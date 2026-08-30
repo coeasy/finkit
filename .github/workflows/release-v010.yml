@@ -1,0 +1,173 @@
+name: Release v0.1.0
+
+on:
+  push:
+    tags:
+      - v0.1.0
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  validate:
+    name: Validate release contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Refresh lock metadata
+        run: cargo metadata --format-version 1 > /dev/null
+
+      - name: Require clean lockfile
+        run: git diff --exit-code -- Cargo.lock
+
+      - name: Verify package versions
+        run: python scripts/check_version_alignment.py
+
+      - name: Verify Rust workspace
+        run: cargo check --workspace
+
+  python-wheel:
+    name: Python wheel / ${{ matrix.os }}
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-13, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install maturin
+        run: python -m pip install --upgrade pip "maturin>=1.5,<2.0"
+
+      - name: Build Finkit abi3 wheel
+        working-directory: ffi/python-binding
+        run: maturin build --release --features abi3 --out ../../dist
+
+      - name: Build source distribution
+        if: runner.os == 'Linux'
+        working-directory: ffi/python-binding
+        run: maturin sdist --out ../../dist
+
+      - name: Upload Python package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: finkit-python-${{ runner.os }}
+          path: dist/*
+          if-no-files-found: error
+
+  cli:
+    name: CLI / ${{ matrix.os }}
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-13, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Finkit CLI
+        run: cargo build --release -p alpha-ta-cli --bin finkit
+
+      - name: Stage CLI release asset
+        shell: bash
+        run: |
+          mkdir -p dist
+          ARCH="$(uname -m)"
+          case "$RUNNER_OS" in
+            Linux)
+              cp target/release/finkit "dist/finkit-v0.1.0-linux-${ARCH}"
+              chmod +x "dist/finkit-v0.1.0-linux-${ARCH}"
+              ;;
+            macOS)
+              cp target/release/finkit "dist/finkit-v0.1.0-macos-${ARCH}"
+              chmod +x "dist/finkit-v0.1.0-macos-${ARCH}"
+              ;;
+            Windows)
+              cp target/release/finkit.exe "dist/finkit-v0.1.0-windows-${ARCH}.exe"
+              ;;
+          esac
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: finkit-cli-${{ runner.os }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release assets
+    needs: [python-wheel, cli]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: finkit-*
+          path: dist
+          merge-multiple: true
+
+      - name: List release assets
+        run: find dist -maxdepth 1 -type f -print -exec sha256sum {} \;
+
+      - name: Create or update v0.1.0 release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          cat > release-notes.md <<'EOF'
+          # Finkit v0.1.0
+
+          First installable foundation release of Finkit, a high-performance financial indicator, factor, and formula computation engine.
+
+          ## Included assets
+
+          - Python `finkit==0.1.0` native wheels for Linux, macOS, and Windows
+          - Python source distribution
+          - `finkit` CLI binaries for Linux, macOS, and Windows
+
+          ## Python
+
+          Install a wheel downloaded from this release:
+
+          ```bash
+          pip install ./finkit-0.1.0-*.whl
+          ```
+
+          Then:
+
+          ```python
+          import numpy as np
+          import finkit
+          print(finkit.__version__)
+          print(finkit.sma(np.arange(1.0, 20.0), 5))
+          ```
+
+          The existing Rust core and multi-language FFI remain compatibility-backed by the historical `alpha-ta-*` internal crate identities during the v0.1.x migration.
+          EOF
+
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* \
+              --title "Finkit v0.1.0" \
+              --notes-file release-notes.md
+          fi
