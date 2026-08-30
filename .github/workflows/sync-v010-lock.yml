@@ -1,4 +1,4 @@
-name: Sync v0.1.0 Lockfile
+name: Finalize v0.1.0 Migration
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  sync:
+  finalize:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
@@ -23,15 +23,34 @@ jobs:
       - name: Refresh Cargo.lock workspace package versions
         run: cargo update --workspace
 
-      - name: Commit refreshed lockfile when needed
+      - name: Finalize public CLI branding
         shell: bash
         run: |
-          if git diff --quiet -- Cargo.lock; then
-            echo "Cargo.lock already aligned"
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("cli/src/main.rs")
+          text = path.read_text(encoding="utf-8")
+          replacements = {
+              '#[command(name = "alpha_ta")]': '#[command(name = "finkit")]',
+              '#[command(about = "Technical Analysis CLI — compute indicators, detect patterns, run formulas")]': '#[command(about = "Finkit financial computation CLI — indicators, formulas, streaming, and features")]',
+              'Usage: alpha-ta-cli ': 'Usage: finkit ',
+              'Usage: alpha_ta ': 'Usage: finkit ',
+          }
+          for old, new in replacements.items():
+              text = text.replace(old, new)
+          path.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Commit migration updates when needed
+        shell: bash
+        run: |
+          if git diff --quiet -- Cargo.lock cli/src/main.rs; then
+            echo "Migration state already finalized"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock
-          git commit -m "chore: sync Cargo.lock for v0.1.0"
+          git add Cargo.lock cli/src/main.rs
+          git commit -m "chore: finalize Finkit v0.1.0 migration"
           git push origin HEAD:feat/finkit-v0.1.0-foundation
