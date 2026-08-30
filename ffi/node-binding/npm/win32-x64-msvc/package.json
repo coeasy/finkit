@@ -1,19 +1,11 @@
 {
-  "name": "@alphata/node-win32-x64-msvc",
-  "version": "1.0.0",
-  "os": [
-    "win32"
-  ],
-  "cpu": [
-    "x64"
-  ],
+  "name": "@alphata/core-win32-x64-msvc",
+  "version": "0.1.0",
+  "os": ["win32"],
+  "cpu": ["x64"],
   "main": "alpha_ta.node",
-  "files": [
-    "alpha_ta.node"
-  ],
-  "description": "Windows x64 MSVC native binding for @alphata/node",
+  "files": ["alpha_ta.node"],
+  "description": "Windows x64 MSVC native binding for Finkit Node.js",
   "license": "Apache-2.0",
-  "engines": {
-    "node": ">= 16"
-  }
+  "engines": {"node": ">= 16"}
 }
