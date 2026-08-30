@@ -1,0 +1,29 @@
+name: Version Alignment
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  versions:
+    name: Verify v0.1.0 metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Refresh lock metadata
+        run: cargo metadata --format-version 1 > /dev/null
+
+      - name: Verify repository is lock-clean
+        run: git diff --exit-code -- Cargo.lock
+
+      - name: Check all package versions
+        run: python scripts/check_version_alignment.py
