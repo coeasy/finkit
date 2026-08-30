@@ -1,0 +1,37 @@
+name: Sync v0.1.0 Lockfile
+
+on:
+  push:
+    branches:
+      - feat/finkit-v0.1.0-foundation
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/finkit-v0.1.0-foundation
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Refresh Cargo.lock workspace versions
+        run: cargo metadata --format-version 1 > /dev/null
+
+      - name: Commit refreshed lockfile when needed
+        shell: bash
+        run: |
+          if git diff --quiet -- Cargo.lock; then
+            echo "Cargo.lock already aligned"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock
+          git commit -m "chore: sync Cargo.lock for v0.1.0"
+          git push origin HEAD:feat/finkit-v0.1.0-foundation
