@@ -23,8 +23,8 @@ pub enum CheckpointError {
 /// # Example
 ///
 /// ```
-/// use alpha_ta_core::streaming::indicators::StreamingSma;
-/// use alpha_ta_core::streaming::{StreamingIndicator, CheckpointState};
+/// use finkit::streaming::indicators::StreamingSma;
+/// use finkit::streaming::{StreamingIndicator, CheckpointState};
 ///
 /// let mut sma = StreamingSma::new(5);
 /// for i in 0..10 { sma.next(i as f64); }

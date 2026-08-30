@@ -1,5 +1,5 @@
 [package]
-name = "alpha-ta-ios"
+name = "finkit-ios"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -16,7 +16,7 @@ workspace = true
 crate-type = ["staticlib"]
 
 [dependencies]
-alpha-ta-core = { path = "../../core" }
+finkit = { path = "../../core" }
 libc = "0.2"
 ndarray = { workspace = true }
-alpha-ta-ffi-common = { path = "../ffi-common" }
+finkit-ffi-common = { path = "../ffi-common" }

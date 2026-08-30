@@ -170,11 +170,11 @@ mod tests {
         let config = ChartConfig::default();
         let result = renderer.render(&draw_list, &config);
         assert!(result.is_ok());
-        let json_str = result.expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
-        let parsed: Value = serde_json::from_str(&json_str).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let json_str = result.expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let parsed: Value = serde_json::from_str(&json_str).expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
         assert!(parsed["config"].is_object());
         assert!(parsed["primitives"].is_array());
-        assert_eq!(parsed["primitives"].as_array().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)").len(), 0);
+        assert_eq!(parsed["primitives"].as_array().expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)").len(), 0);
     }
 
     #[test]
@@ -189,9 +189,9 @@ mod tests {
         let config = ChartConfig::default();
         let result = renderer.render(&draw_list, &config);
         assert!(result.is_ok());
-        let json_str = result.expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
-        let parsed: Value = serde_json::from_str(&json_str).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
-        let prims = parsed["primitives"].as_array().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let json_str = result.expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let parsed: Value = serde_json::from_str(&json_str).expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let prims = parsed["primitives"].as_array().expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
         assert_eq!(prims.len(), 1);
         assert_eq!(prims[0]["type"], "Line");
         assert_eq!(prims[0]["p1"]["x"], 0.0);
@@ -210,9 +210,9 @@ mod tests {
         let config = ChartConfig::default();
         let result = renderer.render(&draw_list, &config);
         assert!(result.is_ok());
-        let json_str = result.expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
-        let parsed: Value = serde_json::from_str(&json_str).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
-        let prims = parsed["primitives"].as_array().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let json_str = result.expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let parsed: Value = serde_json::from_str(&json_str).expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let prims = parsed["primitives"].as_array().expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
         assert_eq!(prims.len(), 1);
         assert_eq!(prims[0]["type"], "FilledRect");
         assert_eq!(prims[0]["fill"]["r"], 255);
@@ -231,9 +231,9 @@ mod tests {
         let config = ChartConfig::default();
         let result = renderer.render(&draw_list, &config);
         assert!(result.is_ok());
-        let json_str = result.expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
-        let parsed: Value = serde_json::from_str(&json_str).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
-        let prims = parsed["primitives"].as_array().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let json_str = result.expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let parsed: Value = serde_json::from_str(&json_str).expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let prims = parsed["primitives"].as_array().expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
         assert_eq!(prims[0]["type"], "Circle");
         assert_eq!(prims[0]["radius"], 25.0);
     }
@@ -250,9 +250,9 @@ mod tests {
         let config = ChartConfig::default();
         let result = renderer.render(&draw_list, &config);
         assert!(result.is_ok());
-        let json_str = result.expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
-        let parsed: Value = serde_json::from_str(&json_str).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
-        let prims = parsed["primitives"].as_array().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let json_str = result.expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let parsed: Value = serde_json::from_str(&json_str).expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let prims = parsed["primitives"].as_array().expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
         assert_eq!(prims[0]["type"], "Text");
         assert_eq!(prims[0]["content"], "Hello");
     }
@@ -272,12 +272,12 @@ mod tests {
         let config = ChartConfig::default();
         let result = renderer.render(&draw_list, &config);
         assert!(result.is_ok());
-        let json_str = result.expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
-        let parsed: Value = serde_json::from_str(&json_str).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
-        let prims = parsed["primitives"].as_array().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let json_str = result.expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let parsed: Value = serde_json::from_str(&json_str).expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let prims = parsed["primitives"].as_array().expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
         assert_eq!(prims[0]["type"], "Group");
         assert!(prims[0]["transform"].is_object());
-        assert_eq!(prims[0]["primitives"].as_array().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)").len(), 1);
+        assert_eq!(prims[0]["primitives"].as_array().expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)").len(), 1);
     }
 
     #[test]
@@ -287,8 +287,8 @@ mod tests {
         let config = ChartConfig::default();
         let result = renderer.render(&draw_list, &config);
         assert!(result.is_ok());
-        let json_str = result.expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
-        let parsed: Value = serde_json::from_str(&json_str).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let json_str = result.expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let parsed: Value = serde_json::from_str(&json_str).expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
         assert_eq!(parsed["config"]["width"], 1200);
         assert_eq!(parsed["config"]["height"], 600);
     }
@@ -315,9 +315,9 @@ mod tests {
         let config = ChartConfig::default();
         let result = renderer.render(&draw_list, &config);
         assert!(result.is_ok());
-        let json_str = result.expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
-        let parsed: Value = serde_json::from_str(&json_str).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
-        let prims = parsed["primitives"].as_array().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let json_str = result.expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let parsed: Value = serde_json::from_str(&json_str).expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let prims = parsed["primitives"].as_array().expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
         assert_eq!(prims.len(), 3);
     }
 
@@ -345,11 +345,11 @@ mod tests {
         let config = ChartConfig::default();
         let result = renderer.render(&draw_list, &config);
         assert!(result.is_ok());
-        let json_str = result.expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
-        let parsed: Value = serde_json::from_str(&json_str).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
-        let prims = parsed["primitives"].as_array().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let json_str = result.expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let parsed: Value = serde_json::from_str(&json_str).expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let prims = parsed["primitives"].as_array().expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
         assert_eq!(prims[0]["type"], "Polygon");
-        assert_eq!(prims[0]["points"].as_array().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)").len(), 3);
+        assert_eq!(prims[0]["points"].as_array().expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)").len(), 3);
     }
 
     #[test]
@@ -364,9 +364,9 @@ mod tests {
         let config = ChartConfig::default();
         let result = renderer.render(&draw_list, &config);
         assert!(result.is_ok());
-        let json_str = result.expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
-        let parsed: Value = serde_json::from_str(&json_str).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
-        let prims = parsed["primitives"].as_array().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let json_str = result.expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let parsed: Value = serde_json::from_str(&json_str).expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let prims = parsed["primitives"].as_array().expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
         assert_eq!(prims[0]["type"], "Path");
         assert_eq!(prims[0]["close"], true);
     }
@@ -382,9 +382,9 @@ mod tests {
         let config = ChartConfig::default();
         let result = renderer.render(&draw_list, &config);
         assert!(result.is_ok());
-        let json_str = result.expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
-        let parsed: Value = serde_json::from_str(&json_str).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
-        let prims = parsed["primitives"].as_array().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let json_str = result.expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let parsed: Value = serde_json::from_str(&json_str).expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let prims = parsed["primitives"].as_array().expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
         assert_eq!(prims[0]["type"], "Rect");
         assert_eq!(prims[0]["rect"]["x"], 10.0);
         assert_eq!(prims[0]["rect"]["width"], 30.0);
@@ -408,12 +408,12 @@ mod tests {
         let config = ChartConfig::default();
         let result = renderer.render(&draw_list, &config);
         assert!(result.is_ok());
-        let json_str = result.expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
-        let parsed: Value = serde_json::from_str(&json_str).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let json_str = result.expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let parsed: Value = serde_json::from_str(&json_str).expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
         let style_val = &parsed["primitives"][0]["style"];
         assert_eq!(style_val["line_width"], 2.5);
         assert_eq!(style_val["line_style"], "Dashed");
-        let opacity = style_val["opacity"].as_f64().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
+        let opacity = style_val["opacity"].as_f64().expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)");
         assert!((opacity - 0.8).abs() < 0.01);
         assert_eq!(style_val["stroke_color"]["r"], 255);
         assert_eq!(style_val["fill_color"]["b"], 255);

@@ -1,7 +1,7 @@
-use alpha_ta_core::error::IndicatorError;
-use alpha_ta_core::streaming::builder::{Builder, IndicatorBuilder};
-use alpha_ta_core::streaming::indicators::*;
-use alpha_ta_core::streaming::{IndicatorMeta, StreamingIndicator};
+use finkit::error::IndicatorError;
+use finkit::streaming::builder::{Builder, IndicatorBuilder};
+use finkit::streaming::indicators::*;
+use finkit::streaming::{IndicatorMeta, StreamingIndicator};
 
 // ---------------------------------------------------------------------------
 // Single-period builders — happy path

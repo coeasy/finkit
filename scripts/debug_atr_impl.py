@@ -9,7 +9,7 @@ sys.path.insert(0, r'P:\llm_code\finkit\dist\python\windows-x64')
 
 try:
     import talib
-    import alpha_ta
+    import finkit
 except ImportError as e:
     print(f"Import error: {e}")
     sys.exit(1)
@@ -81,7 +81,7 @@ print(f"TA-Lib ATR[14]:   {atr_talib[14]:.10f}")
 print(f"方法1 ATR[14]:    {atr_m1[14]:.10f}")
 print(f"方法2 ATR[14]:    {atr_m2[14]:.10f}")
 print(f"方法3 ATR[14]:    {atr_m3[14]:.10f}")
-print(f"AlphaTA ATR[14]:  {np.array(alpha_ta.atr(high, low, close, timeperiod=14))[14]:.10f}")
+print(f"AlphaTA ATR[14]:  {np.array(finkit.atr(high, low, close, timeperiod=14))[14]:.10f}")
 
 print(f"\n差异:")
 print(f"方法1 vs TA-Lib:  {abs(atr_m1[14] - atr_talib[14]):.2e}")
@@ -113,7 +113,7 @@ print(f"方法4 vs TA-Lib:    {abs(atr_m4[14] - atr_talib[14]):.2e}")
 
 print("\n[4] 检查 AlphaTA 的实现")
 print("-" * 80)
-alpha_atr = np.array(alpha_ta.atr(high, low, close, timeperiod=14))
+alpha_atr = np.array(finkit.atr(high, low, close, timeperiod=14))
 print(f"AlphaTA ATR[13]: {alpha_atr[13]:.10f}")
 print(f"AlphaTA ATR[14]: {alpha_atr[14]:.10f}")
 print(f"TA-Lib ATR[13]:  {atr_talib[13]:.10f}")

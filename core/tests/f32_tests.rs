@@ -1,4 +1,4 @@
-use alpha_ta_core::streaming::float_trait::*;
+use finkit::streaming::float_trait::*;
 
 const F32_EPS: f32 = 1e-4;
 

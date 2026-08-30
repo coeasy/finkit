@@ -6,7 +6,7 @@
 //! # Example
 //!
 //! ```
-//! use alpha_ta_core::streaming::float_trait::{Float, GenericSma};
+//! use finkit::streaming::float_trait::{Float, GenericSma};
 //!
 //! // f64 (default)
 //! let mut sma64 = GenericSma::<f64>::new(3);

@@ -16,8 +16,8 @@
 //! # Quick Start
 //!
 //! ```
-//! use alpha_ta_core::streaming::{StreamingIndicator, OhlcvBar, Ohlcv};
-//! use alpha_ta_core::streaming::overlap::sma::StreamingSma;
+//! use finkit::streaming::{StreamingIndicator, OhlcvBar, Ohlcv};
+//! use finkit::streaming::overlap::sma::StreamingSma;
 //!
 //! let mut sma = StreamingSma::new(3);
 //! assert_eq!(sma.next(11.0), None);  // warming up

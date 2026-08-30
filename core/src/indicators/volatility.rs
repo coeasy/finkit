@@ -18,7 +18,7 @@ use ndarray::Array1;
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let high = vec![45.0, 45.5, 46.0, 45.5, 46.5, 46.0, 45.5, 45.0, 45.5, 46.0];
 /// let low = vec![43.0, 43.5, 44.0, 43.0, 44.0, 43.5, 43.0, 42.5, 43.0, 43.5];
@@ -85,7 +85,7 @@ pub fn atr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Ar
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let high = vec![45.0, 45.5, 46.0, 45.5, 46.5, 46.0, 45.5, 45.0, 45.5, 46.0];
 /// let low = vec![43.0, 43.5, 44.0, 43.0, 44.0, 43.5, 43.0, 42.5, 43.0, 43.5];
@@ -172,7 +172,7 @@ pub fn atr_into(
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let high = vec![45.0, 45.5, 46.0, 45.5, 46.5, 46.0, 45.5, 45.0, 45.5, 46.0];
 /// let low = vec![43.0, 43.5, 44.0, 43.0, 44.0, 43.5, 43.0, 42.5, 43.0, 43.5];
@@ -249,7 +249,7 @@ pub fn natr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<A
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let high = vec![45.0, 45.5, 46.0, 45.5, 46.5, 46.0, 45.5, 45.0, 45.5, 46.0];
 /// let low = vec![43.0, 43.5, 44.0, 43.0, 44.0, 43.5, 43.0, 42.5, 43.0, 43.5];

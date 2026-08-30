@@ -32,7 +32,7 @@ maturin develop --release
 验证安装：
 
 ```python
-import alpha_ta as ta
+import finkit as ta
 import numpy as np
 
 close = np.arange(1, 101, dtype=np.float64)
@@ -70,7 +70,7 @@ df = pd.read_parquet("600519_daily.parquet")
 ### 2.3 使用 AlphaTA KlineData（内置可视化数据格式）
 
 ```python
-import alpha_ta as ta
+import finkit as ta
 
 data = ta.KlineData.from_csv(open("600519_daily.csv", encoding="gbk").read())
 assert data.validate()
@@ -106,7 +106,7 @@ MACD: (DIF-DEA)*2;
 AlphaTA 等价：
 
 ```python
-import alpha_ta as ta
+import finkit as ta
 
 macd_line, signal, hist = ta.macd(close, fastperiod=12, slowperiod=26, signalperiod=9)
 # macd_line ≈ DIF, signal ≈ DEA, hist ≈ (DIF-DEA)*2
@@ -135,7 +135,7 @@ j = 3 * slowk - 2 * slowd
 完整示例脚本：
 
 ```python
-import alpha_ta as ta
+import finkit as ta
 import numpy as np
 import pandas as pd
 
@@ -242,7 +242,7 @@ assert max_diff < 1e-4, "MACD 与通达信差异过大，请检查参数"
 ### 6.1 使用 AlphaTA 内置 K 线图
 
 ```python
-import alpha_ta as ta
+import finkit as ta
 
 dates = [f"2024-01-{i+1:02d}" for i in range(n)]
 kline = ta.KlineData(

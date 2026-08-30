@@ -74,7 +74,7 @@ pub struct VolumeNodesResult {
 /// # Example
 ///
 /// ```
-/// use alpha_ta_core::indicators::market_profile_tpo;
+/// use finkit::indicators::market_profile_tpo;
 ///
 /// let high  = vec![15.0, 15.0, 15.0, 15.0, 15.0, 15.0];
 /// let low   = vec![ 5.0,  5.0,  5.0,  5.0,  5.0,  5.0];
@@ -206,7 +206,7 @@ pub fn market_profile_tpo(
 /// # Example
 ///
 /// ```
-/// use alpha_ta_core::indicators::vwap_anchored_session;
+/// use finkit::indicators::vwap_anchored_session;
 ///
 /// let high  = vec![10.0, 11.0, 12.0, 11.5, 12.5, 13.0];
 /// let low   = vec![ 9.0, 10.0, 11.0, 10.5, 11.5, 12.0];
@@ -294,7 +294,7 @@ pub fn vwap_anchored_session(
 /// # Example
 ///
 /// ```
-/// use alpha_ta_core::indicators::volume_nodes;
+/// use finkit::indicators::volume_nodes;
 ///
 /// let high  = vec![15.0, 15.0, 15.0, 15.0, 15.0, 15.0];
 /// let low   = vec![ 5.0,  5.0,  5.0,  5.0,  5.0,  5.0];

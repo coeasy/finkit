@@ -64,7 +64,7 @@ def tolerance_for(name: str) -> float:
 
 def reproduce_cmd(name: str) -> str:
     return (
-        f"cargo test -p alpha-ta-core --test golden_talib_tests "
+        f"cargo test -p finkit --test golden_talib_tests "
         f"golden_talib_{name.lower()} -- --nocapture"
     )
 
@@ -222,7 +222,7 @@ def format_matrix_md(rows: list[dict[str, Any]], dry_run: bool, report_path: Pat
             "",
             "```bash",
             "python scripts/gen_talib_golden.py      # TA-Lib reference JSON",
-            "cargo test -p alpha-ta-core --test golden_talib_tests",
+            "cargo test -p finkit --test golden_talib_tests",
             "python scripts/gen_compat_matrix.py",
             "```",
             "",

@@ -3,9 +3,9 @@
 //! Compares equivalent indicators head-to-head across batch and streaming modes.
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use alpha_ta_core::indicators;
-use alpha_ta_core::streaming::indicators::*;
-use alpha_ta_core::streaming::{StreamingIndicator};
+use finkit::indicators;
+use finkit::streaming::indicators::*;
+use finkit::streaming::{StreamingIndicator};
 
 use ta::indicators::{
     SimpleMovingAverage as TaRsSma,

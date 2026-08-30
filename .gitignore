@@ -28,6 +28,7 @@ packaging/usage/*/bin/
 packaging/usage/*/obj/
 # FFI build artifacts
 ffi/c-binding/build-usage/
+ffi/c-binding/build-usage-*/
 ffi/node-binding/node_modules/
 ffi/node-binding/*.node
 ffi/python-binding/dist/

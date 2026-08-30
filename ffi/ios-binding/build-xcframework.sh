@@ -35,8 +35,8 @@ TARGETS=(
 
 build_target() {
   local target="$1"
-  echo "[build-ios] cargo build --release --target ${target} -p alpha-ta-ios"
-  ( cd "${ROOT}" && cargo build --release --target "${target}" -p alpha-ta-ios )
+  echo "[build-ios] cargo build --release --target ${target} -p finkit-ios"
+  ( cd "${ROOT}" && cargo build --release --target "${target}" -p finkit-ios )
 }
 
 # 1. Compile for every target
@@ -60,20 +60,20 @@ for slice in "${SLICES[@]}"; do
   name="${slice%%:*}"
   target="${slice##*:}"
   mkdir -p "${WORK}/${name}/Headers"
-  cp "${ROOT}/target/${target}/release/libalpha_ta_ios.a" "${WORK}/${name}/"
-  cp "${ROOT}/ffi/ios-binding/include/alpha_ta.h"  "${WORK}/${name}/Headers/"
-  cp "${ROOT}/ffi/ios-binding/include/AlphaTA.swift" "${WORK}/${name}/Headers/"
+  cp "${ROOT}/target/${target}/release/libfinkit_ios.a" "${WORK}/${name}/"
+  cp "${ROOT}/ffi/ios-binding/include/finkit.h"  "${WORK}/${name}/Headers/"
+  cp "${ROOT}/ffi/ios-binding/include/Finkit.swift" "${WORK}/${name}/Headers/"
 done
 
 # 3. Generate the .xcframework
-rm -rf "${OUT}/AlphaTA.xcframework"
+rm -rf "${OUT}/Finkit.xcframework"
 xcodebuild -create-xcframework \
-  -library "${WORK}/ios-arm64/libalpha_ta_ios.a"            -headers "${WORK}/ios-arm64/Headers" \
-  -library "${WORK}/ios-arm64-simulator/libalpha_ta_ios.a"  -headers "${WORK}/ios-arm64-simulator/Headers" \
-  -library "${WORK}/ios/libalpha_ta_ios.a"                  -headers "${WORK}/ios/Headers" \
-  -library "${WORK}/ios-x86_64-simulator/libalpha_ta_ios.a" -headers "${WORK}/ios-x86_64-simulator/Headers" \
-  -output "${OUT}/AlphaTA.xcframework"
+  -library "${WORK}/ios-arm64/libfinkit_ios.a"            -headers "${WORK}/ios-arm64/Headers" \
+  -library "${WORK}/ios-arm64-simulator/libfinkit_ios.a"  -headers "${WORK}/ios-arm64-simulator/Headers" \
+  -library "${WORK}/ios/libfinkit_ios.a"                  -headers "${WORK}/ios/Headers" \
+  -library "${WORK}/ios-x86_64-simulator/libfinkit_ios.a" -headers "${WORK}/ios-x86_64-simulator/Headers" \
+  -output "${OUT}/Finkit.xcframework"
 
 echo
-echo "[build-ios] OK: ${OUT}/AlphaTA.xcframework"
-ls -la "${OUT}/AlphaTA.xcframework"
+echo "[build-ios] OK: ${OUT}/Finkit.xcframework"
+ls -la "${OUT}/Finkit.xcframework"

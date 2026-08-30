@@ -49,7 +49,7 @@ When adding a new indicator:
 cargo test
 
 # Run tests for specific crate
-cargo test -p alpha-ta-core
+cargo test -p finkit
 
 # Run benchmarks
 cargo bench

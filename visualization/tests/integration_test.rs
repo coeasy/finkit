@@ -1,14 +1,14 @@
-use alpha_ta_visualization::chart::KlineChart;
-use alpha_ta_visualization::config::{
+use finkit_visualization::chart::KlineChart;
+use finkit_visualization::config::{
     ChartConfigBuilder, ChartType, ColorScheme, DecimateStrategy, IndicatorConfig, IndicatorType,
     Theme,
 };
-use alpha_ta_visualization::data::KlineData;
-use alpha_ta_visualization::decimate::decimate;
-use alpha_ta_visualization::language::Language;
-use alpha_ta_visualization::layout::LayoutCalculator;
-use alpha_ta_visualization::primitive::DrawList;
-use alpha_ta_visualization::render::{Renderer, SvgRenderer};
+use finkit_visualization::data::KlineData;
+use finkit_visualization::decimate::decimate;
+use finkit_visualization::language::Language;
+use finkit_visualization::layout::LayoutCalculator;
+use finkit_visualization::primitive::DrawList;
+use finkit_visualization::render::{Renderer, SvgRenderer};
 
 fn make_test_data(n: usize) -> KlineData {
     let mut data = KlineData::new(

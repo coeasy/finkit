@@ -24,8 +24,8 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use alpha_ta_core::formula::engine::FormulaEngine;
-use alpha_ta_core::formula::types::FormulaContext;
+use finkit::formula::engine::FormulaEngine;
+use finkit::formula::types::FormulaContext;
 use ndarray::Array1;
 
 /// Make a small synthetic OHLCV context of length `n` from the seed byte.

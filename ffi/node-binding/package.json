@@ -1,6 +1,6 @@
 {
-  "name": "@alphata/core",
-  "version": "1.0.0",
+  "name": "finkit",
+  "version": "0.1.0",
   "description": "High-performance financial technical analysis library for Node.js, powered by Rust and NAPI-RS. 150+ indicators, 60+ candlestick patterns, and chart pattern recognition.",
   "main": "index.js",
   "types": "index.d.ts",
@@ -14,12 +14,12 @@
     "url": "https://github.com/coeasy/finkit/issues"
   },
   "license": "MIT OR Apache-2.0",
-  "author": "AlphaTA Contributors",
+  "author": "Finkit Contributors",
   "keywords": [
     "technical-analysis",
     "trading",
     "quantitative-finance",
-    "alphata",
+    "finkit",
     "indicators",
     "candlestick",
     "stock",
@@ -35,7 +35,7 @@
     "node": ">= 16"
   },
   "napi": {
-    "name": "alpha_ta",
+    "name": "finkit",
     "triples": {
       "defaults": true,
       "additional": [
@@ -71,13 +71,13 @@
     "typescript": "^5.0.0"
   },
   "optionalDependencies": {
-    "@alphata/core-darwin-arm64": "1.0.0",
-    "@alphata/core-darwin-x64": "1.0.0",
-    "@alphata/core-linux-arm64-gnu": "1.0.0",
-    "@alphata/core-linux-arm64-musl": "1.0.0",
-    "@alphata/core-linux-x64-gnu": "1.0.0",
-    "@alphata/core-linux-x64-musl": "1.0.0",
-    "@alphata/core-win32-x64-msvc": "1.0.0",
-    "@alphata/core-win32-arm64-msvc": "1.0.0"
+    "finkit-darwin-arm64": "0.1.0",
+    "finkit-darwin-x64": "0.1.0",
+    "finkit-linux-arm64-gnu": "0.1.0",
+    "finkit-linux-arm64-musl": "0.1.0",
+    "finkit-linux-x64-gnu": "0.1.0",
+    "finkit-linux-x64-musl": "0.1.0",
+    "finkit-win32-x64-msvc": "0.1.0",
+    "finkit-win32-arm64-msvc": "0.1.0"
   }
 }

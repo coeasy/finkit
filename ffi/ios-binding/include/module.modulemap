@@ -1,5 +1,5 @@
-framework module AlphaTA {
-    umbrella header "alpha_ta.h"
-    header "alpha_ta.h"
+framework module Finkit {
+    umbrella header "finkit.h"
+    header "finkit.h"
     export *
 }

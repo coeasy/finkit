@@ -62,7 +62,7 @@ fn reject_if_non_finite(name: &'static str, input: &[f64]) -> Result<()> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::moving_avg;
+/// use finkit::math::moving_avg;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let result = moving_avg::sma(&data, 3).unwrap();
@@ -116,7 +116,7 @@ fn sma_inner(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::moving_avg;
+/// use finkit::math::moving_avg;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let mut output = vec![0.0; data.len()];
@@ -170,7 +170,7 @@ pub fn sma_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> 
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::moving_avg;
+/// use finkit::math::moving_avg;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let result = moving_avg::ema(&data, 3).unwrap();
@@ -192,7 +192,7 @@ pub fn ema(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::moving_avg::{ema_with_seed, EmaSeed};
+/// use finkit::math::moving_avg::{ema_with_seed, EmaSeed};
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
 /// // FirstValue seed: the EMA is valid immediately and starts at input[0].
@@ -446,7 +446,7 @@ mod simd_horizontal_sum_tests {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::moving_avg;
+/// use finkit::math::moving_avg;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let mut output = vec![0.0; data.len()];
@@ -502,7 +502,7 @@ pub fn ema_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> 
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::moving_avg;
+/// use finkit::math::moving_avg;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let result = moving_avg::wma(&data, 3).unwrap();
@@ -586,7 +586,7 @@ fn wma_inner(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::moving_avg;
+/// use finkit::math::moving_avg;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let mut output = vec![0.0; data.len()];
@@ -780,7 +780,7 @@ unsafe fn weighted_by_index_avx2_kernel(input: &[f64], out: &mut [f64], len: usi
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::moving_avg;
+/// use finkit::math::moving_avg;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let result = moving_avg::dema(&data, 3).unwrap();
@@ -856,7 +856,7 @@ pub fn dema(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::moving_avg;
+/// use finkit::math::moving_avg;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0];
 /// let result = moving_avg::tema(&data, 3).unwrap();
@@ -963,7 +963,7 @@ pub fn tema(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::moving_avg;
+/// use finkit::math::moving_avg;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let result = moving_avg::kama(&data, 5, 2, 30).unwrap();
@@ -1046,7 +1046,7 @@ pub fn kama(
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::moving_avg;
+/// use finkit::math::moving_avg;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let result = moving_avg::trima(&data, 3).unwrap();
@@ -1112,7 +1112,7 @@ pub fn trima(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::moving_avg;
+/// use finkit::math::moving_avg;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let periods = vec![3.0; 10];
@@ -1166,7 +1166,7 @@ pub fn mavp(
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::moving_avg;
+/// use finkit::math::moving_avg;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let result = moving_avg::hma(&data, 4).unwrap();
@@ -1254,7 +1254,7 @@ pub fn hma(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::moving_avg;
+/// use finkit::math::moving_avg;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let result = moving_avg::alma(&data, 3, 6.0, 0.85).unwrap();
@@ -1333,7 +1333,7 @@ pub fn alma(input: &[f64], period: usize, sigma: f64, offset: f64) -> Result<Arr
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::moving_avg;
+/// use finkit::math::moving_avg;
 ///
 /// let data = vec![10.0, 11.0, 12.0, 11.5, 13.0, 14.0, 13.5, 15.0, 16.0, 17.0];
 /// let result = moving_avg::mcginley(&data, 14).unwrap();
@@ -1394,7 +1394,7 @@ pub fn mcginley(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::moving_avg;
+/// use finkit::math::moving_avg;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let result = moving_avg::zlema(&data, 3).unwrap();
@@ -1450,7 +1450,7 @@ pub fn zlema(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::moving_avg;
+/// use finkit::math::moving_avg;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let result = moving_avg::vidya(&data, 5, 3).unwrap();
@@ -1535,7 +1535,7 @@ pub fn vidya(input: &[f64], period: usize, cmo_period: usize) -> Result<Array1<f
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::moving_avg;
+/// use finkit::math::moving_avg;
 ///
 /// let data = vec![10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0];
 /// let volume = vec![1.0; 10];
@@ -1654,7 +1654,7 @@ pub fn vwma(input: &[f64], volume: &[f64], period: usize) -> Result<Array1<f64>>
 ///
 /// # Example
 /// ```rust
-/// use alpha_ta_core::math::moving_avg::ema_multi_periods;
+/// use finkit::math::moving_avg::ema_multi_periods;
 /// let data: Vec<f64> = (1..=20).map(|i| i as f64).collect();
 /// let mut buf5  = vec![0.0; data.len()];
 /// let mut buf10 = vec![0.0; data.len()];

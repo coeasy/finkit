@@ -1,4 +1,4 @@
-// test_indicators.cpp - Comprehensive tests for alpha_ta C++ bindings
+// test_indicators.cpp - Comprehensive tests for finkit C++ bindings
 #include <iostream>
 #include <vector>
 #include <cmath>
@@ -6,9 +6,9 @@
 #include <string>
 #include <algorithm>
 #include <numeric>
-#include "alpha_ta.hpp"
+#include "finkit.hpp"
 
-using namespace alphata;
+using namespace finkit;
 
 // Test helpers
 static int tests_passed = 0;
@@ -395,7 +395,7 @@ void test_benchmark() {
 
 int main() {
     std::cout << "========================================" << std::endl;
-    std::cout << "  alpha_ta C++ Binding Tests" << std::endl;
+    std::cout << "  finkit C++ Binding Tests" << std::endl;
     std::cout << "  Version: " << version() << std::endl;
     std::cout << "========================================" << std::endl;
     std::cout << std::endl;

@@ -109,91 +109,91 @@ fn main() {
 
     // Overlap indicators
     profile_indicator("SMA(20)", 10000, || {
-        alpha_ta_core::math::moving_avg::sma(&close, 20).unwrap();
+        finkit::math::moving_avg::sma(&close, 20).unwrap();
     });
 
     profile_indicator("EMA(20)", 10000, || {
-        alpha_ta_core::math::moving_avg::ema(&close, 20).unwrap();
+        finkit::math::moving_avg::ema(&close, 20).unwrap();
     });
 
     profile_indicator("WMA(20)", 10000, || {
-        alpha_ta_core::math::moving_avg::wma(&close, 20).unwrap();
+        finkit::math::moving_avg::wma(&close, 20).unwrap();
     });
 
     profile_indicator("DEMA(20)", 10000, || {
-        alpha_ta_core::math::moving_avg::dema(&close, 20).unwrap();
+        finkit::math::moving_avg::dema(&close, 20).unwrap();
     });
 
     profile_indicator("TEMA(20)", 10000, || {
-        alpha_ta_core::math::moving_avg::tema(&close, 20).unwrap();
+        finkit::math::moving_avg::tema(&close, 20).unwrap();
     });
 
     // Momentum indicators
     profile_indicator("RSI(14)", 10000, || {
-        alpha_ta_core::indicators::rsi(&close, 14).unwrap();
+        finkit::indicators::rsi(&close, 14).unwrap();
     });
 
     profile_indicator("MACD(12,26,9)", 10000, || {
-        alpha_ta_core::indicators::macd(&close, 12, 26, 9).unwrap();
+        finkit::indicators::macd(&close, 12, 26, 9).unwrap();
     });
 
     profile_indicator("MOM(10)", 10000, || {
-        alpha_ta_core::indicators::mom(&close, 10).unwrap();
+        finkit::indicators::mom(&close, 10).unwrap();
     });
 
     profile_indicator("ROC(10)", 10000, || {
-        alpha_ta_core::indicators::roc(&close, 10).unwrap();
+        finkit::indicators::roc(&close, 10).unwrap();
     });
 
     profile_indicator("CCI(14)", 10000, || {
-        alpha_ta_core::indicators::cci(&high, &low, &close, 14).unwrap();
+        finkit::indicators::cci(&high, &low, &close, 14).unwrap();
     });
 
     profile_indicator("WILLR(14)", 10000, || {
-        alpha_ta_core::indicators::willr(&high, &low, &close, 14).unwrap();
+        finkit::indicators::willr(&high, &low, &close, 14).unwrap();
     });
 
     profile_indicator("ADX(14)", 10000, || {
-        alpha_ta_core::indicators::adx(&high, &low, &close, 14).unwrap();
+        finkit::indicators::adx(&high, &low, &close, 14).unwrap();
     });
 
     profile_indicator("TRIX(14)", 10000, || {
-        alpha_ta_core::indicators::trix(&close, 14).unwrap();
+        finkit::indicators::trix(&close, 14).unwrap();
     });
 
     // Volatility indicators
     profile_indicator("BBANDS(20,2)", 10000, || {
-        alpha_ta_core::indicators::bbands(&close, 20, 2.0, 2.0).unwrap();
+        finkit::indicators::bbands(&close, 20, 2.0, 2.0).unwrap();
     });
 
     profile_indicator("ATR(14)", 10000, || {
-        alpha_ta_core::indicators::atr(&high, &low, &close, 14).unwrap();
+        finkit::indicators::atr(&high, &low, &close, 14).unwrap();
     });
 
     profile_indicator("NATR(14)", 10000, || {
-        alpha_ta_core::indicators::natr(&high, &low, &close, 14).unwrap();
+        finkit::indicators::natr(&high, &low, &close, 14).unwrap();
     });
 
     // Volume indicators
     profile_indicator("OBV", 10000, || {
-        alpha_ta_core::indicators::obv(&close, &volume).unwrap();
+        finkit::indicators::obv(&close, &volume).unwrap();
     });
 
     profile_indicator("AD", 10000, || {
-        alpha_ta_core::indicators::ad(&high, &low, &close, &volume).unwrap();
+        finkit::indicators::ad(&high, &low, &close, &volume).unwrap();
     });
 
     profile_indicator("ADOSC", 10000, || {
-        alpha_ta_core::indicators::adosc(&high, &low, &close, &volume, 3, 10).unwrap();
+        finkit::indicators::adosc(&high, &low, &close, &volume, 3, 10).unwrap();
     });
 
     // Statistical indicators
     profile_indicator("STDDEV(20)", 10000, || {
-        alpha_ta_core::indicators::std_dev(&close, 20, 1.0).unwrap();
+        finkit::indicators::std_dev(&close, 20, 1.0).unwrap();
     });
 
     profile_indicator("VAR(20)", 10000, || {
-        alpha_ta_core::indicators::var(&close, 20, 1.0).unwrap();
+        finkit::indicators::var(&close, 20, 1.0).unwrap();
     });
 
     // Zero-alloc variants
@@ -202,11 +202,11 @@ fn main() {
     let mut out = vec![0.0; close.len()];
 
     profile_indicator("SMA_INTO(20)", 10000, || {
-        alpha_ta_core::math::moving_avg::sma_into(&close, 20, &mut out).unwrap();
+        finkit::math::moving_avg::sma_into(&close, 20, &mut out).unwrap();
     });
 
     profile_indicator("EMA_INTO(20)", 10000, || {
-        alpha_ta_core::math::moving_avg::ema_into(&close, 20, &mut out).unwrap();
+        finkit::math::moving_avg::ema_into(&close, 20, &mut out).unwrap();
     });
 
     println!("{}", "-".repeat(60));

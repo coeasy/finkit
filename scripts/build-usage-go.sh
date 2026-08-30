@@ -32,8 +32,8 @@ OUT_DIR="${ROOT}/dist/go/${PLATFORM}"
 mkdir -p "${OUT_DIR}/lib"
 
 # 1. Build the cgo shared lib -------------------------------------------
-echo "[build-usage-go] cargo build --release -p alpha-ta-go"
-( cd "${ROOT}" && cargo build --release -p alpha-ta-go )
+echo "[build-usage-go] cargo build --release -p finkit-go"
+( cd "${ROOT}" && cargo build --release -p finkit-go )
 
 case "${PLATFORM}" in
   windows-x64)  NATIVE="alpha_ta_go.dll"          ;;

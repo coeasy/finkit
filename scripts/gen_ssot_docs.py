@@ -680,7 +680,7 @@ def build_version_rows(canonical: str) -> list[tuple[str, str, str, str, str]]:
         match = "✅" if py_ver == canonical else "❌"
         rows.append(
             (
-                "alpha-ta-python (pyproject)",
+                "finkit-python (pyproject)",
                 "ffi/python-binding/pyproject.toml",
                 py_ver,
                 "project.version",
@@ -693,7 +693,7 @@ def build_version_rows(canonical: str) -> list[tuple[str, str, str, str, str]]:
         match = "✅" if node_ver == canonical else "❌"
         rows.append(
             (
-                "alpha-ta-node (package.json)",
+                "finkit-node (package.json)",
                 "ffi/node-binding/package.json",
                 node_ver,
                 "version",

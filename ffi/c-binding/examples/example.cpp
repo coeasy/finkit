@@ -1,4 +1,4 @@
-// Example: Using alpha_ta in C++
+// Example: Using finkit in C++
 // This example demonstrates all indicators with practical usage patterns
 
 #include <iostream>
@@ -10,9 +10,9 @@
 #include <chrono>
 #include <cmath>
 #include <sstream>
-#include "alpha_ta.hpp"
+#include "finkit.hpp"
 
-using namespace alphata;
+using namespace finkit;
 
 // Helper to print a few values from a vector
 template<typename T>
@@ -411,7 +411,7 @@ void example_benchmark() {
 
 int main() {
     std::cout << "============================================================" << std::endl;
-    std::cout << "  alpha_ta C++ Binding Examples" << std::endl;
+    std::cout << "  finkit C++ Binding Examples" << std::endl;
     std::cout << "  Library Version: " << version() << std::endl;
     std::cout << "============================================================" << std::endl;
     

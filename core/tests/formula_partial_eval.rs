@@ -6,8 +6,8 @@
 //! empty error list, while a failed call yields NaN-filled data plus at
 //! least one error string.
 
-use alpha_ta_core::formula::engine::FormulaEngine;
-use alpha_ta_core::formula::types::FormulaContext;
+use finkit::formula::engine::FormulaEngine;
+use finkit::formula::types::FormulaContext;
 use ndarray::Array1;
 
 fn make_ctx(len: usize) -> FormulaContext {

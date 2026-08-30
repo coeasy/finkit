@@ -1,7 +1,7 @@
 #![cfg(feature = "fta-polars")]
 
 use polars::prelude::*;
-use alpha_ta_core::polars_ext::{TaDataFrame, TaSeries};
+use finkit::polars_ext::{TaDataFrame, TaSeries};
 
 fn sample_close_series() -> Series {
     let data: Vec<f64> = (1..=50).map(|i| 100.0 + (i as f64).sin() * 10.0).collect();

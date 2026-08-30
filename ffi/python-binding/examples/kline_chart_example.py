@@ -1,4 +1,4 @@
-import alpha_ta as ta
+import finkit as ta
 import os
 import math
 

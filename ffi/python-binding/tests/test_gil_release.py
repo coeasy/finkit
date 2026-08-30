@@ -6,9 +6,9 @@ import time
 def test_gil_release_concurrent():
     """Verify computation-heavy calls release the GIL by running them in parallel threads."""
     try:
-        import alpha_ta_python as ta
+        import finkit as ta
     except ImportError:
-        print("SKIP: alpha_ta_python not installed")
+        print("SKIP: finkit not installed")
         return
 
     data = list(range(1, 10001))

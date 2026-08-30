@@ -1,5 +1,5 @@
-use alpha_ta_core::indicators;
-use alpha_ta_core::math::moving_avg;
+use finkit::indicators;
+use finkit::math::moving_avg;
 
 #[test]
 fn test_sma_empty_input() {

@@ -1,6 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use alpha_ta_core::streaming::indicators::*;
-use alpha_ta_core::streaming::{Ohlcv, StreamingIndicator};
+use finkit::streaming::indicators::*;
+use finkit::streaming::{Ohlcv, StreamingIndicator};
 
 const DATA_LEN: usize = 10_000;
 

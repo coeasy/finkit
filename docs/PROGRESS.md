@@ -19,7 +19,7 @@
 | Test Milestone | completed | 2 |
 ## 项目总进度
 
-**215/276 Story 完成** | 55 pending | 6 blocked
+**219/276 Story 完成** | 57 pending | 0 blocked
 
 ### 最终交付物
 
@@ -150,3 +150,24 @@
 | 2026-06-23 15:47:54 | 🔄 failed | TASK-223 — [unknown/unknown] attempt 1 [1 attempt(s)] |
 | 2026-06-23 15:47:54 | 🔄 failed | TASK-224 — [unknown/unknown] attempt 1 [1 attempt(s)] |
 | 2026-06-23 15:47:54 | 🔄 failed | TASK-225 — [unknown/unknown] attempt 1 [1 attempt(s)] |
+
+---
+
+## 2026-08-30 会话 — v0.1.0 阶段 A（版本对齐 / 命名统一 / CI / 进度回写）
+
+> 依据 `docs/plan/FINKIT_V1_ALIGNMENT_AND_FIX_PLAN.md` 执行阶段 A，解除 TASK-216~220 blocked，回写本会话成果。
+
+| 时间 (UTC) | 状态 | 记录 |
+|------------|------|------|
+| 2026-08-30 10:30 | ✅ done | TASK-216 — 初始提交 `de607ed`（1134 文件）建立；命名统一为 `finkit` |
+| 2026-08-30 10:35 | ✅ done | TASK-217 — 恢复 `.github/workflows/ci.yml`，crate 引用修正为 `-p finkit` |
+| 2026-08-30 10:40 | ✅ done | TASK-219 — 版本治理文档 `FINKIT_V1_ALIGNMENT_AND_FIX_PLAN.md`；D-1 版本统一 v0.1.0；D-2 命名统一 finkit |
+| 2026-08-30 10:50 | ✅ done | TASK-220 — 22 个 TA-Lib golden 生成并重新生成 `COMPAT_MATRIX.md`（17 pass / 5 warn / 0 fail，100% 结论） |
+| 2026-08-30 11:00 | 🔄 pending | TASK-218 — 共享测试数据集生成器（阶段 B 承接） |
+| 2026-08-30 11:05 | ✅ done | 版本矩阵统一：`version-matrix.md` 全 workspace/pyproject/package.json = 0.1.0 且名为 finkit |
+| 2026-08-30 11:10 | ✅ done | `BINDING_TIERS.md` 成熟度重写：Python/Rust/Node/WASM→`beta`，其余→`experimental` |
+| 2026-08-30 11:15 | ✅ done | 删除 `scripts/rename_to_rusta.py`；core `alpha-ta-polars` feature 改名为 `finkit-polars` |
+
+### 项目总进度
+
+**219/276 Story 完成** | 57 pending | 0 blocked

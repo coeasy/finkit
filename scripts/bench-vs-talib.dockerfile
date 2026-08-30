@@ -49,7 +49,7 @@ WORKDIR /work
 COPY . /work
 
 # Warm cargo cache for the bench target only
-RUN cargo build --release -p alpha-ta-core --features talib-c 2>&1 | tail -5 || true
+RUN cargo build --release -p finkit --features talib-c 2>&1 | tail -5 || true
 
 ENTRYPOINT ["/work/scripts/bench-vs-talib.sh"]
 CMD ["--precision"]

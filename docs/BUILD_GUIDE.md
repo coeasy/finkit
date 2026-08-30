@@ -22,8 +22,8 @@ cargo build --release --no-default-features  # 裁剪默认特性（见 core/Car
 ## 2. CLI
 
 ```bash
-cargo build --release -p alpha-ta-cli
-# 产物：target/release/alpha-ta-cli(.exe)
+cargo build --release -p finkit-cli
+# 产物：target/release/finkit-cli(.exe)
 cargo install --path cli
 ```
 
@@ -31,7 +31,7 @@ cargo install --path cli
 
 | 语言 | 构建命令 | 产物 |
 |------|---------|------|
-| C/C++ | `cargo build --release -p alpha-ta-ffi` | `alpha_ta.{a,so,dll}` + `include/alpha_ta.h`（cbindgen 生成） |
+| C/C++ | `cargo build --release -p finkit-ffi` | `alpha_ta.{a,so,dll}` + `include/alpha_ta.h`（cbindgen 生成） |
 | Python | `cd ffi/python-binding && maturin build --release`（手动）；`maturin develop`（本地）。另见 `ffi/python-binding/pyproject.toml` 的 `cibuildwheel` 配置 | `.whl` / sdist |
 | Node | `cd ffi/node-binding && npm install && npm run build` | `*.node` + `index.d.ts` |
 | Go | `cd ffi/go-binding && make build` | C shim + `go/ta` 包 |

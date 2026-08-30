@@ -1,5 +1,5 @@
 [package]
-name = "alpha-ta-wasm"
+name = "finkit-wasm"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,7 +12,7 @@ workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
-alpha-ta-core = { path = "../core", default-features = false, features = ["std", "formula", "serde", "tracing", "indicators-all"] }
+finkit = { path = "../core", default-features = false, features = ["std", "formula", "serde", "tracing", "indicators-all"] }
 ndarray = { workspace = true }
 wasm-bindgen = "0.2"
 serde-wasm-bindgen = "0.6"

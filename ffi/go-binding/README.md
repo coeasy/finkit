@@ -1,6 +1,6 @@
-# AlphaTA Go Binding
+# Finkit Go Binding
 
-Go bindings for the AlphaTA technical analysis library, using CGO for high-performance FFI.
+Go bindings for the finkit technical analysis library, using CGO for high-performance FFI.
 
 ## Requirements
 
@@ -16,7 +16,7 @@ make build
 
 # Or manually
 cd ../..
-cargo build --release -p alpha-ta-go
+cargo build --release -p finkit-go
 ```
 
 The compiled library will be available in `../../target/release/`.

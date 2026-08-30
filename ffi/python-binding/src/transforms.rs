@@ -1,6 +1,6 @@
 use numpy::PyReadonlyArray1;
 use pyo3::prelude::*;
-use alpha_ta_core::transforms::{
+use finkit::transforms::{
     Diff, DiffN, LogReturn, MinMaxScaler, PctChange, PercentileRank, Pipeline, Rank, RollingMean,
     RollingStd, RollingSum, StandardScaler, Transform, ZScore,
 };

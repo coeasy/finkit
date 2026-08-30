@@ -1,8 +1,8 @@
 package ta
 
 /*
-#cgo windows LDFLAGS: -L../target/release -lalpha_ta_go -lws2_32 -ladvapi32 -luserenv -lbcrypt -lncrypt -lschannel -luser32
-#cgo !windows LDFLAGS: -L../target/release -lalpha_ta_go -lm -ldl -lpthread
+#cgo windows LDFLAGS: -L../target/release -lfinkit_go -lws2_32 -ladvapi32 -luserenv -lbcrypt -lncrypt -lschannel -luser32
+#cgo !windows LDFLAGS: -L../target/release -lfinkit_go -lm -ldl -lpthread
 
 #include <stdlib.h>
 

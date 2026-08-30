@@ -8,7 +8,7 @@ use super::traits::Ohlcv;
 /// # Example
 ///
 /// ```
-/// use alpha_ta_core::streaming::{Ohlcv, OhlcvBar, PriceSource};
+/// use finkit::streaming::{Ohlcv, OhlcvBar, PriceSource};
 ///
 /// let bar = OhlcvBar::new(100.0, 110.0, 90.0, 105.0, 50000.0);
 /// assert_eq!(PriceSource::Close.extract(&bar), 105.0);

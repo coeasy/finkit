@@ -2,9 +2,9 @@
 
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
-use alpha_ta_core::indicators::sweep::{ema_sweep, rsi_sweep, sma_sweep};
-use alpha_ta_core::indicators::sweep_engine::{ParamRange, SweepEngine};
-use alpha_ta_core::indicators::sweepable::{EmaSweepable, RsiSweepable, SmaSweepable};
+use finkit::indicators::sweep::{ema_sweep, rsi_sweep, sma_sweep};
+use finkit::indicators::sweep_engine::{ParamRange, SweepEngine};
+use finkit::indicators::sweepable::{EmaSweepable, RsiSweepable, SmaSweepable};
 
 /// Sweep SMA across multiple periods.
 #[napi]

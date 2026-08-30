@@ -172,7 +172,7 @@ mod tests {
         let renderer = HtmlRenderer::new();
         let config = default_config();
         let draw_list = DrawList::new();
-        let result = renderer.render(&draw_list, &config).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/html.rs (A5 governance)");
+        let result = renderer.render(&draw_list, &config).expect("finkit-visualization: unexpected None/Err in visualization/src/render/html.rs (A5 governance)");
         assert!(result.starts_with("<!DOCTYPE html>"));
         assert!(result.contains("<html>"));
         assert!(result.contains("</html>"));
@@ -185,7 +185,7 @@ mod tests {
         let renderer = HtmlRenderer::new();
         let config = default_config();
         let draw_list = DrawList::new();
-        let result = renderer.render(&draw_list, &config).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/html.rs (A5 governance)");
+        let result = renderer.render(&draw_list, &config).expect("finkit-visualization: unexpected None/Err in visualization/src/render/html.rs (A5 governance)");
         assert!(result.contains("<style>"));
         assert!(result.contains("</style>"));
         assert!(result.contains(".chart-container"));
@@ -196,7 +196,7 @@ mod tests {
         let renderer = HtmlRenderer::new();
         let config = default_config();
         let draw_list = DrawList::new();
-        let result = renderer.render(&draw_list, &config).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/html.rs (A5 governance)");
+        let result = renderer.render(&draw_list, &config).expect("finkit-visualization: unexpected None/Err in visualization/src/render/html.rs (A5 governance)");
         assert!(result.contains("<script>"));
         assert!(result.contains("</script>"));
         assert!(result.contains("addEventListener"));
@@ -213,7 +213,7 @@ mod tests {
             p2: Point::new(100.0, 100.0),
             style: Style::default(),
         });
-        let result = renderer.render(&draw_list, &config).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/html.rs (A5 governance)");
+        let result = renderer.render(&draw_list, &config).expect("finkit-visualization: unexpected None/Err in visualization/src/render/html.rs (A5 governance)");
         assert!(result.contains("<line"));
         assert!(result.contains("x1=\"0.00\""));
     }
@@ -223,7 +223,7 @@ mod tests {
         let renderer = HtmlRenderer::new();
         let config = default_config();
         let draw_list = DrawList::new();
-        let result = renderer.render(&draw_list, &config).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/html.rs (A5 governance)");
+        let result = renderer.render(&draw_list, &config).expect("finkit-visualization: unexpected None/Err in visualization/src/render/html.rs (A5 governance)");
         assert!(result.contains("tooltip"));
         assert!(result.contains("id=\"tooltip\""));
     }
@@ -233,7 +233,7 @@ mod tests {
         let renderer = HtmlRenderer::new();
         let config = default_config();
         let draw_list = DrawList::new();
-        let result = renderer.render(&draw_list, &config).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/html.rs (A5 governance)");
+        let result = renderer.render(&draw_list, &config).expect("finkit-visualization: unexpected None/Err in visualization/src/render/html.rs (A5 governance)");
         assert!(result.contains(".crosshair-h"));
         assert!(result.contains(".crosshair-v"));
     }
@@ -243,7 +243,7 @@ mod tests {
         let renderer = HtmlRenderer::new();
         let config = default_config();
         let draw_list = DrawList::new();
-        let result = renderer.render(&draw_list, &config).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/html.rs (A5 governance)");
+        let result = renderer.render(&draw_list, &config).expect("finkit-visualization: unexpected None/Err in visualization/src/render/html.rs (A5 governance)");
         assert!(result.contains("charset=\"utf-8\""));
     }
 
@@ -253,7 +253,7 @@ mod tests {
         let mut config = default_config();
         config.title = "<script>alert('xss')</script>".to_string();
         let draw_list = DrawList::new();
-        let result = renderer.render(&draw_list, &config).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/html.rs (A5 governance)");
+        let result = renderer.render(&draw_list, &config).expect("finkit-visualization: unexpected None/Err in visualization/src/render/html.rs (A5 governance)");
         assert!(result.contains("&lt;script&gt;"));
         assert!(!result.contains("<script>alert('xss')</script>"));
     }
@@ -263,7 +263,7 @@ mod tests {
         let renderer = HtmlRenderer::new();
         let config = default_config();
         let draw_list = DrawList::new();
-        let result = renderer.render(&draw_list, &config).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/html.rs (A5 governance)");
+        let result = renderer.render(&draw_list, &config).expect("finkit-visualization: unexpected None/Err in visualization/src/render/html.rs (A5 governance)");
         assert!(!result.contains("src="));
         assert!(!result.contains("href="));
     }
@@ -293,7 +293,7 @@ mod tests {
         let renderer = HtmlRenderer::new();
         let config = default_config();
         let draw_list = DrawList::new();
-        let result = renderer.render(&draw_list, &config).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/html.rs (A5 governance)");
+        let result = renderer.render(&draw_list, &config).expect("finkit-visualization: unexpected None/Err in visualization/src/render/html.rs (A5 governance)");
         assert!(result.contains(&config.theme_config.background_color));
         assert!(result.contains(&config.theme_config.crosshair_color));
     }

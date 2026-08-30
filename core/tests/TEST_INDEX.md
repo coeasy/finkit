@@ -86,19 +86,19 @@
 
 ```bash
 # 运行所有测试
-cargo test -p alpha-ta-core
+cargo test -p finkit
 
 # 运行特定类别测试
-cargo test -p alpha-ta-core --test builder_tests
-cargo test -p alpha-ta-core --test repaint_tests
-cargo test -p alpha-ta-core --test property_tests
+cargo test -p finkit --test builder_tests
+cargo test -p finkit --test repaint_tests
+cargo test -p finkit --test property_tests
 
 # 运行 golden 测试
-cargo test -p alpha-ta-core --test golden_tests
+cargo test -p finkit --test golden_tests
 
 # 运行兼容性测试
-cargo test -p alpha-ta-core --test dzh_compat_tests
-cargo test -p alpha-ta-core --test ths_compat_tests
+cargo test -p finkit --test dzh_compat_tests
+cargo test -p finkit --test ths_compat_tests
 ```
 
 ## 测试模板使用

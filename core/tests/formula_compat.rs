@@ -1,6 +1,6 @@
 use ndarray::Array1;
-use alpha_ta_core::formula::engine::FormulaEngine;
-use alpha_ta_core::formula::types::FormulaContext;
+use finkit::formula::engine::FormulaEngine;
+use finkit::formula::types::FormulaContext;
 
 fn make_ctx(len: usize) -> FormulaContext {
     let close: Vec<f64> = (0..len).map(|i| 10.0 + (i as f64 * 0.3).sin() * 2.0 + i as f64 * 0.05).collect();

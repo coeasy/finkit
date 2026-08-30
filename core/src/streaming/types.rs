@@ -5,7 +5,7 @@ use super::traits::Ohlcv;
 /// # Example
 ///
 /// ```
-/// use alpha_ta_core::streaming::{Ohlcv, OhlcvBar};
+/// use finkit::streaming::{Ohlcv, OhlcvBar};
 ///
 /// let bar = OhlcvBar::new(100.0, 110.0, 95.0, 105.0, 50000.0);
 /// assert_eq!(bar.open(), 100.0);

@@ -31,8 +31,8 @@
 //! # Example
 //!
 //! ```
-//! use alpha_ta_core::patterns::streaming::{StreamingGoldenCross, StreamingPattern};
-//! use alpha_ta_core::streaming::OhlcvBar;
+//! use finkit::patterns::streaming::{StreamingGoldenCross, StreamingPattern};
+//! use finkit::streaming::OhlcvBar;
 //!
 //! let mut gc = StreamingGoldenCross::new(5, 10);
 //! for i in 0..30 {

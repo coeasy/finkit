@@ -1,9 +1,9 @@
 [package]
-name = "alpha-ta-node"
+name = "finkit-node"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Node.js bindings for AlphaTA"
+description = "Node.js bindings for finkit"
 
 [lints]
 workspace = true
@@ -12,8 +12,8 @@ workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
-alpha-ta-core = { path = "../../core", default-features = false, features = ["std", "serde", "indicators-all"] }
-alpha-ta-visualization = { path = "../../visualization", features = ["svg"] }
+finkit = { path = "../../core", default-features = false, features = ["std", "serde", "indicators-all"] }
+finkit-visualization = { path = "../../visualization", features = ["svg"] }
 napi = { version = "2", features = ["napi4", "tokio_rt"] }
 napi-derive = "2"
 tokio = { version = "1", features = ["rt", "sync"] }
@@ -25,4 +25,4 @@ napi-build = "2"
 
 [features]
 default = ["formula"]
-formula = ["alpha-ta-core/formula", "dep:ndarray"]
+formula = ["finkit/formula", "dep:ndarray"]

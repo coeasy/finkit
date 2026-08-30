@@ -8,8 +8,8 @@
 //! # Example
 //!
 //! ```
-//! use alpha_ta_core::selectors::{Factor, FactorEngine, Direction, rank_zscore};
-//! use alpha_ta_core::error::Result;
+//! use finkit::selectors::{Factor, FactorEngine, Direction, rank_zscore};
+//! use finkit::error::Result;
 //! use ndarray::Array1;
 //! use std::sync::Arc;
 //!

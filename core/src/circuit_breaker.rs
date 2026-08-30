@@ -8,7 +8,7 @@
 //! from being hammered after a transient outage:
 //!
 //! ```no_run
-//! use alpha_ta_core::circuit_breaker::{CircuitBreaker, CircuitBreakerError};
+//! use finkit::circuit_breaker::{CircuitBreaker, CircuitBreakerError};
 //!
 //! let mut cb = CircuitBreaker::new(3, std::time::Duration::from_secs(10));
 //! let result: Result<u32, CircuitBreakerError<&'static str>> =

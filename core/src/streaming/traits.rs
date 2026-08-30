@@ -5,7 +5,7 @@
 /// # Example
 ///
 /// ```
-/// use alpha_ta_core::streaming::{Ohlcv, OhlcvBar};
+/// use finkit::streaming::{Ohlcv, OhlcvBar};
 ///
 /// let bar = OhlcvBar::new(100.0, 110.0, 95.0, 105.0, 1000.0);
 /// assert_eq!(bar.close(), 105.0);
@@ -67,8 +67,8 @@ pub trait Ohlcv {
 /// # Example
 ///
 /// ```
-/// use alpha_ta_core::streaming::{StreamingIndicator, OhlcvBar};
-/// use alpha_ta_core::streaming::indicators::StreamingSma;
+/// use finkit::streaming::{StreamingIndicator, OhlcvBar};
+/// use finkit::streaming::indicators::StreamingSma;
 ///
 /// let mut sma = StreamingSma::new(3);
 /// assert_eq!(sma.next(1.0), None);
@@ -113,8 +113,8 @@ pub trait StreamingIndicator<Input = f64, Output = f64> {
 /// # Example
 ///
 /// ```
-/// use alpha_ta_core::streaming::indicators::StreamingSma;
-/// use alpha_ta_core::streaming::IndicatorMeta;
+/// use finkit::streaming::indicators::StreamingSma;
+/// use finkit::streaming::IndicatorMeta;
 ///
 /// assert_eq!(StreamingSma::name(), "SMA");
 /// assert_eq!(StreamingSma::category(), "overlap");

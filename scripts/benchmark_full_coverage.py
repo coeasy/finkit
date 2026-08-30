@@ -4,7 +4,7 @@ Tests all 158+ TA-Lib functions across all categories
 """
 import numpy as np
 import time
-import alpha_ta
+import finkit
 import talib
 
 # Generate test data
@@ -74,61 +74,61 @@ print("Testing Overlap Indicators (38)...")
 
 # Moving Averages
 results.append(benchmark("SMA", 
-    lambda: alpha_ta.sma(close, 20),
+    lambda: finkit.sma(close, 20),
     lambda: talib.SMA(close, 20)))
 
 results.append(benchmark("EMA", 
-    lambda: alpha_ta.ema(close, 20),
+    lambda: finkit.ema(close, 20),
     lambda: talib.EMA(close, 20)))
 
 results.append(benchmark("WMA", 
-    lambda: alpha_ta.wma(close, 20),
+    lambda: finkit.wma(close, 20),
     lambda: talib.WMA(close, 20)))
 
 results.append(benchmark("DEMA", 
-    lambda: alpha_ta.dema(close, 20),
+    lambda: finkit.dema(close, 20),
     lambda: talib.DEMA(close, 20)))
 
 results.append(benchmark("TEMA", 
-    lambda: alpha_ta.tema(close, 20),
+    lambda: finkit.tema(close, 20),
     lambda: talib.TEMA(close, 20)))
 
 results.append(benchmark("TRIMA", 
-    lambda: alpha_ta.trima(close, 20),
+    lambda: finkit.trima(close, 20),
     lambda: talib.TRIMA(close, 20)))
 
 results.append(benchmark("KAMA", 
-    lambda: alpha_ta.kama(close, 20),
+    lambda: finkit.kama(close, 20),
     lambda: talib.KAMA(close, 20)))
 
 results.append(benchmark("MAMA", 
-    lambda: alpha_ta.mama(close, 0.5, 0.05),
+    lambda: finkit.mama(close, 0.5, 0.05),
     lambda: talib.MAMA(close, 0.5, 0.05)))
 
 results.append(benchmark("T3", 
-    lambda: alpha_ta.t3(close, 20, 0.7),
+    lambda: finkit.t3(close, 20, 0.7),
     lambda: talib.T3(close, 20, 0.7)))
 
 # Bollinger Bands variants
 results.append(benchmark("BBANDS", 
-    lambda: alpha_ta.bbands(close, 20, 2.0, 2.0),
+    lambda: finkit.bbands(close, 20, 2.0, 2.0),
     lambda: talib.BBANDS(close, 20, 2.0, 2.0)))
 
 # Price transforms
 results.append(benchmark("AVGPRICE", 
-    lambda: alpha_ta.avgprice(open_price, high, low, close),
+    lambda: finkit.avgprice(open_price, high, low, close),
     lambda: talib.AVGPRICE(open_price, high, low, close)))
 
 results.append(benchmark("MEDPRICE", 
-    lambda: alpha_ta.medprice(high, low),
+    lambda: finkit.medprice(high, low),
     lambda: talib.MEDPRICE(high, low)))
 
 results.append(benchmark("TYPPRICE", 
-    lambda: alpha_ta.typprice(high, low, close),
+    lambda: finkit.typprice(high, low, close),
     lambda: talib.TYPPRICE(high, low, close)))
 
 results.append(benchmark("WCLPRICE", 
-    lambda: alpha_ta.wclprice(high, low, close),
+    lambda: finkit.wclprice(high, low, close),
     lambda: talib.WCLPRICE(high, low, close)))
 
 # ============================================================================
@@ -137,123 +137,123 @@ results.append(benchmark("WCLPRICE",
 print("Testing Momentum Indicators (30)...")
 
 results.append(benchmark("ADX", 
-    lambda: alpha_ta.adx(high, low, close, 14),
+    lambda: finkit.adx(high, low, close, 14),
     lambda: talib.ADX(high, low, close, 14)))
 
 results.append(benchmark("ADXR", 
-    lambda: alpha_ta.adxr(high, low, close, 14),
+    lambda: finkit.adxr(high, low, close, 14),
     lambda: talib.ADXR(high, low, close, 14)))
 
 results.append(benchmark("APO", 
-    lambda: alpha_ta.apo(close, 12, 26),
+    lambda: finkit.apo(close, 12, 26),
     lambda: talib.APO(close, 12, 26)))
 
 results.append(benchmark("AROON", 
-    lambda: alpha_ta.aroon(high, low, 14),
+    lambda: finkit.aroon(high, low, 14),
     lambda: talib.AROON(high, low, 14)))
 
 results.append(benchmark("AROONOSC", 
-    lambda: alpha_ta.aroonosc(high, low, 14),
+    lambda: finkit.aroonosc(high, low, 14),
     lambda: talib.AROONOSC(high, low, 14)))
 
 results.append(benchmark("BOP", 
-    lambda: alpha_ta.bop(open_price, high, low, close),
+    lambda: finkit.bop(open_price, high, low, close),
     lambda: talib.BOP(open_price, high, low, close)))
 
 results.append(benchmark("CCI", 
-    lambda: alpha_ta.cci(high, low, close, 20),
+    lambda: finkit.cci(high, low, close, 20),
     lambda: talib.CCI(high, low, close, 20)))
 
 results.append(benchmark("CMO", 
-    lambda: alpha_ta.cmo(close, 14),
+    lambda: finkit.cmo(close, 14),
     lambda: talib.CMO(close, 14)))
 
 results.append(benchmark("DX", 
-    lambda: alpha_ta.dx(high, low, close, 14),
+    lambda: finkit.dx(high, low, close, 14),
     lambda: talib.DX(high, low, close, 14)))
 
 results.append(benchmark("MACD", 
-    lambda: alpha_ta.macd(close, 12, 26, 9),
+    lambda: finkit.macd(close, 12, 26, 9),
     lambda: talib.MACD(close, 12, 26, 9)))
 
 results.append(benchmark("MACDEXT", 
-    lambda: alpha_ta.macdext(close, 12, 1, 26, 1, 9, 1),
+    lambda: finkit.macdext(close, 12, 1, 26, 1, 9, 1),
     lambda: talib.MACDEXT(close, 12, 1, 26, 1, 9, 1)))
 
 results.append(benchmark("MACDFIX", 
-    lambda: alpha_ta.macdfix(close, 9),
+    lambda: finkit.macdfix(close, 9),
     lambda: talib.MACDFIX(close, 9)))
 
 results.append(benchmark("MFI", 
-    lambda: alpha_ta.mfi(high, low, close, volume, 14),
+    lambda: finkit.mfi(high, low, close, volume, 14),
     lambda: talib.MFI(high, low, close, volume, 14)))
 
 results.append(benchmark("MINUS_DI", 
-    lambda: alpha_ta.minus_di(high, low, close, 14),
+    lambda: finkit.minus_di(high, low, close, 14),
     lambda: talib.MINUS_DI(high, low, close, 14)))
 
 results.append(benchmark("MINUS_DM", 
-    lambda: alpha_ta.minus_dm(high, low, 14),
+    lambda: finkit.minus_dm(high, low, 14),
     lambda: talib.MINUS_DM(high, low, 14)))
 
 results.append(benchmark("MOM", 
-    lambda: alpha_ta.mom(close, 10),
+    lambda: finkit.mom(close, 10),
     lambda: talib.MOM(close, 10)))
 
 results.append(benchmark("PLUS_DI", 
-    lambda: alpha_ta.plus_di(high, low, close, 14),
+    lambda: finkit.plus_di(high, low, close, 14),
     lambda: talib.PLUS_DI(high, low, close, 14)))
 
 results.append(benchmark("PLUS_DM", 
-    lambda: alpha_ta.plus_dm(high, low, 14),
+    lambda: finkit.plus_dm(high, low, 14),
     lambda: talib.PLUS_DM(high, low, 14)))
 
 results.append(benchmark("PPO", 
-    lambda: alpha_ta.ppo(close, 12, 26),
+    lambda: finkit.ppo(close, 12, 26),
     lambda: talib.PPO(close, 12, 26)))
 
 results.append(benchmark("ROC", 
-    lambda: alpha_ta.roc(close, 10),
+    lambda: finkit.roc(close, 10),
     lambda: talib.ROC(close, 10)))
 
 results.append(benchmark("ROCP", 
-    lambda: alpha_ta.rocp(close, 10),
+    lambda: finkit.rocp(close, 10),
     lambda: talib.ROCP(close, 10)))
 
 results.append(benchmark("ROCR", 
-    lambda: alpha_ta.rocr(close, 10),
+    lambda: finkit.rocr(close, 10),
     lambda: talib.ROCR(close, 10)))
 
 results.append(benchmark("ROCR100", 
-    lambda: alpha_ta.rocr100(close, 10),
+    lambda: finkit.rocr100(close, 10),
     lambda: talib.ROCR100(close, 10)))
 
 results.append(benchmark("RSI", 
-    lambda: alpha_ta.rsi(close, 14),
+    lambda: finkit.rsi(close, 14),
     lambda: talib.RSI(close, 14)))
 
 results.append(benchmark("STOCH", 
-    lambda: alpha_ta.stoch(high, low, close, 14, 3, 0, 3, 0),
+    lambda: finkit.stoch(high, low, close, 14, 3, 0, 3, 0),
     lambda: talib.STOCH(high, low, close, 14, 3, 0, 3, 0)))
 
 results.append(benchmark("STOCHF", 
-    lambda: alpha_ta.stochf(high, low, close, 14, 3, 0),
+    lambda: finkit.stochf(high, low, close, 14, 3, 0),
     lambda: talib.STOCHF(high, low, close, 14, 3, 0)))
 
 results.append(benchmark("STOCHRSI", 
-    lambda: alpha_ta.stochrsi(close, 14, 14, 3, 0),
+    lambda: finkit.stochrsi(close, 14, 14, 3, 0),
     lambda: talib.STOCHRSI(close, 14, 14, 3, 0)))
 
 results.append(benchmark("TRIX", 
-    lambda: alpha_ta.trix(close, 20),
+    lambda: finkit.trix(close, 20),
     lambda: talib.TRIX(close, 20)))
 
 results.append(benchmark("ULTOSC", 
-    lambda: alpha_ta.ultosc(high, low, close, 7, 14, 28),
+    lambda: finkit.ultosc(high, low, close, 7, 14, 28),
     lambda: talib.ULTOSC(high, low, close, 7, 14, 28)))
 
 results.append(benchmark("WILLR", 
-    lambda: alpha_ta.willr(high, low, close, 14),
+    lambda: finkit.willr(high, low, close, 14),
     lambda: talib.WILLR(high, low, close, 14)))
 
 # ============================================================================
@@ -262,15 +262,15 @@ results.append(benchmark("WILLR",
 print("Testing Volume Indicators (4)...")
 
 results.append(benchmark("AD", 
-    lambda: alpha_ta.ad(high, low, close, volume),
+    lambda: finkit.ad(high, low, close, volume),
     lambda: talib.AD(high, low, close, volume)))
 
 results.append(benchmark("ADOSC", 
-    lambda: alpha_ta.adosc(high, low, close, volume, 3, 10),
+    lambda: finkit.adosc(high, low, close, volume, 3, 10),
     lambda: talib.ADOSC(high, low, close, volume, 3, 10)))
 
 results.append(benchmark("OBV", 
-    lambda: alpha_ta.obv(close, volume),
+    lambda: finkit.obv(close, volume),
     lambda: talib.OBV(close, volume)))
 
 # ============================================================================
@@ -279,15 +279,15 @@ results.append(benchmark("OBV",
 print("Testing Volatility Indicators (3)...")
 
 results.append(benchmark("ATR", 
-    lambda: alpha_ta.atr(high, low, close, 14),
+    lambda: finkit.atr(high, low, close, 14),
     lambda: talib.ATR(high, low, close, 14)))
 
 results.append(benchmark("NATR", 
-    lambda: alpha_ta.natr(high, low, close, 14),
+    lambda: finkit.natr(high, low, close, 14),
     lambda: talib.NATR(high, low, close, 14)))
 
 results.append(benchmark("TRANGE", 
-    lambda: alpha_ta.trange(high, low, close),
+    lambda: finkit.trange(high, low, close),
     lambda: talib.TRANGE(high, low, close)))
 
 # ============================================================================
@@ -296,19 +296,19 @@ results.append(benchmark("TRANGE",
 print("Testing Price Transform Indicators (4)...")
 
 results.append(benchmark("AVGPRICE", 
-    lambda: alpha_ta.avgprice(open_price, high, low, close),
+    lambda: finkit.avgprice(open_price, high, low, close),
     lambda: talib.AVGPRICE(open_price, high, low, close)))
 
 results.append(benchmark("MEDPRICE", 
-    lambda: alpha_ta.medprice(high, low),
+    lambda: finkit.medprice(high, low),
     lambda: talib.MEDPRICE(high, low)))
 
 results.append(benchmark("TYPPRICE", 
-    lambda: alpha_ta.typprice(high, low, close),
+    lambda: finkit.typprice(high, low, close),
     lambda: talib.TYPPRICE(high, low, close)))
 
 results.append(benchmark("WCLPRICE", 
-    lambda: alpha_ta.wclprice(high, low, close),
+    lambda: finkit.wclprice(high, low, close),
     lambda: talib.WCLPRICE(high, low, close)))
 
 # ============================================================================
@@ -317,39 +317,39 @@ results.append(benchmark("WCLPRICE",
 print("Testing Statistic Indicators (9)...")
 
 results.append(benchmark("BETA", 
-    lambda: alpha_ta.beta(close, close, 5),
+    lambda: finkit.beta(close, close, 5),
     lambda: talib.BETA(close, close, 5)))
 
 results.append(benchmark("CORREL", 
-    lambda: alpha_ta.correl(close, close, 30),
+    lambda: finkit.correl(close, close, 30),
     lambda: talib.CORREL(close, close, 30)))
 
 results.append(benchmark("LINEARREG", 
-    lambda: alpha_ta.linearreg(close, 14),
+    lambda: finkit.linearreg(close, 14),
     lambda: talib.LINEARREG(close, 14)))
 
 results.append(benchmark("LINEARREG_ANGLE", 
-    lambda: alpha_ta.linearreg_angle(close, 14),
+    lambda: finkit.linearreg_angle(close, 14),
     lambda: talib.LINEARREG_ANGLE(close, 14)))
 
 results.append(benchmark("LINEARREG_INTERCEPT", 
-    lambda: alpha_ta.linearreg_intercept(close, 14),
+    lambda: finkit.linearreg_intercept(close, 14),
     lambda: talib.LINEARREG_INTERCEPT(close, 14)))
 
 results.append(benchmark("LINEARREG_SLOPE", 
-    lambda: alpha_ta.linearreg_slope(close, 14),
+    lambda: finkit.linearreg_slope(close, 14),
     lambda: talib.LINEARREG_SLOPE(close, 14)))
 
 results.append(benchmark("STDDEV", 
-    lambda: alpha_ta.stddev(close, 20, 1.0),
+    lambda: finkit.stddev(close, 20, 1.0),
     lambda: talib.STDDEV(close, 20, 1.0)))
 
 results.append(benchmark("TSF", 
-    lambda: alpha_ta.tsf(close, 14),
+    lambda: finkit.tsf(close, 14),
     lambda: talib.TSF(close, 14)))
 
 results.append(benchmark("VAR", 
-    lambda: alpha_ta.var(close, 20, 1.0),
+    lambda: finkit.var(close, 20, 1.0),
     lambda: talib.VAR(close, 20, 1.0)))
 
 # ============================================================================
@@ -358,27 +358,27 @@ results.append(benchmark("VAR",
 print("Testing Cycle Indicators (5)...")
 
 results.append(benchmark("HT_DCPERIOD", 
-    lambda: alpha_ta.ht_dcperiod(close),
+    lambda: finkit.ht_dcperiod(close),
     lambda: talib.HT_DCPERIOD(close)))
 
 results.append(benchmark("HT_DCPHASE", 
-    lambda: alpha_ta.ht_dcphase(close),
+    lambda: finkit.ht_dcphase(close),
     lambda: talib.HT_DCPHASE(close)))
 
 results.append(benchmark("HT_PHASOR", 
-    lambda: alpha_ta.ht_phasor(close),
+    lambda: finkit.ht_phasor(close),
     lambda: talib.HT_PHASOR(close)))
 
 results.append(benchmark("HT_SINE", 
-    lambda: alpha_ta.ht_sine(close),
+    lambda: finkit.ht_sine(close),
     lambda: talib.HT_SINE(close)))
 
 results.append(benchmark("HT_TRENDLINE", 
-    lambda: alpha_ta.ht_trendline(close),
+    lambda: finkit.ht_trendline(close),
     lambda: talib.HT_TRENDLINE(close)))
 
 results.append(benchmark("HT_TRENDMODE", 
-    lambda: alpha_ta.ht_trendmode(close),
+    lambda: finkit.ht_trendmode(close),
     lambda: talib.HT_TRENDMODE(close)))
 
 # ============================================================================
@@ -388,307 +388,307 @@ print("Testing Candlestick Patterns (61)...")
 
 # Two Crows
 results.append(benchmark("CDL2CROWS", 
-    lambda: alpha_ta.cdl2crows(open_price, high, low, close),
+    lambda: finkit.cdl2crows(open_price, high, low, close),
     lambda: talib.CDL2CROWS(open_price, high, low, close)))
 
 # Three Black Crows
 results.append(benchmark("CDL3BLACKCROWS", 
-    lambda: alpha_ta.cdl3blackcrows(open_price, high, low, close),
+    lambda: finkit.cdl3blackcrows(open_price, high, low, close),
     lambda: talib.CDL3BLACKCROWS(open_price, high, low, close)))
 
 # Three Inside Up/Down
 results.append(benchmark("CDL3INSIDE", 
-    lambda: alpha_ta.cdl3inside(open_price, high, low, close),
+    lambda: finkit.cdl3inside(open_price, high, low, close),
     lambda: talib.CDL3INSIDE(open_price, high, low, close)))
 
 # Three Line Strike
 results.append(benchmark("CDL3LINESTRIKE", 
-    lambda: alpha_ta.cdl3linestrike(open_price, high, low, close),
+    lambda: finkit.cdl3linestrike(open_price, high, low, close),
     lambda: talib.CDL3LINESTRIKE(open_price, high, low, close)))
 
 # Three Outside Up/Down
 results.append(benchmark("CDL3OUTSIDE", 
-    lambda: alpha_ta.cdl3outside(open_price, high, low, close),
+    lambda: finkit.cdl3outside(open_price, high, low, close),
     lambda: talib.CDL3OUTSIDE(open_price, high, low, close)))
 
 # Three Stars In The South
 results.append(benchmark("CDL3STARSINSOUTH", 
-    lambda: alpha_ta.cdl3starsinsouth(open_price, high, low, close),
+    lambda: finkit.cdl3starsinsouth(open_price, high, low, close),
     lambda: talib.CDL3STARSINSOUTH(open_price, high, low, close)))
 
 # Three White Soldiers
 results.append(benchmark("CDL3WHITESOLDIERS", 
-    lambda: alpha_ta.cdl3whitesoldiers(open_price, high, low, close),
+    lambda: finkit.cdl3whitesoldiers(open_price, high, low, close),
     lambda: talib.CDL3WHITESOLDIERS(open_price, high, low, close)))
 
 # Abandoned Baby
 results.append(benchmark("CDLABANDONEDBABY", 
-    lambda: alpha_ta.cdlabandonedbaby(open_price, high, low, close, 0.3),
+    lambda: finkit.cdlabandonedbaby(open_price, high, low, close, 0.3),
     lambda: talib.CDLABANDONEDBABY(open_price, high, low, close, 0.3)))
 
 # Advance Block
 results.append(benchmark("CDLADVANCEBLOCK", 
-    lambda: alpha_ta.cdladvanceblock(open_price, high, low, close),
+    lambda: finkit.cdladvanceblock(open_price, high, low, close),
     lambda: talib.CDLADVANCEBLOCK(open_price, high, low, close)))
 
 # Belt-hold
 results.append(benchmark("CDLBELTHOLD", 
-    lambda: alpha_ta.cdlbelthold(open_price, high, low, close),
+    lambda: finkit.cdlbelthold(open_price, high, low, close),
     lambda: talib.CDLBELTHOLD(open_price, high, low, close)))
 
 # Breakaway
 results.append(benchmark("CDLBREAKAWAY", 
-    lambda: alpha_ta.cdlbreakaway(open_price, high, low, close),
+    lambda: finkit.cdlbreakaway(open_price, high, low, close),
     lambda: talib.CDLBREAKAWAY(open_price, high, low, close)))
 
 # Closing Marubozu
 results.append(benchmark("CDLCLOSINGMARUBOZU", 
-    lambda: alpha_ta.cdlclosingmarubozu(open_price, high, low, close),
+    lambda: finkit.cdlclosingmarubozu(open_price, high, low, close),
     lambda: talib.CDLCLOSINGMARUBOZU(open_price, high, low, close)))
 
 # Concealing Baby Swallow
 results.append(benchmark("CDLCONCEALBABYSWALL", 
-    lambda: alpha_ta.cdlconcealbabyswall(open_price, high, low, close),
+    lambda: finkit.cdlconcealbabyswall(open_price, high, low, close),
     lambda: talib.CDLCONCEALBABYSWALL(open_price, high, low, close)))
 
 # Counterattack
 results.append(benchmark("CDLCOUNTERATTACK", 
-    lambda: alpha_ta.cdlcounterattack(open_price, high, low, close),
+    lambda: finkit.cdlcounterattack(open_price, high, low, close),
     lambda: talib.CDLCOUNTERATTACK(open_price, high, low, close)))
 
 # Dark Cloud Cover
 results.append(benchmark("CDLDARKCLOUDCOVER", 
-    lambda: alpha_ta.cdldarkcloudcover(open_price, high, low, close, 0.5),
+    lambda: finkit.cdldarkcloudcover(open_price, high, low, close, 0.5),
     lambda: talib.CDLDARKCLOUDCOVER(open_price, high, low, close, 0.5)))
 
 # Doji
 results.append(benchmark("CDLDOJI", 
-    lambda: alpha_ta.cdldoji(open_price, high, low, close),
+    lambda: finkit.cdldoji(open_price, high, low, close),
     lambda: talib.CDLDOJI(open_price, high, low, close)))
 
 # Doji Star
 results.append(benchmark("CDLDOJISTAR", 
-    lambda: alpha_ta.cdldojistar(open_price, high, low, close),
+    lambda: finkit.cdldojistar(open_price, high, low, close),
     lambda: talib.CDLDOJISTAR(open_price, high, low, close)))
 
 # Dragonfly Doji
 results.append(benchmark("CDLDRAGONFLYDOJI", 
-    lambda: alpha_ta.cdldragonflydoji(open_price, high, low, close),
+    lambda: finkit.cdldragonflydoji(open_price, high, low, close),
     lambda: talib.CDLDRAGONFLYDOJI(open_price, high, low, close)))
 
 # Engulfing Pattern
 results.append(benchmark("CDLENGULFING", 
-    lambda: alpha_ta.cdlengulfing(open_price, high, low, close),
+    lambda: finkit.cdlengulfing(open_price, high, low, close),
     lambda: talib.CDLENGULFING(open_price, high, low, close)))
 
 # Evening Doji Star
 results.append(benchmark("CDLEVENINGDOJISTAR", 
-    lambda: alpha_ta.cdleveningdojistar(open_price, high, low, close, 0.3),
+    lambda: finkit.cdleveningdojistar(open_price, high, low, close, 0.3),
     lambda: talib.CDLEVENINGDOJISTAR(open_price, high, low, close, 0.3)))
 
 # Evening Star
 results.append(benchmark("CDLEVENINGSTAR", 
-    lambda: alpha_ta.cdleveningstar(open_price, high, low, close, 0.3),
+    lambda: finkit.cdleveningstar(open_price, high, low, close, 0.3),
     lambda: talib.CDLEVENINGSTAR(open_price, high, low, close, 0.3)))
 
 # Gap Side-bySide White Lines
 results.append(benchmark("CDLGAPSIDESIDEWHITE", 
-    lambda: alpha_ta.cdlgapsidesidewhite(open_price, high, low, close),
+    lambda: finkit.cdlgapsidesidewhite(open_price, high, low, close),
     lambda: talib.CDLGAPSIDESIDEWHITE(open_price, high, low, close)))
 
 # Gravestone Doji
 results.append(benchmark("CDLGRAVESTONEDOJI", 
-    lambda: alpha_ta.cdlgravestonedoji(open_price, high, low, close),
+    lambda: finkit.cdlgravestonedoji(open_price, high, low, close),
     lambda: talib.CDLGRAVESTONEDOJI(open_price, high, low, close)))
 
 # Hammer
 results.append(benchmark("CDLHAMMER", 
-    lambda: alpha_ta.cdlhammer(open_price, high, low, close),
+    lambda: finkit.cdlhammer(open_price, high, low, close),
     lambda: talib.CDLHAMMER(open_price, high, low, close)))
 
 # Hanging Man
 results.append(benchmark("CDLHANGINGMAN", 
-    lambda: alpha_ta.cdlhangingman(open_price, high, low, close),
+    lambda: finkit.cdlhangingman(open_price, high, low, close),
     lambda: talib.CDLHANGINGMAN(open_price, high, low, close)))
 
 # Harami Pattern
 results.append(benchmark("CDLHARAMI", 
-    lambda: alpha_ta.cdlharami(open_price, high, low, close),
+    lambda: finkit.cdlharami(open_price, high, low, close),
     lambda: talib.CDLHARAMI(open_price, high, low, close)))
 
 # Harami Cross
 results.append(benchmark("CDLHARAMICROSS", 
-    lambda: alpha_ta.cdlharamicross(open_price, high, low, close),
+    lambda: finkit.cdlharamicross(open_price, high, low, close),
     lambda: talib.CDLHARAMICROSS(open_price, high, low, close)))
 
 # High-Wave Candle
 results.append(benchmark("CDLHIGHWAVE", 
-    lambda: alpha_ta.cdlhighwave(open_price, high, low, close),
+    lambda: finkit.cdlhighwave(open_price, high, low, close),
     lambda: talib.CDLHIGHWAVE(open_price, high, low, close)))
 
 # Hikkake Pattern
 results.append(benchmark("CDLHIKKAKE", 
-    lambda: alpha_ta.cdlhikkake(open_price, high, low, close),
+    lambda: finkit.cdlhikkake(open_price, high, low, close),
     lambda: talib.CDLHIKKAKE(open_price, high, low, close)))
 
 # Hikkake Modified
 results.append(benchmark("CDLHIKKAKEMOD", 
-    lambda: alpha_ta.cdlhikkakemod(open_price, high, low, close),
+    lambda: finkit.cdlhikkakemod(open_price, high, low, close),
     lambda: talib.CDLHIKKAKEMOD(open_price, high, low, close)))
 
 # Homing Pigeon
 results.append(benchmark("CDLHOMINGPIGEON", 
-    lambda: alpha_ta.cdlhomingpigeon(open_price, high, low, close),
+    lambda: finkit.cdlhomingpigeon(open_price, high, low, close),
     lambda: talib.CDLHOMINGPIGEON(open_price, high, low, close)))
 
 # Identical Three Crows
 results.append(benchmark("CDLIDENTICAL3CROWS", 
-    lambda: alpha_ta.cdlidentical3crows(open_price, high, low, close),
+    lambda: finkit.cdlidentical3crows(open_price, high, low, close),
     lambda: talib.CDLIDENTICAL3CROWS(open_price, high, low, close)))
 
 # In-Neck Pattern
 results.append(benchmark("CDLINNECK", 
-    lambda: alpha_ta.cdlonneck(open_price, high, low, close),
+    lambda: finkit.cdlonneck(open_price, high, low, close),
     lambda: talib.CDLINNECK(open_price, high, low, close)))
 
 # Inverted Hammer
 results.append(benchmark("CDLINVERTEDHAMMER", 
-    lambda: alpha_ta.cdlinvertedhammer(open_price, high, low, close),
+    lambda: finkit.cdlinvertedhammer(open_price, high, low, close),
     lambda: talib.CDLINVERTEDHAMMER(open_price, high, low, close)))
 
 # Kicking
 results.append(benchmark("CDLKICKING", 
-    lambda: alpha_ta.cdlkicking(open_price, high, low, close),
+    lambda: finkit.cdlkicking(open_price, high, low, close),
     lambda: talib.CDLKICKING(open_price, high, low, close)))
 
 # Kicking - bull/bear determined by the longer marubozu
 results.append(benchmark("CDLKICKINGBYLENGTH", 
-    lambda: alpha_ta.cdlkickingbylength(open_price, high, low, close),
+    lambda: finkit.cdlkickingbylength(open_price, high, low, close),
     lambda: talib.CDLKICKINGBYLENGTH(open_price, high, low, close)))
 
 # Ladder Bottom
 results.append(benchmark("CDLLADDERBOTTOM", 
-    lambda: alpha_ta.cdlladderbottom(open_price, high, low, close),
+    lambda: finkit.cdlladderbottom(open_price, high, low, close),
     lambda: talib.CDLLADDERBOTTOM(open_price, high, low, close)))
 
 # Long Legged Doji
 results.append(benchmark("CDLLONGLEGGEDDOJI", 
-    lambda: alpha_ta.cdllongleggeddoji(open_price, high, low, close),
+    lambda: finkit.cdllongleggeddoji(open_price, high, low, close),
     lambda: talib.CDLLONGLEGGEDDOJI(open_price, high, low, close)))
 
 # Long Line Candle
 results.append(benchmark("CDLLONGLINE", 
-    lambda: alpha_ta.cdllongline(open_price, high, low, close),
+    lambda: finkit.cdllongline(open_price, high, low, close),
     lambda: talib.CDLLONGLINE(open_price, high, low, close)))
 
 # Marubozu
 results.append(benchmark("CDLMARUBOZU", 
-    lambda: alpha_ta.cdlmarubozu(open_price, high, low, close),
+    lambda: finkit.cdlmarubozu(open_price, high, low, close),
     lambda: talib.CDLMARUBOZU(open_price, high, low, close)))
 
 # Matching Low
 results.append(benchmark("CDLMATCHINGLOW", 
-    lambda: alpha_ta.cdlmatchinglow(open_price, high, low, close),
+    lambda: finkit.cdlmatchinglow(open_price, high, low, close),
     lambda: talib.CDLMATCHINGLOW(open_price, high, low, close)))
 
 # Mathematical Marubozu
 results.append(benchmark("CDLMATHOLD", 
-    lambda: alpha_ta.cdlmathold(open_price, high, low, close, 0.5),
+    lambda: finkit.cdlmathold(open_price, high, low, close, 0.5),
     lambda: talib.CDLMATHOLD(open_price, high, low, close, 0.5)))
 
 # Morning Doji Star
 results.append(benchmark("CDLMORNINGDOJISTAR", 
-    lambda: alpha_ta.cdlmorningdojistar(open_price, high, low, close, 0.3),
+    lambda: finkit.cdlmorningdojistar(open_price, high, low, close, 0.3),
     lambda: talib.CDLMORNINGDOJISTAR(open_price, high, low, close, 0.3)))
 
 # Morning Star
 results.append(benchmark("CDLMORNINGSTAR", 
-    lambda: alpha_ta.cdlmorningstar(open_price, high, low, close, 0.3),
+    lambda: finkit.cdlmorningstar(open_price, high, low, close, 0.3),
     lambda: talib.CDLMORNINGSTAR(open_price, high, low, close, 0.3)))
 
 # On-Neck Pattern
 results.append(benchmark("CDLONNECK", 
-    lambda: alpha_ta.cdlonneck(open_price, high, low, close),
+    lambda: finkit.cdlonneck(open_price, high, low, close),
     lambda: talib.CDLONNECK(open_price, high, low, close)))
 
 # Piercing Pattern
 results.append(benchmark("CDLPIERCING", 
-    lambda: alpha_ta.cdlpiercing(open_price, high, low, close),
+    lambda: finkit.cdlpiercing(open_price, high, low, close),
     lambda: talib.CDLPIERCING(open_price, high, low, close)))
 
 # Rickshaw Man
 results.append(benchmark("CDLRICKSHAWMAN", 
-    lambda: alpha_ta.cdlrickshawman(open_price, high, low, close),
+    lambda: finkit.cdlrickshawman(open_price, high, low, close),
     lambda: talib.CDLRICKSHAWMAN(open_price, high, low, close)))
 
 # Rising/Falling Three Methods
 results.append(benchmark("CDLRISEFALL3METHODS", 
-    lambda: alpha_ta.cdlrisefall3methods(open_price, high, low, close),
+    lambda: finkit.cdlrisefall3methods(open_price, high, low, close),
     lambda: talib.CDLRISEFALL3METHODS(open_price, high, low, close)))
 
 # Separating Lines
 results.append(benchmark("CDLSEPARATINGLINES", 
-    lambda: alpha_ta.cdlseparatinglines(open_price, high, low, close),
+    lambda: finkit.cdlseparatinglines(open_price, high, low, close),
     lambda: talib.CDLSEPARATINGLINES(open_price, high, low, close)))
 
 # Shooting Star
 results.append(benchmark("CDLSHOOTINGSTAR", 
-    lambda: alpha_ta.cdlshootingstar(open_price, high, low, close),
+    lambda: finkit.cdlshootingstar(open_price, high, low, close),
     lambda: talib.CDLSHOOTINGSTAR(open_price, high, low, close)))
 
 # Short Line Candle
 results.append(benchmark("CDLSHORTLINE", 
-    lambda: alpha_ta.cdlshortline(open_price, high, low, close),
+    lambda: finkit.cdlshortline(open_price, high, low, close),
     lambda: talib.CDLSHORTLINE(open_price, high, low, close)))
 
 # Spinning Top
 results.append(benchmark("CDLSPINNINGTOP", 
-    lambda: alpha_ta.cdlspinningtop(open_price, high, low, close),
+    lambda: finkit.cdlspinningtop(open_price, high, low, close),
     lambda: talib.CDLSPINNINGTOP(open_price, high, low, close)))
 
 # Stalled Pattern
 results.append(benchmark("CDLSTALLEDPATTERN", 
-    lambda: alpha_ta.cdlstalledpattern(open_price, high, low, close),
+    lambda: finkit.cdlstalledpattern(open_price, high, low, close),
     lambda: talib.CDLSTALLEDPATTERN(open_price, high, low, close)))
 
 # Stick Sandwich
 results.append(benchmark("CDLSTICKSANDWICH", 
-    lambda: alpha_ta.cdlsticksandwich(open_price, high, low, close),
+    lambda: finkit.cdlsticksandwich(open_price, high, low, close),
     lambda: talib.CDLSTICKSANDWICH(open_price, high, low, close)))
 
 # Takuri (Dragonfly Doji with very long lower shadow)
 results.append(benchmark("CDLTAKURI", 
-    lambda: alpha_ta.cdltakuri(open_price, high, low, close),
+    lambda: finkit.cdltakuri(open_price, high, low, close),
     lambda: talib.CDLTAKURI(open_price, high, low, close)))
 
 # Tasuki Gap
 results.append(benchmark("CDLTASUKIGAP", 
-    lambda: alpha_ta.cdltasukigap(open_price, high, low, close),
+    lambda: finkit.cdltasukigap(open_price, high, low, close),
     lambda: talib.CDLTASUKIGAP(open_price, high, low, close)))
 
 # Thrusting Pattern
 results.append(benchmark("CDLTHRUSTING", 
-    lambda: alpha_ta.cdlthrusting(open_price, high, low, close),
+    lambda: finkit.cdlthrusting(open_price, high, low, close),
     lambda: talib.CDLTHRUSTING(open_price, high, low, close)))
 
 # Tristar Pattern
 results.append(benchmark("CDLTRISTAR", 
-    lambda: alpha_ta.cdltristar(open_price, high, low, close),
+    lambda: finkit.cdltristar(open_price, high, low, close),
     lambda: talib.CDLTRISTAR(open_price, high, low, close)))
 
 # Unique 3 River
 results.append(benchmark("CDLUNIQUE3RIVER", 
-    lambda: alpha_ta.cdlunique3river(open_price, high, low, close),
+    lambda: finkit.cdlunique3river(open_price, high, low, close),
     lambda: talib.CDLUNIQUE3RIVER(open_price, high, low, close)))
 
 # Upside Gap Two Crows
 results.append(benchmark("CDLUPSIDEGAP2CROWS", 
-    lambda: alpha_ta.cdlupsidegap2crows(open_price, high, low, close),
+    lambda: finkit.cdlupsidegap2crows(open_price, high, low, close),
     lambda: talib.CDLUPSIDEGAP2CROWS(open_price, high, low, close)))
 
 # Upside/Downside Gap Three Methods
 results.append(benchmark("CDLXSIDEGAP3METHODS", 
-    lambda: alpha_ta.cdlxsidegap3methods(open_price, high, low, close),
+    lambda: finkit.cdlxsidegap3methods(open_price, high, low, close),
     lambda: talib.CDLXSIDEGAP3METHODS(open_price, high, low, close)))
 
 # ============================================================================

@@ -202,7 +202,7 @@ mod tests {
         let renderer = SvgRenderer::new();
         let config = default_config();
         let draw_list = DrawList::new();
-        let result = renderer.render(&draw_list, &config).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
+        let result = renderer.render(&draw_list, &config).expect("finkit-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
         assert!(result.starts_with("<svg"));
         assert!(result.contains("xmlns=\"http://www.w3.org/2000/svg\""));
         assert!(result.contains(&format!("width=\"{}\"", config.width)));
@@ -219,7 +219,7 @@ mod tests {
         let renderer = SvgRenderer::new();
         let config = default_config();
         let draw_list = DrawList::new();
-        let result = renderer.render(&draw_list, &config).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
+        let result = renderer.render(&draw_list, &config).expect("finkit-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
         assert!(result.contains(&format!(
             "<rect width=\"100%\" height=\"100%\" fill=\"{}\"/>",
             config.theme_config.background_color
@@ -236,7 +236,7 @@ mod tests {
             p2: Point::new(100.0, 200.0),
             style: Style::default(),
         });
-        let result = renderer.render(&draw_list, &config).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
+        let result = renderer.render(&draw_list, &config).expect("finkit-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
         assert!(result.contains("<line"));
         assert!(result.contains("x1=\"10.00\""));
         assert!(result.contains("y1=\"20.00\""));
@@ -253,7 +253,7 @@ mod tests {
             rect: Rect::new(10.0, 20.0, 100.0, 50.0),
             style: Style::default(),
         });
-        let result = renderer.render(&draw_list, &config).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
+        let result = renderer.render(&draw_list, &config).expect("finkit-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
         assert!(result.contains("<rect"));
         assert!(result.contains("x=\"10.00\""));
         assert!(result.contains("y=\"20.00\""));
@@ -271,7 +271,7 @@ mod tests {
             fill: Color::RED,
             stroke: Some(Color::BLACK),
         });
-        let result = renderer.render(&draw_list, &config).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
+        let result = renderer.render(&draw_list, &config).expect("finkit-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
         assert!(result.contains("<rect"));
         assert!(result.contains("fill=\"#ff0000\""));
         assert!(result.contains("stroke=\"#000000\""));
@@ -287,7 +287,7 @@ mod tests {
             fill: Color::GREEN,
             stroke: None,
         });
-        let result = renderer.render(&draw_list, &config).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
+        let result = renderer.render(&draw_list, &config).expect("finkit-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
         assert!(result.contains("fill=\"#00ff00\""));
         assert!(!result.contains("stroke="));
     }
@@ -305,7 +305,7 @@ mod tests {
             ],
             style: Style::default(),
         });
-        let result = renderer.render(&draw_list, &config).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
+        let result = renderer.render(&draw_list, &config).expect("finkit-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
         assert!(result.contains("<polygon"));
         assert!(result.contains("points=\"0.00,0.00 100.00,0.00 50.00,100.00\""));
     }
@@ -324,7 +324,7 @@ mod tests {
             style: Style::default(),
             close: false,
         });
-        let result = renderer.render(&draw_list, &config).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
+        let result = renderer.render(&draw_list, &config).expect("finkit-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
         assert!(result.contains("<path"));
         assert!(result.contains("d=\"M10.00 10.00 L50.00 50.00 L100.00 10.00\""));
         assert!(!result.contains(" Z"));
@@ -340,7 +340,7 @@ mod tests {
             style: Style::default(),
             close: true,
         });
-        let result = renderer.render(&draw_list, &config).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
+        let result = renderer.render(&draw_list, &config).expect("finkit-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
         assert!(result.contains(" Z\""));
     }
 
@@ -354,7 +354,7 @@ mod tests {
             style: Style::default(),
             close: false,
         });
-        let result = renderer.render(&draw_list, &config).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
+        let result = renderer.render(&draw_list, &config).expect("finkit-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
         assert!(!result.contains("<path"));
     }
 
@@ -368,7 +368,7 @@ mod tests {
             radius: 25.0,
             style: Style::default(),
         });
-        let result = renderer.render(&draw_list, &config).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
+        let result = renderer.render(&draw_list, &config).expect("finkit-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
         assert!(result.contains("<circle"));
         assert!(result.contains("cx=\"50.00\""));
         assert!(result.contains("cy=\"50.00\""));
@@ -385,7 +385,7 @@ mod tests {
             content: "Hello SVG".to_string(),
             style: Style::default(),
         });
-        let result = renderer.render(&draw_list, &config).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
+        let result = renderer.render(&draw_list, &config).expect("finkit-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
         assert!(result.contains("<text"));
         assert!(result.contains("x=\"10.00\""));
         assert!(result.contains("y=\"20.00\""));
@@ -402,7 +402,7 @@ mod tests {
             content: "<script>alert('xss')&\"</script>".to_string(),
             style: Style::default(),
         });
-        let result = renderer.render(&draw_list, &config).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
+        let result = renderer.render(&draw_list, &config).expect("finkit-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
         assert!(result.contains("&lt;script&gt;alert(&apos;xss&apos;)&amp;&quot;&lt;/script&gt;"));
     }
 
@@ -419,7 +419,7 @@ mod tests {
             }],
             transform: None,
         });
-        let result = renderer.render(&draw_list, &config).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
+        let result = renderer.render(&draw_list, &config).expect("finkit-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
         assert!(result.contains("<g>"));
         assert!(result.contains("</g>"));
         assert!(!result.contains("transform="));
@@ -438,7 +438,7 @@ mod tests {
             }],
             transform: Some(Transform::translate(5.0, 10.0)),
         });
-        let result = renderer.render(&draw_list, &config).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
+        let result = renderer.render(&draw_list, &config).expect("finkit-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
         assert!(result.contains("<g transform=\"matrix(1.00,0.00,0.00,1.00,5.00,10.00)\">"));
     }
 
@@ -458,7 +458,7 @@ mod tests {
             }],
             transform: Some(Transform::translate(10.0, 20.0)),
         });
-        let result = renderer.render(&draw_list, &config).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
+        let result = renderer.render(&draw_list, &config).expect("finkit-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
         assert!(result.contains("matrix(1.00,0.00,0.00,1.00,10.00,20.00)"));
         assert!(result.contains("matrix(2.00,0.00,0.00,2.00,0.00,0.00)"));
         assert!(result.contains("cx=\"5.00\""));
@@ -634,11 +634,11 @@ mod tests {
         let renderer = SvgRenderer::new();
         let config = default_config();
         let draw_list = DrawList::new();
-        let result = renderer.render(&draw_list, &config).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
+        let result = renderer.render(&draw_list, &config).expect("finkit-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
         assert!(result.contains("<svg"));
         assert!(result.contains("</svg>"));
-        let body_start = result.find("</svg>").expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
-        let bg_end = result.find("<rect width=\"100%\"").expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
+        let body_start = result.find("</svg>").expect("finkit-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
+        let bg_end = result.find("<rect width=\"100%\"").expect("finkit-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
         assert!(bg_end < body_start);
     }
 
@@ -662,7 +662,7 @@ mod tests {
             content: "Test".to_string(),
             style: Style::default(),
         });
-        let result = renderer.render(&draw_list, &config).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
+        let result = renderer.render(&draw_list, &config).expect("finkit-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
         assert!(result.contains("<line"));
         assert!(result.contains("<circle"));
         assert!(result.contains("<text"));
@@ -716,7 +716,7 @@ mod tests {
                 .with_fill(Color::BLACK),
         });
 
-        let result = renderer.render(&draw_list, &config).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
+        let result = renderer.render(&draw_list, &config).expect("finkit-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
         assert!(result.contains("<svg"));
         assert!(result.contains("fill=\"#ef4444\""));
         assert!(result.contains("fill=\"#22c55e\""));
@@ -744,7 +744,7 @@ mod tests {
             style: Style::default(),
             close: false,
         });
-        let result = renderer.render(&draw_list, &config).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
+        let result = renderer.render(&draw_list, &config).expect("finkit-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
         assert!(result.contains("d=\"M10.00 20.00\""));
     }
 
@@ -767,7 +767,7 @@ mod tests {
             ],
             transform: None,
         });
-        let result = renderer.render(&draw_list, &config).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
+        let result = renderer.render(&draw_list, &config).expect("finkit-visualization: unexpected None/Err in visualization/src/render/svg.rs (A5 governance)");
         assert!(result.contains("<g>"));
         assert!(result.contains("<rect"));
         assert!(result.contains("<circle"));

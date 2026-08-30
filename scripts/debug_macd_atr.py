@@ -8,7 +8,7 @@ import numpy as np
 sys.path.insert(0, r'P:\llm_code\finkit\dist\python\windows-x64')
 
 try:
-    import alpha_ta
+    import finkit
     import talib
 except ImportError as e:
     print(f"Import error: {e}")
@@ -29,7 +29,7 @@ print("=" * 80)
 print("\n[1] MACD Analysis")
 print("-" * 80)
 talib_macd, talib_signal, talib_hist = talib.MACD(close, fastperiod=12, slowperiod=26, signalperiod=9)
-alpha_result = alpha_ta.macd(close, fastperiod=12, slowperiod=26, signalperiod=9)
+alpha_result = finkit.macd(close, fastperiod=12, slowperiod=26, signalperiod=9)
 alpha_macd, alpha_signal, alpha_hist = np.array(alpha_result[0]), np.array(alpha_result[1]), np.array(alpha_result[2])
 
 # Find first valid index
@@ -73,8 +73,8 @@ talib_ema12 = talib.EMA(close, timeperiod=12)
 talib_ema26 = talib.EMA(close, timeperiod=26)
 
 # AlphaTA EMA
-alpha_ema12 = np.array(alpha_ta.ema(close, timeperiod=12))
-alpha_ema26 = np.array(alpha_ta.ema(close, timeperiod=26))
+alpha_ema12 = np.array(finkit.ema(close, timeperiod=12))
+alpha_ema26 = np.array(finkit.ema(close, timeperiod=26))
 
 print(f"EMA(12) at index 11:")
 print(f"  Manual (SMA init): {ema12_manual[11]:.6f}")
@@ -90,7 +90,7 @@ print(f"  AlphaTA:           {alpha_ema26[25]:.6f}")
 print("\n[3] ATR Analysis")
 print("-" * 80)
 talib_atr = talib.ATR(high, low, close, timeperiod=14)
-alpha_atr = np.array(alpha_ta.atr(high, low, close, timeperiod=14))
+alpha_atr = np.array(finkit.atr(high, low, close, timeperiod=14))
 
 # Calculate True Range manually
 tr = np.maximum(high[1:] - low[1:], 

@@ -1201,7 +1201,7 @@ brew install ta-lib  # 或 apt-get install libta-lib0-dev
 ### 8.5.5 验证
 
 ```bash
-$ cargo test -p alpha-ta-core --lib --no-fail-fast
+$ cargo test -p finkit --lib --no-fail-fast
 test result: ok. 2451 passed; 0 failed; 1 ignored
 ```
 
@@ -1395,10 +1395,10 @@ RUSTFLAGS="-C target-feature=+simd128" cargo build --target wasm32-unknown-unkno
 #### 8.5.8 验证
 
 ```bash
-$ cargo test -p alpha-ta-core --lib --no-fail-fast
+$ cargo test -p finkit --lib --no-fail-fast
 test result: ok. 2511 passed; 0 failed; 1 ignored
 
-$ cargo test -p alpha-ta-core --lib --features rayon --no-fail-fast
+$ cargo test -p finkit --lib --features rayon --no-fail-fast
 test result: ok. 2515 passed; 0 failed; 1 ignored
 
 # 增量:

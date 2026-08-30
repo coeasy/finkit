@@ -392,7 +392,7 @@ mod tests {
             .build();
         let layout = LayoutCalculator::calculate(&data, &config, 0);
 
-        let title_rect = layout.title_rect.expect("alpha-ta-visualization: unexpected None/Err in visualization/src/layout.rs (A5 governance)");
+        let title_rect = layout.title_rect.expect("finkit-visualization: unexpected None/Err in visualization/src/layout.rs (A5 governance)");
         assert!((title_rect.height - 30.0).abs() < 1e-10);
         assert!((title_rect.x - 80.0).abs() < 1e-10);
         assert!((title_rect.y - 10.0).abs() < 1e-10);
@@ -416,7 +416,7 @@ mod tests {
             .build();
         let layout = LayoutCalculator::calculate(&data, &config, 0);
 
-        let legend_rect = layout.legend_rect.expect("alpha-ta-visualization: unexpected None/Err in visualization/src/layout.rs (A5 governance)");
+        let legend_rect = layout.legend_rect.expect("finkit-visualization: unexpected None/Err in visualization/src/layout.rs (A5 governance)");
         assert!((legend_rect.height - 25.0).abs() < 1e-10);
     }
 
@@ -445,8 +445,8 @@ mod tests {
         assert!(layout.title_rect.is_some());
         assert!(layout.legend_rect.is_some());
 
-        let title = layout.title_rect.expect("alpha-ta-visualization: unexpected None/Err in visualization/src/layout.rs (A5 governance)");
-        let legend = layout.legend_rect.expect("alpha-ta-visualization: unexpected None/Err in visualization/src/layout.rs (A5 governance)");
+        let title = layout.title_rect.expect("finkit-visualization: unexpected None/Err in visualization/src/layout.rs (A5 governance)");
+        let legend = layout.legend_rect.expect("finkit-visualization: unexpected None/Err in visualization/src/layout.rs (A5 governance)");
         assert!((legend.y - (title.y + title.height)).abs() < 1e-10);
     }
 
@@ -490,8 +490,8 @@ mod tests {
         let y_axis = &layout.y_axes[0];
         assert!(!y_axis.ticks.is_empty());
         assert_eq!(y_axis.ticks.len(), y_axis.labels.len());
-        assert!(*y_axis.ticks.first().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/layout.rs (A5 governance)") <= y_axis.min);
-        assert!(*y_axis.ticks.last().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/layout.rs (A5 governance)") >= y_axis.max);
+        assert!(*y_axis.ticks.first().expect("finkit-visualization: unexpected None/Err in visualization/src/layout.rs (A5 governance)") <= y_axis.min);
+        assert!(*y_axis.ticks.last().expect("finkit-visualization: unexpected None/Err in visualization/src/layout.rs (A5 governance)") >= y_axis.max);
     }
 
     #[test]
@@ -528,7 +528,7 @@ mod tests {
         assert!((layout.x_axis.max - 9.0).abs() < 1e-10);
 
         assert_eq!(layout.x_axis.labels[0], "01-02");
-        assert_eq!(*layout.x_axis.labels.last().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/layout.rs (A5 governance)"), "01-15");
+        assert_eq!(*layout.x_axis.labels.last().expect("finkit-visualization: unexpected None/Err in visualization/src/layout.rs (A5 governance)"), "01-15");
     }
 
     #[test]

@@ -411,7 +411,7 @@ def format_methodology_section() -> str:
             "6. **Reproduce locally**:",
             "",
             "   ```bash",
-            "   cargo bench -p alpha-ta-core --bench talib_c_comparison --features talib-c",
+            "   cargo bench -p finkit --bench talib_c_comparison --features talib-c",
             "   python scripts/gen_benchmark_report.py",
             "   ```",
             "",

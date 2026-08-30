@@ -192,7 +192,7 @@ impl KlineChart {
         let sub_count = if self.config.show_volume { 1 } else { 0 };
         let layout = LayoutCalculator::calculate(data, &self.config, sub_count);
         self.layout = Some(layout);
-        let layout = self.layout.as_ref().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
+        let layout = self.layout.as_ref().expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
 
         let mut bg = DrawList::new();
         indicators::render_grid(&mut bg, layout, &self.config);
@@ -225,7 +225,7 @@ impl KlineChart {
     }
 
     fn incremental_render_internal(&mut self, data: &KlineData) -> Result<()> {
-        let layout = self.layout.as_ref().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
+        let layout = self.layout.as_ref().expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
         let last_idx = data.len() - 1;
 
         match self.config.chart_type {
@@ -435,7 +435,7 @@ impl KlineChart {
         self.layout = Some(LayoutCalculator::calculate(data, &self.config, sub_count));
         self.draw_list.clear();
 
-        let layout = self.layout.as_ref().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
+        let layout = self.layout.as_ref().expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
 
         indicators::render_grid(&mut self.draw_list, layout, &self.config);
         indicators::render_axes(&mut self.draw_list, layout, &self.config);
@@ -804,7 +804,7 @@ mod tests {
             .build();
         let mut chart = KlineChart::new(config);
         let data = make_test_data();
-        chart.build_draw_list(&data, &[]).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
+        chart.build_draw_list(&data, &[]).expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
         assert!(!chart.draw_list().is_empty());
         assert!(chart.layout().is_some());
     }
@@ -816,7 +816,7 @@ mod tests {
             .build();
         let mut chart = KlineChart::new(config);
         let data = make_test_data();
-        chart.build_draw_list(&data, &[]).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
+        chart.build_draw_list(&data, &[]).expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
         assert!(!chart.draw_list().is_empty());
     }
 
@@ -827,7 +827,7 @@ mod tests {
             .build();
         let mut chart = KlineChart::new(config);
         let data = make_test_data();
-        chart.build_draw_list(&data, &[]).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
+        chart.build_draw_list(&data, &[]).expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
         assert!(!chart.draw_list().is_empty());
     }
 
@@ -838,7 +838,7 @@ mod tests {
             .build();
         let mut chart = KlineChart::new(config);
         let data = make_test_data();
-        chart.build_draw_list(&data, &[]).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
+        chart.build_draw_list(&data, &[]).expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
         assert!(!chart.draw_list().is_empty());
     }
 
@@ -851,8 +851,8 @@ mod tests {
         let mut chart = KlineChart::new(config);
         let data = make_test_data();
         let indicators = vec![IndicatorConfig::new(IndicatorType::MA, vec![5.0])];
-        chart.build_draw_list(&data, &indicators).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
-        let svg = chart.to_svg_string().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
+        chart.build_draw_list(&data, &indicators).expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
+        let svg = chart.to_svg_string().expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
         assert!(svg.starts_with("<svg"));
         assert!(svg.contains("</svg>"));
         assert!(svg.contains(">Test K线图</text>"));
@@ -874,7 +874,7 @@ mod tests {
             .build();
         let mut chart = KlineChart::new(config);
         let data = make_test_data();
-        chart.build_draw_list(&data, &[]).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
+        chart.build_draw_list(&data, &[]).expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
         let result = chart.save_as_html("test.html");
         assert!(result.is_err());
     }
@@ -887,8 +887,8 @@ mod tests {
             .build();
         let mut chart = KlineChart::new(config);
         let data = make_test_data();
-        chart.build_draw_list(&data, &[]).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
-        assert!(!chart.layout().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)").sub_panels.is_empty());
+        chart.build_draw_list(&data, &[]).expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
+        assert!(!chart.layout().expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)").sub_panels.is_empty());
     }
 
     #[test]
@@ -899,8 +899,8 @@ mod tests {
             .build();
         let mut chart = KlineChart::new(config);
         let data = make_test_data();
-        chart.build_draw_list(&data, &[]).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
-        assert!(chart.layout().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)").sub_panels.is_empty());
+        chart.build_draw_list(&data, &[]).expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
+        assert!(chart.layout().expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)").sub_panels.is_empty());
     }
 
     #[test]
@@ -1000,7 +1000,7 @@ mod tests {
         );
         chart.set_data(data);
         assert!(chart.data().is_some());
-        assert_eq!(chart.data().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)").len(), 1);
+        assert_eq!(chart.data().expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)").len(), 1);
     }
 
     #[test]
@@ -1016,12 +1016,12 @@ mod tests {
             vec![1000.0],
         );
         chart.set_data(data);
-        chart.render_incremental().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
+        chart.render_incremental().expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
 
         chart
             .append_kline("2024-01-02", 103.0, 108.0, 101.0, 107.0, 1200.0)
-            .expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
-        assert_eq!(chart.data().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)").len(), 2);
+            .expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
+        assert_eq!(chart.data().expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)").len(), 2);
     }
 
     #[test]
@@ -1045,12 +1045,12 @@ mod tests {
             vec![1000.0],
         );
         chart.set_data(data);
-        chart.render_incremental().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
+        chart.render_incremental().expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
 
         chart
             .update_last_kline(106.0, Some(110.0), Some(97.0), Some(1500.0))
-            .expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
-        let d = chart.data().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
+            .expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
+        let d = chart.data().expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
         assert_eq!(d.closes[0], 106.0);
         assert_eq!(d.highs[0], 110.0);
         assert_eq!(d.lows[0], 97.0);
@@ -1075,7 +1075,7 @@ mod tests {
         chart.set_data(data);
         let result = chart.render_incremental();
         assert!(result.is_ok());
-        assert!(!result.expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)").is_empty());
+        assert!(!result.expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)").is_empty());
     }
 
     #[test]
@@ -1086,14 +1086,14 @@ mod tests {
         let mut chart = KlineChart::new(config);
         let data = make_test_data();
         chart.set_data(data);
-        chart.render_incremental().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
+        chart.render_incremental().expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
 
         chart
             .update_last_kline(112.0, Some(113.0), Some(108.0), Some(2000.0))
-            .expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
+            .expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
         let result = chart.render_incremental();
         assert!(result.is_ok());
-        assert!(!result.expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)").is_empty());
+        assert!(!result.expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)").is_empty());
     }
 
     #[test]
@@ -1112,14 +1112,14 @@ mod tests {
         let mut chart = KlineChart::new(config);
         let data = make_test_data();
         chart.set_data(data);
-        chart.render_incremental().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
+        chart.render_incremental().expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
 
         chart
             .append_kline("2024-01-16", 110.0, 113.0, 108.0, 112.0, 1800.0)
-            .expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
+            .expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
         let result = chart.render_incremental();
         assert!(result.is_ok());
-        assert_eq!(chart.data().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)").len(), 11);
+        assert_eq!(chart.data().expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)").len(), 11);
     }
 
     #[test]
@@ -1130,9 +1130,9 @@ mod tests {
         let mut chart = KlineChart::new(config);
         let data = make_test_data();
         chart.set_data(data);
-        chart.render_incremental().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
+        chart.render_incremental().expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
 
-        chart.update_last_kline(112.0, None, None, None).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
+        chart.update_last_kline(112.0, None, None, None).expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
         let result = chart.render_incremental();
         assert!(result.is_ok());
     }
@@ -1145,9 +1145,9 @@ mod tests {
         let mut chart = KlineChart::new(config);
         let data = make_test_data();
         chart.set_data(data);
-        chart.render_incremental().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
+        chart.render_incremental().expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
 
-        chart.update_last_kline(112.0, None, None, None).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
+        chart.update_last_kline(112.0, None, None, None).expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
         let result = chart.render_incremental();
         assert!(result.is_ok());
     }
@@ -1160,9 +1160,9 @@ mod tests {
         let mut chart = KlineChart::new(config);
         let data = make_test_data();
         chart.set_data(data);
-        chart.render_incremental().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
+        chart.render_incremental().expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
 
-        chart.update_last_kline(112.0, None, None, None).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
+        chart.update_last_kline(112.0, None, None, None).expect("finkit-visualization: unexpected None/Err in visualization/src/chart/mod.rs (A5 governance)");
         let result = chart.render_incremental();
         assert!(result.is_ok());
     }

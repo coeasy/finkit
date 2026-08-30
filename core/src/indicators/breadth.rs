@@ -24,7 +24,7 @@ use ndarray::Array1;
 ///
 /// # Example
 /// ```rust
-/// use alpha_ta_core::indicators::advance_decline_line;
+/// use finkit::indicators::advance_decline_line;
 ///
 /// let advances = vec![1500.0, 1200.0, 1800.0, 1100.0, 1600.0];
 /// let declines = vec![1000.0, 1300.0, 900.0, 1400.0, 1100.0];
@@ -75,7 +75,7 @@ pub fn advance_decline_line(advances: &[f64], declines: &[f64]) -> Result<Array1
 ///
 /// # Example
 /// ```rust
-/// use alpha_ta_core::indicators::advance_decline_ratio;
+/// use finkit::indicators::advance_decline_ratio;
 ///
 /// let advances = vec![1500.0, 1200.0, 1800.0];
 /// let declines = vec![1000.0, 1300.0, 900.0];
@@ -129,7 +129,7 @@ pub fn advance_decline_ratio(advances: &[f64], declines: &[f64]) -> Result<Array
 ///
 /// # Example
 /// ```rust
-/// use alpha_ta_core::indicators::mcclellan_oscillator;
+/// use finkit::indicators::mcclellan_oscillator;
 ///
 /// let ad_diff: Vec<f64> = (0..50).map(|i| (i as f64) % 10.0 - 5.0).collect();
 /// let result = mcclellan_oscillator(&ad_diff, 19, 39).unwrap();
@@ -192,7 +192,7 @@ pub fn mcclellan_oscillator(
 ///
 /// # Example
 /// ```rust
-/// use alpha_ta_core::indicators::mcclellan_summation;
+/// use finkit::indicators::mcclellan_summation;
 ///
 /// let osc = vec![50.0, -30.0, 80.0, -20.0, 40.0];
 /// let result = mcclellan_summation(&osc).unwrap();
@@ -249,7 +249,7 @@ pub fn mcclellan_summation(mcclellan_osc: &[f64]) -> Result<Array1<f64>> {
 ///
 /// # Example
 /// ```rust
-/// use alpha_ta_core::indicators::trin;
+/// use finkit::indicators::trin;
 ///
 /// let advances = vec![1500.0, 1200.0, 800.0];
 /// let declines = vec![1000.0, 1300.0, 1500.0];
@@ -322,7 +322,7 @@ pub fn trin(
 ///
 /// # Example
 /// ```rust
-/// use alpha_ta_core::indicators::new_highs_lows;
+/// use finkit::indicators::new_highs_lows;
 ///
 /// let highs = vec![200.0, 150.0, 50.0, 100.0, 300.0];
 /// let lows = vec![50.0, 100.0, 200.0, 80.0, 30.0];

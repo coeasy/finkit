@@ -1,4 +1,4 @@
-use alpha_ta_core::math::moving_avg::{sma, wma};
+use finkit::math::moving_avg::{sma, wma};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;

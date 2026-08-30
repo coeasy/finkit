@@ -1,6 +1,6 @@
-use alpha_ta_core::streaming::{Ohlcv, OhlcvBar, PriceSource};
-use alpha_ta_core::streaming::builder::{Builder, IndicatorBuilder};
-use alpha_ta_core::streaming::indicators::StreamingSma;
+use finkit::streaming::{Ohlcv, OhlcvBar, PriceSource};
+use finkit::streaming::builder::{Builder, IndicatorBuilder};
+use finkit::streaming::indicators::StreamingSma;
 
 fn test_bar() -> OhlcvBar {
     OhlcvBar::new(100.0, 120.0, 80.0, 110.0, 50000.0)

@@ -9,9 +9,9 @@ use crate::error::IndicatorError;
 /// # Example
 ///
 /// ```
-/// use alpha_ta_core::streaming::builder::{IndicatorBuilder, Builder};
-/// use alpha_ta_core::streaming::indicators::StreamingSma;
-/// use alpha_ta_core::streaming::IndicatorMeta;
+/// use finkit::streaming::builder::{IndicatorBuilder, Builder};
+/// use finkit::streaming::indicators::StreamingSma;
+/// use finkit::streaming::IndicatorMeta;
 ///
 /// let sma = StreamingSma::builder()
 ///     .period(20)

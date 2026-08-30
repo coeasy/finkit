@@ -7,9 +7,9 @@ import numpy as np
 def test_compute_indicators_basic():
     """Test basic batch computation functionality."""
     try:
-        import alpha_ta as ta
+        import finkit as ta
     except ImportError:
-        print("SKIP: alpha_ta not installed")
+        print("SKIP: finkit not installed")
         return
 
     close = np.arange(1, 101, dtype=np.float64)
@@ -36,9 +36,9 @@ def test_compute_indicators_basic():
 def test_compute_indicators_with_ohlcv():
     """Test batch computation with full OHLCV data."""
     try:
-        import alpha_ta as ta
+        import finkit as ta
     except ImportError:
-        print("SKIP: alpha_ta not installed")
+        print("SKIP: finkit not installed")
         return
 
     n = 100
@@ -81,9 +81,9 @@ def test_compute_indicators_with_ohlcv():
 def test_compute_indicators_multi_output():
     """Test batch computation with multi-output indicators."""
     try:
-        import alpha_ta as ta
+        import finkit as ta
     except ImportError:
-        print("SKIP: alpha_ta not installed")
+        print("SKIP: finkit not installed")
         return
 
     close = np.arange(1, 101, dtype=np.float64)
@@ -122,9 +122,9 @@ def test_compute_indicators_multi_output():
 def test_compute_indicators_gil_release():
     """Verify batch computation releases GIL by running concurrent calls."""
     try:
-        import alpha_ta as ta
+        import finkit as ta
     except ImportError:
-        print("SKIP: alpha_ta not installed")
+        print("SKIP: finkit not installed")
         return
 
     close = np.arange(1, 10001, dtype=np.float64)
@@ -169,9 +169,9 @@ def test_compute_indicators_gil_release():
 def test_compute_indicators_performance_comparison():
     """Compare performance of batch vs individual calls."""
     try:
-        import alpha_ta as ta
+        import finkit as ta
     except ImportError:
-        print("SKIP: alpha_ta not installed")
+        print("SKIP: finkit not installed")
         return
 
     close = np.arange(1, 10001, dtype=np.float64)
@@ -229,9 +229,9 @@ def test_compute_indicators_performance_comparison():
 def test_compute_indicators_c_contiguous():
     """Test that C-contiguous arrays work correctly."""
     try:
-        import alpha_ta as ta
+        import finkit as ta
     except ImportError:
-        print("SKIP: alpha_ta not installed")
+        print("SKIP: finkit not installed")
         return
 
     close_c = np.arange(1, 101, dtype=np.float64)
@@ -258,9 +258,9 @@ def test_compute_indicators_c_contiguous():
 def test_compute_indicators_error_handling():
     """Test error handling for missing data."""
     try:
-        import alpha_ta as ta
+        import finkit as ta
     except ImportError:
-        print("SKIP: alpha_ta not installed")
+        print("SKIP: finkit not installed")
         return
 
     close = np.arange(1, 101, dtype=np.float64)
@@ -283,9 +283,9 @@ def test_compute_indicators_error_handling():
 def test_compute_indicators_large_batch():
     """Test batch computation with many indicators."""
     try:
-        import alpha_ta as ta
+        import finkit as ta
     except ImportError:
-        print("SKIP: alpha_ta not installed")
+        print("SKIP: finkit not installed")
         return
 
     close = np.arange(1, 1001, dtype=np.float64)

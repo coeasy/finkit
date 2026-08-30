@@ -13,7 +13,7 @@
 //! # Example
 //!
 //! ```
-//! use alpha_ta_core::features::{FeatureSet, FeatureMatrix, MultiPeriodFeature};
+//! use finkit::features::{FeatureSet, FeatureMatrix, MultiPeriodFeature};
 //!
 //! let close = vec![100.0, 101.0, 102.0, 101.5, 103.0, 104.0, 103.5, 105.0, 106.0, 107.0];
 //! let mut engine = FeatureSet::new();

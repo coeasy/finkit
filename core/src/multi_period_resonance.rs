@@ -16,8 +16,8 @@
 //! # Example
 //!
 //! ```
-//! use alpha_ta_core::multi_period_resonance::{mtf_resonance, mtf_majority};
-//! use alpha_ta_core::patterns::Signal;
+//! use finkit::multi_period_resonance::{mtf_resonance, mtf_majority};
+//! use finkit::patterns::Signal;
 //! use ndarray::Array1;
 //!
 //! // Same length, two timeframes, both already resampled to daily bars

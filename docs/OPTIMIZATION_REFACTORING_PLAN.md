@@ -578,9 +578,9 @@ Phase 2: 持续精度监控
 
 ```bash
 # 核心基准（无需 TA-Lib C 库）
-cargo bench -p alpha-ta-core --bench formula_bench
-cargo bench -p alpha-ta-core --bench streaming_bench
-cargo bench -p alpha-ta-core --bench simd_bench
+cargo bench -p finkit --bench formula_bench
+cargo bench -p finkit --bench streaming_bench
+cargo bench -p finkit --bench simd_bench
 
 # TA-Lib C 对比（需安装 TA-Lib C 库）
 cargo bench --bench talib_c_comparison --features talib-c
@@ -602,11 +602,11 @@ cargo bench --bench parallel_batch_bench --features rayon
 
 ```bash
 # 全量单元测试
-cargo test -p alpha-ta-core --lib --no-fail-fast
+cargo test -p finkit --lib --no-fail-fast
 # 预期: 2515+ passed
 
 # Golden 测试
-cargo test -p alpha-ta-core --features talib-c -- golden_tests
+cargo test -p finkit --features talib-c -- golden_tests
 
 # 性能门禁
 python scripts/gen_benchmark_report.py --perf-gate --threshold 5

@@ -1,0 +1,14 @@
+# pkg-config file for finkit
+
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+libdir=${exec_prefix}/@CMAKE_INSTALL_LIBDIR@
+includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
+
+Name: finkit
+Description: Finkit - Financial Technical Analysis Library C/C++ Bindings
+URL: https://github.com/coeasy/finkit
+Version: @PROJECT_VERSION@
+Libs: -L${libdir} -lfinkit_ffi
+Cflags: -I${includedir}
+Requires:

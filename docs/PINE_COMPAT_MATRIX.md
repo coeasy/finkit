@@ -103,7 +103,7 @@ test -d tests/pine_corpus
 python -c "import json; m=json.load(open('tests/pine_corpus/manifest.json')); print(m['summary'])"
 
 # Pine 方言解析冒烟（Rust）
-cargo test -p alpha-ta-core dialect_tests -- --nocapture
+cargo test -p finkit dialect_tests -- --nocapture
 ```
 
 ## 相关文件

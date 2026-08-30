@@ -80,7 +80,7 @@ pub struct PivotResult {
 ///
 /// # Example
 /// ```rust
-/// use alpha_ta_core::indicators::{pivot_points, PivotMethod};
+/// use finkit::indicators::{pivot_points, PivotMethod};
 ///
 /// let high = vec![105.0, 106.0, 107.0, 108.0];
 /// let low = vec![100.0, 101.0, 102.0, 103.0];

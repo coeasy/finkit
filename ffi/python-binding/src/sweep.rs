@@ -1,9 +1,9 @@
 //! Python bindings for parameter sweep API.
 
 use pyo3::prelude::*;
-use alpha_ta_core::indicators::sweep::{ema_sweep, rsi_sweep, sma_sweep};
-use alpha_ta_core::indicators::sweep_engine::{ParamRange, SweepEngine};
-use alpha_ta_core::indicators::sweepable::{EmaSweepable, RsiSweepable, SmaSweepable};
+use finkit::indicators::sweep::{ema_sweep, rsi_sweep, sma_sweep};
+use finkit::indicators::sweep_engine::{ParamRange, SweepEngine};
+use finkit::indicators::sweepable::{EmaSweepable, RsiSweepable, SmaSweepable};
 
 /// Sweep SMA across multiple periods.
 ///
@@ -64,7 +64,7 @@ pub fn sweep_engine(
             "sma" => engine.run(&SmaSweepable, &data, &param_ranges),
             "ema" => engine.run(&EmaSweepable, &data, &param_ranges),
             "rsi" => engine.run(&RsiSweepable, &data, &param_ranges),
-            other => Err(alpha_ta_core::error::TaError::InvalidParameter {
+            other => Err(finkit::error::TaError::InvalidParameter {
                 name: "indicator".to_string(),
                 constraint: format!("one of 'sma','ema','rsi', got '{other}'"),
             }),

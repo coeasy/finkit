@@ -8,8 +8,8 @@
 //! It asserts the pipeline has not regressed versus the previously recorded
 //! baseline and prints a per-script table plus the recomputed pass rate.
 
-use alpha_ta_core::formula::pine::{map_pine_to_alphata, parse_pine};
-use alpha_ta_core::formula::{FormulaContext, FormulaDialect, FormulaEngine};
+use finkit::formula::pine::{map_pine_to_alphata, parse_pine};
+use finkit::formula::{FormulaContext, FormulaDialect, FormulaEngine};
 use ndarray::Array1;
 use std::collections::HashMap;
 use std::path::Path;

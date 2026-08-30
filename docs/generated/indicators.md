@@ -3,7 +3,7 @@
 > **SSOT** — auto-generated from `core/src/indicators/mod.rs` and submodule `pub fn` exports.
 > Do not edit manually. Regenerate: `python scripts/gen_ssot_docs.py --generate`
 
-Modules exported from `indicators/mod.rs`: **31** | Public indicator functions: **280**
+Modules exported from `indicators/mod.rs`: **34** | Public indicator functions: **315**
 
 ## astock
 
@@ -106,6 +106,11 @@ Modules exported from `indicators/mod.rs`: **31** | Public indicator functions: 
 |----------|
 | `bandpass` |
 | `decycler` |
+| `ehlers_ema_super_smoother` |
+| `ehlers_fisher_transform` |
+| `ehlers_instantaneous_trendline` |
+| `ehlers_roofing_filter_v2` |
+| `ehlers_sidewinder` |
 | `ht_dcperiod` |
 | `ht_dcphase` |
 | `ht_measurement` |
@@ -255,6 +260,7 @@ Modules exported from `indicators/mod.rs`: **31** | Public indicator functions: 
 | `jma` |
 | `ma` |
 | `mama` |
+| `mama_into` |
 | `midpoint` |
 | `midprice` |
 | `sar` |
@@ -262,6 +268,18 @@ Modules exported from `indicators/mod.rs`: **31** | Public indicator functions: 
 | `t3` |
 | `tema_into` |
 | `vidya` |
+
+## parallel
+
+| Function |
+|----------|
+| `parallel_atr_batch` |
+| `parallel_ema_batch` |
+| `parallel_ema_multi_period` |
+| `parallel_rsi_batch` |
+| `parallel_sma_batch` |
+| `parallel_sma_multi_period` |
+| `rayon_thread_count` |
 
 ## pivot
 
@@ -274,9 +292,13 @@ Modules exported from `indicators/mod.rs`: **31** | Public indicator functions: 
 | Function |
 |----------|
 | `avgprice` |
+| `avgprice_into` |
 | `medprice` |
+| `medprice_into` |
 | `typprice` |
+| `typprice_into` |
 | `wclprice` |
+| `wclprice_into` |
 
 ## relative_strength
 
@@ -318,6 +340,17 @@ Modules exported from `indicators/mod.rs`: **31** | Public indicator functions: 
 | `v_shape_reversal` |
 | `v_shape_reversal_score` |
 
+## smc
+
+| Function |
+|----------|
+| `break_of_structure` |
+| `change_of_character` |
+| `fair_value_gap` |
+| `liquidity_zones` |
+| `order_block` |
+| `smc_signals` |
+
 ## statistics
 
 | Function |
@@ -325,6 +358,7 @@ Modules exported from `indicators/mod.rs`: **31** | Public indicator functions: 
 | `avgdev` |
 | `beta` |
 | `correlation` |
+| `kurtosis` |
 | `linear_reg` |
 | `linearreg` |
 | `linearreg_angle` |
@@ -332,6 +366,7 @@ Modules exported from `indicators/mod.rs`: **31** | Public indicator functions: 
 | `linearreg_slope` |
 | `percent_rank` |
 | `pr` |
+| `skewness` |
 | `std_dev` |
 | `tsf` |
 | `var` |
@@ -343,6 +378,8 @@ Modules exported from `indicators/mod.rs`: **31** | Public indicator functions: 
 |----------|
 | `supertrend` |
 | `supertrend_default` |
+| `supertrend_multi` |
+| `wow_direction` |
 
 ## sweep
 
@@ -382,20 +419,24 @@ _No `pub fn` exports in this module file._
 | `natr` |
 | `natr_into` |
 | `trange` |
+| `trange_into` |
 
 ## volatility_ext
 
 | Function |
 |----------|
 | `adr` |
+| `atr_trailing_stop` |
 | `calmar_ratio` |
 | `chaikin_volatility` |
+| `chandelier_exit` |
 | `choppiness_index` |
 | `garman_klass_volatility` |
 | `historical_volatility` |
 | `information_ratio` |
 | `keltner` |
 | `keltner_channel` |
+| `keltner_channel_ext` |
 | `mass_index` |
 | `max_drawdown` |
 | `parkinson_volatility` |
@@ -411,6 +452,7 @@ _No `pub fn` exports in this module file._
 | Function |
 |----------|
 | `ad` |
+| `ad_into` |
 | `adosc` |
 | `anchored_vwap` |
 | `obv` |
@@ -438,6 +480,14 @@ _No `pub fn` exports in this module file._
 | `volume_roc` |
 | `vwmacd` |
 | `vzo` |
+
+## volume_profile
+
+| Function |
+|----------|
+| `market_profile_tpo` |
+| `volume_nodes` |
+| `vwap_anchored_session` |
 
 ## Regenerate
 

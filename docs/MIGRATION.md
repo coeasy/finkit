@@ -7,7 +7,7 @@
 - 统一入口：`use alpha_ta_core::{indicators, streaming, formula};`
 - 批量指标签名：`fn rsi(close: &[f64], period: usize) -> Result<Array1<f64>, TaError>`。
 - 流式接口：实现 `StreamingIndicator` 的 `StreamingXxx::next(&mut input) -> Option<f64>`。
-- 若你之前用 `ta` crate：`ta` 与 `alpha-ta-core` 的批量函数名基本一致（`Sma->sma`、`Ema->ema`、`Rsi->rsi`），返回值从 `Vec/usize 下标` 变为 `Array1<f64>`；用 `ta` 仅为基准对照（见 `core/Cargo.toml` 的 dev-dependency）。
+- 若你之前用 `ta` crate：`ta` 与 `finkit` 的批量函数名基本一致（`Sma->sma`、`Ema->ema`、`Rsi->rsi`），返回值从 `Vec/usize 下标` 变为 `Array1<f64>`；用 `ta` 仅为基准对照（见 `core/Cargo.toml` 的 dev-dependency）。
 
 ## 2. 公式语言用户
 
@@ -28,5 +28,5 @@
 
 - [ ] 确认目标语言绑定已随发行包更新。
 - [ ] 将旧 import 路径改为新路径（如 Go：`github.com/coeasy/finkit/go/ta`）。
-- [ ] 运行 `cargo test -p alpha-ta-core` 与各语言冒烟测试。
+- [ ] 运行 `cargo test -p finkit` 与各语言冒烟测试。
 - [ ] 用 golden 用例核对输出与 TA-Lib 对齐（`tests/golden/`）。

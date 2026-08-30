@@ -11,20 +11,20 @@
 #![allow(non_snake_case)]
 #![allow(missing_docs)]
 
-use alpha_ta_core::indicators;
-use alpha_ta_core::math::moving_avg;
-use alpha_ta_core::patterns;
+use finkit::indicators;
+use finkit::math::moving_avg;
+use finkit::patterns;
 use std::slice;
-use alpha_ta_ffi_common::panic::*;
+use finkit_ffi_common::panic::*;
 
 // Leak-detection allocator: installed only for the test binary. iOS indicators
 // write into a caller-owned buffer (no heap transfer across the FFI boundary),
 // but this still guards against the Rust side leaking internal scratch buffers.
-// See `alpha_ta_ffi_common::leak`.
+// See `finkit_ffi_common::leak`.
 #[cfg(test)]
 #[global_allocator]
-static TEST_ALLOC: alpha_ta_ffi_common::leak::CountingAlloc =
-    alpha_ta_ffi_common::leak::CountingAlloc;
+static TEST_ALLOC: finkit_ffi_common::leak::CountingAlloc =
+    finkit_ffi_common::leak::CountingAlloc;
 
 /// ABI version exported to the Swift wrapper so the framework can refuse
 /// to load a `.a` built against an incompatible core.
@@ -147,7 +147,7 @@ mod tests {
     // Rust side's internal scratch allocations are fully reclaimed each cycle.
     #[test]
     fn ffi_heap_no_leak_indicator_cycle() {
-        use alpha_ta_ffi_common::leak::live_bytes;
+        use finkit_ffi_common::leak::live_bytes;
         let n: i32 = 512;
         let input: Vec<f64> = (0..n as usize).map(|i| (i as f64).sin()).collect();
 

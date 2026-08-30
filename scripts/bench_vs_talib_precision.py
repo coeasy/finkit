@@ -35,10 +35,10 @@ import numpy as np
 
 # ---- import guards --------------------------------------------------------
 try:
-    import AlphaTA
+    import finkit
 except ImportError:
-    print("[precision] AlphaTA not installed; pip install AlphaTA (or use the "
-          "local wheel in dist/python/<plat>/alpha-ta-*.whl)",
+    print("[precision] finkit not installed; pip install finkit (or use the "
+          "local wheel in dist/python/<plat>/finkit-*.whl)",
           file=sys.stderr)
     sys.exit(2)
 
@@ -109,16 +109,16 @@ def run_comparisons(high, low, close, open_, volume) -> list[dict]:
 
     # ---- single-array indicators -----------------------------------------
     for name, fk_fn, ta_fn in [
-        ("SMA(20)",     lambda c: AlphaTA.sma(c, 20),                lambda c: talib.SMA(c, 20)),
-        ("EMA(20)",     lambda c: AlphaTA.ema(c, 20),                lambda c: talib.EMA(c, 20)),
-        ("WMA(20)",     lambda c: AlphaTA.wma(c, 20),                lambda c: talib.WMA(c, 20)),
-        ("RSI(14)",     lambda c: AlphaTA.rsi(c, 14),                lambda c: talib.RSI(c, 14)),
-        ("ATR(14)",     lambda: AlphaTA.atr(high, low, close, 14),   lambda: talib.ATR(high, low, close, 14)),
-        ("NATR(14)",    lambda: AlphaTA.natr(high, low, close, 14),  lambda: talib.NATR(high, low, close, 14)),
-        ("ADX(14)",     lambda: AlphaTA.adx(high, low, close, 14),   lambda: talib.ADX(high, low, close, 14)),
-        ("CCI(14)",     lambda: AlphaTA.cci(high, low, close, 14),   lambda: talib.CCI(high, low, close, 14)),
-        ("WILLR(14)",   lambda: AlphaTA.willr(high, low, close, 14), lambda: talib.WILLR(high, low, close, 14)),
-        ("OBV",         lambda: AlphaTA.obv(close, volume),          lambda: talib.OBV(close, volume)),
+        ("SMA(20)",     lambda c: finkit.sma(c, 20),                lambda c: talib.SMA(c, 20)),
+        ("EMA(20)",     lambda c: finkit.ema(c, 20),                lambda c: talib.EMA(c, 20)),
+        ("WMA(20)",     lambda c: finkit.wma(c, 20),                lambda c: talib.WMA(c, 20)),
+        ("RSI(14)",     lambda c: finkit.rsi(c, 14),                lambda c: talib.RSI(c, 14)),
+        ("ATR(14)",     lambda: finkit.atr(high, low, close, 14),   lambda: talib.ATR(high, low, close, 14)),
+        ("NATR(14)",    lambda: finkit.natr(high, low, close, 14),  lambda: talib.NATR(high, low, close, 14)),
+        ("ADX(14)",     lambda: finkit.adx(high, low, close, 14),   lambda: talib.ADX(high, low, close, 14)),
+        ("CCI(14)",     lambda: finkit.cci(high, low, close, 14),   lambda: talib.CCI(high, low, close, 14)),
+        ("WILLR(14)",   lambda: finkit.willr(high, low, close, 14), lambda: talib.WILLR(high, low, close, 14)),
+        ("OBV",         lambda: finkit.obv(close, volume),          lambda: talib.OBV(close, volume)),
     ]:
         names.append(name)
         try:
@@ -131,7 +131,7 @@ def run_comparisons(high, low, close, open_, volume) -> list[dict]:
 
     # ---- multi-array indicators -----------------------------------------
     try:
-        fk_macd = AlphaTA.macd(close)        # (macd, signal, hist)
+        fk_macd = finkit.macd(close)        # (macd, signal, hist)
         ta_macd = talib.MACD(close)         # (macd, signal, hist)
         names.append("MACD(12,26,9)")
         rows.append([
@@ -144,7 +144,7 @@ def run_comparisons(high, low, close, open_, volume) -> list[dict]:
         rows.append([{"name": "MACD", "error": repr(exc)}])
 
     try:
-        fk_bb = AlphaTA.bollinger_bands(close, 20, 2.0, 2.0)  # (upper, mid, lower)
+        fk_bb = finkit.bollinger_bands(close, 20, 2.0, 2.0)  # (upper, mid, lower)
         ta_bb = talib.BBANDS(close, 20, 2.0, 2.0)            # (upper, mid, lower)
         names.append("BBANDS(20,2)")
         rows.append([
@@ -157,7 +157,7 @@ def run_comparisons(high, low, close, open_, volume) -> list[dict]:
         rows.append([{"name": "BBANDS", "error": repr(exc)}])
 
     try:
-        fk_sto = AlphaTA.stoch(high, low, close)        # (slowk, slowd)
+        fk_sto = finkit.stoch(high, low, close)        # (slowk, slowd)
         ta_sto = talib.STOCH(high, low, close)        # (slowk, slowd)
         names.append("STOCH(14,3,3)")
         rows.append([

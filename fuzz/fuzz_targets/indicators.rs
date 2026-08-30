@@ -14,8 +14,8 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use alpha_ta_core::math::moving_avg::{sma, ema, wma, dema};
-use alpha_ta_core::indicators::{bbands, macd, rsi};
+use finkit::math::moving_avg::{sma, ema, wma, dema};
+use finkit::indicators::{bbands, macd, rsi};
 use ndarray::Array1;
 
 fuzz_target!(|data: &[u8]| {

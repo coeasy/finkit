@@ -1,8 +1,8 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use alpha_ta_core::indicators::sweep::{ema_sweep, rsi_sweep, sma_sweep};
-use alpha_ta_core::indicators::sweep_engine::{SweepEngine, ParamRange};
-use alpha_ta_core::indicators::sweepable::SmaSweepable;
-use alpha_ta_core::math::moving_avg::{ema, sma};
+use finkit::indicators::sweep::{ema_sweep, rsi_sweep, sma_sweep};
+use finkit::indicators::sweep_engine::{SweepEngine, ParamRange};
+use finkit::indicators::sweepable::SmaSweepable;
+use finkit::math::moving_avg::{ema, sma};
 
 fn generate_data(n: usize) -> Vec<f64> {
     let mut data = Vec::with_capacity(n);
@@ -59,7 +59,7 @@ fn bench_rsi_sweep(c: &mut Criterion) {
     c.bench_function("rsi_individual_6_periods", |b| {
         b.iter(|| {
             for &p in &periods {
-                let _ = alpha_ta_core::indicators::momentum::rsi(&data, p).unwrap();
+                let _ = finkit::indicators::momentum::rsi(&data, p).unwrap();
             }
         })
     });

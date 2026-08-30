@@ -1,8 +1,8 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
-use alpha_ta_core::formula::simd::SimdOps;
-use alpha_ta_core::math::simd_ops;
-use alpha_ta_core::math::statistics;
-use alpha_ta_core::math::linear;
+use finkit::formula::simd::SimdOps;
+use finkit::math::simd_ops;
+use finkit::math::statistics;
+use finkit::math::linear;
 
 const DATA_LEN: usize = 100_000;
 const SMALL_DATA_LEN: usize = 10_000;

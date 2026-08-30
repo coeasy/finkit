@@ -42,7 +42,7 @@ maturin develop --release
 ## 快速入门
 
 ```python
-import alpha_ta as ta
+import finkit as ta
 import numpy as np
 
 # 示例数据
@@ -194,7 +194,7 @@ ta.detect_flag(high, low, close, flagpole_period=10, flag_period=5)
 ```python
 import numpy as np
 import pandas as pd
-import alpha_ta as ta
+import finkit as ta
 
 # NumPy数组输入
 close_np = np.array([100.0, 101.5, 99.8, ...])

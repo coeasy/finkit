@@ -3,14 +3,14 @@
 //! Reference values are self-golden: generated once by our library via the
 //! ignored `generate_golden` test, then compared on every run.
 
-use alpha_ta_core::indicators::{
+use finkit::indicators::{
     adx, apo, aroon, bbands, cci, cmo, macd, mom, roc, rsi, stoch, stochrsi, trix, volatility::atr,
     volatility::{natr, trange}, volume::{obv, vwap}, willr,
     classic_patterns::{darvas_box, kagi, point_and_figure, renko, three_line_break, williams_alligator},
     heikin_ashi,
 };
-use alpha_ta_core::indicators::StochResult;
-use alpha_ta_core::math::moving_avg::{dema, ema, sma, tema, wma};
+use finkit::indicators::StochResult;
+use finkit::math::moving_avg::{dema, ema, sma, tema, wma};
 use std::fs;
 use std::path::{Path, PathBuf};
 

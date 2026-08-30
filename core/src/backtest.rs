@@ -20,8 +20,8 @@
 //! # Example
 //!
 //! ```
-//! use alpha_ta_core::backtest::{backtest, BacktestConfig};
-//! use alpha_ta_core::patterns::Signal;
+//! use finkit::backtest::{backtest, BacktestConfig};
+//! use finkit::patterns::Signal;
 //! use ndarray::Array1;
 //!
 //! let close: Vec<f64> = (0..50).map(|i| 100.0 + (i as f64) * 0.1).collect();

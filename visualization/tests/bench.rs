@@ -1,11 +1,11 @@
 use std::time::Instant;
 
-use alpha_ta_visualization::chart::KlineChart;
-use alpha_ta_visualization::config::{
+use finkit_visualization::chart::KlineChart;
+use finkit_visualization::config::{
     ChartConfigBuilder, ChartType, DecimateStrategy, IndicatorConfig, IndicatorType,
 };
-use alpha_ta_visualization::data::KlineData;
-use alpha_ta_visualization::decimate::decimate;
+use finkit_visualization::data::KlineData;
+use finkit_visualization::decimate::decimate;
 
 fn make_test_data(n: usize) -> KlineData {
     let mut data = KlineData::new(

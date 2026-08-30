@@ -3,7 +3,7 @@
 对比 AlphaTA 和 TA-Lib 的所有指标
 """
 import numpy as np
-import alpha_ta
+import finkit
 import talib
 import json
 

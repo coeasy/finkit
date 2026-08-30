@@ -189,8 +189,8 @@ mod tests {
             vec![103.0],
             vec![1000.0],
         );
-        let json = serde_json::to_string(&data).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/data.rs (A5 governance)");
-        let deserialized: KlineData = serde_json::from_str(&json).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/data.rs (A5 governance)");
+        let json = serde_json::to_string(&data).expect("finkit-visualization: unexpected None/Err in visualization/src/data.rs (A5 governance)");
+        let deserialized: KlineData = serde_json::from_str(&json).expect("finkit-visualization: unexpected None/Err in visualization/src/data.rs (A5 governance)");
         assert_eq!(data, deserialized);
     }
 
@@ -251,7 +251,7 @@ mod tests {
     #[test]
     fn test_kline_data_from_json() {
         let json = r#"{"dates":["2024-01-01"],"opens":[100.0],"highs":[105.0],"lows":[98.0],"closes":[103.0],"volumes":[1000.0]}"#;
-        let data = KlineData::from_json(json).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/data.rs (A5 governance)");
+        let data = KlineData::from_json(json).expect("finkit-visualization: unexpected None/Err in visualization/src/data.rs (A5 governance)");
         assert_eq!(data.len(), 1);
         assert_eq!(data.closes()[0], 103.0);
     }
@@ -259,7 +259,7 @@ mod tests {
     #[test]
     fn test_kline_data_from_csv() {
         let csv = "date,open,high,low,close,volume\n2024-01-01,100.0,105.0,98.0,103.0,1000.0\n2024-01-02,103.0,108.0,101.0,107.0,1200.0";
-        let data = KlineData::from_csv(csv).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/data.rs (A5 governance)");
+        let data = KlineData::from_csv(csv).expect("finkit-visualization: unexpected None/Err in visualization/src/data.rs (A5 governance)");
         assert_eq!(data.len(), 2);
         assert_eq!(data.opens()[0], 100.0);
         assert_eq!(data.closes()[1], 107.0);
@@ -268,7 +268,7 @@ mod tests {
     #[test]
     fn test_kline_data_from_csv_no_header() {
         let csv = "2024-01-01,100.0,105.0,98.0,103.0,1000.0";
-        let data = KlineData::from_csv(csv).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/data.rs (A5 governance)");
+        let data = KlineData::from_csv(csv).expect("finkit-visualization: unexpected None/Err in visualization/src/data.rs (A5 governance)");
         assert_eq!(data.len(), 1);
         assert_eq!(data.dates()[0], "2024-01-01");
     }

@@ -27,7 +27,7 @@ pub struct LinRegResult {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::linear;
+/// use finkit::math::linear;
 ///
 /// let x = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let y = vec![2.0, 4.0, 5.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
@@ -109,7 +109,7 @@ pub fn linear_regression(x: &[f64], y: &[f64]) -> Result<LinRegResult> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::linear;
+/// use finkit::math::linear;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let result = linear::linreg_slope(&data, 5).unwrap();
@@ -163,7 +163,7 @@ pub fn linreg_slope(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::linear;
+/// use finkit::math::linear;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let result = linear::linreg_intercept(&data, 5).unwrap();
@@ -218,7 +218,7 @@ pub fn linreg_intercept(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::linear;
+/// use finkit::math::linear;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let result = linear::linreg(&data, 5).unwrap();
@@ -276,7 +276,7 @@ pub fn linreg(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::linear;
+/// use finkit::math::linear;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let result = linear::linreg_angle(&data, 5).unwrap();

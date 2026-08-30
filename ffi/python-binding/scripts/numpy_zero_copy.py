@@ -21,7 +21,7 @@ SKIP_FUNCS = {
     "formula_search_templates",
     "formula_list_categories",
     "fibonacci_retracement",
-    "alpha_ta",
+    "finkit",
 }
 
 SLICE_ERR = (

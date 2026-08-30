@@ -48,5 +48,5 @@ make docker-compose-up  # 走 Docker/Compose
 ## 4. 注意
 
 - Windows 下请优先用 **PowerShell 7（`pwsh`）** 脚本或 Docker；旧 `cmd` 下部分步骤可能受限。
-- 若只改核心指标，无需全量一键；直接 `cargo test -p alpha-ta-core` 更快。
+- 若只改核心指标，无需全量一键；直接 `cargo test -p finkit` 更快。
 - 产物目录为 gitignore 的 `/dist/`，不会进入提交。

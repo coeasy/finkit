@@ -1,5 +1,5 @@
-use alpha_ta_core::indicators;
-use alpha_ta_core::math::moving_avg;
+use finkit::indicators;
+use finkit::math::moving_avg;
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
 
 fn generate_test_data(n: usize) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {

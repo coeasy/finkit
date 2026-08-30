@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────────────
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_sma(
+pub extern "system" fn Java_com_finkit_Indicators_sma(
     mut env: JNIEnv,
     _class: JClass,
     input: JDoubleArray,
@@ -21,7 +21,7 @@ let input_vec = get_double_array(&mut env, input);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_ema(
+pub extern "system" fn Java_com_finkit_Indicators_ema(
     mut env: JNIEnv,
     _class: JClass,
     input: JDoubleArray,
@@ -37,7 +37,7 @@ let input_vec = get_double_array(&mut env, input);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_wma(
+pub extern "system" fn Java_com_finkit_Indicators_wma(
     mut env: JNIEnv,
     _class: JClass,
     input: JDoubleArray,
@@ -53,7 +53,7 @@ let input_vec = get_double_array(&mut env, input);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_dema(
+pub extern "system" fn Java_com_finkit_Indicators_dema(
     mut env: JNIEnv,
     _class: JClass,
     input: JDoubleArray,
@@ -69,7 +69,7 @@ let input_vec = get_double_array(&mut env, input);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_tema(
+pub extern "system" fn Java_com_finkit_Indicators_tema(
     mut env: JNIEnv,
     _class: JClass,
     input: JDoubleArray,
@@ -85,7 +85,7 @@ let input_vec = get_double_array(&mut env, input);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_kama(
+pub extern "system" fn Java_com_finkit_Indicators_kama(
     mut env: JNIEnv,
     _class: JClass,
     input: JDoubleArray,
@@ -101,7 +101,7 @@ let input_vec = get_double_array(&mut env, input);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_mama(
+pub extern "system" fn Java_com_finkit_Indicators_mama(
     mut env: JNIEnv,
     _class: JClass,
     input: JDoubleArray,
@@ -119,7 +119,7 @@ pub extern "system" fn Java_com_alphata_Indicators_mama(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_t3(
+pub extern "system" fn Java_com_finkit_Indicators_t3(
     mut env: JNIEnv,
     _class: JClass,
     input: JDoubleArray,
@@ -136,7 +136,7 @@ let input_vec = get_double_array(&mut env, input);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_bbands(
+pub extern "system" fn Java_com_finkit_Indicators_bbands(
     mut env: JNIEnv,
     _class: JClass,
     input: JDoubleArray,
@@ -157,7 +157,7 @@ pub extern "system" fn Java_com_alphata_Indicators_bbands(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_midpoint(
+pub extern "system" fn Java_com_finkit_Indicators_midpoint(
     mut env: JNIEnv,
     _class: JClass,
     input: JDoubleArray,
@@ -173,7 +173,7 @@ let input_vec = get_double_array(&mut env, input);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_midprice(
+pub extern "system" fn Java_com_finkit_Indicators_midprice(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -191,7 +191,7 @@ let high_vec = get_double_array(&mut env, high);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_sar(
+pub extern "system" fn Java_com_finkit_Indicators_sar(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -213,7 +213,7 @@ pub extern "system" fn Java_com_alphata_Indicators_sar(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_rsi(
+pub extern "system" fn Java_com_finkit_Indicators_rsi(
     mut env: JNIEnv,
     _class: JClass,
     input: JDoubleArray,
@@ -229,7 +229,7 @@ let input_vec = get_double_array(&mut env, input);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_macd(
+pub extern "system" fn Java_com_finkit_Indicators_macd(
     mut env: JNIEnv,
     _class: JClass,
     input: JDoubleArray,
@@ -255,7 +255,7 @@ pub extern "system" fn Java_com_alphata_Indicators_macd(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_stoch(
+pub extern "system" fn Java_com_finkit_Indicators_stoch(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -285,7 +285,7 @@ pub extern "system" fn Java_com_alphata_Indicators_stoch(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_adx(
+pub extern "system" fn Java_com_finkit_Indicators_adx(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -305,7 +305,7 @@ let high_vec = get_double_array(&mut env, high);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_aroon(
+pub extern "system" fn Java_com_finkit_Indicators_aroon(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -324,7 +324,7 @@ pub extern "system" fn Java_com_alphata_Indicators_aroon(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_cci(
+pub extern "system" fn Java_com_finkit_Indicators_cci(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -344,7 +344,7 @@ let high_vec = get_double_array(&mut env, high);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_mom(
+pub extern "system" fn Java_com_finkit_Indicators_mom(
     mut env: JNIEnv,
     _class: JClass,
     input: JDoubleArray,
@@ -360,7 +360,7 @@ let input_vec = get_double_array(&mut env, input);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_roc(
+pub extern "system" fn Java_com_finkit_Indicators_roc(
     mut env: JNIEnv,
     _class: JClass,
     input: JDoubleArray,
@@ -376,7 +376,7 @@ let input_vec = get_double_array(&mut env, input);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_willr(
+pub extern "system" fn Java_com_finkit_Indicators_willr(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -396,7 +396,7 @@ let high_vec = get_double_array(&mut env, high);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_apo(
+pub extern "system" fn Java_com_finkit_Indicators_apo(
     mut env: JNIEnv,
     _class: JClass,
     input: JDoubleArray,
@@ -413,7 +413,7 @@ let input_vec = get_double_array(&mut env, input);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_bop(
+pub extern "system" fn Java_com_finkit_Indicators_bop(
     mut env: JNIEnv,
     _class: JClass,
     open: JDoubleArray,
@@ -434,7 +434,7 @@ let open_vec = get_double_array(&mut env, open);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_cmo(
+pub extern "system" fn Java_com_finkit_Indicators_cmo(
     mut env: JNIEnv,
     _class: JClass,
     input: JDoubleArray,
@@ -450,7 +450,7 @@ let input_vec = get_double_array(&mut env, input);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_mfi(
+pub extern "system" fn Java_com_finkit_Indicators_mfi(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -478,7 +478,7 @@ let high_vec = get_double_array(&mut env, high);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_trix(
+pub extern "system" fn Java_com_finkit_Indicators_trix(
     mut env: JNIEnv,
     _class: JClass,
     input: JDoubleArray,
@@ -494,7 +494,7 @@ let input_vec = get_double_array(&mut env, input);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_atr(
+pub extern "system" fn Java_com_finkit_Indicators_atr(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -514,7 +514,7 @@ let high_vec = get_double_array(&mut env, high);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_natr(
+pub extern "system" fn Java_com_finkit_Indicators_natr(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -534,7 +534,7 @@ let high_vec = get_double_array(&mut env, high);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_trange(
+pub extern "system" fn Java_com_finkit_Indicators_trange(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -553,7 +553,7 @@ let high_vec = get_double_array(&mut env, high);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_obv(
+pub extern "system" fn Java_com_finkit_Indicators_obv(
     mut env: JNIEnv,
     _class: JClass,
     close: JDoubleArray,
@@ -570,7 +570,7 @@ let close_vec = get_double_array(&mut env, close);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_ad(
+pub extern "system" fn Java_com_finkit_Indicators_ad(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -591,7 +591,7 @@ let high_vec = get_double_array(&mut env, high);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_adosc(
+pub extern "system" fn Java_com_finkit_Indicators_adosc(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -621,7 +621,7 @@ let high_vec = get_double_array(&mut env, high);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_zscore(
+pub extern "system" fn Java_com_finkit_Indicators_zscore(
     mut env: JNIEnv,
     _class: JClass,
     input: JDoubleArray,
@@ -637,7 +637,7 @@ let input_vec = get_double_array(&mut env, input);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_beta(
+pub extern "system" fn Java_com_finkit_Indicators_beta(
     mut env: JNIEnv,
     _class: JClass,
     asset: JDoubleArray,
@@ -655,7 +655,7 @@ let asset_vec = get_double_array(&mut env, asset);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_correlation(
+pub extern "system" fn Java_com_finkit_Indicators_correlation(
     mut env: JNIEnv,
     _class: JClass,
     inputA: JDoubleArray,
@@ -673,7 +673,7 @@ let a_vec = get_double_array(&mut env, inputA);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_tsf(
+pub extern "system" fn Java_com_finkit_Indicators_tsf(
     mut env: JNIEnv,
     _class: JClass,
     input: JDoubleArray,
@@ -689,7 +689,7 @@ let input_vec = get_double_array(&mut env, input);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_avgprice(
+pub extern "system" fn Java_com_finkit_Indicators_avgprice(
     mut env: JNIEnv,
     _class: JClass,
     open: JDoubleArray,
@@ -710,7 +710,7 @@ let open_vec = get_double_array(&mut env, open);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_medprice(
+pub extern "system" fn Java_com_finkit_Indicators_medprice(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -727,7 +727,7 @@ let high_vec = get_double_array(&mut env, high);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_typprice(
+pub extern "system" fn Java_com_finkit_Indicators_typprice(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -746,7 +746,7 @@ let high_vec = get_double_array(&mut env, high);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_wclprice(
+pub extern "system" fn Java_com_finkit_Indicators_wclprice(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -765,7 +765,7 @@ let high_vec = get_double_array(&mut env, high);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_renko(
+pub extern "system" fn Java_com_finkit_Indicators_renko(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -781,7 +781,7 @@ let h = get_double_array(&mut env, high);
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_kagi(
+pub extern "system" fn Java_com_finkit_Indicators_kagi(
     mut env: JNIEnv,
     _class: JClass,
     close: JDoubleArray,

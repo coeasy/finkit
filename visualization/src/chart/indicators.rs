@@ -3,7 +3,7 @@ use crate::data::KlineData;
 use crate::geometry::{Point, Rect, Scale};
 use crate::layout::ChartLayout;
 use crate::primitive::{Color, DrawList, LineStyle, Primitive, Style};
-use alpha_ta_core::indicators;
+use finkit::indicators;
 
 fn data_len_from_layout(layout: &ChartLayout) -> usize {
     let max_tick = layout.x_axis.max;

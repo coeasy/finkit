@@ -24,8 +24,8 @@
 
 ```bash
 cargo bench --workspace --bench talib_comparison_bench
-cargo bench -p alpha-ta-core --bench zero_alloc_bench     # 零分配验证
-cargo bench -p alpha-ta-core --bench memory_profile --features memory-profile
+cargo bench -p finkit --bench zero_alloc_bench     # 零分配验证
+cargo bench -p finkit --bench memory_profile --features memory-profile
 ```
 
 目录说明：

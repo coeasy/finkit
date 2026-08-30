@@ -49,7 +49,7 @@ pub struct IchimokuResult {
 ///
 /// # Example
 /// ```
-/// use alpha_ta_core::indicators::ichimoku;
+/// use finkit::indicators::ichimoku;
 ///
 /// let high: Vec<f64> = (0..60).map(|i| 100.0 + i as f64).collect();
 /// let low: Vec<f64> = (0..60).map(|i| 98.0 + i as f64).collect();

@@ -8,12 +8,12 @@
 //!
 //! Run with:
 //! ```bash
-//! cargo bench -p alpha_ta-core --bench zero_alloc_bench
+//! cargo bench -p finkit --bench zero_alloc_bench
 //! ```
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 
-use alpha_ta_core::math::simd_kernels as k;
+use finkit::math::simd_kernels as k;
 
 const N_SMALL: usize = 1_000;
 const N_MEDIUM: usize = 10_000;

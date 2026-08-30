@@ -30,7 +30,7 @@ pub struct VwapBandsResult {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let high = vec![45.0, 45.5, 46.0, 45.5, 46.5, 46.0, 45.5, 45.0, 45.5, 46.0];
 /// let low = vec![43.0, 43.5, 44.0, 43.0, 44.0, 43.5, 43.0, 42.5, 43.0, 43.5];
@@ -98,7 +98,7 @@ pub fn ad_into(high: &[f64], low: &[f64], close: &[f64], volume: &[f64], output:
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let high = vec![45.0, 45.5, 46.0, 45.5, 46.5, 46.0, 45.5, 45.0, 45.5, 46.0];
 /// let low = vec![43.0, 43.5, 44.0, 43.0, 44.0, 43.5, 43.0, 42.5, 43.0, 43.5];
@@ -171,7 +171,7 @@ pub fn adosc(
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let close = vec![44.0, 44.25, 44.5, 43.75, 44.5, 44.25, 44.0, 43.5, 44.0, 44.25];
 /// let volume = vec![100.0, 110.0, 120.0, 115.0, 130.0, 125.0, 105.0, 95.0, 110.0, 115.0];
@@ -235,7 +235,7 @@ pub struct VolumeProfileResult {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let high = vec![45.0, 45.5, 46.0, 45.5, 46.5, 46.0, 45.5, 45.0, 45.5, 46.0];
 /// let low = vec![43.0, 43.5, 44.0, 43.0, 44.0, 43.5, 43.0, 42.5, 43.0, 43.5];
@@ -387,7 +387,7 @@ pub fn volume_profile(
 ///
 /// # Example
 /// ```rust
-/// use alpha_ta_core::indicators::vwap;
+/// use finkit::indicators::vwap;
 ///
 /// let high = vec![10.0, 11.0, 12.0, 13.0, 14.0];
 /// let low = vec![9.0, 10.0, 11.0, 12.0, 13.0];
@@ -445,7 +445,7 @@ pub fn vwap(high: &[f64], low: &[f64], close: &[f64], volume: &[f64]) -> Result<
 ///
 /// # Example
 /// ```rust
-/// use alpha_ta_core::indicators::anchored_vwap;
+/// use finkit::indicators::anchored_vwap;
 ///
 /// let high = vec![10.0, 11.0, 12.0, 13.0, 14.0];
 /// let low = vec![9.0, 10.0, 11.0, 12.0, 13.0];
@@ -517,7 +517,7 @@ pub fn anchored_vwap(
 ///
 /// # Example
 /// ```rust
-/// use alpha_ta_core::indicators::vwap_bands;
+/// use finkit::indicators::vwap_bands;
 ///
 /// let high = vec![10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0];
 /// let low = vec![9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0];

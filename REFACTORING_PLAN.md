@@ -130,7 +130,7 @@ finkit/
 | 3-6 | **`winapi: 0.3.9` 旧版依赖** | 应迁移到 `windows-sys`（已存在 `0.61.2` 版本） | 低优先级，仅当需要 Windows 新 API 时迁移 |
 | 3-7 | **`thiserror` 存在 2 个版本** | 1.0.69 和 2.0.18 共存，应统一到 v2 | 逐步迁移 |
 | 3-8 | **没有 MSRV 检查** | Cargo.toml 声明了 `rust-version = "1.75"`，但 CI 未测试旧版 Rust | 在 CI 中增加旧版本编译验证 |
-| 3-9 | **CI 中 `cargo build -p alpha-ta-android` 仍为旧名（已修）** | 上轮已修正为 `alpha-ta-android`，确认生效 | 已修，确认 |
+| 3-9 | **CI 中 `cargo build -p finkit-android` 仍为旧名（已修）** | 上轮已修正为 `finkit-android`，确认生效 | 已修，确认 |
 | 3-10 | **`docs/src/` 的 mdBook 构建未在 docs-check.yml 中验证** | `docs-check.yml` 只检查死链和版本一致性，不构建 mdBook | 增加 `mdbook build docs/` 验证步骤 |
 
 ---
@@ -183,7 +183,7 @@ finkit/
 ## 7. 命名红线（易踩坑记录）
 
 - core crate lib 名 = `alpha_ta_core`（**无 `[lib]` override**）；visualization lib = `alpha_ta_visualization`。**没有** `finkit_core` / `finkit_visualization`。
-- 所有 binding 包名用**连字符** `alpha-ta-*`（如 `alpha-ta-android`），cargo `-p` 不接受 `alpha_ta-android`。
+- 所有 binding 包名用**连字符** `alpha-ta-*`（如 `finkit-android`），cargo `-p` 不接受 `alpha_ta-android`。
 - `cdl_*`/某些图表类指标在部分语言走 dispatcher，不暴露为独立函数——`--check` 只对有 `ffi.bodies.<lang>` 的项判漂移。
 - `scripts/sync_bindings.py --rewrite` 重写 lib.rs **必须保留被删 span 之间的空隙**（非注册表函数），否则留悬空引用。
 - jni 0.21 破坏性变更：`JNIEnv` 不再 `Clone`；`jdoubleArray` 裸指针不满足 `AsJArrayRaw`。

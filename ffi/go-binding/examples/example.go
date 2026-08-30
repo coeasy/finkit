@@ -5,7 +5,7 @@ import (
 	"math"
 	"os"
 
-	"github.com/alphata/alpha-ta/go/ta"
+	"github.com/coeasy/finkit/go/ta"
 )
 
 func main() {
@@ -27,7 +27,7 @@ func main() {
 		volume[i] = 1000000 + float64(i)*10000
 	}
 
-	fmt.Println("=== AlphaTA Go Binding Example ===")
+	fmt.Println("=== Finkit Go Binding Example ===")
 	fmt.Printf("Version: %s\n", ta.Version())
 	fmt.Printf("Data points: %d\n\n", len(closes))
 

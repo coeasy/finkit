@@ -406,7 +406,7 @@ mod tests {
     fn test_every_nth_preserves_endpoints() {
         let indices = every_nth(1000, 50);
         assert_eq!(indices[0], 0);
-        assert_eq!(*indices.last().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/decimate.rs (A5 governance)"), 999);
+        assert_eq!(*indices.last().expect("finkit-visualization: unexpected None/Err in visualization/src/decimate.rs (A5 governance)"), 999);
     }
 
     #[test]
@@ -461,7 +461,7 @@ mod tests {
         assert!(result.len() <= 102);
         assert!(result.len() >= 98);
         assert_eq!(result.indices[0], 0);
-        assert_eq!(*result.indices.last().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/decimate.rs (A5 governance)"), 999);
+        assert_eq!(*result.indices.last().expect("finkit-visualization: unexpected None/Err in visualization/src/decimate.rs (A5 governance)"), 999);
         assert_eq!(result.original_len, 1000);
     }
 
@@ -481,7 +481,7 @@ mod tests {
         let result = decimate(&data, &DecimateStrategy::EveryNth, 100);
         assert_eq!(result.len(), 100);
         assert_eq!(result.indices[0], 0);
-        assert_eq!(*result.indices.last().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/decimate.rs (A5 governance)"), 999);
+        assert_eq!(*result.indices.last().expect("finkit-visualization: unexpected None/Err in visualization/src/decimate.rs (A5 governance)"), 999);
         assert_eq!(result.original_len, 1000);
     }
 
@@ -523,7 +523,7 @@ mod tests {
         let data = make_sine_data(1000);
         let result = decimate(&data, &DecimateStrategy::LTTB, 100);
         assert_eq!(result.indices[0], 0);
-        assert_eq!(*result.indices.last().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/decimate.rs (A5 governance)"), 999);
+        assert_eq!(*result.indices.last().expect("finkit-visualization: unexpected None/Err in visualization/src/decimate.rs (A5 governance)"), 999);
         assert!(result.len() <= 102);
     }
 
@@ -549,7 +549,7 @@ mod tests {
     fn test_every_nth_exact_division() {
         let indices = every_nth(100, 10);
         assert_eq!(indices.len(), 10);
-        assert_eq!(*indices.last().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/decimate.rs (A5 governance)"), 99);
+        assert_eq!(*indices.last().expect("finkit-visualization: unexpected None/Err in visualization/src/decimate.rs (A5 governance)"), 99);
     }
 
     #[test]

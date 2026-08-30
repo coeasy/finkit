@@ -1,12 +1,12 @@
-# AlphaTA Industrial-Grade Optimization — Planning Overview
+# Finkit Industrial-Grade Optimization — Planning Overview
 
-> **Generated:** 2026-06-24 | **Branch:** feature/industrial-grade-upgrade | **Status:** completed
+> **Generated:** 2026-08-30 | **Branch:** main | **Status:** in-progress (v0.1.0 阶段 A 已执行)
 
 ## Progress
 
-- ✅ Completed: **215**
-- 🔄 Pending: **55**
-- ❌ Blocked: **6**
+- ✅ Completed: **219**
+- 🔄 Pending: **57**
+- ❌ Blocked: **0**
 - 📊 Total: **276**
 
 ## Tech Stack
@@ -262,11 +262,11 @@
 | TASK-213 | 公式引擎并行计算优化 | P2 |  | refactor | ✅ Done | 4 AC |
 | TASK-214 | 公式系统集成测试与兼容性验证 | P2 |  | test | ✅ Done | 6 AC |
 | TASK-215 | 公式系统文档全面更新 | P2 |  | docs | ✅ Done | 5 AC |
-| TASK-216 | 初始化 git 仓库与分支策略 | P0 |  | infra | ❌ Blocked | 4 AC |
-| TASK-217 | 根 CI 质量门禁骨架 | P0 |  | infra | ❌ Blocked | 5 AC |
-| TASK-218 | 共享测试数据集生成器 | P0 |  | test | ❌ Blocked | 3 AC |
-| TASK-219 | 文档诚信审计与版本治理 | P0 |  | docs | ❌ Blocked | 3 AC |
-| TASK-220 | TA-Lib C 参考输出生成器 | P0 |  | test | ❌ Blocked | 3 AC |
+| TASK-216 | 初始化 git 仓库与分支策略 | P0 |  | infra | ✅ Done | 4 AC |
+| TASK-217 | 根 CI 质量门禁骨架 | P0 |  | infra | ✅ Done | 5 AC |
+| TASK-218 | 共享测试数据集生成器 | P0 |  | test | 🔄 Pending | 3 AC |
+| TASK-219 | 文档诚信审计与版本治理 | P0 |  | docs | ✅ Done | 3 AC |
+| TASK-220 | TA-Lib C 参考输出生成器 | P0 |  | test | ✅ Done | 3 AC |
 | TASK-221 | 逐函数比对器与分指标族容差策略 | P0 |  | test | 🔄 Pending | 2 AC |
 | TASK-222 | COMPAT_MATRIX 自动生成并入 CI | P0 |  | docs | 🔄 Pending | 3 AC |
 | TASK-223 | 统一 Criterion benchmark harness 与唯一权 | P0 |  | test | 🔄 Pending | 3 AC |

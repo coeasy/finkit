@@ -64,11 +64,11 @@ read the results.
 ### Python
 
 ```bash
-pip install alpha_ta
+pip install finkit
 ```
 
 ```python
-import alpha_ta as ta
+import finkit as ta
 import numpy as np
 
 close = np.arange(1.0, 101.0)
@@ -192,7 +192,7 @@ Detailed installation instructions for each language binding are available in [d
 
 | Language | Package Manager | Command |
 |----------|----------------|---------|
-| Python   | pip            | `pip install alpha_ta` |
+| Python   | pip            | `pip install finkit` |
 | Node.js  | npm            | `npm install @alphata/node` |
 | Rust     | cargo          | `cargo add alpha-ta-core` |
 | Java     | Maven          | Add dependency to `pom.xml` |
@@ -310,7 +310,7 @@ Full indicator list with parameters: [docs/indicators.md](docs/indicators.md)
 ### Python - Complete Example
 
 ```python
-import alpha_ta as ta
+import finkit as ta
 import numpy as np
 import pandas as pd
 
@@ -539,7 +539,7 @@ const rsiResult = rsi(close, 5);
 
 ```bash
 # Build the shared library
-cargo build --release -p alpha-ta-ffi
+cargo build --release -p finkit-ffi
 ```
 
 ```c
@@ -818,7 +818,7 @@ fn main() {
 #### Python
 
 ```python
-import alpha_ta as ta
+import finkit as ta
 
 data = ta.PyKlineData(
     dates=["2024-01-01", "2024-01-02", "2024-01-03"],

@@ -42,7 +42,7 @@ use ndarray::Array1;
 ///
 /// # Example
 /// ```
-/// use alpha_ta_core::indicators::winner;
+/// use finkit::indicators::winner;
 /// let close = vec![10.0, 11.0, 9.5, 12.0, 8.0];
 /// let volume = vec![100.0, 150.0, 200.0, 120.0, 180.0];
 /// let result = winner(&close, &volume, 10.0, None).unwrap();
@@ -105,7 +105,7 @@ pub fn winner(
 ///
 /// # Example
 /// ```
-/// use alpha_ta_core::indicators::cost;
+/// use finkit::indicators::cost;
 /// let close = vec![10.0, 11.0, 9.5, 12.0, 8.0];
 /// let volume = vec![100.0, 150.0, 200.0, 120.0, 180.0];
 /// let result = cost(&close, &volume, 0.5, None).unwrap();
@@ -230,7 +230,7 @@ fn compute_winner_ratio(
 ///
 /// # Example
 /// ```
-/// use alpha_ta_core::indicators::main_net_inflow;
+/// use finkit::indicators::main_net_inflow;
 /// let close = vec![10.0, 11.0, 12.0, 9.0, 13.0];
 /// let volume = vec![1_000_000.0, 800_000.0, 1_500_000.0, 600_000.0, 2_000_000.0];
 /// let result = main_net_inflow(&close, &volume, 10_000_000.0).unwrap();
@@ -354,7 +354,7 @@ pub fn money_flow(
 ///
 /// # Example
 /// ```
-/// use alpha_ta_core::indicators::limit_up;
+/// use finkit::indicators::limit_up;
 /// let close = vec![10.0, 11.0, 12.0, 9.0, 13.0];
 /// let prev_close = vec![10.0, 10.0, 11.0, 12.0, 9.0];
 /// let result = limit_up(&close, &prev_close, 0.10).unwrap();
@@ -459,7 +459,7 @@ pub fn consecutive_limit(limit_signal: &[f64]) -> Result<Array1<f64>> {
 ///
 /// # Example
 /// ```
-/// use alpha_ta_core::indicators::turnover;
+/// use finkit::indicators::turnover;
 /// let volume = vec![1_000_000.0, 2_000_000.0, 1_500_000.0];
 /// let free_float = vec![100_000_000.0; 3];
 /// let result = turnover(&volume, &free_float).unwrap();

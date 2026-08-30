@@ -2,9 +2,9 @@
 //! Times the ORIGINAL HEAD algorithms (copied inline) vs the CURRENT
 //! optimized `indicators::*` functions, eliminating compiler/alignment variance.
 
-use alpha_ta_core::indicators::{apo, aroon, willr};
-use alpha_ta_core::math::moving_avg::sma;
-use alpha_ta_core::utils::init_output;
+use finkit::indicators::{apo, aroon, willr};
+use finkit::math::moving_avg::sma;
+use finkit::utils::init_output;
 use ndarray::Array1;
 
 const N: usize = 10_000;

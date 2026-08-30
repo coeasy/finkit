@@ -20,7 +20,7 @@
 //! # 示例
 //!
 //! ```no_run
-//! use alpha_ta_core::formula::{AstNode, FormulaOptimizer, OptLevel};
+//! use finkit::formula::{AstNode, FormulaOptimizer, OptLevel};
 //!
 //! let ast = AstNode::Number(1.0);
 //! // 默认 Standard

@@ -1,7 +1,7 @@
 //! Comprehensive serde roundtrip tests for all streaming indicators with CheckpointState.
 
-use alpha_ta_core::streaming::indicators::*;
-use alpha_ta_core::streaming::{CheckpointState, Ohlcv, OhlcvBar, StreamingIndicator};
+use finkit::streaming::indicators::*;
+use finkit::streaming::{CheckpointState, Ohlcv, OhlcvBar, StreamingIndicator};
 
 fn make_bars(n: usize) -> Vec<OhlcvBar> {
     (0..n)

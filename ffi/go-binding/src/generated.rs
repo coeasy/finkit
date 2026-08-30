@@ -707,7 +707,7 @@ if high.is_null() || low.is_null() || close.is_null() || length <= 0 {
         let c = std::slice::from_raw_parts(close, length as usize);
         let lb = if lookback > 0 { lookback as usize } else { 5 };
         let conf = if confirmation > 0 { confirmation as usize } else { 3 };
-        match alpha_ta_core::indicators::darvas_box(h, l, c, lb, conf) {
+        match finkit::indicators::darvas_box(h, l, c, lb, conf) {
             Ok(r) => {
                 #[derive(serde::Serialize)]
                 struct Out {
@@ -744,7 +744,7 @@ if high.is_null() || low.is_null() || length <= 0 || box_size <= 0.0 {
     unsafe {
         let h = std::slice::from_raw_parts(high, length as usize);
         let l = std::slice::from_raw_parts(low, length as usize);
-        match alpha_ta_core::indicators::renko(h, l, box_size) {
+        match finkit::indicators::renko(h, l, box_size) {
             Ok(r) => {
                 #[derive(serde::Serialize)]
                 struct Out {
@@ -777,7 +777,7 @@ if close.is_null() || length <= 0 || reversal <= 0.0 {
     }
     unsafe {
         let c = std::slice::from_raw_parts(close, length as usize);
-        match alpha_ta_core::indicators::kagi(c, reversal) {
+        match finkit::indicators::kagi(c, reversal) {
             Ok(r) => {
                 #[derive(serde::Serialize)]
                 struct Out {
@@ -814,7 +814,7 @@ if high.is_null() || low.is_null() || length <= 0 || box_size <= 0.0 {
         let h = std::slice::from_raw_parts(high, length as usize);
         let l = std::slice::from_raw_parts(low, length as usize);
         let rev = if reversal > 0 { reversal as usize } else { 3 };
-        match alpha_ta_core::indicators::point_and_figure(h, l, box_size, rev) {
+        match finkit::indicators::point_and_figure(h, l, box_size, rev) {
             Ok(r) => {
                 #[derive(serde::Serialize)]
                 struct Out {
@@ -849,7 +849,7 @@ if close.is_null() || length <= 0 || lines <= 0 {
     }
     unsafe {
         let c = std::slice::from_raw_parts(close, length as usize);
-        match alpha_ta_core::indicators::three_line_break(c, lines as usize) {
+        match finkit::indicators::three_line_break(c, lines as usize) {
             Ok(r) => {
                 #[derive(serde::Serialize)]
                 struct Out {
@@ -881,7 +881,7 @@ if close.is_null() || length <= 0 {
     }
     unsafe {
         let c = std::slice::from_raw_parts(close, length as usize);
-        match alpha_ta_core::indicators::williams_alligator(c) {
+        match finkit::indicators::williams_alligator(c) {
             Ok(r) => {
                 #[derive(serde::Serialize)]
                 struct Out {
@@ -921,7 +921,7 @@ if open.is_null() || high.is_null() || low.is_null() || close.is_null() || lengt
         let h = std::slice::from_raw_parts(high, length as usize);
         let l = std::slice::from_raw_parts(low, length as usize);
         let c = std::slice::from_raw_parts(close, length as usize);
-        match alpha_ta_core::indicators::heikin_ashi(o, h, l, c) {
+        match finkit::indicators::heikin_ashi(o, h, l, c) {
             Ok(r) => {
                 #[derive(serde::Serialize)]
                 struct Out {

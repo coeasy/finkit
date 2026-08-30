@@ -91,7 +91,7 @@ preflight:
 lint:
 	cargo fmt --all -- --check
 	cargo clippy --workspace --all-targets -- -D warnings
-	cargo clippy -p alpha-ta-core --no-default-features --features no_std -- -D warnings
+	cargo clippy -p finkit --no-default-features --features no_std -- -D warnings
 
 # ---- housekeeping ---------------------------------------------------------
 dist:

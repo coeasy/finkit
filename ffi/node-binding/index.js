@@ -32,24 +32,24 @@ switch (platform) {
   case 'android':
     switch (arch) {
       case 'arm64':
-        localFileExisted = existsSync(join(__dirname, 'alpha_ta.android-arm64.node'))
+        localFileExisted = existsSync(join(__dirname, 'finkit.android-arm64.node'))
         try {
           if (localFileExisted) {
-            nativeBinding = require('./alpha_ta.android-arm64.node')
+            nativeBinding = require('./finkit.android-arm64.node')
           } else {
-            nativeBinding = require('@alphata/core-android-arm64')
+            nativeBinding = require('finkit-android-arm64')
           }
         } catch (e) {
           loadError = e
         }
         break
       case 'arm':
-        localFileExisted = existsSync(join(__dirname, 'alpha_ta.android-arm-eabi.node'))
+        localFileExisted = existsSync(join(__dirname, 'finkit.android-arm-eabi.node'))
         try {
           if (localFileExisted) {
-            nativeBinding = require('./alpha_ta.android-arm-eabi.node')
+            nativeBinding = require('./finkit.android-arm-eabi.node')
           } else {
-            nativeBinding = require('@alphata/core-android-arm-eabi')
+            nativeBinding = require('finkit-android-arm-eabi')
           }
         } catch (e) {
           loadError = e
@@ -63,13 +63,13 @@ switch (platform) {
     switch (arch) {
       case 'x64':
         localFileExisted = existsSync(
-          join(__dirname, 'alpha_ta.win32-x64-msvc.node')
+          join(__dirname, 'finkit.win32-x64-msvc.node')
         )
         try {
           if (localFileExisted) {
-            nativeBinding = require('./alpha_ta.win32-x64-msvc.node')
+            nativeBinding = require('./finkit.win32-x64-msvc.node')
           } else {
-            nativeBinding = require('@alphata/core-win32-x64-msvc')
+            nativeBinding = require('finkit-win32-x64-msvc')
           }
         } catch (e) {
           loadError = e
@@ -77,13 +77,13 @@ switch (platform) {
         break
       case 'ia32':
         localFileExisted = existsSync(
-          join(__dirname, 'alpha_ta.win32-ia32-msvc.node')
+          join(__dirname, 'finkit.win32-ia32-msvc.node')
         )
         try {
           if (localFileExisted) {
-            nativeBinding = require('./alpha_ta.win32-ia32-msvc.node')
+            nativeBinding = require('./finkit.win32-ia32-msvc.node')
           } else {
-            nativeBinding = require('@alphata/core-win32-ia32-msvc')
+            nativeBinding = require('finkit-win32-ia32-msvc')
           }
         } catch (e) {
           loadError = e
@@ -91,13 +91,13 @@ switch (platform) {
         break
       case 'arm64':
         localFileExisted = existsSync(
-          join(__dirname, 'alpha_ta.win32-arm64-msvc.node')
+          join(__dirname, 'finkit.win32-arm64-msvc.node')
         )
         try {
           if (localFileExisted) {
-            nativeBinding = require('./alpha_ta.win32-arm64-msvc.node')
+            nativeBinding = require('./finkit.win32-arm64-msvc.node')
           } else {
-            nativeBinding = require('@alphata/core-win32-arm64-msvc')
+            nativeBinding = require('finkit-win32-arm64-msvc')
           }
         } catch (e) {
           loadError = e
@@ -108,23 +108,23 @@ switch (platform) {
     }
     break
   case 'darwin':
-    localFileExisted = existsSync(join(__dirname, 'alpha_ta.darwin-universal.node'))
+    localFileExisted = existsSync(join(__dirname, 'finkit.darwin-universal.node'))
     try {
       if (localFileExisted) {
-        nativeBinding = require('./alpha_ta.darwin-universal.node')
+        nativeBinding = require('./finkit.darwin-universal.node')
       } else {
-        nativeBinding = require('@alphata/core-darwin-universal')
+        nativeBinding = require('finkit-darwin-universal')
       }
       break
     } catch {}
     switch (arch) {
       case 'x64':
-        localFileExisted = existsSync(join(__dirname, 'alpha_ta.darwin-x64.node'))
+        localFileExisted = existsSync(join(__dirname, 'finkit.darwin-x64.node'))
         try {
           if (localFileExisted) {
-            nativeBinding = require('./alpha_ta.darwin-x64.node')
+            nativeBinding = require('./finkit.darwin-x64.node')
           } else {
-            nativeBinding = require('@alphata/core-darwin-x64')
+            nativeBinding = require('finkit-darwin-x64')
           }
         } catch (e) {
           loadError = e
@@ -132,13 +132,13 @@ switch (platform) {
         break
       case 'arm64':
         localFileExisted = existsSync(
-          join(__dirname, 'alpha_ta.darwin-arm64.node')
+          join(__dirname, 'finkit.darwin-arm64.node')
         )
         try {
           if (localFileExisted) {
-            nativeBinding = require('./alpha_ta.darwin-arm64.node')
+            nativeBinding = require('./finkit.darwin-arm64.node')
           } else {
-            nativeBinding = require('@alphata/core-darwin-arm64')
+            nativeBinding = require('finkit-darwin-arm64')
           }
         } catch (e) {
           loadError = e
@@ -152,12 +152,12 @@ switch (platform) {
     if (arch !== 'x64') {
       throw new Error(`Unsupported architecture on FreeBSD: ${arch}`)
     }
-    localFileExisted = existsSync(join(__dirname, 'alpha_ta.freebsd-x64.node'))
+    localFileExisted = existsSync(join(__dirname, 'finkit.freebsd-x64.node'))
     try {
       if (localFileExisted) {
-        nativeBinding = require('./alpha_ta.freebsd-x64.node')
+        nativeBinding = require('./finkit.freebsd-x64.node')
       } else {
-        nativeBinding = require('@alphata/core-freebsd-x64')
+        nativeBinding = require('finkit-freebsd-x64')
       }
     } catch (e) {
       loadError = e
@@ -168,26 +168,26 @@ switch (platform) {
       case 'x64':
         if (isMusl()) {
           localFileExisted = existsSync(
-            join(__dirname, 'alpha_ta.linux-x64-musl.node')
+            join(__dirname, 'finkit.linux-x64-musl.node')
           )
           try {
             if (localFileExisted) {
-              nativeBinding = require('./alpha_ta.linux-x64-musl.node')
+              nativeBinding = require('./finkit.linux-x64-musl.node')
             } else {
-              nativeBinding = require('@alphata/core-linux-x64-musl')
+              nativeBinding = require('finkit-linux-x64-musl')
             }
           } catch (e) {
             loadError = e
           }
         } else {
           localFileExisted = existsSync(
-            join(__dirname, 'alpha_ta.linux-x64-gnu.node')
+            join(__dirname, 'finkit.linux-x64-gnu.node')
           )
           try {
             if (localFileExisted) {
-              nativeBinding = require('./alpha_ta.linux-x64-gnu.node')
+              nativeBinding = require('./finkit.linux-x64-gnu.node')
             } else {
-              nativeBinding = require('@alphata/core-linux-x64-gnu')
+              nativeBinding = require('finkit-linux-x64-gnu')
             }
           } catch (e) {
             loadError = e
@@ -197,26 +197,26 @@ switch (platform) {
       case 'arm64':
         if (isMusl()) {
           localFileExisted = existsSync(
-            join(__dirname, 'alpha_ta.linux-arm64-musl.node')
+            join(__dirname, 'finkit.linux-arm64-musl.node')
           )
           try {
             if (localFileExisted) {
-              nativeBinding = require('./alpha_ta.linux-arm64-musl.node')
+              nativeBinding = require('./finkit.linux-arm64-musl.node')
             } else {
-              nativeBinding = require('@alphata/core-linux-arm64-musl')
+              nativeBinding = require('finkit-linux-arm64-musl')
             }
           } catch (e) {
             loadError = e
           }
         } else {
           localFileExisted = existsSync(
-            join(__dirname, 'alpha_ta.linux-arm64-gnu.node')
+            join(__dirname, 'finkit.linux-arm64-gnu.node')
           )
           try {
             if (localFileExisted) {
-              nativeBinding = require('./alpha_ta.linux-arm64-gnu.node')
+              nativeBinding = require('./finkit.linux-arm64-gnu.node')
             } else {
-              nativeBinding = require('@alphata/core-linux-arm64-gnu')
+              nativeBinding = require('finkit-linux-arm64-gnu')
             }
           } catch (e) {
             loadError = e
@@ -226,26 +226,26 @@ switch (platform) {
       case 'arm':
         if (isMusl()) {
           localFileExisted = existsSync(
-            join(__dirname, 'alpha_ta.linux-arm-musleabihf.node')
+            join(__dirname, 'finkit.linux-arm-musleabihf.node')
           )
           try {
             if (localFileExisted) {
-              nativeBinding = require('./alpha_ta.linux-arm-musleabihf.node')
+              nativeBinding = require('./finkit.linux-arm-musleabihf.node')
             } else {
-              nativeBinding = require('@alphata/core-linux-arm-musleabihf')
+              nativeBinding = require('finkit-linux-arm-musleabihf')
             }
           } catch (e) {
             loadError = e
           }
         } else {
           localFileExisted = existsSync(
-            join(__dirname, 'alpha_ta.linux-arm-gnueabihf.node')
+            join(__dirname, 'finkit.linux-arm-gnueabihf.node')
           )
           try {
             if (localFileExisted) {
-              nativeBinding = require('./alpha_ta.linux-arm-gnueabihf.node')
+              nativeBinding = require('./finkit.linux-arm-gnueabihf.node')
             } else {
-              nativeBinding = require('@alphata/core-linux-arm-gnueabihf')
+              nativeBinding = require('finkit-linux-arm-gnueabihf')
             }
           } catch (e) {
             loadError = e
@@ -255,26 +255,26 @@ switch (platform) {
       case 'riscv64':
         if (isMusl()) {
           localFileExisted = existsSync(
-            join(__dirname, 'alpha_ta.linux-riscv64-musl.node')
+            join(__dirname, 'finkit.linux-riscv64-musl.node')
           )
           try {
             if (localFileExisted) {
-              nativeBinding = require('./alpha_ta.linux-riscv64-musl.node')
+              nativeBinding = require('./finkit.linux-riscv64-musl.node')
             } else {
-              nativeBinding = require('@alphata/core-linux-riscv64-musl')
+              nativeBinding = require('finkit-linux-riscv64-musl')
             }
           } catch (e) {
             loadError = e
           }
         } else {
           localFileExisted = existsSync(
-            join(__dirname, 'alpha_ta.linux-riscv64-gnu.node')
+            join(__dirname, 'finkit.linux-riscv64-gnu.node')
           )
           try {
             if (localFileExisted) {
-              nativeBinding = require('./alpha_ta.linux-riscv64-gnu.node')
+              nativeBinding = require('./finkit.linux-riscv64-gnu.node')
             } else {
-              nativeBinding = require('@alphata/core-linux-riscv64-gnu')
+              nativeBinding = require('finkit-linux-riscv64-gnu')
             }
           } catch (e) {
             loadError = e
@@ -283,13 +283,13 @@ switch (platform) {
         break
       case 's390x':
         localFileExisted = existsSync(
-          join(__dirname, 'alpha_ta.linux-s390x-gnu.node')
+          join(__dirname, 'finkit.linux-s390x-gnu.node')
         )
         try {
           if (localFileExisted) {
-            nativeBinding = require('./alpha_ta.linux-s390x-gnu.node')
+            nativeBinding = require('./finkit.linux-s390x-gnu.node')
           } else {
-            nativeBinding = require('@alphata/core-linux-s390x-gnu')
+            nativeBinding = require('finkit-linux-s390x-gnu')
           }
         } catch (e) {
           loadError = e

@@ -3,9 +3,9 @@
 // Regenerate with: python3 scripts/gen_binding.py --lang python --generate <path>
 
 use pyo3::prelude::*;
-use alpha_ta_core::indicators;
-use alpha_ta_core::math::moving_avg;
-use alpha_ta_core::patterns::candlestick;
+use finkit::indicators;
+use finkit::math::moving_avg;
+use finkit::patterns::candlestick;
 
 struct AlphaTaGenerated;
 

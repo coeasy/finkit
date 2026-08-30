@@ -1,7 +1,7 @@
 //! Momentum indicator benchmarks: TTM Squeeze, Vortex, Inertia.
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use alpha_ta_core::indicators;
+use finkit::indicators;
 
 const DATA_LEN: usize = 10_000;
 

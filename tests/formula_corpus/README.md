@@ -113,10 +113,10 @@ tests/formula_corpus/
 
 ```bash
 # 运行全部语料回归
-cargo test -p alpha-ta-core formula_corpus -- --nocapture
+cargo test -p finkit formula_corpus -- --nocapture
 
 # 仅运行 TDX 语料
-cargo test -p alpha-ta-core formula_corpus_tdx
+cargo test -p finkit formula_corpus_tdx
 ```
 
 当前语料作为回归基线定义；测试运行器将在后续 Story 中实现。

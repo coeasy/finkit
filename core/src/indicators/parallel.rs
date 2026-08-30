@@ -52,7 +52,7 @@ pub const PARALLEL_MIN_LEN: usize = 4096;
 /// # Example
 ///
 /// ```rust,no_run
-/// use alpha_ta_core::indicators::parallel::parallel_sma_batch;
+/// use finkit::indicators::parallel::parallel_sma_batch;
 /// # #[cfg(feature = "rayon")]
 /// # {
 /// let closes: Vec<Vec<f64>> = (0..100).map(|i| {
@@ -180,7 +180,7 @@ where
 /// # Example
 ///
 /// ```rust,no_run
-/// use alpha_ta_core::indicators::parallel::parallel_sma_multi_period;
+/// use finkit::indicators::parallel::parallel_sma_multi_period;
 /// # #[cfg(feature = "rayon")]
 /// # {
 /// let data: Vec<f64> = (0..10_000).map(|i| 100.0 + (i as f64 * 0.013).sin() * 5.0).collect();

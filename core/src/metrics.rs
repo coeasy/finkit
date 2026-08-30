@@ -93,7 +93,7 @@ pub fn streaming_next(name: &'static str, ready: bool) {
 /// # Example
 ///
 /// ```ignore
-/// use alpha_ta_core::metrics::streaming_measure;
+/// use finkit::metrics::streaming_measure;
 /// fn next(&mut self, input: f64) -> Option<f64> {
 ///     streaming_measure!("sma", self.count, {
 ///         self.count += 1;
@@ -145,7 +145,7 @@ pub fn option_is_some<T>(o: &Option<T>) -> bool {
 /// # Example
 ///
 /// ```ignore
-/// use alpha_ta_core::metrics::timed;
+/// use finkit::metrics::timed;
 /// let r = timed("rsi", || { /* computation */ 42.0 });
 /// ```
 #[cfg(feature = "metrics")]

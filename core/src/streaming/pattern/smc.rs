@@ -24,8 +24,8 @@ use crate::impl_standard_methods;
 /// # Example
 ///
 /// ```
-/// use alpha_ta_core::streaming::indicators::StreamingFairValueGap;
-/// use alpha_ta_core::streaming::StreamingIndicator;
+/// use finkit::streaming::indicators::StreamingFairValueGap;
+/// use finkit::streaming::StreamingIndicator;
 ///
 /// let mut fvg = StreamingFairValueGap::new();
 /// // Warm-up: first two bars return None.
@@ -148,8 +148,8 @@ impl IndicatorMeta for StreamingFairValueGap {
 /// # Example
 ///
 /// ```
-/// use alpha_ta_core::streaming::indicators::StreamingOrderBlock;
-/// use alpha_ta_core::streaming::StreamingIndicator;
+/// use finkit::streaming::indicators::StreamingOrderBlock;
+/// use finkit::streaming::StreamingIndicator;
 ///
 /// let mut ob = StreamingOrderBlock::new(3);
 /// // Feed 10 bars of (high, low, close).

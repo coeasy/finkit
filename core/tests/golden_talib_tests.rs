@@ -14,12 +14,12 @@
 //! Warmup / unstable-period bars must align (golden `null` ↔ AlphaTA `NaN`).
 //! Missing golden JSON files cause the indicator test to **skip** (not fail).
 
-use alpha_ta_core::indicators::{
+use finkit::indicators::{
     adx, apo, aroon, bbands, cci, cmo, macd, mom, roc, rsi, stoch, trix, willr,
     volatility::{atr, natr},
     volume::{ad, obv},
 };
-use alpha_ta_core::math::moving_avg::{dema, ema, sma, tema, wma};
+use finkit::math::moving_avg::{dema, ema, sma, tema, wma};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
@@ -469,7 +469,7 @@ fn compare_series(
 
 fn reproduce_cmd(indicator: &str) -> String {
     format!(
-        "cargo test -p alpha_ta-core --test golden_talib_tests golden_talib_{} -- --nocapture",
+        "cargo test -p finkit --test golden_talib_tests golden_talib_{} -- --nocapture",
         indicator.to_lowercase()
     )
 }

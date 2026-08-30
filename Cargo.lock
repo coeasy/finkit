@@ -46,176 +46,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
-name = "alpha-ta-android"
-version = "1.0.0"
-dependencies = [
- "alpha-ta-core",
- "android_logger",
- "jni",
- "ndarray",
-]
-
-[[package]]
-name = "alpha-ta-cli"
-version = "1.0.0"
-dependencies = [
- "alpha-ta-core",
- "alpha-ta-visualization",
- "assert_cmd",
- "clap",
- "csv",
- "ndarray",
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "alpha-ta-core"
-version = "1.0.0"
-dependencies = [
- "ahash",
- "alpha-ta-ffi-common",
- "approx",
- "bincode",
- "criterion",
- "dhat",
- "libm",
- "lru",
- "metrics",
- "metrics-exporter-prometheus",
- "ndarray",
- "pest",
- "pest_derive",
- "polars",
- "proptest",
- "rayon",
- "serde",
- "serde_json",
- "ta",
- "thiserror 1.0.69",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "alpha-ta-dotnet"
-version = "1.0.0"
-dependencies = [
- "alpha-ta-core",
- "alpha-ta-ffi-common",
- "libc",
- "ndarray",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "alpha-ta-ffi"
-version = "1.0.0"
-dependencies = [
- "alpha-ta-core",
- "alpha-ta-visualization",
- "libc",
- "ndarray",
- "serde_json",
-]
-
-[[package]]
-name = "alpha-ta-ffi-common"
-version = "1.0.0"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "alpha-ta-go"
-version = "1.0.0"
-dependencies = [
- "alpha-ta-core",
- "alpha-ta-ffi-common",
- "libc",
- "ndarray",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "alpha-ta-ios"
-version = "1.0.0"
-dependencies = [
- "alpha-ta-core",
- "alpha-ta-ffi-common",
- "libc",
- "ndarray",
-]
-
-[[package]]
-name = "alpha-ta-java"
-version = "1.0.0"
-dependencies = [
- "alpha-ta-core",
- "alpha-ta-ffi-common",
- "alpha-ta-visualization",
- "jni",
- "lazy_static",
- "ndarray",
- "serde_json",
-]
-
-[[package]]
-name = "alpha-ta-node"
-version = "1.0.0"
-dependencies = [
- "alpha-ta-core",
- "alpha-ta-visualization",
- "napi",
- "napi-build",
- "napi-derive",
- "ndarray",
- "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "alpha-ta-python"
-version = "1.0.0"
-dependencies = [
- "alpha-ta-core",
- "alpha-ta-visualization",
- "ndarray",
- "numpy",
- "pyo3",
-]
-
-[[package]]
-name = "alpha-ta-visualization"
-version = "1.0.0"
-dependencies = [
- "alpha-ta-core",
- "fontdue",
- "png",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "alpha-ta-wasm"
-version = "1.0.0"
-dependencies = [
- "alpha-ta-core",
- "console_error_panic_hook",
- "getrandom 0.3.4",
- "ndarray",
- "serde",
- "serde-wasm-bindgen",
- "serde_json",
- "wasm-bindgen",
-]
-
-[[package]]
 name = "android_log-sys"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -870,6 +700,176 @@ name = "find-msvc-tools"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
+
+[[package]]
+name = "finkit"
+version = "0.1.0"
+dependencies = [
+ "ahash",
+ "approx",
+ "bincode",
+ "criterion",
+ "dhat",
+ "finkit-ffi-common",
+ "libm",
+ "lru",
+ "metrics",
+ "metrics-exporter-prometheus",
+ "ndarray",
+ "pest",
+ "pest_derive",
+ "polars",
+ "proptest",
+ "rayon",
+ "serde",
+ "serde_json",
+ "ta",
+ "thiserror 1.0.69",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "finkit-android"
+version = "0.1.0"
+dependencies = [
+ "android_logger",
+ "finkit",
+ "jni",
+ "ndarray",
+]
+
+[[package]]
+name = "finkit-cli"
+version = "0.1.0"
+dependencies = [
+ "assert_cmd",
+ "clap",
+ "csv",
+ "finkit",
+ "finkit-visualization",
+ "ndarray",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "finkit-dotnet"
+version = "0.1.0"
+dependencies = [
+ "finkit",
+ "finkit-ffi-common",
+ "libc",
+ "ndarray",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "finkit-ffi"
+version = "0.1.0"
+dependencies = [
+ "finkit",
+ "finkit-visualization",
+ "libc",
+ "ndarray",
+ "serde_json",
+]
+
+[[package]]
+name = "finkit-ffi-common"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "finkit-go"
+version = "0.1.0"
+dependencies = [
+ "finkit",
+ "finkit-ffi-common",
+ "libc",
+ "ndarray",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "finkit-ios"
+version = "0.1.0"
+dependencies = [
+ "finkit",
+ "finkit-ffi-common",
+ "libc",
+ "ndarray",
+]
+
+[[package]]
+name = "finkit-java"
+version = "0.1.0"
+dependencies = [
+ "finkit",
+ "finkit-ffi-common",
+ "finkit-visualization",
+ "jni",
+ "lazy_static",
+ "ndarray",
+ "serde_json",
+]
+
+[[package]]
+name = "finkit-node"
+version = "0.1.0"
+dependencies = [
+ "finkit",
+ "finkit-visualization",
+ "napi",
+ "napi-build",
+ "napi-derive",
+ "ndarray",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "finkit-python"
+version = "0.1.0"
+dependencies = [
+ "finkit",
+ "finkit-visualization",
+ "ndarray",
+ "numpy",
+ "pyo3",
+]
+
+[[package]]
+name = "finkit-visualization"
+version = "0.1.0"
+dependencies = [
+ "finkit",
+ "fontdue",
+ "png",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "finkit-wasm"
+version = "0.1.0"
+dependencies = [
+ "console_error_panic_hook",
+ "finkit",
+ "getrandom 0.3.4",
+ "ndarray",
+ "serde",
+ "serde-wasm-bindgen",
+ "serde_json",
+ "wasm-bindgen",
+]
 
 [[package]]
 name = "flate2"

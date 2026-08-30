@@ -1,7 +1,7 @@
 use proptest::prelude::*;
-use alpha_ta_core::indicators::{bbands, macd, mom, roc, rsi, volatility::atr};
-use alpha_ta_core::math::moving_avg::{dema, ema, kama, sma, sma_into, wma};
-use alpha_ta_core::streaming::{
+use finkit::indicators::{bbands, macd, mom, roc, rsi, volatility::atr};
+use finkit::math::moving_avg::{dema, ema, kama, sma, sma_into, wma};
+use finkit::streaming::{
     indicators::{
         StreamingAtr, StreamingBoll, StreamingCci, StreamingEma, StreamingKama, StreamingMacd,
         StreamingMfi, StreamingMom, StreamingNatr, StreamingObv, StreamingRoc, StreamingRsi,

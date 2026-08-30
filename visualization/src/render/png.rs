@@ -603,7 +603,7 @@ mod tests {
         let fb = FrameBuffer::new(4, 4);
         let result = encode_png(&fb);
         assert!(result.is_ok());
-        let data = result.expect("alpha-ta-visualization: unexpected None/Err in visualization/src/render/png.rs (A5 governance)");
+        let data = result.expect("finkit-visualization: unexpected None/Err in visualization/src/render/png.rs (A5 governance)");
         assert!(!data.is_empty());
         assert_eq!(&data[0..4], b"\x89PNG");
     }

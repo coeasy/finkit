@@ -1,5 +1,5 @@
 [package]
-name = "alpha-ta-fuzz"
+name = "finkit-fuzz"
 version = "0.0.0"
 edition = "2021"
 publish = false
@@ -13,7 +13,7 @@ publish = false
 # See `docs/FUZZING.md` for full instructions and OSS-Fuzz integration.
 
 [dependencies]
-alpha-ta-core = { path = "../core", features = ["std", "formula", "tracing", "metrics"] }
+finkit = { path = "../core", features = ["std", "formula", "tracing", "metrics"] }
 libfuzzer-sys = "0.4"
 ndarray = "0.15"
 

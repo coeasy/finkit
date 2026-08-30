@@ -50,7 +50,7 @@ pub struct SuperTrendResult {
 ///
 /// # 示例
 /// ```
-/// use alpha_ta_core::indicators::supertrend;
+/// use finkit::indicators::supertrend;
 ///
 /// let high = vec![10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0, 30.0];
 /// let low = vec![8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0];
@@ -165,7 +165,7 @@ pub fn supertrend(
 ///
 /// # 示例
 /// ```
-/// use alpha_ta_core::indicators::supertrend_default;
+/// use finkit::indicators::supertrend_default;
 ///
 /// let high = vec![10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0, 30.0];
 /// let low = vec![8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0];
@@ -203,7 +203,7 @@ pub struct SuperTrendMultiResult {
 /// # Example
 ///
 /// ```
-/// use alpha_ta_core::indicators::supertrend_multi;
+/// use finkit::indicators::supertrend_multi;
 ///
 /// let high  = vec![10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0, 30.0, 32.0, 34.0, 36.0, 38.0];
 /// let low   = vec![ 8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0, 30.0, 32.0, 34.0, 36.0];
@@ -262,7 +262,7 @@ pub fn supertrend_multi(
 /// # Example
 ///
 /// ```
-/// use alpha_ta_core::indicators::wow_direction;
+/// use finkit::indicators::wow_direction;
 ///
 /// let high  = vec![10.0, 11.0, 12.0, 11.5, 13.0, 14.5, 14.0, 15.5, 17.0, 16.5];
 /// let low   = vec![ 9.0, 10.0, 11.0, 10.5, 12.0, 13.5, 13.0, 14.5, 16.0, 15.5];

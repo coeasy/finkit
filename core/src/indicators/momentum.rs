@@ -142,7 +142,7 @@ fn sma_nan_as_zero_into(input: &[f64], period: usize, output: &mut [f64]) -> Res
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let close = vec![44.0, 44.25, 44.5, 43.75, 44.5, 44.25, 44.0, 43.5, 44.0, 44.25];
 /// let result = indicators::rsi(&close, 5).unwrap();
@@ -195,7 +195,7 @@ fn rsi_inner(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let close = vec![44.0, 44.25, 44.5, 43.75, 44.5, 44.25, 44.0, 43.5, 44.0, 44.25];
 /// let mut output = vec![0.0; close.len()];
@@ -249,7 +249,7 @@ pub struct StochResult {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let high = vec![45.0, 45.5, 46.0, 45.5, 46.5, 46.0, 45.5, 45.0, 45.5, 46.0];
 /// let low = vec![43.0, 43.5, 44.0, 43.0, 44.0, 43.5, 43.0, 42.5, 43.0, 43.5];
@@ -414,7 +414,7 @@ fn stoch_fused_pipeline(
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let high = vec![45.0, 45.5, 46.0, 45.5, 46.5, 46.0, 45.5, 45.0, 45.5, 46.0];
 /// let low = vec![43.0, 43.5, 44.0, 43.0, 44.0, 43.5, 43.0, 42.5, 43.0, 43.5];
@@ -484,7 +484,7 @@ pub struct MacdResult {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let close: Vec<f64> = (1..=35).map(|x| x as f64).collect();
 /// let result = indicators::macd(&close, 12, 26, 9).unwrap();
@@ -623,7 +623,7 @@ fn macd_inner(
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let high = vec![45.0, 45.5, 46.0, 45.5, 46.5, 46.0, 45.5, 45.0, 45.5, 46.0];
 /// let low = vec![43.0, 43.5, 44.0, 43.0, 44.0, 43.5, 43.0, 42.5, 43.0, 43.5];
@@ -897,7 +897,7 @@ pub struct AroonResult {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let high = vec![45.0, 45.5, 46.0, 45.5, 46.5, 46.0, 45.5, 45.0, 45.5, 46.0];
 /// let low = vec![43.0, 43.5, 44.0, 43.0, 44.0, 43.5, 43.0, 42.5, 43.0, 43.5];
@@ -1012,7 +1012,7 @@ pub fn aroon(high: &[f64], low: &[f64], period: usize) -> Result<AroonResult> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let high = vec![45.0, 45.5, 46.0, 45.5, 46.5, 46.0, 45.5, 45.0, 45.5, 46.0];
 /// let low = vec![43.0, 43.5, 44.0, 43.0, 44.0, 43.5, 43.0, 42.5, 43.0, 43.5];
@@ -1124,7 +1124,7 @@ pub fn cci(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Ar
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let close = vec![44.0, 44.25, 44.5, 43.75, 44.5, 44.25, 44.0, 43.5, 44.0, 44.25];
 /// let result = indicators::mom(&close, 5).unwrap();
@@ -1161,7 +1161,7 @@ pub fn mom(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let close = vec![44.0, 44.25, 44.5, 43.75, 44.5, 44.25, 44.0, 43.5, 44.0, 44.25];
 /// let result = indicators::roc(&close, 5).unwrap();
@@ -1193,7 +1193,7 @@ pub fn roc(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let high = vec![45.0, 45.5, 46.0, 45.5, 46.5, 46.0, 45.5, 45.0, 45.5, 46.0];
 /// let low = vec![43.0, 43.5, 44.0, 43.0, 44.0, 43.5, 43.0, 42.5, 43.0, 43.5];
@@ -1328,7 +1328,7 @@ pub struct ElderRayResult {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let high = vec![45.0, 45.5, 46.0, 45.5, 46.5, 46.0, 45.5, 45.0, 45.5, 46.0];
 /// let low = vec![43.0, 43.5, 44.0, 43.0, 44.0, 43.5, 43.0, 42.5, 43.0, 43.5];
@@ -1401,7 +1401,7 @@ pub fn elder_ray(
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let close = vec![44.0, 44.25, 44.5, 43.75, 44.5, 44.25, 44.0, 43.5, 44.0, 44.25];
 /// let result = indicators::apo(&close, 2, 5).unwrap();
@@ -1474,7 +1474,7 @@ pub fn apo(input: &[f64], fast_period: usize, slow_period: usize) -> Result<Arra
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let open = vec![43.5, 44.0, 44.25, 43.5, 44.25, 44.0, 43.75, 43.25, 43.75, 44.0];
 /// let high = vec![45.0, 45.5, 46.0, 45.5, 46.5, 46.0, 45.5, 45.0, 45.5, 46.0];
@@ -1513,7 +1513,7 @@ pub fn bop(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result<Arr
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let close = vec![44.0, 44.25, 44.5, 43.75, 44.5, 44.25, 44.0, 43.5, 44.0, 44.25];
 /// let result = indicators::cmo(&close, 5).unwrap();
@@ -1589,7 +1589,7 @@ pub fn cmo(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let high = vec![45.0, 45.5, 46.0, 45.5, 46.5, 46.0, 45.5, 45.0, 45.5, 46.0];
 /// let low = vec![43.0, 43.5, 44.0, 43.0, 44.0, 43.5, 43.0, 42.5, 43.0, 43.5];
@@ -1659,7 +1659,7 @@ pub fn dx(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Arr
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let high = vec![45.0, 45.5, 46.0, 45.5, 46.5, 46.0, 45.5, 45.0, 45.5, 46.0];
 /// let low = vec![43.0, 43.5, 44.0, 43.0, 44.0, 43.5, 43.0, 42.5, 43.0, 43.5];
@@ -1733,7 +1733,7 @@ pub fn mfi(
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let high = vec![45.0, 45.5, 46.0, 45.5, 46.5, 46.0, 45.5, 45.0, 45.5, 46.0];
 /// let low = vec![43.0, 43.5, 44.0, 43.0, 44.0, 43.5, 43.0, 42.5, 43.0, 43.5];
@@ -1762,7 +1762,7 @@ pub fn minus_di(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Resu
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let high = vec![45.0, 45.5, 46.0, 45.5, 46.5, 46.0, 45.5, 45.0, 45.5, 46.0];
 /// let low = vec![43.0, 43.5, 44.0, 43.0, 44.0, 43.5, 43.0, 42.5, 43.0, 43.5];
@@ -1792,7 +1792,7 @@ pub fn minus_dm(high: &[f64], low: &[f64]) -> Result<Array1<f64>> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let high = vec![45.0, 45.5, 46.0, 45.5, 46.5, 46.0, 45.5, 45.0, 45.5, 46.0];
 /// let low = vec![43.0, 43.5, 44.0, 43.0, 44.0, 43.5, 43.0, 42.5, 43.0, 43.5];
@@ -1821,7 +1821,7 @@ pub fn plus_di(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Resul
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let high = vec![45.0, 45.5, 46.0, 45.5, 46.5, 46.0, 45.5, 45.0, 45.5, 46.0];
 /// let low = vec![43.0, 43.5, 44.0, 43.0, 44.0, 43.5, 43.0, 42.5, 43.0, 43.5];
@@ -1860,7 +1860,7 @@ pub fn plus_dm(high: &[f64], low: &[f64]) -> Result<Array1<f64>> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let close: Vec<f64> = (1..=15).map(|x| x as f64).collect();
 /// let result = indicators::trix(&close, 5).unwrap();
@@ -1924,7 +1924,7 @@ pub fn trix(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let high: Vec<f64> = (0..20).map(|i| 45.0 + i as f64 * 0.1).collect();
 /// let low: Vec<f64> = (0..20).map(|i| 43.0 + i as f64 * 0.1).collect();
@@ -1956,7 +1956,7 @@ pub fn adxr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<A
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let high = vec![45.0, 45.5, 46.0, 45.5, 46.5, 46.0, 45.5, 45.0, 45.5, 46.0];
 /// let low = vec![43.0, 43.5, 44.0, 43.0, 44.0, 43.5, 43.0, 42.5, 43.0, 43.5];
@@ -2126,7 +2126,7 @@ fn aroonosc_deque_inner(
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators::{self, MaType};
+/// use finkit::indicators::{self, MaType};
 ///
 /// let close: Vec<f64> = (1..=30).map(|x| x as f64).collect();
 /// let result = indicators::macdext(&close, 12, MaType::Ema, 26, MaType::Ema, 9, MaType::Ema).unwrap();
@@ -2177,7 +2177,7 @@ pub fn macdext(
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let close: Vec<f64> = (1..=40).map(|x| x as f64).collect();
 /// let result = indicators::macdfix(&close).unwrap();
@@ -2194,7 +2194,7 @@ pub fn macdfix(input: &[f64]) -> Result<MacdResult> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let close: Vec<f64> = (1..=30).map(|x| x as f64).collect();
 /// let result = indicators::ppo(&close, 12, 26).unwrap();
@@ -2223,7 +2223,7 @@ pub fn ppo(input: &[f64], fast_period: usize, slow_period: usize) -> Result<Arra
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let close = vec![44.0, 44.25, 44.5, 43.75, 44.5, 44.25, 44.0, 43.5, 44.0, 44.25];
 /// let result = indicators::rocp(&close, 5).unwrap();
@@ -2250,7 +2250,7 @@ pub fn rocp(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let close = vec![44.0, 44.25, 44.5, 43.75, 44.5, 44.25, 44.0, 43.5, 44.0, 44.25];
 /// let result = indicators::rocr(&close, 5).unwrap();
@@ -2277,7 +2277,7 @@ pub fn rocr(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let close = vec![44.0, 44.25, 44.5, 43.75, 44.5, 44.25, 44.0, 43.5, 44.0, 44.25];
 /// let result = indicators::rocr100(&close, 5).unwrap();
@@ -2304,7 +2304,7 @@ pub fn rocr100(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let high = vec![45.0, 45.5, 46.0, 45.5, 46.5, 46.0, 45.5, 45.0, 45.5, 46.0];
 /// let low = vec![43.0, 43.5, 44.0, 43.0, 44.0, 43.5, 43.0, 42.5, 43.0, 43.5];
@@ -2413,7 +2413,7 @@ pub fn stochf(
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let close: Vec<f64> = (0..50).map(|i| 100.0 + (i as f64 * 0.1).sin() * 10.0).collect();
 /// let result = indicators::stochrsi(&close, 14, 14, 3, 3).unwrap();
@@ -2542,7 +2542,7 @@ pub fn stochrsi(
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let high: Vec<f64> = (0..30).map(|i| 45.0 + i as f64 * 0.1).collect();
 /// let low: Vec<f64> = (0..30).map(|i| 43.0 + i as f64 * 0.1).collect();

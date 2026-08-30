@@ -9,7 +9,7 @@ import numpy as np
 sys.path.insert(0, r'P:\llm_code\finkit\dist\python\windows-x64')
 
 try:
-    import alpha_ta
+    import finkit
     import talib
 except ImportError as e:
     print(f"Import error: {e}")
@@ -32,14 +32,14 @@ print()
 
 # 测试简单指标
 test_cases = [
-    ('MOM', lambda: alpha_ta.mom(close, 10), lambda: talib.MOM(close, 10)),
-    ('ROC', lambda: alpha_ta.roc(close, 10), lambda: talib.ROC(close, 10)),
-    ('BOP', lambda: alpha_ta.bop(open_price, high, low, close), lambda: talib.BOP(open_price, high, low, close)),
-    ('TRANGE', lambda: alpha_ta.trange(high, low, close), lambda: talib.TRANGE(high, low, close)),
-    ('AVGPRICE', lambda: alpha_ta.avgprice(open_price, high, low, close), lambda: talib.AVGPRICE(open_price, high, low, close)),
-    ('MEDPRICE', lambda: alpha_ta.medprice(high, low), lambda: talib.MEDPRICE(high, low)),
-    ('TYPPRICE', lambda: alpha_ta.typprice(high, low, close), lambda: talib.TYPPRICE(high, low, close)),
-    ('WCLPRICE', lambda: alpha_ta.wclprice(high, low, close), lambda: talib.WCLPRICE(high, low, close)),
+    ('MOM', lambda: finkit.mom(close, 10), lambda: talib.MOM(close, 10)),
+    ('ROC', lambda: finkit.roc(close, 10), lambda: talib.ROC(close, 10)),
+    ('BOP', lambda: finkit.bop(open_price, high, low, close), lambda: talib.BOP(open_price, high, low, close)),
+    ('TRANGE', lambda: finkit.trange(high, low, close), lambda: talib.TRANGE(high, low, close)),
+    ('AVGPRICE', lambda: finkit.avgprice(open_price, high, low, close), lambda: talib.AVGPRICE(open_price, high, low, close)),
+    ('MEDPRICE', lambda: finkit.medprice(high, low), lambda: talib.MEDPRICE(high, low)),
+    ('TYPPRICE', lambda: finkit.typprice(high, low, close), lambda: talib.TYPPRICE(high, low, close)),
+    ('WCLPRICE', lambda: finkit.wclprice(high, low, close), lambda: talib.WCLPRICE(high, low, close)),
 ]
 
 results = []

@@ -10,7 +10,7 @@
 //! # Example
 //!
 //! ```
-//! use alpha_ta_core::indicators;
+//! use finkit::indicators;
 //!
 //! let close = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 //! let sma = indicators::sma(&close, 3).unwrap();
@@ -211,7 +211,7 @@ pub trait SliceOutput {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators::{SliceOutput, SmaSlice};
+/// use finkit::indicators::{SliceOutput, SmaSlice};
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
 /// let mut out = vec![0.0; 5];
@@ -232,7 +232,7 @@ impl SliceOutput for SmaSlice {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators::{SliceOutput, EmaSlice};
+/// use finkit::indicators::{SliceOutput, EmaSlice};
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
 /// let mut out = vec![0.0; 5];
@@ -324,7 +324,7 @@ mod slice_output_tests {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
 /// let mut out = vec![0.0; 5];
@@ -340,7 +340,7 @@ pub fn sma_into_slice(input: &[f64], period: usize, output: &mut [f64]) -> Resul
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
 /// let mut out = vec![0.0; 5];

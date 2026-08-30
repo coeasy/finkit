@@ -4,12 +4,12 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.alphata</groupId>
-    <artifactId>alpha-ta</artifactId>
-    <version>1.0.0</version>
+    <groupId>com.finkit</groupId>
+    <artifactId>finkit</artifactId>
+    <version>0.1.0</version>
     <packaging>jar</packaging>
 
-    <name>AlphaTA Java Bindings</name>
+    <name>Finkit Java Bindings</name>
     <description>High-performance financial technical analysis library with Rust core and Java JNI bindings.
         Provides 100+ indicators including moving averages, oscillators, volatility measures,
         cycle indicators, candlestick patterns, and chart pattern detection.
@@ -27,8 +27,8 @@
 
     <developers>
         <developer>
-            <id>alphata</id>
-            <name>AlphaTA Contributors</name>
+            <id>finkit</id>
+            <name>Finkit Contributors</name>
         </developer>
     </developers>
 
@@ -106,7 +106,7 @@
                         <link>https://docs.oracle.com/javase/8/docs/api/</link>
                     </links>
                     <bottom>
-                        <![CDATA[Copyright &#169; {inceptionYear}&#x2013;{currentYear} alpha_ta Contributors. Released under the MIT License.]]>
+                        <![CDATA[Copyright &#169; {inceptionYear}&#x2013;{currentYear} finkit Contributors. Released under the MIT License.]]>
                     </bottom>
                 </configuration>
                 <executions>
@@ -126,7 +126,7 @@
                 <configuration>
                     <archive>
                         <manifestEntries>
-                            <Automatic-Module-Name>com.alphata</Automatic-Module-Name>
+                            <Automatic-Module-Name>com.finkit</Automatic-Module-Name>
                         </manifestEntries>
                     </archive>
                 </configuration>

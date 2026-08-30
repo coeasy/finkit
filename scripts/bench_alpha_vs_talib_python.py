@@ -5,7 +5,7 @@
 # For each TA-Lib function:
 #   1. Generate fixed random OHLCV data (seeded for reproducibility).
 #   2. Call talib.<FUNC> (time it).
-#   3. Call alpha_ta.<func> (time it).
+#   3. Call finkit.<func> (time it).
 #   4. Compare outputs (max abs diff ≤ 1e-6).
 #   5. Calculate speedup ratio.
 #
@@ -21,7 +21,7 @@
 # Exit codes:
 #   0  all functions compared successfully
 #   1  at least one function had precision mismatch (> 1e-6)
-#   2  missing dependency (alpha_ta / talib not installed)
+#   2  missing dependency (finkit / talib not installed)
 # ----------------------------------------------------------------------------
 from __future__ import annotations
 
@@ -36,9 +36,9 @@ import numpy as np
 
 # ---- import guards --------------------------------------------------------
 try:
-    import alpha_ta
+    import finkit
 except ImportError:
-    print("[bench] alpha_ta not installed; build and install the wheel first",
+    print("[bench] finkit not installed; build and install the wheel first",
           file=sys.stderr)
     sys.exit(2)
 
@@ -50,11 +50,11 @@ except ImportError:
 
 
 # ----------------------------------------------------------------------------
-# Function registry — 158 TA-Lib functions mapped to alpha_ta equivalents.
+# Function registry — 158 TA-Lib functions mapped to finkit equivalents.
 #
 # Each entry:
 #   talib:   TA-Lib function name (uppercase)
-#   alpha:   alpha_ta function name (lowercase) — None if no equivalent
+#   alpha:   finkit function name (lowercase) — None if no equivalent
 #   category: indicator category
 #   inputs:  list of input array keys from the OHLCV tuple
 #   params:  dict of keyword parameters
@@ -81,7 +81,7 @@ FUNCTIONS = [
     {"talib": "MIDPRICE",   "alpha": "midprice",   "category": "Overlap",  "inputs": ["high", "low"], "params": {"timeperiod": 14},      "returns": 1},
     {"talib": "HT_TRENDLINE","alpha": "ht_trendline","category": "Overlap", "inputs": ["close"],   "params": {},                          "returns": 1},
     {"talib": "MAMA",       "alpha": "mama",       "category": "Overlap",  "inputs": ["close"],   "params": {"fastlimit": 0.5, "slowlimit": 0.05}, "returns": 2},
-    {"talib": "FRAMA",      "alpha": None,          "category": "Overlap",  "inputs": ["close"],   "params": {},                          "returns": 1},  # FRAMA not in alpha_ta
+    {"talib": "FRAMA",      "alpha": None,          "category": "Overlap",  "inputs": ["close"],   "params": {},                          "returns": 1},  # FRAMA not in finkit
 
     # ========================================================================
     # Momentum (30)
@@ -352,14 +352,14 @@ def run_benchmark(scale: int, output_dir: str, repeat: int = 5):
             skipped.append({"name": talib_name, "reason": "not in talib"})
             continue
 
-        # Skip if no alpha_ta equivalent
+        # Skip if no finkit equivalent
         if alpha_name is None:
-            skipped.append({"name": talib_name, "reason": "no alpha_ta equivalent"})
+            skipped.append({"name": talib_name, "reason": "no finkit equivalent"})
             continue
 
-        alpha_func = getattr(alpha_ta, alpha_name, None)
+        alpha_func = getattr(finkit, alpha_name, None)
         if alpha_func is None:
-            skipped.append({"name": talib_name, "reason": f"alpha_ta.{alpha_name} not found"})
+            skipped.append({"name": talib_name, "reason": f"finkit.{alpha_name} not found"})
             continue
 
         # Prepare inputs
@@ -375,13 +375,13 @@ def run_benchmark(scale: int, output_dir: str, repeat: int = 5):
             errors.append({"name": talib_name, "side": "talib", "error": str(e)})
             continue
 
-        # Time alpha_ta
+        # Time finkit
         try:
             alpha_time = time_call(alpha_func, *inputs, repeat=repeat, **params)
             alpha_result = alpha_func(*inputs, **params)
             alpha_arrs = to_list(alpha_result)
         except Exception as e:
-            errors.append({"name": talib_name, "side": "alpha_ta", "error": str(e)})
+            errors.append({"name": talib_name, "side": "finkit", "error": str(e)})
             continue
 
         # Compare outputs
@@ -588,7 +588,7 @@ def main():
     scale_map = {"1K": 1_000, "10K": 10_000, "100K": 100_000, "1M": 1_000_000}
     scale = scale_map[args.scale]
 
-    print(f"[bench] AlphaTA version: {getattr(alpha_ta, '__version__', 'unknown')}")
+    print(f"[bench] AlphaTA version: {getattr(finkit, '__version__', 'unknown')}")
     print(f"[bench] TA-Lib version: {talib.__version__}")
     print(f"[bench] NumPy version: {np.__version__}")
 

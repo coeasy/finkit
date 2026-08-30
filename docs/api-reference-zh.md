@@ -36,7 +36,7 @@ sma(close, timeperiod=30)
 
 **示例:**
 ```python
-import alpha_ta as ta
+import finkit as ta
 close = [44.34, 44.09, 43.61, 44.33, 44.83, 45.10, 45.42, 45.84]
 sma = ta.sma(close, 5)  # 5日均线
 ```

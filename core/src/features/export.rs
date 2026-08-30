@@ -48,7 +48,7 @@ pub fn to_json_lines(matrix: &FeatureMatrix, path: impl AsRef<Path>) -> std::io:
 /// Export FeatureMatrix to Arrow IPC format (simplified column-based binary).
 ///
 /// Note: This is a simplified implementation. For production use with
-/// full Arrow compatibility, enable the `alpha-ta-polars` feature.
+/// full Arrow compatibility, enable the `finkit-polars` feature.
 pub fn to_arrow_ipc(matrix: &FeatureMatrix, path: impl AsRef<Path>) -> std::io::Result<()> {
     let mut file = std::fs::File::create(path)?;
 

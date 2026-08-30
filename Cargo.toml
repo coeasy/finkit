@@ -18,7 +18,7 @@ exclude = []
 resolver = "2"
 
 [workspace.package]
-version = "1.0.0"
+version = "0.1.0"
 edition = "2021"
 rust-version = "1.75" # D-5: MSRV 1.75 (workspace-wide)
 authors = ["AlphaTA Contributors"]
@@ -26,7 +26,7 @@ description = "A high-performance Financial Technical Analysis library in Rust"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/coeasy/finkit"
 homepage = "https://github.com/coeasy/finkit"
-documentation = "https://docs.rs/alpha-ta-core"
+documentation = "https://docs.rs/finkit"
 
 [workspace.dependencies]
 serde = { version = "1.0", features = ["derive"] }
@@ -50,21 +50,21 @@ lto = "thin"
 codegen-units = 1
 strip = "debuginfo"
 
-[profile.release.package."alpha-ta-dotnet"]
+[profile.release.package."finkit-dotnet"]
 codegen-units = 16
 
-[profile.release.package."alpha-ta-go"]
+[profile.release.package."finkit-go"]
 codegen-units = 16
 
-# alpha-ta-java uses default release profile (codegen-units=1) for maximum optimization.
+# finkit-java uses default release profile (codegen-units=1) for maximum optimization.
 
-[profile.release.package."alpha-ta-node"]
+[profile.release.package."finkit-node"]
 codegen-units = 16
 
-[profile.release.package."alpha-ta-python"]
+[profile.release.package."finkit-python"]
 codegen-units = 16
 
-[profile.release.package."alpha-ta-ffi"]
+[profile.release.package."finkit-ffi"]
 codegen-units = 16
 
 [profile.dev]

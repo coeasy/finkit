@@ -1,8 +1,8 @@
 """
-Example: Using AlphaTA in Python
+Example: Using finkit in Python
 """
 import numpy as np
-import alpha_ta as ta
+import finkit as ta
 
 def generate_sample_data(n=100):
     """Generate sample OHLCV data"""
@@ -18,7 +18,7 @@ def main():
     open_price, high, low, close, volume = generate_sample_data(200)
     
     print("=" * 60)
-    print("AlphaTA Python Example")
+    print("finkit Python Example")
     print("=" * 60)
     
     # Overlap Studies

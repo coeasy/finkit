@@ -1,9 +1,9 @@
-use alpha_ta_visualization::chart::KlineChart;
-use alpha_ta_visualization::config::{
+use finkit_visualization::chart::KlineChart;
+use finkit_visualization::config::{
     ChartConfigBuilder, ChartType, IndicatorConfig, IndicatorType,
 };
-use alpha_ta_visualization::data::KlineData;
-use alpha_ta_visualization::language::Language;
+use finkit_visualization::data::KlineData;
+use finkit_visualization::language::Language;
 
 fn main() {
     let mut data = KlineData::new(

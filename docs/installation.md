@@ -65,7 +65,7 @@ conda install -c conda-forge alpha_ta
 ### Verification
 
 ```python
-import alpha_ta as ta
+import finkit as ta
 import numpy as np
 
 close = np.arange(1.0, 51.0)

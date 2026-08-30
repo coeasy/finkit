@@ -1,5 +1,5 @@
 use ndarray::Array1;
-use alpha_ta_core::formula::{FormulaContext, FormulaEngine, ParamValues};
+use finkit::formula::{FormulaContext, FormulaEngine, ParamValues};
 
 fn make_test_ctx(len: usize) -> FormulaContext {
     let open = Array1::from_vec((0..len).map(|i| 100.0 + i as f64 * 0.5).collect());

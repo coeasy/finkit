@@ -181,7 +181,7 @@ mod tests {
         let data = make_test_data();
         let info = create_crosshair_info(0, 100.0, 200.0, &data);
         assert!(info.is_some());
-        let info = info.expect("alpha-ta-visualization: unexpected None/Err in visualization/src/interaction/crosshair.rs (A5 governance)");
+        let info = info.expect("finkit-visualization: unexpected None/Err in visualization/src/interaction/crosshair.rs (A5 governance)");
         assert_eq!(info.index, 0);
         assert!((info.x - 100.0).abs() < 1e-10);
         assert!((info.y - 200.0).abs() < 1e-10);
@@ -202,7 +202,7 @@ mod tests {
     #[test]
     fn test_crosshair_info_fields() {
         let data = make_test_data();
-        let info = create_crosshair_info(2, 50.0, 150.0, &data).expect("alpha-ta-visualization: unexpected None/Err in visualization/src/interaction/crosshair.rs (A5 governance)");
+        let info = create_crosshair_info(2, 50.0, 150.0, &data).expect("finkit-visualization: unexpected None/Err in visualization/src/interaction/crosshair.rs (A5 governance)");
         assert_eq!(info.index, 2);
         assert!((info.ohlcv.0 - 101.0).abs() < 1e-10);
         assert!((info.ohlcv.3 - 100.0).abs() < 1e-10);

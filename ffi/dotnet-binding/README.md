@@ -1,4 +1,4 @@
-# AlphaTA .NET Binding
+# Finkit .NET Binding
 
 High-performance technical analysis indicators for .NET, powered by Rust via P/Invoke.
 
@@ -26,20 +26,20 @@ cargo build --release
 
 # Copy the native library to the output directory
 # Windows:
-cp target/release/alpha_ta_dotnet.dll src/AlphaTA/bin/Release/native/
+cp target/release/finkit_dotnet.dll src/Finkit/bin/Release/native/
 # Linux/macOS:
-cp target/release/libalpha_ta_dotnet.so src/AlphaTA/bin/Release/native/
-cp target/release/libalpha_ta_dotnet.dylib src/AlphaTA/bin/Release/native/
+cp target/release/libfinkit_dotnet.so src/Finkit/bin/Release/native/
+cp target/release/libfinkit_dotnet.dylib src/Finkit/bin/Release/native/
 
 # Build the .NET library
-cd src/AlphaTA
+cd src/Finkit
 dotnet build -c Release
 ```
 
 ## Usage
 
 ```csharp
-using AlphaTA;
+using Finkit;
 
 // Simple Moving Average
 double[] prices = { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0 };
@@ -149,7 +149,7 @@ helper) to avoid memory leaks.
 - The .NET side **must**:
   1. Receive the `*mut c_char` (or `IntPtr`) from a `ta_*` call.
   2. Marshal it to a managed `string` (e.g. via `Marshal.PtrToStringAnsi`) **once**.
-  3. Call `ta_free_cstring` (directly or via the bundled `AlphaTA.Native.FreeCString` wrapper) to release the native buffer.
+  3. Call `ta_free_cstring` (directly or via the bundled `Finkit.Native.FreeCString` wrapper) to release the native buffer.
 - Do **not** call `Marshal.FreeHGlobal` on a pointer obtained from `ta_*` unless you have
   verified that the native function returned a pointer allocated by `malloc` (most `ta_*`
   functions use Rust's allocator; mixing them with the CRT allocator is **undefined
@@ -159,13 +159,13 @@ helper) to avoid memory leaks.
 ### Example
 
 ```csharp
-using AlphaTA;
+using Finkit;
 using System.Runtime.InteropServices;
 
 IntPtr raw = NativeBindings.ta_get_version();   // returns *mut c_char
 string version = Marshal.PtrToStringAnsi(raw);  // single marshal copy
 NativeBindings.ta_free_cstring(raw);             // free native allocation
-Console.WriteLine($"AlphaTA {version}");
+Console.WriteLine($"Finkit {version}");
 ```
 
 ## License

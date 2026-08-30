@@ -24,7 +24,7 @@ pip install websockets
 验证流式 API：
 
 ```python
-import alpha_ta as ta
+import finkit as ta
 
 rsi = ta.StreamingRSI(period=14)
 print(rsi.update(50000.0))  # 首根 K 线，可能为 NaN
@@ -85,7 +85,7 @@ AlphaTA 提供与批量 API 数值一致的流式指标类，每根新 K 线调�
 ### 3.1 流式 RSI
 
 ```python
-import alpha_ta as ta
+import finkit as ta
 
 streaming_rsi = ta.StreamingRSI(period=14)
 
@@ -115,7 +115,7 @@ for price in prices:
 先用历史数据预热状态，再接入实时流：
 
 ```python
-import alpha_ta as ta
+import finkit as ta
 
 # 历史预热
 history = fetch_binance_klines(limit=100)[2]  # closes
@@ -135,7 +135,7 @@ print(f"实时 RSI: {live_rsi:.2f}")
 ### 3.4 流式 vs 批量一致性验证
 
 ```python
-import alpha_ta as ta
+import finkit as ta
 import numpy as np
 
 closes = np.array(prices, dtype=np.float64)
@@ -172,7 +172,7 @@ print("流式与批量结果一致")
 ### 4.1 RSI 超买超卖信号
 
 ```python
-import alpha_ta as ta
+import finkit as ta
 
 class RsiSignalStrategy:
     def __init__(self, period: int = 14, oversold: float = 30.0, overbought: float = 70.0):
@@ -194,7 +194,7 @@ class RsiSignalStrategy:
 ### 4.2 EMA 交叉策略
 
 ```python
-import alpha_ta as ta
+import finkit as ta
 
 class EmaCrossStrategy:
     def __init__(self, fast: int = 12, slow: int = 26):
@@ -253,7 +253,7 @@ class MomentumStrategy:
 流式指标支持序列化状态，适合断线重连或服务重启后恢复计算上下文。
 
 ```python
-import alpha_ta as ta
+import finkit as ta
 
 rsi = ta.StreamingRSI(period=14)
 for price in [42000, 42100, 42200, 42300]:
@@ -277,7 +277,7 @@ print(f"恢复后 RSI: {new_rsi:.2f}")
 ```python
 """模拟加密货币实时 K 线流 + 流式指标 + 信号输出"""
 import time
-import alpha_ta as ta
+import finkit as ta
 
 def simulate_realtime_stream(closes: list[float], delay: float = 0.05):
     rsi_strategy = ta.StreamingRSI(period=14)

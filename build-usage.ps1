@@ -12,7 +12,7 @@
 
 .PARAMETER BenchTalib
   Switch: run scripts/bench-vs-talib.ps1 instead of the language build.
-  Emits dist/bench/alpha-ta-vs-talib.md + dist/bench/results.json.
+  Emits dist/bench/finkit-vs-talib.md + dist/bench/results.json.
 
 .PARAMETER NoBundle
   Switch: skip the final usage-bundle.zip packaging step.

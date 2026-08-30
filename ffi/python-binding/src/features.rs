@@ -3,8 +3,8 @@
 use numpy::PyReadonlyArray1;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use alpha_ta_core::features;
-use alpha_ta_core::indicators;
+use finkit::features;
+use finkit::indicators;
 
 type PyDictResult<'py> = PyResult<Bound<'py, PyDict>>;
 

@@ -3,9 +3,9 @@
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
-use alpha_ta_core::indicators;
-use alpha_ta_core::math::moving_avg;
-use alpha_ta_core::patterns::{candlestick, chart};
+use finkit::indicators;
+use finkit::math::moving_avg;
+use finkit::patterns::{candlestick, chart};
 
 mod streaming;
 mod sweep;
@@ -14,7 +14,7 @@ mod transforms;
 #[cfg(feature = "formula")]
 use ndarray::Array1;
 #[cfg(feature = "formula")]
-use alpha_ta_core::formula::{parse_formula, FormulaContext, FormulaEngine, FormulaError};
+use finkit::formula::{parse_formula, FormulaContext, FormulaEngine, FormulaError};
 #[cfg(feature = "formula")]
 use std::collections::HashMap;
 
@@ -44,7 +44,7 @@ fn formula_error_to_napi(e: FormulaError) -> napi::Error {
     }
 }
 
-use alpha_ta_core::error::TaError;
+use finkit::error::TaError;
 
 // ============================================================================
 // Overlap Studies - Moving Averages
@@ -1187,7 +1187,7 @@ pub struct KlineDataNapi {
     pub volumes: Vec<f64>,
 }
 
-impl From<KlineDataNapi> for alpha_ta_visualization::data::KlineData {
+impl From<KlineDataNapi> for finkit_visualization::data::KlineData {
     fn from(data: KlineDataNapi) -> Self {
         Self::new(
             data.dates,
@@ -1200,8 +1200,8 @@ impl From<KlineDataNapi> for alpha_ta_visualization::data::KlineData {
     }
 }
 
-impl From<alpha_ta_visualization::data::KlineData> for KlineDataNapi {
-    fn from(data: alpha_ta_visualization::data::KlineData) -> Self {
+impl From<finkit_visualization::data::KlineData> for KlineDataNapi {
+    fn from(data: finkit_visualization::data::KlineData) -> Self {
         Self {
             dates: data.dates,
             opens: data.opens,
@@ -1234,14 +1234,14 @@ pub fn kline_data_new(
 
 #[napi]
 pub fn kline_data_validate(data: KlineDataNapi) -> bool {
-    let inner: alpha_ta_visualization::data::KlineData = data.into();
+    let inner: finkit_visualization::data::KlineData = data.into();
     inner.validate()
 }
 
 #[napi]
 pub struct KlineChartNapi {
-    inner: alpha_ta_visualization::chart::KlineChart,
-    data: Option<alpha_ta_visualization::data::KlineData>,
+    inner: finkit_visualization::chart::KlineChart,
+    data: Option<finkit_visualization::data::KlineData>,
 }
 
 #[napi]
@@ -1254,17 +1254,17 @@ impl KlineChartNapi {
         width: u32,
         height: u32,
     ) -> Result<Self> {
-        let inner_data: alpha_ta_visualization::data::KlineData = data.into();
+        let inner_data: finkit_visualization::data::KlineData = data.into();
         let lang = match language.as_str() {
-            "zh-CN" | "zh" => alpha_ta_visualization::language::Language::ZhCn,
-            _ => alpha_ta_visualization::language::Language::EnUs,
+            "zh-CN" | "zh" => finkit_visualization::language::Language::ZhCn,
+            _ => finkit_visualization::language::Language::EnUs,
         };
-        let config = alpha_ta_visualization::config::ChartConfigBuilder::new()
+        let config = finkit_visualization::config::ChartConfigBuilder::new()
             .with_title(&title)
             .with_language(lang)
             .with_dimensions(width, height)
             .build();
-        let mut chart = alpha_ta_visualization::chart::KlineChart::new(config);
+        let mut chart = finkit_visualization::chart::KlineChart::new(config);
         chart.set_data(inner_data.clone());
         chart
             .build_draw_list(&inner_data, &[])
@@ -1573,7 +1573,7 @@ pub fn formula_search_templates(keyword: String) -> Result<Vec<FormulaTemplateIn
 #[napi]
 #[cfg(feature = "formula")]
 pub fn formula_list_categories() -> Result<Vec<String>> {
-    use alpha_ta_core::formula::templates::FormulaTemplates;
+    use finkit::formula::templates::FormulaTemplates;
 
     let categories = FormulaTemplates::categories();
     Ok(categories.iter().map(|c| format!("{:?}", c)).collect())

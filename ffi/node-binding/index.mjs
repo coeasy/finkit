@@ -11,45 +11,45 @@ const require = createRequire(import.meta.url)
 let nativeBinding = null
 
 try {
-  nativeBinding = require('./alpha_ta.node')
+  nativeBinding = require('./finkit.node')
 } catch (e) {
   let pkgName = null
   const platformKey = `${platform}-${arch}`
 
   switch (platformKey) {
     case 'darwin-arm64':
-      pkgName = '@alphata/node-darwin-arm64'
+      pkgName = 'finkit-darwin-arm64'
       break
     case 'darwin-x64':
-      pkgName = '@alphata/node-darwin-x64'
+      pkgName = 'finkit-darwin-x64'
       break
     case 'linux-arm64':
       try {
         if (readFileSync('/usr/bin/ldd', 'utf8').includes('musl')) {
-          pkgName = '@alphata/node-linux-arm64-musl'
+          pkgName = 'finkit-linux-arm64-musl'
         } else {
-          pkgName = '@alphata/node-linux-arm64-gnu'
+          pkgName = 'finkit-linux-arm64-gnu'
         }
       } catch {
-        pkgName = '@alphata/node-linux-arm64-gnu'
+        pkgName = 'finkit-linux-arm64-gnu'
       }
       break
     case 'linux-x64':
       try {
         if (readFileSync('/usr/bin/ldd', 'utf8').includes('musl')) {
-          pkgName = '@alphata/node-linux-x64-musl'
+          pkgName = 'finkit-linux-x64-musl'
         } else {
-          pkgName = '@alphata/node-linux-x64-gnu'
+          pkgName = 'finkit-linux-x64-gnu'
         }
       } catch {
-        pkgName = '@alphata/node-linux-x64-gnu'
+        pkgName = 'finkit-linux-x64-gnu'
       }
       break
     case 'win32-x64':
-      pkgName = '@alphata/node-win32-x64-msvc'
+      pkgName = 'finkit-win32-x64-msvc'
       break
     case 'win32-arm64':
-      pkgName = '@alphata/node-win32-arm64-msvc'
+      pkgName = 'finkit-win32-arm64-msvc'
       break
     default:
       throw new Error(`Unsupported platform: ${platformKey}`)

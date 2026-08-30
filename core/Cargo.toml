@@ -1,5 +1,5 @@
 [package]
-name = "alpha-ta-core"
+name = "finkit"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -133,7 +133,7 @@ ta = "0.5"
 # the global allocator when the `memory-profile` feature is enabled.
 dhat = "0.3"
 # Golden reference vectors shared with every FFI binding's test suite.
-alpha-ta-ffi-common = { path = "../ffi/ffi-common" }
+finkit-ffi-common = { path = "../ffi/ffi-common" }
 
 [package.metadata.docs.rs]
 all-features = true
@@ -185,7 +185,7 @@ serde = ["std", "dep:serde", "dep:bincode"]
 nightly-avx512 = []
 precision-f32 = []
 rayon = ["std", "dep:rayon"]
-alpha-ta-polars = ["std", "dep:polars"]
+finkit-polars = ["std", "dep:polars"]
 # O-1: tracing re-export. opt-in subscriber via tracing-subscriber feature.
 tracing = ["dep:tracing"]
 tracing-subscriber = ["dep:tracing-subscriber", "tracing"]

@@ -13,7 +13,7 @@
 //! # Example
 //!
 //! ```
-//! use alpha_ta_core::indicators;
+//! use finkit::indicators;
 //!
 //! let high  = vec![10.0, 11.0, 12.0, 11.5, 10.5, 9.5, 10.0, 11.0, 12.5, 13.0];
 //! let low   = vec![ 9.0, 10.0, 11.0, 10.5,  9.5,  8.5,  9.5, 10.0, 11.5, 12.0];
@@ -47,7 +47,7 @@ pub type OrderBlockResult = Array1<f64>;
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let high  = vec![10.0, 11.0, 12.0, 11.5, 10.5, 9.5, 10.0, 11.0, 12.5, 13.0];
 /// let low   = vec![ 9.0, 10.0, 11.0, 10.5,  9.5,  8.5,  9.5, 10.0, 11.5, 12.0];
@@ -139,7 +139,7 @@ pub type FairValueGapResult = Array1<f64>;
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let high = vec![10.0, 12.0, 14.0, 13.5, 11.0,  9.0,  8.0, 10.0, 12.0];
 /// let low  = vec![ 9.0, 11.0, 13.0, 12.5, 10.0,  8.0,  7.0,  9.0, 11.0];
@@ -206,7 +206,7 @@ pub type BreakOfStructureResult = Array1<f64>;
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let high  = vec![10.0, 11.0, 12.0, 11.5, 13.0, 12.5, 14.0, 13.5, 15.0, 14.5];
 /// let low   = vec![ 9.0, 10.0, 11.0, 10.5, 12.0, 11.5, 13.0, 12.5, 14.0, 13.5];
@@ -285,7 +285,7 @@ pub type ChangeOfCharacterResult = Array1<f64>;
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let high  = vec![14.0, 13.5, 15.0, 14.5, 13.0, 11.5, 10.0, 11.0, 10.5,  9.0];
 /// let low   = vec![13.0, 12.5, 14.0, 13.5, 12.0, 10.5,  9.0,  9.5,  9.0,  8.0];
@@ -379,7 +379,7 @@ pub type LiquidityZonesResult = Array1<f64>;
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let high = vec![10.0, 10.2, 10.1, 10.3, 10.2, 12.0, 13.0, 12.5, 13.5, 13.2];
 /// let low  = vec![ 9.8, 10.0,  9.9, 10.1, 10.0, 11.5, 12.5, 12.0, 13.0, 12.8];
@@ -465,7 +465,7 @@ pub struct SmcSignals {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let high  = vec![10.0, 11.0, 12.0, 11.5, 13.0, 12.5, 14.0, 13.5, 15.0, 14.5];
 /// let low   = vec![ 9.0, 10.0, 11.0, 10.5, 12.0, 11.5, 13.0, 12.5, 14.0, 13.5];

@@ -78,7 +78,7 @@ cargo build --release --all-features
 cargo test
 
 # Run tests for specific crate
-cargo test -p alpha-ta-core
+cargo test -p finkit
 
 # Run benchmarks
 cargo bench
@@ -428,7 +428,7 @@ cargo test -- --nocapture
 cargo test my_indicator
 
 # Run tests for specific crate
-cargo test -p alpha-ta-core
+cargo test -p finkit
 ```
 
 ### Integration Tests
@@ -462,10 +462,10 @@ dotnet test
 cargo install cargo-llvm-cov
 
 # Generate coverage report
-cargo llvm-cov --package alpha-ta-core --all-features --html
+cargo llvm-cov --package finkit --all-features --html
 
 # Generate LCOV format for CI
-cargo llvm-cov --package alpha-ta-core --all-features --lcov --output-path lcov.info
+cargo llvm-cov --package finkit --all-features --lcov --output-path lcov.info
 ```
 
 ### Benchmarks
@@ -637,7 +637,7 @@ GitHub Actions will automatically:
 cargo doc --no-deps --open
 
 # Generate for specific crate
-cargo doc --no-deps --package alpha-ta-core --open
+cargo doc --no-deps --package finkit --open
 ```
 
 ### API Documentation

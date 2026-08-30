@@ -1,5 +1,5 @@
 {
-  "name": "@alphata/node-linux-arm64-musl",
+  "name": "finkit-linux-arm64-musl",
   "version": "1.0.0",
   "os": [
     "linux"
@@ -10,11 +10,11 @@
   "libc": [
     "musl"
   ],
-  "main": "alpha_ta.node",
+  "main": "finkit.node",
   "files": [
-    "alpha_ta.node"
+    "finkit.node"
   ],
-  "description": "Linux ARM64 musl native binding for @alphata/node",
+  "description": "Linux ARM64 musl native binding for finkit",
   "license": "Apache-2.0",
   "engines": {
     "node": ">= 16"

@@ -168,7 +168,7 @@ mod tests {
         let mut state = ViewState::new();
         state.set_cursor(Some(Point::new(50.0, 50.0)));
         assert!(state.cursor.is_some());
-        assert_eq!(state.cursor.expect("alpha-ta-visualization: unexpected None/Err in visualization/src/interaction/mod.rs (A5 governance)").x, 50.0);
+        assert_eq!(state.cursor.expect("finkit-visualization: unexpected None/Err in visualization/src/interaction/mod.rs (A5 governance)").x, 50.0);
     }
 
     #[test]

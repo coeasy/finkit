@@ -39,8 +39,8 @@ PKG_NAME="alpha_ta-${VERSION}.tgz"
 has_tool() { command -v "$1" >/dev/null 2>&1; }
 
 # Build the native .node for the current triple ---------------------------
-echo "[build-usage-node] cargo build --release -p alpha-ta-node"
-( cd "${ROOT}" && cargo build --release -p alpha-ta-node )
+echo "[build-usage-node] cargo build --release -p finkit-node"
+( cd "${ROOT}" && cargo build --release -p finkit-node )
 
 # Copy the .node binary into the package output ---------------------------
 # N-API produces platform-specific names like: alpha_ta.win32-x64-msvc.node

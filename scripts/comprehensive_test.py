@@ -6,7 +6,7 @@ Tests all indicators and generates detailed accuracy report
 
 import numpy as np
 import talib
-import alpha_ta
+import finkit
 import time
 import json
 from typing import Dict, List, Tuple
@@ -133,268 +133,268 @@ def main():
     indicators = [
         # Overlap studies
         ('BBANDS', 
-         lambda d: alpha_ta.bbands(d['close'], timeperiod=20, nbdevup=2.0, nbdevdn=2.0),
+         lambda d: finkit.bbands(d['close'], timeperiod=20, nbdevup=2.0, nbdevdn=2.0),
          lambda d: talib.BBANDS(d['close'], timeperiod=20, nbdevup=2.0, nbdevdn=2.0)),
         
         ('DEMA',
-         lambda d: alpha_ta.dema(d['close'], timeperiod=30),
+         lambda d: finkit.dema(d['close'], timeperiod=30),
          lambda d: talib.DEMA(d['close'], timeperiod=30)),
         
         ('EMA',
-         lambda d: alpha_ta.ema(d['close'], timeperiod=30),
+         lambda d: finkit.ema(d['close'], timeperiod=30),
          lambda d: talib.EMA(d['close'], timeperiod=30)),
         
         ('HT_TRENDLINE',
-         lambda d: alpha_ta.ht_trendline(d['close']),
+         lambda d: finkit.ht_trendline(d['close']),
          lambda d: talib.HT_TRENDLINE(d['close'])),
         
         ('KAMA',
-         lambda d: alpha_ta.kama(d['close'], timeperiod=30),
+         lambda d: finkit.kama(d['close'], timeperiod=30),
          lambda d: talib.KAMA(d['close'], timeperiod=30)),
         
         ('MA',
-         lambda d: alpha_ta.ma(d['close'], timeperiod=30, matype=0),
+         lambda d: finkit.ma(d['close'], timeperiod=30, matype=0),
          lambda d: talib.MA(d['close'], timeperiod=30, matype=0)),
         
         ('MAMA',
-         lambda d: alpha_ta.mama(d['close'], fastlimit=0.5, slowlimit=0.05),
+         lambda d: finkit.mama(d['close'], fastlimit=0.5, slowlimit=0.05),
          lambda d: talib.MAMA(d['close'], fastlimit=0.5, slowlimit=0.05)),
         
         ('MIDPOINT',
-         lambda d: alpha_ta.midpoint(d['close'], timeperiod=14),
+         lambda d: finkit.midpoint(d['close'], timeperiod=14),
          lambda d: talib.MIDPOINT(d['close'], timeperiod=14)),
         
         ('MIDPRICE',
-         lambda d: alpha_ta.midprice(d['high'], d['low'], timeperiod=14),
+         lambda d: finkit.midprice(d['high'], d['low'], timeperiod=14),
          lambda d: talib.MIDPRICE(d['high'], d['low'], timeperiod=14)),
         
         ('SAR',
-         lambda d: alpha_ta.sar(d['high'], d['low'], acceleration=0.02, maximum=0.2),
+         lambda d: finkit.sar(d['high'], d['low'], acceleration=0.02, maximum=0.2),
          lambda d: talib.SAR(d['high'], d['low'], acceleration=0.02, maximum=0.2)),
         
         ('SMA',
-         lambda d: alpha_ta.sma(d['close'], timeperiod=30),
+         lambda d: finkit.sma(d['close'], timeperiod=30),
          lambda d: talib.SMA(d['close'], timeperiod=30)),
         
         ('T3',
-         lambda d: alpha_ta.t3(d['close'], timeperiod=5, vfactor=0.7),
+         lambda d: finkit.t3(d['close'], timeperiod=5, vfactor=0.7),
          lambda d: talib.T3(d['close'], timeperiod=5, vfactor=0.7)),
         
         ('TEMA',
-         lambda d: alpha_ta.tema(d['close'], timeperiod=30),
+         lambda d: finkit.tema(d['close'], timeperiod=30),
          lambda d: talib.TEMA(d['close'], timeperiod=30)),
         
         ('TRIMA',
-         lambda d: alpha_ta.trima(d['close'], timeperiod=30),
+         lambda d: finkit.trima(d['close'], timeperiod=30),
          lambda d: talib.TRIMA(d['close'], timeperiod=30)),
         
         ('WMA',
-         lambda d: alpha_ta.wma(d['close'], timeperiod=30),
+         lambda d: finkit.wma(d['close'], timeperiod=30),
          lambda d: talib.WMA(d['close'], timeperiod=30)),
         
         # Momentum indicators
         ('ADX',
-         lambda d: alpha_ta.adx(d['high'], d['low'], d['close'], timeperiod=14),
+         lambda d: finkit.adx(d['high'], d['low'], d['close'], timeperiod=14),
          lambda d: talib.ADX(d['high'], d['low'], d['close'], timeperiod=14)),
         
         ('ADXR',
-         lambda d: alpha_ta.adxr(d['high'], d['low'], d['close'], timeperiod=14),
+         lambda d: finkit.adxr(d['high'], d['low'], d['close'], timeperiod=14),
          lambda d: talib.ADXR(d['high'], d['low'], d['close'], timeperiod=14)),
         
         ('APO',
-         lambda d: alpha_ta.apo(d['close'], fastperiod=12, slowperiod=26, matype=0),
+         lambda d: finkit.apo(d['close'], fastperiod=12, slowperiod=26, matype=0),
          lambda d: talib.APO(d['close'], fastperiod=12, slowperiod=26, matype=0)),
         
         ('AROON',
-         lambda d: alpha_ta.aroon(d['high'], d['low'], timeperiod=14),
+         lambda d: finkit.aroon(d['high'], d['low'], timeperiod=14),
          lambda d: talib.AROON(d['high'], d['low'], timeperiod=14)),
         
         ('AROONOSC',
-         lambda d: alpha_ta.aroonosc(d['high'], d['low'], timeperiod=14),
+         lambda d: finkit.aroonosc(d['high'], d['low'], timeperiod=14),
          lambda d: talib.AROONOSC(d['high'], d['low'], timeperiod=14)),
         
         ('BOP',
-         lambda d: alpha_ta.bop(d['open'], d['high'], d['low'], d['close']),
+         lambda d: finkit.bop(d['open'], d['high'], d['low'], d['close']),
          lambda d: talib.BOP(d['open'], d['high'], d['low'], d['close'])),
         
         ('CCI',
-         lambda d: alpha_ta.cci(d['high'], d['low'], d['close'], timeperiod=20),
+         lambda d: finkit.cci(d['high'], d['low'], d['close'], timeperiod=20),
          lambda d: talib.CCI(d['high'], d['low'], d['close'], timeperiod=20)),
         
         ('CMO',
-         lambda d: alpha_ta.cmo(d['close'], timeperiod=14),
+         lambda d: finkit.cmo(d['close'], timeperiod=14),
          lambda d: talib.CMO(d['close'], timeperiod=14)),
         
         ('DX',
-         lambda d: alpha_ta.dx(d['high'], d['low'], d['close'], timeperiod=14),
+         lambda d: finkit.dx(d['high'], d['low'], d['close'], timeperiod=14),
          lambda d: talib.DX(d['high'], d['low'], d['close'], timeperiod=14)),
         
         ('MACD',
-         lambda d: alpha_ta.macd(d['close'], fastperiod=12, slowperiod=26, signalperiod=9),
+         lambda d: finkit.macd(d['close'], fastperiod=12, slowperiod=26, signalperiod=9),
          lambda d: talib.MACD(d['close'], fastperiod=12, slowperiod=26, signalperiod=9)),
         
         ('MACDEXT',
-         lambda d: alpha_ta.macdext(d['close'], fastperiod=12, fastmatype=0, slowperiod=26, slowmatype=0, signalperiod=9, signalmatype=0),
+         lambda d: finkit.macdext(d['close'], fastperiod=12, fastmatype=0, slowperiod=26, slowmatype=0, signalperiod=9, signalmatype=0),
          lambda d: talib.MACDEXT(d['close'], fastperiod=12, fastmatype=0, slowperiod=26, slowmatype=0, signalperiod=9, signalmatype=0)),
         
         ('MACDFIX',
-         lambda d: alpha_ta.macdfix(d['close'], signalperiod=9),
+         lambda d: finkit.macdfix(d['close'], signalperiod=9),
          lambda d: talib.MACDFIX(d['close'], signalperiod=9)),
         
         ('MFI',
-         lambda d: alpha_ta.mfi(d['high'], d['low'], d['close'], d['volume'], timeperiod=14),
+         lambda d: finkit.mfi(d['high'], d['low'], d['close'], d['volume'], timeperiod=14),
          lambda d: talib.MFI(d['high'], d['low'], d['close'], d['volume'], timeperiod=14)),
         
         ('MINUS_DI',
-         lambda d: alpha_ta.minus_di(d['high'], d['low'], d['close'], timeperiod=14),
+         lambda d: finkit.minus_di(d['high'], d['low'], d['close'], timeperiod=14),
          lambda d: talib.MINUS_DI(d['high'], d['low'], d['close'], timeperiod=14)),
         
         ('MINUS_DM',
-         lambda d: alpha_ta.minus_dm(d['high'], d['low'], timeperiod=14),
+         lambda d: finkit.minus_dm(d['high'], d['low'], timeperiod=14),
          lambda d: talib.MINUS_DM(d['high'], d['low'], timeperiod=14)),
         
         ('MOM',
-         lambda d: alpha_ta.mom(d['close'], timeperiod=10),
+         lambda d: finkit.mom(d['close'], timeperiod=10),
          lambda d: talib.MOM(d['close'], timeperiod=10)),
         
         ('PLUS_DI',
-         lambda d: alpha_ta.plus_di(d['high'], d['low'], d['close'], timeperiod=14),
+         lambda d: finkit.plus_di(d['high'], d['low'], d['close'], timeperiod=14),
          lambda d: talib.PLUS_DI(d['high'], d['low'], d['close'], timeperiod=14)),
         
         ('PLUS_DM',
-         lambda d: alpha_ta.plus_dm(d['high'], d['low'], timeperiod=14),
+         lambda d: finkit.plus_dm(d['high'], d['low'], timeperiod=14),
          lambda d: talib.PLUS_DM(d['high'], d['low'], timeperiod=14)),
         
         ('PPO',
-         lambda d: alpha_ta.ppo(d['close'], fastperiod=12, slowperiod=26, matype=0),
+         lambda d: finkit.ppo(d['close'], fastperiod=12, slowperiod=26, matype=0),
          lambda d: talib.PPO(d['close'], fastperiod=12, slowperiod=26, matype=0)),
         
         ('ROC',
-         lambda d: alpha_ta.roc(d['close'], timeperiod=10),
+         lambda d: finkit.roc(d['close'], timeperiod=10),
          lambda d: talib.ROC(d['close'], timeperiod=10)),
         
         ('ROCP',
-         lambda d: alpha_ta.rocp(d['close'], timeperiod=10),
+         lambda d: finkit.rocp(d['close'], timeperiod=10),
          lambda d: talib.ROCP(d['close'], timeperiod=10)),
         
         ('ROCR',
-         lambda d: alpha_ta.rocr(d['close'], timeperiod=10),
+         lambda d: finkit.rocr(d['close'], timeperiod=10),
          lambda d: talib.ROCR(d['close'], timeperiod=10)),
         
         ('ROCR100',
-         lambda d: alpha_ta.rocr100(d['close'], timeperiod=10),
+         lambda d: finkit.rocr100(d['close'], timeperiod=10),
          lambda d: talib.ROCR100(d['close'], timeperiod=10)),
         
         ('RSI',
-         lambda d: alpha_ta.rsi(d['close'], timeperiod=14),
+         lambda d: finkit.rsi(d['close'], timeperiod=14),
          lambda d: talib.RSI(d['close'], timeperiod=14)),
         
         ('STOCH',
-         lambda d: alpha_ta.stoch(d['high'], d['low'], d['close'], fastk_period=5, slowk_period=3, slowk_matype=0, slowd_period=3, slowd_matype=0),
+         lambda d: finkit.stoch(d['high'], d['low'], d['close'], fastk_period=5, slowk_period=3, slowk_matype=0, slowd_period=3, slowd_matype=0),
          lambda d: talib.STOCH(d['high'], d['low'], d['close'], fastk_period=5, slowk_period=3, slowk_matype=0, slowd_period=3, slowd_matype=0)),
         
         ('STOCHF',
-         lambda d: alpha_ta.stochf(d['high'], d['low'], d['close'], fastk_period=5, fastd_period=3, fastd_matype=0),
+         lambda d: finkit.stochf(d['high'], d['low'], d['close'], fastk_period=5, fastd_period=3, fastd_matype=0),
          lambda d: talib.STOCHF(d['high'], d['low'], d['close'], fastk_period=5, fastd_period=3, fastd_matype=0)),
         
         ('STOCHRSI',
-         lambda d: alpha_ta.stochrsi(d['close'], timeperiod=14, fastk_period=5, fastd_period=3, fastd_matype=0),
+         lambda d: finkit.stochrsi(d['close'], timeperiod=14, fastk_period=5, fastd_period=3, fastd_matype=0),
          lambda d: talib.STOCHRSI(d['close'], timeperiod=14, fastk_period=5, fastd_period=3, fastd_matype=0)),
         
         ('TRIX',
-         lambda d: alpha_ta.trix(d['close'], timeperiod=30),
+         lambda d: finkit.trix(d['close'], timeperiod=30),
          lambda d: talib.TRIX(d['close'], timeperiod=30)),
         
         ('ULTOSC',
-         lambda d: alpha_ta.ultosc(d['high'], d['low'], d['close'], timeperiod1=7, timeperiod2=14, timeperiod3=28),
+         lambda d: finkit.ultosc(d['high'], d['low'], d['close'], timeperiod1=7, timeperiod2=14, timeperiod3=28),
          lambda d: talib.ULTOSC(d['high'], d['low'], d['close'], timeperiod1=7, timeperiod2=14, timeperiod3=28)),
         
         ('WILLR',
-         lambda d: alpha_ta.willr(d['high'], d['low'], d['close'], timeperiod=14),
+         lambda d: finkit.willr(d['high'], d['low'], d['close'], timeperiod=14),
          lambda d: talib.WILLR(d['high'], d['low'], d['close'], timeperiod=14)),
         
         # Volume indicators
         ('AD',
-         lambda d: alpha_ta.ad(d['high'], d['low'], d['close'], d['volume']),
+         lambda d: finkit.ad(d['high'], d['low'], d['close'], d['volume']),
          lambda d: talib.AD(d['high'], d['low'], d['close'], d['volume'])),
         
         ('ADOSC',
-         lambda d: alpha_ta.adosc(d['high'], d['low'], d['close'], d['volume'], fastperiod=3, slowperiod=10),
+         lambda d: finkit.adosc(d['high'], d['low'], d['close'], d['volume'], fastperiod=3, slowperiod=10),
          lambda d: talib.ADOSC(d['high'], d['low'], d['close'], d['volume'], fastperiod=3, slowperiod=10)),
         
         ('OBV',
-         lambda d: alpha_ta.obv(d['close'], d['volume']),
+         lambda d: finkit.obv(d['close'], d['volume']),
          lambda d: talib.OBV(d['close'], d['volume'])),
         
         # Volatility indicators
         ('ATR',
-         lambda d: alpha_ta.atr(d['high'], d['low'], d['close'], timeperiod=14),
+         lambda d: finkit.atr(d['high'], d['low'], d['close'], timeperiod=14),
          lambda d: talib.ATR(d['high'], d['low'], d['close'], timeperiod=14)),
         
         ('NATR',
-         lambda d: alpha_ta.natr(d['high'], d['low'], d['close'], timeperiod=14),
+         lambda d: finkit.natr(d['high'], d['low'], d['close'], timeperiod=14),
          lambda d: talib.NATR(d['high'], d['low'], d['close'], timeperiod=14)),
         
         ('TRANGE',
-         lambda d: alpha_ta.trange(d['high'], d['low'], d['close']),
+         lambda d: finkit.trange(d['high'], d['low'], d['close']),
          lambda d: talib.TRANGE(d['high'], d['low'], d['close'])),
         
         # Cycle indicators
         ('HT_DCPERIOD',
-         lambda d: alpha_ta.ht_dcperiod(d['close']),
+         lambda d: finkit.ht_dcperiod(d['close']),
          lambda d: talib.HT_DCPERIOD(d['close'])),
         
         ('HT_DCPHASE',
-         lambda d: alpha_ta.ht_dcphase(d['close']),
+         lambda d: finkit.ht_dcphase(d['close']),
          lambda d: talib.HT_DCPHASE(d['close'])),
         
         ('HT_PHASOR',
-         lambda d: alpha_ta.ht_phasor(d['close']),
+         lambda d: finkit.ht_phasor(d['close']),
          lambda d: talib.HT_PHASOR(d['close'])),
         
         ('HT_SINE',
-         lambda d: alpha_ta.ht_sine(d['close']),
+         lambda d: finkit.ht_sine(d['close']),
          lambda d: talib.HT_SINE(d['close'])),
         
         ('HT_TRENDMODE',
-         lambda d: alpha_ta.ht_trendmode(d['close']),
+         lambda d: finkit.ht_trendmode(d['close']),
          lambda d: talib.HT_TRENDMODE(d['close'])),
         
         # Statistics
         ('BETA',
-         lambda d: alpha_ta.beta(d['high'], d['low'], timeperiod=5),
+         lambda d: finkit.beta(d['high'], d['low'], timeperiod=5),
          lambda d: talib.BETA(d['high'], d['low'], timeperiod=5)),
         
         ('CORREL',
-         lambda d: alpha_ta.correl(d['high'], d['low'], timeperiod=30),
+         lambda d: finkit.correl(d['high'], d['low'], timeperiod=30),
          lambda d: talib.CORREL(d['high'], d['low'], timeperiod=30)),
         
         ('LINEARREG',
-         lambda d: alpha_ta.linearreg(d['close'], timeperiod=14),
+         lambda d: finkit.linearreg(d['close'], timeperiod=14),
          lambda d: talib.LINEARREG(d['close'], timeperiod=14)),
         
         ('LINEARREG_ANGLE',
-         lambda d: alpha_ta.linearreg_angle(d['close'], timeperiod=14),
+         lambda d: finkit.linearreg_angle(d['close'], timeperiod=14),
          lambda d: talib.LINEARREG_ANGLE(d['close'], timeperiod=14)),
         
         ('LINEARREG_INTERCEPT',
-         lambda d: alpha_ta.linearreg_intercept(d['close'], timeperiod=14),
+         lambda d: finkit.linearreg_intercept(d['close'], timeperiod=14),
          lambda d: talib.LINEARREG_INTERCEPT(d['close'], timeperiod=14)),
         
         ('LINEARREG_SLOPE',
-         lambda d: alpha_ta.linearreg_slope(d['close'], timeperiod=14),
+         lambda d: finkit.linearreg_slope(d['close'], timeperiod=14),
          lambda d: talib.LINEARREG_SLOPE(d['close'], timeperiod=14)),
         
         ('STDDEV',
-         lambda d: alpha_ta.stddev(d['close'], timeperiod=5, nbdev=1.0),
+         lambda d: finkit.stddev(d['close'], timeperiod=5, nbdev=1.0),
          lambda d: talib.STDDEV(d['close'], timeperiod=5, nbdev=1.0)),
         
         ('TSF',
-         lambda d: alpha_ta.tsf(d['close'], timeperiod=14),
+         lambda d: finkit.tsf(d['close'], timeperiod=14),
          lambda d: talib.TSF(d['close'], timeperiod=14)),
         
         ('VAR',
-         lambda d: alpha_ta.var(d['close'], timeperiod=5, nbdev=1.0),
+         lambda d: finkit.var(d['close'], timeperiod=5, nbdev=1.0),
          lambda d: talib.VAR(d['close'], timeperiod=5, nbdev=1.0)),
     ]
     

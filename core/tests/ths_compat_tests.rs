@@ -1,6 +1,6 @@
 use ndarray::Array1;
-use alpha_ta_core::formula::engine::FormulaEngine;
-use alpha_ta_core::formula::types::{FormulaContext, AlertCommand, SelectionResult};
+use finkit::formula::engine::FormulaEngine;
+use finkit::formula::types::{FormulaContext, AlertCommand, SelectionResult};
 
 fn make_test_context(len: usize) -> FormulaContext {
     let close: Vec<f64> = (0..len).map(|i| 10.0 + i as f64 * 0.5).collect();

@@ -1,4 +1,4 @@
-# alpha-ta-core
+# finkit
 
 > **Tier1** · Rust native · 成熟度: `stable` · [绑定分级说明](../docs/BINDING_TIERS.md)
 
@@ -38,7 +38,7 @@ High-performance technical analysis library for Rust — faster than TA-Lib C.
 ## Quick Start
 
 ```rust
-use alpha_ta_core::indicators;
+use finkit::indicators;
 
 let close = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 
@@ -52,7 +52,7 @@ let rsi = indicators::rsi(&close, 5).unwrap();
 ## Streaming Indicators
 
 ```rust
-use alpha_ta_core::streaming::{StreamingIndicator, indicators::StreamingSma};
+use finkit::streaming::{StreamingIndicator, indicators::StreamingSma};
 
 let mut sma = StreamingSma::new(3);
 sma.next(1.0); // warming up
@@ -64,8 +64,8 @@ assert_eq!(val, Some(2.0));
 ## Builder API
 
 ```rust
-use alpha_ta_core::streaming::{IndicatorBuilder, Builder, StreamingIndicator};
-use alpha_ta_core::streaming::indicators::StreamingSma;
+use finkit::streaming::{IndicatorBuilder, Builder, StreamingIndicator};
+use finkit::streaming::indicators::StreamingSma;
 
 let mut sma = StreamingSma::builder()
     .period(14)
@@ -82,7 +82,7 @@ assert!(sma.is_ready());
 ## Transform Pipeline
 
 ```rust
-use alpha_ta_core::transforms::{Pipeline, LogReturn, ZScore, Transform};
+use finkit::transforms::{Pipeline, LogReturn, ZScore, Transform};
 
 let data = vec![100.0, 105.0, 103.0, 108.0, 110.0, 107.0, 112.0, 115.0, 113.0, 118.0];
 let result = Pipeline::new()

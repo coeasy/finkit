@@ -1,10 +1,10 @@
 //! Tests for the classic stock-trading chart patterns (Darvas, Renko, Kagi,
 //! Point & Figure, Three Line Break, Williams Alligator, Heikin-Ashi).
 //!
-//! These are first-class indicators in `alpha_ta_core::indicators` but live in
+//! These are first-class indicators in `finkit::indicators` but live in
 //! the `classic_patterns` and `chart` modules.
 
-use alpha_ta_core::indicators::{
+use finkit::indicators::{
     classic_patterns::{
         darvas_box, kagi, point_and_figure, renko, three_line_break, williams_alligator,
     },

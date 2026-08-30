@@ -2,7 +2,7 @@
 
 **版本**: v1.0
 **日期**: 2026-07-12
-**适用范围**: `alpha-ta-core` (Rust 指标库) 执行效率、内存占用、数值准确性。
+**适用范围**: `finkit` (Rust 指标库) 执行效率、内存占用、数值准确性。
 
 ---
 
@@ -11,7 +11,7 @@
 | 项 | 当前状态 |
 |----|----------|
 | 工作区 | 存在**大量未提交的 Phase 3 WIP** (momentum.rs +1257 行、cycle.rs +1240、streaming 重构为子目录 144 文件)。需先固化基线。 |
-| 单测 | `cargo test -p alpha-ta-core --release --lib` → **2598 通过 / 0 失败**。 |
+| 单测 | `cargo test -p finkit --release --lib` → **2598 通过 / 0 失败**。 |
 | TA-Lib golden | `core/tests/golden/talib/` **为空** → 所有 `golden_talib_*` 测试**跳过** (无参照数据)。 |
 | Python+talib | 本机**无可用 numpy+talib 环境** (Store 占位符 stub)；`scripts/gen_talib_golden.py`、`bench_alpha_vs_talib_python.py` 无法运行。 |
 | 性能对比 | 平均加速比 ~1.61x；优于 TA-Lib 32/43 (74.4%)；**10 个指标 < 1.0x**。 |

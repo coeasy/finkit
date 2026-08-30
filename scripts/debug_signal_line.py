@@ -9,7 +9,7 @@ sys.path.insert(0, r'P:\llm_code\finkit\dist\python\windows-x64')
 
 try:
     import talib
-    import alpha_ta
+    import finkit
 except ImportError as e:
     print(f"Import error: {e}")
     sys.exit(1)

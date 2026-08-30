@@ -1,5 +1,5 @@
 use napi_derive::napi;
-use alpha_ta_core::transforms::{
+use finkit::transforms::{
     Diff, DiffN, LogReturn, MinMaxScaler, PctChange, PercentileRank, Pipeline as CorePipeline,
     Rank, RollingMean, RollingStd, RollingSum, StandardScaler, Transform, ZScore,
 };

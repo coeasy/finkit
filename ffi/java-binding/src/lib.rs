@@ -9,11 +9,11 @@ use jni::sys::{jboolean, jdouble, jdoubleArray, jint, jintArray, jobject, jsize}
 use jni::JNIEnv;
 use ndarray::Array1;
 use serde_json;
-use alpha_ta_core::formula::*;
-use alpha_ta_core::indicators;
-use alpha_ta_core::math::moving_avg;
-use alpha_ta_core::patterns::{candlestick, chart};
-use alpha_ta_ffi_common::panic::*;
+use finkit::formula::*;
+use finkit::indicators;
+use finkit::math::moving_avg;
+use finkit::patterns::{candlestick, chart};
+use finkit_ffi_common::panic::*;
 
 // ============================================================================
 // FFI memory-ownership contract (Java)
@@ -39,7 +39,7 @@ use alpha_ta_ffi_common::panic::*;
 // ============================================================================
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_freeJString(
+pub extern "system" fn Java_com_finkit_Indicators_freeJString(
     env: JNIEnv,
     _class: JClass,
     s: jni::sys::jstring,
@@ -171,7 +171,7 @@ where
 
 #[cfg(test)]
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_ffiPanicTest() -> jobject {
+pub extern "system" fn Java_com_finkit_Indicators_ffiPanicTest() -> jobject {
     ffi_catch_ptr(|| -> jobject { panic!("ffi panic injection test") })
 }
 
@@ -179,14 +179,14 @@ include!("generated.rs");
 
 #[cfg(test)]
 mod tests {
-    use alpha_ta_core::math::moving_avg::sma;
-    use alpha_ta_core::indicators::momentum::rsi;
+    use finkit::math::moving_avg::sma;
+    use finkit::indicators::momentum::rsi;
 
     #[test]
     fn export_panic_test_returns_null_not_abort() {
         // A panic inside the generated `ffi_catch_ptr` guard must
         // yield a null `jobject`, never unwind across the JNI boundary.
-        let p = crate::Java_com_alphata_Indicators_ffiPanicTest();
+        let p = crate::Java_com_finkit_Indicators_ffiPanicTest();
         assert!(p.is_null());
     }
 
@@ -210,7 +210,7 @@ mod tests {
 
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_formulaEvalMulti(
+pub extern "system" fn Java_com_finkit_Indicators_formulaEvalMulti(
     mut env: JNIEnv,
     _class: JClass,
     source: JString,
@@ -270,7 +270,7 @@ pub extern "system" fn Java_com_alphata_Indicators_formulaEvalMulti(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_formulaEvalDraw(
+pub extern "system" fn Java_com_finkit_Indicators_formulaEvalDraw(
     mut env: JNIEnv,
     _class: JClass,
     source: JString,
@@ -318,7 +318,7 @@ pub extern "system" fn Java_com_alphata_Indicators_formulaEvalDraw(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_formulaEvalDebug(
+pub extern "system" fn Java_com_finkit_Indicators_formulaEvalDebug(
     mut env: JNIEnv,
     _class: JClass,
     source: JString,
@@ -365,7 +365,7 @@ pub extern "system" fn Java_com_alphata_Indicators_formulaEvalDebug(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_formulaGetTemplate(
+pub extern "system" fn Java_com_finkit_Indicators_formulaGetTemplate(
     mut env: JNIEnv,
     _class: JClass,
     name: JString,
@@ -390,7 +390,7 @@ pub extern "system" fn Java_com_alphata_Indicators_formulaGetTemplate(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_formulaSearchTemplates(
+pub extern "system" fn Java_com_finkit_Indicators_formulaSearchTemplates(
     mut env: JNIEnv,
     _class: JClass,
     keyword: JString,
@@ -411,11 +411,11 @@ pub extern "system" fn Java_com_alphata_Indicators_formulaSearchTemplates(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_formulaListCategories(
+pub extern "system" fn Java_com_finkit_Indicators_formulaListCategories(
     env: JNIEnv,
     _class: JClass,
 ) -> jni::sys::jstring {
-    use alpha_ta_core::formula::templates::FormulaTemplates;
+    use finkit::formula::templates::FormulaTemplates;
 
     let categories = FormulaTemplates::categories();
     let json_str = serde_json::to_string(&categories).unwrap_or_else(|_| "[]".to_string());
@@ -467,7 +467,7 @@ pub extern "system" fn Java_com_alphata_Indicators_formulaListCategories(
 
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_dx(
+pub extern "system" fn Java_com_finkit_Indicators_dx(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -497,7 +497,7 @@ pub extern "system" fn Java_com_alphata_Indicators_dx(
 
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_plus_di(
+pub extern "system" fn Java_com_finkit_Indicators_plus_di(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -515,7 +515,7 @@ pub extern "system" fn Java_com_alphata_Indicators_plus_di(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_minus_di(
+pub extern "system" fn Java_com_finkit_Indicators_minus_di(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -571,7 +571,7 @@ pub extern "system" fn Java_com_alphata_Indicators_minus_di(
 // ============================================================================
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_htDcperiod(
+pub extern "system" fn Java_com_finkit_Indicators_htDcperiod(
     mut env: JNIEnv,
     _class: JClass,
     input: JDoubleArray,
@@ -584,7 +584,7 @@ pub extern "system" fn Java_com_alphata_Indicators_htDcperiod(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_htDcphase(
+pub extern "system" fn Java_com_finkit_Indicators_htDcphase(
     mut env: JNIEnv,
     _class: JClass,
     input: JDoubleArray,
@@ -597,7 +597,7 @@ pub extern "system" fn Java_com_alphata_Indicators_htDcphase(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_htPhasor(
+pub extern "system" fn Java_com_finkit_Indicators_htPhasor(
     mut env: JNIEnv,
     _class: JClass,
     input: JDoubleArray,
@@ -613,7 +613,7 @@ pub extern "system" fn Java_com_alphata_Indicators_htPhasor(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_htSine(
+pub extern "system" fn Java_com_finkit_Indicators_htSine(
     mut env: JNIEnv,
     _class: JClass,
     input: JDoubleArray,
@@ -629,7 +629,7 @@ pub extern "system" fn Java_com_alphata_Indicators_htSine(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_htTrendmode(
+pub extern "system" fn Java_com_finkit_Indicators_htTrendmode(
     mut env: JNIEnv,
     _class: JClass,
     input: JDoubleArray,
@@ -642,7 +642,7 @@ pub extern "system" fn Java_com_alphata_Indicators_htTrendmode(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_htTrendline(
+pub extern "system" fn Java_com_finkit_Indicators_htTrendline(
     mut env: JNIEnv,
     _class: JClass,
     input: JDoubleArray,
@@ -661,7 +661,7 @@ pub extern "system" fn Java_com_alphata_Indicators_htTrendline(
 
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_percentRank(
+pub extern "system" fn Java_com_finkit_Indicators_percentRank(
     mut env: JNIEnv,
     _class: JClass,
     input: JDoubleArray,
@@ -679,7 +679,7 @@ pub extern "system" fn Java_com_alphata_Indicators_percentRank(
 
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_stdDev(
+pub extern "system" fn Java_com_finkit_Indicators_stdDev(
     mut env: JNIEnv,
     _class: JClass,
     input: JDoubleArray,
@@ -694,7 +694,7 @@ pub extern "system" fn Java_com_alphata_Indicators_stdDev(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_linearReg(
+pub extern "system" fn Java_com_finkit_Indicators_linearReg(
     mut env: JNIEnv,
     _class: JClass,
     input: JDoubleArray,
@@ -783,154 +783,154 @@ macro_rules! impl_cdl_pattern_4arg {
     };
 }
 
-impl_cdl_pattern_5arg!(Java_com_alphata_Patterns_cdlDoji, doji, 0.1);
+impl_cdl_pattern_5arg!(Java_com_finkit_Patterns_cdlDoji, doji, 0.1);
 impl_cdl_pattern_5arg!(
-    Java_com_alphata_Patterns_cdlDragonflyDoji,
+    Java_com_finkit_Patterns_cdlDragonflyDoji,
     dragonfly_doji,
     0.1
 );
 impl_cdl_pattern_5arg!(
-    Java_com_alphata_Patterns_cdlGravestoneDoji,
+    Java_com_finkit_Patterns_cdlGravestoneDoji,
     gravestone_doji,
     0.1
 );
 impl_cdl_pattern_5arg!(
-    Java_com_alphata_Patterns_cdlLongLeggedDoji,
+    Java_com_finkit_Patterns_cdlLongLeggedDoji,
     long_legged_doji,
     1.0
 );
-impl_cdl_pattern_4arg!(Java_com_alphata_Patterns_cdlDoji4Prices, doji_4prices);
-impl_cdl_pattern_5arg!(Java_com_alphata_Patterns_cdlMarubozu, marubozu, 0.1);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlDoji4Prices, doji_4prices);
+impl_cdl_pattern_5arg!(Java_com_finkit_Patterns_cdlMarubozu, marubozu, 0.1);
 impl_cdl_pattern_5arg!(
-    Java_com_alphata_Patterns_cdlMorningDojiStar,
+    Java_com_finkit_Patterns_cdlMorningDojiStar,
     morning_doji_star,
     0.1
 );
 impl_cdl_pattern_5arg!(
-    Java_com_alphata_Patterns_cdlEveningDojiStar,
+    Java_com_finkit_Patterns_cdlEveningDojiStar,
     evening_doji_star,
     0.1
 );
 impl_cdl_pattern_5arg!(
-    Java_com_alphata_Patterns_cdlAbandonedBaby,
+    Java_com_finkit_Patterns_cdlAbandonedBaby,
     abandoned_baby,
     0.3
 );
 
-impl_cdl_pattern_4arg!(Java_com_alphata_Patterns_cdlHammer, hammer);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlHammer, hammer);
 impl_cdl_pattern_4arg!(
-    Java_com_alphata_Patterns_cdlInvertedHammer,
+    Java_com_finkit_Patterns_cdlInvertedHammer,
     inverted_hammer
 );
-impl_cdl_pattern_4arg!(Java_com_alphata_Patterns_cdlHangingMan, hanging_man);
-impl_cdl_pattern_4arg!(Java_com_alphata_Patterns_cdlShootingStar, shooting_star);
-impl_cdl_pattern_4arg!(Java_com_alphata_Patterns_cdlEngulfing, engulfing);
-impl_cdl_pattern_4arg!(Java_com_alphata_Patterns_cdlHarami, harami);
-impl_cdl_pattern_4arg!(Java_com_alphata_Patterns_cdlHaramiCross, harami_cross);
-impl_cdl_pattern_4arg!(Java_com_alphata_Patterns_cdlMorningStar, morning_star);
-impl_cdl_pattern_4arg!(Java_com_alphata_Patterns_cdlEveningStar, evening_star);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlHangingMan, hanging_man);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlShootingStar, shooting_star);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlEngulfing, engulfing);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlHarami, harami);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlHaramiCross, harami_cross);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlMorningStar, morning_star);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlEveningStar, evening_star);
 impl_cdl_pattern_4arg!(
-    Java_com_alphata_Patterns_cdlThreeWhiteSoldiers,
+    Java_com_finkit_Patterns_cdlThreeWhiteSoldiers,
     three_white_soldiers
 );
 impl_cdl_pattern_4arg!(
-    Java_com_alphata_Patterns_cdlThreeBlackCrows,
+    Java_com_finkit_Patterns_cdlThreeBlackCrows,
     three_black_crows
 );
 impl_cdl_pattern_4arg!(
-    Java_com_alphata_Patterns_cdlThreeInsideUp,
+    Java_com_finkit_Patterns_cdlThreeInsideUp,
     three_inside_up
 );
 impl_cdl_pattern_4arg!(
-    Java_com_alphata_Patterns_cdlThreeOutsideUp,
+    Java_com_finkit_Patterns_cdlThreeOutsideUp,
     three_outside_up
 );
 impl_cdl_pattern_4arg!(
-    Java_com_alphata_Patterns_cdlThreeInsideDown,
+    Java_com_finkit_Patterns_cdlThreeInsideDown,
     three_inside_down
 );
 impl_cdl_pattern_4arg!(
-    Java_com_alphata_Patterns_cdlThreeOutsideDown,
+    Java_com_finkit_Patterns_cdlThreeOutsideDown,
     three_outside_down
 );
 impl_cdl_pattern_4arg!(
-    Java_com_alphata_Patterns_cdlThreeStarsInSouth,
+    Java_com_finkit_Patterns_cdlThreeStarsInSouth,
     three_stars_in_south
 );
 impl_cdl_pattern_4arg!(
-    Java_com_alphata_Patterns_cdlThreeLineStrike,
+    Java_com_finkit_Patterns_cdlThreeLineStrike,
     three_line_strike
 );
-impl_cdl_pattern_4arg!(Java_com_alphata_Patterns_cdlStickSandwich, stick_sandwich);
-impl_cdl_pattern_4arg!(Java_com_alphata_Patterns_cdlBeltHold, belt_hold);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlStickSandwich, stick_sandwich);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlBeltHold, belt_hold);
 impl_cdl_pattern_4arg!(
-    Java_com_alphata_Patterns_cdlClosingMarubozu,
+    Java_com_finkit_Patterns_cdlClosingMarubozu,
     closing_marubozu
 );
-impl_cdl_pattern_4arg!(Java_com_alphata_Patterns_cdlSpinningTop, spinning_top);
-impl_cdl_pattern_4arg!(Java_com_alphata_Patterns_cdlHighWave, high_wave);
-impl_cdl_pattern_4arg!(Java_com_alphata_Patterns_cdlRickshawMan, rickshaw_man);
-impl_cdl_pattern_4arg!(Java_com_alphata_Patterns_cdlShortLine, short_line);
-impl_cdl_pattern_4arg!(Java_com_alphata_Patterns_cdlLongLine, long_line);
-impl_cdl_pattern_4arg!(Java_com_alphata_Patterns_cdlPiercing, piercing);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlSpinningTop, spinning_top);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlHighWave, high_wave);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlRickshawMan, rickshaw_man);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlShortLine, short_line);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlLongLine, long_line);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlPiercing, piercing);
 impl_cdl_pattern_4arg!(
-    Java_com_alphata_Patterns_cdlDarkCloudCover,
+    Java_com_finkit_Patterns_cdlDarkCloudCover,
     dark_cloud_cover
 );
-impl_cdl_pattern_4arg!(Java_com_alphata_Patterns_cdlTweezerTop, tweezer_top);
-impl_cdl_pattern_4arg!(Java_com_alphata_Patterns_cdlTweezerBot, tweezer_bot);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlTweezerTop, tweezer_top);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlTweezerBot, tweezer_bot);
 impl_cdl_pattern_4arg!(
-    Java_com_alphata_Patterns_cdlUpsideGap2Crows,
+    Java_com_finkit_Patterns_cdlUpsideGap2Crows,
     upside_gap_2crows
 );
 impl_cdl_pattern_4arg!(
-    Java_com_alphata_Patterns_cdlUpsideGap3Methods,
+    Java_com_finkit_Patterns_cdlUpsideGap3Methods,
     upside_gap_3methods
 );
-impl_cdl_pattern_4arg!(Java_com_alphata_Patterns_cdlMatHold, mat_hold);
-impl_cdl_pattern_4arg!(Java_com_alphata_Patterns_cdlTasukiGap, tasuki_gap);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlMatHold, mat_hold);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlTasukiGap, tasuki_gap);
 impl_cdl_pattern_4arg!(
-    Java_com_alphata_Patterns_cdlSeparatingLines,
+    Java_com_finkit_Patterns_cdlSeparatingLines,
     separating_lines
 );
-impl_cdl_pattern_4arg!(Java_com_alphata_Patterns_cdlCounterAttack, counter_attack);
-impl_cdl_pattern_4arg!(Java_com_alphata_Patterns_cdlMatchingLow, matching_low);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlCounterAttack, counter_attack);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlMatchingLow, matching_low);
 impl_cdl_pattern_4arg!(
-    Java_com_alphata_Patterns_cdlIdentical3Crows,
+    Java_com_finkit_Patterns_cdlIdentical3Crows,
     identical_3crows
 );
-impl_cdl_pattern_4arg!(Java_com_alphata_Patterns_cdlUnique3River, unique_3_river);
-impl_cdl_pattern_4arg!(Java_com_alphata_Patterns_cdlBreakaway, breakaway);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlUnique3River, unique_3_river);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlBreakaway, breakaway);
 impl_cdl_pattern_4arg!(
-    Java_com_alphata_Patterns_cdlConcealingBabySwallow,
+    Java_com_finkit_Patterns_cdlConcealingBabySwallow,
     concealing_baby_swallow
 );
-impl_cdl_pattern_4arg!(Java_com_alphata_Patterns_cdlKicking, kicking);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlKicking, kicking);
 impl_cdl_pattern_4arg!(
-    Java_com_alphata_Patterns_cdlKickingByLength,
+    Java_com_finkit_Patterns_cdlKickingByLength,
     kicking_by_length
 );
-impl_cdl_pattern_4arg!(Java_com_alphata_Patterns_cdlAdvanceBlock, advance_block);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlAdvanceBlock, advance_block);
 impl_cdl_pattern_4arg!(
-    Java_com_alphata_Patterns_cdlStalledPattern,
+    Java_com_finkit_Patterns_cdlStalledPattern,
     stalled_pattern
 );
-impl_cdl_pattern_4arg!(Java_com_alphata_Patterns_cdlThrusting, thrusting);
-impl_cdl_pattern_4arg!(Java_com_alphata_Patterns_cdlInNeck, in_neck);
-impl_cdl_pattern_4arg!(Java_com_alphata_Patterns_cdlOnNeck, on_neck);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlThrusting, thrusting);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlInNeck, in_neck);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlOnNeck, on_neck);
 
-impl_cdl_pattern!(Java_com_alphata_Patterns_cdlDojiWithThreshold, doji, threshold: jdouble);
-impl_cdl_pattern!(Java_com_alphata_Patterns_cdlMarubozuWithThreshold, marubozu, threshold: jdouble);
-impl_cdl_pattern!(Java_com_alphata_Patterns_cdlMorningDojiStarWithThreshold, morning_doji_star, threshold: jdouble);
-impl_cdl_pattern!(Java_com_alphata_Patterns_cdlEveningDojiStarWithThreshold, evening_doji_star, threshold: jdouble);
-impl_cdl_pattern!(Java_com_alphata_Patterns_cdlAbandonedBabyWithThreshold, abandoned_baby, threshold: jdouble);
+impl_cdl_pattern!(Java_com_finkit_Patterns_cdlDojiWithThreshold, doji, threshold: jdouble);
+impl_cdl_pattern!(Java_com_finkit_Patterns_cdlMarubozuWithThreshold, marubozu, threshold: jdouble);
+impl_cdl_pattern!(Java_com_finkit_Patterns_cdlMorningDojiStarWithThreshold, morning_doji_star, threshold: jdouble);
+impl_cdl_pattern!(Java_com_finkit_Patterns_cdlEveningDojiStarWithThreshold, evening_doji_star, threshold: jdouble);
+impl_cdl_pattern!(Java_com_finkit_Patterns_cdlAbandonedBabyWithThreshold, abandoned_baby, threshold: jdouble);
 
 // ============================================================================
 // Chart Patterns
 // ============================================================================
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_ChartPatterns_detectHeadShouldersTop(
+pub extern "system" fn Java_com_finkit_ChartPatterns_detectHeadShouldersTop(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -945,7 +945,7 @@ pub extern "system" fn Java_com_alphata_ChartPatterns_detectHeadShouldersTop(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_ChartPatterns_detectHeadShouldersBottom(
+pub extern "system" fn Java_com_finkit_ChartPatterns_detectHeadShouldersBottom(
     mut env: JNIEnv,
     _class: JClass,
     low: JDoubleArray,
@@ -960,7 +960,7 @@ pub extern "system" fn Java_com_alphata_ChartPatterns_detectHeadShouldersBottom(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_ChartPatterns_detectDoubleTop(
+pub extern "system" fn Java_com_finkit_ChartPatterns_detectDoubleTop(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -975,7 +975,7 @@ pub extern "system" fn Java_com_alphata_ChartPatterns_detectDoubleTop(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_ChartPatterns_detectDoubleBottom(
+pub extern "system" fn Java_com_finkit_ChartPatterns_detectDoubleBottom(
     mut env: JNIEnv,
     _class: JClass,
     low: JDoubleArray,
@@ -990,7 +990,7 @@ pub extern "system" fn Java_com_alphata_ChartPatterns_detectDoubleBottom(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_ChartPatterns_detectTripleTop(
+pub extern "system" fn Java_com_finkit_ChartPatterns_detectTripleTop(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -1005,7 +1005,7 @@ pub extern "system" fn Java_com_alphata_ChartPatterns_detectTripleTop(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_ChartPatterns_detectTripleBottom(
+pub extern "system" fn Java_com_finkit_ChartPatterns_detectTripleBottom(
     mut env: JNIEnv,
     _class: JClass,
     low: JDoubleArray,
@@ -1020,7 +1020,7 @@ pub extern "system" fn Java_com_alphata_ChartPatterns_detectTripleBottom(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_ChartPatterns_detectAscendingTriangle(
+pub extern "system" fn Java_com_finkit_ChartPatterns_detectAscendingTriangle(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -1037,7 +1037,7 @@ pub extern "system" fn Java_com_alphata_ChartPatterns_detectAscendingTriangle(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_ChartPatterns_detectDescendingTriangle(
+pub extern "system" fn Java_com_finkit_ChartPatterns_detectDescendingTriangle(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -1054,7 +1054,7 @@ pub extern "system" fn Java_com_alphata_ChartPatterns_detectDescendingTriangle(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_ChartPatterns_detectSymmetricalTriangle(
+pub extern "system" fn Java_com_finkit_ChartPatterns_detectSymmetricalTriangle(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -1070,7 +1070,7 @@ pub extern "system" fn Java_com_alphata_ChartPatterns_detectSymmetricalTriangle(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_ChartPatterns_detectRisingWedge(
+pub extern "system" fn Java_com_finkit_ChartPatterns_detectRisingWedge(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -1086,7 +1086,7 @@ pub extern "system" fn Java_com_alphata_ChartPatterns_detectRisingWedge(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_ChartPatterns_detectFallingWedge(
+pub extern "system" fn Java_com_finkit_ChartPatterns_detectFallingWedge(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -1102,7 +1102,7 @@ pub extern "system" fn Java_com_alphata_ChartPatterns_detectFallingWedge(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_ChartPatterns_detectPennant(
+pub extern "system" fn Java_com_finkit_ChartPatterns_detectPennant(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -1127,7 +1127,7 @@ pub extern "system" fn Java_com_alphata_ChartPatterns_detectPennant(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_ChartPatterns_detectFlag(
+pub extern "system" fn Java_com_finkit_ChartPatterns_detectFlag(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -1152,7 +1152,7 @@ pub extern "system" fn Java_com_alphata_ChartPatterns_detectFlag(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_ChartPatterns_detectRectangle(
+pub extern "system" fn Java_com_finkit_ChartPatterns_detectRectangle(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -1173,7 +1173,7 @@ pub extern "system" fn Java_com_alphata_ChartPatterns_detectRectangle(
 // ============================================================================
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_ichimoku(
+pub extern "system" fn Java_com_finkit_Indicators_ichimoku(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -1211,7 +1211,7 @@ pub extern "system" fn Java_com_alphata_Indicators_ichimoku(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_supertrend(
+pub extern "system" fn Java_com_finkit_Indicators_supertrend(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -1255,7 +1255,7 @@ pub extern "system" fn Java_com_alphata_Indicators_supertrend(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_vwap(
+pub extern "system" fn Java_com_finkit_Indicators_vwap(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -1274,7 +1274,7 @@ pub extern "system" fn Java_com_alphata_Indicators_vwap(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_anchoredVwap(
+pub extern "system" fn Java_com_finkit_Indicators_anchoredVwap(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -1300,7 +1300,7 @@ pub extern "system" fn Java_com_alphata_Indicators_anchoredVwap(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_vwapBands(
+pub extern "system" fn Java_com_finkit_Indicators_vwapBands(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -1333,7 +1333,7 @@ pub extern "system" fn Java_com_alphata_Indicators_vwapBands(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_elderRay(
+pub extern "system" fn Java_com_finkit_Indicators_elderRay(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -1364,7 +1364,7 @@ pub extern "system" fn Java_com_alphata_Indicators_elderRay(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_donchian(
+pub extern "system" fn Java_com_finkit_Indicators_donchian(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -1387,7 +1387,7 @@ pub extern "system" fn Java_com_alphata_Indicators_donchian(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_volumeProfile(
+pub extern "system" fn Java_com_finkit_Indicators_volumeProfile(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -1425,7 +1425,7 @@ pub extern "system" fn Java_com_alphata_Indicators_volumeProfile(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_fibonacciRetracement(
+pub extern "system" fn Java_com_finkit_Indicators_fibonacciRetracement(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -1483,9 +1483,9 @@ static KLINE_DATA_HANDLE: AtomicI64 = AtomicI64::new(1);
 static KLINE_CHART_HANDLE: AtomicI64 = AtomicI64::new(1);
 
 lazy_static::lazy_static! {
-    static ref KLINE_DATA_MAP: RwLock<HashMap<i64, alpha_ta_visualization::data::KlineData>> =
+    static ref KLINE_DATA_MAP: RwLock<HashMap<i64, finkit_visualization::data::KlineData>> =
         RwLock::new(HashMap::new());
-    static ref KLINE_CHART_MAP: RwLock<HashMap<i64, (alpha_ta_visualization::chart::KlineChart, Option<alpha_ta_visualization::data::KlineData>)>> =
+    static ref KLINE_CHART_MAP: RwLock<HashMap<i64, (finkit_visualization::chart::KlineChart, Option<finkit_visualization::data::KlineData>)>> =
         RwLock::new(HashMap::new());
 }
 
@@ -1511,7 +1511,7 @@ fn get_string_array(env: &mut JNIEnv, arr: jni::sys::jobjectArray) -> Vec<String
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_KlineChart_klineDataNew(
+pub extern "system" fn Java_com_finkit_KlineChart_klineDataNew(
     mut env: JNIEnv,
     _class: JClass,
     dates: jni::sys::jobjectArray,
@@ -1527,7 +1527,7 @@ pub extern "system" fn Java_com_alphata_KlineChart_klineDataNew(
     let lows_vec = get_double_array(&mut env, lows);
     let closes_vec = get_double_array(&mut env, closes);
     let volumes_vec = get_double_array(&mut env, volumes);
-    let data = alpha_ta_visualization::data::KlineData::new(
+    let data = finkit_visualization::data::KlineData::new(
         dates_vec,
         opens_vec,
         highs_vec,
@@ -1541,7 +1541,7 @@ pub extern "system" fn Java_com_alphata_KlineChart_klineDataNew(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_KlineChart_klineDataFree(
+pub extern "system" fn Java_com_finkit_KlineChart_klineDataFree(
     _env: JNIEnv,
     _class: JClass,
     handle: jni::sys::jlong,
@@ -1550,7 +1550,7 @@ pub extern "system" fn Java_com_alphata_KlineChart_klineDataFree(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_KlineChart_klineDataValidate(
+pub extern "system" fn Java_com_finkit_KlineChart_klineDataValidate(
     _env: JNIEnv,
     _class: JClass,
     handle: jni::sys::jlong,
@@ -1563,7 +1563,7 @@ pub extern "system" fn Java_com_alphata_KlineChart_klineDataValidate(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_KlineChart_klineChartNew(
+pub extern "system" fn Java_com_finkit_KlineChart_klineChartNew(
     mut env: JNIEnv,
     _class: JClass,
     data_handle: jni::sys::jlong,
@@ -1582,15 +1582,15 @@ pub extern "system" fn Java_com_alphata_KlineChart_klineChartNew(
     let lang_str: String = env.get_string(&language).unwrap().into();
     let title_str: String = env.get_string(&title).unwrap().into();
     let lang = match lang_str.as_str() {
-        "zh-CN" | "zh" => alpha_ta_visualization::language::Language::ZhCn,
-        _ => alpha_ta_visualization::language::Language::EnUs,
+        "zh-CN" | "zh" => finkit_visualization::language::Language::ZhCn,
+        _ => finkit_visualization::language::Language::EnUs,
     };
-    let config = alpha_ta_visualization::config::ChartConfigBuilder::new()
+    let config = finkit_visualization::config::ChartConfigBuilder::new()
         .with_title(&title_str)
         .with_language(lang)
         .with_dimensions(width as u32, height as u32)
         .build();
-    let mut chart = alpha_ta_visualization::chart::KlineChart::new(config);
+    let mut chart = finkit_visualization::chart::KlineChart::new(config);
     chart.set_data(data.clone());
     let _ = chart.build_draw_list(&data, &[]);
     let handle = KLINE_CHART_HANDLE.fetch_add(1, Ordering::SeqCst);
@@ -1602,7 +1602,7 @@ pub extern "system" fn Java_com_alphata_KlineChart_klineChartNew(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_KlineChart_klineChartFree(
+pub extern "system" fn Java_com_finkit_KlineChart_klineChartFree(
     _env: JNIEnv,
     _class: JClass,
     handle: jni::sys::jlong,
@@ -1611,7 +1611,7 @@ pub extern "system" fn Java_com_alphata_KlineChart_klineChartFree(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_KlineChart_klineChartAddMa(
+pub extern "system" fn Java_com_finkit_KlineChart_klineChartAddMa(
     _env: JNIEnv,
     _class: JClass,
     handle: jni::sys::jlong,
@@ -1630,7 +1630,7 @@ pub extern "system" fn Java_com_alphata_KlineChart_klineChartAddMa(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_KlineChart_klineChartAddMacd(
+pub extern "system" fn Java_com_finkit_KlineChart_klineChartAddMacd(
     _env: JNIEnv,
     _class: JClass,
     handle: jni::sys::jlong,
@@ -1645,7 +1645,7 @@ pub extern "system" fn Java_com_alphata_KlineChart_klineChartAddMacd(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_KlineChart_klineChartAddRsi(
+pub extern "system" fn Java_com_finkit_KlineChart_klineChartAddRsi(
     _env: JNIEnv,
     _class: JClass,
     handle: jni::sys::jlong,
@@ -1658,7 +1658,7 @@ pub extern "system" fn Java_com_alphata_KlineChart_klineChartAddRsi(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_KlineChart_klineChartAddBoll(
+pub extern "system" fn Java_com_finkit_KlineChart_klineChartAddBoll(
     _env: JNIEnv,
     _class: JClass,
     handle: jni::sys::jlong,
@@ -1672,7 +1672,7 @@ pub extern "system" fn Java_com_alphata_KlineChart_klineChartAddBoll(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_KlineChart_klineChartSaveAsSvg(
+pub extern "system" fn Java_com_finkit_KlineChart_klineChartSaveAsSvg(
     mut env: JNIEnv,
     _class: JClass,
     handle: jni::sys::jlong,
@@ -1686,7 +1686,7 @@ pub extern "system" fn Java_com_alphata_KlineChart_klineChartSaveAsSvg(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_KlineChart_klineChartToSvg(
+pub extern "system" fn Java_com_finkit_KlineChart_klineChartToSvg(
     env: JNIEnv,
     _class: JClass,
     handle: jni::sys::jlong,
@@ -1710,7 +1710,7 @@ pub extern "system" fn Java_com_alphata_KlineChart_klineChartToSvg(
 // ============================================================================
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_darvasBox(
+pub extern "system" fn Java_com_finkit_Indicators_darvasBox(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -1733,7 +1733,7 @@ pub extern "system" fn Java_com_alphata_Indicators_darvasBox(
 
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_pointAndFigure(
+pub extern "system" fn Java_com_finkit_Indicators_pointAndFigure(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -1749,7 +1749,7 @@ pub extern "system" fn Java_com_alphata_Indicators_pointAndFigure(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_threeLineBreak(
+pub extern "system" fn Java_com_finkit_Indicators_threeLineBreak(
     mut env: JNIEnv,
     _class: JClass,
     close: JDoubleArray,
@@ -1761,7 +1761,7 @@ pub extern "system" fn Java_com_alphata_Indicators_threeLineBreak(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_williamsAlligator(
+pub extern "system" fn Java_com_finkit_Indicators_williamsAlligator(
     mut env: JNIEnv,
     _class: JClass,
     close: JDoubleArray,
@@ -1772,7 +1772,7 @@ pub extern "system" fn Java_com_alphata_Indicators_williamsAlligator(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_heikinAshi(
+pub extern "system" fn Java_com_finkit_Indicators_heikinAshi(
     mut env: JNIEnv,
     _class: JClass,
     open: JDoubleArray,
@@ -1799,7 +1799,7 @@ fn build_dto2(
     a: &Array1<f64>,
     b: &Array1<i32>,
 ) -> jobject {
-    let cls = env.find_class("com/alpha_ta/DoubleOutput").unwrap();
+    let cls = env.find_class("com/finkit/DoubleOutput").unwrap();
     let obj = env.alloc_object(&cls).unwrap();
     let a_arr = to_double_array(&mut env, a.to_vec());
     let b_arr = {
@@ -1820,7 +1820,7 @@ fn build_dto_2d_1i(
     b: &Array1<f64>,
     c: &Array1<i32>,
 ) -> jobject {
-    let cls = env.find_class("com/alpha_ta/TripleOutput").unwrap();
+    let cls = env.find_class("com/finkit/TripleOutput").unwrap();
     let obj = env.alloc_object(&cls).unwrap();
     let a_arr = to_double_array(&mut env, a.to_vec());
     let b_arr = to_double_array(&mut env, b.to_vec());
@@ -1843,7 +1843,7 @@ fn build_dto3(
     b: &Array1<i32>,
     c: &Array1<i32>,
 ) -> jobject {
-    let cls = env.find_class("com/alpha_ta/TripleOutput").unwrap();
+    let cls = env.find_class("com/finkit/TripleOutput").unwrap();
     let obj = env.alloc_object(&cls).unwrap();
     let a_arr = to_double_array(&mut env, a.to_vec());
     let b_arr = {
@@ -1871,7 +1871,7 @@ fn build_dto_3d(
     b: &Array1<f64>,
     c: &Array1<f64>,
 ) -> jobject {
-    let cls = env.find_class("com/alpha_ta/TripleOutput").unwrap();
+    let cls = env.find_class("com/finkit/TripleOutput").unwrap();
     let obj = env.alloc_object(&cls).unwrap();
     let a_arr = to_double_array(&mut env, a.to_vec());
     let b_arr = to_double_array(&mut env, b.to_vec());
@@ -1889,7 +1889,7 @@ fn build_dto4(
     c: &Array1<f64>,
     d: &Array1<f64>,
 ) -> jobject {
-    let cls = env.find_class("com/alpha_ta/QuadOutput").unwrap();
+    let cls = env.find_class("com/finkit/QuadOutput").unwrap();
     let obj = env.alloc_object(&cls).unwrap();
     let a_arr = to_double_array(&mut env, a.to_vec());
     let b_arr = to_double_array(&mut env, b.to_vec());
@@ -1907,7 +1907,7 @@ fn build_dto4(
 // ============================================================================
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_formulaEval(
+pub extern "system" fn Java_com_finkit_Indicators_formulaEval(
     mut env: JNIEnv,
     _class: JClass,
     source: JString,
@@ -1994,7 +1994,7 @@ pub extern "system" fn Java_com_alphata_Indicators_formulaEval(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_formulaValidate(
+pub extern "system" fn Java_com_finkit_Indicators_formulaValidate(
     mut env: JNIEnv,
     _class: JClass,
     source: JString,
@@ -2012,7 +2012,7 @@ pub extern "system" fn Java_com_alphata_Indicators_formulaValidate(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_formulaEvalJit(
+pub extern "system" fn Java_com_finkit_Indicators_formulaEvalJit(
     mut env: JNIEnv,
     _class: JClass,
     source: JString,
@@ -2027,7 +2027,7 @@ pub extern "system" fn Java_com_alphata_Indicators_formulaEvalJit(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_formulaEvalSimd(
+pub extern "system" fn Java_com_finkit_Indicators_formulaEvalSimd(
     mut env: JNIEnv,
     _class: JClass,
     source: JString,
@@ -2042,7 +2042,7 @@ pub extern "system" fn Java_com_alphata_Indicators_formulaEvalSimd(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_alphata_Indicators_formulaEvalZeroCopy(
+pub extern "system" fn Java_com_finkit_Indicators_formulaEvalZeroCopy(
     mut env: JNIEnv,
     _class: JClass,
     source: JString,

@@ -1,7 +1,7 @@
-use alpha_ta_core::error::{FfiError, FormulaError, IndicatorError, TaError};
-use alpha_ta_core::indicators;
-use alpha_ta_core::math::moving_avg;
-use alpha_ta_core::patterns::candlestick;
+use finkit::error::{FfiError, FormulaError, IndicatorError, TaError};
+use finkit::indicators;
+use finkit::math::moving_avg;
+use finkit::patterns::candlestick;
 use std::cell::RefCell;
 use std::ffi::CString;
 use std::os::raw::c_char;
@@ -255,7 +255,7 @@ pub unsafe extern "C" fn ta_ffi_panic_test() -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alpha_ta_core::error::{
+    use finkit::error::{
         FfiError, FormulaError, IndicatorError,
     };
 

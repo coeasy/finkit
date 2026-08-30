@@ -4,7 +4,7 @@ MACD Signal line 精度诊断脚本
 """
 import numpy as np
 import talib
-import alpha_ta
+import finkit
 
 # 生成测试数据
 np.random.seed(42)
@@ -15,7 +15,7 @@ close = np.cumsum(np.random.randn(n)) + 100
 talib_macd, talib_signal, talib_hist = talib.MACD(close, fastperiod=12, slowperiod=26, signalperiod=9)
 
 # 计算 AlphaTA MACD
-alpha_result = alpha_ta.macd(close, fastperiod=12, slowperiod=26, signalperiod=9)
+alpha_result = finkit.macd(close, fastperiod=12, slowperiod=26, signalperiod=9)
 alpha_macd = alpha_result[0]
 alpha_signal = alpha_result[1]
 alpha_hist = alpha_result[2]

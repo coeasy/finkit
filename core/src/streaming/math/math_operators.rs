@@ -49,7 +49,7 @@ use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::streaming::indicators::StreamingAdd;
+/// use finkit::streaming::indicators::StreamingAdd;
 /// let mut add = StreamingAdd::new();
 /// assert_eq!(add.next_pair(1.0, 2.0), Some(3.0));
 /// assert_eq!(add.next_pair(10.0, 20.0), Some(30.0));
@@ -108,7 +108,7 @@ impl IndicatorMeta for StreamingAdd {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::streaming::indicators::StreamingSub;
+/// use finkit::streaming::indicators::StreamingSub;
 /// let mut sub = StreamingSub::new();
 /// assert_eq!(sub.next_pair(10.0, 3.0), Some(7.0));
 /// assert_eq!(sub.next_pair(5.0, 8.0), Some(-3.0));
@@ -167,7 +167,7 @@ impl IndicatorMeta for StreamingSub {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::streaming::indicators::StreamingMult;
+/// use finkit::streaming::indicators::StreamingMult;
 /// let mut mult = StreamingMult::new();
 /// assert_eq!(mult.next_pair(3.0, 4.0), Some(12.0));
 /// assert_eq!(mult.next_pair(-2.0, 5.0), Some(-10.0));
@@ -229,7 +229,7 @@ impl IndicatorMeta for StreamingMult {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::streaming::indicators::StreamingDiv;
+/// use finkit::streaming::indicators::StreamingDiv;
 /// let mut div = StreamingDiv::new();
 /// assert_eq!(div.next_pair(10.0, 2.0), Some(5.0));
 /// assert_eq!(div.next_pair(1.0, 0.0), None); // 除零
@@ -297,7 +297,7 @@ impl IndicatorMeta for StreamingDiv {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::streaming::{StreamingIndicator, indicators::StreamingMinus};
+/// use finkit::streaming::{StreamingIndicator, indicators::StreamingMinus};
 /// let mut m = StreamingMinus::new(2);
 /// assert_eq!(m.next(1.0), None);  // 累积中
 /// assert_eq!(m.next(2.0), None);  // 累积中
@@ -374,7 +374,7 @@ impl_indicator_meta!(StreamingMinus, "MINUS", "math_operators", "Periodic differ
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::streaming::{StreamingIndicator, indicators::StreamingMax};
+/// use finkit::streaming::{StreamingIndicator, indicators::StreamingMax};
 /// let mut m = StreamingMax::new(3);
 /// assert_eq!(m.next(3.0), None);
 /// assert_eq!(m.next(1.0), None);
@@ -447,7 +447,7 @@ impl_indicator_meta!(StreamingMax, "MAX", "math_operators", "Rolling window maxi
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::streaming::{StreamingIndicator, indicators::StreamingMin};
+/// use finkit::streaming::{StreamingIndicator, indicators::StreamingMin};
 /// let mut m = StreamingMin::new(3);
 /// assert_eq!(m.next(3.0), None);
 /// assert_eq!(m.next(1.0), None);
@@ -519,7 +519,7 @@ impl_indicator_meta!(StreamingMin, "MIN", "math_operators", "Rolling window mini
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::streaming::{StreamingIndicator, indicators::StreamingSum};
+/// use finkit::streaming::{StreamingIndicator, indicators::StreamingSum};
 /// let mut s = StreamingSum::new(3);
 /// assert_eq!(s.next(1.0), None);
 /// assert_eq!(s.next(2.0), None);

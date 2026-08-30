@@ -1,10 +1,10 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use ndarray::Array1;
-use alpha_ta_core::formula::{FormulaContext, FormulaEngine};
-use alpha_ta_core::indicators;
-use alpha_ta_core::math::moving_avg;
-use alpha_ta_core::streaming::indicators::*;
-use alpha_ta_core::streaming::StreamingIndicator;
+use finkit::formula::{FormulaContext, FormulaEngine};
+use finkit::indicators;
+use finkit::math::moving_avg;
+use finkit::streaming::indicators::*;
+use finkit::streaming::StreamingIndicator;
 
 const NEW_IND_DATA_LEN: usize = 10_000;
 

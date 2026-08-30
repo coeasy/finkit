@@ -40,7 +40,7 @@ pub struct DonchianResult {
 ///
 /// # Example
 /// ```rust
-/// use alpha_ta_core::indicators::donchian;
+/// use finkit::indicators::donchian;
 ///
 /// let high = vec![10.0, 12.0, 14.0, 13.0, 15.0, 16.0];
 /// let low = vec![8.0, 10.0, 11.0, 10.0, 12.0, 13.0];

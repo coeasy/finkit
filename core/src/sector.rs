@@ -25,7 +25,7 @@ use std::cmp::Ordering;
 /// # Example
 /// ```
 /// use ndarray::Array2;
-/// use alpha_ta_core::sector::SectorPanel;
+/// use finkit::sector::SectorPanel;
 /// let close = Array2::<f64>::zeros((31, 100));
 /// let panel = SectorPanel::new(
 ///     (0..31).map(|i| format!("8010{:02}0", i + 10)).collect(),

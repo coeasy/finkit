@@ -10,11 +10,11 @@
 //! actual speedup on the host CPU.
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use alpha_ta_core::indicators::parallel::{
+use finkit::indicators::parallel::{
     parallel_ema_batch, parallel_sma_batch, parallel_sma_multi_period,
 };
 #[cfg(feature = "rayon")]
-use alpha_ta_core::indicators::parallel::parallel_rsi_batch;
+use finkit::indicators::parallel::parallel_rsi_batch;
 
 fn make_closes(n_stocks: usize, n_bars: usize) -> Vec<Vec<f64>> {
     (0..n_stocks)

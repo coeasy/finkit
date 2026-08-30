@@ -15,7 +15,7 @@
 //! # Examples
 //!
 //! ```
-//! use alpha_ta_core::patterns::classic_ext::vcp;
+//! use finkit::patterns::classic_ext::vcp;
 //! let high = vec![10.0; 50];
 //! let low = vec![10.0; 50];
 //! let close = vec![10.0; 50];

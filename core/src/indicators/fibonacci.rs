@@ -54,7 +54,7 @@ const FIB_EXTENSIONS: [f64; 2] = [1.272, 1.618];
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators::fibonacci_retracement;
+/// use finkit::indicators::fibonacci_retracement;
 ///
 /// let high = vec![10.0, 11.0, 12.0, 13.0, 14.0, 13.5, 13.0];
 /// let low = vec![9.0, 9.5, 10.0, 11.0, 12.0, 11.5, 11.0];

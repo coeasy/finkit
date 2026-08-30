@@ -1,8 +1,8 @@
 //! Feature engineering performance benchmarks.
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use alpha_ta_core::features::*;
-use alpha_ta_core::math::statistics;
+use finkit::features::*;
+use finkit::math::statistics;
 
 const DATA_LEN: usize = 10_000;
 
@@ -366,7 +366,7 @@ fn bench_rolling_ic(c: &mut Criterion) {
 }
 
 fn bench_complexity(c: &mut Criterion) {
-    use alpha_ta_core::features::complexity::*;
+    use finkit::features::complexity::*;
 
     let mut group = c.benchmark_group("complexity");
     let close = create_close_data(1000);

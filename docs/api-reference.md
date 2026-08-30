@@ -310,7 +310,7 @@ pip install alpha-ta
 ### Functions
 
 ```python
-import alpha_ta as ta
+import finkit as ta
 import numpy as np
 
 # Overlap Studies
@@ -370,7 +370,7 @@ def detect_double_top(
 ### Complete Example
 
 ```python
-import alpha_ta as ta
+import finkit as ta
 import numpy as np
 import pandas as pd
 

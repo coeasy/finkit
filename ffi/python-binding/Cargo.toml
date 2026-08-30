@@ -1,9 +1,9 @@
 [package]
-name = "alpha-ta-python"
+name = "finkit-python"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Python bindings for AlphaTA"
+description = "Python bindings for finkit"
 
 [lints]
 workspace = true
@@ -12,13 +12,13 @@ workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
-alpha-ta-core = { path = "../../core", default-features = false, features = ["std", "serde", "indicators-all"] }
-alpha-ta-visualization = { path = "../../visualization", features = ["svg", "html"] }
+finkit = { path = "../../core", default-features = false, features = ["std", "serde", "indicators-all"] }
+finkit-visualization = { path = "../../visualization", features = ["svg", "html"] }
 pyo3 = { version = "0.23", features = ["extension-module"] }
 numpy = "0.23"
 ndarray = { workspace = true, optional = true }
 
 [features]
 default = ["formula"]
-formula = ["alpha-ta-core/formula", "dep:ndarray"]
+formula = ["finkit/formula", "dep:ndarray"]
 abi3 = ["pyo3/abi3-py38"]

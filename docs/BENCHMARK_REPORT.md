@@ -64,7 +64,7 @@ perf_gate:
 
 ```bash
 # 运行所有 benchmark
-cargo bench -p alpha-ta-core
+cargo bench -p finkit
 
 # 生成权威报告
 python scripts/gen_benchmark_report.py

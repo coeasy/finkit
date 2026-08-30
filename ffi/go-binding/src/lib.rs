@@ -8,9 +8,9 @@ use std::os::raw::{c_char, c_double, c_int};
 
 use ndarray::Array1;
 use serde_json;
-use alpha_ta_core::formula::{FormulaContext, FormulaEngine};
-use alpha_ta_ffi_common::panic::*;
-use alpha_ta_core::indicators::{
+use finkit::formula::{FormulaContext, FormulaEngine};
+use finkit_ffi_common::panic::*;
+use finkit::indicators::{
     ad, adosc, adx, aroon, atr, bbands, beta, cci, correlation, dema, ema, ht_dcperiod, ht_dcphase,
     ht_phasor, ht_sine, ht_trendline, ht_trendmode, kama, linear_reg, macd, mom, natr, obv, roc,
     rsi, sma, std_dev, stoch, t3, tema, trange, tsf, willr, wma, zscore,
@@ -18,11 +18,11 @@ use alpha_ta_core::indicators::{
 
 // Leak-detection allocator: installed only for the test binary so the FFI
 // ownership contract (alloc via `ta_*` + free via `ta_free_*`) can be checked
-// for heap growth. See `alpha_ta_ffi_common::leak`.
+// for heap growth. See `finkit_ffi_common::leak`.
 #[cfg(test)]
 #[global_allocator]
-static TEST_ALLOC: alpha_ta_ffi_common::leak::CountingAlloc =
-    alpha_ta_ffi_common::leak::CountingAlloc;
+static TEST_ALLOC: finkit_ffi_common::leak::CountingAlloc =
+    finkit_ffi_common::leak::CountingAlloc;
 
 #[repr(C)]
 pub struct TaResult {
@@ -110,8 +110,8 @@ include!("generated.rs");
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alpha_ta_core::indicators::sma;
-    use alpha_ta_core::indicators::rsi;
+    use finkit::indicators::sma;
+    use finkit::indicators::rsi;
 
     #[test]
     fn export_panic_test_returns_null_not_abort() {
@@ -145,7 +145,7 @@ mod tests {
     // the live-heap bytes return to baseline, catching forgotten frees.
     #[test]
     fn ffi_heap_no_leak_alloc_free_cycle() {
-        use alpha_ta_ffi_common::leak::live_bytes;
+        use finkit_ffi_common::leak::live_bytes;
         let n: c_int = 512;
         let input: Vec<c_double> = (0..n as usize).map(|i| (i as f64).sin()).collect();
 
@@ -630,7 +630,7 @@ pub extern "C" fn ta_formula_eval_debug(
 pub extern "C" fn ta_formula_get_template(
     name: *const c_char,
 ) -> *mut c_char {
-    use alpha_ta_core::formula::FormulaEngine;
+    use finkit::formula::FormulaEngine;
 
     if name.is_null() {
         let err = CString::new("invalid input").unwrap();
@@ -668,7 +668,7 @@ pub extern "C" fn ta_formula_get_template(
 pub extern "C" fn ta_formula_search_templates(
     keyword: *const c_char,
 ) -> *mut c_char {
-    use alpha_ta_core::formula::FormulaEngine;
+    use finkit::formula::FormulaEngine;
 
     if keyword.is_null() {
         let err = CString::new("invalid input").unwrap();
@@ -697,7 +697,7 @@ pub extern "C" fn ta_formula_search_templates(
 
 #[no_mangle]
 pub extern "C" fn ta_formula_list_categories() -> *mut c_char {
-    use alpha_ta_core::formula::templates::FormulaTemplates;
+    use finkit::formula::templates::FormulaTemplates;
 
     let categories = FormulaTemplates::categories();
     let json_str = serde_json::to_string(&categories).unwrap_or_else(|_| "[]".to_string());

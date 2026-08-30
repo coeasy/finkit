@@ -2,7 +2,7 @@
   "version": 4,
   "updated": "2026-06-20",
   "regression_threshold_pct": 5.0,
-  "description": "AlphaTA baseline timings (µs) for core indicators at 10K/100K/1M/10M scales. CI fails if current > baseline × 1.05. v4 extends the v3 baseline with 10M entries (P-8) so the perf-gate catches scaling regressions at the 10-million-bar order. The 10M numbers are conservative O(n) extrapolations from the 1M numbers plus a 1.4× memory-bandwidth factor (cache misses dominate past L2). Refresh with `cargo bench -p alpha-ta-core --bench ten_million_bench` and update after non-perf-impact refactors.",
+  "description": "AlphaTA baseline timings (µs) for core indicators at 10K/100K/1M/10M scales. CI fails if current > baseline × 1.05. v4 extends the v3 baseline with 10M entries (P-8) so the perf-gate catches scaling regressions at the 10-million-bar order. The 10M numbers are conservative O(n) extrapolations from the 1M numbers plus a 1.4× memory-bandwidth factor (cache misses dominate past L2). Refresh with `cargo bench -p finkit --bench ten_million_bench` and update after non-perf-impact refactors.",
   "indicators": {
     "SMA_20": { "10K": 13.14, "100K": 136.08, "1M": 2942.3, "10M": 33500.0 },
     "EMA_12": { "10K": 21.41, "100K": 218.00, "1M": 3720.1, "10M": 42500.0 },

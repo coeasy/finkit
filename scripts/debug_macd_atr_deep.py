@@ -8,7 +8,7 @@ import numpy as np
 sys.path.insert(0, r'P:\llm_code\finkit\dist\python\windows-x64')
 
 try:
-    import alpha_ta
+    import finkit
     import talib
 except ImportError as e:
     print(f"Import error: {e}")
@@ -32,8 +32,8 @@ print("-" * 80)
 # 计算 EMA12 和 EMA26
 talib_ema12 = talib.EMA(close, timeperiod=12)
 talib_ema26 = talib.EMA(close, timeperiod=26)
-alpha_ema12 = np.array(alpha_ta.ema(close, timeperiod=12))
-alpha_ema26 = np.array(alpha_ta.ema(close, timeperiod=26))
+alpha_ema12 = np.array(finkit.ema(close, timeperiod=12))
+alpha_ema26 = np.array(finkit.ema(close, timeperiod=26))
 
 print("EMA(12) 对比:")
 print(f"  TA-Lib EMA12[25]:  {talib_ema12[25]:.10f}")
@@ -67,7 +67,7 @@ print("-" * 80)
 
 # 计算 True Range
 talib_tr = talib.TRANGE(high, low, close)
-alpha_tr = np.array(alpha_ta.trange(high, low, close))
+alpha_tr = np.array(finkit.trange(high, low, close))
 
 print("True Range 对比:")
 print(f"  TA-Lib TR[0]:  {talib_tr[0]:.10f}")
@@ -80,7 +80,7 @@ print(f"  Diff: {abs(talib_tr[13] - alpha_tr[13]):.2e}")
 
 # 计算 ATR
 talib_atr = talib.ATR(high, low, close, timeperiod=14)
-alpha_atr = np.array(alpha_ta.atr(high, low, close, timeperiod=14))
+alpha_atr = np.array(finkit.atr(high, low, close, timeperiod=14))
 
 # 手动计算 ATR (SMA of TR)
 manual_atr_sma = talib.SMA(talib_tr, timeperiod=14)
@@ -123,7 +123,7 @@ print("-" * 80)
 # 测试简单序列
 test_data = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0])
 talib_ema_test = talib.EMA(test_data, timeperiod=3)
-alpha_ema_test = np.array(alpha_ta.ema(test_data, timeperiod=3))
+alpha_ema_test = np.array(finkit.ema(test_data, timeperiod=3))
 
 print("简单序列 EMA(3) 对比:")
 print(f"  Input: {test_data}")

@@ -8,7 +8,7 @@ use super::Transform;
 /// # Example
 ///
 /// ```
-/// use alpha_ta_core::transforms::{Pipeline, LogReturn, ZScore, Transform};
+/// use finkit::transforms::{Pipeline, LogReturn, ZScore, Transform};
 ///
 /// let data = vec![100.0, 105.0, 103.0, 108.0, 110.0, 107.0, 112.0, 115.0, 113.0, 118.0];
 /// let result = Pipeline::new()

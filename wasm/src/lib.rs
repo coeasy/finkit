@@ -4,11 +4,11 @@
 
 use wasm_bindgen::prelude::*;
 
-use alpha_ta_core::indicators;
-use alpha_ta_core::math::moving_avg;
-use alpha_ta_core::patterns::{candlestick, chart};
+use finkit::indicators;
+use finkit::math::moving_avg;
+use finkit::patterns::{candlestick, chart};
 use ndarray::Array1;
-use alpha_ta_core::formula::{FormulaEngine, FormulaContext, parse_formula, DrawCommand, FormulaTemplates};
+use finkit::formula::{FormulaEngine, FormulaContext, parse_formula, DrawCommand, FormulaTemplates};
 
 mod streaming;
 mod transforms;
@@ -1323,14 +1323,14 @@ pub fn var(input: Vec<f64>, period: usize, nb_dev: f64) -> Result<Vec<f64>, JsEr
 
 // ───────────────────── Streaming API (O(1) per bar) ─────────────────────
 //
-// A unified streaming facade backed by `alpha_ta_core::streaming::indicators::*`.
+// A unified streaming facade backed by `finkit::streaming::indicators::*`.
 // Each export returns a JS object with a `next(value) -> number | null` method,
 // mirroring the Rust `StreamingIndicator` trait. This lets WASM clients compute
 // indicators incrementally with O(1) per-bar cost.
 
 #[wasm_bindgen]
 pub struct StreamingSmaHandle {
-    inner: alpha_ta_core::streaming::indicators::StreamingSma,
+    inner: finkit::streaming::indicators::StreamingSma,
 }
 
 #[wasm_bindgen]
@@ -1341,30 +1341,30 @@ impl StreamingSmaHandle {
             return Err(JsError::new("period must be > 0"));
         }
         Ok(Self {
-            inner: alpha_ta_core::streaming::indicators::StreamingSma::new(period),
+            inner: finkit::streaming::indicators::StreamingSma::new(period),
         })
     }
     #[wasm_bindgen(js_name = next)]
     pub fn next(&mut self, value: f64) -> Option<f64> {
-        alpha_ta_core::streaming::StreamingIndicator::next(&mut self.inner, value)
+        finkit::streaming::StreamingIndicator::next(&mut self.inner, value)
     }
     #[wasm_bindgen(js_name = value)]
     pub fn value(&self) -> Option<f64> {
-        alpha_ta_core::streaming::StreamingIndicator::value(&self.inner)
+        finkit::streaming::StreamingIndicator::value(&self.inner)
     }
     #[wasm_bindgen(js_name = reset)]
     pub fn reset(&mut self) {
-        alpha_ta_core::streaming::StreamingIndicator::reset(&mut self.inner);
+        finkit::streaming::StreamingIndicator::reset(&mut self.inner);
     }
     #[wasm_bindgen(js_name = isReady)]
     pub fn is_ready(&self) -> bool {
-        alpha_ta_core::streaming::StreamingIndicator::is_ready(&self.inner)
+        finkit::streaming::StreamingIndicator::is_ready(&self.inner)
     }
 }
 
 #[wasm_bindgen]
 pub struct StreamingEmaHandle {
-    inner: alpha_ta_core::streaming::indicators::StreamingEma,
+    inner: finkit::streaming::indicators::StreamingEma,
 }
 
 #[wasm_bindgen]
@@ -1375,30 +1375,30 @@ impl StreamingEmaHandle {
             return Err(JsError::new("period must be > 0"));
         }
         Ok(Self {
-            inner: alpha_ta_core::streaming::indicators::StreamingEma::new(period),
+            inner: finkit::streaming::indicators::StreamingEma::new(period),
         })
     }
     #[wasm_bindgen(js_name = next)]
     pub fn next(&mut self, value: f64) -> Option<f64> {
-        alpha_ta_core::streaming::StreamingIndicator::next(&mut self.inner, value)
+        finkit::streaming::StreamingIndicator::next(&mut self.inner, value)
     }
     #[wasm_bindgen(js_name = value)]
     pub fn value(&self) -> Option<f64> {
-        alpha_ta_core::streaming::StreamingIndicator::value(&self.inner)
+        finkit::streaming::StreamingIndicator::value(&self.inner)
     }
     #[wasm_bindgen(js_name = reset)]
     pub fn reset(&mut self) {
-        alpha_ta_core::streaming::StreamingIndicator::reset(&mut self.inner);
+        finkit::streaming::StreamingIndicator::reset(&mut self.inner);
     }
     #[wasm_bindgen(js_name = isReady)]
     pub fn is_ready(&self) -> bool {
-        alpha_ta_core::streaming::StreamingIndicator::is_ready(&self.inner)
+        finkit::streaming::StreamingIndicator::is_ready(&self.inner)
     }
 }
 
 #[wasm_bindgen]
 pub struct StreamingRsiHandle {
-    inner: alpha_ta_core::streaming::indicators::StreamingRsi,
+    inner: finkit::streaming::indicators::StreamingRsi,
 }
 
 #[wasm_bindgen]
@@ -1409,30 +1409,30 @@ impl StreamingRsiHandle {
             return Err(JsError::new("period must be > 0"));
         }
         Ok(Self {
-            inner: alpha_ta_core::streaming::indicators::StreamingRsi::new(period),
+            inner: finkit::streaming::indicators::StreamingRsi::new(period),
         })
     }
     #[wasm_bindgen(js_name = next)]
     pub fn next(&mut self, value: f64) -> Option<f64> {
-        alpha_ta_core::streaming::StreamingIndicator::next(&mut self.inner, value)
+        finkit::streaming::StreamingIndicator::next(&mut self.inner, value)
     }
     #[wasm_bindgen(js_name = value)]
     pub fn value(&self) -> Option<f64> {
-        alpha_ta_core::streaming::StreamingIndicator::value(&self.inner)
+        finkit::streaming::StreamingIndicator::value(&self.inner)
     }
     #[wasm_bindgen(js_name = reset)]
     pub fn reset(&mut self) {
-        alpha_ta_core::streaming::StreamingIndicator::reset(&mut self.inner);
+        finkit::streaming::StreamingIndicator::reset(&mut self.inner);
     }
     #[wasm_bindgen(js_name = isReady)]
     pub fn is_ready(&self) -> bool {
-        alpha_ta_core::streaming::StreamingIndicator::is_ready(&self.inner)
+        finkit::streaming::StreamingIndicator::is_ready(&self.inner)
     }
 }
 
 #[wasm_bindgen]
 pub struct StreamingAtrHandle {
-    inner: alpha_ta_core::streaming::indicators::StreamingAtr,
+    inner: finkit::streaming::indicators::StreamingAtr,
 }
 
 #[wasm_bindgen]
@@ -1443,30 +1443,30 @@ impl StreamingAtrHandle {
             return Err(JsError::new("period must be > 0"));
         }
         Ok(Self {
-            inner: alpha_ta_core::streaming::indicators::StreamingAtr::new(period),
+            inner: finkit::streaming::indicators::StreamingAtr::new(period),
         })
     }
     /// Feed a single bar: (high, low, close)
     pub fn next_bar(&mut self, high: f64, low: f64, close: f64) -> Option<f64> {
-        alpha_ta_core::streaming::StreamingIndicator::next(&mut self.inner, (high, low, close))
+        finkit::streaming::StreamingIndicator::next(&mut self.inner, (high, low, close))
     }
     #[wasm_bindgen(js_name = value)]
     pub fn value(&self) -> Option<f64> {
-        alpha_ta_core::streaming::StreamingIndicator::value(&self.inner)
+        finkit::streaming::StreamingIndicator::value(&self.inner)
     }
     #[wasm_bindgen(js_name = reset)]
     pub fn reset(&mut self) {
-        alpha_ta_core::streaming::StreamingIndicator::reset(&mut self.inner);
+        finkit::streaming::StreamingIndicator::reset(&mut self.inner);
     }
     #[wasm_bindgen(js_name = isReady)]
     pub fn is_ready(&self) -> bool {
-        alpha_ta_core::streaming::StreamingIndicator::is_ready(&self.inner)
+        finkit::streaming::StreamingIndicator::is_ready(&self.inner)
     }
 }
 
 #[wasm_bindgen]
 pub struct StreamingMacdHandle {
-    inner: alpha_ta_core::streaming::indicators::StreamingMacd,
+    inner: finkit::streaming::indicators::StreamingMacd,
 }
 
 #[wasm_bindgen(getter_with_clone)]
@@ -1484,26 +1484,26 @@ impl StreamingMacdHandle {
             return Err(JsError::new("fast/slow/signal must be > 0"));
         }
         Ok(Self {
-            inner: alpha_ta_core::streaming::indicators::StreamingMacd::new(fast, slow, signal),
+            inner: finkit::streaming::indicators::StreamingMacd::new(fast, slow, signal),
         })
     }
     pub fn next(&mut self, value: f64) -> Option<MacdStreamingOutput> {
-        alpha_ta_core::streaming::StreamingIndicator::next(&mut self.inner, value)
+        finkit::streaming::StreamingIndicator::next(&mut self.inner, value)
             .map(|o| MacdStreamingOutput { macd: o.macd, signal: o.signal, hist: o.histogram })
     }
     #[wasm_bindgen(js_name = reset)]
     pub fn reset(&mut self) {
-        alpha_ta_core::streaming::StreamingIndicator::reset(&mut self.inner);
+        finkit::streaming::StreamingIndicator::reset(&mut self.inner);
     }
     #[wasm_bindgen(js_name = isReady)]
     pub fn is_ready(&self) -> bool {
-        alpha_ta_core::streaming::StreamingIndicator::is_ready(&self.inner)
+        finkit::streaming::StreamingIndicator::is_ready(&self.inner)
     }
 }
 
 #[wasm_bindgen]
 pub struct StreamingBollHandle {
-    inner: alpha_ta_core::streaming::indicators::StreamingBoll,
+    inner: finkit::streaming::indicators::StreamingBoll,
 }
 
 #[wasm_bindgen(getter_with_clone)]
@@ -1521,70 +1521,70 @@ impl StreamingBollHandle {
             return Err(JsError::new("period must be > 0"));
         }
         Ok(Self {
-            inner: alpha_ta_core::streaming::indicators::StreamingBoll::new(period, nb_dev_up, nb_dev_dn),
+            inner: finkit::streaming::indicators::StreamingBoll::new(period, nb_dev_up, nb_dev_dn),
         })
     }
     pub fn next(&mut self, value: f64) -> Option<BollStreamingOutput> {
-        alpha_ta_core::streaming::StreamingIndicator::next(&mut self.inner, value)
+        finkit::streaming::StreamingIndicator::next(&mut self.inner, value)
             .map(|o| BollStreamingOutput { upper: o.upper, middle: o.middle, lower: o.lower })
     }
     #[wasm_bindgen(js_name = reset)]
     pub fn reset(&mut self) {
-        alpha_ta_core::streaming::StreamingIndicator::reset(&mut self.inner);
+        finkit::streaming::StreamingIndicator::reset(&mut self.inner);
     }
     #[wasm_bindgen(js_name = isReady)]
     pub fn is_ready(&self) -> bool {
-        alpha_ta_core::streaming::StreamingIndicator::is_ready(&self.inner)
+        finkit::streaming::StreamingIndicator::is_ready(&self.inner)
     }
 }
 
 #[wasm_bindgen]
 pub struct StreamingObvHandle {
-    inner: alpha_ta_core::streaming::indicators::StreamingObv,
+    inner: finkit::streaming::indicators::StreamingObv,
 }
 
 #[wasm_bindgen]
 impl StreamingObvHandle {
     #[wasm_bindgen(constructor)]
     pub fn new() -> StreamingObvHandle {
-        Self { inner: alpha_ta_core::streaming::indicators::StreamingObv::new() }
+        Self { inner: finkit::streaming::indicators::StreamingObv::new() }
     }
     /// Feed a single bar: (close, volume)
     pub fn next_bar(&mut self, close: f64, volume: f64) -> Option<f64> {
-        let bar = alpha_ta_core::streaming::OhlcvBar::new(0.0, 0.0, 0.0, close, volume);
-        alpha_ta_core::streaming::StreamingIndicator::next(&mut self.inner, &bar)
+        let bar = finkit::streaming::OhlcvBar::new(0.0, 0.0, 0.0, close, volume);
+        finkit::streaming::StreamingIndicator::next(&mut self.inner, &bar)
     }
     #[wasm_bindgen(js_name = reset)]
     pub fn reset(&mut self) {
-        alpha_ta_core::streaming::StreamingIndicator::reset(&mut self.inner);
+        finkit::streaming::StreamingIndicator::reset(&mut self.inner);
     }
 }
 
 #[wasm_bindgen]
 pub struct StreamingVwapHandle {
-    inner: alpha_ta_core::streaming::indicators::StreamingVwap,
+    inner: finkit::streaming::indicators::StreamingVwap,
 }
 
 #[wasm_bindgen]
 impl StreamingVwapHandle {
     #[wasm_bindgen(constructor)]
     pub fn new() -> StreamingVwapHandle {
-        Self { inner: alpha_ta_core::streaming::indicators::StreamingVwap::new() }
+        Self { inner: finkit::streaming::indicators::StreamingVwap::new() }
     }
     /// Feed a single bar: (high, low, close, volume)
     pub fn next_bar(&mut self, high: f64, low: f64, close: f64, volume: f64) -> Option<f64> {
-        let bar = alpha_ta_core::streaming::OhlcvBar::new(0.0, high, low, close, volume);
-        alpha_ta_core::streaming::StreamingIndicator::next(&mut self.inner, &bar)
+        let bar = finkit::streaming::OhlcvBar::new(0.0, high, low, close, volume);
+        finkit::streaming::StreamingIndicator::next(&mut self.inner, &bar)
     }
     #[wasm_bindgen(js_name = reset)]
     pub fn reset(&mut self) {
-        alpha_ta_core::streaming::StreamingIndicator::reset(&mut self.inner);
+        finkit::streaming::StreamingIndicator::reset(&mut self.inner);
     }
 }
 
 #[wasm_bindgen]
 pub struct StreamingAdxHandle {
-    inner: alpha_ta_core::streaming::indicators::StreamingAdx,
+    inner: finkit::streaming::indicators::StreamingAdx,
 }
 
 #[wasm_bindgen]
@@ -1595,26 +1595,26 @@ impl StreamingAdxHandle {
             return Err(JsError::new("period must be > 0"));
         }
         Ok(Self {
-            inner: alpha_ta_core::streaming::indicators::StreamingAdx::new(period),
+            inner: finkit::streaming::indicators::StreamingAdx::new(period),
         })
     }
     /// Feed a single bar: (high, low, close)
     pub fn next_bar(&mut self, high: f64, low: f64, close: f64) -> Option<f64> {
-        alpha_ta_core::streaming::StreamingIndicator::next(&mut self.inner, (high, low, close))
+        finkit::streaming::StreamingIndicator::next(&mut self.inner, (high, low, close))
     }
     #[wasm_bindgen(js_name = reset)]
     pub fn reset(&mut self) {
-        alpha_ta_core::streaming::StreamingIndicator::reset(&mut self.inner);
+        finkit::streaming::StreamingIndicator::reset(&mut self.inner);
     }
     #[wasm_bindgen(js_name = isReady)]
     pub fn is_ready(&self) -> bool {
-        alpha_ta_core::streaming::StreamingIndicator::is_ready(&self.inner)
+        finkit::streaming::StreamingIndicator::is_ready(&self.inner)
     }
 }
 
 #[wasm_bindgen]
 pub struct StreamingStochHandle {
-    inner: alpha_ta_core::streaming::indicators::StreamingStoch,
+    inner: finkit::streaming::indicators::StreamingStoch,
 }
 
 #[wasm_bindgen(getter_with_clone)]
@@ -1631,27 +1631,27 @@ impl StreamingStochHandle {
             return Err(JsError::new("periods must be > 0"));
         }
         Ok(Self {
-            inner: alpha_ta_core::streaming::indicators::StreamingStoch::new(fast_k, slow_k, slow_d),
+            inner: finkit::streaming::indicators::StreamingStoch::new(fast_k, slow_k, slow_d),
         })
     }
     /// Feed a single bar: (high, low, close)
     pub fn next_bar(&mut self, high: f64, low: f64, close: f64) -> Option<StochStreamingOutput> {
-        alpha_ta_core::streaming::StreamingIndicator::next(&mut self.inner, (high, low, close))
+        finkit::streaming::StreamingIndicator::next(&mut self.inner, (high, low, close))
             .map(|o| StochStreamingOutput { k: o.k, d: o.d })
     }
     #[wasm_bindgen(js_name = reset)]
     pub fn reset(&mut self) {
-        alpha_ta_core::streaming::StreamingIndicator::reset(&mut self.inner);
+        finkit::streaming::StreamingIndicator::reset(&mut self.inner);
     }
     #[wasm_bindgen(js_name = isReady)]
     pub fn is_ready(&self) -> bool {
-        alpha_ta_core::streaming::StreamingIndicator::is_ready(&self.inner)
+        finkit::streaming::StreamingIndicator::is_ready(&self.inner)
     }
 }
 
 #[wasm_bindgen]
 pub struct StreamingSuperTrendHandle {
-    inner: alpha_ta_core::streaming::indicators::StreamingSuperTrend,
+    inner: finkit::streaming::indicators::StreamingSuperTrend,
 }
 
 #[wasm_bindgen(getter_with_clone)]
@@ -1668,12 +1668,12 @@ impl StreamingSuperTrendHandle {
             return Err(JsError::new("period must be > 0"));
         }
         Ok(Self {
-            inner: alpha_ta_core::streaming::indicators::StreamingSuperTrend::new(period, multiplier),
+            inner: finkit::streaming::indicators::StreamingSuperTrend::new(period, multiplier),
         })
     }
     /// Feed a single bar: (high, low, close)
     pub fn next_bar(&mut self, high: f64, low: f64, close: f64) -> Option<SuperTrendStreamingOutput> {
-        let bar = alpha_ta_core::streaming::OhlcvBar::new(0.0, high, low, close, 0.0);
+        let bar = finkit::streaming::OhlcvBar::new(0.0, high, low, close, 0.0);
         self.inner.next(&bar)
             .map(|o| SuperTrendStreamingOutput { supertrend: o.supertrend, direction: o.direction })
     }

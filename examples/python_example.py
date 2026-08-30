@@ -3,7 +3,7 @@ alpha_ta Python 示例代码
 展示如何使用 alpha_ta 进行技术分析
 """
 
-import alpha_ta as ta
+import finkit as ta
 import numpy as np
 import pandas as pd
 

@@ -24,7 +24,7 @@
 //! # Examples
 //!
 //! ```
-//! use alpha_ta_core::patterns::harmonic::gartley;
+//! use finkit::patterns::harmonic::gartley;
 //! // Need at least 20 bars for the gartley pattern recognition.
 //! let n = 30;
 //! let high: Vec<f64> = (0..n).map(|i| 10.0 + (i as f64) * 0.1 + ((i % 5) as f64) * 0.05).collect();

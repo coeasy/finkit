@@ -1,6 +1,6 @@
-use alpha_ta_core::formula::compiler::{CompiledFormula, FormulaCache, FormulaCompiler};
-use alpha_ta_core::formula::engine::FormulaEngine;
-use alpha_ta_core::formula::types::FormulaContext;
+use finkit::formula::compiler::{CompiledFormula, FormulaCache, FormulaCompiler};
+use finkit::formula::engine::FormulaEngine;
+use finkit::formula::types::FormulaContext;
 use ndarray::Array1;
 
 fn make_ctx(len: usize) -> FormulaContext {
@@ -257,7 +257,7 @@ mod cache_performance_tests {
 
 mod cache_data_structure_tests {
     use super::*;
-    use alpha_ta_core::formula::ast::AstNode;
+    use finkit::formula::ast::AstNode;
 
     #[test]
     fn test_cache_insert_and_retrieve() {

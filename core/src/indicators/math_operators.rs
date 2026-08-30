@@ -40,7 +40,7 @@ use std::collections::VecDeque;
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::math_operators::add;
+/// use finkit::indicators::math_operators::add;
 /// let a = vec![1.0, 2.0, 3.0];
 /// let b = vec![10.0, 20.0, 30.0];
 /// let r = add(&a, &b).unwrap();
@@ -68,7 +68,7 @@ pub fn add(a: &[f64], b: &[f64]) -> Result<Array1<f64>> {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::math_operators::sub;
+/// use finkit::indicators::math_operators::sub;
 /// let a = vec![10.0, 20.0, 30.0];
 /// let b = vec![1.0, 2.0, 3.0];
 /// let r = sub(&a, &b).unwrap();
@@ -96,7 +96,7 @@ pub fn sub(a: &[f64], b: &[f64]) -> Result<Array1<f64>> {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::math_operators::mult;
+/// use finkit::indicators::math_operators::mult;
 /// let a = vec![2.0, 3.0, 4.0];
 /// let b = vec![5.0, 6.0, 7.0];
 /// let r = mult(&a, &b).unwrap();
@@ -127,7 +127,7 @@ pub fn mult(a: &[f64], b: &[f64]) -> Result<Array1<f64>> {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::math_operators::div;
+/// use finkit::indicators::math_operators::div;
 /// let a = vec![10.0, 20.0, 30.0];
 /// let b = vec![2.0, 4.0, 5.0];
 /// let r = div(&a, &b).unwrap();
@@ -165,7 +165,7 @@ pub fn div(a: &[f64], b: &[f64]) -> Result<Array1<f64>> {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::math_operators::minus;
+/// use finkit::indicators::math_operators::minus;
 /// let data = vec![1.0, 2.0, 4.0, 7.0, 11.0];
 /// let r = minus(&data, 2).unwrap();
 /// // 前 2 个为 NaN，r[2] = 4 - 1 = 3, r[3] = 7 - 2 = 5, r[4] = 11 - 4 = 7
@@ -205,7 +205,7 @@ pub fn minus(data: &[f64], period: usize) -> Result<Array1<f64>> {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::math_operators::max;
+/// use finkit::indicators::math_operators::max;
 /// let data = vec![3.0, 1.0, 4.0, 1.0, 5.0, 9.0, 2.0, 6.0];
 /// let r = max(&data, 3).unwrap();
 /// assert!(r[0].is_nan() && r[1].is_nan());
@@ -269,7 +269,7 @@ pub fn max(data: &[f64], period: usize) -> Result<Array1<f64>> {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::math_operators::min;
+/// use finkit::indicators::math_operators::min;
 /// let data = vec![3.0, 1.0, 4.0, 1.0, 5.0, 9.0, 2.0, 6.0];
 /// let r = min(&data, 3).unwrap();
 /// assert!(r[0].is_nan() && r[1].is_nan());
@@ -334,7 +334,7 @@ pub fn min(data: &[f64], period: usize) -> Result<Array1<f64>> {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::math_operators::sum;
+/// use finkit::indicators::math_operators::sum;
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
 /// let r = sum(&data, 3).unwrap();
 /// assert!(r[0].is_nan() && r[1].is_nan());
@@ -382,7 +382,7 @@ pub fn sum(data: &[f64], period: usize) -> Result<Array1<f64>> {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::math_operators::maxindex;
+/// use finkit::indicators::math_operators::maxindex;
 /// let data = vec![3.0, 1.0, 4.0, 1.0, 5.0];
 /// let r = maxindex(&data, 3).unwrap();
 /// assert_eq!(r[0], -1);
@@ -438,7 +438,7 @@ pub fn maxindex(data: &[f64], period: usize) -> Result<Array1<i64>> {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::math_operators::minindex;
+/// use finkit::indicators::math_operators::minindex;
 /// let data = vec![3.0, 1.0, 4.0, 1.0, 5.0];
 /// let r = minindex(&data, 3).unwrap();
 /// assert_eq!(r[0], -1);
@@ -492,7 +492,7 @@ pub fn minindex(data: &[f64], period: usize) -> Result<Array1<i64>> {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::math_operators::minmax;
+/// use finkit::indicators::math_operators::minmax;
 /// let data = vec![3.0, 1.0, 4.0, 1.0, 5.0, 9.0, 2.0, 6.0];
 /// let (mins, maxs) = minmax(&data, 3).unwrap();
 /// assert_eq!(mins[2], 1.0);
@@ -518,7 +518,7 @@ pub fn minmax(data: &[f64], period: usize) -> Result<(Array1<f64>, Array1<f64>)>
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::math_operators::minmaxindex;
+/// use finkit::indicators::math_operators::minmaxindex;
 /// let data = vec![3.0, 1.0, 4.0, 1.0, 5.0];
 /// let (min_idx, max_idx) = minmaxindex(&data, 3).unwrap();
 /// assert_eq!(min_idx[2], 1); // [3,1,4] -> min 1 at offset 1

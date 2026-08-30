@@ -54,7 +54,7 @@ def find_pyfunction_blocks(content: str) -> list[tuple[int, int, str]]:
         if not fn_match:
             continue
         func_name = fn_match.group(1)
-        if func_name == "alpha_ta":
+        if func_name == "finkit":
             continue
         paren_start = m.end() + fn_match.end() - 1
         # Find closing paren of signature (handle nested generics)

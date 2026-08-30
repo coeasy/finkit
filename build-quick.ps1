@@ -91,11 +91,11 @@ foreach ($lang in $WANT) {
     switch ($lang) {
         "python" { $wantPython = $true }
         "wasm"   { $wantWasm   = $true }
-        "node"    { $nativeCrates += "alpha-ta-node" }
-        "go"      { $nativeCrates += "alpha-ta-go" }
-        "c"       { $nativeCrates += "alpha-ta-ffi" }
-        "dotnet"  { $nativeCrates += "alpha-ta-dotnet" }
-        "java"    { $nativeCrates += "alpha-ta-java" }
+        "node"    { $nativeCrates += "finkit-node" }
+        "go"      { $nativeCrates += "finkit-go" }
+        "c"       { $nativeCrates += "finkit-ffi" }
+        "dotnet"  { $nativeCrates += "finkit-dotnet" }
+        "java"    { $nativeCrates += "finkit-java" }
     }
 }
 $t0 = Get-Date
@@ -105,8 +105,8 @@ if ($nativeCrates.Count -gt 0) {
     if ($LASTEXITCODE -ne 0) { Write-Warning "[build-quick] native pre-build failed; per-language scripts will rebuild" }
 }
 if ($wantPython) {
-    Info "cargo build --release -p alpha-ta-python --features abi3"
-    & cargo build --release -p alpha-ta-python --features abi3
+    Info "cargo build --release -p finkit-python --features abi3"
+    & cargo build --release -p finkit-python --features abi3
     if ($LASTEXITCODE -ne 0) { Write-Warning "[build-quick] python pre-build failed; build-usage-python.sh will rebuild" }
 }
 if ($wantWasm) {
@@ -169,7 +169,7 @@ for lang in langs:
             "size_bytes": f.stat().st_size,
             "sha256": hashlib.sha256(f.read_bytes()).hexdigest(),
         })
-manifest = {"name": "AlphaTA", "version": "$ver", "platform": "$platform", "quick_build": True, "components": components}
+manifest = {"name": "finkit", "version": "$ver", "platform": "$platform", "quick_build": True, "components": components}
 out = root / "manifest.json"
 out.write_text(json.dumps(manifest, indent=2))
 print(f"wrote {out} ({len(components)} components)")

@@ -1,5 +1,5 @@
 {
-  "name": "@alphata/node-linux-x64-gnu",
+  "name": "finkit-linux-x64-gnu",
   "version": "1.0.0",
   "os": [
     "linux"
@@ -10,11 +10,11 @@
   "libc": [
     "glibc"
   ],
-  "main": "alpha_ta.node",
+  "main": "finkit.node",
   "files": [
-    "alpha_ta.node"
+    "finkit.node"
   ],
-  "description": "Linux x64 glibc native binding for @alphata/node",
+  "description": "Linux x64 glibc native binding for finkit",
   "license": "Apache-2.0",
   "engines": {
     "node": ">= 16"

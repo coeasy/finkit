@@ -137,7 +137,7 @@ pub struct KeltnerResult {
 ///
 /// # Example
 /// ```rust
-/// use alpha_ta_core::indicators::keltner;
+/// use finkit::indicators::keltner;
 ///
 /// let high = vec![10.0, 12.0, 14.0, 13.0, 15.0, 16.0];
 /// let low = vec![8.0, 10.0, 11.0, 10.0, 12.0, 13.0];
@@ -206,7 +206,7 @@ pub fn keltner(
 ///
 /// # Example
 /// ```rust
-/// use alpha_ta_core::indicators::historical_volatility;
+/// use finkit::indicators::historical_volatility;
 ///
 /// let close = vec![100.0, 101.0, 102.0, 103.0, 104.0, 105.0];
 /// let hv = historical_volatility(&close, 3, 252.0).unwrap();
@@ -317,7 +317,7 @@ pub fn historical_volatility(
 ///
 /// # Example
 /// ```rust
-/// use alpha_ta_core::indicators::ulcer_index;
+/// use finkit::indicators::ulcer_index;
 ///
 /// let close = vec![100.0, 95.0, 90.0, 92.0, 98.0, 105.0];
 /// let ui = ulcer_index(&close, 3).unwrap();
@@ -422,7 +422,7 @@ pub fn ulcer_index(close: &[f64], period: usize) -> Result<Array1<f64>> {
 ///
 /// # Example
 /// ```rust
-/// use alpha_ta_core::indicators::choppiness_index;
+/// use finkit::indicators::choppiness_index;
 ///
 /// let high = vec![10.0, 12.0, 14.0, 13.0, 15.0];
 /// let low = vec![8.0, 10.0, 11.0, 10.0, 12.0];
@@ -1438,7 +1438,7 @@ pub struct AtrTrailingStopResult {
 /// # Example
 ///
 /// ```
-/// use alpha_ta_core::indicators::atr_trailing_stop;
+/// use finkit::indicators::atr_trailing_stop;
 ///
 /// let high  = vec![10.0, 11.0, 12.0, 11.5, 13.0, 14.0, 13.5, 12.5, 11.5, 12.0];
 /// let low   = vec![ 9.0, 10.0, 11.0, 10.5, 12.0, 13.0, 12.5, 11.5, 10.5, 11.0];
@@ -1541,7 +1541,7 @@ pub struct ChandelierExitResult {
 /// # Example
 ///
 /// ```
-/// use alpha_ta_core::indicators::chandelier_exit;
+/// use finkit::indicators::chandelier_exit;
 ///
 /// let high  = vec![10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0];
 /// let low   = vec![ 8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0];
@@ -1658,7 +1658,7 @@ pub struct KeltnerChannelExtResult {
 /// # Example
 ///
 /// ```
-/// use alpha_ta_core::indicators::keltner_channel_ext;
+/// use finkit::indicators::keltner_channel_ext;
 ///
 /// let high  = vec![10.0, 12.0, 14.0, 13.0, 15.0, 16.0, 17.0, 18.0];
 /// let low   = vec![ 8.0, 10.0, 11.0, 10.0, 12.0, 13.0, 14.0, 15.0];

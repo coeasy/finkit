@@ -4,7 +4,7 @@ Includes both performance benchmark and numerical correctness validation
 """
 import numpy as np
 import time
-import alpha_ta
+import finkit
 import talib
 from datetime import datetime
 
@@ -137,61 +137,61 @@ print()
 # Define test cases
 test_cases = [
     # Overlap indicators
-    ("SMA", lambda: alpha_ta.sma(close, 20), lambda: talib.SMA(close, 20), "Overlap"),
-    ("EMA", lambda: alpha_ta.ema(close, 20), lambda: talib.EMA(close, 20), "Overlap"),
-    ("WMA", lambda: alpha_ta.wma(close, 20), lambda: talib.WMA(close, 20), "Overlap"),
-    ("DEMA", lambda: alpha_ta.dema(close, 20), lambda: talib.DEMA(close, 20), "Overlap"),
-    ("TEMA", lambda: alpha_ta.tema(close, 20), lambda: talib.TEMA(close, 20), "Overlap"),
-    ("KAMA", lambda: alpha_ta.kama(close, 20), lambda: talib.KAMA(close, 20), "Overlap"),
-    ("MAMA", lambda: alpha_ta.mama(close, 0.5, 0.05), lambda: talib.MAMA(close, 0.5, 0.05), "Overlap"),
-    ("T3", lambda: alpha_ta.t3(close, 20, 0.7), lambda: talib.T3(close, 20, 0.7), "Overlap"),
+    ("SMA", lambda: finkit.sma(close, 20), lambda: talib.SMA(close, 20), "Overlap"),
+    ("EMA", lambda: finkit.ema(close, 20), lambda: talib.EMA(close, 20), "Overlap"),
+    ("WMA", lambda: finkit.wma(close, 20), lambda: talib.WMA(close, 20), "Overlap"),
+    ("DEMA", lambda: finkit.dema(close, 20), lambda: talib.DEMA(close, 20), "Overlap"),
+    ("TEMA", lambda: finkit.tema(close, 20), lambda: talib.TEMA(close, 20), "Overlap"),
+    ("KAMA", lambda: finkit.kama(close, 20), lambda: talib.KAMA(close, 20), "Overlap"),
+    ("MAMA", lambda: finkit.mama(close, 0.5, 0.05), lambda: talib.MAMA(close, 0.5, 0.05), "Overlap"),
+    ("T3", lambda: finkit.t3(close, 20, 0.7), lambda: talib.T3(close, 20, 0.7), "Overlap"),
     
     # Price transforms
-    ("AVGPRICE", lambda: alpha_ta.avgprice(open_price, high, low, close), lambda: talib.AVGPRICE(open_price, high, low, close), "Price Transform"),
-    ("MEDPRICE", lambda: alpha_ta.medprice(high, low), lambda: talib.MEDPRICE(high, low), "Price Transform"),
-    ("TYPPRICE", lambda: alpha_ta.typprice(high, low, close), lambda: talib.TYPPRICE(high, low, close), "Price Transform"),
-    ("WCLPRICE", lambda: alpha_ta.wclprice(high, low, close), lambda: talib.WCLPRICE(high, low, close), "Price Transform"),
+    ("AVGPRICE", lambda: finkit.avgprice(open_price, high, low, close), lambda: talib.AVGPRICE(open_price, high, low, close), "Price Transform"),
+    ("MEDPRICE", lambda: finkit.medprice(high, low), lambda: talib.MEDPRICE(high, low), "Price Transform"),
+    ("TYPPRICE", lambda: finkit.typprice(high, low, close), lambda: talib.TYPPRICE(high, low, close), "Price Transform"),
+    ("WCLPRICE", lambda: finkit.wclprice(high, low, close), lambda: talib.WCLPRICE(high, low, close), "Price Transform"),
     
     # Momentum indicators
-    ("ADX", lambda: alpha_ta.adx(high, low, close, 14), lambda: talib.ADX(high, low, close, 14), "Momentum"),
-    ("APO", lambda: alpha_ta.apo(close, 12, 26), lambda: talib.APO(close, 12, 26), "Momentum"),
-    ("AROON", lambda: alpha_ta.aroon(high, low, 14), lambda: talib.AROON(high, low, 14), "Momentum"),
-    ("BOP", lambda: alpha_ta.bop(open_price, high, low, close), lambda: talib.BOP(open_price, high, low, close), "Momentum"),
-    ("CCI", lambda: alpha_ta.cci(high, low, close, 20), lambda: talib.CCI(high, low, close, 20), "Momentum"),
-    ("CMO", lambda: alpha_ta.cmo(close, 14), lambda: talib.CMO(close, 14), "Momentum"),
-    ("DX", lambda: alpha_ta.dx(high, low, close, 14), lambda: talib.DX(high, low, close, 14), "Momentum"),
-    ("MACD", lambda: alpha_ta.macd(close, 12, 26, 9), lambda: talib.MACD(close, 12, 26, 9), "Momentum"),
-    ("MFI", lambda: alpha_ta.mfi(high, low, close, volume, 14), lambda: talib.MFI(high, low, close, volume, 14), "Momentum"),
-    ("MINUS_DI", lambda: alpha_ta.minus_di(high, low, close, 14), lambda: talib.MINUS_DI(high, low, close, 14), "Momentum"),
-    ("MOM", lambda: alpha_ta.mom(close, 10), lambda: talib.MOM(close, 10), "Momentum"),
-    ("PLUS_DI", lambda: alpha_ta.plus_di(high, low, close, 14), lambda: talib.PLUS_DI(high, low, close, 14), "Momentum"),
-    ("ROC", lambda: alpha_ta.roc(close, 10), lambda: talib.ROC(close, 10), "Momentum"),
-    ("RSI", lambda: alpha_ta.rsi(close, 14), lambda: talib.RSI(close, 14), "Momentum"),
-    ("TRIX", lambda: alpha_ta.trix(close, 20), lambda: talib.TRIX(close, 20), "Momentum"),
-    ("WILLR", lambda: alpha_ta.willr(high, low, close, 14), lambda: talib.WILLR(high, low, close, 14), "Momentum"),
+    ("ADX", lambda: finkit.adx(high, low, close, 14), lambda: talib.ADX(high, low, close, 14), "Momentum"),
+    ("APO", lambda: finkit.apo(close, 12, 26), lambda: talib.APO(close, 12, 26), "Momentum"),
+    ("AROON", lambda: finkit.aroon(high, low, 14), lambda: talib.AROON(high, low, 14), "Momentum"),
+    ("BOP", lambda: finkit.bop(open_price, high, low, close), lambda: talib.BOP(open_price, high, low, close), "Momentum"),
+    ("CCI", lambda: finkit.cci(high, low, close, 20), lambda: talib.CCI(high, low, close, 20), "Momentum"),
+    ("CMO", lambda: finkit.cmo(close, 14), lambda: talib.CMO(close, 14), "Momentum"),
+    ("DX", lambda: finkit.dx(high, low, close, 14), lambda: talib.DX(high, low, close, 14), "Momentum"),
+    ("MACD", lambda: finkit.macd(close, 12, 26, 9), lambda: talib.MACD(close, 12, 26, 9), "Momentum"),
+    ("MFI", lambda: finkit.mfi(high, low, close, volume, 14), lambda: talib.MFI(high, low, close, volume, 14), "Momentum"),
+    ("MINUS_DI", lambda: finkit.minus_di(high, low, close, 14), lambda: talib.MINUS_DI(high, low, close, 14), "Momentum"),
+    ("MOM", lambda: finkit.mom(close, 10), lambda: talib.MOM(close, 10), "Momentum"),
+    ("PLUS_DI", lambda: finkit.plus_di(high, low, close, 14), lambda: talib.PLUS_DI(high, low, close, 14), "Momentum"),
+    ("ROC", lambda: finkit.roc(close, 10), lambda: talib.ROC(close, 10), "Momentum"),
+    ("RSI", lambda: finkit.rsi(close, 14), lambda: talib.RSI(close, 14), "Momentum"),
+    ("TRIX", lambda: finkit.trix(close, 20), lambda: talib.TRIX(close, 20), "Momentum"),
+    ("WILLR", lambda: finkit.willr(high, low, close, 14), lambda: talib.WILLR(high, low, close, 14), "Momentum"),
     
     # Volume indicators
-    ("AD", lambda: alpha_ta.ad(high, low, close, volume), lambda: talib.AD(high, low, close, volume), "Volume"),
-    ("ADOSC", lambda: alpha_ta.adosc(high, low, close, volume, 3, 10), lambda: talib.ADOSC(high, low, close, volume, 3, 10), "Volume"),
-    ("OBV", lambda: alpha_ta.obv(close, volume), lambda: talib.OBV(close, volume), "Volume"),
+    ("AD", lambda: finkit.ad(high, low, close, volume), lambda: talib.AD(high, low, close, volume), "Volume"),
+    ("ADOSC", lambda: finkit.adosc(high, low, close, volume, 3, 10), lambda: talib.ADOSC(high, low, close, volume, 3, 10), "Volume"),
+    ("OBV", lambda: finkit.obv(close, volume), lambda: talib.OBV(close, volume), "Volume"),
     
     # Volatility indicators
-    ("ATR", lambda: alpha_ta.atr(high, low, close, 14), lambda: talib.ATR(high, low, close, 14), "Volatility"),
-    ("NATR", lambda: alpha_ta.natr(high, low, close, 14), lambda: talib.NATR(high, low, close, 14), "Volatility"),
-    ("TRANGE", lambda: alpha_ta.trange(high, low, close), lambda: talib.TRANGE(high, low, close), "Volatility"),
+    ("ATR", lambda: finkit.atr(high, low, close, 14), lambda: talib.ATR(high, low, close, 14), "Volatility"),
+    ("NATR", lambda: finkit.natr(high, low, close, 14), lambda: talib.NATR(high, low, close, 14), "Volatility"),
+    ("TRANGE", lambda: finkit.trange(high, low, close), lambda: talib.TRANGE(high, low, close), "Volatility"),
     
     # Statistic indicators
-    ("BETA", lambda: alpha_ta.beta(close, close, 5), lambda: talib.BETA(close, close, 5), "Statistic"),
-    ("TSF", lambda: alpha_ta.tsf(close, 14), lambda: talib.TSF(close, 14), "Statistic"),
-    ("VAR", lambda: alpha_ta.var(close, 20, 1.0), lambda: talib.VAR(close, 20, 1.0), "Statistic"),
+    ("BETA", lambda: finkit.beta(close, close, 5), lambda: talib.BETA(close, close, 5), "Statistic"),
+    ("TSF", lambda: finkit.tsf(close, 14), lambda: talib.TSF(close, 14), "Statistic"),
+    ("VAR", lambda: finkit.var(close, 20, 1.0), lambda: talib.VAR(close, 20, 1.0), "Statistic"),
     
     # Cycle indicators
-    ("HT_DCPERIOD", lambda: alpha_ta.ht_dcperiod(close), lambda: talib.HT_DCPERIOD(close), "Cycle"),
-    ("HT_DCPHASE", lambda: alpha_ta.ht_dcphase(close), lambda: talib.HT_DCPHASE(close), "Cycle"),
-    ("HT_PHASOR", lambda: alpha_ta.ht_phasor(close), lambda: talib.HT_PHASOR(close), "Cycle"),
-    ("HT_SINE", lambda: alpha_ta.ht_sine(close), lambda: talib.HT_SINE(close), "Cycle"),
-    ("HT_TRENDLINE", lambda: alpha_ta.ht_trendline(close), lambda: talib.HT_TRENDLINE(close), "Cycle"),
-    ("HT_TRENDMODE", lambda: alpha_ta.ht_trendmode(close), lambda: talib.HT_TRENDMODE(close), "Cycle"),
+    ("HT_DCPERIOD", lambda: finkit.ht_dcperiod(close), lambda: talib.HT_DCPERIOD(close), "Cycle"),
+    ("HT_DCPHASE", lambda: finkit.ht_dcphase(close), lambda: talib.HT_DCPHASE(close), "Cycle"),
+    ("HT_PHASOR", lambda: finkit.ht_phasor(close), lambda: talib.HT_PHASOR(close), "Cycle"),
+    ("HT_SINE", lambda: finkit.ht_sine(close), lambda: talib.HT_SINE(close), "Cycle"),
+    ("HT_TRENDLINE", lambda: finkit.ht_trendline(close), lambda: talib.HT_TRENDLINE(close), "Cycle"),
+    ("HT_TRENDMODE", lambda: finkit.ht_trendmode(close), lambda: talib.HT_TRENDMODE(close), "Cycle"),
 ]
 
 print("正在运行性能测试和数值验证...")

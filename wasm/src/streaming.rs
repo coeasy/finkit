@@ -1,7 +1,7 @@
 use wasm_bindgen::prelude::*;
-use alpha_ta_core::streaming::StreamingIndicator;
-use alpha_ta_core::streaming::indicators::*;
-use alpha_ta_core::streaming::OhlcvBar;
+use finkit::streaming::StreamingIndicator;
+use finkit::streaming::indicators::*;
+use finkit::streaming::OhlcvBar;
 
 macro_rules! wasm_streaming_f64 {
     ($name:ident, $core:ty, $doc:expr) => {

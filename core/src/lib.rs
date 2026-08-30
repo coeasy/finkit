@@ -67,7 +67,7 @@ pub mod talib_ffi;
 #[cfg(feature = "std")]
 /// Utility functions: input validation, smoothing factors, and array helpers.
 pub mod utils;
-#[cfg(feature = "alpha-ta-polars")]
+#[cfg(feature = "finkit-polars")]
 /// Polars DataFrame zero-copy integration for technical analysis.
 pub mod polars_ext;
 #[cfg(feature = "rayon")]
@@ -92,7 +92,7 @@ pub mod selectors;
 
 // ─────────────────── O-1: tracing re-exports ───────────────────
 //
-// When the `tracing` feature is enabled, downstream users can `use alpha_ta_core::info`
+// When the `tracing` feature is enabled, downstream users can `use finkit::info`
 // etc. to instrument their integration code, and the library's own spans (added via
 // `#[instrument]`) become visible once a `tracing-subscriber` is initialized.
 #[cfg(feature = "tracing")]

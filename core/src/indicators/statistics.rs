@@ -19,7 +19,7 @@ use ndarray::Array1;
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::statistics::avgdev;
+/// use finkit::indicators::statistics::avgdev;
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let result = avgdev(&data, 5).unwrap();
 /// assert_eq!(result.len(), 10);
@@ -91,7 +91,7 @@ pub fn avgdev(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::zscore;
+/// use finkit::indicators::zscore;
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let result = zscore(&data, 5).unwrap();
 /// ```
@@ -159,7 +159,7 @@ pub fn zscore(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::percent_rank;
+/// use finkit::indicators::percent_rank;
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
 /// let result = percent_rank(&data, 3).unwrap();
 /// ```
@@ -240,7 +240,7 @@ pub fn pr(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::beta;
+/// use finkit::indicators::beta;
 /// let stock = vec![100.0, 101.0, 102.0, 103.0, 104.0, 105.0];
 /// let market = vec![3000.0, 3010.0, 3020.0, 3015.0, 3030.0, 3040.0];
 /// let result = beta(&stock, &market, 5).unwrap();
@@ -333,7 +333,7 @@ pub fn beta(asset: &[f64], benchmark: &[f64], timeperiod: usize) -> Result<Array
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::correlation;
+/// use finkit::indicators::correlation;
 /// let x = vec![1.0, 2.0, 3.0, 4.0, 5.0];
 /// let y = vec![2.0, 4.0, 6.0, 8.0, 10.0];
 /// let result = correlation(&x, &y, 3).unwrap();
@@ -422,7 +422,7 @@ pub fn correlation(input_a: &[f64], input_b: &[f64], timeperiod: usize) -> Resul
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let result = indicators::std_dev(&data, 5, 1.0).unwrap();
@@ -482,7 +482,7 @@ pub fn std_dev(input: &[f64], timeperiod: usize, nb_dev: f64) -> Result<Array1<f
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let result = indicators::var(&data, 5, 1.0).unwrap();
@@ -545,7 +545,7 @@ pub fn var(input: &[f64], period: usize, nb_dev: f64) -> Result<Array1<f64>> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let result = indicators::linear_reg(&data, 5).unwrap();
@@ -573,7 +573,7 @@ pub fn linear_reg(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::tsf;
+/// use finkit::indicators::tsf;
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let result = tsf(&data, 5).unwrap();
 /// ```
@@ -645,7 +645,7 @@ pub fn tsf(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators::statistics::linearreg;
+/// use finkit::indicators::statistics::linearreg;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
 /// let result = linearreg(&data, 3).unwrap();
@@ -669,7 +669,7 @@ pub fn linearreg(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators::statistics::linearreg_angle;
+/// use finkit::indicators::statistics::linearreg_angle;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
 /// let result = linearreg_angle(&data, 3).unwrap();
@@ -693,7 +693,7 @@ pub fn linearreg_angle(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators::statistics::linearreg_intercept;
+/// use finkit::indicators::statistics::linearreg_intercept;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
 /// let result = linearreg_intercept(&data, 3).unwrap();
@@ -717,7 +717,7 @@ pub fn linearreg_intercept(input: &[f64], period: usize) -> Result<Array1<f64>> 
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::indicators::statistics::linearreg_slope;
+/// use finkit::indicators::statistics::linearreg_slope;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
 /// let result = linearreg_slope(&data, 3).unwrap();
@@ -748,7 +748,7 @@ pub fn linearreg_slope(input: &[f64], period: usize) -> Result<Array1<f64>> {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::statistics::skewness;
+/// use finkit::indicators::statistics::skewness;
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let r = skewness(&data, 5).unwrap();
 /// assert_eq!(r.len(), 10);
@@ -817,7 +817,7 @@ pub fn skewness(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::statistics::kurtosis;
+/// use finkit::indicators::statistics::kurtosis;
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let r = kurtosis(&data, 5).unwrap();
 /// assert_eq!(r.len(), 10);

@@ -22,8 +22,8 @@
 //! # Example
 //!
 //! ```
-//! use alpha_ta_core::batch::{IndicatorJob, run_parallel};
-//! use alpha_ta_core::indicators;
+//! use finkit::batch::{IndicatorJob, run_parallel};
+//! use finkit::indicators;
 //!
 //! let close: Vec<f64> = (0..1024).map(|i| 100.0 + (i as f64) * 0.01).collect();
 //!

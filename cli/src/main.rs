@@ -4,9 +4,9 @@ mod csv_io;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use csv_io::{read_close_input, read_ohlcv_input};
-use alpha_ta_core::indicators;
-use alpha_ta_core::math::moving_avg;
-use alpha_ta_core::patterns::{candlestick, chart};
+use finkit::indicators;
+use finkit::math::moving_avg;
+use finkit::patterns::{candlestick, chart};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -193,7 +193,7 @@ enum Commands {
     },
     /// Execute a TongDaXin-compatible formula (requires OHLCV input)
     ///
-    /// Usage: alpha-ta-cli formula "MA(CLOSE, 5)" --input data.csv
+    /// Usage: finkit-cli formula "MA(CLOSE, 5)" --input data.csv
     Formula {
         /// 公式字符串，例如 `MA(CLOSE, 5)` 或 `MA(C, 5)`
         formula: Option<String>,
@@ -211,7 +211,7 @@ enum Commands {
     },
     /// Streaming/incremental indicator computation (O(1) per bar)
     ///
-    /// Usage: alpha-ta-cli streaming sma --input data.csv --period 14
+    /// Usage: finkit-cli streaming sma --input data.csv --period 14
     Streaming {
         /// Streaming indicator name: sma, ema, rsi, atr, macd, boll, vwap, obv, adx, stoch, supertrend, ...
         indicator: String,
@@ -238,7 +238,7 @@ enum Commands {
     },
     /// Apply data transformations (log-return, z-score, scaling, etc.)
     ///
-    /// Usage: alpha-ta-cli transform log_return --input data.csv
+    /// Usage: finkit-cli transform log_return --input data.csv
     Transform {
         /// Transform name: log_return, pct_change, zscore, standard_scaler, minmax_scaler, rank, diff
         transform: String,
@@ -254,7 +254,7 @@ enum Commands {
     },
     /// Feature engineering pipeline (alpha factors, cross features, etc.)
     ///
-    /// Usage: alpha-ta-cli features alpha_pack --input data.csv
+    /// Usage: finkit-cli features alpha_pack --input data.csv
     Features {
         /// Feature pack name: alpha_pack (default pack of alpha factors)
         pack: String,
@@ -270,7 +270,7 @@ enum Commands {
     },
     /// Parameter sweep over an indicator
     ///
-    /// Usage: alpha-ta-cli sweep sma --input data.csv --period-min 5 --period-max 50
+    /// Usage: finkit-cli sweep sma --input data.csv --period-min 5 --period-max 50
     Sweep {
         /// Indicator to sweep: sma, ema, rsi, atr, wma
         indicator: String,
@@ -292,7 +292,7 @@ enum Commands {
     },
     /// Generate a chart from OHLCV data (SVG/HTML/JSON)
     ///
-    /// Usage: alpha-ta-cli chart --input data.csv --format svg --output chart.svg
+    /// Usage: finkit-cli chart --input data.csv --format svg --output chart.svg
     Chart {
         #[arg(short, long)]
         input: PathBuf,
@@ -330,7 +330,7 @@ enum Commands {
     },
     /// Browse, search, and render formula templates
     ///
-    /// Usage: alpha-ta-cli template list | search macd | render <name> --input data.csv
+    /// Usage: finkit-cli template list | search macd | render <name> --input data.csv
     Template {
         /// Action: list, search, render, info
         action: String,
@@ -596,7 +596,7 @@ fn main() {
                 (Some(f), _) => f,
                 (None, Some(e)) => e,
                 (None, None) => {
-                    eprintln!("Formula expression required: positional `alpha-ta-cli formula \"MA(C,5)\" -i data.csv` or `--expr MA(C,5)`");
+                    eprintln!("Formula expression required: positional `finkit-cli formula \"MA(C,5)\" -i data.csv` or `--expr MA(C,5)`");
                     std::process::exit(1);
                 }
             };
@@ -607,21 +607,21 @@ fn main() {
             let close_arr = ndarray::Array1::from_vec(ohlcv.close);
             let volume_arr = ndarray::Array1::from_vec(ohlcv.volume);
 
-            let mut ctx = alpha_ta_core::formula::FormulaContext::new(
+            let mut ctx = finkit::formula::FormulaContext::new(
                 open_arr, high_arr, low_arr, close_arr, volume_arr, None,
             );
-            let mut engine = alpha_ta_core::formula::FormulaEngine::new();
+            let mut engine = finkit::formula::FormulaEngine::new();
 
-            let dialect = alpha_ta_core::formula::FormulaDialect::from_str(&dialect)
-                .unwrap_or(alpha_ta_core::formula::FormulaDialect::AlphaTA);
+            let dialect = finkit::formula::FormulaDialect::from_str(&dialect)
+                .unwrap_or(finkit::formula::FormulaDialect::AlphaTA);
             let result = match dialect {
-                alpha_ta_core::formula::FormulaDialect::AlphaTA => {
+                finkit::formula::FormulaDialect::AlphaTA => {
                     engine.eval(&expr_str, &mut ctx)
                 }
-                alpha_ta_core::formula::FormulaDialect::Pine => {
-                    let ast = alpha_ta_core::formula::parse_formula_with_dialect(
+                finkit::formula::FormulaDialect::Pine => {
+                    let ast = finkit::formula::parse_formula_with_dialect(
                         &expr_str,
-                        alpha_ta_core::formula::FormulaDialect::Pine,
+                        finkit::formula::FormulaDialect::Pine,
                     )
                     .map_err(|e| {
                         eprintln!("Pine parse/map error: {e}");
@@ -667,8 +667,8 @@ fn main() {
 
 // ─────────────────────── CLI subcommand implementations ───────────────────────
 
-use alpha_ta_core::streaming::{StreamingIndicator, OhlcvBar};
-use alpha_ta_core::transforms::{LogReturn, PctChange, ZScore, StandardScaler, MinMaxScaler, Rank, PercentileRank, Diff, DiffN, RollingMean, RollingStd, RollingSum, Transform};
+use finkit::streaming::{StreamingIndicator, OhlcvBar};
+use finkit::transforms::{LogReturn, PctChange, ZScore, StandardScaler, MinMaxScaler, Rank, PercentileRank, Diff, DiffN, RollingMean, RollingStd, RollingSum, Transform};
 
 fn run_streaming(
     indicator: &str,
@@ -681,7 +681,7 @@ fn run_streaming(
     output: Option<String>,
     format: OutputFormat,
 ) {
-    use alpha_ta_core::streaming::indicators::*;
+    use finkit::streaming::indicators::*;
     let ohlcv = read_ohlcv_input(Some(input)).expect("Failed to read OHLCV input");
     let close = ohlcv.close.clone();
     let high = ohlcv.high.clone();
@@ -810,7 +810,7 @@ fn run_features(
     output: Option<String>,
     format: OutputFormat,
 ) {
-    use alpha_ta_core::math::moving_avg;
+    use finkit::math::moving_avg;
     let ohlcv = read_ohlcv_input(Some(input)).expect("Failed to read OHLCV input");
     let close = &ohlcv.close;
     let high = &ohlcv.high;
@@ -869,7 +869,7 @@ fn run_sweep(
     output: Option<String>,
     format: OutputFormat,
 ) {
-    use alpha_ta_core::math::moving_avg;
+    use finkit::math::moving_avg;
     let data = read_close_input(input).expect("Failed to read input");
     if period_step == 0 {
         eprintln!("--period-step must be > 0");
@@ -970,9 +970,9 @@ fn run_chart(
     title: Option<&str>,
     output: Option<String>,
 ) {
-    use alpha_ta_visualization::config::ChartConfig;
-    use alpha_ta_visualization::data::KlineData;
-    use alpha_ta_visualization::renderer::{ChartRenderer, Renderer};
+    use finkit_visualization::config::ChartConfig;
+    use finkit_visualization::data::KlineData;
+    use finkit_visualization::renderer::{ChartRenderer, Renderer};
     let ohlcv = read_ohlcv_input(Some(input)).expect("Failed to read OHLCV input");
     let mut cfg = ChartConfig::default();
     if let Some(t) = title {
@@ -1149,7 +1149,7 @@ fn run_template(
     output: Option<String>,
     format: OutputFormat,
 ) {
-    use alpha_ta_core::formula::{FormulaEngine, FormulaTemplates};
+    use finkit::formula::{FormulaEngine, FormulaTemplates};
     let mut engine = FormulaEngine::new();
     let templates = FormulaTemplates::new();
     match action {
@@ -1255,7 +1255,7 @@ fn run_template(
             let low_arr = ndarray::Array1::from_vec(ohlcv.low);
             let close_arr = ndarray::Array1::from_vec(ohlcv.close);
             let volume_arr = ndarray::Array1::from_vec(ohlcv.volume);
-            let mut ctx = alpha_ta_core::formula::FormulaContext::new(
+            let mut ctx = finkit::formula::FormulaContext::new(
                 open_arr, high_arr, low_arr, close_arr, volume_arr, None,
             );
             match engine.eval(&source.0, &mut ctx) {

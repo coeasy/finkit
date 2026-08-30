@@ -1,8 +1,8 @@
 //! Comprehensive accuracy test comparing AlphaTA with reference values
 //! Tests all major indicators to identify numerical discrepancies
 
-use alpha_ta_core::indicators;
-use alpha_ta_core::math::moving_avg;
+use finkit::indicators;
+use finkit::math::moving_avg;
 use criterion::{criterion_group, criterion_main, Criterion};
 
 fn generate_test_data(n: usize) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {

@@ -572,7 +572,7 @@ cargo check --workspace
 python scripts/sync_bindings.py --check
 
 # 3. 注册表一致性
-cargo test -p alpha-ta-core --lib test_docs_json_matches_registry
+cargo test -p finkit --lib test_docs_json_matches_registry
 
 # 4. 审计脚本（本轮已修正）
 python scripts/_a5_scan.py        # 生产 panic 必须恒为 0

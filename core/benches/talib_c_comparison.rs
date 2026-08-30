@@ -4,10 +4,10 @@
 //! Run with: cargo bench --bench talib_c_comparison --features talib-c
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use alpha_ta_core::indicators;
+use finkit::indicators;
 #[allow(unused_imports)]
-use alpha_ta_core::math::moving_avg;
-use alpha_ta_core::talib_ffi::*;
+use finkit::math::moving_avg;
+use finkit::talib_ffi::*;
 
 const DATA_LEN: usize = 10_000;
 
@@ -899,7 +899,7 @@ fn bench_statistics(c: &mut Criterion) {
 
     // 33. LINEARREG_SLOPE
     group.bench_function("FTA_LINREG_SLOPE_14", |b| {
-        b.iter(|| black_box(alpha_ta_core::math::linear::linreg_slope(&close, 14).unwrap()))
+        b.iter(|| black_box(finkit::math::linear::linreg_slope(&close, 14).unwrap()))
     });
     group.bench_function("TALib_LINREG_SLOPE_14", |b| {
         b.iter(|| black_box(ta_linearreg_slope(&close, 14)))

@@ -8,16 +8,16 @@
 
 use numpy::PyReadonlyArray1;
 use pyo3::prelude::*;
-use alpha_ta_core::indicators;
-use alpha_ta_core::indicators::PivotMethod;
-use alpha_ta_core::math::moving_avg;
-use alpha_ta_core::patterns::{candlestick, chart};
-use alpha_ta_visualization::config::{
+use ::finkit::indicators;
+use ::finkit::indicators::PivotMethod;
+use ::finkit::math::moving_avg;
+use ::finkit::patterns::{candlestick, chart};
+use finkit_visualization::config::{
     ChartConfig, ChartConfigBuilder, IndicatorConfig, IndicatorType,
 };
-use alpha_ta_visualization::data::KlineData;
-use alpha_ta_visualization::error::VisualizationError;
-use alpha_ta_visualization::language::Language;
+use finkit_visualization::data::KlineData;
+use finkit_visualization::error::VisualizationError;
+use finkit_visualization::language::Language;
 
 mod streaming;
 mod sweep;
@@ -27,7 +27,7 @@ mod features;
 #[cfg(feature = "formula")]
 use ndarray::Array1;
 #[cfg(feature = "formula")]
-use alpha_ta_core::formula::{
+use ::finkit::formula::{
     parse_formula, parse_formula_with_dialect, FormulaContext, FormulaDialect, FormulaEngine,
     FormulaError,
 };
@@ -2412,7 +2412,7 @@ pub fn formula_eval_draw(
     volume: &Bound<'_, PyAny>,
     amount: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<PyObject> {
-    use alpha_ta_core::formula::DrawCommand;
+    use ::finkit::formula::DrawCommand;
 
     let open_vec = extract_array_bound(open)?;
     let high_vec = extract_array_bound(high)?;
@@ -2626,7 +2626,7 @@ pub fn formula_eval_debug(
 #[pyfunction]
 #[cfg(feature = "formula")]
 pub fn formula_get_template(py: Python<'_>, name: &str) -> PyResult<PyObject> {
-    use alpha_ta_core::formula::FormulaEngine;
+    use ::finkit::formula::FormulaEngine;
 
     let dict = pyo3::types::PyDict::new(py);
     let engine = FormulaEngine::new();
@@ -2671,7 +2671,7 @@ pub fn formula_get_template(py: Python<'_>, name: &str) -> PyResult<PyObject> {
 #[pyfunction]
 #[cfg(feature = "formula")]
 pub fn formula_search_templates(py: Python<'_>, keyword: &str) -> PyResult<PyObject> {
-    use alpha_ta_core::formula::FormulaEngine;
+    use ::finkit::formula::FormulaEngine;
 
     let engine = FormulaEngine::new();
     let templates = engine.search_templates(keyword);
@@ -2709,7 +2709,7 @@ pub fn formula_search_templates(py: Python<'_>, keyword: &str) -> PyResult<PyObj
 #[pyfunction]
 #[cfg(feature = "formula")]
 pub fn formula_list_categories(py: Python<'_>) -> PyResult<PyObject> {
-    use alpha_ta_core::formula::templates::FormulaTemplates;
+    use ::finkit::formula::templates::FormulaTemplates;
 
     let templates = FormulaTemplates::new();
     let list = pyo3::types::PyList::empty(py);
@@ -2901,7 +2901,7 @@ impl PyKlineChart {
         let config = self.config.clone();
         let indicators = self.indicators.clone();
         let svg = py.allow_threads(|| -> PyResult<String> {
-            let mut chart = alpha_ta_visualization::chart::KlineChart::new(config);
+            let mut chart = finkit_visualization::chart::KlineChart::new(config);
             chart
                 .build_draw_list(&data, &indicators)
                 .map_err(convert_vis_error)?;
@@ -2916,7 +2916,7 @@ impl PyKlineChart {
         let config = self.config.clone();
         let indicators = self.indicators.clone();
         let html = py.allow_threads(|| -> PyResult<String> {
-            let mut chart = alpha_ta_visualization::chart::KlineChart::new(config);
+            let mut chart = finkit_visualization::chart::KlineChart::new(config);
             chart
                 .build_draw_list(&data, &indicators)
                 .map_err(convert_vis_error)?;
@@ -2931,7 +2931,7 @@ impl PyKlineChart {
         let config = self.config.clone();
         let indicators = self.indicators.clone();
         py.allow_threads(|| {
-            let mut chart = alpha_ta_visualization::chart::KlineChart::new(config);
+            let mut chart = finkit_visualization::chart::KlineChart::new(config);
             chart
                 .build_draw_list(&data, &indicators)
                 .map_err(convert_vis_error)?;
@@ -3747,7 +3747,7 @@ fn compute_single_indicator(
 /// - Chart Patterns (Head & Shoulders, Double Top/Bottom, etc.)
 /// - Advanced Indicators (Ichimoku, Donchian, Elder-Ray, Pivot Points, Fibonacci)
 #[pymodule]
-fn alpha_ta(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn finkit(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyKlineData>()?;
     m.add_class::<PyKlineChart>()?;
 

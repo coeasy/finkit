@@ -1,9 +1,9 @@
 //! Benchmark for `ema_multi_periods` vs N×single ema (D.1 / D.7 FMA optimization).
 //!
-//! Run with: cargo bench -p alpha-ta-core --bench ema_multi_periods_bench
+//! Run with: cargo bench -p finkit --bench ema_multi_periods_bench
 
-use alpha_ta_core::indicators::ema;
-use alpha_ta_core::math::moving_avg::ema_multi_periods;
+use finkit::indicators::ema;
+use finkit::math::moving_avg::ema_multi_periods;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 
 fn bench_ema_multi_periods(c: &mut Criterion) {

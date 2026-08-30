@@ -639,8 +639,8 @@ mod tests {
         let s = Scale::linear_scale(0.0, 100.0, 0.0, 800.0);
         let ticks = s.nice_ticks(5);
         assert!(ticks.len() >= 5);
-        assert!(*ticks.first().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/geometry.rs (A5 governance)") <= 0.0);
-        assert!(*ticks.last().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/geometry.rs (A5 governance)") >= 100.0);
+        assert!(*ticks.first().expect("finkit-visualization: unexpected None/Err in visualization/src/geometry.rs (A5 governance)") <= 0.0);
+        assert!(*ticks.last().expect("finkit-visualization: unexpected None/Err in visualization/src/geometry.rs (A5 governance)") >= 100.0);
     }
 
     #[test]
@@ -648,8 +648,8 @@ mod tests {
         let s = Scale::linear_scale(0.0, 1.0, 0.0, 800.0);
         let ticks = s.nice_ticks(5);
         assert!(ticks.len() >= 5);
-        assert!(*ticks.first().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/geometry.rs (A5 governance)") <= 0.0);
-        assert!(*ticks.last().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/geometry.rs (A5 governance)") >= 1.0);
+        assert!(*ticks.first().expect("finkit-visualization: unexpected None/Err in visualization/src/geometry.rs (A5 governance)") <= 0.0);
+        assert!(*ticks.last().expect("finkit-visualization: unexpected None/Err in visualization/src/geometry.rs (A5 governance)") >= 1.0);
     }
 
     #[test]
@@ -756,7 +756,7 @@ mod tests {
         let p2 = Point::new(8.0, 8.0);
         let result = ClipRect::clip_line(&p1, &p2, &rect);
         assert!(result.is_some());
-        let (r1, r2) = result.expect("alpha-ta-visualization: unexpected None/Err in visualization/src/geometry.rs (A5 governance)");
+        let (r1, r2) = result.expect("finkit-visualization: unexpected None/Err in visualization/src/geometry.rs (A5 governance)");
         assert!((r1.x - 2.0).abs() < 1e-10);
         assert!((r1.y - 2.0).abs() < 1e-10);
         assert!((r2.x - 8.0).abs() < 1e-10);
@@ -779,7 +779,7 @@ mod tests {
         let p2 = Point::new(15.0, 5.0);
         let result = ClipRect::clip_line(&p1, &p2, &rect);
         assert!(result.is_some());
-        let (r1, r2) = result.expect("alpha-ta-visualization: unexpected None/Err in visualization/src/geometry.rs (A5 governance)");
+        let (r1, r2) = result.expect("finkit-visualization: unexpected None/Err in visualization/src/geometry.rs (A5 governance)");
         assert!((r1.x - 0.0).abs() < 1e-10);
         assert!((r1.y - 5.0).abs() < 1e-10);
         assert!((r2.x - 10.0).abs() < 1e-10);
@@ -793,7 +793,7 @@ mod tests {
         let p2 = Point::new(15.0, 15.0);
         let result = ClipRect::clip_line(&p1, &p2, &rect);
         assert!(result.is_some());
-        let (r1, r2) = result.expect("alpha-ta-visualization: unexpected None/Err in visualization/src/geometry.rs (A5 governance)");
+        let (r1, r2) = result.expect("finkit-visualization: unexpected None/Err in visualization/src/geometry.rs (A5 governance)");
         assert!((r1.x - 0.0).abs() < 1e-10);
         assert!((r1.y - 0.0).abs() < 1e-10);
         assert!((r2.x - 10.0).abs() < 1e-10);
@@ -816,7 +816,7 @@ mod tests {
         let p2 = Point::new(15.0, 8.0);
         let result = ClipRect::clip_line(&p1, &p2, &rect);
         assert!(result.is_some());
-        let (r1, r2) = result.expect("alpha-ta-visualization: unexpected None/Err in visualization/src/geometry.rs (A5 governance)");
+        let (r1, r2) = result.expect("finkit-visualization: unexpected None/Err in visualization/src/geometry.rs (A5 governance)");
         assert!((r1.x - 0.0).abs() < 1e-10);
         assert!((r2.x - 10.0).abs() < 1e-10);
     }
@@ -837,8 +837,8 @@ mod tests {
         let s = Scale::linear_scale(-50.0, 50.0, 0.0, 800.0);
         let ticks = s.nice_ticks(5);
         assert!(ticks.len() >= 5);
-        assert!(*ticks.first().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/geometry.rs (A5 governance)") <= -50.0);
-        assert!(*ticks.last().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/geometry.rs (A5 governance)") >= 50.0);
+        assert!(*ticks.first().expect("finkit-visualization: unexpected None/Err in visualization/src/geometry.rs (A5 governance)") <= -50.0);
+        assert!(*ticks.last().expect("finkit-visualization: unexpected None/Err in visualization/src/geometry.rs (A5 governance)") >= 50.0);
         assert!(ticks.contains(&0.0));
     }
 
@@ -847,8 +847,8 @@ mod tests {
         let s = Scale::linear_scale(0.0, 0.01, 0.0, 800.0);
         let ticks = s.nice_ticks(5);
         assert!(ticks.len() >= 5);
-        assert!(*ticks.first().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/geometry.rs (A5 governance)") <= 0.0);
-        assert!(*ticks.last().expect("alpha-ta-visualization: unexpected None/Err in visualization/src/geometry.rs (A5 governance)") >= 0.01);
+        assert!(*ticks.first().expect("finkit-visualization: unexpected None/Err in visualization/src/geometry.rs (A5 governance)") <= 0.0);
+        assert!(*ticks.last().expect("finkit-visualization: unexpected None/Err in visualization/src/geometry.rs (A5 governance)") >= 0.01);
     }
 
     #[test]
@@ -894,7 +894,7 @@ mod tests {
         let p2 = Point::new(5.0, 15.0);
         let result = ClipRect::clip_line(&p1, &p2, &rect);
         assert!(result.is_some());
-        let (r1, r2) = result.expect("alpha-ta-visualization: unexpected None/Err in visualization/src/geometry.rs (A5 governance)");
+        let (r1, r2) = result.expect("finkit-visualization: unexpected None/Err in visualization/src/geometry.rs (A5 governance)");
         assert!((r1.x - 5.0).abs() < 1e-10);
         assert!((r1.y - 0.0).abs() < 1e-10);
         assert!((r2.x - 5.0).abs() < 1e-10);
@@ -908,7 +908,7 @@ mod tests {
         let p2 = Point::new(15.0, 5.0);
         let result = ClipRect::clip_line(&p1, &p2, &rect);
         assert!(result.is_some());
-        let (r1, r2) = result.expect("alpha-ta-visualization: unexpected None/Err in visualization/src/geometry.rs (A5 governance)");
+        let (r1, r2) = result.expect("finkit-visualization: unexpected None/Err in visualization/src/geometry.rs (A5 governance)");
         assert!((r1.x - 0.0).abs() < 1e-10);
         assert!((r1.y - 5.0).abs() < 1e-10);
         assert!((r2.x - 10.0).abs() < 1e-10);

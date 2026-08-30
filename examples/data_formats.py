@@ -221,14 +221,14 @@ def cross_convert(rows: List[Dict[str, Any]]) -> None:
 # AlphaTA integration (optional)
 # ---------------------------------------------------------------------------
 
-def example_alpha_ta_compute(rows: List[Dict[str, Any]]) -> None:
-    ta = _optional_import("alpha_ta")
+def example_finkit_compute(rows: List[Dict[str, Any]]) -> None:
+    ta = _optional_import("finkit")
     if ta is None:
         print("=== AlphaTA compute - SKIPPED (alpha_ta not installed) ===")
         return
 
     print("=== AlphaTA indicator on loaded OHLCV ===")
-    import alpha_ta as ta
+    import finkit as ta
 
     closes = [float(r["close"]) for r in rows]
     rsi = ta.rsi(closes, timeperiod=5)
@@ -263,7 +263,7 @@ def run_check() -> bool:
         errors.append("polars row count mismatch")
 
     cross_convert(rows)
-    example_alpha_ta_compute(rows)
+    example_finkit_compute(rows)
 
     print()
     if errors:
@@ -296,7 +296,7 @@ def main() -> int:
     example_pandas(rows)
     example_polars(rows)
     cross_convert(rows)
-    example_alpha_ta_compute(rows)
+    example_finkit_compute(rows)
     print("\nDone.")
     return 0
 

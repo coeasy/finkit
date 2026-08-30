@@ -1,6 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use ndarray::Array1;
-use alpha_ta_core::formula::{
+use finkit::formula::{
     compile_to_bytecode, parse_formula, BytecodeVM, FormulaContext, FormulaEngine, FormulaExecutor,
     FormulaOptimizer, JitCompiler, SimdOps,
 };
@@ -930,11 +930,11 @@ fn benchmark_jma(c: &mut Criterion) {
         .collect();
 
     group.bench_function("jma_7_10000", |b| {
-        b.iter(|| black_box(alpha_ta_core::indicators::jma(&data, 7, 0.0, 2.0).unwrap()))
+        b.iter(|| black_box(finkit::indicators::jma(&data, 7, 0.0, 2.0).unwrap()))
     });
 
     group.bench_function("jma_14_10000", |b| {
-        b.iter(|| black_box(alpha_ta_core::indicators::jma(&data, 14, 0.0, 2.0).unwrap()))
+        b.iter(|| black_box(finkit::indicators::jma(&data, 14, 0.0, 2.0).unwrap()))
     });
 
     group.finish();

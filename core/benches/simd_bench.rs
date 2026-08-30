@@ -1,7 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use alpha_ta_core::math::simd_kernels;
-use alpha_ta_core::math::simd_ops;
-use alpha_ta_core::formula::SimdOps;
+use finkit::math::simd_kernels;
+use finkit::math::simd_ops;
+use finkit::formula::SimdOps;
 
 const DATA_LEN: usize = 10_000;
 const KERNEL_LEN: usize = 100_000;

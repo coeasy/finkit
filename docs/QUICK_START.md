@@ -6,7 +6,7 @@
 
 | 语言 | 包名/方式 | 安装 |
 |------|-----------|------|
-| Rust | `alpha-ta-core` | `cargo add alpha-ta-core` / 或 `cargo add --path core` |
+| Rust | `finkit` | `cargo add finkit` / 或 `cargo add --path core` |
 | Python | `alpha_ta`（PyO3）| `pip install alpha-ta` 或 `cd ffi/python-binding && maturin develop` |
 | Node | `@alphata/core`（napi-rs）| `npm install @alphata/core` |
 | Go | `github.com/coeasy/finkit/go/ta` | `go get github.com/coeasy/finkit/go/ta` |
@@ -58,7 +58,7 @@ alpha-ta-cli macd -i data.csv --fast 12 --slow 26 --signal 9
 ## 4. 验证安装
 
 ```bash
-cargo test -p alpha-ta-core        # Rust 冒烟
+cargo test -p finkit        # Rust 冒烟
 make bench-vs-talib                # 与 TA-Lib C 对照跑分
 ```
 

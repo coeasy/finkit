@@ -43,8 +43,8 @@ pub struct SweepEngineResult {
 /// # Example
 ///
 /// ```
-/// use alpha_ta_core::indicators::sweep_engine::{SweepEngine, ParamRange};
-/// use alpha_ta_core::indicators::sweepable::SmaSweepable;
+/// use finkit::indicators::sweep_engine::{SweepEngine, ParamRange};
+/// use finkit::indicators::sweepable::SmaSweepable;
 ///
 /// let data: Vec<f64> = (0..200).map(|i| 50.0 + (i as f64 * 0.1).sin() * 10.0).collect();
 /// let engine = SweepEngine::new();

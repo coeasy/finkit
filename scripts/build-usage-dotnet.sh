@@ -54,8 +54,8 @@ RUNTIMES_DIR="${OUT_DIR}/runtimes/${RID}/native"
 mkdir -p "${RUNTIMES_DIR}"
 
 # 1. Build the native cdylib ---------------------------------------------
-echo "[build-usage-dotnet] cargo build --release -p alpha-ta-dotnet"
-( cd "${ROOT}" && cargo build --release -p alpha-ta-dotnet )
+echo "[build-usage-dotnet] cargo build --release -p finkit-dotnet"
+( cd "${ROOT}" && cargo build --release -p finkit-dotnet )
 
 if [[ ! -f "${ROOT}/target/release/${NATIVE}" ]]; then
   echo "[build-usage-dotnet] ERROR: native lib not found: ${NATIVE}" >&2
@@ -86,7 +86,7 @@ else
 fi
 
 echo "[build-usage-dotnet] dotnet pack -c Release"
-( cd "${BINDING_DIR}/src/AlphaTA" && dotnet pack -c Release -o "$(to_win "${OUT_DIR}")" -p:Version=1.0.0 )
+( cd "${BINDING_DIR}/src/Finkit" && dotnet pack -c Release -o "$(to_win "${OUT_DIR}")" -p:Version=1.0.0 )
 
 # Drop the staging tree
 rm -rf "${LINK_TARGET}"

@@ -9,7 +9,7 @@
 //! # Example
 //!
 //! ```
-//! use alpha_ta_core::risk::{sharpe_ratio, max_drawdown, var_historical};
+//! use finkit::risk::{sharpe_ratio, max_drawdown, var_historical};
 //!
 //! let returns = vec![0.01, -0.02, 0.03, -0.01, 0.02, 0.005, -0.015];
 //! let sharpe = sharpe_ratio(&returns, 0.0, 252);

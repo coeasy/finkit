@@ -1,5 +1,5 @@
 language = "C"
-include_guard = "ALPHA_TA_H"
+include_guard = "FINKIT_H"
 include_version = true
 usize_is_size_t = true
 
@@ -11,7 +11,7 @@ exclude = ["ta_ffi_panic_test"]
 sort_by = "Name"
 
 [defines]
-"target_os = windows" = "ALPHA_TA_WINDOWS"
+"target_os = windows" = "FINKIT_WINDOWS"
 
 [parse]
 parse_deps = false

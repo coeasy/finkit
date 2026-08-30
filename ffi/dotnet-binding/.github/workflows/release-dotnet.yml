@@ -65,11 +65,11 @@ jobs:
         run: |
           mkdir -p ffi/dotnet-binding/native/${{ steps.platform.outputs.rid }}/${{ matrix.arch }}
           if [ "${{ matrix.os }}" == "windows-latest" ]; then
-            cp ffi/dotnet-binding/target/${{ steps.target.outputs.target }}/release/alpha_ta_dotnet.dll ffi/dotnet-binding/native/${{ steps.platform.outputs.rid }}/${{ matrix.arch }}/
+            cp ffi/dotnet-binding/target/${{ steps.target.outputs.target }}/release/finkit_dotnet.dll ffi/dotnet-binding/native/${{ steps.platform.outputs.rid }}/${{ matrix.arch }}/
           elif [ "${{ matrix.os }}" == "macos-latest" ]; then
-            cp ffi/dotnet-binding/target/${{ steps.target.outputs.target }}/release/libalpha_ta_dotnet.dylib ffi/dotnet-binding/native/${{ steps.platform.outputs.rid }}/${{ matrix.arch }}/
+            cp ffi/dotnet-binding/target/${{ steps.target.outputs.target }}/release/libfinkit_dotnet.dylib ffi/dotnet-binding/native/${{ steps.platform.outputs.rid }}/${{ matrix.arch }}/
           else
-            cp ffi/dotnet-binding/target/${{ steps.target.outputs.target }}/release/libalpha_ta_dotnet.so ffi/dotnet-binding/native/${{ steps.platform.outputs.rid }}/${{ matrix.arch }}/
+            cp ffi/dotnet-binding/target/${{ steps.target.outputs.target }}/release/libfinkit_dotnet.so ffi/dotnet-binding/native/${{ steps.platform.outputs.rid }}/${{ matrix.arch }}/
           fi
 
       - name: Upload native artifact

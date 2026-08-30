@@ -4,7 +4,7 @@
 //! JIT (when enabled), and SIMD (when enabled). Any divergence beyond
 //! tolerance `1e-10` fails the test with index and values printed.
 
-use alpha_ta_core::formula::{FormulaContext, FormulaEngine};
+use finkit::formula::{FormulaContext, FormulaEngine};
 use ndarray::Array1;
 
 const TOLERANCE: f64 = 1e-10;

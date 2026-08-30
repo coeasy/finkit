@@ -1,8 +1,8 @@
 use criterion::{black_box, criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use ndarray::Array1;
-use alpha_ta_core::formula::{FormulaContext, FormulaEngine};
-use alpha_ta_core::indicators;
-use alpha_ta_core::math::moving_avg;
+use finkit::formula::{FormulaContext, FormulaEngine};
+use finkit::indicators;
+use finkit::math::moving_avg;
 
 #[allow(clippy::type_complexity)]
 fn create_ohlcv_data(len: usize) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {

@@ -3,7 +3,7 @@
 # AlphaTA C/C++ usage-package builder.
 #
 # Runs the upstream CMake install() rules and copies the staged tree
-# (libAlphaTA_ffi.so + headers + cmake config) to dist/c/<platform>/.
+# (libfinkit_ffi.so + headers + cmake config) to dist/c/<platform>/.
 # ----------------------------------------------------------------------------
 
 set -euo pipefail
@@ -44,8 +44,8 @@ rm -rf "${PREFIX}"
 mkdir -p "${PREFIX}"
 
 # 1. cargo build the cdylib ----------------------------------------------
-echo "[build-usage-c] cargo build --release -p alpha-ta-ffi"
-( cd "${ROOT}" && cargo build --release -p alpha-ta-ffi )
+echo "[build-usage-c] cargo build --release -p finkit-ffi"
+( cd "${ROOT}" && cargo build --release -p finkit-ffi )
 
 # 2. cmake install ------------------------------------------------------
 echo "[build-usage-c] cmake --install into ${PREFIX}"

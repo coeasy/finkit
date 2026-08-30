@@ -79,7 +79,7 @@ Bottom of the file summarizes:
 
 3. **Both at once** — the most common cause is a forgotten `py.allow_threads`
    wrapper in the Python binding or a SIMD lane misalignment. Re-run
-   `cargo test -p alpha-ta-core` and inspect the failing parity tests.
+   `cargo test -p finkit` and inspect the failing parity tests.
 
 ## Reproducing the numbers
 

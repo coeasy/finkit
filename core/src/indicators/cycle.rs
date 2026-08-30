@@ -70,7 +70,7 @@ use ndarray::Array1;
 ///
 /// # Example
 /// ```
-/// use alpha_ta_core::indicators::ht_dcperiod;
+/// use finkit::indicators::ht_dcperiod;
 /// let typical_price: Vec<f64> = (0..60).map(|i| i as f64).collect();
 /// let result = ht_dcperiod(&typical_price).unwrap();
 /// ```
@@ -109,7 +109,7 @@ pub fn ht_dcperiod(input: &[f64]) -> Result<Array1<f64>> {
 ///
 /// # Example
 /// ```
-/// use alpha_ta_core::indicators::ht_dcphase;
+/// use finkit::indicators::ht_dcphase;
 /// let data: Vec<f64> = (0..60).map(|i| (i as f64 * 0.1).sin()).collect();
 /// let result = ht_dcphase(&data).unwrap();
 /// ```
@@ -148,7 +148,7 @@ pub fn ht_dcphase(input: &[f64]) -> Result<Array1<f64>> {
 ///
 /// # Example
 /// ```
-/// use alpha_ta_core::indicators::ht_phasor;
+/// use finkit::indicators::ht_phasor;
 /// let data: Vec<f64> = (0..40).map(|i| (i as f64 * 0.1).sin()).collect();
 /// let (in_phase, quadrature) = ht_phasor(&data).unwrap();
 /// ```
@@ -189,7 +189,7 @@ pub fn ht_phasor(input: &[f64]) -> Result<(Array1<f64>, Array1<f64>)> {
 ///
 /// # Example
 /// ```
-/// use alpha_ta_core::indicators::ht_sine;
+/// use finkit::indicators::ht_sine;
 /// let data: Vec<f64> = (0..60).map(|i| (i as f64 * 0.1).sin()).collect();
 /// let (sine, lead_sine) = ht_sine(&data).unwrap();
 /// ```
@@ -242,7 +242,7 @@ pub fn ht_sine(input: &[f64]) -> Result<(Array1<f64>, Array1<f64>)> {
 ///
 /// # Example
 /// ```
-/// use alpha_ta_core::indicators::ht_trendmode;
+/// use finkit::indicators::ht_trendmode;
 /// let data: Vec<f64> = (0..60).map(|i| i as f64).collect();
 /// let result = ht_trendmode(&data).unwrap();
 /// ```
@@ -291,7 +291,7 @@ pub fn ht_trendmode(input: &[f64]) -> Result<Array1<f64>> {
 ///
 /// # Example
 /// ```
-/// use alpha_ta_core::indicators::ht_measurement;
+/// use finkit::indicators::ht_measurement;
 /// let data: Vec<f64> = (0..60).map(|i| i as f64).collect();
 /// let result = ht_measurement(&data).unwrap();
 /// ```
@@ -336,7 +336,7 @@ pub fn ht_measurement(input: &[f64]) -> Result<Array1<f64>> {
 ///
 /// # Example
 /// ```
-/// use alpha_ta_core::indicators::ht_trendline;
+/// use finkit::indicators::ht_trendline;
 /// let typical_price: Vec<f64> = (0..60).map(|i| i as f64).collect();
 /// let result = ht_trendline(&typical_price).unwrap();
 /// ```
@@ -734,7 +734,7 @@ fn compute_hilbert_components(
 ///
 /// # Example
 /// ```
-/// use alpha_ta_core::indicators::super_smoother;
+/// use finkit::indicators::super_smoother;
 /// let data: Vec<f64> = (0..50).map(|i| (i as f64 * 0.1).sin() * 10.0 + 50.0).collect();
 /// let result = super_smoother(&data, 10).unwrap();
 /// ```
@@ -782,7 +782,7 @@ pub fn super_smoother(input: &[f64], period: usize) -> Result<Array1<f64>> {
 ///
 /// # Example
 /// ```
-/// use alpha_ta_core::indicators::super_smoother_3pole;
+/// use finkit::indicators::super_smoother_3pole;
 /// let data: Vec<f64> = (0..50).map(|i| (i as f64 * 0.1).sin() * 10.0 + 50.0).collect();
 /// let result = super_smoother_3pole(&data, 10).unwrap();
 /// ```
@@ -839,7 +839,7 @@ pub fn super_smoother_3pole(input: &[f64], period: usize) -> Result<Array1<f64>>
 ///
 /// # Example
 /// ```
-/// use alpha_ta_core::indicators::roofing_filter;
+/// use finkit::indicators::roofing_filter;
 /// let data: Vec<f64> = (0..80).map(|i| (i as f64 * 0.1).sin() * 10.0 + 50.0).collect();
 /// let result = roofing_filter(&data, 48, 10).unwrap();
 /// ```
@@ -905,7 +905,7 @@ pub fn roofing_filter(input: &[f64], hp_period: usize, lp_period: usize) -> Resu
 ///
 /// # Example
 /// ```
-/// use alpha_ta_core::indicators::decycler;
+/// use finkit::indicators::decycler;
 /// let data: Vec<f64> = (0..60).map(|i| i as f64 + (i as f64 * 0.3).sin() * 2.0).collect();
 /// let result = decycler(&data, 20).unwrap();
 /// ```
@@ -957,7 +957,7 @@ pub fn decycler(input: &[f64], hp_period: usize) -> Result<Array1<f64>> {
 ///
 /// # Example
 /// ```
-/// use alpha_ta_core::indicators::bandpass;
+/// use finkit::indicators::bandpass;
 /// let data: Vec<f64> = (0..80).map(|i| (i as f64 * 0.2).sin() * 5.0 + 50.0).collect();
 /// let result = bandpass(&data, 20, 0.3).unwrap();
 /// ```
@@ -1013,7 +1013,7 @@ pub fn bandpass(input: &[f64], period: usize, bandwidth: f64) -> Result<Array1<f
 ///
 /// # Example
 /// ```
-/// use alpha_ta_core::indicators::instantaneous_trendline;
+/// use finkit::indicators::instantaneous_trendline;
 /// let data: Vec<f64> = (0..60).map(|i| i as f64 * 0.5 + 10.0).collect();
 /// let result = instantaneous_trendline(&data, 0.07).unwrap();
 /// ```
@@ -1072,7 +1072,7 @@ pub fn instantaneous_trendline(input: &[f64], alpha: f64) -> Result<Array1<f64>>
 ///
 /// # Example
 /// ```
-/// use alpha_ta_core::indicators::ehlers_ema_super_smoother;
+/// use finkit::indicators::ehlers_ema_super_smoother;
 /// let data: Vec<f64> = (0..50).map(|i| (i as f64 * 0.1).sin() * 10.0 + 50.0).collect();
 /// let result = ehlers_ema_super_smoother(&data, 10).unwrap();
 /// ```
@@ -1137,7 +1137,7 @@ pub fn ehlers_ema_super_smoother(input: &[f64], period: usize) -> Result<Array1<
 ///
 /// # Example
 /// ```
-/// use alpha_ta_core::indicators::ehlers_fisher_transform;
+/// use finkit::indicators::ehlers_fisher_transform;
 /// let high: Vec<f64> = (0..30).map(|i| 50.0 + (i as f64 * 0.2).sin() * 5.0).collect();
 /// let low: Vec<f64> = high.iter().map(|h| h - 3.0).collect();
 /// let result = ehlers_fisher_transform(&high, &low, 10).unwrap();
@@ -1167,7 +1167,7 @@ pub fn ehlers_fisher_transform(
 ///
 /// # Example
 /// ```
-/// use alpha_ta_core::indicators::ehlers_instantaneous_trendline;
+/// use finkit::indicators::ehlers_instantaneous_trendline;
 /// let data: Vec<f64> = (0..60).map(|i| i as f64 * 0.5 + 10.0).collect();
 /// let result = ehlers_instantaneous_trendline(&data).unwrap();
 /// ```
@@ -1203,7 +1203,7 @@ pub fn ehlers_instantaneous_trendline(input: &[f64]) -> Result<Array1<f64>> {
 ///
 /// # Example
 /// ```
-/// use alpha_ta_core::indicators::ehlers_roofing_filter_v2;
+/// use finkit::indicators::ehlers_roofing_filter_v2;
 /// let data: Vec<f64> = (0..80).map(|i| (i as f64 * 0.1).sin() * 10.0 + 50.0).collect();
 /// let result = ehlers_roofing_filter_v2(&data, 10).unwrap();
 /// ```
@@ -1284,7 +1284,7 @@ pub fn ehlers_roofing_filter_v2(input: &[f64], period: usize) -> Result<Array1<f
 ///
 /// # Example
 /// ```
-/// use alpha_ta_core::indicators::ehlers_sidewinder;
+/// use finkit::indicators::ehlers_sidewinder;
 /// // Trending data
 /// let trend: Vec<f64> = (0..50).map(|i| i as f64).collect();
 /// let result = ehlers_sidewinder(&trend, 10).unwrap();

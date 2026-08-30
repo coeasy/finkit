@@ -8,7 +8,7 @@
 //! # Running
 //!
 //! ```text
-//! cargo test --release -p alpha_ta-core --test long_run_stability -- --ignored --nocapture
+//! cargo test --release -p finkit --test long_run_stability -- --ignored --nocapture
 //! ```
 //!
 //! The test is `#[ignore]`d by default so it doesn't run on every CI push.
@@ -22,9 +22,9 @@
 
 #![cfg(feature = "std")]
 
-use alpha_ta_core::math::moving_avg::sma;
-use alpha_ta_core::streaming::indicators::{StreamingMacd, StreamingRsi, StreamingSma};
-use alpha_ta_core::streaming::{OhlcvBar, StreamingIndicator};
+use finkit::math::moving_avg::sma;
+use finkit::streaming::indicators::{StreamingMacd, StreamingRsi, StreamingSma};
+use finkit::streaming::{OhlcvBar, StreamingIndicator};
 
 const N_BARS: usize = 1_000_000; // 1 million OHLCV bars
 const WARMUP_LIMIT_SECS: u64 = 300; // 5 minutes

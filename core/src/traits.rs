@@ -25,7 +25,7 @@
 //! # Example
 //!
 //! ```
-//! use alpha_ta_core::traits::{Ohlcv, OhlcvBar, StreamingIndicator};
+//! use finkit::traits::{Ohlcv, OhlcvBar, StreamingIndicator};
 //!
 //! let bar = OhlcvBar::new(10.0, 12.0, 9.0, 11.0, 1_000.0, 1_700_000_000_000);
 //! assert_eq!(bar.close(), 11.0);
@@ -60,7 +60,7 @@ use crate::streaming::{IndicatorMeta as InnerIndicatorMeta, StreamingIndicator a
 /// # Example
 ///
 /// ```
-/// use alpha_ta_core::traits::{Ohlcv, OhlcvBar};
+/// use finkit::traits::{Ohlcv, OhlcvBar};
 ///
 /// let bar = OhlcvBar::new(100.0, 110.0, 95.0, 105.0, 500.0, 1_700_000_000);
 /// assert_eq!(bar.open(), 100.0);
@@ -101,7 +101,7 @@ pub trait Ohlcv {
 /// # Example
 ///
 /// ```
-/// use alpha_ta_core::traits::{Ohlcv, OhlcvBar};
+/// use finkit::traits::{Ohlcv, OhlcvBar};
 ///
 /// let bar = OhlcvBar::new(10.0, 12.0, 9.0, 11.0, 1_000.0, 0);
 /// assert_eq!(bar.volume(), 1_000.0);
@@ -295,9 +295,9 @@ impl Ohlcv for OhlcvArrayAdapter {
 /// # Example
 ///
 /// ```
-/// use alpha_ta_core::traits::{Ohlcv, OhlcvBar, StreamingIndicator};
-/// use alpha_ta_core::streaming::indicators::StreamingSma;
-/// use alpha_ta_core::streaming::{IndicatorMeta, StreamingIndicator as InnerStreamingIndicator};
+/// use finkit::traits::{Ohlcv, OhlcvBar, StreamingIndicator};
+/// use finkit::streaming::indicators::StreamingSma;
+/// use finkit::streaming::{IndicatorMeta, StreamingIndicator as InnerStreamingIndicator};
 ///
 /// // Adapt the existing concrete type to the trait wrapper:
 /// struct SmaAdapter(StreamingSma);
@@ -366,8 +366,8 @@ pub trait StreamingIndicator: Send {
 /// # Example
 ///
 /// ```
-/// use alpha_ta_core::traits::{BatchIndicator, Ohlcv};
-/// use alpha_ta_core::indicators::overlap::sma;
+/// use finkit::traits::{BatchIndicator, Ohlcv};
+/// use finkit::indicators::overlap::sma;
 ///
 /// struct SmaBatch { period: usize }
 ///

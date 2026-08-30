@@ -11,8 +11,8 @@
 
 #![no_main]
 
-use alpha_ta_core::formula::bytecode::compile_to_bytecode;
-use alpha_ta_core::formula::parser::parse_formula;
+use finkit::formula::bytecode::compile_to_bytecode;
+use finkit::formula::parser::parse_formula;
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {

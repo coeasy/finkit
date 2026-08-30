@@ -1,9 +1,9 @@
 use criterion::{black_box, criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput};
 use ndarray::Array1;
-use alpha_ta_core::formula::FormulaEngine;
-use alpha_ta_core::indicators::momentum::{macd, rsi};
-use alpha_ta_core::math::moving_avg::{ema, sma};
-use alpha_ta_core::math::statistics::{rolling_max, rolling_min};
+use finkit::formula::FormulaEngine;
+use finkit::indicators::momentum::{macd, rsi};
+use finkit::math::moving_avg::{ema, sma};
+use finkit::math::statistics::{rolling_max, rolling_min};
 
 fn create_ohlcv_data(len: usize) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
     let mut close = Vec::with_capacity(len);
@@ -30,9 +30,9 @@ fn create_ohlcv_data(len: usize) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec
     (open, high, low, close, volume)
 }
 
-fn create_ctx(len: usize) -> alpha_ta_core::formula::FormulaContext {
+fn create_ctx(len: usize) -> finkit::formula::FormulaContext {
     let (open, high, low, close, volume) = create_ohlcv_data(len);
-    alpha_ta_core::formula::FormulaContext::new(
+    finkit::formula::FormulaContext::new(
         Array1::from_vec(open),
         Array1::from_vec(high),
         Array1::from_vec(low),

@@ -1,5 +1,5 @@
 [package]
-name = "alpha-ta-visualization"
+name = "finkit-visualization"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -15,7 +15,7 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 png = { version = "0.17", optional = true }
 fontdue = "0.9"
-alpha-ta-core = { path = "../core" }
+finkit = { path = "../core" }
 
 [features]
 default = ["svg"]

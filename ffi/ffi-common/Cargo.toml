@@ -1,5 +1,5 @@
 [package]
-name = "alpha-ta-ffi-common"
+name = "finkit-ffi-common"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

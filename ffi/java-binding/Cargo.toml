@@ -1,9 +1,9 @@
 [package]
-name = "alpha-ta-java"
+name = "finkit-java"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Java bindings for AlphaTA"
+description = "Java bindings for finkit"
 
 [lints]
 workspace = true
@@ -12,10 +12,10 @@ workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
-alpha-ta-core = { path = "../../core" }
-alpha-ta-visualization = { path = "../../visualization", features = ["svg"] }
+finkit = { path = "../../core" }
+finkit-visualization = { path = "../../visualization", features = ["svg"] }
 jni = { workspace = true }
 lazy_static = "1.4"
 ndarray = { workspace = true }
 serde_json = { workspace = true }
-alpha-ta-ffi-common = { path = "../ffi-common" }
+finkit-ffi-common = { path = "../ffi-common" }

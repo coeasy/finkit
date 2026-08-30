@@ -2,9 +2,9 @@
 //!
 //! Demonstrates building a complete ML feature matrix from raw price data.
 //!
-//! Run: cargo run --example feature_pipeline -p alpha_ta-core
+//! Run: cargo run --example feature_pipeline -p finkit
 
-use alpha_ta_core::features::*;
+use finkit::features::*;
 
 fn generate_sample_data(n: usize) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
     let mut close = Vec::with_capacity(n);
@@ -88,10 +88,10 @@ fn main() {
 
     // 5. Signal detection
     println!("5. Detecting signals...");
-    let sma5: Vec<f64> = alpha_ta_core::indicators::sma(&close, 5)
+    let sma5: Vec<f64> = finkit::indicators::sma(&close, 5)
         .unwrap()
         .to_vec();
-    let sma20: Vec<f64> = alpha_ta_core::indicators::sma(&close, 20)
+    let sma20: Vec<f64> = finkit::indicators::sma(&close, 20)
         .unwrap()
         .to_vec();
     let crossovers = crossover(&sma5, &sma20);

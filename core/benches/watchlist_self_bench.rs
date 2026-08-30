@@ -7,12 +7,12 @@
 //!
 //! Run with:
 //! ```bash
-//! cargo bench -p alpha_ta-core --bench watchlist_self_bench
+//! cargo bench -p finkit --bench watchlist_self_bench
 //! ```
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 
-use alpha_ta_core::indicators;
+use finkit::indicators;
 
 const SIZES: &[usize] = &[1_000, 10_000, 100_000];
 
@@ -70,14 +70,14 @@ fn bench_wma(c: &mut Criterion) {
         let (_, _, _, c, _) = make_ohlcv(n);
         g.throughput(Throughput::Elements(n as u64));
         g.bench_with_input(criterion::BenchmarkId::from_parameter(n), &n, |b, _| {
-            b.iter(|| alpha_ta_core::math::moving_avg::wma(black_box(&c), 20).unwrap())
+            b.iter(|| finkit::math::moving_avg::wma(black_box(&c), 20).unwrap())
         });
     }
     g.finish();
 }
 
 fn bench_kama(c: &mut Criterion) {
-    use alpha_ta_core::math::moving_avg;
+    use finkit::math::moving_avg;
     let mut g = c.benchmark_group("watchlist_kama");
     for &n in SIZES {
         let (_, _, _, c, _) = make_ohlcv(n);
@@ -224,7 +224,7 @@ fn bench_rsi_scalar(c: &mut Criterion) {
         let mut out = vec![0.0f64; n];
         g.throughput(Throughput::Elements(n as u64));
         g.bench_with_input(criterion::BenchmarkId::from_parameter(n), &n, |b, _| {
-            b.iter(|| alpha_ta_core::math::simd_kernels::rsi_scalar(black_box(&c), 14, black_box(&mut out)))
+            b.iter(|| finkit::math::simd_kernels::rsi_scalar(black_box(&c), 14, black_box(&mut out)))
         });
     }
     g.finish();
@@ -239,7 +239,7 @@ fn bench_stoch_scalar(c: &mut Criterion) {
         g.throughput(Throughput::Elements(n as u64));
         g.bench_with_input(criterion::BenchmarkId::from_parameter(n), &n, |b, _| {
             b.iter(|| {
-                alpha_ta_core::math::simd_kernels::stoch_scalar(
+                finkit::math::simd_kernels::stoch_scalar(
                     black_box(&h),
                     black_box(&l),
                     black_box(&c),

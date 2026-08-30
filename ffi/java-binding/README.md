@@ -1,4 +1,4 @@
-# Rust TA-Lib Java Bindings
+# Finkit Java Bindings
 
 High-performance technical analysis indicators for Java, powered by a Rust core via JNI.
 
@@ -111,8 +111,8 @@ High-performance technical analysis indicators for Java, powered by a Rust core 
 
 ```xml
 <dependency>
-    <groupId>com.alphata</groupId>
-    <artifactId>AlphaTA</artifactId>
+    <groupId>com.finkit</groupId>
+    <artifactId>finkit</artifactId>
     <version>1.0.0</version>
 </dependency>
 ```
@@ -120,13 +120,13 @@ High-performance technical analysis indicators for Java, powered by a Rust core 
 ### Gradle
 
 ```groovy
-implementation 'com.alphata:AlphaTA:1.0.0'
+implementation 'com.finkit:finkit:1.0.0'
 ```
 
 ## Quick Start
 
 ```java
-import com.alphata.*;
+import com.finkit.*;
 
 public class Example {
     public static void main(String[] args) {
@@ -179,11 +179,11 @@ The native library is automatically loaded when any indicator class is first use
 
 | OS | Architecture | Library File |
 |----|-------------|--------------|
-| Windows | x86_64 | `alphata_java.dll` |
-| Linux | x86_64 | `libalphata_java.so` |
-| Linux | aarch64 | `libalphata_java.so` |
-| macOS | x86_64 | `libalphata_java.dylib` |
-| macOS | aarch64 | `libalphata_java.dylib` |
+| Windows | x86_64 | `finkit_java.dll` |
+| Linux | x86_64 | `libfinkit_java.so` |
+| Linux | aarch64 | `libfinkit_java.so` |
+| macOS | x86_64 | `libfinkit_java.dylib` |
+| macOS | aarch64 | `libfinkit_java.dylib` |
 
 If the native library is not bundled with the JAR, set the library path:
 
@@ -231,9 +231,9 @@ mvn test
 ## API Reference
 
 Full Javadoc is available at:
-- [Indicators](https://javadoc.io/doc/com.alphata/AlphaTA/latest/com.alphata/Indicators.html)
-- [Patterns](https://javadoc.io/doc/com.alphata/AlphaTA/latest/com.alphata/Patterns.html)
-- [ChartPatterns](https://javadoc.io/doc/com.alphata/AlphaTA/latest/com.alphata/ChartPatterns.html)
+- [Indicators](https://javadoc.io/doc/com.finkit/finkit/latest/com.finkit/Indicators.html)
+- [Patterns](https://javadoc.io/doc/com.finkit/finkit/latest/com.finkit/Patterns.html)
+- [ChartPatterns](https://javadoc.io/doc/com.finkit/finkit/latest/com.finkit/ChartPatterns.html)
 
 ## Memory Management
 
@@ -248,7 +248,7 @@ caller to avoid the JVM's local reference table growing unbounded (which manifes
 
 - JNI signature:
   ```
-  Java_com_rusttalib_Indicators_freeJString(JNIEnv* env, jclass, jstring ref)
+  Java_com_finkit_Indicators_freeJString(JNIEnv* env, jclass, jstring ref)
   ```
   Implementation: `env->DeleteLocalRef(ref)`. The function is exported from
   `ffi/java-binding/src/lib.rs` and is safe to call with a `null` `jstring` (no-op).
@@ -266,12 +266,12 @@ caller to avoid the JVM's local reference table growing unbounded (which manifes
 ### Example
 
 ```java
-import com.alphata.Indicators;
+import com.finkit.Indicators;
 
 long jstrRef = Indicators.getVersion();          // raw jstring ref (long)
 String version = Indicators.fromJString(jstrRef); // copy to managed String
 Indicators.freeJString(jstrRef);                  // release JNI local ref
-System.out.println("AlphaTA " + version);
+System.out.println("Finkit " + version);
 ```
 
 > **Why explicit release?** The previous design relied on the JVM's `PushLocalFrame` /

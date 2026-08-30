@@ -7,8 +7,8 @@
 //! - D-6：回归基线快照（输出指纹校验）
 
 use ndarray::Array1;
-use alpha_ta_core::formula::engine::FormulaEngine;
-use alpha_ta_core::formula::FormulaContext;
+use finkit::formula::engine::FormulaEngine;
+use finkit::formula::FormulaContext;
 use std::time::Instant;
 
 /// 构造一个 1000 根 K 线的真实形态数据集（带趋势 + 噪声 + 周期）。

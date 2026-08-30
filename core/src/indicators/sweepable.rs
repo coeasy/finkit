@@ -29,7 +29,7 @@ pub struct SweepResult {
 /// # Example
 ///
 /// ```
-/// use alpha_ta_core::indicators::sweepable::{Sweepable, SweepParams};
+/// use finkit::indicators::sweepable::{Sweepable, SweepParams};
 ///
 /// struct SmaSweepable;
 /// // See SweepEngine for usage with Cartesian product scans.

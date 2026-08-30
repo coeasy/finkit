@@ -6,7 +6,7 @@
 //!    (numeric / data-shape problems).
 //! 2. [`FormulaError`]   — domain errors raised by the formula engine
 //!    (parsing, evaluation, resource limits).
-//! 3. [`FfiError`][alpha_ta_core::FfiError] — boundary errors raised when crossing the FFI
+//! 3. [`FfiError`][finkit::FfiError] — boundary errors raised when crossing the FFI
 //!    edge into other languages (null pointers, undersized buffers, and
 //!    conversions of the two domain errors above).
 //!

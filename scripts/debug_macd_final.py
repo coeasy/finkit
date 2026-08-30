@@ -8,7 +8,7 @@ import numpy as np
 sys.path.insert(0, r'P:\llm_code\finkit\dist\python\windows-x64')
 
 try:
-    import alpha_ta
+    import finkit
     import talib
 except ImportError as e:
     print(f"Import error: {e}")
@@ -62,7 +62,7 @@ macd_line = ema12 - ema26
 print("\n[2] MACD Line 对比")
 print("-" * 80)
 talib_macd, _, _ = talib.MACD(close, fastperiod=12, slowperiod=26, signalperiod=9)
-alpha_result = alpha_ta.macd(close, fastperiod=12, slowperiod=26, signalperiod=9)
+alpha_result = finkit.macd(close, fastperiod=12, slowperiod=26, signalperiod=9)
 alpha_macd = np.array(alpha_result[0])
 
 print(f"TA-Lib MACD[33]:    {talib_macd[33]:.10f}")

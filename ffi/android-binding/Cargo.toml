@@ -1,9 +1,9 @@
 [package]
-name = "alpha-ta-android"
+name = "finkit-android"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Android (JNI) bindings for AlphaTA — built as a cdylib loaded from a .aar"
+description = "Android (JNI) bindings for finkit — built as a cdylib loaded from a .aar"
 
 [lints]
 workspace = true
@@ -13,8 +13,8 @@ workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
-# alpha-ta-core provides all the pure-Rust indicators the android shims delegate to.
-alpha-ta-core = { path = "../../core" }
+# finkit provides all the pure-Rust indicators the android shims delegate to.
+finkit = { path = "../../core" }
 
 jni = { workspace = true }
 ndarray = { workspace = true }

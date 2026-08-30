@@ -3,7 +3,7 @@
 > **SSOT** — auto-generated from `core/src/formula/functions.rs`.
 > Do not edit manually. Regenerate: `python scripts/gen_ssot_docs.py --generate`
 
-Built-in formula functions: **231**
+Built-in formula functions: **233**
 
 These functions are available in the formula DSL for expressions like `SMA(CLOSE, 20)`.
 
@@ -23,6 +23,8 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `ALMA` |
 | `APO` |
 | `AROONOSC` |
+| `AROON_DN` |
+| `AROON_UP` |
 | `ASIN` |
 | `ATAN` |
 | `ATR` |
@@ -203,7 +205,6 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `SINH` |
 | `SKEW` |
 | `SLOPE` |
-| `SMA` |
 | `SMARTSELECT` |
 | `SORT` |
 | `SQRT` |
@@ -235,6 +236,7 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `VALUEWHEN` |
 | `VAR` |
 | `VWAP` |
+| `VWMA` |
 | `WCLPRICE` |
 | `WILLIAMS_ALLIGATOR` |
 | `WILLR` |
@@ -246,7 +248,7 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 ## Usage Example
 
 ```rust
-use alphata_core::formula::FormulaEngine;
+use AlphaTA_core::formula::FormulaEngine;
 
 let engine = FormulaEngine::new();
 let result = engine.eval("SMA(CLOSE, 20) + EMA(CLOSE, 10)", &ohlcv)?;

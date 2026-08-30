@@ -1,4 +1,4 @@
-use alpha_ta_core::streaming::{
+use finkit::streaming::{
     indicators::{
         StreamingAtr, StreamingBoll, StreamingCci, StreamingEma, StreamingMacd, StreamingMom,
         StreamingRoc, StreamingRsi, StreamingSma,

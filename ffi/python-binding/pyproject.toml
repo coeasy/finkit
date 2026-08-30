@@ -3,14 +3,14 @@ requires = ["maturin>=1.5,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "alpha-ta"
-version = "1.0.0"
+name = "finkit"
+version = "0.1.0"
 description = "High-performance financial technical analysis library for quantitative trading"
 authors = [
-    {name = "AlphaTA Contributors"}
+    {name = "Finkit Contributors"}
 ]
 maintainers = [
-    {name = "AlphaTA Team"}
+    {name = "Finkit Team"}
 ]
 readme = "README.md"
 license = {text = "MIT OR Apache-2.0"}
@@ -19,7 +19,7 @@ keywords = [
     "trading",
     "quantitative",
     "finance",
-    "alphata",
+    "finkit",
     "stock",
     "crypto",
     "indicators",
@@ -78,10 +78,10 @@ archs = ["AMD64"]
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
-module-name = "alpha_ta"
+module-name = "finkit"
 strip = true
 sdist-include = ["Cargo.lock"]
-include = ["alpha_ta/py.typed"]
+include = ["finkit/py.typed"]
 
 [tool.maturin.target.x86_64-pc-windows-msvc]
 features = ["pyo3/extension-module"]

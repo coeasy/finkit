@@ -6,8 +6,8 @@
 //!
 //! ```ignore
 //! #[global_allocator]
-//! static TEST_ALLOC: alpha_ta_ffi_common::leak::CountingAlloc =
-//!     alpha_ta_ffi_common::leak::CountingAlloc;
+//! static TEST_ALLOC: finkit_ffi_common::leak::CountingAlloc =
+//!     finkit_ffi_common::leak::CountingAlloc;
 //! ```
 //!
 //! Once installed as the process global allocator for the test binary, every

@@ -4,7 +4,7 @@ Target exceptions (see docs/api-reference.md):
   - InsufficientDataError  — input too short for the requested operation
   - InvalidParameterError — period or other argument out of valid range
 
-Tests skip when alpha_ta is not installed or semantic exceptions are not yet
+Tests skip when finkit is not installed or semantic exceptions are not yet
 registered on the module.
 """
 
@@ -14,24 +14,24 @@ import numpy as np
 import pytest
 
 
-def _import_alpha_ta():
+def _import_finkit():
     try:
-        import alpha_ta as ta
+        import finkit as ta
         return ta
     except ImportError:
-        pytest.skip("alpha_ta not installed — build with: maturin develop")
+        pytest.skip("finkit not installed — build with: maturin develop")
 
 
 def _get_exception_classes():
-    """Resolve semantic exception types from alpha_ta (module or exceptions sub-module)."""
-    ta = _import_alpha_ta()
+    """Resolve semantic exception types from finkit (module or exceptions sub-module)."""
+    ta = _import_finkit()
 
     insufficient = getattr(ta, "InsufficientDataError", None)
     invalid_param = getattr(ta, "InvalidParameterError", None)
 
     if insufficient is None or invalid_param is None:
         try:
-            from alpha_ta.exceptions import InsufficientDataError, InvalidParameterError
+            from finkit.exceptions import InsufficientDataError, InvalidParameterError
             insufficient = insufficient or InsufficientDataError
             invalid_param = invalid_param or InvalidParameterError
         except ImportError:
@@ -129,16 +129,16 @@ def test_invalid_parameter_macd_periods():
 # ---------------------------------------------------------------------------
 
 def test_exception_inheritance():
-    """Semantic errors should inherit from a common AlphaTAError base."""
+    """Semantic errors should inherit from a common FinkitError base."""
     ta, InsufficientDataError, InvalidParameterError = _get_exception_classes()
 
-    base = getattr(ta, "AlphaTAError", None) or getattr(ta, "TaLibError", None)
+    base = getattr(ta, "FinkitError", None) or getattr(ta, "TaLibError", None)
 
     if base is None:
         try:
-            from alpha_ta.exceptions import AlphaTAError as base
+            from finkit.exceptions import FinkitError as base
         except ImportError:
-            pytest.skip("AlphaTAError base class not defined")
+            pytest.skip("FinkitError base class not defined")
 
     assert issubclass(InsufficientDataError, Exception)
     assert issubclass(InvalidParameterError, Exception)

@@ -1,6 +1,6 @@
 """Tests for pandas/polars DataFrame TA accessor (df.ta.*) and batch strategy runner.
 
-These tests define the target API contract. They skip gracefully when alpha_ta or
+These tests define the target API contract. They skip gracefully when finkit or
 the accessor extension is not yet installed/built.
 """
 
@@ -17,12 +17,12 @@ import pandas as pd
 # Fixtures & helpers
 # ---------------------------------------------------------------------------
 
-def _import_alpha_ta():
+def _import_finkit():
     try:
-        import alpha_ta as ta
+        import finkit as ta
         return ta
     except ImportError:
-        pytest.skip("alpha_ta not installed — build with: maturin develop")
+        pytest.skip("finkit not installed — build with: maturin develop")
 
 
 def _make_ohlcv_df(n: int = 100, seed: int = 42) -> pd.DataFrame:
@@ -41,7 +41,7 @@ def _make_ohlcv_df(n: int = 100, seed: int = 42) -> pd.DataFrame:
 
 def _get_accessor(df: pd.DataFrame):
     """Return df.ta accessor or skip if not registered."""
-    ta = _import_alpha_ta()
+    ta = _import_finkit()
 
     # Allow explicit registration helper from the binding (future API).
     register = getattr(ta, "register_accessor", None)

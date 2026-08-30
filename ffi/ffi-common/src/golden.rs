@@ -49,7 +49,7 @@ pub const SMA_GOLDEN: &[GoldenVector] = &[
 
 /// Exponential Moving Average golden vectors (alpha = 2/(period+1) = 0.5).
 /// Seeded with the SMA of the first `period` values (TA-Lib / Wilder
-/// convention, matching `alpha_ta_core::math::moving_avg::ema`).
+/// convention, matching `finkit::math::moving_avg::ema`).
 pub const EMA_GOLDEN: &[GoldenVector] = &[
     GoldenVector {
         name: "rising_1_10_p3",

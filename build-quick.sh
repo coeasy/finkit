@@ -127,11 +127,11 @@ for lang in "${WANT[@]}"; do
   case "${lang}" in
     python) want_python=1 ;;
     wasm)   want_wasm=1 ;;
-    node)    native_crates+=( "alpha-ta-node" ) ;;
-    go)      native_crates+=( "alpha-ta-go" ) ;;
-    c)       native_crates+=( "alpha-ta-ffi" ) ;;
-    dotnet)  native_crates+=( "alpha-ta-dotnet" ) ;;
-    java)    native_crates+=( "alpha-ta-java" ) ;;
+    node)    native_crates+=( "finkit-node" ) ;;
+    go)      native_crates+=( "finkit-go" ) ;;
+    c)       native_crates+=( "finkit-ffi" ) ;;
+    dotnet)  native_crates+=( "finkit-dotnet" ) ;;
+    java)    native_crates+=( "finkit-java" ) ;;
   esac
 done
 
@@ -144,8 +144,8 @@ if [[ ${#native_crates[@]} -gt 0 ]]; then
     || echo "[build-quick] WARN: native pre-build failed; per-language scripts will rebuild"
 fi
 if [[ "${want_python}" -eq 1 ]]; then
-  info "cargo build --release -p alpha-ta-python --features abi3"
-  cargo build --release -p alpha-ta-python --features abi3 \
+  info "cargo build --release -p finkit-python --features abi3"
+  cargo build --release -p finkit-python --features abi3 \
     || echo "[build-quick] WARN: python pre-build failed; build-usage-python.sh will rebuild"
 fi
 if [[ "${want_wasm}" -eq 1 ]]; then
@@ -217,7 +217,7 @@ for lang in langs:
             "sha256": hashlib.sha256(f.read_bytes()).hexdigest(),
         })
 manifest = {
-    "name": "AlphaTA",
+    "name": "finkit",
     "version": "${VERSION}",
     "platform": "${PLATFORM}",
     "quick_build": True,
@@ -230,7 +230,7 @@ PY
 
 # ---- bundle (optional) ------------------------------------------------------
 if [[ "${DO_BUNDLE}" -eq 1 && "${fail_count}" -eq 0 ]]; then
-  BUNDLE="${DIST}/alpha-ta-${VERSION}-${PLATFORM}-quick-bundle.zip"
+  BUNDLE="${DIST}/finkit-${VERSION}-${PLATFORM}-quick-bundle.zip"
   info "bundling into ${BUNDLE}"
   # Collect the per-language source directories into an array.
   bundle_srcs=()

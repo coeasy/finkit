@@ -11,7 +11,7 @@ const DEFAULT_BINS: usize = 10;
 /// # Example
 ///
 /// ```
-/// use alpha_ta_core::features::mutual_info_discrete;
+/// use finkit::features::mutual_info_discrete;
 ///
 /// let x = vec![0, 1, 0, 1, 0, 1];
 /// let y = vec![0, 1, 0, 1, 0, 1];
@@ -53,7 +53,7 @@ pub fn mutual_info_discrete(x: &[usize], y: &[usize]) -> f64 {
 /// # Example
 ///
 /// ```
-/// use alpha_ta_core::features::mutual_info_continuous;
+/// use finkit::features::mutual_info_continuous;
 ///
 /// let x: Vec<f64> = (0..50).map(|i| i as f64).collect();
 /// let y: Vec<f64> = x.iter().map(|&v| v * 2.0 + 0.1).collect();
@@ -72,7 +72,7 @@ pub fn mutual_info_continuous(x: &[f64], y: &[f64], bins: usize) -> f64 {
 /// # Example
 ///
 /// ```
-/// use alpha_ta_core::features::feature_importance_rank;
+/// use finkit::features::feature_importance_rank;
 ///
 /// let signal: Vec<f64> = (0..20).map(|i| i as f64).collect();
 /// let noise: Vec<f64> = (0..20).map(|i| (i as f64 * 3.1).sin()).collect();

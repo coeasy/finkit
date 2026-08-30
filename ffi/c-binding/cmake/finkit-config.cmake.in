@@ -1,0 +1,62 @@
+@PACKAGE_INIT@
+
+# ----------------------------------------------------------------------------
+# finkit CMake package config
+#
+# Provided by `find_package(finkit CONFIG)` from a downstream project. After
+# this file is included, the following imported targets are available:
+#
+#   finkit::finkit   - umbrella target: finkit dylib + public C/C++ headers
+#   finkit::headers  - headers-only target (no library)
+# ----------------------------------------------------------------------------
+
+include(CMakeFindDependencyMacro)
+include(GNUInstallDirs)
+
+# Re-construct the IMPORTED target at consumer-config time so we don't have to
+# ship a separate finkit-targets.cmake (the finkit dylib is itself IMPORTED,
+# so we have nothing to export).
+if(NOT TARGET finkit)
+    if(WIN32)
+        set(_finkit_runtime "bin/finkit_ffi.dll")
+        set(_finkit_archive "lib/finkit_ffi.dll.lib")
+    elseif(APPLE)
+        set(_finkit_library "lib/libfinkit_ffi.dylib")
+    else()
+        set(_finkit_library "lib/libfinkit_ffi.so")
+    endif()
+
+    add_library(finkit SHARED IMPORTED GLOBAL)
+    if(WIN32)
+        set_target_properties(finkit PROPERTIES
+            IMPORTED_LOCATION "${PACKAGE_PREFIX_DIR}/${_finkit_runtime}"
+            IMPORTED_IMPLIB   "${PACKAGE_PREFIX_DIR}/${_finkit_archive}"
+            INTERFACE_INCLUDE_DIRECTORIES "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_INCLUDEDIR@"
+        )
+    else()
+        set_target_properties(finkit PROPERTIES
+            IMPORTED_LOCATION "${PACKAGE_PREFIX_DIR}/${_finkit_library}"
+            INTERFACE_INCLUDE_DIRECTORIES "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_INCLUDEDIR@"
+        )
+    endif()
+endif()
+
+if(NOT TARGET finkit_headers)
+    add_library(finkit_headers INTERFACE)
+    target_include_directories(finkit_headers INTERFACE
+        $<BUILD_INTERFACE:${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_INCLUDEDIR@>
+    )
+endif()
+
+if(NOT TARGET finkit::finkit)
+    add_library(finkit::finkit INTERFACE IMPORTED)
+    set_target_properties(finkit::finkit PROPERTIES
+        INTERFACE_LINK_LIBRARIES "finkit;finkit_headers"
+    )
+endif()
+
+if(NOT TARGET finkit::headers)
+    add_library(finkit::headers ALIAS finkit_headers)
+endif()
+
+check_required_components(finkit)

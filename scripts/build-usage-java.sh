@@ -38,8 +38,8 @@ JAR_NAME="alpha-ta-${VERSION}.jar"
 has_tool() { command -v "$1" >/dev/null 2>&1; }
 
 # 1. Build the native cdylib ----------------------------------------------
-echo "[build-usage-java] cargo build --release -p alpha-ta-java"
-( cd "${ROOT}" && cargo build --release -p alpha-ta-java )
+echo "[build-usage-java] cargo build --release -p finkit-java"
+( cd "${ROOT}" && cargo build --release -p finkit-java )
 
 # 2. Stage the native lib ------------------------------------------------
 case "${PLATFORM}" in

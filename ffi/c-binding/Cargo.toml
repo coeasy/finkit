@@ -1,9 +1,9 @@
 [package]
-name = "alpha-ta-ffi"
+name = "finkit-ffi"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "C FFI bindings for AlphaTA"
+description = "C FFI bindings for Finkit"
 
 [lints]
 workspace = true
@@ -12,8 +12,8 @@ workspace = true
 crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
-alpha-ta-core = { path = "../../core" }
-alpha-ta-visualization = { path = "../../visualization", features = ["svg"] }
+finkit = { path = "../../core" }
+finkit-visualization = { path = "../../visualization", features = ["svg"] }
 libc = "0.2"
 serde_json = { workspace = true }
 ndarray = { workspace = true }

@@ -8,7 +8,7 @@ import numpy as np
 sys.path.insert(0, r'P:\llm_code\finkit\dist\python\windows-x64')
 
 try:
-    import alpha_ta
+    import finkit
     import talib
 except ImportError as e:
     print(f"Import error: {e}")
@@ -56,7 +56,7 @@ print(f"\nExpected warmup (slow + signal - 2): {expected_warmup}")
 print(f"Expected first valid index: {expected_warmup}")
 
 # Check AlphaTA
-alpha_result = alpha_ta.macd(close, fastperiod=12, slowperiod=26, signalperiod=9)
+alpha_result = finkit.macd(close, fastperiod=12, slowperiod=26, signalperiod=9)
 alpha_macd = np.array(alpha_result[0])
 first_valid_alpha = np.where(~np.isnan(alpha_macd))[0]
 if len(first_valid_alpha) > 0:
@@ -78,7 +78,7 @@ print(f"\nExpected warmup for ATR: {14 - 1} (period - 1)")
 print(f"Expected first valid index: {14 - 1}")
 
 # Check AlphaTA
-alpha_atr = np.array(alpha_ta.atr(high, low, close, timeperiod=14))
+alpha_atr = np.array(finkit.atr(high, low, close, timeperiod=14))
 first_valid_alpha_atr = np.where(~np.isnan(alpha_atr))[0]
 if len(first_valid_alpha_atr) > 0:
     print(f"AlphaTA ATR first valid index: {first_valid_alpha_atr[0]}")
@@ -91,7 +91,7 @@ first_valid_ema = np.where(~np.isnan(talib_ema))[0]
 if len(first_valid_ema) > 0:
     print(f"TA-Lib EMA first valid index: {first_valid_ema[0]}")
 
-alpha_ema = np.array(alpha_ta.ema(close, timeperiod=14))
+alpha_ema = np.array(finkit.ema(close, timeperiod=14))
 first_valid_alpha_ema = np.where(~np.isnan(alpha_ema))[0]
 if len(first_valid_alpha_ema) > 0:
     print(f"AlphaTA EMA first valid index: {first_valid_alpha_ema[0]}")

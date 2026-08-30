@@ -12,7 +12,7 @@ use ndarray::Array1;
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::statistics;
+/// use finkit::math::statistics;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let result = statistics::mean(&data).unwrap();
@@ -36,7 +36,7 @@ pub fn mean(data: &[f64]) -> Result<f64> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::statistics;
+/// use finkit::math::statistics;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let result = statistics::variance(&data).unwrap();
@@ -65,7 +65,7 @@ pub fn variance(data: &[f64]) -> Result<f64> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::statistics;
+/// use finkit::math::statistics;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let result = statistics::std_dev(&data).unwrap();
@@ -87,7 +87,7 @@ pub fn std_dev(data: &[f64]) -> Result<f64> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::statistics;
+/// use finkit::math::statistics;
 ///
 /// let x = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let y = vec![2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0];
@@ -135,7 +135,7 @@ pub fn covariance(x: &[f64], y: &[f64]) -> Result<f64> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::statistics;
+/// use finkit::math::statistics;
 ///
 /// let x = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let y = vec![2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0];
@@ -197,7 +197,7 @@ pub fn correlation(x: &[f64], y: &[f64]) -> Result<f64> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::statistics;
+/// use finkit::math::statistics;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let result = statistics::rolling_mean(&data, 3).unwrap();
@@ -246,7 +246,7 @@ pub fn rolling_mean(data: &[f64], window: usize) -> Result<Array1<f64>> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::statistics;
+/// use finkit::math::statistics;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let result = statistics::rolling_variance(&data, 3).unwrap();
@@ -303,7 +303,7 @@ pub fn rolling_variance(data: &[f64], window: usize) -> Result<Array1<f64>> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::statistics;
+/// use finkit::math::statistics;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let result = statistics::rolling_std_dev(&data, 3).unwrap();
@@ -324,7 +324,7 @@ pub fn rolling_std_dev(data: &[f64], window: usize) -> Result<Array1<f64>> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::statistics;
+/// use finkit::math::statistics;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let result = statistics::skewness(&data).unwrap();
@@ -364,7 +364,7 @@ pub fn skewness(data: &[f64]) -> Result<f64> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::statistics;
+/// use finkit::math::statistics;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let result = statistics::kurtosis(&data).unwrap();
@@ -408,7 +408,7 @@ pub fn kurtosis(data: &[f64]) -> Result<f64> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::statistics;
+/// use finkit::math::statistics;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let result = statistics::rolling_max(&data, 3).unwrap();
@@ -465,7 +465,7 @@ pub fn rolling_max(data: &[f64], window: usize) -> Result<Array1<f64>> {
 /// # Examples
 ///
 /// ```
-/// use alpha_ta_core::math::statistics;
+/// use finkit::math::statistics;
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 /// let result = statistics::rolling_min(&data, 3).unwrap();

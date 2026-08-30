@@ -6,11 +6,11 @@
 //! the `metrics` + `tracing` warning paths by simply ensuring the error
 //! surfaces.
 
-use alpha_ta_core::error::TaError;
-use alpha_ta_core::indicators::{bbands, macd, rsi};
-use alpha_ta_core::math::moving_avg::{dema, ema, kama, sma, wma};
+use finkit::error::TaError;
+use finkit::indicators::{bbands, macd, rsi};
+use finkit::math::moving_avg::{dema, ema, kama, sma, wma};
 
-fn assert_invalid_param(err: alpha_ta_core::error::Result<ndarray::Array1<f64>>, needle: &str) {
+fn assert_invalid_param(err: finkit::error::Result<ndarray::Array1<f64>>, needle: &str) {
     match err {
         Err(TaError::InvalidParameter { name, constraint }) => {
             assert!(

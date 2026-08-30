@@ -11,15 +11,15 @@
 //!
 //! Run with:
 //! ```bash
-//! cargo bench -p alpha_ta-core --bench ten_million_bench -- --warm-up-time=1 --measurement-time=3 --sample-size=10
+//! cargo bench -p finkit --bench ten_million_bench -- --warm-up-time=1 --measurement-time=3 --sample-size=10
 //! ```
 //!
 //! Output is also written to `docs/benchmark-baseline.json` for the
 //! perf-gate CI to ingest.
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use alpha_ta_core::indicators;
-use alpha_ta_core::math::simd_kernels as k;
+use finkit::indicators;
+use finkit::math::simd_kernels as k;
 
 const N_TEN_MILLION: usize = 10_000_000;
 

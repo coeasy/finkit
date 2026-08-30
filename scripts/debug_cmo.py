@@ -8,7 +8,7 @@ import numpy as np
 sys.path.insert(0, r'P:\llm_code\finkit\dist\python\windows-x64')
 
 try:
-    import alpha_ta
+    import finkit
     import talib
 except ImportError as e:
     print(f"Import error: {e}")
@@ -25,7 +25,7 @@ print("=" * 80)
 
 # Calculate CMO
 talib_cmo = talib.CMO(close, timeperiod=14)
-alpha_cmo = np.array(alpha_ta.cmo(close, timeperiod=14))
+alpha_cmo = np.array(finkit.cmo(close, timeperiod=14))
 
 # Manual CMO calculation to understand the logic
 changes = np.diff(close)

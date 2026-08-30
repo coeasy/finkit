@@ -1,6 +1,6 @@
 use napi_derive::napi;
-use alpha_ta_core::streaming::OhlcvBar;
-use alpha_ta_core::streaming::StreamingIndicator;
+use finkit::streaming::OhlcvBar;
+use finkit::streaming::StreamingIndicator;
 
 // ============================================================================
 // Category 1: f64 → f64 (single-period constructor)
@@ -10,7 +10,7 @@ macro_rules! napi_streaming_f64 {
     ($napi_name:ident, $core_mod:ident, $core_type:ident) => {
         #[napi]
         pub struct $napi_name {
-            inner: alpha_ta_core::streaming::indicators::$core_type,
+            inner: finkit::streaming::indicators::$core_type,
         }
 
         #[napi]
@@ -18,7 +18,7 @@ macro_rules! napi_streaming_f64 {
             #[napi(constructor)]
             pub fn new(period: u32) -> Self {
                 Self {
-                    inner: alpha_ta_core::streaming::indicators::$core_type::new(period as usize),
+                    inner: finkit::streaming::indicators::$core_type::new(period as usize),
                 }
             }
 
@@ -74,7 +74,7 @@ pub struct MacdResult {
 
 #[napi]
 pub struct NapiStreamingMacd {
-    inner: alpha_ta_core::streaming::indicators::StreamingMacd,
+    inner: finkit::streaming::indicators::StreamingMacd,
 }
 
 #[napi]
@@ -82,7 +82,7 @@ impl NapiStreamingMacd {
     #[napi(constructor)]
     pub fn new(fast_period: Option<u32>, slow_period: Option<u32>, signal_period: Option<u32>) -> Self {
         Self {
-            inner: alpha_ta_core::streaming::indicators::StreamingMacd::new(
+            inner: finkit::streaming::indicators::StreamingMacd::new(
                 fast_period.unwrap_or(12) as usize,
                 slow_period.unwrap_or(26) as usize,
                 signal_period.unwrap_or(9) as usize,
@@ -131,7 +131,7 @@ pub struct BollResult {
 
 #[napi]
 pub struct NapiStreamingBoll {
-    inner: alpha_ta_core::streaming::indicators::StreamingBoll,
+    inner: finkit::streaming::indicators::StreamingBoll,
 }
 
 #[napi]
@@ -139,7 +139,7 @@ impl NapiStreamingBoll {
     #[napi(constructor)]
     pub fn new(period: Option<u32>, nb_dev_up: Option<f64>, nb_dev_dn: Option<f64>) -> Self {
         Self {
-            inner: alpha_ta_core::streaming::indicators::StreamingBoll::new(
+            inner: finkit::streaming::indicators::StreamingBoll::new(
                 period.unwrap_or(20) as usize,
                 nb_dev_up.unwrap_or(2.0),
                 nb_dev_dn.unwrap_or(2.0),
@@ -187,7 +187,7 @@ macro_rules! napi_streaming_hlc {
     ($napi_name:ident, $core_mod:ident, $core_type:ident) => {
         #[napi]
         pub struct $napi_name {
-            inner: alpha_ta_core::streaming::indicators::$core_type,
+            inner: finkit::streaming::indicators::$core_type,
         }
 
         #[napi]
@@ -195,7 +195,7 @@ macro_rules! napi_streaming_hlc {
             #[napi(constructor)]
             pub fn new(period: u32) -> Self {
                 Self {
-                    inner: alpha_ta_core::streaming::indicators::$core_type::new(period as usize),
+                    inner: finkit::streaming::indicators::$core_type::new(period as usize),
                 }
             }
 
@@ -238,7 +238,7 @@ pub struct StochResult {
 
 #[napi]
 pub struct NapiStreamingStoch {
-    inner: alpha_ta_core::streaming::indicators::StreamingStoch,
+    inner: finkit::streaming::indicators::StreamingStoch,
 }
 
 #[napi]
@@ -246,7 +246,7 @@ impl NapiStreamingStoch {
     #[napi(constructor)]
     pub fn new(k_period: Option<u32>, k_slow: Option<u32>, d_period: Option<u32>) -> Self {
         Self {
-            inner: alpha_ta_core::streaming::indicators::StreamingStoch::new(
+            inner: finkit::streaming::indicators::StreamingStoch::new(
                 k_period.unwrap_or(14) as usize,
                 k_slow.unwrap_or(3) as usize,
                 d_period.unwrap_or(3) as usize,
@@ -290,7 +290,7 @@ pub struct AroonResult {
 
 #[napi]
 pub struct NapiStreamingAroon {
-    inner: alpha_ta_core::streaming::indicators::StreamingAroon,
+    inner: finkit::streaming::indicators::StreamingAroon,
 }
 
 #[napi]
@@ -298,7 +298,7 @@ impl NapiStreamingAroon {
     #[napi(constructor)]
     pub fn new(period: Option<u32>) -> Self {
         Self {
-            inner: alpha_ta_core::streaming::indicators::StreamingAroon::new(
+            inner: finkit::streaming::indicators::StreamingAroon::new(
                 period.unwrap_or(14) as usize,
             ),
         }
@@ -340,7 +340,7 @@ impl NapiStreamingAroon {
 
 #[napi]
 pub struct NapiStreamingObv {
-    inner: alpha_ta_core::streaming::indicators::StreamingObv,
+    inner: finkit::streaming::indicators::StreamingObv,
 }
 
 #[napi]
@@ -348,7 +348,7 @@ impl NapiStreamingObv {
     #[napi(constructor)]
     pub fn new() -> Self {
         Self {
-            inner: alpha_ta_core::streaming::indicators::StreamingObv::new(),
+            inner: finkit::streaming::indicators::StreamingObv::new(),
         }
     }
 
@@ -376,7 +376,7 @@ impl NapiStreamingObv {
 
 #[napi]
 pub struct NapiStreamingVwap {
-    inner: alpha_ta_core::streaming::indicators::StreamingVwap,
+    inner: finkit::streaming::indicators::StreamingVwap,
 }
 
 #[napi]
@@ -384,7 +384,7 @@ impl NapiStreamingVwap {
     #[napi(constructor)]
     pub fn new() -> Self {
         Self {
-            inner: alpha_ta_core::streaming::indicators::StreamingVwap::new(),
+            inner: finkit::streaming::indicators::StreamingVwap::new(),
         }
     }
 
@@ -414,7 +414,7 @@ macro_rules! napi_streaming_ohlcv {
     ($napi_name:ident, $core_mod:ident, $core_type:ident) => {
         #[napi]
         pub struct $napi_name {
-            inner: alpha_ta_core::streaming::indicators::$core_type,
+            inner: finkit::streaming::indicators::$core_type,
         }
 
         #[napi]
@@ -422,7 +422,7 @@ macro_rules! napi_streaming_ohlcv {
             #[napi(constructor)]
             pub fn new(period: u32) -> Self {
                 Self {
-                    inner: alpha_ta_core::streaming::indicators::$core_type::new(period as usize),
+                    inner: finkit::streaming::indicators::$core_type::new(period as usize),
                 }
             }
 
@@ -456,7 +456,7 @@ napi_streaming_ohlcv!(NapiStreamingNatr, natr, StreamingNatr);
 
 #[napi]
 pub struct NapiStreamingTrange {
-    inner: alpha_ta_core::streaming::indicators::StreamingTrange,
+    inner: finkit::streaming::indicators::StreamingTrange,
 }
 
 #[napi]
@@ -464,7 +464,7 @@ impl NapiStreamingTrange {
     #[napi(constructor)]
     pub fn new() -> Self {
         Self {
-            inner: alpha_ta_core::streaming::indicators::StreamingTrange::new(),
+            inner: finkit::streaming::indicators::StreamingTrange::new(),
         }
     }
 
@@ -503,7 +503,7 @@ pub struct DonchianResult {
 
 #[napi]
 pub struct NapiStreamingDonchian {
-    inner: alpha_ta_core::streaming::indicators::StreamingDonchian,
+    inner: finkit::streaming::indicators::StreamingDonchian,
 }
 
 #[napi]
@@ -511,7 +511,7 @@ impl NapiStreamingDonchian {
     #[napi(constructor)]
     pub fn new(period: Option<u32>) -> Self {
         Self {
-            inner: alpha_ta_core::streaming::indicators::StreamingDonchian::new(
+            inner: finkit::streaming::indicators::StreamingDonchian::new(
                 period.unwrap_or(20) as usize,
             ),
         }
@@ -561,7 +561,7 @@ pub struct IchimokuResult {
 
 #[napi]
 pub struct NapiStreamingIchimoku {
-    inner: alpha_ta_core::streaming::indicators::StreamingIchimoku,
+    inner: finkit::streaming::indicators::StreamingIchimoku,
 }
 
 #[napi]
@@ -569,7 +569,7 @@ impl NapiStreamingIchimoku {
     #[napi(constructor)]
     pub fn new(tenkan: Option<u32>, kijun: Option<u32>, senkou_b: Option<u32>) -> Self {
         Self {
-            inner: alpha_ta_core::streaming::indicators::StreamingIchimoku::new(
+            inner: finkit::streaming::indicators::StreamingIchimoku::new(
                 tenkan.unwrap_or(9) as usize,
                 kijun.unwrap_or(26) as usize,
                 senkou_b.unwrap_or(52) as usize,
@@ -622,7 +622,7 @@ pub struct SuperTrendResult {
 
 #[napi]
 pub struct NapiStreamingSupertrend {
-    inner: alpha_ta_core::streaming::indicators::StreamingSuperTrend,
+    inner: finkit::streaming::indicators::StreamingSuperTrend,
 }
 
 #[napi]
@@ -630,7 +630,7 @@ impl NapiStreamingSupertrend {
     #[napi(constructor)]
     pub fn new(period: Option<u32>, multiplier: Option<f64>) -> Self {
         Self {
-            inner: alpha_ta_core::streaming::indicators::StreamingSuperTrend::new(
+            inner: finkit::streaming::indicators::StreamingSuperTrend::new(
                 period.unwrap_or(10) as usize,
                 multiplier.unwrap_or(3.0),
             ),
@@ -677,7 +677,7 @@ pub struct KeltnerResult {
 
 #[napi]
 pub struct NapiStreamingKeltner {
-    inner: alpha_ta_core::streaming::indicators::StreamingKeltner,
+    inner: finkit::streaming::indicators::StreamingKeltner,
 }
 
 #[napi]
@@ -685,7 +685,7 @@ impl NapiStreamingKeltner {
     #[napi(constructor)]
     pub fn new(ema_period: Option<u32>, atr_period: Option<u32>, multiplier: Option<f64>) -> Self {
         Self {
-            inner: alpha_ta_core::streaming::indicators::StreamingKeltner::new(
+            inner: finkit::streaming::indicators::StreamingKeltner::new(
                 ema_period.unwrap_or(20) as usize,
                 atr_period.unwrap_or(10) as usize,
                 multiplier.unwrap_or(2.0),

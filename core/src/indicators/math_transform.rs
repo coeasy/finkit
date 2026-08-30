@@ -34,7 +34,7 @@ use ndarray::Array1;
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::math_transform::acos;
+/// use finkit::indicators::math_transform::acos;
 /// let data = vec![1.0, 0.0, -1.0];
 /// let result = acos(&data).unwrap();
 /// assert_eq!(result.len(), 3);
@@ -68,7 +68,7 @@ pub fn acos(data: &[f64]) -> Result<Array1<f64>> {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::math_transform::asin;
+/// use finkit::indicators::math_transform::asin;
 /// let data = vec![1.0, 0.0, -1.0];
 /// let result = asin(&data).unwrap();
 /// assert_eq!(result.len(), 3);
@@ -98,7 +98,7 @@ pub fn asin(data: &[f64]) -> Result<Array1<f64>> {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::math_transform::atan;
+/// use finkit::indicators::math_transform::atan;
 /// let data = vec![0.0, 1.0, -1.0];
 /// let result = atan(&data).unwrap();
 /// assert_eq!(result.len(), 3);
@@ -120,7 +120,7 @@ pub fn atan(data: &[f64]) -> Result<Array1<f64>> {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::math_transform::ceil;
+/// use finkit::indicators::math_transform::ceil;
 /// let data = vec![1.2, 2.8, -1.7];
 /// let result = ceil(&data).unwrap();
 /// assert_eq!(result.len(), 3);
@@ -142,7 +142,7 @@ pub fn ceil(data: &[f64]) -> Result<Array1<f64>> {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::math_transform::cos;
+/// use finkit::indicators::math_transform::cos;
 /// let data = vec![0.0, std::f64::consts::FRAC_PI_2];
 /// let result = cos(&data).unwrap();
 /// assert_eq!(result.len(), 2);
@@ -167,7 +167,7 @@ pub fn cos(data: &[f64]) -> Result<Array1<f64>> {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::math_transform::cosh;
+/// use finkit::indicators::math_transform::cosh;
 /// let data = vec![0.0, 1.0, -1.0];
 /// let result = cosh(&data).unwrap();
 /// assert_eq!(result.len(), 3);
@@ -189,7 +189,7 @@ pub fn cosh(data: &[f64]) -> Result<Array1<f64>> {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::math_transform::exp;
+/// use finkit::indicators::math_transform::exp;
 /// let data = vec![0.0, 1.0, 2.0];
 /// let result = exp(&data).unwrap();
 /// assert_eq!(result.len(), 3);
@@ -211,7 +211,7 @@ pub fn exp(data: &[f64]) -> Result<Array1<f64>> {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::math_transform::floor;
+/// use finkit::indicators::math_transform::floor;
 /// let data = vec![1.2, 2.8, -1.7];
 /// let result = floor(&data).unwrap();
 /// assert_eq!(result.len(), 3);
@@ -237,7 +237,7 @@ pub fn floor(data: &[f64]) -> Result<Array1<f64>> {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::math_transform::ln;
+/// use finkit::indicators::math_transform::ln;
 /// let data = vec![1.0, std::f64::consts::E];
 /// let result = ln(&data).unwrap();
 /// assert_eq!(result.len(), 2);
@@ -271,7 +271,7 @@ pub fn ln(data: &[f64]) -> Result<Array1<f64>> {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::math_transform::log10;
+/// use finkit::indicators::math_transform::log10;
 /// let data = vec![1.0, 10.0, 100.0];
 /// let result = log10(&data).unwrap();
 /// assert_eq!(result.len(), 3);
@@ -301,7 +301,7 @@ pub fn log10(data: &[f64]) -> Result<Array1<f64>> {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::math_transform::sin;
+/// use finkit::indicators::math_transform::sin;
 /// let data = vec![0.0, std::f64::consts::FRAC_PI_2];
 /// let result = sin(&data).unwrap();
 /// assert_eq!(result.len(), 2);
@@ -326,7 +326,7 @@ pub fn sin(data: &[f64]) -> Result<Array1<f64>> {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::math_transform::sinh;
+/// use finkit::indicators::math_transform::sinh;
 /// let data = vec![0.0, 1.0, -1.0];
 /// let result = sinh(&data).unwrap();
 /// assert_eq!(result.len(), 3);
@@ -352,7 +352,7 @@ pub fn sinh(data: &[f64]) -> Result<Array1<f64>> {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::math_transform::sqrt;
+/// use finkit::indicators::math_transform::sqrt;
 /// let data = vec![4.0];
 /// let result = sqrt(&data).unwrap();
 /// assert_eq!(result[0], 2.0);
@@ -382,7 +382,7 @@ pub fn sqrt(data: &[f64]) -> Result<Array1<f64>> {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::math_transform::tan;
+/// use finkit::indicators::math_transform::tan;
 /// let data = vec![0.0, std::f64::consts::FRAC_PI_4];
 /// let result = tan(&data).unwrap();
 /// assert_eq!(result.len(), 2);
@@ -407,7 +407,7 @@ pub fn tan(data: &[f64]) -> Result<Array1<f64>> {
 ///
 /// # 示例
 /// ```rust
-/// use alpha_ta_core::indicators::math_transform::tanh;
+/// use finkit::indicators::math_transform::tanh;
 /// let data = vec![0.0, 1.0, -1.0];
 /// let result = tanh(&data).unwrap();
 /// assert_eq!(result.len(), 3);

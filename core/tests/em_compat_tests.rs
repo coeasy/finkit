@@ -1,6 +1,6 @@
 use ndarray::Array1;
-use alpha_ta_core::formula::engine::FormulaEngine;
-use alpha_ta_core::formula::types::{EmData, FormulaContext};
+use finkit::formula::engine::FormulaEngine;
+use finkit::formula::types::{EmData, FormulaContext};
 
 fn make_ctx(len: usize) -> FormulaContext {
     let close: Vec<f64> = (0..len)

@@ -1,7 +1,7 @@
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
-use alpha_ta_core::streaming::indicators::*;
-use alpha_ta_core::streaming::{CheckpointState, OhlcvBar, StreamingIndicator};
+use finkit::streaming::indicators::*;
+use finkit::streaming::{CheckpointState, OhlcvBar, StreamingIndicator};
 
 type IchimokuTuple = (f64, f64, f64, f64, f64);
 
@@ -100,7 +100,7 @@ py_streaming_f64_f64!(
 // StreamingT3 handled separately due to name collision with the PyClass name
 #[pyclass(name = "StreamingT3")]
 pub struct PyStreamingT3 {
-    inner: alpha_ta_core::streaming::indicators::StreamingT3,
+    inner: finkit::streaming::indicators::StreamingT3,
 }
 
 #[pymethods]
@@ -108,7 +108,7 @@ impl PyStreamingT3 {
     #[new]
     fn new(period: usize) -> Self {
         Self {
-            inner: alpha_ta_core::streaming::indicators::StreamingT3::new(period),
+            inner: finkit::streaming::indicators::StreamingT3::new(period),
         }
     }
 

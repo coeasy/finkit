@@ -3,7 +3,7 @@
 找出每个指标的具体偏差位置和模式
 """
 import numpy as np
-import alpha_ta
+import finkit
 import talib
 
 # 生成测试数据
@@ -101,82 +101,82 @@ print("开始诊断数值准确度问题...")
 
 # HT_* 系列
 compare_indicator("HT_DCPERIOD", 
-    lambda: alpha_ta.ht_dcperiod(close),
+    lambda: finkit.ht_dcperiod(close),
     lambda: talib.HT_DCPERIOD(close))
 
 compare_indicator("HT_DCPHASE",
-    lambda: alpha_ta.ht_dcphase(close),
+    lambda: finkit.ht_dcphase(close),
     lambda: talib.HT_DCPHASE(close))
 
 compare_indicator("HT_PHASOR",
-    lambda: alpha_ta.ht_phasor(close),
+    lambda: finkit.ht_phasor(close),
     lambda: talib.HT_PHASOR(close))
 
 compare_indicator("HT_SINE",
-    lambda: alpha_ta.ht_sine(close),
+    lambda: finkit.ht_sine(close),
     lambda: talib.HT_SINE(close))
 
 compare_indicator("HT_TRENDLINE",
-    lambda: alpha_ta.ht_trendline(close),
+    lambda: finkit.ht_trendline(close),
     lambda: talib.HT_TRENDLINE(close))
 
 compare_indicator("HT_TRENDMODE",
-    lambda: alpha_ta.ht_trendmode(close),
+    lambda: finkit.ht_trendmode(close),
     lambda: talib.HT_TRENDMODE(close))
 
 # MAMA 和 T3
 compare_indicator("MAMA",
-    lambda: alpha_ta.mama(close, 0.5, 0.05),
+    lambda: finkit.mama(close, 0.5, 0.05),
     lambda: talib.MAMA(close, 0.5, 0.05))
 
 compare_indicator("T3",
-    lambda: alpha_ta.t3(close, 20, 0.7),
+    lambda: finkit.t3(close, 20, 0.7),
     lambda: talib.T3(close, 20, 0.7))
 
 # ADX 系列
 compare_indicator("ADX",
-    lambda: alpha_ta.adx(high, low, close, 14),
+    lambda: finkit.adx(high, low, close, 14),
     lambda: talib.ADX(high, low, close, 14))
 
 compare_indicator("DX",
-    lambda: alpha_ta.dx(high, low, close, 14),
+    lambda: finkit.dx(high, low, close, 14),
     lambda: talib.DX(high, low, close, 14))
 
 compare_indicator("PLUS_DI",
-    lambda: alpha_ta.plus_di(high, low, close, 14),
+    lambda: finkit.plus_di(high, low, close, 14),
     lambda: talib.PLUS_DI(high, low, close, 14))
 
 compare_indicator("MINUS_DI",
-    lambda: alpha_ta.minus_di(high, low, close, 14),
+    lambda: finkit.minus_di(high, low, close, 14),
     lambda: talib.MINUS_DI(high, low, close, 14))
 
 # MACD
 compare_indicator("MACD",
-    lambda: alpha_ta.macd(close, 12, 26, 9),
+    lambda: finkit.macd(close, 12, 26, 9),
     lambda: talib.MACD(close, 12, 26, 9))
 
 # TRIX
 compare_indicator("TRIX",
-    lambda: alpha_ta.trix(close, 20),
+    lambda: finkit.trix(close, 20),
     lambda: talib.TRIX(close, 20))
 
 # AD 和 ADOSC
 compare_indicator("AD",
-    lambda: alpha_ta.ad(high, low, close, volume),
+    lambda: finkit.ad(high, low, close, volume),
     lambda: talib.AD(high, low, close, volume))
 
 compare_indicator("ADOSC",
-    lambda: alpha_ta.adosc(high, low, close, volume, 3, 10),
+    lambda: finkit.adosc(high, low, close, volume, 3, 10),
     lambda: talib.ADOSC(high, low, close, volume, 3, 10))
 
 # ATR
 compare_indicator("ATR",
-    lambda: alpha_ta.atr(high, low, close, 14),
+    lambda: finkit.atr(high, low, close, 14),
     lambda: talib.ATR(high, low, close, 14))
 
 # VAR
 compare_indicator("VAR",
-    lambda: alpha_ta.var(close, 20, 1.0),
+    lambda: finkit.var(close, 20, 1.0),
     lambda: talib.VAR(close, 20, 1.0))
 
 print("\n" + "="*80)

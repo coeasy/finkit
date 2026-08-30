@@ -49,7 +49,7 @@ pub struct AndrewsPitchforkResult {
 ///
 /// # Example
 /// ```rust
-/// use alpha_ta_core::indicators::andrews_pitchfork;
+/// use finkit::indicators::andrews_pitchfork;
 ///
 /// let high = vec![10.0, 12.0, 15.0, 14.0, 16.0, 18.0, 17.0, 19.0, 21.0];
 /// let low = vec![8.0, 10.0, 12.0, 11.0, 13.0, 15.0, 14.0, 16.0, 18.0];
@@ -193,7 +193,7 @@ pub struct GannAnglesResult {
 ///
 /// # Example
 /// ```rust
-/// use alpha_ta_core::indicators::gann_angles;
+/// use finkit::indicators::gann_angles;
 ///
 /// let close = vec![100.0, 102.0, 105.0, 108.0, 110.0, 112.0, 115.0];
 /// let result = gann_angles(&close, 0, 100.0, 1.0, 1.0).unwrap();
@@ -285,7 +285,7 @@ pub struct SpeedResistanceResult {
 ///
 /// # Example
 /// ```rust
-/// use alpha_ta_core::indicators::speed_resistance_lines;
+/// use finkit::indicators::speed_resistance_lines;
 ///
 /// let high = vec![10.0, 12.0, 15.0, 14.0, 16.0, 18.0, 17.0];
 /// let low = vec![8.0, 10.0, 12.0, 11.0, 13.0, 15.0, 14.0];

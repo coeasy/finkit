@@ -1749,7 +1749,7 @@ pub struct VortexResult {
 ///
 /// # Examples
 /// ```
-/// use alpha_ta_core::indicators;
+/// use finkit::indicators;
 ///
 /// let high = vec![45.0, 45.5, 46.0, 45.5, 46.5, 46.0, 45.5, 45.0, 45.5, 46.0,
 ///                 46.5, 47.0, 46.5, 47.0, 47.5];
