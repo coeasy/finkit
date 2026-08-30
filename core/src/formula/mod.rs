@@ -14,8 +14,8 @@
 //! - Memory pool for zero-copy evaluation
 
 pub mod ast;
-pub mod pine;
 pub mod bytecode;
+pub mod compat;
 pub mod compiler;
 pub mod debugger;
 pub mod drawing;
@@ -25,10 +25,11 @@ pub mod functions;
 pub mod jit;
 pub mod memory_pool;
 pub mod opt_level;
-pub mod optimizer;
 pub mod ops;
+pub mod optimizer;
 pub mod params;
 pub mod parser;
+pub mod pine;
 pub mod sandbox;
 pub mod simd;
 pub mod templates;
@@ -36,6 +37,7 @@ pub mod types;
 
 pub use ast::*;
 pub use bytecode::{compile_to_bytecode, Bytecode, BytecodeVM, ExecResult, OpCode};
+pub use compat::{normalize_terminal_source, CompatibilityLevel, FormulaTerminal};
 pub use compiler::{CompiledFormula, FormulaCache, FormulaCompiler};
 pub use debugger::{DebugEvent, FormulaDebugger, FormulaErrorWithLocation};
 pub use drawing::{DrawCommand, DrawResult};
@@ -44,40 +46,42 @@ pub use executor::FormulaExecutor;
 pub use functions::get_builtin_functions;
 pub use jit::{JitCompiler, OptimizedBytecode};
 pub use memory_pool::{BufferPool, ZeroCopyContext};
-pub use opt_level::OptLevel;
-pub use optimizer::{DependencyAnalyzer, FormulaOptimizer};
 pub use ops::*;
+pub use opt_level::OptLevel;
 pub use params::{
     apply_params, get_param_value, parse_params, validate_params, ParamDef, ParamValues,
 };
 pub use parser::parse_formula;
-pub use pine::{map_pine_to_alphata, parse_pine, PineBuiltinTable, PineMapperError, PineError};
+pub use pine::{map_pine_to_alphata, parse_pine, PineBuiltinTable, PineError, PineMapperError};
 pub use sandbox::{ExecSandboxConfig, ExecSandboxState};
 pub use simd::SimdOps;
 pub use templates::{FormulaTemplate, FormulaTemplates, TemplateCategory};
-pub use types::*;
 pub use types::FormulaValue;
+pub use types::*;
 
 /// Formula language dialect selector.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FormulaDialect {
-    /// AlphaTA / TDX-style formula language (default).
+    /// Finkit / AlphaTA / TDX-style formula language (default).
     #[default]
     AlphaTA,
-    /// Pine Script v5 subset.
+    /// TradingView Pine Script v5 subset.
     Pine,
 }
 
 impl FormulaDialect {
-    /// Parse a dialect name from CLI / FFI / Python bindings.
+    /// Parse a dialect or terminal alias from CLI / FFI / language bindings.
     pub fn from_str(s: &str) -> Option<Self> {
-        match s.to_ascii_lowercase().as_str() {
-            "alpha_ta" | "tdx" | "default" | "" => Some(Self::AlphaTA),
-            "pine" => Some(Self::Pine),
+        match s.trim().to_ascii_lowercase().as_str() {
+            "alpha_ta" | "alphata" | "finkit" | "tdx" | "tongdaxin" | "通达信" | "ths"
+            | "tonghuashun" | "同花顺" | "eastmoney" | "em" | "dfcf" | "东方财富"
+            | "default" | "" => Some(Self::AlphaTA),
+            "pine" | "tradingview" | "tv" => Some(Self::Pine),
             _ => None,
         }
     }
 
+    /// Stable canonical identifier.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::AlphaTA => "alpha_ta",
@@ -86,10 +90,11 @@ impl FormulaDialect {
     }
 }
 
-/// Parse a formula expression using the specified dialect.
+/// Parse a formula expression using the specified canonical dialect.
 ///
 /// `FormulaDialect::AlphaTA` delegates to [`parse_formula`].
-/// `FormulaDialect::Pine` uses the Pine Script v5 subset parser and maps to AlphaTA AST.
+/// `FormulaDialect::Pine` uses the Pine Script v5 subset parser and maps to the
+/// canonical Finkit AST.
 pub fn parse_formula_with_dialect(
     source: &str,
     dialect: FormulaDialect,
@@ -97,10 +102,19 @@ pub fn parse_formula_with_dialect(
     match dialect {
         FormulaDialect::AlphaTA => parse_formula(source),
         FormulaDialect::Pine => {
-            let pine = parse_pine(source).map_err(|e| format!("Pine parse error: {}", e))?;
+            let pine = parse_pine(source).map_err(|e| format!("Pine parse error: {e}"))?;
             map_pine_to_alphata(&pine).map_err(|e| format!("Pine map error: {}", e.message))
         }
     }
+}
+
+/// Parse source using a named trading-terminal compatibility adapter.
+pub fn parse_formula_for_terminal(
+    source: &str,
+    terminal: FormulaTerminal,
+) -> Result<AstNode, String> {
+    let normalized = normalize_terminal_source(source, terminal);
+    parse_formula_with_dialect(&normalized, terminal.canonical_dialect())
 }
 
 #[cfg(test)]
@@ -114,6 +128,16 @@ mod dialect_tests {
     }
 
     #[test]
+    fn tdx_terminal_parses_assignment_and_cross() {
+        let source = "MA5:=MA(CLOSE,5); CROSS(CLOSE,MA5);";
+        let ast = parse_formula_for_terminal(source, FormulaTerminal::TongDaXin).unwrap();
+        assert!(matches!(
+            ast,
+            AstNode::Statements(_) | AstNode::Assignment { .. }
+        ));
+    }
+
+    #[test]
     fn pine_dialect_parses_rsi_script() {
         let src = r#"//@version=5
 indicator("RSI")
@@ -122,13 +146,26 @@ rsi = ta.rsi(close, length)
 plot(rsi)
 "#;
         let ast = parse_formula_with_dialect(src, FormulaDialect::Pine).unwrap();
-        assert!(matches!(ast, AstNode::Statements(_) | AstNode::Assignment { .. }));
+        assert!(matches!(
+            ast,
+            AstNode::Statements(_) | AstNode::Assignment { .. }
+        ));
     }
 
     #[test]
-    fn dialect_from_str() {
-        assert_eq!(FormulaDialect::from_str("pine"), Some(FormulaDialect::Pine));
-        assert_eq!(FormulaDialect::from_str("alpha_ta"), Some(FormulaDialect::AlphaTA));
+    fn dialect_from_str_accepts_terminal_aliases() {
+        assert_eq!(
+            FormulaDialect::from_str("TradingView"),
+            Some(FormulaDialect::Pine)
+        );
+        assert_eq!(
+            FormulaDialect::from_str("通达信"),
+            Some(FormulaDialect::AlphaTA)
+        );
+        assert_eq!(
+            FormulaDialect::from_str("同花顺"),
+            Some(FormulaDialect::AlphaTA)
+        );
         assert_eq!(FormulaDialect::from_str("unknown"), None);
     }
 }
