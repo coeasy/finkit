@@ -87,8 +87,17 @@ pub mod risk;
 /// 申万一级 31 行业板块轮动.
 pub mod sector;
 #[cfg(feature = "std")]
-/// 选股因子合成 + 横截面排序.
+/// Legacy stock-selection factor composition helpers.
 pub mod selectors;
+#[cfg(feature = "std")]
+/// Dependency-aware production factor engine and factor transforms.
+pub mod factors;
+#[cfg(feature = "std")]
+/// Canonical indicator/formula metadata registry for bindings and introspection.
+pub mod registry;
+#[cfg(feature = "std")]
+/// Zero-copy aligned market-frame and warm-up/NaN runtime contracts.
+pub mod runtime;
 
 // ─────────────────── O-1: tracing re-exports ───────────────────
 //
