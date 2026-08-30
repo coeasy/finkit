@@ -1804,7 +1804,7 @@ result = engine.evaluate("""
 
 ## 相关文档
 
-- [快速入门指南](QUICK_START.md)
-- [完整 Wiki 文档](WIKI.md)
-- [构建指南](BUILD_GUIDE.md)
+- [快速入门指南](src/quickstart.md)
+- [文档索引](README.md)
+- [开发指南](development.md)
 - [指标完整列表](indicators.md)

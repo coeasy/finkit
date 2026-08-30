@@ -93,7 +93,7 @@ go run examples/go_example/main.go
 
 ## 更多文档
 
-- [快速入门指南](../docs/QUICK_START.md)
-- [完整 Wiki](../docs/WIKI.md)
-- [API 参考](../docs/api-reference-zh.md)
-- [构建指南](../docs/BUILD_GUIDE.md)
+- [快速入门指南](../docs/src/quickstart.md)
+- [文档索引](../docs/README.md)
+- [API 参考](../docs/api-reference.md)
+- [开发指南](../docs/development.md)

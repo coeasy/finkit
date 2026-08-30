@@ -9,11 +9,10 @@
 
 | Document | Description |
 |----------|-------------|
-| [Quick Start Guide](docs/QUICK_START.md) | 5-minute quick start tutorial |
-| [Complete Wiki](docs/WIKI.md) | Full usage guide and examples |
+| [Quick Start Guide](docs/src/quickstart.md) | 5-minute quick start tutorial |
+| [Documentation Index](docs/README.md) | Full usage guide and examples |
 | [API Reference](docs/api-reference.md) | Detailed API documentation for all indicators |
-| [Build Guide](docs/BUILD_GUIDE.md) | Multi-language package building instructions |
-| [One-Click Build](docs/ONE_CLICK_BUILD.md) | One-command build + install + verify for all 7 languages |
+| [Development Guide](docs/development.md) | Building, testing, and packaging instructions |
 | [Installation Guide](docs/installation.md) | Detailed installation for each language |
 | [Performance Benchmarks](docs/benchmark-results.md) | Performance comparison with TA-Lib |
 | [Benchmark vs TA-Lib](docs/BENCHMARK_VS_TALIB.md) | How to read the `bench-vs-talib` output |
@@ -36,7 +35,8 @@
 ## ⚡ One-Click Build
 
 Build every language binding, install it locally, and run a smoke test —
-all from a single command. See [docs/ONE_CLICK_BUILD.md](docs/ONE_CLICK_BUILD.md).
+all from a single command. See [docs/development.md](docs/development.md)
+for build instructions.
 
 ```bash
 ./build-usage.sh                  # bash / zsh / Git-Bash
@@ -58,8 +58,8 @@ read the results.
 ## Quick Start
 
 > **Note:** Package registry publishing (PyPI, npm, crates.io, Maven, NuGet) is
-> not yet active. Use [build from source](docs/installation.md) or the
-> [one-click build](docs/ONE_CLICK_BUILD.md) until releases are published.
+> not yet active. Use [build from source](docs/development.md) until releases
+> are published.
 
 ### Python
 
@@ -688,8 +688,6 @@ let result = engine.eval("MA(CLOSE, 20) + 2 * STD(CLOSE, 20)", &mut ctx)?;
 - [Installation Guide](docs/installation.md) - Detailed installation for each language
 - [API Reference](docs/api-reference.md) - Full API documentation
 - [Benchmark Results](docs/benchmark-results.md) - Detailed performance analysis vs TA-Lib C
-- [Migration Guide](docs/MIGRATION.md) - v1 → v2 migration guide
-- [Release Notes](docs/RELEASE_NOTES_v2.0.md) - v2.0 release notes
 - [Development Guide](docs/development.md) - How to contribute and build from source
 - [Contributing Guidelines](CONTRIBUTING.md) - How to contribute to the project
 
@@ -747,7 +745,7 @@ CI runs on every push and pull request to `main`:
 - `cargo test -p finkit` + doc tests
 - `cargo doc` / `cargo audit`
 
-Planned (not yet enabled — see [docs/plan/FINKIT_V1_ALIGNMENT_AND_FIX_PLAN.md] stage B):
+Planned (not yet enabled):
 - **release.yml** — Unified release pipeline for all language bindings
 - **perf-gate.yml** — Performance regression detection (baseline threshold)
 - **fuzz.yml** — Weekly fuzzing

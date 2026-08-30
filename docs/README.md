@@ -82,7 +82,6 @@ Welcome to the Finkit (Finkit) documentation index. Finkit is a high-performance
 | [.NET Binding](../ffi/dotnet-binding/README.md) | .NET / NuGet integration |
 | [Android Binding](../ffi/android-binding/README.md) | Android JNI integration |
 | [iOS Binding](../ffi/ios-binding/README.md) | iOS framework integration |
-| [Packaging Usage](../packaging/usage/README.md) | Cross-language packaging examples |
 
 ---
 
@@ -103,7 +102,6 @@ These files support autonomous development and project planning. They are **not*
 | Document | Description |
 |----------|-------------|
 | [AGENTS.md](AGENTS.md) | [Internal] AzaLoop agent configuration and workflow |
-| [PLANNING.md](PLANNING.md) | [Internal] Implementation planning notes |
 | [PROGRESS.md](PROGRESS.md) | [Internal] Story completion tracker |
 | [PRD.md](PRD.md) | [Internal] Product requirements document |
 | [Compatibility Matrix](COMPAT_MATRIX.md) | [Internal] TA-Lib compatibility matrix |

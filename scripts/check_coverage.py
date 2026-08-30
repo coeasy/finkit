@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """指标覆盖度检查：registry (SSOT) x streaming x batch。
 
-动机：docs/REFACTORING_PLAN_2026-08.md 3.5 节要求"先建立可信度量，再排期补实现"。
+动机：需要"先建立可信度量，再排期补实现"。
 此前用朴素字符串相等比对得到"流式覆盖 64%"，但因命名不匹配（Bollinger Bands ->
 StreamingBoll、Williams %R -> StreamingWillr）存在大量假阳性。
 

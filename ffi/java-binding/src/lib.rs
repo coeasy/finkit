@@ -35,7 +35,7 @@ use finkit_ffi_common::panic::*;
 // NOTE: these paths require a live `JNIEnv` and therefore cannot be exercised
 // by `cargo test` (no JVM in the test binary). The contract is validated by
 // the Android / host-JVM integration tests instead. See
-// `docs/FFI_MEMORY_CONTRACT.md`.
+// `docs/ffi/memory-contract.md`.
 // ============================================================================
 
 #[no_mangle]

@@ -135,4 +135,3 @@ regression stability.
 
 - `tests/fixtures/README.md` — fixture dataset documentation
 - `tests/golden/*.csv` — legacy self-golden CSV references
-- `docs/OPTIMIZATION_PLAN_2026-06-23.md` — TA-Lib compatibility matrix plan

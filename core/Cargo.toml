@@ -146,7 +146,7 @@ default = ["std", "formula", "serde", "tracing", "metrics", "formula-jit", "form
 # Every category is ON by default via `indicators-all`, so the public API is
 # unchanged unless a consumer explicitly turns a category OFF. Modules in
 # `src/indicators/mod.rs` are gated 1:1 with these features. Turn a category
-# off only after verifying its cross-module dependencies (see REFACTORING_PLAN).
+# off only after verifying its cross-module dependencies.
 # Each category pulls `std` because the indicator implementations depend on
 # `ndarray` (gated behind `std`). This makes the documented "turn off
 # `indicators-all` to shrink the binary" workflow robust: picking a single

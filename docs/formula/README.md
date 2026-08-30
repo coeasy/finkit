@@ -32,4 +32,4 @@ Finkit 公式引擎（`finkit::formula`）：通用证券公式语言运行时�
 | 文华 | ≈90% |
 | Pine Script v5 | ≈60% |
 
-> 更多实现细节见 [Code Wiki 关键类与函数](../code-wiki/03-关键类与函数.md)。
+> 更多实现细节见 [公式引擎](./grammar.md) 与 [Pine 语法](./pine-grammar.md)。

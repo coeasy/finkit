@@ -68,11 +68,6 @@
 
 - `long_run_stability.rs` - 长期运行稳定性
 
-### 调试工具 (Debug)
-调试和诊断工具。
-
-- `debug_cvar.rs` - CVAR 调试
-
 ## 公共模块 (Common)
 
 `tests/common/` 目录包含测试共享工具：

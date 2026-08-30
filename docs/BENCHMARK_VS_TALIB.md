@@ -132,10 +132,6 @@ A `❌` in `summary.md` (or a precision row > 1e-9) indicates a regression.
 
 ## See also
 
-* `ONE_CLICK_BUILD.md` — one-command setup (planned; for now see the
-  repo root `README.md`).
-* `PERFORMANCE_VS_TALIB.md` — historical context (planned; not yet
-  published).
 * [BENCHMARK_REPORT.md](BENCHMARK_REPORT.md) — the long-form report
   (auto-generated, refreshed on every bench run).
 * `competitive-benchmark.md` — Finkit vs `ta-rs` (Rust TA ecosystem)
