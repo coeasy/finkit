@@ -12,7 +12,7 @@ authors = [
 maintainers = [
     {name = "Finkit Contributors"}
 ]
-readme = "README.md"
+readme = "README_FINKIT.md"
 license = {text = "MIT OR Apache-2.0"}
 keywords = [
     "finkit",
@@ -51,7 +51,6 @@ classifiers = [
     "Topic :: Office/Business :: Financial :: Investment",
     "Topic :: Scientific/Engineering :: Mathematics",
     "Topic :: Software Development :: Libraries :: Python Modules",
-    "Typing :: Typed",
 ]
 requires-python = ">=3.8"
 
