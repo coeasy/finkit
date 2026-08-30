@@ -78,7 +78,7 @@ archs = ["x86_64", "arm64"]
 archs = ["AMD64"]
 
 [tool.maturin]
-features = ["pyo3/extension-module"]
+features = ["abi3"]
 python-source = "."
 module-name = "finkit.alpha_ta"
 strip = true
@@ -86,19 +86,19 @@ sdist-include = ["Cargo.lock"]
 include = ["finkit/py.typed"]
 
 [tool.maturin.target.x86_64-pc-windows-msvc]
-features = ["pyo3/extension-module"]
+features = ["abi3"]
 
 [tool.maturin.target.i686-pc-windows-msvc]
-features = ["pyo3/extension-module"]
+features = ["abi3"]
 
 [tool.maturin.target.x86_64-unknown-linux-gnu]
-features = ["pyo3/extension-module"]
+features = ["abi3"]
 
 [tool.maturin.target.aarch64-unknown-linux-gnu]
-features = ["pyo3/extension-module"]
+features = ["abi3"]
 
 [tool.maturin.target.x86_64-apple-darwin]
-features = ["pyo3/extension-module"]
+features = ["abi3"]
 
 [tool.maturin.target.aarch64-apple-darwin]
-features = ["pyo3/extension-module"]
+features = ["abi3"]
