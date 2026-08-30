@@ -4,15 +4,16 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
+    <!-- Keep the historical Maven coordinates during the v0.1.x compatibility
+         window while the public project identity moves to Finkit. -->
     <groupId>com.alphata</groupId>
     <artifactId>alpha-ta</artifactId>
-    <version>1.0.0</version>
+    <version>0.1.0</version>
     <packaging>jar</packaging>
 
-    <name>AlphaTA Java Bindings</name>
-    <description>High-performance financial technical analysis library with Rust core and Java JNI bindings.
-        Provides 100+ indicators including moving averages, oscillators, volatility measures,
-        cycle indicators, candlestick patterns, and chart pattern detection.
+    <name>Finkit Java Bindings (AlphaTA compatibility artifact)</name>
+    <description>Finkit high-performance financial indicator, factor, and formula engine with Rust core and Java JNI bindings.
+        The com.alphata:alpha-ta coordinates are retained for the v0.1.x compatibility window.
     </description>
     <url>https://github.com/coeasy/finkit</url>
 
@@ -27,8 +28,8 @@
 
     <developers>
         <developer>
-            <id>alphata</id>
-            <name>AlphaTA Contributors</name>
+            <id>finkit</id>
+            <name>Finkit Contributors</name>
         </developer>
     </developers>
 
@@ -106,7 +107,7 @@
                         <link>https://docs.oracle.com/javase/8/docs/api/</link>
                     </links>
                     <bottom>
-                        <![CDATA[Copyright &#169; {inceptionYear}&#x2013;{currentYear} alpha_ta Contributors. Released under the MIT License.]]>
+                        <![CDATA[Copyright &#169; {inceptionYear}&#x2013;{currentYear} Finkit Contributors. Released under the MIT OR Apache-2.0 licenses.]]>
                     </bottom>
                 </configuration>
                 <executions>
