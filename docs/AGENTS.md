@@ -1,8 +1,8 @@
-# AlphaTA Industrial-Grade Optimization
+# Finkit Industrial-Grade Optimization
 
 > **Branch:** feature/industrial-grade-upgrade | **Status:** completed | **Updated:** 2026-06-24
 
-**Project Directory:** `E:\agent_learn\AlphaTA`
+**Project Directory:** current repository root (see top-level README).
 
 This project uses AzaLoop for autonomous development. Re-read this file at session start.
 

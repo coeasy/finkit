@@ -1,6 +1,6 @@
-# AlphaTA — Architecture Overview
+# Finkit — Architecture Overview
 
-This document is the canonical reference for the AlphaTA crate structure,
+This document is the canonical reference for the Finkit crate structure,
 dependency graph, and main entry points. Diagrams are Mermaid (rendered by
 GitHub / GitLab / VS Code).
 
@@ -8,15 +8,15 @@ GitHub / GitLab / VS Code).
 
 ```mermaid
 graph TD
-  user[User code] --> core[alpha-ta-core]
-  user --> cli[alpha-ta-cli]
-  user --> wasm[alpha-ta-wasm]
-  user --> py[AlphaTA-python]
-  user --> node[AlphaTA-node]
-  user --> go[AlphaTA-go]
-  user --> java[AlphaTA-java]
-  user --> dotnet[AlphaTA-dotnet]
-  user --> c[AlphaTA-c]
+  user[User code] --> core[finkit]
+  user --> cli[finkit-cli]
+  user --> wasm[finkit-wasm]
+  user --> py[Finkit-python]
+  user --> node[Finkit-node]
+  user --> go[Finkit-go]
+  user --> java[Finkit-java]
+  user --> dotnet[Finkit-dotnet]
+  user --> c[Finkit-c]
 
   py --> core
   node --> core
@@ -26,7 +26,7 @@ graph TD
   c --> core
   wasm --> core
   cli --> core
-  cli --> viz[alpha-ta-visualization]
+  cli --> viz[finkit-visualization]
   viz --> core
 ```
 
@@ -34,16 +34,16 @@ graph TD
 
 | Crate | Role | Output |
 |-------|------|--------|
-| `alpha-ta-core` | Indicators, math, formula engine, traits | `rlib` (consumed by all others) |
-| `alpha-ta-cli` | Command-line interface | `bin` + reusable lib |
-| `alpha-ta-wasm` | Browser / Node.js WASM bindings | `wasm-bindgen` output |
-| `AlphaTA-python` | PyO3 bindings | `.whl` / sdist |
-| `AlphaTA-node` | `napi-rs` bindings | `node-addon-api` binary |
-| `AlphaTA-go` | `cgo` bindings | C-shim + Go package |
-| `AlphaTA-java` | JNI bindings | `.so` / `.dll` + `.jar` |
-| `AlphaTA-dotnet` | P/Invoke bindings | NuGet package |
-| `AlphaTA-c` | Pure-C ABI | `.a` / `.so` / `.dll` |
-| `alpha-ta-visualization` | Chart rendering (SVG/PNG/HTML) | `rlib` |
+| `finkit` | Indicators, math, formula engine, traits | `rlib` (consumed by all others) |
+| `finkit-cli` | Command-line interface | `bin` + reusable lib |
+| `finkit-wasm` | Browser / Node.js WASM bindings | `wasm-bindgen` output |
+| `Finkit-python` | PyO3 bindings | `.whl` / sdist |
+| `Finkit-node` | `napi-rs` bindings | `node-addon-api` binary |
+| `Finkit-go` | `cgo` bindings | C-shim + Go package |
+| `Finkit-java` | JNI bindings | `.so` / `.dll` + `.jar` |
+| `Finkit-dotnet` | P/Invoke bindings | NuGet package |
+| `Finkit-c` | Pure-C ABI | `.a` / `.so` / `.dll` |
+| `finkit-visualization` | Chart rendering (SVG/PNG/HTML) | `rlib` |
 
 ## Layering
 
@@ -57,7 +57,7 @@ graph TD
 └──────────────────────────────────────────────────────┘
                        ▲
 ┌──────────────────────────────────────────────────────┐
-│ Public Rust API (alpha-ta-core)                        │
+│ Public Rust API (finkit)                        │
 │  ├─ traits      (Ohlcv, StreamingIndicator, Batch…)  │
 │  ├─ indicators  (overlap, momentum, volume, …)      │
 │  ├─ formula     (parser, AST, bytecode, JIT, SIMD)   │

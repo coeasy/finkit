@@ -246,9 +246,9 @@ def candidate_names(ind: dict, lang: str) -> list[str]:
     if lang == "java":
         names = []
         if pub in NAME_ALIASES:
-            names.append("Java_com_alphata_Indicators_" + NAME_ALIASES[pub])
-        names.append("Java_com_alphata_Indicators_" + pub)
-        names.append("Java_com_alphata_Indicators_" + core)
+            names.append("Java_com_finkit_Indicators_" + NAME_ALIASES[pub])
+        names.append("Java_com_finkit_Indicators_" + pub)
+        names.append("Java_com_finkit_Indicators_" + core)
         return names
     if lang == "android":
         # The `shim_indicator!` macro's 1st argument IS the C FFI name
@@ -305,7 +305,7 @@ def do_discover(langs: list[str]) -> int:
                 if public != "alpha_" + ff["c_name"]:
                     ff.setdefault("names", {})[lang] = public
             elif lang == "java":
-                if public != "Java_com_alphata_Indicators_" + pub:
+                if public != "Java_com_finkit_Indicators_" + pub:
                     ff.setdefault("names", {})[lang] = public
         save_registry(reg)
         print(f"[discover/{lang}] matched {matched}/{len(inds)}; "

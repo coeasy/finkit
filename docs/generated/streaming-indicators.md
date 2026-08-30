@@ -59,8 +59,8 @@ Streaming indicators provide O(1) per-bar updates via the `StreamingIndicator` t
 ## Usage Example
 
 ```rust
-use AlphaTA_core::streaming::{StreamingIndicator, OhlcvBar};
-use AlphaTA_core::streaming::indicators::StreamingSma;
+use finkit::streaming::{StreamingIndicator, OhlcvBar};
+use finkit::streaming::indicators::StreamingSma;
 
 let mut sma = StreamingSma::new(20);
 let bar = OhlcvBar::new(open, high, low, close, volume);

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Registry-driven binding code generator for AlphaTA.
+"""Registry-driven binding code generator for Finkit.
 
 Consumes the single-source-of-truth ``docs/indicator_registry.json`` (each
 indicator carries an ``ffi`` block enriched by ``extract_corecalls.py``) and
@@ -179,12 +179,12 @@ def emit_py_node_file(inds: list[dict], lang: str) -> str:
         # hand-written indicator methods.
         prelude = (
             "use pyo3::prelude::*;\n"
-            "use alpha_ta_core::indicators;\n"
-            "use alpha_ta_core::math::moving_avg;\n"
-            "use alpha_ta_core::patterns::candlestick;\n\n"
-            "struct AlphaTaGenerated;\n\n"
+            "use finkit::indicators;\n"
+            "use finkit::math::moving_avg;\n"
+            "use finkit::patterns::candlestick;\n\n"
+            "struct FinkitGenerated;\n\n"
             "#[pymethods]\n"
-            "impl AlphaTaGenerated {\n"
+            "impl FinkitGenerated {\n"
         )
         fns = "\n".join(emit_py_node_indicator(i["ffi"], lang) for i in inds)
         return header + "\n" + prelude + fns + "}\n"

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Generate golden test input data for alpha-ta-core.
+Generate golden test input data for finkit-core.
 
 Reference indicator values are produced via self-golden: the Rust integration
 test `generate_golden` (ignored by default) computes values with our library

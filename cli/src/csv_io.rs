@@ -1,4 +1,4 @@
-//! CSV I/O helpers for the alpha_ta CLI.
+//! CSV I/O helpers for the finkit CLI.
 //!
 //! Provides:
 //! - [`OhlcvData`] — in-memory OHLCV container parsed from CSV.
@@ -201,7 +201,7 @@ mod tests {
     fn test_read_close_stdin_mocked() {
         // read_close_stdin reads from actual stdin; we cannot mock it
         // without external crate. This is a placeholder documenting the gap.
-        // In practice, users pipe data: `echo "1.0\n2.0" | alpha_ta sma 3`
+        // In practice, users pipe data: `echo "1.0\n2.0" | finkit sma 3`
     }
 
     #[test]

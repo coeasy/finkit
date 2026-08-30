@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  AlphaTA — one-click build + verify for all 7 language bindings (PowerShell 7+).
+  Finkit — one-click build + verify for all 7 language bindings (PowerShell 7+).
 
 .DESCRIPTION
   Thin forwarder to scripts/build-usage-packages.ps1. Mirrors the bash wrapper

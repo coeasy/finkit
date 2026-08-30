@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ----------------------------------------------------------------------------
-# AlphaTA .NET usage-package builder.
+# Finkit .NET usage-package builder.
 #
-# Produces `AlphaTA.<version>.nupkg` and stages the native lib under
+# Produces `Finkit.<version>.nupkg` and stages the native lib under
 # `runtimes/<rid>/native/`. The .nupkg is a *real* NuGet package that
 # can be `dotnet add package`'d from a local feed (see packaging/usage/
 # dotnet/README.md).
@@ -18,22 +18,22 @@ case "$( uname -s )" in
   MINGW*|MSYS*|CYGWIN*)
     PLATFORM="windows-x64"
     RID="win-x64"
-    NATIVE="alpha_ta_dotnet.dll" ;;
+    NATIVE="finkit_dotnet.dll" ;;
   Darwin)
     case "$( uname -m )" in
       arm64)
         PLATFORM="macos-arm64"; RID="osx-arm64"
-        NATIVE="libalpha_ta_dotnet.dylib" ;;
+        NATIVE="libfinkit_dotnet.dylib" ;;
       x86_64)
         PLATFORM="macos-x64"; RID="osx-x64"
-        NATIVE="libalpha_ta_dotnet.dylib" ;;
+        NATIVE="libfinkit_dotnet.dylib" ;;
     esac ;;
   Linux)
     case "$( uname -m )" in
       aarch64) PLATFORM="linux-arm64"; RID="linux-arm64"
-               NATIVE="libalpha_ta_dotnet.so" ;;
+               NATIVE="libfinkit_dotnet.so" ;;
       x86_64)  PLATFORM="linux-x64"; RID="linux-x64"
-               NATIVE="libalpha_ta_dotnet.so" ;;
+               NATIVE="libfinkit_dotnet.so" ;;
     esac ;;
   *) echo "unsupported platform: $( uname -s )" >&2; exit 1 ;;
 esac

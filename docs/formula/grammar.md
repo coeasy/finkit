@@ -1,6 +1,6 @@
 # 公式文法规范
 
-本文档描述 AlphaTA（AlphaTA）公式引擎的完整文法，基于 `core/src/formula/grammar.pest` 导出为 **EBNF** 格式，并标注通达信（TDX）、同花顺（THS）、大智慧（DZH）各平台方言差异。
+本文档描述 Finkit（Finkit）公式引擎的完整文法，基于 `core/src/formula/grammar.pest` 导出为 **EBNF** 格式，并标注通达信（TDX）、同花顺（THS）、大智慧（DZH）各平台方言差异。
 
 实现文件：`core/src/formula/grammar.pest`
 
@@ -8,7 +8,7 @@
 
 ## 概述
 
-AlphaTA 公式语言兼容国内主流行情软件的指标语法，支持：
+Finkit 公式语言兼容国内主流行情软件的指标语法，支持：
 
 - 变量赋值（`:=` / `=`）与输出（`:`）
 - 算术、逻辑、比较运算符
@@ -363,7 +363,7 @@ MA(C,5)        (* 三平台通用短别名 *)
 
 ### 跨周期引用
 
-AlphaTA 通过 `FormulaContext::with_period_data()` 提供跨周期数据，语法函数：
+Finkit 通过 `FormulaContext::with_period_data()` 提供跨周期数据，语法函数：
 
 | 函数 | 说明 | 返回值 |
 |------|------|--------|

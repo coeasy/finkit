@@ -320,7 +320,7 @@ PARAM N1 = 5, N2 = 10, N3 = 20;
 ### Rust
 
 ```rust
-use alphata_core::formula::{FormulaEngine, FormulaContext};
+use finkit::formula::{FormulaEngine, FormulaContext};
 use ndarray::Array1;
 
 let open = Array1::from_vec(vec![10.0, 10.2, 10.1, 10.5, 10.3]);
@@ -348,7 +348,7 @@ match engine.eval(&source, &mut ctx) {
 ### Python
 
 ```python
-from alpha_ta import Indicators
+from finkit import Indicators
 
 open_prices = [10.0, 10.2, 10.1, 10.5, 10.3]
 high_prices = [10.5, 10.8, 10.6, 10.9, 10.7]
@@ -375,7 +375,7 @@ print(result)
 ### Node.js
 
 ```javascript
-const { Indicators } = require('AlphaTA');
+const { Indicators } = require('finkit');
 
 const open = [10.0, 10.2, 10.1, 10.5, 10.3];
 const high = [10.5, 10.8, 10.6, 10.9, 10.7];
@@ -398,7 +398,7 @@ console.log(result);
 ### Java
 
 ```java
-import com.alphata.Indicators;
+import com.finkit.Indicators;
 import java.util.Map;
 
 public class FormulaExample {
@@ -432,7 +432,7 @@ package main
 
 import (
     "fmt"
-    "github.com.alphata/ta"
+    "github.com/coeasy/finkit"
 )
 
 func main() {
@@ -466,7 +466,7 @@ func main() {
 ```csharp
 using System;
 using System.Collections.Generic;
-using AlphaTA;
+using Finkit;
 
 class Program
 {
@@ -498,7 +498,7 @@ class Program
 ### C++
 
 ```cpp
-#include <alphata.hpp>
+#include <finkit.hpp>
 #include <iostream>
 
 int main() {
@@ -1029,7 +1029,7 @@ ctx = FormulaContext(open, high, low, close, volume, None).with_em_data(em_data)
 ### 使用方式
 
 ```rust
-use alphata_core::formula::{FormulaEngine, FormulaContext};
+use finkit::formula::{FormulaEngine, FormulaContext};
 
 let mut engine = FormulaEngine::new();
 let source = r#"
@@ -1073,7 +1073,7 @@ J: 3 * K - 2 * D
 
 ```rust
 use std::collections::HashMap;
-use alphata_core::formula::types::{FormulaContext, PeriodData};
+use finkit::formula::types::{FormulaContext, PeriodData};
 
 let weekly_data = PeriodData {
     open: Array1::from_vec(weekly_open),

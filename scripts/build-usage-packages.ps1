@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  AlphaTA unified usage-package builder + verifier (PowerShell 7+).
+  Finkit unified usage-package builder + verifier (PowerShell 7+).
 
 .DESCRIPTION
   Windows-native equivalent of scripts/build-usage-packages.sh.
@@ -11,7 +11,7 @@
        actually installing + running it.
     3. Emits a SHA256 + size manifest to dist/manifest.json.
     4. Bundles the full tree into
-       dist/alpha-ta-<version>-<plat>-usage-bundle.zip
+       dist/finkit-<version>-<plat>-usage-bundle.zip
        (via Compress-Archive).
 
 .PARAMETER Languages
@@ -103,8 +103,8 @@ $Verifiers = [ordered]@{
         # Accept abi3 OR cp<XY>-cp<XY>-*.whl (maturin picks based on cargo
         # features; either is valid for a smoke test).
         $distPy = Join-Path $Dist "python\$Platform"
-        $whl = Get-ChildItem -Path $distPy -Filter "alpha-ta-*.whl" -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -match 'alpha-ta-.*-abi3-.*\.whl|alpha-ta-.*-cp\d+-.*\.whl' } |
+        $whl = Get-ChildItem -Path $distPy -Filter "finkit-*.whl" -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match 'finkit-.*-abi3-.*\.whl|finkit-.*-cp\d+-.*\.whl' } |
             Select-Object -First 1
         if (-not $whl) { throw "no wheel to verify in $distPy" }
         $venv = Join-Path $Root ".test_venv\_usage_python"
@@ -112,7 +112,7 @@ $Verifiers = [ordered]@{
         if (-not (Test-Path $venv)) { & $Py -m venv $venv }
         $pipExe = Join-Path $venv "Scripts\pip.exe"
         $pyExe  = Join-Path $venv "Scripts\python.exe"
-        # The alpha-ta Python binding is pyO3 + numpy-aware; install numpy
+        # The finkit Python binding is pyO3 + numpy-aware; install numpy
         # in the venv first (the wheel's first call panics otherwise).
         & $pipExe install --quiet numpy
         if ($LASTEXITCODE -ne 0) { throw "pip install numpy failed" }
@@ -122,7 +122,7 @@ $Verifiers = [ordered]@{
         if ($LASTEXITCODE -ne 0) { throw "verify_install.py exited $LASTEXITCODE" }
     }
     node = {
-        $tgz = Get-ChildItem -Path (Join-Path $Dist "node\$Platform") -Filter "alpha-ta-*.tgz" -ErrorAction SilentlyContinue | Select-Object -First 1
+        $tgz = Get-ChildItem -Path (Join-Path $Dist "node\$Platform") -Filter "finkit-*.tgz" -ErrorAction SilentlyContinue | Select-Object -First 1
         if (-not $tgz) { throw "no tgz to verify" }
         $scratch = Join-Path $Root ".test_venv\_usage_node"
         Remove-Item -Recurse -Force $scratch -ErrorAction SilentlyContinue
@@ -136,7 +136,7 @@ $Verifiers = [ordered]@{
         } finally { Pop-Location }
     }
     java = {
-        $jar = Get-ChildItem -Path (Join-Path $Dist "java\$Platform") -Filter "alpha-ta-*.jar" -ErrorAction SilentlyContinue | Select-Object -First 1
+        $jar = Get-ChildItem -Path (Join-Path $Dist "java\$Platform") -Filter "finkit-*.jar" -ErrorAction SilentlyContinue | Select-Object -First 1
         if (-not $jar) { throw "no jar to verify" }
         $tmp = Join-Path $Root ".test_venv\_usage_java"
         Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
@@ -150,9 +150,9 @@ $Verifiers = [ordered]@{
     }
     go = {
         $mod = Join-Path $Root "packaging\usage\go\tests\go.mod"
-        $goDist = Join-Path $Dist "go\$Platform\alpha-ta"
+        $goDist = Join-Path $Dist "go\$Platform\finkit"
         if (-not (Test-Path $goDist)) { throw "no go module to verify" }
-        (Get-Content $mod) -replace 'replace github.com/alpha-ta-rs/alpha-ta => .*', "replace github.com/alpha-ta-rs/alpha-ta => $goDist" | Set-Content $mod
+        (Get-Content $mod) -replace 'replace github.com/coeasy/finkit => .*', "replace github.com/coeasy/finkit => $goDist" | Set-Content $mod
         Push-Location (Join-Path $Root "packaging\usage\go\tests")
         try { & go run ..\verify_install.go } finally { Pop-Location }
     }
@@ -162,7 +162,7 @@ $Verifiers = [ordered]@{
         if (Test-Path $test) { & $bash $test } else { Write-Warn "no c verifier — skipping" }
     }
     dotnet = {
-        $nupkg = Get-ChildItem -Path (Join-Path $Dist "dotnet\$Platform") -Filter "alpha-ta.*.nupkg" -ErrorAction SilentlyContinue | Select-Object -First 1
+        $nupkg = Get-ChildItem -Path (Join-Path $Dist "dotnet\$Platform") -Filter "Finkit.*.nupkg" -ErrorAction SilentlyContinue | Select-Object -First 1
         if (-not $nupkg) { throw "no nupkg to verify" }
         $feed = Join-Path $Root ".test_venv\_usage_dotnet_feed"
         Remove-Item -Recurse -Force $feed -ErrorAction SilentlyContinue
@@ -186,7 +186,7 @@ $Verifiers = [ordered]@{
 }
 
 # --- main loop --------------------------------------------------------------
-Write-Hdr "AlphaTA usage-package builder"
+Write-Hdr "Finkit usage-package builder"
 Write-Info "version : $Version"
 Write-Info "platform: $Platform"
 Write-Info "langs   : $($Languages -join ', ')"
@@ -252,7 +252,7 @@ for lang in langs:
             "sha256": hashlib.sha256(f.read_bytes()).hexdigest(),
         })
 manifest = {
-    "name": "alpha-ta",
+    "name": "finkit",
     "version": os.environ["VERSION"],
     "platform": plat,
     "components": components,
@@ -280,7 +280,7 @@ if ($Json) { Get-Content $manifestPath }
 # --- bundle -----------------------------------------------------------------
 if (-not $NoBundle -and $failCount -eq 0) {
     Write-Hdr "bundle"
-    $bundle = Join-Path $Dist "alpha-ta-$Version-$Platform-usage-bundle.zip"
+    $bundle = Join-Path $Dist "finkit-$Version-$Platform-usage-bundle.zip"
     $paths = @()
     foreach ($l in $Languages) {
         $p = Join-Path $Dist "$l\$Platform"

@@ -1,6 +1,6 @@
 # Complete Indicator List
 
-This document provides a comprehensive list of all technical analysis indicators available in AlphaTA, organized by category.
+This document provides a comprehensive list of all technical analysis indicators available in Finkit, organized by category.
 
 ## Overlap Studies
 

@@ -42,9 +42,9 @@ The harness is `cargo-fuzz` compatible, which is the format accepted
 by [OSS-Fuzz][oss-fuzz]. To enable OSS-Fuzz:
 
 1. Fork the [google/oss-fuzz](https://github.com/google/oss-fuzz) repo.
-2. Add a project entry under `projects/AlphaTA/` with a
+2. Add a project entry under `projects/Finkit/` with a
    `Dockerfile` and `build.sh` that runs `cargo +nightly fuzz build`.
-3. Update the `alpha-ta-core` repository to expose the fuzz workspace as
+3. Update the `finkit` repository to expose the fuzz workspace as
    the OSS-Fuzz source.
 
 A minimal `build.sh` for OSS-Fuzz:
@@ -52,7 +52,7 @@ A minimal `build.sh` for OSS-Fuzz:
 ```bash
 #!/usr/bin/env bash
 set -ex
-cd "$SRC/alpha-ta-core"
+cd "$SRC/finkit"
 cargo +nightly fuzz build --fuzz-dir fuzz
 cp fuzz/target/release/fuzz_target_* "$OUT/"
 ```

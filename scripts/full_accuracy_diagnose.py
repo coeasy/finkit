@@ -1,11 +1,13 @@
 """
 全面数值准确度诊断脚本
-对比 AlphaTA 和 TA-Lib 的所有指标
+对比 Finkit 和 TA-Lib 的所有指标
 """
 import numpy as np
 import finkit
 import talib
 import json
+
+alpha_ta = finkit  # backward-compat alias (module renamed to `finkit`)
 
 # 生成测试数据
 np.random.seed(42)

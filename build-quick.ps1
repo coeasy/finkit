@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  AlphaTA — one-click QUICK multi-language package builder (Windows / PowerShell).
+  Finkit — one-click QUICK multi-language package builder (Windows / PowerShell).
 
 .DESCRIPTION
   Fast one-command builder for all 7 usage packages
@@ -178,7 +178,7 @@ print(f"wrote {out} ({len(components)} components)")
 
 # bundle
 if ($Bundle -and $fail -eq 0) {
-    $BUNDLE = Join-Path $dist "alpha-ta-$ver-$platform-quick-bundle.zip"
+    $BUNDLE = Join-Path $dist "finkit-$ver-$platform-quick-bundle.zip"
     Info "bundling into $BUNDLE"
     $srcs = @()
     foreach ($lang in $WANT) { $srcs += (Join-Path $dist $lang $platform) }

@@ -886,26 +886,26 @@ BODY:=ABS(CLOSE-OPEN); UPPER:=HIGH-MAX(CLOSE,OPEN); LOWER:=MIN(CLOSE,OPEN)-LOW; 
 ### Python
 
 ```python
-from alpha_ta import Indicators
+import finkit as ta
 
 # Get a specific template
-template = Indicators.formula_get_template("macd_golden_cross")
+template = ta.formula_get_template("macd_golden_cross")
 print(f"Name: {template['name']}")
 print(f"Formula: {template['formula']}")
 
 # Search templates by keyword
-results = Indicators.formula_search_templates("MACD")
+results = ta.formula_search_templates("MACD")
 for t in results:
     print(f"{t['name']}: {t['description']}")
 
 # List all categories
-categories = Indicators.formula_list_categories()
+categories = ta.formula_list_categories()
 for cat in categories:
     print(f"{cat['category']}: {cat['count']} templates")
 
 # Evaluate a template
-template = Indicators.formula_get_template("ma_golden_cross")
-result = Indicators.formula_eval_bytecode(
+template = ta.formula_get_template("ma_golden_cross")
+result = ta.formula_eval_bytecode(
     template["formula"], open, high, low, close, volume
 )
 ```
@@ -913,7 +913,7 @@ result = Indicators.formula_eval_bytecode(
 ### Node.js
 
 ```javascript
-const { Indicators } = require('AlphaTA');
+const { Indicators } = require('finkit');
 
 // Get template
 const template = Indicators.formulaGetTemplate("macd_golden_cross");
@@ -931,7 +931,7 @@ console.log(categories);
 ### Java
 
 ```java
-import com.alphata.Indicators;
+import com.finkit.Indicators;
 import java.util.Map;
 
 Map<String, Object> template = Indicators.formulaGetTemplate("macd_golden_cross");
@@ -942,7 +942,7 @@ System.out.println(template.get("formula"));
 ### Go
 
 ```go
-import "github.com.alphata/ta"
+import "github.com/coeasy/finkit/go/ta"
 
 template := ta.FormulaGetTemplate("macd_golden_cross")
 fmt.Println(template.Name, template.Formula)
@@ -954,7 +954,7 @@ categories := ta.FormulaListCategories()
 ### .NET
 
 ```csharp
-using AlphaTA;
+using Finkit;
 
 var template = Indicators.FormulaGetTemplate("macd_golden_cross");
 Console.WriteLine(template.Name);

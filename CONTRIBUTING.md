@@ -1,6 +1,6 @@
-# Contributing to AlphaTA
+# Contributing to Finkit
 
-Thank you for your interest in contributing to AlphaTA! This document provides guidelines and information for contributors.
+Thank you for your interest in contributing to Finkit! This document provides guidelines and information for contributors.
 
 ## Getting Started
 

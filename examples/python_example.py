@@ -1,6 +1,6 @@
 """
-alpha_ta Python 示例代码
-展示如何使用 alpha_ta 进行技术分析
+finkit Python 示例代码
+展示如何使用 finkit 进行技术分析
 """
 
 import finkit as ta
@@ -228,7 +228,7 @@ def pandas_integration():
 
 
 if __name__ == '__main__':
-    print("alpha_ta Python 示例代码")
+    print("finkit Python 示例代码")
     print("=" * 50)
     
     basic_indicators()

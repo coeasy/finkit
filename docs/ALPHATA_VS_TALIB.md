@@ -1,11 +1,11 @@
-# AlphaTA vs TA-Lib — 功能与效率全面对比
+# Finkit vs TA-Lib — 功能与效率全面对比
 
 > **生成日期**: 2026-07-07
-> **AlphaTA 版本**: 1.0.0 (Rust 2021)
+> **Finkit 版本**: 1.0.0 (Rust 2021)
 > **TA-Lib 版本**: 0.6.4 (C reference)
 > **目标读者**: 量化研究员、回测工程师、量化平台架构师
 
-本文档从 **功能覆盖**、**性能基准**、**算法效率**、**架构优势**、**精度对比**、**独有功能**、**优化建议** 七个维度，对 AlphaTA 与 TA-Lib 进行全面对比。
+本文档从 **功能覆盖**、**性能基准**、**算法效率**、**架构优势**、**精度对比**、**独有功能**、**优化建议** 七个维度，对 Finkit 与 TA-Lib 进行全面对比。
 
 ---
 
@@ -27,7 +27,7 @@
 
 ### 1.1 项目简介
 
-| 项目 | AlphaTA | TA-Lib |
+| 项目 | Finkit | TA-Lib |
 |------|---------|--------|
 | 语言 | Rust 2021 | C99 |
 | 首次发布 | 2025 | 1999 (Mario Fortier) |
@@ -38,14 +38,14 @@
 
 ### 1.2 对比范围
 
-| 维度 | AlphaTA 统计 | TA-Lib 统计 |
+| 维度 | Finkit 统计 | TA-Lib 统计 |
 |------|--------------|-------------|
 | 批量指标 (Batch) | 283 个 pub fn | ~158 个 TA_* 函数 |
 | 流式指标 (Streaming) | 160 个 O(1) per-bar | 0 (仅批处理) |
 | K线形态 (CDL) | 55+ 个 | 61 个 |
 | 多语言绑定 | 7 种 (Python/Node/Java/Go/C/C++/.NET/WASM) | 2 种 (C/Python) |
 | SIMD 加速 | 42 个 AVX2 内核 | 无 |
-| 公式引擎 | ✅ Pine + AlphaTA 双方言 | ❌ |
+| 公式引擎 | ✅ Pine + Finkit 双方言 | ❌ |
 | 零拷贝输出 | ✅ SliceOutput trait | ❌ |
 | 中文/亚洲市场指标 | ✅ KDJ/VR/CR/BR/AR/ENE/EXPMA/BIAS/PSY/DMA 等 | ❌ |
 
@@ -56,7 +56,7 @@
 | `core/src/talib_ffi.rs` | TA-Lib 0.6.4 的 56 个手动 FFI 绑定函数 (受限于 FFI 暴露) |
 | `core/benches/talib_c_comparison.rs` | 37 个指标的真实 FFI 对比基准 |
 | `docs/benchmark-baseline.json` | 17 指标的 10K/100K/1M/10M 多规模基线 |
-| `docs/BENCHMARK_REPORT.md` | 6 核心指标的 AlphaTA vs TA-Lib C 真实对比 |
+| `docs/BENCHMARK_REPORT.md` | 6 核心指标的 Finkit vs TA-Lib C 真实对比 |
 | `core/src/streaming/registry.rs` | 流式指标的完整注册表 (160 个) |
 | `core/src/indicators/*.rs` | 批量指标的 31 个分类文件 |
 | `core/src/math/simd_ops.rs` | 42 个 SIMD AVX2 内核 |
@@ -73,11 +73,11 @@
 
 ## 2. 功能覆盖矩阵
 
-> 状态标注: ✅ 完全兼容 | ⚠️ 部分兼容 (参数/算法有差异) | ❌ 未实现 | ➕ AlphaTA 独有
+> 状态标注: ✅ 完全兼容 | ⚠️ 部分兼容 (参数/算法有差异) | ❌ 未实现 | ➕ Finkit 独有
 
 ### 2.1 Overlap Studies (MA 类) — 18 vs 40+
 
-| TA-Lib 函数 | AlphaTA 批量 | AlphaTA 流式 | 状态 |
+| TA-Lib 函数 | Finkit 批量 | Finkit 流式 | 状态 |
 |-------------|-------------|-------------|------|
 | `TA_SMA` | `indicators::sma` | `StreamingSma` | ✅ |
 | `TA_EMA` | `math::moving_avg::ema` | `StreamingEma` | ✅ |
@@ -110,11 +110,11 @@
 | ➕ `ENE` (中国) | `indicators::china::*` | `StreamingEne` | ➕ |
 | ➕ `EXPMA` (中国) | `indicators::china::*` | `StreamingExpma` | ➕ |
 
-**小结**: AlphaTA 覆盖 30+ MA 类指标（TA-Lib 仅 18），独有 HMA/ALMA/JMA/VIDYA/ZLEMA/FrAMA/Ichimoku/Donchian/SuperTrend/Keltner/DMA/ENE/EXPMA 等 13+ 高级 MA。批量+流式全覆盖。
+**小结**: Finkit 覆盖 30+ MA 类指标（TA-Lib 仅 18），独有 HMA/ALMA/JMA/VIDYA/ZLEMA/FrAMA/Ichimoku/Donchian/SuperTrend/Keltner/DMA/ENE/EXPMA 等 13+ 高级 MA。批量+流式全覆盖。
 
 ### 2.2 Momentum Indicators — 30 vs 50+
 
-| TA-Lib 函数 | AlphaTA 批量 | AlphaTA 流式 | 状态 |
+| TA-Lib 函数 | Finkit 批量 | Finkit 流式 | 状态 |
 |-------------|-------------|-------------|------|
 | `TA_RSI` | `indicators::momentum::rsi` | `StreamingRsi` | ✅ |
 | `TA_MACD` | `indicators::momentum::macd` | `StreamingMacd` | ✅ |
@@ -164,11 +164,11 @@
 | ➕ `CFO` (Chande Forecast) | `indicators::momentum_ext::chande_forecast_oscillator` | `StreamingCfo` | ➕ |
 | ➕ `Elder Ray` | `indicators::momentum::elder_ray` | `StreamingElderRay` | ➕ |
 
-**小结**: AlphaTA 覆盖 50+ 动量指标（TA-Lib 仅 30），独有 KDJ/VR/CR/AR/BR/AO/KST/Coppock/STC/TSI/Fisher/RVI/ConnorsRSI/Vortex/Squeeze/Inertia/QStick/CFO/Elder Ray 等 20+ 高级动量。
+**小结**: Finkit 覆盖 50+ 动量指标（TA-Lib 仅 30），独有 KDJ/VR/CR/AR/BR/AO/KST/Coppock/STC/TSI/Fisher/RVI/ConnorsRSI/Vortex/Squeeze/Inertia/QStick/CFO/Elder Ray 等 20+ 高级动量。
 
 ### 2.3 Volume Indicators — 4 vs 25+
 
-| TA-Lib 函数 | AlphaTA 批量 | AlphaTA 流式 | 状态 |
+| TA-Lib 函数 | Finkit 批量 | Finkit 流式 | 状态 |
 |-------------|-------------|-------------|------|
 | `TA_AD` | `indicators::volume::ad` | `StreamingAd` | ✅ |
 | `TA_ADOSC` | `indicators::volume::adosc` | `StreamingAdosc` | ✅ |
@@ -193,11 +193,11 @@
 | ➕ `TRIN` (Arms Index) | — | `StreamingTrin` | ➕ |
 | ➕ `Put/Call Ratio` | — | `StreamingPutCallRatio` | ➕ |
 
-**小结**: AlphaTA 独有 VWAP 系列、CMF、Force Index、EOM、KVO、NVI/PVI、PVT 等 22+ 指标。
+**小结**: Finkit 独有 VWAP 系列、CMF、Force Index、EOM、KVO、NVI/PVI、PVT 等 22+ 指标。
 
 ### 2.4 Volatility Indicators — 4 vs 20+
 
-| TA-Lib 函数 | AlphaTA 批量 | AlphaTA 流式 | 状态 |
+| TA-Lib 函数 | Finkit 批量 | Finkit 流式 | 状态 |
 |-------------|-------------|-------------|------|
 | `TA_ATR` | `indicators::volatility::atr` | `StreamingAtr` | ✅ |
 | `TA_NATR` | `indicators::volatility::natr` | `StreamingNatr` | ✅ |
@@ -220,11 +220,11 @@
 | ➕ `ADR` (Average Day Range) | — | `StreamingAdr` | ➕ |
 | ➕ `RVI` (Relative Vigor) | `indicators::momentum_ext::rvi` | `StreamingRvi` | ➕ |
 
-**小结**: AlphaTA 独有 17+ 高级波动率指标（Yang-Zhang、Garman-Klass、Sortino、Calmar、Ulcer、Choppiness、Mass Index 等）。
+**小结**: Finkit 独有 17+ 高级波动率指标（Yang-Zhang、Garman-Klass、Sortino、Calmar、Ulcer、Choppiness、Mass Index 等）。
 
 ### 2.5 Price Transform — 4 vs 5
 
-| TA-Lib 函数 | AlphaTA 批量 | AlphaTA 流式 | 状态 |
+| TA-Lib 函数 | Finkit 批量 | Finkit 流式 | 状态 |
 |-------------|-------------|-------------|------|
 | `TA_AVGPRICE` | `indicators::price_transform::avgprice` | `StreamingAvgPrice` | ✅ |
 | `TA_MEDPRICE` | `indicators::price_transform::medprice` | `StreamingMedPrice` | ✅ |
@@ -234,7 +234,7 @@
 
 ### 2.6 Cycle Indicators (Hilbert Transform) — 6 vs 10+
 
-| TA-Lib 函数 | AlphaTA 批量 | AlphaTA 流式 | 状态 |
+| TA-Lib 函数 | Finkit 批量 | Finkit 流式 | 状态 |
 |-------------|-------------|-------------|------|
 | `TA_HT_DCPERIOD` | `indicators::cycle::ht_dcperiod` | `StreamingHtDcPeriod` | ✅ |
 | `TA_HT_DCPHASE` | `indicators::cycle::ht_dcphase` | `StreamingHtDcPhase` | ✅ |
@@ -252,7 +252,7 @@
 
 ### 2.7 Statistics — 9 vs 14
 
-| TA-Lib 函数 | AlphaTA 批量 | AlphaTA 流式 | 状态 |
+| TA-Lib 函数 | Finkit 批量 | Finkit 流式 | 状态 |
 |-------------|-------------|-------------|------|
 | `TA_BETA` | `indicators::statistics::beta` | `StreamingBeta` | ✅ |
 | `TA_CORREL` | `indicators::statistics::correlation` | `StreamingCorrel` | ✅ |
@@ -272,15 +272,15 @@
 
 ### 2.8 Pattern Recognition (CDL) — 61 vs 55+
 
-AlphaTA 流式 K线形态 20+（已实现 `Doji`, `Hammer`, `InvertedHammer`, `Engulfing`, `MorningStar`, `EveningStar`, `Harami`, `Piercing`, `DarkCloudCover`, `SpinningTop`, `Marubozu`, `HangingMan`, `ShootingStar`, `3WhiteSoldiers`, `3BlackCrows`, `DojiStar`, `AbandonedBaby`, `Tristar`, `Kicking`, `TasukiGap` 等）。
+Finkit 流式 K线形态 20+（已实现 `Doji`, `Hammer`, `InvertedHammer`, `Engulfing`, `MorningStar`, `EveningStar`, `Harami`, `Piercing`, `DarkCloudCover`, `SpinningTop`, `Marubozu`, `HangingMan`, `ShootingStar`, `3WhiteSoldiers`, `3BlackCrows`, `DojiStar`, `AbandonedBaby`, `Tristar`, `Kicking`, `TasukiGap` 等）。
 
 批量 K线形态 55+ 来自 `core/src/indicators/classic_patterns.rs` + `core/src/patterns/`。
 
-**覆盖率**: AlphaTA 55+ / TA-Lib 61 = 90%。差 6 个 CDL（`CDL_DRAGONFLY_DOJI`, `CDL_GRAVESTONE_DOJI`, `CDL_LONGLEGGED_DOJI`, `CDL_4PRICE_DOJI`, `CDL_HIGH_WAVE`, `CDL_RICKSHAW_MAN` 等），可后续补充。
+**覆盖率**: Finkit 55+ / TA-Lib 61 = 90%。差 6 个 CDL（`CDL_DRAGONFLY_DOJI`, `CDL_GRAVESTONE_DOJI`, `CDL_LONGLEGGED_DOJI`, `CDL_4PRICE_DOJI`, `CDL_HIGH_WAVE`, `CDL_RICKSHAW_MAN` 等），可后续补充。
 
 ### 2.9 Math Transform — 15 vs 15 ✅ 100%
 
-| TA-Lib 函数 | AlphaTA 批量 | AlphaTA 流式 | 状态 |
+| TA-Lib 函数 | Finkit 批量 | Finkit 流式 | 状态 |
 |-------------|-------------|-------------|------|
 | `TA_ACOS` | `indicators::math_transform::acos` | `StreamingAcos` | ✅ |
 | `TA_ASIN` | `indicators::math_transform::asin` | `StreamingAsin` | ✅ |
@@ -300,7 +300,7 @@ AlphaTA 流式 K线形态 20+（已实现 `Doji`, `Hammer`, `InvertedHammer`, `E
 
 ### 2.10 Math Operators — 10 vs 12
 
-| TA-Lib 函数 | AlphaTA 批量 | AlphaTA 流式 | 状态 |
+| TA-Lib 函数 | Finkit 批量 | Finkit 流式 | 状态 |
 |-------------|-------------|-------------|------|
 | `TA_ADD` | `indicators::math_operators::add` | `StreamingAdd` | ✅ |
 | `TA_SUB` | `indicators::math_operators::sub` | `StreamingSub` | ✅ |
@@ -315,20 +315,20 @@ AlphaTA 流式 K线形态 20+（已实现 `Doji`, `Hammer`, `InvertedHammer`, `E
 | ➕ `MINMAX` | `indicators::math_operators::minmax` | — | ➕ |
 | ➕ `MINMAXINDEX` | `indicators::math_operators::minmaxindex` | — | ➕ |
 
-### 2.11 AlphaTA 独有类别
+### 2.11 Finkit 独有类别
 
 | 类别 | 指标 | 数量 |
 |------|------|------|
 | **中国市场** | KDJ, VR, CR, AR, BR, DPO, DMA, ENE, EXPMA, PSY, BIAS | 11 |
 | **A股专属** | WINNER, COST, MAIN_NET_INFLOW, MONEY_FLOW, LIMIT_UP, LIMIT_DOWN, CONSECUTIVE_LIMIT, TURNOVER, RS_RATIO | 9 |
 | **情绪/宽度** | Fear & Greed Index, VIX-like, Put/Call Ratio, AD_LINE, AD_RATIO, McClellan Osc/Summation, TRIN, New Highs/Lows, AdvanceDecline | 9 |
-| **公式引擎** | Pine DSL, AlphaTA DSL (JIT 编译) | 2 |
+| **公式引擎** | Pine DSL, Finkit DSL (JIT 编译) | 2 |
 | **特征工程** | MultiPeriod, Rolling Stats, Normalization, Labels, Selection | 5+ |
 | **扫雷引擎** | Sweep, SweepEngine, Sweepable | 3 |
 
 ### 2.12 总体覆盖统计
 
-| 类别 | TA-Lib 数量 | AlphaTA 数量 | 覆盖比 |
+| 类别 | TA-Lib 数量 | Finkit 数量 | 覆盖比 |
 |------|------------|--------------|--------|
 | Overlap Studies | 18 | 30+ | 100% + 12 独有 |
 | Momentum | 30 | 50+ | 100% + 20 独有 |
@@ -342,7 +342,7 @@ AlphaTA 流式 K线形态 20+（已实现 `Doji`, `Hammer`, `InvertedHammer`, `E
 | Math Operators | 10 | 12 | 100% + 2 独有 |
 | A股/中国/情绪 | 0 | 35+ | ➕ 全新 |
 
-**总体**: AlphaTA 批量覆盖 ~158 个 TA-Lib 函数中的 ~150 个（95%+），并独有 100+ 个 TA-Lib 不具备的高级指标和领域专属指标。
+**总体**: Finkit 批量覆盖 ~158 个 TA-Lib 函数中的 ~150 个（95%+），并独有 100+ 个 TA-Lib 不具备的高级指标和领域专属指标。
 
 ---
 
@@ -352,7 +352,7 @@ AlphaTA 流式 K线形态 20+（已实现 `Doji`, `Hammer`, `InvertedHammer`, `E
 
 > 来源: `docs/BENCHMARK_REPORT.md` (2026-06-24, Windows 10, x86_64 AVX2)
 
-| 指标 | AlphaTA (µs) | TA-Lib C (µs) | Speedup | 状态 |
+| 指标 | Finkit (µs) | TA-Lib C (µs) | Speedup | 状态 |
 |------|-------------|---------------|---------|------|
 | **SMA(20)** | 12.75 | 20.19 | **1.58x faster** | ✅ |
 | **EMA(12)** | 20.73 | 29.66 | **1.43x faster** | ✅ |
@@ -415,7 +415,7 @@ AlphaTA 流式 K线形态 20+（已实现 `Doji`, `Hammer`, `InvertedHammer`, `E
 | EMA(12) | 20.73 | 55.14 | 2.66x |
 | RSI(14) | 26.60 | 42.82 | 1.61x |
 
-**结论**: 公式引擎开销 1.3x-2.7x，在策略可接受范围内。优势是无需重新编译即可热加载策略 DSL（Pine/AlphaTA 方言）。
+**结论**: 公式引擎开销 1.3x-2.7x，在策略可接受范围内。优势是无需重新编译即可热加载策略 DSL（Pine/Finkit 方言）。
 
 ### 3.5 性能回归门禁（CI 强制）
 
@@ -450,7 +450,7 @@ perf_gate:
 
 ### 4.1 逐类别算法对比
 
-| 类别 | 指标 | AlphaTA 算法 | TA-Lib 算法 | AlphaTA 优势 |
+| 类别 | 指标 | Finkit 算法 | TA-Lib 算法 | Finkit 优势 |
 |------|------|-------------|-------------|-------------|
 | **Overlap** | SMA | 滑动和 + 增量更新；初始 sum 走 `simd_horizontal_sum` (AVX2 4-way unroll) | 滑动和 + 增量更新 | 1.58x (SIMD NaN-fill + 初始和) |
 | **Overlap** | EMA | 标量递推 O(1)/bar (顺序依赖，无法 SIMD 化核心循环) | 标量递推 O(1)/bar | 持平 (但 init 阶段 SIMD 化) |
@@ -495,7 +495,7 @@ perf_gate:
 
 ### 4.3 单遍 vs 多遍算法
 
-| 指标 | 单遍 (AlphaTA) | 多遍 (TA-Lib) | 加速比 |
+| 指标 | 单遍 (Finkit) | 多遍 (TA-Lib) | 加速比 |
 |------|----------------|---------------|--------|
 | **BBANDS** | ✅ Welford | ❌ mean → variance | 1.35x |
 | **STDDEV** | ✅ Welford | ❌ mean → variance | 1.3-1.5x |
@@ -506,20 +506,20 @@ perf_gate:
 
 ### 4.4 增量更新支持
 
-| 计算模式 | AlphaTA | TA-Lib |
+| 计算模式 | Finkit | TA-Lib |
 |----------|---------|--------|
 | **批处理** (O(n) 一次计算) | ✅ 283 个函数 | ✅ ~158 个函数 |
 | **流式** (O(1) per-bar) | ✅ 160 个函数 | ❌ 无 |
 | **Checkpoint/序列化** | ✅ `CheckpointState` + serde | ❌ |
 | **形成 bar 重绘** | ✅ `snapshot/restore` | ❌ |
 
-**关键差异**: AlphaTA 流式框架 160 个指标支持 O(1) per-bar 更新，内部状态（sum、buffer、prev_ema）< 200 bytes/indicator，可跨线程安全序列化。
+**关键差异**: Finkit 流式框架 160 个指标支持 O(1) per-bar 更新，内部状态（sum、buffer、prev_ema）< 200 bytes/indicator，可跨线程安全序列化。
 
 **应用场景**: 实时策略、Tick-to-Bar 聚合、事件驱动回测、策略热加载、跨进程状态迁移。
 
 ### 4.5 零拷贝输出
 
-| API | AlphaTA | TA-Lib |
+| API | Finkit | TA-Lib |
 |-----|---------|--------|
 | **返回 Array** (`Array1<f64>`) | ✅ 283 个 | ✅ |
 | **预分配缓冲写入** (`*_into`) | ✅ `SmaSlice/EmaSlice` + 35+ `_into` 变体 | ❌ |
@@ -538,7 +538,7 @@ vs `indicators::sma(&data, 20)` 返回 `Array1<f64>` (8 MB 分配)。
 
 ### 4.6 内存使用对比（10K bars, 6 指标一次性计算）
 
-| 实现 | AlphaTA (MB) | TA-Lib C (MB) | 节省 |
+| 实现 | Finkit (MB) | TA-Lib C (MB) | 节省 |
 |------|--------------|---------------|------|
 | 6 指标 + 中间 tr 数组 | 6 × 80KB + 80KB = 560KB | 6 × 80KB + 80KB = 560KB | 持平 |
 | 启用 `SliceOutput` 复用 | 6 × 80KB = 480KB | 560KB | 14% ↓ |
@@ -548,28 +548,28 @@ vs `indicators::sma(&data, 20)` 返回 `Array1<f64>` (8 MB 分配)。
 
 ## 5. 架构优势对比
 
-| 维度 | AlphaTA | TA-Lib C | 优势方 |
+| 维度 | Finkit | TA-Lib C | 优势方 |
 |------|---------|----------|--------|
-| **实现语言** | Rust (内存安全，无 GC) | C (手动管理) | **AlphaTA** |
-| **计算模式** | 批处理 + **流式 O(1) 增量** | 仅批处理 | **AlphaTA** |
-| **多语言绑定** | 7 种 (Python/Node/Java/Go/C/C++/.NET/WASM) | 2 种 (C/Python) | **AlphaTA** |
-| **SIMD 加速** | 42 个 AVX2 内核 (自动 fallback) | 标量实现 | **AlphaTA** |
-| **零拷贝输出** | `SliceOutput` trait + 35+ `_into` 变体 | 需分配输出缓冲 | **AlphaTA** |
-| **公式引擎** | JIT 编译 DSL (Pine/AlphaTA 双方言) | 无 | **AlphaTA** |
-| **WASM 支持** | ✅ 可编译为 WebAssembly | ❌ 不能 | **AlphaTA** |
-| **特征工程** | 内置 features 模块 (multi-period/normalization/labels/selection) | 无 | **AlphaTA** |
+| **实现语言** | Rust (内存安全，无 GC) | C (手动管理) | **Finkit** |
+| **计算模式** | 批处理 + **流式 O(1) 增量** | 仅批处理 | **Finkit** |
+| **多语言绑定** | 7 种 (Python/Node/Java/Go/C/C++/.NET/WASM) | 2 种 (C/Python) | **Finkit** |
+| **SIMD 加速** | 42 个 AVX2 内核 (自动 fallback) | 标量实现 | **Finkit** |
+| **零拷贝输出** | `SliceOutput` trait + 35+ `_into` 变体 | 需分配输出缓冲 | **Finkit** |
+| **公式引擎** | JIT 编译 DSL (Pine/Finkit 双方言) | 无 | **Finkit** |
+| **WASM 支持** | ✅ 可编译为 WebAssembly | ❌ 不能 | **Finkit** |
+| **特征工程** | 内置 features 模块 (multi-period/normalization/labels/selection) | 无 | **Finkit** |
 | **K线形态** | 55+ 流式 + 批量 (90% 覆盖) | 61 个批量 (100%) | TA-Lib (略胜) |
-| **中国市场指标** | 20+ (KDJ/VR/CR/AR/BR/DMA/ENE/EXPMA/BIAS/PSY/DPO 等) | ❌ 无 | **AlphaTA** |
-| **A股专属** | 9 个 (WINNER/COST/MAIN_NET_INFLOW/LIMIT_UP/DOWN 等) | ❌ 无 | **AlphaTA** |
-| **情绪指标** | 5 个 (Fear&Greed/Put-Call Ratio/PSY/VIX-like 等) | ❌ 无 | **AlphaTA** |
-| **宽度/情绪** | AD_LINE, McClellan, TRIN, NewHighs/Lows | ❌ 无 | **AlphaTA** |
-| **Checkpoint/序列化** | ✅ `serde` + `CheckpointState` | ❌ | **AlphaTA** |
-| **性能** | 1.04x-2.07x faster (6 核心指标) | baseline | **AlphaTA** |
+| **中国市场指标** | 20+ (KDJ/VR/CR/AR/BR/DMA/ENE/EXPMA/BIAS/PSY/DPO 等) | ❌ 无 | **Finkit** |
+| **A股专属** | 9 个 (WINNER/COST/MAIN_NET_INFLOW/LIMIT_UP/DOWN 等) | ❌ 无 | **Finkit** |
+| **情绪指标** | 5 个 (Fear&Greed/Put-Call Ratio/PSY/VIX-like 等) | ❌ 无 | **Finkit** |
+| **宽度/情绪** | AD_LINE, McClellan, TRIN, NewHighs/Lows | ❌ 无 | **Finkit** |
+| **Checkpoint/序列化** | ✅ `serde` + `CheckpointState` | ❌ | **Finkit** |
+| **性能** | 1.04x-2.07x faster (6 核心指标) | baseline | **Finkit** |
 | **精度** | ~0 至 1e-13 max_rel (优于 TA-Lib 一致路径) | baseline | 持平 |
 | **生态成熟度** | 1 年 (持续增长) | 26 年 | **TA-Lib** |
 | **社区规模** | 成长中 | 庞大 | **TA-Lib** |
-| **文档完整度** | 12+ docs 文件 (BENCHMARK/COMPAT/API) | 1 份用户手册 | **AlphaTA** |
-| **学习曲线** | cargo add 即可 | 需安装 C 库 + pip | **AlphaTA** |
+| **文档完整度** | 12+ docs 文件 (BENCHMARK/COMPAT/API) | 1 份用户手册 | **Finkit** |
+| **学习曲线** | cargo add 即可 | 需安装 C 库 + pip | **Finkit** |
 | **Python 包大小** | 5-20 MB wheel (编译后) | 5-10 MB (含 C 库) | 持平 |
 
 ---
@@ -585,7 +585,7 @@ vs `indicators::sma(&data, 20)` 返回 `Array1<f64>` (8 MB 分配)。
 | **RSI** | 0 | Wilder smoothing 完全一致 |
 | **MACD (line/signal)** | ~1e-15 | EMA of EMA 多一次舍入 |
 | **MACD (hist)** | ~1e-13 | hist = line - signal 放大误差 |
-| **BBANDS** | ~1e-13 | TA-Lib 两遍 vs AlphaTA Welford 单遍，~1 ULP 漂移 |
+| **BBANDS** | ~1e-13 | TA-Lib 两遍 vs Finkit Welford 单遍，~1 ULP 漂移 |
 | **ATR** | ~1e-13 | Wilder smoothing on TR |
 | **ADX** | ~1e-10 | DM smoothing 使用 RMA，符号差异 |
 | **STOCH (slowk)** | ~1e-13 | SMA of raw %K |
@@ -609,9 +609,9 @@ vs `indicators::sma(&data, 20)` 返回 `Array1<f64>` (8 MB 分配)。
 
 | 指标组 | 注意事项 |
 |--------|----------|
-| **BBANDS** | TA-Lib 用 popvar (population variance, 除以 n)；AlphaTA 也用 n，与 TA-Lib 一致 |
-| **STOCH** | TA-Lib 默认 SlowK/D 使用 SMA 平滑；AlphaTA 默认也是 |
-| **MACD** | TA-Lib MACD 类型默认是 EMA；AlphaTA 与之对齐 |
+| **BBANDS** | TA-Lib 用 popvar (population variance, 除以 n)；Finkit 也用 n，与 TA-Lib 一致 |
+| **STOCH** | TA-Lib 默认 SlowK/D 使用 SMA 平滑；Finkit 默认也是 |
+| **MACD** | TA-Lib MACD 类型默认是 EMA；Finkit 与之对齐 |
 | **Hilbert** | HT_DCPERIOD/HT_DCPHASE 在小数点后 5-6 位开始漂移；可接受 |
 | **形态识别** | CDL 输出 ±100/0；必须完全一致才算 pass |
 
@@ -632,13 +632,13 @@ vs `indicators::sma(&data, 20)` 返回 `Array1<f64>` (8 MB 分配)。
 
 ## 7. 独有功能
 
-### 7.1 AlphaTA 独有（TA-Lib 无对应）
+### 7.1 Finkit 独有（TA-Lib 无对应）
 
 #### 7.1.1 流式计算框架
 
 ```rust
-use alpha_ta_core::streaming::{StreamingIndicator, OhlcvBar};
-use alpha_ta_core::streaming::indicators::StreamingSma;
+use finkit::streaming::{StreamingIndicator, OhlcvBar};
+use finkit::streaming::indicators::StreamingSma;
 
 let mut sma = StreamingSma::new(20);
 for bar in bars.iter() {
@@ -652,12 +652,12 @@ for bar in bars.iter() {
 
 **规模对比** (1M bars 回测):
 - TA-Lib: 每次新增 bar 需重算 O(n)，延迟 O(n)
-- AlphaTA 流式: 每次新增 bar 延迟 O(1) ≈ 0.44 ns/val
+- Finkit 流式: 每次新增 bar 延迟 O(1) ≈ 0.44 ns/val
 
 #### 7.1.2 公式引擎 (JIT 编译 DSL)
 
 ```rust
-use alpha_ta_core::formula::{FormulaEngine, FormulaDialect};
+use finkit::formula::{FormulaEngine, FormulaDialect};
 
 let mut engine = FormulaEngine::new(FormulaDialect::AlphaTA);
 engine.compile("rsi_14 = rsi(close, 14); signal = ema(rsi_14, 9)")?;
@@ -749,14 +749,14 @@ let restored: SmaSnapshot = serde_json::from_str(&json)?;
 
 | 语言 | 包名 | 平台 |
 |------|------|------|
-| **Python** | `alpha-ta` | PyPI wheel |
-| **Node.js** | `@alphata/core` | npm |
-| **Java** | `com.alphata:alpha-ta-java` | Maven |
-| **Go** | `github.com/alphata/alpha-ta-go` | go get |
-| **C** | `libalpha_ta` | header + .so/.dll/.dylib |
-| **C++** | `namespace alphata` | header + .so |
-| **.NET** | `AlphaTA.Core` | NuGet |
-| **WASM** | `alpha_ta_wasm` | npm + CDN |
+| **Python** | `finkit` | PyPI wheel |
+| **Node.js** | `finkit` | npm |
+| **Java** | `com.finkit:finkit-java` | Maven |
+| **Go** | `github.com/coeasy/finkit` | go get |
+| **C** | `libfinkit` | header + .so/.dll/.dylib |
+| **C++** | `namespace finkit` | header + .so |
+| **.NET** | `Finkit` | NuGet |
+| **WASM** | `finkit-wasm` | npm + CDN |
 
 #### 7.1.10 WASM 支持
 
@@ -768,11 +768,11 @@ wasm-pack build core --target web
 
 **应用**: 浏览器端策略演示、轻量级回测、加密客户端策略。
 
-### 7.2 TA-Lib 独有（AlphaTA 待实现）
+### 7.2 TA-Lib 独有（Finkit 待实现）
 
 | 功能 | 状态 | 优先级 |
 |------|------|--------|
-| **CDL 形态数量** | TA-Lib 61, AlphaTA 55+ | 中 (补 6 个: Dragonfly/Gravestone/LongLegged/4Price Doji, High Wave, Rickshaw Man) |
+| **CDL 形态数量** | TA-Lib 61, Finkit 55+ | 中 (补 6 个: Dragonfly/Gravestone/LongLegged/4Price Doji, High Wave, Rickshaw Man) |
 | **TA_SAREXT** (extended SAR) | ❌ 未实现 | 低 |
 | **TA_MAMA** (流式) | ❌ 仅批量 | 中 |
 | **TA_PERCENTRANK** (流式) | ❌ 仅批量 | 低 |
@@ -785,19 +785,19 @@ wasm-pack build core --target web
 
 ### 7.3 总结
 
-| 类别 | AlphaTA 独有 | TA-Lib 独有 | 净优势 |
+| 类别 | Finkit 独有 | TA-Lib 独有 | 净优势 |
 |------|--------------|-------------|--------|
-| 流式 O(1) | 160 | 0 | **AlphaTA +160** |
-| 中国/亚洲市场 | 20 | 0 | **AlphaTA +20** |
-| A股专属 | 9 | 0 | **AlphaTA +9** |
-| 情绪/宽度 | 9 | 0 | **AlphaTA +9** |
-| 特征工程 | 11 子模块 | 0 | **AlphaTA +11** |
-| 公式引擎 | 1 (JIT DSL) | 0 | **AlphaTA +1** |
-| 多语言绑定 | 7 种 | 2 种 | **AlphaTA +5** |
-| WASM | ✅ | ❌ | **AlphaTA +1** |
-| Checkpoint | ✅ | ❌ | **AlphaTA +1** |
+| 流式 O(1) | 160 | 0 | **Finkit +160** |
+| 中国/亚洲市场 | 20 | 0 | **Finkit +20** |
+| A股专属 | 9 | 0 | **Finkit +9** |
+| 情绪/宽度 | 9 | 0 | **Finkit +9** |
+| 特征工程 | 11 子模块 | 0 | **Finkit +11** |
+| 公式引擎 | 1 (JIT DSL) | 0 | **Finkit +1** |
+| 多语言绑定 | 7 种 | 2 种 | **Finkit +5** |
+| WASM | ✅ | ❌ | **Finkit +1** |
+| Checkpoint | ✅ | ❌ | **Finkit +1** |
 | CDL 数量 | 55+ | 61 | TA-Lib +6 |
-| **总计** | **216+** | **6** | **AlphaTA +210** |
+| **总计** | **216+** | **6** | **Finkit +210** |
 
 ---
 
@@ -871,7 +871,7 @@ wasm-pack build core --target web
 
 ### 8.4 迁移指南
 
-#### 从 TA-Lib 迁移到 AlphaTA
+#### 从 TA-Lib 迁移到 Finkit
 
 **Python 示例**:
 
@@ -882,8 +882,8 @@ sma = talib.SMA(close, timeperiod=20)
 rsi = talib.RSI(close, timeperiod=14)
 macd, signal, hist = talib.MACD(close, fastperiod=12, slowperiod=26, signalperiod=9)
 
-# AlphaTA
-from alpha_ta import sma, rsi, macd
+# Finkit
+from finkit import sma, rsi, macd
 sma = sma(close, period=20)
 rsi = rsi(close, period=14)
 macd_result = macd(close, fast=12, slow=26, signal=9)
@@ -897,8 +897,8 @@ macd_line, signal_line, hist = macd_result.macd, macd_result.signal, macd_result
 use talib::SMA;
 let sma = SMA::new(20).call(&close)?;
 
-// AlphaTA
-use alpha_ta_core::indicators;
+// Finkit
+use finkit::indicators;
 let sma = indicators::sma(&close, 20)?;
 ```
 
@@ -909,7 +909,7 @@ let sma = indicators::sma(&close, 20)?;
 let sma = indicators::sma(&close, 20)?;
 
 // 流式 (O(1) per-bar)
-use alpha_ta_core::streaming::indicators::StreamingSma;
+use finkit::streaming::indicators::StreamingSma;
 let mut sma = StreamingSma::new(20);
 for &price in &close {
     if let Some(v) = sma.next(price) { /* ... */ }
@@ -920,12 +920,12 @@ for &price in &close {
 
 | 场景 | 推荐 | 原因 |
 |------|------|------|
-| **A股/中国市场回测** | AlphaTA | 20+ 中文专属指标 |
-| **高频实时策略** | AlphaTA | O(1) 流式 + checkpoint |
-| **多语言团队** | AlphaTA | 7 种绑定 |
-| **Web/浏览器展示** | AlphaTA | WASM 支持 |
-| **ML 特征工程** | AlphaTA | features 模块 |
-| **传统美股回测** | TA-Lib 或 AlphaTA | 功能等价 |
+| **A股/中国市场回测** | Finkit | 20+ 中文专属指标 |
+| **高频实时策略** | Finkit | O(1) 流式 + checkpoint |
+| **多语言团队** | Finkit | 7 种绑定 |
+| **Web/浏览器展示** | Finkit | WASM 支持 |
+| **ML 特征工程** | Finkit | features 模块 |
+| **传统美股回测** | TA-Lib 或 Finkit | 功能等价 |
 | **Excel VBA** | TA-Lib | 唯一支持 |
 | **极简 C 项目** | TA-Lib | 单 .so/.dll |
 
@@ -1018,7 +1018,7 @@ TA_SIN   TA_SINH  TA_SQRT  TA_TAN   TA_TANH
 
 **总计**: 18+30+3+3+4+6+9+61+10+15 = 159 个函数（接近官方 158 个，可能有重叠）。
 
-### 9.2 AlphaTA 完整函数列表
+### 9.2 Finkit 完整函数列表
 
 > 来源: `core/src/indicators/*.rs` (283 pub fn) + `core/src/streaming/registry.rs` (160) + `core/src/math/*.rs`
 
@@ -1129,7 +1129,7 @@ brew install ta-lib  # 或 apt-get install libta-lib0-dev
 输出:
 - `dist/bench/results.json` — 机器可读
 - `dist/bench/summary.md` — 一览表
-- `dist/bench/alpha-ta-vs-talib.md` — 完整报告
+- `dist/bench/finkit-vs-talib.md` — 完整报告
 - `dist/bench/precision.md` — 精度对比 (加 `--precision`)
 
 ---
@@ -1142,23 +1142,23 @@ brew install ta-lib  # 或 apt-get install libta-lib0-dev
 
 | 函数 | 文件 | 优化内容 | 预期加速 |
 |------|------|----------|----------|
-| `dema` | [moving_avg.rs:618](file:///p:/llm_code/finkit/core/src/math/moving_avg.rs) | 两次初始求和改 `simd_horizontal_sum` | 1.1-1.3x |
-| `tema` | [moving_avg.rs:690](file:///p:/llm_code/finkit/core/src/math/moving_avg.rs) | 三次初始求和改 `simd_horizontal_sum` | 1.1-1.4x |
-| `trima` | [moving_avg.rs:884](file:///p:/llm_code/finkit/core/src/math/moving_avg.rs) | 第二阶段初始求和改 SIMD | 1.05-1.2x |
-| `mavp` | [moving_avg.rs:950](file:///p:/llm_code/finkit/core/src/math/moving_avg.rs) | 每窗口求和改 SIMD | 1.5-2.0x |
-| `medprice` | [price_transform.rs:70](file:///p:/llm_code/finkit/core/src/indicators/price_transform.rs) | 改用 `simd_median_price` | 2-3x |
-| `typprice` | [price_transform.rs:111](file:///p:/llm_code/finkit/core/src/indicators/price_transform.rs) | 改用 `simd_typical_price` | 2-3x |
-| `ad` | [volume.rs:42](file:///p:/llm_code/finkit/core/src/indicators/volume.rs) | 改用 `simd_ad_line` | 1.5-2.0x |
-| `obv` | [volume.rs:158](file:///p:/llm_code/finkit/core/src/indicators/volume.rs) | 改用 `simd_obv` | 1.5-2.0x |
+| `dema` | [moving_avg.rs:618](../../core/src/math/moving_avg.rs) | 两次初始求和改 `simd_horizontal_sum` | 1.1-1.3x |
+| `tema` | [moving_avg.rs:690](../../core/src/math/moving_avg.rs) | 三次初始求和改 `simd_horizontal_sum` | 1.1-1.4x |
+| `trima` | [moving_avg.rs:884](../../core/src/math/moving_avg.rs) | 第二阶段初始求和改 SIMD | 1.05-1.2x |
+| `mavp` | [moving_avg.rs:950](../../core/src/math/moving_avg.rs) | 每窗口求和改 SIMD | 1.5-2.0x |
+| `medprice` | [price_transform.rs:70](../../core/src/indicators/price_transform.rs) | 改用 `simd_median_price` | 2-3x |
+| `typprice` | [price_transform.rs:111](../../core/src/indicators/price_transform.rs) | 改用 `simd_typical_price` | 2-3x |
+| `ad` | [volume.rs:42](../../core/src/indicators/volume.rs) | 改用 `simd_ad_line` | 1.5-2.0x |
+| `obv` | [volume.rs:158](../../core/src/indicators/volume.rs) | 改用 `simd_obv` | 1.5-2.0x |
 
 ### 8.5.2 零分配 (`*_into`) 变体扩展
 
 | 函数 | 签名 | 文件 | 行号 |
 |------|------|------|------|
-| `macd_into` | `(input, fp, sp, sigp, macd, signal, hist)` | momentum.rs | [line 2588](file:///p:/llm_code/finkit/core/src/indicators/momentum.rs) |
-| `mama_into` | `(input, fast, slow, mama, fama)` | overlap.rs | [line 665](file:///p:/llm_code/finkit/core/src/indicators/overlap.rs) |
-| `wclprice_into` | `(high, low, close, output)` | price_transform.rs | [line 168](file:///p:/llm_code/finkit/core/src/indicators/price_transform.rs) |
-| `ad_into` | `(high, low, close, vol, output)` | volume.rs | [line 64](file:///p:/llm_code/finkit/core/src/indicators/volume.rs) |
+| `macd_into` | `(input, fp, sp, sigp, macd, signal, hist)` | momentum.rs | [line 2588](../../core/src/indicators/momentum.rs) |
+| `mama_into` | `(input, fast, slow, mama, fama)` | overlap.rs | [line 665](../../core/src/indicators/overlap.rs) |
+| `wclprice_into` | `(high, low, close, output)` | price_transform.rs | [line 168](../../core/src/indicators/price_transform.rs) |
+| `ad_into` | `(high, low, close, vol, output)` | volume.rs | [line 64](../../core/src/indicators/volume.rs) |
 
 **已存在的零分配变体**（保持向后兼容）:
 
@@ -1185,7 +1185,7 @@ brew install ta-lib  # 或 apt-get install libta-lib0-dev
 
 下表整合了 [BENCHMARK_REPORT.md](BENCHMARK_REPORT.md) 历史数据 + 2026-07-07 优化预期:
 
-| 指标 | AlphaTA (µs, 10K) | TA-Lib C (µs, 10K) | Speedup | 优化后预期 |
+| 指标 | Finkit (µs, 10K) | TA-Lib C (µs, 10K) | Speedup | 优化后预期 |
 |------|-------------------|---------------------|---------|-----------|
 | SMA(20) | 12.75 | 20.19 | 1.58x | 1.6-1.8x (SIMD sum) |
 | EMA(12) | 20.73 | 29.66 | 1.43x | 1.5-1.7x (SIMD seed) |
@@ -1262,7 +1262,7 @@ test result: ok. 2451 passed; 0 failed; 1 ignored
 #### ema_multi_periods 用法示例
 
 ```rust
-use alpha_ta_core::math::moving_avg::ema_multi_periods;
+use finkit::math::moving_avg::ema_multi_periods;
 
 let close: Vec<f64> = (1..=10_000).map(|i| 100.0 + (i as f64 * 0.013).sin() * 5.0).collect();
 let periods = [5usize, 10, 20, 30, 60, 120];
@@ -1277,7 +1277,7 @@ let mut bufs: Vec<Vec<f64>> = periods.iter().map(|_| vec![0.0; close.len()]).col
 
 #### D.5 AVX-512 内核详情（2026-07-07）
 
-新模块 [`math/simd_ops_avx512.rs`](file:///p:/llm_code/finkit/core/src/math/simd_ops_avx512.rs) 提供 7 个 8-wide AVX-512F 内核，目标硬件为 Skylake-X / Ice Lake / Zen 4 及以上：
+新模块 [`math/simd_ops_avx512.rs`](../../core/src/math/simd_ops_avx512.rs) 提供 7 个 8-wide AVX-512F 内核，目标硬件为 Skylake-X / Ice Lake / Zen 4 及以上：
 
 | 函数 | 描述 | 内部 |
 |------|------|------|
@@ -1312,7 +1312,7 @@ let mut bufs: Vec<Vec<f64>> = periods.iter().map(|_| vec![0.0; close.len()]).col
 **使用示例**:
 
 ```rust
-use alpha_ta_core::math::simd_ops_avx512;
+use finkit::math::simd_ops_avx512;
 
 if simd_ops_avx512::simd512_available() {
     // AVX-512 硬件上：8-wide 内核生效
@@ -1325,7 +1325,7 @@ if simd_ops_avx512::simd512_available() {
 
 #### D.6 多线程 rayon 批处理详情（2026-07-07）
 
-新模块 [`indicators/parallel.rs`](file:///p:/llm_code/finkit/core/src/indicators/parallel.rs) 提供 8 个公共 API，按"rayon 特性开关"自动启用并行或回退到顺序路径：
+新模块 [`indicators/parallel.rs`](../../core/src/indicators/parallel.rs) 提供 8 个公共 API，按"rayon 特性开关"自动启用并行或回退到顺序路径：
 
 | 函数 | 描述 |
 |------|------|
@@ -1355,7 +1355,7 @@ if simd_ops_avx512::simd512_available() {
 **使用示例**:
 
 ```rust
-use alpha_ta_core::indicators::parallel::parallel_sma_batch;
+use finkit::indicators::parallel::parallel_sma_batch;
 
 // 多股票扫描
 let closes: Vec<Vec<f64>> = (0..1000).map(|i| /* 每只股票的 close */ unimplemented!()).collect();
@@ -1365,7 +1365,7 @@ let sma_results = parallel_sma_batch(&refs, 20).unwrap();
 
 #### D.8 WASM simd128 内核详情（2026-07-07）
 
-新模块 [`math/simd_ops_wasm.rs`](file:///p:/llm_code/finkit/core/src/math/simd_ops_wasm.rs) 提供 5 个 WASM SIMD128（2-wide f64）内核：
+新模块 [`math/simd_ops_wasm.rs`](../../core/src/math/simd_ops_wasm.rs) 提供 5 个 WASM SIMD128（2-wide f64）内核：
 
 | 函数 | 描述 | WASM primitive |
 |------|------|----------------|
@@ -1415,7 +1415,7 @@ test result: ok. 2515 passed; 0 failed; 1 ignored
 
 ## 总结
 
-| 维度 | AlphaTA 优势 | TA-Lib 优势 |
+| 维度 | Finkit 优势 | TA-Lib 优势 |
 |------|--------------|-------------|
 | **性能** | 1.04x-2.07x faster (6 核心指标) | — |
 | **功能覆盖** | 95%+ TA-Lib + 100+ 独有 | CDL 6 个独有 |
@@ -1426,38 +1426,38 @@ test result: ok. 2515 passed; 0 failed; 1 ignored
 | **生态成熟度** | — | 26 年积累 |
 | **学习曲线** | cargo add | 系统库 + pip |
 
-**结论**: AlphaTA 在 **性能**、**流式计算**、**亚洲市场**、**现代集成** 方面显著优于 TA-Lib；在 **生态成熟度**、**CDL 完整性** 方面略逊。两者定位不同：TA-Lib 是经典 C 库，AlphaTA 是面向 2026+ 的现代 Rust 量化基础设施。
+**结论**: Finkit 在 **性能**、**流式计算**、**亚洲市场**、**现代集成** 方面显著优于 TA-Lib；在 **生态成熟度**、**CDL 完整性** 方面略逊。两者定位不同：TA-Lib 是经典 C 库，Finkit 是面向 2026+ 的现代 Rust 量化基础设施。
 
 推荐:
-- **新项目** (尤其中国/亚洲市场) → AlphaTA
-- **实时高频策略** → AlphaTA (流式 O(1))
-- **ML 特征工程** → AlphaTA (features 模块)
-- **Web/浏览器端** → AlphaTA (WASM)
+- **新项目** (尤其中国/亚洲市场) → Finkit
+- **实时高频策略** → Finkit (流式 O(1))
+- **ML 特征工程** → Finkit (features 模块)
+- **Web/浏览器端** → Finkit (WASM)
 - **传统美股成熟策略** → 两者皆可
 - **Excel/VBA 老系统** → TA-Lib
-- **需要长期稳定性的核心库** → TA-Lib (待 AlphaTA v2.0 验证)
+- **需要长期稳定性的核心库** → TA-Lib (待 Finkit v2.0 验证)
 
 ---
 
 **版权**: Apache-2.0
-**维护**: AlphaTA Team
+**维护**: Finkit Team
 
 ---
 
 ## 10. 全量 158 函数对比表（2026-07-07 更新）
 
-本章提供 **TA-Lib 0.6.4 全部 158 个函数** 与 **AlphaTA 1.0** 的逐项对应关系。表格列说明：
+本章提供 **TA-Lib 0.6.4 全部 158 个函数** 与 **Finkit 1.0** 的逐项对应关系。表格列说明：
 
 - **TA-Lib 名称**: TA-Lib 0.6.4 官方函数名
-- **AlphaTA 批量**: 对应的 Rust pub fn（`indicators::*`）
-- **AlphaTA 流式**: 对应的 `StreamingXxx` struct（`streaming::indicators::*`）
+- **Finkit 批量**: 对应的 Rust pub fn（`indicators::*`）
+- **Finkit 流式**: 对应的 `StreamingXxx` struct（`streaming::indicators::*`）
 - **SIMD**: 是否使用 AVX2 内核 (`simd_ops`)
 - **`_into` 零分配**: 是否有直接写入预分配缓冲区的变体
 - **基准测试组**: 在 `talib_c_comparison.rs` 中的分组
 
 ### 10.1 Overlap Studies (13 函数)
 
-| TA-Lib 名称 | AlphaTA 批量 | AlphaTA 流式 | SIMD | `_into` | 基准组 |
+| TA-Lib 名称 | Finkit 批量 | Finkit 流式 | SIMD | `_into` | 基准组 |
 |-------------|-------------|--------------|------|---------|--------|
 | `TA_SMA` | `sma` | `StreamingSma` | ✅ | `sma_into` | overlap |
 | `TA_EMA` | `ema` | `StreamingEma` | ✅ | `ema_into` | overlap |
@@ -1475,7 +1475,7 @@ test result: ok. 2515 passed; 0 failed; 1 ignored
 
 ### 10.2 Momentum Indicators (30 函数)
 
-| TA-Lib 名称 | AlphaTA 批量 | AlphaTA 流式 | SIMD | `_into` | 基准组 |
+| TA-Lib 名称 | Finkit 批量 | Finkit 流式 | SIMD | `_into` | 基准组 |
 |-------------|-------------|--------------|------|---------|--------|
 | `TA_ADX` | `adx` | `StreamingAdx` | ✅ | — | directional |
 | `TA_ADXR` | `adxr` | `StreamingAdxr` | ✅ | — | directional |
@@ -1510,7 +1510,7 @@ test result: ok. 2515 passed; 0 failed; 1 ignored
 
 ### 10.3 Volume Indicators (3 函数)
 
-| TA-Lib 名称 | AlphaTA 批量 | AlphaTA 流式 | SIMD | `_into` | 基准组 |
+| TA-Lib 名称 | Finkit 批量 | Finkit 流式 | SIMD | `_into` | 基准组 |
 |-------------|-------------|--------------|------|---------|--------|
 | `TA_AD` | `ad` | `StreamingAd` | ✅ | `ad_into` | volume |
 | `TA_ADOSC` | `adosc` | `StreamingAdosc` | ✅ | — | volume |
@@ -1518,7 +1518,7 @@ test result: ok. 2515 passed; 0 failed; 1 ignored
 
 ### 10.4 Volatility Indicators (3 函数)
 
-| TA-Lib 名称 | AlphaTA 批量 | AlphaTA 流式 | SIMD | `_into` | 基准组 |
+| TA-Lib 名称 | Finkit 批量 | Finkit 流式 | SIMD | `_into` | 基准组 |
 |-------------|-------------|--------------|------|---------|--------|
 | `TA_ATR` | `atr` | `StreamingAtr` | ✅ | `atr_into` | volatility |
 | `TA_NATR` | `natr` | `StreamingNatr` | ✅ | — | volatility |
@@ -1526,7 +1526,7 @@ test result: ok. 2515 passed; 0 failed; 1 ignored
 
 ### 10.5 Price Transform (4 函数)
 
-| TA-Lib 名称 | AlphaTA 批量 | AlphaTA 流式 | SIMD | `_into` | 基准组 |
+| TA-Lib 名称 | Finkit 批量 | Finkit 流式 | SIMD | `_into` | 基准组 |
 |-------------|-------------|--------------|------|---------|--------|
 | `TA_AVGPRICE` | `avgprice` | `StreamingAvgPrice` | ✅ | — | price_transform_full |
 | `TA_MEDPRICE` | `medprice` | `StreamingMedPrice` | ✅ | — | price_transform_full |
@@ -1535,7 +1535,7 @@ test result: ok. 2515 passed; 0 failed; 1 ignored
 
 ### 10.6 Cycle Indicators (6 函数)
 
-| TA-Lib 名称 | AlphaTA 批量 | AlphaTA 流式 | SIMD | `_into` | 基准组 |
+| TA-Lib 名称 | Finkit 批量 | Finkit 流式 | SIMD | `_into` | 基准组 |
 |-------------|-------------|--------------|------|---------|--------|
 | `TA_HT_DCPERIOD` | `ht_dcperiod` | `StreamingHtDcPeriod` | ✅ HT 链路 | — | cycle_extra |
 | `TA_HT_DCPHASE` | `ht_dcphase` | `StreamingHtDcPhase` | ✅ HT 链路 | — | cycle_extra |
@@ -1548,7 +1548,7 @@ test result: ok. 2515 passed; 0 failed; 1 ignored
 
 ### 10.7 Statistics Functions (13 函数)
 
-| TA-Lib 名称 | AlphaTA 批量 | AlphaTA 流式 | SIMD | `_into` | 基准组 |
+| TA-Lib 名称 | Finkit 批量 | Finkit 流式 | SIMD | `_into` | 基准组 |
 |-------------|-------------|--------------|------|---------|--------|
 | `TA_AVGDEV` | `avgdev` | `StreamingAvgdev` | — | — | statistics_extra |
 | `TA_BETA` | `beta` | `StreamingBeta` | — | — | statistics |
@@ -1566,7 +1566,7 @@ test result: ok. 2515 passed; 0 failed; 1 ignored
 
 ### 10.8 Math Transform (15 函数)
 
-| TA-Lib 名称 | AlphaTA 批量 | AlphaTA 流式 | SIMD | `_into` | 基准组 |
+| TA-Lib 名称 | Finkit 批量 | Finkit 流式 | SIMD | `_into` | 基准组 |
 |-------------|-------------|--------------|------|---------|--------|
 | `TA_ACOS` | `acos` | `StreamingAcos` | ✅ | — | math_transform |
 | `TA_ASIN` | `asin` | `StreamingAsin` | ✅ | — | math_transform |
@@ -1586,7 +1586,7 @@ test result: ok. 2515 passed; 0 failed; 1 ignored
 
 ### 10.9 Math Operators (11 函数)
 
-| TA-Lib 名称 | AlphaTA 批量 | AlphaTA 流式 | SIMD | `_into` | 基准组 |
+| TA-Lib 名称 | Finkit 批量 | Finkit 流式 | SIMD | `_into` | 基准组 |
 |-------------|-------------|--------------|------|---------|--------|
 | `TA_ADD` | `add` | `StreamingAdd` | ✅ | — | math_operators |
 | `TA_DIV` | `div` | `StreamingDiv` | ✅ | — | math_operators |
@@ -1602,7 +1602,7 @@ test result: ok. 2515 passed; 0 failed; 1 ignored
 
 ### 10.10 Pattern Recognition (61 函数)
 
-| TA-Lib 名称 | AlphaTA 批量 | AlphaTA 流式 | 基准组 |
+| TA-Lib 名称 | Finkit 批量 | Finkit 流式 | 基准组 |
 |-------------|-------------|--------------|--------|
 | `TA_CDL2CROWS` | `cdl_2crows` | — | patterns |
 | `TA_CDL3BLACKCROWS` | `cdl_3black_crows` | `StreamingCdl3BlackCrows` | patterns |
@@ -1668,7 +1668,7 @@ test result: ok. 2515 passed; 0 failed; 1 ignored
 
 ### 10.11 覆盖率与状态汇总
 
-| 类别 | TA-Lib 官方 | AlphaTA 实现 | 流式 | 缺失 |
+| 类别 | TA-Lib 官方 | Finkit 实现 | 流式 | 缺失 |
 |------|-----------|-------------|------|------|
 | Overlap Studies | 18 | 13 (含 SAREXT) | 11 | 5 (历史别名) |
 | Momentum | 30 | 30 ✅ | 30 ✅ | 0 |
@@ -1682,7 +1682,7 @@ test result: ok. 2515 passed; 0 failed; 1 ignored
 | Pattern Recognition | 61 | 60+ ✅ | 20 | 0 |
 | **总计** | **158** | **159** | **111** | **<10** |
 
-**注**: AlphaTA 1.0 已实现 **TA-Lib 0.6.4 全量 158 函数**（含 SKEWNESS/KURTOSIS 补充），且对 **160 个指标** 提供 O(1) per-bar 流式版本。详情见 [talib_ffi.rs](file:///p:/llm_code/finkit/core/src/talib_ffi.rs) 的 162 个 FFI 绑定。
+**注**: Finkit 1.0 已实现 **TA-Lib 0.6.4 全量 158 函数**（含 SKEWNESS/KURTOSIS 补充），且对 **160 个指标** 提供 O(1) per-bar 流式版本。详情见 [talib_ffi.rs](../../core/src/talib_ffi.rs) 的 162 个 FFI 绑定。
 
 ### 10.12 性能对比总表（与 TA-Lib C 0.6.4）
 
@@ -1690,7 +1690,7 @@ test result: ok. 2515 passed; 0 failed; 1 ignored
 > 硬件: 现代 x86_64 多核 CPU (AVX2)
 > 数据规模: 10,000 bars (默认) + 10K/100K/1M 分组 (scaled)
 
-| 指标 | 数据规模 | AlphaTA (ns/bar) | TA-Lib C (ns/bar) | 加速比 | 备注 |
+| 指标 | 数据规模 | Finkit (ns/bar) | TA-Lib C (ns/bar) | 加速比 | 备注 |
 |------|---------|------------------|-------------------|--------|------|
 | SMA(20) | 10K | 14.3 | 22.6 | **1.58x** | SIMD AVX2 |
 | SMA(20) | 1M | 13.1 | 22.0 | **1.68x** | SIMD 缓存友好 |
@@ -1735,24 +1735,24 @@ test result: ok. 2515 passed; 0 failed; 1 ignored
 | SUM(30) | 10K | 14.0 | 17.0 | **1.21x** | 滚动和 |
 | MAX(30)/MIN(30) | 10K | 18.0-22.0 | 24.0-28.0 | ~1.30x | 滚动极值 |
 
-**总体**: AlphaTA 在 39/40 个已 benchmark 指标上 **快于或等于 TA-Lib C**，平均加速比 **1.20x-1.50x**。核心 SIMD 函数（SMA/EMA/RSI/MACD/BBANDS/ATR）达 **1.4x-2.0x** 加速。
+**总体**: Finkit 在 39/40 个已 benchmark 指标上 **快于或等于 TA-Lib C**，平均加速比 **1.20x-1.50x**。核心 SIMD 函数（SMA/EMA/RSI/MACD/BBANDS/ATR）达 **1.4x-2.0x** 加速。
 
 ### 10.13 性能优化技术汇总（2026-07-07 落地）
 
 | 技术 | 覆盖函数 | 加速比 | 文件 |
 |------|---------|--------|------|
-| **AVX2 SIMD 求和/水平求和** | sma/ema/wma/t3/dema/tema/trima/mavp | 1.5-2.0x | [simd_ops.rs](file:///p:/llm_code/finkit/core/src/math/simd_ops.rs) |
-| **AVX2 SIMD 中位数/典型价** | medprice/typprice | 2-3x | [simd_ops.rs](file:///p:/llm_code/finkit/core/src/math/simd_ops.rs) |
-| **AVX2 SIMD OBV/AD** | obv/ad | 1.5-2.0x | [simd_ops.rs](file:///p:/llm_code/finkit/core/src/math/simd_ops.rs) |
-| **AVX2 SIMD Hilbert 链路** | ht_dcperiod / ht_dcphase / ht_phasor / ht_sine / ht_trendmode / ht_trendline | 2.5x (38.56 → 15 ns/bar) | [simd_ops.rs](file:///p:/llm_code/finkit/core/src/math/simd_ops.rs) |
-| **Welford 增量标准差** | rsi/bbands | 1.2-1.5x | [statistics.rs](file:///p:/llm_code/finkit/core/src/math/statistics.rs) |
-| **FMA (`mul_add`)** | ema/dema/tema + kdj K/D + ht_quadrature | 1.05-1.1x | [moving_avg.rs](file:///p:/llm_code/finkit/core/src/math/moving_avg.rs) / [china.rs](file:///p:/llm_code/finkit/core/src/indicators/china.rs) / [cycle.rs](file:///p:/llm_code/finkit/core/src/indicators/cycle.rs) |
+| **AVX2 SIMD 求和/水平求和** | sma/ema/wma/t3/dema/tema/trima/mavp | 1.5-2.0x | [simd_ops.rs](../../core/src/math/simd_ops.rs) |
+| **AVX2 SIMD 中位数/典型价** | medprice/typprice | 2-3x | [simd_ops.rs](../../core/src/math/simd_ops.rs) |
+| **AVX2 SIMD OBV/AD** | obv/ad | 1.5-2.0x | [simd_ops.rs](../../core/src/math/simd_ops.rs) |
+| **AVX2 SIMD Hilbert 链路** | ht_dcperiod / ht_dcphase / ht_phasor / ht_sine / ht_trendmode / ht_trendline | 2.5x (38.56 → 15 ns/bar) | [simd_ops.rs](../../core/src/math/simd_ops.rs) |
+| **Welford 增量标准差** | rsi/bbands | 1.2-1.5x | [statistics.rs](../../core/src/math/statistics.rs) |
+| **FMA (`mul_add`)** | ema/dema/tema + kdj K/D + ht_quadrature | 1.05-1.1x | [moving_avg.rs](../../core/src/math/moving_avg.rs) / [china.rs](../../core/src/indicators/china.rs) / [cycle.rs](../../core/src/indicators/cycle.rs) |
 | **零分配 `*_into`** | sma/ema/rsi/macd/bbands/atr/wclprice/ad/medprice/typprice/obv/mama | 1.2-1.4x (减分配) | 各 `_into` 变体 |
-| **O(1) per-bar 流式** | 160 个 streaming struct | ~1.5-3x (减热路径) | [streaming/](file:///p:/llm_code/finkit/core/src/streaming/) |
-| **多周期 EMA 并行** | ema_multi_periods | 2-4x (vs 6 次独立 ema) | [moving_avg.rs](file:///p:/llm_code/finkit/core/src/math/moving_avg.rs) |
-| **AVX-512F 8-wide 内核** | simd512_sma / simd512_ema / simd512_rsi / simd512_macd_seed / simd512_bbands_seed / simd512_atr_seed / simd512_adx_seed + simd512_horizontal_sum | 1.5-2.0x (Skylake-X+/Zen 4+ AVX-512 硬件) | [simd_ops_avx512.rs](file:///p:/llm_code/finkit/core/src/math/simd_ops_avx512.rs) |
-| **WASM SIMD128 2-wide 内核** | simd128_sma / simd128_ema / simd128_rsi / simd128_bbands / simd128_horizontal_sum | 1.3-1.8x (浏览器/wasm32 + simd128) | [simd_ops_wasm.rs](file:///p:/llm_code/finkit/core/src/math/simd_ops_wasm.rs) |
-| **多线程 rayon 批处理** | parallel_sma/ema/rsi/atr_batch + parallel_apply + parallel_sma/ema_multi_period | 3.3x (4 核) / 5.7x (8 核) | [parallel.rs](file:///p:/llm_code/finkit/core/src/indicators/parallel.rs) |
+| **O(1) per-bar 流式** | 160 个 streaming struct | ~1.5-3x (减热路径) | [streaming/](../../core/src/streaming/) |
+| **多周期 EMA 并行** | ema_multi_periods | 2-4x (vs 6 次独立 ema) | [moving_avg.rs](../../core/src/math/moving_avg.rs) |
+| **AVX-512F 8-wide 内核** | simd512_sma / simd512_ema / simd512_rsi / simd512_macd_seed / simd512_bbands_seed / simd512_atr_seed / simd512_adx_seed + simd512_horizontal_sum | 1.5-2.0x (Skylake-X+/Zen 4+ AVX-512 硬件) | [simd_ops_avx512.rs](../../core/src/math/simd_ops_avx512.rs) |
+| **WASM SIMD128 2-wide 内核** | simd128_sma / simd128_ema / simd128_rsi / simd128_bbands / simd128_horizontal_sum | 1.3-1.8x (浏览器/wasm32 + simd128) | [simd_ops_wasm.rs](../../core/src/math/simd_ops_wasm.rs) |
+| **多线程 rayon 批处理** | parallel_sma/ema/rsi/atr_batch + parallel_apply + parallel_sma/ema_multi_period | 3.3x (4 核) / 5.7x (8 核) | [parallel.rs](../../core/src/indicators/parallel.rs) |
 
 **总 SIMD 内核数**: 45 (AVX2) + 8 (AVX-512) + 5 (WASM simd128)
 **总零分配变体数**: 35+

@@ -12,7 +12,7 @@
 
 ## 典型对照（概数）
 
-| 指标 | AlphaTA vs TA-Lib | 说明 |
+| 指标 | Finkit vs TA-Lib | 说明 |
 |------|-------------------|------|
 | SMA / EMA / WMA | 1.5x–2.6x | 零分配 + SIMD 求和 |
 | MACD | 1.3x–2.0x | 多周期 EMA 单趟 |

@@ -1,15 +1,15 @@
 # API Reference
 
-Complete API reference for all language bindings in AlphaTA.
+Complete API reference for all language bindings in Finkit.
 
 ## Core API (Rust)
 
 ### Module Structure
 
 ```rust
-use alphata_core::indicators;
-use alphata_core::math::moving_avg;
-use alphata_core::patterns::{candlestick, chart};
+use finkit::indicators;
+use finkit::math::moving_avg;
+use finkit::patterns::{candlestick, chart};
 ```
 
 ### Overlap Studies
@@ -157,13 +157,13 @@ pub fn head_shoulders(
 ### Streaming API (Incremental)
 
 The `streaming` module provides O(1) per-bar indicator updates via the
-[`StreamingIndicator`](https://docs.rs/alpha-ta-core/latest/alphata_core/streaming/trait.StreamingIndicator.html)
+[`StreamingIndicator`](https://docs.rs/finkit/latest/finkit/streaming/trait.StreamingIndicator.html)
 trait. Use this path for live data feeds where re-scanning full history is impractical.
 
 #### Core Traits
 
 ```rust
-use alphata_core::streaming::{Ohlcv, OhlcvBar, StreamingIndicator, IndicatorMeta};
+use finkit::streaming::{Ohlcv, OhlcvBar, StreamingIndicator, IndicatorMeta};
 
 /// OHLCV bar access
 pub trait Ohlcv {
@@ -203,8 +203,8 @@ pub trait IndicatorMeta {
 | `StreamingMacd` | `f64` | `MacdOutput` | `streaming::indicators` |
 
 ```rust
-use alphata_core::streaming::{StreamingIndicator, OhlcvBar};
-use alphata_core::streaming::indicators::{StreamingSma, StreamingMacd, MacdOutput};
+use finkit::streaming::{StreamingIndicator, OhlcvBar};
+use finkit::streaming::indicators::{StreamingSma, StreamingMacd, MacdOutput};
 
 // Simple moving average — feed close prices one at a time
 let mut sma = StreamingSma::new(3);
@@ -219,7 +219,7 @@ let out: MacdOutput = macd.next(100.0);
 // out.macd, out.signal, out.histogram
 
 // OHLCV bar input for ATR
-use alphata_core::streaming::indicators::StreamingAtr;
+use finkit::streaming::indicators::StreamingAtr;
 let bar = OhlcvBar::new(10.0, 12.0, 9.0, 11.0, 1000.0);
 let mut atr = StreamingAtr::new(14);
 let val = atr.next(&bar);
@@ -247,7 +247,7 @@ The registry module exposes static metadata for all supported indicators,
 enabling discovery, documentation generation, and JSON export.
 
 ```rust
-use alphata_core::streaming::{
+use finkit::streaming::{
     all_indicators, registry_document,
     IndicatorInfo, ParamInfo, RegistryDocument,
 };
@@ -290,7 +290,7 @@ The canonical JSON snapshot lives at `docs/indicator_registry.json` and is
 validated against `registry_document()` in core tests:
 
 ```rust
-use alphata_core::streaming::registry_document;
+use finkit::streaming::registry_document;
 use serde_json;
 
 let json = serde_json::to_string_pretty(&registry_document()).unwrap();
@@ -304,7 +304,7 @@ Valid category slugs: `overlap`, `momentum`, `volume`, `volatility`, `price_tran
 ### Installation
 
 ```bash
-pip install alpha-ta
+pip install finkit
 ```
 
 ### Functions
@@ -397,7 +397,7 @@ double_tops = ta.detect_double_top(high)
 ### Installation
 
 ```bash
-npm install @alphata/node
+npm install finkit
 ```
 
 ### TypeScript Definitions
@@ -481,7 +481,7 @@ import {
   sma, ema, rsi, macd, bollinger_bands,
   stoch, atr, obv,
   cdl_doji, cdl_hammer, detect_double_top
-} from '@alphata/node';
+} from 'finkit';
 
 const close = Array.from({ length: 100 }, (_, i) => 100 + i + Math.random());
 const high = close.map(x => x + Math.random() * 2);
@@ -504,16 +504,16 @@ const doubleTops = detect_double_top(high);
 
 ```xml
 <dependency>
-    <groupId>com.alphata</groupId>
-    <artifactId>AlphaTA</artifactId>
-    <version>1.0.0</version>
+    <groupId>com.finkit</groupId>
+    <artifactId>finkit</artifactId>
+    <version>0.1.0</version>
 </dependency>
 ```
 
 ### Classes
 
 ```java
-package com.alphata;
+package com.finkit;
 
 public class Indicators {
     // Overlap Studies
@@ -558,8 +558,8 @@ public class StochResult {
 ### Complete Example
 
 ```java
-import com.alphata.Indicators;
-import com.alphata.MacdResult;
+import com.finkit.Indicators;
+import com.finkit.MacdResult;
 
 public class Example {
     public static void main(String[] args) {
@@ -655,13 +655,13 @@ func main() {
 ### NuGet Package
 
 ```bash
-dotnet add package AlphaTA
+dotnet add package finkit
 ```
 
 ### Classes
 
 ```csharp
-namespace AlphaTA;
+namespace Finkit;
 
 public class Indicators
 {
@@ -705,7 +705,7 @@ public class BbandsResult
 ```csharp
 using System;
 using System.Linq;
-using AlphaTA;
+using Finkit;
 
 class Program
 {
@@ -731,7 +731,7 @@ class Program
 ### Installation
 
 ```bash
-npm install alpha-ta-wasm
+npm install finkit-wasm
 ```
 
 ### Functions
@@ -768,7 +768,7 @@ export function obv(close: number[], volume: number[]): number[];
 ### Complete Example
 
 ```typescript
-import init, { sma, rsi, macd } from 'alpha-ta-wasm';
+import init, { sma, rsi, macd } from 'finkit-wasm';
 
 async function main() {
   await init();
@@ -791,28 +791,28 @@ main();
 ### Installation
 
 ```bash
-cargo install alpha-ta-cli
+cargo install finkit
 ```
 
 ### Commands
 
 ```bash
 # Calculate indicators
-alpha-ta-cli sma --input data.csv --period 14 --output sma.csv
-alpha-ta-cli ema --input data.csv --period 14
-alpha-ta-cli rsi --input data.csv --period 14
-alpha-ta-cli macd --input data.csv --fast 12 --slow 26 --signal 9
-alpha-ta-cli bbands --input data.csv --period 20 --nbdevup 2.0 --nbdevdn 2.0
-alpha-ta-cli atr --input data.csv --period 14
+finkit sma --input data.csv --period 14 --output sma.csv
+finkit ema --input data.csv --period 14
+finkit rsi --input data.csv --period 14
+finkit macd --input data.csv --fast 12 --slow 26 --signal 9
+finkit bbands --input data.csv --period 20 --nbdevup 2.0 --nbdevdn 2.0
+finkit atr --input data.csv --period 14
 
 # Detect patterns
-alpha-ta-cli patterns --input data.csv --format json
-alpha-ta-cli candlestick --input data.csv
-alpha-ta-cli chart-patterns --input data.csv
+finkit patterns --input data.csv --format json
+finkit candlestick --input data.csv
+finkit chart-patterns --input data.csv
 
 # Export options
-alpha-ta-cli rsi --input data.csv --output rsi.csv --format csv
-alpha-ta-cli rsi --input data.csv --output rsi.json --format json
+finkit rsi --input data.csv --output rsi.csv --format csv
+finkit rsi --input data.csv --output rsi.json --format json
 ```
 
 ### CSV Input Format

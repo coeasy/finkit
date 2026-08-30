@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ----------------------------------------------------------------------------
-# AlphaTA C/C++ usage-package builder.
+# Finkit C/C++ usage-package builder.
 #
 # Runs the upstream CMake install() rules and copies the staged tree
 # (libfinkit_ffi.so + headers + cmake config) to dist/c/<platform>/.

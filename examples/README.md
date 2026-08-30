@@ -1,6 +1,6 @@
-# AlphaTA 示例代码
+# Finkit 示例代码
 
-本目录包含 AlphaTA 多语言示例代码，帮助用户快速上手。
+本目录包含 Finkit 多语言示例代码，帮助用户快速上手。
 
 ## 目录结构
 
@@ -9,7 +9,7 @@ examples/
 ├── python_example.py      # Python 示例
 ├── nodejs_example.js      # Node.js 示例
 ├── java_example/
-│   └── AlphaTAExample.java # Java 示例
+│   └── FinkitExample.java # Java 示例
 ├── go_example/
 │   └── main.go            # Go 示例
 └── README.md              # 本文件
@@ -20,8 +20,8 @@ examples/
 ### Python
 
 ```bash
-# 安装 AlphaTA
-pip install alpha-ta
+# 安装 Finkit
+pip install finkit
 
 # 运行示例
 python examples/python_example.py
@@ -30,8 +30,8 @@ python examples/python_example.py
 ### Node.js
 
 ```bash
-# 安装 AlphaTA
-npm install AlphaTA-node
+# 安装 Finkit
+npm install finkit
 
 # 运行示例
 node examples/nodejs_example.js
@@ -41,17 +41,17 @@ node examples/nodejs_example.js
 
 ```bash
 # 编译示例 (需要先构建 Java binding)
-javac -cp dist/java/windows-x64/AlphaTA-1.0.0.jar examples/java_example/AlphaTAExample.java
+javac -cp dist/java/windows-x64/finkit-0.1.0.jar examples/java_example/FinkitExample.java
 
 # 运行示例
-java -cp dist/java/windows-x64/AlphaTA-1.0.0.jar;examples/java_example AlphaTAExample
+java -cp dist/java/windows-x64/finkit-0.1.0.jar;examples/java_example FinkitExample
 ```
 
 ### Go
 
 ```bash
-# 安装 AlphaTA
-go get github.com.alphata/ta
+# 安装 Finkit
+go get github.com/coeasy/finkit/go/ta
 
 # 运行示例
 go run examples/go_example/main.go

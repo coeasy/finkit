@@ -1,6 +1,6 @@
-# AlphaTA Documentation
+# Finkit Documentation
 
-Welcome to the AlphaTA (AlphaTA) documentation index. AlphaTA is a high-performance financial technical analysis library written in Rust with multi-language bindings.
+Welcome to the Finkit (Finkit) documentation index. Finkit is a high-performance financial technical analysis library written in Rust with multi-language bindings.
 
 > **mdBook site:** Build locally with `mdbook build docs` (requires [mdBook](https://rust-lang.github.io/mdBook/)). Navigation lives in [`src/SUMMARY.md`](src/SUMMARY.md).
 

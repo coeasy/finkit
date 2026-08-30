@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ----------------------------------------------------------------------------
-# AlphaTA unified usage-package builder + verifier.
+# Finkit unified usage-package builder + verifier.
 #
 # Replaces (or supersedes) the legacy `build-all-packages.sh`. For each
 # enabled language it:
@@ -11,7 +11,7 @@
 #      tree's smoke tests).
 #   3. Emits a SHA256 + size manifest to dist/manifest.json.
 #   4. Bundles the full tree into
-#      dist/alpha-ta-<version>-<plat>-usage-bundle.zip
+#      dist/finkit-<version>-<plat>-usage-bundle.zip
 #
 # Usage:
 #   ./scripts/build-usage-packages.sh                        # all languages
@@ -124,7 +124,7 @@ build_wasm() {
 
 verify_python() {
   local whl
-  whl="$( find "${DIST}/python/${PLATFORM}" -name 'alpha-ta-*-abi3-*.whl' 2>/dev/null | head -1 )"
+  whl="$( find "${DIST}/python/${PLATFORM}" -name 'finkit-*-abi3-*.whl' 2>/dev/null | head -1 )"
   if [[ -z "${whl}" ]]; then
     err "no abi3 wheel to verify"
     return 1
@@ -142,7 +142,7 @@ verify_python() {
 
 verify_node() {
   local tgz
-  tgz="$( find "${DIST}/node/${PLATFORM}" -name 'alpha-ta-*.tgz' 2>/dev/null | head -1 )"
+  tgz="$( find "${DIST}/node/${PLATFORM}" -name 'finkit-*.tgz' 2>/dev/null | head -1 )"
   if [[ -z "${tgz}" ]]; then
     err "no tgz to verify"
     return 1
@@ -157,7 +157,7 @@ verify_node() {
 
 verify_java() {
   local jar
-  jar="$( find "${DIST}/java/${PLATFORM}" -name 'alpha-ta-*.jar' 2>/dev/null | head -1 )"
+  jar="$( find "${DIST}/java/${PLATFORM}" -name 'finkit-*.jar' 2>/dev/null | head -1 )"
   if [[ -z "${jar}" ]]; then
     err "no jar to verify"
     return 1
@@ -171,7 +171,7 @@ verify_java() {
 verify_go() {
   # Rewrite the replace directive in tests/go.mod to point at the built tree.
   local mod="${ROOT}/packaging/usage/go/tests/go.mod"
-  local go_dist="${DIST}/go/${PLATFORM}/AlphaTA"
+  local go_dist="${DIST}/go/${PLATFORM}/finkit"
   if [[ ! -d "${go_dist}" ]]; then
     err "no go module to verify"
     return 1
@@ -181,7 +181,7 @@ verify_go() {
 import re, pathlib
 p = pathlib.Path("${mod}")
 text = p.read_text()
-text = re.sub(r"replace github.com/alpha-ta-rs/AlphaTA => .*", "replace github.com/alpha-ta-rs/AlphaTA => ${go_dist}", text)
+text = re.sub(r"replace github.com/coeasy/finkit => .*", "replace github.com/coeasy/finkit => ${go_dist}", text)
 p.write_text(text)
 PY
   ( cd "${ROOT}/packaging/usage/go/tests" && go run ../verify_install.go )
@@ -193,7 +193,7 @@ verify_c() {
 
 verify_dotnet() {
   local nupkg
-  nupkg="$( find "${DIST}/dotnet/${PLATFORM}" -name 'AlphaTA.*.nupkg' 2>/dev/null | head -1 )"
+  nupkg="$( find "${DIST}/dotnet/${PLATFORM}" -name 'Finkit.*.nupkg' 2>/dev/null | head -1 )"
   if [[ -z "${nupkg}" ]]; then
     err "no nupkg to verify"
     return 1
@@ -214,7 +214,7 @@ verify_wasm() {
 
 # --- main --------------------------------------------------------------------
 
-hdr "AlphaTA usage-package builder"
+hdr "Finkit usage-package builder"
 info "version : ${VERSION}"
 info "platform: ${PLATFORM}"
 info "langs   : ${WANT[*]}"
@@ -280,7 +280,7 @@ for lang in langs:
         })
 
 manifest = {
-    "name": "AlphaTA",
+    "name": "Finkit",
     "version": "${VERSION}",
     "platform": "${PLATFORM}",
     "components": components,
@@ -294,7 +294,7 @@ PY
 
 if [[ "${DO_BUNDLE}" -eq 1 && "${fail_count}" -eq 0 ]]; then
   hdr "bundle"
-  BUNDLE="${DIST}/alpha-ta-${VERSION}-${PLATFORM}-usage-bundle.zip"
+  BUNDLE="${DIST}/finkit-${VERSION}-${PLATFORM}-usage-bundle.zip"
   if command -v zip >/dev/null 2>&1; then
     ( cd "${DIST}" && zip -qr "${BUNDLE}" \
         python/${PLATFORM} \

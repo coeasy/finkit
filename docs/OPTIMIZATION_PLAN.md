@@ -1,4 +1,4 @@
-# AlphaTA Streaming — Optimization Plan
+# Finkit Streaming — Optimization Plan
 
 > Priority-ordered roadmap. See `STREAMING_VS_TALIB_EFFICIENCY.md` for comparison data.
 
@@ -40,7 +40,7 @@
 
 ## Phase 5: Missing TA-Lib Candlestick Patterns — LOW PRIORITY
 
-TA-Lib has ~61 patterns; AlphaTA has 19. Missing ~42. Implement as needed per user demand.
+TA-Lib has ~61 patterns; Finkit has 19. Missing ~42. Implement as needed per user demand.
 
 ## Execution Order
 

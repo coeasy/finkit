@@ -1,4 +1,4 @@
-//! Shared utilities for AlphaTA language bindings.
+//! Shared utilities for Finkit language bindings.
 //!
 //! This crate is the single home for cross-language FFI concerns so that the
 //! eight bindings (C / Python / Node / Go / .NET / Java / iOS / Android) no

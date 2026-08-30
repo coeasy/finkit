@@ -4,7 +4,7 @@
 
 ## 1. Rust 用户
 
-- 统一入口：`use alpha_ta_core::{indicators, streaming, formula};`
+- 统一入口：`use finkit::{indicators, streaming, formula};`
 - 批量指标签名：`fn rsi(close: &[f64], period: usize) -> Result<Array1<f64>, TaError>`。
 - 流式接口：实现 `StreamingIndicator` 的 `StreamingXxx::next(&mut input) -> Option<f64>`。
 - 若你之前用 `ta` crate：`ta` 与 `finkit` 的批量函数名基本一致（`Sma->sma`、`Ema->ema`、`Rsi->rsi`），返回值从 `Vec/usize 下标` 变为 `Array1<f64>`；用 `ta` 仅为基准对照（见 `core/Cargo.toml` 的 dev-dependency）。

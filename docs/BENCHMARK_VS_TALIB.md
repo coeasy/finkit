@@ -1,4 +1,4 @@
-# AlphaTA vs TA-Lib C — Benchmark & Precision Report
+# Finkit vs TA-Lib C — Benchmark & Precision Report
 
 > Companion to the one-click build setup (see the repo root `README.md`
 > for the bootstrap command). This document explains how to read the
@@ -11,7 +11,7 @@
 head-to-head:
 
 1. **`cargo bench --bench talib_c_comparison --features talib-c`** — runs
-   Criterion benchmarks for ~30 indicators. Each indicator gets a `AlphaTA_X`
+   Criterion benchmarks for ~30 indicators. Each indicator gets a `Finkit_X`
    and a `talib_X` entry, plus a `_vs_talib` group suffix.
 
 2. **`scripts/bench_report.py --json-out dist/bench/results.json`** —
@@ -23,7 +23,7 @@ head-to-head:
 
 3. **`scripts/bench_vs_talib_precision.py`** *(only with `--precision`)* —
    for each indicator, generates 100 000 random OHLCV samples, calls
-   AlphaTA and TA-Lib on the same input, then writes
+   Finkit and TA-Lib on the same input, then writes
    `dist/bench/precision.{md,json}` and merges `delta_pp` back into
    `dist/bench/results.json`.
 
@@ -33,15 +33,15 @@ head-to-head:
 ## Reading the summary
 
 ```
-| Indicator | Category | AlphaTA (us) | TA-Lib C (us) | Speedup | Δ (pp)  | Status |
+| Indicator | Category | Finkit (us) | TA-Lib C (us) | Speedup | Δ (pp)  | Status |
 | SMA_20    | Overlap  | 0.83        | 1.12          | 1.35x   | 2.0e-12 | ✅     |
 | ATR_14    | Volat.   | 1.10        | 0.78          | 0.71x   | 4.1e-13 | ❌     |
 ```
 
 | Column      | What to look for                                              |
 | ----------- | ------------------------------------------------------------- |
-| `AlphaTA (us)` / `TA-Lib C (us)` | Wall-clock per call (microseconds, smaller = better) |
-| `Speedup`   | `TA-Lib C / AlphaTA` (higher = AlphaTA is faster). `>1.0x` is good |
+| `Finkit (us)` / `TA-Lib C (us)` | Wall-clock per call (microseconds, smaller = better) |
+| `Speedup`   | `TA-Lib C / Finkit` (higher = Finkit is faster). `>1.0x` is good |
 | `Δ (pp)`    | Max relative diff vs TA-Lib output (precision SLA: < 1e-12)   |
 | `Status`    | `✅` within gate, `⚠️` within 25%, `❌` exceeded the gate       |
 
@@ -49,18 +49,18 @@ Bottom of the file summarizes:
 
 ```
 - Total: 30
-- AlphaTA faster: 24
-- AlphaTA within 25%: 4
-- AlphaTA >25% slower: 2
+- Finkit faster: 24
+- Finkit within 25%: 4
+- Finkit >25% slower: 2
 ```
 
 ## SLA gates
 
 | Gate                | Threshold              | What it means                                |
 | ------------------- | ---------------------- | -------------------------------------------- |
-| Speed gate          | AlphaTA ≤ 1.25 × TA-Lib | Listed in the `Watch List` if exceeded       |
-| Speed gate (hard)   | AlphaTA ≤ 1.0 × TA-Lib  | Listed under `Needs Optimization`            |
-| Regression gate     | AlphaTA ≤ 1.05 × baseline (`docs/benchmark-baseline.json`) | Catches local regressions vs committed numbers |
+| Speed gate          | Finkit ≤ 1.25 × TA-Lib | Listed in the `Watch List` if exceeded       |
+| Speed gate (hard)   | Finkit ≤ 1.0 × TA-Lib  | Listed under `Needs Optimization`            |
+| Regression gate     | Finkit ≤ 1.05 × baseline (`docs/benchmark-baseline.json`) | Catches local regressions vs committed numbers |
 | 1M ns/bar SLA       | Per-indicator ceiling in `ONE_M_NS_BAR_SLA` (in `bench_report.py`) | Catches O(n²) algorithms scaling poorly at 1M bars |
 | Precision SLA       | `max_abs < 1e-9` and `max_rel < 1e-12` (default) | Catches algorithm divergence in the parity check |
 
@@ -138,7 +138,7 @@ A `❌` in `summary.md` (or a precision row > 1e-9) indicates a regression.
   published).
 * [BENCHMARK_REPORT.md](BENCHMARK_REPORT.md) — the long-form report
   (auto-generated, refreshed on every bench run).
-* `competitive-benchmark.md` — AlphaTA vs `ta-rs` (Rust TA ecosystem)
+* `competitive-benchmark.md` — Finkit vs `ta-rs` (Rust TA ecosystem)
   (planned; not yet published).
 * `EFFICIENCY_COMPARISON.md` — broader ecosystem comparison (planned;
   not yet published).

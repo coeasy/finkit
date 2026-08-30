@@ -1,4 +1,4 @@
-# AlphaTA 权威 Benchmark 报告
+# Finkit 权威 Benchmark 报告
 
 > **生成时间**: 2026-06-24
 > **环境**: Windows 10, x86_64 AVX2, Rust 2021 edition
@@ -8,7 +8,7 @@
 
 ## 1. 核心指标性能 (10K bars)
 
-| 指标 | AlphaTA (µs) | TA-Lib C (µs) | 性能比 | 状态 |
+| 指标 | Finkit (µs) | TA-Lib C (µs) | 性能比 | 状态 |
 |------|----------|---------------|--------|------|
 | SMA(20) | 12.75 | 20.19 | **1.58x faster** | ✅ |
 | EMA(12) | 20.73 | 29.66 | **1.43x faster** | ✅ |

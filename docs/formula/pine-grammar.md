@@ -1,6 +1,6 @@
 # Pine Script v5 文法规范
 
-本文档描述 AlphaTA Pine 方言支持的 **Pine Script v5 语法子集**，EBNF 由 `core/src/formula/pine/grammar.pest` 导出。
+本文档描述 Finkit Pine 方言支持的 **Pine Script v5 语法子集**，EBNF 由 `core/src/formula/pine/grammar.pest` 导出。
 
 实现文件：
 
@@ -12,10 +12,10 @@
 
 ## 概述
 
-AlphaTA Pine 方言是 TradingView Pine Script v5 的**有意裁剪子集**，目标：
+Finkit Pine 方言是 TradingView Pine Script v5 的**有意裁剪子集**，目标：
 
 1. 解析常见 `indicator()` 脚本
-2. 将 `ta.*` / `math.*` 内置函数映射到 AlphaTA 公式函数
+2. 将 `ta.*` / `math.*` 内置函数映射到 Finkit 公式函数
 3. 支持 bar-by-bar series 求值语义（`core/src/formula/pine/runtime.rs`）
 
 **不支持**完整 Pine 生态（策略、库、UDT、完整绘图对象等）。详见 [兼容矩阵](../PINE_COMPAT_MATRIX.md)。
@@ -187,13 +187,13 @@ block_comment    = "/*" (!"*/" ANY)* "*/"
 
 ---
 
-## 与 AlphaTA 公式引擎的关系
+## 与 Finkit 公式引擎的关系
 
-Pine 脚本经以下管线进入 AlphaTA 执行：
+Pine 脚本经以下管线进入 Finkit 执行：
 
 ```
 Pine 源码 → parse_pine() → PineAst
-         → map_pine_to_AlphaTA() → AstNode
+         → map_pine_to_Finkit() → AstNode
          → FormulaExecutor / BytecodeVM
 ```
 
@@ -203,6 +203,6 @@ Pine 源码 → parse_pine() → PineAst
 
 ## 相关文档
 
-- [AlphaTA 公式文法（TDX 方言）](./grammar.md)
+- [Finkit 公式文法（TDX 方言）](./grammar.md)
 - [Pine 兼容矩阵](../PINE_COMPAT_MATRIX.md)
-- [Pine → AlphaTA 迁移指南](../migration/pine-to-AlphaTA.md)
+- [Pine → Finkit 迁移指南](../migration/pine-to-alphata.md)

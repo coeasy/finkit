@@ -1,5 +1,5 @@
 # =============================================================================
-# AlphaTA — true one-click build image
+# Finkit — true one-click build image
 # =============================================================================
 #
 # Pre-installs every toolchain required to build the 7-language usage
@@ -17,11 +17,11 @@
 #   * wasm-pack + rustup target wasm32  — WASM
 #
 # Build:
-#   docker build -t alpha_ta/builder:latest .
+#   docker build -t finkit/builder:latest .
 #
 # Use (mounts host dist/ so artifacts survive container exit):
-#   docker run --rm -v "$(pwd)/dist:/work/dist" alpha_ta/builder:latest
-#   docker run --rm -v "$(pwd)/dist:/work/dist" alpha_ta/builder:latest --bench-talib
+#   docker run --rm -v "$(pwd)/dist:/work/dist" finkit/builder:latest
+#   docker run --rm -v "$(pwd)/dist:/work/dist" finkit/builder:latest --bench-talib
 # =============================================================================
 
 FROM rust:1.82-bookworm
@@ -79,7 +79,7 @@ COPY . /work
 
 # Pre-build the core crate to warm the cargo cache; subsequent
 # `docker run --rm -v ./dist:/work/dist …` invocations reuse the layer.
-RUN cargo build --release -p alpha_ta-core 2>&1 | tail -5 || true
+RUN cargo build --release -p finkit 2>&1 | tail -5 || true
 
 # ---- entrypoint -----------------------------------------------------------
 # `./build-usage.sh` (or `.ps1`) lives at /work, exposed as the entrypoint.

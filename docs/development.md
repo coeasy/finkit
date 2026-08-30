@@ -1,6 +1,6 @@
 # Development Guide
 
-This guide explains how to contribute to AlphaTA, build from source, and develop new features.
+This guide explains how to contribute to Finkit, build from source, and develop new features.
 
 ## Getting Started
 
@@ -24,7 +24,7 @@ cd finkit
 ## Project Structure
 
 ```
-AlphaTA/
+Finkit/
 ├── core/                       # Core Rust library
 │   ├── src/
 │   │   ├── lib.rs              # Library entry point
@@ -154,11 +154,11 @@ cd ffi/dotnet-binding
 cargo build --release
 
 # Build .NET library
-cd src/AlphaTA
+cd src/Finkit
 dotnet build --configuration Release
 
 # Run tests
-cd ../AlphaTA.Tests
+cd ../Finkit.Tests
 dotnet test
 ```
 
@@ -351,7 +351,7 @@ Register the function in the module:
 
 ```rust
 #[pymodule]
-fn AlphaTA(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn finkit(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(my_indicator, m)?)?;
     Ok(())
 }
@@ -451,7 +451,7 @@ cd ffi/go-binding
 go test -v ./...
 
 # .NET
-cd ffi/dotnet-binding/src/AlphaTA.Tests
+cd ffi/dotnet-binding/src/Finkit.Tests
 dotnet test
 ```
 

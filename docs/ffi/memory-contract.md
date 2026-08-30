@@ -1,6 +1,6 @@
 # FFI Memory Ownership Contract
 
-This document describes memory ownership for every `extern "C"` export in `ffi/c-binding/src/lib.rs`. It is the authoritative reference for C/C++/language-binding authors integrating AlphaTA.
+This document describes memory ownership for every `extern "C"` export in `ffi/c-binding/src/lib.rs`. It is the authoritative reference for C/C++/language-binding authors integrating Finkit.
 
 ## Ownership vocabulary
 
@@ -170,7 +170,7 @@ All functions below: `*const f64` inputs **borrowed**; `*mut f64` outputs **call
 
 ---
 
-## Ownership matrix — chart patterns (AlphaTA-native)
+## Ownership matrix — chart patterns (Finkit-native)
 
 Optional outputs may be `NULL` (skipped). When non-null, caller pre-allocates `len` elements.
 

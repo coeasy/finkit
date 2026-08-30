@@ -1,6 +1,6 @@
 # FFI Error Codes
 
-This document describes the stable error codes returned across the AlphaTA/AlphaTA C FFI boundary (`ffi/c-binding`). All `extern "C"` exports use `std::panic::catch_unwind`; panics are converted to `InternalError` instead of aborting the host process.
+This document describes the stable error codes returned across the Finkit/Finkit C FFI boundary (`ffi/c-binding`). All `extern "C"` exports use `std::panic::catch_unwind`; panics are converted to `InternalError` instead of aborting the host process.
 
 ## Unified `FfiStatus` (top-level classification)
 

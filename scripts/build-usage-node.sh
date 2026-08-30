@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # ----------------------------------------------------------------------------
-# AlphaTA Node.js usage-package builder.
+# Finkit Node.js usage-package builder.
 #
-# Produces `alpha_ta-1.0.0.tgz` (npm packed from the ffi/node-binding
+# Produces `finkit-1.0.0.tgz` (npm packed from the ffi/node-binding
 # manifest) plus the per-triple `.node` files, in
-# dist/node/<platform>/.  The .tgz name is **alpha_ta** (not alpha-ta-node) so
-# consumers can `npm install alpha_ta@1.0.0`.
+# dist/node/<platform>/.  The .tgz name is **finkit** so
+# consumers can `npm install finkit@1.0.0`.
 # ----------------------------------------------------------------------------
 
 set -euo pipefail
@@ -34,7 +34,7 @@ OUT_DIR="${ROOT}/dist/node/${PLATFORM}"
 mkdir -p "${OUT_DIR}"
 
 VERSION="$( grep -E '^version' "${ROOT}/Cargo.toml" | head -1 | sed -E 's/.*"([^"]+)".*/\1/' )"
-PKG_NAME="alpha_ta-${VERSION}.tgz"
+PKG_NAME="finkit-${VERSION}.tgz"
 
 has_tool() { command -v "$1" >/dev/null 2>&1; }
 
@@ -43,8 +43,8 @@ echo "[build-usage-node] cargo build --release -p finkit-node"
 ( cd "${ROOT}" && cargo build --release -p finkit-node )
 
 # Copy the .node binary into the package output ---------------------------
-# N-API produces platform-specific names like: alpha_ta.win32-x64-msvc.node
-for cand in "${ROOT}/target/release/alpha_ta."*.node; do
+# N-API produces platform-specific names like: finkit.win32-x64-msvc.node
+for cand in "${ROOT}/target/release/finkit".*.node; do
   if [[ -f "${cand}" ]]; then
     cp "${cand}" "${OUT_DIR}/"
     echo "[build-usage-node] staged $( basename "${cand}" )"

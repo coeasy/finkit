@@ -1,9 +1,9 @@
 # FFI 内存所有权契约（Memory Ownership Contract）
 
 > 配套任务：**A4 — FFI 内存所有权契约 + 泄漏测试**（见 `docs/UPGRADE_PLAN_2026.md`）。
-> 自动化泄漏测试实现见 `alpha_ta_ffi_common::leak` + 各绑定 `mod tests::ffi_heap_no_leak_*`。
+> 自动化泄漏测试实现见 `finkit_ffi_common::leak` + 各绑定 `mod tests::ffi_heap_no_leak_*`。
 
-本文件是 AlphaTA 八语言 FFI 绑定的**单一内存所有权事实源**。它规定：每个把
+本文件是 Finkit 八语言 FFI 绑定的**单一内存所有权事实源**。它规定：每个把
 Rust 堆所有权转移给宿主语言的 `ta_*` 导出函数，必须有一个配对释放函数；调用
 方负责释放，绑定侧**绝不**自动释放。
 
@@ -24,7 +24,7 @@ Rust 堆所有权转移给宿主语言的 `ta_*` 导出函数，必须有一个�
 
 ## 逐绑定契约
 
-### Go（`alpha-ta-go`）
+### Go（`finkit-go`）
 
 | 分配函数 | 返回类型 | 释放函数 | 备注 |
 |----------|----------|----------|------|
@@ -38,7 +38,7 @@ Rust 堆所有权转移给宿主语言的 `ta_*` 导出函数，必须有一个�
   `ta_sma`+`ta_free_result` 与 `ta_formula_eval`+`ta_free_string`，断言 live 堆字节
   回到基线。
 
-### .NET（`alpha-ta-dotnet`）
+### .NET（`finkit-dotnet`）
 
 | 分配函数 | 返回类型 | 释放函数 | 备注 |
 |----------|----------|----------|------|
@@ -52,16 +52,16 @@ Rust 堆所有权转移给宿主语言的 `ta_*` 导出函数，必须有一个�
 - **测试覆盖**：`ffi_heap_no_leak_formula_eval_cycle`（dotnet）循环 400 次
   `ta_formula_eval`+`ta_free_cstring`，并直接演练 `ta_free` / `ta_free_array` 释放路径。
 
-### iOS（`alpha-ta-ios`）
+### iOS（`finkit-ios`）
 
-- 所有指标：`alpha_ta_sma(input, len, period, out: *mut f64) -> i32`。
+- 所有指标：`finkit_sma(input, len, period, out: *mut f64) -> i32`。
   **调用方拥有 `out` 缓冲区**，函数返回 `0` 成功 / `-1` 错误，不转移任何堆所有权。
-- 蜡烛图：`alpha_ta_detect_candlestick(...) -> i32`（返回检测计数），同样不转移堆。
+- 蜡烛图：`finkit_detect_candlestick(...) -> i32`（返回检测计数），同样不转移堆。
 - **无 `ta_free_*` 契约**（没有跨边界堆所有权）。
 - **测试覆盖**：`ffi_heap_no_leak_indicator_cycle`（ios）循环 400 次指标 + 蜡烛图
   调用，断言 Rust 侧内部临时分配被完全回收（防止间接泄漏）。
 
-### Java（`alpha-ta-java`）
+### Java（`finkit-java`）
 
 Java 导出函数需要活着的 `JNIEnv`（即一个 JVM），因此**不能在 `cargo test` 中单元测试**
 （测试二进制内无 JVM）。其所有权契约有两类：
@@ -87,7 +87,7 @@ Java 导出函数需要活着的 `JNIEnv`（即一个 JVM），因此**不能在
 
 ## 泄漏测试机制
 
-- 计数分配器 `alpha_ta_ffi_common::leak::CountingAlloc`：在测试的二进制里通过
+- 计数分配器 `finkit_ffi_common::leak::CountingAlloc`：在测试的二进制里通过
   `#[global_allocator]` 安装（仅 `#[cfg(test)]`），对每次 Rust 堆分配/释放做净字节
   计数。
 - 每个绑定测试快照「前 / 后」live 字节；正确 alloc+free 配对下两者（留小容差）相等；

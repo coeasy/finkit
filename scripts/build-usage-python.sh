@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ----------------------------------------------------------------------------
-# AlphaTA Python usage-package builder.
+# Finkit Python usage-package builder.
 #
 # Produces wheels for Python 3.10..3.14 + an abi3 stable wheel, in
 # dist/python/<platform>/. Fixes the `return` bug from the old
@@ -75,7 +75,7 @@ build_abi3() {
     maturin build --release --out "${OUT_DIR}" --features abi3 --strip
   )
   local n
-  n=$( find "${OUT_DIR}" -name 'alpha_ta-*-abi3-*.whl' | wc -l )
+  n=$( find "${OUT_DIR}" -name 'finkit-*-abi3-*.whl' | wc -l )
   echo "[build-usage-python] abi3 wheels: ${n}"
 }
 

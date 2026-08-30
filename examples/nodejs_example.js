@@ -1,9 +1,9 @@
 /**
- * alpha_ta Node.js 示例代码
- * 展示如何使用 alpha_ta 进行技术分析
+ * finkit Node.js 示例代码
+ * 展示如何使用 finkit 进行技术分析
  */
 
-const ta = require('alpha_ta-node');
+const ta = require('finkit');
 
 // ============================================
 // 基础指标计算示例
@@ -219,7 +219,7 @@ function completeAnalysis() {
 // 主函数
 // ============================================
 function main() {
-    console.log('alpha_ta Node.js 示例代码');
+    console.log('finkit Node.js 示例代码');
     console.log('=' .repeat(50));
     
     basicIndicators();

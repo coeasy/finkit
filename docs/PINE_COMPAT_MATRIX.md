@@ -48,7 +48,7 @@
 
 基于 `core/src/formula/pine/builtin_table.rs` 当前实现：
 
-| 命名空间 | 函数 | AlphaTA 映射 | 语料命中 | 状态 |
+| 命名空间 | 函数 | Finkit 映射 | 语料命中 | 状态 |
 |----------|------|-------------|----------|------|
 | ta | sma | SMA | sma_overlay, stochastic | ✅ |
 | ta | ema | EMA | ema_crossover, keltner, heikin_ashi | ✅ |

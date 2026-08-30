@@ -1,8 +1,8 @@
 // ----------------------------------------------------------------------------
-// alpha_ta-ios — Objective-C bridge for the AlphaTA Rust core.
+// finkit-ios — Objective-C bridge for the Finkit Rust core.
 //
 // The crate is compiled as a `staticlib` and linked directly into the Swift
-// wrapper that ships in the .xcframework (see `include/alpha_ta.h`).
+// wrapper that ships in the .xcframework (see `include/finkit.h`).
 //
 // All exported symbols follow the C ABI, are marked `#[no_mangle] extern "C"`,
 // and are safe to call from the simulator (aarch64-apple-ios-sim) and from

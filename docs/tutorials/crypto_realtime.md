@@ -1,6 +1,6 @@
 # 加密货币场景：流式指标实时更新
 
-本教程面向加密货币量化与做市场景，演示如何使用 AlphaTA 流式（Streaming）指标 API 对实时 K 线流进行增量更新，并生成 RSI / EMA 信号。
+本教程面向加密货币量化与做市场景，演示如何使用 Finkit 流式（Streaming）指标 API 对实时 K 线流进行增量更新，并生成 RSI / EMA 信号。
 
 ## 目录
 
@@ -16,7 +16,7 @@
 ## 1. 安装与环境
 
 ```bash
-pip install alpha-ta numpy
+pip install finkit numpy
 # 可选：WebSocket 数据源
 pip install websockets
 ```
@@ -74,13 +74,13 @@ def load_closes_from_csv(path: str) -> list[float]:
 #         print(f"Signal: {signal}")
 ```
 
-生产环境建议使用交易所官方 SDK 或成熟的行情网关，本教程聚焦 AlphaTA 指标层。
+生产环境建议使用交易所官方 SDK 或成熟的行情网关，本教程聚焦 Finkit 指标层。
 
 ---
 
 ## 3. 流式 RSI / EMA 更新
 
-AlphaTA 提供与批量 API 数值一致的流式指标类，每根新 K 线调用 `update()` 即可获得最新值，无需重算全量历史。
+Finkit 提供与批量 API 数值一致的流式指标类，每根新 K 线调用 `update()` 即可获得最新值，无需重算全量历史。
 
 ### 3.1 流式 RSI
 

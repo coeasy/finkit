@@ -95,7 +95,7 @@ print(f"差异: {abs(signal_rma[33] - signal_talib[33]):.2e}")
 
 print("\n[4] 对比 AlphaTA Signal line")
 print("-" * 80)
-alpha_result = alpha_ta.macd(close, fastperiod=12, slowperiod=26, signalperiod=9)
+alpha_result = finkit.macd(close, fastperiod=12, slowperiod=26, signalperiod=9)
 alpha_macd = np.array(alpha_result[0])
 alpha_signal = np.array(alpha_result[1])
 

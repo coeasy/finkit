@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Registry-driven C header generator for AlphaTA's C FFI.
+"""Registry-driven C header generator for Finkit's C FFI.
 
 Single source of truth: docs/indicator_registry.json (each indicator that is
 exposed over C carries an `ffi` block produced by scripts/enrich_registry_ffi.py).
-This script emits ffi/c-binding/include/alpha_ta.h:
+This script emits ffi/c-binding/include/finkit.h:
 
   - the stable ABI boilerplate (include guard, TA_API macros, FfiStatus enum,
     version/error reporting functions) — fixed template;
@@ -12,7 +12,7 @@ This script emits ffi/c-binding/include/alpha_ta.h:
   - the K-line visualization API — fixed template (not an indicator).
 
 Usage:
-    python scripts/gen_c_header.py --generate [PATH]   # write header (default: alpha_ta.h)
+    python scripts/gen_c_header.py --generate [PATH]   # write header (default: finkit.h)
     python scripts/gen_c_header.py --check    [PATH]   # fail if header != generated
 
 `--check` is wired into CI so the committed header can never silently drift
@@ -28,9 +28,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 REGISTRY = ROOT / "docs/indicator_registry.json"
-DEFAULT_HEADER = ROOT / "ffi/c-binding/include/alpha_ta.h"
+DEFAULT_HEADER = ROOT / "ffi/c-binding/include/finkit.h"
 
-# Canonical section order (mirrors alpha_ta.h).
+# Canonical section order (mirrors finkit.h).
 GROUPS = [
     "Moving averages & overlays",
     "Momentum & oscillators",

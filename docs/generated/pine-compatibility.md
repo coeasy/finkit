@@ -5,7 +5,7 @@
 
 Pine Script v5 built-in functions supported: **33**
 
-AlphaTA supports a subset of Pine Script v5 for indicator migration from TradingView.
+Finkit supports a subset of Pine Script v5 for indicator migration from TradingView.
 
 ## Supported Built-in Functions
 

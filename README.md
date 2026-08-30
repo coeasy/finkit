@@ -1,4 +1,4 @@
-# AlphaTA - Financial Technical Analysis Library
+# Finkit - Financial Technical Analysis Library
 
 [![CI](https://github.com/coeasy/finkit/actions/workflows/ci.yml/badge.svg)](https://github.com/coeasy/finkit/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](LICENSE)
@@ -44,10 +44,10 @@ pwsh ./build-usage.ps1            # PowerShell 7+
 make                              # make target
 
 # Or one-command Docker (no host toolchain needed)
-docker build -t alphata/builder:latest .
-docker run --rm -v "$(pwd)/dist:/work/dist" alphata/builder:latest
+docker build -t finkit/builder:latest .
+docker run --rm -v "$(pwd)/dist:/work/dist" finkit/builder:latest
 
-# One-command AlphaTA vs TA-Lib head-to-head
+# One-command Finkit vs TA-Lib head-to-head
 ./scripts/bench-vs-talib.sh --precision
 ```
 
@@ -80,11 +80,11 @@ macd, signal, hist = ta.macd(close, fastperiod=12, slowperiod=26, signalperiod=9
 ### Node.js
 
 ```bash
-npm install @alphata/node
+npm install finkit
 ```
 
 ```typescript
-import { sma, rsi, macd } from '@alphata/node';
+import { sma, rsi, macd } from 'finkit';
 
 const close = Array.from({ length: 100 }, (_, i) => i + 1);
 const smaResult = sma(close, 14);
@@ -96,12 +96,12 @@ const macdResult = macd(close, 12, 26, 9);
 
 ```toml
 [dependencies]
-alpha-ta-core = "1.0.0"
+finkit = "0.1.0"
 ```
 
 ```rust
-use alpha_ta_core::indicators;
-use alpha_ta_core::math::moving_avg;
+use finkit::indicators;
+use finkit::math::moving_avg;
 
 let close = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 let sma = moving_avg::sma(&close, 3).unwrap();
@@ -126,14 +126,14 @@ rsi, _ := ta.RSI(close, 14)
 
 ```xml
 <dependency>
-    <groupId>com.alphata</groupId>
-    <artifactId>alpha_ta</artifactId>
-    <version>1.0.0</version>
+    <groupId>com.finkit</groupId>
+    <artifactId>finkit</artifactId>
+    <version>0.1.0</version>
 </dependency>
 ```
 
 ```java
-import com.alphata.Indicators;
+import com.finkit.Indicators;
 
 double[] close = new double[100];
 for (int i = 0; i < 100; i++) close[i] = 1.0 + i * 0.09;
@@ -145,11 +145,11 @@ double[] rsi = Indicators.rsi(close, 14);
 ### .NET
 
 ```bash
-dotnet add package alpha_ta
+dotnet add package finkit
 ```
 
 ```csharp
-using AlphaTA;
+using Finkit;
 
 var close = Enumerable.Range(1, 100).Select(i => (double)i).ToArray();
 var sma = Indicators.SMA(close, 14);
@@ -159,27 +159,27 @@ var rsi = Indicators.RSI(close, 14);
 ### CLI
 
 ```bash
-cargo install alpha-ta-cli
+cargo install finkit-cli
 ```
 
-`alpha-ta-cli` ships with 14 subcommands covering 100+ indicators, OHLCV pattern detection, and a TongDaXin-compatible formula engine.
+`finkit-cli` ships with 14 subcommands covering 100+ indicators, OHLCV pattern detection, and a TongDaXin-compatible formula engine.
 
 | Subcommand | Description | Required Input | Example |
 |------------|-------------|----------------|---------|
-| `sma` | Simple Moving Average | close CSV | `alpha-ta-cli sma -i data.csv --period 14` |
-| `ema` | Exponential Moving Average | close CSV | `alpha-ta-cli ema -i data.csv --period 14` |
-| `wma` | Weighted Moving Average | close CSV | `alpha-ta-cli wma -i data.csv --period 14` |
-| `rsi` | Relative Strength Index | close CSV | `alpha-ta-cli rsi -i data.csv --period 14` |
-| `macd` | MACD | close CSV | `alpha-ta-cli macd -i data.csv --fast 12 --slow 26 --signal 9` |
-| `bbands` | Bollinger Bands | OHLCV CSV | `alpha-ta-cli bbands -i data.csv --period 20 --stddev 2.0` |
-| `atr` | Average True Range | OHLCV CSV | `alpha-ta-cli atr -i data.csv --period 14` |
-| `stoch` | Stochastic Oscillator | OHLCV CSV | `alpha-ta-cli stoch -i data.csv` |
-| `adx` | Average Directional Index | OHLCV CSV | `alpha-ta-cli adx -i data.csv --period 14` |
-| `cci` | Commodity Channel Index | OHLCV CSV | `alpha-ta-cli cci -i data.csv --period 14` |
-| `obv` | On Balance Volume | OHLCV CSV | `alpha-ta-cli obv -i data.csv` |
-| `willr` | Williams %R | OHLCV CSV | `alpha-ta-cli willr -i data.csv --period 14` |
-| `pattern` | Candlestick / chart pattern detection | OHLCV CSV | `alpha-ta-cli pattern -i data.csv --kind candlestick --name doji` |
-| `formula` | TongDaXin-compatible formula evaluation | OHLCV CSV | `alpha-ta-cli formula "MA(CLOSE,5) + 2*STDDEV(CLOSE,5)" -i data.csv` |
+| `sma` | Simple Moving Average | close CSV | `finkit-cli sma -i data.csv --period 14` |
+| `ema` | Exponential Moving Average | close CSV | `finkit-cli ema -i data.csv --period 14` |
+| `wma` | Weighted Moving Average | close CSV | `finkit-cli wma -i data.csv --period 14` |
+| `rsi` | Relative Strength Index | close CSV | `finkit-cli rsi -i data.csv --period 14` |
+| `macd` | MACD | close CSV | `finkit-cli macd -i data.csv --fast 12 --slow 26 --signal 9` |
+| `bbands` | Bollinger Bands | OHLCV CSV | `finkit-cli bbands -i data.csv --period 20 --stddev 2.0` |
+| `atr` | Average True Range | OHLCV CSV | `finkit-cli atr -i data.csv --period 14` |
+| `stoch` | Stochastic Oscillator | OHLCV CSV | `finkit-cli stoch -i data.csv` |
+| `adx` | Average Directional Index | OHLCV CSV | `finkit-cli adx -i data.csv --period 14` |
+| `cci` | Commodity Channel Index | OHLCV CSV | `finkit-cli cci -i data.csv --period 14` |
+| `obv` | On Balance Volume | OHLCV CSV | `finkit-cli obv -i data.csv` |
+| `willr` | Williams %R | OHLCV CSV | `finkit-cli willr -i data.csv --period 14` |
+| `pattern` | Candlestick / chart pattern detection | OHLCV CSV | `finkit-cli pattern -i data.csv --kind candlestick --name doji` |
+| `formula` | TongDaXin-compatible formula evaluation | OHLCV CSV | `finkit-cli formula "MA(CLOSE,5) + 2*STDDEV(CLOSE,5)" -i data.csv` |
 
 All subcommands support `--format {plain,csv,json}` and write to stdout or `--output <file>`. Pipe-friendly via stdin.
 
@@ -193,13 +193,13 @@ Detailed installation instructions for each language binding are available in [d
 | Language | Package Manager | Command |
 |----------|----------------|---------|
 | Python   | pip            | `pip install finkit` |
-| Node.js  | npm            | `npm install @alphata/node` |
-| Rust     | cargo          | `cargo add alpha-ta-core` |
+| Node.js  | npm            | `npm install finkit` |
+| Rust     | cargo          | `cargo add finkit` |
 | Java     | Maven          | Add dependency to `pom.xml` |
 | Go       | go get         | `go get github.com/coeasy/finkit/go/ta` |
-| .NET     | NuGet          | `dotnet add package alpha_ta` |
-| C++      | CMake          | Link against `libalphata_c.so` |
-| WASM     | npm            | `npm install @alphata/wasm` |
+| .NET     | NuGet          | `dotnet add package finkit` |
+| C++      | CMake          | Link against `libfinkit_ffi.so` |
+| WASM     | npm            | `npm install finkit-wasm` |
 
 ## Performance
 
@@ -207,7 +207,7 @@ Real FFI benchmark against TA-Lib C 0.6.4 on 10,000 data points (Criterion.rs, `
 
 ### Core Indicators — All Faster Than TA-Lib C
 
-| Indicator | FTA (µs) | TA-Lib C (µs) | Speedup |
+| Indicator | Finkit (µs) | TA-Lib C (µs) | Speedup |
 |-----------|----------|---------------|---------|
 | SMA(20)   | 12.28    | 19.98         | **1.63x faster** |
 | EMA(12)   | 20.60    | 29.19         | **1.42x faster** |
@@ -220,7 +220,7 @@ Real FFI benchmark against TA-Lib C 0.6.4 on 10,000 data points (Criterion.rs, `
 
 ### Extended Indicators — Watch-List (within 25% of TA-Lib)
 
-| Indicator | FTA (µs) | TA-Lib C (µs) | Verdict |
+| Indicator | Finkit (µs) | TA-Lib C (µs) | Verdict |
 |-----------|----------|---------------|---------|
 | AROON(14) | 63.44    | 52.11         | ⚠️ 0.82x |
 | MFI(14)   | 51.23    | 44.17         | ⚠️ 0.86x |
@@ -248,9 +248,9 @@ Real FFI benchmark against TA-Lib C 0.6.4 on 10,000 data points (Criterion.rs, `
 | .NET     | 1.10x               | P/Invoke overhead |
 | WASM     | 1.50x               | WebAssembly sandbox |
 
-### Competitive Comparison: FTA vs TA-Lib vs Kand vs quantedge-ta
+### Competitive Comparison: Finkit vs TA-Lib vs Kand vs quantedge-ta
 
-| Feature | **FTA** (Rust) | **TA-Lib** (C) | **Kand** (Rust) | **quantedge-ta** (Rust) |
+| Feature | **Finkit** (Rust) | **TA-Lib** (C) | **Kand** (Rust) | **quantedge-ta** (Rust) |
 |---------|--------------|----------------|-----------------|------------------------|
 | **Batch Indicators** | 150+ | 150+ | ~30 | ~40 |
 | **Streaming** | 98 (O(1)/bar) | ❌ | ~30 | ❌ |
@@ -267,7 +267,7 @@ Real FFI benchmark against TA-Lib C 0.6.4 on 10,000 data points (Criterion.rs, `
 
 | Library | SMA(20) | EMA(12) | RSI(14) | MACD | Notes |
 |---------|---------|---------|---------|------|-------|
-| **FTA** | **1.26** | **2.05** | **2.67** | **3.14** | Optimized Rust |
+| **Finkit** | **1.26** | **2.05** | **2.67** | **3.14** | Optimized Rust |
 | TA-Lib C | 2.04 | 2.97 | 5.52 | 10.00 | Native C via FFI |
 | Kand | ~7 | ~7 | ~15 | ~20 | PyO3 optimized |
 | quantedge-ta | ~5 | ~4 | ~12 | ~15 | Batch mode only |
@@ -357,7 +357,7 @@ import {
   stoch, atr, obv,
   cdl_doji, cdl_hammer, cdl_engulfing,
   detect_double_top, detect_head_shoulders
-} from '@alphata/node';
+} from 'finkit';
 
 // Generate sample data
 const close = Array.from({ length: 100 }, (_, i) => 100 + i * 0.5 + Math.random() * 2 - 1);
@@ -386,10 +386,10 @@ const headShoulders = detect_head_shoulders(high, 30, 0.05);
 ### Java - Complete Example
 
 ```java
-import com.alphata.Indicators;
-import com.alphata.MacdResult;
-import com.alphata.BbandsResult;
-import com.alphata.StochResult;
+import com.finkit.Indicators;
+import com.finkit.MacdResult;
+import com.finkit.BbandsResult;
+import com.finkit.StochResult;
 import java.util.Arrays;
 
 public class Example {
@@ -481,7 +481,7 @@ func main() {
 ```csharp
 using System;
 using System.Linq;
-using AlphaTA;
+using Finkit;
 
 class Program
 {
@@ -523,11 +523,11 @@ class Program
 ### WebAssembly (WASM)
 
 ```bash
-npm install alpha-ta-wasm
+npm install finkit-wasm
 ```
 
 ```javascript
-import init, { sma, ema, rsi, macd } from 'alpha-ta-wasm';
+import init, { sma, ema, rsi, macd } from 'finkit-wasm';
 
 await init();
 const close = new Float64Array([44.34, 44.09, 43.61, 44.33, 44.83, 45.10, 45.42, 45.84]);
@@ -543,7 +543,7 @@ cargo build --release -p finkit-ffi
 ```
 
 ```c
-#include "alphata.h"
+#include "finkit.h"
 
 double close[] = {44.34, 44.09, 43.61, 44.33, 44.83, 45.10};
 TaResult *result = ta_sma(close, 6, 3);
@@ -605,7 +605,7 @@ dist/
 ## Architecture
 
 ```
-fta/
+finkit/
 ├── core/                       # Core Rust library
 │   └── src/
 │       ├── indicators/         # Technical indicators
@@ -640,7 +640,7 @@ fta/
 All 98 streaming indicators support O(1) per-bar incremental updates:
 
 ```rust
-use alpha_ta_core::streaming::{StreamingSma, StreamingRsi, StreamingIndicator};
+use finkit::streaming::{StreamingSma, StreamingRsi, StreamingIndicator};
 
 let mut sma = StreamingSma::new(20);
 let mut rsi = StreamingRsi::new(14);
@@ -665,7 +665,7 @@ let restored = StreamingSma::restore_state(&state)?;
 ## Transform Pipeline
 
 ```rust
-use alpha_ta_core::transforms::{Pipeline, LogReturn, ZScore, Transform};
+use finkit::transforms::{Pipeline, LogReturn, ZScore, Transform};
 
 let result = Pipeline::new()
     .add(LogReturn)
@@ -676,7 +676,7 @@ let result = Pipeline::new()
 ## Formula Engine
 
 ```rust
-use alpha_ta_core::formula::{FormulaEngine, FormulaContext};
+use finkit::formula::{FormulaEngine, FormulaContext};
 
 let mut engine = FormulaEngine::new();
 let result = engine.eval("MA(CLOSE, 20) + 2 * STD(CLOSE, 20)", &mut ctx)?;
@@ -740,26 +740,23 @@ wasm-pack build --target web
 
 ### CI/CD
 
-CI runs on every push and pull request to `main`/`master`:
+CI runs on every push and pull request to `main`:
 
-- `cargo fmt --check` / `cargo clippy` (default, no_std, all-features)
-- `cargo test --workspace`
-- `cargo doc` with `-D warnings`
-- SSOT docs validation (`scripts/gen_ssot_docs.py --check`)
-- `cargo audit` for security advisories
-- WASM build check
-- FFI binding smoke tests (Linux/macOS/Windows)
-- Code coverage (on push to main only)
+- `cargo fmt --check`
+- `cargo clippy` (core hard gate; workspace advisory)
+- `cargo test -p finkit` + doc tests
+- `cargo doc` / `cargo audit`
 
-Additional workflows:
-- **release.yml** — Unified release pipeline for all 7 language bindings
-- **perf-gate.yml** — Performance regression detection (10% threshold)
-- **fuzz.yml** — Weekly fuzzing (3 targets, 300s each)
-- **docs-check.yml** + **docs-deploy.yml** — Documentation validation and mdBook deploy
+Planned (not yet enabled — see [docs/plan/FINKIT_V1_ALIGNMENT_AND_FIX_PLAN.md] stage B):
+- **release.yml** — Unified release pipeline for all language bindings
+- **perf-gate.yml** — Performance regression detection (baseline threshold)
+- **fuzz.yml** — Weekly fuzzing
+- **docs-check.yml** — SSOT validation (`gen_ssot_docs.py --check`) + link check
+- FFI binding build matrix (Python/Node/C) and ABI diff check
 
 ## 可视化模块
 
-FTA 内置高性能 K 线图可视化模块，支持纯 Rust 渲染，无需浏览器或外部依赖。
+Finkit 内置高性能 K 线图可视化模块，支持纯 Rust 渲染，无需浏览器或外部依赖。
 
 ### 功能概述
 
@@ -775,14 +772,14 @@ FTA 内置高性能 K 线图可视化模块，支持纯 Rust 渲染，无需浏�
 
 ```toml
 [dependencies]
-alpha-ta-visualization = { version = "1.0.0", features = ["svg"] }
+finkit-visualization = { version = "0.1.0", features = ["svg"] }
 ```
 
 ```rust
-use alphata_visualization::chart::KlineChart;
-use alphata_visualization::config::{ChartConfigBuilder, ChartType, IndicatorConfig, IndicatorType};
-use alphata_visualization::data::KlineData;
-use alphata_visualization::language::Language;
+use finkit_visualization::chart::KlineChart;
+use finkit_visualization::config::{ChartConfigBuilder, ChartType, IndicatorConfig, IndicatorType};
+use finkit_visualization::data::KlineData;
+use finkit_visualization::language::Language;
 
 fn main() {
     let data = KlineData::new(
@@ -840,7 +837,7 @@ chart.save_as_html("kline.html")
 #### Node.js
 
 ```typescript
-import { PyKlineChart } from '@alphata/node';
+import { PyKlineChart } from 'finkit';
 
 // 使用 JSON 数据创建图表
 const chartData = {
@@ -856,8 +853,8 @@ const chartData = {
 #### Java
 
 ```java
-import com.alphata.KlineChart;
-import com.alphata.KlineData;
+import com.finkit.KlineChart;
+import com.finkit.KlineData;
 
 KlineData data = new KlineData(
     new String[]{"2024-01-01", "2024-01-02", "2024-01-03"},

@@ -3,7 +3,7 @@ name = "finkit-ffi-common"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Shared FFI utilities, error mapping and indicator registry for AlphaTA language bindings"
+description = "Shared FFI utilities, error mapping and indicator registry for Finkit language bindings"
 
 [lints]
 workspace = true

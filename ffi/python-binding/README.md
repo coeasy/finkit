@@ -1,4 +1,4 @@
-# AlphaTA: 高性能Python技术分析库
+# finkit: 高性能Python技术分析库
 
 > **Tier1** · 成熟度: `stable` · [绑定分级说明](../../docs/BINDING_TIERS.md)
 
@@ -26,15 +26,15 @@
 ## 安装
 
 ```bash
-pip install alpha-ta
+pip install finkit
 ```
 
 ### 从源码编译
 
 ```bash
 # 前置条件: Rust (rustup.rs)
-git clone https://github.com.alphata/AlphaTA.git
-cd AlphaTA/ffi/python-binding
+git clone https://github.com/coeasy/finkit.git
+cd finkit/ffi/python-binding
 pip install maturin
 maturin develop --release
 ```

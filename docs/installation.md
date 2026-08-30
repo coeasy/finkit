@@ -14,7 +14,7 @@ This document provides detailed installation instructions for each language bind
 - **Git**: For cloning the repository
   ```bash
   git clone https://github.com/coeasy/finkit.git
-cd alpha-ta
+cd finkit
   ```
 
 ## Python
@@ -22,7 +22,7 @@ cd alpha-ta
 ### Option 1: pip (Recommended)
 
 ```bash
-pip install alpha-ta
+pip install finkit
 ```
 
 ### Option 2: Build from Source
@@ -39,13 +39,13 @@ maturin develop --release
 
 # Or build wheel
 maturin build --release --out dist
-pip install dist/alpha-ta-*.whl
+pip install dist/finkit-*.whl
 ```
 
 ### Option 3: Conda
 
 ```bash
-conda install -c conda-forge alpha_ta
+conda install -c conda-forge finkit
 ```
 
 ### Platform-Specific Notes
@@ -78,13 +78,13 @@ print(f"Python binding installed successfully! RSI length: {len(rsi)}")
 ### Option 1: npm (Recommended)
 
 ```bash
-npm install @alphata/node
+npm install finkit
 ```
 
 ### Option 2: yarn
 
 ```bash
-yarn add @alphata/node
+yarn add finkit
 ```
 
 ### Option 3: Build from Source
@@ -122,7 +122,7 @@ npm test
 The package includes TypeScript definitions out of the box:
 
 ```typescript
-import { sma, rsi, macd, MacdResult } from '@alphata/node';
+import { sma, rsi, macd, MacdResult } from 'finkit';
 
 const close = Array.from({ length: 100 }, (_, i) => i + 1);
 const macdResult: MacdResult = macd(close, 12, 26, 9);
@@ -131,7 +131,7 @@ const macdResult: MacdResult = macd(close, 12, 26, 9);
 ### Verification
 
 ```javascript
-const ta = require('@alphata/node');
+const ta = require('finkit');
 const close = Array.from({ length: 50 }, (_, i) => i + 1);
 const rsi = ta.rsi(close, 14);
 console.log(`Node.js binding installed! RSI length: ${rsi.length}`);
@@ -142,14 +142,14 @@ console.log(`Node.js binding installed! RSI length: ${rsi.length}`);
 ### Option 1: cargo (Recommended)
 
 ```bash
-cargo add alpha-ta-core
+cargo add finkit
 ```
 
 ### Option 2: Manual (Cargo.toml)
 
 ```toml
 [dependencies]
-alpha-ta-core = "1.0.0"
+finkit = "0.1.0"
 ```
 
 ### Option 3: Build from Source
@@ -159,7 +159,7 @@ alpha-ta-core = "1.0.0"
 cargo build --release
 
 # Run tests
-cargo test --package alpha-ta-core
+cargo test --package finkit
 
 # Optional: Build with all features
 cargo build --release --all-features
@@ -169,7 +169,7 @@ cargo build --release --all-features
 
 ```toml
 [dependencies]
-alpha-ta-core = { version = "1.0.0", features = ["formula"] }
+finkit = { version = "0.1.0", features = ["formula"] }
 ```
 
 Available features:
@@ -178,14 +178,14 @@ Available features:
 - `serde` (default): Enable serialization support with serde and bincode
 - `no_std`: Enable no_std support with libm (mutually exclusive with std)
 - `rayon`: Enable parallel computation support
-- `alpha-ta-polars`: Enable Polars DataFrame integration
+- `finkit-polars`: Enable Polars DataFrame integration
 - `nightly-avx512`: Enable AVX-512 SIMD optimizations (requires nightly Rust)
 - `precision-f32`: Use f32 precision instead of f64
 
 ### Verification
 
 ```rust
-use alpha_ta_core::indicators;
+use finkit::indicators;
 
 fn main() {
     let close: Vec<f64> = (1..=50).map(|x| x as f64).collect();
@@ -202,9 +202,9 @@ Add to your `pom.xml`:
 
 ```xml
 <dependency>
-    <groupId>com.alphata</groupId>
-    <artifactId>alpha_ta</artifactId>
-    <version>1.0.0</version>
+    <groupId>com.finkit</groupId>
+    <artifactId>finkit</artifactId>
+    <version>0.1.0</version>
 </dependency>
 ```
 
@@ -214,7 +214,7 @@ Add to your `build.gradle`:
 
 ```gradle
 dependencies {
-    implementation 'com.alphata:alpha_ta:1.0.0'
+    implementation 'com.finkit:finkit:0.1.0'
 }
 ```
 
@@ -257,7 +257,7 @@ set PATH=<repo_root>\ffi\java-binding\target\release;%PATH%
 ### Verification
 
 ```java
-import com.alphata.Indicators;
+import com.finkit.Indicators;
 
 public class Test {
     public static void main(String[] args) {
@@ -370,13 +370,13 @@ func main() {
 ### Option 1: NuGet CLI
 
 ```bash
-dotnet add package alpha_ta
+dotnet add package finkit
 ```
 
 ### Option 2: Package Manager Console
 
 ```powershell
-Install-Package alpha_ta
+Install-Package finkit
 ```
 
 ### Option 3: Build from Source
@@ -391,11 +391,11 @@ cd ffi/dotnet-binding
 cargo build --release
 
 # Build .NET library
-cd src/alpha_ta
+cd src/finkit
 dotnet build --configuration Release
 
 # Run tests
-cd ../alpha_ta.Tests
+cd ../finkit.Tests
 dotnet test
 ```
 
@@ -406,15 +406,15 @@ dotnet test
 The native libraries are automatically deployed to platform-specific folders:
 
 ```
-alpha_ta/
+finkit/
 ├── runtimes/
 │   ├── win-x64/native/
-│   │   └── alpha_ta_dotnet.dll
+│   │   └── finkit_dotnet.dll
 │   ├── linux-x64/native/
-│   │   └── libalpha_ta_dotnet.so
+│   │   └── libfinkit_dotnet.so
 │   └── osx-x64/native/
-│       └── libalpha_ta_dotnet.dylib
-└── alpha_ta.dll
+│       └── libfinkit_dotnet.dylib
+└── finkit.dll
 ```
 
 ### Verification
@@ -422,7 +422,7 @@ alpha_ta/
 ```csharp
 using System;
 using System.Linq;
-using alpha_ta;
+using Finkit;
 
 class Program
 {
@@ -447,7 +447,7 @@ project(my_project)
 add_subdirectory(<repo_root>/ffi/c-binding)
 
 # Link against FTA
-target_link_libraries(your_target PRIVATE alpha_ta_c)
+target_link_libraries(your_target PRIVATE finkit)
 ```
 
 ### Option 2: Manual Build
@@ -460,14 +460,14 @@ cd ffi/c-binding
 cargo build --release
 
 # Copy header and library
-cp include/alpha_ta.h /usr/local/include/
-cp target/release/libalpha_ta_c.so /usr/local/lib/
+cp include/finkit.h /usr/local/include/
+cp target/release/libfinkit_ffi.so /usr/local/lib/
 ```
 
 ### Usage
 
 ```cpp
-#include <alpha_ta.h>
+#include <finkit.h>
 #include <iostream>
 
 int main() {
@@ -475,7 +475,7 @@ int main() {
     double* sma = nullptr;
     int len = 0;
 
-    int result = alpha_ta_sma(close, 10, 3, &sma, &len);
+    int result = ta_sma(close, 10, 3, &sma, &len);
     if (result == 0) {
         std::cout << "C++ binding installed! SMA length: " << len << std::endl;
         free(sma);
@@ -490,7 +490,7 @@ int main() {
 ### Option 1: npm
 
 ```bash
-npm install alpha-ta-wasm
+npm install finkit-wasm
 ```
 
 ### Option 2: Build from Source
@@ -512,7 +512,7 @@ wasm-pack build --target nodejs --out-dir pkg
 ### Usage
 
 ```typescript
-import init, { rsi, sma, macd } from 'alpha-ta-wasm';
+import init, { rsi, sma, macd } from 'finkit-wasm';
 
 async function main() {
   await init();
@@ -530,7 +530,7 @@ main();
 ### Option 1: cargo install
 
 ```bash
-cargo install alpha-ta-cli
+cargo install finkit
 ```
 
 ### Option 2: Build from Source
@@ -547,30 +547,30 @@ cargo install --path .
 
 ```bash
 # Calculate indicators
-alpha-ta-cli sma --input data.csv --period 14
-alpha-ta-cli ema --input data.csv --period 14
-alpha-ta-cli rsi --input data.csv --period 14
-alpha-ta-cli macd --input data.csv --fast 12 --slow 26 --signal 9
+finkit sma --input data.csv --period 14
+finkit ema --input data.csv --period 14
+finkit rsi --input data.csv --period 14
+finkit macd --input data.csv --fast 12 --slow 26 --signal 9
 
 # Export results
-alpha-ta-cli rsi --input data.csv --output rsi.csv
+finkit rsi --input data.csv --output rsi.csv
 ```
 
 ## Troubleshooting
 
 ### Common Issues
 
-**Python: "ModuleNotFoundError: No module named 'alpha_ta'"**
+**Python: "ModuleNotFoundError: No module named 'finkit'"**
 ```bash
 # Reinstall with verbose output
-pip install --verbose alpha_ta
+pip install --verbose finkit
 ```
 
-**Node.js: "Cannot find module '@alphata/node'"**
+**Node.js: "Cannot find module 'finkit'"**
 ```bash
 # Clear npm cache and reinstall
 npm cache clean --force
-npm install @alphata/node
+npm install finkit
 ```
 
 **Java: "UnsatisfiedLinkError"**

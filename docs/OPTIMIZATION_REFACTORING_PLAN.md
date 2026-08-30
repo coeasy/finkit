@@ -1,7 +1,7 @@
-# AlphaTA vs TA-Lib 执行效率对比与优化重构方案
+# Finkit vs TA-Lib 执行效率对比与优化重构方案
 
 > **生成日期**: 2026-07-18
-> **AlphaTA 版本**: 1.0.0 (Rust 2021)
+> **Finkit 版本**: 1.0.0 (Rust 2021)
 > **TA-Lib 版本**: 0.6.4 (C reference)
 > **文档定位**: 全面梳理项目功能、对比 TA-Lib 执行效率、分析改进点、制定优化重构方案
 
@@ -24,7 +24,7 @@
 
 ### 1.1 核心架构
 
-AlphaTA 是基于 Rust 2021 的高性能金融技术分析库，采用 Cargo workspace 管理 13 个 crate：
+Finkit 是基于 Rust 2021 的高性能金融技术分析库，采用 Cargo workspace 管理 13 个 crate：
 
 | 模块 | 路径 | 职责 |
 |------|------|------|
@@ -32,7 +32,7 @@ AlphaTA 是基于 Rust 2021 的高性能金融技术分析库，采用 Cargo wor
 | **indicators** | `core/src/indicators/` | 283 个批量指标函数（31 个分类文件） |
 | **streaming** | `core/src/streaming/` | 160 个 O(1) 流式指标 |
 | **math** | `core/src/math/` | 数学基础库（SIMD 内核、移动平均、统计） |
-| **formula** | `core/src/formula/` | JIT 编译公式引擎（Pine + AlphaTA 双方言） |
+| **formula** | `core/src/formula/` | JIT 编译公式引擎（Pine + Finkit 双方言） |
 | **patterns** | `core/src/patterns/` | 图表形态识别 |
 | **features** | `core/src/features/` | ML 特征工程流水线（11 子模块） |
 | **FFI bindings** | `ffi/` | 8 种语言绑定（Python/Node/Java/Go/C/.NET/iOS/Android） |
@@ -42,7 +42,7 @@ AlphaTA 是基于 Rust 2021 的高性能金融技术分析库，采用 Cargo wor
 
 ### 1.2 功能覆盖总览
 
-| 功能类别 | AlphaTA | TA-Lib | 净优势 |
+| 功能类别 | Finkit | TA-Lib | 净优势 |
 |----------|---------|--------|--------|
 | **批量指标** | 283 pub fn | ~158 函数 | +125 |
 | **流式指标 O(1)** | 160 | 0 | **+160** |
@@ -51,7 +51,7 @@ AlphaTA 是基于 Rust 2021 的高性能金融技术分析库，采用 Cargo wor
 | **中国市场指标** | 20+ (KDJ/VR/CR/BIAS...) | 0 | **+20** |
 | **A股专属** | 9 (WINNER/COST/涨停...) | 0 | **+9** |
 | **情绪/宽度** | 9 (Fear&Greed/TRIN...) | 0 | **+9** |
-| **公式引擎** | JIT DSL (Pine+AlphaTA) | 无 | **+1** |
+| **公式引擎** | JIT DSL (Pine+Finkit) | 无 | **+1** |
 | **特征工程** | 11 子模块 | 无 | **+11** |
 | **多语言绑定** | 8 种 + WASM | 2 种 (C/Python) | **+7** |
 | **Checkpoint/序列化** | serde + CheckpointState | 无 | **+1** |
@@ -79,7 +79,7 @@ AlphaTA 是基于 Rust 2021 的高性能金融技术分析库，采用 Cargo wor
 
 > 数据来源：`BENCHMARK_REPORT.md`（2026-06-24，Windows 10 x86_64 AVX2）
 
-| 指标 | AlphaTA (µs) | TA-Lib C (µs) | 加速比 | 状态 |
+| 指标 | Finkit (µs) | TA-Lib C (µs) | 加速比 | 状态 |
 |------|-------------|---------------|--------|------|
 | **SMA(20)** | 12.75 | 20.19 | **1.58x** | ✅ 领先 |
 | **EMA(12)** | 20.73 | 29.66 | **1.43x** | ✅ 领先 |
@@ -92,7 +92,7 @@ AlphaTA 是基于 Rust 2021 的高性能金融技术分析库，采用 Cargo wor
 
 ### 2.2 扩展指标性能（10K bars，ns/bar 维度）
 
-| 指标 | AlphaTA (ns/bar) | TA-Lib C (ns/bar) | 加速比 | 优化技术 |
+| 指标 | Finkit (ns/bar) | TA-Lib C (ns/bar) | 加速比 | 优化技术 |
 |------|-------------------|---------------------|--------|----------|
 | SMA(20) | 14.3 | 22.6 | **1.58x** | SIMD AVX2 |
 | EMA(12) | 11.0 | 15.7 | **1.43x** | FMA |
@@ -148,13 +148,13 @@ AlphaTA 是基于 Rust 2021 的高性能金融技术分析库，采用 Cargo wor
 
 ### 2.4 流式 O(1) 增量更新对比
 
-| 指标 | AlphaTA 流式 ns/val (500K) | TA-Lib 重算 (10K) | 差异 |
+| 指标 | Finkit 流式 ns/val (500K) | TA-Lib 重算 (10K) | 差异 |
 |------|-----------------------------|---------------------|------|
 | SMA(20) | **0.44 ns** | 12.75 µs/bar | **29,000x** |
 | EMA(12) | **0.58 ns** | 20.73 µs/bar | **35,700x** |
 | RSI(14) | **1.86 ns** | 26.60 µs/bar | **14,300x** |
 
-**关键差异**: TA-Lib **没有**流式 O(1) 接口。每新增一个 bar 需要重算整个数组（O(n)），对实时策略延迟极高。AlphaTA 流式路径 O(1) per-bar，500K bars 时 SMA 每秒可处理 **22 亿次**更新。
+**关键差异**: TA-Lib **没有**流式 O(1) 接口。每新增一个 bar 需要重算整个数组（O(n)），对实时策略延迟极高。Finkit 流式路径 O(1) per-bar，500K bars 时 SMA 每秒可处理 **22 亿次**更新。
 
 ### 2.5 公式引擎开销
 
@@ -352,7 +352,7 @@ let ema = pool.ema(&close, 12)?;  // 复用同一缓冲
 **方案**:
 1. 在有 TA-Lib C 环境的 Docker 中批量生成 golden reference
 2. 覆盖全部 158 个 TA-Lib 对应函数
-3. CI 自动验证 AlphaTA 输出 vs golden reference
+3. CI 自动验证 Finkit 输出 vs golden reference
 4. 精度阈值: SMA/EMA=0, RSI=0, MACD≤1e-13, HT≤1e-9
 
 ### 4.3 P2 — 功能补全
@@ -431,7 +431,7 @@ let offset = sma.warmup_offset(20);  // = 19
 
 ### 5.3 大规模数据内存对比
 
-| 场景 (10M bars) | AlphaTA 当前 | AlphaTA 优化后 | TA-Lib |
+| 场景 (10M bars) | Finkit 当前 | Finkit 优化后 | TA-Lib |
 |-----------------|-------------|---------------|--------|
 | SMA 单次 | 80 MB (Array1) | 0 (`_into`) | 80 MB |
 | 6 指标同时 | 480 MB | 0 (流式) | 480 MB |
@@ -617,4 +617,4 @@ python scripts/bench_vs_talib_precision.py --exit-on-fail
 
 ---
 
-**结论**: AlphaTA 当前在 **全部 39 个已测指标上快于 TA-Lib C**，平均加速 1.20-1.50x。通过本方案的 MACD 融合、HT SIMD 化、ADX/CCI/STOCH SIMD 化等 P0 优化，目标将**最低加速比从 1.04x 提升到 1.20x+**，核心指标平均达 **2.0x**。同时补全功能缺口（CDL 100%、流式补全）、建立自动化精度门禁，实现全面超越 TA-Lib 的目标。
+**结论**: Finkit 当前在 **全部 39 个已测指标上快于 TA-Lib C**，平均加速 1.20-1.50x。通过本方案的 MACD 融合、HT SIMD 化、ADX/CCI/STOCH SIMD 化等 P0 优化，目标将**最低加速比从 1.04x 提升到 1.20x+**，核心指标平均达 **2.0x**。同时补全功能缺口（CDL 100%、流式补全）、建立自动化精度门禁，实现全面超越 TA-Lib 的目标。

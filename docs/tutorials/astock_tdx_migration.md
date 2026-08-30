@@ -1,24 +1,24 @@
-# A股场景：从通达信 TDX 公式迁移到 AlphaTA
+# A股场景：从通达信 TDX 公式迁移到 Finkit
 
-本教程面向 A 股量化用户，演示如何将通达信（TDX）常用技术指标公式迁移到 AlphaTA Python 绑定，并完成数据导入、指标计算、结果对比与可视化。
+本教程面向 A 股量化用户，演示如何将通达信（TDX）常用技术指标公式迁移到 Finkit Python 绑定，并完成数据导入、指标计算、结果对比与可视化。
 
 ## 目录
 
-1. [安装 AlphaTA](#1-安装-AlphaTA)
+1. [安装 Finkit](#1-安装-Finkit)
 2. [导入 A 股 OHLCV 数据](#2-导入-a-股-ohlcv-数据)
-3. [TDX 公式与 AlphaTA 对照](#3-tdx-公式与-AlphaTA-对照)
+3. [TDX 公式与 Finkit 对照](#3-tdx-公式与-Finkit-对照)
 4. [运行 MACD / KDJ / BOLL](#4-运行-macd--kdj--boll)
 5. [与通达信结果对比](#5-与通达信结果对比)
 6. [可视化](#6-可视化)
 
 ---
 
-## 1. 安装 AlphaTA
+## 1. 安装 Finkit
 
 ### 从 PyPI 安装（推荐）
 
 ```bash
-pip install alpha-ta numpy pandas
+pip install finkit numpy pandas
 ```
 
 ### 从源码构建（开发版）
@@ -67,7 +67,7 @@ volume = df["volume"].astype(float).values
 df = pd.read_parquet("600519_daily.parquet")
 ```
 
-### 2.3 使用 AlphaTA KlineData（内置可视化数据格式）
+### 2.3 使用 Finkit KlineData（内置可视化数据格式）
 
 ```python
 import finkit as ta
@@ -80,9 +80,9 @@ assert data.validate()
 
 ---
 
-## 3. TDX 公式与 AlphaTA 对照
+## 3. TDX 公式与 Finkit 对照
 
-| 通达信公式 | 含义 | AlphaTA 等价调用 |
+| 通达信公式 | 含义 | Finkit 等价调用 |
 |-----------|------|----------------|
 | `MA(C,20)` | 20 日简单移动平均 | `ta.sma(close, timeperiod=20)` |
 | `EMA(C,12)` | 12 日指数移动平均 | `ta.ema(close, timeperiod=12)` |
@@ -103,7 +103,7 @@ DEA: EMA(DIF,9);
 MACD: (DIF-DEA)*2;
 ```
 
-AlphaTA 等价：
+Finkit 等价：
 
 ```python
 import finkit as ta
@@ -121,7 +121,7 @@ D:SMA(K,3,1);
 J:3*K-2*D;
 ```
 
-AlphaTA 等价：
+Finkit 等价：
 
 ```python
 slowk, slowd = ta.stoch(high, low, close, fastk_period=9, slowk_period=3, slowd_period=3)
@@ -213,7 +213,7 @@ import pandas as pd
 tdx = pd.read_csv("tdx_macd_export.csv", encoding="gbk")
 alphata_macd = macd  # 来自上一节
 
-# 对齐有效区间（warm-up 期 AlphaTA 输出 NaN）
+# 对齐有效区间（warm-up 期 Finkit 输出 NaN）
 valid = ~np.isnan(alphata_macd)
 diff = np.abs(alphata_macd[valid] - tdx["DIF"].values[valid])
 max_diff = np.nanmax(diff)
@@ -231,7 +231,7 @@ assert max_diff < 1e-4, "MACD 与通达信差异过大，请检查参数"
 | 差异原因 | 说明 |
 |---------|------|
 | 复权方式 | 前复权/后复权/不复权数据不同 |
-| 参数默认值 | 确认 TDX 与 AlphaTA 周期参数一致 |
+| 参数默认值 | 确认 TDX 与 Finkit 周期参数一致 |
 | Warm-up 期 | 前 N 根 K 线为 NaN，对比时跳过 |
 | EMA 初始化 | 少数软件 EMA 种子值算法略有差异 |
 
@@ -239,7 +239,7 @@ assert max_diff < 1e-4, "MACD 与通达信差异过大，请检查参数"
 
 ## 6. 可视化
 
-### 6.1 使用 AlphaTA 内置 K 线图
+### 6.1 使用 Finkit 内置 K 线图
 
 ```python
 import finkit as ta

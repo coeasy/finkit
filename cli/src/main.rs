@@ -12,7 +12,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
-#[command(name = "alpha_ta")]
+#[command(name = "finkit")]
 #[command(about = "Technical Analysis CLI — compute indicators, detect patterns, run formulas")]
 #[command(version)]
 struct Cli {
@@ -307,7 +307,7 @@ enum Commands {
     },
     /// Generic indicator calculator
     ///
-    /// Usage: alpha_ta calc SMA --period 20 --input data.csv
+    /// Usage: finkit calc SMA --period 20 --input data.csv
     Calc {
         /// Indicator name: SMA, EMA, RSI, MACD, ATR, BBANDS, ADX, CCI, OBV, WILLR, WMA, STOCH
         indicator: String,
@@ -1029,7 +1029,7 @@ fn run_chart(
             if chart_format == "html" {
                 format!(
                     "<!doctype html><html><head><meta charset=\"utf-8\"><title>{}</title></head><body>{}</body></html>\n",
-                    title.unwrap_or("AlphaTA Chart"), svg
+                    title.unwrap_or("Finkit Chart"), svg
                 )
             } else {
                 svg

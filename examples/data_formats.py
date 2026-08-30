@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-OHLCV data format interoperability examples for AlphaTA.
+OHLCV data format interoperability examples for Finkit.
 
 Demonstrates loading and converting between:
   - CSV (stdlib)
@@ -218,16 +218,16 @@ def cross_convert(rows: List[Dict[str, Any]]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# AlphaTA integration (optional)
+# Finkit integration (optional)
 # ---------------------------------------------------------------------------
 
 def example_finkit_compute(rows: List[Dict[str, Any]]) -> None:
     ta = _optional_import("finkit")
     if ta is None:
-        print("=== AlphaTA compute - SKIPPED (alpha_ta not installed) ===")
+        print("=== finkit compute - SKIPPED (finkit not installed) ===")
         return
 
-    print("=== AlphaTA indicator on loaded OHLCV ===")
+    print("=== finkit indicator on loaded OHLCV ===")
     import finkit as ta
 
     closes = [float(r["close"]) for r in rows]
@@ -280,7 +280,7 @@ def run_check() -> bool:
 # ---------------------------------------------------------------------------
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="OHLCV data format examples for AlphaTA")
+    parser = argparse.ArgumentParser(description="OHLCV data format examples for Finkit")
     parser.add_argument(
         "--check",
         action="store_true",

@@ -1,4 +1,4 @@
-# AlphaTA 项目总结
+# Finkit 项目总结
 
 ## 项目状态
 
@@ -6,7 +6,7 @@
 
 ## 完成的功能清单
 
-### 1. 核心库 (alpha-ta-core) ✅
+### 1. 核心库 (finkit) ✅
 
 **数学基础库**
 - ✅ 移动平均算法 (SMA, EMA, WMA, DEMA, TEMA, KAMA)
@@ -64,8 +64,8 @@
 
 **C FFI (ffi/c-binding)**
 - ✅ 9个导出函数 (SMA, EMA, RSI, MACD, BBANDS, ADX, ATR, OBV, STOCH, SAR)
-- ✅ C头文件 (alpha-ta.h)
-- ✅ C++头文件封装 (alpha-ta.hpp)
+- ✅ C头文件 (finkit.h)
+- ✅ C++头文件封装 (finkit.hpp)
 - ✅ C++示例代码 (example.cpp)
 - ✅ 支持动态库和静态库编译
 
@@ -136,7 +136,7 @@
 ## 项目结构
 
 ```
-alpha-ta/
+finkit/
 ├── .github/workflows/ci.yml          # CI/CD流水线
 ├── cli/                               # CLI工具
 │   ├── Cargo.toml
@@ -164,8 +164,8 @@ alpha-ta/
 ├── ffi/                               # FFI绑定
 │   ├── c-binding/                     # C/C++
 │   │   ├── include/
-│   │   │   ├── alpha-ta.h
-│   │   │   └── alpha-ta.hpp
+│   │   │   ├── finkit.h
+│   │   │   └── finkit.hpp
 │   │   └── examples/example.cpp
 │   ├── python-binding/                # Python
 │   │   ├── examples/example.py
@@ -187,7 +187,7 @@ alpha-ta/
 
 核心指标示例（1000个数据点）：
 
-| 指标 | TA-Lib (µs) | alpha-ta (µs) | 加速比 |
+| 指标 | TA-Lib (µs) | finkit (µs) | 加速比 |
 |------|-------------|-----------------|--------|
 | SMA_20 | 19.98 | 12.28 | 1.63x ✅ |
 | EMA_12 | 29.19 | 20.60 | 1.42x ✅ |
@@ -200,8 +200,8 @@ alpha-ta/
 
 **总体统计**
 - 33 个指标参与对比
-- alpha-ta 更快：24 个（72.7%）
-- alpha-ta 较慢但差距 < 25%：9 个（见 watch-list）
+- finkit 更快：24 个（72.7%）
+- finkit 较慢但差距 < 25%：9 个（见 watch-list）
 - 平均加速比：1.45x
 
 **Watch-list（差距 < 25% 的指标，下一步优化目标）**
@@ -231,24 +231,24 @@ alpha-ta/
 ### Rust
 ```toml
 [dependencies]
-alpha-ta-core = "1.0.0"
+finkit = "1.0.0"
 ```
 
 ### Python
 ```bash
-pip install alpha-ta
+pip install finkit
 ```
 
 ### Node.js
 ```bash
-npm install alpha-ta
+npm install finkit
 ```
 
 ### Java (Maven)
 ```xml
 <dependency>
-    <groupId>com.alpha-ta</groupId>
-    <artifactId>alpha-ta</artifactId>
+    <groupId>com.finkit</groupId>
+    <artifactId>finkit</artifactId>
     <version>1.0.0</version>
 </dependency>
 ```
@@ -276,7 +276,7 @@ MIT OR Apache-2.0
 
 ## 贡献者
 
-- alpha-ta Contributors
+- finkit Contributors
 
 ## 联系方式
 

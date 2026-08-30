@@ -1,6 +1,6 @@
 [book]
-title = "AlphaTA Documentation"
-authors = ["AlphaTA Contributors"]
+title = "Finkit Documentation"
+authors = ["Finkit Contributors"]
 language = "en"
 multilingual = false
 src = "src"

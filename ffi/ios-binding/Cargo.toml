@@ -3,7 +3,7 @@ name = "finkit-ios"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "iOS bindings for AlphaTA — built as a staticlib + .modulemap and packaged as an .xcframework"
+description = "iOS bindings for Finkit — built as a staticlib + .modulemap and packaged as an .xcframework"
 
 [lints]
 workspace = true

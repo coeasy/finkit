@@ -5,7 +5,7 @@ The `features` module provides a comprehensive toolkit for transforming raw fina
 ## Quick Start
 
 ```rust
-use alphata_core::features::*;
+use finkit::features::*;
 
 // Generate multi-period SMA features
 let close = vec![100.0, 101.0, 102.0, 101.5, 103.0, 104.0, 103.5, 105.0, 106.0, 107.0,
@@ -41,7 +41,7 @@ println!("Generated {} features x {} rows", matrix.cols(), matrix.rows());
 The `FeatureMatrix` is the central data structure:
 
 ```rust
-use alphata_core::features::FeatureMatrix;
+use finkit::features::FeatureMatrix;
 
 let mut matrix = FeatureMatrix::new();
 matrix.add_column("sma_5", vec![f64::NAN; 4].into_iter().chain(vec![101.0, 102.0]).collect());
@@ -64,7 +64,7 @@ let merged = matrix.merge(&other);
 Generate the same indicator with different lookback windows:
 
 ```rust
-use alphata_core::features::MultiPeriodFeature;
+use finkit::features::MultiPeriodFeature;
 
 let close = vec![/* ... price data ... */];
 
@@ -83,7 +83,7 @@ Supported indicators: `sma`, `ema`, `wma`, `rsi`, `roc`, `mom`, `atr` (uses clos
 ## Signal Detection
 
 ```rust
-use alphata_core::features::{crossover, crossunder, threshold_cross, divergence};
+use finkit::features::{crossover, crossunder, threshold_cross, divergence};
 
 let fast_ma = vec![100.0, 101.0, 102.0, 101.5, 103.0];
 let slow_ma = vec![100.5, 100.8, 101.5, 102.0, 102.5];
@@ -107,7 +107,7 @@ let divergences = divergence(&price, &indicator, 3);
 ## Time Series Transformations
 
 ```rust
-use alphata_core::features::{lag, lead, diff, pct_change, multi_lag, rolling_apply};
+use finkit::features::{lag, lead, diff, pct_change, multi_lag, rolling_apply};
 
 let data = vec![100.0, 101.0, 102.0, 103.0, 104.0, 105.0];
 
@@ -129,7 +129,7 @@ let rolling_range = rolling_apply(&data, 3, |window| {
 ## Rolling Statistics
 
 ```rust
-use alphata_core::features::{
+use finkit::features::{
     rolling_skewness, rolling_kurtosis, rolling_entropy,
     rolling_zscore, rolling_percentile
 };
@@ -146,7 +146,7 @@ let pctl = rolling_percentile(&data, 20);
 ## Normalization
 
 ```rust
-use alphata_core::features::{
+use finkit::features::{
     rolling_zscore_normalize, rolling_minmax, robust_scaler, rank_normalize
 };
 
@@ -161,7 +161,7 @@ let ranked = rank_normalize(&data, 50);     // Rank within window / window_size
 ## ML Label Generation
 
 ```rust
-use alphata_core::features::{forward_return, triple_barrier, binary_label, fixed_horizon_label};
+use finkit::features::{forward_return, triple_barrier, binary_label, fixed_horizon_label};
 
 let close = vec![/* ... price data ... */];
 let high = vec![/* ... high prices ... */];
@@ -184,7 +184,7 @@ let discrete = fixed_horizon_label(&close, 10, 0.005); // -1, 0, 1
 ## Feature Combinations
 
 ```rust
-use alphata_core::features::{
+use finkit::features::{
     feature_ratio, feature_spread, rolling_correlation, rolling_correlation_matrix
 };
 
@@ -203,7 +203,7 @@ let corr_matrix = rolling_correlation_matrix(&features, 3);
 ## Feature Selection
 
 ```rust
-use alphata_core::features::{variance_threshold, correlation_filter, mutual_information};
+use finkit::features::{variance_threshold, correlation_filter, mutual_information};
 
 let features = vec![
     vec![1.0, 2.0, 3.0, 4.0, 5.0],
@@ -225,7 +225,7 @@ let mi_scores = mutual_information(&features, &target, 5);
 ## Export
 
 ```rust
-use alphata_core::features::{FeatureMatrix, to_csv, to_json_lines, to_arrow_ipc};
+use finkit::features::{FeatureMatrix, to_csv, to_json_lines, to_arrow_ipc};
 
 let matrix = FeatureMatrix::new();
 // ... add columns ...
@@ -247,7 +247,7 @@ std::fs::write("features.arrow", arrow).unwrap();
 For batch processing large datasets:
 
 ```rust
-use alphata_core::features::{batch_zscore_simd, batch_minmax_simd, correlation_simd};
+use finkit::features::{batch_zscore_simd, batch_minmax_simd, correlation_simd};
 
 let data: Vec<f64> = (0..100_000).map(|i| i as f64 * 0.01).collect();
 
@@ -262,8 +262,8 @@ let corr = correlation_simd(&data, &other);
 ## Complete Pipeline Example
 
 ```rust
-use alphata_core::features::*;
-use alphata_core::indicators;
+use finkit::features::*;
+use finkit::indicators;
 
 fn build_ml_features(close: &[f64], high: &[f64], low: &[f64], volume: &[f64]) -> FeatureMatrix {
     let mut matrix = FeatureMatrix::new();

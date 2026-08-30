@@ -1,6 +1,6 @@
-# Pine Script → AlphaTA 迁移指南
+# Pine Script → Finkit 迁移指南
 
-本文档帮助将 TradingView Pine Script v5 指标迁移到 AlphaTA 公式引擎（含 Pine 方言与原生 AlphaTA/TDX 公式）。
+本文档帮助将 TradingView Pine Script v5 指标迁移到 Finkit 公式引擎（含 Pine 方言与原生 Finkit/TDX 公式）。
 
 ---
 
@@ -21,7 +21,7 @@ plot(rsi)
 let ast = parse_formula_with_dialect(source, FormulaDialect::Pine)?;
 ```
 
-### 方式二：改写为 AlphaTA/TDX 公式
+### 方式二：改写为 Finkit/TDX 公式
 
 ```text
 N:=14;
@@ -34,7 +34,7 @@ RSI_VAL:RSI(CLOSE,N);
 
 ### ta.* 技术分析（已映射）
 
-| Pine Script | AlphaTA | 说明 |
+| Pine Script | Finkit | 说明 |
 |-------------|--------|------|
 | `ta.sma(src, len)` | `SMA(src, len)` | 简单移动平均 |
 | `ta.ema(src, len)` | `EMA(src, len)` | 指数移动平均 |
@@ -47,7 +47,7 @@ RSI_VAL:RSI(CLOSE,N);
 
 ### math.* 数学函数（已映射）
 
-| Pine Script | AlphaTA |
+| Pine Script | Finkit |
 |-------------|--------|
 | `math.abs(x)` | `ABS(x)` |
 | `math.log(x)` | `LOG(x)` |
@@ -58,7 +58,7 @@ RSI_VAL:RSI(CLOSE,N);
 
 ### NA 处理（已映射）
 
-| Pine Script | AlphaTA 等价 |
+| Pine Script | Finkit 等价 |
 |-------------|-------------|
 | `na(x)` | `ISNA(x)` |
 | `nz(x, y)` | `IF(ISNA(x), y, x)` |
@@ -66,15 +66,15 @@ RSI_VAL:RSI(CLOSE,N);
 
 ### 跨周期（部分映射）
 
-| Pine Script | AlphaTA | 状态 |
+| Pine Script | Finkit | 状态 |
 |-------------|--------|------|
 | `request.security(sym, tf, expr)` | `SECURITY(...)` | ⚠️ 解析可用；不重绘语义未实现 |
 
-### ta.* 尚未映射（需手写 AlphaTA 或等待后续版本）
+### ta.* 尚未映射（需手写 Finkit 或等待后续版本）
 
-| Pine Script | AlphaTA 替代建议 |
+| Pine Script | Finkit 替代建议 |
 |-------------|-----------------|
-| `ta.supertrend(f, len)` | 使用 AlphaTA `SUPERTREND` 指标 API（若有）或手写 |
+| `ta.supertrend(f, len)` | 使用 Finkit `SUPERTREND` 指标 API（若有）或手写 |
 | `ta.vwap(src)` | `VWAP` 内置函数 |
 | `ta.wpr(len)` | `WILLR(high, low, close, len)` |
 | `ta.obv` | `OBV` |
@@ -90,7 +90,7 @@ RSI_VAL:RSI(CLOSE,N);
 
 ### 内置变量对照
 
-| Pine Script | AlphaTA |
+| Pine Script | Finkit |
 |-------------|--------|
 | `open` | `OPEN` |
 | `high` | `HIGH` |
@@ -121,7 +121,7 @@ strategy("My Strategy", overlay=true)
 indicator("My Indicator", overlay=true)
 ```
 
-策略逻辑需在 AlphaTA 应用层实现，而非公式引擎内。
+策略逻辑需在 Finkit 应用层实现，而非公式引擎内。
 
 ### 3. 替换警报与绘图对象
 
@@ -130,7 +130,7 @@ indicator("My Indicator", overlay=true)
 alertcondition(condition, title="Alert")
 line.new(x1, y1, x2, y2)
 
-// 绘图改用 AlphaTA 原生指令（TDX 方言）
+// 绘图改用 Finkit 原生指令（TDX 方言）
 DRAWTEXT(condition, CLOSE, "BUY");
 STICKLINE(condition, OPEN, CLOSE, 2, 1);
 ```
@@ -141,7 +141,7 @@ STICKLINE(condition, OPEN, CLOSE, 2, 1);
 // Pine
 prevClose = close[1]
 
-// AlphaTA
+// Finkit
 PREV_CLOSE := REF(CLOSE, 1);
 ```
 
@@ -153,7 +153,7 @@ Pine 方言可解析 `[1]` 语法，但复杂历史引用建议改写为 `REF()`
 // Pine
 [macdLine, signalLine, histLine] = ta.macd(close, 12, 26, 9)
 
-// AlphaTA（分变量赋值或指标 API）
+// Finkit（分变量赋值或指标 API）
 DIF := EMA(CLOSE,12) - EMA(CLOSE,26);
 DEA := EMA(DIF, 9);
 MACD := 2 * (DIF - DEA);
@@ -164,7 +164,7 @@ MACD := 2 * (DIF - DEA);
 | 场景 | 推荐 |
 |------|------|
 | 现有 Pine 脚本、快速验证 | `FormulaDialect::Pine` |
-| 生产环境、国内行情软件习惯 | AlphaTA/TDX 公式 |
+| 生产环境、国内行情软件习惯 | Finkit/TDX 公式 |
 | 跨平台 CI 回归 | `tests/pine_corpus/` + `tests/formula_corpus/` |
 
 ---
@@ -176,7 +176,7 @@ MACD := 2 * (DIF - DEA);
 | 特性 | 影响 | 迁移建议 |
 |------|------|----------|
 | `strategy()` | 无法编译策略脚本 | 应用层回测框架 |
-| Repaint semantics | `request.security` 行为与 TV 不一致 | 避免 lookahead；用 AlphaTA 跨周期 API |
+| Repaint semantics | `request.security` 行为与 TV 不一致 | 避免 lookahead；用 Finkit 跨周期 API |
 | 自定义类型 (UDT) | `type` / 方法调用失败 | 拆为独立变量或 Rust 结构体 |
 | `alertcondition()` | 无警报触发 | 应用层条件监控 |
 | `library` / `import` | 无法引用外部库 | 内联函数或 Rust 模块 |
@@ -203,7 +203,7 @@ hline(70)
 hline(30)
 ```
 
-### AlphaTA TDX 公式
+### Finkit TDX 公式
 
 ```text
 N:=14;
@@ -222,7 +222,7 @@ parse_formula_with_dialect(pine_source, FormulaDialect::Pine)?;
 
 - [Pine 文法规范](../formula/pine-grammar.md)
 - [Pine 兼容矩阵](../PINE_COMPAT_MATRIX.md)
-- [AlphaTA 公式文法](../formula/grammar.md)
+- [Finkit 公式文法](../formula/grammar.md)
 - [公式语料回归集](../../tests/formula_corpus/README.md)
 - [Pine 语料回归集](../../tests/pine_corpus/README.md)
 - 内置映射实现：`core/src/formula/pine/builtin_table.rs`

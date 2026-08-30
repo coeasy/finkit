@@ -1,4 +1,4 @@
-# @alphata/node
+# finkit
 
 > **Tier1** · 成熟度: `stable` · [绑定分级说明](../../docs/BINDING_TIERS.md)
 
@@ -20,7 +20,7 @@ High-performance technical analysis library for Node.js, powered by Rust and [NA
 ## Installation
 
 ```bash
-npm install @alphata/node
+npm install finkit
 ```
 
 ## Quick Start
@@ -28,7 +28,7 @@ npm install @alphata/node
 ### CommonJS
 
 ```javascript
-const ta = require('@alphata/node')
+const ta = require('finkit')
 
 const close = [100.0, 101.5, 99.8, 102.3, 103.1, 101.0, 100.5, 102.8, 104.2, 103.5]
 
@@ -48,7 +48,7 @@ console.log('Upper:', bb.upper[bb.upper.length - 1])
 ### ESM
 
 ```javascript
-import { rsi, macd, bollingerBands } from '@alphata/node'
+import { rsi, macd, bollingerBands } from 'finkit'
 
 const close = [100.0, 101.5, 99.8, 102.3, 103.1]
 
@@ -60,8 +60,8 @@ const bbResult = bollingerBands(close, 5, 2.0, 2.0)
 ### TypeScript
 
 ```typescript
-import type { MacdResult, BbandsResult } from '@alphata/node'
-import { rsi, macd, bollinger_bands } from '@alphata/node'
+import type { MacdResult, BbandsResult } from 'finkit'
+import { rsi, macd, bollinger_bands } from 'finkit'
 
 const close: number[] = [100.0, 101.5, 99.8, 102.3, 103.1]
 
@@ -73,7 +73,7 @@ const bbResult: BbandsResult = bollinger_bands(close, 5, 2.0, 2.0)
 ### Async (for large datasets)
 
 ```javascript
-import { macdAsync } from '@alphata/node'
+import { macdAsync } from 'finkit'
 
 // Non-blocking computation on large dataset
 const largeDataset = generateLargePriceArray(1000000)
@@ -225,8 +225,8 @@ All candlestick functions return `number[]` where:
 - `@napi-rs/cli` >= 2.18
 
 ```bash
-git clone https://github.com.alphata/AlphaTA.git
-cd AlphaTA/ffi/node-binding
+git clone https://github.com/coeasy/finkit.git
+cd finkit/ffi/node-binding
 
 # Install dependencies
 npm install

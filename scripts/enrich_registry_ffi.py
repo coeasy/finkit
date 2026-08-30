@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """One-time enrichment: attach a structured `ffi` block to every indicator in
-docs/indicator_registry.json that is exposed by ffi/c-binding/include/alpha_ta.h,
+docs/indicator_registry.json that is exposed by ffi/c-binding/include/finkit.h,
 making the registry the COMPLETE single source of truth for C binding codegen.
 
 For each `TA_API ta_result_t ta_*(...)` in the header we:
@@ -11,7 +11,7 @@ For each `TA_API ta_result_t ta_*(...)` in the header we:
   - store an `ffi` block: c_name, doc_group, inputs/outputs/params (the exact,
     proven C signature) and an `order` index preserving header layout.
 
-scripts/gen_c_header.py then regenerates alpha_ta.h from these blocks.
+scripts/gen_c_header.py then regenerates finkit.h from these blocks.
 
 Idempotent: re-running overwrites existing `ffi` blocks and skips already-added
 entries.
@@ -23,7 +23,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-HEADER = ROOT / "ffi/c-binding/include/alpha_ta.h"
+HEADER = ROOT / "ffi/c-binding/include/finkit.h"
 REGISTRY = ROOT / "docs/indicator_registry.json"
 
 SECTION_RE = re.compile(r"──\s*(.+?)\s*──")

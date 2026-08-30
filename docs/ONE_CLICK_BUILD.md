@@ -7,8 +7,8 @@
 `Dockerfile` 已预装 Rust + 各语言工具链：
 
 ```bash
-docker build -t alpha_ta/builder:latest .
-docker run --rm -v "$(pwd)/dist:/work/dist" alpha_ta/builder:latest
+docker build -t finkit/builder:latest .
+docker run --rm -v "$(pwd)/dist:/work/dist" finkit/builder:latest
 ```
 
 配合 Compose：
@@ -32,7 +32,7 @@ pwsh ./build-usage.ps1           # PowerShell 7+
 make                    # 全部
 make python             # 仅 Python wheel
 make java / make node / make go / make c / make dotnet   # 逐个
-make bench-vs-talib     # AlphaTA vs TA-Lib C 对照
+make bench-vs-talib     # Finkit vs TA-Lib C 对照
 make install-and-test   # 本地安装所有产物 + 冒烟
 make docker-compose-up  # 走 Docker/Compose
 ```

@@ -1,4 +1,4 @@
-# AlphaTA — Data flow
+# Finkit — Data flow
 
 End-to-end data flow for the two primary usage patterns.
 
@@ -7,9 +7,9 @@ End-to-end data flow for the two primary usage patterns.
 ```mermaid
 sequenceDiagram
   participant U as User code
-  participant C as alpha-ta-core::indicators
-  participant M as alpha-ta-core::math
-  participant S as alpha-ta-core::streaming (optional)
+  participant C as finkit::indicators
+  participant M as finkit::math
+  participant S as finkit::streaming (optional)
 
   U->>C: sma(&close, 20)
   C->>M: moving_avg::sma_simd_avx2(close, 20)

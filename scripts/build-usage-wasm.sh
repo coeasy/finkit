@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ----------------------------------------------------------------------------
-# AlphaTA WASM usage-package builder.
+# Finkit WASM usage-package builder.
 #
 # Produces three bundles:
 #   * dist/wasm/web/         — `<script type="module">` consumer

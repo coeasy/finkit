@@ -68,13 +68,10 @@ install-and-test:
 
 # ---- docker ----------------------------------------------------------------
 docker-build:
-	docker build -t alpha_ta/builder:latest $(ROOT)
-
+	docker build -t finkit/builder:latest $(ROOT)
 docker-run:
-	docker run --rm -v $(ROOT)/dist:/work/dist alpha_ta/builder:latest --no-bundle
-
-docker-bench:
-	docker run --rm -v $(ROOT)/dist:/work/dist alpha_ta/builder:latest --bench-talib
+	docker run --rm -v $(ROOT)/dist:/work/dist finkit/builder:latest --no-bundle
+	docker run --rm -v $(ROOT)/dist:/work/dist finkit/builder:latest --bench-talib
 
 docker-compose-up:
 	docker compose -f $(ROOT)/docker-compose.yml up --abort-on-container-exit
@@ -105,10 +102,10 @@ clean:
 # `verify-ffi` fails CI if the committed header drifts from the registry
 # (docs/indicator_registry.json), keeping the single source of truth honest.
 gen-c-header:
-	python3 $(ROOT)/scripts/gen_c_header.py --generate $(ROOT)/ffi/c-binding/include/alpha_ta.h
+	python3 $(ROOT)/scripts/gen_c_header.py --generate $(ROOT)/ffi/c-binding/include/finkit.h
 
 verify-ffi:
-	python3 $(ROOT)/scripts/gen_c_header.py --check $(ROOT)/ffi/c-binding/include/alpha_ta.h
+	python3 $(ROOT)/scripts/gen_c_header.py --check $(ROOT)/ffi/c-binding/include/finkit.h
 
 # ---- codegen: regenerate the C *Rust* wrappers from the indicator registry --
 # `gen-c-binding` rewrites ffi/c-binding/src/{lib.rs -> include! generated.rs}
@@ -133,19 +130,19 @@ verify-all-bindings:
 # ---- help ------------------------------------------------------------------
 help:
 	@echo ""
-	@echo "AlphaTA one-click targets"
+	@echo "Finkit one-click targets"
 	@echo "========================"
 	@echo "  make                  Build + verify all 7 languages (default)"
 	@echo "  make <lang>           Build + verify a single language"
 	@echo "                          languages: $(LANGS)"
-	@echo "  make bench-vs-talib   AlphaTA vs TA-Lib C head-to-head"
+	@echo "  make bench-vs-talib   Finkit vs TA-Lib C head-to-head"
 	@echo "  make install-and-test Install every built artifact + run smoke"
 	@echo "  make docker-build     Build the true one-click Docker image"
 	@echo "  make docker-run       Run the build inside Docker (mounts ./dist)"
 	@echo "  make docker-bench     Run only --bench-talib inside Docker"
 	@echo "  make preflight        Toolchain pre-check (no build)"
 	@echo "  make clean            Wipe dist/"
-	@echo "  make gen-c-header     Regenerate ffi/c-binding/include/alpha_ta.h from registry"
+	@echo "  make gen-c-header     Regenerate ffi/c-binding/include/finkit.h from registry"
 	@echo "  make verify-ffi       Fail if the C header has drifted from the registry"
 	@echo "  make gen-c-binding    Regenerate ffi/c-binding/src/{lib.rs,generated.rs} from registry"
 	@echo "  make verify-bindings  Fail if the C wrappers drifted from the registry"

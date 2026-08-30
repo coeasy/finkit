@@ -1,6 +1,6 @@
 # Formula 引擎文档
 
-AlphaTA 公式引擎（`alpha-ta-core::formula`）：通用证券公式语言运行时，
+Finkit 公式引擎（`finkit::formula`）：通用证券公式语言运行时，
 兼容多券商产品语法（TDX/THS/DZH）与 Pine Script（部分）。
 
 ## 子文档

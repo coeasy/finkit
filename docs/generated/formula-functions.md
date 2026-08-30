@@ -248,7 +248,7 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 ## Usage Example
 
 ```rust
-use AlphaTA_core::formula::FormulaEngine;
+use finkit::formula::FormulaEngine;
 
 let engine = FormulaEngine::new();
 let result = engine.eval("SMA(CLOSE, 20) + EMA(CLOSE, 10)", &ohlcv)?;

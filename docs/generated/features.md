@@ -18,7 +18,7 @@ Feature engineering transforms raw OHLCV data into ML-ready feature matrices.
 ## Usage Example
 
 ```rust
-use AlphaTA_core::features::{FeatureMatrix, FeatureSet};
+use finkit::features::{FeatureMatrix, FeatureSet};
 
 let mut features = FeatureSet::new();
 features.add_indicator("sma", &[5, 10, 20]);

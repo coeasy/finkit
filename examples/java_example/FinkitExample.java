@@ -1,19 +1,19 @@
-package com.alphata.examples;
+package com.finkit.examples;
 
-import com.alphata.Indicators;
-import com.alphata.MacdResult;
-import com.alphata.BbandsResult;
-import com.alphata.StochResult;
+import com.finkit.Indicators;
+import com.finkit.MacdResult;
+import com.finkit.BbandsResult;
+import com.finkit.StochResult;
 import java.util.Arrays;
 
 /**
- * alpha_ta Java 示例代码
- * 展示如何使用 alpha_ta 进行技术分析
+ * finkit Java 示例代码
+ * 展示如何使用 finkit 进行技术分析
  */
-public class AlphaTAExample {
+public class FinkitExample {
 
     public static void main(String[] args) {
-        System.out.println("alpha_ta Java 示例代码");
+        System.out.println("finkit Java 示例代码");
         System.out.println("==================================================");
         
         basicIndicators();

@@ -17,7 +17,7 @@ cargo build --release --no-default-features  # 裁剪默认特性（见 core/Car
 ```
 
 常用特性：`std`、`formula`、`indicators-all`（默认全开）、`rayon`（并行批量）、`feature` 相关、`unchecked-indexing`（越界热路径）、`talib-c`（TA-Lib C）
-、`alpha-ta-polars`（Polars 集成）。
+、`finkit-polars`（Polars 集成）。
 
 ## 2. CLI
 
@@ -31,14 +31,14 @@ cargo install --path cli
 
 | 语言 | 构建命令 | 产物 |
 |------|---------|------|
-| C/C++ | `cargo build --release -p finkit-ffi` | `alpha_ta.{a,so,dll}` + `include/alpha_ta.h`（cbindgen 生成） |
+| C/C++ | `cargo build --release -p finkit-ffi` | `finkit.{a,so,dll}` + `include/finkit.h`（cbindgen 生成） |
 | Python | `cd ffi/python-binding && maturin build --release`（手动）；`maturin develop`（本地）。另见 `ffi/python-binding/pyproject.toml` 的 `cibuildwheel` 配置 | `.whl` / sdist |
 | Node | `cd ffi/node-binding && npm install && npm run build` | `*.node` + `index.d.ts` |
 | Go | `cd ffi/go-binding && make build` | C shim + `go/ta` 包 |
 | Java | `cargo build --release`（原生库）；JAR 由 Maven（`ffi/java-binding/pom.xml`）打包 | `.so/.dll` + `.jar` |
 | .NET | `cd ffi/dotnet-binding && cargo build --release`；NuGet 打包 | `.nupkg` |
-| iOS | `./ffi/ios-binding/build-xcframework.sh`（需 Xcode + 4 个 iOS target） | `AlphaTA.xcframework` |
-| Android | 见 `ffi/android-binding/README.md`（NDK 25+，四个 ABI） | `AlphaTA-android-release.aar` |
+| iOS | `./ffi/ios-binding/build-xcframework.sh`（需 Xcode + 4 个 iOS target） | `Finkit.xcframework` |
+| Android | 见 `ffi/android-binding/README.md`（NDK 25+，四个 ABI） | `Finkit-android-release.aar` |
 | WASM | `cd wasm && wasm-pack build --target web` | wasm + JS glue |
 
 > 注意：iOS/Android/Go 等需要对应平台工具链；本机缺失时对应 crate 可不编译，不影响其他成员。

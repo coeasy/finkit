@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ----------------------------------------------------------------------------
-# AlphaTA Java usage-package builder.
+# Finkit Java usage-package builder.
 #
-# Produces `alpha-ta-1.0.0.jar` and the native `.dll`/`.so`/`.dylib` for
+# Produces `finkit-1.0.0.jar` and the native `.dll`/`.so`/`.dylib` for
 # the current platform, in dist/java/<platform>/.  The native lib is
 # staged under `natives/` inside the JAR so consumers do not need to set
 # `java.library.path`.
@@ -33,7 +33,7 @@ OUT_DIR="${ROOT}/dist/java/${PLATFORM}"
 mkdir -p "${OUT_DIR}/natives"
 
 VERSION="$( grep -E '^version' "${ROOT}/Cargo.toml" | head -1 | sed -E 's/.*"([^"]+)".*/\1/' )"
-JAR_NAME="alpha-ta-${VERSION}.jar"
+JAR_NAME="finkit-${VERSION}.jar"
 
 has_tool() { command -v "$1" >/dev/null 2>&1; }
 
@@ -43,9 +43,9 @@ echo "[build-usage-java] cargo build --release -p finkit-java"
 
 # 2. Stage the native lib ------------------------------------------------
 case "${PLATFORM}" in
-  windows-x64)  NATIVE="alpha_ta_java.dll"          ;;
-  macos-*)      NATIVE="libalpha_ta_java.dylib"     ;;
-  linux-*)      NATIVE="libalpha_ta_java.so"        ;;
+  windows-x64)  NATIVE="finkit_java.dll"         ;;
+  macos-*)      NATIVE="libfinkit_java.dylib"    ;;
+  linux-*)      NATIVE="libfinkit_java.so"       ;;
 esac
 
 if [[ ! -f "${ROOT}/target/release/${NATIVE}" ]]; then

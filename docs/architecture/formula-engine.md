@@ -1,4 +1,4 @@
-# AlphaTA — Formula engine internals
+# Finkit — Formula engine internals
 
 The formula engine implements a 4-stage pipeline that compiles the
 `MA(CLOSE, 20)` style source into native code paths, with on-the-fly

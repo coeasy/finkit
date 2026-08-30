@@ -3,7 +3,7 @@ name = "finkit-wasm"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "WebAssembly bindings for AlphaTA"
+description = "WebAssembly bindings for Finkit"
 
 [lints]
 workspace = true

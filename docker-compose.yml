@@ -1,25 +1,25 @@
 # =============================================================================
-# AlphaTA — one-line docker-compose stack
+# Finkit — one-line docker-compose stack
 # =============================================================================
 #
 # Two services:
-#   alpha_ta-builder  — full 7-language build, mounts ./dist to host.
+#   finkit-builder  — full 7-language build, mounts ./dist to host.
 #   bench-vs-talib  — runs only the TA-Lib C head-to-head bench.
 #
 # Usage:
 #   docker compose build                 # build the image
-#   docker compose run --rm alpha_ta-builder
+#   docker compose run --rm finkit-builder
 #   docker compose run --rm bench-vs-talib
 #   docker compose up --abort-on-container-exit   # CI mode
 # =============================================================================
 
 services:
-  alpha_ta-builder:
+  finkit-builder:
     build:
       context: .
       dockerfile: Dockerfile
-    image: alpha_ta/builder:latest
-    container_name: alpha_ta-builder
+    image: finkit/builder:latest
+    container_name: finkit-builder
     volumes:
       - ./dist:/work/dist
     environment:
@@ -30,8 +30,8 @@ services:
       - no-new-privileges:true
 
   bench-vs-talib:
-    image: alpha_ta/builder:latest
-    container_name: alpha_ta-bench-vs-talib
+    image: finkit/builder:latest
+    container_name: finkit-bench-vs-talib
     volumes:
       - ./dist:/work/dist
     environment:

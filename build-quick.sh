@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# AlphaTA — one-click QUICK multi-language package builder.
+# Finkit — one-click QUICK multi-language package builder.
 #
 # Design goal: build all 7 usage packages (python/node/java/go/c/dotnet/wasm)
 # as FAST as possible, with one command.

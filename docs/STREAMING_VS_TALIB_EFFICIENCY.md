@@ -1,10 +1,10 @@
-# AlphaTA Streaming vs TA-Lib — Efficiency Comparison
+# Finkit Streaming vs TA-Lib — Efficiency Comparison
 
 > Generated from codebase audit. TA-Lib version 0.6.4 (C/Rust bindings).
 
 ## 1. Architecture Comparison
 
-| Dimension | TA-Lib (batch) | AlphaTA Streaming |
+| Dimension | TA-Lib (batch) | Finkit Streaming |
 |-----------|----------------|-------------------|
 | **API model** | `TA_SMA(close[], period) → result[]` | `sma.next(value) → Option<f64>` |
 | **Per-call cost** | O(N) full recompute | **O(1) amortized** (95% of indicators) |
@@ -14,13 +14,13 @@
 | **Recompute** | Must re-call with full array | One call per bar |
 | **Repaint** | N/A (batch) | Supported via `compute_bar` |
 
-**Key advantage**: AlphaTA streaming indicators run in **constant time per bar** regardless of dataset size. TA-Lib must reprocess the entire dataset on each call.
+**Key advantage**: Finkit streaming indicators run in **constant time per bar** regardless of dataset size. TA-Lib must reprocess the entire dataset on each call.
 
 ## 2. Indicator Coverage
 
 ### TA-Lib Overlap (15 indicators)
 
-| TA-Lib Function | AlphaTA Streaming | Per-bar Complexity | Status |
+| TA-Lib Function | Finkit Streaming | Per-bar Complexity | Status |
 |-----------------|-------------------|--------------------|--------|
 | SMA | `StreamingSma` | O(1) running sum | ✅ |
 | EMA | `StreamingEma` | O(1) multiplier | ✅ |
@@ -40,7 +40,7 @@
 
 ### TA-Lib Momentum (28 indicators)
 
-| TA-Lib Function | AlphaTA Streaming | Per-bar Complexity | Status |
+| TA-Lib Function | Finkit Streaming | Per-bar Complexity | Status |
 |-----------------|-------------------|--------------------|--------|
 | RSI | `StreamingRsi` | O(1) Wilder smoothing | ✅ |
 | MACD | `StreamingMacd` | O(1) 3×EMA | ✅ |
@@ -69,7 +69,7 @@
 
 ### TA-Lib Volatility (10 indicators)
 
-| TA-Lib Function | AlphaTA Streaming | Per-bar Complexity | Status |
+| TA-Lib Function | Finkit Streaming | Per-bar Complexity | Status |
 |-----------------|-------------------|--------------------|--------|
 | ATR | `StreamingAtr` | O(1) Wilder EMA | ✅ |
 | NATR | `StreamingNatr` | O(1) ATR-based | ✅ |
@@ -82,7 +82,7 @@
 
 ### TA-Lib Volume (9 indicators)
 
-| TA-Lib Function | AlphaTA Streaming | Per-bar Complexity | Status |
+| TA-Lib Function | Finkit Streaming | Per-bar Complexity | Status |
 |-----------------|-------------------|--------------------|--------|
 | OBV | `StreamingObv` | O(1) | ✅ |
 | AD | `StreamingAd` | O(1) | ✅ |
@@ -93,7 +93,7 @@
 
 ### TA-Lib Trend (10 indicators)
 
-| TA-Lib Function | AlphaTA Streaming | Per-bar Complexity | Status |
+| TA-Lib Function | Finkit Streaming | Per-bar Complexity | Status |
 |-----------------|-------------------|--------------------|--------|
 | SAR | `StreamingSar` | O(1) step-by-step | ✅ |
 | ADX/DX/DI | (covered above) | O(1) | ✅ |
@@ -107,7 +107,7 @@
 
 ### TA-Lib Statistics (7 indicators)
 
-| TA-Lib Function | AlphaTA Streaming | Per-bar Complexity | Status |
+| TA-Lib Function | Finkit Streaming | Per-bar Complexity | Status |
 |-----------------|-------------------|--------------------|--------|
 | LINEARREG | `StreamingLinReg` | O(1) running sums | ✅ |
 | LINEARREG_SLOPE | `StreamingLinRegSlope` | O(1) running sums | ✅ |
@@ -119,16 +119,16 @@
 
 ### TA-Lib Math (15 indicators)
 
-| TA-Lib Function | AlphaTA Streaming | Per-bar Complexity | Status |
+| TA-Lib Function | Finkit Streaming | Per-bar Complexity | Status |
 |-----------------|-------------------|--------------------|--------|
 | ADD/SUB/MULT/DIV | `StreamingAdd/Sub/Mult/Div` | O(1) | ✅ |
 | MINUS/PLUS/MAX/MIN/SUM | streaming variants | O(1) | ✅ |
 | ACOS/ASIN/ATAN/COS/SIN/TAN | streaming variants | O(1) | ✅ |
 | EXP/LN/LOG10/CEIL/FLOOR/SQRT | streaming variants | O(1) | ✅ |
 
-### TA-Lib Candlestick (N/A — TA-Lib has ~60, AlphaTA has 19)
+### TA-Lib Candlestick (N/A — TA-Lib has ~60, Finkit has 19)
 
-| TA-Lib Pattern | AlphaTA Streaming | Status |
+| TA-Lib Pattern | Finkit Streaming | Status |
 |----------------|-------------------|--------|
 | CDL_DOJI | `StreamingCdlDoji` | ✅ |
 | CDL_HAMMER | `StreamingCdlHammer` | ✅ |
@@ -137,14 +137,14 @@
 | CDL_EVENINGSTAR | `StreamingCdlEveningStar` | ✅ |
 | ... (14 more) | streaming variants | ✅ |
 
-**AlphaTA also has TA-Lib-absent categories**:
+**Finkit also has TA-Lib-absent categories**:
 - **Breadth** (7): Advance/Decline, TRIN, Fear/Greed, Put/Call Ratio, etc.
 - **Pattern/SMC** (3): Fair Value Gap, Order Block, Squeeze Momentum
 - **Cycle** (12): Ehlers filters, McClellan, Mass Index
 
 ## 3. Coverage Summary
 
-| Category | TA-Lib Count | AlphaTA Streaming | Delta |
+| Category | TA-Lib Count | Finkit Streaming | Delta |
 |----------|-------------|-------------------|-------|
 | Overlap | 15 | 25 | +10 (HMA, JMA, VWMA, etc.) |
 | Momentum | 28 | 32 | +4 (TSI, KDJ, Fisher, etc.) |
@@ -155,8 +155,8 @@
 | Price Transform | 6 | 6 | = |
 | Math | 15 | 23 | +8 (Rolling Max/Min/Sum) |
 | Candlestick | ~61 | 19 | -42 (fewer patterns) |
-| Breadth | 0 | 7 | +7 (AlphaTA exclusive) |
-| Cycle | 0 | 12 | +12 (AlphaTA exclusive) |
+| Breadth | 0 | 7 | +7 (Finkit exclusive) |
+| Cycle | 0 | 12 | +12 (Finkit exclusive) |
 | **Total** | **~161** | **~184** | **+23 net** |
 
 ## 4. Per-Indicator Complexity Summary
@@ -197,6 +197,6 @@
 ## 6. Known Limitations vs TA-Lib
 
 1. **Candlestick patterns**: 19 vs TA-Lib's ~61 — missing ~42 patterns
-2. **Indicator parameters**: Some TA-Lib indicators accept variable price sources (close, open, etc.) — AlphaTA has fixed inputs
+2. **Indicator parameters**: Some TA-Lib indicators accept variable price sources (close, open, etc.) — Finkit has fixed inputs
 3. **Batch fallback**: No batch API — must use `batch` module separately
 4. **Hilbert Transform accuracy**: Phase-accurate implementation may differ slightly from TA-Lib's proprietary algorithm

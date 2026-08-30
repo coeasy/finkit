@@ -43,7 +43,7 @@ All FFI bindings expose the debug API:
 ### Python Example
 
 ```python
-from alpha_ta import Indicators
+import finkit as ta
 
 open_prices = [10.0, 10.2, 10.1, 10.5, 10.3, 10.8, 11.0, 10.9, 11.2, 11.5]
 high_prices = [10.5, 10.8, 10.6, 10.9, 10.7, 11.2, 11.3, 11.1, 11.5, 11.8]
@@ -59,7 +59,7 @@ MACD := 2 * (DIF - DEA);
 CROSS(DIF, DEA)
 """
 
-debug_result = Indicators.formula_eval_debug(
+debug_result = ta.formula_eval_debug(
     source, open_prices, high_prices, low_prices, close_prices, volumes
 )
 
