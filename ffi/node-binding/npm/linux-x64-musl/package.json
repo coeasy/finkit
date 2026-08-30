@@ -1,22 +1,12 @@
 {
-  "name": "@alphata/node-linux-x64-musl",
-  "version": "1.0.0",
-  "os": [
-    "linux"
-  ],
-  "cpu": [
-    "x64"
-  ],
-  "libc": [
-    "musl"
-  ],
+  "name": "@alphata/core-linux-x64-musl",
+  "version": "0.1.0",
+  "os": ["linux"],
+  "cpu": ["x64"],
+  "libc": ["musl"],
   "main": "alpha_ta.node",
-  "files": [
-    "alpha_ta.node"
-  ],
-  "description": "Linux x64 musl native binding for @alphata/node",
+  "files": ["alpha_ta.node"],
+  "description": "Linux x64 musl native binding for Finkit Node.js",
   "license": "Apache-2.0",
-  "engines": {
-    "node": ">= 16"
-  }
+  "engines": {"node": ">= 16"}
 }
