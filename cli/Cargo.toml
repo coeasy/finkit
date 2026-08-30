@@ -3,10 +3,14 @@ name = "alpha-ta-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Command-line interface for AlphaTA"
+description = "Command-line interface for the Finkit financial computation engine"
 repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
+
+[[bin]]
+name = "finkit"
+path = "src/main.rs"
 
 [lints]
 workspace = true
@@ -21,6 +25,5 @@ serde_json = { workspace = true }
 ndarray = { workspace = true }
 
 [dev-dependencies]
-# F5: CLI integration tests via assert_cmd + tempfile.
 assert_cmd = "2"
 tempfile = "3"
