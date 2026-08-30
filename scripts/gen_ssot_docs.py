@@ -412,8 +412,8 @@ def format_streaming_md(catalog: dict[str, list[str]]) -> str:
     lines.append("## Usage Example")
     lines.append("")
     lines.append("```rust")
-    lines.append("use AlphaTA_core::streaming::{StreamingIndicator, OhlcvBar};")
-    lines.append("use AlphaTA_core::streaming::indicators::StreamingSma;")
+    lines.append("use finkit::streaming::{StreamingIndicator, OhlcvBar};")
+    lines.append("use finkit::streaming::indicators::StreamingSma;")
     lines.append("")
     lines.append("let mut sma = StreamingSma::new(20);")
     lines.append("let bar = OhlcvBar::new(open, high, low, close, volume);")
@@ -458,7 +458,7 @@ def format_formula_md(functions: list[str]) -> str:
     lines.append("## Usage Example")
     lines.append("")
     lines.append("```rust")
-    lines.append("use AlphaTA_core::formula::FormulaEngine;")
+    lines.append("use finkit::formula::FormulaEngine;")
     lines.append("")
     lines.append("let engine = FormulaEngine::new();")
     lines.append("let result = engine.eval(\"SMA(CLOSE, 20) + EMA(CLOSE, 10)\", &ohlcv)?;")
@@ -500,7 +500,7 @@ def format_features_md(modules: list[str]) -> str:
     lines.append("## Usage Example")
     lines.append("")
     lines.append("```rust")
-    lines.append("use AlphaTA_core::features::{FeatureMatrix, FeatureSet};")
+    lines.append("use finkit::features::{FeatureMatrix, FeatureSet};")
     lines.append("")
     lines.append("let mut features = FeatureSet::new();")
     lines.append("features.add_indicator(\"sma\", &[5, 10, 20]);")
@@ -529,7 +529,7 @@ def format_pine_md(builtins: list[str]) -> str:
         "",
         f"Pine Script v5 built-in functions supported: **{len(builtins)}**",
         "",
-        "AlphaTA supports a subset of Pine Script v5 for indicator migration from TradingView.",
+        "Finkit supports a subset of Pine Script v5 for indicator migration from TradingView.",
         "",
         "## Supported Built-in Functions",
         "",

@@ -112,8 +112,8 @@ pub trait IndicatorMeta {
 ## 4. 示例用法
 
 ```rust
-use AlphaTA::streaming::{StreamingSma, StreamingIndicator, SmaConfig};
-use AlphaTA::OhlcvBar;
+use finkit::streaming::{StreamingSma, StreamingIndicator, SmaConfig};
+use finkit::OhlcvBar;
 
 let mut sma = StreamingSma::new(SmaConfig { period: 14 });
 for bar in market_data {

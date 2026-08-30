@@ -41,8 +41,8 @@ GROUPS = [
     "Chart patterns (FTA-native)",
 ]
 
-HEAD = """#ifndef ALPHA_TA_H
-#define ALPHA_TA_H
+HEAD = """#ifndef FINKIT_H
+#define FINKIT_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -51,7 +51,7 @@ extern "C" {
 #include <stdint.h>
 
 #ifdef _WIN32
-  #ifdef ALPHA_TA_EXPORTS
+  #ifdef FINKIT_EXPORTS
     #define TA_API __declspec(dllexport)
   #else
     #define TA_API __declspec(dllimport)
@@ -81,16 +81,16 @@ typedef enum FfiStatus {
 TA_API char *ta_version(void);
 TA_API char *ta_last_error(void);
 TA_API int32_t ta_last_error_code(void);
-TA_API void alpha_ta_free_string(char *s);
+TA_API void finkit_free_string(char *s);
 
 """
 
 KLINE = """/* ── K-line visualization ────────────────────────────────────────────────── */
 
-typedef int64_t alpha_ta_kline_data_t;
-typedef int64_t alpha_ta_kline_chart_t;
+typedef int64_t finkit_kline_data_t;
+typedef int64_t finkit_kline_chart_t;
 
-TA_API alpha_ta_kline_data_t alpha_ta_kline_data_new(
+TA_API finkit_kline_data_t finkit_kline_data_new(
     const char * const *dates,
     const double *opens,
     const double *highs,
@@ -98,44 +98,44 @@ TA_API alpha_ta_kline_data_t alpha_ta_kline_data_new(
     const double *closes,
     const double *volumes,
     int32_t len);
-TA_API void alpha_ta_kline_data_free(alpha_ta_kline_data_t handle);
-TA_API int32_t alpha_ta_kline_data_validate(alpha_ta_kline_data_t handle);
+TA_API void finkit_kline_data_free(finkit_kline_data_t handle);
+TA_API int32_t finkit_kline_data_validate(finkit_kline_data_t handle);
 
-TA_API alpha_ta_kline_chart_t alpha_ta_kline_chart_new(
-    alpha_ta_kline_data_t data_handle,
+TA_API finkit_kline_chart_t finkit_kline_chart_new(
+    finkit_kline_data_t data_handle,
     const char *language,
     const char *title,
     uint32_t width,
     uint32_t height);
-TA_API void alpha_ta_kline_chart_free(alpha_ta_kline_chart_t handle);
+TA_API void finkit_kline_chart_free(finkit_kline_chart_t handle);
 
-TA_API int32_t alpha_ta_kline_chart_add_ma(
-    alpha_ta_kline_chart_t handle,
+TA_API int32_t finkit_kline_chart_add_ma(
+    finkit_kline_chart_t handle,
     const int32_t *periods,
     int32_t periods_len);
-TA_API int32_t alpha_ta_kline_chart_add_macd(
-    alpha_ta_kline_chart_t handle,
+TA_API int32_t finkit_kline_chart_add_macd(
+    finkit_kline_chart_t handle,
     int32_t fast,
     int32_t slow,
     int32_t signal);
-TA_API int32_t alpha_ta_kline_chart_add_rsi(
-    alpha_ta_kline_chart_t handle,
+TA_API int32_t finkit_kline_chart_add_rsi(
+    finkit_kline_chart_t handle,
     int32_t period);
-TA_API int32_t alpha_ta_kline_chart_add_boll(
-    alpha_ta_kline_chart_t handle,
+TA_API int32_t finkit_kline_chart_add_boll(
+    finkit_kline_chart_t handle,
     int32_t period,
     double nb_dev);
 
-TA_API int32_t alpha_ta_kline_chart_save_as_svg(
-    alpha_ta_kline_chart_t handle,
+TA_API int32_t finkit_kline_chart_save_as_svg(
+    finkit_kline_chart_t handle,
     const char *path);
-TA_API char *alpha_ta_kline_chart_to_svg(alpha_ta_kline_chart_t handle);
+TA_API char *finkit_kline_chart_to_svg(finkit_kline_chart_t handle);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* ALPHA_TA_H */
+#endif /* FINKIT_H */
 """
 
 
@@ -221,7 +221,7 @@ def check(header_path: Path) -> bool:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Generate AlphaTA C FFI header from registry")
+    ap = argparse.ArgumentParser(description="Generate Finkit C FFI header from registry")
     ap.add_argument("--generate", nargs="?", const=str(DEFAULT_HEADER), default=None,
                     metavar="PATH", help="write the generated header")
     ap.add_argument("--check", nargs="?", const=str(DEFAULT_HEADER), default=None,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Registry-driven binding synchronizer for AlphaTA.
+"""Registry-driven binding synchronizer for Finkit.
 
 This is the multi-language extension of ``gen_binding.py``.  Where
 ``gen_binding.py`` *templates* C/Python/Node wrappers from language-agnostic
