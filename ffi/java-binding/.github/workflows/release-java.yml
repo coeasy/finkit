@@ -1,0 +1,139 @@
+name: Release Java (Maven Central)
+
+on:
+  push:
+    tags:
+      - 'java-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., 0.1.0)'
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-native:
+    name: Build Native Library (${{ matrix.os }} - ${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: libalpha_ta_java.so
+            classifier: linux-x86_64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            artifact: libalpha_ta_java.so
+            classifier: linux-aarch64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact: libalpha_ta_java.dylib
+            classifier: macos-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: libalpha_ta_java.dylib
+            classifier: macos-aarch64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: alpha_ta_java.dll
+            classifier: windows-x86_64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build native library
+        run: cargo build --release --target ${{ matrix.target }}
+        working-directory: ffi/java-binding
+
+      - name: Upload native library
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.classifier }}
+          path: ffi/java-binding/target/${{ matrix.target }}/release/${{ matrix.artifact }}
+
+  release:
+    name: Release to Maven Central
+    needs: build-native
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 8
+        uses: actions/setup-java@v4
+        with:
+          java-version: '8'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Download native libraries
+        uses: actions/download-artifact@v4
+        with:
+          path: natives
+
+      - name: Organize native libraries
+        run: |
+          mkdir -p ffi/java-binding/natives
+          for dir in natives/native-*; do
+            classifier=$(basename $dir | sed 's/native-//')
+            mkdir -p ffi/java-binding/natives/$classifier
+            cp $dir/* ffi/java-binding/natives/$classifier/
+          done
+
+      - name: Set version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/java-v}"
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          cd ffi/java-binding
+          mvn versions:set -DnewVersion=$VERSION -DgenerateBackupPoms=false
+
+      - name: Build and stage
+        run: |
+          cd ffi/java-binding
+          mvn clean deploy -P release-sign-artifacts \
+            -DperformRelease=true \
+            -DskipTests=true \
+            -DaltDeploymentRepository=local::file:./target/staging
+        env:
+          MAVEN_OPTS: "-Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn"
+
+      - name: Publish to Maven Central
+        run: |
+          cd ffi/java-binding
+          mvn clean deploy \
+            -P release-sign-artifacts \
+            -DperformRelease=true \
+            -DskipTests=true
+        env:
+          MAVEN_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          MAVEN_GPG_KEY: ${{ secrets.MAVEN_GPG_KEY }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+
+      - name: Upload release artifacts
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            ffi/java-binding/target/*.jar
+          generate_release_notes: true

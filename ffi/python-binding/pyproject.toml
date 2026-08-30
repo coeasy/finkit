@@ -1,0 +1,102 @@
+[build-system]
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "alpha-ta"
+version = "1.0.0"
+description = "High-performance financial technical analysis library for quantitative trading"
+authors = [
+    {name = "AlphaTA Contributors"}
+]
+maintainers = [
+    {name = "AlphaTA Team"}
+]
+readme = "README.md"
+license = {text = "MIT OR Apache-2.0"}
+keywords = [
+    "technical-analysis",
+    "trading",
+    "quantitative",
+    "finance",
+    "alphata",
+    "stock",
+    "crypto",
+    "indicators",
+    "rust",
+    "performance"
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Rust",
+    "Operating System :: OS Independent",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Topic :: Office/Business :: Financial",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+requires-python = ">=3.8"
+
+[project.urls]
+Homepage = "https://github.com/coeasy/finkit"
+Documentation = "https://github.com/coeasy/finkit/tree/main/ffi/python-binding"
+Repository = "https://github.com/coeasy/finkit"
+Issues = "https://github.com/coeasy/finkit/issues"
+Changelog = "https://github.com/coeasy/finkit/releases"
+
+[tool.cibuildwheel]
+build = "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-*"
+skip = ["*-musllinux_*", "pp*"]
+environment-pass = ["RUSTFLAGS"]
+test-command = "pip install pytest numpy && pytest {package}/tests -x -q"
+test-skip = ["*linux_aarch64*"]
+
+[tool.cibuildwheel.linux]
+archs = ["x86_64", "aarch64"]
+
+[tool.cibuildwheel.macos]
+archs = ["x86_64", "arm64"]
+
+[tool.cibuildwheel.windows]
+archs = ["AMD64"]
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+module-name = "alpha_ta"
+strip = true
+sdist-include = ["Cargo.lock"]
+include = ["alpha_ta/py.typed"]
+
+[tool.maturin.target.x86_64-pc-windows-msvc]
+features = ["pyo3/extension-module"]
+
+[tool.maturin.target.i686-pc-windows-msvc]
+features = ["pyo3/extension-module"]
+
+[tool.maturin.target.x86_64-unknown-linux-gnu]
+features = ["pyo3/extension-module"]
+
+[tool.maturin.target.aarch64-unknown-linux-gnu]
+features = ["pyo3/extension-module"]
+
+[tool.maturin.target.x86_64-apple-darwin]
+features = ["pyo3/extension-module"]
+
+[tool.maturin.target.aarch64-apple-darwin]
+features = ["pyo3/extension-module"]

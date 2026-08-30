@@ -1,0 +1,11 @@
+//@version=5
+indicator("Stochastic", overlay=false)
+length = input(14, "Length")
+smoothK = input(3, "Smooth K")
+smoothD = input(3, "Smooth D")
+k = ta.sma(ta.stoch(close, high, low, length), smoothK)
+d = ta.sma(k, smoothD)
+plot(k, "K", color=color.blue)
+plot(d, "D", color=color.orange)
+hline(80)
+hline(20)

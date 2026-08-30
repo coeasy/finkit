@@ -1,0 +1,83 @@
+{
+  "name": "@alphata/core",
+  "version": "1.0.0",
+  "description": "High-performance financial technical analysis library for Node.js, powered by Rust and NAPI-RS. 150+ indicators, 60+ candlestick patterns, and chart pattern recognition.",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/coeasy/finkit.git",
+    "directory": "ffi/node-binding"
+  },
+  "homepage": "https://github.com/coeasy/finkit",
+  "bugs": {
+    "url": "https://github.com/coeasy/finkit/issues"
+  },
+  "license": "MIT OR Apache-2.0",
+  "author": "AlphaTA Contributors",
+  "keywords": [
+    "technical-analysis",
+    "trading",
+    "quantitative-finance",
+    "alphata",
+    "indicators",
+    "candlestick",
+    "stock",
+    "crypto",
+    "napi-rs",
+    "rust",
+    "performance",
+    "macd",
+    "rsi",
+    "bollinger-bands"
+  ],
+  "engines": {
+    "node": ">= 16"
+  },
+  "napi": {
+    "name": "alpha_ta",
+    "triples": {
+      "defaults": true,
+      "additional": [
+        "aarch64-unknown-linux-musl",
+        "x86_64-unknown-linux-musl",
+        "aarch64-pc-windows-msvc"
+      ]
+    }
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./index.d.ts",
+        "default": "./index.mjs"
+      },
+      "require": {
+        "types": "./index.d.ts",
+        "default": "./index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "artifacts": "napi artifacts",
+    "build": "napi build --platform --release",
+    "build:debug": "napi build --platform",
+    "prepublishOnly": "napi prepublish -t npm",
+    "test": "node --test test/**/*.mjs",
+    "version": "napi version"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^2.18.0",
+    "typescript": "^5.0.0"
+  },
+  "optionalDependencies": {
+    "@alphata/core-darwin-arm64": "1.0.0",
+    "@alphata/core-darwin-x64": "1.0.0",
+    "@alphata/core-linux-arm64-gnu": "1.0.0",
+    "@alphata/core-linux-arm64-musl": "1.0.0",
+    "@alphata/core-linux-x64-gnu": "1.0.0",
+    "@alphata/core-linux-x64-musl": "1.0.0",
+    "@alphata/core-win32-x64-msvc": "1.0.0",
+    "@alphata/core-win32-arm64-msvc": "1.0.0"
+  }
+}

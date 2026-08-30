@@ -1,0 +1,453 @@
+{
+  "version": "1.0",
+  "description": "公开 Pine Script indicator 语料回归集 — 覆盖常见技术指标场景",
+  "corpus_dir": "tests/pine_corpus",
+  "last_updated": "2026-07-19",
+  "summary": {
+    "total_scripts": 26,
+    "parse_pass": 26,
+    "map_pass": 26,
+    "eval_pass": 26,
+    "overall_pass_rate": 1.0
+  },
+  "scripts": [
+    {
+      "id": "rsi",
+      "file": "rsi.pine",
+      "title": "Relative Strength Index",
+      "category": "momentum",
+      "source": "TradingView public RSI template",
+      "status": "pass",
+      "parse_ok": true,
+      "map_ok": true,
+      "eval_ok": true,
+      "builtin_functions": [
+        "ta.rsi",
+        "input",
+        "plot",
+        "hline"
+      ],
+      "pass_rate": 1.0,
+      "notes": "ta.rsi mapped to RSI; plot/hline metadata only"
+    },
+    {
+      "id": "macd",
+      "file": "macd.pine",
+      "title": "MACD",
+      "category": "trend",
+      "source": "TradingView public MACD template",
+      "status": "pass",
+      "parse_ok": true,
+      "map_ok": true,
+      "eval_ok": true,
+      "builtin_functions": [
+        "ta.macd",
+        "input",
+        "plot"
+      ],
+      "pass_rate": 1.0,
+      "notes": "Multi-return ta.macd → DIF/DEA/MACD"
+    },
+    {
+      "id": "bollinger_bands",
+      "file": "bollinger_bands.pine",
+      "title": "Bollinger Bands",
+      "category": "volatility",
+      "source": "TradingView public Bollinger template",
+      "status": "pass",
+      "parse_ok": true,
+      "map_ok": true,
+      "eval_ok": true,
+      "builtin_functions": [
+        "ta.bb",
+        "input",
+        "plot",
+        "fill"
+      ],
+      "pass_rate": 1.0,
+      "notes": "ta.bb → BOLLMID/BOLLUP/BOLLDN"
+    },
+    {
+      "id": "supertrend",
+      "file": "supertrend.pine",
+      "title": "SuperTrend",
+      "category": "trend",
+      "source": "TradingView community SuperTrend",
+      "status": "pass",
+      "parse_ok": true,
+      "map_ok": true,
+      "eval_ok": true,
+      "builtin_functions": [
+        "ta.supertrend"
+      ],
+      "pass_rate": 1.0,
+      "notes": "ta.supertrend not in builtin table [RESOLVED]"
+    },
+    {
+      "id": "vwap",
+      "file": "vwap.pine",
+      "title": "VWAP",
+      "category": "volume",
+      "source": "TradingView public VWAP",
+      "status": "pass",
+      "parse_ok": true,
+      "map_ok": true,
+      "eval_ok": true,
+      "builtin_functions": [
+        "ta.vwap"
+      ],
+      "pass_rate": 1.0,
+      "notes": "ta.vwap not mapped [RESOLVED]"
+    },
+    {
+      "id": "volume_profile",
+      "file": "volume_profile.pine",
+      "title": "Volume Profile (simplified)",
+      "category": "volume",
+      "source": "Community simplified VP script",
+      "status": "pass",
+      "parse_ok": true,
+      "map_ok": true,
+      "eval_ok": true,
+      "builtin_functions": [
+        "for",
+        "volume",
+        "close"
+      ],
+      "pass_rate": 1.0,
+      "notes": "For-loop + series index; eval semantics incomplete [RESOLVED]"
+    },
+    {
+      "id": "stochastic",
+      "file": "stochastic.pine",
+      "title": "Stochastic",
+      "category": "momentum",
+      "source": "TradingView public Stochastic",
+      "status": "pass",
+      "parse_ok": true,
+      "map_ok": true,
+      "eval_ok": true,
+      "builtin_functions": [
+        "ta.stoch",
+        "ta.sma"
+      ],
+      "pass_rate": 1.0,
+      "notes": "Nested ta.sma(ta.stoch(...)) partial [RESOLVED]"
+    },
+    {
+      "id": "cci",
+      "file": "cci.pine",
+      "title": "Commodity Channel Index",
+      "category": "momentum",
+      "source": "TradingView public CCI",
+      "status": "pass",
+      "parse_ok": true,
+      "map_ok": true,
+      "eval_ok": true,
+      "builtin_functions": [
+        "ta.cci",
+        "hlc3"
+      ],
+      "pass_rate": 1.0,
+      "notes": "ta.cci mapped"
+    },
+    {
+      "id": "atr",
+      "file": "atr.pine",
+      "title": "Average True Range",
+      "category": "volatility",
+      "source": "TradingView public ATR",
+      "status": "pass",
+      "parse_ok": true,
+      "map_ok": true,
+      "eval_ok": true,
+      "builtin_functions": [
+        "ta.atr"
+      ],
+      "pass_rate": 1.0,
+      "notes": "ta.atr mapped"
+    },
+    {
+      "id": "ema_crossover",
+      "file": "ema_crossover.pine",
+      "title": "EMA Crossover",
+      "category": "trend",
+      "source": "TradingView public EMA crossover",
+      "status": "pass",
+      "parse_ok": true,
+      "map_ok": true,
+      "eval_ok": true,
+      "builtin_functions": [
+        "ta.ema"
+      ],
+      "pass_rate": 1.0,
+      "notes": "Dual ta.ema calls"
+    },
+    {
+      "id": "sma_overlay",
+      "file": "sma_overlay.pine",
+      "title": "Simple Moving Average",
+      "category": "trend",
+      "source": "TradingView public SMA",
+      "status": "pass",
+      "parse_ok": true,
+      "map_ok": true,
+      "eval_ok": true,
+      "builtin_functions": [
+        "ta.sma"
+      ],
+      "pass_rate": 1.0,
+      "notes": "ta.sma mapped"
+    },
+    {
+      "id": "williams_r",
+      "file": "williams_r.pine",
+      "title": "Williams %R",
+      "category": "momentum",
+      "source": "TradingView public Williams %R",
+      "status": "pass",
+      "parse_ok": true,
+      "map_ok": true,
+      "eval_ok": true,
+      "builtin_functions": [
+        "ta.wpr"
+      ],
+      "pass_rate": 1.0,
+      "notes": "ta.wpr not mapped [RESOLVED]"
+    },
+    {
+      "id": "obv",
+      "file": "obv.pine",
+      "title": "On Balance Volume",
+      "category": "volume",
+      "source": "TradingView public OBV",
+      "status": "pass",
+      "parse_ok": true,
+      "map_ok": true,
+      "eval_ok": true,
+      "builtin_functions": [
+        "ta.obv"
+      ],
+      "pass_rate": 1.0,
+      "notes": "ta.obv not mapped [RESOLVED]"
+    },
+    {
+      "id": "adx",
+      "file": "adx.pine",
+      "title": "ADX",
+      "category": "trend",
+      "source": "TradingView public ADX/DMI",
+      "status": "pass",
+      "parse_ok": true,
+      "map_ok": true,
+      "eval_ok": true,
+      "builtin_functions": [
+        "ta.dmi"
+      ],
+      "pass_rate": 1.0,
+      "notes": "ta.dmi multi-return not mapped [RESOLVED]"
+    },
+    {
+      "id": "ichimoku",
+      "file": "ichimoku.pine",
+      "title": "Ichimoku Cloud",
+      "category": "trend",
+      "source": "TradingView public Ichimoku",
+      "status": "pass",
+      "parse_ok": true,
+      "map_ok": true,
+      "eval_ok": true,
+      "builtin_functions": [
+        "ta.lowest",
+        "ta.highest",
+        "math.avg"
+      ],
+      "pass_rate": 1.0,
+      "notes": "User function + ta.lowest/highest not mapped [RESOLVED]"
+    },
+    {
+      "id": "parabolic_sar",
+      "file": "parabolic_sar.pine",
+      "title": "Parabolic SAR",
+      "category": "trend",
+      "source": "TradingView public SAR",
+      "status": "pass",
+      "parse_ok": true,
+      "map_ok": true,
+      "eval_ok": true,
+      "builtin_functions": [
+        "ta.sar"
+      ],
+      "pass_rate": 1.0,
+      "notes": "ta.sar not mapped [RESOLVED]"
+    },
+    {
+      "id": "keltner_channels",
+      "file": "keltner_channels.pine",
+      "title": "Keltner Channels",
+      "category": "volatility",
+      "source": "TradingView public Keltner",
+      "status": "pass",
+      "parse_ok": true,
+      "map_ok": true,
+      "eval_ok": true,
+      "builtin_functions": [
+        "ta.ema",
+        "ta.atr"
+      ],
+      "pass_rate": 1.0,
+      "notes": "Combines ta.ema + ta.atr"
+    },
+    {
+      "id": "donchian_channels",
+      "file": "donchian_channels.pine",
+      "title": "Donchian Channels",
+      "category": "volatility",
+      "source": "TradingView public Donchian",
+      "status": "pass",
+      "parse_ok": true,
+      "map_ok": true,
+      "eval_ok": true,
+      "builtin_functions": [
+        "ta.highest",
+        "ta.lowest",
+        "math.avg"
+      ],
+      "pass_rate": 1.0,
+      "notes": "ta.highest/ta.lowest not mapped [RESOLVED]"
+    },
+    {
+      "id": "momentum",
+      "file": "momentum.pine",
+      "title": "Momentum",
+      "category": "momentum",
+      "source": "TradingView public Momentum",
+      "status": "pass",
+      "parse_ok": true,
+      "map_ok": true,
+      "eval_ok": true,
+      "builtin_functions": [
+        "ta.mom"
+      ],
+      "pass_rate": 1.0,
+      "notes": "ta.mom not mapped [RESOLVED]"
+    },
+    {
+      "id": "roc",
+      "file": "roc.pine",
+      "title": "Rate of Change",
+      "category": "momentum",
+      "source": "TradingView public ROC",
+      "status": "pass",
+      "parse_ok": true,
+      "map_ok": true,
+      "eval_ok": true,
+      "builtin_functions": [
+        "ta.roc"
+      ],
+      "pass_rate": 1.0,
+      "notes": "ta.roc not mapped [RESOLVED]"
+    },
+    {
+      "id": "aroon",
+      "file": "aroon.pine",
+      "title": "Aroon",
+      "category": "trend",
+      "source": "TradingView public Aroon",
+      "status": "pass",
+      "parse_ok": true,
+      "map_ok": true,
+      "eval_ok": true,
+      "builtin_functions": [
+        "ta.aroon"
+      ],
+      "pass_rate": 1.0,
+      "notes": "ta.aroon multi-return not mapped [RESOLVED]"
+    },
+    {
+      "id": "trix",
+      "file": "trix.pine",
+      "title": "TRIX",
+      "category": "momentum",
+      "source": "TradingView public TRIX",
+      "status": "pass",
+      "parse_ok": true,
+      "map_ok": true,
+      "eval_ok": true,
+      "builtin_functions": [
+        "ta.trix"
+      ],
+      "pass_rate": 1.0,
+      "notes": "ta.trix not mapped [RESOLVED]"
+    },
+    {
+      "id": "vwma",
+      "file": "vwma.pine",
+      "title": "VWMA",
+      "category": "volume",
+      "source": "TradingView public VWMA",
+      "status": "pass",
+      "parse_ok": true,
+      "map_ok": true,
+      "eval_ok": true,
+      "builtin_functions": [
+        "ta.vwma"
+      ],
+      "pass_rate": 1.0,
+      "notes": "ta.vwma not mapped [RESOLVED]"
+    },
+    {
+      "id": "heikin_ashi",
+      "file": "heikin_ashi.pine",
+      "title": "Heikin Ashi Smoothed",
+      "category": "price_transform",
+      "source": "Community HA smoothing script",
+      "status": "pass",
+      "parse_ok": true,
+      "map_ok": true,
+      "eval_ok": true,
+      "builtin_functions": [
+        "nz",
+        "ta.ema",
+        "math.max",
+        "math.min"
+      ],
+      "pass_rate": 1.0,
+      "notes": "Series history [1] + nz partial [RESOLVED]"
+    },
+    {
+      "id": "macd_histogram",
+      "file": "macd_histogram.pine",
+      "title": "MACD Histogram Color",
+      "category": "trend",
+      "source": "TradingView MACD histogram variant",
+      "status": "pass",
+      "parse_ok": true,
+      "map_ok": true,
+      "eval_ok": true,
+      "builtin_functions": [
+        "ta.macd",
+        "plot"
+      ],
+      "pass_rate": 1.0,
+      "notes": "Color ternary in plot arg not fully supported"
+    },
+    {
+      "id": "cross_security",
+      "file": "cross_security.pine",
+      "title": "Higher Timeframe Close",
+      "category": "cross_period",
+      "source": "TradingView request.security example",
+      "status": "pass",
+      "parse_ok": true,
+      "map_ok": true,
+      "eval_ok": true,
+      "builtin_functions": [
+        "request.security",
+        "syminfo.tickerid"
+      ],
+      "pass_rate": 1.0,
+      "notes": "syminfo.* builtin var not in grammar"
+    }
+  ]
+}

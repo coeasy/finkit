@@ -1,0 +1,7 @@
+//@version=5
+indicator("Williams %R", overlay=false)
+length = input(14, "Length")
+wr = ta.wpr(length)
+plot(wr, "Williams %R", color=color.purple)
+hline(-20)
+hline(-80)

@@ -1,0 +1,13 @@
+{
+  "id": "expma_tdx",
+  "platform": "TDX",
+  "source_formula": "EXP1:=EMA(CLOSE,12);EXP2:=EMA(CLOSE,50);EXP3:=EMA(CLOSE,20);",
+  "description": "指数平滑均线EXPMA - 通达信多周期组合",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv",
+    "columns": ["close"]
+  },
+  "expected_output_columns": ["EXP1", "EXP2", "EXP3"],
+  "tolerance": 1e-8,
+  "tags": ["trend", "moving_average"]
+}

@@ -1,0 +1,10 @@
+//@version=5
+indicator("Bollinger Bands", overlay=true)
+length = input(20, "Length")
+mult = input(2.0, "StdDev")
+src = close
+[middle, upper, lower] = ta.bb(src, length, mult)
+plot(middle, "Basis", color=color.orange)
+plot(upper, "Upper", color=color.blue)
+plot(lower, "Lower", color=color.blue)
+fill(upper, lower, color=color.new(color.blue, 90))

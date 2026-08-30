@@ -1,0 +1,13 @@
+{
+  "id": "rsi_tdx",
+  "platform": "TDX",
+  "source_formula": "RSI:=SMA(MAX(CLOSE-REF(CLOSE,1),0),14,1)/SMA(ABS(CLOSE-REF(CLOSE,1)),14,1)*100;",
+  "description": "相对强弱指标RSI - 通达信SMA平滑版本",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv",
+    "columns": ["close"]
+  },
+  "expected_output_columns": ["RSI"],
+  "tolerance": 1e-8,
+  "tags": ["oscillator", "momentum"]
+}

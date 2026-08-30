@@ -1,0 +1,13 @@
+{
+  "id": "macd_tdx",
+  "platform": "TDX",
+  "source_formula": "DIFF:=EMA(CLOSE,12)-EMA(CLOSE,26);DEA:=EMA(DIFF,9);MACD:=2*(DIFF-DEA);",
+  "description": "经典MACD指标 - 通达信版本",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv",
+    "columns": ["close"]
+  },
+  "expected_output_columns": ["DIFF", "DEA", "MACD"],
+  "tolerance": 1e-8,
+  "tags": ["trend", "momentum"]
+}

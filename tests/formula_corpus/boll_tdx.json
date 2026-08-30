@@ -1,0 +1,13 @@
+{
+  "id": "boll_tdx",
+  "platform": "TDX",
+  "source_formula": "MID:=MA(CLOSE,20);UPPER:=MID+2*STD(CLOSE,20);LOWER:=MID-2*STD(CLOSE,20);",
+  "description": "布林带三线 - 通达信标准公式",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv",
+    "columns": ["close"]
+  },
+  "expected_output_columns": ["MID", "UPPER", "LOWER"],
+  "tolerance": 1e-8,
+  "tags": ["volatility", "trend"]
+}

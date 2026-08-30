@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="{{LANGUAGE_CODE}}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{CHART_TITLE}}</title>
+    <script src="{{ECHARTS_CDN_URL}}"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: {{BACKGROUND_COLOR}};
+        }
+        #chart {
+            width: {{CHART_WIDTH}}px;
+            height: {{CHART_HEIGHT}}px;
+        }
+        .toolbar {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 100;
+            display: flex;
+            gap: 8px;
+        }
+        .toolbar button {
+            padding: 6px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: {{BUTTON_BACKGROUND}};
+            color: {{BUTTON_TEXT_COLOR}};
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+        .toolbar button:hover {
+            background: {{BUTTON_HOVER_BACKGROUND}};
+        }
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 16px;
+            color: {{TEXT_COLOR}};
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <button id="btn-zoom-in" title="{{ZOOM_IN_TEXT}}">{{ZOOM_IN_TEXT}}</button>
+        <button id="btn-zoom-out" title="{{ZOOM_OUT_TEXT}}">{{ZOOM_OUT_TEXT}}</button>
+        <button id="btn-reset" title="{{RESET_TEXT}}">{{RESET_TEXT}}</button>
+    </div>
+    <div id="chart"></div>
+    <div id="loading" class="loading">{{LOADING_TEXT}}</div>
+
+    <script src="{{LOCALE_JS_PATH}}"></script>
+    <script src="{{CONFIG_JS_PATH}}"></script>
+    <script>
+        (function() {
+            'use strict';
+
+            const chartDom = document.getElementById('chart');
+            const loadingDom = document.getElementById('loading');
+            const myChart = echarts.init(chartDom, '{{ECHARTS_THEME}}');
+
+            const chartData = {{CHART_DATA_JSON}};
+            const indicatorConfigs = {{INDICATOR_CONFIGS_JSON}};
+            const chartConfig = {{CHART_CONFIG_JSON}};
+
+            const locale = window.CHART_LOCALE || {};
+
+            function formatTooltip(params) {
+                if (!params || params.length === 0) return '';
+                
+                const date = params[0].axisValue;
+                let html = `<div style="font-weight:bold;margin-bottom:5px;">${date}</div>`;
+                
+                params.forEach(function(item) {
+                    if (item.data && Array.isArray(item.data)) {
+                        const d = item.data;
+                        if (d.length >= 6) {
+                            html += `<div>${locale.tooltip_open || 'Open'}: ${d[1]}</div>`;
+                            html += `<div>${locale.tooltip_close || 'Close'}: ${d[2]}</div>`;
+                            html += `<div>${locale.tooltip_low || 'Low'}: ${d[3]}</div>`;
+                            html += `<div>${locale.tooltip_high || 'High'}: ${d[4]}</div>`;
+                            html += `<div>${locale.tooltip_volume || 'Volume'}: ${d[5]}</div>`;
+                        }
+                    } else if (item.seriesName && item.value !== undefined) {
+                        html += `<div style="color:${item.color};">${item.seriesName}: ${item.value}</div>`;
+                    }
+                });
+                
+                return html;
+            }
+
+            function generateChartData(dates, opens, highs, lows, closes, volumes) {
+                const data = [];
+                const len = Math.min(dates.length, opens.length, highs.length, lows.length, closes.length, volumes.length);
+                for (let i = 0; i < len; i++) {
+                    data.push([
+                        dates[i],
+                        opens[i],
+                        closes[i],
+                        lows[i],
+                        highs[i],
+                        volumes[i]
+                    ]);
+                }
+                return data;
+            }
+
+            function initChart() {
+                const data = chartData;
+                if (!data || !data.dates || data.dates.length === 0) {
+                    loadingDom.textContent = locale.no_data || 'No Data';
+                    return;
+                }
+
+                const klineData = generateChartData(
+                    data.dates, data.opens, data.highs, data.lows, data.closes, data.volumes
+                );
+
+                const option = generateChartOption(klineData, indicatorConfigs, chartConfig, locale);
+                
+                myChart.setOption(option);
+                loadingDom.style.display = 'none';
+
+                myChart.on('datazoom', function(params) {
+                    updateToolbarState();
+                });
+            }
+
+            function updateToolbarState() {
+                const option = myChart.getOption();
+                const dataZoom = option.dataZoom;
+                if (dataZoom && dataZoom.length > 0) {
+                    const start = dataZoom[0].start;
+                    const end = dataZoom[0].end;
+                    document.getElementById('btn-reset').disabled = (start === 0 && end === 100);
+                }
+            }
+
+            document.getElementById('btn-zoom-in').addEventListener('click', function() {
+                const option = myChart.getOption();
+                const dataZoom = option.dataZoom[0];
+                const range = dataZoom.end - dataZoom.start;
+                if (range > 10) {
+                    const mid = (dataZoom.start + dataZoom.end) / 2;
+                    const newRange = range * 0.7;
+                    myChart.dispatchAction({
+                        type: 'dataZoom',
+                        start: mid - newRange / 2,
+                        end: mid + newRange / 2
+                    });
+                }
+            });
+
+            document.getElementById('btn-zoom-out').addEventListener('click', function() {
+                const option = myChart.getOption();
+                const dataZoom = option.dataZoom[0];
+                const range = dataZoom.end - dataZoom.start;
+                if (range < 90) {
+                    const mid = (dataZoom.start + dataZoom.end) / 2;
+                    const newRange = Math.min(range * 1.4, 100);
+                    myChart.dispatchAction({
+                        type: 'dataZoom',
+                        start: Math.max(0, mid - newRange / 2),
+                        end: Math.min(100, mid + newRange / 2)
+                    });
+                }
+            });
+
+            document.getElementById('btn-reset').addEventListener('click', function() {
+                myChart.dispatchAction({
+                    type: 'dataZoom',
+                    start: 0,
+                    end: 100
+                });
+            });
+
+            window.addEventListener('resize', function() {
+                myChart.resize();
+            });
+
+            initChart();
+        })();
+    </script>
+</body>
+</html>

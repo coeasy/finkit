@@ -1,0 +1,3209 @@
+{
+  "version": "1.0.0",
+  "generated_at": null,
+  "indicators": [
+    {
+      "name": "SMA",
+      "category": "overlap",
+      "description": "Simple Moving Average",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "EMA",
+      "category": "overlap",
+      "description": "Exponential Moving Average",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "WMA",
+      "category": "overlap",
+      "description": "Weighted Moving Average",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "DEMA",
+      "category": "overlap",
+      "description": "Double Exponential Moving Average",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 28,
+      "streaming": true
+    },
+    {
+      "name": "TEMA",
+      "category": "overlap",
+      "description": "Triple Exponential Moving Average",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 42,
+      "streaming": true
+    },
+    {
+      "name": "KAMA",
+      "category": "overlap",
+      "description": "Kaufman Adaptive Moving Average",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "10",
+          "description": "Efficiency ratio lookback"
+        },
+        {
+          "name": "fast",
+          "param_type": "usize",
+          "default": "2",
+          "description": "Fast smoothing constant"
+        },
+        {
+          "name": "slow",
+          "param_type": "usize",
+          "default": "30",
+          "description": "Slow smoothing constant"
+        }
+      ],
+      "convergence": 30,
+      "streaming": true
+    },
+    {
+      "name": "T3",
+      "category": "overlap",
+      "description": "Triple Exponential Moving Average (T3)",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "5",
+          "description": "Lookback period"
+        },
+        {
+          "name": "v_factor",
+          "param_type": "f64",
+          "default": "0.7",
+          "description": "Volume factor"
+        }
+      ],
+      "convergence": 15,
+      "streaming": true
+    },
+    {
+      "name": "HMA",
+      "category": "overlap",
+      "description": "Hull Moving Average",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 20,
+      "streaming": true
+    },
+    {
+      "name": "ALMA",
+      "category": "overlap",
+      "description": "Arnaud Legoux Moving Average",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "9",
+          "description": "Lookback period"
+        },
+        {
+          "name": "sigma",
+          "param_type": "f64",
+          "default": "6.0",
+          "description": "Sigma (Gaussian width)"
+        },
+        {
+          "name": "offset",
+          "param_type": "f64",
+          "default": "0.85",
+          "description": "Offset (0-1)"
+        }
+      ],
+      "convergence": 9,
+      "streaming": true
+    },
+    {
+      "name": "Bollinger Bands",
+      "category": "overlap",
+      "description": "Bollinger Bands (upper, middle, lower)",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "20",
+          "description": "Lookback period"
+        },
+        {
+          "name": "stddev",
+          "param_type": "f64",
+          "default": "2.0",
+          "description": "Standard deviation multiplier"
+        }
+      ],
+      "convergence": 20,
+      "streaming": true
+    },
+    {
+      "name": "SAR",
+      "category": "overlap",
+      "description": "Parabolic Stop and Reverse",
+      "params": [
+        {
+          "name": "acceleration",
+          "param_type": "f64",
+          "default": "0.02",
+          "description": "Acceleration factor step"
+        },
+        {
+          "name": "maximum",
+          "param_type": "f64",
+          "default": "0.2",
+          "description": "Maximum acceleration factor"
+        }
+      ],
+      "convergence": 2,
+      "streaming": true
+    },
+    {
+      "name": "MAMA",
+      "category": "overlap",
+      "description": "MESA Adaptive Moving Average",
+      "params": [
+        {
+          "name": "fast_limit",
+          "param_type": "f64",
+          "default": "0.5",
+          "description": "Fast limit"
+        },
+        {
+          "name": "slow_limit",
+          "param_type": "f64",
+          "default": "0.05",
+          "description": "Slow limit"
+        }
+      ],
+      "convergence": 32,
+      "streaming": false
+    },
+    {
+      "name": "MIDPOINT",
+      "category": "overlap",
+      "description": "MidPoint over period",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": false
+    },
+    {
+      "name": "MIDPRICE",
+      "category": "overlap",
+      "description": "Midpoint Price over period",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": false
+    },
+    {
+      "name": "TRIMA",
+      "category": "overlap",
+      "description": "Triangular Moving Average (double-smoothed SMA)",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 21,
+      "streaming": true
+    },
+    {
+      "name": "MAVP",
+      "category": "overlap",
+      "description": "Moving Average with Variable Period (dynamic per-bar period)",
+      "params": [
+        {
+          "name": "min_period",
+          "param_type": "usize",
+          "default": "2",
+          "description": "Minimum allowed period"
+        },
+        {
+          "name": "max_period",
+          "param_type": "usize",
+          "default": "30",
+          "description": "Maximum allowed period"
+        },
+        {
+          "name": "ma_type",
+          "param_type": "usize",
+          "default": "0",
+          "description": "MA type (0=SMA, 1=EMA)"
+        }
+      ],
+      "convergence": 30,
+      "streaming": false
+    },
+    {
+      "name": "SAREXT",
+      "category": "overlap",
+      "description": "Parabolic SAR - Extended (separate long/short acceleration)",
+      "params": [
+        {
+          "name": "start_value",
+          "param_type": "f64",
+          "default": "0.0",
+          "description": "Starting SAR value"
+        },
+        {
+          "name": "offset_on_reverse",
+          "param_type": "f64",
+          "default": "0.0",
+          "description": "Offset on reverse"
+        },
+        {
+          "name": "af_init_long",
+          "param_type": "f64",
+          "default": "0.02",
+          "description": "Initial acceleration long"
+        },
+        {
+          "name": "af_long",
+          "param_type": "f64",
+          "default": "0.02",
+          "description": "Acceleration step long"
+        },
+        {
+          "name": "af_max_long",
+          "param_type": "f64",
+          "default": "0.2",
+          "description": "Max acceleration long"
+        },
+        {
+          "name": "af_init_short",
+          "param_type": "f64",
+          "default": "0.02",
+          "description": "Initial acceleration short"
+        },
+        {
+          "name": "af_short",
+          "param_type": "f64",
+          "default": "0.02",
+          "description": "Acceleration step short"
+        },
+        {
+          "name": "af_max_short",
+          "param_type": "f64",
+          "default": "0.2",
+          "description": "Max acceleration short"
+        }
+      ],
+      "convergence": 2,
+      "streaming": false
+    },
+    {
+      "name": "Donchian Channel",
+      "category": "overlap",
+      "description": "Donchian Channel (upper, middle, lower)",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "20",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 20,
+      "streaming": true
+    },
+    {
+      "name": "SuperTrend",
+      "category": "overlap",
+      "description": "SuperTrend trend-following overlay",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "10",
+          "description": "ATR lookback period"
+        },
+        {
+          "name": "multiplier",
+          "param_type": "f64",
+          "default": "3.0",
+          "description": "ATR multiplier"
+        }
+      ],
+      "convergence": 11,
+      "streaming": true
+    },
+    {
+      "name": "Ichimoku Cloud",
+      "category": "overlap",
+      "description": "Ichimoku Kinko Hyo (conversion, base, spans, lagging)",
+      "params": [
+        {
+          "name": "tenkan",
+          "param_type": "usize",
+          "default": "9",
+          "description": "Conversion line period"
+        },
+        {
+          "name": "kijun",
+          "param_type": "usize",
+          "default": "26",
+          "description": "Base line period"
+        },
+        {
+          "name": "senkou_b",
+          "param_type": "usize",
+          "default": "52",
+          "description": "Leading span B period"
+        }
+      ],
+      "convergence": 52,
+      "streaming": true
+    },
+    {
+      "name": "RSI",
+      "category": "momentum",
+      "description": "Relative Strength Index",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 15,
+      "streaming": true
+    },
+    {
+      "name": "MACD",
+      "category": "momentum",
+      "description": "Moving Average Convergence/Divergence",
+      "params": [
+        {
+          "name": "fast_period",
+          "param_type": "usize",
+          "default": "12",
+          "description": "Fast EMA period"
+        },
+        {
+          "name": "slow_period",
+          "param_type": "usize",
+          "default": "26",
+          "description": "Slow EMA period"
+        },
+        {
+          "name": "signal_period",
+          "param_type": "usize",
+          "default": "9",
+          "description": "Signal line EMA period"
+        }
+      ],
+      "convergence": 35,
+      "streaming": true
+    },
+    {
+      "name": "Stochastic",
+      "category": "momentum",
+      "description": "Stochastic Oscillator (%K / %D)",
+      "params": [
+        {
+          "name": "k_period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "%K lookback period"
+        },
+        {
+          "name": "d_period",
+          "param_type": "usize",
+          "default": "3",
+          "description": "%D smoothing period"
+        }
+      ],
+      "convergence": 16,
+      "streaming": true
+    },
+    {
+      "name": "KDJ",
+      "category": "momentum",
+      "description": "Chinese Stochastic Oscillator (K/D/J)",
+      "params": [
+        {
+          "name": "n",
+          "param_type": "usize",
+          "default": "9",
+          "description": "RSV lookback period"
+        },
+        {
+          "name": "m1",
+          "param_type": "usize",
+          "default": "3",
+          "description": "K smoothing period"
+        },
+        {
+          "name": "m2",
+          "param_type": "usize",
+          "default": "3",
+          "description": "D smoothing period"
+        }
+      ],
+      "convergence": 9,
+      "streaming": true
+    },
+    {
+      "name": "BIAS",
+      "category": "momentum",
+      "description": "Deviation Rate (乖离率)",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "Williams %R",
+      "category": "momentum",
+      "description": "Williams Percent Range",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "CCI",
+      "category": "momentum",
+      "description": "Commodity Channel Index",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "ADX",
+      "category": "momentum",
+      "description": "Average Directional Index",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 28,
+      "streaming": true
+    },
+    {
+      "name": "ADXR",
+      "category": "momentum",
+      "description": "Average Directional Movement Index Rating",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 42,
+      "streaming": true
+    },
+    {
+      "name": "MFI",
+      "category": "momentum",
+      "description": "Money Flow Index",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 15,
+      "streaming": true
+    },
+    {
+      "name": "MOM",
+      "category": "momentum",
+      "description": "Momentum",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "10",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 11,
+      "streaming": true
+    },
+    {
+      "name": "ROC",
+      "category": "momentum",
+      "description": "Rate of Change",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "10",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 11,
+      "streaming": true
+    },
+    {
+      "name": "ROCP",
+      "category": "momentum",
+      "description": "Rate of Change Percentage (decimal)",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "10",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 11,
+      "streaming": true
+    },
+    {
+      "name": "ROCR",
+      "category": "momentum",
+      "description": "Rate of Change Ratio",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "10",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 11,
+      "streaming": true
+    },
+    {
+      "name": "ROCR100",
+      "category": "momentum",
+      "description": "Rate of Change Ratio * 100",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "10",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 11,
+      "streaming": true
+    },
+    {
+      "name": "MACDEXT",
+      "category": "momentum",
+      "description": "MACD with controllable MA type per line",
+      "params": [
+        {
+          "name": "fast_period",
+          "param_type": "usize",
+          "default": "12",
+          "description": "Fast MA period"
+        },
+        {
+          "name": "fast_ma",
+          "param_type": "usize",
+          "default": "1",
+          "description": "Fast MA type (0=SMA, 1=EMA)"
+        },
+        {
+          "name": "slow_period",
+          "param_type": "usize",
+          "default": "26",
+          "description": "Slow MA period"
+        },
+        {
+          "name": "slow_ma",
+          "param_type": "usize",
+          "default": "1",
+          "description": "Slow MA type (0=SMA, 1=EMA)"
+        },
+        {
+          "name": "signal_period",
+          "param_type": "usize",
+          "default": "9",
+          "description": "Signal line period"
+        },
+        {
+          "name": "signal_ma",
+          "param_type": "usize",
+          "default": "1",
+          "description": "Signal MA type (0=SMA, 1=EMA)"
+        }
+      ],
+      "convergence": 35,
+      "streaming": true
+    },
+    {
+      "name": "MACDFIX",
+      "category": "momentum",
+      "description": "MACD with fixed 12/26 fast/slow EMA",
+      "params": [
+        {
+          "name": "signal_period",
+          "param_type": "usize",
+          "default": "9",
+          "description": "Signal line EMA period"
+        }
+      ],
+      "convergence": 35,
+      "streaming": true
+    },
+    {
+      "name": "Aroon",
+      "category": "momentum",
+      "description": "Aroon Up/Down oscillator",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 15,
+      "streaming": true
+    },
+    {
+      "name": "AROONOSC",
+      "category": "momentum",
+      "description": "Aroon Oscillator",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 15,
+      "streaming": true
+    },
+    {
+      "name": "APO",
+      "category": "momentum",
+      "description": "Absolute Price Oscillator",
+      "params": [
+        {
+          "name": "fast_period",
+          "param_type": "usize",
+          "default": "12",
+          "description": "Fast EMA period"
+        },
+        {
+          "name": "slow_period",
+          "param_type": "usize",
+          "default": "26",
+          "description": "Slow EMA period"
+        }
+      ],
+      "convergence": 26,
+      "streaming": true
+    },
+    {
+      "name": "PPO",
+      "category": "momentum",
+      "description": "Percentage Price Oscillator",
+      "params": [
+        {
+          "name": "fast_period",
+          "param_type": "usize",
+          "default": "12",
+          "description": "Fast EMA period"
+        },
+        {
+          "name": "slow_period",
+          "param_type": "usize",
+          "default": "26",
+          "description": "Slow EMA period"
+        }
+      ],
+      "convergence": 26,
+      "streaming": true
+    },
+    {
+      "name": "BOP",
+      "category": "momentum",
+      "description": "Balance of Power",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "CMO",
+      "category": "momentum",
+      "description": "Chande Momentum Oscillator",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 15,
+      "streaming": true
+    },
+    {
+      "name": "ELDERRAY",
+      "category": "momentum",
+      "description": "Elder Ray Index (Bull/Bear Power)",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "DX",
+      "category": "momentum",
+      "description": "Directional Movement Index",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 15,
+      "streaming": true
+    },
+    {
+      "name": "MINUS_DI",
+      "category": "momentum",
+      "description": "Minus Directional Indicator",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 15,
+      "streaming": true
+    },
+    {
+      "name": "MINUS_DM",
+      "category": "momentum",
+      "description": "Minus Directional Movement",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "PLUS_DI",
+      "category": "momentum",
+      "description": "Plus Directional Indicator",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 15,
+      "streaming": true
+    },
+    {
+      "name": "PLUS_DM",
+      "category": "momentum",
+      "description": "Plus Directional Movement",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "STOCHF",
+      "category": "momentum",
+      "description": "Stochastic Fast",
+      "params": [
+        {
+          "name": "fastk_period",
+          "param_type": "usize",
+          "default": "5",
+          "description": "Fast %K period"
+        },
+        {
+          "name": "fastd_period",
+          "param_type": "usize",
+          "default": "3",
+          "description": "Fast %D period"
+        }
+      ],
+      "convergence": 5,
+      "streaming": true
+    },
+    {
+      "name": "STOCHRSI",
+      "category": "momentum",
+      "description": "Stochastic RSI",
+      "params": [
+        {
+          "name": "rsi_period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "RSI period"
+        },
+        {
+          "name": "stoch_period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Stochastic period"
+        },
+        {
+          "name": "fastk_period",
+          "param_type": "usize",
+          "default": "3",
+          "description": "Fast %K period"
+        },
+        {
+          "name": "fastd_period",
+          "param_type": "usize",
+          "default": "3",
+          "description": "Fast %D period"
+        }
+      ],
+      "convergence": 28,
+      "streaming": true
+    },
+    {
+      "name": "ULTOSC",
+      "category": "momentum",
+      "description": "Ultimate Oscillator",
+      "params": [
+        {
+          "name": "period1",
+          "param_type": "usize",
+          "default": "7",
+          "description": "Short period"
+        },
+        {
+          "name": "period2",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Medium period"
+        },
+        {
+          "name": "period3",
+          "param_type": "usize",
+          "default": "28",
+          "description": "Long period"
+        }
+      ],
+      "convergence": 29,
+      "streaming": true
+    },
+    {
+      "name": "TRIX",
+      "category": "momentum",
+      "description": "Triple Smooth EMA Rate of Change",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 42,
+      "streaming": true
+    },
+    {
+      "name": "Elder Ray",
+      "category": "momentum",
+      "description": "Elder Ray Index (bull power / bear power)",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "13",
+          "description": "EMA period for bull/bear power baseline"
+        }
+      ],
+      "convergence": 13,
+      "streaming": true
+    },
+    {
+      "name": "Fisher",
+      "category": "momentum",
+      "description": "Ehlers Fisher Transform",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "TSI",
+      "category": "momentum",
+      "description": "True Strength Index",
+      "params": [
+        {
+          "name": "long_period",
+          "param_type": "usize",
+          "default": "25",
+          "description": "Long EMA period"
+        },
+        {
+          "name": "short_period",
+          "param_type": "usize",
+          "default": "13",
+          "description": "Short EMA period"
+        }
+      ],
+      "convergence": 37,
+      "streaming": true
+    },
+    {
+      "name": "OBV",
+      "category": "volume",
+      "description": "On Balance Volume",
+      "params": [],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "VWAP",
+      "category": "volume",
+      "description": "Volume Weighted Average Price",
+      "params": [],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "AD",
+      "category": "volume",
+      "description": "Accumulation/Distribution Line",
+      "params": [],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "ADOSC",
+      "category": "volume",
+      "description": "Accumulation/Distribution Oscillator",
+      "params": [
+        {
+          "name": "fast_period",
+          "param_type": "usize",
+          "default": "12",
+          "description": "Fast EMA period"
+        },
+        {
+          "name": "slow_period",
+          "param_type": "usize",
+          "default": "26",
+          "description": "Slow EMA period"
+        }
+      ],
+      "convergence": 26,
+      "streaming": true
+    },
+    {
+      "name": "Volume Profile",
+      "category": "volume",
+      "description": "Price-volume distribution histogram",
+      "params": [
+        {
+          "name": "num_bins",
+          "param_type": "usize",
+          "default": "20",
+          "description": "Number of price bins"
+        }
+      ],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "Anchored VWAP",
+      "category": "volume",
+      "description": "VWAP anchored to a specific bar",
+      "params": [],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "VWAP Bands",
+      "category": "volume",
+      "description": "VWAP with standard deviation bands",
+      "params": [
+        {
+          "name": "stddev",
+          "param_type": "f64",
+          "default": "2.0",
+          "description": "Standard deviation multiplier"
+        }
+      ],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "CMF",
+      "category": "volume",
+      "description": "Chaikin Money Flow",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "20",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 20,
+      "streaming": true
+    },
+    {
+      "name": "ATR",
+      "category": "volatility",
+      "description": "Average True Range",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 15,
+      "streaming": true
+    },
+    {
+      "name": "NATR",
+      "category": "volatility",
+      "description": "Normalized Average True Range",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 15,
+      "streaming": true
+    },
+    {
+      "name": "TRANGE",
+      "category": "volatility",
+      "description": "True Range",
+      "params": [],
+      "convergence": 2,
+      "streaming": true
+    },
+    {
+      "name": "CHOP",
+      "category": "volatility",
+      "description": "Choppiness Index",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "AVGPRICE",
+      "category": "price_transform",
+      "description": "Average Price (O+H+L+C)/4",
+      "params": [],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "MEDPRICE",
+      "category": "price_transform",
+      "description": "Median Price (H+L)/2",
+      "params": [],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "TYPPRICE",
+      "category": "price_transform",
+      "description": "Typical Price (H+L+C)/3",
+      "params": [],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "WCLPRICE",
+      "category": "price_transform",
+      "description": "Weighted Close Price (H+L+2C)/4",
+      "params": [],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "Pivot Points",
+      "category": "price_transform",
+      "description": "Classic pivot point support/resistance levels",
+      "params": [
+        {
+          "name": "pivot_type",
+          "param_type": "str",
+          "default": "standard",
+          "description": "Pivot calculation method (standard, fibonacci, camarilla)"
+        }
+      ],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "HT_DCPERIOD",
+      "category": "cycle",
+      "description": "Hilbert Transform - Dominant Cycle Period",
+      "params": [],
+      "convergence": 32,
+      "streaming": true
+    },
+    {
+      "name": "HT_DCPHASE",
+      "category": "cycle",
+      "description": "Hilbert Transform - Dominant Cycle Phase",
+      "params": [],
+      "convergence": 32,
+      "streaming": true
+    },
+    {
+      "name": "HT_PHASOR",
+      "category": "cycle",
+      "description": "Hilbert Transform - Phasor Components (inphase, quadrature)",
+      "params": [],
+      "convergence": 32,
+      "streaming": false
+    },
+    {
+      "name": "HT_SINE",
+      "category": "cycle",
+      "description": "Hilbert Transform - SineWave (sine, leadsine)",
+      "params": [],
+      "convergence": 32,
+      "streaming": true
+    },
+    {
+      "name": "HT_TRENDMODE",
+      "category": "cycle",
+      "description": "Hilbert Transform - Trend vs Cycle Mode",
+      "params": [],
+      "convergence": 32,
+      "streaming": true
+    },
+    {
+      "name": "HT_TRENDLINE",
+      "category": "cycle",
+      "description": "Hilbert Transform - Instantaneous Trendline",
+      "params": [],
+      "convergence": 32,
+      "streaming": true
+    },
+    {
+      "name": "ZSCORE",
+      "category": "statistics",
+      "description": "Rolling Z-Score",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "PERCENT_RANK",
+      "category": "statistics",
+      "description": "Percentile rank over period",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": false
+    },
+    {
+      "name": "BETA",
+      "category": "statistics",
+      "description": "Beta (covariance vs benchmark)",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "20",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 20,
+      "streaming": true
+    },
+    {
+      "name": "CORREL",
+      "category": "statistics",
+      "description": "Pearson correlation coefficient",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "STDDEV",
+      "category": "statistics",
+      "description": "Rolling standard deviation",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "AVGDEV",
+      "category": "statistics",
+      "description": "Mean Absolute Deviation over period",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "LINEAR_REG",
+      "category": "statistics",
+      "description": "Linear regression value",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "TSF",
+      "category": "statistics",
+      "description": "Time Series Forecast",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "LINREG_SLOPE",
+      "category": "statistics",
+      "description": "Linear regression slope",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "LINREG_INTERCEPT",
+      "category": "statistics",
+      "description": "Linear regression intercept",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "LINREG_ANGLE",
+      "category": "statistics",
+      "description": "Linear regression angle (degrees)",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "VAR",
+      "category": "statistics",
+      "description": "Rolling population variance",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "SKEWNESS",
+      "category": "statistics",
+      "description": "Statistical skewness",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "KURTOSIS",
+      "category": "statistics",
+      "description": "Statistical kurtosis",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "AD_LINE",
+      "category": "breadth",
+      "description": "Advance/Decline Line",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "AD_RATIO",
+      "category": "breadth",
+      "description": "Advance/Decline Ratio",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "McClellan Oscillator",
+      "category": "breadth",
+      "description": "McClellan Oscillator (breadth momentum)",
+      "params": [
+        {
+          "name": "fast_period",
+          "param_type": "usize",
+          "default": "12",
+          "description": "Fast EMA period"
+        },
+        {
+          "name": "slow_period",
+          "param_type": "usize",
+          "default": "26",
+          "description": "Slow EMA period"
+        }
+      ],
+      "convergence": 26,
+      "streaming": false
+    },
+    {
+      "name": "McClellan Summation",
+      "category": "breadth",
+      "description": "McClellan Summation Index",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "TRIN",
+      "category": "breadth",
+      "description": "Arms Index (TRIN)",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "New Highs/Lows",
+      "category": "breadth",
+      "description": "Net new highs minus new lows",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "VIX-like Volatility",
+      "category": "sentiment",
+      "description": "VIX-style implied volatility proxy",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "20",
+          "description": "Lookback window"
+        }
+      ],
+      "convergence": 20,
+      "streaming": false
+    },
+    {
+      "name": "Fear & Greed Index",
+      "category": "sentiment",
+      "description": "Composite fear and greed score",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "Put/Call Ratio",
+      "category": "sentiment",
+      "description": "Put volume / Call volume ratio",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "Volatility Index",
+      "category": "sentiment",
+      "description": "Annualised volatility index",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "20",
+          "description": "Lookback window"
+        }
+      ],
+      "convergence": 20,
+      "streaming": false
+    },
+    {
+      "name": "PSY",
+      "category": "sentiment",
+      "description": "Psychological Line (心理线)",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 15,
+      "streaming": true
+    },
+    {
+      "name": "VR",
+      "category": "volume",
+      "description": "Volume Ratio (成交量比率)",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 27,
+      "streaming": true
+    },
+    {
+      "name": "CR",
+      "category": "momentum",
+      "description": "Energy Indicator (能量指标)",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 27,
+      "streaming": true
+    },
+    {
+      "name": "DPO",
+      "category": "momentum",
+      "description": "Detrended Price Oscillator (去趋势价格振荡器)",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 28,
+      "streaming": true
+    },
+    {
+      "name": "AR",
+      "category": "momentum",
+      "description": "Activity Ratio (人气指标)",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 26,
+      "streaming": true
+    },
+    {
+      "name": "BR",
+      "category": "momentum",
+      "description": "Bias Ratio (意愿指标)",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 27,
+      "streaming": true
+    },
+    {
+      "name": "DMA",
+      "category": "overlap",
+      "description": "Different of Moving Averages (平行线差)",
+      "params": [
+        {
+          "name": "short_period",
+          "param_type": "usize",
+          "default": "10",
+          "description": "Short MA period"
+        },
+        {
+          "name": "long_period",
+          "param_type": "usize",
+          "default": "50",
+          "description": "Long MA period"
+        },
+        {
+          "name": "ama_period",
+          "param_type": "usize",
+          "default": "10",
+          "description": "AMA smoothing period"
+        }
+      ],
+      "convergence": 60,
+      "streaming": true
+    },
+    {
+      "name": "ENE",
+      "category": "overlap",
+      "description": "Envelope (轨道线)",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "25",
+          "description": "MA period"
+        },
+        {
+          "name": "k1",
+          "param_type": "f64",
+          "default": "11.0",
+          "description": "Upper percentage"
+        },
+        {
+          "name": "k2",
+          "param_type": "f64",
+          "default": "9.0",
+          "description": "Lower percentage"
+        }
+      ],
+      "convergence": 25,
+      "streaming": true
+    },
+    {
+      "name": "EXPMA",
+      "category": "overlap",
+      "description": "Exponential Moving Average Group (指数平滑均线)",
+      "params": [
+        {
+          "name": "short_period",
+          "param_type": "usize",
+          "default": "12",
+          "description": "Short EMA period"
+        },
+        {
+          "name": "long_period",
+          "param_type": "usize",
+          "default": "50",
+          "description": "Long EMA period"
+        }
+      ],
+      "convergence": 50,
+      "streaming": true
+    },
+    {
+      "name": "WINNER",
+      "category": "astock",
+      "description": "Winner ratio (获利盘比例) at a given cost basis",
+      "params": [
+        {
+          "name": "cost",
+          "param_type": "f64",
+          "default": "10.0",
+          "description": "Cost basis price"
+        }
+      ],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "COST",
+      "category": "astock",
+      "description": "Cost distribution (成本分布) — price at a given winner ratio",
+      "params": [
+        {
+          "name": "winpct",
+          "param_type": "f64",
+          "default": "0.5",
+          "description": "Target winner ratio (0-1)"
+        }
+      ],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "MAIN_NET_INFLOW",
+      "category": "astock",
+      "description": "Main capital net inflow (主力净流入) via large-trade threshold",
+      "params": [
+        {
+          "name": "large_threshold",
+          "param_type": "f64",
+          "default": "1000000.0",
+          "description": "Trade amount threshold for large orders"
+        }
+      ],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "MONEY_FLOW",
+      "category": "astock",
+      "description": "Rolling sum of typical price × volume (资金流量)",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "LIMIT_UP",
+      "category": "astock",
+      "description": "Limit-up detection (涨停检测) — 1.0 if change >= threshold",
+      "params": [
+        {
+          "name": "threshold",
+          "param_type": "f64",
+          "default": "0.10",
+          "description": "Daily price limit (0.10 main board, 0.20 ChiNext/STAR)"
+        }
+      ],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "LIMIT_DOWN",
+      "category": "astock",
+      "description": "Limit-down detection (跌停检测) — 1.0 if change <= -threshold",
+      "params": [
+        {
+          "name": "threshold",
+          "param_type": "f64",
+          "default": "0.10",
+          "description": "Daily price limit"
+        }
+      ],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "CONSECUTIVE_LIMIT",
+      "category": "astock",
+      "description": "Consecutive limit-up count (连板数)",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "TURNOVER",
+      "category": "astock",
+      "description": "Turnover rate (换手率) = volume / free-float shares",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "RS_RATIO",
+      "category": "astock",
+      "description": "Relative strength ratio vs benchmark (相对强弱)",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": false
+    },
+    {
+      "name": "Mass Index",
+      "category": "volatility",
+      "description": "Mass Index",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "25",
+          "description": "Summation period"
+        },
+        {
+          "name": "ema_period",
+          "param_type": "usize",
+          "default": "9",
+          "description": "EMA smoothing period"
+        }
+      ],
+      "convergence": 43,
+      "streaming": true
+    },
+    {
+      "name": "Ulcer Index",
+      "category": "volatility",
+      "description": "Ulcer Index",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 27,
+      "streaming": true
+    },
+    {
+      "name": "RVI",
+      "category": "volatility",
+      "description": "Relative Vigor Index",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "10",
+          "description": "SMA smoothing period"
+        }
+      ],
+      "convergence": 16,
+      "streaming": true
+    },
+    {
+      "name": "McGinley",
+      "category": "overlap",
+      "description": "McGinley Dynamic",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Dynamic period"
+        }
+      ],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "ZLEMA",
+      "category": "overlap",
+      "description": "Zero Lag EMA",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "EMA period"
+        }
+      ],
+      "convergence": 21,
+      "streaming": true
+    },
+    {
+      "name": "VIDYA",
+      "category": "overlap",
+      "description": "Variable Index Dynamic Average",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "VIDYA period"
+        },
+        {
+          "name": "cmo_period",
+          "param_type": "usize",
+          "default": "9",
+          "description": "CMO lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "VWMA",
+      "category": "overlap",
+      "description": "Volume Weighted Moving Average",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "20",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 20,
+      "streaming": true
+    },
+    {
+      "name": "Force Index",
+      "category": "volume",
+      "description": "Force Index",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "13",
+          "description": "EMA smoothing period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "EOM",
+      "category": "volume",
+      "description": "Ease of Movement",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "SMA smoothing period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "NVI",
+      "category": "volume",
+      "description": "Negative Volume Index",
+      "params": [],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "PVI",
+      "category": "volume",
+      "description": "Positive Volume Index",
+      "params": [],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "PVT",
+      "category": "volume",
+      "description": "Price Volume Trend",
+      "params": [],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "KVO",
+      "category": "volume",
+      "description": "Klinger Volume Oscillator",
+      "params": [
+        {
+          "name": "fast_period",
+          "param_type": "usize",
+          "default": "34",
+          "description": "Fast EMA period"
+        },
+        {
+          "name": "slow_period",
+          "param_type": "usize",
+          "default": "55",
+          "description": "Slow EMA period"
+        },
+        {
+          "name": "signal_period",
+          "param_type": "usize",
+          "default": "13",
+          "description": "Signal EMA period"
+        }
+      ],
+      "convergence": 68,
+      "streaming": true
+    },
+    {
+      "name": "AO",
+      "category": "momentum",
+      "description": "Awesome Oscillator",
+      "params": [
+        {
+          "name": "fast_period",
+          "param_type": "usize",
+          "default": "5",
+          "description": "Fast SMA period"
+        },
+        {
+          "name": "slow_period",
+          "param_type": "usize",
+          "default": "34",
+          "description": "Slow SMA period"
+        }
+      ],
+      "convergence": 34,
+      "streaming": true
+    },
+    {
+      "name": "Coppock",
+      "category": "momentum",
+      "description": "Coppock Curve",
+      "params": [
+        {
+          "name": "wma_period",
+          "param_type": "usize",
+          "default": "10",
+          "description": "WMA smoothing period"
+        },
+        {
+          "name": "long_roc",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Long ROC period"
+        },
+        {
+          "name": "short_roc",
+          "param_type": "usize",
+          "default": "11",
+          "description": "Short ROC period"
+        }
+      ],
+      "convergence": 24,
+      "streaming": true
+    },
+    {
+      "name": "KST",
+      "category": "momentum",
+      "description": "Know Sure Thing",
+      "params": [
+        {
+          "name": "roc1",
+          "param_type": "usize",
+          "default": "10",
+          "description": "ROC period 1"
+        },
+        {
+          "name": "roc2",
+          "param_type": "usize",
+          "default": "15",
+          "description": "ROC period 2"
+        },
+        {
+          "name": "roc3",
+          "param_type": "usize",
+          "default": "20",
+          "description": "ROC period 3"
+        },
+        {
+          "name": "roc4",
+          "param_type": "usize",
+          "default": "30",
+          "description": "ROC period 4"
+        },
+        {
+          "name": "sma1",
+          "param_type": "usize",
+          "default": "10",
+          "description": "SMA period 1"
+        },
+        {
+          "name": "sma2",
+          "param_type": "usize",
+          "default": "10",
+          "description": "SMA period 2"
+        },
+        {
+          "name": "sma3",
+          "param_type": "usize",
+          "default": "10",
+          "description": "SMA period 3"
+        },
+        {
+          "name": "sma4",
+          "param_type": "usize",
+          "default": "15",
+          "description": "SMA period 4"
+        },
+        {
+          "name": "signal_period",
+          "param_type": "usize",
+          "default": "9",
+          "description": "Signal line SMA period"
+        }
+      ],
+      "convergence": 54,
+      "streaming": true
+    },
+    {
+      "name": "STC",
+      "category": "momentum",
+      "description": "Schaff Trend Cycle",
+      "params": [
+        {
+          "name": "fast_period",
+          "param_type": "usize",
+          "default": "23",
+          "description": "Fast EMA period"
+        },
+        {
+          "name": "slow_period",
+          "param_type": "usize",
+          "default": "50",
+          "description": "Slow EMA period"
+        },
+        {
+          "name": "cycle",
+          "param_type": "usize",
+          "default": "10",
+          "description": "Stochastic cycle period"
+        }
+      ],
+      "convergence": 70,
+      "streaming": true
+    },
+    {
+      "name": "Vortex",
+      "category": "momentum",
+      "description": "Vortex Indicator (VI+/VI-)",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 15,
+      "streaming": true
+    },
+    {
+      "name": "Inertia",
+      "category": "momentum",
+      "description": "Inertia Indicator (RVI + Linear Regression)",
+      "params": [
+        {
+          "name": "rvi_period",
+          "param_type": "usize",
+          "default": "10",
+          "description": "RVI period"
+        },
+        {
+          "name": "linreg_period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Linear regression period"
+        }
+      ],
+      "convergence": 24,
+      "streaming": true
+    },
+    {
+      "name": "Squeeze Momentum",
+      "category": "momentum",
+      "description": "Squeeze Momentum (John Carter)",
+      "params": [
+        {
+          "name": "bb_period",
+          "param_type": "usize",
+          "default": "20",
+          "description": "Bollinger Bands period"
+        },
+        {
+          "name": "kc_period",
+          "param_type": "usize",
+          "default": "20",
+          "description": "Keltner Channel period"
+        },
+        {
+          "name": "mom_period",
+          "param_type": "usize",
+          "default": "12",
+          "description": "Momentum period"
+        }
+      ],
+      "convergence": 20,
+      "streaming": true
+    },
+    {
+      "name": "QStick",
+      "category": "momentum",
+      "description": "QStick Indicator",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "JMA",
+      "category": "overlap",
+      "description": "Jurik Moving Average",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "7",
+          "description": "Lookback period"
+        },
+        {
+          "name": "phase",
+          "param_type": "f64",
+          "default": "0.0",
+          "description": "Phase shift (-100 to 100)"
+        },
+        {
+          "name": "power",
+          "param_type": "f64",
+          "default": "2.0",
+          "description": "Smoothing power"
+        }
+      ],
+      "convergence": 7,
+      "streaming": true
+    },
+    {
+      "name": "Efficiency Ratio",
+      "category": "statistics",
+      "description": "Kaufman Efficiency Ratio",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "CFO",
+      "category": "momentum",
+      "description": "Chande Forecast Oscillator",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "Twiggs MF",
+      "category": "volume",
+      "description": "Twiggs Money Flow",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "Keltner Channel",
+      "category": "volatility",
+      "description": "Keltner Channel (upper, middle, lower)",
+      "params": [
+        {
+          "name": "ema_period",
+          "param_type": "usize",
+          "default": "20",
+          "description": "EMA period"
+        },
+        {
+          "name": "atr_period",
+          "param_type": "usize",
+          "default": "10",
+          "description": "ATR period"
+        },
+        {
+          "name": "multiplier",
+          "param_type": "f64",
+          "default": "2.0",
+          "description": "ATR multiplier"
+        }
+      ],
+      "convergence": 20,
+      "streaming": true
+    },
+    {
+      "name": "ADR",
+      "category": "volatility",
+      "description": "Average Day Range",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "Chaikin Volatility",
+      "category": "volatility",
+      "description": "Chaikin Volatility (EMA of H-L range change)",
+      "params": [
+        {
+          "name": "ema_period",
+          "param_type": "usize",
+          "default": "10",
+          "description": "EMA smoothing period"
+        },
+        {
+          "name": "roc_period",
+          "param_type": "usize",
+          "default": "10",
+          "description": "Rate of change period"
+        }
+      ],
+      "convergence": 20,
+      "streaming": true
+    },
+    {
+      "name": "HV",
+      "category": "volatility",
+      "description": "Historical Volatility (Close-to-Close)",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "20",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 21,
+      "streaming": true
+    },
+    {
+      "name": "VZO",
+      "category": "volume",
+      "description": "Volume Zone Oscillator",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "VWAP MTF",
+      "category": "volume",
+      "description": "Multi-timeframe VWAP with session resets",
+      "params": [],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "Volume Momentum",
+      "category": "volume",
+      "description": "Volume Momentum (Volume - SMA(Volume))",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "Volume ROC",
+      "category": "volume",
+      "description": "Volume Rate of Change",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "Fibonacci Retracement",
+      "category": "fibonacci",
+      "description": "Fibonacci retracement levels (23.6%, 38.2%, 50%, 61.8%, 78.6%)",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "ACOS",
+      "category": "math_transform",
+      "description": "Vector Trigonometric ACos",
+      "params": [],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "ASIN",
+      "category": "math_transform",
+      "description": "Vector Trigonometric ASin",
+      "params": [],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "ATAN",
+      "category": "math_transform",
+      "description": "Vector Trigonometric ATan",
+      "params": [],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "CEIL",
+      "category": "math_transform",
+      "description": "Vector Ceil",
+      "params": [],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "COS",
+      "category": "math_transform",
+      "description": "Vector Trigonometric Cos",
+      "params": [],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "COSH",
+      "category": "math_transform",
+      "description": "Vector Trigonometric Cosh",
+      "params": [],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "EXP",
+      "category": "math_transform",
+      "description": "Vector Exp",
+      "params": [],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "FLOOR",
+      "category": "math_transform",
+      "description": "Vector Floor",
+      "params": [],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "LN",
+      "category": "math_transform",
+      "description": "Vector Natural Logarithm",
+      "params": [],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "LOG10",
+      "category": "math_transform",
+      "description": "Vector Log10",
+      "params": [],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "SIN",
+      "category": "math_transform",
+      "description": "Vector Trigonometric Sin",
+      "params": [],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "SINH",
+      "category": "math_transform",
+      "description": "Vector Trigonometric Sinh",
+      "params": [],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "SQRT",
+      "category": "math_transform",
+      "description": "Vector Square Root",
+      "params": [],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "TAN",
+      "category": "math_transform",
+      "description": "Vector Trigonometric Tan",
+      "params": [],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "TANH",
+      "category": "math_transform",
+      "description": "Vector Trigonometric Tanh",
+      "params": [],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "ADD",
+      "category": "math_operators",
+      "description": "Vector Arithmetic Add",
+      "params": [],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "SUB",
+      "category": "math_operators",
+      "description": "Vector Arithmetic Sub",
+      "params": [],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "MULT",
+      "category": "math_operators",
+      "description": "Vector Arithmetic Mult",
+      "params": [],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "DIV",
+      "category": "math_operators",
+      "description": "Vector Arithmetic Div",
+      "params": [],
+      "convergence": 1,
+      "streaming": true
+    },
+    {
+      "name": "MAX",
+      "category": "math_operators",
+      "description": "Highest value over a period",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "MIN",
+      "category": "math_operators",
+      "description": "Lowest value over a period",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "MAXINDEX",
+      "category": "math_operators",
+      "description": "Index of highest value within period",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": false
+    },
+    {
+      "name": "MININDEX",
+      "category": "math_operators",
+      "description": "Index of lowest value within period",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": false
+    },
+    {
+      "name": "MINUS",
+      "category": "math_operators",
+      "description": "Vector Arithmetic Minus (period difference)",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "SUM",
+      "category": "math_operators",
+      "description": "Summation over a period",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "14",
+          "description": "Lookback period"
+        }
+      ],
+      "convergence": 14,
+      "streaming": true
+    },
+    {
+      "name": "CDL_DOJI",
+      "category": "pattern",
+      "description": "Doji candlestick pattern",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "CDL_DRAGONFLY_DOJI",
+      "category": "pattern",
+      "description": "Dragonfly Doji pattern",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "CDL_GRAVESTONE_DOJI",
+      "category": "pattern",
+      "description": "Gravestone Doji pattern",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "CDL_LONGLEGGED_DOJI",
+      "category": "pattern",
+      "description": "Long-Legged Doji pattern",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "CDL_4PRICE_DOJI",
+      "category": "pattern",
+      "description": "Four-Price Doji pattern",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "CDL_MARUBOZU",
+      "category": "pattern",
+      "description": "Marubozu (full body, no wicks)",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "CDL_HAMMER",
+      "category": "pattern",
+      "description": "Hammer bullish reversal pattern",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "CDL_INVERTED_HAMMER",
+      "category": "pattern",
+      "description": "Inverted Hammer pattern",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "CDL_HANGING_MAN",
+      "category": "pattern",
+      "description": "Hanging Man bearish reversal",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "CDL_SHOOTING_STAR",
+      "category": "pattern",
+      "description": "Shooting Star bearish reversal",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "CDL_ENGULFING",
+      "category": "pattern",
+      "description": "Bullish/Bearish Engulfing pattern",
+      "params": [],
+      "convergence": 2,
+      "streaming": false
+    },
+    {
+      "name": "CDL_HARAMI",
+      "category": "pattern",
+      "description": "Harami pattern",
+      "params": [],
+      "convergence": 2,
+      "streaming": false
+    },
+    {
+      "name": "CDL_HARAMI_CROSS",
+      "category": "pattern",
+      "description": "Harami Cross pattern",
+      "params": [],
+      "convergence": 2,
+      "streaming": false
+    },
+    {
+      "name": "CDL_MORNINGSTAR",
+      "category": "pattern",
+      "description": "Morning Star bullish reversal",
+      "params": [],
+      "convergence": 3,
+      "streaming": false
+    },
+    {
+      "name": "CDL_EVENINGSTAR",
+      "category": "pattern",
+      "description": "Evening Star bearish reversal",
+      "params": [],
+      "convergence": 3,
+      "streaming": false
+    },
+    {
+      "name": "CDL_MORNING_DOJI_STAR",
+      "category": "pattern",
+      "description": "Morning Doji Star pattern",
+      "params": [],
+      "convergence": 3,
+      "streaming": false
+    },
+    {
+      "name": "CDL_EVENING_DOJI_STAR",
+      "category": "pattern",
+      "description": "Evening Doji Star pattern",
+      "params": [],
+      "convergence": 3,
+      "streaming": false
+    },
+    {
+      "name": "CDL_3WHITE_SOLDIERS",
+      "category": "pattern",
+      "description": "Three White Soldiers bullish",
+      "params": [],
+      "convergence": 3,
+      "streaming": false
+    },
+    {
+      "name": "CDL_3BLACK_CROWS",
+      "category": "pattern",
+      "description": "Three Black Crows bearish",
+      "params": [],
+      "convergence": 3,
+      "streaming": false
+    },
+    {
+      "name": "CDL_3INSIDE_UP",
+      "category": "pattern",
+      "description": "Three Inside Up bullish confirmation",
+      "params": [],
+      "convergence": 3,
+      "streaming": false
+    },
+    {
+      "name": "CDL_3OUTSIDE_UP",
+      "category": "pattern",
+      "description": "Three Outside Up bullish continuation",
+      "params": [],
+      "convergence": 3,
+      "streaming": false
+    },
+    {
+      "name": "CDL_3INSIDE_DOWN",
+      "category": "pattern",
+      "description": "Three Inside Down bearish confirmation",
+      "params": [],
+      "convergence": 3,
+      "streaming": false
+    },
+    {
+      "name": "CDL_3OUTSIDE_DOWN",
+      "category": "pattern",
+      "description": "Three Outside Down bearish continuation",
+      "params": [],
+      "convergence": 3,
+      "streaming": false
+    },
+    {
+      "name": "CDL_3STARS_IN_SOUTH",
+      "category": "pattern",
+      "description": "Three Stars in the South pattern",
+      "params": [],
+      "convergence": 3,
+      "streaming": false
+    },
+    {
+      "name": "CDL_3LINE_STRIKE",
+      "category": "pattern",
+      "description": "Three-Line Strike pattern",
+      "params": [],
+      "convergence": 4,
+      "streaming": false
+    },
+    {
+      "name": "CDL_STICK_SANDWICH",
+      "category": "pattern",
+      "description": "Stick Sandwich pattern",
+      "params": [],
+      "convergence": 3,
+      "streaming": false
+    },
+    {
+      "name": "CDL_BELT_HOLD",
+      "category": "pattern",
+      "description": "Belt Hold pattern",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "CDL_CLOSING_MARUBOZU",
+      "category": "pattern",
+      "description": "Closing Marubozu pattern",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "CDL_SPINNING_TOP",
+      "category": "pattern",
+      "description": "Spinning Top indecision pattern",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "CDL_HIGH_WAVE",
+      "category": "pattern",
+      "description": "High Wave candle pattern",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "CDL_RICKSHAW_MAN",
+      "category": "pattern",
+      "description": "Rickshaw Man pattern",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "CDL_SHORT_LINE",
+      "category": "pattern",
+      "description": "Short Line candle",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "CDL_LONG_LINE",
+      "category": "pattern",
+      "description": "Long Line candle",
+      "params": [],
+      "convergence": 1,
+      "streaming": false
+    },
+    {
+      "name": "CDL_PIERCING",
+      "category": "pattern",
+      "description": "Piercing Line bullish reversal",
+      "params": [],
+      "convergence": 2,
+      "streaming": false
+    },
+    {
+      "name": "CDL_DARK_CLOUD",
+      "category": "pattern",
+      "description": "Dark Cloud Cover bearish reversal",
+      "params": [],
+      "convergence": 2,
+      "streaming": false
+    },
+    {
+      "name": "CDL_TWEEZER_TOP",
+      "category": "pattern",
+      "description": "Tweezer Top bearish reversal",
+      "params": [],
+      "convergence": 2,
+      "streaming": false
+    },
+    {
+      "name": "CDL_TWEEZER_BOT",
+      "category": "pattern",
+      "description": "Tweezer Bottom bullish reversal",
+      "params": [],
+      "convergence": 2,
+      "streaming": false
+    },
+    {
+      "name": "CDL_ABANDONED_BABY",
+      "category": "pattern",
+      "description": "Abandoned Baby reversal pattern",
+      "params": [],
+      "convergence": 3,
+      "streaming": false
+    },
+    {
+      "name": "CDL_UPSIDE_GAP_2CROWS",
+      "category": "pattern",
+      "description": "Upside Gap Two Crows bearish",
+      "params": [],
+      "convergence": 3,
+      "streaming": false
+    },
+    {
+      "name": "CDL_UPSIDE_GAP_3METHODS",
+      "category": "pattern",
+      "description": "Upside/Downside Gap Three Methods",
+      "params": [],
+      "convergence": 3,
+      "streaming": false
+    },
+    {
+      "name": "CDL_MAT_HOLD",
+      "category": "pattern",
+      "description": "Mat Hold bullish continuation",
+      "params": [],
+      "convergence": 5,
+      "streaming": false
+    },
+    {
+      "name": "CDL_TASUKI_GAP",
+      "category": "pattern",
+      "description": "Tasuki Gap continuation pattern",
+      "params": [],
+      "convergence": 3,
+      "streaming": false
+    },
+    {
+      "name": "CDL_SEPARATING_LINES",
+      "category": "pattern",
+      "description": "Separating Lines pattern",
+      "params": [],
+      "convergence": 2,
+      "streaming": false
+    },
+    {
+      "name": "CDL_COUNTER_ATTACK",
+      "category": "pattern",
+      "description": "Counter Attack pattern",
+      "params": [],
+      "convergence": 2,
+      "streaming": false
+    },
+    {
+      "name": "CDL_MATCHING_LOW",
+      "category": "pattern",
+      "description": "Matching Low bullish pattern",
+      "params": [],
+      "convergence": 2,
+      "streaming": false
+    },
+    {
+      "name": "CDL_IDENTICAL_3CROWS",
+      "category": "pattern",
+      "description": "Identical Three Crows bearish",
+      "params": [],
+      "convergence": 3,
+      "streaming": false
+    },
+    {
+      "name": "CDL_UNIQUE_3RIVER",
+      "category": "pattern",
+      "description": "Unique Three River Bottom",
+      "params": [],
+      "convergence": 3,
+      "streaming": false
+    },
+    {
+      "name": "CDL_BREAKAWAY",
+      "category": "pattern",
+      "description": "Breakaway pattern",
+      "params": [],
+      "convergence": 5,
+      "streaming": false
+    },
+    {
+      "name": "CDL_CONCEALING_BABY",
+      "category": "pattern",
+      "description": "Concealing Baby Swallow bearish",
+      "params": [],
+      "convergence": 4,
+      "streaming": false
+    },
+    {
+      "name": "CDL_KICKING",
+      "category": "pattern",
+      "description": "Kicking pattern",
+      "params": [],
+      "convergence": 2,
+      "streaming": false
+    },
+    {
+      "name": "CDL_KICKING_BY_LENGTH",
+      "category": "pattern",
+      "description": "Kicking — determined by longer marubozu",
+      "params": [],
+      "convergence": 2,
+      "streaming": false
+    },
+    {
+      "name": "CDL_ADVANCE_BLOCK",
+      "category": "pattern",
+      "description": "Advance Block bearish weakening",
+      "params": [],
+      "convergence": 3,
+      "streaming": false
+    },
+    {
+      "name": "CDL_STALLED_PATTERN",
+      "category": "pattern",
+      "description": "Stalled Pattern (Deliberation)",
+      "params": [],
+      "convergence": 3,
+      "streaming": false
+    },
+    {
+      "name": "CDL_THRUSTING",
+      "category": "pattern",
+      "description": "Thrusting Pattern",
+      "params": [],
+      "convergence": 2,
+      "streaming": false
+    },
+    {
+      "name": "CDL_IN_NECK",
+      "category": "pattern",
+      "description": "In-Neck Pattern",
+      "params": [],
+      "convergence": 2,
+      "streaming": false
+    },
+    {
+      "name": "CDL_ON_NECK",
+      "category": "pattern",
+      "description": "On-Neck Pattern",
+      "params": [],
+      "convergence": 2,
+      "streaming": false
+    }
+  ]
+}

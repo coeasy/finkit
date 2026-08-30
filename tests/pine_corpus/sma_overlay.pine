@@ -1,0 +1,6 @@
+//@version=5
+indicator("Simple Moving Average", overlay=true)
+length = input(20, "SMA Length")
+src = close
+smaVal = ta.sma(src, length)
+plot(smaVal, "SMA", color=color.blue, linewidth=2)

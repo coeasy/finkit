@@ -1,0 +1,7 @@
+//@version=5
+indicator("ADX", overlay=false)
+length = input(14, "ADX Length")
+[diPlus, diMinus, adxVal] = ta.dmi(length, length)
+plot(adxVal, "ADX", color=color.orange)
+plot(diPlus, "+DI", color=color.green)
+plot(diMinus, "-DI", color=color.red)

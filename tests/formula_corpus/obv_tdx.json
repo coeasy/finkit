@@ -1,0 +1,13 @@
+{
+  "id": "obv_tdx",
+  "platform": "TDX",
+  "source_formula": "OBV_VAL:=OBV(CLOSE,VOL);MAOBV:=MA(OBV_VAL,30);",
+  "description": "能量潮OBV及30日均线 - 通达信版本",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv",
+    "columns": ["close", "volume"]
+  },
+  "expected_output_columns": ["OBV_VAL", "MAOBV"],
+  "tolerance": 1e-8,
+  "tags": ["volume", "trend"]
+}

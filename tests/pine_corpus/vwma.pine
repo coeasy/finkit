@@ -1,0 +1,5 @@
+//@version=5
+indicator("VWMA", overlay=true)
+length = input(20, "Length")
+vwmaVal = ta.vwma(close, length)
+plot(vwmaVal, "VWMA", color=color.yellow)

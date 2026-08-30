@@ -1,0 +1,9 @@
+//@version=5
+indicator("Donchian Channels", overlay=true)
+length = input(20, "Length")
+upperDC = ta.highest(high, length)
+lowerDC = ta.lowest(low, length)
+basisDC = math.avg(upperDC, lowerDC)
+plot(upperDC, "Upper", color=color.blue)
+plot(basisDC, "Basis", color=color.orange)
+plot(lowerDC, "Lower", color=color.blue)

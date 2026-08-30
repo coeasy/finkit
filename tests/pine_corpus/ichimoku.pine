@@ -1,0 +1,17 @@
+//@version=5
+indicator("Ichimoku Cloud", overlay=true)
+conversionPeriods = input(9, "Conversion Line Periods")
+basePeriods = input(26, "Base Line Periods")
+laggingSpan2Periods = input(52, "Lagging Span 2 Periods")
+displacement = input(26, "Displacement")
+// Note: the original Pine uses a user-defined `donchian(len) => ...` helper,
+// which the AlphaTA Pine mapper does not yet support. Inlined here (equivalent
+// to the donchian mid-line: (highest + lowest) / 2).
+conversionLine = math.avg(ta.lowest(low, conversionPeriods), ta.highest(high, conversionPeriods))
+baseLine = math.avg(ta.lowest(low, basePeriods), ta.highest(high, basePeriods))
+leadLine1 = math.avg(conversionLine, baseLine)
+leadLine2 = math.avg(ta.lowest(low, laggingSpan2Periods), ta.highest(high, laggingSpan2Periods))
+plot(conversionLine, "Conversion Line", color=color.blue)
+plot(baseLine, "Base Line", color=color.red)
+plot(leadLine1, "Lead 1", color=color.green)
+plot(leadLine2, "Lead 2", color=color.orange)

@@ -1,0 +1,28 @@
+[package]
+name = "alpha-ta-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "WebAssembly bindings for AlphaTA"
+
+[lints]
+workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+alpha-ta-core = { path = "../core", default-features = false, features = ["std", "formula", "serde", "tracing", "indicators-all"] }
+ndarray = { workspace = true }
+wasm-bindgen = "0.2"
+serde-wasm-bindgen = "0.6"
+serde = { workspace = true }
+serde_json = { workspace = true }
+getrandom = { version = "0.3", features = ["wasm_js"] }
+
+[features]
+default = []
+console_error_panic_hook = ["dep:console_error_panic_hook"]
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+console_error_panic_hook = { version = "0.1", optional = true }

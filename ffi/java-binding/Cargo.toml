@@ -1,0 +1,21 @@
+[package]
+name = "alpha-ta-java"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Java bindings for AlphaTA"
+
+[lints]
+workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+alpha-ta-core = { path = "../../core" }
+alpha-ta-visualization = { path = "../../visualization", features = ["svg"] }
+jni = { workspace = true }
+lazy_static = "1.4"
+ndarray = { workspace = true }
+serde_json = { workspace = true }
+alpha-ta-ffi-common = { path = "../ffi-common" }

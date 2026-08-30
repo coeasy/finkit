@@ -1,0 +1,12 @@
+//@version=5
+indicator("Keltner Channels", overlay=true)
+length = input(20, "Length")
+mult = input(1.5, "Multiplier")
+src = close
+basis = ta.ema(src, length)
+range = ta.atr(length)
+upperKC = basis + range * mult
+lowerKC = basis - range * mult
+plot(basis, "Basis", color=color.orange)
+plot(upperKC, "Upper", color=color.blue)
+plot(lowerKC, "Lower", color=color.blue)

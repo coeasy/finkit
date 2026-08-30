@@ -1,0 +1,14 @@
+{
+  "id": "cross_period_refdate",
+  "platform": "CROSS",
+  "source_formula": "周期:=PERIODTYPE();昨收:=REFDATE(CLOSE,1);今开对比:=(CLOSE-REFDATE(CLOSE,1))/REFDATE(CLOSE,1)*100;",
+  "description": "跨周期引用 - PERIODTYPE与REFDATE历史Bar引用",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv",
+    "columns": ["close"],
+    "period_type": 1
+  },
+  "expected_output_columns": ["周期", "昨收", "今开对比"],
+  "tolerance": 1e-8,
+  "tags": ["cross_period", "dialect"]
+}

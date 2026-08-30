@@ -1,0 +1,8 @@
+//@version=5
+indicator("EMA Crossover", overlay=true)
+fastLen = input(9, "Fast EMA")
+slowLen = input(21, "Slow EMA")
+fastEMA = ta.ema(close, fastLen)
+slowEMA = ta.ema(close, slowLen)
+plot(fastEMA, "Fast EMA", color=color.green)
+plot(slowEMA, "Slow EMA", color=color.red)

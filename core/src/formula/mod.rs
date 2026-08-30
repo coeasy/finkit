@@ -1,0 +1,134 @@
+//! Formula expression engine for technical analysis.
+//!
+//! Parses and evaluates indicator expressions like `SMA(CLOSE, 20)` or
+//! `CROSS(MA(C,5), MA(C,20))`. Supports bytecode compilation, JIT
+//! optimization, SIMD acceleration, and zero-copy evaluation.
+//!
+//! # Features
+//!
+//! - Expression parser with operator precedence
+//! - Bytecode compiler + VM executor
+//! - JIT-optimized evaluation
+//! - SIMD-accelerated operations
+//! - Template library with 100+ pre-built formulas
+//! - Memory pool for zero-copy evaluation
+
+pub mod ast;
+pub mod pine;
+pub mod bytecode;
+pub mod compiler;
+pub mod debugger;
+pub mod drawing;
+pub mod engine;
+pub mod executor;
+pub mod functions;
+pub mod jit;
+pub mod memory_pool;
+pub mod opt_level;
+pub mod optimizer;
+pub mod ops;
+pub mod params;
+pub mod parser;
+pub mod sandbox;
+pub mod simd;
+pub mod templates;
+pub mod types;
+
+pub use ast::*;
+pub use bytecode::{compile_to_bytecode, Bytecode, BytecodeVM, ExecResult, OpCode};
+pub use compiler::{CompiledFormula, FormulaCache, FormulaCompiler};
+pub use debugger::{DebugEvent, FormulaDebugger, FormulaErrorWithLocation};
+pub use drawing::{DrawCommand, DrawResult};
+pub use engine::{FormulaEngine, FormulaResult};
+pub use executor::FormulaExecutor;
+pub use functions::get_builtin_functions;
+pub use jit::{JitCompiler, OptimizedBytecode};
+pub use memory_pool::{BufferPool, ZeroCopyContext};
+pub use opt_level::OptLevel;
+pub use optimizer::{DependencyAnalyzer, FormulaOptimizer};
+pub use ops::*;
+pub use params::{
+    apply_params, get_param_value, parse_params, validate_params, ParamDef, ParamValues,
+};
+pub use parser::parse_formula;
+pub use pine::{map_pine_to_alphata, parse_pine, PineBuiltinTable, PineMapperError, PineError};
+pub use sandbox::{ExecSandboxConfig, ExecSandboxState};
+pub use simd::SimdOps;
+pub use templates::{FormulaTemplate, FormulaTemplates, TemplateCategory};
+pub use types::*;
+pub use types::FormulaValue;
+
+/// Formula language dialect selector.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FormulaDialect {
+    /// AlphaTA / TDX-style formula language (default).
+    #[default]
+    AlphaTA,
+    /// Pine Script v5 subset.
+    Pine,
+}
+
+impl FormulaDialect {
+    /// Parse a dialect name from CLI / FFI / Python bindings.
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_ascii_lowercase().as_str() {
+            "alpha_ta" | "tdx" | "default" | "" => Some(Self::AlphaTA),
+            "pine" => Some(Self::Pine),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::AlphaTA => "alpha_ta",
+            Self::Pine => "pine",
+        }
+    }
+}
+
+/// Parse a formula expression using the specified dialect.
+///
+/// `FormulaDialect::AlphaTA` delegates to [`parse_formula`].
+/// `FormulaDialect::Pine` uses the Pine Script v5 subset parser and maps to AlphaTA AST.
+pub fn parse_formula_with_dialect(
+    source: &str,
+    dialect: FormulaDialect,
+) -> Result<AstNode, String> {
+    match dialect {
+        FormulaDialect::AlphaTA => parse_formula(source),
+        FormulaDialect::Pine => {
+            let pine = parse_pine(source).map_err(|e| format!("Pine parse error: {}", e))?;
+            map_pine_to_alphata(&pine).map_err(|e| format!("Pine map error: {}", e.message))
+        }
+    }
+}
+
+#[cfg(test)]
+mod dialect_tests {
+    use super::*;
+
+    #[test]
+    fn alpha_ta_dialect_parses_tdx_formula() {
+        let ast = parse_formula_with_dialect("CLOSE + OPEN", FormulaDialect::AlphaTA).unwrap();
+        assert!(matches!(ast, AstNode::BinaryOp { .. }));
+    }
+
+    #[test]
+    fn pine_dialect_parses_rsi_script() {
+        let src = r#"//@version=5
+indicator("RSI")
+length = input(14)
+rsi = ta.rsi(close, length)
+plot(rsi)
+"#;
+        let ast = parse_formula_with_dialect(src, FormulaDialect::Pine).unwrap();
+        assert!(matches!(ast, AstNode::Statements(_) | AstNode::Assignment { .. }));
+    }
+
+    #[test]
+    fn dialect_from_str() {
+        assert_eq!(FormulaDialect::from_str("pine"), Some(FormulaDialect::Pine));
+        assert_eq!(FormulaDialect::from_str("alpha_ta"), Some(FormulaDialect::AlphaTA));
+        assert_eq!(FormulaDialect::from_str("unknown"), None);
+    }
+}

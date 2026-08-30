@@ -1,0 +1,13 @@
+{
+  "id": "dialect_ohlc_aliases",
+  "platform": "CROSS",
+  "source_formula": "振幅H:=(H-L)/C*100;振幅FULL:=(HIGH-LOW)/CLOSE*100;差值:=振幅H-振幅FULL;",
+  "description": "跨平台OHLC别名 - H/L/C与HIGH/LOW/CLOSE等价性",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv",
+    "columns": ["high", "low", "close"]
+  },
+  "expected_output_columns": ["振幅H", "振幅FULL", "差值"],
+  "tolerance": 1e-10,
+  "tags": ["dialect", "alias"]
+}

@@ -1,0 +1,28 @@
+[package]
+name = "alpha-ta-node"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Node.js bindings for AlphaTA"
+
+[lints]
+workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+alpha-ta-core = { path = "../../core", default-features = false, features = ["std", "serde", "indicators-all"] }
+alpha-ta-visualization = { path = "../../visualization", features = ["svg"] }
+napi = { version = "2", features = ["napi4", "tokio_rt"] }
+napi-derive = "2"
+tokio = { version = "1", features = ["rt", "sync"] }
+ndarray = { workspace = true, optional = true }
+serde_json = { workspace = true }
+
+[build-dependencies]
+napi-build = "2"
+
+[features]
+default = ["formula"]
+formula = ["alpha-ta-core/formula", "dep:ndarray"]

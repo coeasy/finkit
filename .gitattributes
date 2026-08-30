@@ -1,0 +1,59 @@
+# Normalize line endings to LF in the repository.
+* text=auto
+
+# Source code: normalize to LF, end-of-line conversions handled automatically.
+*.c        text eol=lf
+*.h        text eol=lf
+*.rs       text eol=lf
+*.toml     text eol=lf
+*.py       text eol=lf
+*.pyi      text eol=lf
+*.ts       text eol=lf
+*.js       text eol=lf
+*.go       text eol=lf
+*.java     text eol=lf
+*.cs       text eol=lf
+*.swift    text eol=lf
+*.hs       text eol=lf
+*.md       text eol=lf
+*.yml      text eol=lf
+*.yaml     text eol=lf
+*.json     text eol=lf
+*.csv      text eol=lf
+*.txt      text eol=lf
+*.svg      text eol=lf
+*.html     text eol=lf
+*.css      text eol=lf
+
+# Scripts must keep LF even on Windows checkouts.
+*.sh       text eol=lf
+Makefile   text eol=lf
+
+# Windows batch scripts convert to CRLF on checkouts.
+*.ps1      text eol=crlf
+*.bat      text eol=crlf
+*.cmd      text eol=crlf
+
+# Binary artifacts: do not touch.
+*.png      binary
+*.jpg      binary
+*.jpeg     binary
+*.gif      binary
+*.webp     binary
+*.ico      binary
+*.woff     binary
+*.woff2    binary
+*.ttf      binary
+*.so       binary
+*.dylib    binary
+*.dll      binary
+*.a        binary
+*.lib      binary
+*.node     binary
+*.wasm     binary
+*.pyc      binary
+*.jar      binary
+*.zip      binary
+*.gz       binary
+*.tgz      binary
+*.woff     binary

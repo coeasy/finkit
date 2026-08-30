@@ -1,0 +1,22 @@
+{
+  "name": "@alphata/node-linux-arm64-musl",
+  "version": "1.0.0",
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "libc": [
+    "musl"
+  ],
+  "main": "alpha_ta.node",
+  "files": [
+    "alpha_ta.node"
+  ],
+  "description": "Linux ARM64 musl native binding for @alphata/node",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">= 16"
+  }
+}

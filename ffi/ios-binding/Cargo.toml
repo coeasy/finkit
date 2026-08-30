@@ -1,0 +1,22 @@
+[package]
+name = "alpha-ta-ios"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "iOS bindings for AlphaTA — built as a staticlib + .modulemap and packaged as an .xcframework"
+
+[lints]
+workspace = true
+
+[lib]
+# `staticlib` is the only way to ship a Rust crate inside an .xcframework:
+# Apple requires the dylib to be marked optional and embedded as a private
+# framework, which adds MB of overhead; `staticlib` + a Swift wrapper
+# module is the conventional, low-overhead way.
+crate-type = ["staticlib"]
+
+[dependencies]
+alpha-ta-core = { path = "../../core" }
+libc = "0.2"
+ndarray = { workspace = true }
+alpha-ta-ffi-common = { path = "../ffi-common" }

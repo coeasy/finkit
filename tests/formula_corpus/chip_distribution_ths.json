@@ -1,0 +1,14 @@
+{
+  "id": "chip_distribution_ths",
+  "platform": "THS",
+  "source_formula": "获利比例:=WINNER(CLOSE)*100;平均成本:=COST(50);套牢比例:=100-WINNER(CLOSE)*100;",
+  "description": "同花顺筹码分布公式 - 获利比例/平均成本/套牢比例",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv",
+    "columns": ["close"],
+    "chip_data": true
+  },
+  "expected_output_columns": ["获利比例", "平均成本", "套牢比例"],
+  "tolerance": 1e-6,
+  "tags": ["chip", "volume"]
+}

@@ -1,0 +1,24 @@
+[package]
+name = "alpha-ta-android"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Android (JNI) bindings for AlphaTA — built as a cdylib loaded from a .aar"
+
+[lints]
+workspace = true
+
+[lib]
+# `cdylib` is required so the .so is callable from the JVM via JNI.
+crate-type = ["cdylib"]
+
+[dependencies]
+# alpha-ta-core provides all the pure-Rust indicators the android shims delegate to.
+alpha-ta-core = { path = "../../core" }
+
+jni = { workspace = true }
+ndarray = { workspace = true }
+
+[target.'cfg(target_os = "android")'.dependencies]
+# The Android NDK ships its own log.h; jni-sys pulls in the right C headers.
+android_logger = "0.14"

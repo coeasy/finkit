@@ -1,0 +1,10 @@
+//@version=5
+indicator("MACD Histogram Color", overlay=false)
+fastLen = input(12)
+slowLen = input(26)
+sigLen = input(9)
+[macdLine, signalLine, histLine] = ta.macd(close, fastLen, slowLen, sigLen)
+histColor = histLine >= 0 ? color.green : color.red
+plot(histLine, "Histogram", color=histColor, style=plot.style_histogram)
+plot(macdLine, "MACD")
+plot(signalLine, "Signal")

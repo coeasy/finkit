@@ -1,0 +1,42 @@
+# =============================================================================
+# AlphaTA — one-line docker-compose stack
+# =============================================================================
+#
+# Two services:
+#   alpha_ta-builder  — full 7-language build, mounts ./dist to host.
+#   bench-vs-talib  — runs only the TA-Lib C head-to-head bench.
+#
+# Usage:
+#   docker compose build                 # build the image
+#   docker compose run --rm alpha_ta-builder
+#   docker compose run --rm bench-vs-talib
+#   docker compose up --abort-on-container-exit   # CI mode
+# =============================================================================
+
+services:
+  alpha_ta-builder:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: alpha_ta/builder:latest
+    container_name: alpha_ta-builder
+    volumes:
+      - ./dist:/work/dist
+    environment:
+      - CARGO_TERM_COLOR=always
+    command: ["--no-bundle"]
+    # Drop capabilities, run as non-root where possible
+    security_opt:
+      - no-new-privileges:true
+
+  bench-vs-talib:
+    image: alpha_ta/builder:latest
+    container_name: alpha_ta-bench-vs-talib
+    volumes:
+      - ./dist:/work/dist
+    environment:
+      - CARGO_TERM_COLOR=always
+    command: ["--bench-talib"]
+    security_opt:
+      - no-new-privileges:true
+    profiles: ["bench"]

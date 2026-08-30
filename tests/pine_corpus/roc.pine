@@ -1,0 +1,6 @@
+//@version=5
+indicator("Rate of Change", overlay=false)
+length = input(12, "Length")
+rocVal = ta.roc(close, length)
+plot(rocVal, "ROC", color=color.green)
+hline(0)

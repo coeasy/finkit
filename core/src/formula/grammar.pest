@@ -1,0 +1,127 @@
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+
+// 注释支持: //, /* */, {...} (通达信), # (Pine Script)
+line_comment = _{ "//" ~ (!"\n" ~ ANY)* }
+hash_comment = _{ "#" ~ (!"\n" ~ ANY)* }
+block_comment = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
+brace_comment = _{ "{" ~ (!"}" ~ ANY)* ~ "}" }
+COMMENT = _{ line_comment | hash_comment | block_comment | brace_comment }
+
+// 程序入口
+program = _{ SOI ~ (param_decl ~ ";")? ~ statement ~ (";" ~ statement)* ~ EOI }
+
+// 参数声明: PARAMS: N1(5,100,12), N2(5,100,26)
+param_decl = { "PARAMS" ~ ":" ~ param_item ~ ("," ~ param_item)* }
+param_item = { identifier ~ "(" ~ number ~ "," ~ number ~ "," ~ number ~ ")" }
+
+// 语句 - 具体语句必须在expression之前
+statement = { compound_assignment | assignment | output | draw_line | draw_band | draw_kline | draw_rect | fill_rgn | part_line | poly_line | draw_gbk | draw_text | draw_icon | stick_line | draw_sl | draw_text_fix | draw_number | vert_line | if_then_else_stmt | for_stmt | while_stmt | expression }
+
+// 赋值: VAR := expr 或 VAR = expr (大智慧兼容, = 后面不能跟 =)
+assignment = { identifier ~ (":=" | ("=" ~ !"=")) ~ expression }
+
+// 复合赋值: VAR += expr, VAR -= expr, VAR *= expr, VAR /= expr
+compound_assignment = { identifier ~ compound_op ~ expression }
+compound_op = { "+=" | "-=" | "*=" | "/=" }
+
+// 输出: VAR: expr, 支持行尾颜色和样式 MA5:MA(C,5),COLORRED,LINETHICK2
+output = { identifier ~ ":" ~ expression ~ ("," ~ output_attr)* }
+output_attr = { color_spec | line_style | draw_modifier | point_style }
+
+// 颜色规格 - 使用原子规则确保优先匹配
+color_spec = @{ color_name | color_rgb | color_hex }
+color_name = @{ "COLORRED" | "COLORGREEN" | "COLORBLUE" | "COLORYELLOW" | "COLORWHITE" | "COLORBLACK" | "COLORCYAN" | "COLORMAGENTA" | "COLORGRAY" }
+color_rgb = @{ "COLOR" ~ "(" ~ ASCII_DIGIT+ ~ "," ~ ASCII_DIGIT+ ~ "," ~ ASCII_DIGIT+ ~ ")" }
+color_hex = @{ "COLORHEX" ~ "(" ~ ASCII_HEX_DIGIT+ ~ ")" }
+
+// 绘图指令 - 完整TDX绘图支持
+draw_text = { "DRAWTEXT" ~ "(" ~ expression ~ "," ~ expression ~ "," ~ string ~ ")" ~ ("," ~ color_spec)? }
+draw_icon = { "DRAWICON" ~ "(" ~ expression ~ "," ~ expression ~ "," ~ expression ~ ")" ~ ("," ~ color_spec)? }
+stick_line = { "STICKLINE" ~ "(" ~ expression ~ "," ~ expression ~ "," ~ expression ~ "," ~ expression ~ "," ~ bool_val ~ ")" ~ ("," ~ color_spec)? }
+draw_line = { "DRAWLINE" ~ "(" ~ expression ~ "," ~ expression ~ "," ~ expression ~ "," ~ expression ~ "," ~ expression ~ ")" ~ ("," ~ color_spec)? }
+draw_band = { "DRAWBAND" ~ "(" ~ expression ~ "," ~ color_spec ~ "," ~ expression ~ "," ~ color_spec ~ ")" }
+draw_kline = { "DRAWKLINE" ~ "(" ~ expression ~ "," ~ expression ~ "," ~ expression ~ "," ~ expression ~ ")" }
+draw_rect = { "DRAWRECTREL" ~ "(" ~ expression ~ "," ~ expression ~ "," ~ expression ~ "," ~ expression ~ "," ~ color_spec ~ ")" }
+fill_rgn = { "FILLRGN" ~ "(" ~ expression ~ "," ~ expression ~ "," ~ expression ~ ")" ~ ("," ~ color_spec)? }
+part_line = { "PARTLINE" ~ "(" ~ expression ~ "," ~ expression ~ ")" ~ ("," ~ color_spec)? }
+poly_line = { "POLYLINE" ~ "(" ~ expression ~ "," ~ expression ~ ")" ~ ("," ~ color_spec)? }
+draw_gbk = { "DRAWGBK" ~ "(" ~ expression ~ "," ~ color_spec ~ ")" }
+draw_sl = { "DRAWSL" ~ "(" ~ expression ~ "," ~ expression ~ "," ~ expression ~ "," ~ expression ~ ")" ~ ("," ~ color_spec)? }
+draw_text_fix = { "DRAWTEXT_FIX" ~ "(" ~ expression ~ "," ~ expression ~ "," ~ string ~ ")" ~ ("," ~ color_spec)? }
+draw_number = { "DRAWNUMBER" ~ "(" ~ expression ~ "," ~ expression ~ "," ~ expression ~ "," ~ expression ~ ")" ~ ("," ~ color_spec)? }
+vert_line = { "VERTLINE" ~ "(" ~ expression ~ ")" ~ ("," ~ color_spec)? }
+
+// IF-THEN-ELSE 语句: IF cond THEN expr1 ELSE expr2
+if_then_else_stmt = {
+    "IF" ~ expression ~ "THEN" ~ expression ~ "ELSE" ~ expression
+}
+
+// FOR循环: FOR I=1 TO N DO ... END 或 FOR I:=1 TO N DO ... END
+for_stmt = { "FOR" ~ identifier ~ for_assign_op ~ expression ~ "TO" ~ expression ~ "DO" ~ statement+ ~ "END" }
+for_assign_op = { ":=" | ("=" ~ !"=") }
+
+// WHILE循环: WHILE cond DO ... END
+while_stmt = { "WHILE" ~ expression ~ "DO" ~ statement+ ~ "END" }
+
+// 输出修饰符
+line_style = { "LINETHICK" ~ ASCII_DIGIT }
+draw_modifier = { "NODRAW" | "NOTEXT" | "NOAXIS" | "COLORAUTO" }
+point_style = { "POINTDOT" | "CIRCLEDOT" | "CROSSDOT" | "STICK" | "VOLSTICK" | "LINESTICK" | "COLORSTICK" }
+output_modifier = { line_style | draw_modifier | point_style }
+
+// 表达式 - 所有规则都非silent，便于解析
+expression = { logical_or }
+
+logical_or = { logical_xor ~ ("OR" ~ logical_xor)* }
+logical_xor = { logical_and ~ ("XOR" ~ logical_and)* }
+logical_and = { comparison ~ ("AND" ~ comparison)* }
+comparison = { addition ~ (comp_op ~ addition)? }
+comp_op = { ">=" | "<=" | "==" | "!=" | "<>" | ">" | "<" }
+
+addition = { multiplication ~ (add_op ~ multiplication)* }
+add_op = { "+" | "-" | "&" }
+
+multiplication = { unary ~ (mul_op ~ unary)* }
+mul_op = { "*" | "/" | "%" }
+
+unary = { ("NOT" ~ unary) | ("-" ~ power) | power }
+power = { postfix ~ ("^" ~ postfix)? }
+
+postfix = { primary ~ (index_access)* }
+index_access = { "[" ~ expression ~ "]" }
+
+primary = { function_call | number | string | variable | "(" ~ expression ~ ")" }
+
+// 函数调用: FUNC(arg1, arg2, ...)
+function_call = { identifier ~ "(" ~ (expression ~ ("," ~ expression)*)? ~ ")" }
+
+// 变量: 标识符（CLOSE, C, MA5等）
+variable = { identifier }
+
+// 标识符 - 排除关键字和颜色名
+identifier = @{ !builtin_keyword ~ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
+
+// 内置关键字 - 不能用作标识符（IF 允许作为函数名）
+// 必须后跟非标识符字符，避免前缀匹配（如 DO 匹配 DOWN）
+builtin_keyword = @{
+    ("THEN" | "ELSE" | "AND" | "OR" | "XOR" | "NOT" |
+    "TRUE" | "FALSE" | "PARAMS" |
+    "DRAWTEXT_FIX" | "DRAWTEXT" | "DRAWICON" | "STICKLINE" | "DRAWLINE" | "DRAWBAND" |
+    "DRAWKLINE" | "DRAWRECTREL" | "FILLRGN" | "PARTLINE" | "POLYLINE" | "DRAWGBK" |
+    "DRAWSL" | "DRAWNUMBER" | "VERTLINE" |
+    "FOR" | "WHILE" | "DO" | "END" | "TO" |
+    "LINETHICK" | "NODRAW" | "NOTEXT" | "NOAXIS" | "COLORAUTO" |
+    "POINTDOT" | "CIRCLEDOT" | "CROSSDOT" | "STICK" | "VOLSTICK" | "LINESTICK" | "COLORSTICK" |
+    "COLORRED" | "COLORGREEN" | "COLORBLUE" | "COLORYELLOW" |
+    "COLORWHITE" | "COLORBLACK" | "COLORCYAN" | "COLORMAGENTA" | "COLORGRAY" |
+    "COLOR" | "COLORHEX") ~ !(ASCII_ALPHANUMERIC | "_")
+}
+
+// 数字 - 不包含负号，负号通过unary规则处理
+number = @{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
+
+// 字符串: 双引号或单引号
+string = { "\"" ~ (!("\"") ~ ANY)* ~ "\"" | "'" ~ (!("'") ~ ANY)* ~ "'" }
+
+// 布尔
+bool_val = @{ "TRUE" | "FALSE" }

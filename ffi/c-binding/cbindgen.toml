@@ -1,0 +1,17 @@
+language = "C"
+include_guard = "ALPHA_TA_H"
+include_version = true
+usize_is_size_t = true
+
+[export]
+# Test-only panic injection — not part of the stable ABI.
+exclude = ["ta_ffi_panic_test"]
+
+[fn]
+sort_by = "Name"
+
+[defines]
+"target_os = windows" = "ALPHA_TA_WINDOWS"
+
+[parse]
+parse_deps = false

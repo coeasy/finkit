@@ -1,0 +1,260 @@
+# Formula Engine Functions
+
+> **SSOT** — auto-generated from `core/src/formula/functions.rs`.
+> Do not edit manually. Regenerate: `python scripts/gen_ssot_docs.py --generate`
+
+Built-in formula functions: **231**
+
+These functions are available in the formula DSL for expressions like `SMA(CLOSE, 20)`.
+
+## Function Reference
+
+| Function |
+|----------|
+| `ABS` |
+| `ACOS` |
+| `AD` |
+| `ADD` |
+| `ADOSC` |
+| `ADX` |
+| `ADXR` |
+| `ALERT` |
+| `ALERTONCE` |
+| `ALMA` |
+| `APO` |
+| `AROONOSC` |
+| `ASIN` |
+| `ATAN` |
+| `ATR` |
+| `AVEDEV` |
+| `AVGDEV` |
+| `AVGPRICE` |
+| `AVGPRICE_N` |
+| `BACKSET` |
+| `BARSCOUNT` |
+| `BARSLAST` |
+| `BARSLASTCOUNT` |
+| `BARSSINCE` |
+| `BARSSINCEN` |
+| `BETA` |
+| `BETWEEN` |
+| `BIAS` |
+| `BLOCKAVG` |
+| `BLOCKDATA` |
+| `BLOCKINDEX` |
+| `BOLL` |
+| `BOLLDN` |
+| `BOLLMID` |
+| `BOLLWIDTH` |
+| `BOP` |
+| `CCI` |
+| `CEIL` |
+| `CEILING` |
+| `CHECKSIG` |
+| `CHOP` |
+| `CMF` |
+| `CMO` |
+| `CONSECUTIVE_LIMIT` |
+| `CONST` |
+| `CORREL` |
+| `COS` |
+| `COSH` |
+| `COST` |
+| `COUNT` |
+| `CROSS` |
+| `CROSSBELOW` |
+| `CUMMAX` |
+| `CUMMIN` |
+| `CUMSUM` |
+| `DARVAS_BOX` |
+| `DEA` |
+| `DEMA` |
+| `DEVSQ` |
+| `DIFF` |
+| `DIV` |
+| `DMA` |
+| `DONCHIAN` |
+| `DONCHIAN_LOWER` |
+| `DONCHIAN_UPPER` |
+| `DONCHIAN_WIDTH` |
+| `DPO` |
+| `DX` |
+| `DYNAINFO` |
+| `EMA` |
+| `EM_COSTEX` |
+| `EM_CROSS` |
+| `EM_PEAK` |
+| `EM_PEAKBARS` |
+| `EM_REF` |
+| `EM_TROUGH` |
+| `EM_TROUGHBARS` |
+| `EM_ZIG` |
+| `EVERY` |
+| `EXIST` |
+| `EXP` |
+| `FILTER` |
+| `FINANCE` |
+| `FINDHIGH` |
+| `FINDLOW` |
+| `FISHER` |
+| `FISHER_SIGNAL` |
+| `FLOOR` |
+| `FORCAST` |
+| `FOX_BACKTEST` |
+| `FOX_BUY` |
+| `FOX_MAX_DRAWDOWN` |
+| `FOX_PEAK` |
+| `FOX_PEAKBARS` |
+| `FOX_PROFIT_RATIO` |
+| `FOX_SELL` |
+| `FOX_TRADE_COUNT` |
+| `FOX_TRADE_SIGNAL` |
+| `FOX_TROUGH` |
+| `FOX_TROUGHBARS` |
+| `FOX_WIN_RATE` |
+| `FOX_ZIG` |
+| `FRACPART` |
+| `HEIKIN_ASHI` |
+| `HHV` |
+| `HHVBARS` |
+| `HISTVOL` |
+| `HMA` |
+| `HT_DCPERIOD` |
+| `HT_DCPHASE` |
+| `HT_MEASUREMENT` |
+| `HT_PHASOR` |
+| `HT_SINE` |
+| `HT_TRENDLINE` |
+| `HT_TRENDMODE` |
+| `ICHIMOKU_KIJUN` |
+| `ICHIMOKU_TENKAN` |
+| `IF` |
+| `IFTHEN` |
+| `INTPART` |
+| `KAGI` |
+| `KAMA` |
+| `KDJ` |
+| `KURT` |
+| `LAST` |
+| `LIMIT_DOWN` |
+| `LIMIT_UP` |
+| `LINEAR_REG` |
+| `LLV` |
+| `LLVBARS` |
+| `LOG` |
+| `LONGCROSS` |
+| `LWINNER` |
+| `MA` |
+| `MACD` |
+| `MACDEXT` |
+| `MACDFIX` |
+| `MAIN_NET_INFLOW` |
+| `MAVP` |
+| `MAX` |
+| `MAXINDEX` |
+| `MAXPRICE` |
+| `MEDIAN` |
+| `MEDPRICE` |
+| `MFI` |
+| `MIDPOINT` |
+| `MIDPRICE` |
+| `MIN` |
+| `MININDEX` |
+| `MINPRICE` |
+| `MINUS` |
+| `MINUS_DI` |
+| `MINUS_DM` |
+| `MOD` |
+| `MODE` |
+| `MOM` |
+| `MONEY_FLOW` |
+| `MULT` |
+| `MULTSIG` |
+| `NATR` |
+| `NOT` |
+| `OBV` |
+| `PEAK` |
+| `PEAKBARS` |
+| `PERCENTILE` |
+| `PERCENT_RANK` |
+| `PLUS_DI` |
+| `PLUS_DM` |
+| `POINT_AND_FIGURE` |
+| `POW` |
+| `PPO` |
+| `PSY` |
+| `RANGE` |
+| `RANK` |
+| `REF` |
+| `REFDATE` |
+| `RENKO` |
+| `REVERSE` |
+| `ROC` |
+| `ROCP` |
+| `ROCR` |
+| `ROUND` |
+| `RSI` |
+| `RS_RATIO` |
+| `SAR` |
+| `SAREXT` |
+| `SELECTCOND` |
+| `SIGN` |
+| `SIN` |
+| `SINH` |
+| `SKEW` |
+| `SLOPE` |
+| `SMA` |
+| `SMARTSELECT` |
+| `SORT` |
+| `SQRT` |
+| `STD` |
+| `STOCH` |
+| `STOCHF` |
+| `STOCHRSI` |
+| `STRCAT` |
+| `SUB` |
+| `SUM` |
+| `SUMBARS` |
+| `SUPERTREND` |
+| `TAN` |
+| `TANH` |
+| `TEMA` |
+| `THREE_LINE_BREAK` |
+| `TOPN` |
+| `TOTALVOL` |
+| `TRANGE` |
+| `TRIMA` |
+| `TRIX` |
+| `TROUGH` |
+| `TROUGHBARS` |
+| `TSF` |
+| `TSI` |
+| `TURNOVER` |
+| `TYPPRICE` |
+| `ULTOSC` |
+| `VALUEWHEN` |
+| `VAR` |
+| `VWAP` |
+| `WCLPRICE` |
+| `WILLIAMS_ALLIGATOR` |
+| `WILLR` |
+| `WINNER` |
+| `WMA` |
+| `ZIGZAG` |
+| `ZSCORE` |
+
+## Usage Example
+
+```rust
+use alphata_core::formula::FormulaEngine;
+
+let engine = FormulaEngine::new();
+let result = engine.eval("SMA(CLOSE, 20) + EMA(CLOSE, 10)", &ohlcv)?;
+```
+
+## Regenerate
+
+```bash
+python scripts/gen_ssot_docs.py --generate
+python scripts/gen_ssot_docs.py --check   # CI gate
+```

@@ -1,0 +1,198 @@
+WHITESPACE = _{ " " | "\t" | "\r" }
+
+// 注释: // 行注释（不含 //@version=）, /* */ 块注释
+line_comment = _{ "//" ~ (!"@version=" ~ (!"\n" ~ ANY)*) }
+block_comment = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
+COMMENT = _{ line_comment | block_comment }
+
+NEWLINE = _{ "\n" | "\r\n" | "\r" }
+
+// 程序入口
+program = { SOI ~ (NEWLINE* ~ program_item)* ~ NEWLINE* ~ EOI }
+program_item = { version_annotation | declaration | statement }
+
+// //@version=5 注解
+version_annotation = { "//" ~ "@version=" ~ version_num }
+version_num = @{ ASCII_DIGIT+ }
+
+// 声明
+declaration = {
+    indicator_decl
+    | study_decl
+    | function_decl
+    | var_decl
+    | input_decl
+}
+
+// indicator("title", overlay=true, ...)
+indicator_decl = {
+    "indicator" ~ "(" ~ string ~ ("," ~ indicator_arg)* ~ ")"
+}
+indicator_arg = { identifier ~ "=" ~ expression }
+
+// study() — Pine v4 兼容
+study_decl = {
+    "study" ~ "(" ~ string ~ ("," ~ indicator_arg)* ~ ")"
+}
+
+// var / varip 变量声明
+var_decl = {
+    var_kw ~ type_qualifier? ~ identifier ~ "=" ~ expression
+}
+var_kw = { "var" ~ !("ip") | "varip" }
+
+// input 声明: input(14, "RSI Length") 或 input.int(...)
+input_decl = {
+    "input" ~ "(" ~ expression ~ ("," ~ input_arg)* ~ ")"
+    | input_typed_decl
+}
+input_typed_decl = {
+    "input" ~ "." ~ input_type ~ "(" ~ expression ~ ("," ~ input_arg)* ~ ")"
+}
+input_type = { "int" | "float" | "bool" | "string" | "color" | "source" }
+input_arg = { string | identifier ~ "=" ~ expression }
+
+// 函数声明: myFunc(x, y) => body  或  myFunc(x) =>\n    expr
+function_decl = {
+    identifier ~ "(" ~ param_list? ~ ")" ~ "=>" ~ NEWLINE* ~ (expression | block)
+}
+param_list = { identifier ~ ("," ~ identifier)* }
+
+// 语句块（多行语句，缩进不敏感子集）
+block = { statement ~ (NEWLINE+ ~ !("else") ~ statement)* }
+
+// 语句
+statement = {
+    assignment
+    | if_stmt
+    | for_stmt
+    | while_stmt
+    | plot_call
+    | hline_call
+    | fill_call
+    | function_call_stmt
+    | function_decl
+    | expression
+}
+
+// 赋值: x = expr  或  x := expr  或  [a, b] = expr (元组解构)
+assignment = { "[" ~ identifier ~ ("," ~ identifier)* ~ "]" ~ assign_op ~ expression | identifier ~ assign_op ~ expression }
+assign_op = { ":=" | "=" }
+
+// if-else
+if_stmt = {
+    "if" ~ expression ~ NEWLINE+ ~ block
+    ~ (NEWLINE* ~ "else" ~ NEWLINE+ ~ block)?
+}
+
+// for i = start to end [by step]
+for_stmt = {
+    "for" ~ identifier ~ "=" ~ expression ~ "to" ~ expression
+    ~ ("by" ~ expression)?
+    ~ NEWLINE+ ~ block
+}
+
+// while condition
+while_stmt = {
+    "while" ~ expression ~ NEWLINE+ ~ block
+}
+
+// Named-argument LHS: a plain identifier (e.g. linewidth, style) tried first,
+// then a namespace keyword (e.g. color) so `color=color.orange` parses while
+// `linewidth=2` does not get eaten by the `line` namespace prefix.
+arg_name = { identifier | namespace }
+
+// plot(title, value, ...)
+plot_call = { "plot" ~ "(" ~ plot_args ~ ")" }
+plot_args = { expression ~ ("," ~ plot_arg)* }
+plot_arg = { arg_name ~ "=" ~ expression | expression }
+
+// hline(price, ...)
+hline_call = { "hline" ~ "(" ~ hline_args ~ ")" }
+hline_args = { expression ~ ("," ~ hline_arg)* }
+hline_arg = { arg_name ~ "=" ~ expression | expression }
+
+// fill(plot1, plot2, ...)
+fill_call = { "fill" ~ "(" ~ fill_args ~ ")" }
+fill_args = { expression ~ "," ~ expression ~ ("," ~ fill_arg)* }
+fill_arg = { arg_name ~ "=" ~ expression | expression }
+
+// 独立函数调用语句
+function_call_stmt = { qualified_call }
+
+// 表达式
+expression = { ternary }
+
+ternary = { logical_or ~ ("?" ~ expression ~ ":" ~ expression)? }
+
+logical_or = { logical_and ~ ("or" ~ logical_and)* }
+logical_and = { comparison ~ ("and" ~ comparison)* }
+
+comparison = { addition ~ (comp_op ~ addition)? }
+comp_op = { "==" | "!=" | ">=" | "<=" | ">" | "<" }
+
+addition = { multiplication ~ (add_op ~ multiplication)* }
+add_op = { "+" | "-" }
+
+multiplication = { unary ~ (mul_op ~ unary)* }
+mul_op = { "*" | "/" | "%" }
+
+unary = { ("not" ~ unary) | ("-" ~ unary) | postfix }
+
+postfix = { primary ~ (index_access)* }
+index_access = { "[" ~ expression ~ "]" }
+
+primary = {
+    function_call
+    | namespace_access
+    | number
+    | string
+    | bool_literal
+    | na_literal
+    | variable
+    | "(" ~ expression ~ ")"
+}
+
+namespace_access = { namespace ~ "." ~ identifier }
+
+bool_literal = { "true" | "false" }
+
+// 函数调用（含命名空间: ta.sma, math.abs, request.security）
+function_call = { qualified_call | simple_call }
+qualified_call = { namespace ~ "." ~ identifier ~ "(" ~ arg_list? ~ ")" }
+simple_call = { identifier ~ "(" ~ arg_list? ~ ")" }
+namespace = { "ta" | "math" | "request" | "color" | "str" | "array" | "line" | "label" | "box" | "syminfo" | "plot" }
+arg_list = { expression ~ ("," ~ arg_item)* }
+arg_item = { arg_name ~ "=" ~ expression | expression }
+
+// na 字面量
+na_literal = { "na" ~ !ASCII_ALPHA }
+
+// 变量引用
+variable = { barstate_var | identifier | builtin_var }
+barstate_var = { "barstate" ~ "." ~ barstate_field }
+barstate_field = { "isconfirmed" | "islast" | "isnew" | "isrealtime" | "ishistory" | "isfirst" }
+builtin_var = { "open" | "high" | "low" | "close" | "volume" | "time" | "hl2" | "hlc3" | "ohlc4" | "bar_index" }
+
+// Pine 类型限定符
+type_qualifier = { "series" | "simple" | "const" | "input" }
+
+// 标识符
+identifier = @{ !pine_keyword ~ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
+
+pine_keyword = @{
+    ("if" | "else" | "for" | "while" | "to" | "by" | "and" | "or" | "not"
+    | "var" | "varip" | "true" | "false" | "na"
+    | "indicator" | "study" | "plot" | "hline" | "fill"
+    | "series" | "simple" | "const"
+    | "open" | "high" | "low" | "close" | "volume" | "time"
+    | "hl2" | "hlc3" | "ohlc4"
+    | "ta" | "math" | "request" | "color" | "str" | "array"
+    | "label" | "box" | "barstate" | "bar_index") ~ !(ASCII_ALPHANUMERIC | "_")
+}
+
+// 数字字面量
+number = @{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
+
+// 字符串字面量
+string = { "\"" ~ (!("\"") ~ ANY)* ~ "\"" }

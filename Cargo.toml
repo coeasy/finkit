@@ -1,0 +1,100 @@
+[workspace]
+members = [
+    "core",
+    "visualization",
+    "ffi/c-binding",
+    "ffi/ffi-common",
+    "ffi/python-binding",
+    "ffi/node-binding",
+    "ffi/go-binding",
+    "ffi/dotnet-binding",
+    "ffi/ios-binding",
+    "ffi/java-binding",
+    "ffi/android-binding",
+    "cli",
+    "wasm",
+]
+exclude = []
+resolver = "2"
+
+[workspace.package]
+version = "1.0.0"
+edition = "2021"
+rust-version = "1.75" # D-5: MSRV 1.75 (workspace-wide)
+authors = ["AlphaTA Contributors"]
+description = "A high-performance Financial Technical Analysis library in Rust"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/coeasy/finkit"
+homepage = "https://github.com/coeasy/finkit"
+documentation = "https://docs.rs/alpha-ta-core"
+
+[workspace.dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+ndarray = "0.16"
+thiserror = "1.0"
+# JNI bindings (used by java-binding and android-binding).
+jni = "0.21"
+# X-0 / O-1: tracing ecosystem (default features; tracing-subscriber optional
+# so downstream users opt into actual log output).
+tracing = { version = "0.1", default-features = false, features = ["std", "attributes"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter"] }
+# X-0 / O-2: metrics ecosystem (lightweight default; prometheus exporter
+# behind an opt-in feature).
+metrics = "0.23"
+metrics-exporter-prometheus = { version = "0.15", default-features = false }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"
+
+[profile.release.package."alpha-ta-dotnet"]
+codegen-units = 16
+
+[profile.release.package."alpha-ta-go"]
+codegen-units = 16
+
+# alpha-ta-java uses default release profile (codegen-units=1) for maximum optimization.
+
+[profile.release.package."alpha-ta-node"]
+codegen-units = 16
+
+[profile.release.package."alpha-ta-python"]
+codegen-units = 16
+
+[profile.release.package."alpha-ta-ffi"]
+codegen-units = 16
+
+[profile.dev]
+opt-level = 1
+debug = 1
+
+[profile.bench]
+inherits = "release"
+# 1M-scale linear regression gate (A-10) requires aggressive optimization:
+# - lto = "fat" enables cross-crate inlining to keep hot indicator loops
+#   in a single code page, cutting ns/bar at 1M inputs.
+# - target-cpu = "native" lets the compiler emit AVX2/FMA/BMI2 for the local
+#   benchmark host so the 1M baseline we commit reflects achievable
+#   single-threaded throughput, not the Rust target-features default (SSE2).
+# - codegen-units = 1 ensures consistent LTO decisions across crates.
+lto = "fat"
+codegen-units = 1
+opt-level = 3
+
+[profile.bench.package."*"]
+# Allow per-crate opt-out only for the FFI binding crates which produce
+# larger binaries that don't benefit from fat LTO during the gate.
+codegen-units = 16
+
+[workspace.lints.rust]
+# `unsafe_op_in_unsafe_fn` is set to "warn" to encourage explicit unsafe blocks
+# within unsafe functions. Existing code has ~260 violations (mostly SIMD); new
+# unsafe fns should use explicit `unsafe { ... }` blocks per the style guide.
+unsafe_op_in_unsafe_fn = "warn"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }

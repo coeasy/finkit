@@ -1,0 +1,73 @@
+{
+  "version": "1.0",
+  "generation_date": "2026-06-24",
+  "seed": 42,
+  "generator_version": "1.0.0",
+  "output_dir": "tests/fixtures",
+  "datasets": [
+    {
+      "id": "ashare",
+      "filename": "ashare_sh_index_250d.csv",
+      "type": "ashare",
+      "description": "Virtual Shanghai Composite daily OHLCV, 250 trading days",
+      "rows": 250,
+      "columns": [
+        "date",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "path": "tests/fixtures/ashare_sh_index_250d.csv"
+    },
+    {
+      "id": "crypto",
+      "filename": "crypto_btc_usdt_1m_1000.csv",
+      "type": "crypto",
+      "description": "Simulated BTC/USDT 1-minute OHLCV, 1000 bars",
+      "rows": 1000,
+      "columns": [
+        "timestamp",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "path": "tests/fixtures/crypto_btc_usdt_1m_1000.csv"
+    },
+    {
+      "id": "synthetic",
+      "filename": "synthetic_waves_500.csv",
+      "type": "synthetic",
+      "description": "Sine / triangle / step waves with noise for boundary testing",
+      "rows": 500,
+      "columns": [
+        "index",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "path": "tests/fixtures/synthetic_waves_500.csv"
+    },
+    {
+      "id": "random",
+      "filename": "random_normal_1000.csv",
+      "type": "random",
+      "description": "Fixed-seed normal-distribution OHLCV for property-based tests",
+      "rows": 1000,
+      "columns": [
+        "index",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "path": "tests/fixtures/random_normal_1000.csv"
+    }
+  ]
+}

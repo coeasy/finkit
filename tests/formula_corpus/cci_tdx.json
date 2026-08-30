@@ -1,0 +1,13 @@
+{
+  "id": "cci_tdx",
+  "platform": "TDX",
+  "source_formula": "TP:=(HIGH+LOW+CLOSE)/3;MA_TP:=MA(TP,14);MD_TP:=SUM(ABS(TP-MA_TP),14)/14;CCI:=(TP-MA_TP)/(0.015*MD_TP);",
+  "description": "顺势指标CCI - 通达信经典公式",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv",
+    "columns": ["high", "low", "close"]
+  },
+  "expected_output_columns": ["TP", "MA_TP", "MD_TP", "CCI"],
+  "tolerance": 1e-8,
+  "tags": ["oscillator", "momentum"]
+}

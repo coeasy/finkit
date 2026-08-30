@@ -1,0 +1,13 @@
+{
+  "id": "dialect_close_vs_c",
+  "platform": "CROSS",
+  "source_formula": "MA_CLOSE:=MA(CLOSE,5);MA_C:=MA(C,5);DIFF:=MA_CLOSE-MA_C;",
+  "description": "跨平台方言差异 - CLOSE与C别名等价性验证",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv",
+    "columns": ["close"]
+  },
+  "expected_output_columns": ["MA_CLOSE", "MA_C", "DIFF"],
+  "tolerance": 1e-10,
+  "tags": ["dialect", "alias"]
+}

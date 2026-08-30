@@ -1,0 +1,14 @@
+# pkg-config file for alpha_ta
+
+prefix=P:/llm_code/finkit/dist/c/windows-x64/installed
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: alpha_ta
+Description: AlphaTA - Financial Technical Analysis Library C/C++ Bindings
+URL: https://github.com/alpha-ta/alpha_ta
+Version: 1.0.0
+Libs: -L${libdir} -lalpha_ta
+Cflags: -I${includedir}
+Requires:

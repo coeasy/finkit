@@ -1,0 +1,65 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net6.0;net8.0</TargetFrameworks>
+    <RootNamespace>AlphaTA</RootNamespace>
+    <AssemblyName>AlphaTA</AssemblyName>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>10.0</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <!-- NuGet Package Metadata
+         PackageId aligned to the "AlphaTA" identity (matches the Rust
+         crate name, the GitHub repo and the C/Python/Node/Go/Java packages).
+         The .NET assembly and root namespace use `AlphaTA` to keep
+         the .NET-side casing consistent with the public API. -->
+    <PackageId>AlphaTA</PackageId>
+    <Title>AlphaTA - .NET Bindings</Title>
+    <Version>1.0.0</Version>
+    <Authors>AlphaTA Contributors</Authors>
+    <Company>AlphaTA</Company>
+    <Description>High-performance financial technical analysis indicators library for .NET, powered by Rust. Includes SMA, EMA, RSI, MACD, Bollinger Bands, Stochastic, ADX, ATR, Hilbert Transform, and 40+ more indicators.</Description>
+    <PackageTags>technical-analysis;trading;finance;indicators;rsi;macd;moving-average;bollinger-bands;atr;stochastic;adx;hilbert-transform;alphata</PackageTags>
+    <PackageLicenseExpression>MIT OR Apache-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/coeasy/finkit</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/coeasy/finkit</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Copyright>Copyright (c) AlphaTA Contributors</Copyright>
+
+    <!-- Multi-RID support for the NuGet runtime asset layout.
+         The build script places the native binary under
+           dist/dotnet/<plat>/runtimes/<rid>/native/
+         so the consumer can `dotnet add package AlphaTA` and the correct
+         lib is copied next to the assembly at restore time. -->
+    <RuntimeIdentifiers>win-x64;linux-x64;osx-x64;osx-arm64</RuntimeIdentifiers>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Stage alpha_ta_dotnet.dll next to the .NET assembly. The build script
+         copies the compiled native binary to ../native/win-x64/native/ before
+         invoking `dotnet pack` and removes it afterwards. Packing the file
+         under the standard `runtimes/<rid>/native/` RID layout makes the
+         resulting nupkg consumable via `dotnet add package AlphaTA` without
+         any extra restore flags. The build script stages the binary at a
+         known path so we can glob for it without the recursive subpath
+         leaking into the nupkg layout. -->
+    <None Include="..\..\native\win-x64\native\*.dll" Pack="true"
+          Condition="Exists('..\..\native\win-x64\native')">
+      <Pack>true</Pack>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <PackagePath>runtimes\win-x64\native\</PackagePath>
+    </None>
+  </ItemGroup>
+
+</Project>

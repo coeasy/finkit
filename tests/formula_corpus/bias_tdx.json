@@ -1,0 +1,13 @@
+{
+  "id": "bias_tdx",
+  "platform": "TDX",
+  "source_formula": "BIAS1:=(CLOSE-MA(CLOSE,6))/MA(CLOSE,6)*100;BIAS2:=(CLOSE-MA(CLOSE,12))/MA(CLOSE,12)*100;BIAS3:=(CLOSE-MA(CLOSE,24))/MA(CLOSE,24)*100;",
+  "description": "乖离率BIAS三线 - 通达信常用参数6/12/24",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv",
+    "columns": ["close"]
+  },
+  "expected_output_columns": ["BIAS1", "BIAS2", "BIAS3"],
+  "tolerance": 1e-8,
+  "tags": ["oscillator", "trend"]
+}

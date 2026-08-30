@@ -1,0 +1,13 @@
+{
+  "id": "wr_tdx",
+  "platform": "TDX",
+  "source_formula": "WR1:=(HHV(HIGH,10)-CLOSE)/(HHV(HIGH,10)-LLV(LOW,10))*100;WR2:=(HHV(HIGH,6)-CLOSE)/(HHV(HIGH,6)-LLV(LOW,6))*100;",
+  "description": "威廉指标WR - 通达信双周期版本",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv",
+    "columns": ["high", "low", "close"]
+  },
+  "expected_output_columns": ["WR1", "WR2"],
+  "tolerance": 1e-8,
+  "tags": ["oscillator", "momentum"]
+}

@@ -1,0 +1,13 @@
+{
+  "id": "dialect_close1_ths",
+  "platform": "THS",
+  "source_formula": "昨收:=CLOSE1;昨收REF:=REF(CLOSE,1);差值:=CLOSE1-REF(CLOSE,1);",
+  "description": "同花顺CLOSE1昨收别名与REF(CLOSE,1)等价性",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv",
+    "columns": ["close"]
+  },
+  "expected_output_columns": ["昨收", "昨收REF", "差值"],
+  "tolerance": 1e-10,
+  "tags": ["dialect", "alias", "ths"]
+}

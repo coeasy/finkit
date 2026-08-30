@@ -1,0 +1,7 @@
+//@version=5
+indicator("SuperTrend", overlay=true)
+atrPeriod = input(10, "ATR Period")
+factor = input(3.0, "Factor")
+[supertrend, direction] = ta.supertrend(factor, atrPeriod)
+plot(direction < 0 ? supertrend : na, "Up Trend", color=color.green, style=plot.style_linebr)
+plot(direction > 0 ? supertrend : na, "Down Trend", color=color.red, style=plot.style_linebr)

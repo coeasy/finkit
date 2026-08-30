@@ -1,0 +1,137 @@
+name: Release .NET NuGet Package
+
+on:
+  push:
+    tags:
+      - 'dotnet-v*'
+
+jobs:
+  build-native:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        arch: [x64, arm64]
+        exclude:
+          - os: windows-latest
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.arch == 'arm64' && 'aarch64-unknown-linux-gnu' || '' }}${{ matrix.os == 'windows-latest' && 'x86_64-pc-windows-msvc' || '' }}${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin' || '' }}
+
+      - name: Install cross-compilation tools (Linux ARM64)
+        if: matrix.os == 'ubuntu-latest' && matrix.arch == 'arm64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Set Rust target
+        id: target
+        run: |
+          if [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
+            if [ "${{ matrix.arch }}" == "arm64" ]; then
+              echo "target=aarch64-unknown-linux-gnu" >> $GITHUB_OUTPUT
+            else
+              echo "target=x86_64-unknown-linux-gnu" >> $GITHUB_OUTPUT
+            fi
+          elif [ "${{ matrix.os }}" == "windows-latest" ]; then
+            echo "target=x86_64-pc-windows-msvc" >> $GITHUB_OUTPUT
+          else
+            echo "target=aarch64-apple-darwin" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build native library
+        working-directory: ffi/dotnet-binding
+        run: |
+          cargo build --release --target ${{ steps.target.outputs.target }}
+
+      - name: Get platform identifier
+        id: platform
+        run: |
+          if [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
+            echo "rid=linux" >> $GITHUB_OUTPUT
+          elif [ "${{ matrix.os }}" == "windows-latest" ]; then
+            echo "rid=win" >> $GITHUB_OUTPUT
+          else
+            echo "rid=osx" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Copy native library
+        run: |
+          mkdir -p ffi/dotnet-binding/native/${{ steps.platform.outputs.rid }}/${{ matrix.arch }}
+          if [ "${{ matrix.os }}" == "windows-latest" ]; then
+            cp ffi/dotnet-binding/target/${{ steps.target.outputs.target }}/release/alpha_ta_dotnet.dll ffi/dotnet-binding/native/${{ steps.platform.outputs.rid }}/${{ matrix.arch }}/
+          elif [ "${{ matrix.os }}" == "macos-latest" ]; then
+            cp ffi/dotnet-binding/target/${{ steps.target.outputs.target }}/release/libalpha_ta_dotnet.dylib ffi/dotnet-binding/native/${{ steps.platform.outputs.rid }}/${{ matrix.arch }}/
+          else
+            cp ffi/dotnet-binding/target/${{ steps.target.outputs.target }}/release/libalpha_ta_dotnet.so ffi/dotnet-binding/native/${{ steps.platform.outputs.rid }}/${{ matrix.arch }}/
+          fi
+
+      - name: Upload native artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ steps.platform.outputs.rid }}-${{ matrix.arch }}
+          path: ffi/dotnet-binding/native/
+          retention-days: 1
+
+  build-dotnet:
+    needs: build-native
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Download native artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ffi/dotnet-binding/native
+
+      - name: Organize native libraries
+        run: |
+          mkdir -p ffi/dotnet-binding/native-final
+          for dir in ffi/dotnet-binding/native/native-*; do
+            cp -r "$dir"/* ffi/dotnet-binding/native-final/
+          done
+
+      - name: Copy native libraries to package structure
+        working-directory: ffi/dotnet-binding
+        run: |
+          mkdir -p src/RustTALib/native
+          cp -r native-final/* src/RustTALib/native/
+
+      - name: Restore dependencies
+        working-directory: ffi/dotnet-binding/src/RustTALib
+        run: dotnet restore
+
+      - name: Build
+        working-directory: ffi/dotnet-binding/src/RustTALib
+        run: dotnet build -c Release --no-restore
+
+      - name: Run tests
+        working-directory: ffi/dotnet-binding/src/RustTALib.Tests
+        run: dotnet test -c Release --no-restore --verbosity normal
+
+      - name: Pack NuGet
+        working-directory: ffi/dotnet-binding/src/RustTALib
+        run: dotnet pack -c Release --no-build -o ../../nuget-packages /p:Version=${GITHUB_REF_NAME#dotnet-v}
+
+      - name: Publish to NuGet
+        working-directory: ffi/dotnet-binding
+        run: dotnet nuget push nuget-packages/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json
+
+      - name: Upload NuGet package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-package
+          path: ffi/dotnet-binding/nuget-packages/
+          retention-days: 30

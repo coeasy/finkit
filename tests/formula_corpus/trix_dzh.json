@@ -1,0 +1,13 @@
+{
+  "id": "trix_dzh",
+  "platform": "DZH",
+  "source_formula": "TR:=EMA(EMA(EMA(CLOSE,12),12),12);TRIX:=(TR-REF(TR,1))/REF(TR,1)*100;TRMA:=MA(TRIX,9);",
+  "description": "大智慧TRIX三重指数平滑均线及信号线",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv",
+    "columns": ["close"]
+  },
+  "expected_output_columns": ["TR", "TRIX", "TRMA"],
+  "tolerance": 1e-8,
+  "tags": ["oscillator", "trend"]
+}

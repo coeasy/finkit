@@ -1,0 +1,4 @@
+//@version=5
+indicator("Higher Timeframe Close", overlay=true)
+htfClose = request.security(syminfo.tickerid, "D", close)
+plot(htfClose, "HTF Close", color=color.orange, linewidth=2)

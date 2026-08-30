@@ -1,0 +1,208 @@
+[package]
+name = "alpha-ta-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+
+[lints]
+workspace = true
+
+[[bench]]
+name = "formula_bench"
+harness = false
+
+[[bench]]
+name = "streaming_bench"
+harness = false
+
+[[bench]]
+name = "talib_comparison_bench"
+harness = false
+
+[[bench]]
+name = "sweep_bench"
+harness = false
+
+[[bench]]
+name = "simd_bench"
+harness = false
+
+[[bench]]
+name = "talib_c_comparison"
+harness = false
+required-features = ["talib-c"]
+
+[[bench]]
+name = "competitive_bench"
+harness = false
+
+[[bench]]
+name = "features_bench"
+harness = false
+
+[[bench]]
+name = "trend_bench"
+harness = false
+
+[[bench]]
+name = "momentum_bench"
+harness = false
+
+[[bench]]
+name = "volume_bench"
+harness = false
+
+[[bench]]
+name = "simd_statistics_bench"
+harness = false
+
+[[bench]]
+name = "talib_triple_comparison_bench"
+harness = false
+
+[[bench]]
+name = "watchlist_self_bench"
+harness = false
+
+[[bench]]
+name = "ten_million_bench"
+harness = false
+required-features = ["std"]
+
+# D1: Zero-allocation micro-benchmarks — SIMD `_into` variants vs scalar.
+[[bench]]
+name = "zero_alloc_bench"
+harness = false
+
+# D1: Multi-period EMA benchmark — FMA optimized single-pass vs N×single ema.
+[[bench]]
+name = "ema_multi_periods_bench"
+harness = false
+
+# D.6: Parallel batch benchmark — measures rayon scaling across multi-stock
+# batch APIs (parallel_sma_batch, parallel_ema_batch, parallel_rsi_batch,
+# parallel_sma_multi_period). Run with --features rayon.
+[[bench]]
+name = "parallel_batch_bench"
+harness = false
+required-features = ["rayon"]
+
+# B1: Memory profiling benchmark — uses dhat-rs to measure peak heap
+# allocation per indicator at 1M / 10M scales. Outputs a JSON report
+# consumed by `.github/scripts/check_memory_regression.py`.
+[[bench]]
+name = "memory_profile"
+harness = false
+required-features = ["memory-profile"]
+
+
+[dependencies]
+serde = { workspace = true, optional = true }
+bincode = { version = "1.3", optional = true }
+thiserror = { workspace = true, optional = true }
+ndarray = { workspace = true, optional = true }
+rayon = { version = "1", optional = true }
+pest = { version = "2.8", optional = true }
+pest_derive = { version = "2.8", optional = true }
+lru = { version = "0.12", optional = true }
+polars = { version = "0.46", optional = true, default-features = false }
+ahash = { version = "0.8", optional = true }
+libm = { version = "0.2" }
+# X-0: observability deps wired in via features.
+tracing = { workspace = true, optional = true }
+tracing-subscriber = { workspace = true, optional = true }
+metrics = { workspace = true, optional = true }
+metrics-exporter-prometheus = { workspace = true, optional = true }
+
+[dev-dependencies]
+approx = "0.5"
+bincode = "1.3"
+criterion = "0.5"
+proptest = "1.4"
+serde = { workspace = true }
+serde_json = { workspace = true }
+ta = "0.5"
+# B1: dhat-rs for heap profiling in the memory_profile benchmark.
+# Used with `dhat::Profiler::builder().testing().build()` for programmatic
+# `HeapStats::get()` access without file output, and with `dhat::Alloc` as
+# the global allocator when the `memory-profile` feature is enabled.
+dhat = "0.3"
+# Golden reference vectors shared with every FFI binding's test suite.
+alpha-ta-ffi-common = { path = "../ffi/ffi-common" }
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[features]
+default = ["std", "formula", "serde", "tracing", "metrics", "formula-jit", "formula-simd", "indicators-all"]
+
+# ── Indicator category feature flags (incremental tree-shaking scaffold) ──
+# Every category is ON by default via `indicators-all`, so the public API is
+# unchanged unless a consumer explicitly turns a category OFF. Modules in
+# `src/indicators/mod.rs` are gated 1:1 with these features. Turn a category
+# off only after verifying its cross-module dependencies (see REFACTORING_PLAN).
+# Each category pulls `std` because the indicator implementations depend on
+# `ndarray` (gated behind `std`). This makes the documented "turn off
+# `indicators-all` to shrink the binary" workflow robust: picking a single
+# category still compiles (it transitively enables `std` + `ndarray`).
+indicators-overlap = ["std"]
+# `momentum` builds on `overlap` (e.g. `bbands`, `MaType`, `ma`) and
+# `volatility` (e.g. `atr`), so enabling it transitively enables those.
+indicators-momentum = ["std", "indicators-overlap", "indicators-volatility"]
+indicators-volume = ["std", "indicators-momentum"]
+indicators-volatility = ["std"]
+indicators-cycle = ["std", "indicators-momentum"]
+indicators-statistics = ["std"]
+indicators-price-transform = ["std"]
+indicators-patterns = ["std"]
+indicators-market = ["std", "indicators-momentum"]
+# Meta-feature enabling every indicator category. Keep this in `default`.
+indicators-all = [
+    "indicators-overlap",
+    "indicators-momentum",
+    "indicators-volume",
+    "indicators-volatility",
+    "indicators-cycle",
+    "indicators-statistics",
+    "indicators-price-transform",
+    "indicators-patterns",
+    "indicators-market",
+]
+std = ["dep:thiserror", "dep:ndarray", "dep:ahash"]
+# `libm` is a non-optional dependency so the `no_std` math helpers
+# (`f64_sqrt`/`f64_ln`) are always available whenever `std` is off
+# (pure `no_std` builds and the bare `--no-default-features` case).
+no_std = []
+formula = ["std", "dep:pest", "dep:pest_derive", "dep:lru"]
+talib-c = ["std"]
+serde = ["std", "dep:serde", "dep:bincode"]
+nightly-avx512 = []
+precision-f32 = []
+rayon = ["std", "dep:rayon"]
+alpha-ta-polars = ["std", "dep:polars"]
+# O-1: tracing re-export. opt-in subscriber via tracing-subscriber feature.
+tracing = ["dep:tracing"]
+tracing-subscriber = ["dep:tracing-subscriber", "tracing"]
+# O-2: prometheus exporter. Opt-in to keep binary size small.
+metrics-prometheus = ["dep:metrics-exporter-prometheus", "metrics"]
+metrics = ["dep:metrics"]
+# R-4: circuit breaker pattern for repeated failure isolation.
+circuit-breaker = ["std"]
+# Optional formula execution paths (enabled by default for backward compatibility).
+# Both features are real public-API gates but `formula-simd` is currently a
+# thin alias for the bytecode executor (see `engine.rs::eval_simd`).
+# `formula-jit` gates the real (if rudimentary) `JitCompiler` entry points.
+formula-jit = []
+formula-simd = []
+# Unsafe unchecked indexing for hot paths — opt-in for maximum throughput.
+unchecked-indexing = []
+# B1: Enable dhat-rs global allocator and memory profiling benchmark.
+# Use with: cargo bench --bench memory_profile --features memory-profile
+memory-profile = ["std"]
+# D-3: enable strict missing_docs lint at the crate level.

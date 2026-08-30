@@ -1,0 +1,186 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://azaloop.dev/schemas/prd.json",
+  "title": "AzaLoop PRD JSON",
+  "description": "Machine-readable PRD format for AzaLoop development loop",
+  "type": "object",
+  "required": ["stories"],
+  "properties": {
+    "project_name": {
+      "type": "string",
+      "description": "Project name (alternative to feature.name)"
+    },
+    "description": {
+      "type": "string",
+      "description": "Project description"
+    },
+    "feature": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string" },
+        "branch": { "type": "string" },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "in_progress", "completed", "cancelled"],
+          "default": "pending"
+        }
+      }
+    },
+    "tech": {
+      "type": "object",
+      "properties": {
+        "language": { "type": "string" },
+        "frontend": { "type": "string" },
+        "backend": { "type": "string" },
+        "testing": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "globalConstraints": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "stories": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "title"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string", "maxLength": 100 },
+          "description": { "type": "string", "maxLength": 500 },
+          "type": {
+            "type": "string",
+            "enum": ["setup", "feature", "frontend", "backend", "fullstack", "test", "docs", "refactor", "bugfix", "infra"],
+            "default": "fullstack"
+          },
+          "priority": { "type": "integer", "minimum": 0, "maximum": 99, "default": 1 },
+          "passes": { "type": "boolean", "default": false },
+          "blocked": { "type": "boolean", "default": false },
+          "acceptance_criteria": {
+            "type": "array",
+            "items": { "type": "string" },
+            "default": []
+          },
+          "files": {
+            "type": "array",
+            "items": { "type": "string" },
+            "default": []
+          },
+          "depends_on": {
+            "type": "array",
+            "items": { "type": "string" },
+            "default": []
+          },
+          "attempts": { "type": "integer", "default": 0 },
+          "completed_at": {
+            "oneOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ],
+            "default": null
+          },
+          "estimated_effort": {
+            "type": "string",
+            "description": "Estimated effort (e.g. XS, S, M, L, XL)"
+          },
+          "assignee": {
+            "type": "string",
+            "description": "Assigned developer or team"
+          },
+          "metadata": {
+            "type": "object",
+            "description": "Arbitrary metadata for external resource association",
+            "properties": {
+              "github_issue": { "type": "string", "description": "GitHub issue URL or number" },
+              "jira_ticket": { "type": "string", "description": "Jira ticket key (e.g. PROJ-123)" },
+              "sprint": { "type": "string", "description": "Sprint identifier" },
+              "external_url": { "type": "string", "description": "External resource URL" },
+              "labels": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Classification labels"
+              }
+            },
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "optimization_history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["round", "scores", "weighted_total", "changes", "timestamp"],
+        "properties": {
+          "round": { "type": "integer" },
+          "scores": {
+            "type": "object",
+            "additionalProperties": { "type": "number" }
+          },
+          "weighted_total": { "type": "number" },
+          "changes": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "timestamp": { "type": "string", "format": "date-time" }
+        }
+      },
+      "default": []
+    },
+    "loop_config": {
+      "type": "object",
+      "properties": {
+        "max_iterations": { "type": "integer", "default": 50 },
+        "max_retries_per_story": { "type": "integer", "default": 3 },
+        "auto_commit": { "type": "boolean", "default": true }
+      }
+    },
+    "tech_stack": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Technology stack list (alternative to tech object)"
+    },
+    "estimated_effort": {
+      "type": "string",
+      "description": "Overall project effort estimate"
+    },
+    "prd_version": {
+      "type": "integer",
+      "default": 1,
+      "description": "PRD version number, auto-incremented on each change"
+    },
+    "last_updated": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO timestamp of last PRD modification"
+    },
+    "change_log": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["version", "timestamp", "action", "summary"],
+        "properties": {
+          "version": { "type": "integer" },
+          "timestamp": { "type": "string" },
+          "action": {
+            "type": "string",
+            "enum": ["created", "evolved", "merged", "patched", "optimized"]
+          },
+          "summary": { "type": "string" },
+          "stories_added": { "type": "array", "items": { "type": "string" }, "default": [] },
+          "stories_updated": { "type": "array", "items": { "type": "string" }, "default": [] }
+        }
+      },
+      "default": [],
+      "description": "Change history for PRD modifications"
+    }
+  },
+  "additionalProperties": true
+}

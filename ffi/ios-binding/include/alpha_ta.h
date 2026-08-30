@@ -1,0 +1,36 @@
+#ifndef ALPHA_TA_IOS_H
+#define ALPHA_TA_IOS_H
+
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/// ABI version of the bundled static lib. Bumped whenever the symbol set
+/// changes in a backwards-incompatible way.
+int32_t alpha_ta_ios_abi_version(void);
+
+// ---- moving averages -------------------------------------------------------
+int32_t alpha_ta_sma(const double *input, int32_t len, int32_t period, double *out);
+int32_t alpha_ta_ema(const double *input, int32_t len, int32_t period, double *out);
+int32_t alpha_ta_wma(const double *input, int32_t len, int32_t period, double *out);
+
+// ---- momentum --------------------------------------------------------------
+int32_t alpha_ta_rsi(const double *input, int32_t len, int32_t period, double *out);
+int32_t alpha_ta_roc(const double *input, int32_t len, int32_t period, double *out);
+int32_t alpha_ta_mom(const double *input, int32_t len, int32_t period, double *out);
+
+// ---- candlestick patterns --------------------------------------------------
+/// Returns the number of candlestick patterns detected in the supplied OHLC
+/// series. The actual list of pattern names is exposed through
+/// `alpha_ta_pattern_names` (TBD in a follow-up release).
+int32_t alpha_ta_detect_candlestick(const double *open, const double *high,
+                                  const double *low,  const double *close,
+                                  int32_t len);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

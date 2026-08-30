@@ -1,0 +1,13 @@
+{
+  "id": "dmi_tdx",
+  "platform": "TDX",
+  "source_formula": "PDI:=PLUS_DI(HIGH,LOW,CLOSE,14);MDI:=MINUS_DI(HIGH,LOW,CLOSE,14);ADX_VAL:=ADX(HIGH,LOW,CLOSE,14);",
+  "description": "动向指标DMI - 通达信PDI/MDI/ADX三线",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv",
+    "columns": ["high", "low", "close"]
+  },
+  "expected_output_columns": ["PDI", "MDI", "ADX_VAL"],
+  "tolerance": 1e-8,
+  "tags": ["trend", "momentum"]
+}

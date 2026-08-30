@@ -1,0 +1,13 @@
+{
+  "id": "kdj_tdx",
+  "platform": "TDX",
+  "source_formula": "RSV:=(CLOSE-LLV(LOW,9))/(HHV(HIGH,9)-LLV(LOW,9))*100;K:=SMA(RSV,3,1);D:=SMA(K,3,1);J:=3*K-2*D;",
+  "description": "经典KDJ随机指标 - 通达信三线公式",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv",
+    "columns": ["high", "low", "close"]
+  },
+  "expected_output_columns": ["RSV", "K", "D", "J"],
+  "tolerance": 1e-8,
+  "tags": ["oscillator", "momentum"]
+}

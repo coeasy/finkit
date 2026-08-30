@@ -1,0 +1,10 @@
+//@version=5
+indicator("Heikin Ashi Smoothed", overlay=true)
+length = input(8, "Smoothing")
+haClose = (open + high + low + close) / 4
+haOpen = 0.0
+haOpen := nz(haOpen[1], open) + haClose / 2
+haHigh = math.max(high, math.max(haOpen, haClose))
+haLow = math.min(low, math.min(haOpen, haClose))
+smoothClose = ta.ema(haClose, length)
+plot(smoothClose, "HA Close EMA", color=color.blue)

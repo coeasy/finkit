@@ -1,0 +1,2 @@
+test line 1
+test line 2 with f64::NAN and assert!(v.is_nan())

@@ -1,0 +1,5 @@
+framework module AlphaTA {
+    umbrella header "alpha_ta.h"
+    header "alpha_ta.h"
+    export *
+}

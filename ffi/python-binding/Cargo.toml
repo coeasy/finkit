@@ -1,0 +1,24 @@
+[package]
+name = "alpha-ta-python"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Python bindings for AlphaTA"
+
+[lints]
+workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+alpha-ta-core = { path = "../../core", default-features = false, features = ["std", "serde", "indicators-all"] }
+alpha-ta-visualization = { path = "../../visualization", features = ["svg", "html"] }
+pyo3 = { version = "0.23", features = ["extension-module"] }
+numpy = "0.23"
+ndarray = { workspace = true, optional = true }
+
+[features]
+default = ["formula"]
+formula = ["alpha-ta-core/formula", "dep:ndarray"]
+abi3 = ["pyo3/abi3-py38"]

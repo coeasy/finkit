@@ -1,0 +1,6 @@
+//@version=5
+indicator("Aroon", overlay=false)
+length = input(14, "Length")
+[aroonUp, aroonDown] = ta.aroon(length)
+plot(aroonUp, "Aroon Up", color=color.green)
+plot(aroonDown, "Aroon Down", color=color.red)

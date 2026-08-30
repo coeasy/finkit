@@ -1,0 +1,7 @@
+//@version=5
+indicator("Parabolic SAR", overlay=true)
+start = input(0.02, "Start")
+increment = input(0.02, "Increment")
+maximum = input(0.2, "Maximum")
+sarVal = ta.sar(start, increment, maximum)
+plot(sarVal, "SAR", color=color.blue, style=plot.style_cross)

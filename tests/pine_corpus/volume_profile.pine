@@ -1,0 +1,10 @@
+//@version=5
+indicator("Volume Profile (simplified)", overlay=true)
+lookback = input(50, "Lookback Bars")
+volSum = 0.0
+priceSum = 0.0
+for i = 0 to lookback - 1
+    volSum := volSum + volume[i]
+    priceSum := priceSum + close[i] * volume[i]
+avgPrice = priceSum / volSum
+plot(avgPrice, "Volume Weighted Price", color=color.purple)

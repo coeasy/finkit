@@ -1,0 +1,6 @@
+//@version=5
+indicator("TRIX", overlay=false)
+length = input(15, "Length")
+trixVal = ta.trix(close, length)
+plot(trixVal, "TRIX", color=color.blue)
+hline(0)

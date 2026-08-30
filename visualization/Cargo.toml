@@ -1,0 +1,24 @@
+[package]
+name = "alpha-ta-visualization"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+png = { version = "0.17", optional = true }
+fontdue = "0.9"
+alpha-ta-core = { path = "../core" }
+
+[features]
+default = ["svg"]
+svg = []
+png = ["dep:png"]
+html = ["svg"]

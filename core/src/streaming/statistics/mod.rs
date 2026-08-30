@@ -1,0 +1,10 @@
+pub mod avgdev;
+pub mod beta;
+pub mod correl;
+pub mod linreg;
+pub mod linreg_angle;
+pub mod linreg_intercept;
+pub mod linreg_slope;
+pub mod max_min_index;
+pub mod percent_rank;
+pub mod zscore;

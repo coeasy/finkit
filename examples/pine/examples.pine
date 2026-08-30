@@ -1,0 +1,111 @@
+// Pine Script v5 示例脚本集合
+// 这些示例展示了 AlphaTA Pine 解析器支持的功能
+
+// ============================================================
+// 示例 1: 简单的 SMA 指标
+// ============================================================
+//@version=5
+indicator("Simple SMA", overlay=true)
+sma20 = ta.sma(close, 20)
+plot(sma20, color=color.blue)
+
+// ============================================================
+// 示例 2: MACD 指标（多返回值）
+// ============================================================
+//@version=5
+indicator("MACD Example", overlay=false)
+[dif, dea, macd_hist] = ta.macd(close, 12, 26, 9)
+plot(dif, color=color.blue, title="DIF")
+plot(dea, color=color.orange, title="DEA")
+plot(macd_hist, color=color.red, title="MACD")
+
+// ============================================================
+// 示例 3: RSI 与超买超卖
+// ============================================================
+//@version=5
+indicator("RSI with Levels", overlay=false)
+rsi = ta.rsi(close, 14)
+plot(rsi, color=color.purple)
+hline(70, color=color.red, title="Overbought")
+hline(30, color=color.green, title="Oversold")
+
+// ============================================================
+// 示例 4: 布林带
+// ============================================================
+//@version=5
+indicator("Bollinger Bands", overlay=true)
+[middle, upper, lower] = ta.bb(close, 20, 2.0)
+plot(middle, color=color.blue, title="Middle")
+plot(upper, color=color.red, title="Upper")
+plot(lower, color=color.green, title="Lower")
+fill(upper, lower, color=color.gray)
+
+// ============================================================
+// 示例 5: 使用历史操作符
+// ============================================================
+//@version=5
+indicator("Price Change", overlay=false)
+prev_close = close[1]
+change = close - prev_close
+pct_change = (change / prev_close) * 100
+plot(pct_change, color=color.blue)
+
+// ============================================================
+// 示例 6: 条件语句
+// ============================================================
+//@version=5
+indicator("Signal Example", overlay=true)
+fast_ma = ta.ema(close, 10)
+slow_ma = ta.ema(close, 30)
+signal = fast_ma > slow_ma ? 1 : 0
+plot(signal, color=color.green, title="Bullish Signal")
+
+// ============================================================
+// 示例 7: 自定义函数
+// ============================================================
+//@version=5
+indicator("Custom Function", overlay=false)
+my_rsi(source, length) =>
+    delta = source - source[1]
+    gain = delta > 0 ? delta : 0
+    loss = delta < 0 ? -delta : 0
+    avg_gain = ta.sma(gain, length)
+    avg_loss = ta.sma(loss, length)
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+    rsi
+
+rsi_val = my_rsi(close, 14)
+plot(rsi_val, color=color.purple)
+
+// ============================================================
+// 示例 8: 使用 var 变量
+// ============================================================
+//@version=5
+indicator("Counter Example", overlay=false)
+var count = 0
+if close > open
+    count := count + 1
+plot(count, color=color.blue, title="Up Bars Count")
+
+// ============================================================
+// 示例 9: 多指标组合
+// ============================================================
+//@version=5
+indicator("Multi-Indicator", overlay=true)
+sma_short = ta.sma(close, 5)
+sma_long = ta.sma(close, 20)
+rsi = ta.rsi(close, 14)
+atr = ta.atr(14)
+
+plot(sma_short, color=color.blue, title="SMA5")
+plot(sma_long, color=color.red, title="SMA20")
+
+// ============================================================
+// 示例 10: 使用 na 处理函数
+// ============================================================
+//@version=5
+indicator("NA Handling", overlay=false)
+value = na ? 0 : close
+filled_value = nz(value, 0)
+plot(filled_value, color=color.blue)

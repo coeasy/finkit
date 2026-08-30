@@ -1,0 +1,19 @@
+{
+  "name": "@alphata/node-darwin-arm64",
+  "version": "1.0.0",
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "main": "alpha_ta.node",
+  "files": [
+    "alpha_ta.node"
+  ],
+  "description": "Darwin ARM64 native binding for @alphata/node",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">= 16"
+  }
+}

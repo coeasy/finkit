@@ -1,0 +1,25 @@
+{
+  "version": 4,
+  "updated": "2026-06-20",
+  "regression_threshold_pct": 5.0,
+  "description": "AlphaTA baseline timings (µs) for core indicators at 10K/100K/1M/10M scales. CI fails if current > baseline × 1.05. v4 extends the v3 baseline with 10M entries (P-8) so the perf-gate catches scaling regressions at the 10-million-bar order. The 10M numbers are conservative O(n) extrapolations from the 1M numbers plus a 1.4× memory-bandwidth factor (cache misses dominate past L2). Refresh with `cargo bench -p alpha-ta-core --bench ten_million_bench` and update after non-perf-impact refactors.",
+  "indicators": {
+    "SMA_20": { "10K": 13.14, "100K": 136.08, "1M": 2942.3, "10M": 33500.0 },
+    "EMA_12": { "10K": 21.41, "100K": 218.00, "1M": 3720.1, "10M": 42500.0 },
+    "RSI_14": { "10K": 29.08, "100K": 271.05, "1M": 4564.8, "10M": 52000.0 },
+    "MACD": { "10K": 31.29, "100K": 351.49, "1M": 7825.4, "10M": 92000.0 },
+    "BBANDS_20": { "10K": 50.19, "100K": 501.9, "1M": 9061.9, "10M": 105000.0 },
+    "ATR_14": { "10K": 40.01, "100K": 431.59, "1M": 9172.7, "10M": 108000.0 },
+    "ADX_14": { "10K": 97.87, "100K": 803.18, "1M": 8492.0, "10M": 99000.0 },
+    "STOCHF_14_3": { "10K": 152.61, "100K": 1526.1, "1M": 15261.0, "10M": 180000.0 },
+    "STOCHRSI_14_14_3_3": { "10K": 158.81, "100K": 1588.1, "1M": 15881.0, "10M": 188000.0 },
+    "ULTOSC_7_14_28": { "10K": 55.56, "100K": 555.6, "1M": 5556.0, "10M": 65000.0 },
+    "AROONOSC_14": { "10K": 80.93, "100K": 809.3, "1M": 8093.0, "10M": 95000.0 },
+    "PLUS_DM_14": { "10K": 11.14, "100K": 111.4, "1M": 1114.0, "10M": 13500.0 },
+    "MINUS_DM_14": { "10K": 8.66, "100K": 86.6, "1M": 866.0, "10M": 10500.0 },
+    "HT_PHASOR": { "10K": 29.41, "100K": 294.1, "1M": 2941.0, "10M": 35000.0 },
+    "HT_SINE": { "10K": 385.62, "100K": 3856.2, "1M": 38562.0, "10M": 460000.0 },
+    "WCLPRICE": { "10K": 7.86, "100K": 78.6, "1M": 786.0, "10M": 9500.0 },
+    "VAR_20": { "10K": 17.76, "100K": 177.6, "1M": 1776.0, "10M": 21000.0 }
+  }
+}

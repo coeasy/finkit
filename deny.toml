@@ -1,0 +1,52 @@
+# cargo-deny configuration
+# https://embarkstudios.github.io/cargo-deny/
+
+[graph]
+all-features = true
+no-default-features = false
+
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-DFS-2016",
+    "Unicode-3.0",
+    "CC0-1.0",
+    "MPL-2.0",
+    "Zlib",
+    "0BSD",
+    "OpenSSL",
+    "Unlicense",
+]
+confidence-threshold = 0.8
+
+[licenses.private]
+ignore = true
+ignore-sources = ["git+https://github.com/*"]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+highlight = "all"
+workspace-default-features = "warn"
+
+# Skip these (false positives, or pulled by build scripts we don't ship)
+skip = [
+    { name = "ahash", version = "*" },
+    { name = "hashbrown", version = "*" },
+    { name = "getrandom", version = "*" },
+]
+
+[advisories]
+db-urls = ["https://github.com/rustsec/advisory-db"]
+yanked = "warn"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "warn"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

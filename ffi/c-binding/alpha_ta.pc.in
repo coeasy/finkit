@@ -1,0 +1,14 @@
+# pkg-config file for alpha_ta
+
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+libdir=${exec_prefix}/@CMAKE_INSTALL_LIBDIR@
+includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
+
+Name: alpha_ta
+Description: AlphaTA - Financial Technical Analysis Library C/C++ Bindings
+URL: https://github.com/alpha-ta/alpha_ta
+Version: @PROJECT_VERSION@
+Libs: -L${libdir} -lalpha_ta
+Cflags: -I${includedir}
+Requires:

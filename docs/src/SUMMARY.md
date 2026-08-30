@@ -1,0 +1,15 @@
+# Summary
+
+- [Introduction](./introduction.md)
+- [Getting Started](./getting-started.md)
+  - [Installation](./installation.md)
+  - [Quick Start](./quickstart.md)
+- [User Guide](./guide/README.md)
+  - [Indicators](./guide/indicators.md)
+  - [Formula Engine](./guide/formula-engine.md)
+  - [Streaming](./guide/streaming.md)
+- [Tutorials](./tutorials/README.md)
+- [API Reference](./reference/README.md)
+- [Benchmarks](./benchmarks.md)
+- [Migration](./migration/README.md)
+- [FFI Bindings](./bindings/README.md)
