@@ -13,7 +13,7 @@
 - [x] 修复 Node loader 与 native package 名称断链
 - [x] Java Maven metadata 统一 `0.1.0`
 - [x] .NET NuGet metadata 统一 `0.1.0`
-- [ ] Cargo.lock 本地 workspace package version 完成同步并提交
+- [x] Cargo.lock 本地 workspace package version 完成同步并提交
 
 ## Phase B — Installable Python Package
 
@@ -28,7 +28,7 @@
 ## Phase C — CLI Productization
 
 - [x] Cargo binary 输出名调整为 `finkit`
-- [ ] CLI help 中公共名称全部切换为 Finkit
+- [x] CLI help 中公共名称切换为 Finkit
 - [ ] Linux/macOS/Windows release binary 验证
 
 ## Phase D — Release Pipeline
