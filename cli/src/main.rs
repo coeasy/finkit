@@ -12,8 +12,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
-#[command(name = "alpha_ta")]
-#[command(about = "Technical Analysis CLI — compute indicators, detect patterns, run formulas")]
+#[command(name = "finkit")]
+#[command(about = "Finkit financial computation CLI — indicators, formulas, streaming, and features")]
 #[command(version)]
 struct Cli {
     #[command(subcommand)]
@@ -193,7 +193,7 @@ enum Commands {
     },
     /// Execute a TongDaXin-compatible formula (requires OHLCV input)
     ///
-    /// Usage: alpha-ta-cli formula "MA(CLOSE, 5)" --input data.csv
+    /// Usage: finkit formula "MA(CLOSE, 5)" --input data.csv
     Formula {
         /// 公式字符串，例如 `MA(CLOSE, 5)` 或 `MA(C, 5)`
         formula: Option<String>,
@@ -211,7 +211,7 @@ enum Commands {
     },
     /// Streaming/incremental indicator computation (O(1) per bar)
     ///
-    /// Usage: alpha-ta-cli streaming sma --input data.csv --period 14
+    /// Usage: finkit streaming sma --input data.csv --period 14
     Streaming {
         /// Streaming indicator name: sma, ema, rsi, atr, macd, boll, vwap, obv, adx, stoch, supertrend, ...
         indicator: String,
@@ -238,7 +238,7 @@ enum Commands {
     },
     /// Apply data transformations (log-return, z-score, scaling, etc.)
     ///
-    /// Usage: alpha-ta-cli transform log_return --input data.csv
+    /// Usage: finkit transform log_return --input data.csv
     Transform {
         /// Transform name: log_return, pct_change, zscore, standard_scaler, minmax_scaler, rank, diff
         transform: String,
@@ -254,7 +254,7 @@ enum Commands {
     },
     /// Feature engineering pipeline (alpha factors, cross features, etc.)
     ///
-    /// Usage: alpha-ta-cli features alpha_pack --input data.csv
+    /// Usage: finkit features alpha_pack --input data.csv
     Features {
         /// Feature pack name: alpha_pack (default pack of alpha factors)
         pack: String,
@@ -270,7 +270,7 @@ enum Commands {
     },
     /// Parameter sweep over an indicator
     ///
-    /// Usage: alpha-ta-cli sweep sma --input data.csv --period-min 5 --period-max 50
+    /// Usage: finkit sweep sma --input data.csv --period-min 5 --period-max 50
     Sweep {
         /// Indicator to sweep: sma, ema, rsi, atr, wma
         indicator: String,
@@ -292,7 +292,7 @@ enum Commands {
     },
     /// Generate a chart from OHLCV data (SVG/HTML/JSON)
     ///
-    /// Usage: alpha-ta-cli chart --input data.csv --format svg --output chart.svg
+    /// Usage: finkit chart --input data.csv --format svg --output chart.svg
     Chart {
         #[arg(short, long)]
         input: PathBuf,
@@ -307,7 +307,7 @@ enum Commands {
     },
     /// Generic indicator calculator
     ///
-    /// Usage: alpha_ta calc SMA --period 20 --input data.csv
+    /// Usage: finkit calc SMA --period 20 --input data.csv
     Calc {
         /// Indicator name: SMA, EMA, RSI, MACD, ATR, BBANDS, ADX, CCI, OBV, WILLR, WMA, STOCH
         indicator: String,
@@ -330,7 +330,7 @@ enum Commands {
     },
     /// Browse, search, and render formula templates
     ///
-    /// Usage: alpha-ta-cli template list | search macd | render <name> --input data.csv
+    /// Usage: finkit template list | search macd | render <name> --input data.csv
     Template {
         /// Action: list, search, render, info
         action: String,
