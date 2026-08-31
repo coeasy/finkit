@@ -1,6 +1,6 @@
+use crate::impl_standard_methods;
 use crate::streaming::overlap::sma::StreamingSma;
 use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
-use crate::impl_standard_methods;
 
 /// Streaming Volume Oscillator.
 ///
@@ -63,10 +63,18 @@ impl StreamingIndicator for StreamingVolumeOscillator {
 }
 
 impl IndicatorMeta for StreamingVolumeOscillator {
-    fn name() -> &'static str { "VOLUME_OSCILLATOR" }
-    fn category() -> &'static str { "volume" }
-    fn description() -> &'static str { "Volume Oscillator" }
-    fn warm_up_period(&self) -> usize { self.slow_period }
+    fn name() -> &'static str {
+        "VOLUME_OSCILLATOR"
+    }
+    fn category() -> &'static str {
+        "volume"
+    }
+    fn description() -> &'static str {
+        "Volume Oscillator"
+    }
+    fn warm_up_period(&self) -> usize {
+        self.slow_period
+    }
 }
 
 #[cfg(test)]

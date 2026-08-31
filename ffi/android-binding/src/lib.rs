@@ -33,7 +33,8 @@ fn from_double_array(env: &mut JNIEnv, arr: jdoubleArray) -> Vec<f64> {
     let arr: JDoubleArray = unsafe { JDoubleArray::from_raw(arr as jarray) };
     let len = env.get_array_length(&arr).expect("len") as usize;
     let mut buf = vec![0.0f64; len];
-    env.get_double_array_region(&arr, 0, &mut buf).expect("copy");
+    env.get_double_array_region(&arr, 0, &mut buf)
+        .expect("copy");
     buf
 }
 
@@ -90,17 +91,12 @@ fn dispatch_ta(name: &str, data: &[f64], period: usize) -> Vec<f64> {
         "ta_percent_rank" => Some(finkit::indicators::statistics::percent_rank(data, period)),
         _ => None,
     };
-    res.and_then(|r| r.ok()).map(|a| a.to_vec()).unwrap_or_default()
+    res.and_then(|r| r.ok())
+        .map(|a| a.to_vec())
+        .unwrap_or_default()
 }
 
-
 include!("generated.rs");
-
-
-
-
-
-
 
 /// ABI version exported to the Android side so the wrapper can refuse
 /// to load a `.so` built against an incompatible core.

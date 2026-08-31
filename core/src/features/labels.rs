@@ -6,8 +6,8 @@
 //! - Fixed horizon labels
 //! - Binary classification labels
 
-use ndarray::Array1;
 use super::BarrierLabel;
+use ndarray::Array1;
 
 /// Compute n-period forward log return: ln(close[i+n] / close[i]).
 ///
@@ -74,22 +74,42 @@ pub fn triple_barrier(
         let lower_barrier = entry_price * (1.0 - sl_factor * vol);
         let end = (i + max_hold).min(len - 1);
 
-        let mut label = BarrierLabel { label: 0, duration: end - i, ret: 0.0 };
+        let mut label = BarrierLabel {
+            label: 0,
+            duration: end - i,
+            ret: 0.0,
+        };
 
         for j in (i + 1)..=end {
             if high[j] >= upper_barrier {
                 let ret = (upper_barrier / entry_price).ln();
-                label = BarrierLabel { label: 1, duration: j - i, ret };
+                label = BarrierLabel {
+                    label: 1,
+                    duration: j - i,
+                    ret,
+                };
                 break;
             }
             if low[j] <= lower_barrier {
                 let ret = (lower_barrier / entry_price).ln();
-                label = BarrierLabel { label: -1, duration: j - i, ret };
+                label = BarrierLabel {
+                    label: -1,
+                    duration: j - i,
+                    ret,
+                };
                 break;
             }
             if j == end {
-                let ret = if entry_price > 0.0 { (close[j] / entry_price).ln() } else { 0.0 };
-                label = BarrierLabel { label: 0, duration: j - i, ret };
+                let ret = if entry_price > 0.0 {
+                    (close[j] / entry_price).ln()
+                } else {
+                    0.0
+                };
+                label = BarrierLabel {
+                    label: 0,
+                    duration: j - i,
+                    ret,
+                };
             }
         }
 
@@ -148,7 +168,9 @@ mod tests {
 
     #[test]
     fn test_triple_barrier() {
-        let close = vec![100.0, 101.0, 102.0, 103.0, 104.0, 105.0, 104.0, 103.0, 102.0, 101.0];
+        let close = vec![
+            100.0, 101.0, 102.0, 103.0, 104.0, 105.0, 104.0, 103.0, 102.0, 101.0,
+        ];
         let high: Vec<f64> = close.iter().map(|&c| c + 1.0).collect();
         let low: Vec<f64> = close.iter().map(|&c| c - 1.0).collect();
         let labels = triple_barrier(&close, &high, &low, 2.0, 2.0, 5);
@@ -162,17 +184,17 @@ mod tests {
     fn test_fixed_horizon_label() {
         let close = vec![100.0, 110.0, 90.0, 100.0, 100.0];
         let result = fixed_horizon_label(&close, 1, 0.05);
-        assert_eq!(result[0], 1.0);  // 10% rise
+        assert_eq!(result[0], 1.0); // 10% rise
         assert_eq!(result[1], -1.0); // ~18% fall
-        assert!(result[3] == 0.0);   // 0% change
+        assert!(result[3] == 0.0); // 0% change
     }
 
     #[test]
     fn test_binary_label() {
         let close = vec![100.0, 105.0, 95.0, 110.0, 100.0];
         let result = binary_label(&close, 1, 0.02);
-        assert_eq!(result[0], 1.0);  // 5% > 2%
-        assert_eq!(result[1], 0.0);  // -9.5% not > 2%
-        assert_eq!(result[2], 1.0);  // ~15.8% > 2%
+        assert_eq!(result[0], 1.0); // 5% > 2%
+        assert_eq!(result[1], 0.0); // -9.5% not > 2%
+        assert_eq!(result[2], 1.0); // ~15.8% > 2%
     }
 }

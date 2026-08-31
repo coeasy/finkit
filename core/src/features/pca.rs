@@ -180,8 +180,7 @@ fn merge_statistics(
 
     let mut mean = vec![0.0; d];
     for i in 0..d {
-        mean[i] =
-            (n_old as f64 * mean_old[i] + n_new as f64 * mean_new[i]) / n_total as f64;
+        mean[i] = (n_old as f64 * mean_old[i] + n_new as f64 * mean_new[i]) / n_total as f64;
     }
 
     let mut cov = vec![0.0; d * d];

@@ -1,6 +1,6 @@
+use crate::impl_standard_methods;
 use crate::streaming::overlap::ema::StreamingEma;
 use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
-use crate::impl_standard_methods;
 
 /// Streaming Percentage Price Oscillator (PPO).
 ///
@@ -65,10 +65,18 @@ impl StreamingIndicator for StreamingPpo {
 }
 
 impl IndicatorMeta for StreamingPpo {
-    fn name() -> &'static str { "PPO" }
-    fn category() -> &'static str { "momentum" }
-    fn description() -> &'static str { "Percentage Price Oscillator" }
-    fn warm_up_period(&self) -> usize { self.slow_period }
+    fn name() -> &'static str {
+        "PPO"
+    }
+    fn category() -> &'static str {
+        "momentum"
+    }
+    fn description() -> &'static str {
+        "Percentage Price Oscillator"
+    }
+    fn warm_up_period(&self) -> usize {
+        self.slow_period
+    }
 }
 
 #[cfg(test)]
@@ -78,7 +86,9 @@ mod tests {
     #[test]
     fn test_streaming_ppo_basic() {
         let mut ppo = StreamingPpo::new(12, 26);
-        let data: Vec<f64> = (0..50).map(|i| 100.0 + (i as f64 * 0.2).sin() * 10.0).collect();
+        let data: Vec<f64> = (0..50)
+            .map(|i| 100.0 + (i as f64 * 0.2).sin() * 10.0)
+            .collect();
         let mut last = None;
         for &d in &data {
             last = ppo.next(d);
@@ -93,7 +103,10 @@ mod tests {
             ppo.next(100.0);
         }
         let v = ppo.value().unwrap();
-        assert!(v.abs() < 1e-10, "PPO of constant input should be ~0, got {v}");
+        assert!(
+            v.abs() < 1e-10,
+            "PPO of constant input should be ~0, got {v}"
+        );
     }
 
     #[test]

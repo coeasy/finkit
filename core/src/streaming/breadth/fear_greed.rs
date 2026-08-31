@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 
 /// Streaming Fear & Greed Index (simplified composite).
 ///
@@ -21,7 +21,9 @@ impl StreamingFearGreedIndex {
 }
 
 impl Default for StreamingFearGreedIndex {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Input: (volatility_score, momentum_score, breadth_score) each in [0, 1]
@@ -49,10 +51,18 @@ impl StreamingIndicator<(f64, f64, f64)> for StreamingFearGreedIndex {
 }
 
 impl IndicatorMeta for StreamingFearGreedIndex {
-    fn name() -> &'static str { "FEAR_GREED_INDEX" }
-    fn category() -> &'static str { "sentiment" }
-    fn description() -> &'static str { "Fear & Greed Index" }
-    fn warm_up_period(&self) -> usize { 1 }
+    fn name() -> &'static str {
+        "FEAR_GREED_INDEX"
+    }
+    fn category() -> &'static str {
+        "sentiment"
+    }
+    fn description() -> &'static str {
+        "Fear & Greed Index"
+    }
+    fn warm_up_period(&self) -> usize {
+        1
+    }
 }
 
 #[cfg(test)]

@@ -58,7 +58,9 @@ impl StreamingMama {
 }
 
 impl Default for StreamingMama {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl StreamingIndicator for StreamingMama {
@@ -123,24 +125,42 @@ impl StreamingIndicator for StreamingMama {
         self.last_fama = None;
     }
 
-    fn is_ready(&self) -> bool { self.count >= 32 }
-    fn count(&self) -> usize { self.count }
-    fn value(&self) -> Option<f64> { self.last_mama }
+    fn is_ready(&self) -> bool {
+        self.count >= 32
+    }
+    fn count(&self) -> usize {
+        self.count
+    }
+    fn value(&self) -> Option<f64> {
+        self.last_mama
+    }
 }
 
 impl StreamingMama {
     /// FAMA value (follows MAMA with even slower adaptation).
-    pub fn fama(&self) -> Option<f64> { self.last_fama }
+    pub fn fama(&self) -> Option<f64> {
+        self.last_fama
+    }
 
     /// Adaptive smoothing constant (0..=fast_limit). Useful for diagnostics.
-    pub fn alpha(&self) -> f64 { self.alpha }
+    pub fn alpha(&self) -> f64 {
+        self.alpha
+    }
 }
 
 impl IndicatorMeta for StreamingMama {
-    fn name() -> &'static str { "MAMA" }
-    fn category() -> &'static str { "overlap" }
-    fn description() -> &'static str { "MESA Adaptive Moving Average" }
-    fn warm_up_period(&self) -> usize { 32 }
+    fn name() -> &'static str {
+        "MAMA"
+    }
+    fn category() -> &'static str {
+        "overlap"
+    }
+    fn description() -> &'static str {
+        "MESA Adaptive Moving Average"
+    }
+    fn warm_up_period(&self) -> usize {
+        32
+    }
 }
 
 #[cfg(test)]
@@ -148,7 +168,9 @@ mod tests {
     use super::*;
 
     fn sine_wave(n: usize, freq: f64, amp: f64, offset: f64) -> Vec<f64> {
-        (0..n).map(|i| amp * (i as f64 * freq).sin() + offset).collect()
+        (0..n)
+            .map(|i| amp * (i as f64 * freq).sin() + offset)
+            .collect()
     }
 
     #[test]
@@ -156,7 +178,9 @@ mod tests {
         let mut m = StreamingMama::new();
         let data = sine_wave(50, 0.1, 1.0, 50.0);
         let mut last = None;
-        for &v in &data { last = m.next(v); }
+        for &v in &data {
+            last = m.next(v);
+        }
         assert!(last.is_some());
         // MAMA should track the wave within bounds
         let v = last.unwrap();
@@ -167,7 +191,9 @@ mod tests {
     fn test_mama_fama_relationship() {
         let mut m = StreamingMama::new();
         let data = sine_wave(60, 0.1, 5.0, 100.0);
-        for &v in &data { m.next(v); }
+        for &v in &data {
+            m.next(v);
+        }
         let mama = m.value().unwrap();
         let fama = m.fama().unwrap();
         // FAMA adapts slower, so MAMA and FAMA should be close but not identical
@@ -178,7 +204,9 @@ mod tests {
     fn test_mama_reset() {
         let mut m = StreamingMama::new();
         let data = sine_wave(50, 0.1, 1.0, 50.0);
-        for &v in &data { m.next(v); }
+        for &v in &data {
+            m.next(v);
+        }
         assert!(m.is_ready());
         m.reset();
         assert!(!m.is_ready());

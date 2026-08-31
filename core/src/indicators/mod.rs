@@ -53,17 +53,17 @@ macro_rules! idx_mut {
 // crate: individual categories can be disabled once their cross-module
 // dependencies are verified.
 #[cfg(feature = "indicators-market")]
-pub mod breadth;
-#[cfg(feature = "indicators-market")]
 pub mod astock;
+#[cfg(feature = "indicators-market")]
+pub mod breadth;
 #[cfg(feature = "indicators-patterns")]
 pub mod chart;
+#[cfg(feature = "indicators-market")]
+pub mod china;
 #[cfg(feature = "indicators-patterns")]
 pub mod classic_patterns;
 #[cfg(feature = "indicators-patterns")]
 pub mod classic_tools;
-#[cfg(feature = "indicators-market")]
-pub mod china;
 #[cfg(feature = "indicators-market")]
 pub mod consolidation;
 #[cfg(feature = "indicators-cycle")]
@@ -103,17 +103,17 @@ pub mod statistics;
 #[cfg(all(feature = "indicators-market", feature = "indicators-all"))]
 pub mod supertrend;
 #[cfg(feature = "indicators-market")]
-pub mod top_bottom;
-#[cfg(feature = "indicators-volatility")]
-pub mod volatility;
-#[cfg(all(feature = "indicators-volatility", feature = "indicators-all"))]
-pub mod volatility_ext;
-#[cfg(feature = "indicators-market")]
 pub mod sweep;
 #[cfg(feature = "indicators-market")]
 pub mod sweep_engine;
 #[cfg(feature = "indicators-market")]
 pub mod sweepable;
+#[cfg(feature = "indicators-market")]
+pub mod top_bottom;
+#[cfg(feature = "indicators-volatility")]
+pub mod volatility;
+#[cfg(all(feature = "indicators-volatility", feature = "indicators-all"))]
+pub mod volatility_ext;
 #[cfg(feature = "indicators-volume")]
 pub mod volume;
 #[cfg(feature = "indicators-volume")]
@@ -128,17 +128,13 @@ pub use breadth::*;
 #[cfg(feature = "indicators-patterns")]
 pub use chart::*;
 #[cfg(feature = "indicators-market")]
-pub use consolidation::*;
-#[cfg(feature = "indicators-market")]
-pub use relative_strength::*;
-#[cfg(feature = "indicators-market")]
-pub use short_term::*;
+pub use china::*;
 #[cfg(feature = "indicators-patterns")]
 pub use classic_patterns::*;
 #[cfg(feature = "indicators-patterns")]
 pub use classic_tools::*;
 #[cfg(feature = "indicators-market")]
-pub use china::*;
+pub use consolidation::*;
 #[cfg(feature = "indicators-cycle")]
 pub use cycle::*;
 #[cfg(feature = "indicators-market")]
@@ -162,17 +158,17 @@ pub use pivot::*;
 #[cfg(feature = "indicators-price-transform")]
 pub use price_transform::*;
 #[cfg(feature = "indicators-market")]
+pub use relative_strength::*;
+#[cfg(feature = "indicators-market")]
 pub use sentiment::*;
+#[cfg(feature = "indicators-market")]
+pub use short_term::*;
 #[cfg(feature = "indicators-market")]
 pub use smc::*;
 #[cfg(feature = "indicators-statistics")]
 pub use statistics::*;
 #[cfg(all(feature = "indicators-market", feature = "indicators-all"))]
 pub use supertrend::*;
-#[cfg(feature = "indicators-volatility")]
-pub use volatility::*;
-#[cfg(all(feature = "indicators-volatility", feature = "indicators-all"))]
-pub use volatility_ext::*;
 #[cfg(feature = "indicators-market")]
 pub use sweep::*;
 #[cfg(feature = "indicators-market")]
@@ -181,6 +177,10 @@ pub use sweep_engine::*;
 pub use sweepable::*;
 #[cfg(feature = "indicators-market")]
 pub use top_bottom::*;
+#[cfg(feature = "indicators-volatility")]
+pub use volatility::*;
+#[cfg(all(feature = "indicators-volatility", feature = "indicators-all"))]
+pub use volatility_ext::*;
 #[cfg(feature = "indicators-volume")]
 pub use volume::*;
 #[cfg(feature = "indicators-volume")]
@@ -294,7 +294,9 @@ mod slice_output_tests {
         let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 4.0, 3.0, 2.0, 3.0, 4.0];
         let expected = crate::indicators::momentum::rsi(&data, 5).unwrap();
         let mut out = vec![0.0; data.len()];
-        RsiSlice { period: 5 }.compute_into(&data, &mut out).unwrap();
+        RsiSlice { period: 5 }
+            .compute_into(&data, &mut out)
+            .unwrap();
         for i in 0..data.len() {
             if expected[i].is_nan() {
                 assert!(out[i].is_nan(), "nan mismatch at {i}");
@@ -308,7 +310,9 @@ mod slice_output_tests {
         let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
         let expected = crate::math::moving_avg::trima(&data, 5).unwrap();
         let mut out = vec![0.0; data.len()];
-        TrimaSlice { period: 5 }.compute_into(&data, &mut out).unwrap();
+        TrimaSlice { period: 5 }
+            .compute_into(&data, &mut out)
+            .unwrap();
         for i in 0..data.len() {
             if expected[i].is_nan() {
                 assert!(out[i].is_nan(), "nan mismatch at {i}");

@@ -1,6 +1,6 @@
-use napi_derive::napi;
 use finkit::streaming::OhlcvBar;
 use finkit::streaming::StreamingIndicator;
+use napi_derive::napi;
 
 // ============================================================================
 // Category 1: f64 → f64 (single-period constructor)
@@ -29,7 +29,10 @@ macro_rules! napi_streaming_f64 {
 
             #[napi]
             pub fn update_batch(&mut self, values: Vec<f64>) -> Vec<f64> {
-                values.into_iter().map(|v| self.inner.next(v).unwrap_or(f64::NAN)).collect()
+                values
+                    .into_iter()
+                    .map(|v| self.inner.next(v).unwrap_or(f64::NAN))
+                    .collect()
             }
 
             #[napi]
@@ -80,7 +83,11 @@ pub struct NapiStreamingMacd {
 #[napi]
 impl NapiStreamingMacd {
     #[napi(constructor)]
-    pub fn new(fast_period: Option<u32>, slow_period: Option<u32>, signal_period: Option<u32>) -> Self {
+    pub fn new(
+        fast_period: Option<u32>,
+        slow_period: Option<u32>,
+        signal_period: Option<u32>,
+    ) -> Self {
         Self {
             inner: finkit::streaming::indicators::StreamingMacd::new(
                 fast_period.unwrap_or(12) as usize,
@@ -258,7 +265,10 @@ impl NapiStreamingStoch {
     pub fn update(&mut self, high: f64, low: f64, close: f64) -> StochResult {
         match self.inner.next((high, low, close)) {
             Some(out) => StochResult { k: out.k, d: out.d },
-            None => StochResult { k: f64::NAN, d: f64::NAN },
+            None => StochResult {
+                k: f64::NAN,
+                d: f64::NAN,
+            },
         }
     }
 
@@ -298,9 +308,7 @@ impl NapiStreamingAroon {
     #[napi(constructor)]
     pub fn new(period: Option<u32>) -> Self {
         Self {
-            inner: finkit::streaming::indicators::StreamingAroon::new(
-                period.unwrap_or(14) as usize,
-            ),
+            inner: finkit::streaming::indicators::StreamingAroon::new(period.unwrap_or(14) as usize),
         }
     }
 
@@ -427,7 +435,14 @@ macro_rules! napi_streaming_ohlcv {
             }
 
             #[napi]
-            pub fn update(&mut self, open: f64, high: f64, low: f64, close: f64, volume: f64) -> f64 {
+            pub fn update(
+                &mut self,
+                open: f64,
+                high: f64,
+                low: f64,
+                close: f64,
+                volume: f64,
+            ) -> f64 {
                 let bar = OhlcvBar::new(open, high, low, close, volume);
                 self.inner.next(&bar).unwrap_or(f64::NAN)
             }
@@ -512,13 +527,20 @@ impl NapiStreamingDonchian {
     pub fn new(period: Option<u32>) -> Self {
         Self {
             inner: finkit::streaming::indicators::StreamingDonchian::new(
-                period.unwrap_or(20) as usize,
+                period.unwrap_or(20) as usize
             ),
         }
     }
 
     #[napi]
-    pub fn update(&mut self, open: f64, high: f64, low: f64, close: f64, volume: f64) -> DonchianResult {
+    pub fn update(
+        &mut self,
+        open: f64,
+        high: f64,
+        low: f64,
+        close: f64,
+        volume: f64,
+    ) -> DonchianResult {
         let bar = OhlcvBar::new(open, high, low, close, volume);
         match self.inner.next(&bar) {
             Some(out) => DonchianResult {
@@ -578,7 +600,14 @@ impl NapiStreamingIchimoku {
     }
 
     #[napi]
-    pub fn update(&mut self, open: f64, high: f64, low: f64, close: f64, volume: f64) -> IchimokuResult {
+    pub fn update(
+        &mut self,
+        open: f64,
+        high: f64,
+        low: f64,
+        close: f64,
+        volume: f64,
+    ) -> IchimokuResult {
         let bar = OhlcvBar::new(open, high, low, close, volume);
         match self.inner.next(&bar) {
             Some(out) => IchimokuResult {
@@ -638,7 +667,14 @@ impl NapiStreamingSupertrend {
     }
 
     #[napi]
-    pub fn update(&mut self, open: f64, high: f64, low: f64, close: f64, volume: f64) -> SuperTrendResult {
+    pub fn update(
+        &mut self,
+        open: f64,
+        high: f64,
+        low: f64,
+        close: f64,
+        volume: f64,
+    ) -> SuperTrendResult {
         let bar = OhlcvBar::new(open, high, low, close, volume);
         match self.inner.next(&bar) {
             Some(out) => SuperTrendResult {
@@ -694,7 +730,14 @@ impl NapiStreamingKeltner {
     }
 
     #[napi]
-    pub fn update(&mut self, open: f64, high: f64, low: f64, close: f64, volume: f64) -> KeltnerResult {
+    pub fn update(
+        &mut self,
+        open: f64,
+        high: f64,
+        low: f64,
+        close: f64,
+        volume: f64,
+    ) -> KeltnerResult {
         let bar = OhlcvBar::new(open, high, low, close, volume);
         match self.inner.next(&bar) {
             Some(out) => KeltnerResult {

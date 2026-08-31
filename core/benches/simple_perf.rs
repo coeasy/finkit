@@ -13,7 +13,7 @@ fn generate_test_data(n: usize) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<
     for i in 0..n {
         let change = ((i as f64 * 0.1).sin() * 2.0) + ((i as f64 * 0.05).cos() * 1.5);
         price += change;
-        
+
         let h = price + (i as f64 * 0.03).sin().abs() * 3.0;
         let l = price - (i as f64 * 0.04).cos().abs() * 3.0;
         let o = price + (i as f64 * 0.02).sin() * 1.0;
@@ -52,11 +52,14 @@ fn test_all_indicators_performance() {
     let (_open, high, low, close, volume) = generate_test_data(10000);
     let iterations = 100;
 
-    println!("\n=== AlphaTA Performance Benchmark (10000 bars, {} iterations) ===\n", iterations);
+    println!(
+        "\n=== AlphaTA Performance Benchmark (10000 bars, {} iterations) ===\n",
+        iterations
+    );
 
     // Overlap Indicators
     println!("【Overlap Indicators】");
-    
+
     let time = benchmark_indicator("SMA_20", iterations, || {
         let _ = moving_avg::sma(&close, 20).unwrap();
     });

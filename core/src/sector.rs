@@ -64,7 +64,11 @@ impl SectorPanel {
                 constraint: format!("first dim must be n_sectors={}", n_sectors),
             });
         }
-        Ok(Self { codes, names, close })
+        Ok(Self {
+            codes,
+            names,
+            close,
+        })
     }
 
     /// 板块数
@@ -237,8 +241,16 @@ pub fn sector_momentum_rotation(
         let p_now = row[n_bars - 1];
         let p_short = row[n_bars - short];
         let p_long = row[n_bars - long];
-        let r_short = if p_short > 0.0 { p_now / p_short - 1.0 } else { 0.0 };
-        let r_long = if p_long > 0.0 { p_now / p_long - 1.0 } else { 0.0 };
+        let r_short = if p_short > 0.0 {
+            p_now / p_short - 1.0
+        } else {
+            0.0
+        };
+        let r_long = if p_long > 0.0 {
+            p_now / p_long - 1.0
+        } else {
+            0.0
+        };
         scored.push((panel.names[i].clone(), r_short - r_long));
     }
     scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
@@ -258,10 +270,13 @@ mod tests {
         let mut close = Array2::<f64>::zeros((n_sectors, n_bars));
         for i in 0..n_sectors {
             for t in 0..n_bars {
-                close[[i, t]] = 10.0 + (i as f64) * 0.1 + (t as f64) * 0.01 * (i as f64 + 1.0) * 0.1;
+                close[[i, t]] =
+                    10.0 + (i as f64) * 0.1 + (t as f64) * 0.01 * (i as f64 + 1.0) * 0.1;
             }
         }
-        let codes = (0..n_sectors).map(|i| format!("8010{:02}0", i + 10)).collect();
+        let codes = (0..n_sectors)
+            .map(|i| format!("8010{:02}0", i + 10))
+            .collect();
         let names = (0..n_sectors).map(|i| format!("行业{}", i + 1)).collect();
         SectorPanel::new(codes, names, close).unwrap()
     }
@@ -293,7 +308,10 @@ mod tests {
             assert_eq!(rs[[i, 5]], 0.0, "warmup bars should be zero");
         }
         // Later bars should be non-zero
-        assert!(rs[[4, 49]].abs() > 0.0, "warmup-over bars should have non-zero RS");
+        assert!(
+            rs[[4, 49]].abs() > 0.0,
+            "warmup-over bars should have non-zero RS"
+        );
     }
 
     #[test]

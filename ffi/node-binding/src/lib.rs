@@ -1,4 +1,10 @@
-#![allow(non_snake_case, dead_code, missing_docs, missing_debug_implementations, deprecated)]
+#![allow(
+    non_snake_case,
+    dead_code,
+    missing_docs,
+    missing_debug_implementations,
+    deprecated
+)]
 
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
@@ -12,16 +18,18 @@ mod sweep;
 mod transforms;
 
 #[cfg(feature = "formula")]
-use ndarray::Array1;
-#[cfg(feature = "formula")]
 use finkit::formula::{parse_formula, FormulaContext, FormulaEngine, FormulaError};
+#[cfg(feature = "formula")]
+use ndarray::Array1;
 #[cfg(feature = "formula")]
 use std::collections::HashMap;
 
 #[cfg(feature = "formula")]
 fn formula_error_to_napi(e: FormulaError) -> napi::Error {
     match e {
-        FormulaError::ParseError(msg) => napi::Error::new(napi::Status::InvalidArg, format!("Parse error: {}", msg)),
+        FormulaError::ParseError(msg) => {
+            napi::Error::new(napi::Status::InvalidArg, format!("Parse error: {}", msg))
+        }
         FormulaError::Parse { line, col, message } => napi::Error::new(
             napi::Status::InvalidArg,
             format!("Parse error at line {}, col {}: {}", line, col, message),
@@ -34,13 +42,37 @@ fn formula_error_to_napi(e: FormulaError) -> napi::Error {
             napi::Status::InvalidArg,
             format!("Type mismatch: expected {}, got {}", expected, actual),
         ),
-        FormulaError::RuntimeError(msg) => napi::Error::new(napi::Status::GenericFailure, format!("Runtime error: {}", msg)),
-        FormulaError::InvalidParameter(msg) => napi::Error::new(napi::Status::InvalidArg, format!("Invalid parameter: {}", msg)),
-        FormulaError::InsufficientData(msg) => napi::Error::new(napi::Status::InvalidArg, format!("Insufficient data: {}", msg)),
-        FormulaError::InvalidOperation(msg) => napi::Error::new(napi::Status::InvalidArg, format!("Invalid operation: {}", msg)),
-        FormulaError::UnsupportedFunction(msg) => napi::Error::new(napi::Status::InvalidArg, format!("Unsupported function: {}", msg)),
-        FormulaError::Timeout { elapsed_ms } => napi::Error::new(napi::Status::GenericFailure, format!("Execution timeout after {}ms", elapsed_ms)),
-        FormulaError::MemoryLimit { used, limit } => napi::Error::new(napi::Status::GenericFailure, format!("Memory limit exceeded: used {} bytes, limit {} bytes", used, limit)),
+        FormulaError::RuntimeError(msg) => napi::Error::new(
+            napi::Status::GenericFailure,
+            format!("Runtime error: {}", msg),
+        ),
+        FormulaError::InvalidParameter(msg) => napi::Error::new(
+            napi::Status::InvalidArg,
+            format!("Invalid parameter: {}", msg),
+        ),
+        FormulaError::InsufficientData(msg) => napi::Error::new(
+            napi::Status::InvalidArg,
+            format!("Insufficient data: {}", msg),
+        ),
+        FormulaError::InvalidOperation(msg) => napi::Error::new(
+            napi::Status::InvalidArg,
+            format!("Invalid operation: {}", msg),
+        ),
+        FormulaError::UnsupportedFunction(msg) => napi::Error::new(
+            napi::Status::InvalidArg,
+            format!("Unsupported function: {}", msg),
+        ),
+        FormulaError::Timeout { elapsed_ms } => napi::Error::new(
+            napi::Status::GenericFailure,
+            format!("Execution timeout after {}ms", elapsed_ms),
+        ),
+        FormulaError::MemoryLimit { used, limit } => napi::Error::new(
+            napi::Status::GenericFailure,
+            format!(
+                "Memory limit exceeded: used {} bytes, limit {} bytes",
+                used, limit
+            ),
+        ),
     }
 }
 
@@ -50,19 +82,7 @@ use finkit::error::TaError;
 // Overlap Studies - Moving Averages
 // ============================================================================
 
-
 include!("generated.rs");
-
-
-
-
-
-
-
-
-
-
-
 
 /// MESA Adaptive Moving Average (MAMA)
 ///
@@ -136,29 +156,9 @@ pub struct HeikinAshiResult {
 // Classic stock-trading chart patterns (FTA-native, added 2026-06-06).
 // ============================================================================
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 // ============================================================================
 // Momentum Indicators
 // ============================================================================
-
-
 
 /// MACD Result structure
 #[napi(object)]
@@ -167,8 +167,6 @@ pub struct MacdResult {
     pub signal: Vec<f64>,
     pub hist: Vec<f64>,
 }
-
-
 
 /// MACD with custom moving average type (async for large datasets)
 ///
@@ -209,38 +207,12 @@ pub struct StochResult {
     pub d: Vec<f64>,
 }
 
-
-
-
-
-
-
-
-
-
-
 /// Aroon Indicator Result
 #[napi(object)]
 pub struct AroonResult {
     pub aroon_up: Vec<f64>,
     pub aroon_down: Vec<f64>,
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 /// Directional Movement Index (DX)
 ///
@@ -257,8 +229,6 @@ pub fn dx(high: Vec<f64>, low: Vec<f64>, close: Vec<f64>, timeperiod: u32) -> Re
         .map(|arr| arr.into_raw_vec())
         .map_err(|e| Error::new(Status::InvalidArg, format!("{}", e)))
 }
-
-
 
 /// Minus Directional Indicator (MINUS_DI)
 ///
@@ -298,15 +268,9 @@ pub fn plus_di(
         .map_err(|e| Error::new(Status::InvalidArg, format!("{}", e)))
 }
 
-
-
 // ============================================================================
 // Volume Indicators
 // ============================================================================
-
-
-
-
 
 // ============================================================================
 // Volatility Indicators
@@ -320,19 +284,9 @@ pub struct BbandsResult {
     pub lower: Vec<f64>,
 }
 
-
-
-
-
-
-
 // ============================================================================
 // Cycle Indicators (Hilbert Transform)
 // ============================================================================
-
-
-
-
 
 /// Hilbert Transform - Phasor Components Result
 #[napi(object)]
@@ -341,8 +295,6 @@ pub struct HtPhasorResult {
     pub quadrature: Vec<f64>,
 }
 
-
-
 /// Hilbert Transform - Sine Wave Result
 #[napi(object)]
 pub struct HtSineResult {
@@ -350,65 +302,17 @@ pub struct HtSineResult {
     pub lead_sine: Vec<f64>,
 }
 
-
-
-
-
-
-
 // ============================================================================
 // Price Transforms
 // ============================================================================
-
-
-
-
-
-
-
-
 
 // ============================================================================
 // Statistical Indicators
 // ============================================================================
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 // ============================================================================
 // Candlestick Patterns
 // ============================================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 /// Harami Cross (CDLHARAMICROSS)
 ///
@@ -425,10 +329,6 @@ pub fn cdl_harami_cross(
         .map(|arr| arr.into_raw_vec())
         .map_err(|e| Error::new(Status::InvalidArg, format!("{}", e)))
 }
-
-
-
-
 
 /// Morning Doji Star (CDLMORNINGDOJISTAR)
 ///
@@ -461,12 +361,6 @@ pub fn cdl_evening_doji_star(
         .map(|arr| arr.into_raw_vec())
         .map_err(|e| Error::new(Status::InvalidArg, format!("{}", e)))
 }
-
-
-
-
-
-
 
 /// Piercing Pattern (CDLPIERCING)
 ///
@@ -1324,20 +1218,6 @@ impl KlineChartNapi {
 // New Indicators (TASK-166~180)
 // ============================================================================
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 // ============================================================================
 // Formula System
 // ============================================================================
@@ -1392,7 +1272,9 @@ pub fn formula_eval(
     );
     let mut engine = FormulaEngine::new();
 
-    let result = engine.eval(&source, &mut ctx).map_err(formula_error_to_napi)?;
+    let result = engine
+        .eval(&source, &mut ctx)
+        .map_err(formula_error_to_napi)?;
 
     let mut output = HashMap::new();
 
@@ -1439,7 +1321,9 @@ pub fn formula_eval_multi(
     );
     let mut engine = FormulaEngine::new();
 
-    let multi = engine.eval_multi(&source, &mut ctx).map_err(formula_error_to_napi)?;
+    let multi = engine
+        .eval_multi(&source, &mut ctx)
+        .map_err(formula_error_to_napi)?;
 
     let mut names = Vec::new();
     let mut values = Vec::new();
@@ -1485,7 +1369,9 @@ pub fn formula_eval_draw(
     );
     let mut engine = FormulaEngine::new();
 
-    let _result = engine.eval(&source, &mut ctx).map_err(formula_error_to_napi)?;
+    let _result = engine
+        .eval(&source, &mut ctx)
+        .map_err(formula_error_to_napi)?;
 
     let draw_commands = ctx.draw_commands.borrow();
     let json_value = serde_json::json!({
@@ -1521,7 +1407,9 @@ pub fn formula_eval_debug(
     );
     let mut engine = FormulaEngine::new();
 
-    let (_result, debugger) = engine.eval_with_debug(&source, &mut ctx).map_err(formula_error_to_napi)?;
+    let (_result, debugger) = engine
+        .eval_with_debug(&source, &mut ctx)
+        .map_err(formula_error_to_napi)?;
 
     let json_value = serde_json::json!({
         "events": debugger.get_events(),
@@ -1630,7 +1518,9 @@ pub fn formula_eval_jit(
     );
     let mut engine = FormulaEngine::new();
 
-    let result = engine.eval_jit(&source, &mut ctx).map_err(formula_error_to_napi)?;
+    let result = engine
+        .eval_jit(&source, &mut ctx)
+        .map_err(formula_error_to_napi)?;
 
     let mut output = HashMap::new();
 
@@ -1683,7 +1573,9 @@ pub fn formula_eval_simd(
     );
     let mut engine = FormulaEngine::new();
 
-    let result = engine.eval_simd(&source, &mut ctx).map_err(formula_error_to_napi)?;
+    let result = engine
+        .eval_simd(&source, &mut ctx)
+        .map_err(formula_error_to_napi)?;
 
     let mut output = HashMap::new();
 

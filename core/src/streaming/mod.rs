@@ -30,17 +30,17 @@
 // ---------------------------------------------------------------------------
 // Sub-category modules
 // ---------------------------------------------------------------------------
-pub mod overlap;
+pub mod breadth;
+pub mod cycle;
+pub mod math;
 pub mod momentum;
+pub mod overlap;
+pub mod pattern;
+pub mod price_transform;
+pub mod statistics;
 pub mod trend;
 pub mod volatility;
 pub mod volume;
-pub mod cycle;
-pub mod price_transform;
-pub mod statistics;
-pub mod pattern;
-pub mod breadth;
-pub mod math;
 
 // ---------------------------------------------------------------------------
 // Infrastructure modules
@@ -163,9 +163,9 @@ pub mod indicators {
     pub use super::volume::pvi::StreamingPvi;
     pub use super::volume::pvt::StreamingPvt;
     pub use super::volume::twiggs_mf::StreamingTwiggsMf;
-    pub use super::volume::vr::StreamingVr;
     pub use super::volume::volume_momentum::{StreamingVolumeMomentum, StreamingVolumeRoc};
     pub use super::volume::volume_oscillator::StreamingVolumeOscillator;
+    pub use super::volume::vr::StreamingVr;
     pub use super::volume::vzo::StreamingVzo;
 
     pub use super::cycle::ehlers::{
@@ -181,8 +181,8 @@ pub mod indicators {
 
     pub use super::price_transform::avgprice::StreamingAvgPrice;
     pub use super::price_transform::bop::StreamingBop;
-    pub use super::price_transform::midprice::StreamingMidprice;
     pub use super::price_transform::medprice::StreamingMedPrice;
+    pub use super::price_transform::midprice::StreamingMidprice;
     pub use super::price_transform::qstick::StreamingQStick;
     pub use super::price_transform::typprice::StreamingTypPrice;
     pub use super::price_transform::wclprice::StreamingWclPrice;
@@ -200,15 +200,14 @@ pub mod indicators {
 
     pub use super::pattern::patterns::{
         StreamingCdl3BlackCrows, StreamingCdl3WhiteSoldiers, StreamingCdlAbandonedBaby,
-        StreamingCdlDarkCloudCover, StreamingCdlDoji, StreamingCdlDojiStar,
-        StreamingCdlEngulfing, StreamingCdlEveningStar, StreamingCdlHangingMan,
-        StreamingCdlHarami, StreamingCdlHammer, StreamingCdlInvertedHammer,
-        StreamingCdlKicking, StreamingCdlMarubozu, StreamingCdlMorningStar,
-        StreamingCdlPiercing, StreamingCdlShootingStar, StreamingCdlSpinningTop,
-        StreamingCdlTasukiGap, StreamingCdlTristar,
+        StreamingCdlDarkCloudCover, StreamingCdlDoji, StreamingCdlDojiStar, StreamingCdlEngulfing,
+        StreamingCdlEveningStar, StreamingCdlHammer, StreamingCdlHangingMan, StreamingCdlHarami,
+        StreamingCdlInvertedHammer, StreamingCdlKicking, StreamingCdlMarubozu,
+        StreamingCdlMorningStar, StreamingCdlPiercing, StreamingCdlShootingStar,
+        StreamingCdlSpinningTop, StreamingCdlTasukiGap, StreamingCdlTristar,
     };
-    pub use super::pattern::squeeze_momentum::{StreamingSqueezeMomentum, SqueezeMomentumOutput};
     pub use super::pattern::smc::{StreamingFairValueGap, StreamingOrderBlock};
+    pub use super::pattern::squeeze_momentum::{SqueezeMomentumOutput, StreamingSqueezeMomentum};
 
     pub use super::breadth::advance_decline::StreamingAdvanceDeclineLine;
     pub use super::breadth::ar::StreamingAr;

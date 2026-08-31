@@ -270,7 +270,12 @@ pub fn supertrend_multi(
 /// let dir = wow_direction(&high, &low, &close, 3).unwrap();
 /// assert_eq!(dir.len(), 10);
 /// ```
-pub fn wow_direction(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Array1<i32>> {
+pub fn wow_direction(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    period: usize,
+) -> Result<Array1<i32>> {
     if high.len() != low.len() || high.len() != close.len() {
         return Err(TaError::InvalidParameter {
             name: "high, low, close".to_string(),

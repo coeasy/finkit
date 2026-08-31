@@ -1,6 +1,6 @@
+use crate::impl_standard_methods;
 use crate::streaming::overlap::ema::StreamingEma;
 use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
-use crate::impl_standard_methods;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamingMassIndex {
@@ -177,8 +177,7 @@ mod tests {
         let ema_period = 9;
 
         let batch =
-            crate::indicators::volatility_ext::mass_index(&high, &low, period, ema_period)
-                .unwrap();
+            crate::indicators::volatility_ext::mass_index(&high, &low, period, ema_period).unwrap();
         let mut streaming = StreamingMassIndex::new(period, ema_period);
 
         for (i, bar) in bars.iter().enumerate() {

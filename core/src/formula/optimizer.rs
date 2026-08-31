@@ -85,9 +85,9 @@ impl FormulaOptimizer {
                 expr: Box::new(Self::algebraic_simplify(expr)),
                 modifier: modifier.clone(),
             },
-            AstNode::Statements(stmts) => AstNode::Statements(
-                stmts.iter().map(Self::algebraic_simplify).collect(),
-            ),
+            AstNode::Statements(stmts) => {
+                AstNode::Statements(stmts.iter().map(Self::algebraic_simplify).collect())
+            }
             AstNode::DrawText {
                 cond,
                 price,
@@ -125,7 +125,11 @@ impl FormulaOptimizer {
                 empty: *empty,
                 color: color.clone(),
             },
-            AstNode::DrawGeneric { command, args, color } => AstNode::DrawGeneric {
+            AstNode::DrawGeneric {
+                command,
+                args,
+                color,
+            } => AstNode::DrawGeneric {
                 command: command.clone(),
                 args: args.iter().map(Self::algebraic_simplify).collect(),
                 color: color.clone(),
@@ -230,7 +234,10 @@ impl FormulaOptimizer {
         match (a, b) {
             (AstNode::Variable(x), AstNode::Variable(y)) => x == y,
             (AstNode::Number(x), AstNode::Number(y)) => x == y,
-            (AstNode::FunctionCall { name: n1, args: a1 }, AstNode::FunctionCall { name: n2, args: a2 }) => {
+            (
+                AstNode::FunctionCall { name: n1, args: a1 },
+                AstNode::FunctionCall { name: n2, args: a2 },
+            ) => {
                 n1 == n2
                     && a1.len() == a2.len()
                     && a1.iter().zip(a2.iter()).all(|(x, y)| Self::same_expr(x, y))
@@ -291,9 +298,9 @@ impl FormulaOptimizer {
                 expr: Box::new(Self::strength_reduction(expr)),
                 modifier: modifier.clone(),
             },
-            AstNode::Statements(stmts) => AstNode::Statements(
-                stmts.iter().map(Self::strength_reduction).collect(),
-            ),
+            AstNode::Statements(stmts) => {
+                AstNode::Statements(stmts.iter().map(Self::strength_reduction).collect())
+            }
             AstNode::DrawText {
                 cond,
                 price,
@@ -331,7 +338,11 @@ impl FormulaOptimizer {
                 empty: *empty,
                 color: color.clone(),
             },
-            AstNode::DrawGeneric { command, args, color } => AstNode::DrawGeneric {
+            AstNode::DrawGeneric {
+                command,
+                args,
+                color,
+            } => AstNode::DrawGeneric {
                 command: command.clone(),
                 args: args.iter().map(Self::strength_reduction).collect(),
                 color: color.clone(),
@@ -550,7 +561,11 @@ impl FormulaOptimizer {
                 empty: *empty,
                 color: color.clone(),
             },
-            AstNode::DrawGeneric { command, args, color } => AstNode::DrawGeneric {
+            AstNode::DrawGeneric {
+                command,
+                args,
+                color,
+            } => AstNode::DrawGeneric {
                 command: command.clone(),
                 args: args.iter().map(Self::loop_invariant_code_motion).collect(),
                 color: color.clone(),
@@ -710,7 +725,11 @@ impl FormulaOptimizer {
                 empty: *empty,
                 color: color.clone(),
             },
-            AstNode::DrawGeneric { command, args, color } => AstNode::DrawGeneric {
+            AstNode::DrawGeneric {
+                command,
+                args,
+                color,
+            } => AstNode::DrawGeneric {
                 command: command.clone(),
                 args: args.iter().map(Self::constant_folding).collect(),
                 color: color.clone(),
@@ -907,7 +926,11 @@ impl FormulaOptimizer {
                 empty: *empty,
                 color: color.clone(),
             },
-            AstNode::DrawGeneric { command, args, color } => AstNode::DrawGeneric {
+            AstNode::DrawGeneric {
+                command,
+                args,
+                color,
+            } => AstNode::DrawGeneric {
                 command: command.clone(),
                 args: args.iter().map(Self::dead_code_elimination).collect(),
                 color: color.clone(),
@@ -1398,9 +1421,7 @@ impl DependencyAnalyzer {
                         needed_vars.insert(name.clone());
                         changed = true;
                     }
-                    AstNode::ParamDecl { name, .. }
-                        if needed_vars.contains(name) =>
-                    {
+                    AstNode::ParamDecl { name, .. } if needed_vars.contains(name) => {
                         keep_indices.insert(idx);
                         changed = true;
                     }
@@ -1425,7 +1446,9 @@ impl DependencyAnalyzer {
 
     fn collect_vars(node: &AstNode, vars: &mut std::collections::HashSet<String>) {
         match node {
-            AstNode::Variable(name) => { vars.insert(name.clone()); }
+            AstNode::Variable(name) => {
+                vars.insert(name.clone());
+            }
             AstNode::BinaryOp { left, right, .. } => {
                 Self::collect_vars(left, vars);
                 Self::collect_vars(right, vars);
@@ -1440,7 +1463,11 @@ impl DependencyAnalyzer {
                 Self::collect_vars(array, vars);
                 Self::collect_vars(index, vars);
             }
-            AstNode::IfThenElse { cond, then_branch, else_branch } => {
+            AstNode::IfThenElse {
+                cond,
+                then_branch,
+                else_branch,
+            } => {
                 Self::collect_vars(cond, vars);
                 Self::collect_vars(then_branch, vars);
                 Self::collect_vars(else_branch, vars);
@@ -1462,7 +1489,9 @@ impl DependencyAnalyzer {
                 Self::collect_vars(cond, vars);
                 Self::collect_vars(price, vars);
             }
-            AstNode::DrawIcon { cond, price, icon, .. } => {
+            AstNode::DrawIcon {
+                cond, price, icon, ..
+            } => {
                 Self::collect_vars(cond, vars);
                 Self::collect_vars(price, vars);
                 Self::collect_vars(icon, vars);
@@ -1505,7 +1534,9 @@ impl DependencyAnalyzer {
             }
 
             let has_dependency = stmt_uses.iter().any(|u| current_defines.contains(u))
-                || stmt_defines.iter().any(|d| current_uses.contains(d) || current_defines.contains(d));
+                || stmt_defines
+                    .iter()
+                    .any(|d| current_uses.contains(d) || current_defines.contains(d));
 
             if has_dependency && !current_group.is_empty() {
                 groups.push(std::mem::take(&mut current_group));
@@ -1864,7 +1895,13 @@ mod tests {
         };
         let opt = FormulaOptimizer::algebraic_simplify(&ast);
         // 当前实现：Sub 不化简,保留为 BinaryOp(Sub)
-        assert!(matches!(opt, AstNode::BinaryOp { op: BinaryOperator::Sub, .. }));
+        assert!(matches!(
+            opt,
+            AstNode::BinaryOp {
+                op: BinaryOperator::Sub,
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -1943,7 +1980,7 @@ mod tests {
         // 3.14 + 5 不依赖任何变量,是 loop invariant
         let ast = AstNode::BinaryOp {
             op: BinaryOperator::Add,
-            left: Box::new(AstNode::Number(3.14)),
+            left: Box::new(AstNode::Number(std::f64::consts::PI)),
             right: Box::new(AstNode::Number(5.0)),
         };
         assert!(FormulaOptimizer::is_loop_invariant(&ast, "i"));
@@ -2053,16 +2090,14 @@ mod tests {
             | AstNode::CompoundAssignment { expr, .. }
             | AstNode::Output { expr, .. } => ast_contains_strength_reduced_mul(expr),
             AstNode::BinaryOp { left, right, .. } => {
-                ast_contains_strength_reduced_mul(left)
-                    || ast_contains_strength_reduced_mul(right)
+                ast_contains_strength_reduced_mul(left) || ast_contains_strength_reduced_mul(right)
             }
             AstNode::UnaryOp { expr, .. } => ast_contains_strength_reduced_mul(expr),
             AstNode::FunctionCall { args, .. } => {
                 args.iter().any(ast_contains_strength_reduced_mul)
             }
             AstNode::IndexAccess { array, index } => {
-                ast_contains_strength_reduced_mul(array)
-                    || ast_contains_strength_reduced_mul(index)
+                ast_contains_strength_reduced_mul(array) || ast_contains_strength_reduced_mul(index)
             }
             AstNode::IfThenElse {
                 cond,
@@ -2073,7 +2108,9 @@ mod tests {
                     || ast_contains_strength_reduced_mul(then_branch)
                     || ast_contains_strength_reduced_mul(else_branch)
             }
-            AstNode::ForLoop { start, end, body, .. } => {
+            AstNode::ForLoop {
+                start, end, body, ..
+            } => {
                 ast_contains_strength_reduced_mul(start)
                     || ast_contains_strength_reduced_mul(end)
                     || body.iter().any(ast_contains_strength_reduced_mul)

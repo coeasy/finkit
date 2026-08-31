@@ -26,7 +26,9 @@ impl StreamingHtTrendline {
 }
 
 impl Default for StreamingHtTrendline {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl StreamingIndicator for StreamingHtTrendline {
@@ -39,7 +41,8 @@ impl StreamingIndicator for StreamingHtTrendline {
             let smooth_price = (4.0 * self.price_buf[3]
                 + 3.0 * self.price_buf[2]
                 + 2.0 * self.price_buf[1]
-                + self.price_buf[0]) / 10.0;
+                + self.price_buf[0])
+                / 10.0;
 
             let weight = if phase.is_finite() {
                 ((phase + PI / 2.0) / PI).clamp(0.1, 0.9)
@@ -68,16 +71,30 @@ impl StreamingIndicator for StreamingHtTrendline {
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { self.state.count >= 32 }
-    fn count(&self) -> usize { self.state.count }
-    fn value(&self) -> Option<f64> { self.last_value }
+    fn is_ready(&self) -> bool {
+        self.state.count >= 32
+    }
+    fn count(&self) -> usize {
+        self.state.count
+    }
+    fn value(&self) -> Option<f64> {
+        self.last_value
+    }
 }
 
 impl IndicatorMeta for StreamingHtTrendline {
-    fn name() -> &'static str { "HT_TRENDLINE" }
-    fn category() -> &'static str { "cycle" }
-    fn description() -> &'static str { "Hilbert Transform - Instantaneous Trendline" }
-    fn warm_up_period(&self) -> usize { 32 }
+    fn name() -> &'static str {
+        "HT_TRENDLINE"
+    }
+    fn category() -> &'static str {
+        "cycle"
+    }
+    fn description() -> &'static str {
+        "Hilbert Transform - Instantaneous Trendline"
+    }
+    fn warm_up_period(&self) -> usize {
+        32
+    }
 }
 
 #[cfg(test)]
@@ -85,7 +102,9 @@ mod tests {
     use super::*;
 
     fn sine_wave(n: usize, freq: f64, amp: f64, offset: f64) -> Vec<f64> {
-        (0..n).map(|i| amp * (i as f64 * freq).sin() + offset).collect()
+        (0..n)
+            .map(|i| amp * (i as f64 * freq).sin() + offset)
+            .collect()
     }
 
     #[test]
@@ -93,7 +112,9 @@ mod tests {
         let mut ht = StreamingHtTrendline::new();
         let data = sine_wave(100, 0.1, 1.0, 50.0);
         let mut last = None;
-        for &v in &data { last = ht.next(v); }
+        for &v in &data {
+            last = ht.next(v);
+        }
         assert!(last.is_some());
         assert!(last.unwrap().is_finite());
     }
@@ -107,7 +128,9 @@ mod tests {
     #[test]
     fn test_streaming_ht_trendline_reset() {
         let mut ht = StreamingHtTrendline::new();
-        for i in 0..50 { ht.next(i as f64); }
+        for i in 0..50 {
+            ht.next(i as f64);
+        }
         assert!(ht.is_ready());
         ht.reset();
         assert!(!ht.is_ready());
@@ -119,7 +142,9 @@ mod tests {
         let data = sine_wave(200, 0.1, 1.0, 50.0);
         let mut vals = Vec::new();
         for &v in &data {
-            if let Some(tl) = ht.next(v) { vals.push(tl); }
+            if let Some(tl) = ht.next(v) {
+                vals.push(tl);
+            }
         }
         if !vals.is_empty() {
             let mean = vals.iter().sum::<f64>() / vals.len() as f64;

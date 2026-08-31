@@ -1,6 +1,6 @@
-use crate::streaming::traits::{StreamingIndicator};
+use crate::impl_indicator_meta;
 use crate::impl_standard_methods;
-use crate::{impl_indicator_meta};
+use crate::streaming::traits::StreamingIndicator;
 
 /// Streaming Commodity Channel Index (CCI).
 ///
@@ -38,7 +38,10 @@ impl StreamingCci {
 
 impl StreamingIndicator<(f64, f64, f64)> for StreamingCci {
     #[inline]
-    #[cfg_attr(feature = "tracing", tracing::instrument(level = "trace", skip(self, input)))]
+    #[cfg_attr(
+        feature = "tracing",
+        tracing::instrument(level = "trace", skip(self, input))
+    )]
     fn next(&mut self, input: (f64, f64, f64)) -> Option<f64> {
         crate::streaming_measure!("cci", self.count, {
             let (high, low, close) = input;
@@ -189,16 +192,21 @@ mod tests {
             .map(|i| 50.0 + (i as f64 * 0.2).sin() * 10.0)
             .collect();
         let low: Vec<f64> = high.iter().map(|h| h - 3.0).collect();
-        let close: Vec<f64> = high.iter().zip(low.iter()).map(|(h, l)| (h + l) / 2.0).collect();
+        let close: Vec<f64> = high
+            .iter()
+            .zip(low.iter())
+            .map(|(h, l)| (h + l) / 2.0)
+            .collect();
         let period = 14;
 
         let batch = crate::indicators::momentum::cci(&high, &low, &close, period).unwrap();
 
         let mut streaming = StreamingCci::new(period);
         for i in 0..n {
-            if let (Some(s), false) =
-                (streaming.next((high[i], low[i], close[i])), batch[i].is_nan())
-            {
+            if let (Some(s), false) = (
+                streaming.next((high[i], low[i], close[i])),
+                batch[i].is_nan(),
+            ) {
                 assert!(
                     (s - batch[i]).abs() < 1e-10,
                     "CCI mismatch at {i}: streaming={s}, batch={}",

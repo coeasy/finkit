@@ -1,6 +1,6 @@
+use crate::impl_standard_methods;
 use crate::streaming::overlap::sma::StreamingSma;
 use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
-use crate::impl_standard_methods;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -119,7 +119,9 @@ impl StreamingRvi {
         let n2 = (self.rvi_pos + 1) % 4;
         let oldest = self.rvi_pos;
         Some(
-            (self.rvi_ring[newest] + 2.0 * self.rvi_ring[n1] + 2.0 * self.rvi_ring[n2]
+            (self.rvi_ring[newest]
+                + 2.0 * self.rvi_ring[n1]
+                + 2.0 * self.rvi_ring[n2]
                 + self.rvi_ring[oldest])
                 / 6.0,
         )
@@ -182,9 +184,7 @@ impl StreamingIndicator<&dyn Ohlcv, RviOutput> for StreamingRvi {
         self.num_sma.is_ready() && self.denom_sma.is_ready()
     }
 
-        impl_standard_methods!(output = RviOutput);
-
-
+    impl_standard_methods!(output = RviOutput);
 }
 
 impl IndicatorMeta for StreamingRvi {
@@ -271,8 +271,7 @@ mod tests {
         let close: Vec<f64> = bars.iter().map(|b| b.close()).collect();
         let period = 10;
 
-        let batch =
-            crate::indicators::rvi(&open, &high, &low, &close, period).unwrap();
+        let batch = crate::indicators::rvi(&open, &high, &low, &close, period).unwrap();
         let mut streaming = StreamingRvi::new(period);
 
         for (i, bar) in bars.iter().enumerate() {

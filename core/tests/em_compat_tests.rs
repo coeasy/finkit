@@ -1,6 +1,6 @@
-use ndarray::Array1;
 use finkit::formula::engine::FormulaEngine;
 use finkit::formula::types::{EmData, FormulaContext};
+use ndarray::Array1;
 
 fn make_ctx(len: usize) -> FormulaContext {
     let close: Vec<f64> = (0..len)
@@ -26,9 +26,15 @@ fn make_ctx_with_em_data(len: usize) -> FormulaContext {
     let ctx = make_ctx(len);
     let mut em_data = EmData::default();
 
-    let buy_vol: Vec<f64> = (0..len).map(|i| 500.0 + (i as f64 * 0.5).sin() * 100.0).collect();
-    let sell_vol: Vec<f64> = (0..len).map(|i| 400.0 + (i as f64 * 0.3).cos() * 80.0).collect();
-    let zlccv: Vec<f64> = (0..len).map(|i| 100.0 + (i as f64 * 0.4).sin() * 30.0).collect();
+    let buy_vol: Vec<f64> = (0..len)
+        .map(|i| 500.0 + (i as f64 * 0.5).sin() * 100.0)
+        .collect();
+    let sell_vol: Vec<f64> = (0..len)
+        .map(|i| 400.0 + (i as f64 * 0.3).cos() * 80.0)
+        .collect();
+    let zlccv: Vec<f64> = (0..len)
+        .map(|i| 100.0 + (i as f64 * 0.4).sin() * 30.0)
+        .collect();
 
     em_data
         .dkcol_data
@@ -60,7 +66,8 @@ fn test_em_dkcol_with_data() {
     assert_eq!(result.len(), 100);
     for i in 0..100 {
         if !result[i].is_nan() {
-            let expected = 500.0 + (i as f64 * 0.5).sin() * 100.0 - (400.0 + (i as f64 * 0.3).cos() * 80.0);
+            let expected =
+                500.0 + (i as f64 * 0.5).sin() * 100.0 - (400.0 + (i as f64 * 0.3).cos() * 80.0);
             assert!((result[i] - expected).abs() < 1e-10);
         }
     }
@@ -95,7 +102,13 @@ fn test_em_cross_basic() {
 fn test_em_cross_with_crossing_data() {
     let mut engine = FormulaEngine::new();
     let close: Vec<f64> = (0..20)
-        .map(|i| if i < 10 { 10.0 - i as f64 * 0.5 } else { 5.0 + (i - 10) as f64 * 0.5 })
+        .map(|i| {
+            if i < 10 {
+                10.0 - i as f64 * 0.5
+            } else {
+                5.0 + (i - 10) as f64 * 0.5
+            }
+        })
         .collect();
     let open: Vec<f64> = close.iter().map(|c| c - 0.1).collect();
     let high: Vec<f64> = close.iter().map(|c| c + 0.5).collect();
@@ -248,15 +261,18 @@ fn test_em_zlccv_without_data() {
 #[test]
 fn test_em_data_injection_interface() {
     let mut em_data = EmData::default();
-    em_data
-        .dkcol_data
-        .insert("BUYVOL".to_string(), Array1::from_vec(vec![100.0, 200.0, 150.0]));
-    em_data
-        .dkcol_data
-        .insert("SELLVOL".to_string(), Array1::from_vec(vec![80.0, 180.0, 120.0]));
-    em_data
-        .external_data
-        .insert("SH000001".to_string(), Array1::from_vec(vec![3000.0, 3010.0, 3020.0]));
+    em_data.dkcol_data.insert(
+        "BUYVOL".to_string(),
+        Array1::from_vec(vec![100.0, 200.0, 150.0]),
+    );
+    em_data.dkcol_data.insert(
+        "SELLVOL".to_string(),
+        Array1::from_vec(vec![80.0, 180.0, 120.0]),
+    );
+    em_data.external_data.insert(
+        "SH000001".to_string(),
+        Array1::from_vec(vec![3000.0, 3010.0, 3020.0]),
+    );
 
     assert_eq!(em_data.dkcol_data.len(), 2);
     assert_eq!(em_data.external_data.len(), 1);
@@ -274,12 +290,14 @@ fn test_em_dkcol_with_injected_data() {
     let vol = Array1::from_vec(vec![1000.0, 2000.0, 1500.0]);
 
     let mut em_data = EmData::default();
-    em_data
-        .dkcol_data
-        .insert("BUYVOL".to_string(), Array1::from_vec(vec![500.0, 800.0, 600.0]));
-    em_data
-        .dkcol_data
-        .insert("SELLVOL".to_string(), Array1::from_vec(vec![300.0, 700.0, 400.0]));
+    em_data.dkcol_data.insert(
+        "BUYVOL".to_string(),
+        Array1::from_vec(vec![500.0, 800.0, 600.0]),
+    );
+    em_data.dkcol_data.insert(
+        "SELLVOL".to_string(),
+        Array1::from_vec(vec![300.0, 700.0, 400.0]),
+    );
 
     let ctx = FormulaContext::new(open, high, low, close, vol, None).with_em_data(em_data);
     let mut ctx = ctx;
@@ -381,7 +399,10 @@ fn test_em_compatibility_summary() {
     println!("  Total formulas tested: {}", total);
     println!("  Passed: {}", passed);
     println!("  Compatibility rate: {:.1}%", compatibility_rate);
-    assert!(compatibility_rate >= 95.0, "Compatibility rate should be >= 95%");
+    assert!(
+        compatibility_rate >= 95.0,
+        "Compatibility rate should be >= 95%"
+    );
 }
 
 #[test]

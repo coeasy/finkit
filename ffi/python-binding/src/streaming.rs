@@ -1,7 +1,7 @@
-use pyo3::prelude::*;
-use pyo3::types::PyBytes;
 use finkit::streaming::indicators::*;
 use finkit::streaming::{CheckpointState, OhlcvBar, StreamingIndicator};
+use pyo3::prelude::*;
+use pyo3::types::PyBytes;
 
 type IchimokuTuple = (f64, f64, f64, f64, f64);
 
@@ -50,17 +50,17 @@ macro_rules! py_streaming_f64_f64 {
             }
 
             fn save_state<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
-                let bytes = self.inner.save_state().map_err(|e| {
-                    pyo3::exceptions::PyRuntimeError::new_err(e.to_string())
-                })?;
+                let bytes = self
+                    .inner
+                    .save_state()
+                    .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
                 Ok(PyBytes::new(py, &bytes))
             }
 
             #[staticmethod]
             fn restore_state(bytes: &[u8]) -> PyResult<Self> {
-                let inner = <$rust_type>::restore_state(bytes).map_err(|e| {
-                    pyo3::exceptions::PyRuntimeError::new_err(e.to_string())
-                })?;
+                let inner = <$rust_type>::restore_state(bytes)
+                    .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
                 Ok(Self { inner })
             }
         }
@@ -189,16 +189,8 @@ py_streaming_f64_f64!(
     StreamingCmo,
     "Streaming Chande Momentum Oscillator"
 );
-py_streaming_f64_f64!(
-    StreamingULCER,
-    StreamingUlcerIndex,
-    "Streaming Ulcer Index"
-);
-py_streaming_f64_f64!(
-    StreamingPSY,
-    StreamingPsy,
-    "Streaming Psychological Line"
-);
+py_streaming_f64_f64!(StreamingULCER, StreamingUlcerIndex, "Streaming Ulcer Index");
+py_streaming_f64_f64!(StreamingPSY, StreamingPsy, "Streaming Psychological Line");
 
 macro_rules! py_streaming_f64_f64_default {
     ($py_name:ident, $rust_type:ty, $doc:expr) => {
@@ -313,17 +305,17 @@ macro_rules! py_streaming_f64_f64_2period {
     };
 }
 
-py_streaming_f64_f64_2period!(StreamingAPO, StreamingApo, "Streaming Absolute Price Oscillator");
+py_streaming_f64_f64_2period!(
+    StreamingAPO,
+    StreamingApo,
+    "Streaming Absolute Price Oscillator"
+);
 py_streaming_f64_f64_2period!(
     StreamingPPO,
     StreamingPpo,
     "Streaming Percentage Price Oscillator"
 );
-py_streaming_f64_f64_2period!(
-    StreamingTSI,
-    StreamingTsi,
-    "Streaming True Strength Index"
-);
+py_streaming_f64_f64_2period!(StreamingTSI, StreamingTsi, "Streaming True Strength Index");
 
 macro_rules! py_streaming_f64_f64_3period {
     ($py_name:ident, $rust_type:ty, $doc:expr) => {
@@ -419,11 +411,7 @@ macro_rules! py_streaming_f64_f64_stc {
     };
 }
 
-py_streaming_f64_f64_stc!(
-    StreamingSTC,
-    StreamingStc,
-    "Streaming Schaff Trend Cycle"
-);
+py_streaming_f64_f64_stc!(StreamingSTC, StreamingStc, "Streaming Schaff Trend Cycle");
 
 macro_rules! py_streaming_f64_f64_alma {
     ($py_name:ident, $rust_type:ty, $doc:expr) => {
@@ -1373,7 +1361,11 @@ macro_rules! py_streaming_ohlcv_f64_default {
     };
 }
 
-py_streaming_ohlcv_f64_default!(StreamingAD, StreamingAd, "Streaming Accumulation/Distribution");
+py_streaming_ohlcv_f64_default!(
+    StreamingAD,
+    StreamingAd,
+    "Streaming Accumulation/Distribution"
+);
 py_streaming_ohlcv_f64_default!(
     StreamingPVI,
     StreamingPvi,
@@ -1384,11 +1376,7 @@ py_streaming_ohlcv_f64_default!(
     StreamingNvi,
     "Streaming Negative Volume Index"
 );
-py_streaming_ohlcv_f64_default!(
-    StreamingPVT,
-    StreamingPvt,
-    "Streaming Price Volume Trend"
-);
+py_streaming_ohlcv_f64_default!(StreamingPVT, StreamingPvt, "Streaming Price Volume Trend");
 py_streaming_ohlcv_f64_default!(
     PyStreamingAnchoredVwap,
     StreamingAnchoredVwap,
@@ -1626,13 +1614,7 @@ macro_rules! py_streaming_hlcv_f64 {
                 }
             }
 
-            fn update(
-                &mut self,
-                high: f64,
-                low: f64,
-                close: f64,
-                volume: f64,
-            ) -> f64 {
+            fn update(&mut self, high: f64, low: f64, close: f64, volume: f64) -> f64 {
                 self.inner
                     .next((high, low, close, volume))
                     .unwrap_or(f64::NAN)
@@ -1645,7 +1627,9 @@ macro_rules! py_streaming_hlcv_f64 {
                 close: Vec<f64>,
                 volume: Vec<f64>,
             ) -> PyResult<Vec<f64>> {
-                if high.len() != low.len() || high.len() != close.len() || high.len() != volume.len()
+                if high.len() != low.len()
+                    || high.len() != close.len()
+                    || high.len() != volume.len()
                 {
                     return Err(pyo3::exceptions::PyValueError::new_err(
                         "high, low, close, volume must have the same length",
@@ -1656,9 +1640,7 @@ macro_rules! py_streaming_hlcv_f64 {
                     .zip(low.iter())
                     .zip(close.iter())
                     .zip(volume.iter())
-                    .map(|(((&h, &l), &c), &v)| {
-                        self.inner.next((h, l, c, v)).unwrap_or(f64::NAN)
-                    })
+                    .map(|(((&h, &l), &c), &v)| self.inner.next((h, l, c, v)).unwrap_or(f64::NAN))
                     .collect())
             }
 
@@ -1677,11 +1659,7 @@ macro_rules! py_streaming_hlcv_f64 {
     };
 }
 
-py_streaming_hlcv_f64!(
-    StreamingCMF,
-    StreamingCmf,
-    "Streaming Chaikin Money Flow"
-);
+py_streaming_hlcv_f64!(StreamingCMF, StreamingCmf, "Streaming Chaikin Money Flow");
 
 #[pyclass]
 pub struct StreamingTRANGE {

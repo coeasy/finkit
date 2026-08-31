@@ -40,7 +40,10 @@ impl StreamingMfi {
         }
     }
 
-    #[cfg_attr(feature = "tracing", tracing::instrument(level = "trace", skip(self, bar)))]
+    #[cfg_attr(
+        feature = "tracing",
+        tracing::instrument(level = "trace", skip(self, bar))
+    )]
     pub fn next(&mut self, bar: &dyn Ohlcv) -> Option<f64> {
         crate::streaming_measure!("mfi", self.count, {
             self.count += 1;
@@ -116,8 +119,12 @@ impl StreamingMfi {
         self.last_value = None;
     }
 
-    pub fn is_ready(&self) -> bool { self.count > self.period }
-    pub fn count(&self) -> usize { self.count }
+    pub fn is_ready(&self) -> bool {
+        self.count > self.period
+    }
+    pub fn count(&self) -> usize {
+        self.count
+    }
 
     pub fn value(&self) -> Option<f64> {
         self.last_value
@@ -125,10 +132,18 @@ impl StreamingMfi {
 }
 
 impl IndicatorMeta for StreamingMfi {
-    fn name() -> &'static str { "MFI" }
-    fn category() -> &'static str { "momentum" }
-    fn description() -> &'static str { "Money Flow Index" }
-    fn warm_up_period(&self) -> usize { self.period + 1 }
+    fn name() -> &'static str {
+        "MFI"
+    }
+    fn category() -> &'static str {
+        "momentum"
+    }
+    fn description() -> &'static str {
+        "Money Flow Index"
+    }
+    fn warm_up_period(&self) -> usize {
+        self.period + 1
+    }
 }
 
 #[cfg(test)]
@@ -145,7 +160,9 @@ mod tests {
             OhlcvBar::new(12.0, 14.0, 11.0, 13.0, 200.0),
             OhlcvBar::new(13.0, 15.0, 12.0, 14.0, 180.0),
         ];
-        for bar in &bars[..3] { assert_eq!(mfi.next(bar), None); }
+        for bar in &bars[..3] {
+            assert_eq!(mfi.next(bar), None);
+        }
         let v = mfi.next(&bars[3]).unwrap();
         assert!((0.0..=100.0).contains(&v));
     }
@@ -159,7 +176,13 @@ mod tests {
     fn test_streaming_mfi_reset() {
         let mut mfi = StreamingMfi::new(3);
         for i in 0..10 {
-            mfi.next(&OhlcvBar::new(i as f64, i as f64 + 2.0, i as f64 - 1.0, i as f64 + 1.0, 100.0));
+            mfi.next(&OhlcvBar::new(
+                i as f64,
+                i as f64 + 2.0,
+                i as f64 - 1.0,
+                i as f64 + 1.0,
+                100.0,
+            ));
         }
         assert!(mfi.is_ready());
         mfi.reset();

@@ -8,9 +8,9 @@
 //!
 //! Uses a fixed-size Hilbert state from [`super::ht_dcperiod::HilbertState`].
 
+use crate::impl_standard_methods;
 use crate::streaming::cycle::ht_dcperiod::HilbertState;
 use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
-use crate::impl_standard_methods;
 
 /// Streaming HT_MEASUREMENT (phased buy/sell).
 #[derive(Clone)]
@@ -32,7 +32,9 @@ impl StreamingHtMeasurement {
 }
 
 impl Default for StreamingHtMeasurement {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl StreamingIndicator for StreamingHtMeasurement {
@@ -64,16 +66,26 @@ impl StreamingIndicator for StreamingHtMeasurement {
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { self.count >= 32 }
+    fn is_ready(&self) -> bool {
+        self.count >= 32
+    }
 
     impl_standard_methods!();
 }
 
 impl IndicatorMeta for StreamingHtMeasurement {
-    fn name() -> &'static str { "HT_MEASUREMENT" }
-    fn category() -> &'static str { "cycle" }
-    fn description() -> &'static str { "Hilbert Transform - Phased buy/sell measurement" }
-    fn warm_up_period(&self) -> usize { 32 }
+    fn name() -> &'static str {
+        "HT_MEASUREMENT"
+    }
+    fn category() -> &'static str {
+        "cycle"
+    }
+    fn description() -> &'static str {
+        "Hilbert Transform - Phased buy/sell measurement"
+    }
+    fn warm_up_period(&self) -> usize {
+        32
+    }
 }
 
 #[cfg(test)]
@@ -81,7 +93,9 @@ mod tests {
     use super::*;
 
     fn sine_wave(n: usize, freq: f64, amp: f64, offset: f64) -> Vec<f64> {
-        (0..n).map(|i| amp * (i as f64 * freq).sin() + offset).collect()
+        (0..n)
+            .map(|i| amp * (i as f64 * freq).sin() + offset)
+            .collect()
     }
 
     #[test]
@@ -89,11 +103,15 @@ mod tests {
         let mut m = StreamingHtMeasurement::new();
         let data = sine_wave(80, 0.1, 1.0, 50.0);
         let mut last = None;
-        for &v in &data { last = m.next(v); }
+        for &v in &data {
+            last = m.next(v);
+        }
         assert!(last.is_some());
         let val = last.unwrap();
-        assert!(val >= -1.0 && val <= 1.0,
-                "measurement out of [-1,1]: {val}");
+        assert!(
+            val >= -1.0 && val <= 1.0,
+            "measurement out of [-1,1]: {val}"
+        );
     }
 
     #[test]
@@ -106,7 +124,9 @@ mod tests {
     fn test_ht_measurement_reset() {
         let mut m = StreamingHtMeasurement::new();
         let data = sine_wave(50, 0.1, 1.0, 50.0);
-        for &v in &data { m.next(v); }
+        for &v in &data {
+            m.next(v);
+        }
         assert!(m.is_ready());
         m.reset();
         assert!(!m.is_ready());

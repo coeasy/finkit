@@ -377,7 +377,12 @@ pub fn sample_entropy(data: &[f64], m: usize, r: f64) -> Result<f64> {
 /// * `window` - Rolling window size
 /// * `m` - Embedding dimension
 /// * `r` - Tolerance
-pub fn rolling_approx_entropy(data: &[f64], window: usize, m: usize, r: f64) -> Result<Array1<f64>> {
+pub fn rolling_approx_entropy(
+    data: &[f64],
+    window: usize,
+    m: usize,
+    r: f64,
+) -> Result<Array1<f64>> {
     if window < m + 2 {
         return Err(TaError::InvalidParameter {
             name: "window".to_string(),
@@ -410,7 +415,12 @@ pub fn rolling_approx_entropy(data: &[f64], window: usize, m: usize, r: f64) -> 
 /// * `window` - Rolling window size
 /// * `m` - Embedding dimension
 /// * `r` - Tolerance
-pub fn rolling_sample_entropy(data: &[f64], window: usize, m: usize, r: f64) -> Result<Array1<f64>> {
+pub fn rolling_sample_entropy(
+    data: &[f64],
+    window: usize,
+    m: usize,
+    r: f64,
+) -> Result<Array1<f64>> {
     if window < m + 2 {
         return Err(TaError::InvalidParameter {
             name: "window".to_string(),
@@ -445,7 +455,11 @@ mod tests {
     fn test_higuchi_smooth() {
         // High-frequency oscillation should give FD > 1
         let data: Vec<f64> = (0..200)
-            .map(|i| (i as f64 * 0.7).sin() * 10.0 + (i as f64 * 1.3).cos() * 5.0 + (i as f64 * 3.7).sin() * 2.0)
+            .map(|i| {
+                (i as f64 * 0.7).sin() * 10.0
+                    + (i as f64 * 1.3).cos() * 5.0
+                    + (i as f64 * 3.7).sin() * 2.0
+            })
             .collect();
         let fd = fractal_dimension_higuchi(&data, 10).unwrap();
         // Multi-harmonic signal should have higher complexity
@@ -477,9 +491,7 @@ mod tests {
 
     #[test]
     fn test_box_counting_oscillating() {
-        let data: Vec<f64> = (0..100)
-            .map(|i| (i as f64 * 0.5).sin() * 20.0)
-            .collect();
+        let data: Vec<f64> = (0..100).map(|i| (i as f64 * 0.5).sin() * 20.0).collect();
         let fd = fractal_dimension_box(&data, 8).unwrap();
         assert!(fd > 0.7 && fd < 2.5, "Box FD for oscillating data: {}", fd);
     }
@@ -492,7 +504,9 @@ mod tests {
 
     #[test]
     fn test_rolling_higuchi() {
-        let data: Vec<f64> = (0..50).map(|i| (i as f64 * 0.3).sin() * 10.0 + i as f64).collect();
+        let data: Vec<f64> = (0..50)
+            .map(|i| (i as f64 * 0.3).sin() * 10.0 + i as f64)
+            .collect();
         let result = rolling_fractal_dimension_higuchi(&data, 20, 5).unwrap();
         assert_eq!(result.len(), 50);
         assert!(result[18].is_nan());
@@ -501,7 +515,9 @@ mod tests {
 
     #[test]
     fn test_rolling_box() {
-        let data: Vec<f64> = (0..50).map(|i| (i as f64 * 0.3).sin() * 10.0 + i as f64).collect();
+        let data: Vec<f64> = (0..50)
+            .map(|i| (i as f64 * 0.3).sin() * 10.0 + i as f64)
+            .collect();
         let result = rolling_fractal_dimension_box(&data, 20, 5).unwrap();
         assert_eq!(result.len(), 50);
         assert!(result[18].is_nan());
@@ -566,9 +582,7 @@ mod tests {
 
     #[test]
     fn test_rolling_approx_entropy() {
-        let data: Vec<f64> = (0..50)
-            .map(|i| (i as f64 * 0.5).sin() * 10.0)
-            .collect();
+        let data: Vec<f64> = (0..50).map(|i| (i as f64 * 0.5).sin() * 10.0).collect();
         let result = rolling_approx_entropy(&data, 20, 2, 1.0).unwrap();
         assert_eq!(result.len(), 50);
         assert!(result[18].is_nan());
@@ -577,9 +591,7 @@ mod tests {
 
     #[test]
     fn test_rolling_sample_entropy() {
-        let data: Vec<f64> = (0..50)
-            .map(|i| (i as f64 * 0.5).sin() * 10.0)
-            .collect();
+        let data: Vec<f64> = (0..50).map(|i| (i as f64 * 0.5).sin() * 10.0).collect();
         let result = rolling_sample_entropy(&data, 20, 2, 3.0).unwrap();
         assert_eq!(result.len(), 50);
         assert!(result[18].is_nan());
@@ -828,7 +840,9 @@ mod dfa_tests {
     fn test_dfa_brownian() {
         // Cumulative sum of constant = linear => profile is quadratic => α ~1.5
         // Let's use something more realistic - a trending series
-        let data: Vec<f64> = (0..200).map(|i| i as f64 * 0.1 + (i as f64 * 0.3).sin()).collect();
+        let data: Vec<f64> = (0..200)
+            .map(|i| i as f64 * 0.1 + (i as f64 * 0.3).sin())
+            .collect();
         let alpha = dfa(&data, 1).unwrap();
         assert!(alpha.is_finite(), "DFA alpha should be finite: {}", alpha);
     }
@@ -840,7 +854,12 @@ mod dfa_tests {
             .collect();
         for order in 1..=4 {
             let alpha = dfa(&data, order).unwrap();
-            assert!(alpha.is_finite(), "DFA-{} alpha should be finite: {}", order, alpha);
+            assert!(
+                alpha.is_finite(),
+                "DFA-{} alpha should be finite: {}",
+                order,
+                alpha
+            );
         }
     }
 
@@ -855,7 +874,9 @@ mod dfa_tests {
 
     #[test]
     fn test_rolling_dfa() {
-        let data: Vec<f64> = (0..60).map(|i| (i as f64 * 0.3).sin() * 10.0 + i as f64 * 0.1).collect();
+        let data: Vec<f64> = (0..60)
+            .map(|i| (i as f64 * 0.3).sin() * 10.0 + i as f64 * 0.1)
+            .collect();
         let result = rolling_dfa(&data, 30, 1).unwrap();
         assert_eq!(result.len(), 60);
         assert!(result[28].is_nan());
@@ -965,7 +986,11 @@ pub fn lyapunov_exponent(data: &[f64], m: usize, tau: usize, max_iter: usize) ->
     let n_pts = time_idx.len() as f64;
     let sum_x: f64 = time_idx.iter().sum();
     let sum_y: f64 = log_div.iter().sum();
-    let sum_xy: f64 = time_idx.iter().zip(log_div.iter()).map(|(x, y)| x * y).sum();
+    let sum_xy: f64 = time_idx
+        .iter()
+        .zip(log_div.iter())
+        .map(|(x, y)| x * y)
+        .sum();
     let sum_xx: f64 = time_idx.iter().map(|x| x * x).sum();
 
     let denom = n_pts * sum_xx - sum_x * sum_x;

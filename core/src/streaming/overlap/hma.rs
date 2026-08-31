@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::streaming::overlap::wma::StreamingWma;
+use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 
 /// Streaming Hull Moving Average (HMA).
 ///
@@ -31,7 +31,10 @@ impl StreamingHma {
 
 impl StreamingIndicator for StreamingHma {
     #[inline]
-    #[cfg_attr(feature = "tracing", tracing::instrument(level = "trace", skip(self, input)))]
+    #[cfg_attr(
+        feature = "tracing",
+        tracing::instrument(level = "trace", skip(self, input))
+    )]
     fn next(&mut self, input: f64) -> Option<f64> {
         crate::streaming_measure!("hma", self.wma_full.count(), {
             let half = self.wma_half.next(input);

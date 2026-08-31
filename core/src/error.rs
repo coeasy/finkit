@@ -401,10 +401,7 @@ mod tests {
             s.contains("10"),
             "expected `10` in display string, got: {s}"
         );
-        assert!(
-            s.contains("5"),
-            "expected `5` in display string, got: {s}"
-        );
+        assert!(s.contains("5"), "expected `5` in display string, got: {s}");
     }
 
     #[test]

@@ -348,7 +348,11 @@ pub fn rolling_semivariance(data: &[f64], window: usize) -> Array1<f64> {
             .iter()
             .map(|&x| {
                 let d = x - mean;
-                if d < 0.0 { d * d } else { 0.0 }
+                if d < 0.0 {
+                    d * d
+                } else {
+                    0.0
+                }
             })
             .sum::<f64>()
             / n;
@@ -523,7 +527,10 @@ fn solve_linear_system(mut a: Vec<Vec<f64>>, mut b: Vec<f64>) -> Option<Vec<f64>
 }
 
 /// OLS fit with intercept: `y = beta0 + beta1*x1 + ...`.
-fn ols_with_intercept(y: &[f64], predictors: &[Array1<f64>]) -> Result<(Vec<f64>, Vec<f64>, usize)> {
+fn ols_with_intercept(
+    y: &[f64],
+    predictors: &[Array1<f64>],
+) -> Result<(Vec<f64>, Vec<f64>, usize)> {
     let n = y.len();
     if n < 2 {
         return Err(TaError::InvalidParameter {
@@ -582,11 +589,10 @@ fn ols_with_intercept(y: &[f64], predictors: &[Array1<f64>]) -> Result<(Vec<f64>
     for i in 0..k {
         let mut unit = vec![0.0; k];
         unit[i] = 1.0;
-        xtx_inv[i] = solve_linear_system(xtx.clone(), unit).ok_or_else(|| {
-            TaError::ComputationError {
+        xtx_inv[i] =
+            solve_linear_system(xtx.clone(), unit).ok_or_else(|| TaError::ComputationError {
                 message: "failed to invert X'X".to_string(),
-            }
-        })?;
+            })?;
     }
 
     let mut t_stats = vec![0.0; k];
@@ -634,9 +640,7 @@ pub fn adf_test(data: &[f64], max_lag: usize) -> Result<AdfResult> {
 
     let mut y = Vec::with_capacity(obs);
     let mut lag_level = Array1::zeros(obs);
-    let mut lagged_diffs: Vec<Array1<f64>> = (0..lags_used)
-        .map(|_| Array1::zeros(obs))
-        .collect();
+    let mut lagged_diffs: Vec<Array1<f64>> = (0..lags_used).map(|_| Array1::zeros(obs)).collect();
 
     for (idx, t) in (start..end).enumerate() {
         y.push(dy[t]);
@@ -694,8 +698,7 @@ pub fn cointegration_test(
     }
 
     let adf = adf_test(&residuals, max_lag)?;
-    let (cv1, cv5, cv10) =
-        interpolate_critical_values(&COINT_CRITICAL_VALUES, series_x.len());
+    let (cv1, cv5, cv10) = interpolate_critical_values(&COINT_CRITICAL_VALUES, series_x.len());
     let p_value = mackinnon_p_value(adf.test_statistic, cv1, cv5, cv10);
 
     Ok(CointegrationResult {
@@ -813,7 +816,9 @@ mod tests {
     #[test]
     fn test_hurst_trending_above_half() {
         // Strongly persistent series (cumulative positive drift)
-        let returns: Vec<f64> = (0..256).map(|i| 0.01 + (i as f64 * 0.001).sin() * 0.001).collect();
+        let returns: Vec<f64> = (0..256)
+            .map(|i| 0.01 + (i as f64 * 0.001).sin() * 0.001)
+            .collect();
         let h = hurst_exponent(&returns, 20);
         assert!(h.is_finite());
         assert!(h > 0.45, "H={h}");
@@ -860,9 +865,7 @@ mod tests {
         let mut rng_state = 42_u64;
         let mut data = Vec::with_capacity(200);
         for _ in 0..200 {
-            rng_state = rng_state
-                .wrapping_mul(6364136223846793005)
-                .wrapping_add(1);
+            rng_state = rng_state.wrapping_mul(6364136223846793005).wrapping_add(1);
             let u = (rng_state >> 33) as f64 / u32::MAX as f64;
             data.push(u - 0.5);
         }
@@ -878,9 +881,7 @@ mod tests {
         let mut rng_state = 7_u64;
         let mut walk = vec![0.0; 200];
         for i in 1..200 {
-            rng_state = rng_state
-                .wrapping_mul(6364136223846793005)
-                .wrapping_add(1);
+            rng_state = rng_state.wrapping_mul(6364136223846793005).wrapping_add(1);
             let u = (rng_state >> 33) as f64 / u32::MAX as f64;
             walk[i] = walk[i - 1] + u;
         }
@@ -924,14 +925,10 @@ mod tests {
         let mut y = vec![0.0; 200];
         let mut rng_state = 99_u64;
         for i in 1..200 {
-            rng_state = rng_state
-                .wrapping_mul(6364136223846793005)
-                .wrapping_add(1);
+            rng_state = rng_state.wrapping_mul(6364136223846793005).wrapping_add(1);
             let u = (rng_state >> 33) as f64 / u32::MAX as f64;
             x[i] = x[i - 1] + u;
-            rng_state = rng_state
-                .wrapping_mul(6364136223846793005)
-                .wrapping_add(1);
+            rng_state = rng_state.wrapping_mul(6364136223846793005).wrapping_add(1);
             let v = (rng_state >> 33) as f64 / u32::MAX as f64;
             y[i] = y[i - 1] + v;
         }
@@ -1759,18 +1756,26 @@ fn regularized_incomplete_beta(a: f64, b: f64, x: f64) -> f64 {
         // Even step
         let num = m_f * (b - m_f) * x / ((a + 2.0 * m_f - 1.0) * (a + 2.0 * m_f));
         d = 1.0 + num * d;
-        if d.abs() < 1e-30 { d = 1e-30; }
+        if d.abs() < 1e-30 {
+            d = 1e-30;
+        }
         c = 1.0 + num / c;
-        if c.abs() < 1e-30 { c = 1e-30; }
+        if c.abs() < 1e-30 {
+            c = 1e-30;
+        }
         d = 1.0 / d;
         f_val *= c * d;
 
         // Odd step
         let num2 = -(a + m_f) * (a + b + m_f) * x / ((a + 2.0 * m_f) * (a + 2.0 * m_f + 1.0));
         d = 1.0 + num2 * d;
-        if d.abs() < 1e-30 { d = 1e-30; }
+        if d.abs() < 1e-30 {
+            d = 1e-30;
+        }
         c = 1.0 + num2 / c;
-        if c.abs() < 1e-30 { c = 1e-30; }
+        if c.abs() < 1e-30 {
+            c = 1e-30;
+        }
         d = 1.0 / d;
         let delta = c * d;
         f_val *= delta;
@@ -2008,7 +2013,11 @@ mod ic_tests {
         let rank = rolling_ic(&factor, &fwd_ret, 15, IcMethod::Rank).unwrap();
 
         for i in 14..n {
-            assert!(pearson[i].is_finite(), "Pearson IC at {} should be finite", i);
+            assert!(
+                pearson[i].is_finite(),
+                "Pearson IC at {} should be finite",
+                i
+            );
             assert!(rank[i].is_finite(), "Rank IC at {} should be finite", i);
             assert!(pearson[i] >= -1.0 && pearson[i] <= 1.0);
             assert!(rank[i] >= -1.0 && rank[i] <= 1.0);

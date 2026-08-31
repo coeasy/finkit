@@ -41,7 +41,8 @@ pub fn v_shape_reversal(
     for i in lookback..n {
         let prev_cum_drop = 1.0 - close[i - 1] / close[i - lookback];
         let daily_bounce = close[i] / open[i] - 1.0;
-        if is_bullish(open[i], close[i]) && prev_cum_drop >= drop_pct && daily_bounce >= bounce_pct {
+        if is_bullish(open[i], close[i]) && prev_cum_drop >= drop_pct && daily_bounce >= bounce_pct
+        {
             out[i] = 100;
         }
     }
@@ -374,12 +375,7 @@ pub fn kneading_line(
 // ============================================================================
 
 /// 旭日东升 — 阴线后大阳线，开盘低于阴线收盘 + 收盘高于阴线开盘
-pub fn rising_sun(
-    open: &[f64],
-    high: &[f64],
-    low: &[f64],
-    close: &[f64],
-) -> Result<PatternResult> {
+pub fn rising_sun(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result<PatternResult> {
     validate_ohlcv(open, high, low, close, 2)?;
     let n = close.len();
     let mut out = init_signal(n);
@@ -677,7 +673,11 @@ pub fn volume_price_rise(
     let vol_ma5 = precompute_sma(volume, 5);
 
     for i in 20..n {
-        if !ma5[i].is_finite() || !ma10[i].is_finite() || !ma20[i].is_finite() || !vol_ma5[i].is_finite() {
+        if !ma5[i].is_finite()
+            || !ma10[i].is_finite()
+            || !ma20[i].is_finite()
+            || !vol_ma5[i].is_finite()
+        {
             continue;
         }
         if !is_bullish(open[i], close[i]) {
@@ -763,8 +763,14 @@ mod tests {
         let mut h = h;
         let mut l = l;
         let mut c = c;
-        o[14] = 13.0; h[14] = 13.05; l[14] = 11.5; c[14] = 12.9;
-        o[15] = 12.95; h[15] = 13.0; l[15] = 11.45; c[15] = 12.85;
+        o[14] = 13.0;
+        h[14] = 13.05;
+        l[14] = 11.5;
+        c[14] = 12.9;
+        o[15] = 12.95;
+        h[15] = 13.0;
+        l[15] = 11.45;
+        c[15] = 12.85;
         let r = double_pin_bottom(&o, &h, &l, &c, 10, 2.0).unwrap();
         // Should fire at 15
         assert_eq!(r[15], 100, "double pin bottom should fire at 15");

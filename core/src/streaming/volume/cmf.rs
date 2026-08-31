@@ -1,6 +1,6 @@
-use crate::streaming::traits::{StreamingIndicator};
+use crate::impl_indicator_meta;
 use crate::impl_standard_methods;
-use crate::{impl_indicator_meta};
+use crate::streaming::traits::StreamingIndicator;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamingCmf {
@@ -106,7 +106,10 @@ impl StreamingIndicator<(f64, f64, f64, f64)> for StreamingCmf {
             return None;
         }
 
-        let result = if self.valid_mfv == self.period && self.valid_vol == self.period && self.sum_vol.abs() > 1e-15 {
+        let result = if self.valid_mfv == self.period
+            && self.valid_vol == self.period
+            && self.sum_vol.abs() > 1e-15
+        {
             Some(self.sum_mfv / self.sum_vol)
         } else {
             None
@@ -125,8 +128,12 @@ impl StreamingIndicator<(f64, f64, f64, f64)> for StreamingCmf {
         self.valid_vol = 0;
         self.count = 0;
         self.last_value = None;
-        for v in &mut self.mfv_buf { *v = f64::NAN; }
-        for v in &mut self.vol_buf { *v = f64::NAN; }
+        for v in &mut self.mfv_buf {
+            *v = f64::NAN;
+        }
+        for v in &mut self.vol_buf {
+            *v = f64::NAN;
+        }
     }
 
     #[inline]
@@ -190,7 +197,8 @@ mod tests {
         let volume: Vec<f64> = (0..n).map(|i| 1000.0 + i as f64 * 10.0).collect();
         let period = 20;
 
-        let batch = crate::indicators::volume_ext::cmf(&high, &low, &close, &volume, period).unwrap();
+        let batch =
+            crate::indicators::volume_ext::cmf(&high, &low, &close, &volume, period).unwrap();
         let mut streaming = StreamingCmf::new(period);
 
         for i in 0..n {

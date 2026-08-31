@@ -92,12 +92,16 @@ fn wavg4(a: f64, b: f64, c: f64, d: f64) -> f64 {
     (a + 2.0 * b + 2.0 * c + d) / 6.0
 }
 
-
 /// Awesome Oscillator (AO) — Bill Williams
 ///
 /// AO = SMA(Median Price, fast) - SMA(Median Price, slow)
 /// where Median Price = (High + Low) / 2.
-pub fn ao(high: &[f64], low: &[f64], fast_period: usize, slow_period: usize) -> Result<Array1<f64>> {
+pub fn ao(
+    high: &[f64],
+    low: &[f64],
+    fast_period: usize,
+    slow_period: usize,
+) -> Result<Array1<f64>> {
     validate_hl(high, low)?;
     validate_period("fast_period", fast_period)?;
     validate_period("slow_period", slow_period)?;
@@ -960,9 +964,7 @@ pub fn connors_rsi(
         });
     }
 
-    let min_len = rsi_period
-        .max(streak_period + 1)
-        .max(rank_period + 1);
+    let min_len = rsi_period.max(streak_period + 1).max(rank_period + 1);
     validate_input(close.len(), min_len)?;
 
     let len = close.len();
@@ -978,9 +980,7 @@ pub fn connors_rsi(
     }
 
     let mut output = init_output(len);
-    let start = rsi_period
-        .max(streak_period + 1)
-        .max(rank_period);
+    let start = rsi_period.max(streak_period + 1).max(rank_period);
 
     for i in start..len {
         let r = price_rsi[i];
@@ -1027,10 +1027,7 @@ pub fn stoch_rsi(
     validate_period("stoch_period", stoch_period)?;
     validate_period("k_period", k_period)?;
     validate_period("d_period", d_period)?;
-    validate_input(
-        close.len(),
-        rsi_period + stoch_period + k_period + d_period,
-    )?;
+    validate_input(close.len(), rsi_period + stoch_period + k_period + d_period)?;
 
     let len = close.len();
     let rsi_vals = rsi(close, rsi_period)?;
@@ -1084,7 +1081,11 @@ pub fn stoch_rsi(
         }
 
         // Incremental SMA for %D (feeds from smoothed_k)
-        let sk_val = if smoothed_k[i].is_nan() { 0.0 } else { smoothed_k[i] };
+        let sk_val = if smoothed_k[i].is_nan() {
+            0.0
+        } else {
+            smoothed_k[i]
+        };
         d_sum += sk_val - d_buf[d_pos];
         d_buf[d_pos] = sk_val;
         d_pos += 1;
@@ -1112,10 +1113,7 @@ pub fn stoch_rsi(
         }
     }
 
-    Ok(StochRsiResult {
-        k: out_k,
-        d: out_d,
-    })
+    Ok(StochRsiResult { k: out_k, d: out_d })
 }
 
 /// Relative Vigor Index (RVI) result.
@@ -1395,11 +1393,7 @@ pub struct WilliamsFractalResult {
 /// * `high` - High prices
 /// * `low` - Low prices
 /// * `n` - Number of bars on each side (typically 2)
-pub fn williams_fractal(
-    high: &[f64],
-    low: &[f64],
-    n: usize,
-) -> Result<WilliamsFractalResult> {
+pub fn williams_fractal(high: &[f64], low: &[f64], n: usize) -> Result<WilliamsFractalResult> {
     validate_hl(high, low)?;
     let min_len = 2 * n + 1;
     validate_input(high.len(), min_len)?;
@@ -1511,7 +1505,9 @@ mod tests {
 
     #[test]
     fn test_stc_basic() {
-        let input: Vec<f64> = (0..80).map(|i| 100.0 + (i as f64 * 0.3).sin() * 5.0).collect();
+        let input: Vec<f64> = (0..80)
+            .map(|i| 100.0 + (i as f64 * 0.3).sin() * 5.0)
+            .collect();
         let result = stc(&input, 23, 50, 10).unwrap();
 
         assert!(result.iter().any(|v| !v.is_nan()));
@@ -1524,7 +1520,11 @@ mod tests {
     fn test_chop_basic() {
         let high: Vec<f64> = (0..20).map(|i| 10.0 + i as f64).collect();
         let low: Vec<f64> = high.iter().map(|h| h - 1.0).collect();
-        let close: Vec<f64> = high.iter().zip(low.iter()).map(|(h, l)| (h + l) / 2.0).collect();
+        let close: Vec<f64> = high
+            .iter()
+            .zip(low.iter())
+            .map(|(h, l)| (h + l) / 2.0)
+            .collect();
         let result = chop(&high, &low, &close, 14).unwrap();
 
         assert!(result[12].is_nan());
@@ -1537,7 +1537,11 @@ mod tests {
         let len = 30;
         let high: Vec<f64> = (0..len).map(|i| 10.0 + i as f64 * 0.1).collect();
         let low: Vec<f64> = high.iter().map(|h| h - 0.5).collect();
-        let close: Vec<f64> = high.iter().zip(low.iter()).map(|(h, l)| (h + l) / 2.0).collect();
+        let close: Vec<f64> = high
+            .iter()
+            .zip(low.iter())
+            .map(|(h, l)| (h + l) / 2.0)
+            .collect();
 
         let trending = chop(&high, &low, &close, 14).unwrap();
 
@@ -1590,7 +1594,9 @@ mod tests {
 
     #[test]
     fn test_connors_rsi_basic() {
-        let close: Vec<f64> = (0..120).map(|i| 100.0 + (i as f64 * 0.2).sin() * 5.0).collect();
+        let close: Vec<f64> = (0..120)
+            .map(|i| 100.0 + (i as f64 * 0.2).sin() * 5.0)
+            .collect();
         let result = connors_rsi(&close, 3, 2, 100).unwrap();
 
         assert_eq!(result.len(), close.len());
@@ -1610,7 +1616,9 @@ mod tests {
 
     #[test]
     fn test_stoch_rsi_basic() {
-        let close: Vec<f64> = (0..60).map(|i| 100.0 + (i as f64 * 0.15).sin() * 10.0).collect();
+        let close: Vec<f64> = (0..60)
+            .map(|i| 100.0 + (i as f64 * 0.15).sin() * 10.0)
+            .collect();
         let result = stoch_rsi(&close, 14, 14, 3, 3).unwrap();
 
         assert_eq!(result.k.len(), close.len());
@@ -1627,7 +1635,9 @@ mod tests {
 
     #[test]
     fn test_stoch_rsi_range() {
-        let close: Vec<f64> = (0..80).map(|i| 100.0 + (i as f64 * 0.1).sin() * 8.0).collect();
+        let close: Vec<f64> = (0..80)
+            .map(|i| 100.0 + (i as f64 * 0.1).sin() * 8.0)
+            .collect();
         let result = stoch_rsi(&close, 14, 14, 3, 3).unwrap();
 
         for v in result.k.iter().filter(|v| !v.is_nan()) {
@@ -1682,9 +1692,15 @@ mod tests {
     // ============ Chande Kroll Stop tests ============
     #[test]
     fn test_chande_kroll_stop_basic() {
-        let high: Vec<f64> = (0..50).map(|i| 110.0 + (i as f64 * 0.3).sin() * 5.0).collect();
-        let low: Vec<f64> = (0..50).map(|i| 90.0 + (i as f64 * 0.3).sin() * 5.0).collect();
-        let close: Vec<f64> = (0..50).map(|i| 100.0 + (i as f64 * 0.3).sin() * 5.0).collect();
+        let high: Vec<f64> = (0..50)
+            .map(|i| 110.0 + (i as f64 * 0.3).sin() * 5.0)
+            .collect();
+        let low: Vec<f64> = (0..50)
+            .map(|i| 90.0 + (i as f64 * 0.3).sin() * 5.0)
+            .collect();
+        let close: Vec<f64> = (0..50)
+            .map(|i| 100.0 + (i as f64 * 0.3).sin() * 5.0)
+            .collect();
         let result = chande_kroll_stop(&high, &low, &close, 10, 1, 9).unwrap();
         assert_eq!(result.stop_long.len(), 50);
         assert_eq!(result.stop_short.len(), 50);
@@ -1698,9 +1714,15 @@ mod tests {
     // ============ TTM Squeeze tests ============
     #[test]
     fn test_ttm_squeeze_basic() {
-        let high: Vec<f64> = (0..60).map(|i| 110.0 + (i as f64 * 0.2).sin() * 5.0).collect();
-        let low: Vec<f64> = (0..60).map(|i| 90.0 + (i as f64 * 0.2).sin() * 5.0).collect();
-        let close: Vec<f64> = (0..60).map(|i| 100.0 + (i as f64 * 0.2).sin() * 5.0).collect();
+        let high: Vec<f64> = (0..60)
+            .map(|i| 110.0 + (i as f64 * 0.2).sin() * 5.0)
+            .collect();
+        let low: Vec<f64> = (0..60)
+            .map(|i| 90.0 + (i as f64 * 0.2).sin() * 5.0)
+            .collect();
+        let close: Vec<f64> = (0..60)
+            .map(|i| 100.0 + (i as f64 * 0.2).sin() * 5.0)
+            .collect();
         let result = ttm_squeeze(&high, &low, &close, 20, 2.0, 20, 1.5).unwrap();
         assert_eq!(result.momentum.len(), 60);
         assert_eq!(result.squeeze_on.len(), 60);
@@ -1760,12 +1782,7 @@ pub struct VortexResult {
 /// let result = indicators::vortex(&high, &low, &close, 7).unwrap();
 /// assert_eq!(result.vi_plus.len(), 15);
 /// ```
-pub fn vortex(
-    high: &[f64],
-    low: &[f64],
-    close: &[f64],
-    period: usize,
-) -> Result<VortexResult> {
+pub fn vortex(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<VortexResult> {
     if high.len() != low.len() || high.len() != close.len() {
         return Err(TaError::InvalidParameter {
             name: "high, low, close".to_string(),
@@ -1830,16 +1847,16 @@ mod vortex_tests {
     #[test]
     fn test_vortex_basic() {
         let high = vec![
-            45.0, 45.5, 46.0, 45.5, 46.5, 46.0, 45.5, 45.0, 45.5, 46.0, 46.5, 47.0, 46.5,
-            47.0, 47.5, 47.0, 46.5, 47.0, 47.5, 48.0,
+            45.0, 45.5, 46.0, 45.5, 46.5, 46.0, 45.5, 45.0, 45.5, 46.0, 46.5, 47.0, 46.5, 47.0,
+            47.5, 47.0, 46.5, 47.0, 47.5, 48.0,
         ];
         let low = vec![
-            43.0, 43.5, 44.0, 43.0, 44.0, 43.5, 43.0, 42.5, 43.0, 43.5, 44.0, 44.5, 44.0,
-            44.5, 45.0, 44.5, 44.0, 44.5, 45.0, 45.5,
+            43.0, 43.5, 44.0, 43.0, 44.0, 43.5, 43.0, 42.5, 43.0, 43.5, 44.0, 44.5, 44.0, 44.5,
+            45.0, 44.5, 44.0, 44.5, 45.0, 45.5,
         ];
         let close = vec![
-            44.0, 44.5, 45.0, 44.0, 45.0, 44.5, 44.0, 43.5, 44.0, 44.5, 45.0, 45.5, 45.0,
-            45.5, 46.0, 45.5, 45.0, 45.5, 46.0, 46.5,
+            44.0, 44.5, 45.0, 44.0, 45.0, 44.5, 44.0, 43.5, 44.0, 44.5, 45.0, 45.5, 45.0, 45.5,
+            46.0, 45.5, 45.0, 45.5, 46.0, 46.5,
         ];
         let result = vortex(&high, &low, &close, 14).unwrap();
         assert_eq!(result.vi_plus.len(), 20);
@@ -1941,7 +1958,11 @@ pub fn inertia(
             high[i - 2] - low[i - 2],
             high[i - 3] - low[i - 3],
         );
-        ratio[i] = if denom.abs() > 1e-15 { num / denom } else { 0.0 };
+        ratio[i] = if denom.abs() > 1e-15 {
+            num / denom
+        } else {
+            0.0
+        };
     }
 
     // Step 2: Compute rolling SMA of ratio over rvi_period
@@ -2169,15 +2190,9 @@ mod inertia_tests {
     fn test_inertia_basic() {
         let n = 50;
         let open: Vec<f64> = (0..n).map(|i| 100.0 + (i as f64) * 0.5).collect();
-        let close: Vec<f64> = (0..n)
-            .map(|i| 100.0 + (i as f64) * 0.5 + 0.3)
-            .collect();
-        let high: Vec<f64> = (0..n)
-            .map(|i| 100.0 + (i as f64) * 0.5 + 1.0)
-            .collect();
-        let low: Vec<f64> = (0..n)
-            .map(|i| 100.0 + (i as f64) * 0.5 - 0.5)
-            .collect();
+        let close: Vec<f64> = (0..n).map(|i| 100.0 + (i as f64) * 0.5 + 0.3).collect();
+        let high: Vec<f64> = (0..n).map(|i| 100.0 + (i as f64) * 0.5 + 1.0).collect();
+        let low: Vec<f64> = (0..n).map(|i| 100.0 + (i as f64) * 0.5 - 0.5).collect();
 
         let result = inertia(&open, &high, &low, &close, 10, 14).unwrap();
         assert_eq!(result.len(), n);
@@ -2301,12 +2316,20 @@ mod qstick_tests {
 
     #[test]
     fn test_qstick_basic_sma() {
-        let open = vec![100.0, 101.0, 102.0, 103.0, 104.0, 105.0, 106.0, 107.0, 108.0, 109.0];
-        let close = vec![101.0, 102.0, 103.0, 104.0, 105.0, 106.0, 107.0, 108.0, 109.0, 110.0];
+        let open = vec![
+            100.0, 101.0, 102.0, 103.0, 104.0, 105.0, 106.0, 107.0, 108.0, 109.0,
+        ];
+        let close = vec![
+            101.0, 102.0, 103.0, 104.0, 105.0, 106.0, 107.0, 108.0, 109.0, 110.0,
+        ];
         let result = qstick(&open, &close, 5, MaType::Sma).unwrap();
         assert_eq!(result.len(), 10);
         for i in 4..10 {
-            assert!((result[i] - 1.0).abs() < 1e-10, "Expected 1.0 at {i}, got {}", result[i]);
+            assert!(
+                (result[i] - 1.0).abs() < 1e-10,
+                "Expected 1.0 at {i}, got {}",
+                result[i]
+            );
         }
     }
 
@@ -2415,7 +2438,9 @@ mod cfo_tests {
 
     #[test]
     fn test_cfo_basic() {
-        let data: Vec<f64> = (0..30).map(|i| 100.0 + (i as f64 * 0.3).sin() * 5.0).collect();
+        let data: Vec<f64> = (0..30)
+            .map(|i| 100.0 + (i as f64 * 0.3).sin() * 5.0)
+            .collect();
         let result = chande_forecast_oscillator(&data, 14).unwrap();
         assert_eq!(result.len(), 30);
         for i in 0..13 {

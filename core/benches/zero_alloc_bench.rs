@@ -43,9 +43,7 @@ fn bench_sma_zero_alloc(c: &mut Criterion) {
             b.iter(|| k::sma_scalar_into(black_box(&data), period, &mut out_scalar))
         });
         g.bench_with_input(BenchmarkId::new("scalar_naive_into", n), &n, |b, _| {
-            b.iter(|| {
-                k::sma_scalar_naive_into(black_box(&data), period, &mut out_scalar)
-            })
+            b.iter(|| k::sma_scalar_naive_into(black_box(&data), period, &mut out_scalar))
         });
     }
     g.finish();

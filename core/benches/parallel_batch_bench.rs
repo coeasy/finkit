@@ -10,11 +10,11 @@
 //! actual speedup on the host CPU.
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+#[cfg(feature = "rayon")]
+use finkit::indicators::parallel::parallel_rsi_batch;
 use finkit::indicators::parallel::{
     parallel_ema_batch, parallel_sma_batch, parallel_sma_multi_period,
 };
-#[cfg(feature = "rayon")]
-use finkit::indicators::parallel::parallel_rsi_batch;
 
 fn make_closes(n_stocks: usize, n_bars: usize) -> Vec<Vec<f64>> {
     (0..n_stocks)
@@ -89,13 +89,9 @@ fn bench_parallel_sma_multi_period(c: &mut Criterion) {
             .collect();
         let periods = [5usize, 10, 20, 30, 60, 120];
         group.throughput(Throughput::Elements(n_bars as u64));
-        group.bench_with_input(
-            BenchmarkId::from_parameter(n_bars),
-            &n_bars,
-            |b, _| {
-                b.iter(|| parallel_sma_multi_period(&closes, &periods).unwrap());
-            },
-        );
+        group.bench_with_input(BenchmarkId::from_parameter(n_bars), &n_bars, |b, _| {
+            b.iter(|| parallel_sma_multi_period(&closes, &periods).unwrap());
+        });
     }
     group.finish();
 }

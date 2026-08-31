@@ -12,7 +12,7 @@
 //! In `no_std` mode, only scalar fallback functions are available.
 
 #[cfg(not(feature = "std"))]
-use libm::{sqrt, log, sin, cos};
+use libm::{cos, log, sin, sqrt};
 
 #[cfg(not(feature = "std"))]
 #[inline]
@@ -495,14 +495,13 @@ unsafe fn weighted_sum_avx2(data: &[f64], weights: &[f64], result: &mut [f64]) {
 
 #[cfg(all(feature = "std", target_arch = "x86_64"))]
 #[target_feature(enable = "avx2")]
-unsafe fn true_range_avx2(
-    high: &[f64],
-    low: &[f64],
-    prev_close: &[f64],
-    result: &mut [f64],
-) {
+unsafe fn true_range_avx2(high: &[f64], low: &[f64], prev_close: &[f64], result: &mut [f64]) {
     use core::arch::x86_64::*;
-    let len = high.len().min(low.len()).min(prev_close.len()).min(result.len());
+    let len = high
+        .len()
+        .min(low.len())
+        .min(prev_close.len())
+        .min(result.len());
     let chunks = len / 4;
     let sign_mask = _mm256_castsi256_pd(_mm256_set1_epi64x(i64::MIN));
     for i in 0..chunks {
@@ -526,12 +525,7 @@ unsafe fn true_range_avx2(
 
 #[cfg(all(feature = "std", target_arch = "x86_64"))]
 #[target_feature(enable = "avx2")]
-unsafe fn typical_price_avx2(
-    high: &[f64],
-    low: &[f64],
-    close: &[f64],
-    result: &mut [f64],
-) {
+unsafe fn typical_price_avx2(high: &[f64], low: &[f64], close: &[f64], result: &mut [f64]) {
     use core::arch::x86_64::*;
     let len = high.len().min(low.len()).min(close.len()).min(result.len());
     let chunks = len / 4;
@@ -551,11 +545,7 @@ unsafe fn typical_price_avx2(
 
 #[cfg(all(feature = "std", target_arch = "x86_64"))]
 #[target_feature(enable = "avx2")]
-unsafe fn median_price_avx2(
-    high: &[f64],
-    low: &[f64],
-    result: &mut [f64],
-) {
+unsafe fn median_price_avx2(high: &[f64], low: &[f64], result: &mut [f64]) {
     use core::arch::x86_64::*;
     let len = high.len().min(low.len()).min(result.len());
     let chunks = len / 4;
@@ -841,7 +831,7 @@ unsafe fn ad_line_avx2(
     let eps = _mm256_set1_pd(1e-15);
     let zero = _mm256_setzero_pd();
     let sign_mask = _mm256_set1_pd(f64::from_bits(0x7FFF_FFFF_FFFF_FFFFu64));
-    
+
     // SIMD 计算 money flow volume
     for c in 0..chunks {
         let off = c * 4;
@@ -849,12 +839,12 @@ unsafe fn ad_line_avx2(
         let vl = _mm256_loadu_pd(low.as_ptr().add(off));
         let vc = _mm256_loadu_pd(close.as_ptr().add(off));
         let vvol = _mm256_loadu_pd(volume.as_ptr().add(off));
-        
+
         let hl = _mm256_sub_pd(vh, vl);
         let cl = _mm256_sub_pd(vc, vl);
         let hc = _mm256_sub_pd(vh, vc);
         let clv = _mm256_sub_pd(cl, hc);
-        
+
         // 优化：使用更高效的除法和条件选择
         let abs_hl = _mm256_and_pd(sign_mask, hl);
         let valid = _mm256_cmp_pd(abs_hl, eps, _CMP_GT_OS);
@@ -863,7 +853,7 @@ unsafe fn ad_line_avx2(
         let mfv_v = _mm256_mul_pd(mfm, vvol);
         _mm256_storeu_pd(result_ptr.add(off), mfv_v);
     }
-    
+
     // 处理剩余元素
     for i in (chunks * 4)..len {
         let hl = high[i] - low[i];
@@ -879,7 +869,7 @@ unsafe fn ad_line_avx2(
     let mut acc = result[0];
     let mut i = 1;
     let unroll_end = len.saturating_sub(3);
-    
+
     while i < unroll_end {
         acc += result[i];
         result[i] = acc;
@@ -891,7 +881,7 @@ unsafe fn ad_line_avx2(
         result[i + 3] = acc;
         i += 4;
     }
-    
+
     while i < len {
         acc += result[i];
         result[i] = acc;
@@ -991,7 +981,11 @@ fn weighted_sum_scalar(data: &[f64], weights: &[f64], result: &mut [f64]) {
 }
 
 fn true_range_scalar(high: &[f64], low: &[f64], prev_close: &[f64], result: &mut [f64]) {
-    let len = high.len().min(low.len()).min(prev_close.len()).min(result.len());
+    let len = high
+        .len()
+        .min(low.len())
+        .min(prev_close.len())
+        .min(result.len());
     for i in 0..len {
         let hl = high[i] - low[i];
         let hpc = (high[i] - prev_close[i]).abs();
@@ -1081,13 +1075,7 @@ fn obv_core_scalar(close: &[f64], volume: &[f64], result: &mut [f64]) {
     }
 }
 
-fn ad_line_scalar(
-    high: &[f64],
-    low: &[f64],
-    close: &[f64],
-    volume: &[f64],
-    result: &mut [f64],
-) {
+fn ad_line_scalar(high: &[f64], low: &[f64], close: &[f64], volume: &[f64], result: &mut [f64]) {
     let len = high
         .len()
         .min(low.len())
@@ -1522,13 +1510,7 @@ pub fn simd_obv(close: &[f64], volume: &[f64], result: &mut [f64]) {
     obv_core_scalar(close, volume, result)
 }
 
-pub fn simd_ad_line(
-    high: &[f64],
-    low: &[f64],
-    close: &[f64],
-    volume: &[f64],
-    result: &mut [f64],
-) {
+pub fn simd_ad_line(high: &[f64], low: &[f64], close: &[f64], volume: &[f64], result: &mut [f64]) {
     #[cfg(all(feature = "std", target_arch = "x86_64"))]
     {
         if is_x86_feature_detected!("avx2") {
@@ -1777,7 +1759,11 @@ unsafe fn zscore_optimized_avx2(data: &[f64], period: usize, result: &mut [f64])
     let mean = sum * inv_w;
     let var = (sum_sq - sum * mean) * inv_w_minus_1;
     let std = var.max(0.0).sqrt();
-    result[period - 1] = if std.abs() < 1e-15 { 0.0 } else { (data[period - 1] - mean) / std };
+    result[period - 1] = if std.abs() < 1e-15 {
+        0.0
+    } else {
+        (data[period - 1] - mean) / std
+    };
 
     for i in period..len {
         let old = data[i - period];
@@ -1787,7 +1773,11 @@ unsafe fn zscore_optimized_avx2(data: &[f64], period: usize, result: &mut [f64])
         let m = sum * inv_w;
         let var = (sum_sq - sum * m) * inv_w_minus_1;
         let std = var.max(0.0).sqrt();
-        result[i] = if std.abs() < 1e-15 { 0.0 } else { (data[i] - m) / std };
+        result[i] = if std.abs() < 1e-15 {
+            0.0
+        } else {
+            (data[i] - m) / std
+        };
     }
 
     for r in result.iter_mut().take(period - 1) {
@@ -1812,7 +1802,11 @@ fn zscore_optimized_scalar(data: &[f64], period: usize, result: &mut [f64]) {
     let mean = sum * inv_w;
     let var = (sum_sq - sum * mean) * inv_w_minus_1;
     let std = f64_sqrt(var.max(0.0));
-    result[period - 1] = if std.abs() < 1e-15 { 0.0 } else { (data[period - 1] - mean) / std };
+    result[period - 1] = if std.abs() < 1e-15 {
+        0.0
+    } else {
+        (data[period - 1] - mean) / std
+    };
 
     for i in period..len {
         let old = data[i - period];
@@ -1822,7 +1816,11 @@ fn zscore_optimized_scalar(data: &[f64], period: usize, result: &mut [f64]) {
         let m = sum * inv_w;
         let var = (sum_sq - sum * m) * inv_w_minus_1;
         let std = f64_sqrt(var.max(0.0));
-        result[i] = if std.abs() < 1e-15 { 0.0 } else { (data[i] - m) / std };
+        result[i] = if std.abs() < 1e-15 {
+            0.0
+        } else {
+            (data[i] - m) / std
+        };
     }
 
     for r in result.iter_mut().take(period - 1) {
@@ -1886,7 +1884,11 @@ unsafe fn correl_avx2(x: &[f64], y: &[f64], period: usize, result: &mut [f64]) {
     let var_x = (sum_x2 - sum_x * mean_x) * inv_w_minus_1;
     let var_y = (sum_y2 - sum_y * mean_y) * inv_w_minus_1;
     let denom = (var_x.max(0.0) * var_y.max(0.0)).sqrt();
-    result[period - 1] = if denom.abs() < 1e-15 { f64::NAN } else { cov / denom };
+    result[period - 1] = if denom.abs() < 1e-15 {
+        f64::NAN
+    } else {
+        cov / denom
+    };
 
     for i in period..len {
         let old_x = x[i - period];
@@ -1905,7 +1907,11 @@ unsafe fn correl_avx2(x: &[f64], y: &[f64], period: usize, result: &mut [f64]) {
         let var_x = (sum_x2 - sum_x * mean_x) * inv_w_minus_1;
         let var_y = (sum_y2 - sum_y * mean_y) * inv_w_minus_1;
         let denom = (var_x.max(0.0) * var_y.max(0.0)).sqrt();
-        result[i] = if denom.abs() < 1e-15 { f64::NAN } else { cov / denom };
+        result[i] = if denom.abs() < 1e-15 {
+            f64::NAN
+        } else {
+            cov / denom
+        };
     }
 
     for r in result.iter_mut().take(period - 1) {
@@ -1927,7 +1933,11 @@ fn correl_scalar(x: &[f64], y: &[f64], period: usize, result: &mut [f64]) {
 
     let mut sum_x: f64 = x[..period].iter().sum();
     let mut sum_y: f64 = y[..period].iter().sum();
-    let mut sum_xy: f64 = x[..period].iter().zip(y[..period].iter()).map(|(xi, yi)| xi * yi).sum();
+    let mut sum_xy: f64 = x[..period]
+        .iter()
+        .zip(y[..period].iter())
+        .map(|(xi, yi)| xi * yi)
+        .sum();
     let mut sum_x2: f64 = x[..period].iter().map(|xi| xi * xi).sum();
     let mut sum_y2: f64 = y[..period].iter().map(|yi| yi * yi).sum();
 
@@ -1937,7 +1947,11 @@ fn correl_scalar(x: &[f64], y: &[f64], period: usize, result: &mut [f64]) {
     let var_x = (sum_x2 - sum_x * mean_x) * inv_w_minus_1;
     let var_y = (sum_y2 - sum_y * mean_y) * inv_w_minus_1;
     let denom = f64_sqrt(var_x.max(0.0) * var_y.max(0.0));
-    result[period - 1] = if denom.abs() < 1e-15 { f64::NAN } else { cov / denom };
+    result[period - 1] = if denom.abs() < 1e-15 {
+        f64::NAN
+    } else {
+        cov / denom
+    };
 
     for i in period..len {
         let old_x = x[i - period];
@@ -1956,7 +1970,11 @@ fn correl_scalar(x: &[f64], y: &[f64], period: usize, result: &mut [f64]) {
         let var_x = (sum_x2 - sum_x * mean_x) * inv_w_minus_1;
         let var_y = (sum_y2 - sum_y * mean_y) * inv_w_minus_1;
         let denom = f64_sqrt(var_x.max(0.0) * var_y.max(0.0));
-        result[i] = if denom.abs() < 1e-15 { f64::NAN } else { cov / denom };
+        result[i] = if denom.abs() < 1e-15 {
+            f64::NAN
+        } else {
+            cov / denom
+        };
     }
 
     for r in result.iter_mut().take(period - 1) {
@@ -2015,7 +2033,11 @@ unsafe fn beta_avx2(asset: &[f64], benchmark: &[f64], period: usize, result: &mu
     let mean_b = sum_b * inv_w;
     let cov = (sum_ab - sum_a * mean_b) * inv_w_minus_1;
     let var_b = (sum_b2 - sum_b * mean_b) * inv_w_minus_1;
-    result[period - 1] = if var_b.abs() < 1e-15 { f64::NAN } else { cov / var_b };
+    result[period - 1] = if var_b.abs() < 1e-15 {
+        f64::NAN
+    } else {
+        cov / var_b
+    };
 
     for i in period..len {
         let old_a = asset[i - period];
@@ -2031,7 +2053,11 @@ unsafe fn beta_avx2(asset: &[f64], benchmark: &[f64], period: usize, result: &mu
         let mean_b = sum_b * inv_w;
         let cov = (sum_ab - sum_a * mean_b) * inv_w_minus_1;
         let var_b = (sum_b2 - sum_b * mean_b) * inv_w_minus_1;
-        result[i] = if var_b.abs() < 1e-15 { f64::NAN } else { cov / var_b.max(0.0) };
+        result[i] = if var_b.abs() < 1e-15 {
+            f64::NAN
+        } else {
+            cov / var_b.max(0.0)
+        };
     }
 
     for r in result.iter_mut().take(period - 1) {
@@ -2053,14 +2079,22 @@ fn beta_scalar(asset: &[f64], benchmark: &[f64], period: usize, result: &mut [f6
 
     let mut sum_a: f64 = asset[..period].iter().sum();
     let mut sum_b: f64 = benchmark[..period].iter().sum();
-    let mut sum_ab: f64 = asset[..period].iter().zip(benchmark[..period].iter()).map(|(a, b)| a * b).sum();
+    let mut sum_ab: f64 = asset[..period]
+        .iter()
+        .zip(benchmark[..period].iter())
+        .map(|(a, b)| a * b)
+        .sum();
     let mut sum_b2: f64 = benchmark[..period].iter().map(|b| b * b).sum();
 
     let _mean_a = sum_a * inv_w;
     let mean_b = sum_b * inv_w;
     let cov = (sum_ab - sum_a * mean_b) * inv_w_minus_1;
     let var_b = (sum_b2 - sum_b * mean_b) * inv_w_minus_1;
-    result[period - 1] = if var_b.abs() < 1e-15 { f64::NAN } else { cov / var_b };
+    result[period - 1] = if var_b.abs() < 1e-15 {
+        f64::NAN
+    } else {
+        cov / var_b
+    };
 
     for i in period..len {
         let old_a = asset[i - period];
@@ -2076,7 +2110,11 @@ fn beta_scalar(asset: &[f64], benchmark: &[f64], period: usize, result: &mut [f6
         let mean_b = sum_b * inv_w;
         let cov = (sum_ab - sum_a * mean_b) * inv_w_minus_1;
         let var_b = (sum_b2 - sum_b * mean_b) * inv_w_minus_1;
-        result[i] = if var_b.abs() < 1e-15 { f64::NAN } else { cov / var_b.max(0.0) };
+        result[i] = if var_b.abs() < 1e-15 {
+            f64::NAN
+        } else {
+            cov / var_b.max(0.0)
+        };
     }
 
     for r in result.iter_mut().take(period - 1) {
@@ -2326,7 +2364,11 @@ pub fn simd_linreg_angle(data: &[f64], period: usize, result: &mut [f64]) {
 /// implementation on non-x86_64 or when AVX2 is unavailable.
 #[cfg(feature = "std")]
 pub fn simd_atr(high: &[f64], low: &[f64], prev_close: &[f64], period: usize, result: &mut [f64]) {
-    let len = high.len().min(low.len()).min(prev_close.len()).min(result.len());
+    let len = high
+        .len()
+        .min(low.len())
+        .min(prev_close.len())
+        .min(result.len());
     if len == 0 || period == 0 {
         for r in result.iter_mut().take(len) {
             *r = f64::NAN;
@@ -2371,8 +2413,18 @@ fn atr_wilder_scalar(tr: &[f64], period: usize, result: &mut [f64]) {
 /// a sliding window) is a serial reduction, but the surrounding
 /// arithmetic — `(period - idx) / period * 100` and the (up - down) oscillator —
 /// is fully vectorised in chunks of 4 f64.
-pub fn simd_aroon(high: &[f64], low: &[f64], period: usize, out_up: &mut [f64], out_down: &mut [f64]) {
-    let len = high.len().min(low.len()).min(out_up.len()).min(out_down.len());
+pub fn simd_aroon(
+    high: &[f64],
+    low: &[f64],
+    period: usize,
+    out_up: &mut [f64],
+    out_down: &mut [f64],
+) {
+    let len = high
+        .len()
+        .min(low.len())
+        .min(out_up.len())
+        .min(out_down.len());
     if len == 0 || period == 0 {
         for r in out_up.iter_mut().take(len) {
             *r = f64::NAN;
@@ -2625,7 +2677,11 @@ pub fn simd_mama_hilbert(src: &[f64], out_smooth: &mut [f64], out_period: &mut [
             ph += core::f64::consts::PI;
         }
         // phase delta
-        let d_phase = if ph < phase { ph + core::f64::consts::PI - phase } else { ph - phase };
+        let d_phase = if ph < phase {
+            ph + core::f64::consts::PI - phase
+        } else {
+            ph - phase
+        };
         phase = ph;
         // period estimate
         if d_phase > 1e-6 && d_phase < core::f64::consts::PI {
@@ -2808,14 +2864,10 @@ pub fn simd_ht_smooth(input: &[f64], out: &mut [f64]) {
     }
     for i in 3..len {
         // FMA: smooth = (4*x[i] + 3*x[i-1] + 2*x[i-2] + 1*x[i-3]) * 0.1
-        let v = unsafe {
-            (4.0 * *input.get_unchecked(i))
-                .mul_add(*input.get_unchecked(i), 0.0)
-        };
+        let v = unsafe { (4.0 * *input.get_unchecked(i)).mul_add(*input.get_unchecked(i), 0.0) };
         let _ = v;
         // 直接展开，避免编译器对临时变量做额外优化
-        out[i] = 0.1
-            * (4.0 * input[i] + 3.0 * input[i - 1] + 2.0 * input[i - 2] + input[i - 3]);
+        out[i] = 0.1 * (4.0 * input[i] + 3.0 * input[i - 1] + 2.0 * input[i - 2] + input[i - 3]);
     }
 }
 
@@ -2879,7 +2931,8 @@ pub fn simd_ht_detrender(smooth: &[f64], out: &mut [f64]) {
         }
     }
     for i in 10..len {
-        let a = 0.0962 * smooth[i] + 0.5769 * smooth[i - 2] - 0.5769 * smooth[i - 4]
+        let a = 0.0962 * smooth[i] + 0.5769 * smooth[i - 2]
+            - 0.5769 * smooth[i - 4]
             - 0.0962 * smooth[i - 6];
         let b = 0.075 * smooth[i - 1] + 0.54 * smooth[i - 3] + 0.075 * smooth[i - 5];
         out[i] = a * b;
@@ -2928,7 +2981,8 @@ unsafe fn ht_detrender_avx2(smooth: &[f64], out: &mut [f64], len: usize) {
     }
     let tail_start = 10 + chunks * 4;
     for i in tail_start..len {
-        let a = 0.0962 * smooth[i] + 0.5769 * smooth[i - 2] - 0.5769 * smooth[i - 4]
+        let a = 0.0962 * smooth[i] + 0.5769 * smooth[i - 2]
+            - 0.5769 * smooth[i - 4]
             - 0.0962 * smooth[i - 6];
         let b = 0.075 * smooth[i - 1] + 0.54 * smooth[i - 3] + 0.075 * smooth[i - 5];
         out[i] = a * b;
@@ -2970,9 +3024,11 @@ pub fn simd_ht_components(detrender: &[f64], phase_out: &mut [f64]) {
     }
     for i in 16..len {
         let ip = detrender[i - 6];
-        let q = 0.0962 * detrender[i] + 0.5769 * detrender[i - 2] - 0.5769 * detrender[i - 4]
+        let q = 0.0962 * detrender[i] + 0.5769 * detrender[i - 2]
+            - 0.5769 * detrender[i - 4]
             - 0.0962 * detrender[i - 6];
-        let j1 = 0.0962 * ip + 0.5769 * detrender[i - 8] - 0.5769 * detrender[i - 10]
+        let j1 = 0.0962 * ip + 0.5769 * detrender[i - 8]
+            - 0.5769 * detrender[i - 10]
             - 0.0962 * detrender[i - 12];
         // 修正：j1 是对 in_phase 序列做同样 4-tap Hilbert
         // 但 in_phase[i-k] = detrender[i-k-6]，所以 j1[i] = 0.0962*detrender[i-6]
@@ -3046,16 +3102,22 @@ unsafe fn ht_components_avx2(detrender: &[f64], phase_out: &mut [f64], len: usiz
         for k in 0..4 {
             let re_v = re_arr[k];
             let im_v = im_arr[k];
-            phase_out[i + k] = if re_v.abs() > 1e-10 { im_v.atan2(re_v) } else { 0.0 };
+            phase_out[i + k] = if re_v.abs() > 1e-10 {
+                im_v.atan2(re_v)
+            } else {
+                0.0
+            };
         }
     }
     // 尾部
     let tail_start = 16 + chunks * 4;
     for i in tail_start..len {
         let ip = detrender[i - 6];
-        let q = 0.0962 * detrender[i] + 0.5769 * detrender[i - 2] - 0.5769 * detrender[i - 4]
+        let q = 0.0962 * detrender[i] + 0.5769 * detrender[i - 2]
+            - 0.5769 * detrender[i - 4]
             - 0.0962 * detrender[i - 6];
-        let j1 = 0.0962 * detrender[i - 6] + 0.5769 * detrender[i - 8] - 0.5769 * detrender[i - 10]
+        let j1 = 0.0962 * detrender[i - 6] + 0.5769 * detrender[i - 8]
+            - 0.5769 * detrender[i - 10]
             - 0.0962 * detrender[i - 12];
         let i2 = ip - j1;
         let j2 = q + ip;
@@ -3188,7 +3250,12 @@ pub fn simd_dual_diff_init(high: &[f64], open: &[f64], low: &[f64], period: usiz
 
 #[cfg(all(feature = "std", target_arch = "x86_64"))]
 #[target_feature(enable = "avx2")]
-unsafe fn dual_diff_init_avx2(high: &[f64], open: &[f64], low: &[f64], period: usize) -> (f64, f64) {
+unsafe fn dual_diff_init_avx2(
+    high: &[f64],
+    open: &[f64],
+    low: &[f64],
+    period: usize,
+) -> (f64, f64) {
     use core::arch::x86_64::*;
     let mut acc_ho = _mm256_setzero_pd();
     let mut acc_ol = _mm256_setzero_pd();
@@ -3219,12 +3286,7 @@ unsafe fn dual_diff_init_avx2(high: &[f64], open: &[f64], low: &[f64], period: u
 /// 注：BR 的索引从 1 开始（j=1..=period），所以这里 `close[i]` 实际
 /// 是 close[i+1] 在原 BR 公式中。调用方负责传入正确的窗口。
 #[cfg(feature = "std")]
-pub fn simd_dual_max_init(
-    high: &[f64],
-    close: &[f64],
-    low: &[f64],
-    period: usize,
-) -> (f64, f64) {
+pub fn simd_dual_max_init(high: &[f64], close: &[f64], low: &[f64], period: usize) -> (f64, f64) {
     debug_assert!(period + 1 <= high.len() && period + 1 <= close.len() && period + 1 <= low.len());
     #[cfg(all(target_arch = "x86_64"))]
     {
@@ -3317,15 +3379,15 @@ unsafe fn mom_avx2(input: &[f64], period: usize, result: &mut [f64]) {
         }
         return;
     }
-    
+
     // Fill NaN for warmup period
     for r in result.iter_mut().take(period) {
         *r = f64::NAN;
     }
-    
+
     let ptr = input.as_ptr();
     let out_ptr = result.as_mut_ptr();
-    
+
     // Process 4 elements at a time using AVX2
     let chunks = (len - period) / 4;
     for c in 0..chunks {
@@ -3335,7 +3397,7 @@ unsafe fn mom_avx2(input: &[f64], period: usize, result: &mut [f64]) {
         let v_diff = _mm256_sub_pd(v_curr, v_prev);
         _mm256_storeu_pd(out_ptr.add(i), v_diff);
     }
-    
+
     // Handle remaining elements
     for i in (period + chunks * 4)..len {
         result[i] = input[i] - input[i - period];
@@ -3351,11 +3413,11 @@ fn mom_scalar(input: &[f64], period: usize, result: &mut [f64]) {
         }
         return;
     }
-    
+
     for r in result.iter_mut().take(period) {
         *r = f64::NAN;
     }
-    
+
     for i in period..len {
         result[i] = input[i] - input[i - period];
     }
@@ -3377,16 +3439,21 @@ pub fn simd_bop(open: &[f64], high: &[f64], low: &[f64], close: &[f64], result: 
 #[target_feature(enable = "avx2")]
 unsafe fn bop_avx2(open: &[f64], high: &[f64], low: &[f64], close: &[f64], result: &mut [f64]) {
     use core::arch::x86_64::*;
-    let len = open.len().min(high.len()).min(low.len()).min(close.len()).min(result.len());
+    let len = open
+        .len()
+        .min(high.len())
+        .min(low.len())
+        .min(close.len())
+        .min(result.len());
     let _zero = _mm256_setzero_pd();
     let epsilon = _mm256_set1_pd(1e-15);
-    
+
     let o_ptr = open.as_ptr();
     let h_ptr = high.as_ptr();
     let l_ptr = low.as_ptr();
     let c_ptr = close.as_ptr();
     let out_ptr = result.as_mut_ptr();
-    
+
     let chunks = len / 4;
     for c in 0..chunks {
         let i = c * 4;
@@ -3394,18 +3461,18 @@ unsafe fn bop_avx2(open: &[f64], high: &[f64], low: &[f64], close: &[f64], resul
         let vh = _mm256_loadu_pd(h_ptr.add(i));
         let vl = _mm256_loadu_pd(l_ptr.add(i));
         let vc = _mm256_loadu_pd(c_ptr.add(i));
-        
+
         let range = _mm256_sub_pd(vh, vl);
         let range_abs = _mm256_andnot_pd(_mm256_set1_pd(-0.0), range);
         let mask = _mm256_cmp_pd(range_abs, epsilon, _CMP_GT_OQ);
-        
+
         let numerator = _mm256_sub_pd(vc, vo);
         let division = _mm256_div_pd(numerator, range);
         let masked_result = _mm256_and_pd(division, mask);
-        
+
         _mm256_storeu_pd(out_ptr.add(i), masked_result);
     }
-    
+
     // Handle remaining elements
     for i in (chunks * 4)..len {
         let range = high[i] - low[i];
@@ -3419,8 +3486,13 @@ unsafe fn bop_avx2(open: &[f64], high: &[f64], low: &[f64], close: &[f64], resul
 
 #[allow(dead_code)]
 fn bop_scalar(open: &[f64], high: &[f64], low: &[f64], close: &[f64], result: &mut [f64]) {
-    let len = open.len().min(high.len()).min(low.len()).min(close.len()).min(result.len());
-    
+    let len = open
+        .len()
+        .min(high.len())
+        .min(low.len())
+        .min(close.len())
+        .min(result.len());
+
     for i in 0..len {
         let range = high[i] - low[i];
         if range.abs() > 1e-15 {
@@ -3445,18 +3517,29 @@ pub fn simd_avgprice(open: &[f64], high: &[f64], low: &[f64], close: &[f64], res
 
 #[cfg(all(feature = "std", target_arch = "x86_64"))]
 #[target_feature(enable = "avx2")]
-unsafe fn avgprice_avx2(open: &[f64], high: &[f64], low: &[f64], close: &[f64], result: &mut [f64]) {
+unsafe fn avgprice_avx2(
+    open: &[f64],
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    result: &mut [f64],
+) {
     unsafe {
         use core::arch::x86_64::*;
-        let len = open.len().min(high.len()).min(low.len()).min(close.len()).min(result.len());
+        let len = open
+            .len()
+            .min(high.len())
+            .min(low.len())
+            .min(close.len())
+            .min(result.len());
         let quarter = _mm256_set1_pd(0.25);
-        
+
         let o_ptr = open.as_ptr();
         let h_ptr = high.as_ptr();
         let l_ptr = low.as_ptr();
         let c_ptr = close.as_ptr();
         let out_ptr = result.as_mut_ptr();
-        
+
         let chunks = len / 4;
         for c in 0..chunks {
             let i = c * 4;
@@ -3464,13 +3547,13 @@ unsafe fn avgprice_avx2(open: &[f64], high: &[f64], low: &[f64], close: &[f64], 
             let vh = _mm256_loadu_pd(h_ptr.add(i));
             let vl = _mm256_loadu_pd(l_ptr.add(i));
             let vc = _mm256_loadu_pd(c_ptr.add(i));
-            
+
             let sum = _mm256_add_pd(_mm256_add_pd(vo, vh), _mm256_add_pd(vl, vc));
             let avg = _mm256_mul_pd(sum, quarter);
-            
+
             _mm256_storeu_pd(out_ptr.add(i), avg);
         }
-        
+
         // Handle remaining elements
         for i in (chunks * 4)..len {
             result[i] = (open[i] + high[i] + low[i] + close[i]) * 0.25;
@@ -3480,8 +3563,13 @@ unsafe fn avgprice_avx2(open: &[f64], high: &[f64], low: &[f64], close: &[f64], 
 
 #[allow(dead_code)]
 fn avgprice_scalar(open: &[f64], high: &[f64], low: &[f64], close: &[f64], result: &mut [f64]) {
-    let len = open.len().min(high.len()).min(low.len()).min(close.len()).min(result.len());
-    
+    let len = open
+        .len()
+        .min(high.len())
+        .min(low.len())
+        .min(close.len())
+        .min(result.len());
+
     for i in 0..len {
         result[i] = (open[i] + high[i] + low[i] + close[i]) / 4.0;
     }
@@ -3502,13 +3590,20 @@ mod simd_temporal_tests {
         let k = 0.3;
         let got = simd_ema_next(prev, sample, k);
         let expected = prev + k * (sample - prev);
-        assert!((got - expected).abs() < 1e-12, "got={} expected={}", got, expected);
+        assert!(
+            (got - expected).abs() < 1e-12,
+            "got={} expected={}",
+            got,
+            expected
+        );
     }
 
     #[test]
     fn test_simd_cmo_matches_scalar() {
         // 8 bars: trending up then down
-        let src: Vec<f64> = (0..20).map(|i| 10.0 + (i as f64 * 0.5).sin() * 2.0).collect();
+        let src: Vec<f64> = (0..20)
+            .map(|i| 10.0 + (i as f64 * 0.5).sin() * 2.0)
+            .collect();
         let mut out = vec![f64::NAN; 20];
         simd_cmo(&src, 5, &mut out);
         // 头 5 根 NaN
@@ -3551,7 +3646,12 @@ mod simd_temporal_tests {
         simd_sar_step(&high, &low, 9.0, 10.0, 0.02, 0.02, 0.2, &mut out);
         // SAR 应单调上升
         for i in 1..20 {
-            assert!(out[i] >= out[i - 1] - 1e-9, "SAR not monotonic: {} >= {}", out[i], out[i - 1]);
+            assert!(
+                out[i] >= out[i - 1] - 1e-9,
+                "SAR not monotonic: {} >= {}",
+                out[i],
+                out[i - 1]
+            );
         }
     }
 
@@ -3583,7 +3683,12 @@ mod simd_temporal_tests {
         }
         for i in 3..n {
             assert!(out[i].is_finite());
-            assert!(out[i] >= 0.0 && out[i] <= 180.0, "phase[{}] = {}", i, out[i]);
+            assert!(
+                out[i] >= 0.0 && out[i] <= 180.0,
+                "phase[{}] = {}",
+                i,
+                out[i]
+            );
         }
     }
 }
@@ -3668,7 +3773,8 @@ mod hilbert_simd_tests {
             *o = 0.0;
         }
         for i in 3..len {
-            out[i] = 0.1 * (4.0 * input[i] + 3.0 * input[i - 1] + 2.0 * input[i - 2] + input[i - 3]);
+            out[i] =
+                0.1 * (4.0 * input[i] + 3.0 * input[i - 1] + 2.0 * input[i - 2] + input[i - 3]);
         }
     }
 
@@ -3679,7 +3785,8 @@ mod hilbert_simd_tests {
             *o = 0.0;
         }
         for i in 10..len {
-            let a = 0.0962 * smooth[i] + 0.5769 * smooth[i - 2] - 0.5769 * smooth[i - 4]
+            let a = 0.0962 * smooth[i] + 0.5769 * smooth[i - 2]
+                - 0.5769 * smooth[i - 4]
                 - 0.0962 * smooth[i - 6];
             let b = 0.075 * smooth[i - 1] + 0.54 * smooth[i - 3] + 0.075 * smooth[i - 5];
             out[i] = a * b;
@@ -3694,7 +3801,8 @@ mod hilbert_simd_tests {
         }
         for i in 16..len {
             let ip = detrender[i - 6];
-            let q = 0.0962 * detrender[i] + 0.5769 * detrender[i - 2] - 0.5769 * detrender[i - 4]
+            let q = 0.0962 * detrender[i] + 0.5769 * detrender[i - 2]
+                - 0.5769 * detrender[i - 4]
                 - 0.0962 * detrender[i - 6];
             let j1 = 0.0962 * detrender[i - 6] + 0.5769 * detrender[i - 8]
                 - 0.5769 * detrender[i - 10]
@@ -3710,7 +3818,9 @@ mod hilbert_simd_tests {
     #[test]
     fn test_simd_ht_smooth_matches_scalar() {
         let n = 50;
-        let input: Vec<f64> = (0..n).map(|i| 50.0 + (i as f64 * 0.2).sin() * 3.0).collect();
+        let input: Vec<f64> = (0..n)
+            .map(|i| 50.0 + (i as f64 * 0.2).sin() * 3.0)
+            .collect();
         let mut simd_out = vec![0.0; n];
         let mut scalar_out = vec![0.0; n];
         simd_ht_smooth(&input, &mut simd_out);
@@ -3729,7 +3839,9 @@ mod hilbert_simd_tests {
     #[test]
     fn test_simd_ht_detrender_matches_scalar() {
         let n = 50;
-        let input: Vec<f64> = (0..n).map(|i| 50.0 + (i as f64 * 0.2).sin() * 3.0).collect();
+        let input: Vec<f64> = (0..n)
+            .map(|i| 50.0 + (i as f64 * 0.2).sin() * 3.0)
+            .collect();
         let mut smooth = vec![0.0; n];
         smooth_scalar(&input, &mut smooth);
 
@@ -3751,7 +3863,9 @@ mod hilbert_simd_tests {
     #[test]
     fn test_simd_ht_components_matches_scalar() {
         let n = 60;
-        let input: Vec<f64> = (0..n).map(|i| 50.0 + (i as f64 * 0.2).sin() * 3.0).collect();
+        let input: Vec<f64> = (0..n)
+            .map(|i| 50.0 + (i as f64 * 0.2).sin() * 3.0)
+            .collect();
         let mut smooth = vec![0.0; n];
         let mut detrender = vec![0.0; n];
         smooth_scalar(&input, &mut smooth);
@@ -3776,7 +3890,9 @@ mod hilbert_simd_tests {
     fn test_simd_ht_pipeline_consistency() {
         // 100-bar sine wave + SIMD pipeline should match scalar pipeline.
         let n = 100;
-        let input: Vec<f64> = (0..n).map(|i| 50.0 + (i as f64 * 0.1).sin() * 3.0).collect();
+        let input: Vec<f64> = (0..n)
+            .map(|i| 50.0 + (i as f64 * 0.1).sin() * 3.0)
+            .collect();
 
         // SIMD path
         let mut smooth_simd = vec![0.0; n];
@@ -3808,7 +3924,9 @@ mod hilbert_simd_tests {
     #[test]
     fn test_simd_ht_phase_bounded() {
         let n = 50;
-        let input: Vec<f64> = (0..n).map(|i| 50.0 + (i as f64 * 0.1).sin() * 3.0).collect();
+        let input: Vec<f64> = (0..n)
+            .map(|i| 50.0 + (i as f64 * 0.1).sin() * 3.0)
+            .collect();
         let mut smooth = vec![0.0; n];
         let mut detrender = vec![0.0; n];
         simd_ht_smooth(&input, &mut smooth);
@@ -3819,7 +3937,8 @@ mod hilbert_simd_tests {
         for i in 16..n {
             assert!(phase[i].is_finite(), "phase at {} is NaN/inf", i);
             assert!(
-                phase[i] >= -core::f64::consts::PI - 1e-9 && phase[i] <= core::f64::consts::PI + 1e-9,
+                phase[i] >= -core::f64::consts::PI - 1e-9
+                    && phase[i] <= core::f64::consts::PI + 1e-9,
                 "phase[{}] = {} out of [-π, π]",
                 i,
                 phase[i]
@@ -3859,8 +3978,12 @@ mod china_simd_tests {
     #[test]
     fn test_simd_diff_sum_matches_scalar() {
         let n = 100;
-        let a: Vec<f64> = (0..n).map(|i| 50.0 + (i as f64 * 0.1).sin() * 3.0).collect();
-        let b: Vec<f64> = (0..n).map(|i| 49.0 + (i as f64 * 0.07).cos() * 2.0).collect();
+        let a: Vec<f64> = (0..n)
+            .map(|i| 50.0 + (i as f64 * 0.1).sin() * 3.0)
+            .collect();
+        let b: Vec<f64> = (0..n)
+            .map(|i| 49.0 + (i as f64 * 0.07).cos() * 2.0)
+            .collect();
         for &period in &[1usize, 3, 4, 7, 16, 32, 50, 100] {
             let simd = simd_diff_sum(&a, &b, period);
             let mut scalar = 0.0;
@@ -3880,8 +4003,12 @@ mod china_simd_tests {
     #[test]
     fn test_simd_max_diff_sum_matches_scalar() {
         let n = 100;
-        let a: Vec<f64> = (0..n).map(|i| 50.0 + (i as f64 * 0.1).sin() * 3.0).collect();
-        let b: Vec<f64> = (0..n).map(|i| 49.0 + (i as f64 * 0.07).cos() * 2.0).collect();
+        let a: Vec<f64> = (0..n)
+            .map(|i| 50.0 + (i as f64 * 0.1).sin() * 3.0)
+            .collect();
+        let b: Vec<f64> = (0..n)
+            .map(|i| 49.0 + (i as f64 * 0.07).cos() * 2.0)
+            .collect();
         for &period in &[1usize, 3, 4, 7, 16, 32, 50, 100] {
             let simd = simd_max_diff_sum(&a, &b, period);
             let mut scalar = 0.0;
@@ -3904,9 +4031,15 @@ mod china_simd_tests {
     #[test]
     fn test_simd_dual_diff_init_matches_scalar() {
         let n = 60;
-        let high: Vec<f64> = (0..n).map(|i| 50.0 + (i as f64 * 0.1).sin() * 3.0).collect();
-        let open: Vec<f64> = (0..n).map(|i| 49.0 + (i as f64 * 0.07).cos() * 2.0).collect();
-        let low: Vec<f64> = (0..n).map(|i| 48.0 + (i as f64 * 0.13).sin() * 1.5).collect();
+        let high: Vec<f64> = (0..n)
+            .map(|i| 50.0 + (i as f64 * 0.1).sin() * 3.0)
+            .collect();
+        let open: Vec<f64> = (0..n)
+            .map(|i| 49.0 + (i as f64 * 0.07).cos() * 2.0)
+            .collect();
+        let low: Vec<f64> = (0..n)
+            .map(|i| 48.0 + (i as f64 * 0.13).sin() * 1.5)
+            .collect();
         for &period in &[1usize, 3, 4, 7, 16, 32, 50, 60] {
             let (simd_ho, simd_ol) = simd_dual_diff_init(&high, &open, &low, period);
             let mut ho = 0.0;
@@ -3935,9 +4068,15 @@ mod china_simd_tests {
     #[test]
     fn test_simd_dual_max_init_matches_scalar() {
         let n = 60;
-        let high: Vec<f64> = (0..n).map(|i| 50.0 + (i as f64 * 0.1).sin() * 3.0).collect();
-        let close: Vec<f64> = (0..n).map(|i| 49.0 + (i as f64 * 0.07).cos() * 2.0).collect();
-        let low: Vec<f64> = (0..n).map(|i| 48.0 + (i as f64 * 0.13).sin() * 1.5).collect();
+        let high: Vec<f64> = (0..n)
+            .map(|i| 50.0 + (i as f64 * 0.1).sin() * 3.0)
+            .collect();
+        let close: Vec<f64> = (0..n)
+            .map(|i| 49.0 + (i as f64 * 0.07).cos() * 2.0)
+            .collect();
+        let low: Vec<f64> = (0..n)
+            .map(|i| 48.0 + (i as f64 * 0.13).sin() * 1.5)
+            .collect();
         for &period in &[1usize, 3, 4, 7, 16, 32, 50, 59] {
             let (simd_up, simd_down) = simd_dual_max_init(&high, &close, &low, period);
             let mut up = 0.0;
@@ -4231,12 +4370,17 @@ mod tests {
         let m = 4000;
         for i in 0..m {
             // dense sampling across (-π/2, π/2) plus edges
-            angles.push(-core::f64::consts::FRAC_PI_2 + 2.0 * core::f64::consts::FRAC_PI_2 * (i as f64) / (m as f64));
+            angles.push(
+                -core::f64::consts::FRAC_PI_2
+                    + 2.0 * core::f64::consts::FRAC_PI_2 * (i as f64) / (m as f64),
+            );
         }
         // some random larger angles to exercise the quadrant blend
         let mut seed = 12345u64;
         for _ in 0..2000 {
-            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let r = ((seed >> 11) as f64) / (1u64 << 53) as f64; // [0,1)
             angles.push((r * 8.0 - 4.0) * core::f64::consts::PI); // [-4π, 4π]
         }
@@ -4254,8 +4398,16 @@ mod tests {
             max_cos_err = max_cos_err.max((cos_out[i] - c).abs());
         }
         // SLA: error <= 1e-9 for |x| <= π/2; larger angles keep < 1e-6 (polynomial approx).
-        assert!(max_sin_err <= 1e-6, "max sin error {} exceeds 1e-6", max_sin_err);
-        assert!(max_cos_err <= 1e-6, "max cos error {} exceeds 1e-6", max_cos_err);
+        assert!(
+            max_sin_err <= 1e-6,
+            "max sin error {} exceeds 1e-6",
+            max_sin_err
+        );
+        assert!(
+            max_cos_err <= 1e-6,
+            "max cos error {} exceeds 1e-6",
+            max_cos_err
+        );
 
         // Tighter bound for the phase domain specifically.
         let mut max_phase_sin_err = 0.0_f64;
@@ -4288,7 +4440,9 @@ mod tests {
         let mut angles: Vec<f64> = Vec::with_capacity(n);
         let mut seed = 0x9E3779B97F4A7C15u64;
         for _ in 0..n {
-            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let r = ((seed >> 11) as f64) / (1u64 << 53) as f64; // [0,1)
             angles.push((r - 0.5) * core::f64::consts::PI); // (-π/2, π/2)
         }
@@ -4323,7 +4477,11 @@ mod tests {
             simd_elapsed / (iters as f64 * n as f64),
             scalar_elapsed / (iters as f64 * n as f64)
         );
-        assert!(speedup >= 1.5, "simd_sin_cos speedup too low: {:.2}x", speedup);
+        assert!(
+            speedup >= 1.5,
+            "simd_sin_cos speedup too low: {:.2}x",
+            speedup
+        );
     }
 
     #[test]
@@ -4333,7 +4491,9 @@ mod tests {
         let n = 500usize;
         let mut seed = 0xABCDEFu64;
         let mut rnd = || {
-            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             ((seed >> 11) as f64) / (1u64 << 53) as f64
         };
         let high: Vec<f64> = (0..n).map(|_| 100.0 + 10.0 * rnd()).collect();

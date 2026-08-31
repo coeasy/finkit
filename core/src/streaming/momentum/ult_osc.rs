@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use std::collections::VecDeque;
 
 /// Streaming Ultimate Oscillator (ULTOSC).
@@ -100,10 +100,18 @@ impl StreamingIndicator<(f64, f64, f64)> for StreamingUltOsc {
 }
 
 impl IndicatorMeta for StreamingUltOsc {
-    fn name() -> &'static str { "ULTOSC" }
-    fn category() -> &'static str { "momentum" }
-    fn description() -> &'static str { "Ultimate Oscillator" }
-    fn warm_up_period(&self) -> usize { self.max_period + 1 }
+    fn name() -> &'static str {
+        "ULTOSC"
+    }
+    fn category() -> &'static str {
+        "momentum"
+    }
+    fn description() -> &'static str {
+        "Ultimate Oscillator"
+    }
+    fn warm_up_period(&self) -> usize {
+        self.max_period + 1
+    }
 }
 
 #[cfg(test)]
@@ -126,7 +134,10 @@ mod tests {
             }
         }
         let v = last.unwrap();
-        assert!((0.0..=100.0).contains(&v), "ULTOSC should be 0-100, got {v}");
+        assert!(
+            (0.0..=100.0).contains(&v),
+            "ULTOSC should be 0-100, got {v}"
+        );
     }
 
     #[test]

@@ -1,10 +1,10 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use ndarray::Array1;
 use finkit::formula::{FormulaContext, FormulaEngine};
 use finkit::indicators;
 use finkit::math::moving_avg;
 use finkit::streaming::indicators::*;
 use finkit::streaming::StreamingIndicator;
+use ndarray::Array1;
 
 const NEW_IND_DATA_LEN: usize = 10_000;
 
@@ -141,70 +141,50 @@ fn bench_streaming_all(c: &mut Criterion) {
     for size in [10_000, 100_000, 500_000] {
         let (_, high, low, close, _) = create_ohlcv_data(size);
 
-        group.bench_with_input(
-            BenchmarkId::new("SMA_20", size),
-            &size,
-            |b, _| {
-                b.iter(|| {
-                    let mut ind = StreamingSma::new(20);
-                    for &v in &close {
-                        black_box(ind.next(v));
-                    }
-                })
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("SMA_20", size), &size, |b, _| {
+            b.iter(|| {
+                let mut ind = StreamingSma::new(20);
+                for &v in &close {
+                    black_box(ind.next(v));
+                }
+            })
+        });
 
-        group.bench_with_input(
-            BenchmarkId::new("EMA_12", size),
-            &size,
-            |b, _| {
-                b.iter(|| {
-                    let mut ind = StreamingEma::new(12);
-                    for &v in &close {
-                        black_box(ind.next(v));
-                    }
-                })
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("EMA_12", size), &size, |b, _| {
+            b.iter(|| {
+                let mut ind = StreamingEma::new(12);
+                for &v in &close {
+                    black_box(ind.next(v));
+                }
+            })
+        });
 
-        group.bench_with_input(
-            BenchmarkId::new("RSI_14", size),
-            &size,
-            |b, _| {
-                b.iter(|| {
-                    let mut ind = StreamingRsi::new(14);
-                    for &v in &close {
-                        black_box(ind.next(v));
-                    }
-                })
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("RSI_14", size), &size, |b, _| {
+            b.iter(|| {
+                let mut ind = StreamingRsi::new(14);
+                for &v in &close {
+                    black_box(ind.next(v));
+                }
+            })
+        });
 
-        group.bench_with_input(
-            BenchmarkId::new("MACD_12_26_9", size),
-            &size,
-            |b, _| {
-                b.iter(|| {
-                    let mut ind = StreamingMacd::new(12, 26, 9);
-                    for &v in &close {
-                        black_box(ind.next(v));
-                    }
-                })
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("MACD_12_26_9", size), &size, |b, _| {
+            b.iter(|| {
+                let mut ind = StreamingMacd::new(12, 26, 9);
+                for &v in &close {
+                    black_box(ind.next(v));
+                }
+            })
+        });
 
-        group.bench_with_input(
-            BenchmarkId::new("BOLL_20", size),
-            &size,
-            |b, _| {
-                b.iter(|| {
-                    let mut ind = StreamingBoll::new(20, 2.0, 2.0);
-                    for &v in &close {
-                        black_box(ind.next(v));
-                    }
-                })
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("BOLL_20", size), &size, |b, _| {
+            b.iter(|| {
+                let mut ind = StreamingBoll::new(20, 2.0, 2.0);
+                for &v in &close {
+                    black_box(ind.next(v));
+                }
+            })
+        });
 
         let ohlc: Vec<(f64, f64, f64)> = high
             .iter()
@@ -212,18 +192,14 @@ fn bench_streaming_all(c: &mut Criterion) {
             .zip(close.iter())
             .map(|((&h, &l), &c)| (h, l, c))
             .collect();
-        group.bench_with_input(
-            BenchmarkId::new("ATR_14", size),
-            &size,
-            |b, _| {
-                b.iter(|| {
-                    let mut ind = StreamingAtr::new(14);
-                    for &(h, l, cl) in &ohlc {
-                        black_box(ind.next((h, l, cl)));
-                    }
-                })
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("ATR_14", size), &size, |b, _| {
+            b.iter(|| {
+                let mut ind = StreamingAtr::new(14);
+                for &(h, l, cl) in &ohlc {
+                    black_box(ind.next((h, l, cl)));
+                }
+            })
+        });
     }
     group.finish();
 }
@@ -285,11 +261,7 @@ fn bench_native_momentum_ext(c: &mut Criterion) {
         b.iter(|| black_box(indicators::coppock(&close, 10, 14, 11).unwrap()))
     });
     group.bench_function("KST", |b| {
-        b.iter(|| {
-            black_box(
-                indicators::kst(&close, 10, 15, 20, 30, 10, 10, 10, 15, 9).unwrap(),
-            )
-        })
+        b.iter(|| black_box(indicators::kst(&close, 10, 15, 20, 30, 10, 10, 10, 15, 9).unwrap()))
     });
     group.bench_function("STC_23_50_10", |b| {
         b.iter(|| black_box(indicators::stc(&close, 23, 50, 10).unwrap()))
@@ -431,8 +403,7 @@ fn bench_into_variants(c: &mut Criterion) {
     });
     group.bench_function("stoch_into", |b| {
         b.iter(|| {
-            indicators::stoch_into(&high, &low, &close, 14, 3, 3, &mut k_out, &mut d_out)
-                .unwrap();
+            indicators::stoch_into(&high, &low, &close, 14, 3, 3, &mut k_out, &mut d_out).unwrap();
             black_box(k_out[size - 1] + d_out[size - 1])
         })
     });

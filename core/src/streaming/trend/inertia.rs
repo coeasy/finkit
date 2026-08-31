@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 
 /// Streaming Inertia Indicator.
 ///
@@ -254,7 +254,9 @@ mod tests {
     #[test]
     fn test_streaming_vs_batch_convergence() {
         let n = 60;
-        let open: Vec<f64> = (0..n).map(|i| 100.0 + (i as f64 * 0.2).sin() * 3.0).collect();
+        let open: Vec<f64> = (0..n)
+            .map(|i| 100.0 + (i as f64 * 0.2).sin() * 3.0)
+            .collect();
         let high: Vec<f64> = open.iter().map(|o| o + 1.5).collect();
         let low: Vec<f64> = open.iter().map(|o| o - 1.0).collect();
         let close: Vec<f64> = open.iter().map(|o| o + 0.3).collect();

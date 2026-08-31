@@ -2,9 +2,9 @@
 //!
 //! Run with: cargo bench -p finkit --bench ema_multi_periods_bench
 
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use finkit::indicators::ema;
 use finkit::math::moving_avg::ema_multi_periods;
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 
 fn bench_ema_multi_periods(c: &mut Criterion) {
     let mut group = c.benchmark_group("ema_multi_periods");
@@ -25,14 +25,18 @@ fn bench_ema_multi_periods(c: &mut Criterion) {
         });
 
         // Optimized: one pass, FMA, zero-alloc on the hot path
-        group.bench_with_input(BenchmarkId::new("ema_multi_periods", size), &size, |b, _| {
-            let mut bufs: Vec<Vec<f64>> = periods.iter().map(|_| vec![0.0; size]).collect();
-            b.iter(|| {
-                let mut refs: Vec<&mut [f64]> =
-                    bufs.iter_mut().map(|b| b.as_mut_slice()).collect();
-                black_box(ema_multi_periods(&data, &periods, &mut refs).unwrap());
-            })
-        });
+        group.bench_with_input(
+            BenchmarkId::new("ema_multi_periods", size),
+            &size,
+            |b, _| {
+                let mut bufs: Vec<Vec<f64>> = periods.iter().map(|_| vec![0.0; size]).collect();
+                b.iter(|| {
+                    let mut refs: Vec<&mut [f64]> =
+                        bufs.iter_mut().map(|b| b.as_mut_slice()).collect();
+                    black_box(ema_multi_periods(&data, &periods, &mut refs).unwrap());
+                })
+            },
+        );
     }
 
     group.finish();

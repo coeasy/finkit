@@ -26,16 +26,30 @@ impl StreamingIndicator for StreamingStdDev {
         self.var.reset();
     }
 
-    fn is_ready(&self) -> bool { self.var.is_ready() }
-    fn count(&self) -> usize { self.var.count() }
-    fn value(&self) -> Option<f64> { self.var.value().map(|v| v.max(0.0).sqrt()) }
+    fn is_ready(&self) -> bool {
+        self.var.is_ready()
+    }
+    fn count(&self) -> usize {
+        self.var.count()
+    }
+    fn value(&self) -> Option<f64> {
+        self.var.value().map(|v| v.max(0.0).sqrt())
+    }
 }
 
 impl IndicatorMeta for StreamingStdDev {
-    fn name() -> &'static str { "STDDEV" }
-    fn category() -> &'static str { "statistic" }
-    fn description() -> &'static str { "Rolling Standard Deviation (Welford)" }
-    fn warm_up_period(&self) -> usize { self.var.warm_up_period() }
+    fn name() -> &'static str {
+        "STDDEV"
+    }
+    fn category() -> &'static str {
+        "statistic"
+    }
+    fn description() -> &'static str {
+        "Rolling Standard Deviation (Welford)"
+    }
+    fn warm_up_period(&self) -> usize {
+        self.var.warm_up_period()
+    }
 }
 
 #[cfg(test)]
@@ -60,7 +74,9 @@ mod tests {
     #[test]
     fn test_streaming_stddev_reset() {
         let mut sd = StreamingStdDev::new(3);
-        sd.next(1.0); sd.next(2.0); sd.next(3.0);
+        sd.next(1.0);
+        sd.next(2.0);
+        sd.next(3.0);
         assert!(sd.is_ready());
         sd.reset();
         assert!(!sd.is_ready());
@@ -82,7 +98,9 @@ mod tests {
 
     #[test]
     fn test_streaming_vs_batch_convergence() {
-        let data: Vec<f64> = (0..100).map(|i| 50.0 + (i as f64 * 0.1).sin() * 10.0).collect();
+        let data: Vec<f64> = (0..100)
+            .map(|i| 50.0 + (i as f64 * 0.1).sin() * 10.0)
+            .collect();
         let period = 20;
         let batch = crate::math::statistics::rolling_std_dev(&data, period).unwrap();
 

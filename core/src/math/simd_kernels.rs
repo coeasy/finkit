@@ -343,13 +343,7 @@ pub fn stoch_scalar(
 
 #[cfg(feature = "std")]
 #[inline]
-pub fn cci_scalar(
-    high: &[f64],
-    low: &[f64],
-    close: &[f64],
-    period: usize,
-    out: &mut [f64],
-) {
+pub fn cci_scalar(high: &[f64], low: &[f64], close: &[f64], period: usize, out: &mut [f64]) {
     let len = close.len();
     for v in out.iter_mut().take(len) {
         *v = f64::NAN;
@@ -737,13 +731,7 @@ unsafe fn stoch_avx2(
 
 // Scalar fallback (no SIMD intrinsics)
 #[cfg(all(feature = "std", target_arch = "x86_64"))]
-unsafe fn cci_fallback(
-    high: &[f64],
-    low: &[f64],
-    close: &[f64],
-    period: usize,
-    out: &mut [f64],
-) {
+unsafe fn cci_fallback(high: &[f64], low: &[f64], close: &[f64], period: usize, out: &mut [f64]) {
     cci_scalar(high, low, close, period, out);
 }
 
@@ -892,7 +880,11 @@ pub fn sma_simd_into(data: &[f64], period: usize, out: &mut [f64]) {
             return unsafe { sma_fallback_sse(data, period, out) };
         }
     }
-    #[cfg(all(feature = "std", target_arch = "x86_64", not(feature = "nightly-avx512")))]
+    #[cfg(all(
+        feature = "std",
+        target_arch = "x86_64",
+        not(feature = "nightly-avx512")
+    ))]
     {
         if x86_dispatch::has_avx2() {
             return unsafe { sma_fallback(data, period, out) };
@@ -955,7 +947,11 @@ pub fn ema_simd_into(data: &[f64], period: usize, out: &mut [f64]) {
             return unsafe { ema_fallback_sse(data, period, out) };
         }
     }
-    #[cfg(all(feature = "std", target_arch = "x86_64", not(feature = "nightly-avx512")))]
+    #[cfg(all(
+        feature = "std",
+        target_arch = "x86_64",
+        not(feature = "nightly-avx512")
+    ))]
     {
         if x86_dispatch::has_avx2() {
             return unsafe { ema_fallback(data, period, out) };
@@ -1007,11 +1003,7 @@ pub fn macd_simd(
         &mut signal,
         &mut hist,
     );
-    SimdMacdResult {
-        macd,
-        signal,
-        hist,
-    }
+    SimdMacdResult { macd, signal, hist }
 }
 
 /// NOTE: MACD's inner loops are sequential EMA chains (`x[i]*k + prev*(1-k)`),
@@ -1094,12 +1086,7 @@ pub fn stoch_simd_into(
 }
 
 #[cfg(feature = "std")]
-pub fn cci_simd(
-    high: &[f64],
-    low: &[f64],
-    close: &[f64],
-    period: usize,
-) -> alloc::vec::Vec<f64> {
+pub fn cci_simd(high: &[f64], low: &[f64], close: &[f64], period: usize) -> alloc::vec::Vec<f64> {
     let mut out = alloc::vec![f64::NAN; close.len()];
     cci_simd_into(high, low, close, period, &mut out);
     out
@@ -1110,13 +1097,7 @@ pub fn cci_simd(
 /// amenable to plain SIMD. The scalar path already uses an O(n·log period)
 /// sorted-window + prefix-sum scheme, so there is no easy vectorization win.
 /// This entry delegates to scalar; it is a dispatch slot, not a vectorized kernel.
-pub fn cci_simd_into(
-    high: &[f64],
-    low: &[f64],
-    close: &[f64],
-    period: usize,
-    out: &mut [f64],
-) {
+pub fn cci_simd_into(high: &[f64], low: &[f64], close: &[f64], period: usize, out: &mut [f64]) {
     #[cfg(all(feature = "std", target_arch = "x86_64"))]
     {
         if x86_dispatch::has_avx2() {
@@ -1404,8 +1385,14 @@ mod tests {
                 100.0 + t * 0.01 + (t * 0.37).sin() * 2.0 + (t * 1.13).cos() * 1.5
             })
             .collect();
-        let high: Vec<f64> = close.iter().map(|c| c + 1.5 + (c % 10.0).sin() * 0.5).collect();
-        let low: Vec<f64> = close.iter().map(|c| c - 1.5 - (c % 10.0).cos() * 0.5).collect();
+        let high: Vec<f64> = close
+            .iter()
+            .map(|c| c + 1.5 + (c % 10.0).sin() * 0.5)
+            .collect();
+        let low: Vec<f64> = close
+            .iter()
+            .map(|c| c - 1.5 - (c % 10.0).cos() * 0.5)
+            .collect();
         (high, low, close)
     }
 
@@ -1415,7 +1402,16 @@ mod tests {
         for (k_period, k_slow, d_period) in [(5, 3, 3), (14, 3, 3), (14, 5, 5)] {
             let mut k_scalar = vec![f64::NAN; close.len()];
             let mut d_scalar = vec![f64::NAN; close.len()];
-            stoch_scalar(&high, &low, &close, k_period, k_slow, d_period, &mut k_scalar, &mut d_scalar);
+            stoch_scalar(
+                &high,
+                &low,
+                &close,
+                k_period,
+                k_slow,
+                d_period,
+                &mut k_scalar,
+                &mut d_scalar,
+            );
             let simd = stoch_simd(&high, &low, &close, k_period, k_slow, d_period);
             assert_slices_close(&k_scalar, &simd.k, 1e-10);
             assert_slices_close(&d_scalar, &simd.d, 1e-10);
@@ -1467,7 +1463,12 @@ mod tests {
         let result = cci_simd(&high, &low, &close, 14);
         for (i, &v) in result.iter().enumerate() {
             if !v.is_nan() {
-                assert!(v.abs() < 1e-10, "CCI should be ~0 for flat market at {}: {}", i, v);
+                assert!(
+                    v.abs() < 1e-10,
+                    "CCI should be ~0 for flat market at {}: {}",
+                    i,
+                    v
+                );
             }
         }
     }

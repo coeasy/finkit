@@ -109,10 +109,7 @@ macro_rules! streaming_measure {
         let __start = $crate::metrics::__std::time::Instant::now();
         let __result = { $body };
         $crate::metrics::streaming_next($name, $crate::metrics::option_is_some(&__result));
-        $crate::metrics::record_indicator_duration(
-            $name,
-            __start.elapsed().as_secs_f64(),
-        );
+        $crate::metrics::record_indicator_duration($name, __start.elapsed().as_secs_f64());
         let _ = $count; // currently unused; reserved for per-period metrics
         __result
     }};
@@ -155,10 +152,7 @@ macro_rules! timed {
         let __start = $crate::metrics::__std::time::Instant::now();
         let __result = { $body };
         $crate::metrics::indicator_called($name);
-        $crate::metrics::record_indicator_duration(
-            $name,
-            __start.elapsed().as_secs_f64(),
-        );
+        $crate::metrics::record_indicator_duration($name, __start.elapsed().as_secs_f64());
         __result
     }};
 }
@@ -168,7 +162,9 @@ macro_rules! timed {
 #[cfg(not(feature = "metrics"))]
 #[macro_export]
 macro_rules! timed {
-    ($name:expr, $body:expr) => {{ $body }};
+    ($name:expr, $body:expr) => {{
+        $body
+    }};
 }
 
 /// Statically-resolved path to `std` for use by the `timed!` macro. When the
@@ -186,8 +182,12 @@ pub mod __std {
     pub mod time {
         pub struct Instant;
         impl Instant {
-            pub fn now() -> Self { Instant }
-            pub fn elapsed(&self) -> core::time::Duration { core::time::Duration::from_secs(0) }
+            pub fn now() -> Self {
+                Instant
+            }
+            pub fn elapsed(&self) -> core::time::Duration {
+                core::time::Duration::from_secs(0)
+            }
         }
     }
 }
@@ -196,10 +196,9 @@ pub mod __std {
 /// whose `render()` produces the scrape text. Requires the
 /// `metrics-prometheus` feature.
 #[cfg(feature = "metrics-prometheus")]
-pub fn prometheus_recorder() -> Result<
-    metrics_exporter_prometheus::PrometheusHandle,
-    metrics_exporter_prometheus::BuildError,
-> {
+pub fn prometheus_recorder(
+) -> Result<metrics_exporter_prometheus::PrometheusHandle, metrics_exporter_prometheus::BuildError>
+{
     use std::sync::OnceLock;
     static HANDLE: OnceLock<metrics_exporter_prometheus::PrometheusHandle> = OnceLock::new();
     if let Some(h) = HANDLE.get() {

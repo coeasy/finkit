@@ -94,6 +94,9 @@ impl FeatureRanking {
 
     /// Get features above a given importance threshold.
     pub fn above_threshold(&self, threshold: f64) -> Vec<&(String, f64)> {
-        self.rankings.iter().filter(|(_, v)| *v >= threshold).collect()
+        self.rankings
+            .iter()
+            .filter(|(_, v)| *v >= threshold)
+            .collect()
     }
 }

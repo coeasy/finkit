@@ -88,9 +88,7 @@ fn bench_rsi_10m(c: &mut Criterion) {
     g.bench_with_input(
         BenchmarkId::from_parameter(N_TEN_MILLION),
         &N_TEN_MILLION,
-        |b, _| {
-            b.iter(|| k::rsi_simd(black_box(&data), period))
-        },
+        |b, _| b.iter(|| k::rsi_simd(black_box(&data), period)),
     );
     g.finish();
 }

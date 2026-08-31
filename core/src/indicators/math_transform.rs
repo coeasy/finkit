@@ -547,7 +547,11 @@ mod tests {
         assert_eq!(result.len(), 3);
         assert_relative_eq!(result[0], 1.0, epsilon = EPS);
         assert_relative_eq!(result[1], std::f64::consts::E, epsilon = 1e-10);
-        assert_relative_eq!(result[2], std::f64::consts::E * std::f64::consts::E, epsilon = 1e-10);
+        assert_relative_eq!(
+            result[2],
+            std::f64::consts::E * std::f64::consts::E,
+            epsilon = 1e-10
+        );
     }
 
     #[test]
@@ -576,7 +580,11 @@ mod tests {
     // ---------- ln ----------
     #[test]
     fn test_ln_basic() {
-        let data = vec![1.0, std::f64::consts::E, std::f64::consts::E * std::f64::consts::E];
+        let data = vec![
+            1.0,
+            std::f64::consts::E,
+            std::f64::consts::E * std::f64::consts::E,
+        ];
         let result = ln(&data).unwrap();
         assert_eq!(result.len(), 3);
         assert_relative_eq!(result[0], 0.0, epsilon = EPS);

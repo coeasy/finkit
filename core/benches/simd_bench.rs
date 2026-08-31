@@ -1,7 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use finkit::formula::SimdOps;
 use finkit::math::simd_kernels;
 use finkit::math::simd_ops;
-use finkit::formula::SimdOps;
 
 const DATA_LEN: usize = 10_000;
 const KERNEL_LEN: usize = 100_000;
@@ -84,14 +84,7 @@ fn bench_simd_true_range(c: &mut Criterion) {
     prev_close[1..].copy_from_slice(&close[..DATA_LEN - 1]);
     let mut result = vec![0.0; DATA_LEN];
     c.bench_function("simd_true_range_10000", |b| {
-        b.iter(|| {
-            simd_ops::simd_true_range(
-                black_box(&high),
-                &low,
-                &prev_close,
-                &mut result,
-            )
-        })
+        b.iter(|| simd_ops::simd_true_range(black_box(&high), &low, &prev_close, &mut result))
     });
 }
 
@@ -99,9 +92,7 @@ fn bench_simd_typical_price(c: &mut Criterion) {
     let (high, low, close) = generate_hlc_data(DATA_LEN);
     let mut result = vec![0.0; DATA_LEN];
     c.bench_function("simd_typical_price_10000", |b| {
-        b.iter(|| {
-            simd_ops::simd_typical_price(black_box(&high), &low, &close, &mut result)
-        })
+        b.iter(|| simd_ops::simd_typical_price(black_box(&high), &low, &close, &mut result))
     });
 }
 
@@ -159,15 +150,7 @@ fn bench_simd_ad_line(c: &mut Criterion) {
     let volume = generate_volume_data(DATA_LEN);
     let mut result = vec![0.0; DATA_LEN];
     c.bench_function("simd_ad_line_10000", |b| {
-        b.iter(|| {
-            simd_ops::simd_ad_line(
-                black_box(&high),
-                &low,
-                &close,
-                &volume,
-                &mut result,
-            )
-        })
+        b.iter(|| simd_ops::simd_ad_line(black_box(&high), &low, &close, &volume, &mut result))
     });
 }
 

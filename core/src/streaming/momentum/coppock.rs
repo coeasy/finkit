@@ -1,7 +1,7 @@
-use crate::streaming::momentum::roc::StreamingRoc;
-use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::momentum::roc::StreamingRoc;
 use crate::streaming::overlap::wma::StreamingWma;
+use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 
 /// Streaming Coppock Curve.
 ///
@@ -69,9 +69,15 @@ impl StreamingIndicator for StreamingCoppock {
 }
 
 impl IndicatorMeta for StreamingCoppock {
-    fn name() -> &'static str { "Coppock" }
-    fn category() -> &'static str { "momentum" }
-    fn description() -> &'static str { "Coppock Curve" }
+    fn name() -> &'static str {
+        "Coppock"
+    }
+    fn category() -> &'static str {
+        "momentum"
+    }
+    fn description() -> &'static str {
+        "Coppock Curve"
+    }
     fn warm_up_period(&self) -> usize {
         self.long_roc_period.max(self.short_roc_period) + self.wma_period
     }
@@ -124,7 +130,9 @@ mod tests {
         let long_roc = 14;
         let short_roc = 11;
 
-        let batch = crate::indicators::momentum_ext::coppock(&data, wma_period, long_roc, short_roc).unwrap();
+        let batch =
+            crate::indicators::momentum_ext::coppock(&data, wma_period, long_roc, short_roc)
+                .unwrap();
 
         let mut streaming = StreamingCoppock::new(wma_period, long_roc, short_roc);
         for (i, &val) in data.iter().enumerate() {

@@ -37,11 +37,7 @@ fn bench_ichimoku(c: &mut Criterion) {
     let (high, low, close) = create_hlc_data(DATA_LEN);
 
     group.bench_function("ichimoku_10000", |b| {
-        b.iter(|| {
-            black_box(
-                indicators::ichimoku(&high, &low, &close, 9, 26, 52, 26).unwrap(),
-            )
-        })
+        b.iter(|| black_box(indicators::ichimoku(&high, &low, &close, 9, 26, 52, 26).unwrap()))
     });
 
     group.finish();

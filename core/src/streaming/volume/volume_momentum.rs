@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 
 /// Streaming Volume Momentum = Volume - SMA(Volume, period).
 ///
@@ -201,7 +201,9 @@ mod tests {
     #[test]
     fn test_streaming_vs_batch_volume_momentum() {
         use crate::indicators::volume_momentum;
-        let data = vec![100.0, 200.0, 150.0, 300.0, 250.0, 180.0, 220.0, 280.0, 190.0, 310.0];
+        let data = vec![
+            100.0, 200.0, 150.0, 300.0, 250.0, 180.0, 220.0, 280.0, 190.0, 310.0,
+        ];
         let batch = volume_momentum(&data, 5).unwrap();
 
         let mut streaming = StreamingVolumeMomentum::new(5);
@@ -228,7 +230,9 @@ mod tests {
     #[test]
     fn test_streaming_vs_batch_volume_roc() {
         use crate::indicators::volume_roc;
-        let data = vec![100.0, 200.0, 150.0, 300.0, 250.0, 180.0, 220.0, 280.0, 190.0, 310.0];
+        let data = vec![
+            100.0, 200.0, 150.0, 300.0, 250.0, 180.0, 220.0, 280.0, 190.0, 310.0,
+        ];
         let batch = volume_roc(&data, 3).unwrap();
 
         let mut streaming = StreamingVolumeRoc::new(3);

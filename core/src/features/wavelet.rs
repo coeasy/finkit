@@ -89,7 +89,8 @@ pub fn dwt_features(data: &[f64], basis: WaveletBasis, max_level: usize) -> Resu
         let d_std = if d.len() < 2 {
             0.0
         } else {
-            let var = d.iter().map(|x| (x - d_mean) * (x - d_mean)).sum::<f64>() / (d.len() - 1) as f64;
+            let var =
+                d.iter().map(|x| (x - d_mean) * (x - d_mean)).sum::<f64>() / (d.len() - 1) as f64;
             var.sqrt()
         };
         detail_std.push(d_std);

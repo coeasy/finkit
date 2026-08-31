@@ -94,12 +94,23 @@ impl StreamingCorrel {
         self.last_value = None;
     }
 
-    pub fn is_ready(&self) -> bool { self.x_window.len() >= self.period }
-    pub fn count(&self) -> usize { self.count }
-    pub fn value(&self) -> Option<f64> { self.last_value }
+    pub fn is_ready(&self) -> bool {
+        self.x_window.len() >= self.period
+    }
+    pub fn count(&self) -> usize {
+        self.count
+    }
+    pub fn value(&self) -> Option<f64> {
+        self.last_value
+    }
 }
 
-impl_indicator_meta!(StreamingCorrel, "CORREL", "statistic", "Rolling Pearson Correlation");
+impl_indicator_meta!(
+    StreamingCorrel,
+    "CORREL",
+    "statistic",
+    "Rolling Pearson Correlation"
+);
 
 #[cfg(test)]
 mod tests {
@@ -133,7 +144,9 @@ mod tests {
     #[test]
     fn test_streaming_correl_reset() {
         let mut c = StreamingCorrel::new(3);
-        c.next_pair(1.0, 2.0); c.next_pair(2.0, 4.0); c.next_pair(3.0, 6.0);
+        c.next_pair(1.0, 2.0);
+        c.next_pair(2.0, 4.0);
+        c.next_pair(3.0, 6.0);
         assert!(c.is_ready());
         c.reset();
         assert!(!c.is_ready());
@@ -142,8 +155,12 @@ mod tests {
 
     #[test]
     fn test_streaming_correl_vs_batch() {
-        let x: Vec<f64> = (0..50).map(|i| 50.0 + (i as f64 * 0.1).sin() * 10.0).collect();
-        let y: Vec<f64> = (0..50).map(|i| 30.0 + (i as f64 * 0.15).cos() * 5.0).collect();
+        let x: Vec<f64> = (0..50)
+            .map(|i| 50.0 + (i as f64 * 0.1).sin() * 10.0)
+            .collect();
+        let y: Vec<f64> = (0..50)
+            .map(|i| 30.0 + (i as f64 * 0.15).cos() * 5.0)
+            .collect();
         let period = 10;
 
         let batch = crate::indicators::correlation(&x, &y, period).unwrap();

@@ -156,7 +156,10 @@ pub struct BatchStats {
 /// Run a batch of jobs and return both the per-job results and a single
 /// [`BatchStats`] summary. The serial path measures elapsed time using
 /// `Instant::now()`.
-pub fn run_parallel_with_stats(jobs: &[IndicatorJob], input: &[f64]) -> (Vec<JobResult>, BatchStats) {
+pub fn run_parallel_with_stats(
+    jobs: &[IndicatorJob],
+    input: &[f64],
+) -> (Vec<JobResult>, BatchStats) {
     let start = std::time::Instant::now();
     let results = run_parallel(jobs, input);
     let elapsed_us = start.elapsed().as_micros();
@@ -190,9 +193,15 @@ mod tests {
     fn run_parallel_preserves_order() {
         let close = linear_series(1024);
         let jobs: Vec<IndicatorJob> = vec![
-            IndicatorJob::new("sma_20", |data| indicators::sma(data, 20).map(|a| a.to_vec())),
-            IndicatorJob::new("ema_50", |data| indicators::ema(data, 50).map(|a| a.to_vec())),
-            IndicatorJob::new("rsi_14", |data| indicators::rsi(data, 14).map(|a| a.to_vec())),
+            IndicatorJob::new("sma_20", |data| {
+                indicators::sma(data, 20).map(|a| a.to_vec())
+            }),
+            IndicatorJob::new("ema_50", |data| {
+                indicators::ema(data, 50).map(|a| a.to_vec())
+            }),
+            IndicatorJob::new("rsi_14", |data| {
+                indicators::rsi(data, 14).map(|a| a.to_vec())
+            }),
         ];
         let results = run_parallel(&jobs, &close);
         assert_eq!(results.len(), 3);
@@ -222,11 +231,13 @@ mod tests {
     fn run_parallel_with_stats_counts() {
         let close = linear_series(128);
         let jobs: Vec<IndicatorJob> = vec![
-            IndicatorJob::new("good1", |data| indicators::sma(data, 10).map(|a| a.to_vec())),
-            IndicatorJob::new("good2", |data| indicators::ema(data, 10).map(|a| a.to_vec())),
-            IndicatorJob::new("bad", |data| {
-                indicators::sma(data, 0).map(|a| a.to_vec())
+            IndicatorJob::new("good1", |data| {
+                indicators::sma(data, 10).map(|a| a.to_vec())
             }),
+            IndicatorJob::new("good2", |data| {
+                indicators::ema(data, 10).map(|a| a.to_vec())
+            }),
+            IndicatorJob::new("bad", |data| indicators::sma(data, 0).map(|a| a.to_vec())),
         ];
         let (results, stats) = run_parallel_with_stats(&jobs, &close);
         assert_eq!(results.len(), 3);

@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamingAvgPrice {
@@ -69,7 +69,9 @@ mod tests {
     #[test]
     fn test_streaming_avgprice_basic() {
         let mut avg = StreamingAvgPrice::new();
-        let v = avg.next(&OhlcvBar::new(10.0, 12.0, 9.0, 11.0, 100.0)).unwrap();
+        let v = avg
+            .next(&OhlcvBar::new(10.0, 12.0, 9.0, 11.0, 100.0))
+            .unwrap();
         assert!((v - 10.5).abs() < 1e-10);
         assert!(avg.is_ready());
     }

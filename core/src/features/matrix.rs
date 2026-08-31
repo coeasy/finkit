@@ -106,10 +106,7 @@ impl FeatureMatrix {
     pub fn slice_rows(&self, start: usize, end: usize) -> FeatureMatrix {
         let mut result = FeatureMatrix::with_capacity(end - start, self.cols());
         for (i, col) in self.data.iter().enumerate() {
-            result.add_column(
-                self.features[i].clone(),
-                col[start..end].to_vec(),
-            );
+            result.add_column(self.features[i].clone(), col[start..end].to_vec());
         }
         result
     }

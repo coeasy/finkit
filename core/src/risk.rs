@@ -52,10 +52,12 @@ pub fn var_parametric(returns: &[f64], confidence: f64) -> f64 {
     }
     let n = returns.len() as f64;
     let mean = returns.iter().filter(|r| r.is_finite()).sum::<f64>() / n;
-    let var: f64 = returns.iter()
+    let var: f64 = returns
+        .iter()
         .filter(|r| r.is_finite())
         .map(|r| (r - mean).powi(2))
-        .sum::<f64>() / (n - 1.0);
+        .sum::<f64>()
+        / (n - 1.0);
     let std = var.sqrt();
     let z = normal_quantile(confidence);
     -(mean - z * std)
@@ -153,12 +155,18 @@ pub fn sortino_ratio(returns: &[f64], risk_free: f64, annualize: usize) -> f64 {
     }
     let n = returns.len() as f64;
     let mean = returns.iter().sum::<f64>() / n;
-    let downside_var: f64 = returns.iter()
+    let downside_var: f64 = returns
+        .iter()
         .map(|r| {
             let excess = r - risk_free;
-            if excess < 0.0 { excess.powi(2) } else { 0.0 }
+            if excess < 0.0 {
+                excess.powi(2)
+            } else {
+                0.0
+            }
         })
-        .sum::<f64>() / n;
+        .sum::<f64>()
+        / n;
     let dstd = downside_var.sqrt();
     if dstd < 1e-15 {
         return 0.0;
@@ -203,29 +211,29 @@ pub fn calmar_ratio(returns: &[f64], annualize: usize) -> f64 {
 fn normal_quantile(p: f64) -> f64 {
     // Acklam's algorithm constants
     const A1: f64 = -3.969683028665376e+01;
-    const A2: f64 =  2.209460984245205e+02;
+    const A2: f64 = 2.209460984245205e+02;
     const A3: f64 = -2.759285104469687e+02;
-    const A4: f64 =  1.383577518672690e+02;
+    const A4: f64 = 1.383577518672690e+02;
     const A5: f64 = -3.066479806614716e+01;
-    const A6: f64 =  2.506628277459239e+00;
+    const A6: f64 = 2.506628277459239e+00;
 
     const B1: f64 = -5.447609879822406e+01;
-    const B2: f64 =  1.615858368580409e+02;
+    const B2: f64 = 1.615858368580409e+02;
     const B3: f64 = -1.556989798598866e+02;
-    const B4: f64 =  6.680131188771972e+01;
+    const B4: f64 = 6.680131188771972e+01;
     const B5: f64 = -1.328068155288572e+01;
 
     const C1: f64 = -7.784894002430293e-03;
     const C2: f64 = -3.223964580411365e-01;
     const C3: f64 = -2.400758277161838e+00;
     const C4: f64 = -2.549732539343734e+00;
-    const C5: f64 =  4.374664141464968e+00;
-    const C6: f64 =  2.938163982698783e+00;
+    const C5: f64 = 4.374664141464968e+00;
+    const C6: f64 = 2.938163982698783e+00;
 
-    const D1: f64 =  7.784695709041462e-03;
-    const D2: f64 =  3.224671290700398e-01;
-    const D3: f64 =  2.445134137142996e+00;
-    const D4: f64 =  3.754408661907416e+00;
+    const D1: f64 = 7.784695709041462e-03;
+    const D2: f64 = 3.224671290700398e-01;
+    const D3: f64 = 2.445134137142996e+00;
+    const D4: f64 = 3.754408661907416e+00;
 
     const P_LOW: f64 = 0.02425;
     const P_HIGH: f64 = 1.0 - P_LOW;
@@ -282,12 +290,14 @@ mod tests {
     #[test]
     fn test_var_parametric_known() {
         // mean=0, std=1 → 95% VaR = 1.645
-        let returns: Vec<f64> = (0..10000).map(|i| {
-            // Pseudo-random normal via Box-Muller
-            let u1 = ((i + 1) as f64 / 10001.0).max(1e-15);
-            let u2 = ((i + 2) as f64 / 10002.0).max(1e-15);
-            (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos()
-        }).collect();
+        let returns: Vec<f64> = (0..10000)
+            .map(|i| {
+                // Pseudo-random normal via Box-Muller
+                let u1 = ((i + 1) as f64 / 10001.0).max(1e-15);
+                let u2 = ((i + 2) as f64 / 10002.0).max(1e-15);
+                (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos()
+            })
+            .collect();
         let var95 = var_parametric(&returns, 0.95);
         // Allow ~10% tolerance due to RNG quality
         assert!((var95 - 1.645).abs() < 0.2, "got {}", var95);
@@ -359,7 +369,11 @@ mod tests {
         returns[100] = -0.005;
         returns[101] = 0.001;
         let c = calmar_ratio(&returns, 252);
-        assert!(c > 50.0, "got {} (expected high Calmar for near-monotonic uptrend)", c);
+        assert!(
+            c > 50.0,
+            "got {} (expected high Calmar for near-monotonic uptrend)",
+            c
+        );
     }
 
     #[test]

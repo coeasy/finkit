@@ -46,36 +46,40 @@ impl HilbertState {
         self.count += 1;
         Self::shift(&mut self.input_buf, input);
 
-        if self.count < 4 { return None; }
+        if self.count < 4 {
+            return None;
+        }
 
         let smooth = (4.0 * self.input_buf[7]
             + 3.0 * self.input_buf[6]
             + 2.0 * self.input_buf[5]
-            + self.input_buf[4]) / 10.0;
+            + self.input_buf[4])
+            / 10.0;
         Self::shift(&mut self.smooth_buf, smooth);
 
-        if self.count < 10 { return None; }
+        if self.count < 10 {
+            return None;
+        }
 
-        let det = (0.0962 * self.smooth_buf[7]
-            + 0.5769 * self.smooth_buf[5]
+        let det = (0.0962 * self.smooth_buf[7] + 0.5769 * self.smooth_buf[5]
             - 0.5769 * self.smooth_buf[3]
             - 0.0962 * self.smooth_buf[1])
             * (0.075 * self.smooth_buf[6] + 0.54 * self.smooth_buf[4] + 0.075 * self.smooth_buf[2]);
         Self::shift(&mut self.det_buf, det);
 
-        if self.count < 16 { return None; }
+        if self.count < 16 {
+            return None;
+        }
 
         let in_phase = self.det_buf[1]; // det[i-6]
         Self::shift(&mut self.ip_buf, in_phase);
 
-        let quadrature = 0.0962 * self.det_buf[7]
-            + 0.5769 * self.det_buf[5]
+        let quadrature = 0.0962 * self.det_buf[7] + 0.5769 * self.det_buf[5]
             - 0.5769 * self.det_buf[3]
             - 0.0962 * self.det_buf[1];
         Self::shift(&mut self.q_buf, quadrature);
 
-        let j1 = 0.0962 * self.ip_buf[7]
-            + 0.5769 * self.ip_buf[5]
+        let j1 = 0.0962 * self.ip_buf[7] + 0.5769 * self.ip_buf[5]
             - 0.5769 * self.ip_buf[3]
             - 0.0962 * self.ip_buf[1];
         Self::shift(&mut self.j1_buf, j1);
@@ -117,12 +121,17 @@ pub struct StreamingHtDcPeriod {
 
 impl StreamingHtDcPeriod {
     pub fn new() -> Self {
-        Self { state: HilbertState::new(), last_value: None }
+        Self {
+            state: HilbertState::new(),
+            last_value: None,
+        }
     }
 }
 
 impl Default for StreamingHtDcPeriod {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl StreamingIndicator for StreamingHtDcPeriod {
@@ -133,17 +142,34 @@ impl StreamingIndicator for StreamingHtDcPeriod {
         result
     }
 
-    fn reset(&mut self) { self.state.reset(); self.last_value = None; }
-    fn is_ready(&self) -> bool { self.state.count >= 32 }
-    fn count(&self) -> usize { self.state.count }
-    fn value(&self) -> Option<f64> { self.last_value }
+    fn reset(&mut self) {
+        self.state.reset();
+        self.last_value = None;
+    }
+    fn is_ready(&self) -> bool {
+        self.state.count >= 32
+    }
+    fn count(&self) -> usize {
+        self.state.count
+    }
+    fn value(&self) -> Option<f64> {
+        self.last_value
+    }
 }
 
 impl IndicatorMeta for StreamingHtDcPeriod {
-    fn name() -> &'static str { "HT_DCPERIOD" }
-    fn category() -> &'static str { "cycle" }
-    fn description() -> &'static str { "Hilbert Transform - Dominant Cycle Period" }
-    fn warm_up_period(&self) -> usize { 32 }
+    fn name() -> &'static str {
+        "HT_DCPERIOD"
+    }
+    fn category() -> &'static str {
+        "cycle"
+    }
+    fn description() -> &'static str {
+        "Hilbert Transform - Dominant Cycle Period"
+    }
+    fn warm_up_period(&self) -> usize {
+        32
+    }
 }
 
 #[cfg(test)]
@@ -151,7 +177,9 @@ mod tests {
     use super::*;
 
     fn sine_wave(n: usize, freq: f64, amp: f64, offset: f64) -> Vec<f64> {
-        (0..n).map(|i| amp * (i as f64 * freq).sin() + offset).collect()
+        (0..n)
+            .map(|i| amp * (i as f64 * freq).sin() + offset)
+            .collect()
     }
 
     #[test]
@@ -159,7 +187,9 @@ mod tests {
         let mut ht = StreamingHtDcPeriod::new();
         let data = sine_wave(100, 0.1, 1.0, 50.0);
         let mut last = None;
-        for &v in &data { last = ht.next(v); }
+        for &v in &data {
+            last = ht.next(v);
+        }
         assert!(last.is_some());
         let val = last.unwrap();
         assert!((6.0..=50.0).contains(&val));
@@ -174,7 +204,9 @@ mod tests {
     #[test]
     fn test_streaming_ht_dcperiod_reset() {
         let mut ht = StreamingHtDcPeriod::new();
-        for i in 0..50 { ht.next(i as f64); }
+        for i in 0..50 {
+            ht.next(i as f64);
+        }
         assert!(ht.is_ready());
         ht.reset();
         assert!(!ht.is_ready());

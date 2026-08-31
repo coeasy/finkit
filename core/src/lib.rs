@@ -50,36 +50,22 @@ pub mod patterns;
 // `formula` engine). They are therefore gated behind `indicators-all` so that
 // turning the indicator surface off (tree-shaking) also prunes its dependents.
 // Default build keeps `indicators-all` on, so public behaviour is unchanged.
-#[cfg(all(feature = "std", feature = "indicators-all"))]
-/// Streaming (incremental) O(1) per-bar indicator updates.
-pub mod streaming;
-/// Top-level trait abstractions: [`Ohlcv`], [`StreamingIndicator`], [`BatchIndicator`].
-pub mod traits;
 #[cfg(feature = "std")]
-/// Data transformation pipelines: rolling windows, normalization, and feature scaling.
-pub mod transforms;
-#[cfg(all(feature = "std", feature = "indicators-all", feature = "formula"))]
-/// Feature engineering: multi-period features, signal detection, and ML label generation.
-pub mod features;
-#[cfg(feature = "talib-c")]
-/// TA-Lib C library FFI compatibility layer.
-pub mod talib_ffi;
-#[cfg(feature = "std")]
-/// Utility functions: input validation, smoothing factors, and array helpers.
-pub mod utils;
-#[cfg(feature = "finkit-polars")]
-/// Polars DataFrame zero-copy integration for technical analysis.
-pub mod polars_ext;
+/// Lightweight vectorized backtest engine.
+pub mod backtest;
 #[cfg(feature = "rayon")]
 /// Parallel batch API: run multiple independent indicator jobs in parallel
 /// over the same input slice. Disabled in no_std builds.
 pub mod batch;
-#[cfg(feature = "std")]
-/// Lightweight vectorized backtest engine.
-pub mod backtest;
+#[cfg(all(feature = "std", feature = "indicators-all", feature = "formula"))]
+/// Feature engineering: multi-period features, signal detection, and ML label generation.
+pub mod features;
 #[cfg(feature = "std")]
 /// Multi-timeframe pattern resonance: 5m/30m/日线 联动信号.
 pub mod multi_period_resonance;
+#[cfg(feature = "finkit-polars")]
+/// Polars DataFrame zero-copy integration for technical analysis.
+pub mod polars_ext;
 #[cfg(feature = "std")]
 /// Portfolio risk metrics: VaR / CVaR / MDD / Sharpe / Sortino / Calmar.
 pub mod risk;
@@ -89,6 +75,20 @@ pub mod sector;
 #[cfg(feature = "std")]
 /// 选股因子合成 + 横截面排序.
 pub mod selectors;
+#[cfg(all(feature = "std", feature = "indicators-all"))]
+/// Streaming (incremental) O(1) per-bar indicator updates.
+pub mod streaming;
+#[cfg(feature = "talib-c")]
+/// TA-Lib C library FFI compatibility layer.
+pub mod talib_ffi;
+/// Top-level trait abstractions: [`Ohlcv`], [`StreamingIndicator`], [`BatchIndicator`].
+pub mod traits;
+#[cfg(feature = "std")]
+/// Data transformation pipelines: rolling windows, normalization, and feature scaling.
+pub mod transforms;
+#[cfg(feature = "std")]
+/// Utility functions: input validation, smoothing factors, and array helpers.
+pub mod utils;
 
 // ─────────────────── O-1: tracing re-exports ───────────────────
 //

@@ -1,10 +1,10 @@
 //! Python bindings for the feature engineering module.
 
+use finkit::features;
+use finkit::indicators;
 use numpy::PyReadonlyArray1;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use finkit::features;
-use finkit::indicators;
 
 type PyDictResult<'py> = PyResult<Bound<'py, PyDict>>;
 
@@ -28,7 +28,7 @@ fn feature_set(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         let mut engine = features::FeatureSet::new();
         for (name, periods) in &indicators {
             engine.add_indicator(name, periods);
@@ -58,7 +58,7 @@ fn rolling_skewness(
     let data = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| features::rolling_skewness(data, window).to_vec()))
+    Ok(py.detach(|| features::rolling_skewness(data, window).to_vec()))
 }
 
 /// Rolling kurtosis over a window.
@@ -71,7 +71,7 @@ fn rolling_kurtosis(
     let data = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| features::rolling_kurtosis(data, window).to_vec()))
+    Ok(py.detach(|| features::rolling_kurtosis(data, window).to_vec()))
 }
 
 /// Rolling entropy (information entropy using histogram binning).
@@ -85,7 +85,7 @@ fn rolling_entropy(
     let data = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| features::rolling_entropy(data, window, bins).to_vec()))
+    Ok(py.detach(|| features::rolling_entropy(data, window, bins).to_vec()))
 }
 
 /// Rolling z-score.
@@ -98,7 +98,7 @@ fn rolling_zscore(
     let data = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| features::rolling_zscore(data, window).to_vec()))
+    Ok(py.detach(|| features::rolling_zscore(data, window).to_vec()))
 }
 
 /// Rolling percentile rank within window.
@@ -111,7 +111,7 @@ fn rolling_percentile(
     let data = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| features::rolling_percentile(data, window).to_vec()))
+    Ok(py.detach(|| features::rolling_percentile(data, window).to_vec()))
 }
 
 // ============================================================================
@@ -128,7 +128,7 @@ fn rolling_zscore_normalize(
     let data = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| features::rolling_zscore_normalize(data, window).to_vec()))
+    Ok(py.detach(|| features::rolling_zscore_normalize(data, window).to_vec()))
 }
 
 /// Rolling min-max normalization to [0, 1].
@@ -141,7 +141,7 @@ fn rolling_minmax(
     let data = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| features::rolling_minmax(data, window).to_vec()))
+    Ok(py.detach(|| features::rolling_minmax(data, window).to_vec()))
 }
 
 /// Robust scaler using median and IQR.
@@ -154,7 +154,7 @@ fn robust_scaler(
     let data = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| features::robust_scaler(data, window).to_vec()))
+    Ok(py.detach(|| features::robust_scaler(data, window).to_vec()))
 }
 
 /// Rank normalization within a rolling window.
@@ -167,7 +167,7 @@ fn rank_normalize(
     let data = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| features::rank_normalize(data, window).to_vec()))
+    Ok(py.detach(|| features::rank_normalize(data, window).to_vec()))
 }
 
 // ============================================================================
@@ -180,7 +180,7 @@ fn lag(py: Python<'_>, data: PyReadonlyArray1<'_, f64>, n: usize) -> PyResult<Ve
     let data = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| features::lag(data, n).to_vec()))
+    Ok(py.detach(|| features::lag(data, n).to_vec()))
 }
 
 /// Lead (shift backward) by n positions.
@@ -189,7 +189,7 @@ fn lead(py: Python<'_>, data: PyReadonlyArray1<'_, f64>, n: usize) -> PyResult<V
     let data = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| features::lead(data, n).to_vec()))
+    Ok(py.detach(|| features::lead(data, n).to_vec()))
 }
 
 /// N-th order difference.
@@ -198,7 +198,7 @@ fn diff(py: Python<'_>, data: PyReadonlyArray1<'_, f64>, n: usize) -> PyResult<V
     let data = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| features::diff(data, n).to_vec()))
+    Ok(py.detach(|| features::diff(data, n).to_vec()))
 }
 
 /// Percentage change over n periods.
@@ -207,7 +207,7 @@ fn pct_change(py: Python<'_>, data: PyReadonlyArray1<'_, f64>, n: usize) -> PyRe
     let data = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| features::pct_change(data, n).to_vec()))
+    Ok(py.detach(|| features::pct_change(data, n).to_vec()))
 }
 
 // ============================================================================
@@ -224,7 +224,7 @@ fn forward_return(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| features::forward_return(close, n).to_vec()))
+    Ok(py.detach(|| features::forward_return(close, n).to_vec()))
 }
 
 /// Binary label: 1 if forward return > threshold, else 0.
@@ -238,7 +238,7 @@ fn binary_label(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| features::binary_label(close, n, threshold).to_vec()))
+    Ok(py.detach(|| features::binary_label(close, n, threshold).to_vec()))
 }
 
 /// Fixed horizon label: +1, 0, -1 based on return vs threshold.
@@ -252,7 +252,7 @@ fn fixed_horizon_label(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| features::fixed_horizon_label(close, horizon, threshold).to_vec()))
+    Ok(py.detach(|| features::fixed_horizon_label(close, horizon, threshold).to_vec()))
 }
 
 /// Triple barrier label (López de Prado method).
@@ -277,7 +277,7 @@ fn triple_barrier(
     let low = low
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| {
+    Ok(py.detach(|| {
         features::triple_barrier(close, high, low, pt_factor, sl_factor, max_hold)
             .into_iter()
             .map(|b| (b.label, b.duration, b.ret))
@@ -302,7 +302,7 @@ fn feature_ratio(
     let b = b
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| features::feature_ratio(a, b).to_vec()))
+    Ok(py.detach(|| features::feature_ratio(a, b).to_vec()))
 }
 
 /// Element-wise spread: a[i] - b[i].
@@ -318,7 +318,7 @@ fn feature_spread(
     let b = b
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| features::feature_spread(a, b).to_vec()))
+    Ok(py.detach(|| features::feature_spread(a, b).to_vec()))
 }
 
 /// Rolling Pearson correlation between two series.
@@ -335,7 +335,7 @@ fn rolling_correlation(
     let b = b
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| features::rolling_correlation(a, b, window).to_vec()))
+    Ok(py.detach(|| features::rolling_correlation(a, b, window).to_vec()))
 }
 
 // ============================================================================
@@ -348,7 +348,7 @@ fn batch_zscore(py: Python<'_>, data: PyReadonlyArray1<'_, f64>) -> PyResult<Vec
     let data = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| features::batch_zscore_simd(data).to_vec()))
+    Ok(py.detach(|| features::batch_zscore_simd(data).to_vec()))
 }
 
 /// Batch min-max normalization (SIMD-optimized).
@@ -357,7 +357,7 @@ fn batch_minmax(py: Python<'_>, data: PyReadonlyArray1<'_, f64>) -> PyResult<Vec
     let data = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| features::batch_minmax_simd(data).to_vec()))
+    Ok(py.detach(|| features::batch_minmax_simd(data).to_vec()))
 }
 
 /// Pearson correlation between two arrays (SIMD-optimized).
@@ -373,7 +373,7 @@ fn correlation(
     let b = b
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| features::correlation_simd(a, b)))
+    Ok(py.detach(|| features::correlation_simd(a, b)))
 }
 
 // ============================================================================
@@ -387,7 +387,7 @@ fn hma(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, period: usize) -> PyRes
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         indicators::hma(close, period)
             .map(|arr| arr.into_raw_vec_and_offset().0)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -407,7 +407,7 @@ fn alma(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         indicators::alma(close, period, offset_factor, sigma)
             .map(|arr| arr.into_raw_vec_and_offset().0)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -426,7 +426,7 @@ fn vidya(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         indicators::vidya(close, short_period, long_period)
             .map(|arr| arr.into_raw_vec_and_offset().0)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -445,7 +445,7 @@ fn mama<'py>(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    let result = py.allow_threads(|| {
+    let result = py.detach(|| {
         indicators::mama(close, fastlimit, slowlimit)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
     })?;
@@ -462,7 +462,7 @@ fn frama(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, period: usize) -> PyR
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         indicators::frama(close, period)
             .map(|arr| arr.into_raw_vec_and_offset().0)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -486,7 +486,7 @@ fn connors_rsi(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         indicators::connors_rsi(close, rsi_period, streak_period, rank_period)
             .map(|arr| arr.into_raw_vec_and_offset().0)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -507,7 +507,7 @@ fn stoch_rsi<'py>(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    let result = py.allow_threads(|| {
+    let result = py.detach(|| {
         indicators::stoch_rsi(close, rsi_period, stoch_period, k_period, d_period)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
     })?;
@@ -540,7 +540,7 @@ fn rvi<'py>(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    let result = py.allow_threads(|| {
+    let result = py.detach(|| {
         indicators::rvi(open, high, low, close, period)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
     })?;
@@ -577,7 +577,7 @@ fn garman_klass_volatility(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         indicators::garman_klass_volatility(open, high, low, close, period)
             .map(|arr| arr.into_raw_vec_and_offset().0)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -599,7 +599,7 @@ fn parkinson_volatility(
     let low = low
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         indicators::parkinson_volatility(high, low, period)
             .map(|arr| arr.into_raw_vec_and_offset().0)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -629,7 +629,7 @@ fn rogers_satchell_volatility(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         indicators::rogers_satchell_volatility(open, high, low, close, period)
             .map(|arr| arr.into_raw_vec_and_offset().0)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -659,7 +659,7 @@ fn yang_zhang_volatility(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         indicators::yang_zhang_volatility(open, high, low, close, period)
             .map(|arr| arr.into_raw_vec_and_offset().0)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -677,7 +677,7 @@ fn realized_volatility(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         indicators::realized_volatility(close, period)
             .map(|arr| arr.into_raw_vec_and_offset().0)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -695,7 +695,7 @@ fn semivariance(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         indicators::semivariance(close, period)
             .map(|arr| arr.into_raw_vec_and_offset().0)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -723,7 +723,7 @@ fn vwmacd<'py>(
     let volume = volume
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    let result = py.allow_threads(|| {
+    let result = py.detach(|| {
         indicators::vwmacd(close, volume, fastperiod, slowperiod, signalperiod)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
     })?;
@@ -749,7 +749,7 @@ fn hurst_exponent(
     let data = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| features::hurst_exponent(data, min_window)))
+    Ok(py.detach(|| features::hurst_exponent(data, min_window)))
 }
 
 /// Autocorrelation function (ACF).
@@ -759,7 +759,7 @@ fn acf(py: Python<'_>, data: PyReadonlyArray1<'_, f64>, max_lag: usize) -> PyRes
     let data = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| features::acf(data, max_lag)))
+    Ok(py.detach(|| features::acf(data, max_lag)))
 }
 
 /// Partial autocorrelation function (PACF).
@@ -769,7 +769,7 @@ fn pacf(py: Python<'_>, data: PyReadonlyArray1<'_, f64>, max_lag: usize) -> PyRe
     let data = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| features::pacf(data, max_lag)))
+    Ok(py.detach(|| features::pacf(data, max_lag)))
 }
 
 /// Augmented Dickey-Fuller unit-root test.
@@ -783,7 +783,7 @@ fn adf_test<'py>(
     let data = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    let result = py.allow_threads(|| {
+    let result = py.detach(|| {
         features::adf_test(data, max_lag)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
     })?;
@@ -810,14 +810,17 @@ fn cointegration_test<'py>(
     let series_y = series_y
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    let result = py.allow_threads(|| {
+    let result = py.detach(|| {
         features::cointegration_test(series_x, series_y, max_lag)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
     })?;
     let dict = PyDict::new(py);
     dict.set_item("test_statistic", result.test_statistic)?;
     dict.set_item("p_value", result.p_value)?;
-    dict.set_item("cointegration_coefficient", result.cointegration_coefficient)?;
+    dict.set_item(
+        "cointegration_coefficient",
+        result.cointegration_coefficient,
+    )?;
     dict.set_item("is_cointegrated", result.is_cointegrated)?;
     Ok(dict)
 }
@@ -839,7 +842,7 @@ fn feature_cross(
     let b = b
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| features::feature_cross(a, b).to_vec()))
+    Ok(py.detach(|| features::feature_cross(a, b).to_vec()))
 }
 
 /// Generate all pairwise cross-product features.
@@ -859,7 +862,7 @@ fn auto_cross(
             Ok((name, slice.to_vec()))
         })
         .collect::<PyResult<_>>()?;
-    Ok(py.allow_threads(move || {
+    Ok(py.detach(move || {
         let refs: Vec<(&str, &[f64])> = columns_owned
             .iter()
             .map(|(name, data)| (name.as_str(), data.as_slice()))
@@ -889,7 +892,7 @@ fn tick_imbalance(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| features::tick_imbalance(close, window).to_vec()))
+    Ok(py.detach(|| features::tick_imbalance(close, window).to_vec()))
 }
 
 /// Volume imbalance: rolling ratio of signed volume to total volume.
@@ -907,7 +910,7 @@ fn volume_imbalance(
     let volume = volume
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| features::volume_imbalance(close, volume, window).to_vec()))
+    Ok(py.detach(|| features::volume_imbalance(close, volume, window).to_vec()))
 }
 
 /// Kyle's lambda: rolling price impact coefficient.
@@ -925,7 +928,7 @@ fn kyle_lambda(
     let volume = volume
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| features::kyle_lambda(close, volume, window).to_vec()))
+    Ok(py.detach(|| features::kyle_lambda(close, volume, window).to_vec()))
 }
 
 /// Roll (1984) implied spread estimator.
@@ -939,7 +942,7 @@ fn roll_spread(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| features::roll_spread(close, window).to_vec()))
+    Ok(py.detach(|| features::roll_spread(close, window).to_vec()))
 }
 
 // ============================================================================
@@ -959,7 +962,7 @@ fn threshold_regime(
     let data = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| features::threshold_regime(data, window, low_pct, high_pct).to_vec()))
+    Ok(py.detach(|| features::threshold_regime(data, window, low_pct, high_pct).to_vec()))
 }
 
 /// Gaussian HMM regime detection.
@@ -974,7 +977,7 @@ fn hmm_regime<'py>(
     let data = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    let result = py.allow_threads(|| features::hmm_regime(data, n_states, max_iter));
+    let result = py.detach(|| features::hmm_regime(data, n_states, max_iter));
     let dict = PyDict::new(py);
     dict.set_item("states", result.states.to_vec())?;
     dict.set_item("state_probs", result.state_probs)?;

@@ -1,6 +1,6 @@
+use crate::impl_standard_methods;
 use crate::streaming::rolling_minmax::{RollingMax, RollingMin};
 use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
-use crate::impl_standard_methods;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -102,10 +102,18 @@ impl StreamingIndicator<(f64, f64), FisherOutput> for StreamingFisher {
 }
 
 impl IndicatorMeta for StreamingFisher {
-    fn name() -> &'static str { "Fisher" }
-    fn category() -> &'static str { "momentum" }
-    fn description() -> &'static str { "Ehlers Fisher Transform" }
-    fn warm_up_period(&self) -> usize { self.period }
+    fn name() -> &'static str {
+        "Fisher"
+    }
+    fn category() -> &'static str {
+        "momentum"
+    }
+    fn description() -> &'static str {
+        "Ehlers Fisher Transform"
+    }
+    fn warm_up_period(&self) -> usize {
+        self.period
+    }
 }
 
 #[cfg(test)]

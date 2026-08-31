@@ -1,4 +1,3 @@
-use proptest::prelude::*;
 use finkit::indicators::{bbands, macd, mom, roc, rsi, volatility::atr};
 use finkit::math::moving_avg::{dema, ema, kama, sma, sma_into, wma};
 use finkit::streaming::{
@@ -9,6 +8,7 @@ use finkit::streaming::{
     },
     OhlcvBar, StreamingIndicator,
 };
+use proptest::prelude::*;
 
 fn finite_vec(min_len: usize, max_len: usize) -> impl Strategy<Value = Vec<f64>> {
     prop::collection::vec(1.0f64..=1000.0, min_len..=max_len)

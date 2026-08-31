@@ -43,12 +43,7 @@ pub struct HmmResult {
 /// * `window` - Rolling window for volatility estimation.
 /// * `low_pct` - Percentile below which regime is classified as low (e.g. 25.0).
 /// * `high_pct` - Percentile above which regime is classified as high (e.g. 75.0).
-pub fn threshold_regime(
-    data: &[f64],
-    window: usize,
-    low_pct: f64,
-    high_pct: f64,
-) -> Array1<f64> {
+pub fn threshold_regime(data: &[f64], window: usize, low_pct: f64, high_pct: f64) -> Array1<f64> {
     let len = data.len();
     let mut out = Array1::from_elem(len, f64::NAN);
     if len < 2 || window < 2 {
@@ -59,7 +54,11 @@ pub fn threshold_regime(
     let vol = rolling_std_dev(returns.as_slice().unwrap_or(&[]), window)
         .unwrap_or_else(|_| Array1::from_elem(len, f64::NAN));
 
-    let valid: Vec<f64> = vol.iter().copied().filter(|v| v.is_finite() && *v >= 0.0).collect();
+    let valid: Vec<f64> = vol
+        .iter()
+        .copied()
+        .filter(|v| v.is_finite() && *v >= 0.0)
+        .collect();
     if valid.is_empty() {
         return out;
     }
@@ -198,7 +197,10 @@ impl FeatureEngine for RegimeFeature {
         let mut matrix = FeatureMatrix::with_capacity(close.len(), 2);
         matrix.add_column(
             Feature::new(
-                format!("regime_w{}_{}_{}", self.window, self.low_pct as u32, self.high_pct as u32),
+                format!(
+                    "regime_w{}_{}_{}",
+                    self.window, self.low_pct as u32, self.high_pct as u32
+                ),
                 "regime",
                 self.window,
             ),
@@ -559,7 +561,10 @@ mod tests {
         let data = vec![100.0; 30];
         let result = threshold_regime(&data, 5, 25.0, 75.0);
         for i in 5..30 {
-            assert_eq!(result[i], 0.0, "constant series should be low regime at {i}");
+            assert_eq!(
+                result[i], 0.0,
+                "constant series should be low regime at {i}"
+            );
         }
     }
 
@@ -579,11 +584,19 @@ mod tests {
     fn test_hmm_regime_two_states() {
         let data = oscillating_prices(80, 0.5, 8.0, 40);
         let result = hmm_regime(&data, 2, 50);
-        let valid: Vec<f64> = result.states.iter().copied().filter(|v| v.is_finite()).collect();
+        let valid: Vec<f64> = result
+            .states
+            .iter()
+            .copied()
+            .filter(|v| v.is_finite())
+            .collect();
         assert_eq!(valid.len(), data.len() - 9);
         assert_eq!(result.means.len(), 2);
         assert_eq!(result.stds.len(), 2);
-        assert!(result.means[0].abs() <= result.means[1].abs() + 0.05 || result.means[1] <= result.means[0]);
+        assert!(
+            result.means[0].abs() <= result.means[1].abs() + 0.05
+                || result.means[1] <= result.means[0]
+        );
     }
 
     #[test]
@@ -603,8 +616,22 @@ mod tests {
         let states = vec![0.0, 0.0, 1.0, 1.0, 2.0, 2.0, 2.0];
         let changes = regime_signal(&states);
         assert_eq!(changes.len(), 2);
-        assert_eq!(changes[0], RegimeChange { index: 2, from_state: 0, to_state: 1 });
-        assert_eq!(changes[1], RegimeChange { index: 4, from_state: 1, to_state: 2 });
+        assert_eq!(
+            changes[0],
+            RegimeChange {
+                index: 2,
+                from_state: 0,
+                to_state: 1
+            }
+        );
+        assert_eq!(
+            changes[1],
+            RegimeChange {
+                index: 4,
+                from_state: 1,
+                to_state: 2
+            }
+        );
     }
 
     #[test]
@@ -617,7 +644,9 @@ mod tests {
 
     #[test]
     fn test_regime_feature_generates_columns() {
-        let close: Vec<f64> = (0..40).map(|i| 100.0 + (i as f64 * 0.2).sin() * (1.0 + i as f64 / 10.0)).collect();
+        let close: Vec<f64> = (0..40)
+            .map(|i| 100.0 + (i as f64 * 0.2).sin() * (1.0 + i as f64 / 10.0))
+            .collect();
         let engine = RegimeFeature::default_threshold();
         let matrix = engine.generate(&close);
         assert_eq!(matrix.cols(), 2);

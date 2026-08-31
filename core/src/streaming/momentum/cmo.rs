@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use std::collections::VecDeque;
 
 /// Streaming Chande Momentum Oscillator (CMO).
@@ -93,10 +93,18 @@ impl StreamingIndicator for StreamingCmo {
 }
 
 impl IndicatorMeta for StreamingCmo {
-    fn name() -> &'static str { "CMO" }
-    fn category() -> &'static str { "momentum" }
-    fn description() -> &'static str { "Chande Momentum Oscillator" }
-    fn warm_up_period(&self) -> usize { self.period + 1 }
+    fn name() -> &'static str {
+        "CMO"
+    }
+    fn category() -> &'static str {
+        "momentum"
+    }
+    fn description() -> &'static str {
+        "Chande Momentum Oscillator"
+    }
+    fn warm_up_period(&self) -> usize {
+        self.period + 1
+    }
 }
 
 #[cfg(test)]
@@ -106,13 +114,18 @@ mod tests {
     #[test]
     fn test_streaming_cmo_basic() {
         let mut cmo = StreamingCmo::new(14);
-        let data: Vec<f64> = (0..30).map(|i| 50.0 + (i as f64 * 0.3).sin() * 10.0).collect();
+        let data: Vec<f64> = (0..30)
+            .map(|i| 50.0 + (i as f64 * 0.3).sin() * 10.0)
+            .collect();
         let mut last = None;
         for &d in &data {
             last = cmo.next(d);
         }
         let v = last.unwrap();
-        assert!((-100.0..=100.0).contains(&v), "CMO should be -100..100, got {v}");
+        assert!(
+            (-100.0..=100.0).contains(&v),
+            "CMO should be -100..100, got {v}"
+        );
     }
 
     #[test]

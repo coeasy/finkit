@@ -703,7 +703,8 @@ impl JitCompiler {
                     // x + 0 → x  |  0 + x → already folded by constant_fold
                     (_, OpCode::Add) | (_, OpCode::Sub) => {
                         matches!(&result.get(len.wrapping_sub(3)), Some(OpCode::PushConst(v)) if *v == 0.0)
-                            || (len >= 2 && matches!(&result[len - 2], OpCode::PushConst(v) if *v == 0.0))
+                            || (len >= 2
+                                && matches!(&result[len - 2], OpCode::PushConst(v) if *v == 0.0))
                     }
                     // x * 1 → x  |  x / 1 → x
                     (OpCode::PushConst(v), OpCode::Mul | OpCode::Div) if *v == 1.0 => true,
@@ -1089,7 +1090,12 @@ mod tests {
                 .get(src)
                 .expect("hot_count should track source");
             assert_eq!(count, i, "hot_count mismatch at iter {}", i);
-            assert!(!compiler.is_hot(src), "should not be hot at iter {} (count={})", i, count);
+            assert!(
+                !compiler.is_hot(src),
+                "should not be hot at iter {} (count={})",
+                i,
+                count
+            );
         }
         // 第 10 次：count=10 >= threshold=10 → is_hot 应为 true
         let bc = compile_formula(src);
@@ -1097,7 +1103,10 @@ mod tests {
         let _ = compiler.compile_and_execute(bc, &mut ctx);
         let count = *compiler.hot_count.get(src).unwrap();
         assert_eq!(count, 10);
-        assert!(compiler.is_hot(src), "should be hot at count=10 with threshold=10");
+        assert!(
+            compiler.is_hot(src),
+            "should be hot at count=10 with threshold=10"
+        );
     }
 
     #[test]

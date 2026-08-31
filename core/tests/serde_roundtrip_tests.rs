@@ -7,13 +7,21 @@ fn make_bars(n: usize) -> Vec<OhlcvBar> {
     (0..n)
         .map(|i| {
             let base = 100.0 + (i as f64 * 0.3).sin() * 10.0;
-            OhlcvBar::new(base, base + 2.0, base - 1.5, base + 0.5, 1000.0 + i as f64 * 10.0)
+            OhlcvBar::new(
+                base,
+                base + 2.0,
+                base - 1.5,
+                base + 0.5,
+                1000.0 + i as f64 * 10.0,
+            )
         })
         .collect()
 }
 
 fn gen_data(n: usize) -> Vec<f64> {
-    (0..n).map(|i| 50.0 + (i as f64 * 0.3).sin() * 10.0).collect()
+    (0..n)
+        .map(|i| 50.0 + (i as f64 * 0.3).sin() * 10.0)
+        .collect()
 }
 
 // =============================================================================
@@ -26,7 +34,9 @@ macro_rules! checkpoint_test_f64 {
         fn $name() {
             let data = gen_data($warmup + 20);
             let mut ind = $create;
-            for &v in &data[..$warmup] { ind.next(v); }
+            for &v in &data[..$warmup] {
+                ind.next(v);
+            }
             let bytes = ind.save_state().unwrap();
             let mut restored = decltype_restore(&bytes, &ind);
             for &v in &data[$warmup..] {
@@ -115,22 +125,50 @@ checkpoint_test_f64!(test_checkpoint_stddev, StreamingStdDev::new(14), 20);
 checkpoint_test_f64!(test_checkpoint_zscore, StreamingZscore::new(14), 20);
 checkpoint_test_f64!(test_checkpoint_mcginley, StreamingMcGinley::new(14), 20);
 checkpoint_test_f64!(test_checkpoint_linreg, StreamingLinReg::new(14), 20);
-checkpoint_test_f64!(test_checkpoint_linreg_slope, StreamingLinRegSlope::new(14), 20);
-checkpoint_test_f64!(test_checkpoint_linreg_angle, StreamingLinRegAngle::new(14), 20);
-checkpoint_test_f64!(test_checkpoint_linreg_intercept, StreamingLinRegIntercept::new(14), 20);
+checkpoint_test_f64!(
+    test_checkpoint_linreg_slope,
+    StreamingLinRegSlope::new(14),
+    20
+);
+checkpoint_test_f64!(
+    test_checkpoint_linreg_angle,
+    StreamingLinRegAngle::new(14),
+    20
+);
+checkpoint_test_f64!(
+    test_checkpoint_linreg_intercept,
+    StreamingLinRegIntercept::new(14),
+    20
+);
 checkpoint_test_f64!(test_checkpoint_tsf, StreamingTsf::new(14), 20);
-checkpoint_test_f64!(test_checkpoint_ulcer_index, StreamingUlcerIndex::new(14), 20);
+checkpoint_test_f64!(
+    test_checkpoint_ulcer_index,
+    StreamingUlcerIndex::new(14),
+    20
+);
 checkpoint_test_f64!(test_checkpoint_psy, StreamingPsy::new(14), 20);
 checkpoint_test_f64!(test_checkpoint_vidya, StreamingVidya::new(14, 10), 30);
 checkpoint_test_f64!(test_checkpoint_apo, StreamingApo::new(5, 10), 15);
 checkpoint_test_f64!(test_checkpoint_ppo, StreamingPpo::new(5, 10), 15);
 checkpoint_test_f64!(test_checkpoint_alma, StreamingAlma::new(9, 6.0, 0.85), 15);
-checkpoint_test_f64!(test_checkpoint_coppock, StreamingCoppock::new(10, 14, 11), 40);
+checkpoint_test_f64!(
+    test_checkpoint_coppock,
+    StreamingCoppock::new(10, 14, 11),
+    40
+);
 checkpoint_test_f64!(test_checkpoint_stc, StreamingStc::new(12, 26, 10), 50);
 checkpoint_test_f64!(test_checkpoint_tsi, StreamingTsi::new(25, 13), 50);
 checkpoint_test_f64!(test_checkpoint_ht_dcperiod, StreamingHtDcPeriod::new(), 50);
-checkpoint_test_f64!(test_checkpoint_ht_trendmode, StreamingHtTrendMode::new(), 50);
-checkpoint_test_f64!(test_checkpoint_ht_trendline, StreamingHtTrendline::new(), 50);
+checkpoint_test_f64!(
+    test_checkpoint_ht_trendmode,
+    StreamingHtTrendMode::new(),
+    50
+);
+checkpoint_test_f64!(
+    test_checkpoint_ht_trendline,
+    StreamingHtTrendline::new(),
+    50
+);
 checkpoint_test_f64!(test_checkpoint_ht_dcphase, StreamingHtDcPhase::new(), 50);
 
 // HT_SINE returns struct
@@ -138,7 +176,9 @@ checkpoint_test_f64!(test_checkpoint_ht_dcphase, StreamingHtDcPhase::new(), 50);
 fn test_checkpoint_ht_sine() {
     let data = gen_data(80);
     let mut ind = StreamingHtSine::new();
-    for &v in &data[..60] { ind.next(v); }
+    for &v in &data[..60] {
+        ind.next(v);
+    }
     let bytes = ind.save_state().unwrap();
     let mut restored = StreamingHtSine::restore_state(&bytes).unwrap();
     for &v in &data[60..] {
@@ -151,7 +191,9 @@ fn test_checkpoint_ht_sine() {
 fn test_checkpoint_macd() {
     let data = gen_data(30);
     let mut ind = StreamingMacd::new(3, 5, 3);
-    for &v in &data[..15] { ind.next(v); }
+    for &v in &data[..15] {
+        ind.next(v);
+    }
     let bytes = ind.save_state().unwrap();
     let mut restored = StreamingMacd::restore_state(&bytes).unwrap();
     for &v in &data[15..] {
@@ -164,7 +206,9 @@ fn test_checkpoint_macd() {
 fn test_checkpoint_boll() {
     let data = gen_data(25);
     let mut ind = StreamingBoll::new(5, 2.0, 2.0);
-    for &v in &data[..10] { ind.next(v); }
+    for &v in &data[..10] {
+        ind.next(v);
+    }
     let bytes = ind.save_state().unwrap();
     let mut restored = StreamingBoll::restore_state(&bytes).unwrap();
     for &v in &data[10..] {
@@ -177,7 +221,9 @@ fn test_checkpoint_boll() {
 fn test_checkpoint_dma() {
     let data = gen_data(35);
     let mut ind = StreamingDma::new(5, 10, 5);
-    for &v in &data[..20] { ind.next(v); }
+    for &v in &data[..20] {
+        ind.next(v);
+    }
     let bytes = ind.save_state().unwrap();
     let mut restored = StreamingDma::restore_state(&bytes).unwrap();
     for &v in &data[20..] {
@@ -190,7 +236,9 @@ fn test_checkpoint_dma() {
 fn test_checkpoint_expma() {
     let data = gen_data(30);
     let mut ind = StreamingExpma::new(5, 10);
-    for &v in &data[..15] { ind.next(v); }
+    for &v in &data[..15] {
+        ind.next(v);
+    }
     let bytes = ind.save_state().unwrap();
     let mut restored = StreamingExpma::restore_state(&bytes).unwrap();
     for &v in &data[15..] {
@@ -203,7 +251,9 @@ fn test_checkpoint_expma() {
 fn test_checkpoint_ene() {
     let data = gen_data(30);
     let mut ind = StreamingEne::new(10, 6.0, 6.0);
-    for &v in &data[..15] { ind.next(v); }
+    for &v in &data[..15] {
+        ind.next(v);
+    }
     let bytes = ind.save_state().unwrap();
     let mut restored = StreamingEne::restore_state(&bytes).unwrap();
     for &v in &data[15..] {
@@ -216,7 +266,9 @@ fn test_checkpoint_ene() {
 fn test_checkpoint_kst() {
     let data = gen_data(80);
     let mut ind = StreamingKst::new(10, 15, 20, 30, 10, 10, 10, 15, 9);
-    for &v in &data[..60] { ind.next(v); }
+    for &v in &data[..60] {
+        ind.next(v);
+    }
     let bytes = ind.save_state().unwrap();
     let mut restored = StreamingKst::restore_state(&bytes).unwrap();
     for &v in &data[60..] {
@@ -229,7 +281,9 @@ fn test_checkpoint_kst() {
 fn test_checkpoint_stoch_rsi() {
     let data = gen_data(60);
     let mut ind = StreamingStochRsi::new(14, 14, 3, 3);
-    for &v in &data[..40] { ind.next(v); }
+    for &v in &data[..40] {
+        ind.next(v);
+    }
     let bytes = ind.save_state().unwrap();
     let mut restored = StreamingStochRsi::restore_state(&bytes).unwrap();
     for &v in &data[40..] {
@@ -320,11 +374,16 @@ fn test_checkpoint_ult_osc() {
 fn test_checkpoint_mass_index() {
     let bars = make_bars(60);
     let mut ind = StreamingMassIndex::new(25, 9);
-    for bar in &bars[..40] { ind.next(bar as &dyn Ohlcv); }
+    for bar in &bars[..40] {
+        ind.next(bar as &dyn Ohlcv);
+    }
     let bytes = ind.save_state().unwrap();
     let mut restored = StreamingMassIndex::restore_state(&bytes).unwrap();
     for bar in &bars[40..] {
-        assert_eq!(ind.next(bar as &dyn Ohlcv), restored.next(bar as &dyn Ohlcv));
+        assert_eq!(
+            ind.next(bar as &dyn Ohlcv),
+            restored.next(bar as &dyn Ohlcv)
+        );
     }
 }
 
@@ -343,7 +402,10 @@ fn test_checkpoint_aroon() {
     let mut restored = StreamingAroon::restore_state(&bytes).unwrap();
     for i in 20..40 {
         let base = 100.0 + (i as f64 * 0.2).sin() * 5.0;
-        assert_eq!(ind.next((base + 1.5, base - 1.5)), restored.next((base + 1.5, base - 1.5)));
+        assert_eq!(
+            ind.next((base + 1.5, base - 1.5)),
+            restored.next((base + 1.5, base - 1.5))
+        );
     }
 }
 
@@ -358,7 +420,10 @@ fn test_checkpoint_aroon_osc() {
     let mut restored = StreamingAroonOsc::restore_state(&bytes).unwrap();
     for i in 20..40 {
         let base = 100.0 + (i as f64 * 0.2).sin() * 5.0;
-        assert_eq!(ind.next((base + 1.5, base - 1.5)), restored.next((base + 1.5, base - 1.5)));
+        assert_eq!(
+            ind.next((base + 1.5, base - 1.5)),
+            restored.next((base + 1.5, base - 1.5))
+        );
     }
 }
 
@@ -373,7 +438,10 @@ fn test_checkpoint_fisher() {
     let mut restored = StreamingFisher::restore_state(&bytes).unwrap();
     for i in 15..35 {
         let base = 100.0 + (i as f64 * 0.2).sin() * 5.0;
-        assert_eq!(ind.next((base + 1.5, base - 1.5)), restored.next((base + 1.5, base - 1.5)));
+        assert_eq!(
+            ind.next((base + 1.5, base - 1.5)),
+            restored.next((base + 1.5, base - 1.5))
+        );
     }
 }
 
@@ -423,10 +491,18 @@ checkpoint_test_ohlcv!(test_checkpoint_ad, StreamingAd::new(), 10);
 checkpoint_test_ohlcv!(test_checkpoint_nvi, StreamingNvi::new(), 10);
 checkpoint_test_ohlcv!(test_checkpoint_pvi, StreamingPvi::new(), 10);
 checkpoint_test_ohlcv!(test_checkpoint_pvt, StreamingPvt::new(), 10);
-checkpoint_test_ohlcv!(test_checkpoint_anchored_vwap, StreamingAnchoredVwap::new(), 10);
+checkpoint_test_ohlcv!(
+    test_checkpoint_anchored_vwap,
+    StreamingAnchoredVwap::new(),
+    10
+);
 checkpoint_test_ohlcv!(test_checkpoint_ao, StreamingAo::new(5, 34), 40);
 checkpoint_test_ohlcv!(test_checkpoint_eom, StreamingEom::new(14), 20);
-checkpoint_test_ohlcv!(test_checkpoint_force_index, StreamingForceIndex::new(13), 20);
+checkpoint_test_ohlcv!(
+    test_checkpoint_force_index,
+    StreamingForceIndex::new(13),
+    20
+);
 checkpoint_test_ohlcv!(test_checkpoint_mfi, StreamingMfi::new(14), 20);
 checkpoint_test_ohlcv!(test_checkpoint_natr, StreamingNatr::new(14), 20);
 checkpoint_test_ohlcv!(test_checkpoint_willr, StreamingWillR::new(14), 20);
@@ -441,9 +517,21 @@ checkpoint_test_ohlcv!(test_checkpoint_vr, StreamingVr::new(14), 20);
 
 // &dyn Ohlcv → struct output
 checkpoint_test_ohlcv!(test_checkpoint_donchian, StreamingDonchian::new(14), 20);
-checkpoint_test_ohlcv!(test_checkpoint_ichimoku, StreamingIchimoku::new(9, 26, 52), 60);
-checkpoint_test_ohlcv!(test_checkpoint_supertrend, StreamingSuperTrend::new(10, 3.0), 20);
-checkpoint_test_ohlcv!(test_checkpoint_keltner, StreamingKeltner::new(20, 10, 2.0), 30);
+checkpoint_test_ohlcv!(
+    test_checkpoint_ichimoku,
+    StreamingIchimoku::new(9, 26, 52),
+    60
+);
+checkpoint_test_ohlcv!(
+    test_checkpoint_supertrend,
+    StreamingSuperTrend::new(10, 3.0),
+    20
+);
+checkpoint_test_ohlcv!(
+    test_checkpoint_keltner,
+    StreamingKeltner::new(20, 10, 2.0),
+    30
+);
 // ElderRay takes (f64,f64,f64) tuple
 #[test]
 fn test_checkpoint_elder_ray() {
@@ -471,11 +559,16 @@ checkpoint_test_ohlcv!(test_checkpoint_sar, StreamingSar::new(0.02, 0.2), 20);
 fn test_checkpoint_adosc() {
     let bars = make_bars(40);
     let mut ind = StreamingAdosc::new(3, 10);
-    for bar in &bars[..20] { ind.next(bar as &dyn Ohlcv); }
+    for bar in &bars[..20] {
+        ind.next(bar as &dyn Ohlcv);
+    }
     let bytes = ind.save_state().unwrap();
     let mut restored = StreamingAdosc::restore_state(&bytes).unwrap();
     for bar in &bars[20..] {
-        assert_eq!(ind.next(bar as &dyn Ohlcv), restored.next(bar as &dyn Ohlcv));
+        assert_eq!(
+            ind.next(bar as &dyn Ohlcv),
+            restored.next(bar as &dyn Ohlcv)
+        );
     }
 }
 
@@ -483,11 +576,16 @@ fn test_checkpoint_adosc() {
 fn test_checkpoint_kvo() {
     let bars = make_bars(80);
     let mut ind = StreamingKvo::new(34, 55, 13);
-    for bar in &bars[..60] { ind.next(bar as &dyn Ohlcv); }
+    for bar in &bars[..60] {
+        ind.next(bar as &dyn Ohlcv);
+    }
     let bytes = ind.save_state().unwrap();
     let mut restored = StreamingKvo::restore_state(&bytes).unwrap();
     for bar in &bars[60..] {
-        assert_eq!(ind.next(bar as &dyn Ohlcv), restored.next(bar as &dyn Ohlcv));
+        assert_eq!(
+            ind.next(bar as &dyn Ohlcv),
+            restored.next(bar as &dyn Ohlcv)
+        );
     }
 }
 
@@ -495,11 +593,16 @@ fn test_checkpoint_kvo() {
 fn test_checkpoint_vwap_bands() {
     let bars = make_bars(45);
     let mut ind = StreamingVwapBands::new(20, 2.0);
-    for bar in &bars[..25] { ind.next(bar as &dyn Ohlcv); }
+    for bar in &bars[..25] {
+        ind.next(bar as &dyn Ohlcv);
+    }
     let bytes = ind.save_state().unwrap();
     let mut restored = StreamingVwapBands::restore_state(&bytes).unwrap();
     for bar in &bars[25..] {
-        assert_eq!(ind.next(bar as &dyn Ohlcv), restored.next(bar as &dyn Ohlcv));
+        assert_eq!(
+            ind.next(bar as &dyn Ohlcv),
+            restored.next(bar as &dyn Ohlcv)
+        );
     }
 }
 

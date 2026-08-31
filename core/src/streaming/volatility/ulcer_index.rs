@@ -1,6 +1,6 @@
+use crate::impl_standard_methods;
 use crate::streaming::rolling_minmax::RollingMax;
 use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
-use crate::impl_standard_methods;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamingUlcerIndex {
@@ -145,7 +145,9 @@ mod tests {
     #[test]
     fn test_streaming_ulcer_index_basic() {
         let mut ui = StreamingUlcerIndex::new(5);
-        let data: Vec<f64> = (0..30).map(|i| 100.0 + (i as f64 * 0.3).sin() * 5.0).collect();
+        let data: Vec<f64> = (0..30)
+            .map(|i| 100.0 + (i as f64 * 0.3).sin() * 5.0)
+            .collect();
         let mut last = None;
         for &val in &data {
             last = ui.next(val);

@@ -5,15 +5,12 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use finkit::indicators;
 use finkit::streaming::indicators::*;
-use finkit::streaming::{StreamingIndicator};
+use finkit::streaming::StreamingIndicator;
 
 use ta::indicators::{
+    AverageTrueRange as TaRsAtr, BollingerBands as TaRsBoll, ExponentialMovingAverage as TaRsEma,
+    MovingAverageConvergenceDivergence as TaRsMacd, RelativeStrengthIndex as TaRsRsi,
     SimpleMovingAverage as TaRsSma,
-    ExponentialMovingAverage as TaRsEma,
-    RelativeStrengthIndex as TaRsRsi,
-    BollingerBands as TaRsBoll,
-    AverageTrueRange as TaRsAtr,
-    MovingAverageConvergenceDivergence as TaRsMacd,
 };
 use ta::Next;
 
@@ -267,7 +264,9 @@ fn bench_fta_additional(c: &mut Criterion) {
         b.iter(|| black_box(indicators::stoch(&high, &low, &close, 14, 3, 3).unwrap()))
     });
     group.bench_function(BenchmarkId::new("fta_obv", DATA_LEN), |b| {
-        let volume: Vec<f64> = (0..DATA_LEN).map(|i| 10000.0 + (i as f64 * 10.0).sin() * 3000.0).collect();
+        let volume: Vec<f64> = (0..DATA_LEN)
+            .map(|i| 10000.0 + (i as f64 * 10.0).sin() * 3000.0)
+            .collect();
         b.iter(|| black_box(indicators::obv(&close, &volume).unwrap()))
     });
 
@@ -319,16 +318,27 @@ fn bench_fta_volatility_ext(c: &mut Criterion) {
     let (open, high, low, close, _) = create_ohlcv_data(DATA_LEN);
 
     group.bench_function(BenchmarkId::new("fta_garman_klass_vol_20", DATA_LEN), |b| {
-        b.iter(|| black_box(indicators::garman_klass_volatility(&open, &high, &low, &close, 20).unwrap()))
+        b.iter(|| {
+            black_box(indicators::garman_klass_volatility(&open, &high, &low, &close, 20).unwrap())
+        })
     });
     group.bench_function(BenchmarkId::new("fta_parkinson_vol_20", DATA_LEN), |b| {
         b.iter(|| black_box(indicators::parkinson_volatility(&high, &low, 20).unwrap()))
     });
-    group.bench_function(BenchmarkId::new("fta_rogers_satchell_vol_20", DATA_LEN), |b| {
-        b.iter(|| black_box(indicators::rogers_satchell_volatility(&open, &high, &low, &close, 20).unwrap()))
-    });
+    group.bench_function(
+        BenchmarkId::new("fta_rogers_satchell_vol_20", DATA_LEN),
+        |b| {
+            b.iter(|| {
+                black_box(
+                    indicators::rogers_satchell_volatility(&open, &high, &low, &close, 20).unwrap(),
+                )
+            })
+        },
+    );
     group.bench_function(BenchmarkId::new("fta_yang_zhang_vol_20", DATA_LEN), |b| {
-        b.iter(|| black_box(indicators::yang_zhang_volatility(&open, &high, &low, &close, 20).unwrap()))
+        b.iter(|| {
+            black_box(indicators::yang_zhang_volatility(&open, &high, &low, &close, 20).unwrap())
+        })
     });
     group.bench_function(BenchmarkId::new("fta_realized_vol_20", DATA_LEN), |b| {
         b.iter(|| black_box(indicators::realized_volatility(&close, 20).unwrap()))

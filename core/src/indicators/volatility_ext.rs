@@ -712,9 +712,15 @@ mod tests {
 
     #[test]
     fn test_keltner_basic() {
-        let high = vec![10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0, 30.0];
-        let low = vec![8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0];
-        let close = vec![9.0, 11.0, 13.0, 15.0, 17.0, 19.0, 21.0, 23.0, 25.0, 27.0, 29.0];
+        let high = vec![
+            10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0, 30.0,
+        ];
+        let low = vec![
+            8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0,
+        ];
+        let close = vec![
+            9.0, 11.0, 13.0, 15.0, 17.0, 19.0, 21.0, 23.0, 25.0, 27.0, 29.0,
+        ];
 
         let result = keltner(&high, &low, &close, 5, 2.0).unwrap();
 
@@ -728,7 +734,11 @@ mod tests {
             if !result.upper[i].is_nan() && !result.lower[i].is_nan() {
                 assert!(result.upper[i] > result.middle[i]);
                 assert!(result.lower[i] < result.middle[i]);
-                assert_relative_eq!(result.width[i], result.upper[i] - result.lower[i], epsilon = 1e-10);
+                assert_relative_eq!(
+                    result.width[i],
+                    result.upper[i] - result.lower[i],
+                    epsilon = 1e-10
+                );
             }
         }
     }
@@ -753,7 +763,9 @@ mod tests {
 
     #[test]
     fn test_historical_volatility_high_volatility() {
-        let close = vec![100.0, 90.0, 110.0, 85.0, 115.0, 80.0, 120.0, 75.0, 125.0, 70.0, 130.0];
+        let close = vec![
+            100.0, 90.0, 110.0, 85.0, 115.0, 80.0, 120.0, 75.0, 125.0, 70.0, 130.0,
+        ];
         let hv = historical_volatility(&close, 5, 252.0).unwrap();
         assert!(!hv[5].is_nan());
         assert!(hv[5] > 50.0); // High volatility
@@ -870,9 +882,15 @@ mod tests {
 
     #[test]
     fn test_keltner_multiplier_effect() {
-        let high = vec![10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0, 30.0];
-        let low = vec![8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0];
-        let close = vec![9.0, 11.0, 13.0, 15.0, 17.0, 19.0, 21.0, 23.0, 25.0, 27.0, 29.0];
+        let high = vec![
+            10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0, 30.0,
+        ];
+        let low = vec![
+            8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0,
+        ];
+        let close = vec![
+            9.0, 11.0, 13.0, 15.0, 17.0, 19.0, 21.0, 23.0, 25.0, 27.0, 29.0,
+        ];
 
         let result1 = keltner(&high, &low, &close, 5, 1.0).unwrap();
         let result2 = keltner(&high, &low, &close, 5, 2.0).unwrap();
@@ -907,7 +925,13 @@ mod tests {
 
     // ------- Reference-value parity tests against the original O(n*period) algorithm -------
 
-    pub(super) fn ref_adr(high: &[f64], low: &[f64], close: &[f64], period: usize, mode: AdrMode) -> Vec<f64> {
+    pub(super) fn ref_adr(
+        high: &[f64],
+        low: &[f64],
+        close: &[f64],
+        period: usize,
+        mode: AdrMode,
+    ) -> Vec<f64> {
         let len = high.len();
         let mut out = vec![f64::NAN; len];
         for i in period - 1..len {
@@ -940,10 +964,7 @@ mod tests {
             }
             if log_returns.len() >= 2 {
                 let mean: f64 = log_returns.iter().sum::<f64>() / log_returns.len() as f64;
-                let variance: f64 = log_returns
-                    .iter()
-                    .map(|r| (r - mean).powi(2))
-                    .sum::<f64>()
+                let variance: f64 = log_returns.iter().map(|r| (r - mean).powi(2)).sum::<f64>()
                     / (log_returns.len() - 1) as f64;
                 out[i] = variance.sqrt() * td.sqrt() * 100.0;
             }
@@ -1041,11 +1062,7 @@ mod tests {
 /// sigma = sqrt( (1 / (4 * n * ln 2)) * sum( ln(H_i / L_i)^2 ) )
 ///
 /// `period` controls the rolling window size.
-pub fn parkinson_volatility(
-    high: &[f64],
-    low: &[f64],
-    period: usize,
-) -> Result<Array1<f64>> {
+pub fn parkinson_volatility(high: &[f64], low: &[f64], period: usize) -> Result<Array1<f64>> {
     validate_param("period", "greater than 0", || period > 0)?;
     validate_input(high.len(), period)?;
     if high.len() != low.len() {
@@ -1265,17 +1282,17 @@ pub fn semivariance(close: &[f64], period: usize) -> Result<Array1<f64>> {
                 count += 1;
             }
         }
-        output[i] = if count > 0 { (sum_sq / count as f64).sqrt() } else { 0.0 };
+        output[i] = if count > 0 {
+            (sum_sq / count as f64).sqrt()
+        } else {
+            0.0
+        };
     }
     Ok(output)
 }
 
 /// Sortino ratio: excess return / downside deviation.
-pub fn sortino_ratio(
-    close: &[f64],
-    period: usize,
-    risk_free_rate: f64,
-) -> Result<Array1<f64>> {
+pub fn sortino_ratio(close: &[f64], period: usize, risk_free_rate: f64) -> Result<Array1<f64>> {
     validate_param("period", "greater than 0", || period > 0)?;
     validate_input(close.len(), period + 1)?;
     let len = close.len();
@@ -1296,7 +1313,11 @@ pub fn sortino_ratio(
             }
         }
         let mean = sum / period as f64;
-        let ddev = if count > 0 { (sum_sq / count as f64).sqrt() } else { 0.0 };
+        let ddev = if count > 0 {
+            (sum_sq / count as f64).sqrt()
+        } else {
+            0.0
+        };
         output[i] = if ddev > 1e-15 { mean / ddev } else { 0.0 };
     }
     Ok(output)
@@ -1318,7 +1339,11 @@ pub fn calmar_ratio(equity: &[f64], period: usize) -> Result<Array1<f64>> {
                 peak = equity[j];
             }
         }
-        let mdd = if peak > 0.0 { (peak - end_equity.min(peak)) / peak } else { 0.0 };
+        let mdd = if peak > 0.0 {
+            (peak - end_equity.min(peak)) / peak
+        } else {
+            0.0
+        };
         let cagr = if start_equity > 0.0 && end_equity > 0.0 {
             (end_equity / start_equity).powf(252.0 / period as f64) - 1.0
         } else {
@@ -1330,11 +1355,7 @@ pub fn calmar_ratio(equity: &[f64], period: usize) -> Result<Array1<f64>> {
 }
 
 /// Information ratio: active return / tracking error.
-pub fn information_ratio(
-    asset: &[f64],
-    benchmark: &[f64],
-    period: usize,
-) -> Result<Array1<f64>> {
+pub fn information_ratio(asset: &[f64], benchmark: &[f64], period: usize) -> Result<Array1<f64>> {
     validate_param("period", "greater than 0", || period > 0)?;
     let n = asset.len().min(benchmark.len());
     validate_input(n, period)?;
@@ -1346,8 +1367,16 @@ pub fn information_ratio(
         let mut sum_diff: f64 = 0.0;
         let mut sum_sq: f64 = 0.0;
         for j in (i + 1 - period)..=i {
-            let a_ret = if j > 0 { (asset[j] / asset[j - 1]).ln() } else { 0.0 };
-            let b_ret = if j > 0 { (benchmark[j] / benchmark[j - 1]).ln() } else { 0.0 };
+            let a_ret = if j > 0 {
+                (asset[j] / asset[j - 1]).ln()
+            } else {
+                0.0
+            };
+            let b_ret = if j > 0 {
+                (benchmark[j] / benchmark[j - 1]).ln()
+            } else {
+                0.0
+            };
             let d = a_ret - b_ret;
             sum_diff += d;
             sum_sq += d * d;
@@ -1408,7 +1437,12 @@ pub fn keltner_channel(
             width[i] = upper[i] - lower[i];
         }
     }
-    Ok(KeltnerResult { upper, middle, lower, width })
+    Ok(KeltnerResult {
+        upper,
+        middle,
+        lower,
+        width,
+    })
 }
 
 // ========================================================================
@@ -1743,7 +1777,12 @@ mod a3_tests {
         }
         // Stop should never exceed close in an uptrend.
         for i in 3..12 {
-            assert!(r.stop[i] <= close[i] + 1e-9, "stop {} > close {}", r.stop[i], close[i]);
+            assert!(
+                r.stop[i] <= close[i] + 1e-9,
+                "stop {} > close {}",
+                r.stop[i],
+                close[i]
+            );
         }
     }
 
@@ -1826,7 +1865,10 @@ mod a3_tests {
             let w1 = r.upper[0][i] - r.lower[0][i];
             let w2 = r.upper[1][i] - r.lower[1][i];
             let w3 = r.upper[2][i] - r.lower[2][i];
-            assert!(w1 < w2 && w2 < w3, "channel widths should grow with multiplier");
+            assert!(
+                w1 < w2 && w2 < w3,
+                "channel widths should grow with multiplier"
+            );
         }
     }
 
@@ -1864,8 +1906,8 @@ mod a3_tests {
 
 #[cfg(test)]
 mod parity_tests {
-    use super::*;
     use super::tests::*;
+    use super::*;
     #[allow(unused_imports)]
     use approx::assert_relative_eq;
 

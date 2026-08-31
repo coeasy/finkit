@@ -1,8 +1,8 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use finkit::formula::simd::SimdOps;
+use finkit::math::linear;
 use finkit::math::simd_ops;
 use finkit::math::statistics;
-use finkit::math::linear;
 
 const DATA_LEN: usize = 100_000;
 const SMALL_DATA_LEN: usize = 10_000;
@@ -27,7 +27,8 @@ fn generate_benchmark_data(len: usize) -> Vec<f64> {
 
 fn generate_correlated_data(len: usize, correlation: f64) -> (Vec<f64>, Vec<f64>) {
     let x = generate_close_data(len);
-    let y: Vec<f64> = x.iter()
+    let y: Vec<f64> = x
+        .iter()
         .enumerate()
         .map(|(i, xi)| {
             let noise = ((i as f64 * 0.5).sin() * 5.0) * (1.0 - correlation.abs());
@@ -61,7 +62,8 @@ fn bench_stddev(c: &mut Criterion) {
                         let start = i + 1 - *p;
                         let window = &data[start..=i];
                         let mean: f64 = window.iter().sum::<f64>() / *p as f64;
-                        let var: f64 = window.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (*p as f64 - 1.0);
+                        let var: f64 = window.iter().map(|x| (x - mean).powi(2)).sum::<f64>()
+                            / (*p as f64 - 1.0);
                         result_scalar[i] = var.sqrt();
                     }
                 }
@@ -69,11 +71,15 @@ fn bench_stddev(c: &mut Criterion) {
             })
         });
 
-        group.bench_with_input(BenchmarkId::new("statistics_module", period), &period, |b, p| {
-            b.iter(|| {
-                black_box(statistics::rolling_std_dev(black_box(&data), *p).unwrap());
-            })
-        });
+        group.bench_with_input(
+            BenchmarkId::new("statistics_module", period),
+            &period,
+            |b, p| {
+                b.iter(|| {
+                    black_box(statistics::rolling_std_dev(black_box(&data), *p).unwrap());
+                })
+            },
+        );
     }
     group.finish();
 }
@@ -86,12 +92,16 @@ fn bench_zscore(c: &mut Criterion) {
         let mut result_simd = vec![0.0; DATA_LEN];
         let mut result_scalar = vec![0.0; DATA_LEN];
 
-        group.bench_with_input(BenchmarkId::new("simd_optimized", period), &period, |b, p| {
-            b.iter(|| {
-                SimdOps::zscore_optimized(black_box(&data), *p, &mut result_simd);
-                black_box(&result_simd);
-            })
-        });
+        group.bench_with_input(
+            BenchmarkId::new("simd_optimized", period),
+            &period,
+            |b, p| {
+                b.iter(|| {
+                    SimdOps::zscore_optimized(black_box(&data), *p, &mut result_simd);
+                    black_box(&result_simd);
+                })
+            },
+        );
 
         group.bench_with_input(BenchmarkId::new("simd_ops", period), &period, |b, p| {
             b.iter(|| {
@@ -109,9 +119,14 @@ fn bench_zscore(c: &mut Criterion) {
                         let start = i + 1 - *p;
                         let window = &data[start..=i];
                         let mean: f64 = window.iter().sum::<f64>() / *p as f64;
-                        let var: f64 = window.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (*p as f64 - 1.0);
+                        let var: f64 = window.iter().map(|x| (x - mean).powi(2)).sum::<f64>()
+                            / (*p as f64 - 1.0);
                         let std = var.sqrt();
-                        result_scalar[i] = if std.abs() < 1e-15 { 0.0 } else { (data[i] - mean) / std };
+                        result_scalar[i] = if std.abs() < 1e-15 {
+                            0.0
+                        } else {
+                            (data[i] - mean) / std
+                        };
                     }
                 }
                 black_box(&result_scalar);
@@ -154,11 +169,22 @@ fn bench_correl(c: &mut Criterion) {
                         let wy = &y[start..=i];
                         let mean_x: f64 = wx.iter().sum::<f64>() / *p as f64;
                         let mean_y: f64 = wy.iter().sum::<f64>() / *p as f64;
-                        let cov: f64 = wx.iter().zip(wy.iter()).map(|(xi, yi)| (xi - mean_x) * (yi - mean_y)).sum::<f64>() / (*p as f64 - 1.0);
-                        let var_x: f64 = wx.iter().map(|xi| (xi - mean_x).powi(2)).sum::<f64>() / (*p as f64 - 1.0);
-                        let var_y: f64 = wy.iter().map(|yi| (yi - mean_y).powi(2)).sum::<f64>() / (*p as f64 - 1.0);
+                        let cov: f64 = wx
+                            .iter()
+                            .zip(wy.iter())
+                            .map(|(xi, yi)| (xi - mean_x) * (yi - mean_y))
+                            .sum::<f64>()
+                            / (*p as f64 - 1.0);
+                        let var_x: f64 = wx.iter().map(|xi| (xi - mean_x).powi(2)).sum::<f64>()
+                            / (*p as f64 - 1.0);
+                        let var_y: f64 = wy.iter().map(|yi| (yi - mean_y).powi(2)).sum::<f64>()
+                            / (*p as f64 - 1.0);
                         let denom = (var_x * var_y).sqrt();
-                        result_scalar[i] = if denom.abs() < 1e-15 { f64::NAN } else { cov / denom };
+                        result_scalar[i] = if denom.abs() < 1e-15 {
+                            f64::NAN
+                        } else {
+                            cov / denom
+                        };
                     }
                 }
                 black_box(&result_scalar);
@@ -178,14 +204,24 @@ fn bench_beta(c: &mut Criterion) {
 
         group.bench_with_input(BenchmarkId::new("simd", period), &period, |b, p| {
             b.iter(|| {
-                SimdOps::beta(black_box(&asset), black_box(&benchmark), *p, &mut result_simd);
+                SimdOps::beta(
+                    black_box(&asset),
+                    black_box(&benchmark),
+                    *p,
+                    &mut result_simd,
+                );
                 black_box(&result_simd);
             })
         });
 
         group.bench_with_input(BenchmarkId::new("simd_ops", period), &period, |b, p| {
             b.iter(|| {
-                simd_ops::simd_beta(black_box(&asset), black_box(&benchmark), *p, &mut result_simd);
+                simd_ops::simd_beta(
+                    black_box(&asset),
+                    black_box(&benchmark),
+                    *p,
+                    &mut result_simd,
+                );
                 black_box(&result_simd);
             })
         });
@@ -201,9 +237,19 @@ fn bench_beta(c: &mut Criterion) {
                         let wb = &benchmark[start..=i];
                         let mean_a: f64 = wa.iter().sum::<f64>() / *p as f64;
                         let mean_b: f64 = wb.iter().sum::<f64>() / *p as f64;
-                        let cov: f64 = wa.iter().zip(wb.iter()).map(|(a, b)| (a - mean_a) * (b - mean_b)).sum::<f64>() / (*p as f64 - 1.0);
-                        let var_b: f64 = wb.iter().map(|b| (b - mean_b).powi(2)).sum::<f64>() / (*p as f64 - 1.0);
-                        result_scalar[i] = if var_b.abs() < 1e-15 { f64::NAN } else { cov / var_b };
+                        let cov: f64 = wa
+                            .iter()
+                            .zip(wb.iter())
+                            .map(|(a, b)| (a - mean_a) * (b - mean_b))
+                            .sum::<f64>()
+                            / (*p as f64 - 1.0);
+                        let var_b: f64 = wb.iter().map(|b| (b - mean_b).powi(2)).sum::<f64>()
+                            / (*p as f64 - 1.0);
+                        result_scalar[i] = if var_b.abs() < 1e-15 {
+                            f64::NAN
+                        } else {
+                            cov / var_b
+                        };
                     }
                 }
                 black_box(&result_scalar);
@@ -247,7 +293,8 @@ fn bench_linear_reg_slope(c: &mut Criterion) {
                         let sum_x = n * (n - 1.0) / 2.0;
                         let sum_x2 = n * (n - 1.0) * (2.0 * n - 1.0) / 6.0;
                         let sum_y: f64 = window.iter().sum();
-                        let sum_xy: f64 = window.iter().enumerate().map(|(j, v)| j as f64 * v).sum();
+                        let sum_xy: f64 =
+                            window.iter().enumerate().map(|(j, v)| j as f64 * v).sum();
                         let denom = n * sum_x2 - sum_x * sum_x;
                         result_scalar[i] = (n * sum_xy - sum_x * sum_y) / denom;
                     }
@@ -256,11 +303,15 @@ fn bench_linear_reg_slope(c: &mut Criterion) {
             })
         });
 
-        group.bench_with_input(BenchmarkId::new("linear_module", period), &period, |b, p| {
-            b.iter(|| {
-                black_box(linear::linreg_slope(black_box(&data), *p).unwrap());
-            })
-        });
+        group.bench_with_input(
+            BenchmarkId::new("linear_module", period),
+            &period,
+            |b, p| {
+                b.iter(|| {
+                    black_box(linear::linreg_slope(black_box(&data), *p).unwrap());
+                })
+            },
+        );
     }
     group.finish();
 }
@@ -287,11 +338,15 @@ fn bench_linear_reg(c: &mut Criterion) {
             })
         });
 
-        group.bench_with_input(BenchmarkId::new("linear_module", period), &period, |b, p| {
-            b.iter(|| {
-                black_box(linear::linreg(black_box(&data), *p).unwrap());
-            })
-        });
+        group.bench_with_input(
+            BenchmarkId::new("linear_module", period),
+            &period,
+            |b, p| {
+                b.iter(|| {
+                    black_box(linear::linreg(black_box(&data), *p).unwrap());
+                })
+            },
+        );
     }
     group.finish();
 }
@@ -317,11 +372,15 @@ fn bench_linear_reg_angle(c: &mut Criterion) {
             })
         });
 
-        group.bench_with_input(BenchmarkId::new("linear_module", period), &period, |b, p| {
-            b.iter(|| {
-                black_box(linear::linreg_angle(black_box(&data), *p).unwrap());
-            })
-        });
+        group.bench_with_input(
+            BenchmarkId::new("linear_module", period),
+            &period,
+            |b, p| {
+                b.iter(|| {
+                    black_box(linear::linreg_angle(black_box(&data), *p).unwrap());
+                })
+            },
+        );
     }
     group.finish();
 }

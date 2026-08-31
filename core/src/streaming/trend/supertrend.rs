@@ -1,5 +1,5 @@
-use crate::streaming::volatility::atr::StreamingAtr;
 use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
+use crate::streaming::volatility::atr::StreamingAtr;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -70,8 +70,16 @@ impl StreamingSuperTrend {
         };
 
         let st = if self.prev_st.is_nan() || self.prev_st == self.prev_upper {
-            if close <= final_upper { final_upper } else { final_lower }
-        } else if close >= final_lower { final_lower } else { final_upper };
+            if close <= final_upper {
+                final_upper
+            } else {
+                final_lower
+            }
+        } else if close >= final_lower {
+            final_lower
+        } else {
+            final_upper
+        };
 
         self.direction = if st == final_upper { -1 } else { 1 };
         self.prev_close = close;
@@ -79,7 +87,10 @@ impl StreamingSuperTrend {
         self.prev_lower = final_lower;
         self.prev_st = st;
 
-        let result = Some(SuperTrendOutput { supertrend: st, direction: self.direction });
+        let result = Some(SuperTrendOutput {
+            supertrend: st,
+            direction: self.direction,
+        });
         self.last_value = result;
         result
     }
@@ -95,8 +106,12 @@ impl StreamingSuperTrend {
         self.last_value = None;
     }
 
-    pub fn is_ready(&self) -> bool { self.atr.is_ready() }
-    pub fn count(&self) -> usize { self.count }
+    pub fn is_ready(&self) -> bool {
+        self.atr.is_ready()
+    }
+    pub fn count(&self) -> usize {
+        self.count
+    }
 
     pub fn value(&self) -> Option<SuperTrendOutput> {
         self.last_value
@@ -104,10 +119,18 @@ impl StreamingSuperTrend {
 }
 
 impl IndicatorMeta for StreamingSuperTrend {
-    fn name() -> &'static str { "SuperTrend" }
-    fn category() -> &'static str { "volatility" }
-    fn description() -> &'static str { "Super Trend Indicator" }
-    fn warm_up_period(&self) -> usize { self.atr.warm_up_period() }
+    fn name() -> &'static str {
+        "SuperTrend"
+    }
+    fn category() -> &'static str {
+        "volatility"
+    }
+    fn description() -> &'static str {
+        "Super Trend Indicator"
+    }
+    fn warm_up_period(&self) -> usize {
+        self.atr.warm_up_period()
+    }
 }
 
 #[cfg(test)]
@@ -119,7 +142,13 @@ mod tests {
     fn test_streaming_supertrend_basic() {
         let mut st = StreamingSuperTrend::new(3, 2.0);
         for i in 0..10 {
-            let bar = OhlcvBar::new(10.0 + i as f64, 12.0 + i as f64, 9.0 + i as f64, 11.0 + i as f64, 100.0);
+            let bar = OhlcvBar::new(
+                10.0 + i as f64,
+                12.0 + i as f64,
+                9.0 + i as f64,
+                11.0 + i as f64,
+                100.0,
+            );
             if let Some(out) = st.next(&bar) {
                 assert!(!out.supertrend.is_nan());
                 assert!(out.direction == 1 || out.direction == -1);
@@ -132,7 +161,13 @@ mod tests {
         let mut st = StreamingSuperTrend::new(3, 2.0);
         let mut last = None;
         for i in 0..20 {
-            let bar = OhlcvBar::new(10.0 + i as f64, 12.0 + i as f64, 9.0 + i as f64, 11.0 + i as f64, 100.0);
+            let bar = OhlcvBar::new(
+                10.0 + i as f64,
+                12.0 + i as f64,
+                9.0 + i as f64,
+                11.0 + i as f64,
+                100.0,
+            );
             last = st.next(&bar);
         }
         assert_eq!(last.unwrap().direction, 1);
@@ -147,7 +182,13 @@ mod tests {
     fn test_streaming_supertrend_reset() {
         let mut st = StreamingSuperTrend::new(3, 2.0);
         for i in 0..10 {
-            st.next(&OhlcvBar::new(10.0 + i as f64, 12.0 + i as f64, 9.0 + i as f64, 11.0 + i as f64, 100.0));
+            st.next(&OhlcvBar::new(
+                10.0 + i as f64,
+                12.0 + i as f64,
+                9.0 + i as f64,
+                11.0 + i as f64,
+                100.0,
+            ));
         }
         assert!(st.is_ready());
         st.reset();

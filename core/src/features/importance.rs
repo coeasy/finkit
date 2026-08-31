@@ -191,7 +191,10 @@ mod tests {
         let x = vec![0, 1, 0, 1, 0, 1, 0, 1];
         let y = vec![0, 1, 0, 1, 0, 1, 0, 1];
         let mi = mutual_info_discrete(&x, &y);
-        assert!(mi > 0.0, "perfectly correlated discrete vars should have MI > 0");
+        assert!(
+            mi > 0.0,
+            "perfectly correlated discrete vars should have MI > 0"
+        );
 
         let independent_x = vec![0, 0, 1, 1, 0, 0, 1, 1];
         let independent_y = vec![0, 1, 0, 1, 1, 0, 1, 0];
@@ -204,7 +207,10 @@ mod tests {
         let x: Vec<f64> = (0..50).map(|i| i as f64).collect();
         let y: Vec<f64> = x.iter().map(|&v| v * 2.0 + 0.1).collect();
         let mi = mutual_info_continuous(&x, &y, 10);
-        assert!(mi > 0.0, "linearly related continuous vars should have MI > 0");
+        assert!(
+            mi > 0.0,
+            "linearly related continuous vars should have MI > 0"
+        );
 
         let noise: Vec<f64> = (0..50).map(|i| (i as f64 * 7.7).sin()).collect();
         let mi_noise = mutual_info_continuous(&x, &noise, 10);
@@ -216,7 +222,10 @@ mod tests {
         let n = 100;
         let signal: Vec<f64> = (0..n).map(|i| i as f64).collect();
         let noise: Vec<f64> = (0..n).map(|i| (i as f64 * 7.7).sin()).collect();
-        let target: Vec<f64> = signal.iter().map(|&v| if v > 50.0 { 1.0 } else { 0.0 }).collect();
+        let target: Vec<f64> = signal
+            .iter()
+            .map(|&v| if v > 50.0 { 1.0 } else { 0.0 })
+            .collect();
 
         let cols: Vec<&[f64]> = vec![signal.as_slice(), noise.as_slice()];
         let ranking = feature_importance_rank(&cols, &target, 10);
@@ -231,7 +240,10 @@ mod tests {
         let n = 100;
         let signal: Vec<f64> = (0..n).map(|i| i as f64).collect();
         let noise: Vec<f64> = (0..n).map(|i| (i as f64 * 7.7).sin()).collect();
-        let target: Vec<f64> = signal.iter().map(|&v| if v > 50.0 { 1.0 } else { 0.0 }).collect();
+        let target: Vec<f64> = signal
+            .iter()
+            .map(|&v| if v > 50.0 { 1.0 } else { 0.0 })
+            .collect();
 
         let cols: Vec<&[f64]> = vec![signal.as_slice(), noise.as_slice()];
         let ranking = mutual_information_ranking(&cols, &target);

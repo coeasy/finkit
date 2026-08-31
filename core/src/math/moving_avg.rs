@@ -318,7 +318,9 @@ fn ema_inner(input: &[f64], period: usize, seed: EmaSeed) -> Result<Array1<f64>>
             for i in period..len {
                 let val = unsafe { *input_slice.get_unchecked(i) };
                 prev = (val - prev).mul_add(k, prev);
-                unsafe { *output_slice.get_unchecked_mut(i) = prev; }
+                unsafe {
+                    *output_slice.get_unchecked_mut(i) = prev;
+                }
             }
         }
         EmaSeed::FirstValue => {
@@ -334,7 +336,9 @@ fn ema_inner(input: &[f64], period: usize, seed: EmaSeed) -> Result<Array1<f64>>
             for i in 1..len {
                 let val = unsafe { *input_slice.get_unchecked(i) };
                 prev = (val - prev).mul_add(k, prev);
-                unsafe { *output_slice.get_unchecked_mut(i) = prev; }
+                unsafe {
+                    *output_slice.get_unchecked_mut(i) = prev;
+                }
             }
         }
     }
@@ -541,19 +545,19 @@ pub fn wma(input: &[f64], period: usize) -> Result<Array1<f64>> {
 fn wma_inner(input: &[f64], period: usize) -> Result<Array1<f64>> {
     let len = input.len();
     let mut output = Array1::<f64>::zeros(len);
-    
+
     // Only fill warm-up region with NaN (not the entire array)
     for i in 0..period - 1 {
         output[i] = f64::NAN;
     }
-    
+
     let inv_weight_sum = 1.0 / (period * (period + 1) / 2) as f64;
     let p = period as f64;
 
     // Calculate initial window
     let mut window_sum: f64 = 0.0;
     let mut wsum: f64 = 0.0;
-    
+
     for j in 0..period {
         let v = input[j];
         window_sum += v;
@@ -564,7 +568,7 @@ fn wma_inner(input: &[f64], period: usize) -> Result<Array1<f64>> {
     // Main loop with pointer operations and FMA optimization
     let input_ptr = input.as_ptr();
     let output_ptr = output.as_mut_ptr();
-    
+
     unsafe {
         for i in period..len {
             let old = *input_ptr.add(i - period);
@@ -1016,7 +1020,8 @@ pub fn kama(
     }
 
     for i in period + 1..len {
-        volatility += (input[i] - input[i - 1]).abs() - (input[i - period] - input[i - period - 1]).abs();
+        volatility +=
+            (input[i] - input[i - 1]).abs() - (input[i - period] - input[i - period - 1]).abs();
 
         let direction = (input[i] - input[i - period]).abs();
         let er = if volatility != 0.0 {
@@ -1768,7 +1773,6 @@ pub fn ema_multi_periods(
     Ok(())
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1904,7 +1908,8 @@ mod tests {
                         assert!(
                             diff < tol,
                             "mismatch n={n} period={period} i={i}: expected={} simd={} diff={diff}",
-                            expected[i], simd[i]
+                            expected[i],
+                            simd[i]
                         );
                     }
                 }
@@ -1927,7 +1932,8 @@ mod tests {
                     assert!(
                         (a[i] - b[i]).abs() < 1e-9,
                         "period={period} i={i} a={} b={}",
-                        a[i], b[i]
+                        a[i],
+                        b[i]
                     );
                 }
             }

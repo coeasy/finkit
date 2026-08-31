@@ -353,10 +353,8 @@ pub fn ht_trendline(input: &[f64]) -> Result<Array1<f64>> {
 
     for i in 32..len {
         // WMA(4) smooth price: (4*price + 3*price[1] + 2*price[2] + price[3]) / 10
-        let smooth_price = (4.0 * input[i]
-            + 3.0 * input[i - 1]
-            + 2.0 * input[i - 2]
-            + input[i - 3]) / 10.0;
+        let smooth_price =
+            (4.0 * input[i] + 3.0 * input[i - 1] + 2.0 * input[i - 2] + input[i - 3]) / 10.0;
 
         // TA-Lib 兼容：trend mode 当 dc_period <= 6 或 >= 36
         let dc_period = period_out[i];
@@ -696,7 +694,11 @@ fn compute_hilbert_components(
 
         // TA-Lib 兼容：使用 atan(im/re) 而非 atan2(im, re)
         // TA-Lib ta_HT_DCPHASE.c: atan(Quadrature / InPhase) * RAD2DEG
-        phase_out[i] = if re.abs() > 1e-10 { (im / re).atan() } else { 0.0 };
+        phase_out[i] = if re.abs() > 1e-10 {
+            (im / re).atan()
+        } else {
+            0.0
+        };
 
         // Store smoothed period (valid from bar 32 onward)
         period_out[i] = smooth_period;
@@ -816,7 +818,9 @@ pub fn super_smoother_3pole(input: &[f64], period: usize) -> Result<Array1<f64>>
     }
 
     for i in 3..len {
-        output[i] = coef1 * input[i] + coef2 * output[i - 1] + coef3 * output[i - 2]
+        output[i] = coef1 * input[i]
+            + coef2 * output[i - 1]
+            + coef3 * output[i - 2]
             + coef4 * output[i - 3];
     }
 
@@ -858,8 +862,7 @@ pub fn roofing_filter(input: &[f64], hp_period: usize, lp_period: usize) -> Resu
     let mut output = init_output(len);
 
     // High-pass filter coefficients
-    let alpha_hp =
-        (0.707 * 2.0 * std::f64::consts::PI / hp_period as f64).cos();
+    let alpha_hp = (0.707 * 2.0 * std::f64::consts::PI / hp_period as f64).cos();
     let hp_coef = (1.0 + alpha_hp) / 2.0;
 
     // Apply high-pass filter
@@ -922,8 +925,7 @@ pub fn decycler(input: &[f64], hp_period: usize) -> Result<Array1<f64>> {
     let mut hp = vec![0.0f64; len];
     let mut output = init_output(len);
 
-    let alpha_hp =
-        (0.707 * 2.0 * std::f64::consts::PI / hp_period as f64).cos();
+    let alpha_hp = (0.707 * 2.0 * std::f64::consts::PI / hp_period as f64).cos();
     let hp_coef = (1.0 + alpha_hp) / 2.0;
 
     hp[0] = 0.0;
@@ -979,8 +981,7 @@ pub fn bandpass(input: &[f64], period: usize, bandwidth: f64) -> Result<Array1<f
     let len = input.len();
     let mut output = init_output(len);
 
-    let beta =
-        (2.0 * std::f64::consts::PI / period as f64).cos();
+    let beta = (2.0 * std::f64::consts::PI / period as f64).cos();
     let gamma = (2.0 * std::f64::consts::PI * bandwidth / period as f64).cos();
     let delta = 1.0 / gamma;
     let alpha = delta - (delta * delta - 1.0).sqrt();
@@ -1035,8 +1036,7 @@ pub fn instantaneous_trendline(input: &[f64], alpha: f64) -> Result<Array1<f64>>
     }
 
     for i in 2..len {
-        output[i] = (alpha - alpha * alpha / 4.0) * input[i]
-            + 0.5 * alpha * alpha * input[i - 1]
+        output[i] = (alpha - alpha * alpha / 4.0) * input[i] + 0.5 * alpha * alpha * input[i - 1]
             - (alpha - 0.75 * alpha * alpha) * input[i - 2]
             + 2.0 * (1.0 - alpha) * output[i - 1]
             - (1.0 - alpha) * (1.0 - alpha) * output[i - 2];
@@ -1233,8 +1233,7 @@ pub fn ehlers_roofing_filter_v2(input: &[f64], period: usize) -> Result<Array1<f
         hp[1] = input[1] - input[0];
     }
     for i in 2..len {
-        hp[i] = hp_coef * (input[i] - 2.0 * input[i - 1] + input[i - 2])
-            + hp_fb1 * hp[i - 1]
+        hp[i] = hp_coef * (input[i] - 2.0 * input[i - 1] + input[i - 2]) + hp_fb1 * hp[i - 1]
             - hp_fb2 * hp[i - 2];
     }
 
@@ -1322,7 +1321,8 @@ pub fn ehlers_sidewinder(input: &[f64], period: usize) -> Result<Array1<f64>> {
     let smooth_period = (period / 2).max(2);
     let mut output = init_output(len);
     let a1 = (-std::f64::consts::SQRT_2 * std::f64::consts::PI / smooth_period as f64).exp();
-    let b1 = 2.0 * a1 * (std::f64::consts::SQRT_2 * std::f64::consts::PI / smooth_period as f64).cos();
+    let b1 =
+        2.0 * a1 * (std::f64::consts::SQRT_2 * std::f64::consts::PI / smooth_period as f64).cos();
     let c2 = b1;
     let c3 = -a1 * a1;
     let c1 = 1.0 - c2 - c3;
@@ -1692,7 +1692,11 @@ mod tests {
             "ht_sine (whole fn) throughput: {:.2} ns/bar over {} bars x {} iters",
             ns_per_bar, n, iters
         );
-        assert!(ns_per_bar < 200.0, "ht_sine too slow: {:.2} ns/bar", ns_per_bar);
+        assert!(
+            ns_per_bar < 200.0,
+            "ht_sine too slow: {:.2} ns/bar",
+            ns_per_bar
+        );
     }
 
     // ========================================================================
@@ -1919,10 +1923,16 @@ mod tests {
     fn test_super_smoother_reduces_noise() {
         let data = trending_data(200);
         let smoothed = super_smoother(&data, 14).unwrap();
-        let raw_var: f64 = data.windows(2).map(|w| (w[1] - w[0]).powi(2)).sum::<f64>() / data.len() as f64;
-        let sm_var: f64 = smoothed.as_slice().unwrap().windows(2)
+        let raw_var: f64 =
+            data.windows(2).map(|w| (w[1] - w[0]).powi(2)).sum::<f64>() / data.len() as f64;
+        let sm_var: f64 = smoothed
+            .as_slice()
+            .unwrap()
+            .windows(2)
             .skip(2) // skip warmup
-            .map(|w| (w[1] - w[0]).powi(2)).sum::<f64>() / smoothed.len() as f64;
+            .map(|w| (w[1] - w[0]).powi(2))
+            .sum::<f64>()
+            / smoothed.len() as f64;
         assert!(sm_var < raw_var, "smoother should reduce variance");
     }
 
@@ -1961,7 +1971,10 @@ mod tests {
         let tail = &result.as_slice().unwrap()[60..];
         let has_positive = tail.iter().any(|&v| v > 0.5);
         let has_negative = tail.iter().any(|&v| v < -0.5);
-        assert!(has_positive && has_negative, "roofing filter should oscillate on sine input");
+        assert!(
+            has_positive && has_negative,
+            "roofing filter should oscillate on sine input"
+        );
     }
 
     #[test]
@@ -1972,7 +1985,12 @@ mod tests {
         // After sufficient warmup, the decycler should converge toward the input trend.
         // The HP filter has transient effects, so we check later bars with generous tolerance.
         for i in 50..100 {
-            assert!((result[i] - data[i]).abs() < 20.0, "decycler should track trend at bar {i}, got {} vs {}", result[i], data[i]);
+            assert!(
+                (result[i] - data[i]).abs() < 20.0,
+                "decycler should track trend at bar {i}, got {} vs {}",
+                result[i],
+                data[i]
+            );
         }
     }
 
@@ -1984,7 +2002,10 @@ mod tests {
         let tail = &result.as_slice().unwrap()[40..];
         let mean: f64 = tail.iter().sum::<f64>() / tail.len() as f64;
         let max_abs: f64 = tail.iter().map(|v| v.abs()).fold(0.0f64, f64::max);
-        assert!(mean.abs() < max_abs * 0.5, "bandpass mean should be near zero");
+        assert!(
+            mean.abs() < max_abs * 0.5,
+            "bandpass mean should be near zero"
+        );
     }
 
     #[test]
@@ -2001,8 +2022,10 @@ mod tests {
         assert_eq!(result.len(), 100);
         // Should track the trend reasonably well after warmup
         for i in 20..100 {
-            assert!((result[i] - data[i]).abs() < 15.0,
-                "itrend should be within 15 of price at bar {i}");
+            assert!(
+                (result[i] - data[i]).abs() < 15.0,
+                "itrend should be within 15 of price at bar {i}"
+            );
         }
     }
 
@@ -2040,7 +2063,10 @@ mod tests {
             .map(|w| (w[1] - w[0]).powi(2))
             .sum::<f64>()
             / smoothed.len() as f64;
-        assert!(sm_var < raw_var, "ema_super_smoother should reduce variance");
+        assert!(
+            sm_var < raw_var,
+            "ema_super_smoother should reduce variance"
+        );
     }
 
     #[test]
@@ -2085,7 +2111,9 @@ mod tests {
 
     #[test]
     fn test_ehlers_fisher_transform_output_length() {
-        let high: Vec<f64> = (0..50).map(|i| 50.0 + (i as f64 * 0.2).sin() * 5.0).collect();
+        let high: Vec<f64> = (0..50)
+            .map(|i| 50.0 + (i as f64 * 0.2).sin() * 5.0)
+            .collect();
         let low: Vec<f64> = high.iter().map(|h| h - 3.0).collect();
         let result = ehlers_fisher_transform(&high, &low, 10).unwrap();
         assert_eq!(result.fisher.len(), 50);
@@ -2094,19 +2122,27 @@ mod tests {
 
     #[test]
     fn test_ehlers_fisher_transform_matches_fisher() {
-        let high: Vec<f64> = (0..80).map(|i| 50.0 + (i as f64 * 0.15).sin() * 8.0).collect();
+        let high: Vec<f64> = (0..80)
+            .map(|i| 50.0 + (i as f64 * 0.15).sin() * 8.0)
+            .collect();
         let low: Vec<f64> = high.iter().map(|h| h - 4.0).collect();
         let wrapper_result = ehlers_fisher_transform(&high, &low, 10).unwrap();
         let direct_result = crate::indicators::momentum_ext::fisher(&high, &low, 10).unwrap();
         for i in 0..80 {
             // NaN-aware comparison: both NaN is OK, otherwise must match
             if direct_result.fisher[i].is_nan() {
-                assert!(wrapper_result.fisher[i].is_nan(), "fisher[{i}] should be NaN");
+                assert!(
+                    wrapper_result.fisher[i].is_nan(),
+                    "fisher[{i}] should be NaN"
+                );
             } else {
                 assert!((wrapper_result.fisher[i] - direct_result.fisher[i]).abs() < 1e-12);
             }
             if direct_result.signal[i].is_nan() {
-                assert!(wrapper_result.signal[i].is_nan(), "signal[{i}] should be NaN");
+                assert!(
+                    wrapper_result.signal[i].is_nan(),
+                    "signal[{i}] should be NaN"
+                );
             } else {
                 assert!((wrapper_result.signal[i] - direct_result.signal[i]).abs() < 1e-12);
             }
@@ -2116,7 +2152,9 @@ mod tests {
     #[test]
     fn test_ehlers_fisher_transform_signal_lagged() {
         // Signal line is the previous Fisher value
-        let high: Vec<f64> = (0..50).map(|i| 50.0 + (i as f64 * 0.3).sin() * 6.0).collect();
+        let high: Vec<f64> = (0..50)
+            .map(|i| 50.0 + (i as f64 * 0.3).sin() * 6.0)
+            .collect();
         let low: Vec<f64> = high.iter().map(|h| h - 2.0).collect();
         let result = ehlers_fisher_transform(&high, &low, 5).unwrap();
         for i in 6..50 {
@@ -2278,7 +2316,11 @@ mod tests {
         // After warmup, all values should be 0 (or very close)
         for i in 15..100 {
             if result[i].is_finite() {
-                assert!(result[i] < 0.01, "constant input should have ER≈0 at bar {i}, got {}", result[i]);
+                assert!(
+                    result[i] < 0.01,
+                    "constant input should have ER≈0 at bar {i}, got {}",
+                    result[i]
+                );
             }
         }
     }

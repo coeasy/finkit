@@ -48,7 +48,11 @@ impl Position {
         if s > 0 {
             Position::Long
         } else if s < 0 {
-            if allow_short { Position::Short } else { Position::Flat }
+            if allow_short {
+                Position::Short
+            } else {
+                Position::Flat
+            }
         } else {
             Position::Flat
         }
@@ -274,10 +278,12 @@ fn compute_risk_metrics(returns: &[f64], equity: &Array1<f64>) -> (f64, f64, f64
     let mean = returns.iter().sum::<f64>() / n as f64;
     let var: f64 = returns.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / (n - 1) as f64;
     let std = var.sqrt();
-    let downside: f64 = returns.iter()
+    let downside: f64 = returns
+        .iter()
         .filter(|&&r| r < 0.0)
         .map(|r| r.powi(2))
-        .sum::<f64>() / n as f64;
+        .sum::<f64>()
+        / n as f64;
     let dstd = downside.sqrt();
     let ann = (252_f64).sqrt();
     let sharpe = if std > 1e-15 { mean / std * ann } else { 0.0 };
@@ -287,9 +293,13 @@ fn compute_risk_metrics(returns: &[f64], equity: &Array1<f64>) -> (f64, f64, f64
     let mut peak = equity[0];
     let mut max_dd = 0.0_f64;
     for &v in equity.iter() {
-        if v > peak { peak = v; }
+        if v > peak {
+            peak = v;
+        }
         let dd = (peak - v) / peak;
-        if dd > max_dd { max_dd = dd; }
+        if dd > max_dd {
+            max_dd = dd;
+        }
     }
 
     (sharpe, sortino, max_dd)
@@ -312,7 +322,11 @@ fn compute_trade_stats(trades: &[Trade]) -> (f64, f64) {
     } else {
         0.0
     };
-    let pl_ratio = if avg_loss > 1e-15 { avg_win / avg_loss } else { 0.0 };
+    let pl_ratio = if avg_loss > 1e-15 {
+        avg_win / avg_loss
+    } else {
+        0.0
+    };
     (win_rate, pl_ratio)
 }
 
@@ -381,7 +395,11 @@ mod tests {
         let n = 10;
         let close: Vec<f64> = (0..n).map(|i| 100.0 + i as f64).collect();
         // Alternate long/flat to generate multiple round trips
-        let signal: Array1<Signal> = Array1::from((0..n).map(|i| if i % 2 == 0 { 100_i32 } else { 0_i32 }).collect::<Vec<i32>>());
+        let signal: Array1<Signal> = Array1::from(
+            (0..n)
+                .map(|i| if i % 2 == 0 { 100_i32 } else { 0_i32 })
+                .collect::<Vec<i32>>(),
+        );
         let config = BacktestConfig {
             initial_cash: 100_000.0,
             commission: 0.01, // 1% per trade
@@ -390,9 +408,15 @@ mod tests {
         };
         let r = backtest(&close, &signal, &config).unwrap();
         // Commission eats into return
-        let zero_cost = BacktestConfig { commission: 0.0, ..config.clone() };
+        let zero_cost = BacktestConfig {
+            commission: 0.0,
+            ..config.clone()
+        };
         let r0 = backtest(&close, &signal, &zero_cost).unwrap();
-        assert!(r.total_return < r0.total_return, "commission should reduce return");
+        assert!(
+            r.total_return < r0.total_return,
+            "commission should reduce return"
+        );
     }
 
     #[test]
@@ -408,7 +432,11 @@ mod tests {
         };
         let r = backtest(&close, &signal, &config).unwrap();
         // Max DD = (120-80)/120 = 0.333
-        assert!(r.max_drawdown > 0.3 && r.max_drawdown < 0.4, "got {}", r.max_drawdown);
+        assert!(
+            r.max_drawdown > 0.3 && r.max_drawdown < 0.4,
+            "got {}",
+            r.max_drawdown
+        );
     }
 
     #[test]

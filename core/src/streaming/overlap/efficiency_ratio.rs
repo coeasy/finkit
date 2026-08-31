@@ -78,7 +78,12 @@ impl StreamingIndicator<f64, f64> for StreamingEfficiencyRatio {
     impl_standard_methods!();
 }
 
-impl_indicator_meta!(StreamingEfficiencyRatio, "EfficiencyRatio", "overlap", "Kaufman Efficiency Ratio: measures trend efficiency from 0 (choppy) to 1 (trending)");
+impl_indicator_meta!(
+    StreamingEfficiencyRatio,
+    "EfficiencyRatio",
+    "overlap",
+    "Kaufman Efficiency Ratio: measures trend efficiency from 0 (choppy) to 1 (trending)"
+);
 
 #[cfg(test)]
 mod tests {

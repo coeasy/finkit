@@ -14,8 +14,8 @@ crate-type = ["cdylib"]
 [dependencies]
 finkit = { path = "../../core", default-features = false, features = ["std", "serde", "indicators-all"] }
 finkit-visualization = { path = "../../visualization", features = ["svg", "html"] }
-pyo3 = { version = "0.23", features = ["extension-module"] }
-numpy = "0.23"
+pyo3 = { version = "0.29.2", features = ["extension-module"] }
+numpy = "0.29.0"
 ndarray = { workspace = true, optional = true }
 
 [features]

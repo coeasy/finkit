@@ -312,7 +312,11 @@ pub fn simd128_bbands(input: &[f64], period: usize, output: &mut (Vec<f64>, Vec<
 }
 
 #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
-unsafe fn bbands_simd128(input: &[f64], period: usize, output: &mut (Vec<f64>, Vec<f64>, Vec<f64>)) {
+unsafe fn bbands_simd128(
+    input: &[f64],
+    period: usize,
+    output: &mut (Vec<f64>, Vec<f64>, Vec<f64>),
+) {
     use core::arch::wasm32::*;
     let len = input.len();
     if period == 0 || len < period {
@@ -416,7 +420,9 @@ mod tests {
 
     #[test]
     fn test_simd128_rsi_dispatcher_no_panic() {
-        let data: Vec<f64> = (0..200).map(|i| 100.0 + (i as f64 * 0.05).sin() * 5.0).collect();
+        let data: Vec<f64> = (0..200)
+            .map(|i| 100.0 + (i as f64 * 0.05).sin() * 5.0)
+            .collect();
         let mut out = vec![0.0; data.len()];
         simd128_rsi(&data, 14, &mut out);
     }

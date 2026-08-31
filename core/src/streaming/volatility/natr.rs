@@ -1,6 +1,6 @@
-use crate::{impl_indicator_meta, impl_standard_methods};
-use crate::streaming::volatility::atr::StreamingAtr;
 use crate::streaming::traits::{Ohlcv, StreamingIndicator};
+use crate::streaming::volatility::atr::StreamingAtr;
+use crate::{impl_indicator_meta, impl_standard_methods};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamingNatr {
@@ -51,7 +51,12 @@ impl StreamingIndicator<&dyn Ohlcv> for StreamingNatr {
     impl_standard_methods!();
 }
 
-impl_indicator_meta!(StreamingNatr, "NATR", "volatility", "Normalized Average True Range");
+impl_indicator_meta!(
+    StreamingNatr,
+    "NATR",
+    "volatility",
+    "Normalized Average True Range"
+);
 
 #[cfg(test)]
 mod tests {
@@ -68,7 +73,9 @@ mod tests {
             OhlcvBar::new(12.0, 14.0, 11.0, 13.0, 100.0),
             OhlcvBar::new(13.0, 15.0, 12.0, 14.0, 100.0),
         ];
-        for bar in &bars[..2] { assert_eq!(natr.next(bar), None); }
+        for bar in &bars[..2] {
+            assert_eq!(natr.next(bar), None);
+        }
         let v = natr.next(&bars[2]).unwrap();
         assert!(v > 0.0);
     }
@@ -82,7 +89,13 @@ mod tests {
     fn test_streaming_natr_reset() {
         let mut natr = StreamingNatr::new(3);
         for i in 0..5 {
-            natr.next(&OhlcvBar::new(i as f64, i as f64 + 2.0, i as f64 - 1.0, i as f64 + 1.0, 100.0));
+            natr.next(&OhlcvBar::new(
+                i as f64,
+                i as f64 + 2.0,
+                i as f64 - 1.0,
+                i as f64 + 1.0,
+                100.0,
+            ));
         }
         assert!(natr.is_ready());
         natr.reset();

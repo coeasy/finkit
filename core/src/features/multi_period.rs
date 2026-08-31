@@ -21,7 +21,10 @@ pub struct MultiPeriodFeature {
 impl MultiPeriodFeature {
     /// Create a new multi-period feature generator.
     pub fn new(indicator_name: String, periods: Vec<usize>) -> Self {
-        Self { indicator_name, periods }
+        Self {
+            indicator_name,
+            periods,
+        }
     }
 
     /// Create with the default "fast" period template.
@@ -65,9 +68,7 @@ impl MultiPeriodFeature {
             "stddev" => indicators::std_dev(close, period, 1.0).ok(),
             "jma" => indicators::jma(close, period, 0.0, 2.0).ok(),
             "efficiency_ratio" => indicators::efficiency_ratio(close, period).ok(),
-            "cfo" | "chande_forecast" => {
-                indicators::chande_forecast_oscillator(close, period).ok()
-            }
+            "cfo" | "chande_forecast" => indicators::chande_forecast_oscillator(close, period).ok(),
             "qstick" => indicators::qstick(close, close, period, indicators::MaType::Sma).ok(),
             "hv" | "historical_volatility" => {
                 indicators::historical_volatility(close, period, 252.0).ok()
@@ -138,7 +139,9 @@ mod tests {
 
     #[test]
     fn test_multi_period_performance_vs_individual() {
-        let close: Vec<f64> = (0..10_000).map(|i| 100.0 + (i as f64 * 0.01).sin() * 10.0).collect();
+        let close: Vec<f64> = (0..10_000)
+            .map(|i| 100.0 + (i as f64 * 0.01).sin() * 10.0)
+            .collect();
         let gen = MultiPeriodFeature::new("sma".into(), vec![5, 10, 20, 50]);
         let matrix = gen.generate(&close);
         assert_eq!(matrix.cols(), 4);
@@ -147,7 +150,9 @@ mod tests {
 
     #[test]
     fn test_multi_period_new_indicators() {
-        let close: Vec<f64> = (1..=50).map(|i| 100.0 + (i as f64 * 0.1).sin() * 5.0).collect();
+        let close: Vec<f64> = (1..=50)
+            .map(|i| 100.0 + (i as f64 * 0.1).sin() * 5.0)
+            .collect();
 
         let new_names = [
             "jma",

@@ -93,7 +93,10 @@ fn test_rsi_all_losses() {
     let data: Vec<f64> = (1..=20).rev().map(|x| x as f64).collect();
     let result = indicators::rsi(&data, 14).unwrap();
     for i in 14..data.len() {
-        assert!(result[i].abs() < 1e-10, "RSI should be 0 for all-loss series");
+        assert!(
+            result[i].abs() < 1e-10,
+            "RSI should be 0 for all-loss series"
+        );
     }
 }
 

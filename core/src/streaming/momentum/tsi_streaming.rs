@@ -1,6 +1,6 @@
+use crate::impl_standard_methods;
 use crate::streaming::overlap::ema::StreamingEma;
 use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
-use crate::impl_standard_methods;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamingTsi {
@@ -148,16 +148,18 @@ mod tests {
         let long_period = 25;
         let short_period = 13;
 
-        let batch =
-            crate::indicators::momentum_ext::tsi(&data, long_period, short_period).unwrap();
+        let batch = crate::indicators::momentum_ext::tsi(&data, long_period, short_period).unwrap();
         let mut streaming = StreamingTsi::new(long_period, short_period);
 
         let converge_after = long_period + short_period + 20;
         for (i, &val) in data.iter().enumerate() {
             if let Some(s) = streaming.next(val) {
                 if i >= converge_after && !batch[i].is_nan() {
-                    assert!((s - batch[i]).abs() < 1e-6,
-                        "Mismatch at {i}: streaming={s}, batch={}", batch[i]);
+                    assert!(
+                        (s - batch[i]).abs() < 1e-6,
+                        "Mismatch at {i}: streaming={s}, batch={}",
+                        batch[i]
+                    );
                 }
             }
         }

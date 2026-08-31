@@ -1,13 +1,17 @@
-use ndarray::Array1;
 use finkit::formula::engine::FormulaEngine;
 use finkit::formula::types::FormulaContext;
+use ndarray::Array1;
 
 fn make_ctx(len: usize) -> FormulaContext {
-    let close: Vec<f64> = (0..len).map(|i| 10.0 + (i as f64 * 0.3).sin() * 2.0 + i as f64 * 0.05).collect();
+    let close: Vec<f64> = (0..len)
+        .map(|i| 10.0 + (i as f64 * 0.3).sin() * 2.0 + i as f64 * 0.05)
+        .collect();
     let open: Vec<f64> = close.iter().map(|c| c - 0.1).collect();
     let high: Vec<f64> = close.iter().map(|c| c + 0.5).collect();
     let low: Vec<f64> = close.iter().map(|c| c - 0.5).collect();
-    let volume: Vec<f64> = (0..len).map(|i| 1000.0 + (i as f64 * 0.7).sin() * 200.0).collect();
+    let volume: Vec<f64> = (0..len)
+        .map(|i| 1000.0 + (i as f64 * 0.7).sin() * 200.0)
+        .collect();
     FormulaContext::new(
         Array1::from_vec(open),
         Array1::from_vec(high),
@@ -67,7 +71,9 @@ fn test_tdx_kdj() {
 fn test_tdx_kdj_builtin() {
     let mut engine = FormulaEngine::new();
     let mut ctx = make_ctx(100);
-    let result = engine.eval("KDJ(CLOSE, HIGH, LOW, 9, 3, 3)", &mut ctx).unwrap();
+    let result = engine
+        .eval("KDJ(CLOSE, HIGH, LOW, 9, 3, 3)", &mut ctx)
+        .unwrap();
     assert_eq!(result.len(), 100);
 }
 
@@ -1153,7 +1159,12 @@ fn test_batch_execution() {
     for formula in &formulas {
         let mut ctx = make_ctx(100);
         let result = engine.eval(formula, &mut ctx);
-        assert!(result.is_ok(), "Formula '{}' failed: {:?}", formula, result.err());
+        assert!(
+            result.is_ok(),
+            "Formula '{}' failed: {:?}",
+            formula,
+            result.err()
+        );
         assert_eq!(result.unwrap().len(), 100);
     }
 }

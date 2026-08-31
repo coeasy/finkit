@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 
 /// Streaming Chaikin Volatility.
 ///
@@ -138,8 +138,12 @@ mod tests {
     fn test_streaming_chaikin_vol_basic() {
         let mut ind = StreamingChaikinVol::new(10, 10);
         let n = 40;
-        let high: Vec<f64> = (0..n).map(|i| 110.0 + (i as f64 * 0.3).sin() * 5.0).collect();
-        let low: Vec<f64> = (0..n).map(|i| 90.0 + (i as f64 * 0.3).sin() * 5.0).collect();
+        let high: Vec<f64> = (0..n)
+            .map(|i| 110.0 + (i as f64 * 0.3).sin() * 5.0)
+            .collect();
+        let low: Vec<f64> = (0..n)
+            .map(|i| 90.0 + (i as f64 * 0.3).sin() * 5.0)
+            .collect();
 
         let mut results = Vec::new();
         for i in 0..n {
@@ -177,8 +181,12 @@ mod tests {
     #[test]
     fn test_streaming_vs_batch_convergence() {
         let n = 50;
-        let high: Vec<f64> = (0..n).map(|i| 110.0 + (i as f64 * 0.2).sin() * 5.0).collect();
-        let low: Vec<f64> = (0..n).map(|i| 90.0 + (i as f64 * 0.2).sin() * 5.0).collect();
+        let high: Vec<f64> = (0..n)
+            .map(|i| 110.0 + (i as f64 * 0.2).sin() * 5.0)
+            .collect();
+        let low: Vec<f64> = (0..n)
+            .map(|i| 90.0 + (i as f64 * 0.2).sin() * 5.0)
+            .collect();
         let ema_period = 10;
         let roc_period = 10;
 

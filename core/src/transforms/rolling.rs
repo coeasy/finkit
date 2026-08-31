@@ -165,7 +165,9 @@ mod tests {
     #[test]
     fn test_rolling_std_large_values() {
         let base = 1e8;
-        let data: Vec<f64> = (0..20).map(|i| base + (i as f64 * 0.01).sin() * 0.001).collect();
+        let data: Vec<f64> = (0..20)
+            .map(|i| base + (i as f64 * 0.01).sin() * 0.001)
+            .collect();
         let result = RollingStd { window: 10 }.transform(&data);
         for (i, &v) in result.iter().enumerate() {
             if i >= 9 {

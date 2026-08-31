@@ -25,7 +25,10 @@ fn read_csv(path: &str) -> Vec<f64> {
         .filter(|l| !l.starts_with('#') && !l.trim().is_empty())
         .collect();
     let header: Vec<&str> = lines[0].split(',').map(|s| s.trim()).collect();
-    let ci = header.iter().position(|h| h.eq_ignore_ascii_case("close")).unwrap();
+    let ci = header
+        .iter()
+        .position(|h| h.eq_ignore_ascii_case("close"))
+        .unwrap();
     lines[1..]
         .iter()
         .filter_map(|l| l.split(',').nth(ci).and_then(|s| s.trim().parse().ok()))
@@ -72,7 +75,18 @@ fn main() {
                     n += 1;
                 }
             }
-            println!("{} ds#{} len={} compared={} maxdiff={:.3e} @idx{} >1e-10:{}/{} >1e-6:{}", name, ds_id, input.len(), n, maxd, maxi, over, n, over1e6);
+            println!(
+                "{} ds#{} len={} compared={} maxdiff={:.3e} @idx{} >1e-10:{}/{} >1e-6:{}",
+                name,
+                ds_id,
+                input.len(),
+                n,
+                maxd,
+                maxi,
+                over,
+                n,
+                over1e6
+            );
         }
     }
 }

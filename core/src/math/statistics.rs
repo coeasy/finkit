@@ -427,7 +427,8 @@ pub fn rolling_max(data: &[f64], window: usize) -> Result<Array1<f64>> {
 
     let len = data.len();
     let mut output = Array1::from_elem(len, f64::NAN);
-    let mut deque: std::collections::VecDeque<usize> = std::collections::VecDeque::with_capacity(window);
+    let mut deque: std::collections::VecDeque<usize> =
+        std::collections::VecDeque::with_capacity(window);
 
     for i in 0..len {
         while let Some(&back) = deque.back() {
@@ -484,7 +485,8 @@ pub fn rolling_min(data: &[f64], window: usize) -> Result<Array1<f64>> {
 
     let len = data.len();
     let mut output = Array1::from_elem(len, f64::NAN);
-    let mut deque: std::collections::VecDeque<usize> = std::collections::VecDeque::with_capacity(window);
+    let mut deque: std::collections::VecDeque<usize> =
+        std::collections::VecDeque::with_capacity(window);
 
     for i in 0..len {
         while let Some(&back) = deque.back() {
@@ -616,7 +618,11 @@ pub fn spearman_rank(x: &[f64], y: &[f64]) -> Result<f64> {
 fn fractional_ranks(data: &[f64]) -> Vec<f64> {
     let n = data.len();
     let mut indices: Vec<usize> = (0..n).collect();
-    indices.sort_by(|&a, &b| data[a].partial_cmp(&data[b]).unwrap_or(std::cmp::Ordering::Equal));
+    indices.sort_by(|&a, &b| {
+        data[a]
+            .partial_cmp(&data[b])
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     let mut ranks = vec![0.0; n];
     let mut i = 0;

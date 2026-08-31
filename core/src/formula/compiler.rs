@@ -211,14 +211,38 @@ mod tests {
     #[test]
     fn test_cache_lru_eviction() {
         let mut cache = FormulaCache::new(3);
-        cache.insert("a", CompiledFormula { ast: AstNode::Number(1.0), source: "a".to_string() });
-        cache.insert("b", CompiledFormula { ast: AstNode::Number(2.0), source: "b".to_string() });
-        cache.insert("c", CompiledFormula { ast: AstNode::Number(3.0), source: "c".to_string() });
-        
+        cache.insert(
+            "a",
+            CompiledFormula {
+                ast: AstNode::Number(1.0),
+                source: "a".to_string(),
+            },
+        );
+        cache.insert(
+            "b",
+            CompiledFormula {
+                ast: AstNode::Number(2.0),
+                source: "b".to_string(),
+            },
+        );
+        cache.insert(
+            "c",
+            CompiledFormula {
+                ast: AstNode::Number(3.0),
+                source: "c".to_string(),
+            },
+        );
+
         cache.get("a");
-        
-        cache.insert("d", CompiledFormula { ast: AstNode::Number(4.0), source: "d".to_string() });
-        
+
+        cache.insert(
+            "d",
+            CompiledFormula {
+                ast: AstNode::Number(4.0),
+                source: "d".to_string(),
+            },
+        );
+
         assert!(cache.contains("a"));
         assert!(!cache.contains("b"));
         assert!(cache.contains("c"));
@@ -345,9 +369,15 @@ mod tests {
     #[test]
     fn test_cache_remove() {
         let mut cache = FormulaCache::new(10);
-        cache.insert("test", CompiledFormula { ast: AstNode::Number(1.0), source: "test".to_string() });
+        cache.insert(
+            "test",
+            CompiledFormula {
+                ast: AstNode::Number(1.0),
+                source: "test".to_string(),
+            },
+        );
         assert!(cache.contains("test"));
-        
+
         let removed = cache.remove("test");
         assert!(removed.is_some());
         assert!(!cache.contains("test"));
@@ -362,8 +392,14 @@ mod tests {
     #[test]
     fn test_cache_get_cloned() {
         let mut cache = FormulaCache::new(10);
-        cache.insert("42", CompiledFormula { ast: AstNode::Number(42.0), source: "42".to_string() });
-        
+        cache.insert(
+            "42",
+            CompiledFormula {
+                ast: AstNode::Number(42.0),
+                source: "42".to_string(),
+            },
+        );
+
         let cloned = cache.get_cloned("42");
         assert!(cloned.is_some());
         assert_eq!(cloned.unwrap().source, "42");

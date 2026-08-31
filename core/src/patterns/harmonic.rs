@@ -77,8 +77,10 @@ fn find_pivots(high: &[f64], low: &[f64], start: usize, end: usize, order: usize
     for i in (start + order)..(end - order) {
         let h = high[i];
         let l = low[i];
-        let is_max = (i - order..i).all(|k| high[k] <= h) && (i + 1..=i + order).all(|k| high[k] <= h);
-        let is_min = (i - order..i).all(|k| low[k] >= l) && (i + 1..=i + order).all(|k| low[k] >= l);
+        let is_max =
+            (i - order..i).all(|k| high[k] <= h) && (i + 1..=i + order).all(|k| high[k] <= h);
+        let is_min =
+            (i - order..i).all(|k| low[k] >= l) && (i + 1..=i + order).all(|k| low[k] >= l);
         if is_max {
             highs.push(Pivot { idx: i, price: h });
         }
@@ -198,11 +200,27 @@ fn detect_harmonic(
         if pivots.len() >= 5 {
             let last5 = &pivots[pivots.len() - 5..];
             if is_bullish_sequence(last5) {
-                if let Some(_) = check_harmonic(last5, Direction::Bullish, ratios.0, ratios.1, ratios.2, ratios.3, pivot_tolerance) {
+                if let Some(_) = check_harmonic(
+                    last5,
+                    Direction::Bullish,
+                    ratios.0,
+                    ratios.1,
+                    ratios.2,
+                    ratios.3,
+                    pivot_tolerance,
+                ) {
                     out[i] = 100;
                 }
             } else if is_bearish_sequence(last5) {
-                if let Some(_) = check_harmonic(last5, Direction::Bearish, ratios.0, ratios.1, ratios.2, ratios.3, pivot_tolerance) {
+                if let Some(_) = check_harmonic(
+                    last5,
+                    Direction::Bearish,
+                    ratios.0,
+                    ratios.1,
+                    ratios.2,
+                    ratios.3,
+                    pivot_tolerance,
+                ) {
                     out[i] = -100;
                 }
             }
@@ -213,12 +231,18 @@ fn detect_harmonic(
 
 #[inline]
 fn is_bullish_sequence(p: &[Pivot]) -> bool {
-    p[0].price <= p[1].price && p[1].price >= p[2].price && p[2].price <= p[3].price && p[3].price >= p[4].price
+    p[0].price <= p[1].price
+        && p[1].price >= p[2].price
+        && p[2].price <= p[3].price
+        && p[3].price >= p[4].price
 }
 
 #[inline]
 fn is_bearish_sequence(p: &[Pivot]) -> bool {
-    p[0].price >= p[1].price && p[1].price <= p[2].price && p[2].price >= p[3].price && p[3].price <= p[4].price
+    p[0].price >= p[1].price
+        && p[1].price <= p[2].price
+        && p[2].price >= p[3].price
+        && p[3].price <= p[4].price
 }
 
 #[inline]
@@ -244,7 +268,12 @@ pub fn gartley(high: &[f64], low: &[f64], pivot_tolerance: f64) -> Result<Patter
         low,
         3,
         pivot_tolerance,
-        ((0.618, 0.618), (0.382, 0.886), (1.272, 1.618), (0.786, 0.786)),
+        (
+            (0.618, 0.618),
+            (0.382, 0.886),
+            (1.272, 1.618),
+            (0.786, 0.786),
+        ),
     )
 }
 
@@ -266,7 +295,12 @@ pub fn butterfly(high: &[f64], low: &[f64], pivot_tolerance: f64) -> Result<Patt
         low,
         3,
         pivot_tolerance,
-        ((0.786, 0.786), (0.382, 0.886), (1.618, 2.618), (1.272, 1.618)),
+        (
+            (0.786, 0.786),
+            (0.382, 0.886),
+            (1.618, 2.618),
+            (1.272, 1.618),
+        ),
     )
 }
 
@@ -288,7 +322,12 @@ pub fn bat(high: &[f64], low: &[f64], pivot_tolerance: f64) -> Result<PatternRes
         low,
         3,
         pivot_tolerance,
-        ((0.382, 0.500), (0.382, 0.886), (1.618, 2.618), (0.886, 0.886)),
+        (
+            (0.382, 0.500),
+            (0.382, 0.886),
+            (1.618, 2.618),
+            (0.886, 0.886),
+        ),
     )
 }
 
@@ -310,7 +349,12 @@ pub fn crab(high: &[f64], low: &[f64], pivot_tolerance: f64) -> Result<PatternRe
         low,
         3,
         pivot_tolerance,
-        ((0.382, 0.618), (0.382, 0.886), (2.618, 3.618), (1.618, 1.618)),
+        (
+            (0.382, 0.618),
+            (0.382, 0.886),
+            (2.618, 3.618),
+            (1.618, 1.618),
+        ),
     )
 }
 
@@ -332,7 +376,12 @@ pub fn shark(high: &[f64], low: &[f64], pivot_tolerance: f64) -> Result<PatternR
         low,
         3,
         pivot_tolerance,
-        ((0.446, 0.618), (1.130, 1.618), (1.618, 2.236), (0.886, 1.130)),
+        (
+            (0.446, 0.618),
+            (1.130, 1.618),
+            (1.618, 2.236),
+            (0.886, 1.130),
+        ),
     )
 }
 

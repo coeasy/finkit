@@ -1,8 +1,8 @@
-use crate::streaming::rolling_minmax::{RollingMax, RollingMin};
-use crate::streaming::overlap::sma::StreamingSma;
-use crate::streaming::momentum::stoch::StochOutput;
-use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::momentum::stoch::StochOutput;
+use crate::streaming::overlap::sma::StreamingSma;
+use crate::streaming::rolling_minmax::{RollingMax, RollingMin};
+use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 
 /// Streaming Stochastic Fast (STOCHF).
 ///
@@ -105,16 +105,22 @@ impl StreamingIndicator<(f64, f64, f64), StochOutput> for StreamingStochF {
         self.hl_len >= self.fastk_period
     }
 
-        impl_standard_methods!(output = StochOutput);
-
-
+    impl_standard_methods!(output = StochOutput);
 }
 
 impl IndicatorMeta for StreamingStochF {
-    fn name() -> &'static str { "STOCHF" }
-    fn category() -> &'static str { "momentum" }
-    fn description() -> &'static str { "Stochastic Fast" }
-    fn warm_up_period(&self) -> usize { self.fastk_period }
+    fn name() -> &'static str {
+        "STOCHF"
+    }
+    fn category() -> &'static str {
+        "momentum"
+    }
+    fn description() -> &'static str {
+        "Stochastic Fast"
+    }
+    fn warm_up_period(&self) -> usize {
+        self.fastk_period
+    }
 }
 
 #[cfg(test)]
@@ -135,7 +141,11 @@ mod tests {
             last = sf.next(d);
         }
         let v = last.unwrap();
-        assert!((0.0..=100.0).contains(&v.k), "StochF K should be 0-100, got {}", v.k);
+        assert!(
+            (0.0..=100.0).contains(&v.k),
+            "StochF K should be 0-100, got {}",
+            v.k
+        );
     }
 
     #[test]
@@ -179,19 +189,33 @@ mod tests {
             // 线性参考 max/min
             highs.push(h);
             lows.push(l);
-            if highs.len() > fk { highs.remove(0); }
-            if lows.len() > fk { lows.remove(0); }
+            if highs.len() > fk {
+                highs.remove(0);
+            }
+            if lows.len() > fk {
+                lows.remove(0);
+            }
             let lin_opt = {
-                if highs.len() < fk { None } else {
+                if highs.len() < fk {
+                    None
+                } else {
                     let highest = highs.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
                     let lowest = lows.iter().cloned().fold(f64::INFINITY, f64::min);
                     let range = highest - lowest;
                     let k = if range.abs() > 1e-15 {
                         (c - lowest) / range * 100.0
-                    } else { 50.0 };
+                    } else {
+                        50.0
+                    };
                     ks.push(k);
-                    if ks.len() > fd { ks.remove(0); }
-                    let d = if ks.len() < fd { f64::NAN } else { ks.iter().sum::<f64>() / fd as f64 };
+                    if ks.len() > fd {
+                        ks.remove(0);
+                    }
+                    let d = if ks.len() < fd {
+                        f64::NAN
+                    } else {
+                        ks.iter().sum::<f64>() / fd as f64
+                    };
                     Some((k, d))
                 }
             };
@@ -199,9 +223,19 @@ mod tests {
             match (lin_opt, opt) {
                 (None, None) => continue,
                 (Some((lk, ld)), Some(v)) => {
-                    assert!((v.k - lk).abs() < 1e-9, "STOCHF K mismatch: {} vs {}", v.k, lk);
+                    assert!(
+                        (v.k - lk).abs() < 1e-9,
+                        "STOCHF K mismatch: {} vs {}",
+                        v.k,
+                        lk
+                    );
                     if ld.is_finite() {
-                        assert!((v.d - ld).abs() < 1e-9, "STOCHF D mismatch: {} vs {}", v.d, ld);
+                        assert!(
+                            (v.d - ld).abs() < 1e-9,
+                            "STOCHF D mismatch: {} vs {}",
+                            v.d,
+                            ld
+                        );
                     }
                 }
                 (Some(_), None) => panic!("linear ready, streaming not ready"),

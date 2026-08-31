@@ -547,10 +547,7 @@ pub fn plum_twice(
         // Current bar: bullish, closes above neckline, volume ≥ 1.5x average
         let o = open[i];
         let c = close[i];
-        if is_bullish(o, c)
-            && c > neckline
-            && volume[i] > vol_ma10[i] * 1.5
-        {
+        if is_bullish(o, c) && c > neckline && volume[i] > vol_ma10[i] * 1.5 {
             out[i] = 100;
         }
     }
@@ -588,9 +585,8 @@ pub fn cloud_break(
         // Current bar: bullish, body covers the 3-bar decline
         let o = open[i];
         let c = close[i];
-        if is_bullish(o, c)
-            && body(o, c) >= atr_i * 0.6
-            && c >= close[i - 3]  // recovers back to the start of the decline
+        if is_bullish(o, c) && body(o, c) >= atr_i * 0.6 && c >= close[i - 3]
+        // recovers back to the start of the decline
         {
             out[i] = 100;
         }
@@ -672,7 +668,8 @@ pub fn yang_through_three_ma(
         // Bullish bar with body crossing all three MAs
         if is_bullish(o, c)
             && o < sma20[i].min(sma10[i]).min(sma5[i])  // open below all
-            && c > sma20[i].max(sma10[i]).max(sma5[i])  // close above all
+            && c > sma20[i].max(sma10[i]).max(sma5[i])
+        // close above all
         {
             out[i] = 100;
         }
@@ -702,7 +699,8 @@ pub fn yin_through_three_ma(
         }
         if is_bearish(o, c)
             && o > sma20[i].max(sma10[i]).max(sma5[i])  // open above all
-            && c < sma20[i].min(sma10[i]).min(sma5[i])  // close below all
+            && c < sma20[i].min(sma10[i]).min(sma5[i])
+        // close below all
         {
             out[i] = -100;
         }
@@ -1006,12 +1004,7 @@ pub fn doji_inside(
 }
 
 /// 身怀六甲 — 大实体包小实体（小实体非 Doji）
-pub fn inside_bar(
-    open: &[f64],
-    high: &[f64],
-    low: &[f64],
-    close: &[f64],
-) -> Result<PatternResult> {
+pub fn inside_bar(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result<PatternResult> {
     validate_ohlcv(open, high, low, close, 2)?;
     let n = close.len();
     let mut out = init_signal(n);
@@ -1159,11 +1152,7 @@ pub fn hammer_line(
         let b = body(o, c);
         let up = upper_shadow(h, o, c);
         let lo = lower_shadow(l, o, c);
-        if b > 0.0
-            && b < atr_i * 0.4
-            && lo >= b * 2.0
-            && up <= b * 0.5
-        {
+        if b > 0.0 && b < atr_i * 0.4 && lo >= b * 2.0 && up <= b * 0.5 {
             out[i] = 100;
         }
     }
@@ -1198,11 +1187,7 @@ pub fn hanging_man(
         let b = body(o, c);
         let up = upper_shadow(h, o, c);
         let lo = lower_shadow(l, o, c);
-        if b > 0.0
-            && b < atr_i * 0.4
-            && lo >= b * 2.0
-            && up <= b * 0.5
-        {
+        if b > 0.0 && b < atr_i * 0.4 && lo >= b * 2.0 && up <= b * 0.5 {
             out[i] = -100;
         }
     }
@@ -1237,11 +1222,7 @@ pub fn inverted_hammer_line(
         let b = body(o, c);
         let up = upper_shadow(h, o, c);
         let lo = lower_shadow(l, o, c);
-        if b > 0.0
-            && b < atr_i * 0.4
-            && up >= b * 2.0
-            && lo <= b * 0.5
-        {
+        if b > 0.0 && b < atr_i * 0.4 && up >= b * 2.0 && lo <= b * 0.5 {
             out[i] = 100;
         }
     }
@@ -1276,11 +1257,7 @@ pub fn shooting_star(
         let b = body(o, c);
         let up = upper_shadow(h, o, c);
         let lo = lower_shadow(l, o, c);
-        if b > 0.0
-            && b < atr_i * 0.4
-            && up >= b * 2.0
-            && lo <= b * 0.5
-        {
+        if b > 0.0 && b < atr_i * 0.4 && up >= b * 2.0 && lo <= b * 0.5 {
             out[i] = -100;
         }
     }
@@ -1443,12 +1420,7 @@ pub fn high_five_yin(
 /// # 规则
 /// * open == close == high（容差）
 /// * lower_shadow >= body 的 3 倍
-pub fn t_cross(
-    open: &[f64],
-    high: &[f64],
-    low: &[f64],
-    close: &[f64],
-) -> Result<PatternResult> {
+pub fn t_cross(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result<PatternResult> {
     validate_ohlcv(open, high, low, close, 1)?;
     let n = close.len();
     let mut out = init_signal(n);
@@ -1554,7 +1526,10 @@ mod tests {
         c[15] = 14.6;
         v[15] = 250.0;
         let out = hermit_pointing_way(&o, &h, &l, &c, &v, 5).unwrap();
-        assert!(out.iter().any(|&s| s == 100), "expected at least one hermit signal");
+        assert!(
+            out.iter().any(|&s| s == 100),
+            "expected at least one hermit signal"
+        );
     }
 
     #[test]
@@ -1592,32 +1567,18 @@ mod tests {
         // The engulfing fires at i=10 once ATR(5) is ready.
         let o = vec![
             10.0, 10.0, 10.0, 10.0, 10.0, // 5 warmup
-            10.0, 10.0, 9.0,                // warmup
-            9.0,                            // bearish bar
-            8.0,                            // bullish engulfing (engulfs bar i-1)
+            10.0, 10.0, 9.0, // warmup
+            9.0, // bearish bar
+            8.0, // bullish engulfing (engulfs bar i-1)
             9.5, 10.0,
         ];
         let c = vec![
-            10.5, 10.5, 10.5, 10.5, 10.5,
-            10.0, 9.7, 8.5,
-            8.5,
-            10.0,
-            10.3, 10.5,
+            10.5, 10.5, 10.5, 10.5, 10.5, 10.0, 9.7, 8.5, 8.5, 10.0, 10.3, 10.5,
         ];
         let h = vec![
-            10.6, 10.6, 10.6, 10.6, 10.6,
-            10.1, 10.1, 9.1,
-            9.1,
-            10.1,
-            10.4, 10.6,
+            10.6, 10.6, 10.6, 10.6, 10.6, 10.1, 10.1, 9.1, 9.1, 10.1, 10.4, 10.6,
         ];
-        let l = vec![
-            9.9, 9.9, 9.9, 9.9, 9.9,
-            9.4, 9.4, 8.4,
-            8.4,
-            7.9,
-            9.4, 9.9,
-        ];
+        let l = vec![9.9, 9.9, 9.9, 9.9, 9.9, 9.4, 9.4, 8.4, 8.4, 7.9, 9.4, 9.9];
         let out = yang_engulfing(&o, &h, &l, &c).unwrap();
         // bar 9: opens 8.0, closes 10.0 — engulfs bar 8 (o=9.0, c=8.5)
         assert_eq!(out[9], 100);
@@ -1700,9 +1661,15 @@ mod tests {
         let mut h = vec![10.2; n];
         let mut l = vec![9.5; n];
         // Three bars with progressive gap-downs
-        o[3] = 9.5; c[3] = 9.0; l[3] = 8.9;
-        o[4] = 8.9; c[4] = 8.5; l[4] = 8.4;
-        o[5] = 8.4; c[5] = 8.0; l[5] = 7.9;
+        o[3] = 9.5;
+        c[3] = 9.0;
+        l[3] = 8.9;
+        o[4] = 8.9;
+        c[4] = 8.5;
+        l[4] = 8.4;
+        o[5] = 8.4;
+        c[5] = 8.0;
+        l[5] = 7.9;
         let out = three_gap_downs(&o, &h, &l, &c).unwrap();
         assert_eq!(out[5], -100);
     }
@@ -1716,21 +1683,9 @@ mod tests {
             10.5, // bullish prev (open 10.5, close 11.0)
             11.5, // gap-up bearish (open 11.5, close 9.5 — covers prev body)
         ];
-        let c = vec![
-            10.15, 10.25, 10.35, 10.45, 10.55,
-            11.0,
-            9.5,
-        ];
-        let h = vec![
-            10.3, 10.3, 10.4, 10.5, 10.6,
-            11.2,
-            11.6,
-        ];
-        let l = vec![
-            9.9, 10.0, 10.1, 10.2, 10.3,
-            10.4,
-            9.4,
-        ];
+        let c = vec![10.15, 10.25, 10.35, 10.45, 10.55, 11.0, 9.5];
+        let h = vec![10.3, 10.3, 10.4, 10.5, 10.6, 11.2, 11.6];
+        let l = vec![9.9, 10.0, 10.1, 10.2, 10.3, 10.4, 9.4];
         let out = bearish_counterattack(&o, &h, &l, &c).unwrap();
         assert_eq!(out[6], -100);
     }
@@ -1743,11 +1698,20 @@ mod tests {
         let mut h = vec![10.0; n];
         let mut l = vec![10.0; n];
         // Bar 5: big bearish body
-        o[5] = 12.0; c[5] = 10.0; h[5] = 12.1; l[5] = 9.9;
+        o[5] = 12.0;
+        c[5] = 10.0;
+        h[5] = 12.1;
+        l[5] = 9.9;
         // Bar 6: small bullish inside
-        o[6] = 11.0; c[6] = 11.2; h[6] = 11.3; l[6] = 10.9;
+        o[6] = 11.0;
+        c[6] = 11.2;
+        h[6] = 11.3;
+        l[6] = 10.9;
         let out = inside_bar(&o, &h, &l, &c).unwrap();
-        assert_eq!(out[6], 100, "inside bar after bearish big body should be 100");
+        assert_eq!(
+            out[6], 100,
+            "inside bar after bearish big body should be 100"
+        );
     }
 
     #[test]
@@ -1790,7 +1754,9 @@ mod tests {
         let o = close.clone();
         let h: Vec<f64> = close.iter().map(|&x| x + 0.5).collect();
         let l: Vec<f64> = close.iter().map(|&x| x - 0.5).collect();
-        let volume: Vec<f64> = (0..n).map(|i| 100.0 + if i == 49 { 500.0 } else { 0.0 }).collect();
+        let volume: Vec<f64> = (0..n)
+            .map(|i| 100.0 + if i == 49 { 500.0 } else { 0.0 })
+            .collect();
         let out = plum_twice(&o, &h, &l, &close, &volume, 10).unwrap();
         assert_eq!(out.len(), n);
     }

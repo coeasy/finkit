@@ -22,9 +22,9 @@ mod cache_hit_tests {
 
         let result1 = engine.eval("CLOSE + OPEN", &mut ctx).unwrap();
         assert!(engine.cache_hit("CLOSE + OPEN"));
-        
+
         let result2 = engine.eval("CLOSE + OPEN", &mut ctx).unwrap();
-        
+
         for i in 0..10 {
             assert!((result1[i] - result2[i]).abs() < 1e-10);
         }
@@ -36,10 +36,10 @@ mod cache_hit_tests {
         let mut ctx = make_ctx(30);
 
         let formula = "MA(CLOSE, 5) + MA(OPEN, 10)";
-        
+
         engine.eval(formula, &mut ctx).unwrap();
         assert!(engine.cache_hit(formula));
-        
+
         engine.eval(formula, &mut ctx).unwrap();
         assert_eq!(engine.cache_size(), 1);
     }
@@ -61,7 +61,7 @@ mod cache_hit_tests {
         }
 
         assert_eq!(engine.cache_size(), 4);
-        
+
         for formula in &formulas {
             assert!(engine.cache_hit(formula));
         }
@@ -74,7 +74,7 @@ mod cache_hit_tests {
 
         engine.eval("CLOSE + OPEN", &mut ctx).unwrap();
         assert!(engine.cache_hit("CLOSE + OPEN"));
-        
+
         assert!(!engine.cache_hit("CLOSE+OPEN"));
         assert!(!engine.cache_hit("CLOSE  +  OPEN"));
     }
@@ -86,7 +86,7 @@ mod cache_miss_tests {
     #[test]
     fn test_cache_miss_new_formula() {
         let mut engine = FormulaEngine::new();
-        
+
         assert!(!engine.cache_hit("CLOSE + OPEN"));
     }
 
@@ -97,9 +97,9 @@ mod cache_miss_tests {
 
         engine.eval("CLOSE + OPEN", &mut ctx).unwrap();
         assert!(engine.cache_hit("CLOSE + OPEN"));
-        
+
         engine.clear_cache();
-        
+
         assert!(!engine.cache_hit("CLOSE + OPEN"));
     }
 
@@ -109,7 +109,7 @@ mod cache_miss_tests {
         let mut ctx = make_ctx(10);
 
         engine.eval("CLOSE + OPEN", &mut ctx).unwrap();
-        
+
         assert!(!engine.cache_hit("CLOSE - OPEN"));
         assert!(!engine.cache_hit("OPEN + CLOSE"));
     }
@@ -126,11 +126,11 @@ mod cache_invalidation_tests {
         engine.eval("CLOSE + 1", &mut ctx).unwrap();
         engine.eval("CLOSE + 2", &mut ctx).unwrap();
         engine.eval("CLOSE + 3", &mut ctx).unwrap();
-        
+
         assert_eq!(engine.cache_size(), 3);
-        
+
         engine.clear_cache();
-        
+
         assert_eq!(engine.cache_size(), 0);
     }
 
@@ -142,11 +142,11 @@ mod cache_invalidation_tests {
         engine.eval("A: 1", &mut ctx).unwrap();
         engine.eval("B: 2", &mut ctx).unwrap();
         engine.eval("C: 3", &mut ctx).unwrap();
-        
+
         assert_eq!(engine.cache_size(), 3);
-        
+
         engine.eval("D: 4", &mut ctx).unwrap();
-        
+
         assert_eq!(engine.cache_size(), 3);
         assert!(!engine.cache_hit("A: 1"));
         assert!(engine.cache_hit("B: 2"));
@@ -162,11 +162,11 @@ mod cache_invalidation_tests {
         engine.eval("A: 1", &mut ctx).unwrap();
         engine.eval("B: 2", &mut ctx).unwrap();
         engine.eval("C: 3", &mut ctx).unwrap();
-        
+
         engine.eval("A: 1", &mut ctx).unwrap();
-        
+
         engine.eval("D: 4", &mut ctx).unwrap();
-        
+
         assert!(engine.cache_hit("A: 1"));
         assert!(!engine.cache_hit("B: 2"));
         assert!(engine.cache_hit("C: 3"));
@@ -196,7 +196,7 @@ mod cache_performance_tests {
         let mut ctx = make_ctx(100);
 
         let complex_formula = "MA(CLOSE, 5) + MA(HIGH, 10) - MA(LOW, 20) * 0.5 + VOLUME / 10000";
-        
+
         let start_compile = Instant::now();
         engine.eval(complex_formula, &mut ctx).unwrap();
         let compile_time = start_compile.elapsed();
@@ -211,10 +211,15 @@ mod cache_performance_tests {
 
         println!("Initial compile time: {:?}", compile_time);
         println!("Average cached eval time: {:?}", avg_cached_time);
-        println!("Total cached time for {} iterations: {:?}", iterations, cached_total_time);
+        println!(
+            "Total cached time for {} iterations: {:?}",
+            iterations, cached_total_time
+        );
 
-        assert!(avg_cached_time < compile_time, 
-            "Cached evaluation should be faster than initial compilation");
+        assert!(
+            avg_cached_time < compile_time,
+            "Cached evaluation should be faster than initial compilation"
+        );
     }
 
     #[test]
@@ -250,8 +255,10 @@ mod cache_performance_tests {
         println!("Without cache reuse: {:?}", no_cache_time);
         println!("With cache reuse: {:?}", with_cache_time);
 
-        assert!(with_cache_time < no_cache_time,
-            "Cache reuse should be faster than recompiling");
+        assert!(
+            with_cache_time < no_cache_time,
+            "Cache reuse should be faster than recompiling"
+        );
     }
 }
 
@@ -266,9 +273,9 @@ mod cache_data_structure_tests {
             ast: AstNode::Number(42.0),
             source: "42".to_string(),
         };
-        
+
         cache.insert("42", formula);
-        
+
         assert!(cache.contains("42"));
         let retrieved = cache.get("42");
         assert!(retrieved.is_some());
@@ -281,9 +288,9 @@ mod cache_data_structure_tests {
             ast: AstNode::Number(42.0),
             source: "test_formula".to_string(),
         };
-        
+
         cache.insert("test_formula", formula);
-        
+
         assert!(cache.contains("test_formula"));
         assert!(cache.get("test_formula").is_some());
     }
@@ -291,22 +298,28 @@ mod cache_data_structure_tests {
     #[test]
     fn test_cache_different_sources_different_hashes() {
         let mut cache = FormulaCache::new(10);
-        
-        cache.insert("formula1", CompiledFormula { 
-            ast: AstNode::Number(1.0), 
-            source: "formula1".to_string() 
-        });
-        cache.insert("formula2", CompiledFormula { 
-            ast: AstNode::Number(2.0), 
-            source: "formula2".to_string() 
-        });
-        
+
+        cache.insert(
+            "formula1",
+            CompiledFormula {
+                ast: AstNode::Number(1.0),
+                source: "formula1".to_string(),
+            },
+        );
+        cache.insert(
+            "formula2",
+            CompiledFormula {
+                ast: AstNode::Number(2.0),
+                source: "formula2".to_string(),
+            },
+        );
+
         assert!(cache.contains("formula1"));
         assert!(cache.contains("formula2"));
-        
+
         let f1 = cache.get_cloned("formula1").unwrap();
         let f2 = cache.get_cloned("formula2").unwrap();
-        
+
         if let (AstNode::Number(n1), AstNode::Number(n2)) = (&f1.ast, &f2.ast) {
             assert_ne!(n1, n2);
         } else {
@@ -317,17 +330,23 @@ mod cache_data_structure_tests {
     #[test]
     fn test_cache_update_existing() {
         let mut cache = FormulaCache::new(10);
-        
-        cache.insert("test", CompiledFormula { 
-            ast: AstNode::Number(1.0), 
-            source: "test".to_string() 
-        });
-        
-        cache.insert("test", CompiledFormula { 
-            ast: AstNode::Number(2.0), 
-            source: "test_updated".to_string() 
-        });
-        
+
+        cache.insert(
+            "test",
+            CompiledFormula {
+                ast: AstNode::Number(1.0),
+                source: "test".to_string(),
+            },
+        );
+
+        cache.insert(
+            "test",
+            CompiledFormula {
+                ast: AstNode::Number(2.0),
+                source: "test_updated".to_string(),
+            },
+        );
+
         assert_eq!(cache.len(), 1);
         let retrieved = cache.get("test").unwrap();
         if let AstNode::Number(n) = &retrieved.ast {
@@ -340,18 +359,21 @@ mod cache_data_structure_tests {
     #[test]
     fn test_cache_remove() {
         let mut cache = FormulaCache::new(10);
-        
-        cache.insert("test", CompiledFormula { 
-            ast: AstNode::Number(1.0), 
-            source: "test".to_string() 
-        });
-        
+
+        cache.insert(
+            "test",
+            CompiledFormula {
+                ast: AstNode::Number(1.0),
+                source: "test".to_string(),
+            },
+        );
+
         assert!(cache.contains("test"));
-        
+
         let removed = cache.remove("test");
         assert!(removed.is_some());
         assert!(!cache.contains("test"));
-        
+
         let removed_again = cache.remove("test");
         assert!(removed_again.is_none());
     }
@@ -366,12 +388,15 @@ mod cache_data_structure_tests {
     fn test_cache_is_empty() {
         let cache = FormulaCache::new(10);
         assert!(cache.is_empty());
-        
+
         let mut cache = FormulaCache::new(10);
-        cache.insert("test", CompiledFormula { 
-            ast: AstNode::Number(1.0), 
-            source: "test".to_string() 
-        });
+        cache.insert(
+            "test",
+            CompiledFormula {
+                ast: AstNode::Number(1.0),
+                source: "test".to_string(),
+            },
+        );
         assert!(!cache.is_empty());
     }
 }
@@ -384,10 +409,14 @@ mod compiler_cache_tests {
         let mut compiler = FormulaCompiler::new(10);
         let mut ctx = make_ctx(10);
 
-        compiler.compile_and_execute("CLOSE + OPEN", &mut ctx).unwrap();
+        compiler
+            .compile_and_execute("CLOSE + OPEN", &mut ctx)
+            .unwrap();
         assert!(compiler.cache().contains("CLOSE + OPEN"));
 
-        compiler.compile_and_execute("CLOSE + OPEN", &mut ctx).unwrap();
+        compiler
+            .compile_and_execute("CLOSE + OPEN", &mut ctx)
+            .unwrap();
         assert_eq!(compiler.cache().len(), 1);
     }
 
@@ -404,11 +433,11 @@ mod compiler_cache_tests {
 
         compiler.compile_and_execute("CLOSE + 1", &mut ctx).unwrap();
         compiler.compile_and_execute("CLOSE + 2", &mut ctx).unwrap();
-        
+
         assert_eq!(compiler.cache().len(), 2);
-        
+
         compiler.cache_mut().clear();
-        
+
         assert_eq!(compiler.cache().len(), 0);
     }
 

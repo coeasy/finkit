@@ -24,8 +24,7 @@ fn make_ohlcv(len: usize) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) 
     let mut vol = Vec::with_capacity(len);
     for i in 0..len {
         let t = i as f64;
-        let noise =
-            (t * 0.37).sin() * 2.0 + (t * 1.13).cos() * 1.5 + (t * 3.71).sin() * 0.8;
+        let noise = (t * 0.37).sin() * 2.0 + (t * 1.13).cos() * 1.5 + (t * 3.71).sin() * 0.8;
         let trend = t * 0.01;
         let p = 100.0 + trend + noise;
         open.push(p - 0.3);
@@ -117,8 +116,7 @@ fn bench_stochf(c: &mut Criterion) {
         g.throughput(Throughput::Elements(n as u64));
         g.bench_with_input(criterion::BenchmarkId::from_parameter(n), &n, |b, _| {
             b.iter(|| {
-                indicators::stochf(black_box(&h), black_box(&l), black_box(&c), 14, 3)
-                    .unwrap()
+                indicators::stochf(black_box(&h), black_box(&l), black_box(&c), 14, 3).unwrap()
             })
         });
     }
@@ -131,14 +129,7 @@ fn bench_ad(c: &mut Criterion) {
         let (_, h, l, c, v) = make_ohlcv(n);
         g.throughput(Throughput::Elements(n as u64));
         g.bench_with_input(criterion::BenchmarkId::from_parameter(n), &n, |b, _| {
-            b.iter(|| {
-                indicators::ad(
-                    black_box(&h),
-                    black_box(&l),
-                    black_box(&c),
-                    black_box(&v),
-                )
-            })
+            b.iter(|| indicators::ad(black_box(&h), black_box(&l), black_box(&c), black_box(&v)))
         });
     }
     g.finish();
@@ -224,7 +215,9 @@ fn bench_rsi_scalar(c: &mut Criterion) {
         let mut out = vec![0.0f64; n];
         g.throughput(Throughput::Elements(n as u64));
         g.bench_with_input(criterion::BenchmarkId::from_parameter(n), &n, |b, _| {
-            b.iter(|| finkit::math::simd_kernels::rsi_scalar(black_box(&c), 14, black_box(&mut out)))
+            b.iter(|| {
+                finkit::math::simd_kernels::rsi_scalar(black_box(&c), 14, black_box(&mut out))
+            })
         });
     }
     g.finish();

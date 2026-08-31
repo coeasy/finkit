@@ -1,10 +1,10 @@
 //! Node.js bindings for parameter sweep API.
 
-use napi::bindgen_prelude::*;
-use napi_derive::napi;
 use finkit::indicators::sweep::{ema_sweep, rsi_sweep, sma_sweep};
 use finkit::indicators::sweep_engine::{ParamRange, SweepEngine};
 use finkit::indicators::sweepable::{EmaSweepable, RsiSweepable, SmaSweepable};
+use napi::bindgen_prelude::*;
+use napi_derive::napi;
 
 /// Sweep SMA across multiple periods.
 #[napi]
@@ -50,7 +50,11 @@ pub fn sweep_engine_run(
         .iter()
         .map(|r| {
             if r.len() < 3 {
-                ParamRange::new(r[0] as usize, r.get(1).copied().unwrap_or(r[0] + 1) as usize, 1)
+                ParamRange::new(
+                    r[0] as usize,
+                    r.get(1).copied().unwrap_or(r[0] + 1) as usize,
+                    1,
+                )
             } else {
                 ParamRange::new(r[0] as usize, r[1] as usize, r[2] as usize)
             }

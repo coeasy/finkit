@@ -49,10 +49,18 @@ impl StreamingIndicator for StreamingDema {
 }
 
 impl crate::streaming::IndicatorMeta for StreamingDema {
-    fn name() -> &'static str { "DEMA" }
-    fn category() -> &'static str { "overlap" }
-    fn description() -> &'static str { "Double Exponential Moving Average" }
-    fn warm_up_period(&self) -> usize { self.period * 2 - 1 }
+    fn name() -> &'static str {
+        "DEMA"
+    }
+    fn category() -> &'static str {
+        "overlap"
+    }
+    fn description() -> &'static str {
+        "Double Exponential Moving Average"
+    }
+    fn warm_up_period(&self) -> usize {
+        self.period * 2 - 1
+    }
 }
 
 #[cfg(test)]
@@ -80,7 +88,9 @@ mod tests {
 
     #[test]
     fn test_streaming_dema_reset() {
-        test_streaming_reset!(StreamingDema, 3, 10, |ind: &mut StreamingDema, i| { ind.next(i); });
+        test_streaming_reset!(StreamingDema, 3, 10, |ind: &mut StreamingDema, i| {
+            ind.next(i);
+        });
     }
 
     #[test]

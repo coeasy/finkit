@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 
 /// Streaming TRIN (Arms Index / Short-Term Trading Index).
 ///
@@ -20,7 +20,9 @@ impl StreamingTrin {
 }
 
 impl Default for StreamingTrin {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Input: (advances, declines, advancing_volume, declining_volume)
@@ -62,10 +64,18 @@ impl StreamingIndicator<(f64, f64, f64, f64)> for StreamingTrin {
 }
 
 impl IndicatorMeta for StreamingTrin {
-    fn name() -> &'static str { "TRIN" }
-    fn category() -> &'static str { "breadth" }
-    fn description() -> &'static str { "TRIN (Arms Index)" }
-    fn warm_up_period(&self) -> usize { 1 }
+    fn name() -> &'static str {
+        "TRIN"
+    }
+    fn category() -> &'static str {
+        "breadth"
+    }
+    fn description() -> &'static str {
+        "TRIN (Arms Index)"
+    }
+    fn warm_up_period(&self) -> usize {
+        1
+    }
 }
 
 #[cfg(test)]

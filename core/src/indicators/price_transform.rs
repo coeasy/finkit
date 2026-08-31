@@ -179,7 +179,7 @@ pub fn wclprice_into(high: &[f64], low: &[f64], close: &[f64], output: &mut [f64
     }
 
     let len = high.len();
-    
+
     // SIMD 优化：使用 AVX2 向量化计算 (high + low + 2*close) / 4.0
     #[cfg(all(feature = "std", target_arch = "x86_64"))]
     {
@@ -188,7 +188,7 @@ pub fn wclprice_into(high: &[f64], low: &[f64], close: &[f64], output: &mut [f64
             return Ok(());
         }
     }
-    
+
     // 标量回退
     for i in 0..len {
         output[i] = (high[i] + low[i] + 2.0 * close[i]) / 4.0;
@@ -201,39 +201,39 @@ pub fn wclprice_into(high: &[f64], low: &[f64], close: &[f64], output: &mut [f64
 #[target_feature(enable = "avx2")]
 unsafe fn wclprice_avx2(high: &[f64], low: &[f64], close: &[f64], output: &mut [f64]) {
     use std::arch::x86_64::*;
-    
+
     let len = high.len();
     let high_ptr = high.as_ptr();
     let low_ptr = low.as_ptr();
     let close_ptr = close.as_ptr();
     let output_ptr = output.as_mut_ptr();
-    
+
     // 常量 2.0 和 0.25 (1/4)
     let two = _mm256_set1_pd(2.0);
     let quarter = _mm256_set1_pd(0.25);
-    
+
     // 处理 4 的倍数部分
     let chunks = len / 4;
-    
+
     unsafe {
         for i in 0..chunks {
             let idx = i * 4;
-            
+
             // 加载 4 个元素
             let h = _mm256_loadu_pd(high_ptr.add(idx));
             let l = _mm256_loadu_pd(low_ptr.add(idx));
             let c = _mm256_loadu_pd(close_ptr.add(idx));
-            
+
             // 计算: (h + l + 2*c) * 0.25
             let c2 = _mm256_mul_pd(c, two);
             let sum = _mm256_add_pd(_mm256_add_pd(h, l), c2);
             let result = _mm256_mul_pd(sum, quarter);
-            
+
             // 存储结果
             _mm256_storeu_pd(output_ptr.add(idx), result);
         }
     }
-    
+
     // 处理剩余元素
     for i in (chunks * 4)..len {
         output[i] = (high[i] + low[i] + 2.0 * close[i]) / 4.0;
@@ -304,7 +304,13 @@ mod tests {
 }
 
 // Zero-copy `_into` variants (B4 / TASK-315)
-pub fn avgprice_into(open: &[f64], high: &[f64], low: &[f64], close: &[f64], output: &mut [f64]) -> crate::error::Result<()> {
+pub fn avgprice_into(
+    open: &[f64],
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    output: &mut [f64],
+) -> crate::error::Result<()> {
     let result = avgprice(open, high, low, close)?;
     if result.len() != output.len() {
         return Err(crate::error::TaError::InvalidParameter {
@@ -328,7 +334,12 @@ pub fn medprice_into(high: &[f64], low: &[f64], output: &mut [f64]) -> crate::er
     Ok(())
 }
 
-pub fn typprice_into(high: &[f64], low: &[f64], close: &[f64], output: &mut [f64]) -> crate::error::Result<()> {
+pub fn typprice_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    output: &mut [f64],
+) -> crate::error::Result<()> {
     let result = typprice(high, low, close)?;
     if result.len() != output.len() {
         return Err(crate::error::TaError::InvalidParameter {

@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::streaming::Ohlcv;
 
 /// Streaming Balance of Power (BOP).
@@ -53,17 +53,25 @@ impl<T: Ohlcv> StreamingIndicator<T> for StreamingBop {
 }
 
 impl IndicatorMeta for StreamingBop {
-    fn name() -> &'static str { "BOP" }
-    fn category() -> &'static str { "momentum" }
-    fn description() -> &'static str { "Balance of Power" }
-    fn warm_up_period(&self) -> usize { 1 }
+    fn name() -> &'static str {
+        "BOP"
+    }
+    fn category() -> &'static str {
+        "momentum"
+    }
+    fn description() -> &'static str {
+        "Balance of Power"
+    }
+    fn warm_up_period(&self) -> usize {
+        1
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::streaming::OhlcvBar;
     use crate::streaming::traits::StreamingIndicator;
+    use crate::streaming::OhlcvBar;
 
     #[test]
     fn test_streaming_bop_basic() {
@@ -87,9 +95,16 @@ mod tests {
         let mut bop = StreamingBop::new();
         let bar = OhlcvBar::new(100.0, 110.0, 95.0, 105.0, 1000.0);
         <StreamingBop as StreamingIndicator<OhlcvBar>>::next(&mut bop, bar);
-        assert!(<StreamingBop as StreamingIndicator<OhlcvBar>>::is_ready(&bop));
+        assert!(<StreamingBop as StreamingIndicator<OhlcvBar>>::is_ready(
+            &bop
+        ));
         <StreamingBop as StreamingIndicator<OhlcvBar>>::reset(&mut bop);
-        assert!(!<StreamingBop as StreamingIndicator<OhlcvBar>>::is_ready(&bop));
-        assert_eq!(<StreamingBop as StreamingIndicator<OhlcvBar>>::value(&bop), None);
+        assert!(!<StreamingBop as StreamingIndicator<OhlcvBar>>::is_ready(
+            &bop
+        ));
+        assert_eq!(
+            <StreamingBop as StreamingIndicator<OhlcvBar>>::value(&bop),
+            None
+        );
     }
 }

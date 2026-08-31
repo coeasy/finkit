@@ -34,7 +34,10 @@ pub fn classify_builtin_var(name: &str) -> Option<BuiltinVar> {
         Some(BuiltinVar::Low)
     } else if name.eq_ignore_ascii_case("O") || name.eq_ignore_ascii_case("OPEN") {
         Some(BuiltinVar::Open)
-    } else if name.eq_ignore_ascii_case("V") || name.eq_ignore_ascii_case("VOL") || name.eq_ignore_ascii_case("VOLUME") {
+    } else if name.eq_ignore_ascii_case("V")
+        || name.eq_ignore_ascii_case("VOL")
+        || name.eq_ignore_ascii_case("VOLUME")
+    {
         Some(BuiltinVar::Volume)
     } else if name.eq_ignore_ascii_case("AMOUNT") {
         Some(BuiltinVar::Amount)
@@ -75,7 +78,9 @@ impl VarNameCache {
 
     /// 预缓存常用变量名
     pub fn pre_cache_common(&mut self) {
-        for name in ["MA5", "MA10", "MA20", "MA60", "DIF", "DEA", "MACD", "RSI", "K", "D", "J"] {
+        for name in [
+            "MA5", "MA10", "MA20", "MA60", "DIF", "DEA", "MACD", "RSI", "K", "D", "J",
+        ] {
             self.get_or_create(name);
         }
     }

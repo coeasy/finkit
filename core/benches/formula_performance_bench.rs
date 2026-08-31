@@ -1,9 +1,11 @@
-use criterion::{black_box, criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput};
-use ndarray::Array1;
+use criterion::{
+    black_box, criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput,
+};
 use finkit::formula::FormulaEngine;
 use finkit::indicators::momentum::{macd, rsi};
 use finkit::math::moving_avg::{ema, sma};
 use finkit::math::statistics::{rolling_max, rolling_min};
+use ndarray::Array1;
 
 fn create_ohlcv_data(len: usize) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
     let mut close = Vec::with_capacity(len);
@@ -274,21 +276,17 @@ fn benchmark_complex_formula(c: &mut Criterion) {
         group.throughput(Throughput::Elements(data_len as u64));
 
         for (name, formula_src) in formulas.iter() {
-            group.bench_with_input(
-                BenchmarkId::new(*name, data_len),
-                &data_len,
-                |b, len| {
-                    let mut engine = FormulaEngine::new();
-                    let formula = engine.compile(formula_src).unwrap();
-                    b.iter_batched(
-                        || create_ctx(*len),
-                        |mut ctx| {
-                            let _ = black_box(engine.execute(&formula, &mut ctx).unwrap());
-                        },
-                        BatchSize::SmallInput,
-                    )
-                },
-            );
+            group.bench_with_input(BenchmarkId::new(*name, data_len), &data_len, |b, len| {
+                let mut engine = FormulaEngine::new();
+                let formula = engine.compile(formula_src).unwrap();
+                b.iter_batched(
+                    || create_ctx(*len),
+                    |mut ctx| {
+                        let _ = black_box(engine.execute(&formula, &mut ctx).unwrap());
+                    },
+                    BatchSize::SmallInput,
+                )
+            });
         }
     }
     group.finish();
@@ -367,7 +365,8 @@ fn benchmark_zero_copy_performance(c: &mut Criterion) {
                 b.iter_batched(
                     || create_ctx(*len),
                     |mut ctx| {
-                        let _ = black_box(engine.eval_zero_copy("MA(CLOSE, 20)", &mut ctx).unwrap());
+                        let _ =
+                            black_box(engine.eval_zero_copy("MA(CLOSE, 20)", &mut ctx).unwrap());
                     },
                     BatchSize::SmallInput,
                 )
@@ -398,7 +397,8 @@ fn benchmark_zero_copy_performance(c: &mut Criterion) {
                 b.iter_batched(
                     || create_ctx(*len),
                     |mut ctx| {
-                        let _ = black_box(engine.eval_zero_copy("RSI(CLOSE, 14)", &mut ctx).unwrap());
+                        let _ =
+                            black_box(engine.eval_zero_copy("RSI(CLOSE, 14)", &mut ctx).unwrap());
                     },
                     BatchSize::SmallInput,
                 )

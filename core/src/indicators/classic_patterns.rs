@@ -80,7 +80,9 @@ pub fn darvas_box(
         });
     }
     validate_param("lookback", "2..=200", || (2..=200).contains(&lookback))?;
-    validate_param("confirmation", "1..=50", || (1..=50).contains(&confirmation))?;
+    validate_param("confirmation", "1..=50", || {
+        (1..=50).contains(&confirmation)
+    })?;
     validate_input(high.len(), lookback + confirmation)?;
 
     let len = high.len();
@@ -89,7 +91,9 @@ pub fn darvas_box(
     let mut signal = Array1::from(vec![0i32; len]);
 
     // Rolling `lookback` high: high[i] == max(high[i-lookback+1..=i])
-    let _rolling_max: f64 = high[..lookback].iter().fold(f64::NEG_INFINITY, |a, b| a.max(*b));
+    let _rolling_max: f64 = high[..lookback]
+        .iter()
+        .fold(f64::NEG_INFINITY, |a, b| a.max(*b));
 
     let mut candidate_top: Option<f64> = None;
     let mut candidate_bottom: Option<f64> = None;
@@ -236,16 +240,15 @@ pub fn renko(high: &[f64], low: &[f64], box_size: f64) -> Result<RenkoResult> {
                 }
             } else {
                 let mut new_bottom = prev - box_size;
-                let n_dn = loop {
-                    if new_bottom < l {
-                        break 0i32;
-                    }
+                let n_dn = if new_bottom < l {
+                    0
+                } else {
                     let mut count = 0i32;
                     while new_bottom >= l {
                         count += 1;
                         new_bottom -= box_size;
                     }
-                    break count;
+                    count
                 };
                 if n_dn >= 2 {
                     let new_price = prev - (n_dn as f64) * box_size;
@@ -517,7 +520,12 @@ pub fn three_line_break(close: &[f64], lines: usize) -> Result<ThreeLineBreakRes
                 if let Some(last) = last_highs.last_mut() {
                     *last = c.max(*last);
                 }
-            } else if last_lows.len() >= lines && c < *last_lows.iter().min_by(|a, b| a.partial_cmp(b).unwrap()).unwrap() {
+            } else if last_lows.len() >= lines
+                && c < *last_lows
+                    .iter()
+                    .min_by(|a, b| a.partial_cmp(b).unwrap())
+                    .unwrap()
+            {
                 // Reverse down
                 cur_dir = -1;
                 cur_val = c;
@@ -542,7 +550,12 @@ pub fn three_line_break(close: &[f64], lines: usize) -> Result<ThreeLineBreakRes
                 if let Some(last) = last_lows.last_mut() {
                     *last = c.min(*last);
                 }
-            } else if last_highs.len() >= lines && c > *last_highs.iter().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap() {
+            } else if last_highs.len() >= lines
+                && c > *last_highs
+                    .iter()
+                    .max_by(|a, b| a.partial_cmp(b).unwrap())
+                    .unwrap()
+            {
                 // Reverse up
                 cur_dir = 1;
                 cur_val = c;
@@ -702,7 +715,9 @@ mod tests {
 
     #[test]
     fn test_three_line_break_basic() {
-        let close: Vec<f64> = (0..30).map(|i| 100.0 + (i as f64 * 0.5).sin() * 5.0).collect();
+        let close: Vec<f64> = (0..30)
+            .map(|i| 100.0 + (i as f64 * 0.5).sin() * 5.0)
+            .collect();
         let r = three_line_break(&close, 3).unwrap();
         assert_eq!(r.line.len(), 30);
     }

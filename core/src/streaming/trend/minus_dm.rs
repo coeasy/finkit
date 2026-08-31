@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 
 /// Streaming Minus Directional Movement (-DM).
 ///
@@ -72,10 +72,18 @@ impl StreamingIndicator<(f64, f64)> for StreamingMinusDm {
 }
 
 impl IndicatorMeta for StreamingMinusDm {
-    fn name() -> &'static str { "MINUS_DM" }
-    fn category() -> &'static str { "momentum" }
-    fn description() -> &'static str { "Minus Directional Movement" }
-    fn warm_up_period(&self) -> usize { 2 }
+    fn name() -> &'static str {
+        "MINUS_DM"
+    }
+    fn category() -> &'static str {
+        "momentum"
+    }
+    fn description() -> &'static str {
+        "Minus Directional Movement"
+    }
+    fn warm_up_period(&self) -> usize {
+        2
+    }
 }
 
 #[cfg(test)]

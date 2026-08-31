@@ -172,7 +172,9 @@ mod tests {
     #[test]
     fn test_streaming_sar_first_bar() {
         let mut sar = StreamingSar::new(0.02, 0.2);
-        let out = sar.next(&OhlcvBar::new(10.0, 12.0, 9.0, 11.0, 100.0)).unwrap();
+        let out = sar
+            .next(&OhlcvBar::new(10.0, 12.0, 9.0, 11.0, 100.0))
+            .unwrap();
         assert!((out.sar - 9.0).abs() < 1e-10);
         assert_eq!(out.direction, 1);
         assert!(sar.is_ready());

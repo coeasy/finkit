@@ -93,7 +93,12 @@ mod tests {
         for i in 19..100 {
             let v = result[i];
             assert!(!v.is_nan());
-            assert!((0.0..=1.0).contains(&v), "Value {} out of range at index {}", v, i);
+            assert!(
+                (0.0..=1.0).contains(&v),
+                "Value {} out of range at index {}",
+                v,
+                i
+            );
         }
     }
 

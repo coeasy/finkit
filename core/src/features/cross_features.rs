@@ -158,7 +158,8 @@ impl DeviationFeature {
     }
 
     fn raw_deviation(&self, close: &[f64]) -> Array1<f64> {
-        let ma = sma(close, self.period).unwrap_or_else(|_| Array1::from_elem(close.len(), f64::NAN));
+        let ma =
+            sma(close, self.period).unwrap_or_else(|_| Array1::from_elem(close.len(), f64::NAN));
         Array1::from_iter(close.iter().zip(ma.iter()).map(|(&p, &m)| p - m))
     }
 }
@@ -183,8 +184,8 @@ impl FeatureEngine for DeviationFeature {
         _volume: &[f64],
     ) -> FeatureMatrix {
         let dev = self.raw_deviation(close);
-        let atr_vals =
-            atr(high, low, close, self.atr_period).unwrap_or_else(|_| Array1::from_elem(close.len(), f64::NAN));
+        let atr_vals = atr(high, low, close, self.atr_period)
+            .unwrap_or_else(|_| Array1::from_elem(close.len(), f64::NAN));
 
         let norm_dev = Array1::from_iter(dev.iter().zip(atr_vals.iter()).map(|(&d, &a)| {
             if a.abs() > 1e-15 {
@@ -340,10 +341,17 @@ mod tests {
         let a = vec![1.0, 2.0, 3.0];
         let b = vec![4.0, 5.0, 6.0];
         let c = vec![7.0, 8.0, 9.0];
-        let cols = vec![("a", a.as_slice()), ("b", b.as_slice()), ("c", c.as_slice())];
+        let cols = vec![
+            ("a", a.as_slice()),
+            ("b", b.as_slice()),
+            ("c", c.as_slice()),
+        ];
         let matrix = auto_cross(&cols);
         assert_eq!(matrix.cols(), 3);
-        assert_eq!(matrix.column_names(), vec!["cross_a_b", "cross_a_c", "cross_b_c"]);
+        assert_eq!(
+            matrix.column_names(),
+            vec!["cross_a_b", "cross_a_c", "cross_b_c"]
+        );
     }
 
     #[test]
@@ -415,7 +423,11 @@ mod tests {
         let a = vec![1.0, 2.0, 3.0];
         let b = vec![4.0, 5.0, 6.0];
         let c = vec![7.0, 8.0, 9.0];
-        let cols = vec![("a", a.as_slice()), ("b", b.as_slice()), ("c", c.as_slice())];
+        let cols = vec![
+            ("a", a.as_slice()),
+            ("b", b.as_slice()),
+            ("c", c.as_slice()),
+        ];
         let matrix = polynomial_expand(&cols, 2);
         // 3 originals + 3 squared + 3 pairwise products
         assert_eq!(matrix.cols(), 9);
@@ -612,11 +624,7 @@ mod cross_corr_tests {
         let b: Vec<f64> = (0..20).map(|i| i as f64 * 2.0 + 1.0).collect();
         let c: Vec<f64> = (0..20).map(|i| 100.0 - i as f64).collect();
 
-        let result = cross_correlation_matrix(
-            &[&a, &b, &c],
-            CorrelationMethod::Pearson,
-        )
-        .unwrap();
+        let result = cross_correlation_matrix(&[&a, &b, &c], CorrelationMethod::Pearson).unwrap();
 
         assert_eq!(result.n, 3);
         // a and b are perfectly correlated
@@ -632,11 +640,7 @@ mod cross_corr_tests {
         let a: Vec<f64> = (0..20).map(|i| i as f64).collect();
         let b: Vec<f64> = (0..20).map(|i| (i as f64).powi(2)).collect();
 
-        let result = cross_correlation_matrix(
-            &[&a, &b],
-            CorrelationMethod::Spearman,
-        )
-        .unwrap();
+        let result = cross_correlation_matrix(&[&a, &b], CorrelationMethod::Spearman).unwrap();
 
         assert_eq!(result.n, 2);
         // Monotone relationship => Spearman = 1
@@ -654,12 +658,8 @@ mod cross_corr_tests {
         let a: Vec<f64> = (0..30).map(|i| i as f64).collect();
         let b: Vec<f64> = (0..30).map(|i| i as f64 * 2.0).collect();
 
-        let results = rolling_cross_correlation_matrix(
-            &[&a, &b],
-            10,
-            CorrelationMethod::Pearson,
-        )
-        .unwrap();
+        let results =
+            rolling_cross_correlation_matrix(&[&a, &b], 10, CorrelationMethod::Pearson).unwrap();
 
         assert_eq!(results.len(), 30);
         assert!(results[8].is_none());

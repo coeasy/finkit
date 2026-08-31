@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 
 /// Streaming Advance/Decline Line.
 ///
@@ -22,7 +22,9 @@ impl StreamingAdvanceDeclineLine {
 }
 
 impl Default for StreamingAdvanceDeclineLine {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Input: (advances, declines)
@@ -50,10 +52,18 @@ impl StreamingIndicator<(f64, f64)> for StreamingAdvanceDeclineLine {
 }
 
 impl IndicatorMeta for StreamingAdvanceDeclineLine {
-    fn name() -> &'static str { "ADVANCE_DECLINE_LINE" }
-    fn category() -> &'static str { "breadth" }
-    fn description() -> &'static str { "Advance/Decline Line" }
-    fn warm_up_period(&self) -> usize { 1 }
+    fn name() -> &'static str {
+        "ADVANCE_DECLINE_LINE"
+    }
+    fn category() -> &'static str {
+        "breadth"
+    }
+    fn description() -> &'static str {
+        "Advance/Decline Line"
+    }
+    fn warm_up_period(&self) -> usize {
+        1
+    }
 }
 
 #[cfg(test)]

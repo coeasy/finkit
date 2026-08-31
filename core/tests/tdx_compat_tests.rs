@@ -1,13 +1,17 @@
-use ndarray::Array1;
 use finkit::formula::engine::FormulaEngine;
 use finkit::formula::types::{ChipData, DynaInfo, FinanceData, FormulaContext, IndexData};
+use ndarray::Array1;
 
 fn make_ctx(len: usize) -> FormulaContext {
-    let close: Vec<f64> = (0..len).map(|i| 10.0 + (i as f64 * 0.3).sin() * 2.0 + i as f64 * 0.05).collect();
+    let close: Vec<f64> = (0..len)
+        .map(|i| 10.0 + (i as f64 * 0.3).sin() * 2.0 + i as f64 * 0.05)
+        .collect();
     let open: Vec<f64> = close.iter().map(|c| c - 0.1).collect();
     let high: Vec<f64> = close.iter().map(|c| c + 0.5).collect();
     let low: Vec<f64> = close.iter().map(|c| c - 0.5).collect();
-    let volume: Vec<f64> = (0..len).map(|i| 1000.0 + (i as f64 * 0.7).sin() * 200.0).collect();
+    let volume: Vec<f64> = (0..len)
+        .map(|i| 1000.0 + (i as f64 * 0.7).sin() * 200.0)
+        .collect();
     FormulaContext::new(
         Array1::from_vec(open),
         Array1::from_vec(high),
@@ -584,7 +588,9 @@ fn test_barssince() {
 fn test_barssincen() {
     let mut engine = FormulaEngine::new();
     let mut ctx = make_ctx(100);
-    let result = engine.eval("BARSSINCEN(CLOSE > 10.5, 3)", &mut ctx).unwrap();
+    let result = engine
+        .eval("BARSSINCEN(CLOSE > 10.5, 3)", &mut ctx)
+        .unwrap();
     assert_eq!(result.len(), 100);
 }
 
@@ -692,10 +698,10 @@ fn test_compatibility_summary() {
         ("PERIODTYPE()", true),
         ("REFDATE(CLOSE, 10)", true),
     ];
-    
+
     let mut passed = 0;
     let mut failed = 0;
-    
+
     for (formula, should_pass) in &formulas {
         let mut ctx = make_ctx(100);
         let result = engine.eval(formula, &mut ctx);
@@ -714,15 +720,18 @@ fn test_compatibility_summary() {
             }
         }
     }
-    
+
     let total = formulas.len();
     let compatibility_rate = (passed as f64 / total as f64) * 100.0;
-    
+
     println!("TDX Compatibility Test Summary:");
     println!("  Total formulas tested: {}", total);
     println!("  Passed: {}", passed);
     println!("  Failed: {}", failed);
     println!("  Compatibility rate: {:.1}%", compatibility_rate);
-    
-    assert!(compatibility_rate >= 95.0, "Compatibility rate should be >= 95%");
+
+    assert!(
+        compatibility_rate >= 95.0,
+        "Compatibility rate should be >= 95%"
+    );
 }

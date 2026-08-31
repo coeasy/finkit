@@ -1,8 +1,8 @@
-use napi_derive::napi;
 use finkit::transforms::{
     Diff, DiffN, LogReturn, MinMaxScaler, PctChange, PercentileRank, Pipeline as CorePipeline,
     Rank, RollingMean, RollingStd, RollingSum, StandardScaler, Transform, ZScore,
 };
+use napi_derive::napi;
 
 #[napi]
 pub struct Pipeline {
@@ -77,28 +77,36 @@ impl Pipeline {
     #[napi]
     pub fn add_diff_n(&mut self, order: u32) -> &Self {
         let pipeline = std::mem::take(&mut self.inner);
-        self.inner = pipeline.add(DiffN { order: order as usize });
+        self.inner = pipeline.add(DiffN {
+            order: order as usize,
+        });
         self
     }
 
     #[napi]
     pub fn add_rolling_mean(&mut self, window: u32) -> &Self {
         let pipeline = std::mem::take(&mut self.inner);
-        self.inner = pipeline.add(RollingMean { window: window as usize });
+        self.inner = pipeline.add(RollingMean {
+            window: window as usize,
+        });
         self
     }
 
     #[napi]
     pub fn add_rolling_std(&mut self, window: u32) -> &Self {
         let pipeline = std::mem::take(&mut self.inner);
-        self.inner = pipeline.add(RollingStd { window: window as usize });
+        self.inner = pipeline.add(RollingStd {
+            window: window as usize,
+        });
         self
     }
 
     #[napi]
     pub fn add_rolling_sum(&mut self, window: u32) -> &Self {
         let pipeline = std::mem::take(&mut self.inner);
-        self.inner = pipeline.add(RollingSum { window: window as usize });
+        self.inner = pipeline.add(RollingSum {
+            window: window as usize,
+        });
         self
     }
 
@@ -130,5 +138,8 @@ pub fn transform_diff(data: Vec<f64>) -> Vec<f64> {
 
 #[napi]
 pub fn transform_rolling_mean(data: Vec<f64>, window: u32) -> Vec<f64> {
-    RollingMean { window: window as usize }.transform(&data)
+    RollingMean {
+        window: window as usize,
+    }
+    .transform(&data)
 }

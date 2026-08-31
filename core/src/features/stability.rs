@@ -35,12 +35,7 @@ pub fn csi(expected: &[f64], actual: &[f64], bins: usize) -> f64 {
 }
 
 /// Rolling PSI: each window is compared to the first `window`-length segment as baseline.
-pub fn rolling_psi(
-    data: &[f64],
-    window: usize,
-    bins: usize,
-    method: BinningMethod,
-) -> Vec<f64> {
+pub fn rolling_psi(data: &[f64], window: usize, bins: usize, method: BinningMethod) -> Vec<f64> {
     if window == 0 || bins == 0 || data.len() < window {
         return Vec::new();
     }
@@ -76,9 +71,7 @@ fn equal_width_edges(data: &[f64], bins: usize) -> Vec<f64> {
         return vec![min, max + EPSILON];
     }
     let width = (max - min) / bins as f64;
-    (0..=bins)
-        .map(|i| min + width * i as f64)
-        .collect()
+    (0..=bins).map(|i| min + width * i as f64).collect()
 }
 
 fn equal_frequency_edges(data: &[f64], bins: usize) -> Vec<f64> {

@@ -1,6 +1,6 @@
+use crate::impl_standard_methods;
 use crate::streaming::overlap::ema::StreamingEma;
 use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
-use crate::impl_standard_methods;
 use crate::utils::true_range;
 
 /// Streaming Directional Movement Index (DX).
@@ -54,8 +54,16 @@ impl StreamingIndicator<(f64, f64, f64)> for StreamingDx {
         let up_move = high - self.prev_high;
         let down_move = self.prev_low - low;
 
-        let plus_dm = if up_move > 0.0 && up_move > down_move { up_move } else { 0.0 };
-        let minus_dm = if down_move > 0.0 && down_move > up_move { down_move } else { 0.0 };
+        let plus_dm = if up_move > 0.0 && up_move > down_move {
+            up_move
+        } else {
+            0.0
+        };
+        let minus_dm = if down_move > 0.0 && down_move > up_move {
+            down_move
+        } else {
+            0.0
+        };
 
         self.prev_high = high;
         self.prev_low = low;
@@ -110,10 +118,18 @@ impl StreamingIndicator<(f64, f64, f64)> for StreamingDx {
 }
 
 impl IndicatorMeta for StreamingDx {
-    fn name() -> &'static str { "DX" }
-    fn category() -> &'static str { "momentum" }
-    fn description() -> &'static str { "Directional Movement Index" }
-    fn warm_up_period(&self) -> usize { self.period + 1 }
+    fn name() -> &'static str {
+        "DX"
+    }
+    fn category() -> &'static str {
+        "momentum"
+    }
+    fn description() -> &'static str {
+        "Directional Movement Index"
+    }
+    fn warm_up_period(&self) -> usize {
+        self.period + 1
+    }
 }
 
 #[cfg(test)]

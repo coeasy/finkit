@@ -69,8 +69,7 @@ fn synthetic_ohlcv(n: usize) -> FormulaContext {
 
 #[test]
 fn pine_corpus_parse_map_eval() {
-    let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../tests/pine_corpus");
+    let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/pine_corpus");
     assert!(
         corpus_dir.exists(),
         "corpus dir not found at {:?}",
@@ -137,7 +136,10 @@ fn pine_corpus_parse_map_eval() {
     let total = entries.len();
     println!("\n===== Pine Corpus Regression =====");
     println!("total={total} parse_pass={parse_pass} map_pass={map_pass} eval_pass={eval_pass}");
-    println!("overall_eval_pass_rate={:.3}", eval_pass as f64 / total as f64);
+    println!(
+        "overall_eval_pass_rate={:.3}",
+        eval_pass as f64 / total as f64
+    );
     for (name, p, m, e) in &results {
         println!(
             "  {:<24} parse={} map={} eval={}",

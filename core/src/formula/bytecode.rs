@@ -7,7 +7,9 @@ use crate::formula::ast::*;
 use crate::formula::drawing::DrawResult;
 use crate::formula::functions::get_builtin_functions;
 use crate::formula::simd::SimdOps;
-use crate::formula::types::{BuiltinVar, FormulaContext, FormulaError, FormulaValue, classify_builtin_var};
+use crate::formula::types::{
+    classify_builtin_var, BuiltinVar, FormulaContext, FormulaError, FormulaValue,
+};
 
 // ============================================================
 // OpCode definitions
@@ -43,22 +45,40 @@ pub enum OpCode {
     Jump(usize),
     JumpIfFalse(usize),
 
-    Call { name: String, arg_count: usize },
+    Call {
+        name: String,
+        arg_count: usize,
+    },
 
     LoadData(String),
 
     Index,
 
-    CompoundStore { name: String, op: u8 },
+    CompoundStore {
+        name: String,
+        op: u8,
+    },
 
     Output(String),
 
     Select,
 
-    DrawText { text: String, color: String },
-    DrawIcon { color: String },
-    StickLine { empty: bool, color: String },
-    DrawGeneric { command: String, arg_count: usize, color: String },
+    DrawText {
+        text: String,
+        color: String,
+    },
+    DrawIcon {
+        color: String,
+    },
+    StickLine {
+        empty: bool,
+        color: String,
+    },
+    DrawGeneric {
+        command: String,
+        arg_count: usize,
+        color: String,
+    },
 
     PushString(String),
 }
@@ -234,7 +254,11 @@ impl BytecodeCompiler {
                 });
                 Ok(())
             }
-            AstNode::DrawGeneric { command, args, color } => {
+            AstNode::DrawGeneric {
+                command,
+                args,
+                color,
+            } => {
                 for arg in args {
                     self.compile(arg)?;
                 }
@@ -465,48 +489,100 @@ impl BytecodeVM {
                     ))
                 }
             }
-            OpCode::Add => self.exec_binary_op(ctx, |a, b, r| { for i in 0..a.len() { r[i] = a[i] + b[i]; } }),
-            OpCode::Sub => self.exec_binary_op(ctx, |a, b, r| { for i in 0..a.len() { r[i] = a[i] - b[i]; } }),
-            OpCode::Mul => self.exec_binary_op(ctx, |a, b, r| { for i in 0..a.len() { r[i] = a[i] * b[i]; } }),
+            OpCode::Add => self.exec_binary_op(ctx, |a, b, r| {
+                for i in 0..a.len() {
+                    r[i] = a[i] + b[i];
+                }
+            }),
+            OpCode::Sub => self.exec_binary_op(ctx, |a, b, r| {
+                for i in 0..a.len() {
+                    r[i] = a[i] - b[i];
+                }
+            }),
+            OpCode::Mul => self.exec_binary_op(ctx, |a, b, r| {
+                for i in 0..a.len() {
+                    r[i] = a[i] * b[i];
+                }
+            }),
             OpCode::Div => self.exec_binary_op(ctx, |a, b, r| {
                 for i in 0..a.len() {
-                    r[i] = if b[i].abs() < 1e-15 { f64::NAN } else { a[i] / b[i] };
+                    r[i] = if b[i].abs() < 1e-15 {
+                        f64::NAN
+                    } else {
+                        a[i] / b[i]
+                    };
                 }
             }),
             OpCode::Mod => self.exec_binary_op(ctx, |a, b, r| {
                 for i in 0..a.len() {
-                    r[i] = if b[i].abs() < 1e-15 { f64::NAN } else { a[i] - (a[i] / b[i]).floor() * b[i] };
+                    r[i] = if b[i].abs() < 1e-15 {
+                        f64::NAN
+                    } else {
+                        a[i] - (a[i] / b[i]).floor() * b[i]
+                    };
                 }
             }),
             OpCode::Pow => self.exec_binary_op(ctx, |a, b, r| {
-                for i in 0..a.len() { r[i] = a[i].powf(b[i]); }
+                for i in 0..a.len() {
+                    r[i] = a[i].powf(b[i]);
+                }
             }),
             OpCode::Gt => self.exec_binary_op(ctx, |a, b, r| {
-                for i in 0..a.len() { r[i] = if a[i] > b[i] { 1.0 } else { 0.0 }; }
+                for i in 0..a.len() {
+                    r[i] = if a[i] > b[i] { 1.0 } else { 0.0 };
+                }
             }),
             OpCode::Lt => self.exec_binary_op(ctx, |a, b, r| {
-                for i in 0..a.len() { r[i] = if a[i] < b[i] { 1.0 } else { 0.0 }; }
+                for i in 0..a.len() {
+                    r[i] = if a[i] < b[i] { 1.0 } else { 0.0 };
+                }
             }),
             OpCode::Gte => self.exec_binary_op(ctx, |a, b, r| {
-                for i in 0..a.len() { r[i] = if a[i] >= b[i] { 1.0 } else { 0.0 }; }
+                for i in 0..a.len() {
+                    r[i] = if a[i] >= b[i] { 1.0 } else { 0.0 };
+                }
             }),
             OpCode::Lte => self.exec_binary_op(ctx, |a, b, r| {
-                for i in 0..a.len() { r[i] = if a[i] <= b[i] { 1.0 } else { 0.0 }; }
+                for i in 0..a.len() {
+                    r[i] = if a[i] <= b[i] { 1.0 } else { 0.0 };
+                }
             }),
             OpCode::Eq => self.exec_binary_op(ctx, |a, b, r| {
-                for i in 0..a.len() { r[i] = if (a[i] - b[i]).abs() < 1e-10 { 1.0 } else { 0.0 }; }
+                for i in 0..a.len() {
+                    r[i] = if (a[i] - b[i]).abs() < 1e-10 {
+                        1.0
+                    } else {
+                        0.0
+                    };
+                }
             }),
             OpCode::Neq => self.exec_binary_op(ctx, |a, b, r| {
-                for i in 0..a.len() { r[i] = if (a[i] - b[i]).abs() >= 1e-10 { 1.0 } else { 0.0 }; }
+                for i in 0..a.len() {
+                    r[i] = if (a[i] - b[i]).abs() >= 1e-10 {
+                        1.0
+                    } else {
+                        0.0
+                    };
+                }
             }),
             OpCode::And => self.exec_binary_op(ctx, |a, b, r| {
-                for i in 0..a.len() { r[i] = if a[i] > 0.0 && b[i] > 0.0 { 1.0 } else { 0.0 }; }
+                for i in 0..a.len() {
+                    r[i] = if a[i] > 0.0 && b[i] > 0.0 { 1.0 } else { 0.0 };
+                }
             }),
             OpCode::Or => self.exec_binary_op(ctx, |a, b, r| {
-                for i in 0..a.len() { r[i] = if a[i] > 0.0 || b[i] > 0.0 { 1.0 } else { 0.0 }; }
+                for i in 0..a.len() {
+                    r[i] = if a[i] > 0.0 || b[i] > 0.0 { 1.0 } else { 0.0 };
+                }
             }),
             OpCode::Xor => self.exec_binary_op(ctx, |a, b, r| {
-                for i in 0..a.len() { r[i] = if (a[i] > 0.0) != (b[i] > 0.0) { 1.0 } else { 0.0 }; }
+                for i in 0..a.len() {
+                    r[i] = if (a[i] > 0.0) != (b[i] > 0.0) {
+                        1.0
+                    } else {
+                        0.0
+                    };
+                }
             }),
             OpCode::StringConcat => {
                 let _right = self.pop_val()?;
@@ -519,14 +595,12 @@ impl BytecodeVM {
                 let val = self.pop_val()?;
                 match val {
                     FormulaValue::Scalar(v) => {
-                        self.stack.push(FormulaValue::Scalar(if v <= 0.0 { 1.0 } else { 0.0 }));
+                        self.stack
+                            .push(FormulaValue::Scalar(if v <= 0.0 { 1.0 } else { 0.0 }));
                     }
                     FormulaValue::Array(a) => {
                         let mut result = Array1::zeros(a.len());
-                        SimdOps::logical_not(
-                            a.as_slice().unwrap(),
-                            result.as_slice_mut().unwrap(),
-                        );
+                        SimdOps::logical_not(a.as_slice().unwrap(), result.as_slice_mut().unwrap());
                         self.stack.push(FormulaValue::Array(result));
                     }
                 }
@@ -616,7 +690,8 @@ impl BytecodeVM {
                 let cond = self.pop_val()?;
                 match (&cond, &then_val, &else_val) {
                     (FormulaValue::Scalar(c), FormulaValue::Scalar(t), FormulaValue::Scalar(e)) => {
-                        self.stack.push(FormulaValue::Scalar(if *c > 0.0 { *t } else { *e }));
+                        self.stack
+                            .push(FormulaValue::Scalar(if *c > 0.0 { *t } else { *e }));
                     }
                     _ => {
                         let cond_arr = cond.to_array(ctx.data_len);
@@ -641,7 +716,12 @@ impl BytecodeVM {
             OpCode::DrawText { text, color } => {
                 let price = self.pop_val()?;
                 let cond = self.pop_val()?;
-                draw_commands.add_text(cond.to_array(ctx.data_len), price.to_array(ctx.data_len), text.clone(), color.clone());
+                draw_commands.add_text(
+                    cond.to_array(ctx.data_len),
+                    price.to_array(ctx.data_len),
+                    text.clone(),
+                    color.clone(),
+                );
                 Ok(())
             }
             OpCode::DrawIcon { color } => {
@@ -650,7 +730,12 @@ impl BytecodeVM {
                 let cond = self.pop_val()?;
                 let icon_arr = icon_val.to_array(ctx.data_len);
                 let icon_type = icon_arr[0] as i32;
-                draw_commands.add_icon(cond.to_array(ctx.data_len), price.to_array(ctx.data_len), icon_type, color.clone());
+                draw_commands.add_icon(
+                    cond.to_array(ctx.data_len),
+                    price.to_array(ctx.data_len),
+                    icon_type,
+                    color.clone(),
+                );
                 Ok(())
             }
             OpCode::StickLine { empty, color } => {
@@ -660,10 +745,21 @@ impl BytecodeVM {
                 let cond = self.pop_val()?;
                 let width_arr = width_val.to_array(ctx.data_len);
                 let width = width_arr[0] as i32;
-                draw_commands.add_stick(cond.to_array(ctx.data_len), price1.to_array(ctx.data_len), price2.to_array(ctx.data_len), width, *empty, color.clone());
+                draw_commands.add_stick(
+                    cond.to_array(ctx.data_len),
+                    price1.to_array(ctx.data_len),
+                    price2.to_array(ctx.data_len),
+                    width,
+                    *empty,
+                    color.clone(),
+                );
                 Ok(())
             }
-            OpCode::DrawGeneric { command: _, arg_count, color: _ } => {
+            OpCode::DrawGeneric {
+                command: _,
+                arg_count,
+                color: _,
+            } => {
                 for _ in 0..*arg_count {
                     self.pop_val()?;
                 }
@@ -714,9 +810,17 @@ impl BytecodeVM {
                 let len = l.len().min(r.len());
                 let mut result = Array1::zeros(len);
                 if len >= 16 {
-                    _op_fn(l.as_slice().unwrap(), r.as_slice().unwrap(), result.as_slice_mut().unwrap());
+                    _op_fn(
+                        l.as_slice().unwrap(),
+                        r.as_slice().unwrap(),
+                        result.as_slice_mut().unwrap(),
+                    );
                 } else {
-                    _op_fn(l.as_slice().unwrap(), r.as_slice().unwrap(), result.as_slice_mut().unwrap());
+                    _op_fn(
+                        l.as_slice().unwrap(),
+                        r.as_slice().unwrap(),
+                        result.as_slice_mut().unwrap(),
+                    );
                 }
                 self.stack.push(FormulaValue::Array(result));
             }
@@ -725,7 +829,9 @@ impl BytecodeVM {
     }
 
     fn pop_val(&mut self) -> Result<FormulaValue, FormulaError> {
-        self.stack.pop().ok_or_else(|| FormulaError::RuntimeError("Stack underflow".to_string()))
+        self.stack
+            .pop()
+            .ok_or_else(|| FormulaError::RuntimeError("Stack underflow".to_string()))
     }
 
     fn load_variable(&self, name: &str, ctx: &FormulaContext) -> Result<Array1<f64>, FormulaError> {
@@ -936,13 +1042,19 @@ impl Bytecode {
                         .unwrap();
                     buf.write_all(color_bytes).unwrap();
                 }
-                OpCode::DrawGeneric { command, arg_count, color } => {
+                OpCode::DrawGeneric {
+                    command,
+                    arg_count,
+                    color,
+                } => {
                     let cmd_bytes = command.as_bytes();
-                    buf.write_all(&(cmd_bytes.len() as u16).to_le_bytes()).unwrap();
+                    buf.write_all(&(cmd_bytes.len() as u16).to_le_bytes())
+                        .unwrap();
                     buf.write_all(cmd_bytes).unwrap();
                     buf.write_all(&(*arg_count as u32).to_le_bytes()).unwrap();
                     let color_bytes = color.as_bytes();
-                    buf.write_all(&(color_bytes.len() as u16).to_le_bytes()).unwrap();
+                    buf.write_all(&(color_bytes.len() as u16).to_le_bytes())
+                        .unwrap();
                     buf.write_all(color_bytes).unwrap();
                 }
                 OpCode::PushString(s) => {
@@ -1083,10 +1195,16 @@ impl Bytecode {
                 SerializedOpCode::DrawGeneric => {
                     let command = Self::read_string(&mut cursor)?;
                     let mut count_buf = [0u8; 4];
-                    cursor.read_exact(&mut count_buf).map_err(|e| e.to_string())?;
+                    cursor
+                        .read_exact(&mut count_buf)
+                        .map_err(|e| e.to_string())?;
                     let arg_count = u32::from_le_bytes(count_buf) as usize;
                     let color = Self::read_string(&mut cursor)?;
-                    OpCode::DrawGeneric { command, arg_count, color }
+                    OpCode::DrawGeneric {
+                        command,
+                        arg_count,
+                        color,
+                    }
                 }
                 SerializedOpCode::StringConcat => OpCode::StringConcat,
                 SerializedOpCode::Xor => OpCode::Xor,

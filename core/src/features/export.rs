@@ -17,7 +17,11 @@ pub fn to_csv(matrix: &FeatureMatrix, path: impl AsRef<Path>) -> std::io::Result
         let values: Vec<String> = (0..matrix.cols())
             .map(|col| {
                 let v = matrix.get(row, col);
-                if v.is_nan() { String::new() } else { format!("{}", v) }
+                if v.is_nan() {
+                    String::new()
+                } else {
+                    format!("{}", v)
+                }
             })
             .collect();
         writeln!(file, "{}", values.join(","))?;
@@ -79,8 +83,8 @@ pub fn to_arrow_ipc(matrix: &FeatureMatrix, path: impl AsRef<Path>) -> std::io::
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::Feature;
+    use super::*;
     use std::io::Read;
 
     #[test]
@@ -93,7 +97,10 @@ mod tests {
         to_csv(&m, &path).unwrap();
 
         let mut content = String::new();
-        std::fs::File::open(&path).unwrap().read_to_string(&mut content).unwrap();
+        std::fs::File::open(&path)
+            .unwrap()
+            .read_to_string(&mut content)
+            .unwrap();
         assert!(content.contains("a,b"));
         assert!(content.contains("1,4"));
         std::fs::remove_file(path).ok();
@@ -109,7 +116,10 @@ mod tests {
         to_json_lines(&m, &path).unwrap();
 
         let mut content = String::new();
-        std::fs::File::open(&path).unwrap().read_to_string(&mut content).unwrap();
+        std::fs::File::open(&path)
+            .unwrap()
+            .read_to_string(&mut content)
+            .unwrap();
         assert!(content.contains("\"x\":1.5"));
         assert!(content.contains("\"y\":null"));
         std::fs::remove_file(path).ok();

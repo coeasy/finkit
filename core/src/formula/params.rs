@@ -168,7 +168,11 @@ pub fn apply_params(ast: &AstNode, values: &ParamValues) -> AstNode {
             empty: *empty,
             color: color.clone(),
         },
-        AstNode::DrawGeneric { command, args, color } => AstNode::DrawGeneric {
+        AstNode::DrawGeneric {
+            command,
+            args,
+            color,
+        } => AstNode::DrawGeneric {
             command: command.clone(),
             args: args.iter().map(|a| apply_params(a, values)).collect(),
             color: color.clone(),

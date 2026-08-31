@@ -70,7 +70,11 @@ impl Factor {
         compute: Arc<dyn Fn(&[f64]) -> Result<Array1<f64>> + Send + Sync>,
         direction: Direction,
     ) -> Self {
-        Self { name: name.into(), compute, direction }
+        Self {
+            name: name.into(),
+            compute,
+            direction,
+        }
     }
 }
 
@@ -86,7 +90,11 @@ impl FactorEngine {
     /// Create a new factor engine with the given factors and weights.
     /// The number of weights must equal the number of factors.
     pub fn new(factors: Vec<Factor>, weights: Vec<f64>) -> Self {
-        Self { factors, weights, rank_window: 0 }
+        Self {
+            factors,
+            weights,
+            rank_window: 0,
+        }
     }
 
     /// Set the rolling window for [`rank_zscore`]-style normalization.
@@ -119,7 +127,12 @@ impl FactorEngine {
             if raw.len() != n {
                 return Err(TaError::InvalidParameter {
                     name: "factor output".to_string(),
-                    constraint: format!("factor {} returned len={}, expected {}", factor.name, raw.len(), n),
+                    constraint: format!(
+                        "factor {} returned len={}, expected {}",
+                        factor.name,
+                        raw.len(),
+                        n
+                    ),
                 });
             }
             // Apply direction
@@ -149,11 +162,7 @@ impl FactorEngine {
     /// `i`, return the percentile rank (0..1) for each stock.
     /// Uses the supplied `direction` to decide whether highest is best
     /// (HigherBetter) or lowest is best (LowerBetter).
-    pub fn cross_sectional_rank(
-        &self,
-        per_stock: &[f64],
-        direction: Direction,
-    ) -> Vec<f64> {
+    pub fn cross_sectional_rank(&self, per_stock: &[f64], direction: Direction) -> Vec<f64> {
         cross_sectional_rank_impl(per_stock, direction)
     }
 }
@@ -252,7 +261,9 @@ mod tests {
         Factor::new(
             name.to_string(),
             Arc::new(move |data: &[f64]| -> Result<Array1<f64>> {
-                Ok(Array1::from(data.iter().map(|&x| x + bias).collect::<Vec<_>>()))
+                Ok(Array1::from(
+                    data.iter().map(|&x| x + bias).collect::<Vec<_>>(),
+                ))
             }),
             Direction::HigherBetter,
         )
@@ -284,7 +295,9 @@ mod tests {
         let factor = Factor::new(
             "invert".to_string(),
             Arc::new(|data: &[f64]| -> Result<Array1<f64>> {
-                Ok(Array1::from(data.iter().map(|&x| 100.0 - x).collect::<Vec<f64>>()))
+                Ok(Array1::from(
+                    data.iter().map(|&x| 100.0 - x).collect::<Vec<f64>>(),
+                ))
             }),
             Direction::LowerBetter,
         );

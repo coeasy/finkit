@@ -69,7 +69,11 @@ fn validate_signals(signals: &[&Array1<Signal>]) -> Result<()> {
 /// Returns an error if `signals` is empty or if the array lengths differ.
 pub fn mtf_resonance(signals: &[&Array1<Signal>], min_agree: usize) -> Array1<Signal> {
     if validate_signals(signals).is_err() || min_agree == 0 {
-        return Array1::zeros(if signals.is_empty() { 0 } else { signals[0].len() });
+        return Array1::zeros(if signals.is_empty() {
+            0
+        } else {
+            signals[0].len()
+        });
     }
     let n = signals[0].len();
     let mut out = Array1::<i32>::zeros(n);
@@ -104,7 +108,11 @@ pub fn mtf_resonance(signals: &[&Array1<Signal>], min_agree: usize) -> Array1<Si
 /// Returns an error if `signals` is empty or if the array lengths differ.
 pub fn mtf_majority(signals: &[&Array1<Signal>]) -> Array1<Signal> {
     if validate_signals(signals).is_err() {
-        return Array1::zeros(if signals.is_empty() { 0 } else { signals[0].len() });
+        return Array1::zeros(if signals.is_empty() {
+            0
+        } else {
+            signals[0].len()
+        });
     }
     let n = signals[0].len();
     let mut out = Array1::<i32>::zeros(n);
@@ -113,7 +121,11 @@ pub fn mtf_majority(signals: &[&Array1<Signal>]) -> Array1<Signal> {
         let mut bear = 0i32;
         for s in signals {
             let v = s[i];
-            if v > 0 { bull += 1; } else if v < 0 { bear += 1; }
+            if v > 0 {
+                bull += 1;
+            } else if v < 0 {
+                bear += 1;
+            }
         }
         if bull > bear {
             out[i] = 100;
@@ -161,7 +173,11 @@ pub fn mtf_trend_filter(higher_tf: &Array1<Signal>, lower: &Array1<Signal>) -> A
 /// signals, or if signals are inconsistent in length.
 pub fn mtf_weighted(signals: &[&Array1<Signal>], weights: &[f64]) -> Array1<Signal> {
     if validate_signals(signals).is_err() || weights.len() != signals.len() {
-        return Array1::zeros(if signals.is_empty() { 0 } else { signals[0].len() });
+        return Array1::zeros(if signals.is_empty() {
+            0
+        } else {
+            signals[0].len()
+        });
     }
     let n = signals[0].len();
     let mut out = Array1::<i32>::zeros(n);
@@ -170,7 +186,13 @@ pub fn mtf_weighted(signals: &[&Array1<Signal>], weights: &[f64]) -> Array1<Sign
         for (s, &w) in signals.iter().zip(weights.iter()) {
             total += (s[i] as f64) * w;
         }
-        out[i] = if total > 0.0 { 100 } else if total < 0.0 { -100 } else { 0 };
+        out[i] = if total > 0.0 {
+            100
+        } else if total < 0.0 {
+            -100
+        } else {
+            0
+        };
     }
     out
 }

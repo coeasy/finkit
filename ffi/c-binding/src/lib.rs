@@ -230,16 +230,20 @@ where
 #[no_mangle]
 pub unsafe extern "C" fn ta_version() -> *mut c_char {
     ffi_catch_ptr(|| unsafe {
-
-    let v = env!("CARGO_PKG_VERSION");
-    CString::new(v).unwrap().into_raw()
+        let v = env!("CARGO_PKG_VERSION");
+        CString::new(v).unwrap().into_raw()
     })
+}
+
+/// Return the last FFI error code for the calling thread.
+#[no_mangle]
+pub extern "C" fn ta_last_error_code() -> i32 {
+    LAST_ERROR_CODE.with(|code| *code.borrow())
 }
 
 #[no_mangle]
 
 include!("generated.rs");
-
 
 /// Test-only export: panics inside the same `ffi_catch_i32` guard used by
 /// production `ta_*` entry points. Used to verify panic isolation without
@@ -255,9 +259,7 @@ pub unsafe extern "C" fn ta_ffi_panic_test() -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use finkit::error::{
-        FfiError, FormulaError, IndicatorError,
-    };
+    use finkit::error::{FfiError, FormulaError, IndicatorError};
 
     // These tests cover the Phase 6 FFI error-code mapping. Each test
     // exercises a different branch of `map_ta_error` to guarantee that
@@ -371,10 +373,7 @@ mod tests {
 
     #[test]
     fn code_formula_memory_limit() {
-        let err = TaError::Formula(FormulaError::MemoryLimit {
-            used: 1,
-            limit: 2,
-        });
+        let err = TaError::Formula(FormulaError::MemoryLimit { used: 1, limit: 2 });
         let code = map_ta_error(&err);
         assert_eq!(code, 54);
     }
@@ -410,7 +409,10 @@ mod tests {
     fn export_panic_test_returns_internal_error_not_abort() {
         let code = unsafe { ta_ffi_panic_test() };
         assert_eq!(code, FfiStatus::InternalError.as_i32());
-        assert_eq!(unsafe { ta_last_error_code() }, FfiStatus::InternalError.as_i32());
+        assert_eq!(
+            unsafe { ta_last_error_code() },
+            FfiStatus::InternalError.as_i32()
+        );
     }
 
     #[test]

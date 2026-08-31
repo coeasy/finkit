@@ -50,7 +50,11 @@ impl StreamingDonchian {
 
         let upper = self.rolling_max.current().unwrap();
         let lower = self.rolling_min.current().unwrap();
-        let result = Some(DonchianOutput { upper, middle: (upper + lower) / 2.0, lower });
+        let result = Some(DonchianOutput {
+            upper,
+            middle: (upper + lower) / 2.0,
+            lower,
+        });
         self.last_value = result;
         result
     }
@@ -62,8 +66,12 @@ impl StreamingDonchian {
         self.last_value = None;
     }
 
-    pub fn is_ready(&self) -> bool { self.count >= self.period }
-    pub fn count(&self) -> usize { self.count }
+    pub fn is_ready(&self) -> bool {
+        self.count >= self.period
+    }
+    pub fn count(&self) -> usize {
+        self.count
+    }
 
     pub fn value(&self) -> Option<DonchianOutput> {
         self.last_value
@@ -71,10 +79,18 @@ impl StreamingDonchian {
 }
 
 impl IndicatorMeta for StreamingDonchian {
-    fn name() -> &'static str { "Donchian" }
-    fn category() -> &'static str { "volatility" }
-    fn description() -> &'static str { "Donchian Channels" }
-    fn warm_up_period(&self) -> usize { self.period }
+    fn name() -> &'static str {
+        "Donchian"
+    }
+    fn category() -> &'static str {
+        "volatility"
+    }
+    fn description() -> &'static str {
+        "Donchian Channels"
+    }
+    fn warm_up_period(&self) -> usize {
+        self.period
+    }
 }
 
 #[cfg(test)]
@@ -88,7 +104,9 @@ mod tests {
         let out = d.next(&OhlcvBar::new(10.0, 12.0, 9.0, 11.0, 100.0));
         assert!(out.is_none());
         d.next(&OhlcvBar::new(11.0, 13.0, 10.0, 12.0, 100.0));
-        let out = d.next(&OhlcvBar::new(12.0, 14.0, 11.0, 13.0, 100.0)).unwrap();
+        let out = d
+            .next(&OhlcvBar::new(12.0, 14.0, 11.0, 13.0, 100.0))
+            .unwrap();
         assert!((out.upper - 14.0).abs() < 1e-10);
         assert!((out.lower - 9.0).abs() < 1e-10);
     }
@@ -101,7 +119,15 @@ mod tests {
     #[test]
     fn test_streaming_donchian_reset() {
         let mut d = StreamingDonchian::new(3);
-        for i in 0..5 { d.next(&OhlcvBar::new(i as f64, i as f64 + 2.0, i as f64 - 1.0, i as f64 + 1.0, 100.0)); }
+        for i in 0..5 {
+            d.next(&OhlcvBar::new(
+                i as f64,
+                i as f64 + 2.0,
+                i as f64 - 1.0,
+                i as f64 + 1.0,
+                100.0,
+            ));
+        }
         assert!(d.is_ready());
         d.reset();
         assert!(!d.is_ready());
@@ -119,8 +145,14 @@ mod tests {
             let bar = OhlcvBar::new(closes[i] - 1.0, highs[i], lows[i], closes[i], 100.0);
             if let Some(out) = streaming.next(&bar) {
                 if !batch.upper[i].is_nan() {
-                    assert!((out.upper - batch.upper[i]).abs() < 1e-10, "upper mismatch at {i}");
-                    assert!((out.lower - batch.lower[i]).abs() < 1e-10, "lower mismatch at {i}");
+                    assert!(
+                        (out.upper - batch.upper[i]).abs() < 1e-10,
+                        "upper mismatch at {i}"
+                    );
+                    assert!(
+                        (out.lower - batch.lower[i]).abs() < 1e-10,
+                        "lower mismatch at {i}"
+                    );
                 }
             }
         }

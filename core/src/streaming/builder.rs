@@ -58,10 +58,12 @@ macro_rules! impl_builder_single_period {
             type Output = $indicator;
 
             fn build(self) -> Result<Self::Output, IndicatorError> {
-                let period = self.period.ok_or_else(|| IndicatorError::InvalidParameter {
-                    param: "period".into(),
-                    reason: "must be set".into(),
-                })?;
+                let period = self
+                    .period
+                    .ok_or_else(|| IndicatorError::InvalidParameter {
+                        param: "period".into(),
+                        reason: "must be set".into(),
+                    })?;
                 if period == 0 {
                     return Err(IndicatorError::InvalidParameter {
                         param: "period".into(),
@@ -278,8 +280,8 @@ use super::indicators::StreamingBias;
 use super::indicators::StreamingBr;
 use super::indicators::StreamingCci;
 use super::indicators::StreamingChop;
-use super::indicators::StreamingCmo;
 use super::indicators::StreamingCmf;
+use super::indicators::StreamingCmo;
 use super::indicators::StreamingCr;
 use super::indicators::StreamingDema;
 use super::indicators::StreamingDonchian;
@@ -376,31 +378,31 @@ impl_builder_single_period!(StreamingZscore, ZscoreBuilder);
 use super::indicators::StreamingAd;
 use super::indicators::StreamingAdosc;
 use super::indicators::StreamingAnchoredVwap;
-use super::indicators::StreamingHtDcPeriod;
-use super::indicators::StreamingHtDcPhase;
-use super::indicators::StreamingHtSine;
-use super::indicators::StreamingHtTrendline;
-use super::indicators::StreamingHtTrendMode;
 use super::indicators::StreamingAo;
 use super::indicators::StreamingApo;
 use super::indicators::StreamingBeta;
 use super::indicators::StreamingCorrel;
 use super::indicators::StreamingElderRay;
+use super::indicators::StreamingExpma;
+use super::indicators::StreamingHtDcPeriod;
+use super::indicators::StreamingHtDcPhase;
+use super::indicators::StreamingHtSine;
+use super::indicators::StreamingHtTrendMode;
+use super::indicators::StreamingHtTrendline;
 use super::indicators::StreamingLinRegAngle;
 use super::indicators::StreamingLinRegIntercept;
 use super::indicators::StreamingLinRegSlope;
-use super::indicators::StreamingStdDev;
-use super::indicators::StreamingTsf;
-use super::indicators::StreamingVar;
-use super::indicators::StreamingExpma;
+use super::indicators::StreamingMassIndex;
 use super::indicators::StreamingPpo;
+use super::indicators::StreamingStdDev;
 use super::indicators::StreamingStochF;
 use super::indicators::StreamingStochRsi;
-use super::indicators::StreamingUltOsc;
-use super::indicators::StreamingVwapBands;
-use super::indicators::StreamingMassIndex;
+use super::indicators::StreamingTsf;
 use super::indicators::StreamingTsi;
+use super::indicators::StreamingUltOsc;
+use super::indicators::StreamingVar;
 use super::indicators::StreamingVidya;
+use super::indicators::StreamingVwapBands;
 
 impl_builder_two_periods!(StreamingAdosc, AdoscBuilder, fast_period, slow_period);
 impl_builder_two_periods!(StreamingAo, AoBuilder, fast_period, slow_period);
@@ -439,14 +441,18 @@ impl Builder for SarBuilder {
     type Output = StreamingSar;
 
     fn build(self) -> Result<Self::Output, IndicatorError> {
-        let acceleration = self.acceleration.ok_or_else(|| IndicatorError::InvalidParameter {
-            param: "acceleration".into(),
-            reason: "must be set".into(),
-        })?;
-        let maximum = self.maximum.ok_or_else(|| IndicatorError::InvalidParameter {
-            param: "maximum".into(),
-            reason: "must be set".into(),
-        })?;
+        let acceleration = self
+            .acceleration
+            .ok_or_else(|| IndicatorError::InvalidParameter {
+                param: "acceleration".into(),
+                reason: "must be set".into(),
+            })?;
+        let maximum = self
+            .maximum
+            .ok_or_else(|| IndicatorError::InvalidParameter {
+                param: "maximum".into(),
+                reason: "must be set".into(),
+            })?;
         if acceleration <= 0.0 {
             return Err(IndicatorError::InvalidParameter {
                 param: "acceleration".into(),
@@ -497,14 +503,18 @@ impl Builder for SuperTrendBuilder {
     type Output = StreamingSuperTrend;
 
     fn build(self) -> Result<Self::Output, IndicatorError> {
-        let period = self.period.ok_or_else(|| IndicatorError::InvalidParameter {
-            param: "period".into(),
-            reason: "must be set".into(),
-        })?;
-        let multiplier = self.multiplier.ok_or_else(|| IndicatorError::InvalidParameter {
-            param: "multiplier".into(),
-            reason: "must be set".into(),
-        })?;
+        let period = self
+            .period
+            .ok_or_else(|| IndicatorError::InvalidParameter {
+                param: "period".into(),
+                reason: "must be set".into(),
+            })?;
+        let multiplier = self
+            .multiplier
+            .ok_or_else(|| IndicatorError::InvalidParameter {
+                param: "multiplier".into(),
+                reason: "must be set".into(),
+            })?;
         if period == 0 {
             return Err(IndicatorError::InvalidParameter {
                 param: "period".into(),
@@ -541,12 +551,36 @@ use super::indicators::StreamingMacd;
 use super::indicators::StreamingStc;
 use super::indicators::StreamingStoch;
 
-impl_builder_three_periods!(StreamingCoppock, CoppockBuilder, wma_period, long_roc, short_roc);
-impl_builder_three_periods!(StreamingDma, DmaBuilder, short_period, long_period, ama_period);
+impl_builder_three_periods!(
+    StreamingCoppock,
+    CoppockBuilder,
+    wma_period,
+    long_roc,
+    short_roc
+);
+impl_builder_three_periods!(
+    StreamingDma,
+    DmaBuilder,
+    short_period,
+    long_period,
+    ama_period
+);
 impl_builder_three_periods!(StreamingIchimoku, IchimokuBuilder, tenkan, kijun, senkou_b);
 impl_builder_three_periods!(StreamingKdj, KdjBuilder, n, m1, m2);
-impl_builder_three_periods!(StreamingKvo, KvoBuilder, fast_period, slow_period, signal_period);
-impl_builder_three_periods!(StreamingMacd, MacdBuilder, fast_period, slow_period, signal_period);
+impl_builder_three_periods!(
+    StreamingKvo,
+    KvoBuilder,
+    fast_period,
+    slow_period,
+    signal_period
+);
+impl_builder_three_periods!(
+    StreamingMacd,
+    MacdBuilder,
+    fast_period,
+    slow_period,
+    signal_period
+);
 impl_builder_three_periods!(StreamingStc, StcBuilder, fast_period, slow_period, cycle);
 impl_builder_three_periods!(StreamingStoch, StochBuilder, k_period, k_slow, d_period);
 
@@ -582,18 +616,22 @@ impl Builder for AlmaBuilder {
     type Output = StreamingAlma;
 
     fn build(self) -> Result<Self::Output, IndicatorError> {
-        let period = self.period.ok_or_else(|| IndicatorError::InvalidParameter {
-            param: "period".into(),
-            reason: "must be set".into(),
-        })?;
+        let period = self
+            .period
+            .ok_or_else(|| IndicatorError::InvalidParameter {
+                param: "period".into(),
+                reason: "must be set".into(),
+            })?;
         let sigma = self.sigma.ok_or_else(|| IndicatorError::InvalidParameter {
             param: "sigma".into(),
             reason: "must be set".into(),
         })?;
-        let offset = self.offset.ok_or_else(|| IndicatorError::InvalidParameter {
-            param: "offset".into(),
-            reason: "must be set".into(),
-        })?;
+        let offset = self
+            .offset
+            .ok_or_else(|| IndicatorError::InvalidParameter {
+                param: "offset".into(),
+                reason: "must be set".into(),
+            })?;
         if period == 0 {
             return Err(IndicatorError::InvalidParameter {
                 param: "period".into(),
@@ -655,18 +693,24 @@ impl Builder for BollBuilder {
     type Output = StreamingBoll;
 
     fn build(self) -> Result<Self::Output, IndicatorError> {
-        let period = self.period.ok_or_else(|| IndicatorError::InvalidParameter {
-            param: "period".into(),
-            reason: "must be set".into(),
-        })?;
-        let nb_dev_up = self.nb_dev_up.ok_or_else(|| IndicatorError::InvalidParameter {
-            param: "nb_dev_up".into(),
-            reason: "must be set".into(),
-        })?;
-        let nb_dev_dn = self.nb_dev_dn.ok_or_else(|| IndicatorError::InvalidParameter {
-            param: "nb_dev_dn".into(),
-            reason: "must be set".into(),
-        })?;
+        let period = self
+            .period
+            .ok_or_else(|| IndicatorError::InvalidParameter {
+                param: "period".into(),
+                reason: "must be set".into(),
+            })?;
+        let nb_dev_up = self
+            .nb_dev_up
+            .ok_or_else(|| IndicatorError::InvalidParameter {
+                param: "nb_dev_up".into(),
+                reason: "must be set".into(),
+            })?;
+        let nb_dev_dn = self
+            .nb_dev_dn
+            .ok_or_else(|| IndicatorError::InvalidParameter {
+                param: "nb_dev_dn".into(),
+                reason: "must be set".into(),
+            })?;
         if period == 0 {
             return Err(IndicatorError::InvalidParameter {
                 param: "period".into(),
@@ -728,10 +772,12 @@ impl Builder for EneBuilder {
     type Output = StreamingEne;
 
     fn build(self) -> Result<Self::Output, IndicatorError> {
-        let period = self.period.ok_or_else(|| IndicatorError::InvalidParameter {
-            param: "period".into(),
-            reason: "must be set".into(),
-        })?;
+        let period = self
+            .period
+            .ok_or_else(|| IndicatorError::InvalidParameter {
+                param: "period".into(),
+                reason: "must be set".into(),
+            })?;
         let k1 = self.k1.ok_or_else(|| IndicatorError::InvalidParameter {
             param: "k1".into(),
             reason: "must be set".into(),
@@ -789,18 +835,24 @@ impl Builder for KeltnerBuilder {
     type Output = StreamingKeltner;
 
     fn build(self) -> Result<Self::Output, IndicatorError> {
-        let ema_period = self.ema_period.ok_or_else(|| IndicatorError::InvalidParameter {
-            param: "ema_period".into(),
-            reason: "must be set".into(),
-        })?;
-        let atr_period = self.atr_period.ok_or_else(|| IndicatorError::InvalidParameter {
-            param: "atr_period".into(),
-            reason: "must be set".into(),
-        })?;
-        let multiplier = self.multiplier.ok_or_else(|| IndicatorError::InvalidParameter {
-            param: "multiplier".into(),
-            reason: "must be set".into(),
-        })?;
+        let ema_period = self
+            .ema_period
+            .ok_or_else(|| IndicatorError::InvalidParameter {
+                param: "ema_period".into(),
+                reason: "must be set".into(),
+            })?;
+        let atr_period = self
+            .atr_period
+            .ok_or_else(|| IndicatorError::InvalidParameter {
+                param: "atr_period".into(),
+                reason: "must be set".into(),
+            })?;
+        let multiplier = self
+            .multiplier
+            .ok_or_else(|| IndicatorError::InvalidParameter {
+                param: "multiplier".into(),
+                reason: "must be set".into(),
+            })?;
         if ema_period == 0 {
             return Err(IndicatorError::InvalidParameter {
                 param: "ema_period".into(),
@@ -850,15 +902,42 @@ pub struct KstBuilder {
 }
 
 impl KstBuilder {
-    pub fn roc1(mut self, v: usize) -> Self { self.roc1 = Some(v); self }
-    pub fn roc2(mut self, v: usize) -> Self { self.roc2 = Some(v); self }
-    pub fn roc3(mut self, v: usize) -> Self { self.roc3 = Some(v); self }
-    pub fn roc4(mut self, v: usize) -> Self { self.roc4 = Some(v); self }
-    pub fn sma1(mut self, v: usize) -> Self { self.sma1 = Some(v); self }
-    pub fn sma2(mut self, v: usize) -> Self { self.sma2 = Some(v); self }
-    pub fn sma3(mut self, v: usize) -> Self { self.sma3 = Some(v); self }
-    pub fn sma4(mut self, v: usize) -> Self { self.sma4 = Some(v); self }
-    pub fn signal_period(mut self, v: usize) -> Self { self.signal_period = Some(v); self }
+    pub fn roc1(mut self, v: usize) -> Self {
+        self.roc1 = Some(v);
+        self
+    }
+    pub fn roc2(mut self, v: usize) -> Self {
+        self.roc2 = Some(v);
+        self
+    }
+    pub fn roc3(mut self, v: usize) -> Self {
+        self.roc3 = Some(v);
+        self
+    }
+    pub fn roc4(mut self, v: usize) -> Self {
+        self.roc4 = Some(v);
+        self
+    }
+    pub fn sma1(mut self, v: usize) -> Self {
+        self.sma1 = Some(v);
+        self
+    }
+    pub fn sma2(mut self, v: usize) -> Self {
+        self.sma2 = Some(v);
+        self
+    }
+    pub fn sma3(mut self, v: usize) -> Self {
+        self.sma3 = Some(v);
+        self
+    }
+    pub fn sma4(mut self, v: usize) -> Self {
+        self.sma4 = Some(v);
+        self
+    }
+    pub fn signal_period(mut self, v: usize) -> Self {
+        self.signal_period = Some(v);
+        self
+    }
 }
 
 impl Builder for KstBuilder {
@@ -867,19 +946,21 @@ impl Builder for KstBuilder {
     fn build(self) -> Result<Self::Output, IndicatorError> {
         macro_rules! require_usize {
             ($field:ident) => {
-                self.$field.ok_or_else(|| IndicatorError::InvalidParameter {
-                    param: stringify!($field).into(),
-                    reason: "must be set".into(),
-                }).and_then(|v| {
-                    if v == 0 {
-                        Err(IndicatorError::InvalidParameter {
-                            param: stringify!($field).into(),
-                            reason: "> 0".into(),
-                        })
-                    } else {
-                        Ok(v)
-                    }
-                })?
+                self.$field
+                    .ok_or_else(|| IndicatorError::InvalidParameter {
+                        param: stringify!($field).into(),
+                        reason: "must be set".into(),
+                    })
+                    .and_then(|v| {
+                        if v == 0 {
+                            Err(IndicatorError::InvalidParameter {
+                                param: stringify!($field).into(),
+                                reason: "> 0".into(),
+                            })
+                        } else {
+                            Ok(v)
+                        }
+                    })?
             };
         }
         let roc1 = require_usize!(roc1);
@@ -891,7 +972,17 @@ impl Builder for KstBuilder {
         let sma3 = require_usize!(sma3);
         let sma4 = require_usize!(sma4);
         let signal_period = require_usize!(signal_period);
-        Ok(StreamingKst::new(roc1, roc2, roc3, roc4, sma1, sma2, sma3, sma4, signal_period))
+        Ok(StreamingKst::new(
+            roc1,
+            roc2,
+            roc3,
+            roc4,
+            sma1,
+            sma2,
+            sma3,
+            sma4,
+            signal_period,
+        ))
     }
 }
 
@@ -927,10 +1018,22 @@ pub struct StochRsiBuilder {
 }
 
 impl StochRsiBuilder {
-    pub fn rsi_period(mut self, v: usize) -> Self { self.rsi_period = Some(v); self }
-    pub fn stoch_period(mut self, v: usize) -> Self { self.stoch_period = Some(v); self }
-    pub fn fastk_period(mut self, v: usize) -> Self { self.fastk_period = Some(v); self }
-    pub fn fastd_period(mut self, v: usize) -> Self { self.fastd_period = Some(v); self }
+    pub fn rsi_period(mut self, v: usize) -> Self {
+        self.rsi_period = Some(v);
+        self
+    }
+    pub fn stoch_period(mut self, v: usize) -> Self {
+        self.stoch_period = Some(v);
+        self
+    }
+    pub fn fastk_period(mut self, v: usize) -> Self {
+        self.fastk_period = Some(v);
+        self
+    }
+    pub fn fastd_period(mut self, v: usize) -> Self {
+        self.fastd_period = Some(v);
+        self
+    }
 }
 
 impl Builder for StochRsiBuilder {
@@ -939,30 +1042,41 @@ impl Builder for StochRsiBuilder {
     fn build(self) -> Result<Self::Output, IndicatorError> {
         macro_rules! require {
             ($field:ident) => {
-                self.$field.ok_or_else(|| IndicatorError::InvalidParameter {
-                    param: stringify!($field).into(),
-                    reason: "must be set".into(),
-                }).and_then(|v| {
-                    if v == 0 {
-                        Err(IndicatorError::InvalidParameter {
-                            param: stringify!($field).into(),
-                            reason: "> 0".into(),
-                        })
-                    } else { Ok(v) }
-                })?
+                self.$field
+                    .ok_or_else(|| IndicatorError::InvalidParameter {
+                        param: stringify!($field).into(),
+                        reason: "must be set".into(),
+                    })
+                    .and_then(|v| {
+                        if v == 0 {
+                            Err(IndicatorError::InvalidParameter {
+                                param: stringify!($field).into(),
+                                reason: "> 0".into(),
+                            })
+                        } else {
+                            Ok(v)
+                        }
+                    })?
             };
         }
         let rsi_period = require!(rsi_period);
         let stoch_period = require!(stoch_period);
         let fastk_period = require!(fastk_period);
         let fastd_period = require!(fastd_period);
-        Ok(StreamingStochRsi::new(rsi_period, stoch_period, fastk_period, fastd_period))
+        Ok(StreamingStochRsi::new(
+            rsi_period,
+            stoch_period,
+            fastk_period,
+            fastd_period,
+        ))
     }
 }
 
 impl IndicatorBuilder for StreamingStochRsi {
     type Builder = StochRsiBuilder;
-    fn builder() -> Self::Builder { StochRsiBuilder::default() }
+    fn builder() -> Self::Builder {
+        StochRsiBuilder::default()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -976,18 +1090,26 @@ pub struct VwapBandsBuilder {
 }
 
 impl VwapBandsBuilder {
-    pub fn period(mut self, v: usize) -> Self { self.period = Some(v); self }
-    pub fn nb_dev(mut self, v: f64) -> Self { self.nb_dev = Some(v); self }
+    pub fn period(mut self, v: usize) -> Self {
+        self.period = Some(v);
+        self
+    }
+    pub fn nb_dev(mut self, v: f64) -> Self {
+        self.nb_dev = Some(v);
+        self
+    }
 }
 
 impl Builder for VwapBandsBuilder {
     type Output = StreamingVwapBands;
 
     fn build(self) -> Result<Self::Output, IndicatorError> {
-        let period = self.period.ok_or_else(|| IndicatorError::InvalidParameter {
-            param: "period".into(),
-            reason: "must be set".into(),
-        })?;
+        let period = self
+            .period
+            .ok_or_else(|| IndicatorError::InvalidParameter {
+                param: "period".into(),
+                reason: "must be set".into(),
+            })?;
         if period < 2 {
             return Err(IndicatorError::InvalidParameter {
                 param: "period".into(),
@@ -1001,7 +1123,9 @@ impl Builder for VwapBandsBuilder {
 
 impl IndicatorBuilder for StreamingVwapBands {
     type Builder = VwapBandsBuilder;
-    fn builder() -> Self::Builder { VwapBandsBuilder::default() }
+    fn builder() -> Self::Builder {
+        VwapBandsBuilder::default()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1031,10 +1155,12 @@ impl Builder for SmaBuilder {
     type Output = StreamingSma;
 
     fn build(self) -> Result<Self::Output, IndicatorError> {
-        let period = self.period.ok_or_else(|| IndicatorError::InvalidParameter {
-            param: "period".into(),
-            reason: "must be set".into(),
-        })?;
+        let period = self
+            .period
+            .ok_or_else(|| IndicatorError::InvalidParameter {
+                param: "period".into(),
+                reason: "must be set".into(),
+            })?;
         if period == 0 {
             return Err(IndicatorError::InvalidParameter {
                 param: "period".into(),

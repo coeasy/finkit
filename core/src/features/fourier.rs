@@ -86,7 +86,11 @@ pub fn fft_features(data: &[f64], num_bands: usize) -> Result<FftFeatures> {
     let mut spectral_energy = Vec::with_capacity(bands);
     for b in 0..bands {
         let start = 1 + b * band_size;
-        let end = if b == bands - 1 { half } else { 1 + (b + 1) * band_size };
+        let end = if b == bands - 1 {
+            half
+        } else {
+            1 + (b + 1) * band_size
+        };
         let band_energy: f64 = power[start..end].iter().sum();
         let ratio = if total_energy > 1e-15 {
             band_energy / total_energy

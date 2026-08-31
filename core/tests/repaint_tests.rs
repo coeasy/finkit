@@ -67,10 +67,7 @@ fn test_macd_clone_snapshot_restore() {
     let val = macd.value();
     let mut restored = snapshot;
     restored.next(31.0);
-    assert_eq!(
-        restored.value().map(|v| v.macd),
-        val.map(|v| v.macd)
-    );
+    assert_eq!(restored.value().map(|v| v.macd), val.map(|v| v.macd));
 }
 
 #[test]
@@ -85,10 +82,7 @@ fn test_boll_clone_snapshot_restore() {
     let val = boll.value();
     let mut restored = snapshot;
     restored.next(13.0);
-    assert_eq!(
-        restored.value().map(|v| v.upper),
-        val.map(|v| v.upper)
-    );
+    assert_eq!(restored.value().map(|v| v.upper), val.map(|v| v.upper));
 }
 
 #[test]
@@ -233,7 +227,14 @@ fn test_rsi_compute_bar_repaint() {
     let mut rsi = StreamingRsi::new(5);
     let bars: Vec<f64> = vec![44.0, 44.25, 44.5, 43.75, 44.5, 44.25];
     for (i, &v) in bars.iter().enumerate() {
-        rsi.compute_bar(&OhlcvBar::new_with_time(0.0, 0.0, 0.0, v, 0.0, (i + 1) as i64 * 1000));
+        rsi.compute_bar(&OhlcvBar::new_with_time(
+            0.0,
+            0.0,
+            0.0,
+            v,
+            0.0,
+            (i + 1) as i64 * 1000,
+        ));
     }
     rsi.compute_bar(&OhlcvBar::new_with_time(0.0, 0.0, 0.0, 99.0, 0.0, 7000));
     let result = rsi.compute_bar(&OhlcvBar::new_with_time(0.0, 0.0, 0.0, 44.0, 0.0, 7000));

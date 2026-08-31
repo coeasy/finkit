@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 
 /// Streaming QStick Indicator.
 ///
@@ -135,11 +135,14 @@ mod tests {
     fn test_streaming_vs_batch_convergence() {
         use crate::indicators::MaType;
         let n = 30;
-        let open: Vec<f64> = (0..n).map(|i| 100.0 + (i as f64 * 0.3).sin() * 2.0).collect();
+        let open: Vec<f64> = (0..n)
+            .map(|i| 100.0 + (i as f64 * 0.3).sin() * 2.0)
+            .collect();
         let close: Vec<f64> = open.iter().map(|o| o + 0.5).collect();
         let period = 10;
 
-        let batch = crate::indicators::momentum_ext::qstick(&open, &close, period, MaType::Sma).unwrap();
+        let batch =
+            crate::indicators::momentum_ext::qstick(&open, &close, period, MaType::Sma).unwrap();
 
         let mut streaming = StreamingQStick::new(period);
         for i in 0..n {

@@ -1,6 +1,6 @@
-use crate::streaming::trend::adx::StreamingAdx;
-use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
+use crate::streaming::trend::adx::StreamingAdx;
 
 /// Streaming Average Directional Movement Index Rating (ADXR).
 ///
@@ -88,10 +88,18 @@ impl StreamingIndicator<(f64, f64, f64)> for StreamingAdxr {
 }
 
 impl IndicatorMeta for StreamingAdxr {
-    fn name() -> &'static str { "ADXR" }
-    fn category() -> &'static str { "momentum" }
-    fn description() -> &'static str { "Average Directional Movement Index Rating" }
-    fn warm_up_period(&self) -> usize { self.period * 3 + 1 }
+    fn name() -> &'static str {
+        "ADXR"
+    }
+    fn category() -> &'static str {
+        "momentum"
+    }
+    fn description() -> &'static str {
+        "Average Directional Movement Index Rating"
+    }
+    fn warm_up_period(&self) -> usize {
+        self.period * 3 + 1
+    }
 }
 
 #[cfg(test)]

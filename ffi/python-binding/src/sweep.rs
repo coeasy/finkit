@@ -1,9 +1,9 @@
 //! Python bindings for parameter sweep API.
 
-use pyo3::prelude::*;
 use finkit::indicators::sweep::{ema_sweep, rsi_sweep, sma_sweep};
 use finkit::indicators::sweep_engine::{ParamRange, SweepEngine};
 use finkit::indicators::sweepable::{EmaSweepable, RsiSweepable, SmaSweepable};
+use pyo3::prelude::*;
 
 /// Sweep SMA across multiple periods.
 ///
@@ -11,7 +11,7 @@ use finkit::indicators::sweepable::{EmaSweepable, RsiSweepable, SmaSweepable};
 #[pyfunction]
 #[pyo3(signature = (data, periods))]
 pub fn sweep_sma(py: Python<'_>, data: Vec<f64>, periods: Vec<usize>) -> PyResult<Vec<Vec<f64>>> {
-    py.allow_threads(|| {
+    py.detach(|| {
         sma_sweep(&data, &periods)
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
     })
@@ -21,7 +21,7 @@ pub fn sweep_sma(py: Python<'_>, data: Vec<f64>, periods: Vec<usize>) -> PyResul
 #[pyfunction]
 #[pyo3(signature = (data, periods))]
 pub fn sweep_ema(py: Python<'_>, data: Vec<f64>, periods: Vec<usize>) -> PyResult<Vec<Vec<f64>>> {
-    py.allow_threads(|| {
+    py.detach(|| {
         ema_sweep(&data, &periods)
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
     })
@@ -31,7 +31,7 @@ pub fn sweep_ema(py: Python<'_>, data: Vec<f64>, periods: Vec<usize>) -> PyResul
 #[pyfunction]
 #[pyo3(signature = (data, periods))]
 pub fn sweep_rsi(py: Python<'_>, data: Vec<f64>, periods: Vec<usize>) -> PyResult<Vec<Vec<f64>>> {
-    py.allow_threads(|| {
+    py.detach(|| {
         rsi_sweep(&data, &periods)
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
     })
@@ -52,15 +52,15 @@ pub fn sweep_engine(
     indicator: &str,
     data: Vec<f64>,
     ranges: Vec<(usize, usize, usize)>,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     let param_ranges: Vec<ParamRange> = ranges
         .iter()
         .map(|(s, e, step)| ParamRange::new(*s, *e, *step))
         .collect();
 
     let engine = SweepEngine::new();
-    let result = py.allow_threads(|| {
-        match indicator.to_lowercase().as_str() {
+    let result = py
+        .detach(|| match indicator.to_lowercase().as_str() {
             "sma" => engine.run(&SmaSweepable, &data, &param_ranges),
             "ema" => engine.run(&EmaSweepable, &data, &param_ranges),
             "rsi" => engine.run(&RsiSweepable, &data, &param_ranges),
@@ -68,15 +68,14 @@ pub fn sweep_engine(
                 name: "indicator".to_string(),
                 constraint: format!("one of 'sma','ema','rsi', got '{other}'"),
             }),
-        }
-    })
-    .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+        })
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
 
     let dict = pyo3::types::PyDict::new(py);
     dict.set_item("indicator", result.indicator_name)?;
     dict.set_item("param_count", result.param_count)?;
 
-    let results_list: Vec<PyObject> = result
+    let results_list: Vec<Py<PyAny>> = result
         .results
         .iter()
         .map(|r| {

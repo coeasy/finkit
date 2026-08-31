@@ -1,8 +1,8 @@
 use std::collections::VecDeque;
 
-use crate::streaming::traits::{StreamingIndicator};
+use crate::impl_indicator_meta;
 use crate::impl_standard_methods;
-use crate::{impl_indicator_meta};
+use crate::streaming::traits::StreamingIndicator;
 
 /// Streaming Variance using Welford's online algorithm with rolling window.
 #[derive(Clone)]
@@ -38,8 +38,11 @@ impl StreamingIndicator for StreamingVar {
             let old = self.window.pop_front().unwrap();
             let old_mean = self.mean;
             self.mean += (input - old) / self.period as f64;
-            self.m2 += (input - self.mean) * (input - old_mean) - (old - self.mean) * (old - old_mean);
-            if self.m2 < 0.0 { self.m2 = 0.0; }
+            self.m2 +=
+                (input - self.mean) * (input - old_mean) - (old - self.mean) * (old - old_mean);
+            if self.m2 < 0.0 {
+                self.m2 = 0.0;
+            }
         } else {
             let n = self.window.len() as f64 + 1.0;
             let delta = input - self.mean;
@@ -66,12 +69,19 @@ impl StreamingIndicator for StreamingVar {
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { self.window.len() >= self.period }
+    fn is_ready(&self) -> bool {
+        self.window.len() >= self.period
+    }
 
     impl_standard_methods!();
 }
 
-impl_indicator_meta!(StreamingVar, "VAR", "statistic", "Rolling Variance (Welford)");
+impl_indicator_meta!(
+    StreamingVar,
+    "VAR",
+    "statistic",
+    "Rolling Variance (Welford)"
+);
 
 #[cfg(test)]
 mod tests {
@@ -96,7 +106,9 @@ mod tests {
     #[test]
     fn test_streaming_var_reset() {
         let mut v = StreamingVar::new(3);
-        v.next(1.0); v.next(2.0); v.next(3.0);
+        v.next(1.0);
+        v.next(2.0);
+        v.next(3.0);
         assert!(v.is_ready());
         v.reset();
         assert!(!v.is_ready());

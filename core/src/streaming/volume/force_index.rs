@@ -1,6 +1,6 @@
+use crate::impl_standard_methods;
 use crate::streaming::overlap::ema::StreamingEma;
 use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
-use crate::impl_standard_methods;
 use crate::streaming::Ohlcv;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -64,10 +64,18 @@ impl StreamingIndicator<&dyn Ohlcv, f64> for StreamingForceIndex {
 }
 
 impl IndicatorMeta for StreamingForceIndex {
-    fn name() -> &'static str { "Force Index" }
-    fn category() -> &'static str { "volume" }
-    fn description() -> &'static str { "Force Index" }
-    fn warm_up_period(&self) -> usize { self.period + 1 }
+    fn name() -> &'static str {
+        "Force Index"
+    }
+    fn category() -> &'static str {
+        "volume"
+    }
+    fn description() -> &'static str {
+        "Force Index"
+    }
+    fn warm_up_period(&self) -> usize {
+        self.period + 1
+    }
 }
 
 #[cfg(test)]

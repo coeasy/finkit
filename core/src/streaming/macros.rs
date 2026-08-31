@@ -17,13 +17,21 @@ macro_rules! impl_indicator_meta {
     ($type:ty, $name:expr, $category:expr, $desc:expr) => {
         impl $crate::streaming::IndicatorMeta for $type {
             #[inline]
-            fn name() -> &'static str { $name }
+            fn name() -> &'static str {
+                $name
+            }
             #[inline]
-            fn category() -> &'static str { $category }
+            fn category() -> &'static str {
+                $category
+            }
             #[inline]
-            fn description() -> &'static str { $desc }
+            fn description() -> &'static str {
+                $desc
+            }
             #[inline]
-            fn warm_up_period(&self) -> usize { self.period }
+            fn warm_up_period(&self) -> usize {
+                self.period
+            }
         }
     };
 }
@@ -47,15 +55,23 @@ macro_rules! impl_indicator_meta {
 macro_rules! impl_standard_methods {
     () => {
         #[inline]
-        fn count(&self) -> usize { self.count }
+        fn count(&self) -> usize {
+            self.count
+        }
         #[inline]
-        fn value(&self) -> Option<f64> { self.last_value }
+        fn value(&self) -> Option<f64> {
+            self.last_value
+        }
     };
     (output = $output_type:ty) => {
         #[inline]
-        fn count(&self) -> usize { self.count }
+        fn count(&self) -> usize {
+            self.count
+        }
         #[inline]
-        fn value(&self) -> Option<$output_type> { self.last_value }
+        fn value(&self) -> Option<$output_type> {
+            self.last_value
+        }
     };
 }
 

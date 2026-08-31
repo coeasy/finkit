@@ -1,7 +1,7 @@
-use crate::streaming::rolling_minmax::{RollingMax, RollingMin};
-use crate::streaming::traits::{StreamingIndicator};
+use crate::impl_indicator_meta;
 use crate::impl_standard_methods;
-use crate::{impl_indicator_meta};
+use crate::streaming::rolling_minmax::{RollingMax, RollingMin};
+use crate::streaming::traits::StreamingIndicator;
 use crate::utils::true_range;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

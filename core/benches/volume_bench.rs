@@ -91,5 +91,12 @@ fn bench_vwap_mtf(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_vwap, bench_twiggs_mf, bench_vzo, bench_volume_momentum, bench_vwap_mtf);
+criterion_group!(
+    benches,
+    bench_vwap,
+    bench_twiggs_mf,
+    bench_vzo,
+    bench_volume_momentum,
+    bench_vwap_mtf
+);
 criterion_main!(benches);

@@ -3,13 +3,18 @@
 //! Reference values are self-golden: generated once by our library via the
 //! ignored `generate_golden` test, then compared on every run.
 
-use finkit::indicators::{
-    adx, apo, aroon, bbands, cci, cmo, macd, mom, roc, rsi, stoch, stochrsi, trix, volatility::atr,
-    volatility::{natr, trange}, volume::{obv, vwap}, willr,
-    classic_patterns::{darvas_box, kagi, point_and_figure, renko, three_line_break, williams_alligator},
-    heikin_ashi,
-};
 use finkit::indicators::StochResult;
+use finkit::indicators::{
+    adx, apo, aroon, bbands, cci,
+    classic_patterns::{
+        darvas_box, kagi, point_and_figure, renko, three_line_break, williams_alligator,
+    },
+    cmo, heikin_ashi, macd, mom, roc, rsi, stoch, stochrsi, trix,
+    volatility::atr,
+    volatility::{natr, trange},
+    volume::{obv, vwap},
+    willr,
+};
 use finkit::math::moving_avg::{dema, ema, sma, tema, wma};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -310,18 +315,10 @@ fn generate_golden() {
     write_series_csv(&dir.join("cmo_14.csv"), "cmo", cmo14.as_slice().unwrap());
 
     let trix14 = trix(close, 14).unwrap();
-    write_series_csv(
-        &dir.join("trix_14.csv"),
-        "trix",
-        trix14.as_slice().unwrap(),
-    );
+    write_series_csv(&dir.join("trix_14.csv"), "trix", trix14.as_slice().unwrap());
 
     let natr14 = natr(&data.high, &data.low, close, 14).unwrap();
-    write_series_csv(
-        &dir.join("natr_14.csv"),
-        "natr",
-        natr14.as_slice().unwrap(),
-    );
+    write_series_csv(&dir.join("natr_14.csv"), "natr", natr14.as_slice().unwrap());
 
     let trange_vals = trange(&data.high, &data.low, close).unwrap();
     write_series_csv(
@@ -334,18 +331,10 @@ fn generate_golden() {
     write_series_csv(&dir.join("wma_10.csv"), "wma", wma10.as_slice().unwrap());
 
     let dema10 = dema(close, 10).unwrap();
-    write_series_csv(
-        &dir.join("dema_10.csv"),
-        "dema",
-        dema10.as_slice().unwrap(),
-    );
+    write_series_csv(&dir.join("dema_10.csv"), "dema", dema10.as_slice().unwrap());
 
     let tema10 = tema(close, 10).unwrap();
-    write_series_csv(
-        &dir.join("tema_10.csv"),
-        "tema",
-        tema10.as_slice().unwrap(),
-    );
+    write_series_csv(&dir.join("tema_10.csv"), "tema", tema10.as_slice().unwrap());
 
     let obv_vals = obv(close, &data.volume).unwrap();
     write_series_csv(&dir.join("obv.csv"), "obv", obv_vals.as_slice().unwrap());
@@ -401,8 +390,16 @@ fn generate_golden() {
         &["pnf", "col", "new_col"],
         &[
             pnf_res.pnf.as_slice().unwrap(),
-            &pnf_res.column_type.iter().map(|v| *v as f64).collect::<Vec<_>>(),
-            &pnf_res.new_column.iter().map(|v| *v as f64).collect::<Vec<_>>(),
+            &pnf_res
+                .column_type
+                .iter()
+                .map(|v| *v as f64)
+                .collect::<Vec<_>>(),
+            &pnf_res
+                .new_column
+                .iter()
+                .map(|v| *v as f64)
+                .collect::<Vec<_>>(),
         ],
     );
 
@@ -664,10 +661,22 @@ fn golden_heikin_ashi() {
     let data = load_ohlcv();
     let computed = heikin_ashi(&data.open, &data.high, &data.low, &data.close).unwrap();
     let expected = read_multi_series_csv(&golden_dir().join("heikin_ashi.csv"));
-    assert_series_eq(computed.ha_open.as_slice().unwrap(), &expected[0], "HA open");
-    assert_series_eq(computed.ha_high.as_slice().unwrap(), &expected[1], "HA high");
+    assert_series_eq(
+        computed.ha_open.as_slice().unwrap(),
+        &expected[0],
+        "HA open",
+    );
+    assert_series_eq(
+        computed.ha_high.as_slice().unwrap(),
+        &expected[1],
+        "HA high",
+    );
     assert_series_eq(computed.ha_low.as_slice().unwrap(), &expected[2], "HA low");
-    assert_series_eq(computed.ha_close.as_slice().unwrap(), &expected[3], "HA close");
+    assert_series_eq(
+        computed.ha_close.as_slice().unwrap(),
+        &expected[3],
+        "HA close",
+    );
 }
 
 #[test]
@@ -675,8 +684,16 @@ fn golden_darvas_box() {
     let data = load_ohlcv();
     let computed = darvas_box(&data.high, &data.low, &data.close, 5, 3).unwrap();
     let expected = read_multi_series_csv(&golden_dir().join("darvas_box_5_3.csv"));
-    assert_series_eq(computed.box_top.as_slice().unwrap(), &expected[0], "Darvas top");
-    assert_series_eq(computed.box_bottom.as_slice().unwrap(), &expected[1], "Darvas bottom");
+    assert_series_eq(
+        computed.box_top.as_slice().unwrap(),
+        &expected[0],
+        "Darvas top",
+    );
+    assert_series_eq(
+        computed.box_bottom.as_slice().unwrap(),
+        &expected[1],
+        "Darvas bottom",
+    );
     assert_eq!(close_to_int(&expected[2]), computed.signal.to_vec());
 }
 
@@ -685,7 +702,11 @@ fn golden_renko() {
     let data = load_ohlcv();
     let computed = renko(&data.high, &data.low, 5.0).unwrap();
     let expected = read_multi_series_csv(&golden_dir().join("renko_5.csv"));
-    assert_series_eq(computed.bricks.as_slice().unwrap(), &expected[0], "Renko brick");
+    assert_series_eq(
+        computed.bricks.as_slice().unwrap(),
+        &expected[0],
+        "Renko brick",
+    );
     assert_eq!(close_to_int(&expected[1]), computed.direction.to_vec());
 }
 
@@ -722,9 +743,21 @@ fn golden_williams_alligator() {
     let data = load_ohlcv();
     let computed = williams_alligator(&data.close).unwrap();
     let expected = read_multi_series_csv(&golden_dir().join("williams_alligator.csv"));
-    assert_series_eq(computed.jaw.as_slice().unwrap(), &expected[0], "Alligator jaw");
-    assert_series_eq(computed.teeth.as_slice().unwrap(), &expected[1], "Alligator teeth");
-    assert_series_eq(computed.lips.as_slice().unwrap(), &expected[2], "Alligator lips");
+    assert_series_eq(
+        computed.jaw.as_slice().unwrap(),
+        &expected[0],
+        "Alligator jaw",
+    );
+    assert_series_eq(
+        computed.teeth.as_slice().unwrap(),
+        &expected[1],
+        "Alligator teeth",
+    );
+    assert_series_eq(
+        computed.lips.as_slice().unwrap(),
+        &expected[2],
+        "Alligator lips",
+    );
 }
 
 #[test]
@@ -765,28 +798,136 @@ fn golden_stochrsi_simd_snapshot() {
 
     let nan = f64::NAN;
     let expected_k: Vec<f64> = vec![
-        nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,
-        nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, 14.633402877996966,
-        4.040600005430504, 1.1842378929335002e-15, 1.1842378929335002e-15, 2.773044096232221,
-        13.20080246600195, 32.532907454834174, 56.94158982838073, 79.84716479194432,
-        93.84839313644542, 100.0, 100.0, 100.0, 100.0, 97.64431767995325, 89.52551617881227,
-        74.61714438584893, 55.101587417353855, 31.21104684274501, 12.786085302375007,
-        2.8537439365836477, 5.8969785578966745, 13.07199011545687, 22.040125751659662,
-        33.45684092468276, 49.43942696002972, 69.68160920588782, 87.23100148730151,
-        97.40673722772767, 99.99999999999997, 96.35228170360503, 87.24802148653896,
-        73.16304915055302, 57.818618947601635, 41.60051096537618,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        14.633402877996966,
+        4.040600005430504,
+        1.1842378929335002e-15,
+        1.1842378929335002e-15,
+        2.773044096232221,
+        13.20080246600195,
+        32.532907454834174,
+        56.94158982838073,
+        79.84716479194432,
+        93.84839313644542,
+        100.0,
+        100.0,
+        100.0,
+        100.0,
+        97.64431767995325,
+        89.52551617881227,
+        74.61714438584893,
+        55.101587417353855,
+        31.21104684274501,
+        12.786085302375007,
+        2.8537439365836477,
+        5.8969785578966745,
+        13.07199011545687,
+        22.040125751659662,
+        33.45684092468276,
+        49.43942696002972,
+        69.68160920588782,
+        87.23100148730151,
+        97.40673722772767,
+        99.99999999999997,
+        96.35228170360503,
+        87.24802148653896,
+        73.16304915055302,
+        57.818618947601635,
+        41.60051096537618,
     ];
     let expected_d: Vec<f64> = vec![
-        nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,
-        nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, 6.224667627809156,
-        1.3468666684768351, 0.9243480320774076, 5.324615520744723, 16.16891800568945,
-        34.22509991640562, 56.440554025053075, 76.87904925225682, 91.23185264279658,
-        97.94946437881515, 100.0, 100.0, 99.21477255998441, 95.72327795292183, 87.26232608153813,
-        73.08141599400501, 53.64325954864927, 33.032906520824625, 15.616958693901227,
-        7.178935932285115, 7.274237536645736, 13.669698141671073, 22.85631893059977,
-        34.978797878790715, 50.85929236353344, 68.78401255107303, 84.77311597363901,
-        94.87924623834306, 97.91967297711088, 94.53343439671465, 85.58778411356566,
-        72.74322986156453, 57.527393021176934,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        nan,
+        6.224667627809156,
+        1.3468666684768351,
+        0.9243480320774076,
+        5.324615520744723,
+        16.16891800568945,
+        34.22509991640562,
+        56.440554025053075,
+        76.87904925225682,
+        91.23185264279658,
+        97.94946437881515,
+        100.0,
+        100.0,
+        99.21477255998441,
+        95.72327795292183,
+        87.26232608153813,
+        73.08141599400501,
+        53.64325954864927,
+        33.032906520824625,
+        15.616958693901227,
+        7.178935932285115,
+        7.274237536645736,
+        13.669698141671073,
+        22.85631893059977,
+        34.978797878790715,
+        50.85929236353344,
+        68.78401255107303,
+        84.77311597363901,
+        94.87924623834306,
+        97.91967297711088,
+        94.53343439671465,
+        85.58778411356566,
+        72.74322986156453,
+        57.527393021176934,
     ];
 
     assert_eq!(k.len(), expected_k.len());

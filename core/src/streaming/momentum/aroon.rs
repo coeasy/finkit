@@ -1,6 +1,6 @@
+use crate::impl_standard_methods;
 use crate::streaming::rolling_minmax::{RollingMax, RollingMin};
 use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
-use crate::impl_standard_methods;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -98,16 +98,22 @@ impl StreamingIndicator<(f64, f64), AroonOutput> for StreamingAroon {
         self.count > self.period
     }
 
-        impl_standard_methods!(output = AroonOutput);
-
-
+    impl_standard_methods!(output = AroonOutput);
 }
 
 impl IndicatorMeta for StreamingAroon {
-    fn name() -> &'static str { "AROON" }
-    fn category() -> &'static str { "momentum" }
-    fn description() -> &'static str { "Aroon Up/Down" }
-    fn warm_up_period(&self) -> usize { self.period + 1 }
+    fn name() -> &'static str {
+        "AROON"
+    }
+    fn category() -> &'static str {
+        "momentum"
+    }
+    fn description() -> &'static str {
+        "Aroon Up/Down"
+    }
+    fn warm_up_period(&self) -> usize {
+        self.period + 1
+    }
 }
 
 #[cfg(test)]
@@ -156,7 +162,10 @@ mod tests {
             let out = aroon.next((h, h - 2.0));
             if aroon.is_ready() {
                 let out = out.unwrap();
-                assert_eq!(out.aroon_down, 100.0, "In downtrend, aroon_down should be 100");
+                assert_eq!(
+                    out.aroon_down, 100.0,
+                    "In downtrend, aroon_down should be 100"
+                );
             }
         }
     }

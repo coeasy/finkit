@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 
 /// Streaming Chande Forecast Oscillator.
 ///
@@ -115,7 +115,9 @@ mod tests {
     #[test]
     fn test_streaming_cfo_basic() {
         let mut ind = StreamingCfo::new(14);
-        let data: Vec<f64> = (0..30).map(|i| 100.0 + (i as f64 * 0.3).sin() * 5.0).collect();
+        let data: Vec<f64> = (0..30)
+            .map(|i| 100.0 + (i as f64 * 0.3).sin() * 5.0)
+            .collect();
 
         let mut results = Vec::new();
         for &v in &data {
@@ -157,7 +159,8 @@ mod tests {
             .collect();
         let period = 14;
 
-        let batch = crate::indicators::momentum_ext::chande_forecast_oscillator(&data, period).unwrap();
+        let batch =
+            crate::indicators::momentum_ext::chande_forecast_oscillator(&data, period).unwrap();
 
         let mut streaming = StreamingCfo::new(period);
         for i in 0..data.len() {

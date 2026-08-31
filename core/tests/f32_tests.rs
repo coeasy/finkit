@@ -45,13 +45,18 @@ fn test_f32_ema_reset() {
 #[test]
 fn test_f32_rsi_range() {
     let mut rsi = GenericRsi::<f32>::new(14);
-    let data: Vec<f32> = (0..30).map(|i| 50.0_f32 + (i as f32 * 0.1).sin() * 10.0).collect();
+    let data: Vec<f32> = (0..30)
+        .map(|i| 50.0_f32 + (i as f32 * 0.1).sin() * 10.0)
+        .collect();
     let mut last = None;
     for &d in &data {
         last = rsi.next(d);
     }
     let val = last.unwrap();
-    assert!((0.0_f32..=100.0_f32).contains(&val), "RSI f32 out of range: {val}");
+    assert!(
+        (0.0_f32..=100.0_f32).contains(&val),
+        "RSI f32 out of range: {val}"
+    );
 }
 
 #[test]
@@ -135,7 +140,9 @@ fn test_f32_atr_reset() {
 #[test]
 fn test_f32_sma_longer_series() {
     let mut sma = GenericSma::<f32>::new(10);
-    let data: Vec<f32> = (0..100).map(|i| 50.0_f32 + (i as f32 * 0.1).sin() * 10.0).collect();
+    let data: Vec<f32> = (0..100)
+        .map(|i| 50.0_f32 + (i as f32 * 0.1).sin() * 10.0)
+        .collect();
     let mut count = 0;
     for &v in &data {
         if sma.next(v).is_some() {
@@ -147,7 +154,9 @@ fn test_f32_sma_longer_series() {
 
 #[test]
 fn test_f32_f64_sma_convergence() {
-    let data: Vec<f64> = (0..50).map(|i| 50.0 + (i as f64 * 0.1).sin() * 10.0).collect();
+    let data: Vec<f64> = (0..50)
+        .map(|i| 50.0 + (i as f64 * 0.1).sin() * 10.0)
+        .collect();
     let mut sma64 = GenericSma::<f64>::new(5);
     let mut sma32 = GenericSma::<f32>::new(5);
 
@@ -156,7 +165,10 @@ fn test_f32_f64_sma_convergence() {
         let v32 = sma32.next(v as f32);
         match (v64, v32) {
             (Some(a), Some(b)) => {
-                assert!((a - b as f64).abs() < 0.01, "f32/f64 divergence: {a} vs {b}");
+                assert!(
+                    (a - b as f64).abs() < 0.01,
+                    "f32/f64 divergence: {a} vs {b}"
+                );
             }
             (None, None) => {}
             _ => panic!("Readiness mismatch"),
@@ -167,7 +179,9 @@ fn test_f32_f64_sma_convergence() {
 #[test]
 fn test_f32_ema_longer_series() {
     let mut ema = GenericEma::<f32>::new(14);
-    let data: Vec<f32> = (0..100).map(|i| 50.0_f32 + (i as f32 * 0.1).sin() * 10.0).collect();
+    let data: Vec<f32> = (0..100)
+        .map(|i| 50.0_f32 + (i as f32 * 0.1).sin() * 10.0)
+        .collect();
     let mut count = 0;
     for &v in &data {
         if ema.next(v).is_some() {

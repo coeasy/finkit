@@ -1,3 +1,3 @@
 pub mod patterns;
-pub mod squeeze_momentum;
 pub mod smc;
+pub mod squeeze_momentum;

@@ -143,11 +143,7 @@ pub fn roll_spread(close: &[f64], window: usize) -> Array1<f64> {
         }
         cov /= count;
 
-        out[i] = if cov < 0.0 {
-            2.0 * (-cov).sqrt()
-        } else {
-            0.0
-        };
+        out[i] = if cov < 0.0 { 2.0 * (-cov).sqrt() } else { 0.0 };
     }
     out
 }
@@ -313,18 +309,18 @@ pub fn rolling_lob_imbalance(snapshots: &[Vec<LobLevel>], decay: f64) -> Vec<f64
 }
 
 /// Build a feature matrix with all microstructure columns for OHLCV data.
-pub fn microstructure_matrix(
-    close: &[f64],
-    volume: &[f64],
-    window: usize,
-) -> FeatureMatrix {
+pub fn microstructure_matrix(close: &[f64], volume: &[f64], window: usize) -> FeatureMatrix {
     let mut matrix = FeatureMatrix::with_capacity(close.len(), 4);
     matrix.add_column(
         Feature::new(format!("tick_imbalance_{window}"), "microstructure", window),
         tick_imbalance(close, window).to_vec(),
     );
     matrix.add_column(
-        Feature::new(format!("volume_imbalance_{window}"), "microstructure", window),
+        Feature::new(
+            format!("volume_imbalance_{window}"),
+            "microstructure",
+            window,
+        ),
         volume_imbalance(close, volume, window).to_vec(),
     );
     matrix.add_column(
@@ -449,8 +445,14 @@ mod tests {
     #[test]
     fn test_lob_imbalance_balanced() {
         let levels = vec![
-            LobLevel { bid_vol: 100.0, ask_vol: 100.0 },
-            LobLevel { bid_vol: 200.0, ask_vol: 200.0 },
+            LobLevel {
+                bid_vol: 100.0,
+                ask_vol: 100.0,
+            },
+            LobLevel {
+                bid_vol: 200.0,
+                ask_vol: 200.0,
+            },
         ];
         let imb = lob_imbalance(&levels, 0.5);
         assert!((imb).abs() < 1e-10, "balanced LOB should have 0 imbalance");
@@ -459,8 +461,14 @@ mod tests {
     #[test]
     fn test_lob_imbalance_bid_heavy() {
         let levels = vec![
-            LobLevel { bid_vol: 200.0, ask_vol: 100.0 },
-            LobLevel { bid_vol: 150.0, ask_vol: 50.0 },
+            LobLevel {
+                bid_vol: 200.0,
+                ask_vol: 100.0,
+            },
+            LobLevel {
+                bid_vol: 150.0,
+                ask_vol: 50.0,
+            },
         ];
         let imb = lob_imbalance(&levels, 0.5);
         assert!(imb > 0.0, "bid-heavy LOB should be positive");
@@ -470,8 +478,14 @@ mod tests {
     #[test]
     fn test_lob_imbalance_ask_heavy() {
         let levels = vec![
-            LobLevel { bid_vol: 50.0, ask_vol: 200.0 },
-            LobLevel { bid_vol: 30.0, ask_vol: 150.0 },
+            LobLevel {
+                bid_vol: 50.0,
+                ask_vol: 200.0,
+            },
+            LobLevel {
+                bid_vol: 30.0,
+                ask_vol: 150.0,
+            },
         ];
         let imb = lob_imbalance(&levels, 0.5);
         assert!(imb < 0.0, "ask-heavy LOB should be negative");
@@ -489,8 +503,14 @@ mod tests {
         // With decay=1.0, all levels weighted equally
         // With decay=0.0, only first level matters
         let levels = vec![
-            LobLevel { bid_vol: 100.0, ask_vol: 50.0 },
-            LobLevel { bid_vol: 50.0, ask_vol: 200.0 },
+            LobLevel {
+                bid_vol: 100.0,
+                ask_vol: 50.0,
+            },
+            LobLevel {
+                bid_vol: 50.0,
+                ask_vol: 200.0,
+            },
         ];
         let imb_no_decay = lob_imbalance(&levels, 1.0);
         let imb_full_decay = lob_imbalance(&levels, 0.0);
@@ -503,9 +523,18 @@ mod tests {
     #[test]
     fn test_rolling_lob_imbalance() {
         let snapshots = vec![
-            vec![LobLevel { bid_vol: 100.0, ask_vol: 100.0 }],
-            vec![LobLevel { bid_vol: 200.0, ask_vol: 100.0 }],
-            vec![LobLevel { bid_vol: 50.0, ask_vol: 200.0 }],
+            vec![LobLevel {
+                bid_vol: 100.0,
+                ask_vol: 100.0,
+            }],
+            vec![LobLevel {
+                bid_vol: 200.0,
+                ask_vol: 100.0,
+            }],
+            vec![LobLevel {
+                bid_vol: 50.0,
+                ask_vol: 200.0,
+            }],
         ];
         let result = rolling_lob_imbalance(&snapshots, 0.5);
         assert_eq!(result.len(), 3);

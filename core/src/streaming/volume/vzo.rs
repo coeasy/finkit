@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 
 /// Streaming Volume Zone Oscillator (VZO).
 ///
@@ -136,7 +136,9 @@ mod tests {
         let mut ind = StreamingVzo::new(14);
         let n = 30;
         let close: Vec<f64> = (0..n).map(|i| 100.0 + i as f64 * 0.5).collect();
-        let volume: Vec<f64> = (0..n).map(|i| 1000.0 + (i as f64 * 0.7).sin() * 200.0).collect();
+        let volume: Vec<f64> = (0..n)
+            .map(|i| 1000.0 + (i as f64 * 0.7).sin() * 200.0)
+            .collect();
 
         let mut results = Vec::new();
         for i in 0..n {
@@ -175,8 +177,12 @@ mod tests {
     #[test]
     fn test_streaming_vs_batch_convergence() {
         let n = 40;
-        let close: Vec<f64> = (0..n).map(|i| 100.0 + (i as f64 * 0.2).sin() * 5.0 + i as f64 * 0.1).collect();
-        let volume: Vec<f64> = (0..n).map(|i| 1000.0 + (i as f64 * 0.5).cos() * 200.0).collect();
+        let close: Vec<f64> = (0..n)
+            .map(|i| 100.0 + (i as f64 * 0.2).sin() * 5.0 + i as f64 * 0.1)
+            .collect();
+        let volume: Vec<f64> = (0..n)
+            .map(|i| 1000.0 + (i as f64 * 0.5).cos() * 200.0)
+            .collect();
         let period = 14;
 
         let batch = crate::indicators::volume_ext::vzo(&close, &volume, period).unwrap();

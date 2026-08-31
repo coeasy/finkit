@@ -4,16 +4,16 @@
 #![allow(missing_debug_implementations)]
 #![allow(deprecated)]
 
-use jni::objects::{JClass, JDoubleArray, JObject, JPrimitiveArray, JString, JValue};
-use jni::sys::{jboolean, jdouble, jdoubleArray, jint, jintArray, jobject, jsize};
-use jni::JNIEnv;
-use ndarray::Array1;
-use serde_json;
 use finkit::formula::*;
 use finkit::indicators;
 use finkit::math::moving_avg;
 use finkit::patterns::{candlestick, chart};
 use finkit_ffi_common::panic::*;
+use jni::objects::{JClass, JDoubleArray, JObject, JPrimitiveArray, JString, JValue};
+use jni::sys::{jboolean, jdouble, jdoubleArray, jint, jintArray, jobject, jsize};
+use jni::JNIEnv;
+use ndarray::Array1;
+use serde_json;
 
 // ============================================================================
 // FFI memory-ownership contract (Java)
@@ -168,7 +168,6 @@ where
 // Overlap Studies
 // ============================================================================
 
-
 #[cfg(test)]
 #[no_mangle]
 pub extern "system" fn Java_com_finkit_Indicators_ffiPanicTest() -> jobject {
@@ -179,8 +178,8 @@ include!("generated.rs");
 
 #[cfg(test)]
 mod tests {
-    use finkit::math::moving_avg::sma;
     use finkit::indicators::momentum::rsi;
+    use finkit::math::moving_avg::sma;
 
     #[test]
     fn export_panic_test_returns_null_not_abort() {
@@ -207,7 +206,6 @@ mod tests {
         assert!(result[5].is_finite());
     }
 }
-
 
 #[no_mangle]
 pub extern "system" fn Java_com_finkit_Indicators_formulaEvalMulti(
@@ -426,45 +424,9 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaListCategories(
     }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 // ============================================================================
 // Momentum Indicators
 // ============================================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 #[no_mangle]
 pub extern "system" fn Java_com_finkit_Indicators_dx(
@@ -483,18 +445,6 @@ pub extern "system" fn Java_com_finkit_Indicators_dx(
         Err(_) => std::ptr::null_mut(),
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
 #[no_mangle]
 pub extern "system" fn Java_com_finkit_Indicators_plus_di(
@@ -532,39 +482,17 @@ pub extern "system" fn Java_com_finkit_Indicators_minus_di(
     }
 }
 
-
-
 // ============================================================================
 // Volume Indicators
 // ============================================================================
-
-
-
-
-
-
 
 // ============================================================================
 // Volatility Indicators
 // ============================================================================
 
-
-
-
-
-
-
 // ============================================================================
 // Price Transforms
 // ============================================================================
-
-
-
-
-
-
-
-
 
 // ============================================================================
 // Cycle Indicators (Hilbert Transform)
@@ -658,8 +586,6 @@ pub extern "system" fn Java_com_finkit_Indicators_htTrendline(
 // Statistical Indicators
 // ============================================================================
 
-
-
 #[no_mangle]
 pub extern "system" fn Java_com_finkit_Indicators_percentRank(
     mut env: JNIEnv,
@@ -673,10 +599,6 @@ pub extern "system" fn Java_com_finkit_Indicators_percentRank(
         Err(_) => std::ptr::null_mut(),
     }
 }
-
-
-
-
 
 #[no_mangle]
 pub extern "system" fn Java_com_finkit_Indicators_stdDev(
@@ -706,8 +628,6 @@ pub extern "system" fn Java_com_finkit_Indicators_linearReg(
         Err(_) => std::ptr::null_mut(),
     }
 }
-
-
 
 // ============================================================================
 // Candlestick Patterns
@@ -818,10 +738,7 @@ impl_cdl_pattern_5arg!(
 );
 
 impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlHammer, hammer);
-impl_cdl_pattern_4arg!(
-    Java_com_finkit_Patterns_cdlInvertedHammer,
-    inverted_hammer
-);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlInvertedHammer, inverted_hammer);
 impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlHangingMan, hanging_man);
 impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlShootingStar, shooting_star);
 impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlEngulfing, engulfing);
@@ -837,14 +754,8 @@ impl_cdl_pattern_4arg!(
     Java_com_finkit_Patterns_cdlThreeBlackCrows,
     three_black_crows
 );
-impl_cdl_pattern_4arg!(
-    Java_com_finkit_Patterns_cdlThreeInsideUp,
-    three_inside_up
-);
-impl_cdl_pattern_4arg!(
-    Java_com_finkit_Patterns_cdlThreeOutsideUp,
-    three_outside_up
-);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlThreeInsideUp, three_inside_up);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlThreeOutsideUp, three_outside_up);
 impl_cdl_pattern_4arg!(
     Java_com_finkit_Patterns_cdlThreeInsideDown,
     three_inside_down
@@ -873,10 +784,7 @@ impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlRickshawMan, rickshaw_man);
 impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlShortLine, short_line);
 impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlLongLine, long_line);
 impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlPiercing, piercing);
-impl_cdl_pattern_4arg!(
-    Java_com_finkit_Patterns_cdlDarkCloudCover,
-    dark_cloud_cover
-);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlDarkCloudCover, dark_cloud_cover);
 impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlTweezerTop, tweezer_top);
 impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlTweezerBot, tweezer_bot);
 impl_cdl_pattern_4arg!(
@@ -911,10 +819,7 @@ impl_cdl_pattern_4arg!(
     kicking_by_length
 );
 impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlAdvanceBlock, advance_block);
-impl_cdl_pattern_4arg!(
-    Java_com_finkit_Patterns_cdlStalledPattern,
-    stalled_pattern
-);
+impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlStalledPattern, stalled_pattern);
 impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlThrusting, thrusting);
 impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlInNeck, in_neck);
 impl_cdl_pattern_4arg!(Java_com_finkit_Patterns_cdlOnNeck, on_neck);
@@ -1723,14 +1628,14 @@ pub extern "system" fn Java_com_finkit_Indicators_darvasBox(
     let l = get_double_array(&mut env, low);
     let c = get_double_array(&mut env, close);
     let lb = if lookback > 0 { lookback as usize } else { 5 };
-    let conf = if confirmation > 0 { confirmation as usize } else { 3 };
+    let conf = if confirmation > 0 {
+        confirmation as usize
+    } else {
+        3
+    };
     let r = indicators::darvas_box(&h, &l, &c, lb, conf).unwrap();
     build_dto_2d_1i(env, &r.box_top, &r.box_bottom, &r.signal)
 }
-
-
-
-
 
 #[no_mangle]
 pub extern "system" fn Java_com_finkit_Indicators_pointAndFigure(
@@ -1794,11 +1699,7 @@ fn set_int_field(env: &mut JNIEnv, obj: &JObject, field: &str, arr: jintArray) {
         .unwrap();
 }
 
-fn build_dto2(
-    mut env: JNIEnv,
-    a: &Array1<f64>,
-    b: &Array1<i32>,
-) -> jobject {
+fn build_dto2(mut env: JNIEnv, a: &Array1<f64>, b: &Array1<i32>) -> jobject {
     let cls = env.find_class("com/finkit/DoubleOutput").unwrap();
     let obj = env.alloc_object(&cls).unwrap();
     let a_arr = to_double_array(&mut env, a.to_vec());
@@ -1814,12 +1715,7 @@ fn build_dto2(
 }
 
 /// Triple of (double[], double[], int[]) — used by Darvas Box.
-fn build_dto_2d_1i(
-    mut env: JNIEnv,
-    a: &Array1<f64>,
-    b: &Array1<f64>,
-    c: &Array1<i32>,
-) -> jobject {
+fn build_dto_2d_1i(mut env: JNIEnv, a: &Array1<f64>, b: &Array1<f64>, c: &Array1<i32>) -> jobject {
     let cls = env.find_class("com/finkit/TripleOutput").unwrap();
     let obj = env.alloc_object(&cls).unwrap();
     let a_arr = to_double_array(&mut env, a.to_vec());
@@ -1837,12 +1733,7 @@ fn build_dto_2d_1i(
 }
 
 /// Triple of (double[], int[], int[]) — used by Point & Figure.
-fn build_dto3(
-    mut env: JNIEnv,
-    a: &Array1<f64>,
-    b: &Array1<i32>,
-    c: &Array1<i32>,
-) -> jobject {
+fn build_dto3(mut env: JNIEnv, a: &Array1<f64>, b: &Array1<i32>, c: &Array1<i32>) -> jobject {
     let cls = env.find_class("com/finkit/TripleOutput").unwrap();
     let obj = env.alloc_object(&cls).unwrap();
     let a_arr = to_double_array(&mut env, a.to_vec());
@@ -1865,12 +1756,7 @@ fn build_dto3(
 }
 
 /// Triple of (double[], double[], double[]) — used by Williams Alligator.
-fn build_dto_3d(
-    mut env: JNIEnv,
-    a: &Array1<f64>,
-    b: &Array1<f64>,
-    c: &Array1<f64>,
-) -> jobject {
+fn build_dto_3d(mut env: JNIEnv, a: &Array1<f64>, b: &Array1<f64>, c: &Array1<f64>) -> jobject {
     let cls = env.find_class("com/finkit/TripleOutput").unwrap();
     let obj = env.alloc_object(&cls).unwrap();
     let a_arr = to_double_array(&mut env, a.to_vec());
@@ -1902,7 +1788,7 @@ fn build_dto4(
     obj.into_raw()
 }
 
-// ============================================================================ 
+// ============================================================================
 // Formula Engine
 // ============================================================================
 
@@ -2022,8 +1908,16 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaEvalJit(
     close: JDoubleArray,
     volume: JDoubleArray,
 ) -> jobject {
-    formula_eval_helper(&mut env, source, open, high, low, close, volume,
-        |engine, source, ctx| engine.eval_jit(source, ctx))
+    formula_eval_helper(
+        &mut env,
+        source,
+        open,
+        high,
+        low,
+        close,
+        volume,
+        |engine, source, ctx| engine.eval_jit(source, ctx),
+    )
 }
 
 #[no_mangle]
@@ -2037,8 +1931,16 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaEvalSimd(
     close: JDoubleArray,
     volume: JDoubleArray,
 ) -> jobject {
-    formula_eval_helper(&mut env, source, open, high, low, close, volume,
-        |engine, source, ctx| engine.eval_simd(source, ctx))
+    formula_eval_helper(
+        &mut env,
+        source,
+        open,
+        high,
+        low,
+        close,
+        volume,
+        |engine, source, ctx| engine.eval_simd(source, ctx),
+    )
 }
 
 #[no_mangle]
@@ -2052,6 +1954,14 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaEvalZeroCopy(
     close: JDoubleArray,
     volume: JDoubleArray,
 ) -> jobject {
-    formula_eval_helper(&mut env, source, open, high, low, close, volume,
-        |engine, source, ctx| engine.eval_zero_copy(source, ctx))
+    formula_eval_helper(
+        &mut env,
+        source,
+        open,
+        high,
+        low,
+        close,
+        volume,
+        |engine, source, ctx| engine.eval_zero_copy(source, ctx),
+    )
 }

@@ -15,23 +15,23 @@
 //! assert!(!result.is_empty());
 //! ```
 
+mod diff;
 mod log_return;
 mod pct_change;
-mod zscore;
-mod scaler;
 mod pipeline;
 mod rank;
-mod diff;
 mod rolling;
+mod scaler;
+mod zscore;
 
+pub use diff::{Diff, DiffN};
 pub use log_return::LogReturn;
 pub use pct_change::PctChange;
-pub use zscore::ZScore;
-pub use scaler::{StandardScaler, MinMaxScaler};
 pub use pipeline::Pipeline;
-pub use rank::{Rank, PercentileRank};
-pub use diff::{Diff, DiffN};
+pub use rank::{PercentileRank, Rank};
 pub use rolling::{RollingMean, RollingStd, RollingSum};
+pub use scaler::{MinMaxScaler, StandardScaler};
+pub use zscore::ZScore;
 
 /// A data transformation that converts an input slice to a new vector.
 pub trait Transform: Send + Sync {
