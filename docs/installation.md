@@ -19,59 +19,35 @@ cd finkit
 
 ## Python
 
-### Option 1: pip (Recommended)
+Finkit Python wheel 由 GitHub Actions 使用 maturin 构建。完整的版本、平台、wheel 选择、源码构建、测试和故障排查说明见 [Python 安装与发布指南](python.md)。
+
+### 已构建 wheel
+
+从 [GitHub Releases](https://github.com/coeasy/finkit/releases) 下载匹配本机的 `finkit-0.1.0-*.whl`，然后执行：
 
 ```bash
-pip install finkit
+python -m pip install --upgrade pip
+python -m pip install ./finkit-0.1.0-<matching-wheel>.whl
 ```
 
-### Option 2: Build from Source
+支持 CPython 3.8–3.14，以及 Linux x86_64、macOS x86_64/arm64 和 Windows x86_64。pip 会自动安装 NumPy 运行时依赖。
+
+### 从源码构建
 
 ```bash
-# Install maturin
-pip install maturin
+python -m venv .venv
+source .venv/bin/activate       # Windows PowerShell: .\\.venv\\Scripts\\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install "maturin>=1.5,<2.0" "numpy>=1.24" pytest
 
-# Navigate to Python binding directory
 cd ffi/python-binding
-
-# Build and install in development mode
 maturin develop --release
 
-# Or build wheel
-maturin build --release --out dist
-pip install dist/finkit-*.whl
+cd ../..
+python -m pytest ffi/python-binding/tests -q
 ```
 
-### Option 3: Conda
-
-```bash
-conda install -c conda-forge finkit
-```
-
-### Platform-Specific Notes
-
-**Windows:**
-- Requires Visual Studio Build Tools 2019 or later
-- Python 3.8+ (64-bit recommended)
-
-**macOS:**
-- Requires Xcode Command Line Tools
-- Apple Silicon (M1/M2) and Intel supported
-
-**Linux:**
-- GCC 7+ or Clang 6+ required
-- glibc 2.17+ (Ubuntu 18.04+, CentOS 8+)
-
-### Verification
-
-```python
-import finkit as ta
-import numpy as np
-
-close = np.arange(1.0, 51.0)
-rsi = ta.rsi(close, timeperiod=14)
-print(f"Python binding installed successfully! RSI length: {len(rsi)}")
-```
+源码构建需要 Rust 1.85+ 和平台 C/C++ 编译工具链。
 
 ## Node.js
 
@@ -561,10 +537,8 @@ finkit rsi --input data.csv --output rsi.csv
 ### Common Issues
 
 **Python: "ModuleNotFoundError: No module named 'finkit'"**
-```bash
-# Reinstall with verbose output
-pip install --verbose finkit
-```
+
+确认 `python` 和 `python -m pip` 使用同一个虚拟环境，并且不要在源码目录中直接验证已安装 wheel；请参阅 [Python 故障排查](python.md#常见问题)。
 
 **Node.js: "Cannot find module 'finkit'"**
 ```bash
