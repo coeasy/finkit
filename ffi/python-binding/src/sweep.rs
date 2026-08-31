@@ -11,7 +11,7 @@ use pyo3::prelude::*;
 #[pyfunction]
 #[pyo3(signature = (data, periods))]
 pub fn sweep_sma(py: Python<'_>, data: Vec<f64>, periods: Vec<usize>) -> PyResult<Vec<Vec<f64>>> {
-    py.allow_threads(|| {
+    py.detach(|| {
         sma_sweep(&data, &periods)
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
     })
@@ -21,7 +21,7 @@ pub fn sweep_sma(py: Python<'_>, data: Vec<f64>, periods: Vec<usize>) -> PyResul
 #[pyfunction]
 #[pyo3(signature = (data, periods))]
 pub fn sweep_ema(py: Python<'_>, data: Vec<f64>, periods: Vec<usize>) -> PyResult<Vec<Vec<f64>>> {
-    py.allow_threads(|| {
+    py.detach(|| {
         ema_sweep(&data, &periods)
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
     })
@@ -31,7 +31,7 @@ pub fn sweep_ema(py: Python<'_>, data: Vec<f64>, periods: Vec<usize>) -> PyResul
 #[pyfunction]
 #[pyo3(signature = (data, periods))]
 pub fn sweep_rsi(py: Python<'_>, data: Vec<f64>, periods: Vec<usize>) -> PyResult<Vec<Vec<f64>>> {
-    py.allow_threads(|| {
+    py.detach(|| {
         rsi_sweep(&data, &periods)
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
     })
@@ -52,7 +52,7 @@ pub fn sweep_engine(
     indicator: &str,
     data: Vec<f64>,
     ranges: Vec<(usize, usize, usize)>,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     let param_ranges: Vec<ParamRange> = ranges
         .iter()
         .map(|(s, e, step)| ParamRange::new(*s, *e, *step))
@@ -60,7 +60,7 @@ pub fn sweep_engine(
 
     let engine = SweepEngine::new();
     let result = py
-        .allow_threads(|| match indicator.to_lowercase().as_str() {
+        .detach(|| match indicator.to_lowercase().as_str() {
             "sma" => engine.run(&SmaSweepable, &data, &param_ranges),
             "ema" => engine.run(&EmaSweepable, &data, &param_ranges),
             "rsi" => engine.run(&RsiSweepable, &data, &param_ranges),
@@ -75,7 +75,7 @@ pub fn sweep_engine(
     dict.set_item("indicator", result.indicator_name)?;
     dict.set_item("param_count", result.param_count)?;
 
-    let results_list: Vec<PyObject> = result
+    let results_list: Vec<Py<PyAny>> = result
         .results
         .iter()
         .map(|r| {
