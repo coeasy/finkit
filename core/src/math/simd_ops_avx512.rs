@@ -805,7 +805,7 @@ mod tests {
         let data: Vec<f64> = (0..32).map(|i| 100.0 + i as f64).collect();
         let mut output = vec![0.0; data.len()];
         simd512_rsi(&data, 7, &mut output);
-        assert!(output[6].is_finite());
+        assert!(output[..7].iter().all(|value| value.is_nan()));
         assert!(output[7].is_finite());
     }
 
