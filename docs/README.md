@@ -11,6 +11,7 @@ Welcome to the Finkit (Finkit) documentation index. Finkit is a high-performance
 | Document | Description |
 |----------|-------------|
 | [Installation Guide](installation.md) | Detailed per-language installation (pip, npm, Maven, etc.) |
+| [Python Wheel Guide](python.md) | CPython wheel matrix, source builds, verification, and troubleshooting |
 | [Development Guide](development.md) | Build from source, testing, and dev workflow |
 
 ---
