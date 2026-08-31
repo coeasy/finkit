@@ -1980,7 +1980,7 @@ mod tests {
         // 3.14 + 5 不依赖任何变量,是 loop invariant
         let ast = AstNode::BinaryOp {
             op: BinaryOperator::Add,
-            left: Box::new(AstNode::Number(3.14)),
+            left: Box::new(AstNode::Number(std::f64::consts::PI)),
             right: Box::new(AstNode::Number(5.0)),
         };
         assert!(FormulaOptimizer::is_loop_invariant(&ast, "i"));
