@@ -34,7 +34,7 @@ python -m pip install --upgrade pip
 python -m pip install ./finkit-0.1.0-<matching-wheel>.whl
 ```
 
-wheel 支持 CPython 3.8–3.14、Linux x86_64、macOS Intel/Apple Silicon 和 Windows x86_64。pip 会自动安装 NumPy；Pandas accessor 通过 `finkit[pandas]` 可选安装。
+wheel 支持 CPython 3.8–3.14、Linux x86_64、macOS Intel/Apple Silicon 和 Windows x86_64（macOS arm64 不提供 CPython 3.8 wheel）。pip 会自动安装 NumPy；Pandas accessor 通过 `finkit[pandas]` 可选安装。
 
 ### 从源码编译
 
@@ -227,7 +227,7 @@ df["Hist"] = hist
 安装可选 Pandas 支持并运行 accessor 测试：
 
 ```bash
-python -m pip install "finkit[pandas]"
+python -m pip install pandas
 python -m pytest tests/test_accessor.py -q
 ```
 
