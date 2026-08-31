@@ -109,7 +109,7 @@ ndarray = { workspace = true, optional = true }
 rayon = { version = "1", optional = true }
 pest = { version = "2.8", optional = true }
 pest_derive = { version = "2.8", optional = true }
-lru = { version = "0.12", optional = true }
+lru = { version = "0.18.3", optional = true }
 polars = { version = "0.46", optional = true, default-features = false }
 ahash = { version = "0.8", optional = true }
 libm = { version = "0.2" }
