@@ -21,23 +21,37 @@
 - **15+图表形态识别**: 头肩顶/底、双顶/底、三角形等
 - **零GIL竞争**: 完全释放Python GIL，支持真正并行计算
 - **跨平台**: Windows/macOS/Linux
-- **Python 3.8+**: 广泛兼容
+- **CPython 3.8–3.14**: 每个小版本提供独立 wheel
 
 ## 安装
 
+### 安装已构建 wheel（推荐）
+
+从 [GitHub Releases](https://github.com/coeasy/finkit/releases) 下载与本机 Python、系统和架构匹配的 `finkit-0.1.0-*.whl`：
+
 ```bash
-pip install finkit
+python -m pip install --upgrade pip
+python -m pip install ./finkit-0.1.0-<matching-wheel>.whl
 ```
+
+wheel 支持 CPython 3.8–3.14、Linux x86_64、macOS Intel/Apple Silicon 和 Windows x86_64。pip 会自动安装 NumPy；Pandas accessor 通过 `finkit[pandas]` 可选安装。
 
 ### 从源码编译
 
 ```bash
-# 前置条件: Rust (rustup.rs)
 git clone https://github.com/coeasy/finkit.git
-cd finkit/ffi/python-binding
-pip install maturin
+cd finkit
+
+python3 -m venv .venv
+source .venv/bin/activate       # Windows PowerShell: .\\.venv\\Scripts\\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install "maturin>=1.5,<2.0" "numpy>=1.24" pytest
+
+cd ffi/python-binding
 maturin develop --release
 ```
+
+完整的构建矩阵、逐 Python 版本构建、测试和故障排查见 [Python 安装与发布指南](../../docs/python.md)。
 
 ## 快速入门
 
@@ -46,8 +60,10 @@ import finkit as ta
 import numpy as np
 
 # 示例数据
-close = [100.0, 101.5, 99.8, 102.3, 103.1, 101.0, 100.5, 102.8, 104.2, 103.5,
-         105.0, 106.2, 104.8, 107.3, 108.1, 106.5, 105.8, 107.9, 109.2, 108.5]
+close = np.asarray([
+    100.0, 101.5, 99.8, 102.3, 103.1, 101.0, 100.5, 102.8, 104.2, 103.5,
+    105.0, 106.2, 104.8, 107.3, 108.1, 106.5, 105.8, 107.9, 109.2, 108.5,
+], dtype=np.float64)
 
 # RSI
 rsi = ta.rsi(close, timeperiod=14)
@@ -191,28 +207,28 @@ ta.detect_flag(high, low, close, flagpole_period=10, flag_period=5)
 
 ## NumPy/Pandas集成
 
+指标函数接收一维、`float64` NumPy 数组。Pandas 不是必需依赖，使用 DataFrame 时显式转换列：
+
 ```python
+import finkit as ta
 import numpy as np
 import pandas as pd
-import finkit as ta
 
-# NumPy数组输入
-close_np = np.array([100.0, 101.5, 99.8, ...])
-rsi = ta.rsi(close_np.tolist())
-rsi_np = np.array(rsi)
+df = pd.DataFrame({"close": np.arange(1.0, 101.0)})
+close = df["close"].to_numpy(dtype=np.float64, copy=False)
 
-# Pandas DataFrame
-df = pd.DataFrame({
-    'open': [...],
-    'high': [...],
-    'low': [...],
-    'close': [...],
-    'volume': [...]
-})
+df["RSI"] = ta.rsi(close, timeperiod=14)
+macd, signal, hist = ta.macd(close, fastperiod=12, slowperiod=26, signalperiod=9)
+df["MACD"] = macd
+df["Signal"] = signal
+df["Hist"] = hist
+```
 
-df['RSI'] = ta.rsi(df['close'].tolist())
-df['MACD'], df['Signal'], df['Hist'] = ta.macd(df['close'].tolist())
-df['Upper'], df['Middle'], df['Lower'] = ta.bollinger_bands(df['close'].tolist())
+安装可选 Pandas 支持并运行 accessor 测试：
+
+```bash
+python -m pip install "finkit[pandas]"
+python -m pytest tests/test_accessor.py -q
 ```
 
 ## 性能对比
@@ -221,31 +237,33 @@ df['Upper'], df['Middle'], df['Lower'] = ta.bollinger_bands(df['close'].tolist()
 指标计算 (100,000条数据, RSI):
 - pandas-ta:     45.2 ms
 - ta-lib (C):    12.8 ms
-- AlphaTA:    3.2 ms  ✅ 比pandas-ta快14倍
+- Finkit:     3.2 ms  ✅ 比pandas-ta快14倍
 ```
 
 ## 开发
 
 ```bash
-# 安装开发依赖
-pip install maturin pytest numpy pandas
+cd ffi/python-binding
+python -m pip install -e ".[dev]"
 
-# 本地构建
-maturin develop
+# 本地开发构建
+maturin develop --release
 
-# 运行测试
-python -m pytest tests/
+# 运行完整 Python 测试
+cd ../..
+python -m pytest ffi/python-binding/tests -q
 
-# 构建wheel
-maturin build --release
-
-# 发布到PyPI
-maturin publish
+# 构建源码包和 wheel
+cd ffi/python-binding
+maturin sdist --out dist
+maturin build --release --locked --out dist
 ```
+
+发布前请同时检查 wheel 的 Python、平台和架构标签；CI 通过 [python-wheels.yml](../../.github/workflows/python-wheels.yml) 为支持矩阵逐个构建并测试。
 
 ## 许可证
 
-Apache-2.0
+MIT OR Apache-2.0
 
 ## 贡献
 
