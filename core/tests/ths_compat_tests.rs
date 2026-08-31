@@ -266,7 +266,8 @@ mod ths_compat_integration_tests {
         let result = engine.eval(formula, &mut ctx).unwrap();
 
         let cross_count = result.iter().filter(|&v| *v > 0.0).count();
-        assert!(cross_count >= 0);
+        assert_eq!(result.len(), ctx.close.len());
+        assert!(cross_count <= result.len());
     }
 
     #[test]
