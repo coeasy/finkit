@@ -95,7 +95,7 @@ impl PyPipeline {
         let slice = data
             .as_slice()
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-        Ok(py.allow_threads(|| self.inner.transform(slice)))
+        Ok(py.detach(|| self.inner.transform(slice)))
     }
 }
 
@@ -104,7 +104,7 @@ pub fn transform_log_return(py: Python<'_>, data: PyReadonlyArray1<'_, f64>) -> 
     let slice = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| LogReturn.transform(slice)))
+    Ok(py.detach(|| LogReturn.transform(slice)))
 }
 
 #[pyfunction]
@@ -112,7 +112,7 @@ pub fn transform_zscore(py: Python<'_>, data: PyReadonlyArray1<'_, f64>) -> PyRe
     let slice = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| ZScore.transform(slice)))
+    Ok(py.detach(|| ZScore.transform(slice)))
 }
 
 #[pyfunction]
@@ -120,7 +120,7 @@ pub fn transform_rank(py: Python<'_>, data: PyReadonlyArray1<'_, f64>) -> PyResu
     let slice = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| Rank.transform(slice)))
+    Ok(py.detach(|| Rank.transform(slice)))
 }
 
 #[pyfunction]
@@ -128,7 +128,7 @@ pub fn transform_diff(py: Python<'_>, data: PyReadonlyArray1<'_, f64>) -> PyResu
     let slice = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| Diff.transform(slice)))
+    Ok(py.detach(|| Diff.transform(slice)))
 }
 
 #[pyfunction]
@@ -141,7 +141,7 @@ pub fn transform_rolling_mean(
     let slice = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    Ok(py.allow_threads(|| RollingMean { window }.transform(slice)))
+    Ok(py.detach(|| RollingMean { window }.transform(slice)))
 }
 
 pub fn register_transform_classes(m: &Bound<'_, PyModule>) -> PyResult<()> {
