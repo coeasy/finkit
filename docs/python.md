@@ -8,7 +8,7 @@ Finkit 的 Python 绑定使用 PyO3 和 maturin 构建。发布包是带原生 R
 
 | Python | wheel | 说明 |
 | --- | --- | --- |
-| CPython 3.8–3.14 | ✅ | CI 为每个小版本构建并执行测试 |
+| CPython 3.8–3.14 | ✅ | CI 为每个可用平台组合构建并执行测试 |
 | PyPy | 未承诺 | 当前发布流程只构建 CPython wheel |
 | CPython free-threaded（`python3.14t`） | 未承诺 | 不属于 v0.1.0 的发布矩阵 |
 
@@ -21,7 +21,7 @@ Finkit 的 Python 绑定使用 PyO3 和 maturin 构建。发布包是带原生 R
 | macOS Apple Silicon | `macosx_*_arm64` |
 | Windows x86_64 | `win_amd64` |
 
-当前矩阵不包含 Linux ARM64、32 位 Windows 和 musllinux。使用这些平台时请按下面的源码方式构建。
+当前矩阵不包含 Linux ARM64、32 位 Windows 和 musllinux；macOS arm64 也不提供 CPython 3.8 wheel（该版本没有可用的官方 arm64 解释器）。使用这些平台或组合时请按下面的源码方式构建。
 
 ## 安装已构建 wheel
 
@@ -155,7 +155,7 @@ df["hist"] = hist
 带有 `df.ta` accessor 的 pandas 集成属于可选能力。要运行对应测试：
 
 ```bash
-python -m pip install "finkit[pandas]"
+python -m pip install pandas
 python -m pytest ffi/python-binding/tests/test_accessor.py -q
 ```
 
@@ -176,7 +176,7 @@ cd ../..
 python -m pytest ffi/python-binding/tests -q
 ```
 
-每次推送到 `main)、创建 pull request 或推送 `v*` tag 时，GitHub Actions 的 Python wheels workflow 会为 4 个平台和 7 个 CPython 小版本构建 wheel，并将每个 wheel 作为独立 artifact 上传。发布流程还应在创建 Release 时把这些 artifacts 附加到 Release，避免用户直接下载源码包。
+每次推送到 `main`、创建 pull request 或推送 `v*` tag 时，GitHub Actions 的 Python wheels workflow 会为 4 个平台和 7 个 CPython 小版本构建 wheel，并将每个 wheel 作为独立 artifact 上传。发布流程还应在创建 Release 时把这些 artifacts 附加到 Release，避免用户直接下载源码包。
 
 ## 常见问题
 
