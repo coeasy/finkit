@@ -236,16 +236,15 @@ pub fn renko(high: &[f64], low: &[f64], box_size: f64) -> Result<RenkoResult> {
                 }
             } else {
                 let mut new_bottom = prev - box_size;
-                let n_dn = loop {
-                    if new_bottom < l {
-                        break 0i32;
-                    }
+                let n_dn = if new_bottom < l {
+                    0
+                } else {
                     let mut count = 0i32;
                     while new_bottom >= l {
                         count += 1;
                         new_bottom -= box_size;
                     }
-                    break count;
+                    count
                 };
                 if n_dn >= 2 {
                     let new_price = prev - (n_dn as f64) * box_size;
