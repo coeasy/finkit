@@ -113,7 +113,11 @@ pub fn ts_rank(input: ArrayView1<'_, f64>, window: usize) -> Array1<f64> {
     out
 }
 
-pub fn covariance(left: ArrayView1<'_, f64>, right: ArrayView1<'_, f64>, window: usize) -> Array1<f64> {
+pub fn covariance(
+    left: ArrayView1<'_, f64>,
+    right: ArrayView1<'_, f64>,
+    window: usize,
+) -> Array1<f64> {
     let len = left.len().min(right.len());
     let mut out = Array1::from_elem(len, f64::NAN);
     if window < 2 {
@@ -141,7 +145,11 @@ pub fn covariance(left: ArrayView1<'_, f64>, right: ArrayView1<'_, f64>, window:
     out
 }
 
-pub fn correlation(left: ArrayView1<'_, f64>, right: ArrayView1<'_, f64>, window: usize) -> Array1<f64> {
+pub fn correlation(
+    left: ArrayView1<'_, f64>,
+    right: ArrayView1<'_, f64>,
+    window: usize,
+) -> Array1<f64> {
     let len = left.len().min(right.len());
     let mut out = Array1::from_elem(len, f64::NAN);
     if window < 2 {

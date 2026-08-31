@@ -497,12 +497,7 @@ unsafe fn bbands_seed_avx512(input: &[f64], period: usize) -> (f64, f64) {
 
 /// AVX-512 ATR seed: 8-wide AVX-512 true-range accumulation for the
 /// initial period window.
-pub fn simd512_atr_seed(
-    high: &[f64],
-    low: &[f64],
-    prev_close: &[f64],
-    period: usize,
-) -> f64 {
+pub fn simd512_atr_seed(high: &[f64], low: &[f64], prev_close: &[f64], period: usize) -> f64 {
     #[cfg(all(feature = "std", target_arch = "x86_64"))]
     {
         if has_avx512f() {
@@ -521,12 +516,7 @@ pub fn simd512_atr_seed(
 
 #[cfg(all(feature = "std", target_arch = "x86_64"))]
 #[target_feature(enable = "avx512f")]
-unsafe fn atr_seed_avx512(
-    high: &[f64],
-    low: &[f64],
-    prev_close: &[f64],
-    period: usize,
-) -> f64 {
+unsafe fn atr_seed_avx512(high: &[f64], low: &[f64], prev_close: &[f64], period: usize) -> f64 {
     use core::arch::x86_64::*;
     let mut acc = _mm512_setzero_pd();
     let chunks = period / 8;
@@ -751,7 +741,9 @@ mod tests {
 
     #[test]
     fn test_avx512_rsi_consistency() {
-        let data: Vec<f64> = (0..200).map(|i| 100.0 + (i as f64 * 0.1).sin() * 5.0).collect();
+        let data: Vec<f64> = (0..200)
+            .map(|i| 100.0 + (i as f64 * 0.1).sin() * 5.0)
+            .collect();
         let period = 14;
         let mut out_avx512 = vec![0.0; data.len()];
         simd512_rsi(&data, period, &mut out_avx512);
@@ -863,8 +855,12 @@ mod tests {
     #[test]
     fn test_avx512_adx_seed() {
         let len = 200;
-        let high: Vec<f64> = (0..len).map(|i| 105.0 + (i as f64 * 0.1).sin() * 3.0).collect();
-        let low: Vec<f64> = (0..len).map(|i| 95.0 + (i as f64 * 0.1).cos() * 3.0).collect();
+        let high: Vec<f64> = (0..len)
+            .map(|i| 105.0 + (i as f64 * 0.1).sin() * 3.0)
+            .collect();
+        let low: Vec<f64> = (0..len)
+            .map(|i| 95.0 + (i as f64 * 0.1).cos() * 3.0)
+            .collect();
         let prev_close: Vec<f64> = (0..len).map(|i| 100.0 + (i as f64 * 0.05).sin()).collect();
         let period = 14;
         let (tr, pdm, mdm) = simd512_adx_seed(&high, &low, &prev_close, period);

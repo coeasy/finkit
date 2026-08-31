@@ -26,10 +26,19 @@ pub fn validate_period(period: usize) -> Result<usize, FfiError> {
 }
 
 /// Validate two input slices have equal length (e.g. `high`/`low`/`close`).
-pub fn validate_equal_len(a: &[f64], b: &[f64], a_name: &str, b_name: &str) -> Result<(), FfiError> {
+pub fn validate_equal_len(
+    a: &[f64],
+    b: &[f64],
+    a_name: &str,
+    b_name: &str,
+) -> Result<(), FfiError> {
     if a.len() != b.len() {
         Err(FfiError::InvalidInput {
-            reason: format!("`{a_name}` (len {}) and `{b_name}` (len {}) must match", a.len(), b.len()),
+            reason: format!(
+                "`{a_name}` (len {}) and `{b_name}` (len {}) must match",
+                a.len(),
+                b.len()
+            ),
         })
     } else {
         Ok(())

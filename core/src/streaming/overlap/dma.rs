@@ -1,6 +1,6 @@
+use crate::impl_standard_methods;
 use crate::streaming::overlap::sma::StreamingSma;
 use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
-use crate::impl_standard_methods;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -74,9 +74,7 @@ impl StreamingIndicator<f64, DmaOutput> for StreamingDma {
         self.sma_short.is_ready() && self.sma_long.is_ready() && self.sma_ama.is_ready()
     }
 
-        impl_standard_methods!(output = DmaOutput);
-
-
+    impl_standard_methods!(output = DmaOutput);
 }
 
 impl IndicatorMeta for StreamingDma {

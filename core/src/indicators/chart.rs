@@ -45,7 +45,10 @@ pub fn heikin_ashi(
     let mut prev_open = f64::NAN;
     let mut prev_close = f64::NAN;
     for i in 0..len {
-        let o = open[i]; let h = high[i]; let l = low[i]; let c = close[i];
+        let o = open[i];
+        let h = high[i];
+        let l = low[i];
+        let c = close[i];
         if o.is_nan() || h.is_nan() || l.is_nan() || c.is_nan() {
             prev_open = f64::NAN;
             prev_close = f64::NAN;
@@ -118,7 +121,11 @@ pub fn zigzag(high: &[f64], low: &[f64], threshold: f64) -> Result<ZigZagResult>
 
     #[inline(always)]
     fn safe_pct(diff: f64, base: f64) -> f64 {
-        if base.abs() < f64::EPSILON { 0.0 } else { diff / base * 100.0 }
+        if base.abs() < f64::EPSILON {
+            0.0
+        } else {
+            diff / base * 100.0
+        }
     }
 
     if len == 1 {
@@ -235,7 +242,11 @@ mod tests {
         let result = heikin_ashi(&open, &high, &low, &close).unwrap();
 
         assert_eq!(result.ha_close.len(), 3);
-        assert_relative_eq!(result.ha_close[0], (10.0 + 12.0 + 9.0 + 11.0) / 4.0, epsilon = 1e-10);
+        assert_relative_eq!(
+            result.ha_close[0],
+            (10.0 + 12.0 + 9.0 + 11.0) / 4.0,
+            epsilon = 1e-10
+        );
         assert_relative_eq!(result.ha_open[0], (10.0 + 11.0) / 2.0, epsilon = 1e-10);
         assert_relative_eq!(
             result.ha_open[1],
@@ -375,10 +386,16 @@ mod tests {
 
         let result = zigzag(&high, &low, 5.0).unwrap();
         for val in result.zigzag.iter() {
-            assert!(!val.is_infinite(), "zigzag should never produce inf with NaN inputs");
+            assert!(
+                !val.is_infinite(),
+                "zigzag should never produce inf with NaN inputs"
+            );
         }
         for (_, price) in &result.pivots {
-            assert!(price.is_finite(), "pivot price should be finite with NaN inputs");
+            assert!(
+                price.is_finite(),
+                "pivot price should be finite with NaN inputs"
+            );
         }
     }
 
@@ -388,7 +405,10 @@ mod tests {
         let low = vec![f64::NAN, f64::NAN, f64::NAN];
 
         let result = zigzag(&high, &low, 5.0).unwrap();
-        assert!(result.pivots.is_empty(), "all NaN input should produce no pivots");
+        assert!(
+            result.pivots.is_empty(),
+            "all NaN input should produce no pivots"
+        );
     }
 
     #[test]

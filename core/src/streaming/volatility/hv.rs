@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 
 /// Streaming Historical Volatility (Close-to-Close).
 ///
@@ -169,7 +169,8 @@ mod tests {
         let period = 20;
         let ann = 252.0;
 
-        let batch = crate::indicators::volatility_ext::historical_volatility(&close, period, ann).unwrap();
+        let batch =
+            crate::indicators::volatility_ext::historical_volatility(&close, period, ann).unwrap();
 
         let mut streaming = StreamingHv::new(period, ann);
         for i in 0..close.len() {

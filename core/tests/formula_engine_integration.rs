@@ -1,5 +1,5 @@
-use ndarray::Array1;
 use finkit::formula::{FormulaContext, FormulaEngine, ParamValues};
+use ndarray::Array1;
 
 fn make_test_ctx(len: usize) -> FormulaContext {
     let open = Array1::from_vec((0..len).map(|i| 100.0 + i as f64 * 0.5).collect());
@@ -566,8 +566,12 @@ fn test_edge_nan_propagation() {
     let close = Array1::from_vec(vec![1.0, 2.0, f64::NAN, 4.0, 5.0]);
     let ctx_len = close.len();
     let mut ctx = FormulaContext::new(
-        close.clone(), close.clone(), close.clone(), close.clone(),
-        Array1::from_elem(ctx_len, 1000.0), None,
+        close.clone(),
+        close.clone(),
+        close.clone(),
+        close.clone(),
+        Array1::from_elem(ctx_len, 1000.0),
+        None,
     );
     let result = engine.eval("MA(CLOSE, 3)", &mut ctx).unwrap();
     assert_eq!(result.len(), 5);
@@ -620,7 +624,9 @@ fn test_valuewhen() {
     let open = Array1::from_vec(vec![10.0; 10]);
     let high = Array1::from_vec(vec![12.0; 10]);
     let low = Array1::from_vec(vec![8.0; 10]);
-    let close = Array1::from_vec(vec![9.0, 11.5, 10.0, 12.0, 9.5, 13.0, 10.0, 8.0, 14.0, 11.0]);
+    let close = Array1::from_vec(vec![
+        9.0, 11.5, 10.0, 12.0, 9.5, 13.0, 10.0, 8.0, 14.0, 11.0,
+    ]);
     let volume = Array1::from_vec(vec![1000.0; 10]);
     let mut ctx = FormulaContext::new(open, high, low, close, volume, None);
 
@@ -643,7 +649,9 @@ fn test_last() {
     let open = Array1::from_vec(vec![10.0; 10]);
     let high = Array1::from_vec(vec![12.0; 10]);
     let low = Array1::from_vec(vec![8.0; 10]);
-    let close = Array1::from_vec(vec![11.0, 11.0, 11.0, 11.0, 9.0, 11.0, 11.0, 11.0, 11.0, 9.0]);
+    let close = Array1::from_vec(vec![
+        11.0, 11.0, 11.0, 11.0, 9.0, 11.0, 11.0, 11.0, 11.0, 9.0,
+    ]);
     let volume = Array1::from_vec(vec![1000.0; 10]);
     let mut ctx = FormulaContext::new(open, high, low, close, volume, None);
 
@@ -661,7 +669,9 @@ fn test_barslastcount() {
     let open = Array1::from_vec(vec![10.0; 10]);
     let high = Array1::from_vec(vec![12.0; 10]);
     let low = Array1::from_vec(vec![8.0; 10]);
-    let close = Array1::from_vec(vec![11.0, 11.0, 11.0, 9.0, 9.0, 11.0, 11.0, 11.0, 11.0, 9.0]);
+    let close = Array1::from_vec(vec![
+        11.0, 11.0, 11.0, 9.0, 9.0, 11.0, 11.0, 11.0, 11.0, 9.0,
+    ]);
     let volume = Array1::from_vec(vec![1000.0; 10]);
     let mut ctx = FormulaContext::new(open, high, low, close, volume, None);
 
@@ -682,17 +692,17 @@ fn test_barslastcount() {
 fn test_formula_zigzag_functions() {
     let mut engine = FormulaEngine::new();
     let high = Array1::from_vec(vec![
-        10.0, 12.0, 11.0, 15.0, 14.0, 13.0, 9.0, 8.0, 7.0, 11.0,
-        13.0, 16.0, 15.0, 14.0, 10.0, 9.0, 8.0, 12.0, 14.0, 13.0,
+        10.0, 12.0, 11.0, 15.0, 14.0, 13.0, 9.0, 8.0, 7.0, 11.0, 13.0, 16.0, 15.0, 14.0, 10.0, 9.0,
+        8.0, 12.0, 14.0, 13.0,
     ]);
     let low = Array1::from_vec(vec![
-        8.0, 10.0, 9.0, 13.0, 12.0, 11.0, 7.0, 6.0, 5.0, 9.0,
-        11.0, 14.0, 13.0, 12.0, 8.0, 7.0, 6.0, 10.0, 12.0, 11.0,
+        8.0, 10.0, 9.0, 13.0, 12.0, 11.0, 7.0, 6.0, 5.0, 9.0, 11.0, 14.0, 13.0, 12.0, 8.0, 7.0,
+        6.0, 10.0, 12.0, 11.0,
     ]);
     let open = Array1::from_vec(vec![9.0; 20]);
     let close = Array1::from_vec(vec![
-        9.0, 11.0, 10.0, 14.0, 13.0, 12.0, 8.0, 7.0, 6.0, 10.0,
-        12.0, 15.0, 14.0, 13.0, 9.0, 8.0, 7.0, 11.0, 13.0, 12.0,
+        9.0, 11.0, 10.0, 14.0, 13.0, 12.0, 8.0, 7.0, 6.0, 10.0, 12.0, 15.0, 14.0, 13.0, 9.0, 8.0,
+        7.0, 11.0, 13.0, 12.0,
     ]);
     let volume = Array1::from_vec(vec![1000.0; 20]);
     let mut ctx = FormulaContext::new(open, high, low, close, volume, None);
@@ -716,10 +726,14 @@ fn test_formula_zigzag_functions() {
 #[test]
 fn test_formula_advanced_find_functions() {
     let mut engine = FormulaEngine::new();
-    let high = Array1::from_vec(vec![10.0, 15.0, 12.0, 8.0, 20.0, 11.0, 14.0, 9.0, 18.0, 13.0]);
+    let high = Array1::from_vec(vec![
+        10.0, 15.0, 12.0, 8.0, 20.0, 11.0, 14.0, 9.0, 18.0, 13.0,
+    ]);
     let low = Array1::from_vec(vec![8.0, 13.0, 10.0, 6.0, 18.0, 9.0, 12.0, 7.0, 16.0, 11.0]);
     let open = Array1::from_vec(vec![9.0; 10]);
-    let close = Array1::from_vec(vec![9.0, 14.0, 11.0, 7.0, 19.0, 10.0, 13.0, 8.0, 17.0, 12.0]);
+    let close = Array1::from_vec(vec![
+        9.0, 14.0, 11.0, 7.0, 19.0, 10.0, 13.0, 8.0, 17.0, 12.0,
+    ]);
     let volume = Array1::from_vec(vec![1000.0; 10]);
     let mut ctx = FormulaContext::new(open, high, low, close, volume, None);
 
@@ -781,7 +795,9 @@ fn test_formula_signal_functions() {
     assert!((result[5] - 1.0).abs() < 1e-10);
 
     // CHECKSIG: buy when CLOSE > 11, sell when CLOSE < 9, confirm mode=1
-    let result = engine.eval("CHECKSIG(CLOSE > 11, CLOSE < 9, 1)", &mut ctx).unwrap();
+    let result = engine
+        .eval("CHECKSIG(CLOSE > 11, CLOSE < 9, 1)", &mut ctx)
+        .unwrap();
     assert_eq!(result.len(), 10);
     // First buy at bar 1 (12>11)
     assert!((result[1] - 1.0).abs() < 1e-10);
@@ -795,7 +811,9 @@ fn test_formula_signal_functions() {
     assert!((result[6] - (-1.0)).abs() < 1e-10);
 
     // MULTSIG: allows up to 2 same-direction signals within 5 bars
-    let result = engine.eval("MULTSIG(CLOSE > 11, CLOSE < 9, 5, 2)", &mut ctx).unwrap();
+    let result = engine
+        .eval("MULTSIG(CLOSE > 11, CLOSE < 9, 5, 2)", &mut ctx)
+        .unwrap();
     assert_eq!(result.len(), 10);
     // First buy at bar 1
     assert!((result[1] - 1.0).abs() < 1e-10);
@@ -821,15 +839,21 @@ fn test_formula_draw_extensions() {
     let mut ctx = FormulaContext::new(open, high, low, close, volume, None);
 
     // DRAWSL: slope line between two conditions
-    let result = engine.eval("DRAWSL(CLOSE > 11, CLOSE, CLOSE < 9, CLOSE)", &mut ctx).unwrap();
+    let result = engine
+        .eval("DRAWSL(CLOSE > 11, CLOSE, CLOSE < 9, CLOSE)", &mut ctx)
+        .unwrap();
     assert_eq!(result.len(), 10);
 
     // DRAWTEXT_FIX: fixed-position text
-    let result = engine.eval("DRAWTEXT_FIX(0.5, 0.8, \"Hello\")", &mut ctx).unwrap();
+    let result = engine
+        .eval("DRAWTEXT_FIX(0.5, 0.8, \"Hello\")", &mut ctx)
+        .unwrap();
     assert_eq!(result.len(), 10);
 
     // DRAWNUMBER: draw number at condition
-    let result = engine.eval("DRAWNUMBER(CLOSE > 11, CLOSE, CLOSE, 2)", &mut ctx).unwrap();
+    let result = engine
+        .eval("DRAWNUMBER(CLOSE > 11, CLOSE, CLOSE, 2)", &mut ctx)
+        .unwrap();
     assert_eq!(result.len(), 10);
 
     // VERTLINE: vertical line at condition
@@ -893,8 +917,8 @@ fn test_formula_cumulative_functions() {
     // CUMSUM: cumulative sum
     let result = engine.eval("CUMSUM(CLOSE)", &mut ctx).unwrap();
     assert!((result[0] - 1.0).abs() < 1e-10);
-    assert!((result[1] - 4.0).abs() < 1e-10);  // 1+3
-    assert!((result[2] - 6.0).abs() < 1e-10);  // 1+3+2
+    assert!((result[1] - 4.0).abs() < 1e-10); // 1+3
+    assert!((result[2] - 6.0).abs() < 1e-10); // 1+3+2
     assert!((result[9] - 55.0).abs() < 1e-10); // sum of 1..10
 
     // CUM alias
@@ -979,7 +1003,9 @@ fn test_formula_multi_period() {
     let open = Array1::from_vec(vec![10.0; 10]);
     let high = Array1::from_vec(vec![12.0; 10]);
     let low = Array1::from_vec(vec![8.0; 10]);
-    let close = Array1::from_vec(vec![10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0]);
+    let close = Array1::from_vec(vec![
+        10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0,
+    ]);
     let volume = Array1::from_vec(vec![1000.0; 10]);
     let mut ctx = FormulaContext::new(open, high, low, close, volume, None);
 
@@ -1016,7 +1042,12 @@ fn test_formula_lazy_eval() {
 
     // Full eval: computes all variables
     let mut ctx1 = FormulaContext::new(
-        open.clone(), high.clone(), low.clone(), close.clone(), volume.clone(), None,
+        open.clone(),
+        high.clone(),
+        low.clone(),
+        close.clone(),
+        volume.clone(),
+        None,
     );
     let source = "A := MA(CLOSE, 5); B := MA(CLOSE, 10); C := MA(CLOSE, 20); RESULT: A + C";
     let result_full = engine.eval(source, &mut ctx1).unwrap();
@@ -1031,8 +1062,13 @@ fn test_formula_lazy_eval() {
         if result_full[i].is_nan() {
             assert!(result_lazy[i].is_nan());
         } else {
-            assert!((result_full[i] - result_lazy[i]).abs() < 1e-10,
-                "Mismatch at {}: full={}, lazy={}", i, result_full[i], result_lazy[i]);
+            assert!(
+                (result_full[i] - result_lazy[i]).abs() < 1e-10,
+                "Mismatch at {}: full={}, lazy={}",
+                i,
+                result_full[i],
+                result_lazy[i]
+            );
         }
     }
 
@@ -1068,8 +1104,13 @@ fn test_formula_incremental() {
 
     // Verify first 10 values match
     for i in 4..10 {
-        assert!((result1[i] - result2[i]).abs() < 1e-10,
-            "Mismatch at {}: original={}, incremental={}", i, result1[i], result2[i]);
+        assert!(
+            (result1[i] - result2[i]).abs() < 1e-10,
+            "Mismatch at {}: original={}, incremental={}",
+            i,
+            result1[i],
+            result2[i]
+        );
     }
 
     // Verify new bar's MA is correct: avg of bars 6,7,8,9,10 = (16+17+18+19+20)/5 = 18
@@ -1079,9 +1120,20 @@ fn test_formula_incremental() {
     let open_full = Array1::from_vec(vec![10.0; 11]);
     let high_full = Array1::from_vec(vec![12.0; 11]);
     let low_full = Array1::from_vec(vec![8.0; 11]);
-    let close_full = Array1::from_vec((0..11).map(|i| if i < 10 { 10.0 + i as f64 } else { 20.0 }).collect());
+    let close_full = Array1::from_vec(
+        (0..11)
+            .map(|i| if i < 10 { 10.0 + i as f64 } else { 20.0 })
+            .collect(),
+    );
     let volume_full = Array1::from_vec(vec![1000.0; 11]);
-    let mut ctx_full = FormulaContext::new(open_full, high_full, low_full, close_full, volume_full, None);
+    let mut ctx_full = FormulaContext::new(
+        open_full,
+        high_full,
+        low_full,
+        close_full,
+        volume_full,
+        None,
+    );
     let result_full = engine.eval(source, &mut ctx_full).unwrap();
 
     for i in 0..11 {
@@ -1106,7 +1158,12 @@ fn test_formula_parallel() {
 
     // Serial eval
     let mut ctx1 = FormulaContext::new(
-        open.clone(), high.clone(), low.clone(), close.clone(), volume.clone(), None,
+        open.clone(),
+        high.clone(),
+        low.clone(),
+        close.clone(),
+        volume.clone(),
+        None,
     );
     let result_serial = engine.eval(source, &mut ctx1).unwrap();
 
@@ -1120,8 +1177,13 @@ fn test_formula_parallel() {
         if result_serial[i].is_nan() {
             assert!(result_parallel[i].is_nan());
         } else {
-            assert!((result_serial[i] - result_parallel[i]).abs() < 1e-10,
-                "Mismatch at {}: serial={}, parallel={}", i, result_serial[i], result_parallel[i]);
+            assert!(
+                (result_serial[i] - result_parallel[i]).abs() < 1e-10,
+                "Mismatch at {}: serial={}, parallel={}",
+                i,
+                result_serial[i],
+                result_parallel[i]
+            );
         }
     }
 }

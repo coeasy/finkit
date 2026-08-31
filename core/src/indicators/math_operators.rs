@@ -137,13 +137,7 @@ pub fn div(a: &[f64], b: &[f64]) -> Result<Array1<f64>> {
     validate_two_inputs(a, b)?;
     Ok(a.iter()
         .zip(b.iter())
-        .map(|(x, y)| {
-            if *y == 0.0 {
-                f64::NAN
-            } else {
-                x / y
-            }
-        })
+        .map(|(x, y)| if *y == 0.0 { f64::NAN } else { x / y })
         .collect())
 }
 

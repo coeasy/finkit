@@ -110,8 +110,12 @@ impl StreamingIchimoku {
         self.last_value = None;
     }
 
-    pub fn is_ready(&self) -> bool { self.count >= self.senkou_b_period }
-    pub fn count(&self) -> usize { self.count }
+    pub fn is_ready(&self) -> bool {
+        self.count >= self.senkou_b_period
+    }
+    pub fn count(&self) -> usize {
+        self.count
+    }
 
     pub fn value(&self) -> Option<IchimokuOutput> {
         self.last_value
@@ -119,23 +123,37 @@ impl StreamingIchimoku {
 }
 
 impl IndicatorMeta for StreamingIchimoku {
-    fn name() -> &'static str { "Ichimoku" }
-    fn category() -> &'static str { "overlap" }
-    fn description() -> &'static str { "Ichimoku Kinko Hyo" }
-    fn warm_up_period(&self) -> usize { self.senkou_b_period }
+    fn name() -> &'static str {
+        "Ichimoku"
+    }
+    fn category() -> &'static str {
+        "overlap"
+    }
+    fn description() -> &'static str {
+        "Ichimoku Kinko Hyo"
+    }
+    fn warm_up_period(&self) -> usize {
+        self.senkou_b_period
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::streaming::types::OhlcvBar;
     use crate::indicators;
+    use crate::streaming::types::OhlcvBar;
 
     #[test]
     fn test_streaming_ichimoku_basic() {
         let mut ich = StreamingIchimoku::new(9, 26, 52);
         for i in 0..60 {
-            let bar = OhlcvBar::new(10.0 + i as f64, 12.0 + i as f64, 9.0 + i as f64, 11.0 + i as f64, 100.0);
+            let bar = OhlcvBar::new(
+                10.0 + i as f64,
+                12.0 + i as f64,
+                9.0 + i as f64,
+                11.0 + i as f64,
+                100.0,
+            );
             let out = ich.next(&bar);
             if let Some(out) = out {
                 assert!(!out.tenkan.is_nan());
@@ -160,10 +178,19 @@ mod tests {
         for i in 0..len {
             let bar = OhlcvBar::new(close[i], high[i], low[i], close[i], 100.0);
             if let Some(out) = stream.next(&bar) {
-                assert!((out.tenkan - batch.tenkan_sen[i]).abs() < 1e-10, "tenkan at {i}");
-                assert!((out.kijun - batch.kijun_sen[i]).abs() < 1e-10, "kijun at {i}");
+                assert!(
+                    (out.tenkan - batch.tenkan_sen[i]).abs() < 1e-10,
+                    "tenkan at {i}"
+                );
+                assert!(
+                    (out.kijun - batch.kijun_sen[i]).abs() < 1e-10,
+                    "kijun at {i}"
+                );
                 let unshifted_senkou_a = (batch.tenkan_sen[i] + batch.kijun_sen[i]) / 2.0;
-                assert!((out.senkou_a - unshifted_senkou_a).abs() < 1e-10, "senkou_a at {i}");
+                assert!(
+                    (out.senkou_a - unshifted_senkou_a).abs() < 1e-10,
+                    "senkou_a at {i}"
+                );
             }
         }
     }
@@ -177,7 +204,13 @@ mod tests {
     fn test_streaming_ichimoku_reset() {
         let mut ich = StreamingIchimoku::new(3, 5, 10);
         for i in 0..15 {
-            ich.next(&OhlcvBar::new(i as f64, i as f64 + 2.0, i as f64 - 1.0, i as f64 + 1.0, 100.0));
+            ich.next(&OhlcvBar::new(
+                i as f64,
+                i as f64 + 2.0,
+                i as f64 - 1.0,
+                i as f64 + 1.0,
+                100.0,
+            ));
         }
         assert!(ich.is_ready());
         ich.reset();

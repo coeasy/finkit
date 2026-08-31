@@ -33,8 +33,7 @@ fn generate_close_data(len: usize) -> Vec<f64> {
 
 fn generate_ohlc_data(len: usize) -> Vec<(f64, f64, f64)> {
     let (_, high, low, close, _) = create_ohlcv_data(len);
-    high
-        .iter()
+    high.iter()
         .zip(low.iter())
         .zip(close.iter())
         .map(|((&h, &l), &c)| (h, l, c))
@@ -43,8 +42,7 @@ fn generate_ohlc_data(len: usize) -> Vec<(f64, f64, f64)> {
 
 fn generate_ohlcv_data(len: usize) -> Vec<(f64, f64, f64, f64)> {
     let (_, high, low, close, volume) = create_ohlcv_data(len);
-    high
-        .iter()
+    high.iter()
         .zip(low.iter())
         .zip(close.iter())
         .zip(volume.iter())
@@ -54,8 +52,7 @@ fn generate_ohlcv_data(len: usize) -> Vec<(f64, f64, f64, f64)> {
 
 fn generate_full_ohlcv_data(len: usize) -> Vec<(f64, f64, f64, f64, f64)> {
     let (open, high, low, close, volume) = create_ohlcv_data(len);
-    open
-        .into_iter()
+    open.into_iter()
         .zip(high)
         .zip(low)
         .zip(close)
@@ -565,7 +562,9 @@ fn bench_ehlers_super_smoother(c: &mut Criterion) {
     c.bench_function("ehlers_super_smoother_10000", |b| {
         b.iter(|| {
             let mut ind = StreamingSuperSmoother::new(14);
-            for &val in &data { black_box(ind.next(val)); }
+            for &val in &data {
+                black_box(ind.next(val));
+            }
         })
     });
 }
@@ -575,7 +574,9 @@ fn bench_ehlers_roofing_filter(c: &mut Criterion) {
     c.bench_function("ehlers_roofing_filter_10000", |b| {
         b.iter(|| {
             let mut ind = StreamingRoofingFilter::new(48, 10);
-            for &val in &data { black_box(ind.next(val)); }
+            for &val in &data {
+                black_box(ind.next(val));
+            }
         })
     });
 }
@@ -585,7 +586,9 @@ fn bench_ehlers_decycler(c: &mut Criterion) {
     c.bench_function("ehlers_decycler_10000", |b| {
         b.iter(|| {
             let mut ind = StreamingDecycler::new(20);
-            for &val in &data { black_box(ind.next(val)); }
+            for &val in &data {
+                black_box(ind.next(val));
+            }
         })
     });
 }
@@ -595,7 +598,9 @@ fn bench_ehlers_bandpass(c: &mut Criterion) {
     c.bench_function("ehlers_bandpass_10000", |b| {
         b.iter(|| {
             let mut ind = StreamingBandpass::new(20, 0.3);
-            for &val in &data { black_box(ind.next(val)); }
+            for &val in &data {
+                black_box(ind.next(val));
+            }
         })
     });
 }
@@ -605,7 +610,9 @@ fn bench_ehlers_itrend(c: &mut Criterion) {
     c.bench_function("ehlers_itrend_10000", |b| {
         b.iter(|| {
             let mut ind = StreamingInstantaneousTrendline::new(0.07);
-            for &val in &data { black_box(ind.next(val)); }
+            for &val in &data {
+                black_box(ind.next(val));
+            }
         })
     });
 }

@@ -1,9 +1,8 @@
-use wasm_bindgen::prelude::*;
 use finkit::transforms::{
-    Diff, DiffN, LogReturn, MinMaxScaler, PctChange, PercentileRank,
-    Pipeline as CorePipeline, Rank, RollingMean, RollingStd, RollingSum,
-    StandardScaler, Transform, ZScore,
+    Diff, DiffN, LogReturn, MinMaxScaler, PctChange, PercentileRank, Pipeline as CorePipeline,
+    Rank, RollingMean, RollingStd, RollingSum, StandardScaler, Transform, ZScore,
 };
+use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 pub struct Pipeline {

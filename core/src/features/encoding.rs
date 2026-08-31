@@ -45,11 +45,7 @@ pub fn rolling_target_encode(categories: &[usize], target: &[f64], window: usize
 /// Bayesian smoothed target encoding using only past observations.
 ///
 /// `encoded = (count * category_mean + prior_weight * global_mean) / (count + prior_weight)`
-pub fn smoothed_target_encode(
-    categories: &[usize],
-    target: &[f64],
-    prior_weight: f64,
-) -> Vec<f64> {
+pub fn smoothed_target_encode(categories: &[usize], target: &[f64], prior_weight: f64) -> Vec<f64> {
     let n = categories.len().min(target.len());
     let mut out = vec![f64::NAN; n];
 

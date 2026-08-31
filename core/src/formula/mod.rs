@@ -14,7 +14,6 @@
 //! - Memory pool for zero-copy evaluation
 
 pub mod ast;
-pub mod pine;
 pub mod bytecode;
 pub mod compiler;
 pub mod debugger;
@@ -24,11 +23,12 @@ pub mod executor;
 pub mod functions;
 pub mod jit;
 pub mod memory_pool;
+pub mod ops;
 pub mod opt_level;
 pub mod optimizer;
-pub mod ops;
 pub mod params;
 pub mod parser;
+pub mod pine;
 pub mod sandbox;
 pub mod simd;
 pub mod templates;
@@ -44,19 +44,19 @@ pub use executor::FormulaExecutor;
 pub use functions::get_builtin_functions;
 pub use jit::{JitCompiler, OptimizedBytecode};
 pub use memory_pool::{BufferPool, ZeroCopyContext};
+pub use ops::*;
 pub use opt_level::OptLevel;
 pub use optimizer::{DependencyAnalyzer, FormulaOptimizer};
-pub use ops::*;
 pub use params::{
     apply_params, get_param_value, parse_params, validate_params, ParamDef, ParamValues,
 };
 pub use parser::parse_formula;
-pub use pine::{map_pine_to_alphata, parse_pine, PineBuiltinTable, PineMapperError, PineError};
+pub use pine::{map_pine_to_alphata, parse_pine, PineBuiltinTable, PineError, PineMapperError};
 pub use sandbox::{ExecSandboxConfig, ExecSandboxState};
 pub use simd::SimdOps;
 pub use templates::{FormulaTemplate, FormulaTemplates, TemplateCategory};
-pub use types::*;
 pub use types::FormulaValue;
+pub use types::*;
 
 /// Formula language dialect selector.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -122,13 +122,19 @@ rsi = ta.rsi(close, length)
 plot(rsi)
 "#;
         let ast = parse_formula_with_dialect(src, FormulaDialect::Pine).unwrap();
-        assert!(matches!(ast, AstNode::Statements(_) | AstNode::Assignment { .. }));
+        assert!(matches!(
+            ast,
+            AstNode::Statements(_) | AstNode::Assignment { .. }
+        ));
     }
 
     #[test]
     fn dialect_from_str() {
         assert_eq!(FormulaDialect::from_str("pine"), Some(FormulaDialect::Pine));
-        assert_eq!(FormulaDialect::from_str("alpha_ta"), Some(FormulaDialect::AlphaTA));
+        assert_eq!(
+            FormulaDialect::from_str("alpha_ta"),
+            Some(FormulaDialect::AlphaTA)
+        );
         assert_eq!(FormulaDialect::from_str("unknown"), None);
     }
 }

@@ -33,9 +33,7 @@ fn bench_squeeze(c: &mut Criterion) {
 
     group.bench_function("ttm_squeeze_10000", |b| {
         b.iter(|| {
-            black_box(
-                indicators::ttm_squeeze(&high, &low, &close, 20, 2.0, 20, 1.5).unwrap(),
-            )
+            black_box(indicators::ttm_squeeze(&high, &low, &close, 20, 2.0, 20, 1.5).unwrap())
         })
     });
 
@@ -101,5 +99,13 @@ fn bench_cfo(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_squeeze, bench_vortex, bench_inertia, bench_squeeze_momentum, bench_qstick, bench_cfo);
+criterion_group!(
+    benches,
+    bench_squeeze,
+    bench_vortex,
+    bench_inertia,
+    bench_squeeze_momentum,
+    bench_qstick,
+    bench_cfo
+);
 criterion_main!(benches);

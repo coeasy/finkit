@@ -1,6 +1,6 @@
+use crate::impl_standard_methods;
 use crate::streaming::overlap::ema::StreamingEma;
 use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
-use crate::impl_standard_methods;
 
 /// Streaming Chaikin A/D Oscillator (ADOSC)
 ///
@@ -61,16 +61,26 @@ impl StreamingIndicator<&dyn Ohlcv> for StreamingAdosc {
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { self.slow_ema.is_ready() }
+    fn is_ready(&self) -> bool {
+        self.slow_ema.is_ready()
+    }
 
     impl_standard_methods!();
 }
 
 impl IndicatorMeta for StreamingAdosc {
-    fn name() -> &'static str { "ADOSC" }
-    fn category() -> &'static str { "volume" }
-    fn description() -> &'static str { "Chaikin A/D Oscillator" }
-    fn warm_up_period(&self) -> usize { self.slow_period }
+    fn name() -> &'static str {
+        "ADOSC"
+    }
+    fn category() -> &'static str {
+        "volume"
+    }
+    fn description() -> &'static str {
+        "Chaikin A/D Oscillator"
+    }
+    fn warm_up_period(&self) -> usize {
+        self.slow_period
+    }
 }
 
 #[cfg(test)]
@@ -84,7 +94,13 @@ mod tests {
         let bars: Vec<OhlcvBar> = (0..20)
             .map(|i| {
                 let base = 50.0 + (i as f64 * 0.3).sin() * 5.0;
-                OhlcvBar::new(0.0, base + 2.0, base - 2.0, base + 1.0, 100.0 + i as f64 * 10.0)
+                OhlcvBar::new(
+                    0.0,
+                    base + 2.0,
+                    base - 2.0,
+                    base + 1.0,
+                    100.0 + i as f64 * 10.0,
+                )
             })
             .collect();
 
@@ -117,10 +133,18 @@ mod tests {
     #[test]
     fn test_streaming_vs_batch_convergence() {
         let n = 100;
-        let highs: Vec<f64> = (0..n).map(|i| 50.0 + (i as f64 * 0.1).sin() * 5.0 + 2.0).collect();
-        let lows: Vec<f64> = (0..n).map(|i| 50.0 + (i as f64 * 0.1).sin() * 5.0 - 2.0).collect();
-        let closes: Vec<f64> = (0..n).map(|i| 50.0 + (i as f64 * 0.1).sin() * 5.0).collect();
-        let volumes: Vec<f64> = (0..n).map(|i| 100.0 + (i as f64 * 0.2).cos() * 50.0).collect();
+        let highs: Vec<f64> = (0..n)
+            .map(|i| 50.0 + (i as f64 * 0.1).sin() * 5.0 + 2.0)
+            .collect();
+        let lows: Vec<f64> = (0..n)
+            .map(|i| 50.0 + (i as f64 * 0.1).sin() * 5.0 - 2.0)
+            .collect();
+        let closes: Vec<f64> = (0..n)
+            .map(|i| 50.0 + (i as f64 * 0.1).sin() * 5.0)
+            .collect();
+        let volumes: Vec<f64> = (0..n)
+            .map(|i| 100.0 + (i as f64 * 0.2).cos() * 50.0)
+            .collect();
 
         let batch = crate::indicators::adosc(&highs, &lows, &closes, &volumes, 3, 10).unwrap();
 

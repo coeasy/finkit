@@ -69,7 +69,8 @@ pub fn multi_lag(data: &[f64], lags: &[usize]) -> Vec<(String, Array1<f64>)> {
 
 /// Generate multiple diff features at once.
 pub fn multi_diff(data: &[f64], orders: &[usize]) -> Vec<(String, Array1<f64>)> {
-    orders.iter()
+    orders
+        .iter()
         .map(|&n| (format!("diff_{}", n), diff(data, n)))
         .collect()
 }

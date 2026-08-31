@@ -85,10 +85,7 @@ pub fn trend_strength_score(close: &[f64], adx_period: usize) -> Vec<f64> {
     };
 
     let dm_scores = directional_strength_from_close(close, adx_period);
-    for (score, (&adx_val, &dm)) in scores
-        .iter_mut()
-        .zip(adx_vals.iter().zip(dm_scores.iter()))
-    {
+    for (score, (&adx_val, &dm)) in scores.iter_mut().zip(adx_vals.iter().zip(dm_scores.iter())) {
         *score = adx_to_strength(adx_val).max(dm);
     }
     scores
@@ -146,13 +143,10 @@ fn is_pivot_extremum(data: &[f64], index: usize, half: usize, find_max: bool) ->
     if !pivot.is_finite() {
         return false;
     }
-    data[start..end].iter().all(|&v| {
-        if find_max {
-            v <= pivot
-        } else {
-            v >= pivot
-        }
-    }) && data[start..end].iter().any(|&v| (v - pivot).abs() > 1e-12)
+    data[start..end]
+        .iter()
+        .all(|&v| if find_max { v <= pivot } else { v >= pivot })
+        && data[start..end].iter().any(|&v| (v - pivot).abs() > 1e-12)
 }
 
 fn touch_strength(level: f64, series: &[f64], tolerance_pct: f64) -> f64 {
@@ -226,7 +220,10 @@ mod tests {
             }
         }
 
-        let max_support = supports.iter().map(|l| l.price).fold(f64::NEG_INFINITY, f64::max);
+        let max_support = supports
+            .iter()
+            .map(|l| l.price)
+            .fold(f64::NEG_INFINITY, f64::max);
         let min_resistance = resistances
             .iter()
             .map(|l| l.price)
@@ -250,8 +247,7 @@ mod tests {
         let scores = trend_strength_score(&close, 14);
 
         let tail = scores.len().saturating_sub(10);
-        let tail_avg: f64 =
-            scores[tail..].iter().sum::<f64>() / (scores.len() - tail) as f64;
+        let tail_avg: f64 = scores[tail..].iter().sum::<f64>() / (scores.len() - tail) as f64;
         assert!(
             tail_avg > 60.0,
             "trending tail average strength should exceed 60, got {tail_avg}"

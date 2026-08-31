@@ -15,9 +15,10 @@
 //! Missing golden JSON files cause the indicator test to **skip** (not fail).
 
 use finkit::indicators::{
-    adx, apo, aroon, bbands, cci, cmo, macd, mom, roc, rsi, stoch, trix, willr,
+    adx, apo, aroon, bbands, cci, cmo, macd, mom, roc, rsi, stoch, trix,
     volatility::{atr, natr},
     volume::{ad, obv},
+    willr,
 };
 use finkit::math::moving_avg::{dema, ema, sma, tema, wma};
 use serde::Deserialize;
@@ -118,10 +119,7 @@ fn param_usize(params: &HashMap<String, serde_json::Value>, key: &str, default: 
 }
 
 fn param_f64(params: &HashMap<String, serde_json::Value>, key: &str, default: f64) -> f64 {
-    params
-        .get(key)
-        .and_then(|v| v.as_f64())
-        .unwrap_or(default)
+    params.get(key).and_then(|v| v.as_f64()).unwrap_or(default)
 }
 
 fn array_to_vec(arr: ndarray::Array1<f64>) -> Vec<f64> {
@@ -130,7 +128,9 @@ fn array_to_vec(arr: ndarray::Array1<f64>) -> Vec<f64> {
 
 fn read_fixture_csv(path: &Path) -> Ohlcv {
     let content = fs::read_to_string(path).expect("read fixture csv");
-    let mut lines = content.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty());
+    let mut lines = content
+        .lines()
+        .filter(|l| !l.starts_with('#') && !l.trim().is_empty());
     let header = lines.next().expect("fixture header");
     let col_index: HashMap<String, usize> = header
         .split(',')
@@ -139,7 +139,10 @@ fn read_fixture_csv(path: &Path) -> Ohlcv {
         .collect();
 
     for required in ["open", "high", "low", "close", "volume"] {
-        assert!(col_index.contains_key(required), "missing column {required} in {path:?}");
+        assert!(
+            col_index.contains_key(required),
+            "missing column {required} in {path:?}"
+        );
     }
 
     let mut open = Vec::new();
@@ -225,7 +228,10 @@ fn compute_alpha_ta_outputs(
         }
         "ATR" => {
             let p = param_usize(params, "timeperiod", 14);
-            HashMap::from([("atr".to_string(), array_to_vec(atr(high, low, close, p).unwrap()))])
+            HashMap::from([(
+                "atr".to_string(),
+                array_to_vec(atr(high, low, close, p).unwrap()),
+            )])
         }
         "NATR" => {
             let p = param_usize(params, "timeperiod", 14);
@@ -236,7 +242,10 @@ fn compute_alpha_ta_outputs(
         }
         "ADX" => {
             let p = param_usize(params, "timeperiod", 14);
-            HashMap::from([("adx".to_string(), array_to_vec(adx(high, low, close, p).unwrap()))])
+            HashMap::from([(
+                "adx".to_string(),
+                array_to_vec(adx(high, low, close, p).unwrap()),
+            )])
         }
         "STOCH" => {
             let fastk = param_usize(params, "fastk_period", 14);
@@ -250,7 +259,10 @@ fn compute_alpha_ta_outputs(
         }
         "CCI" => {
             let p = param_usize(params, "timeperiod", 14);
-            HashMap::from([("cci".to_string(), array_to_vec(cci(high, low, close, p).unwrap()))])
+            HashMap::from([(
+                "cci".to_string(),
+                array_to_vec(cci(high, low, close, p).unwrap()),
+            )])
         }
         "WILLR" => {
             let p = param_usize(params, "timeperiod", 14);
@@ -279,7 +291,10 @@ fn compute_alpha_ta_outputs(
         "APO" => {
             let fast = param_usize(params, "fastperiod", 12);
             let slow = param_usize(params, "slowperiod", 26);
-            HashMap::from([("apo".to_string(), array_to_vec(apo(close, fast, slow).unwrap()))])
+            HashMap::from([(
+                "apo".to_string(),
+                array_to_vec(apo(close, fast, slow).unwrap()),
+            )])
         }
         "CMO" => {
             let p = param_usize(params, "timeperiod", 14);
@@ -298,7 +313,10 @@ fn compute_alpha_ta_outputs(
 }
 
 /// TA-Lib unstable-period lookback hints for seed-sensitive indicators.
-fn unstable_period_hint(indicator: &str, params: &HashMap<String, serde_json::Value>) -> Option<usize> {
+fn unstable_period_hint(
+    indicator: &str,
+    params: &HashMap<String, serde_json::Value>,
+) -> Option<usize> {
     match indicator {
         "EMA" | "DEMA" | "TEMA" | "WMA" | "SMA" => {
             let p = param_usize(params, "timeperiod", 10);
@@ -443,9 +461,7 @@ fn compare_series(
         match exp_opt {
             None => {
                 if !act.is_nan() {
-                    errors.push(format!(
-                        "{label} warmup idx {i}: expected NaN, got {act}"
-                    ));
+                    errors.push(format!("{label} warmup idx {i}: expected NaN, got {act}"));
                 }
             }
             Some(exp) => {
@@ -495,7 +511,8 @@ fn run_indicator_compat(indicator: &str) -> IndicatorReport {
     let raw = fs::read_to_string(&golden_path).expect("read golden json");
     let golden: GoldenFile = serde_json::from_str(&raw).expect("parse golden json");
     assert_eq!(
-        golden.metadata.indicator, indicator,
+        golden.metadata.indicator,
+        indicator,
         "metadata.indicator mismatch in {}",
         golden_path.display()
     );
@@ -617,8 +634,10 @@ mod golden_talib_suite {
             return;
         }
 
-        let reports: Vec<IndicatorReport> =
-            KNOWN_INDICATORS.iter().map(|name| run_indicator_compat(*name)).collect();
+        let reports: Vec<IndicatorReport> = KNOWN_INDICATORS
+            .iter()
+            .map(|name| run_indicator_compat(*name))
+            .collect();
         write_compat_report(&reports);
     }
 
@@ -640,7 +659,11 @@ mod golden_talib_suite {
                 failures.push(format!("{name}: {}", report.notes));
             }
         }
-        assert!(failures.is_empty(), "TA-Lib golden failures:\n{}", failures.join("\n"));
+        assert!(
+            failures.is_empty(),
+            "TA-Lib golden failures:\n{}",
+            failures.join("\n")
+        );
     }
 }
 

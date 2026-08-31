@@ -139,8 +139,12 @@ pub fn batch_minmax_simd(data: &[f64]) -> Array1<f64> {
     let mut min_val = data[0];
     let mut max_val = data[0];
     for &v in &data[1..] {
-        if v < min_val { min_val = v; }
-        if v > max_val { max_val = v; }
+        if v < min_val {
+            min_val = v;
+        }
+        if v > max_val {
+            max_val = v;
+        }
     }
 
     let range = max_val - min_val;
@@ -167,7 +171,9 @@ pub fn correlation_simd(a: &[f64], b: &[f64]) -> f64 {
     assert_eq!(a.len(), b.len());
     let n = a.len();
     let n_f = n as f64;
-    if n_f < 3.0 { return 0.0; }
+    if n_f < 3.0 {
+        return 0.0;
+    }
 
     // Use SimdOps::mul for element-wise products
     let mut ab = vec![0.0; n];
@@ -188,7 +194,11 @@ pub fn correlation_simd(a: &[f64], b: &[f64]) -> f64 {
     let var_b = sum_b2 / n_f - (sum_b / n_f).powi(2);
     let denom = (var_a * var_b).sqrt();
 
-    if denom > 1e-15 { cov / denom } else { 0.0 }
+    if denom > 1e-15 {
+        cov / denom
+    } else {
+        0.0
+    }
 }
 
 #[cfg(test)]
@@ -198,7 +208,9 @@ mod tests {
 
     #[test]
     fn test_rolling_mean_simd_accuracy() {
-        let data: Vec<f64> = (0..500).map(|i| (i as f64 * 0.17).sin() * 10.0 + i as f64 * 0.003).collect();
+        let data: Vec<f64> = (0..500)
+            .map(|i| (i as f64 * 0.17).sin() * 10.0 + i as f64 * 0.003)
+            .collect();
         for &window in &[5, 10, 20, 50] {
             let expected = statistics::rolling_mean(&data, window).unwrap();
             let simd = rolling_mean_simd(&data, window);
@@ -207,7 +219,11 @@ mod tests {
                 if a.is_nan() {
                     assert!(b.is_nan());
                 } else {
-                    assert!((a - b).abs() < 1e-12, "window={window} diff={}", (a - b).abs());
+                    assert!(
+                        (a - b).abs() < 1e-12,
+                        "window={window} diff={}",
+                        (a - b).abs()
+                    );
                 }
             }
         }
@@ -215,7 +231,9 @@ mod tests {
 
     #[test]
     fn test_rolling_std_simd_accuracy() {
-        let data: Vec<f64> = (0..500).map(|i| (i as f64 * 0.23).cos() * 5.0 + i as f64 * 0.007).collect();
+        let data: Vec<f64> = (0..500)
+            .map(|i| (i as f64 * 0.23).cos() * 5.0 + i as f64 * 0.007)
+            .collect();
         for &window in &[5, 10, 20, 50] {
             let expected = statistics::rolling_std_dev(&data, window).unwrap();
             let simd = rolling_std_simd(&data, window);
@@ -224,7 +242,11 @@ mod tests {
                 if a.is_nan() {
                     assert!(b.is_nan());
                 } else {
-                    assert!((a - b).abs() < 1e-12, "window={window} diff={}", (a - b).abs());
+                    assert!(
+                        (a - b).abs() < 1e-12,
+                        "window={window} diff={}",
+                        (a - b).abs()
+                    );
                 }
             }
         }

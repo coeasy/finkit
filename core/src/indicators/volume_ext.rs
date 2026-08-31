@@ -45,7 +45,10 @@ pub fn cmf(
     volume: &[f64],
     period: usize,
 ) -> Result<Array1<f64>> {
-    validate_same_length("high, low, close, volume", &[high.len(), low.len(), close.len(), volume.len()])?;
+    validate_same_length(
+        "high, low, close, volume",
+        &[high.len(), low.len(), close.len(), volume.len()],
+    )?;
     validate_period("period", period)?;
     validate_input(high.len(), period)?;
 
@@ -59,10 +62,7 @@ pub fn cmf(
     #[inline(always)]
     fn compute_mfv(h: f64, l: f64, c: f64, v: f64) -> (f64, f64, bool) {
         let range = h - l;
-        if range.abs() > 1e-15
-            && !h.is_nan() && !l.is_nan()
-            && !c.is_nan() && !v.is_nan()
-        {
+        if range.abs() > 1e-15 && !h.is_nan() && !l.is_nan() && !c.is_nan() && !v.is_nan() {
             let mfv = ((c - l) - (h - c)) / range * v;
             (mfv, v, true)
         } else {
@@ -304,12 +304,11 @@ pub fn kvo(
         };
 
         // Compute vf[i]
-        let vf_i =
-            if volume[i].is_nan() || dm_i.is_nan() || cm_i.is_nan() || cm_i.abs() <= 1e-15 {
-                0.0
-            } else {
-                volume[i] * (2.0 * dm_i / cm_i - 1.0).abs() * trend_i as f64
-            };
+        let vf_i = if volume[i].is_nan() || dm_i.is_nan() || cm_i.is_nan() || cm_i.abs() <= 1e-15 {
+            0.0
+        } else {
+            volume[i] * (2.0 * dm_i / cm_i - 1.0).abs() * trend_i as f64
+        };
 
         // Update fast EMA
         if fast_count < fast_period {
@@ -395,8 +394,12 @@ pub fn nvi(close: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
         for i in 1..len {
             let c = close[i];
             let cp = close[i - 1];
-            if volume[i] < volume[i - 1] && cp.abs() > 1e-15 && !c.is_nan() && !cp.is_nan()
-                && !volume[i].is_nan() && !volume[i - 1].is_nan()
+            if volume[i] < volume[i - 1]
+                && cp.abs() > 1e-15
+                && !c.is_nan()
+                && !cp.is_nan()
+                && !volume[i].is_nan()
+                && !volume[i - 1].is_nan()
             {
                 prev += prev * (c - cp) / cp;
                 output[i] = prev;
@@ -444,8 +447,12 @@ pub fn pvi(close: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
         for i in 1..len {
             let c = close[i];
             let cp = close[i - 1];
-            if volume[i] > volume[i - 1] && cp.abs() > 1e-15 && !c.is_nan() && !cp.is_nan()
-                && !volume[i].is_nan() && !volume[i - 1].is_nan()
+            if volume[i] > volume[i - 1]
+                && cp.abs() > 1e-15
+                && !c.is_nan()
+                && !cp.is_nan()
+                && !volume[i].is_nan()
+                && !volume[i - 1].is_nan()
             {
                 prev += prev * (c - cp) / cp;
                 output[i] = prev;
@@ -595,7 +602,10 @@ pub fn mfi_ext(
     volume: &[f64],
     period: usize,
 ) -> Result<Array1<f64>> {
-    validate_same_length("high, low, close, volume", &[high.len(), low.len(), close.len(), volume.len()])?;
+    validate_same_length(
+        "high, low, close, volume",
+        &[high.len(), low.len(), close.len(), volume.len()],
+    )?;
     validate_period("period", period)?;
     validate_input(high.len(), period + 1)?;
 
@@ -611,11 +621,7 @@ pub fn mfi_ext(
         .collect();
 
     // Calculate raw money flow
-    let rmf: Vec<f64> = tp
-        .iter()
-        .zip(volume.iter())
-        .map(|(&t, &v)| t * v)
-        .collect();
+    let rmf: Vec<f64> = tp.iter().zip(volume.iter()).map(|(&t, &v)| t * v).collect();
 
     // Rolling sum of positive and negative money flow
     let mut pos_mf_ring = vec![0.0f64; period];
@@ -624,8 +630,16 @@ pub fn mfi_ext(
     let mut sum_neg = 0.0;
 
     for i in 1..len {
-        let pos_mf = if tp[i] > tp[i - 1] && !rmf[i].is_nan() { rmf[i] } else { 0.0 };
-        let neg_mf = if tp[i] < tp[i - 1] && !rmf[i].is_nan() { rmf[i] } else { 0.0 };
+        let pos_mf = if tp[i] > tp[i - 1] && !rmf[i].is_nan() {
+            rmf[i]
+        } else {
+            0.0
+        };
+        let neg_mf = if tp[i] < tp[i - 1] && !rmf[i].is_nan() {
+            rmf[i]
+        } else {
+            0.0
+        };
 
         if i <= period {
             pos_mf_ring[i - 1] = pos_mf;
@@ -641,7 +655,11 @@ pub fn mfi_ext(
         }
 
         if i >= period {
-            let mf_ratio = if sum_neg.abs() > 1e-15 { sum_pos / sum_neg } else { 0.0 };
+            let mf_ratio = if sum_neg.abs() > 1e-15 {
+                sum_pos / sum_neg
+            } else {
+                0.0
+            };
             output[i] = 100.0 - 100.0 / (1.0 + mf_ratio);
         }
     }
@@ -788,7 +806,14 @@ mod tests {
     fn test_eom_basic() {
         let high = vec![12.0, 13.0, 14.0, 15.0, 16.0, 17.0];
         let low = vec![10.0, 11.0, 12.0, 13.0, 14.0, 15.0];
-        let volume = vec![1_000_000.0, 1_200_000.0, 900_000.0, 1_100_000.0, 1_300_000.0, 1_000_000.0];
+        let volume = vec![
+            1_000_000.0,
+            1_200_000.0,
+            900_000.0,
+            1_100_000.0,
+            1_300_000.0,
+            1_000_000.0,
+        ];
         let result = eom(&high, &low, &volume, 3).unwrap();
         assert_eq!(result.len(), 6);
         assert!(result[0].is_nan());
@@ -965,7 +990,10 @@ pub fn twiggs_money_flow(
     period: usize,
 ) -> Result<Array1<f64>> {
     let len = high.len();
-    validate_same_length("high, low, close, volume", &[len, low.len(), close.len(), volume.len()])?;
+    validate_same_length(
+        "high, low, close, volume",
+        &[len, low.len(), close.len(), volume.len()],
+    )?;
     if period < 1 {
         return Err(TaError::InvalidParameter {
             name: "period".to_string(),
@@ -1019,7 +1047,9 @@ mod twiggs_mf_tests {
         let high: Vec<f64> = (0..n).map(|i| 105.0 + i as f64 * 0.5).collect();
         let low: Vec<f64> = (0..n).map(|i| 95.0 + i as f64 * 0.5).collect();
         let close: Vec<f64> = (0..n).map(|i| 100.0 + i as f64 * 0.5).collect();
-        let volume: Vec<f64> = (0..n).map(|i| 1000.0 + (i as f64 * 0.7).sin() * 200.0).collect();
+        let volume: Vec<f64> = (0..n)
+            .map(|i| 1000.0 + (i as f64 * 0.7).sin() * 200.0)
+            .collect();
 
         let result = twiggs_money_flow(&high, &low, &close, &volume, 14).unwrap();
         assert_eq!(result.len(), n);
@@ -1108,7 +1138,9 @@ mod vzo_tests {
     fn test_vzo_basic() {
         let n = 30;
         let close: Vec<f64> = (0..n).map(|i| 100.0 + i as f64 * 0.5).collect();
-        let volume: Vec<f64> = (0..n).map(|i| 1000.0 + (i as f64 * 0.7).sin() * 200.0).collect();
+        let volume: Vec<f64> = (0..n)
+            .map(|i| 1000.0 + (i as f64 * 0.7).sin() * 200.0)
+            .collect();
 
         let result = vzo(&close, &volume, 14).unwrap();
         assert_eq!(result.len(), n);

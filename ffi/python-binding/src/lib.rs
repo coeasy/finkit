@@ -6,8 +6,6 @@
 // so the deprecation churn stays contained to the `core` crate.
 #![allow(deprecated)]
 
-use numpy::PyReadonlyArray1;
-use pyo3::prelude::*;
 use ::finkit::indicators;
 use ::finkit::indicators::PivotMethod;
 use ::finkit::math::moving_avg;
@@ -18,19 +16,21 @@ use finkit_visualization::config::{
 use finkit_visualization::data::KlineData;
 use finkit_visualization::error::VisualizationError;
 use finkit_visualization::language::Language;
+use numpy::PyReadonlyArray1;
+use pyo3::prelude::*;
 
+mod features;
 mod streaming;
 mod sweep;
 mod transforms;
-mod features;
 
-#[cfg(feature = "formula")]
-use ndarray::Array1;
 #[cfg(feature = "formula")]
 use ::finkit::formula::{
     parse_formula, parse_formula_with_dialect, FormulaContext, FormulaDialect, FormulaEngine,
     FormulaError,
 };
+#[cfg(feature = "formula")]
+use ndarray::Array1;
 
 #[cfg(feature = "formula")]
 fn extract_array_bound(obj: &Bound<'_, PyAny>) -> PyResult<Vec<f64>> {
@@ -82,12 +82,15 @@ fn formula_error_to_pyerr(e: FormulaError) -> PyErr {
         FormulaError::ParseError(msg) => {
             PyErr::new::<pyo3::exceptions::PySyntaxError, _>(format!("Parse error: {}", msg))
         }
-        FormulaError::Parse { line, col, message } => PyErr::new::<pyo3::exceptions::PySyntaxError, _>(
-            format!("Parse error at line {}, col {}: {}", line, col, message),
-        ),
-        FormulaError::UndefinedFunction { name } => PyErr::new::<pyo3::exceptions::PyNameError, _>(
-            format!("Undefined function: {}", name),
-        ),
+        FormulaError::Parse { line, col, message } => {
+            PyErr::new::<pyo3::exceptions::PySyntaxError, _>(format!(
+                "Parse error at line {}, col {}: {}",
+                line, col, message
+            ))
+        }
+        FormulaError::UndefinedFunction { name } => {
+            PyErr::new::<pyo3::exceptions::PyNameError, _>(format!("Undefined function: {}", name))
+        }
         FormulaError::TypeMismatch { expected, actual } => {
             PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
                 "Type mismatch: expected {}, got {}",
@@ -107,11 +110,14 @@ fn formula_error_to_pyerr(e: FormulaError) -> PyErr {
             PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid operation: {}", msg))
         }
         FormulaError::UnsupportedFunction(msg) => {
-            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Unsupported function: {}", msg))
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                "Unsupported function: {}",
+                msg
+            ))
         }
-        FormulaError::Timeout { elapsed_ms } => {
-            PyErr::new::<pyo3::exceptions::PyTimeoutError, _>(format!("Execution timeout after {}ms", elapsed_ms))
-        }
+        FormulaError::Timeout { elapsed_ms } => PyErr::new::<pyo3::exceptions::PyTimeoutError, _>(
+            format!("Execution timeout after {}ms", elapsed_ms),
+        ),
         FormulaError::MemoryLimit { used, limit } => {
             PyErr::new::<pyo3::exceptions::PyMemoryError, _>(format!(
                 "Memory limit exceeded: used {} bytes, limit is {} bytes",
@@ -125,59 +131,11 @@ fn formula_error_to_pyerr(e: FormulaError) -> PyErr {
 // Overlap Studies
 // ============================================================================
 
-
 include!("generated.rs");
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 // ============================================================================
 // Momentum Indicators
 // ============================================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 /// Directional Movement Index (DX)
 ///
@@ -212,8 +170,6 @@ fn dx(
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
     })
 }
-
-
 
 /// Minus Directional Indicator (MINUS_DI)
 ///
@@ -329,69 +285,25 @@ fn plus_dm(
     })
 }
 
-
-
 // ============================================================================
 // Cycle Indicators (Hilbert Transform)
 // ============================================================================
-
-
-
-
-
-
-
-
-
-
-
-
 
 // ============================================================================
 // Volume Indicators
 // ============================================================================
 
-
-
-
-
-
-
 // ============================================================================
 // Volatility Indicators
 // ============================================================================
-
-
-
-
-
-
 
 // ============================================================================
 // Price Transform Functions
 // ============================================================================
 
-
-
-
-
-
-
-
-
 // ============================================================================
 // Statistics Functions
 // ============================================================================
-
-
-
-
-
-
-
-
-
-
 
 /// Variance (VAR)
 ///
@@ -419,21 +331,9 @@ fn var(
     })
 }
 
-
-
-
-
 // ============================================================================
 // Candlestick Pattern Recognition
 // ============================================================================
-
-
-
-
-
-
-
-
 
 /// 4 Price Doji (四价十字)
 #[pyfunction]
@@ -464,18 +364,6 @@ fn cdl_doji_4prices(
     })
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
 /// Harami Cross (十字孕线)
 #[pyfunction]
 #[pyo3(signature = (open, high, low, close))]
@@ -504,10 +392,6 @@ fn cdl_harami_cross(
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
     })
 }
-
-
-
-
 
 /// Morning Doji Star (十字晨星)
 #[pyfunction]
@@ -568,12 +452,6 @@ fn cdl_evening_doji_star(
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
     })
 }
-
-
-
-
-
-
 
 /// Three Inside Up (内包向上)
 #[pyfunction]
@@ -1285,20 +1163,6 @@ fn detect_rectangle(
 // New Indicators (TASK-166~180)
 // ============================================================================
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 // ============================================================================
 // Advanced Indicators
 // ============================================================================
@@ -1891,7 +1755,9 @@ pub fn formula_eval(
     let mut engine = FormulaEngine::new();
 
     let result = py.allow_threads(|| {
-        engine.eval(source, &mut ctx).map_err(formula_error_to_pyerr)
+        engine
+            .eval(source, &mut ctx)
+            .map_err(formula_error_to_pyerr)
     })?;
 
     let dict = pyo3::types::PyDict::new(py);
@@ -2044,23 +1910,25 @@ pub fn formula_eval_bytecode(
     let close_array = Array1::from_vec(close_vec);
     let volume_array = Array1::from_vec(volume_vec);
 
-    let (result, variables): (Array1<f64>, std::collections::HashMap<std::sync::Arc<str>, Array1<f64>>) = py
-        .allow_threads(|| {
-            let ctx = FormulaContext::new(
-                open_array,
-                high_array,
-                low_array,
-                close_array,
-                volume_array,
-                None,
-            );
-            let mut engine = FormulaEngine::new();
-            let result = engine
-                .compile_bytecode(source)
-                .and_then(|bc| engine.execute_bytecode(&bc, &ctx))
-                .map_err(formula_error_to_pyerr)?;
-            Result::<_, PyErr>::Ok((result, ctx.variables))
-        })?;
+    let (result, variables): (
+        Array1<f64>,
+        std::collections::HashMap<std::sync::Arc<str>, Array1<f64>>,
+    ) = py.allow_threads(|| {
+        let ctx = FormulaContext::new(
+            open_array,
+            high_array,
+            low_array,
+            close_array,
+            volume_array,
+            None,
+        );
+        let mut engine = FormulaEngine::new();
+        let result = engine
+            .compile_bytecode(source)
+            .and_then(|bc| engine.execute_bytecode(&bc, &ctx))
+            .map_err(formula_error_to_pyerr)?;
+        Result::<_, PyErr>::Ok((result, ctx.variables))
+    })?;
 
     let dict = pyo3::types::PyDict::new(py);
 
@@ -2191,7 +2059,9 @@ pub fn formula_eval_jit(
     let mut engine = FormulaEngine::new();
 
     let result = py.allow_threads(|| {
-        engine.eval_jit(source, &mut ctx).map_err(formula_error_to_pyerr)
+        engine
+            .eval_jit(source, &mut ctx)
+            .map_err(formula_error_to_pyerr)
     })?;
 
     let dict = pyo3::types::PyDict::new(py);
@@ -2257,7 +2127,9 @@ pub fn formula_eval_simd(
     let mut engine = FormulaEngine::new();
 
     let result = py.allow_threads(|| {
-        engine.eval_simd(source, &mut ctx).map_err(formula_error_to_pyerr)
+        engine
+            .eval_simd(source, &mut ctx)
+            .map_err(formula_error_to_pyerr)
     })?;
 
     let dict = pyo3::types::PyDict::new(py);
@@ -2378,7 +2250,9 @@ pub fn formula_eval_multi(
     let mut engine = FormulaEngine::new();
 
     let multi_output = py.allow_threads(|| {
-        engine.eval_multi(source, &mut ctx).map_err(formula_error_to_pyerr)
+        engine
+            .eval_multi(source, &mut ctx)
+            .map_err(formula_error_to_pyerr)
     })?;
 
     let names_list = pyo3::types::PyList::empty(py);
@@ -2439,7 +2313,9 @@ pub fn formula_eval_draw(
     let mut engine = FormulaEngine::new();
 
     let _result = py.allow_threads(|| {
-        engine.eval(source, &mut ctx).map_err(formula_error_to_pyerr)
+        engine
+            .eval(source, &mut ctx)
+            .map_err(formula_error_to_pyerr)
     })?;
 
     let draw_commands = ctx.draw_commands.borrow();
@@ -2447,28 +2323,57 @@ pub fn formula_eval_draw(
     for cmd in &draw_commands.commands {
         let cmd_dict = pyo3::types::PyDict::new(py);
         match cmd {
-            DrawCommand::Text { condition: _, price: _, text, color } => {
+            DrawCommand::Text {
+                condition: _,
+                price: _,
+                text,
+                color,
+            } => {
                 cmd_dict.set_item("type", "Text")?;
                 cmd_dict.set_item("text", text.as_str())?;
                 cmd_dict.set_item("color", color.as_str())?;
             }
-            DrawCommand::Icon { condition: _, price: _, icon_type, color } => {
+            DrawCommand::Icon {
+                condition: _,
+                price: _,
+                icon_type,
+                color,
+            } => {
                 cmd_dict.set_item("type", "Icon")?;
                 cmd_dict.set_item("iconType", *icon_type)?;
                 cmd_dict.set_item("color", color.as_str())?;
             }
-            DrawCommand::StickLine { condition: _, price1: _, price2: _, width, empty, color } => {
+            DrawCommand::StickLine {
+                condition: _,
+                price1: _,
+                price2: _,
+                width,
+                empty,
+                color,
+            } => {
                 cmd_dict.set_item("type", "StickLine")?;
                 cmd_dict.set_item("width", *width)?;
                 cmd_dict.set_item("empty", *empty)?;
                 cmd_dict.set_item("color", color.as_str())?;
             }
-            DrawCommand::Line { cond1: _, price1: _, cond2: _, price2: _, expand, color } => {
+            DrawCommand::Line {
+                cond1: _,
+                price1: _,
+                cond2: _,
+                price2: _,
+                expand,
+                color,
+            } => {
                 cmd_dict.set_item("type", "Line")?;
                 cmd_dict.set_item("expand", *expand)?;
                 cmd_dict.set_item("color", color.as_str())?;
             }
-            DrawCommand::Band { val1: _, color1, val2: _, color2 } => {
+            DrawCommand::Band {
+                val1: _,
+                color1,
+                val2: _,
+                color2,
+            } => {
                 cmd_dict.set_item("type", "Band")?;
                 cmd_dict.set_item("color1", color1.as_str())?;
                 cmd_dict.set_item("color2", color2.as_str())?;
@@ -2476,19 +2381,38 @@ pub fn formula_eval_draw(
             DrawCommand::KLine { .. } => {
                 cmd_dict.set_item("type", "KLine")?;
             }
-            DrawCommand::Rect { x1: _, y1: _, x2: _, y2: _, color } => {
+            DrawCommand::Rect {
+                x1: _,
+                y1: _,
+                x2: _,
+                y2: _,
+                color,
+            } => {
                 cmd_dict.set_item("type", "Rect")?;
                 cmd_dict.set_item("color", color.as_str())?;
             }
-            DrawCommand::FillRgn { cond: _, price1: _, price2: _, color } => {
+            DrawCommand::FillRgn {
+                cond: _,
+                price1: _,
+                price2: _,
+                color,
+            } => {
                 cmd_dict.set_item("type", "FillRgn")?;
                 cmd_dict.set_item("color", color.as_str())?;
             }
-            DrawCommand::PartLine { cond: _, price: _, color } => {
+            DrawCommand::PartLine {
+                cond: _,
+                price: _,
+                color,
+            } => {
                 cmd_dict.set_item("type", "PartLine")?;
                 cmd_dict.set_item("color", color.as_str())?;
             }
-            DrawCommand::PolyLine { cond: _, price: _, color } => {
+            DrawCommand::PolyLine {
+                cond: _,
+                price: _,
+                color,
+            } => {
                 cmd_dict.set_item("type", "PolyLine")?;
                 cmd_dict.set_item("color", color.as_str())?;
             }
@@ -2496,7 +2420,13 @@ pub fn formula_eval_draw(
                 cmd_dict.set_item("type", "Background")?;
                 cmd_dict.set_item("color", color.as_str())?;
             }
-            DrawCommand::SlopeLine { cond1: _, price1: _, cond2: _, price2: _, color } => {
+            DrawCommand::SlopeLine {
+                cond1: _,
+                price1: _,
+                cond2: _,
+                price2: _,
+                color,
+            } => {
                 cmd_dict.set_item("type", "SlopeLine")?;
                 cmd_dict.set_item("color", color.as_str())?;
             }
@@ -2507,12 +2437,21 @@ pub fn formula_eval_draw(
                 cmd_dict.set_item("text", text.as_str())?;
                 cmd_dict.set_item("color", color.as_str())?;
             }
-            DrawCommand::Number { condition: _, price: _, number: _, precision, color } => {
+            DrawCommand::Number {
+                condition: _,
+                price: _,
+                number: _,
+                precision,
+                color,
+            } => {
                 cmd_dict.set_item("type", "Number")?;
                 cmd_dict.set_item("precision", *precision)?;
                 cmd_dict.set_item("color", color.as_str())?;
             }
-            DrawCommand::VertLine { condition: _, color } => {
+            DrawCommand::VertLine {
+                condition: _,
+                color,
+            } => {
                 cmd_dict.set_item("type", "VertLine")?;
                 cmd_dict.set_item("color", color.as_str())?;
             }
@@ -3074,7 +3013,15 @@ fn compute_all_indicators(
     let mut results = Vec::with_capacity(requests.len());
 
     for req in requests {
-        let key = format!("{}_{}", req.name, req.params.iter().map(|p| p.to_string()).collect::<Vec<_>>().join("_"));
+        let key = format!(
+            "{}_{}",
+            req.name,
+            req.params
+                .iter()
+                .map(|p| p.to_string())
+                .collect::<Vec<_>>()
+                .join("_")
+        );
         let result = compute_single_indicator(open, high, low, close, volume, req);
         results.push((key, result));
     }
@@ -3182,11 +3129,13 @@ fn compute_single_indicator(
             let slow = params.get(1).copied().unwrap_or(26.0) as usize;
             let signal = params.get(2).copied().unwrap_or(9.0) as usize;
             indicators::macd(close, fast, slow, signal)
-                .map(|res| IndicatorResult::Triple(
-                    res.macd.into_raw_vec(),
-                    res.signal.into_raw_vec(),
-                    res.hist.into_raw_vec(),
-                ))
+                .map(|res| {
+                    IndicatorResult::Triple(
+                        res.macd.into_raw_vec(),
+                        res.signal.into_raw_vec(),
+                        res.hist.into_raw_vec(),
+                    )
+                })
                 .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
         }
         "bollinger_bands" | "bbands" => {
@@ -3194,11 +3143,13 @@ fn compute_single_indicator(
             let nbdevup = params.get(1).copied().unwrap_or(2.0);
             let nbdevdn = params.get(2).copied().unwrap_or(2.0);
             indicators::bbands(close, period, nbdevup, nbdevdn)
-                .map(|res| IndicatorResult::Triple(
-                    res.upper.into_raw_vec(),
-                    res.middle.into_raw_vec(),
-                    res.lower.into_raw_vec(),
-                ))
+                .map(|res| {
+                    IndicatorResult::Triple(
+                        res.upper.into_raw_vec(),
+                        res.middle.into_raw_vec(),
+                        res.lower.into_raw_vec(),
+                    )
+                })
                 .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
         }
         "midpoint" => {
@@ -3207,42 +3158,24 @@ fn compute_single_indicator(
                 .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
                 .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
         }
-        "ht_dcperiod" => {
-            indicators::ht_dcperiod(close)
-                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
-                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-        }
-        "ht_dcphase" => {
-            indicators::ht_dcphase(close)
-                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
-                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-        }
-        "ht_phasor" => {
-            indicators::ht_phasor(close)
-                .map(|res| IndicatorResult::Double(
-                    res.0.into_raw_vec(),
-                    res.1.into_raw_vec(),
-                ))
-                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-        }
-        "ht_sine" => {
-            indicators::ht_sine(close)
-                .map(|res| IndicatorResult::Double(
-                    res.0.into_raw_vec(),
-                    res.1.into_raw_vec(),
-                ))
-                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-        }
-        "ht_trendmode" => {
-            indicators::ht_trendmode(close)
-                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
-                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-        }
-        "ht_trendline" => {
-            indicators::ht_trendline(close)
-                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
-                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-        }
+        "ht_dcperiod" => indicators::ht_dcperiod(close)
+            .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+            .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+        "ht_dcphase" => indicators::ht_dcphase(close)
+            .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+            .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+        "ht_phasor" => indicators::ht_phasor(close)
+            .map(|res| IndicatorResult::Double(res.0.into_raw_vec(), res.1.into_raw_vec()))
+            .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+        "ht_sine" => indicators::ht_sine(close)
+            .map(|res| IndicatorResult::Double(res.0.into_raw_vec(), res.1.into_raw_vec()))
+            .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+        "ht_trendmode" => indicators::ht_trendmode(close)
+            .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+            .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+        "ht_trendline" => indicators::ht_trendline(close)
+            .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+            .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
         "zscore" => {
             let period = params.first().copied().unwrap_or(14.0) as usize;
             indicators::zscore(close, period)
@@ -3274,455 +3207,380 @@ fn compute_single_indicator(
                 .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
                 .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
         }
-        "adx" => {
-            match (high, low) {
-                (Some(h), Some(l)) => {
-                    let period = params.first().copied().unwrap_or(14.0) as usize;
-                    indicators::adx(h, l, close, period)
-                        .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("ADX requires high and low data".to_string())
+        "adx" => match (high, low) {
+            (Some(h), Some(l)) => {
+                let period = params.first().copied().unwrap_or(14.0) as usize;
+                indicators::adx(h, l, close, period)
+                    .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
             }
-        }
-        "aroon" => {
-            match (high, low) {
-                (Some(h), Some(l)) => {
-                    let period = params.first().copied().unwrap_or(14.0) as usize;
-                    indicators::aroon(h, l, period)
-                        .map(|res| IndicatorResult::Double(
+            _ => IndicatorResult::Error("ADX requires high and low data".to_string()),
+        },
+        "aroon" => match (high, low) {
+            (Some(h), Some(l)) => {
+                let period = params.first().copied().unwrap_or(14.0) as usize;
+                indicators::aroon(h, l, period)
+                    .map(|res| {
+                        IndicatorResult::Double(
                             res.aroon_up.into_raw_vec(),
                             res.aroon_down.into_raw_vec(),
-                        ))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("Aroon requires high and low data".to_string())
+                        )
+                    })
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
             }
-        }
-        "cci" => {
-            match (high, low) {
-                (Some(h), Some(l)) => {
-                    let period = params.first().copied().unwrap_or(14.0) as usize;
-                    indicators::cci(h, l, close, period)
-                        .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("CCI requires high and low data".to_string())
+            _ => IndicatorResult::Error("Aroon requires high and low data".to_string()),
+        },
+        "cci" => match (high, low) {
+            (Some(h), Some(l)) => {
+                let period = params.first().copied().unwrap_or(14.0) as usize;
+                indicators::cci(h, l, close, period)
+                    .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
             }
-        }
-        "willr" => {
-            match (high, low) {
-                (Some(h), Some(l)) => {
-                    let period = params.first().copied().unwrap_or(14.0) as usize;
-                    indicators::willr(h, l, close, period)
-                        .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("WillR requires high and low data".to_string())
+            _ => IndicatorResult::Error("CCI requires high and low data".to_string()),
+        },
+        "willr" => match (high, low) {
+            (Some(h), Some(l)) => {
+                let period = params.first().copied().unwrap_or(14.0) as usize;
+                indicators::willr(h, l, close, period)
+                    .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
             }
-        }
-        "dx" => {
-            match (high, low) {
-                (Some(h), Some(l)) => {
-                    let period = params.first().copied().unwrap_or(14.0) as usize;
-                    indicators::dx(h, l, close, period)
-                        .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("DX requires high and low data".to_string())
+            _ => IndicatorResult::Error("WillR requires high and low data".to_string()),
+        },
+        "dx" => match (high, low) {
+            (Some(h), Some(l)) => {
+                let period = params.first().copied().unwrap_or(14.0) as usize;
+                indicators::dx(h, l, close, period)
+                    .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
             }
-        }
-        "minus_di" => {
-            match (high, low) {
-                (Some(h), Some(l)) => {
-                    let period = params.first().copied().unwrap_or(14.0) as usize;
-                    indicators::minus_di(h, l, close, period)
-                        .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("MinusDI requires high and low data".to_string())
+            _ => IndicatorResult::Error("DX requires high and low data".to_string()),
+        },
+        "minus_di" => match (high, low) {
+            (Some(h), Some(l)) => {
+                let period = params.first().copied().unwrap_or(14.0) as usize;
+                indicators::minus_di(h, l, close, period)
+                    .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
             }
-        }
-        "plus_di" => {
-            match (high, low) {
-                (Some(h), Some(l)) => {
-                    let period = params.first().copied().unwrap_or(14.0) as usize;
-                    indicators::plus_di(h, l, close, period)
-                        .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("PlusDI requires high and low data".to_string())
+            _ => IndicatorResult::Error("MinusDI requires high and low data".to_string()),
+        },
+        "plus_di" => match (high, low) {
+            (Some(h), Some(l)) => {
+                let period = params.first().copied().unwrap_or(14.0) as usize;
+                indicators::plus_di(h, l, close, period)
+                    .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
             }
-        }
-        "minus_dm" => {
-            match (high, low) {
-                (Some(h), Some(l)) => {
-                    indicators::minus_dm(h, l)
-                        .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("MinusDM requires high and low data".to_string())
+            _ => IndicatorResult::Error("PlusDI requires high and low data".to_string()),
+        },
+        "minus_dm" => match (high, low) {
+            (Some(h), Some(l)) => indicators::minus_dm(h, l)
+                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+            _ => IndicatorResult::Error("MinusDM requires high and low data".to_string()),
+        },
+        "plus_dm" => match (high, low) {
+            (Some(h), Some(l)) => indicators::plus_dm(h, l)
+                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+            _ => IndicatorResult::Error("PlusDM requires high and low data".to_string()),
+        },
+        "stoch" => match (high, low) {
+            (Some(h), Some(l)) => {
+                let fastk = params.first().copied().unwrap_or(5.0) as usize;
+                let slowk = params.get(1).copied().unwrap_or(3.0) as usize;
+                let slowd = params.get(2).copied().unwrap_or(3.0) as usize;
+                indicators::stoch(h, l, close, fastk, slowk, slowd)
+                    .map(|res| IndicatorResult::Double(res.k.into_raw_vec(), res.d.into_raw_vec()))
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
             }
-        }
-        "plus_dm" => {
-            match (high, low) {
-                (Some(h), Some(l)) => {
-                    indicators::plus_dm(h, l)
-                        .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("PlusDM requires high and low data".to_string())
+            _ => IndicatorResult::Error("Stoch requires high and low data".to_string()),
+        },
+        "atr" => match (high, low) {
+            (Some(h), Some(l)) => {
+                let period = params.first().copied().unwrap_or(14.0) as usize;
+                indicators::atr(h, l, close, period)
+                    .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
             }
-        }
-        "stoch" => {
-            match (high, low) {
-                (Some(h), Some(l)) => {
-                    let fastk = params.first().copied().unwrap_or(5.0) as usize;
-                    let slowk = params.get(1).copied().unwrap_or(3.0) as usize;
-                    let slowd = params.get(2).copied().unwrap_or(3.0) as usize;
-                    indicators::stoch(h, l, close, fastk, slowk, slowd)
-                        .map(|res| IndicatorResult::Double(
-                            res.k.into_raw_vec(),
-                            res.d.into_raw_vec(),
-                        ))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("Stoch requires high and low data".to_string())
+            _ => IndicatorResult::Error("ATR requires high and low data".to_string()),
+        },
+        "natr" => match (high, low) {
+            (Some(h), Some(l)) => {
+                let period = params.first().copied().unwrap_or(14.0) as usize;
+                indicators::natr(h, l, close, period)
+                    .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
             }
-        }
-        "atr" => {
-            match (high, low) {
-                (Some(h), Some(l)) => {
-                    let period = params.first().copied().unwrap_or(14.0) as usize;
-                    indicators::atr(h, l, close, period)
-                        .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("ATR requires high and low data".to_string())
+            _ => IndicatorResult::Error("NATR requires high and low data".to_string()),
+        },
+        "trange" => match (high, low) {
+            (Some(h), Some(l)) => indicators::trange(h, l, close)
+                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+            _ => IndicatorResult::Error("TRange requires high and low data".to_string()),
+        },
+        "mfi" => match (high, low, volume) {
+            (Some(h), Some(l), Some(v)) => {
+                let period = params.first().copied().unwrap_or(14.0) as usize;
+                indicators::mfi(h, l, close, v, period)
+                    .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
             }
-        }
-        "natr" => {
-            match (high, low) {
-                (Some(h), Some(l)) => {
-                    let period = params.first().copied().unwrap_or(14.0) as usize;
-                    indicators::natr(h, l, close, period)
-                        .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("NATR requires high and low data".to_string())
+            _ => IndicatorResult::Error("MFI requires high, low and volume data".to_string()),
+        },
+        "obv" => match volume {
+            Some(v) => indicators::obv(close, v)
+                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+            _ => IndicatorResult::Error("OBV requires volume data".to_string()),
+        },
+        "ad" => match (high, low, volume) {
+            (Some(h), Some(l), Some(v)) => indicators::ad(h, l, close, v)
+                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+            _ => IndicatorResult::Error("AD requires high, low and volume data".to_string()),
+        },
+        "adosc" => match (high, low, volume) {
+            (Some(h), Some(l), Some(v)) => {
+                let fast = params.first().copied().unwrap_or(3.0) as usize;
+                let slow = params.get(1).copied().unwrap_or(10.0) as usize;
+                indicators::adosc(h, l, close, v, fast, slow)
+                    .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
             }
-        }
-        "trange" => {
-            match (high, low) {
-                (Some(h), Some(l)) => {
-                    indicators::trange(h, l, close)
-                        .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("TRange requires high and low data".to_string())
-            }
-        }
-        "mfi" => {
-            match (high, low, volume) {
-                (Some(h), Some(l), Some(v)) => {
-                    let period = params.first().copied().unwrap_or(14.0) as usize;
-                    indicators::mfi(h, l, close, v, period)
-                        .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("MFI requires high, low and volume data".to_string())
-            }
-        }
-        "obv" => {
-            match volume {
-                Some(v) => {
-                    indicators::obv(close, v)
-                        .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("OBV requires volume data".to_string())
-            }
-        }
-        "ad" => {
-            match (high, low, volume) {
-                (Some(h), Some(l), Some(v)) => {
-                    indicators::ad(h, l, close, v)
-                        .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("AD requires high, low and volume data".to_string())
-            }
-        }
-        "adosc" => {
-            match (high, low, volume) {
-                (Some(h), Some(l), Some(v)) => {
-                    let fast = params.first().copied().unwrap_or(3.0) as usize;
-                    let slow = params.get(1).copied().unwrap_or(10.0) as usize;
-                    indicators::adosc(h, l, close, v, fast, slow)
-                        .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("ADOSC requires high, low and volume data".to_string())
-            }
-        }
-        "bop" => {
-            match (open, high, low) {
-                (Some(o), Some(h), Some(l)) => {
-                    indicators::bop(o, h, l, close)
-                        .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("BOP requires open, high and low data".to_string())
-            }
-        }
-        "avgprice" => {
-            match (open, high, low) {
-                (Some(o), Some(h), Some(l)) => {
-                    indicators::avgprice(o, h, l, close)
-                        .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("AvgPrice requires open, high and low data".to_string())
-            }
-        }
-        "medprice" => {
-            match (high, low) {
-                (Some(h), Some(l)) => {
-                    indicators::medprice(h, l)
-                        .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("MedPrice requires high and low data".to_string())
-            }
-        }
-        "typprice" => {
-            match (high, low) {
-                (Some(h), Some(l)) => {
-                    indicators::typprice(h, l, close)
-                        .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("TypPrice requires high and low data".to_string())
-            }
-        }
-        "wclprice" => {
-            match (high, low) {
-                (Some(h), Some(l)) => {
-                    indicators::wclprice(h, l, close)
-                        .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("WclPrice requires high and low data".to_string())
-            }
-        }
+            _ => IndicatorResult::Error("ADOSC requires high, low and volume data".to_string()),
+        },
+        "bop" => match (open, high, low) {
+            (Some(o), Some(h), Some(l)) => indicators::bop(o, h, l, close)
+                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+            _ => IndicatorResult::Error("BOP requires open, high and low data".to_string()),
+        },
+        "avgprice" => match (open, high, low) {
+            (Some(o), Some(h), Some(l)) => indicators::avgprice(o, h, l, close)
+                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+            _ => IndicatorResult::Error("AvgPrice requires open, high and low data".to_string()),
+        },
+        "medprice" => match (high, low) {
+            (Some(h), Some(l)) => indicators::medprice(h, l)
+                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+            _ => IndicatorResult::Error("MedPrice requires high and low data".to_string()),
+        },
+        "typprice" => match (high, low) {
+            (Some(h), Some(l)) => indicators::typprice(h, l, close)
+                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+            _ => IndicatorResult::Error("TypPrice requires high and low data".to_string()),
+        },
+        "wclprice" => match (high, low) {
+            (Some(h), Some(l)) => indicators::wclprice(h, l, close)
+                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+            _ => IndicatorResult::Error("WclPrice requires high and low data".to_string()),
+        },
         "mama" => {
             let fastlimit = params.first().copied().unwrap_or(0.5);
             let slowlimit = params.get(1).copied().unwrap_or(0.05);
             indicators::mama(close, fastlimit, slowlimit)
-                .map(|res| IndicatorResult::Double(
-                    res.mama.into_raw_vec(),
-                    res.fama.into_raw_vec(),
-                ))
+                .map(|res| {
+                    IndicatorResult::Double(res.mama.into_raw_vec(), res.fama.into_raw_vec())
+                })
                 .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
         }
-        "sar" => {
-            match (high, low) {
-                (Some(h), Some(l)) => {
-                    let acceleration = params.first().copied().unwrap_or(0.02);
-                    let maximum = params.get(1).copied().unwrap_or(0.2);
-                    indicators::sar(h, l, acceleration, maximum)
-                        .map(|res| IndicatorResult::Double(
-                            res.sar.into_raw_vec(),
-                            res.af.into_raw_vec(),
-                        ))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("SAR requires high and low data".to_string())
+        "sar" => match (high, low) {
+            (Some(h), Some(l)) => {
+                let acceleration = params.first().copied().unwrap_or(0.02);
+                let maximum = params.get(1).copied().unwrap_or(0.2);
+                indicators::sar(h, l, acceleration, maximum)
+                    .map(|res| {
+                        IndicatorResult::Double(res.sar.into_raw_vec(), res.af.into_raw_vec())
+                    })
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
             }
-        }
-        "midprice" => {
-            match (high, low) {
-                (Some(h), Some(l)) => {
-                    let period = params.first().copied().unwrap_or(14.0) as usize;
-                    indicators::midprice(h, l, period)
-                        .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("MidPrice requires high and low data".to_string())
+            _ => IndicatorResult::Error("SAR requires high and low data".to_string()),
+        },
+        "midprice" => match (high, low) {
+            (Some(h), Some(l)) => {
+                let period = params.first().copied().unwrap_or(14.0) as usize;
+                indicators::midprice(h, l, period)
+                    .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
             }
-        }
-        "beta" => {
-            IndicatorResult::Error("Beta requires benchmark data (use individual function)".to_string())
-        }
-        "correl" | "correlation" => {
-            IndicatorResult::Error("Correlation requires second series data (use individual function)".to_string())
-        }
-        "vortex" => {
-            match (high, low) {
-                (Some(h), Some(l)) => {
-                    let period = params.first().copied().unwrap_or(14.0) as usize;
-                    indicators::vortex(h, l, close, period)
-                        .map(|res| IndicatorResult::Double(
+            _ => IndicatorResult::Error("MidPrice requires high and low data".to_string()),
+        },
+        "beta" => IndicatorResult::Error(
+            "Beta requires benchmark data (use individual function)".to_string(),
+        ),
+        "correl" | "correlation" => IndicatorResult::Error(
+            "Correlation requires second series data (use individual function)".to_string(),
+        ),
+        "vortex" => match (high, low) {
+            (Some(h), Some(l)) => {
+                let period = params.first().copied().unwrap_or(14.0) as usize;
+                indicators::vortex(h, l, close, period)
+                    .map(|res| {
+                        IndicatorResult::Double(
                             res.vi_plus.into_raw_vec(),
                             res.vi_minus.into_raw_vec(),
-                        ))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("Vortex requires high and low data".to_string())
+                        )
+                    })
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
             }
-        }
-        "vzo" => {
-            match volume {
-                Some(v) => {
-                    let period = params.first().copied().unwrap_or(14.0) as usize;
-                    indicators::vzo(close, v, period)
-                        .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("VZO requires volume data".to_string())
+            _ => IndicatorResult::Error("Vortex requires high and low data".to_string()),
+        },
+        "vzo" => match volume {
+            Some(v) => {
+                let period = params.first().copied().unwrap_or(14.0) as usize;
+                indicators::vzo(close, v, period)
+                    .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
             }
-        }
-        "volume_momentum" => {
-            match volume {
-                Some(v) => {
-                    let period = params.first().copied().unwrap_or(14.0) as usize;
-                    indicators::volume_momentum(v, period)
-                        .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("VolumeMomentum requires volume data".to_string())
+            _ => IndicatorResult::Error("VZO requires volume data".to_string()),
+        },
+        "volume_momentum" => match volume {
+            Some(v) => {
+                let period = params.first().copied().unwrap_or(14.0) as usize;
+                indicators::volume_momentum(v, period)
+                    .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
             }
-        }
-        "volume_roc" => {
-            match volume {
-                Some(v) => {
-                    let period = params.first().copied().unwrap_or(14.0) as usize;
-                    indicators::volume_roc(v, period)
-                        .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("VolumeROC requires volume data".to_string())
+            _ => IndicatorResult::Error("VolumeMomentum requires volume data".to_string()),
+        },
+        "volume_roc" => match volume {
+            Some(v) => {
+                let period = params.first().copied().unwrap_or(14.0) as usize;
+                indicators::volume_roc(v, period)
+                    .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
             }
-        }
+            _ => IndicatorResult::Error("VolumeROC requires volume data".to_string()),
+        },
         "chande_forecast_oscillator" | "cfo" => {
             let period = params.first().copied().unwrap_or(14.0) as usize;
             indicators::chande_forecast_oscillator(close, period)
                 .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
                 .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
         }
-        "twiggs_money_flow" => {
-            match (high, low, volume) {
-                (Some(h), Some(l), Some(v)) => {
-                    let period = params.first().copied().unwrap_or(14.0) as usize;
-                    indicators::twiggs_money_flow(h, l, close, v, period)
-                        .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("TwiggsMoneyFlow requires high, low and volume data".to_string())
+        "twiggs_money_flow" => match (high, low, volume) {
+            (Some(h), Some(l), Some(v)) => {
+                let period = params.first().copied().unwrap_or(14.0) as usize;
+                indicators::twiggs_money_flow(h, l, close, v, period)
+                    .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
             }
-        }
-        "inertia" => {
-            match (open, high, low) {
-                (Some(o), Some(h), Some(l)) => {
-                    let rvi_period = params.first().copied().unwrap_or(10.0) as usize;
-                    let linreg_period = params.get(1).copied().unwrap_or(14.0) as usize;
-                    indicators::inertia(o, h, l, close, rvi_period, linreg_period)
-                        .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("Inertia requires open, high and low data".to_string())
+            _ => IndicatorResult::Error(
+                "TwiggsMoneyFlow requires high, low and volume data".to_string(),
+            ),
+        },
+        "inertia" => match (open, high, low) {
+            (Some(o), Some(h), Some(l)) => {
+                let rvi_period = params.first().copied().unwrap_or(10.0) as usize;
+                let linreg_period = params.get(1).copied().unwrap_or(14.0) as usize;
+                indicators::inertia(o, h, l, close, rvi_period, linreg_period)
+                    .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
             }
-        }
-        "darvas_box" => {
-            match (high, low) {
-                (Some(h), Some(l)) => {
-                    let lookback = params.first().copied().unwrap_or(5.0) as usize;
-                    let confirmation = params.get(1).copied().unwrap_or(3.0) as usize;
-                    indicators::darvas_box(h, l, close, lookback, confirmation)
-                        .map(|r| IndicatorResult::Triple(
+            _ => IndicatorResult::Error("Inertia requires open, high and low data".to_string()),
+        },
+        "darvas_box" => match (high, low) {
+            (Some(h), Some(l)) => {
+                let lookback = params.first().copied().unwrap_or(5.0) as usize;
+                let confirmation = params.get(1).copied().unwrap_or(3.0) as usize;
+                indicators::darvas_box(h, l, close, lookback, confirmation)
+                    .map(|r| {
+                        IndicatorResult::Triple(
                             r.box_top.into_raw_vec(),
                             r.box_bottom.into_raw_vec(),
                             r.signal.into_iter().map(|v| v as f64).collect(),
-                        ))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("DarvasBox requires high and low data".to_string()),
+                        )
+                    })
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
             }
-        }
-        "renko" => {
-            match (high, low) {
-                (Some(h), Some(l)) => {
-                    let box_size = params.first().copied().unwrap_or(1.0);
-                    indicators::renko(h, l, box_size)
-                        .map(|r| IndicatorResult::Double(
+            _ => IndicatorResult::Error("DarvasBox requires high and low data".to_string()),
+        },
+        "renko" => match (high, low) {
+            (Some(h), Some(l)) => {
+                let box_size = params.first().copied().unwrap_or(1.0);
+                indicators::renko(h, l, box_size)
+                    .map(|r| {
+                        IndicatorResult::Double(
                             r.bricks.into_raw_vec(),
                             r.direction.into_iter().map(|v| v as f64).collect(),
-                        ))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("Renko requires high and low data".to_string()),
+                        )
+                    })
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
             }
-        }
+            _ => IndicatorResult::Error("Renko requires high and low data".to_string()),
+        },
         "kagi" => {
             let reversal = params.first().copied().unwrap_or(1.0);
             indicators::kagi(close, reversal)
-                .map(|r| IndicatorResult::Double(
-                    r.kagi.into_raw_vec(),
-                    r.direction.into_iter().map(|v| v as f64).collect(),
-                ))
+                .map(|r| {
+                    IndicatorResult::Double(
+                        r.kagi.into_raw_vec(),
+                        r.direction.into_iter().map(|v| v as f64).collect(),
+                    )
+                })
                 .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
         }
-        "point_and_figure" | "pnf" => {
-            match (high, low) {
-                (Some(h), Some(l)) => {
-                    let box_size = params.first().copied().unwrap_or(1.0);
-                    let reversal = params.get(1).copied().unwrap_or(3.0) as usize;
-                    indicators::point_and_figure(h, l, box_size, reversal)
-                        .map(|r| IndicatorResult::Triple(
+        "point_and_figure" | "pnf" => match (high, low) {
+            (Some(h), Some(l)) => {
+                let box_size = params.first().copied().unwrap_or(1.0);
+                let reversal = params.get(1).copied().unwrap_or(3.0) as usize;
+                indicators::point_and_figure(h, l, box_size, reversal)
+                    .map(|r| {
+                        IndicatorResult::Triple(
                             r.pnf.into_raw_vec(),
                             r.column_type.into_iter().map(|v| v as f64).collect(),
                             r.new_column.into_iter().map(|v| v as f64).collect(),
-                        ))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-                }
-                _ => IndicatorResult::Error("PointAndFigure requires high and low data".to_string()),
+                        )
+                    })
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
             }
-        }
+            _ => IndicatorResult::Error("PointAndFigure requires high and low data".to_string()),
+        },
         "three_line_break" | "tlb" => {
             let lines = params.first().copied().unwrap_or(3.0) as usize;
             indicators::three_line_break(close, lines)
-                .map(|r| IndicatorResult::Double(
-                    r.line.into_raw_vec(),
-                    r.direction.into_iter().map(|v| v as f64).collect(),
-                ))
+                .map(|r| {
+                    IndicatorResult::Double(
+                        r.line.into_raw_vec(),
+                        r.direction.into_iter().map(|v| v as f64).collect(),
+                    )
+                })
                 .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
         }
-        "williams_alligator" | "alligator" => {
-            indicators::williams_alligator(close)
-                .map(|r| IndicatorResult::Triple(
+        "williams_alligator" | "alligator" => indicators::williams_alligator(close)
+            .map(|r| {
+                IndicatorResult::Triple(
                     r.jaw.into_raw_vec(),
                     r.teeth.into_raw_vec(),
                     r.lips.into_raw_vec(),
-                ))
-                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
-        }
-        "heikin_ashi" | "ha" => {
-            match open {
-                Some(o) => match (high, low) {
-                    (Some(h), Some(l)) => indicators::heikin_ashi(o, h, l, close)
-                        .map(|r| IndicatorResult::Quad(
+                )
+            })
+            .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+        "heikin_ashi" | "ha" => match open {
+            Some(o) => match (high, low) {
+                (Some(h), Some(l)) => indicators::heikin_ashi(o, h, l, close)
+                    .map(|r| {
+                        IndicatorResult::Quad(
                             r.ha_open.into_raw_vec(),
                             r.ha_high.into_raw_vec(),
                             r.ha_low.into_raw_vec(),
                             r.ha_close.into_raw_vec(),
-                        ))
-                        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
-                    _ => IndicatorResult::Error("HeikinAshi requires open, high and low".to_string()),
-                },
-                _ => IndicatorResult::Error("HeikinAshi requires open data".to_string()),
-            }
-        }
-        _ => IndicatorResult::Error(format!("Unknown indicator: {}", name))
+                        )
+                    })
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+                _ => IndicatorResult::Error("HeikinAshi requires open, high and low".to_string()),
+            },
+            _ => IndicatorResult::Error("HeikinAshi requires open data".to_string()),
+        },
+        _ => IndicatorResult::Error(format!("Unknown indicator: {}", name)),
     }
 }
 

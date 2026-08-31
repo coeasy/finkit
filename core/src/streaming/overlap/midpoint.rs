@@ -67,7 +67,12 @@ impl StreamingIndicator for StreamingMidpoint {
     impl_standard_methods!();
 }
 
-impl_indicator_meta!(StreamingMidpoint, "MIDPOINT", "overlap", "MidPoint over period");
+impl_indicator_meta!(
+    StreamingMidpoint,
+    "MIDPOINT",
+    "overlap",
+    "MidPoint over period"
+);
 
 #[cfg(test)]
 mod tests {

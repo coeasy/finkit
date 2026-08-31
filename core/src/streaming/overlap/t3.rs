@@ -1,6 +1,6 @@
+use crate::impl_standard_methods;
 use crate::streaming::overlap::ema::StreamingEma;
 use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
-use crate::impl_standard_methods;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamingT3 {
@@ -26,8 +26,12 @@ impl StreamingT3 {
         let c4 = 1.0 + 3.0 * v + v * v * v + 3.0 * v * v;
         Self {
             emas: std::array::from_fn(|_| StreamingEma::new(period)),
-            c1, c2, c3, c4,
-            period, count: 0,
+            c1,
+            c2,
+            c3,
+            c4,
+            period,
+            count: 0,
             last_value: None,
         }
     }
@@ -49,21 +53,33 @@ impl StreamingIndicator for StreamingT3 {
     }
 
     fn reset(&mut self) {
-        for ema in &mut self.emas { ema.reset(); }
+        for ema in &mut self.emas {
+            ema.reset();
+        }
         self.count = 0;
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { self.emas[5].is_ready() }
+    fn is_ready(&self) -> bool {
+        self.emas[5].is_ready()
+    }
 
     impl_standard_methods!();
 }
 
 impl IndicatorMeta for StreamingT3 {
-    fn name() -> &'static str { "T3" }
-    fn category() -> &'static str { "overlap" }
-    fn description() -> &'static str { "Triple Exponential Moving Average T3" }
-    fn warm_up_period(&self) -> usize { self.period * 6 - 5 }
+    fn name() -> &'static str {
+        "T3"
+    }
+    fn category() -> &'static str {
+        "overlap"
+    }
+    fn description() -> &'static str {
+        "Triple Exponential Moving Average T3"
+    }
+    fn warm_up_period(&self) -> usize {
+        self.period * 6 - 5
+    }
 }
 
 #[cfg(test)]
@@ -73,14 +89,18 @@ mod tests {
     #[test]
     fn test_streaming_t3_basic() {
         let mut t3 = StreamingT3::new(3);
-        for i in 0..20 { t3.next(i as f64 + 1.0); }
+        for i in 0..20 {
+            t3.next(i as f64 + 1.0);
+        }
         assert!(t3.is_ready());
     }
 
     #[test]
     fn test_streaming_t3_nan_before_ready() {
         let mut t3 = StreamingT3::new(5);
-        for _ in 0..10 { assert_eq!(t3.next(10.0), None); }
+        for _ in 0..10 {
+            assert_eq!(t3.next(10.0), None);
+        }
     }
 
     #[test]
@@ -91,7 +111,9 @@ mod tests {
     #[test]
     fn test_streaming_t3_reset() {
         let mut t3 = StreamingT3::new(3);
-        for i in 0..20 { t3.next(i as f64); }
+        for i in 0..20 {
+            t3.next(i as f64);
+        }
         assert!(t3.is_ready());
         t3.reset();
         assert!(!t3.is_ready());

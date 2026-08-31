@@ -1,7 +1,7 @@
-use crate::streaming::rolling_minmax::{RollingMax, RollingMin};
-use crate::streaming::traits::{StreamingIndicator};
+use crate::impl_indicator_meta;
 use crate::impl_standard_methods;
-use crate::{impl_indicator_meta};
+use crate::streaming::rolling_minmax::{RollingMax, RollingMin};
+use crate::streaming::traits::StreamingIndicator;
 
 /// Streaming Midpoint Price over period.
 ///
@@ -69,7 +69,12 @@ impl StreamingIndicator<(f64, f64)> for StreamingMidprice {
     impl_standard_methods!();
 }
 
-impl_indicator_meta!(StreamingMidprice, "MIDPRICE", "overlap", "Midpoint Price over period");
+impl_indicator_meta!(
+    StreamingMidprice,
+    "MIDPRICE",
+    "overlap",
+    "Midpoint Price over period"
+);
 
 #[cfg(test)]
 mod tests {

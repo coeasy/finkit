@@ -1,6 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use finkit::indicators::sweep::{ema_sweep, rsi_sweep, sma_sweep};
-use finkit::indicators::sweep_engine::{SweepEngine, ParamRange};
+use finkit::indicators::sweep_engine::{ParamRange, SweepEngine};
 use finkit::indicators::sweepable::SmaSweepable;
 use finkit::math::moving_avg::{ema, sma};
 
@@ -71,7 +71,9 @@ fn bench_sweep_engine(c: &mut Criterion) {
 
     c.bench_function("sweep_engine_sma_20_periods", |b| {
         b.iter(|| {
-            engine.run(&SmaSweepable, &data, &[ParamRange::new(5, 105, 5)]).unwrap()
+            engine
+                .run(&SmaSweepable, &data, &[ParamRange::new(5, 105, 5)])
+                .unwrap()
         })
     });
 
@@ -86,7 +88,9 @@ fn bench_sweep_engine(c: &mut Criterion) {
 
     c.bench_function("sweep_engine_sma_50_periods", |b| {
         b.iter(|| {
-            engine.run(&SmaSweepable, &data, &[ParamRange::new(2, 52, 1)]).unwrap()
+            engine
+                .run(&SmaSweepable, &data, &[ParamRange::new(2, 52, 1)])
+                .unwrap()
         })
     });
 

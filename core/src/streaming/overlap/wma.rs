@@ -32,7 +32,10 @@ impl StreamingWma {
 
 impl StreamingIndicator for StreamingWma {
     #[inline]
-    #[cfg_attr(feature = "tracing", tracing::instrument(level = "trace", skip(self, input)))]
+    #[cfg_attr(
+        feature = "tracing",
+        tracing::instrument(level = "trace", skip(self, input))
+    )]
     fn next(&mut self, input: f64) -> Option<f64> {
         crate::streaming_measure!("wma", self.count, {
             self.count += 1;
@@ -50,8 +53,7 @@ impl StreamingIndicator for StreamingWma {
                 // Steady state: evict oldest, shift weights up by one, newest
                 // carries weight `period`. Mirrors `wma_inner` batch update.
                 let old = self.buf[self.head];
-                self.weighted_sum =
-                    self.weighted_sum + (cap as f64) * input - self.window_sum;
+                self.weighted_sum = self.weighted_sum + (cap as f64) * input - self.window_sum;
                 self.window_sum = self.window_sum + input - old;
                 self.buf[self.head] = input;
                 self.head = (self.head + 1) % cap;
@@ -110,7 +112,9 @@ mod tests {
     #[test]
     fn test_streaming_wma_reset() {
         let mut wma = StreamingWma::new(3);
-        for i in 0..5 { wma.next(i as f64); }
+        for i in 0..5 {
+            wma.next(i as f64);
+        }
         assert!(wma.is_ready());
         wma.reset();
         assert!(!wma.is_ready());
@@ -119,13 +123,19 @@ mod tests {
 
     #[test]
     fn test_streaming_vs_batch_convergence() {
-        let data: Vec<f64> = (0..100).map(|i| 50.0 + (i as f64 * 0.1).sin() * 10.0).collect();
+        let data: Vec<f64> = (0..100)
+            .map(|i| 50.0 + (i as f64 * 0.1).sin() * 10.0)
+            .collect();
         let period = 10;
         let batch = crate::math::moving_avg::wma(&data, period).unwrap();
         let mut streaming = StreamingWma::new(period);
         for (i, &val) in data.iter().enumerate() {
             if let (Some(s), false) = (streaming.next(val), batch[i].is_nan()) {
-                assert!((s - batch[i]).abs() < 1e-10, "Mismatch at {i}: s={s}, b={}", batch[i]);
+                assert!(
+                    (s - batch[i]).abs() < 1e-10,
+                    "Mismatch at {i}: s={s}, b={}",
+                    batch[i]
+                );
             }
         }
     }

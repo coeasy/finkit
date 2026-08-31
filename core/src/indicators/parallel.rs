@@ -189,10 +189,7 @@ where
 /// assert_eq!(results.len(), 6);
 /// # }
 /// ```
-pub fn parallel_sma_multi_period(
-    input: &[f64],
-    periods: &[usize],
-) -> Result<Vec<Array1<f64>>> {
+pub fn parallel_sma_multi_period(input: &[f64], periods: &[usize]) -> Result<Vec<Array1<f64>>> {
     #[cfg(feature = "rayon")]
     {
         use rayon::prelude::*;
@@ -211,10 +208,7 @@ pub fn parallel_sma_multi_period(
 }
 
 /// Multi-period parallel EMA.
-pub fn parallel_ema_multi_period(
-    input: &[f64],
-    periods: &[usize],
-) -> Result<Vec<Array1<f64>>> {
+pub fn parallel_ema_multi_period(input: &[f64], periods: &[usize]) -> Result<Vec<Array1<f64>>> {
     #[cfg(feature = "rayon")]
     {
         use rayon::prelude::*;
@@ -241,7 +235,10 @@ pub fn parallel_ema_multi_period(
 /// Patterns that are inherently independent are processed in parallel.
 /// For 61 patterns × 10K bars, this typically achieves 4-6x speedup on
 /// 4-8 cores.
-pub fn parallel_pattern_scan<P, R>(patterns: &[(String, P)], recognizers_data: R) -> Vec<(String, Vec<i32>)>
+pub fn parallel_pattern_scan<P, R>(
+    patterns: &[(String, P)],
+    recognizers_data: R,
+) -> Vec<(String, Vec<i32>)>
 where
     P: Fn(&R, usize) -> i32 + Sync + Send,
     R: Sync,
@@ -353,7 +350,13 @@ mod tests {
                 if a.is_nan() && b.is_nan() {
                     continue;
                 }
-                assert!(approx_eq(*a, *b, 1e-9), "EMA mismatch at {}: {} vs {}", i, a, b);
+                assert!(
+                    approx_eq(*a, *b, 1e-9),
+                    "EMA mismatch at {}: {} vs {}",
+                    i,
+                    a,
+                    b
+                );
             }
         }
     }
@@ -378,7 +381,13 @@ mod tests {
                 if a.is_nan() && b.is_nan() {
                     continue;
                 }
-                assert!(approx_eq(*a, *b, 1e-6), "RSI mismatch at {}: {} vs {}", i, a, b);
+                assert!(
+                    approx_eq(*a, *b, 1e-6),
+                    "RSI mismatch at {}: {} vs {}",
+                    i,
+                    a,
+                    b
+                );
             }
         }
     }

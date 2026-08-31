@@ -1,6 +1,6 @@
+use crate::impl_standard_methods;
 use crate::streaming::overlap::ema::StreamingEma;
 use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
-use crate::impl_standard_methods;
 use crate::utils::true_range;
 
 /// Streaming Average Directional Index (ADX).
@@ -40,7 +40,10 @@ impl StreamingAdx {
 
 impl StreamingIndicator<(f64, f64, f64)> for StreamingAdx {
     #[inline]
-    #[cfg_attr(feature = "tracing", tracing::instrument(level = "trace", skip(self, input)))]
+    #[cfg_attr(
+        feature = "tracing",
+        tracing::instrument(level = "trace", skip(self, input))
+    )]
     fn next(&mut self, input: (f64, f64, f64)) -> Option<f64> {
         crate::streaming_measure!("adx", self.count, {
             let (high, low, close) = input;
@@ -182,7 +185,10 @@ mod tests {
             last = adx.next(d);
         }
         let last = last.unwrap();
-        assert!(last > 20.0, "ADX in trending market should be > 20, got {last}");
+        assert!(
+            last > 20.0,
+            "ADX in trending market should be > 20, got {last}"
+        );
     }
 
     #[test]

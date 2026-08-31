@@ -131,7 +131,11 @@ pub fn rebound_momentum(
         let daily_ret = close[t] / open[t] - 1.0;
         // Pre-window cumulative return
         let cum_ret = close[t] / close[t - lookback] - 1.0;
-        let vol_ratio = if vol_ma[t] > 0.0 { volume[t] / vol_ma[t] } else { 0.0 };
+        let vol_ratio = if vol_ma[t] > 0.0 {
+            volume[t] / vol_ma[t]
+        } else {
+            0.0
+        };
 
         // Normalize each component
         let s_daily = (daily_ret * 100.0).clamp(0.0, 50.0); // 10% 涨 → 50
@@ -178,7 +182,11 @@ pub fn decline_momentum(
         }
         let daily_ret = 1.0 - close[t] / open[t]; // negative when going down
         let cum_ret = 1.0 - close[t] / close[t - lookback];
-        let vol_ratio = if vol_ma[t] > 0.0 { volume[t] / vol_ma[t] } else { 0.0 };
+        let vol_ratio = if vol_ma[t] > 0.0 {
+            volume[t] / vol_ma[t]
+        } else {
+            0.0
+        };
 
         let s_daily = (daily_ret * 100.0).clamp(0.0, 50.0);
         let s_cum = (cum_ret * 100.0 * 6.0).clamp(0.0, 30.0);
@@ -263,11 +271,7 @@ pub fn inverted_v_reversal(
 /// * `close`, `high`, `low` - OHLC
 /// * `prev_close` - 前一日收盘价
 /// * `threshold`  - 涨停阈值（默认 0.10 = 主板 10%）
-pub fn limit_up_streak(
-    close: &[f64],
-    prev_close: &[f64],
-    threshold: f64,
-) -> Result<Array1<i32>> {
+pub fn limit_up_streak(close: &[f64], prev_close: &[f64], threshold: f64) -> Result<Array1<i32>> {
     if close.len() != prev_close.len() {
         return Err(TaError::InvalidParameter {
             name: "close, prev_close".into(),
@@ -417,8 +421,16 @@ pub fn strong_rebound_score(
             0.0
         };
         // 实体涨幅得分 (0-20)
-        let body_pct = if t > 0 { (close[t] - close[t - 1]).abs() / close[t - 1].max(1e-9) } else { 0.0 };
-        let s_body = if body_pct >= 0.03 { 20.0 } else { 20.0 * (body_pct / 0.03) };
+        let body_pct = if t > 0 {
+            (close[t] - close[t - 1]).abs() / close[t - 1].max(1e-9)
+        } else {
+            0.0
+        };
+        let s_body = if body_pct >= 0.03 {
+            20.0
+        } else {
+            20.0 * (body_pct / 0.03)
+        };
         out[t] = (s_cum + s_vol + s_body).min(100.0);
     }
     Ok(out)
@@ -463,8 +475,16 @@ pub fn strong_decline_score(
         } else {
             0.0
         };
-        let body_pct = if t > 0 { (close[t - 1] - close[t]).abs() / close[t - 1].max(1e-9) } else { 0.0 };
-        let s_body = if body_pct >= 0.03 { 20.0 } else { 20.0 * (body_pct / 0.03) };
+        let body_pct = if t > 0 {
+            (close[t - 1] - close[t]).abs() / close[t - 1].max(1e-9)
+        } else {
+            0.0
+        };
+        let s_body = if body_pct >= 0.03 {
+            20.0
+        } else {
+            20.0 * (body_pct / 0.03)
+        };
         out[t] = (s_cum + s_vol + s_body).min(100.0);
     }
     Ok(out)
@@ -500,12 +520,18 @@ pub fn v_shape_reversal_score(
         };
         // 当日反弹得分 (0-30)
         let s_bounce = if daily_bounce >= 0.0 {
-            30.0 * (daily_bounce / bounce_pct.max(1e-9)).clamp(0.0, 1.5).min(1.0)
+            30.0 * (daily_bounce / bounce_pct.max(1e-9))
+                .clamp(0.0, 1.5)
+                .min(1.0)
         } else {
             0.0
         };
         // 实体得分 (0-20)
-        let body_pct = if open[t] > 0.0 { (close[t] - open[t]).abs() / open[t] } else { 0.0 };
+        let body_pct = if open[t] > 0.0 {
+            (close[t] - open[t]).abs() / open[t]
+        } else {
+            0.0
+        };
         let s_body = 20.0 * (body_pct / 0.05).clamp(0.0, 1.0);
         out[t] = (s_drop + s_bounce + s_body).min(100.0);
     }
@@ -542,7 +568,11 @@ pub fn inverted_v_reversal_score(
         } else {
             0.0
         };
-        let body_pct = if open[t] > 0.0 { (open[t] - close[t]).abs() / open[t] } else { 0.0 };
+        let body_pct = if open[t] > 0.0 {
+            (open[t] - close[t]).abs() / open[t]
+        } else {
+            0.0
+        };
         let s_body = 20.0 * (body_pct / 0.05).clamp(0.0, 1.0);
         out[t] = (s_rise + s_drop + s_body).min(100.0);
     }
@@ -587,7 +617,11 @@ pub fn big_yang_score(
         // 密度得分 (0-50) + 平均实体得分 (0-30) + 大阳线累计涨幅 (0-20)
         let density = cnt as f64 / denom as f64;
         let avg_body = total_body / denom as f64;
-        let cum_rise = if start > 0 { (close[t] / close[start]).max(0.0) - 1.0 } else { 0.0 };
+        let cum_rise = if start > 0 {
+            (close[t] / close[start]).max(0.0) - 1.0
+        } else {
+            0.0
+        };
         let s_density = 50.0 * density;
         let s_body = 30.0 * (avg_body / threshold.max(1e-9)).clamp(0.0, 1.5).min(1.0);
         let s_cum = 20.0 * (cum_rise / (lookback as f64 * threshold)).clamp(0.0, 1.0);
@@ -633,7 +667,11 @@ pub fn big_yin_score(
         }
         let density = cnt as f64 / denom as f64;
         let avg_body = total_body / denom as f64;
-        let cum_drop = if start > 0 { 1.0 - (close[t] / close[start]).min(1.0) } else { 0.0 };
+        let cum_drop = if start > 0 {
+            1.0 - (close[t] / close[start]).min(1.0)
+        } else {
+            0.0
+        };
         let s_density = 50.0 * density;
         let s_body = 30.0 * (avg_body / threshold.max(1e-9)).clamp(0.0, 1.5).min(1.0);
         let s_cum = 20.0 * (cum_drop / (lookback as f64 * threshold)).clamp(0.0, 1.0);
@@ -680,7 +718,9 @@ mod tests {
     fn test_strong_decline() {
         let n = 20;
         let c: Vec<f64> = (0..n).map(|i| 20.0 - (i as f64) * 0.30).collect();
-        let v: Vec<f64> = (0..n).map(|i| if i >= 15 { 300.0 } else { 100.0 }).collect();
+        let v: Vec<f64> = (0..n)
+            .map(|i| if i >= 15 { 300.0 } else { 100.0 })
+            .collect();
         let sig = strong_decline(&c, &v, 5, 0.05, 1.5).unwrap();
         assert!(sig.iter().any(|&s| s == -100), "expected strong decline");
     }
@@ -692,7 +732,11 @@ mod tests {
         let s = rebound_momentum(&o, &h, &l, &c, &v, 5).unwrap();
         assert_eq!(s.len(), c.len());
         // Last bar should have positive momentum
-        assert!(s[n - 1] > 0.0, "expected positive momentum at end, got {}", s[n - 1]);
+        assert!(
+            s[n - 1] > 0.0,
+            "expected positive momentum at end, got {}",
+            s[n - 1]
+        );
     }
 
     #[test]
@@ -702,7 +746,9 @@ mod tests {
         let h: Vec<f64> = o.iter().map(|&x| x + 0.05).collect();
         let l: Vec<f64> = o.iter().map(|&x| x - 0.50).collect();
         let c: Vec<f64> = o.iter().map(|x| *x - 0.10).collect();
-        let v: Vec<f64> = (0..n).map(|i| if i >= 15 { 300.0 } else { 100.0 }).collect();
+        let v: Vec<f64> = (0..n)
+            .map(|i| if i >= 15 { 300.0 } else { 100.0 })
+            .collect();
         let s = decline_momentum(&o, &h, &l, &c, &v, 5).unwrap();
         assert!(s[n - 1] > 0.0, "expected positive decline momentum at end");
     }
@@ -797,16 +843,26 @@ mod tests {
         let (_o, _h, _l, c, v) = synth_strong_rebound();
         let s = strong_rebound_score(&c, &v, 5, 0.04, 1.5).unwrap();
         // Last bar: cum rise ~ 2.5/10 ≈ 25%, vol 2x → 应得高分
-        assert!(s[n_last(&s)] > 50.0, "expected high score, got {}", s[n_last(&s)]);
+        assert!(
+            s[n_last(&s)] > 50.0,
+            "expected high score, got {}",
+            s[n_last(&s)]
+        );
     }
 
     #[test]
     fn test_strong_decline_score() {
         let n = 20;
         let c: Vec<f64> = (0..n).map(|i| 20.0 - (i as f64) * 0.30).collect();
-        let v: Vec<f64> = (0..n).map(|i| if i >= 15 { 300.0 } else { 100.0 }).collect();
+        let v: Vec<f64> = (0..n)
+            .map(|i| if i >= 15 { 300.0 } else { 100.0 })
+            .collect();
         let s = strong_decline_score(&c, &v, 5, 0.05, 1.5).unwrap();
-        assert!(s[n - 1] > 50.0, "expected high decline score at end, got {}", s[n - 1]);
+        assert!(
+            s[n - 1] > 50.0,
+            "expected high decline score at end, got {}",
+            s[n - 1]
+        );
     }
 
     #[test]

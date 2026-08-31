@@ -86,7 +86,12 @@ impl StreamingIndicator<f64, f64> for StreamingJma {
     impl_standard_methods!();
 }
 
-impl_indicator_meta!(StreamingJma, "JMA", "overlap", "Jurik Moving Average: low-lag adaptive moving average with three-stage filtering");
+impl_indicator_meta!(
+    StreamingJma,
+    "JMA",
+    "overlap",
+    "Jurik Moving Average: low-lag adaptive moving average with three-stage filtering"
+);
 
 #[cfg(test)]
 mod tests {
@@ -96,7 +101,9 @@ mod tests {
     #[test]
     fn test_streaming_jma_basic() {
         let mut jma = StreamingJma::new(7, 0.0, 2.0);
-        let data: Vec<f64> = (0..30).map(|i| 100.0 + (i as f64 * 0.3).sin() * 5.0).collect();
+        let data: Vec<f64> = (0..30)
+            .map(|i| 100.0 + (i as f64 * 0.3).sin() * 5.0)
+            .collect();
 
         let mut results = Vec::new();
         for &val in &data {
@@ -133,7 +140,9 @@ mod tests {
 
     #[test]
     fn test_streaming_vs_batch_convergence() {
-        let data: Vec<f64> = (0..50).map(|i| 100.0 + (i as f64 * 0.2).sin() * 5.0).collect();
+        let data: Vec<f64> = (0..50)
+            .map(|i| 100.0 + (i as f64 * 0.2).sin() * 5.0)
+            .collect();
         let period = 7;
         let phase = 0.0;
         let power = 2.0;

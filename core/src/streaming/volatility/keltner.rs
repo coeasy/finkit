@@ -1,6 +1,6 @@
-use crate::streaming::volatility::atr::StreamingAtr;
 use crate::streaming::overlap::ema::StreamingEma;
 use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
+use crate::streaming::volatility::atr::StreamingAtr;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -56,8 +56,12 @@ impl StreamingKeltner {
         self.last_value = None;
     }
 
-    pub fn is_ready(&self) -> bool { self.ema.is_ready() && self.atr.is_ready() }
-    pub fn count(&self) -> usize { self.count }
+    pub fn is_ready(&self) -> bool {
+        self.ema.is_ready() && self.atr.is_ready()
+    }
+    pub fn count(&self) -> usize {
+        self.count
+    }
 
     pub fn value(&self) -> Option<KeltnerOutput> {
         self.last_value
@@ -65,9 +69,15 @@ impl StreamingKeltner {
 }
 
 impl IndicatorMeta for StreamingKeltner {
-    fn name() -> &'static str { "Keltner" }
-    fn category() -> &'static str { "volatility" }
-    fn description() -> &'static str { "Keltner Channels" }
+    fn name() -> &'static str {
+        "Keltner"
+    }
+    fn category() -> &'static str {
+        "volatility"
+    }
+    fn description() -> &'static str {
+        "Keltner Channels"
+    }
     fn warm_up_period(&self) -> usize {
         self.ema.warm_up_period().max(self.atr.warm_up_period())
     }
@@ -82,7 +92,13 @@ mod tests {
     fn test_streaming_keltner_basic() {
         let mut k = StreamingKeltner::new(5, 5, 2.0);
         for i in 0..10 {
-            let bar = OhlcvBar::new(10.0 + i as f64, 12.0 + i as f64, 9.0 + i as f64, 11.0 + i as f64, 100.0);
+            let bar = OhlcvBar::new(
+                10.0 + i as f64,
+                12.0 + i as f64,
+                9.0 + i as f64,
+                11.0 + i as f64,
+                100.0,
+            );
             if let Some(out) = k.next(&bar) {
                 assert!(out.upper > out.middle);
                 assert!(out.middle > out.lower);
@@ -106,7 +122,13 @@ mod tests {
     fn test_streaming_keltner_reset() {
         let mut k = StreamingKeltner::new(3, 3, 2.0);
         for i in 0..10 {
-            k.next(&OhlcvBar::new(10.0 + i as f64, 12.0 + i as f64, 9.0 + i as f64, 11.0 + i as f64, 100.0));
+            k.next(&OhlcvBar::new(
+                10.0 + i as f64,
+                12.0 + i as f64,
+                9.0 + i as f64,
+                11.0 + i as f64,
+                100.0,
+            ));
         }
         assert!(k.is_ready());
         k.reset();
@@ -123,7 +145,9 @@ mod tests {
             OhlcvBar::new(13.0, 15.0, 12.0, 14.0, 100.0),
         ];
         let mut out = None;
-        for bar in &bars { out = k.next(bar); }
+        for bar in &bars {
+            out = k.next(bar);
+        }
         assert!(out.is_some());
     }
 }

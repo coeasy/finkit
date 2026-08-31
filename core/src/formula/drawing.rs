@@ -198,32 +198,85 @@ impl DrawResult {
         color: String,
     ) {
         self.commands.push(DrawCommand::Line {
-            cond1, price1, cond2, price2, expand, color,
+            cond1,
+            price1,
+            cond2,
+            price2,
+            expand,
+            color,
         });
     }
 
-    pub fn add_band(&mut self, val1: Array1<f64>, color1: String, val2: Array1<f64>, color2: String) {
-        self.commands.push(DrawCommand::Band { val1, color1, val2, color2 });
+    pub fn add_band(
+        &mut self,
+        val1: Array1<f64>,
+        color1: String,
+        val2: Array1<f64>,
+        color2: String,
+    ) {
+        self.commands.push(DrawCommand::Band {
+            val1,
+            color1,
+            val2,
+            color2,
+        });
     }
 
-    pub fn add_kline(&mut self, open: Array1<f64>, high: Array1<f64>, low: Array1<f64>, close: Array1<f64>) {
-        self.commands.push(DrawCommand::KLine { open, high, low, close });
+    pub fn add_kline(
+        &mut self,
+        open: Array1<f64>,
+        high: Array1<f64>,
+        low: Array1<f64>,
+        close: Array1<f64>,
+    ) {
+        self.commands.push(DrawCommand::KLine {
+            open,
+            high,
+            low,
+            close,
+        });
     }
 
-    pub fn add_rect(&mut self, x1: Array1<f64>, y1: Array1<f64>, x2: Array1<f64>, y2: Array1<f64>, color: String) {
-        self.commands.push(DrawCommand::Rect { x1, y1, x2, y2, color });
+    pub fn add_rect(
+        &mut self,
+        x1: Array1<f64>,
+        y1: Array1<f64>,
+        x2: Array1<f64>,
+        y2: Array1<f64>,
+        color: String,
+    ) {
+        self.commands.push(DrawCommand::Rect {
+            x1,
+            y1,
+            x2,
+            y2,
+            color,
+        });
     }
 
-    pub fn add_fill_rgn(&mut self, cond: Array1<f64>, price1: Array1<f64>, price2: Array1<f64>, color: String) {
-        self.commands.push(DrawCommand::FillRgn { cond, price1, price2, color });
+    pub fn add_fill_rgn(
+        &mut self,
+        cond: Array1<f64>,
+        price1: Array1<f64>,
+        price2: Array1<f64>,
+        color: String,
+    ) {
+        self.commands.push(DrawCommand::FillRgn {
+            cond,
+            price1,
+            price2,
+            color,
+        });
     }
 
     pub fn add_part_line(&mut self, cond: Array1<f64>, price: Array1<f64>, color: String) {
-        self.commands.push(DrawCommand::PartLine { cond, price, color });
+        self.commands
+            .push(DrawCommand::PartLine { cond, price, color });
     }
 
     pub fn add_poly_line(&mut self, cond: Array1<f64>, price: Array1<f64>, color: String) {
-        self.commands.push(DrawCommand::PolyLine { cond, price, color });
+        self.commands
+            .push(DrawCommand::PolyLine { cond, price, color });
     }
 
     pub fn add_background(&mut self, cond: Array1<f64>, color: String) {
@@ -238,11 +291,18 @@ impl DrawResult {
         price2: Array1<f64>,
         color: String,
     ) {
-        self.commands.push(DrawCommand::SlopeLine { cond1, price1, cond2, price2, color });
+        self.commands.push(DrawCommand::SlopeLine {
+            cond1,
+            price1,
+            cond2,
+            price2,
+            color,
+        });
     }
 
     pub fn add_text_fix(&mut self, x: f64, y: f64, text: String, color: String) {
-        self.commands.push(DrawCommand::TextFix { x, y, text, color });
+        self.commands
+            .push(DrawCommand::TextFix { x, y, text, color });
     }
 
     pub fn add_number(
@@ -253,10 +313,19 @@ impl DrawResult {
         precision: i32,
         color: String,
     ) {
-        self.commands.push(DrawCommand::Number { condition: cond, price, number, precision, color });
+        self.commands.push(DrawCommand::Number {
+            condition: cond,
+            price,
+            number,
+            precision,
+            color,
+        });
     }
 
     pub fn add_vert_line(&mut self, cond: Array1<f64>, color: String) {
-        self.commands.push(DrawCommand::VertLine { condition: cond, color });
+        self.commands.push(DrawCommand::VertLine {
+            condition: cond,
+            color,
+        });
     }
 }

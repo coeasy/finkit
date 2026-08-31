@@ -5,9 +5,9 @@
 //! user-controlled. Useful as a streaming counterpart to the batch
 //! `indicators::momentum::macdfix` entry point.
 
+use crate::impl_standard_methods;
 use crate::streaming::momentum::macd::MacdOutput;
 use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
-use crate::impl_standard_methods;
 
 /// Fast EMA period (canonical TA-Lib MACDFIX value).
 pub const MACDFIX_FAST_PERIOD: usize = 12;
@@ -191,8 +191,7 @@ impl StreamingIndicator<f64, MacdOutput> for StreamingMacdFix {
         self.signal_seeded
     }
 
-        impl_standard_methods!(output = MacdOutput);
-
+    impl_standard_methods!(output = MacdOutput);
 }
 
 impl IndicatorMeta for StreamingMacdFix {

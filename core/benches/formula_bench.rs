@@ -1,9 +1,9 @@
 use criterion::{black_box, criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
-use ndarray::Array1;
 use finkit::formula::{
     compile_to_bytecode, parse_formula, BytecodeVM, FormulaContext, FormulaEngine, FormulaExecutor,
     FormulaOptimizer, JitCompiler, SimdOps,
 };
+use ndarray::Array1;
 
 fn native_sma(data: &[f64], period: usize) -> Vec<f64> {
     let mut result = vec![f64::NAN; data.len()];
@@ -646,9 +646,7 @@ fn benchmark_simd_vs_scalar(c: &mut Criterion) {
         })
     });
 
-    let arr_mod_b: Vec<f64> = (0..data_len)
-        .map(|i| (i % 7 + 1) as f64)
-        .collect();
+    let arr_mod_b: Vec<f64> = (0..data_len).map(|i| (i % 7 + 1) as f64).collect();
 
     group.bench_function("SimdOps_mod", |bencher| {
         let mut result = vec![0.0; data_len];
@@ -675,9 +673,7 @@ fn benchmark_simd_vs_scalar(c: &mut Criterion) {
         })
     });
 
-    let arr_pow_b: Vec<f64> = (0..data_len)
-        .map(|i| ((i % 5 + 1) as f64 * 0.5))
-        .collect();
+    let arr_pow_b: Vec<f64> = (0..data_len).map(|i| ((i % 5 + 1) as f64 * 0.5)).collect();
 
     group.bench_function("SimdOps_pow", |bencher| {
         let mut result = vec![0.0; data_len];
@@ -886,7 +882,8 @@ fn benchmark_zero_copy_vs_normal(c: &mut Criterion) {
 
     group.bench_function("eval_MACD_complex", |b| {
         let mut engine = FormulaEngine::new();
-        let source = "DIF := EMA(CLOSE, 12) - EMA(CLOSE, 26); DEA := EMA(DIF, 9); MACD: (DIF - DEA) * 2";
+        let source =
+            "DIF := EMA(CLOSE, 12) - EMA(CLOSE, 26); DEA := EMA(DIF, 9); MACD: (DIF - DEA) * 2";
         b.iter_batched(
             || create_ctx(data_len),
             |mut ctx| {
@@ -898,7 +895,8 @@ fn benchmark_zero_copy_vs_normal(c: &mut Criterion) {
 
     group.bench_function("zero_copy_MACD_complex", |b| {
         let mut engine = FormulaEngine::new();
-        let source = "DIF := EMA(CLOSE, 12) - EMA(CLOSE, 26); DEA := EMA(DIF, 9); MACD: (DIF - DEA) * 2";
+        let source =
+            "DIF := EMA(CLOSE, 12) - EMA(CLOSE, 26); DEA := EMA(DIF, 9); MACD: (DIF - DEA) * 2";
         b.iter_batched(
             || create_ctx(data_len),
             |mut ctx| {
@@ -910,7 +908,8 @@ fn benchmark_zero_copy_vs_normal(c: &mut Criterion) {
 
     group.bench_function("zero_copy_cached_MACD_complex", |b| {
         let mut engine = FormulaEngine::new();
-        let source = "DIF := EMA(CLOSE, 12) - EMA(CLOSE, 26); DEA := EMA(DIF, 9); MACD: (DIF - DEA) * 2";
+        let source =
+            "DIF := EMA(CLOSE, 12) - EMA(CLOSE, 26); DEA := EMA(DIF, 9); MACD: (DIF - DEA) * 2";
         b.iter_batched(
             || create_ctx(data_len),
             |mut ctx| {
@@ -981,7 +980,8 @@ fn benchmark_optimized_vs_native(c: &mut Criterion) {
                 b.iter_batched(
                     || create_ctx(data_len),
                     |mut ctx| {
-                        let _ = black_box(engine.eval_zero_alloc("MA(CLOSE, 20)", &mut ctx).unwrap());
+                        let _ =
+                            black_box(engine.eval_zero_alloc("MA(CLOSE, 20)", &mut ctx).unwrap());
                     },
                     BatchSize::SmallInput,
                 )
@@ -1067,7 +1067,8 @@ fn benchmark_optimized_vs_native(c: &mut Criterion) {
                 b.iter_batched(
                     || create_ctx(data_len),
                     |mut ctx| {
-                        let _ = black_box(engine.eval_zero_alloc("RSI(CLOSE, 14)", &mut ctx).unwrap());
+                        let _ =
+                            black_box(engine.eval_zero_alloc("RSI(CLOSE, 14)", &mut ctx).unwrap());
                     },
                     BatchSize::SmallInput,
                 )

@@ -17,7 +17,7 @@ use ndarray::Array1;
 
 // Re-export the classic volume profile so callers can reach every
 // volume-auction primitive from one module.
-pub use crate::indicators::volume::{VolumeProfileResult, volume_profile};
+pub use crate::indicators::volume::{volume_profile, VolumeProfileResult};
 
 /// Market Profile (TPO) result.
 ///
@@ -548,17 +548,14 @@ mod tests {
         //   mean ≈ 117.5, std ≈ 88.7, k=1.0
         //   high_thr ≈ 206.2  -> bin 5 (vol=300) is HVN
         //   low_thr  ≈ 28.8   -> bin 0 (vol=5)   is LVN
-        let high  = vec![ 6.0, 16.0, 26.0, 36.0, 46.0, 56.0];
-        let low   = vec![ 4.0, 14.0, 24.0, 34.0, 44.0, 54.0];
-        let close = vec![ 5.0, 15.0, 25.0, 35.0, 45.0, 55.0];
-        let vol   = vec![ 5.0, 100.0, 100.0, 100.0, 100.0, 300.0];
+        let high = vec![6.0, 16.0, 26.0, 36.0, 46.0, 56.0];
+        let low = vec![4.0, 14.0, 24.0, 34.0, 44.0, 54.0];
+        let close = vec![5.0, 15.0, 25.0, 35.0, 45.0, 55.0];
+        let vol = vec![5.0, 100.0, 100.0, 100.0, 100.0, 300.0];
         let r = volume_nodes(&high, &low, &close, &vol, 6, 1.0).unwrap();
         assert_eq!(r.nodes.len(), 6);
         assert!(!r.hvn_prices.is_empty(), "should detect at least one HVN");
-        assert!(
-            !r.lvn_prices.is_empty(),
-            "should detect at least one LVN"
-        );
+        assert!(!r.lvn_prices.is_empty(), "should detect at least one LVN");
         // Nodes must be in {-1, 0, 1}.
         for &n in &r.nodes {
             assert!(n == -1 || n == 0 || n == 1, "unexpected node {n}");

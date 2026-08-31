@@ -10,7 +10,7 @@ pub mod obv;
 pub mod pvi;
 pub mod pvt;
 pub mod twiggs_mf;
-pub mod vr;
 pub mod volume_momentum;
 pub mod volume_oscillator;
+pub mod vr;
 pub mod vzo;

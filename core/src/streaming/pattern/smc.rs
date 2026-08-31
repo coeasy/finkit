@@ -5,8 +5,8 @@
 //! designed for real-time bar-by-bar processing where the full batch API is
 //! impractical.
 
-use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
 
 // ---------------------------------------------------------------------------
 // StreamingFairValueGap
@@ -353,7 +353,7 @@ mod tests {
         let mut fvg = StreamingFairValueGap::new();
         fvg.next((14.0, 13.0)); // first
         fvg.next((12.0, 11.0)); // second
-        // Third bar: high=9 < first low=13 -> bearish gap = 9 - 13 = -4.
+                                // Third bar: high=9 < first low=13 -> bearish gap = 9 - 13 = -4.
         let v = fvg.next((9.0, 8.0)).unwrap();
         assert!((v - (-4.0)).abs() < 1e-10);
     }
@@ -439,7 +439,10 @@ mod tests {
         assert!(last.is_some());
         // A bullish OB would be positive.
         if let Some(v) = last {
-            assert!(v >= 0.0, "expected non-negative (bullish or zero) OB, got {v}");
+            assert!(
+                v >= 0.0,
+                "expected non-negative (bullish or zero) OB, got {v}"
+            );
         }
     }
 }

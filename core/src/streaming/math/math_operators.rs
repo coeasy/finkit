@@ -32,8 +32,8 @@
 
 use std::collections::VecDeque;
 
-use crate::{impl_indicator_meta, impl_standard_methods};
 use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
+use crate::{impl_indicator_meta, impl_standard_methods};
 
 // =====================================================================
 // 双输入算术函数（无状态）
@@ -96,10 +96,18 @@ impl StreamingIndicator for StreamingAdd {
 }
 
 impl IndicatorMeta for StreamingAdd {
-    fn name() -> &'static str { "ADD" }
-    fn category() -> &'static str { "math_operators" }
-    fn description() -> &'static str { "Vector add: a + b" }
-    fn warm_up_period(&self) -> usize { 0 }
+    fn name() -> &'static str {
+        "ADD"
+    }
+    fn category() -> &'static str {
+        "math_operators"
+    }
+    fn description() -> &'static str {
+        "Vector add: a + b"
+    }
+    fn warm_up_period(&self) -> usize {
+        0
+    }
 }
 
 /// 逐元素相减 SUB（streaming 版本）。
@@ -155,10 +163,18 @@ impl StreamingIndicator for StreamingSub {
 }
 
 impl IndicatorMeta for StreamingSub {
-    fn name() -> &'static str { "SUB" }
-    fn category() -> &'static str { "math_operators" }
-    fn description() -> &'static str { "Vector subtract: a - b" }
-    fn warm_up_period(&self) -> usize { 0 }
+    fn name() -> &'static str {
+        "SUB"
+    }
+    fn category() -> &'static str {
+        "math_operators"
+    }
+    fn description() -> &'static str {
+        "Vector subtract: a - b"
+    }
+    fn warm_up_period(&self) -> usize {
+        0
+    }
 }
 
 /// 逐元素相乘 MULT（streaming 版本）。
@@ -214,10 +230,18 @@ impl StreamingIndicator for StreamingMult {
 }
 
 impl IndicatorMeta for StreamingMult {
-    fn name() -> &'static str { "MULT" }
-    fn category() -> &'static str { "math_operators" }
-    fn description() -> &'static str { "Vector multiply: a * b" }
-    fn warm_up_period(&self) -> usize { 0 }
+    fn name() -> &'static str {
+        "MULT"
+    }
+    fn category() -> &'static str {
+        "math_operators"
+    }
+    fn description() -> &'static str {
+        "Vector multiply: a * b"
+    }
+    fn warm_up_period(&self) -> usize {
+        0
+    }
 }
 
 /// 逐元素相除 DIV（streaming 版本）。
@@ -280,10 +304,18 @@ impl StreamingIndicator for StreamingDiv {
 }
 
 impl IndicatorMeta for StreamingDiv {
-    fn name() -> &'static str { "DIV" }
-    fn category() -> &'static str { "math_operators" }
-    fn description() -> &'static str { "Vector divide: a / b (None on divide by zero)" }
-    fn warm_up_period(&self) -> usize { 0 }
+    fn name() -> &'static str {
+        "DIV"
+    }
+    fn category() -> &'static str {
+        "math_operators"
+    }
+    fn description() -> &'static str {
+        "Vector divide: a / b (None on divide by zero)"
+    }
+    fn warm_up_period(&self) -> usize {
+        0
+    }
 }
 
 // =====================================================================
@@ -362,7 +394,12 @@ impl StreamingIndicator for StreamingMinus {
     impl_standard_methods!();
 }
 
-impl_indicator_meta!(StreamingMinus, "MINUS", "math_operators", "Periodic difference: data[i] - data[i - period]");
+impl_indicator_meta!(
+    StreamingMinus,
+    "MINUS",
+    "math_operators",
+    "Periodic difference: data[i] - data[i - period]"
+);
 
 // =====================================================================
 // 窗口统计函数（stateful, 单输入）
@@ -412,7 +449,11 @@ impl StreamingIndicator for StreamingMax {
 
         self.deque.push_back((self.count - 1, input));
 
-        while self.deque.front().map_or(false, |&(pos, _)| pos + self.period < self.count) {
+        while self
+            .deque
+            .front()
+            .map_or(false, |&(pos, _)| pos + self.period < self.count)
+        {
             self.deque.pop_front();
         }
 
@@ -439,7 +480,12 @@ impl StreamingIndicator for StreamingMax {
     impl_standard_methods!();
 }
 
-impl_indicator_meta!(StreamingMax, "MAX", "math_operators", "Rolling window maximum");
+impl_indicator_meta!(
+    StreamingMax,
+    "MAX",
+    "math_operators",
+    "Rolling window maximum"
+);
 
 /// 滚动窗口最小值 MIN（streaming 版本）。
 ///
@@ -484,7 +530,11 @@ impl StreamingIndicator for StreamingMin {
 
         self.deque.push_back((self.count - 1, input));
 
-        while self.deque.front().map_or(false, |&(pos, _)| pos + self.period < self.count) {
+        while self
+            .deque
+            .front()
+            .map_or(false, |&(pos, _)| pos + self.period < self.count)
+        {
             self.deque.pop_front();
         }
 
@@ -511,7 +561,12 @@ impl StreamingIndicator for StreamingMin {
     impl_standard_methods!();
 }
 
-impl_indicator_meta!(StreamingMin, "MIN", "math_operators", "Rolling window minimum");
+impl_indicator_meta!(
+    StreamingMin,
+    "MIN",
+    "math_operators",
+    "Rolling window minimum"
+);
 
 /// 滚动窗口求和 SUM（streaming 版本）。
 ///
@@ -715,7 +770,11 @@ mod tests {
                 assert!(v.is_none());
             } else {
                 let v = v.unwrap();
-                assert!((v - batch[i]).abs() < 1e-10, "mismatch at {i}: {v} vs {}", batch[i]);
+                assert!(
+                    (v - batch[i]).abs() < 1e-10,
+                    "mismatch at {i}: {v} vs {}",
+                    batch[i]
+                );
             }
         }
     }
@@ -729,8 +788,8 @@ mod tests {
         assert_eq!(m.next(1.0), None);
         assert_eq!(m.next(2.0), None);
         // 已就绪
-        assert_eq!(m.next(4.0), Some(3.0));  // 4 - 1
-        assert_eq!(m.next(7.0), Some(5.0));  // 7 - 2
+        assert_eq!(m.next(4.0), Some(3.0)); // 4 - 1
+        assert_eq!(m.next(7.0), Some(5.0)); // 7 - 2
         assert_eq!(m.next(11.0), Some(7.0)); // 11 - 4
     }
 
@@ -738,8 +797,8 @@ mod tests {
     fn test_streaming_minus_period_one() {
         let mut m = StreamingMinus::new(1);
         assert_eq!(m.next(10.0), None);
-        assert_eq!(m.next(13.0), Some(3.0));  // 13 - 10
-        assert_eq!(m.next(15.0), Some(2.0));  // 15 - 13
+        assert_eq!(m.next(13.0), Some(3.0)); // 13 - 10
+        assert_eq!(m.next(15.0), Some(2.0)); // 15 - 13
     }
 
     #[test]
@@ -773,7 +832,11 @@ mod tests {
                 assert!(v.is_none());
             } else {
                 let v = v.unwrap();
-                assert!((v - batch[i]).abs() < 1e-10, "mismatch at {i}: {v} vs {}", batch[i]);
+                assert!(
+                    (v - batch[i]).abs() < 1e-10,
+                    "mismatch at {i}: {v} vs {}",
+                    batch[i]
+                );
             }
         }
     }
@@ -824,7 +887,9 @@ mod tests {
 
     #[test]
     fn test_streaming_max_vs_batch() {
-        let data: Vec<f64> = (0..50).map(|i| 50.0 + (i as f64 * 0.3).sin() * 10.0).collect();
+        let data: Vec<f64> = (0..50)
+            .map(|i| 50.0 + (i as f64 * 0.3).sin() * 10.0)
+            .collect();
         let period = 7;
         let batch = crate::indicators::math_operators::max(&data, period).unwrap();
         let mut s = StreamingMax::new(period);
@@ -834,7 +899,11 @@ mod tests {
                 assert!(v.is_none());
             } else {
                 let v = v.unwrap();
-                assert!((v - batch[i]).abs() < 1e-10, "mismatch at {i}: {v} vs {}", batch[i]);
+                assert!(
+                    (v - batch[i]).abs() < 1e-10,
+                    "mismatch at {i}: {v} vs {}",
+                    batch[i]
+                );
             }
         }
     }
@@ -882,7 +951,9 @@ mod tests {
 
     #[test]
     fn test_streaming_min_vs_batch() {
-        let data: Vec<f64> = (0..50).map(|i| 50.0 + (i as f64 * 0.3).sin() * 10.0).collect();
+        let data: Vec<f64> = (0..50)
+            .map(|i| 50.0 + (i as f64 * 0.3).sin() * 10.0)
+            .collect();
         let period = 5;
         let batch = crate::indicators::math_operators::min(&data, period).unwrap();
         let mut s = StreamingMin::new(period);
@@ -892,7 +963,11 @@ mod tests {
                 assert!(v.is_none());
             } else {
                 let v = v.unwrap();
-                assert!((v - batch[i]).abs() < 1e-10, "mismatch at {i}: {v} vs {}", batch[i]);
+                assert!(
+                    (v - batch[i]).abs() < 1e-10,
+                    "mismatch at {i}: {v} vs {}",
+                    batch[i]
+                );
             }
         }
     }
@@ -950,7 +1025,11 @@ mod tests {
                 assert!(v.is_none());
             } else {
                 let v = v.unwrap();
-                assert!((v - batch[i]).abs() < 1e-10, "mismatch at {i}: {v} vs {}", batch[i]);
+                assert!(
+                    (v - batch[i]).abs() < 1e-10,
+                    "mismatch at {i}: {v} vs {}",
+                    batch[i]
+                );
             }
         }
     }

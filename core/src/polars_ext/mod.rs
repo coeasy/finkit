@@ -7,11 +7,11 @@
 //! without copying the underlying Arrow buffers.
 
 #[cfg(feature = "finkit-polars")]
-mod series_ops;
-#[cfg(feature = "finkit-polars")]
 mod dataframe_ext;
+#[cfg(feature = "finkit-polars")]
+mod series_ops;
 
 #[cfg(feature = "finkit-polars")]
-pub use series_ops::TaSeries;
+pub use dataframe_ext::{TaAccessor, TaDataFrame};
 #[cfg(feature = "finkit-polars")]
-pub use dataframe_ext::{TaDataFrame, TaAccessor};
+pub use series_ops::TaSeries;

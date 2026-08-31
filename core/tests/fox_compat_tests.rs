@@ -1,6 +1,6 @@
-use ndarray::Array1;
 use finkit::formula::engine::FormulaEngine;
 use finkit::formula::types::FormulaContext;
+use ndarray::Array1;
 
 fn make_ctx(len: usize) -> FormulaContext {
     let close: Vec<f64> = (0..len)
@@ -32,7 +32,9 @@ fn make_zigzag_ctx(len: usize) -> FormulaContext {
     let open: Vec<f64> = close.iter().map(|c| c - 0.1).collect();
     let high: Vec<f64> = close.iter().map(|c| c + 0.5).collect();
     let low: Vec<f64> = close.iter().map(|c| c - 0.5).collect();
-    let volume: Vec<f64> = (0..len).map(|i| 1000.0 + (i as f64 * 0.5).sin() * 200.0).collect();
+    let volume: Vec<f64> = (0..len)
+        .map(|i| 1000.0 + (i as f64 * 0.5).sin() * 200.0)
+        .collect();
     FormulaContext::new(
         Array1::from_vec(open),
         Array1::from_vec(high),
@@ -91,7 +93,9 @@ fn test_fox_peak() {
 fn test_fox_troughbars() {
     let mut engine = FormulaEngine::new();
     let mut ctx = make_zigzag_ctx(100);
-    let result = engine.eval("FOX_TROUGHBARS(CLOSE, 5, 1)", &mut ctx).unwrap();
+    let result = engine
+        .eval("FOX_TROUGHBARS(CLOSE, 5, 1)", &mut ctx)
+        .unwrap();
     assert_eq!(result.len(), 100);
 }
 
@@ -196,7 +200,10 @@ fn test_fox_trade_signal() {
     assert_eq!(result.len(), 100);
     let has_buy = result.iter().any(|v| *v == 1.0);
     let has_sell = result.iter().any(|v| *v == -1.0);
-    assert!(has_buy || has_sell, "FOX_TRADE_SIGNAL should produce at least one signal");
+    assert!(
+        has_buy || has_sell,
+        "FOX_TRADE_SIGNAL should produce at least one signal"
+    );
 }
 
 #[test]
@@ -287,7 +294,10 @@ fn test_fox_profit_ratio() {
     let result = engine.eval(source, &mut ctx).unwrap();
     assert_eq!(result.len(), 100);
     let val = result[99];
-    assert!(val >= 0.0 || val.is_infinite(), "Profit ratio should be >= 0 or infinite");
+    assert!(
+        val >= 0.0 || val.is_infinite(),
+        "Profit ratio should be >= 0 or infinite"
+    );
 }
 
 #[test]
@@ -448,12 +458,30 @@ fn test_fox_compatibility_coverage() {
         ("FOX_PEAKBARS", "FOX_PEAKBARS(CLOSE, 5, 1)"),
         ("FOX_BUY", "FOX_BUY(CLOSE > OPEN, CLOSE)"),
         ("FOX_SELL", "FOX_SELL(CLOSE < OPEN, CLOSE)"),
-        ("FOX_TRADE_SIGNAL", "FOX_TRADE_SIGNAL(CLOSE > OPEN, CLOSE < OPEN)"),
-        ("FOX_BACKTEST", "FOX_BACKTEST(CLOSE > OPEN, CLOSE < OPEN, CLOSE)"),
-        ("FOX_PROFIT_RATIO", "FOX_PROFIT_RATIO(CLOSE > OPEN, CLOSE < OPEN, CLOSE)"),
-        ("FOX_WIN_RATE", "FOX_WIN_RATE(CLOSE > OPEN, CLOSE < OPEN, CLOSE)"),
-        ("FOX_MAX_DRAWDOWN", "FOX_MAX_DRAWDOWN(CLOSE > OPEN, CLOSE < OPEN, CLOSE)"),
-        ("FOX_TRADE_COUNT", "FOX_TRADE_COUNT(CLOSE > OPEN, CLOSE < OPEN)"),
+        (
+            "FOX_TRADE_SIGNAL",
+            "FOX_TRADE_SIGNAL(CLOSE > OPEN, CLOSE < OPEN)",
+        ),
+        (
+            "FOX_BACKTEST",
+            "FOX_BACKTEST(CLOSE > OPEN, CLOSE < OPEN, CLOSE)",
+        ),
+        (
+            "FOX_PROFIT_RATIO",
+            "FOX_PROFIT_RATIO(CLOSE > OPEN, CLOSE < OPEN, CLOSE)",
+        ),
+        (
+            "FOX_WIN_RATE",
+            "FOX_WIN_RATE(CLOSE > OPEN, CLOSE < OPEN, CLOSE)",
+        ),
+        (
+            "FOX_MAX_DRAWDOWN",
+            "FOX_MAX_DRAWDOWN(CLOSE > OPEN, CLOSE < OPEN, CLOSE)",
+        ),
+        (
+            "FOX_TRADE_COUNT",
+            "FOX_TRADE_COUNT(CLOSE > OPEN, CLOSE < OPEN)",
+        ),
     ];
 
     let mut passed = 0;
@@ -470,7 +498,10 @@ fn test_fox_compatibility_coverage() {
     }
 
     let coverage = passed as f64 / total as f64 * 100.0;
-    println!("FoxTrader compatibility coverage: {:.1}% ({}/{})", coverage, passed, total);
+    println!(
+        "FoxTrader compatibility coverage: {:.1}% ({}/{})",
+        coverage, passed, total
+    );
     assert!(coverage >= 95.0, "FoxTrader compatibility should be >= 95%");
 }
 

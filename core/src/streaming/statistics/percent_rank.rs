@@ -6,9 +6,9 @@
 //! A true O(1) streaming version would require a balanced BST keyed by value,
 //! which is not worth the constant factor for these small periods.
 
-use crate::streaming::traits::{StreamingIndicator};
+use crate::impl_indicator_meta;
 use crate::impl_standard_methods;
-use crate::{impl_indicator_meta};
+use crate::streaming::traits::StreamingIndicator;
 use std::collections::VecDeque;
 
 /// Streaming rolling `PERCENTRANK` (0..=100 scale).
@@ -64,12 +64,19 @@ impl StreamingIndicator for StreamingPercentRank {
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { self.count >= self.period }
+    fn is_ready(&self) -> bool {
+        self.count >= self.period
+    }
 
     impl_standard_methods!();
 }
 
-impl_indicator_meta!(StreamingPercentRank, "PERCENTRANK", "statistics", "Percent rank (0-100) of current value in rolling window");
+impl_indicator_meta!(
+    StreamingPercentRank,
+    "PERCENTRANK",
+    "statistics",
+    "Percent rank (0-100) of current value in rolling window"
+);
 
 #[cfg(test)]
 mod tests {
@@ -80,7 +87,9 @@ mod tests {
     fn test_percent_rank_basic() {
         let mut p = StreamingPercentRank::new(5);
         // window = [1, 2, 3, 4, 5] -> 5 is the max -> (4 / 4) * 100 = 100
-        for &v in &[1.0, 2.0, 3.0, 4.0] { p.next(v); }
+        for &v in &[1.0, 2.0, 3.0, 4.0] {
+            p.next(v);
+        }
         assert_eq!(p.next(5.0), Some(100.0));
         // window = [2, 3, 4, 5, 1] -> 1 is the min -> 0
         assert_eq!(p.next(1.0), Some(0.0));

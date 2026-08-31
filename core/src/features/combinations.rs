@@ -1,7 +1,7 @@
 //! Feature combinations: ratio, spread, correlation matrix.
 
-use ndarray::Array1;
 use super::{Feature, FeatureMatrix};
+use ndarray::Array1;
 
 /// Compute element-wise ratio: a[i] / b[i].
 pub fn feature_ratio(a: &[f64], b: &[f64]) -> Array1<f64> {
@@ -65,10 +65,7 @@ pub fn rolling_correlation(a: &[f64], b: &[f64], window: usize) -> Array1<f64> {
 ///
 /// Returns a FeatureMatrix where each column is the rolling correlation
 /// between a pair of input columns, named "corr_{name_a}_{name_b}".
-pub fn rolling_correlation_matrix(
-    columns: &[(&str, &[f64])],
-    window: usize,
-) -> FeatureMatrix {
+pub fn rolling_correlation_matrix(columns: &[(&str, &[f64])], window: usize) -> FeatureMatrix {
     let n = columns.len();
     let mut matrix = FeatureMatrix::new();
 
@@ -76,10 +73,7 @@ pub fn rolling_correlation_matrix(
         for j in (i + 1)..n {
             let corr = rolling_correlation(columns[i].1, columns[j].1, window);
             let name = format!("corr_{}_{}", columns[i].0, columns[j].0);
-            matrix.add_column(
-                Feature::new(name, "correlation", window),
-                corr.to_vec(),
-            );
+            matrix.add_column(Feature::new(name, "correlation", window), corr.to_vec());
         }
     }
     matrix
@@ -153,7 +147,11 @@ mod tests {
         let a: Vec<f64> = (0..20).map(|i| i as f64).collect();
         let b: Vec<f64> = (0..20).map(|i| (i as f64).sin()).collect();
         let c: Vec<f64> = (0..20).map(|i| (i as f64).cos()).collect();
-        let cols = vec![("a", a.as_slice()), ("b", b.as_slice()), ("c", c.as_slice())];
+        let cols = vec![
+            ("a", a.as_slice()),
+            ("b", b.as_slice()),
+            ("c", c.as_slice()),
+        ];
         let matrix = rolling_correlation_matrix(&cols, 10);
         // 3 columns => 3 pairs
         assert_eq!(matrix.cols(), 3);
@@ -164,7 +162,11 @@ mod tests {
         let a = vec![10.0, 20.0, 30.0];
         let b = vec![2.0, 5.0, 10.0];
         let c = vec![1.0, 1.0, 1.0];
-        let cols = vec![("a", a.as_slice()), ("b", b.as_slice()), ("c", c.as_slice())];
+        let cols = vec![
+            ("a", a.as_slice()),
+            ("b", b.as_slice()),
+            ("c", c.as_slice()),
+        ];
         let matrix = auto_combine(&cols);
         // 3 pairs * 2 (ratio + spread) = 6 columns
         assert_eq!(matrix.cols(), 6);

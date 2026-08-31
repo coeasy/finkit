@@ -153,10 +153,7 @@ fn test_tsi_builder_ok() {
 
 #[test]
 fn test_vidya_builder_zero_period() {
-    let result = StreamingVidya::builder()
-        .period(0)
-        .cmo_period(9)
-        .build();
+    let result = StreamingVidya::builder().period(0).cmo_period(9).build();
     assert!(result.is_err());
     let err = result.err().unwrap();
     assert!(matches!(err, IndicatorError::InvalidParameter { .. }));
@@ -189,12 +186,7 @@ fn test_stoch_builder_ok() {
 
 #[test]
 fn test_kdj_builder_ok() {
-    let _kdj = StreamingKdj::builder()
-        .n(9)
-        .m1(3)
-        .m2(3)
-        .build()
-        .unwrap();
+    let _kdj = StreamingKdj::builder().n(9).m1(3).m2(3).build().unwrap();
 }
 
 #[test]
@@ -345,10 +337,7 @@ fn test_kst_builder_ok() {
 
 #[test]
 fn test_kst_builder_missing_param() {
-    let result = StreamingKst::builder()
-        .roc1(10)
-        .roc2(15)
-        .build();
+    let result = StreamingKst::builder().roc1(10).roc2(15).build();
     assert!(result.is_err());
     let err = result.err().unwrap();
     assert!(matches!(err, IndicatorError::InvalidParameter { .. }));
@@ -381,7 +370,9 @@ fn test_macd_builder_equivalence() {
         .build()
         .unwrap();
 
-    let data: Vec<f64> = (0..50).map(|i| 50.0 + (i as f64 * 0.1).sin() * 10.0).collect();
+    let data: Vec<f64> = (0..50)
+        .map(|i| 50.0 + (i as f64 * 0.1).sin() * 10.0)
+        .collect();
     for &v in &data {
         let a = macd_new.next(v);
         let b = macd_builder.next(v);
@@ -415,7 +406,12 @@ fn test_all_single_period_builders_compile() {
     let _ = StreamingNatr::builder().period(14).build().unwrap();
     let _ = StreamingPsy::builder().period(12).build().unwrap();
     let _ = StreamingRvi::builder().period(10).build().unwrap();
-    let _ = StreamingStc::builder().fast_period(23).slow_period(50).cycle(10).build().unwrap();
+    let _ = StreamingStc::builder()
+        .fast_period(23)
+        .slow_period(50)
+        .cycle(10)
+        .build()
+        .unwrap();
     let _ = StreamingT3::builder().period(5).build().unwrap();
     let _ = StreamingTrix::builder().period(15).build().unwrap();
     let _ = StreamingUlcerIndex::builder().period(14).build().unwrap();
@@ -428,16 +424,43 @@ fn test_all_single_period_builders_compile() {
 
 #[test]
 fn test_all_two_period_builders_compile() {
-    let _ = StreamingAo::builder().fast_period(5).slow_period(34).build().unwrap();
-    let _ = StreamingExpma::builder().short_period(12).long_period(50).build().unwrap();
-    let _ = StreamingMassIndex::builder().period(25).ema_period(9).build().unwrap();
+    let _ = StreamingAo::builder()
+        .fast_period(5)
+        .slow_period(34)
+        .build()
+        .unwrap();
+    let _ = StreamingExpma::builder()
+        .short_period(12)
+        .long_period(50)
+        .build()
+        .unwrap();
+    let _ = StreamingMassIndex::builder()
+        .period(25)
+        .ema_period(9)
+        .build()
+        .unwrap();
 }
 
 #[test]
 fn test_all_three_period_builders_compile() {
-    let _ = StreamingCoppock::builder().wma_period(10).long_roc(14).short_roc(11).build().unwrap();
-    let _ = StreamingDma::builder().short_period(10).long_period(50).ama_period(10).build().unwrap();
-    let _ = StreamingKvo::builder().fast_period(34).slow_period(55).signal_period(13).build().unwrap();
+    let _ = StreamingCoppock::builder()
+        .wma_period(10)
+        .long_roc(14)
+        .short_roc(11)
+        .build()
+        .unwrap();
+    let _ = StreamingDma::builder()
+        .short_period(10)
+        .long_period(50)
+        .ama_period(10)
+        .build()
+        .unwrap();
+    let _ = StreamingKvo::builder()
+        .fast_period(34)
+        .slow_period(55)
+        .signal_period(13)
+        .build()
+        .unwrap();
 }
 
 #[test]

@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 
 /// Streaming Put/Call Ratio.
 ///
@@ -20,7 +20,9 @@ impl StreamingPutCallRatio {
 }
 
 impl Default for StreamingPutCallRatio {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Input: (put_volume, call_volume)
@@ -53,10 +55,18 @@ impl StreamingIndicator<(f64, f64)> for StreamingPutCallRatio {
 }
 
 impl IndicatorMeta for StreamingPutCallRatio {
-    fn name() -> &'static str { "PUT_CALL_RATIO" }
-    fn category() -> &'static str { "sentiment" }
-    fn description() -> &'static str { "Put/Call Ratio" }
-    fn warm_up_period(&self) -> usize { 1 }
+    fn name() -> &'static str {
+        "PUT_CALL_RATIO"
+    }
+    fn category() -> &'static str {
+        "sentiment"
+    }
+    fn description() -> &'static str {
+        "Put/Call Ratio"
+    }
+    fn warm_up_period(&self) -> usize {
+        1
+    }
 }
 
 #[cfg(test)]

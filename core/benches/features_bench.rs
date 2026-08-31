@@ -7,12 +7,16 @@ use finkit::math::statistics;
 const DATA_LEN: usize = 10_000;
 
 fn create_close_data(len: usize) -> Vec<f64> {
-    (0..len).map(|i| 100.0 + (i as f64 * 0.01).sin() * 10.0 + i as f64 * 0.001).collect()
+    (0..len)
+        .map(|i| 100.0 + (i as f64 * 0.01).sin() * 10.0 + i as f64 * 0.001)
+        .collect()
 }
 
 fn create_volume_data(len: usize) -> Vec<f64> {
     (0..len)
-        .map(|i| 10_000.0 + (i as f64 * 10.0).sin() * 3_000.0 + 2_000.0 * (i as f64 * 2.3).cos().abs())
+        .map(|i| {
+            10_000.0 + (i as f64 * 10.0).sin() * 3_000.0 + 2_000.0 * (i as f64 * 2.3).cos().abs()
+        })
         .collect()
 }
 
@@ -100,7 +104,11 @@ fn bench_cross_features(c: &mut Criterion) {
 
     group.bench_function("auto_cross_3cols_10k", |b| {
         let slow: Vec<f64> = close.iter().map(|v| v * 0.99).collect();
-        let columns = [("close", close.as_slice()), ("slow", slow.as_slice()), ("volume", volume.as_slice())];
+        let columns = [
+            ("close", close.as_slice()),
+            ("slow", slow.as_slice()),
+            ("volume", volume.as_slice()),
+        ];
         b.iter(|| black_box(auto_cross(&columns)))
     });
 
@@ -394,7 +402,11 @@ fn bench_complexity(c: &mut Criterion) {
 fn bench_granger(c: &mut Criterion) {
     let mut group = c.benchmark_group("granger");
     let x = create_close_data(200);
-    let y: Vec<f64> = x.iter().enumerate().map(|(i, &v)| v * 0.5 + (i as f64 * 0.3).sin()).collect();
+    let y: Vec<f64> = x
+        .iter()
+        .enumerate()
+        .map(|(i, &v)| v * 0.5 + (i as f64 * 0.3).sin())
+        .collect();
 
     group.bench_function("granger_causality_200_lag2", |b| {
         b.iter(|| black_box(granger_causality(&x, &y, 2).unwrap()))
@@ -412,7 +424,11 @@ fn bench_cross_correlation(c: &mut Criterion) {
     let n = 1000;
     let s1 = create_close_data(n);
     let s2: Vec<f64> = s1.iter().map(|v| v * 1.1 + 5.0).collect();
-    let s3: Vec<f64> = s1.iter().enumerate().map(|(i, _)| (i as f64 * 0.5).sin() * 50.0).collect();
+    let s3: Vec<f64> = s1
+        .iter()
+        .enumerate()
+        .map(|(i, _)| (i as f64 * 0.5).sin() * 50.0)
+        .collect();
     let series: Vec<&[f64]> = vec![s1.as_slice(), s2.as_slice(), s3.as_slice()];
 
     group.bench_function("cross_corr_3x_1000_pearson", |b| {
@@ -420,7 +436,9 @@ fn bench_cross_correlation(c: &mut Criterion) {
     });
 
     group.bench_function("cross_corr_3x_1000_spearman", |b| {
-        b.iter(|| black_box(cross_correlation_matrix(&series, CorrelationMethod::Spearman).unwrap()))
+        b.iter(|| {
+            black_box(cross_correlation_matrix(&series, CorrelationMethod::Spearman).unwrap())
+        })
     });
 
     group.finish();

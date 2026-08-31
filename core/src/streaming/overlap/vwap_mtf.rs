@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
 
 /// Input for StreamingVwapMtf: an OHLCV bar plus a session_start flag.
 pub struct VwapMtfInput<'a> {
@@ -174,7 +174,9 @@ mod tests {
         let high = vec![10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0];
         let low = vec![9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0];
         let close = vec![9.5, 10.5, 11.5, 12.5, 13.5, 14.5, 15.5, 16.5, 17.5, 18.5];
-        let volume = vec![100.0, 200.0, 150.0, 300.0, 250.0, 180.0, 220.0, 280.0, 190.0, 310.0];
+        let volume = vec![
+            100.0, 200.0, 150.0, 300.0, 250.0, 180.0, 220.0, 280.0, 190.0, 310.0,
+        ];
         let session_start = vec![
             true, false, false, false, true, false, false, true, false, false,
         ];
@@ -190,12 +192,7 @@ mod tests {
                     session_start: session_start[i],
                 })
                 .unwrap();
-            assert_relative_eq!(
-                val,
-                batch[i],
-                epsilon = 1e-10,
-                max_relative = 1e-10
-            );
+            assert_relative_eq!(val, batch[i], epsilon = 1e-10, max_relative = 1e-10);
         }
     }
 }

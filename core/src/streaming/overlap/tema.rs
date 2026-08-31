@@ -1,6 +1,6 @@
+use crate::impl_standard_methods;
 use crate::streaming::overlap::ema::StreamingEma;
 use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
-use crate::impl_standard_methods;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamingTema {
@@ -45,16 +45,26 @@ impl StreamingIndicator for StreamingTema {
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { self.ema3.is_ready() }
+    fn is_ready(&self) -> bool {
+        self.ema3.is_ready()
+    }
 
     impl_standard_methods!();
 }
 
 impl IndicatorMeta for StreamingTema {
-    fn name() -> &'static str { "TEMA" }
-    fn category() -> &'static str { "overlap" }
-    fn description() -> &'static str { "Triple Exponential Moving Average" }
-    fn warm_up_period(&self) -> usize { self.period * 3 - 2 }
+    fn name() -> &'static str {
+        "TEMA"
+    }
+    fn category() -> &'static str {
+        "overlap"
+    }
+    fn description() -> &'static str {
+        "Triple Exponential Moving Average"
+    }
+    fn warm_up_period(&self) -> usize {
+        self.period * 3 - 2
+    }
 }
 
 #[cfg(test)]
@@ -64,7 +74,9 @@ mod tests {
     #[test]
     fn test_streaming_tema_basic() {
         let mut tema = StreamingTema::new(3);
-        for i in 0..10 { tema.next(i as f64 + 1.0); }
+        for i in 0..10 {
+            tema.next(i as f64 + 1.0);
+        }
         assert!(tema.is_ready());
     }
 
@@ -76,7 +88,9 @@ mod tests {
     #[test]
     fn test_streaming_tema_reset() {
         let mut tema = StreamingTema::new(3);
-        for i in 0..10 { tema.next(i as f64); }
+        for i in 0..10 {
+            tema.next(i as f64);
+        }
         assert!(tema.is_ready());
         tema.reset();
         assert!(!tema.is_ready());
@@ -84,7 +98,9 @@ mod tests {
 
     #[test]
     fn test_streaming_vs_batch_convergence() {
-        let data: Vec<f64> = (0..100).map(|i| 50.0 + (i as f64 * 0.1).sin() * 10.0).collect();
+        let data: Vec<f64> = (0..100)
+            .map(|i| 50.0 + (i as f64 * 0.1).sin() * 10.0)
+            .collect();
         let period = 5;
         let batch = crate::math::moving_avg::tema(&data, period).unwrap();
         let mut streaming = StreamingTema::new(period);

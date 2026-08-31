@@ -1,7 +1,7 @@
+use crate::impl_standard_methods;
 use crate::streaming::overlap::ema::StreamingEma;
 use crate::streaming::rolling_minmax::{RollingMax, RollingMin};
 use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
-use crate::impl_standard_methods;
 
 /// Streaming Schaff Trend Cycle (STC).
 ///
@@ -111,7 +111,12 @@ impl StreamingIndicator for StreamingStc {
             self.macd_rolling_min.pop(self.count - self.cycle);
         }
 
-        Self::ring_push(&mut self.macd_buf, &mut self.macd_head, &mut self.macd_len, macd);
+        Self::ring_push(
+            &mut self.macd_buf,
+            &mut self.macd_head,
+            &mut self.macd_len,
+            macd,
+        );
 
         if self.macd_len < self.cycle {
             self.last_value = None;
@@ -190,9 +195,15 @@ impl StreamingIndicator for StreamingStc {
 }
 
 impl IndicatorMeta for StreamingStc {
-    fn name() -> &'static str { "STC" }
-    fn category() -> &'static str { "momentum" }
-    fn description() -> &'static str { "Schaff Trend Cycle" }
+    fn name() -> &'static str {
+        "STC"
+    }
+    fn category() -> &'static str {
+        "momentum"
+    }
+    fn description() -> &'static str {
+        "Schaff Trend Cycle"
+    }
     fn warm_up_period(&self) -> usize {
         self.slow_period + 2 * self.cycle
     }
@@ -215,7 +226,10 @@ mod tests {
         assert!(last.is_some());
         assert!(stc.is_ready());
         let v = last.unwrap();
-        assert!((-1.0..=101.0).contains(&v), "STC value {v} out of expected range");
+        assert!(
+            (-1.0..=101.0).contains(&v),
+            "STC value {v} out of expected range"
+        );
     }
 
     #[test]
@@ -255,6 +269,9 @@ mod tests {
                 }
             }
         }
-        assert!(match_count > 100, "Expected convergence, got only {match_count} matches");
+        assert!(
+            match_count > 100,
+            "Expected convergence, got only {match_count} matches"
+        );
     }
 }

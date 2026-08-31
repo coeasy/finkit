@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamingTrange {
@@ -9,7 +9,9 @@ pub struct StreamingTrange {
 }
 
 impl Default for StreamingTrange {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl StreamingTrange {
@@ -24,7 +26,10 @@ impl StreamingTrange {
 
 impl StreamingIndicator<(f64, f64, f64)> for StreamingTrange {
     #[inline]
-    #[cfg_attr(feature = "tracing", tracing::instrument(level = "trace", skip(self, input)))]
+    #[cfg_attr(
+        feature = "tracing",
+        tracing::instrument(level = "trace", skip(self, input))
+    )]
     fn next(&mut self, input: (f64, f64, f64)) -> Option<f64> {
         crate::streaming_measure!("trange", self.count, {
             let (high, low, close) = input;
@@ -52,16 +57,26 @@ impl StreamingIndicator<(f64, f64, f64)> for StreamingTrange {
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { self.count >= 1 }
+    fn is_ready(&self) -> bool {
+        self.count >= 1
+    }
 
     impl_standard_methods!();
 }
 
 impl IndicatorMeta for StreamingTrange {
-    fn name() -> &'static str { "TRANGE" }
-    fn category() -> &'static str { "volatility" }
-    fn description() -> &'static str { "True Range" }
-    fn warm_up_period(&self) -> usize { 1 }
+    fn name() -> &'static str {
+        "TRANGE"
+    }
+    fn category() -> &'static str {
+        "volatility"
+    }
+    fn description() -> &'static str {
+        "True Range"
+    }
+    fn warm_up_period(&self) -> usize {
+        1
+    }
 }
 
 #[cfg(test)]

@@ -1,7 +1,5 @@
 use finkit_visualization::chart::KlineChart;
-use finkit_visualization::config::{
-    ChartConfigBuilder, ChartType, IndicatorConfig, IndicatorType,
-};
+use finkit_visualization::config::{ChartConfigBuilder, ChartType, IndicatorConfig, IndicatorType};
 use finkit_visualization::data::KlineData;
 use finkit_visualization::language::Language;
 

@@ -1,6 +1,6 @@
+use crate::impl_standard_methods;
 use crate::streaming::overlap::ema::StreamingEma;
 use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
-use crate::impl_standard_methods;
 use crate::streaming::Ohlcv;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -69,11 +69,7 @@ impl StreamingKvo {
             let t = if close.is_nan() { prev_trend } else { 1 };
             let c = if dm.is_nan() { f64::NAN } else { dm };
             (t, c)
-        } else if close.is_nan()
-            || prev_hlc_sum.is_nan()
-            || high.is_nan()
-            || low.is_nan()
-        {
+        } else if close.is_nan() || prev_hlc_sum.is_nan() || high.is_nan() || low.is_nan() {
             (prev_trend, f64::NAN)
         } else {
             let today = high + low + close;
@@ -162,15 +158,19 @@ impl StreamingIndicator<&dyn Ohlcv, KvoOutput> for StreamingKvo {
         self.fast_ema.is_ready() && self.slow_ema.is_ready() && self.signal_ema.is_ready()
     }
 
-        impl_standard_methods!(output = KvoOutput);
-
-
+    impl_standard_methods!(output = KvoOutput);
 }
 
 impl IndicatorMeta for StreamingKvo {
-    fn name() -> &'static str { "KVO" }
-    fn category() -> &'static str { "volume" }
-    fn description() -> &'static str { "Klinger Volume Oscillator" }
+    fn name() -> &'static str {
+        "KVO"
+    }
+    fn category() -> &'static str {
+        "volume"
+    }
+    fn description() -> &'static str {
+        "Klinger Volume Oscillator"
+    }
     fn warm_up_period(&self) -> usize {
         self.slow_period.max(self.fast_period) + self.signal_period
     }
@@ -248,10 +248,9 @@ mod tests {
         let slow = 34;
         let signal = 9;
 
-        let batch = crate::indicators::volume_ext::kvo(
-            &high, &low, &close, &volume, fast, slow, signal,
-        )
-        .unwrap();
+        let batch =
+            crate::indicators::volume_ext::kvo(&high, &low, &close, &volume, fast, slow, signal)
+                .unwrap();
         let mut streaming = StreamingKvo::new(fast, slow, signal);
 
         for (i, bar) in bars.iter().enumerate() {

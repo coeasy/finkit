@@ -1,6 +1,6 @@
-use ndarray::Array1;
 use finkit::formula::engine::FormulaEngine;
 use finkit::formula::types::{BlockData, FormulaContext, MoneyFlowData};
+use ndarray::Array1;
 
 fn make_ctx(len: usize) -> FormulaContext {
     let close: Vec<f64> = (0..len)
@@ -27,12 +27,14 @@ fn make_ctx_with_block_data(len: usize) -> FormulaContext {
     let mut block_data = BlockData::default();
 
     let index_close: Vec<f64> = (0..len).map(|i| 3000.0 + i as f64 * 5.0).collect();
-    block_data
-        .index_close
-        .insert("科技板块".to_string(), Array1::from_vec(index_close.clone()));
-    block_data
-        .index_close
-        .insert("金融板块".to_string(), Array1::from_vec(index_close.clone()));
+    block_data.index_close.insert(
+        "科技板块".to_string(),
+        Array1::from_vec(index_close.clone()),
+    );
+    block_data.index_close.insert(
+        "金融板块".to_string(),
+        Array1::from_vec(index_close.clone()),
+    );
 
     let avg_price: Vec<f64> = (0..len).map(|i| 15.0 + i as f64 * 0.1).collect();
     block_data
@@ -71,21 +73,21 @@ fn make_ctx_with_money_flow(len: usize) -> FormulaContext {
         medium_inflow: Array1::from_vec(
             (0..len).map(|i| (i as f64 * 0.35).sin() * 100.0).collect(),
         ),
-        small_inflow: Array1::from_vec(
-            (0..len).map(|i| (i as f64 * 0.4).sin() * 50.0).collect(),
-        ),
+        small_inflow: Array1::from_vec((0..len).map(|i| (i as f64 * 0.4).sin() * 50.0).collect()),
         main_inflow_pct: Array1::from_vec(
             (0..len).map(|i| (i as f64 * 0.3).sin() * 10.0).collect(),
         ),
         big_order_pct: Array1::from_vec(
-            (0..len).map(|i| 20.0 + (i as f64 * 0.2).sin() * 5.0).collect(),
+            (0..len)
+                .map(|i| 20.0 + (i as f64 * 0.2).sin() * 5.0)
+                .collect(),
         ),
         small_order_pct: Array1::from_vec(
-            (0..len).map(|i| 30.0 + (i as f64 * 0.25).sin() * 8.0).collect(),
+            (0..len)
+                .map(|i| 30.0 + (i as f64 * 0.25).sin() * 8.0)
+                .collect(),
         ),
-        money_flow: Array1::from_vec(
-            (0..len).map(|i| (i as f64 * 0.3).sin() * 1000.0).collect(),
-        ),
+        money_flow: Array1::from_vec((0..len).map(|i| (i as f64 * 0.3).sin() * 1000.0).collect()),
     };
     ctx.with_money_flow_data(mf)
 }
@@ -118,7 +120,9 @@ fn test_dzh_blockavg() {
 fn test_dzh_blockdata_index() {
     let mut engine = FormulaEngine::new();
     let mut ctx = make_ctx_with_block_data(100);
-    let result = engine.eval("BLOCKDATA('科技板块', 'INDEX')", &mut ctx).unwrap();
+    let result = engine
+        .eval("BLOCKDATA('科技板块', 'INDEX')", &mut ctx)
+        .unwrap();
     assert_eq!(result.len(), 100);
     assert!(!result[99].is_nan());
 }
@@ -127,7 +131,9 @@ fn test_dzh_blockdata_index() {
 fn test_dzh_blockdata_avg() {
     let mut engine = FormulaEngine::new();
     let mut ctx = make_ctx_with_block_data(100);
-    let result = engine.eval("BLOCKDATA('科技板块', 'AVG')", &mut ctx).unwrap();
+    let result = engine
+        .eval("BLOCKDATA('科技板块', 'AVG')", &mut ctx)
+        .unwrap();
     assert_eq!(result.len(), 100);
     assert!(!result[99].is_nan());
 }
@@ -136,7 +142,9 @@ fn test_dzh_blockdata_avg() {
 fn test_dzh_blockdata_pct() {
     let mut engine = FormulaEngine::new();
     let mut ctx = make_ctx_with_block_data(100);
-    let result = engine.eval("BLOCKDATA('科技板块', 'PCT')", &mut ctx).unwrap();
+    let result = engine
+        .eval("BLOCKDATA('科技板块', 'PCT')", &mut ctx)
+        .unwrap();
     assert_eq!(result.len(), 100);
 }
 
@@ -144,7 +152,9 @@ fn test_dzh_blockdata_pct() {
 fn test_dzh_blockdata_vol() {
     let mut engine = FormulaEngine::new();
     let mut ctx = make_ctx_with_block_data(100);
-    let result = engine.eval("BLOCKDATA('科技板块', 'VOL')", &mut ctx).unwrap();
+    let result = engine
+        .eval("BLOCKDATA('科技板块', 'VOL')", &mut ctx)
+        .unwrap();
     assert_eq!(result.len(), 100);
     assert!(result[99] > 0.0);
 }
@@ -153,7 +163,9 @@ fn test_dzh_blockdata_vol() {
 fn test_dzh_blockdata_amount() {
     let mut engine = FormulaEngine::new();
     let mut ctx = make_ctx_with_block_data(100);
-    let result = engine.eval("BLOCKDATA('科技板块', 'AMOUNT')", &mut ctx).unwrap();
+    let result = engine
+        .eval("BLOCKDATA('科技板块', 'AMOUNT')", &mut ctx)
+        .unwrap();
     assert_eq!(result.len(), 100);
     assert!(result[99] > 0.0);
 }
@@ -673,7 +685,10 @@ fn test_dzh_compatibility_coverage() {
     }
 
     let coverage = passed as f64 / total as f64 * 100.0;
-    println!("DZH compatibility coverage: {:.1}% ({}/{})", coverage, passed, total);
+    println!(
+        "DZH compatibility coverage: {:.1}% ({}/{})",
+        coverage, passed, total
+    );
     assert!(coverage >= 95.0, "DZH compatibility should be >= 95%");
 }
 

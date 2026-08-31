@@ -1,6 +1,6 @@
+use crate::impl_standard_methods;
 use crate::streaming::overlap::ema::StreamingEma;
 use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
-use crate::impl_standard_methods;
 use crate::utils::true_range;
 
 /// Streaming Plus Directional Indicator (+DI).
@@ -51,7 +51,11 @@ impl StreamingIndicator<(f64, f64, f64)> for StreamingPlusDi {
         let up_move = high - self.prev_high;
         let down_move = self.prev_low - low;
 
-        let plus_dm = if up_move > 0.0 && up_move > down_move { up_move } else { 0.0 };
+        let plus_dm = if up_move > 0.0 && up_move > down_move {
+            up_move
+        } else {
+            0.0
+        };
 
         self.prev_high = high;
         self.prev_low = low;
@@ -93,10 +97,18 @@ impl StreamingIndicator<(f64, f64, f64)> for StreamingPlusDi {
 }
 
 impl IndicatorMeta for StreamingPlusDi {
-    fn name() -> &'static str { "PLUS_DI" }
-    fn category() -> &'static str { "momentum" }
-    fn description() -> &'static str { "Plus Directional Indicator" }
-    fn warm_up_period(&self) -> usize { self.period + 1 }
+    fn name() -> &'static str {
+        "PLUS_DI"
+    }
+    fn category() -> &'static str {
+        "momentum"
+    }
+    fn description() -> &'static str {
+        "Plus Directional Indicator"
+    }
+    fn warm_up_period(&self) -> usize {
+        self.period + 1
+    }
 }
 
 #[cfg(test)]

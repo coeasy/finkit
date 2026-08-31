@@ -52,11 +52,7 @@ const RS_WEIGHTS: [f64; 5] = [0.4, 0.2, 0.2, 0.1, 0.1];
 /// # Errors
 /// - `InvalidParameter`: `symbol.len() != benchmark.len()` 或 `as_of` 越界
 /// - `InsufficientData`: 数据长度不足以计算任何一期收益
-pub fn rs_rating(
-    symbol: &[f64],
-    benchmark: &[f64],
-    as_of: usize,
-) -> Result<u8> {
+pub fn rs_rating(symbol: &[f64], benchmark: &[f64], as_of: usize) -> Result<u8> {
     if symbol.len() != benchmark.len() {
         return Err(TaError::InvalidParameter {
             name: "symbol, benchmark".into(),
@@ -146,11 +142,7 @@ pub fn rs_slope(symbol: &[f64], benchmark: &[f64]) -> Result<Array1<u8>> {
 ///
 /// # Future-data safety
 /// 每根 K 线 t 的输出仅用 `symbol[..=t]` 与 `benchmark[..=t]` 数据。
-pub fn rs_momentum(
-    symbol: &[f64],
-    benchmark: &[f64],
-    lookback: usize,
-) -> Result<Array1<i16>> {
+pub fn rs_momentum(symbol: &[f64], benchmark: &[f64], lookback: usize) -> Result<Array1<i16>> {
     if symbol.len() != benchmark.len() {
         return Err(TaError::InvalidParameter {
             name: "symbol, benchmark".into(),
@@ -312,10 +304,14 @@ mod tests {
         // symbol 涨 50%, benchmark 涨 10% → RS 高
         // 公式映射: 0% excess→50, 99% excess→99, 中等超额对应 70-85
         let n = 300;
-        let symbol = build_uptrend(10.0, n, 0.005);  // 强
+        let symbol = build_uptrend(10.0, n, 0.005); // 强
         let benchmark = build_uptrend(10.0, n, 0.001); // 弱基准
         let rating = rs_rating(&symbol, &benchmark, n - 1).unwrap();
-        assert!(rating >= 70, "strong symbol should have high RS, got {}", rating);
+        assert!(
+            rating >= 70,
+            "strong symbol should have high RS, got {}",
+            rating
+        );
     }
 
     #[test]
@@ -325,7 +321,11 @@ mod tests {
         let symbol = build_downtrend(10.0, n, 0.002);
         let benchmark = build_uptrend(10.0, n, 0.001);
         let rating = rs_rating(&symbol, &benchmark, n - 1).unwrap();
-        assert!(rating <= 40, "weak symbol should have low RS, got {}", rating);
+        assert!(
+            rating <= 40,
+            "weak symbol should have low RS, got {}",
+            rating
+        );
     }
 
     #[test]
@@ -336,14 +336,18 @@ mod tests {
         let benchmark = build_uptrend(10.0, n, 0.001);
         let rating = rs_rating(&symbol, &benchmark, n - 1).unwrap();
         // 应该非常接近 50（50 ± 5）
-        assert!((rating as i32 - 50).abs() <= 5, "equal series should be near 50, got {}", rating);
+        assert!(
+            (rating as i32 - 50).abs() <= 5,
+            "equal series should be near 50, got {}",
+            rating
+        );
     }
 
     #[test]
     fn test_rs_rating_as_of_bounds() {
         let data = vec![10.0; 50];
         assert!(rs_rating(&data, &data, 50).is_err()); // out of bounds
-        assert!(rs_rating(&data, &data, 0).is_err());  // not enough data
+        assert!(rs_rating(&data, &data, 0).is_err()); // not enough data
     }
 
     #[test]
@@ -365,7 +369,11 @@ mod tests {
             assert_eq!(slope[i], 0, "warmup bar {} should be 0", i);
         }
         // 后面的 bar 应该 > 50
-        assert!(slope[n - 1] > 50, "ending bar should be strong, got {}", slope[n - 1]);
+        assert!(
+            slope[n - 1] > 50,
+            "ending bar should be strong, got {}",
+            slope[n - 1]
+        );
     }
 
     #[test]
@@ -377,7 +385,11 @@ mod tests {
         let benchmark = build_uptrend(10.0, n, 0.001);
         let mom = rs_momentum(&symbol, &benchmark, 100).unwrap();
         // 最后一段应该有正动量
-        assert!(mom[n - 1] > 0, "rs_momentum should be positive at end, got {}", mom[n - 1]);
+        assert!(
+            mom[n - 1] > 0,
+            "rs_momentum should be positive at end, got {}",
+            mom[n - 1]
+        );
     }
 
     #[test]
@@ -397,7 +409,11 @@ mod tests {
         // strong2 第二高
         assert!(ranks[1] > ranks[2], "strong2 should outrank neutral");
         // neutral 中位
-        assert!((ranks[2] as i32 - 50).abs() <= 10, "neutral should be middle, got {}", ranks[2]);
+        assert!(
+            (ranks[2] as i32 - 50).abs() <= 10,
+            "neutral should be middle, got {}",
+            ranks[2]
+        );
         // weak1 较低
         assert!(ranks[3] <= 30, "weak1 should rank low, got {}", ranks[3]);
         // weak2 最低

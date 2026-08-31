@@ -1,10 +1,10 @@
 //! Python bindings for the feature engineering module.
 
+use finkit::features;
+use finkit::indicators;
 use numpy::PyReadonlyArray1;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use finkit::features;
-use finkit::indicators;
 
 type PyDictResult<'py> = PyResult<Bound<'py, PyDict>>;
 
@@ -817,7 +817,10 @@ fn cointegration_test<'py>(
     let dict = PyDict::new(py);
     dict.set_item("test_statistic", result.test_statistic)?;
     dict.set_item("p_value", result.p_value)?;
-    dict.set_item("cointegration_coefficient", result.cointegration_coefficient)?;
+    dict.set_item(
+        "cointegration_coefficient",
+        result.cointegration_coefficient,
+    )?;
     dict.set_item("is_cointegrated", result.is_cointegrated)?;
     Ok(dict)
 }

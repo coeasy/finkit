@@ -105,9 +105,10 @@ fn sandbox_push_depth(
     if let Some(limit) = config.timeout_ms {
         if let Some(start) = st.started_at {
             if start.elapsed() > Duration::from_millis(limit) {
-                return Err(FormulaError::RuntimeError(
-                    format!("Sandbox timeout exceeded ({} ms)", limit),
-                ));
+                return Err(FormulaError::RuntimeError(format!(
+                    "Sandbox timeout exceeded ({} ms)",
+                    limit
+                )));
             }
         }
     }
@@ -115,9 +116,10 @@ fn sandbox_push_depth(
     st.recursion_depth += 1;
     if let Some(max) = config.max_recursion_depth {
         if st.recursion_depth > max {
-            return Err(FormulaError::RuntimeError(
-                format!("Sandbox recursion depth exceeded (max {})", max),
-            ));
+            return Err(FormulaError::RuntimeError(format!(
+                "Sandbox recursion depth exceeded (max {})",
+                max
+            )));
         }
     }
 
@@ -148,12 +150,10 @@ pub fn sandbox_track_bytes(
     st.bytes_tracked += bytes;
     if let Some(max) = config.max_memory_bytes {
         if st.bytes_tracked > max {
-            return Err(FormulaError::RuntimeError(
-                format!(
-                    "Sandbox memory limit exceeded ({} bytes > {} bytes)",
-                    st.bytes_tracked, max
-                ),
-            ));
+            return Err(FormulaError::RuntimeError(format!(
+                "Sandbox memory limit exceeded ({} bytes > {} bytes)",
+                st.bytes_tracked, max
+            )));
         }
     }
     Ok(())

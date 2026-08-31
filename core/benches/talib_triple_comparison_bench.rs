@@ -1,8 +1,8 @@
 use criterion::{black_box, criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
-use ndarray::Array1;
 use finkit::formula::{FormulaContext, FormulaEngine};
 use finkit::indicators;
 use finkit::math::moving_avg;
+use ndarray::Array1;
 
 #[allow(clippy::type_complexity)]
 fn create_ohlcv_data(len: usize) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
@@ -69,16 +69,21 @@ fn bench_sma(c: &mut Criterion) {
             )
         });
 
-        g.bench_with_input(BenchmarkId::new("formula_zero_alloc", size), &size, |b, _| {
-            let mut engine = FormulaEngine::new();
-            b.iter_batched(
-                || create_ctx(size),
-                |mut ctx| {
-                    let _ = black_box(engine.eval_zero_alloc("MA(CLOSE, 20)", &mut ctx).unwrap());
-                },
-                BatchSize::SmallInput,
-            )
-        });
+        g.bench_with_input(
+            BenchmarkId::new("formula_zero_alloc", size),
+            &size,
+            |b, _| {
+                let mut engine = FormulaEngine::new();
+                b.iter_batched(
+                    || create_ctx(size),
+                    |mut ctx| {
+                        let _ =
+                            black_box(engine.eval_zero_alloc("MA(CLOSE, 20)", &mut ctx).unwrap());
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
 
         g.finish();
     }
@@ -116,16 +121,21 @@ fn bench_ema(c: &mut Criterion) {
             )
         });
 
-        g.bench_with_input(BenchmarkId::new("formula_zero_alloc", size), &size, |b, _| {
-            let mut engine = FormulaEngine::new();
-            b.iter_batched(
-                || create_ctx(size),
-                |mut ctx| {
-                    let _ = black_box(engine.eval_zero_alloc("EMA(CLOSE, 12)", &mut ctx).unwrap());
-                },
-                BatchSize::SmallInput,
-            )
-        });
+        g.bench_with_input(
+            BenchmarkId::new("formula_zero_alloc", size),
+            &size,
+            |b, _| {
+                let mut engine = FormulaEngine::new();
+                b.iter_batched(
+                    || create_ctx(size),
+                    |mut ctx| {
+                        let _ =
+                            black_box(engine.eval_zero_alloc("EMA(CLOSE, 12)", &mut ctx).unwrap());
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
 
         g.finish();
     }
@@ -163,16 +173,21 @@ fn bench_wma(c: &mut Criterion) {
             )
         });
 
-        g.bench_with_input(BenchmarkId::new("formula_zero_alloc", size), &size, |b, _| {
-            let mut engine = FormulaEngine::new();
-            b.iter_batched(
-                || create_ctx(size),
-                |mut ctx| {
-                    let _ = black_box(engine.eval_zero_alloc("WMA(CLOSE, 20)", &mut ctx).unwrap());
-                },
-                BatchSize::SmallInput,
-            )
-        });
+        g.bench_with_input(
+            BenchmarkId::new("formula_zero_alloc", size),
+            &size,
+            |b, _| {
+                let mut engine = FormulaEngine::new();
+                b.iter_batched(
+                    || create_ctx(size),
+                    |mut ctx| {
+                        let _ =
+                            black_box(engine.eval_zero_alloc("WMA(CLOSE, 20)", &mut ctx).unwrap());
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
 
         g.finish();
     }
@@ -210,16 +225,21 @@ fn bench_dema(c: &mut Criterion) {
             )
         });
 
-        g.bench_with_input(BenchmarkId::new("formula_zero_alloc", size), &size, |b, _| {
-            let mut engine = FormulaEngine::new();
-            b.iter_batched(
-                || create_ctx(size),
-                |mut ctx| {
-                    let _ = black_box(engine.eval_zero_alloc("DEMA(CLOSE, 10)", &mut ctx).unwrap());
-                },
-                BatchSize::SmallInput,
-            )
-        });
+        g.bench_with_input(
+            BenchmarkId::new("formula_zero_alloc", size),
+            &size,
+            |b, _| {
+                let mut engine = FormulaEngine::new();
+                b.iter_batched(
+                    || create_ctx(size),
+                    |mut ctx| {
+                        let _ =
+                            black_box(engine.eval_zero_alloc("DEMA(CLOSE, 10)", &mut ctx).unwrap());
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
 
         g.finish();
     }
@@ -257,16 +277,21 @@ fn bench_tema(c: &mut Criterion) {
             )
         });
 
-        g.bench_with_input(BenchmarkId::new("formula_zero_alloc", size), &size, |b, _| {
-            let mut engine = FormulaEngine::new();
-            b.iter_batched(
-                || create_ctx(size),
-                |mut ctx| {
-                    let _ = black_box(engine.eval_zero_alloc("TEMA(CLOSE, 10)", &mut ctx).unwrap());
-                },
-                BatchSize::SmallInput,
-            )
-        });
+        g.bench_with_input(
+            BenchmarkId::new("formula_zero_alloc", size),
+            &size,
+            |b, _| {
+                let mut engine = FormulaEngine::new();
+                b.iter_batched(
+                    || create_ctx(size),
+                    |mut ctx| {
+                        let _ =
+                            black_box(engine.eval_zero_alloc("TEMA(CLOSE, 10)", &mut ctx).unwrap());
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
 
         g.finish();
     }
@@ -304,16 +329,21 @@ fn bench_kama(c: &mut Criterion) {
             )
         });
 
-        g.bench_with_input(BenchmarkId::new("formula_zero_alloc", size), &size, |b, _| {
-            let mut engine = FormulaEngine::new();
-            b.iter_batched(
-                || create_ctx(size),
-                |mut ctx| {
-                    let _ = black_box(engine.eval_zero_alloc("KAMA(CLOSE, 10)", &mut ctx).unwrap());
-                },
-                BatchSize::SmallInput,
-            )
-        });
+        g.bench_with_input(
+            BenchmarkId::new("formula_zero_alloc", size),
+            &size,
+            |b, _| {
+                let mut engine = FormulaEngine::new();
+                b.iter_batched(
+                    || create_ctx(size),
+                    |mut ctx| {
+                        let _ =
+                            black_box(engine.eval_zero_alloc("KAMA(CLOSE, 10)", &mut ctx).unwrap());
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
 
         g.finish();
     }
@@ -351,16 +381,21 @@ fn bench_rsi(c: &mut Criterion) {
             )
         });
 
-        g.bench_with_input(BenchmarkId::new("formula_zero_alloc", size), &size, |b, _| {
-            let mut engine = FormulaEngine::new();
-            b.iter_batched(
-                || create_ctx(size),
-                |mut ctx| {
-                    let _ = black_box(engine.eval_zero_alloc("RSI(CLOSE, 14)", &mut ctx).unwrap());
-                },
-                BatchSize::SmallInput,
-            )
-        });
+        g.bench_with_input(
+            BenchmarkId::new("formula_zero_alloc", size),
+            &size,
+            |b, _| {
+                let mut engine = FormulaEngine::new();
+                b.iter_batched(
+                    || create_ctx(size),
+                    |mut ctx| {
+                        let _ =
+                            black_box(engine.eval_zero_alloc("RSI(CLOSE, 14)", &mut ctx).unwrap());
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
 
         g.finish();
     }
@@ -398,16 +433,21 @@ fn bench_macd(c: &mut Criterion) {
             )
         });
 
-        g.bench_with_input(BenchmarkId::new("formula_zero_alloc", size), &size, |b, _| {
-            let mut engine = FormulaEngine::new();
-            b.iter_batched(
-                || create_ctx(size),
-                |mut ctx| {
-                    let _ = black_box(engine.eval_zero_alloc("MACD(C,12,26)", &mut ctx).unwrap());
-                },
-                BatchSize::SmallInput,
-            )
-        });
+        g.bench_with_input(
+            BenchmarkId::new("formula_zero_alloc", size),
+            &size,
+            |b, _| {
+                let mut engine = FormulaEngine::new();
+                b.iter_batched(
+                    || create_ctx(size),
+                    |mut ctx| {
+                        let _ =
+                            black_box(engine.eval_zero_alloc("MACD(C,12,26)", &mut ctx).unwrap());
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
 
         g.finish();
     }
@@ -444,16 +484,21 @@ fn bench_cci(c: &mut Criterion) {
             )
         });
 
-        g.bench_with_input(BenchmarkId::new("formula_zero_alloc", size), &size, |b, _| {
-            let mut engine = FormulaEngine::new();
-            b.iter_batched(
-                || create_ctx(size),
-                |mut ctx| {
-                    let _ = black_box(engine.eval_zero_alloc("CCI(H,L,C,14)", &mut ctx).unwrap());
-                },
-                BatchSize::SmallInput,
-            )
-        });
+        g.bench_with_input(
+            BenchmarkId::new("formula_zero_alloc", size),
+            &size,
+            |b, _| {
+                let mut engine = FormulaEngine::new();
+                b.iter_batched(
+                    || create_ctx(size),
+                    |mut ctx| {
+                        let _ =
+                            black_box(engine.eval_zero_alloc("CCI(H,L,C,14)", &mut ctx).unwrap());
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
 
         g.finish();
     }
@@ -490,16 +535,21 @@ fn bench_adx(c: &mut Criterion) {
             )
         });
 
-        g.bench_with_input(BenchmarkId::new("formula_zero_alloc", size), &size, |b, _| {
-            let mut engine = FormulaEngine::new();
-            b.iter_batched(
-                || create_ctx(size),
-                |mut ctx| {
-                    let _ = black_box(engine.eval_zero_alloc("ADX(H,L,C,14)", &mut ctx).unwrap());
-                },
-                BatchSize::SmallInput,
-            )
-        });
+        g.bench_with_input(
+            BenchmarkId::new("formula_zero_alloc", size),
+            &size,
+            |b, _| {
+                let mut engine = FormulaEngine::new();
+                b.iter_batched(
+                    || create_ctx(size),
+                    |mut ctx| {
+                        let _ =
+                            black_box(engine.eval_zero_alloc("ADX(H,L,C,14)", &mut ctx).unwrap());
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
 
         g.finish();
     }
@@ -536,16 +586,24 @@ fn bench_atr(c: &mut Criterion) {
             )
         });
 
-        g.bench_with_input(BenchmarkId::new("formula_zero_alloc", size), &size, |b, _| {
-            let mut engine = FormulaEngine::new();
-            b.iter_batched(
-                || create_ctx(size),
-                |mut ctx| {
-                    let _ = black_box(engine.eval_zero_alloc("ATR_ENHANCED(H,L,C,14)", &mut ctx).unwrap());
-                },
-                BatchSize::SmallInput,
-            )
-        });
+        g.bench_with_input(
+            BenchmarkId::new("formula_zero_alloc", size),
+            &size,
+            |b, _| {
+                let mut engine = FormulaEngine::new();
+                b.iter_batched(
+                    || create_ctx(size),
+                    |mut ctx| {
+                        let _ = black_box(
+                            engine
+                                .eval_zero_alloc("ATR_ENHANCED(H,L,C,14)", &mut ctx)
+                                .unwrap(),
+                        );
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
 
         g.finish();
     }
@@ -583,16 +641,21 @@ fn bench_bbands(c: &mut Criterion) {
             )
         });
 
-        g.bench_with_input(BenchmarkId::new("formula_zero_alloc", size), &size, |b, _| {
-            let mut engine = FormulaEngine::new();
-            b.iter_batched(
-                || create_ctx(size),
-                |mut ctx| {
-                    let _ = black_box(engine.eval_zero_alloc("BOLL(C,20,2)", &mut ctx).unwrap());
-                },
-                BatchSize::SmallInput,
-            )
-        });
+        g.bench_with_input(
+            BenchmarkId::new("formula_zero_alloc", size),
+            &size,
+            |b, _| {
+                let mut engine = FormulaEngine::new();
+                b.iter_batched(
+                    || create_ctx(size),
+                    |mut ctx| {
+                        let _ =
+                            black_box(engine.eval_zero_alloc("BOLL(C,20,2)", &mut ctx).unwrap());
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
 
         g.finish();
     }
@@ -629,16 +692,24 @@ fn bench_stoch(c: &mut Criterion) {
             )
         });
 
-        g.bench_with_input(BenchmarkId::new("formula_zero_alloc", size), &size, |b, _| {
-            let mut engine = FormulaEngine::new();
-            b.iter_batched(
-                || create_ctx(size),
-                |mut ctx| {
-                    let _ = black_box(engine.eval_zero_alloc("STOCH(H,L,C,14,3,3)", &mut ctx).unwrap());
-                },
-                BatchSize::SmallInput,
-            )
-        });
+        g.bench_with_input(
+            BenchmarkId::new("formula_zero_alloc", size),
+            &size,
+            |b, _| {
+                let mut engine = FormulaEngine::new();
+                b.iter_batched(
+                    || create_ctx(size),
+                    |mut ctx| {
+                        let _ = black_box(
+                            engine
+                                .eval_zero_alloc("STOCH(H,L,C,14,3,3)", &mut ctx)
+                                .unwrap(),
+                        );
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
 
         g.finish();
     }
@@ -675,16 +746,21 @@ fn bench_willr(c: &mut Criterion) {
             )
         });
 
-        g.bench_with_input(BenchmarkId::new("formula_zero_alloc", size), &size, |b, _| {
-            let mut engine = FormulaEngine::new();
-            b.iter_batched(
-                || create_ctx(size),
-                |mut ctx| {
-                    let _ = black_box(engine.eval_zero_alloc("WILLR(H,L,C,14)", &mut ctx).unwrap());
-                },
-                BatchSize::SmallInput,
-            )
-        });
+        g.bench_with_input(
+            BenchmarkId::new("formula_zero_alloc", size),
+            &size,
+            |b, _| {
+                let mut engine = FormulaEngine::new();
+                b.iter_batched(
+                    || create_ctx(size),
+                    |mut ctx| {
+                        let _ =
+                            black_box(engine.eval_zero_alloc("WILLR(H,L,C,14)", &mut ctx).unwrap());
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
 
         g.finish();
     }
@@ -722,16 +798,21 @@ fn bench_roc(c: &mut Criterion) {
             )
         });
 
-        g.bench_with_input(BenchmarkId::new("formula_zero_alloc", size), &size, |b, _| {
-            let mut engine = FormulaEngine::new();
-            b.iter_batched(
-                || create_ctx(size),
-                |mut ctx| {
-                    let _ = black_box(engine.eval_zero_alloc("ROC(CLOSE, 10)", &mut ctx).unwrap());
-                },
-                BatchSize::SmallInput,
-            )
-        });
+        g.bench_with_input(
+            BenchmarkId::new("formula_zero_alloc", size),
+            &size,
+            |b, _| {
+                let mut engine = FormulaEngine::new();
+                b.iter_batched(
+                    || create_ctx(size),
+                    |mut ctx| {
+                        let _ =
+                            black_box(engine.eval_zero_alloc("ROC(CLOSE, 10)", &mut ctx).unwrap());
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
 
         g.finish();
     }
@@ -769,16 +850,21 @@ fn bench_mom(c: &mut Criterion) {
             )
         });
 
-        g.bench_with_input(BenchmarkId::new("formula_zero_alloc", size), &size, |b, _| {
-            let mut engine = FormulaEngine::new();
-            b.iter_batched(
-                || create_ctx(size),
-                |mut ctx| {
-                    let _ = black_box(engine.eval_zero_alloc("MOM(CLOSE, 10)", &mut ctx).unwrap());
-                },
-                BatchSize::SmallInput,
-            )
-        });
+        g.bench_with_input(
+            BenchmarkId::new("formula_zero_alloc", size),
+            &size,
+            |b, _| {
+                let mut engine = FormulaEngine::new();
+                b.iter_batched(
+                    || create_ctx(size),
+                    |mut ctx| {
+                        let _ =
+                            black_box(engine.eval_zero_alloc("MOM(CLOSE, 10)", &mut ctx).unwrap());
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
 
         g.finish();
     }
@@ -816,16 +902,21 @@ fn bench_stddev(c: &mut Criterion) {
             )
         });
 
-        g.bench_with_input(BenchmarkId::new("formula_zero_alloc", size), &size, |b, _| {
-            let mut engine = FormulaEngine::new();
-            b.iter_batched(
-                || create_ctx(size),
-                |mut ctx| {
-                    let _ = black_box(engine.eval_zero_alloc("STD(CLOSE, 20)", &mut ctx).unwrap());
-                },
-                BatchSize::SmallInput,
-            )
-        });
+        g.bench_with_input(
+            BenchmarkId::new("formula_zero_alloc", size),
+            &size,
+            |b, _| {
+                let mut engine = FormulaEngine::new();
+                b.iter_batched(
+                    || create_ctx(size),
+                    |mut ctx| {
+                        let _ =
+                            black_box(engine.eval_zero_alloc("STD(CLOSE, 20)", &mut ctx).unwrap());
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
 
         g.finish();
     }
@@ -863,16 +954,24 @@ fn bench_linear_reg(c: &mut Criterion) {
             )
         });
 
-        g.bench_with_input(BenchmarkId::new("formula_zero_alloc", size), &size, |b, _| {
-            let mut engine = FormulaEngine::new();
-            b.iter_batched(
-                || create_ctx(size),
-                |mut ctx| {
-                    let _ = black_box(engine.eval_zero_alloc("LINEARREG(CLOSE, 14)", &mut ctx).unwrap());
-                },
-                BatchSize::SmallInput,
-            )
-        });
+        g.bench_with_input(
+            BenchmarkId::new("formula_zero_alloc", size),
+            &size,
+            |b, _| {
+                let mut engine = FormulaEngine::new();
+                b.iter_batched(
+                    || create_ctx(size),
+                    |mut ctx| {
+                        let _ = black_box(
+                            engine
+                                .eval_zero_alloc("LINEARREG(CLOSE, 14)", &mut ctx)
+                                .unwrap(),
+                        );
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
 
         g.finish();
     }
@@ -910,16 +1009,21 @@ fn bench_trix(c: &mut Criterion) {
             )
         });
 
-        g.bench_with_input(BenchmarkId::new("formula_zero_alloc", size), &size, |b, _| {
-            let mut engine = FormulaEngine::new();
-            b.iter_batched(
-                || create_ctx(size),
-                |mut ctx| {
-                    let _ = black_box(engine.eval_zero_alloc("TRIX(CLOSE, 14)", &mut ctx).unwrap());
-                },
-                BatchSize::SmallInput,
-            )
-        });
+        g.bench_with_input(
+            BenchmarkId::new("formula_zero_alloc", size),
+            &size,
+            |b, _| {
+                let mut engine = FormulaEngine::new();
+                b.iter_batched(
+                    || create_ctx(size),
+                    |mut ctx| {
+                        let _ =
+                            black_box(engine.eval_zero_alloc("TRIX(CLOSE, 14)", &mut ctx).unwrap());
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
 
         g.finish();
     }

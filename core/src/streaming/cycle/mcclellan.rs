@@ -1,6 +1,6 @@
+use crate::impl_standard_methods;
 use crate::streaming::overlap::ema::StreamingEma;
 use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
-use crate::impl_standard_methods;
 
 /// Streaming McClellan Oscillator.
 ///
@@ -69,10 +69,18 @@ impl StreamingIndicator for StreamingMcClellanOscillator {
 }
 
 impl IndicatorMeta for StreamingMcClellanOscillator {
-    fn name() -> &'static str { "MCCLELLAN_OSCILLATOR" }
-    fn category() -> &'static str { "breadth" }
-    fn description() -> &'static str { "McClellan Oscillator" }
-    fn warm_up_period(&self) -> usize { self.long_period }
+    fn name() -> &'static str {
+        "MCCLELLAN_OSCILLATOR"
+    }
+    fn category() -> &'static str {
+        "breadth"
+    }
+    fn description() -> &'static str {
+        "McClellan Oscillator"
+    }
+    fn warm_up_period(&self) -> usize {
+        self.long_period
+    }
 }
 
 #[cfg(test)]

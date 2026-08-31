@@ -46,18 +46,9 @@ fn main() {
     let skew = rolling_skewness(&close, 20);
     let kurt = rolling_kurtosis(&close, 20);
     let ent = rolling_entropy(&close, 20, 10);
-    matrix.add_column(
-        Feature::new("skewness_20", "statistics", 20),
-        skew.to_vec(),
-    );
-    matrix.add_column(
-        Feature::new("kurtosis_20", "statistics", 20),
-        kurt.to_vec(),
-    );
-    matrix.add_column(
-        Feature::new("entropy_20", "statistics", 20),
-        ent.to_vec(),
-    );
+    matrix.add_column(Feature::new("skewness_20", "statistics", 20), skew.to_vec());
+    matrix.add_column(Feature::new("kurtosis_20", "statistics", 20), kurt.to_vec());
+    matrix.add_column(Feature::new("entropy_20", "statistics", 20), ent.to_vec());
     println!("   Added 3 statistical features");
 
     // 3. Normalization
@@ -88,12 +79,8 @@ fn main() {
 
     // 5. Signal detection
     println!("5. Detecting signals...");
-    let sma5: Vec<f64> = finkit::indicators::sma(&close, 5)
-        .unwrap()
-        .to_vec();
-    let sma20: Vec<f64> = finkit::indicators::sma(&close, 20)
-        .unwrap()
-        .to_vec();
+    let sma5: Vec<f64> = finkit::indicators::sma(&close, 5).unwrap().to_vec();
+    let sma20: Vec<f64> = finkit::indicators::sma(&close, 20).unwrap().to_vec();
     let crossovers = crossover(&sma5, &sma20);
     let crossunders = crossunder(&sma5, &sma20);
     println!(
@@ -126,8 +113,14 @@ fn main() {
     println!("7. Computing feature combinations...");
     let ratio = feature_ratio(&sma5, &sma20);
     let spread = feature_spread(&sma5, &sma20);
-    matrix.add_column(Feature::new("sma5_20_ratio", "combination", 0), ratio.to_vec());
-    matrix.add_column(Feature::new("sma5_20_spread", "combination", 0), spread.to_vec());
+    matrix.add_column(
+        Feature::new("sma5_20_ratio", "combination", 0),
+        ratio.to_vec(),
+    );
+    matrix.add_column(
+        Feature::new("sma5_20_spread", "combination", 0),
+        spread.to_vec(),
+    );
     println!("   Added 2 combination features");
 
     // Summary

@@ -10,7 +10,9 @@ pub struct StreamingObv {
 }
 
 impl Default for StreamingObv {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl StreamingObv {
@@ -26,7 +28,10 @@ impl StreamingObv {
 
 impl StreamingIndicator<&dyn Ohlcv> for StreamingObv {
     #[inline]
-    #[cfg_attr(feature = "tracing", tracing::instrument(level = "trace", skip(self, bar)))]
+    #[cfg_attr(
+        feature = "tracing",
+        tracing::instrument(level = "trace", skip(self, bar))
+    )]
     fn next(&mut self, bar: &dyn Ohlcv) -> Option<f64> {
         crate::streaming_measure!("obv", self.count, {
             self.count += 1;
@@ -59,15 +64,25 @@ impl StreamingIndicator<&dyn Ohlcv> for StreamingObv {
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { self.count >= 1 }
+    fn is_ready(&self) -> bool {
+        self.count >= 1
+    }
     impl_standard_methods!();
 }
 
 impl crate::streaming::IndicatorMeta for StreamingObv {
-    fn name() -> &'static str { "OBV" }
-    fn category() -> &'static str { "volume" }
-    fn description() -> &'static str { "On Balance Volume" }
-    fn warm_up_period(&self) -> usize { 1 }
+    fn name() -> &'static str {
+        "OBV"
+    }
+    fn category() -> &'static str {
+        "volume"
+    }
+    fn description() -> &'static str {
+        "On Balance Volume"
+    }
+    fn warm_up_period(&self) -> usize {
+        1
+    }
 }
 
 #[cfg(test)]
@@ -79,11 +94,17 @@ mod tests {
     #[test]
     fn test_streaming_obv_basic() {
         let mut obv = StreamingObv::new();
-        let v1 = obv.next(&OhlcvBar::new(10.0, 12.0, 9.0, 11.0, 100.0)).unwrap();
+        let v1 = obv
+            .next(&OhlcvBar::new(10.0, 12.0, 9.0, 11.0, 100.0))
+            .unwrap();
         assert!((v1 - 100.0).abs() < 1e-10);
-        let v2 = obv.next(&OhlcvBar::new(11.0, 13.0, 10.0, 12.0, 150.0)).unwrap();
+        let v2 = obv
+            .next(&OhlcvBar::new(11.0, 13.0, 10.0, 12.0, 150.0))
+            .unwrap();
         assert!((v2 - 250.0).abs() < 1e-10);
-        let v3 = obv.next(&OhlcvBar::new(12.0, 14.0, 11.0, 10.0, 200.0)).unwrap();
+        let v3 = obv
+            .next(&OhlcvBar::new(12.0, 14.0, 11.0, 10.0, 200.0))
+            .unwrap();
         assert!((v3 - 50.0).abs() < 1e-10);
     }
 

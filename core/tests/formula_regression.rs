@@ -6,9 +6,9 @@
 //! - D-5：Bytecode vs JIT vs SIMD 执行路径 profiling
 //! - D-6：回归基线快照（输出指纹校验）
 
-use ndarray::Array1;
 use finkit::formula::engine::FormulaEngine;
 use finkit::formula::FormulaContext;
+use ndarray::Array1;
 use std::time::Instant;
 
 /// 构造一个 1000 根 K 线的真实形态数据集（带趋势 + 噪声 + 周期）。
@@ -22,10 +22,24 @@ fn make_realistic_context(len: usize) -> FormulaContext {
             trend + cycle + noise
         })
         .collect();
-    let open: Vec<f64> = close.iter().enumerate().map(|(i, c)| c - 0.2 + ((i as f64 * 0.13).sin() * 0.4)).collect();
-    let high: Vec<f64> = close.iter().enumerate().map(|(i, c)| c + 0.5 + ((i as f64 * 0.21).sin() * 0.3).abs()).collect();
-    let low: Vec<f64> = close.iter().enumerate().map(|(i, c)| c - 0.5 - ((i as f64 * 0.27).sin() * 0.3).abs()).collect();
-    let volume: Vec<f64> = (0..len).map(|i| 1_000_000.0 + (i as f64 * 0.5).sin() * 200_000.0).collect();
+    let open: Vec<f64> = close
+        .iter()
+        .enumerate()
+        .map(|(i, c)| c - 0.2 + ((i as f64 * 0.13).sin() * 0.4))
+        .collect();
+    let high: Vec<f64> = close
+        .iter()
+        .enumerate()
+        .map(|(i, c)| c + 0.5 + ((i as f64 * 0.21).sin() * 0.3).abs())
+        .collect();
+    let low: Vec<f64> = close
+        .iter()
+        .enumerate()
+        .map(|(i, c)| c - 0.5 - ((i as f64 * 0.27).sin() * 0.3).abs())
+        .collect();
+    let volume: Vec<f64> = (0..len)
+        .map(|i| 1_000_000.0 + (i as f64 * 0.5).sin() * 200_000.0)
+        .collect();
     FormulaContext::new(
         Array1::from_vec(open),
         Array1::from_vec(high),
@@ -49,7 +63,9 @@ mod compat_regression {
         // MA
         let ma5 = engine.eval("MA(CLOSE,5)", &mut ctx).unwrap();
         assert_eq!(ma5.len(), 500);
-        for i in 0..4 { assert!(ma5[i].is_nan(), "MA5 should be NaN during warmup at i={i}"); }
+        for i in 0..4 {
+            assert!(ma5[i].is_nan(), "MA5 should be NaN during warmup at i={i}");
+        }
         // EMA
         let ema20 = engine.eval("EMA(CLOSE,20)", &mut ctx).unwrap();
         assert_eq!(ema20.len(), 500);
@@ -69,7 +85,10 @@ mod compat_regression {
         let mut ctx = make_realistic_context(300);
         let close1 = engine.eval("CLOSE1", &mut ctx).unwrap();
         for i in 1..300 {
-            assert!((close1[i] - ctx.close[i - 1]).abs() < 1e-10, "CLOSE1 mismatch at i={i}");
+            assert!(
+                (close1[i] - ctx.close[i - 1]).abs() < 1e-10,
+                "CLOSE1 mismatch at i={i}"
+            );
         }
         assert!(close1[0].is_nan());
         // 同花顺风格的多 alias 复合
@@ -77,7 +96,10 @@ mod compat_regression {
         let spread = engine.eval(expr, &mut ctx).unwrap();
         for i in 1..300 {
             let expected = (ctx.high[i - 1] - ctx.low[i - 1]) / ctx.close[i] * 100.0;
-            assert!((spread[i] - expected).abs() < 1e-9, "spread mismatch at i={i}");
+            assert!(
+                (spread[i] - expected).abs() < 1e-9,
+                "spread mismatch at i={i}"
+            );
         }
     }
 
@@ -94,10 +116,15 @@ mod compat_regression {
         // REF 取 N 期前的值
         let ref5 = engine.eval("REF(CLOSE,5)", &mut ctx).unwrap();
         for i in 5..200 {
-            assert!((ref5[i] - ctx.close[i - 5]).abs() < 1e-10, "REF(CLOSE,5) mismatch at i={i}");
+            assert!(
+                (ref5[i] - ctx.close[i - 5]).abs() < 1e-10,
+                "REF(CLOSE,5) mismatch at i={i}"
+            );
         }
         // BETWEEN
-        let between = engine.eval("BETWEEN(CLOSE, MA(CLOSE,20), MA(CLOSE,5))", &mut ctx).unwrap();
+        let between = engine
+            .eval("BETWEEN(CLOSE, MA(CLOSE,20), MA(CLOSE,5))", &mut ctx)
+            .unwrap();
         for v in between.iter() {
             assert!(v.is_finite() || v.is_nan());
         }
@@ -116,9 +143,16 @@ mod fuzzy {
         for seed in 0u32..50 {
             let len = 50 + (seed as usize % 200);
             let close: Vec<f64> = (0..len)
-                .map(|i| 50.0 + (i as f64 * (0.1 + seed as f64 * 0.013).sin() * 10.0) + (i as f64 * 0.7).cos() * 3.0)
+                .map(|i| {
+                    50.0 + (i as f64 * (0.1 + seed as f64 * 0.013).sin() * 10.0)
+                        + (i as f64 * 0.7).cos() * 3.0
+                })
                 .collect();
-            let open: Vec<f64> = close.iter().enumerate().map(|(i, c)| c + (i as f64 * 0.5).sin()).collect();
+            let open: Vec<f64> = close
+                .iter()
+                .enumerate()
+                .map(|(i, c)| c + (i as f64 * 0.5).sin())
+                .collect();
             let high: Vec<f64> = close.iter().map(|c| c + 2.0).collect();
             let low: Vec<f64> = close.iter().map(|c| c - 2.0).collect();
             let volume: Vec<f64> = (0..len).map(|i| 1_000_000.0 + i as f64 * 1000.0).collect();
@@ -158,8 +192,18 @@ mod fuzzy {
         close[50] = f64::INFINITY;
         let ctx = FormulaContext::new(
             Array1::from_vec(close.clone()),
-            Array1::from_vec(close.iter().map(|v| if v.is_nan() { 101.0 } else { *v + 1.0 }).collect()),
-            Array1::from_vec(close.iter().map(|v| if v.is_nan() { 99.0 } else { *v - 1.0 }).collect()),
+            Array1::from_vec(
+                close
+                    .iter()
+                    .map(|v| if v.is_nan() { 101.0 } else { *v + 1.0 })
+                    .collect(),
+            ),
+            Array1::from_vec(
+                close
+                    .iter()
+                    .map(|v| if v.is_nan() { 99.0 } else { *v - 1.0 })
+                    .collect(),
+            ),
             Array1::from_vec(close),
             Array1::from_vec(vec![1_000_000.0; len]),
             None,
@@ -182,7 +226,7 @@ mod fuzzy {
             "",
             "MA(CLOSE,",       // 缺右括号
             "MA CLOSE, 5 )",   // 缺左括号
-            "INVALID_FUNC(1)",  // 未知函数
+            "INVALID_FUNC(1)", // 未知函数
             "CLOSE + + + 1",   // 表达式无效
             "MA(CLOSE,-1)",    // 负参数
         ];
@@ -237,7 +281,10 @@ mod performance {
             t_eval, t_bc, t_jit
         );
         // 性能 sanity：单次 10K K 线的 MA 应 < 200ms（宽限）
-        assert!(t_eval < Duration::from_millis(500), "eval too slow: {t_eval:?}");
+        assert!(
+            t_eval < Duration::from_millis(500),
+            "eval too slow: {t_eval:?}"
+        );
     }
 
     /// profiling：复合公式 (多指标嵌套)
@@ -262,7 +309,10 @@ mod performance {
             let b = bc_arr[i];
             if a.is_finite() && b.is_finite() {
                 let rel = (a - b).abs() / (a.abs().max(1.0));
-                assert!(rel < 1e-5, "complex eval vs bytecode diverged at i={i}: {a} vs {b}");
+                assert!(
+                    rel < 1e-5,
+                    "complex eval vs bytecode diverged at i={i}: {a} vs {b}"
+                );
             }
         }
         eprintln!(
@@ -285,7 +335,11 @@ mod baseline {
         let mut hash: u64 = 0xcbf29ce484222325;
         const PRIME: u64 = 0x100000001b3;
         for v in arr.iter() {
-            let bits = if v.is_nan() { 0x7ff8_0000_0000_0000u64 } else { v.to_bits() };
+            let bits = if v.is_nan() {
+                0x7ff8_0000_0000_0000u64
+            } else {
+                v.to_bits()
+            };
             for byte in bits.to_le_bytes() {
                 hash ^= byte as u64;
                 hash = hash.wrapping_mul(PRIME);

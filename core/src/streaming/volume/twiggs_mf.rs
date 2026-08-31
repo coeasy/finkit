@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 
 /// Streaming Twiggs Money Flow.
 ///
@@ -118,7 +118,9 @@ mod tests {
         let high: Vec<f64> = (0..n).map(|i| 105.0 + i as f64 * 0.5).collect();
         let low: Vec<f64> = (0..n).map(|i| 95.0 + i as f64 * 0.5).collect();
         let close: Vec<f64> = (0..n).map(|i| 100.0 + i as f64 * 0.5).collect();
-        let volume: Vec<f64> = (0..n).map(|i| 1000.0 + (i as f64 * 0.7).sin() * 200.0).collect();
+        let volume: Vec<f64> = (0..n)
+            .map(|i| 1000.0 + (i as f64 * 0.7).sin() * 200.0)
+            .collect();
 
         let mut results = Vec::new();
         for i in 0..n {
@@ -157,16 +159,23 @@ mod tests {
     #[test]
     fn test_streaming_vs_batch_convergence() {
         let n = 40;
-        let high: Vec<f64> = (0..n).map(|i| 105.0 + (i as f64 * 0.2).sin() * 3.0).collect();
-        let low: Vec<f64> = (0..n).map(|i| 95.0 + (i as f64 * 0.2).sin() * 3.0).collect();
-        let close: Vec<f64> = (0..n).map(|i| 100.0 + (i as f64 * 0.2).sin() * 3.0).collect();
-        let volume: Vec<f64> = (0..n).map(|i| 1000.0 + (i as f64 * 0.5).cos() * 200.0).collect();
+        let high: Vec<f64> = (0..n)
+            .map(|i| 105.0 + (i as f64 * 0.2).sin() * 3.0)
+            .collect();
+        let low: Vec<f64> = (0..n)
+            .map(|i| 95.0 + (i as f64 * 0.2).sin() * 3.0)
+            .collect();
+        let close: Vec<f64> = (0..n)
+            .map(|i| 100.0 + (i as f64 * 0.2).sin() * 3.0)
+            .collect();
+        let volume: Vec<f64> = (0..n)
+            .map(|i| 1000.0 + (i as f64 * 0.5).cos() * 200.0)
+            .collect();
         let period = 14;
 
-        let batch = crate::indicators::volume_ext::twiggs_money_flow(
-            &high, &low, &close, &volume, period,
-        )
-        .unwrap();
+        let batch =
+            crate::indicators::volume_ext::twiggs_money_flow(&high, &low, &close, &volume, period)
+                .unwrap();
 
         let mut streaming = StreamingTwiggsMf::new(period);
         for i in 0..n {

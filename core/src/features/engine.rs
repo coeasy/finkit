@@ -1,6 +1,6 @@
 //! Feature engine trait and FeatureSet container.
 
-use super::{FeatureMatrix};
+use super::FeatureMatrix;
 
 /// Trait for feature generators that produce one or more columns from input data.
 pub trait FeatureEngine: Send + Sync {
@@ -34,7 +34,9 @@ pub struct FeatureSet {
 impl FeatureSet {
     /// Create a new empty feature set.
     pub fn new() -> Self {
-        Self { engines: Vec::new() }
+        Self {
+            engines: Vec::new(),
+        }
     }
 
     /// Add a feature engine.
@@ -65,8 +67,9 @@ impl FeatureSet {
         hours: Vec<u8>,
         period: f64,
     ) -> &mut Self {
-        self.engines
-            .push(Box::new(super::TimeFeatureEngine::new(timestamps, hours, period)));
+        self.engines.push(Box::new(super::TimeFeatureEngine::new(
+            timestamps, hours, period,
+        )));
         self
     }
 
@@ -105,7 +108,8 @@ impl FeatureSet {
         #[cfg(feature = "rayon")]
         {
             use rayon::prelude::*;
-            let matrices: Vec<FeatureMatrix> = self.engines
+            let matrices: Vec<FeatureMatrix> = self
+                .engines
                 .par_iter()
                 .map(|engine| engine.generate_ohlcv(open, high, low, close, volume))
                 .collect();
@@ -128,7 +132,10 @@ impl FeatureSet {
 
     /// Get all feature names that will be produced.
     pub fn feature_names(&self) -> Vec<String> {
-        self.engines.iter().flat_map(|e| e.feature_names()).collect()
+        self.engines
+            .iter()
+            .flat_map(|e| e.feature_names())
+            .collect()
     }
 }
 

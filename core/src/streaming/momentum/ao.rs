@@ -1,6 +1,6 @@
+use crate::impl_standard_methods;
 use crate::streaming::overlap::sma::StreamingSma;
 use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
-use crate::impl_standard_methods;
 use crate::streaming::Ohlcv;
 
 /// Streaming Awesome Oscillator (AO) —Bill Williams.
@@ -59,10 +59,18 @@ impl StreamingIndicator<&dyn Ohlcv, f64> for StreamingAo {
 }
 
 impl IndicatorMeta for StreamingAo {
-    fn name() -> &'static str { "AO" }
-    fn category() -> &'static str { "momentum" }
-    fn description() -> &'static str { "Awesome Oscillator" }
-    fn warm_up_period(&self) -> usize { self.fast_period.max(self.slow_period) }
+    fn name() -> &'static str {
+        "AO"
+    }
+    fn category() -> &'static str {
+        "momentum"
+    }
+    fn description() -> &'static str {
+        "Awesome Oscillator"
+    }
+    fn warm_up_period(&self) -> usize {
+        self.fast_period.max(self.slow_period)
+    }
 }
 
 #[cfg(test)]
@@ -124,7 +132,15 @@ mod tests {
             .collect();
         let low: Vec<f64> = high.iter().map(|h| h - 3.0).collect();
         let bars: Vec<OhlcvBar> = (0..n)
-            .map(|i| OhlcvBar::new(high[i] - 1.0, high[i], low[i], (high[i] + low[i]) / 2.0, 1000.0))
+            .map(|i| {
+                OhlcvBar::new(
+                    high[i] - 1.0,
+                    high[i],
+                    low[i],
+                    (high[i] + low[i]) / 2.0,
+                    1000.0,
+                )
+            })
             .collect();
 
         let fast = 5;

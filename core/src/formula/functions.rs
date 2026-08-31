@@ -27,7 +27,9 @@ fn ensure_args_len(name: &str, args: &[Array1<f64>], expected: usize) -> Result<
     if args.len() < expected {
         return Err(FormulaError::InvalidParameter(format!(
             "{} requires at least {} arguments, got {}",
-            name, expected, args.len()
+            name,
+            expected,
+            args.len()
         )));
     }
     Ok(())
@@ -504,36 +506,33 @@ fn fn_em_cross(_ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64
 
 fn fn_em_ref(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("EM_REF", args, 2)?;
-    let name = get_string_from_hash(ctx, args[0][0])
-        .ok_or_else(|| FormulaError::InvalidParameter(
-            "EM_REF: name must be a valid string".to_string(),
-        ))?;
+    let name = get_string_from_hash(ctx, args[0][0]).ok_or_else(|| {
+        FormulaError::InvalidParameter("EM_REF: name must be a valid string".to_string())
+    })?;
     let n = extract_n(args, 1, "EM_REF")?;
 
     let data_len = ctx.data_len;
     match &ctx.em_data {
-        Some(em) => {
-            match em.external_data.get(&name) {
-                Some(data) => {
-                    if data.len() != data_len {
-                        return Ok(nan_vec(data_len));
-                    }
-                    let mut result = Array1::zeros(data_len);
-                    for i in 0..data_len {
-                        if i >= n {
-                            result[i] = data[i - n];
-                        } else {
-                            result[i] = f64::NAN;
-                        }
-                    }
-                    Ok(result)
+        Some(em) => match em.external_data.get(&name) {
+            Some(data) => {
+                if data.len() != data_len {
+                    return Ok(nan_vec(data_len));
                 }
-                None => Err(FormulaError::RuntimeError(format!(
-                    "EM_REF: external data '{}' not found",
-                    name
-                ))),
+                let mut result = Array1::zeros(data_len);
+                for i in 0..data_len {
+                    if i >= n {
+                        result[i] = data[i - n];
+                    } else {
+                        result[i] = f64::NAN;
+                    }
+                }
+                Ok(result)
             }
-        }
+            None => Err(FormulaError::RuntimeError(format!(
+                "EM_REF: external data '{}' not found",
+                name
+            ))),
+        },
         None => Ok(nan_vec(data_len)),
     }
 }
@@ -613,7 +612,10 @@ fn fn_em_peak(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>,
     Ok(result)
 }
 
-fn fn_em_troughbars(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+fn fn_em_troughbars(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("EM_TROUGHBARS", args, 3)?;
     let _k = extract_f64_arg(args, 0, "EM_TROUGHBARS")?;
     let n = extract_f64_arg(args, 1, "EM_TROUGHBARS")?;
@@ -701,18 +703,16 @@ fn fn_em_costex(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64
 fn fn_em_zlccv(ctx: &FormulaContext, _args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let data_len = ctx.data_len;
     match &ctx.em_data {
-        Some(em) => {
-            match em.dkcol_data.get("ZLCCV") {
-                Some(data) => {
-                    if data.len() == data_len {
-                        Ok(data.clone())
-                    } else {
-                        Ok(nan_vec(data_len))
-                    }
+        Some(em) => match em.dkcol_data.get("ZLCCV") {
+            Some(data) => {
+                if data.len() == data_len {
+                    Ok(data.clone())
+                } else {
+                    Ok(nan_vec(data_len))
                 }
-                None => Ok(nan_vec(data_len)),
             }
-        }
+            None => Ok(nan_vec(data_len)),
+        },
         None => Ok(nan_vec(data_len)),
     }
 }
@@ -2521,13 +2521,7 @@ fn fn_cmf(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, For
     let close_values = close.as_slice().unwrap();
     let volume_values = volume.as_slice().unwrap();
 
-    match lib_cmf(
-        high_values,
-        low_values,
-        close_values,
-        volume_values,
-        n,
-    ) {
+    match lib_cmf(high_values, low_values, close_values, volume_values, n) {
         Ok(result) => Ok(result),
         Err(_) => Ok(nan_vec(data_len)),
     }
@@ -2549,7 +2543,10 @@ fn fn_fisher(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, 
     }
 }
 
-fn fn_fisher_signal(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+fn fn_fisher_signal(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("FISHER_SIGNAL", args, 3)?;
     let high = &args[0];
     let low = &args[1];
@@ -3071,8 +3068,10 @@ fn fn_dx(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, Form
     let (high, low, close, n) = resolve_hlc_args("DX", ctx, args)?;
     let data_len = ctx.data_len;
     match crate::indicators::momentum::dx(
-        high.as_slice().unwrap(), low.as_slice().unwrap(),
-        close.as_slice().unwrap(), n,
+        high.as_slice().unwrap(),
+        low.as_slice().unwrap(),
+        close.as_slice().unwrap(),
+        n,
     ) {
         Ok(r) => Ok(r),
         Err(_) => Ok(nan_vec(data_len)),
@@ -3083,8 +3082,10 @@ fn fn_plus_di(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>,
     let (high, low, close, n) = resolve_hlc_args("PLUS_DI", ctx, args)?;
     let data_len = ctx.data_len;
     match crate::indicators::momentum::plus_di(
-        high.as_slice().unwrap(), low.as_slice().unwrap(),
-        close.as_slice().unwrap(), n,
+        high.as_slice().unwrap(),
+        low.as_slice().unwrap(),
+        close.as_slice().unwrap(),
+        n,
     ) {
         Ok(r) => Ok(r),
         Err(_) => Ok(nan_vec(data_len)),
@@ -3095,8 +3096,10 @@ fn fn_minus_di(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
     let (high, low, close, n) = resolve_hlc_args("MINUS_DI", ctx, args)?;
     let data_len = ctx.data_len;
     match crate::indicators::momentum::minus_di(
-        high.as_slice().unwrap(), low.as_slice().unwrap(),
-        close.as_slice().unwrap(), n,
+        high.as_slice().unwrap(),
+        low.as_slice().unwrap(),
+        close.as_slice().unwrap(),
+        n,
     ) {
         Ok(r) => Ok(r),
         Err(_) => Ok(nan_vec(data_len)),
@@ -3107,8 +3110,10 @@ fn fn_adxr(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, Fo
     let (high, low, close, n) = resolve_hlc_args("ADXR", ctx, args)?;
     let data_len = ctx.data_len;
     match crate::indicators::momentum::adxr(
-        high.as_slice().unwrap(), low.as_slice().unwrap(),
-        close.as_slice().unwrap(), n,
+        high.as_slice().unwrap(),
+        low.as_slice().unwrap(),
+        close.as_slice().unwrap(),
+        n,
     ) {
         Ok(r) => Ok(r),
         Err(_) => Ok(nan_vec(data_len)),
@@ -3119,7 +3124,9 @@ fn fn_aroonosc(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
     let (high, low, n) = resolve_hl_args("AROONOSC", ctx, args)?;
     let data_len = ctx.data_len;
     match crate::indicators::momentum::aroonosc(
-        high.as_slice().unwrap(), low.as_slice().unwrap(), n,
+        high.as_slice().unwrap(),
+        low.as_slice().unwrap(),
+        n,
     ) {
         Ok(r) => Ok(r),
         Err(_) => Ok(nan_vec(data_len)),
@@ -3147,7 +3154,9 @@ fn fn_aroon_dn(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
 /// Resolve (HIGH, LOW, CLOSE, N) or (CLOSE, N) → auto-expand from context
 #[allow(clippy::type_complexity)]
 fn resolve_hlc_args<'a>(
-    name: &str, ctx: &'a FormulaContext, args: &'a [Array1<f64>],
+    name: &str,
+    ctx: &'a FormulaContext,
+    args: &'a [Array1<f64>],
 ) -> Result<(&'a Array1<f64>, &'a Array1<f64>, &'a Array1<f64>, usize), FormulaError> {
     if args.len() >= 4 {
         let n = extract_n(args, 3, name)?;
@@ -3165,7 +3174,9 @@ fn resolve_hlc_args<'a>(
 
 /// Resolve (HIGH, LOW, N) or (CLOSE, N) → auto-expand from context
 fn resolve_hl_args<'a>(
-    name: &str, ctx: &'a FormulaContext, args: &'a [Array1<f64>],
+    name: &str,
+    ctx: &'a FormulaContext,
+    args: &'a [Array1<f64>],
 ) -> Result<(&'a Array1<f64>, &'a Array1<f64>, usize), FormulaError> {
     if args.len() >= 3 {
         let n = extract_n(args, 2, name)?;
@@ -3257,7 +3268,9 @@ fn fn_ultosc(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, 
         high.as_slice().unwrap(),
         low.as_slice().unwrap(),
         close.as_slice().unwrap(),
-        p1, p2, p3,
+        p1,
+        p2,
+        p3,
     ) {
         Ok(r) => Ok(r),
         Err(_) => Ok(nan_vec(data_len)),
@@ -3266,7 +3279,9 @@ fn fn_ultosc(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, 
 
 /// Resolve (HIGH, LOW, CLOSE) for ULTOSC: either 3 args or auto-fill from context.
 fn resolve_hlc_for_ultosc<'a>(
-    name: &str, _ctx: &'a FormulaContext, args: &'a [Array1<f64>],
+    name: &str,
+    _ctx: &'a FormulaContext,
+    args: &'a [Array1<f64>],
 ) -> Result<(&'a Array1<f64>, &'a Array1<f64>, &'a Array1<f64>), FormulaError> {
     if args.len() >= 3 {
         Ok((&args[0], &args[1], &args[2]))
@@ -3281,10 +3296,7 @@ fn resolve_hlc_for_ultosc<'a>(
 fn fn_plus_dm(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let (high, low) = resolve_hl_for_dm("PLUS_DM", ctx, args)?;
     let data_len = ctx.data_len;
-    match lib_momentum::plus_dm(
-        high.as_slice().unwrap(),
-        low.as_slice().unwrap(),
-    ) {
+    match lib_momentum::plus_dm(high.as_slice().unwrap(), low.as_slice().unwrap()) {
         Ok(r) => Ok(r),
         Err(_) => Ok(nan_vec(data_len)),
     }
@@ -3293,17 +3305,16 @@ fn fn_plus_dm(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>,
 fn fn_minus_dm(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let (high, low) = resolve_hl_for_dm("MINUS_DM", ctx, args)?;
     let data_len = ctx.data_len;
-    match lib_momentum::minus_dm(
-        high.as_slice().unwrap(),
-        low.as_slice().unwrap(),
-    ) {
+    match lib_momentum::minus_dm(high.as_slice().unwrap(), low.as_slice().unwrap()) {
         Ok(r) => Ok(r),
         Err(_) => Ok(nan_vec(data_len)),
     }
 }
 
 fn resolve_hl_for_dm<'a>(
-    name: &str, _ctx: &'a FormulaContext, args: &'a [Array1<f64>],
+    name: &str,
+    _ctx: &'a FormulaContext,
+    args: &'a [Array1<f64>],
 ) -> Result<(&'a Array1<f64>, &'a Array1<f64>), FormulaError> {
     if args.len() >= 2 {
         Ok((&args[0], &args[1]))
@@ -3317,7 +3328,10 @@ fn resolve_hl_for_dm<'a>(
 
 // ======================== CYCLE INDICATORS (Hilbert Transform) ========================
 
-fn fn_ht_phasor_inner(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+fn fn_ht_phasor_inner(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("HT_PHASOR", args, 1)?;
     let data = args[0].as_slice().unwrap();
     let data_len = ctx.data_len;
@@ -3327,7 +3341,10 @@ fn fn_ht_phasor_inner(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Arra
     }
 }
 
-fn fn_ht_sine_inner(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+fn fn_ht_sine_inner(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("HT_SINE", args, 1)?;
     let data = args[0].as_slice().unwrap();
     let data_len = ctx.data_len;
@@ -3357,7 +3374,10 @@ fn fn_ht_dcphase(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f6
     }
 }
 
-fn fn_ht_trendmode(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+fn fn_ht_trendmode(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("HT_TRENDMODE", args, 1)?;
     let data = args[0].as_slice().unwrap();
     let data_len = ctx.data_len;
@@ -3367,7 +3387,10 @@ fn fn_ht_trendmode(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<
     }
 }
 
-fn fn_ht_trendline(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+fn fn_ht_trendline(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("HT_TRENDLINE", args, 1)?;
     let data = args[0].as_slice().unwrap();
     let data_len = ctx.data_len;
@@ -3377,7 +3400,10 @@ fn fn_ht_trendline(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<
     }
 }
 
-fn fn_ht_measurement(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+fn fn_ht_measurement(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("HT_MEASUREMENT", args, 1)?;
     let data = args[0].as_slice().unwrap();
     let data_len = ctx.data_len;
@@ -3417,10 +3443,7 @@ fn fn_darvas_box_top(
     }
 }
 
-fn fn_renko(
-    ctx: &FormulaContext,
-    args: &[Array1<f64>],
-) -> Result<Array1<f64>, FormulaError> {
+fn fn_renko(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("RENKO", args, 3)?;
     let h = args[0].as_slice().unwrap();
     let l = args[1].as_slice().unwrap();
@@ -3436,10 +3459,7 @@ fn fn_renko(
     }
 }
 
-fn fn_kagi(
-    ctx: &FormulaContext,
-    args: &[Array1<f64>],
-) -> Result<Array1<f64>, FormulaError> {
+fn fn_kagi(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("KAGI", args, 2)?;
     let c = args[0].as_slice().unwrap();
     let reversal = if !args[1].is_empty() && !args[1][0].is_nan() {
@@ -3656,7 +3676,11 @@ fn ts_to_date_parts(ts: i64) -> (i32, u32, u32, u32, u32, u32) {
     let mut y = 1970;
     let mut remaining = total_days;
     loop {
-        let days_in_year = if y % 4 == 0 && (y % 100 != 0 || y % 400 == 0) { 366 } else { 365 };
+        let days_in_year = if y % 4 == 0 && (y % 100 != 0 || y % 400 == 0) {
+            366
+        } else {
+            365
+        };
         if remaining < days_in_year {
             break;
         }
@@ -3665,7 +3689,18 @@ fn ts_to_date_parts(ts: i64) -> (i32, u32, u32, u32, u32, u32) {
     }
     let leap = y % 4 == 0 && (y % 100 != 0 || y % 400 == 0);
     let month_days: [i32; 12] = [
-        31, if leap { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
+        31,
+        if leap { 29 } else { 28 },
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
     ];
     let mut m = 0u32;
     for md in &month_days {
@@ -3712,12 +3747,20 @@ fn fn_weekday(ctx: &FormulaContext, _args: &[Array1<f64>]) -> Result<Array1<f64>
     }))
 }
 
-fn fn_currbarscount(ctx: &FormulaContext, _args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+fn fn_currbarscount(
+    ctx: &FormulaContext,
+    _args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
     let len = ctx.data_len;
-    Ok(Array1::from_vec((0..len).map(|i| (len - i) as f64).collect()))
+    Ok(Array1::from_vec(
+        (0..len).map(|i| (len - i) as f64).collect(),
+    ))
 }
 
-fn fn_totalbarscount(ctx: &FormulaContext, _args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+fn fn_totalbarscount(
+    ctx: &FormulaContext,
+    _args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
     Ok(Array1::from_elem(ctx.data_len, ctx.data_len as f64))
 }
 
@@ -4054,7 +4097,7 @@ fn fn_dynainfo(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
     ensure_args_len("DYNAINFO", args, 1)?;
     let field_id = args[0][0] as usize;
     let data_len = ctx.data_len;
-    
+
     match &ctx.dynainfo {
         Some(di) => {
             let val = di.fields.get(&field_id).copied().unwrap_or(f64::NAN);
@@ -4068,7 +4111,7 @@ fn fn_winner(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, 
     ensure_args_len("WINNER", args, 1)?;
     let price_input = &args[0];
     let data_len = ctx.data_len;
-    
+
     match &ctx.chip_data {
         Some(chip) => {
             let mut result = Array1::zeros(data_len);
@@ -4086,7 +4129,7 @@ fn fn_lwinner(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>,
     let price_input = &args[0];
     let n_days = args[1][0] as usize;
     let data_len = ctx.data_len;
-    
+
     match &ctx.chip_data {
         Some(chip) => {
             let mut result = Array1::zeros(data_len);
@@ -4107,7 +4150,7 @@ fn fn_cost(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, Fo
     ensure_args_len("COST", args, 1)?;
     let ratio_input = &args[0];
     let data_len = ctx.data_len;
-    
+
     match &ctx.chip_data {
         Some(chip) => {
             let mut result = Array1::zeros(data_len);
@@ -4129,14 +4172,12 @@ fn fn_cost(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, Fo
 
 fn fn_blockdata(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("BLOCKDATA", args, 2)?;
-    let block_name = get_string_from_hash(ctx, args[0][0])
-        .ok_or_else(|| FormulaError::InvalidParameter(
-            "BLOCKDATA: block name must be a valid string".to_string(),
-        ))?;
-    let field = get_string_from_hash(ctx, args[1][0])
-        .ok_or_else(|| FormulaError::InvalidParameter(
-            "BLOCKDATA: field must be a valid string".to_string(),
-        ))?;
+    let block_name = get_string_from_hash(ctx, args[0][0]).ok_or_else(|| {
+        FormulaError::InvalidParameter("BLOCKDATA: block name must be a valid string".to_string())
+    })?;
+    let field = get_string_from_hash(ctx, args[1][0]).ok_or_else(|| {
+        FormulaError::InvalidParameter("BLOCKDATA: field must be a valid string".to_string())
+    })?;
 
     let data_len = ctx.data_len;
     match &ctx.block_data {
@@ -4248,10 +4289,9 @@ fn fn_blockdata(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64
 
 fn fn_blockindex(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("BLOCKINDEX", args, 1)?;
-    let block_name = get_string_from_hash(ctx, args[0][0])
-        .ok_or_else(|| FormulaError::InvalidParameter(
-            "BLOCKINDEX: block name must be a valid string".to_string(),
-        ))?;
+    let block_name = get_string_from_hash(ctx, args[0][0]).ok_or_else(|| {
+        FormulaError::InvalidParameter("BLOCKINDEX: block name must be a valid string".to_string())
+    })?;
 
     let data_len = ctx.data_len;
     match &ctx.block_data {
@@ -4274,10 +4314,9 @@ fn fn_blockindex(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f6
 
 fn fn_blockavg(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("BLOCKAVG", args, 1)?;
-    let block_name = get_string_from_hash(ctx, args[0][0])
-        .ok_or_else(|| FormulaError::InvalidParameter(
-            "BLOCKAVG: block name must be a valid string".to_string(),
-        ))?;
+    let block_name = get_string_from_hash(ctx, args[0][0]).ok_or_else(|| {
+        FormulaError::InvalidParameter("BLOCKAVG: block name must be a valid string".to_string())
+    })?;
 
     let data_len = ctx.data_len;
     match &ctx.block_data {
@@ -4356,10 +4395,7 @@ fn fn_bigorder(ctx: &FormulaContext, _args: &[Array1<f64>]) -> Result<Array1<f64
     }
 }
 
-fn fn_smallorder(
-    ctx: &FormulaContext,
-    _args: &[Array1<f64>],
-) -> Result<Array1<f64>, FormulaError> {
+fn fn_smallorder(ctx: &FormulaContext, _args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let data_len = ctx.data_len;
     match &ctx.money_flow_data {
         Some(mf) => {
@@ -4373,10 +4409,7 @@ fn fn_smallorder(
     }
 }
 
-fn fn_maininflow(
-    ctx: &FormulaContext,
-    _args: &[Array1<f64>],
-) -> Result<Array1<f64>, FormulaError> {
+fn fn_maininflow(ctx: &FormulaContext, _args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let data_len = ctx.data_len;
     match &ctx.money_flow_data {
         Some(mf) => {
@@ -4510,7 +4543,10 @@ fn fn_last(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, Fo
     Ok(result)
 }
 
-fn fn_barslastcount(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+fn fn_barslastcount(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("BARSLASTCOUNT", args, 1)?;
     let cond = &args[0];
     let data_len = ctx.data_len;
@@ -4964,7 +5000,11 @@ fn fn_cummax(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, 
         if !input[i].is_nan() && input[i] > max {
             max = input[i];
         }
-        result[i] = if max == f64::NEG_INFINITY { f64::NAN } else { max };
+        result[i] = if max == f64::NEG_INFINITY {
+            f64::NAN
+        } else {
+            max
+        };
     }
     Ok(result)
 }
@@ -4999,7 +5039,8 @@ fn fn_percentile(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f6
             continue;
         }
         let start = i + 1 - n;
-        let mut window: Vec<f64> = input.slice(s![start..=i])
+        let mut window: Vec<f64> = input
+            .slice(s![start..=i])
             .iter()
             .copied()
             .filter(|v| !v.is_nan())
@@ -5028,7 +5069,8 @@ fn fn_median(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, 
             continue;
         }
         let start = i + 1 - n;
-        let mut window: Vec<f64> = input.slice(s![start..=i])
+        let mut window: Vec<f64> = input
+            .slice(s![start..=i])
             .iter()
             .copied()
             .filter(|v| !v.is_nan())
@@ -5062,7 +5104,8 @@ fn fn_skew(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, Fo
             continue;
         }
         let start = i + 1 - n;
-        let window: Vec<f64> = input.slice(s![start..=i])
+        let window: Vec<f64> = input
+            .slice(s![start..=i])
             .iter()
             .copied()
             .filter(|v| !v.is_nan())
@@ -5098,7 +5141,8 @@ fn fn_kurt(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, Fo
             continue;
         }
         let start = i + 1 - n;
-        let window: Vec<f64> = input.slice(s![start..=i])
+        let window: Vec<f64> = input
+            .slice(s![start..=i])
             .iter()
             .copied()
             .filter(|v| !v.is_nan())
@@ -5133,7 +5177,8 @@ fn fn_mode(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, Fo
             continue;
         }
         let start = i + 1 - n;
-        let window: Vec<f64> = input.slice(s![start..=i])
+        let window: Vec<f64> = input
+            .slice(s![start..=i])
             .iter()
             .copied()
             .filter(|v| !v.is_nan())
@@ -5147,7 +5192,8 @@ fn fn_mode(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, Fo
             let entry = counts.entry(key).or_insert((0, v));
             entry.0 += 1;
         }
-        let mode_val = counts.values()
+        let mode_val = counts
+            .values()
             .max_by_key(|(c, _)| *c)
             .map(|(_, v)| *v)
             .unwrap_or(f64::NAN);
@@ -5171,7 +5217,8 @@ fn fn_sort(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, Fo
             continue;
         }
         let start = i + 1 - n;
-        let mut window: Vec<f64> = input.slice(s![start..=i])
+        let mut window: Vec<f64> = input
+            .slice(s![start..=i])
             .iter()
             .copied()
             .filter(|v| !v.is_nan())
@@ -5188,7 +5235,9 @@ fn fn_sort(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, Fo
         } else {
             window.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
         }
-        let rank = window.iter().position(|&v| (v - current).abs() < f64::EPSILON)
+        let rank = window
+            .iter()
+            .position(|&v| (v - current).abs() < f64::EPSILON)
             .map(|p| p + 1)
             .unwrap_or(0);
         result[i] = rank as f64;
@@ -5213,7 +5262,8 @@ fn fn_rank(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, Fo
         if current.is_nan() {
             continue;
         }
-        let window: Vec<f64> = input.slice(s![start..=i])
+        let window: Vec<f64> = input
+            .slice(s![start..=i])
             .iter()
             .copied()
             .filter(|v| !v.is_nan())
@@ -5573,12 +5623,24 @@ pub fn get_builtin_functions() -> HashMap<String, FormulaFn> {
     map.insert("FOX_PEAKBARS".to_string(), fn_fox_peakbars as FormulaFn);
     map.insert("FOX_BUY".to_string(), fn_fox_buy as FormulaFn);
     map.insert("FOX_SELL".to_string(), fn_fox_sell as FormulaFn);
-    map.insert("FOX_TRADE_SIGNAL".to_string(), fn_fox_trade_signal as FormulaFn);
+    map.insert(
+        "FOX_TRADE_SIGNAL".to_string(),
+        fn_fox_trade_signal as FormulaFn,
+    );
     map.insert("FOX_BACKTEST".to_string(), fn_fox_backtest as FormulaFn);
-    map.insert("FOX_PROFIT_RATIO".to_string(), fn_fox_profit_ratio as FormulaFn);
+    map.insert(
+        "FOX_PROFIT_RATIO".to_string(),
+        fn_fox_profit_ratio as FormulaFn,
+    );
     map.insert("FOX_WIN_RATE".to_string(), fn_fox_win_rate as FormulaFn);
-    map.insert("FOX_MAX_DRAWDOWN".to_string(), fn_fox_max_drawdown as FormulaFn);
-    map.insert("FOX_TRADE_COUNT".to_string(), fn_fox_trade_count as FormulaFn);
+    map.insert(
+        "FOX_MAX_DRAWDOWN".to_string(),
+        fn_fox_max_drawdown as FormulaFn,
+    );
+    map.insert(
+        "FOX_TRADE_COUNT".to_string(),
+        fn_fox_trade_count as FormulaFn,
+    );
 
     // TA-Lib C compatibility — additional momentum indicators
     map.insert("STOCHF".to_string(), fn_stochf);
@@ -5604,17 +5666,32 @@ pub fn get_builtin_functions() -> HashMap<String, FormulaFn> {
     map.insert("DARVAS_BOX".to_string(), fn_darvas_box_top as FormulaFn);
     map.insert("RENKO".to_string(), fn_renko as FormulaFn);
     map.insert("KAGI".to_string(), fn_kagi as FormulaFn);
-    map.insert("POINT_AND_FIGURE".to_string(), fn_point_and_figure as FormulaFn);
-    map.insert("THREE_LINE_BREAK".to_string(), fn_three_line_break as FormulaFn);
-    map.insert("WILLIAMS_ALLIGATOR".to_string(), fn_williams_alligator_lips as FormulaFn);
+    map.insert(
+        "POINT_AND_FIGURE".to_string(),
+        fn_point_and_figure as FormulaFn,
+    );
+    map.insert(
+        "THREE_LINE_BREAK".to_string(),
+        fn_three_line_break as FormulaFn,
+    );
+    map.insert(
+        "WILLIAMS_ALLIGATOR".to_string(),
+        fn_williams_alligator_lips as FormulaFn,
+    );
     map.insert("HEIKIN_ASHI".to_string(), fn_heikin_ashi_close as FormulaFn);
 
     // A-share specific indicators
-    map.insert("MAIN_NET_INFLOW".to_string(), fn_main_net_inflow as FormulaFn);
+    map.insert(
+        "MAIN_NET_INFLOW".to_string(),
+        fn_main_net_inflow as FormulaFn,
+    );
     map.insert("MONEY_FLOW".to_string(), fn_money_flow as FormulaFn);
     map.insert("LIMIT_UP".to_string(), fn_limit_up as FormulaFn);
     map.insert("LIMIT_DOWN".to_string(), fn_limit_down as FormulaFn);
-    map.insert("CONSECUTIVE_LIMIT".to_string(), fn_consecutive_limit as FormulaFn);
+    map.insert(
+        "CONSECUTIVE_LIMIT".to_string(),
+        fn_consecutive_limit as FormulaFn,
+    );
     map.insert("TURNOVER".to_string(), fn_turnover as FormulaFn);
     map.insert("RS_RATIO".to_string(), fn_rs_ratio as FormulaFn);
 
@@ -5878,7 +5955,10 @@ fn fn_fox_peak(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
     Ok(result)
 }
 
-fn fn_fox_troughbars(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+fn fn_fox_troughbars(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("FOX_TROUGHBARS", args, 3)?;
     let n = extract_f64_arg(args, 1, "FOX_TROUGHBARS")?;
     let m = args[2][0] as usize;
@@ -5908,7 +5988,10 @@ fn fn_fox_troughbars(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array
     Ok(result)
 }
 
-fn fn_fox_peakbars(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+fn fn_fox_peakbars(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("FOX_PEAKBARS", args, 3)?;
     let n = extract_f64_arg(args, 1, "FOX_PEAKBARS")?;
     let m = args[2][0] as usize;
@@ -5970,7 +6053,10 @@ fn fn_fox_sell(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
     Ok(result)
 }
 
-fn fn_fox_trade_signal(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+fn fn_fox_trade_signal(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("FOX_TRADE_SIGNAL", args, 2)?;
     let buy_cond = &args[0];
     let sell_cond = &args[1];
@@ -5995,7 +6081,10 @@ fn fn_fox_trade_signal(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Arr
     Ok(result)
 }
 
-fn fn_fox_backtest(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+fn fn_fox_backtest(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("FOX_BACKTEST", args, 3)?;
     let buy_cond = &args[0];
     let sell_cond = &args[1];
@@ -6028,7 +6117,10 @@ fn fn_fox_backtest(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<
     Ok(result)
 }
 
-fn fn_fox_profit_ratio(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+fn fn_fox_profit_ratio(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("FOX_PROFIT_RATIO", args, 3)?;
     let buy_cond = &args[0];
     let sell_cond = &args[1];
@@ -6072,7 +6164,10 @@ fn fn_fox_profit_ratio(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Arr
     Ok(Array1::from_elem(data_len, ratio))
 }
 
-fn fn_fox_win_rate(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+fn fn_fox_win_rate(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("FOX_WIN_RATE", args, 3)?;
     let buy_cond = &args[0];
     let sell_cond = &args[1];
@@ -6113,7 +6208,10 @@ fn fn_fox_win_rate(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<
     Ok(Array1::from_elem(data_len, rate))
 }
 
-fn fn_fox_max_drawdown(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+fn fn_fox_max_drawdown(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("FOX_MAX_DRAWDOWN", args, 3)?;
     let buy_cond = &args[0];
     let sell_cond = &args[1];
@@ -6155,7 +6253,10 @@ fn fn_fox_max_drawdown(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Arr
     Ok(result)
 }
 
-fn fn_fox_trade_count(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+fn fn_fox_trade_count(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("FOX_TRADE_COUNT", args, 2)?;
     let buy_cond = &args[0];
     let sell_cond = &args[1];

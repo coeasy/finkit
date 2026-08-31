@@ -4,7 +4,9 @@ use crate::math::statistics::{rolling_max, rolling_min};
 use crate::utils::{init_output, validate_input};
 use ndarray::Array1;
 
-pub use crate::math::moving_avg::{dema, ema, ema_into, kama, mavp, sma, sma_into, tema, trima, wma, wma_into};
+pub use crate::math::moving_avg::{
+    dema, ema, ema_into, kama, mavp, sma, sma_into, tema, trima, wma, wma_into,
+};
 
 /// Moving average type selector for the generic `ma()` function.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -144,7 +146,7 @@ pub fn bbands(
     let upper_ptr = upper.as_mut_ptr();
     let middle_ptr = middle.as_mut_ptr();
     let lower_ptr = lower.as_mut_ptr();
-    
+
     for i in period..len {
         let old = unsafe { *input_ptr.add(i - period) };
         let new = unsafe { *input_ptr.add(i) };
@@ -507,11 +509,7 @@ pub fn sarext(
             }
         }
 
-        sar_values[i] = if is_long {
-            current_sar
-        } else {
-            -current_sar
-        };
+        sar_values[i] = if is_long { current_sar } else { -current_sar };
         af_values[i] = af;
         prev_sar = current_sar.abs();
     }
@@ -1376,12 +1374,7 @@ pub fn hma(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// let result = indicators::alma(&close, 3, 0.85, 6.0).unwrap();
 /// assert_eq!(result.len(), 10);
 /// ```
-pub fn alma(
-    input: &[f64],
-    period: usize,
-    offset_factor: f64,
-    sigma: f64,
-) -> Result<Array1<f64>> {
+pub fn alma(input: &[f64], period: usize, offset_factor: f64, sigma: f64) -> Result<Array1<f64>> {
     moving_avg::alma(input, period, sigma, offset_factor)
 }
 
@@ -1714,7 +1707,9 @@ mod tests {
 
     #[test]
     fn test_mama_into_matches_mama() {
-        let input: Vec<f64> = (1..=50).map(|x| 50.0 + (x as f64 * 0.1).sin() * 5.0).collect();
+        let input: Vec<f64> = (1..=50)
+            .map(|x| 50.0 + (x as f64 * 0.1).sin() * 5.0)
+            .collect();
         let expected = mama(&input, 0.5, 0.05).unwrap();
         let mut mama_out = vec![0.0; input.len()];
         let mut fama_out = vec![0.0; input.len()];
@@ -2055,7 +2050,9 @@ mod jma_tests {
 
     #[test]
     fn test_jma_basic() {
-        let data: Vec<f64> = (0..50).map(|i| 100.0 + (i as f64 * 0.2).sin() * 5.0).collect();
+        let data: Vec<f64> = (0..50)
+            .map(|i| 100.0 + (i as f64 * 0.2).sin() * 5.0)
+            .collect();
         let result = jma(&data, 7, 0.0, 2.0).unwrap();
         assert_eq!(result.len(), 50);
         assert!((result[0] - data[0]).abs() < 1e-10);
@@ -2150,8 +2147,8 @@ pub fn efficiency_ratio(input: &[f64], period: usize) -> Result<Array1<f64>> {
             0.0
         };
         if i + 1 < len {
-            vol_sum += (input[i + 1] - input[i]).abs()
-                - (input[i - period + 1] - input[i - period]).abs();
+            vol_sum +=
+                (input[i + 1] - input[i]).abs() - (input[i - period + 1] - input[i - period]).abs();
         }
     }
 
@@ -2180,9 +2177,15 @@ mod efficiency_ratio_tests {
     #[test]
     fn test_er_choppy() {
         // Choppy data: ER should be close to 0
-        let data = vec![100.0, 101.0, 100.0, 101.0, 100.0, 101.0, 100.0, 101.0, 100.0, 101.0, 100.0];
+        let data = vec![
+            100.0, 101.0, 100.0, 101.0, 100.0, 101.0, 100.0, 101.0, 100.0, 101.0, 100.0,
+        ];
         let result = efficiency_ratio(&data, 10).unwrap();
-        assert!(result[10] < 0.2, "Expected choppy ER near 0, got {}", result[10]);
+        assert!(
+            result[10] < 0.2,
+            "Expected choppy ER near 0, got {}",
+            result[10]
+        );
     }
 
     #[test]

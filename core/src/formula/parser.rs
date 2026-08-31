@@ -235,10 +235,7 @@ fn parse_output(pair: Pair<Rule>) -> Result<AstNode, String> {
                 parse_output_modifier_inner(&mod_inner, &mut modifier)?;
             }
             Rule::output_attr => {
-                let attr_inner = mod_pair
-                    .into_inner()
-                    .next()
-                    .ok_or("Empty output_attr")?;
+                let attr_inner = mod_pair.into_inner().next().ok_or("Empty output_attr")?;
                 match attr_inner.as_rule() {
                     Rule::color_spec => {
                         modifier.color = Some(parse_color_spec(attr_inner)?);
@@ -271,7 +268,10 @@ fn parse_output(pair: Pair<Rule>) -> Result<AstNode, String> {
     })
 }
 
-fn parse_output_modifier_inner(mod_inner: &Pair<Rule>, modifier: &mut OutputModifier) -> Result<(), String> {
+fn parse_output_modifier_inner(
+    mod_inner: &Pair<Rule>,
+    modifier: &mut OutputModifier,
+) -> Result<(), String> {
     match mod_inner.as_rule() {
         Rule::line_style => {
             let s = mod_inner.as_str();
@@ -394,7 +394,10 @@ fn parse_draw_text_fix(pair: Pair<Rule>) -> Result<AstNode, String> {
     args.push(y);
 
     let text_pair = inner.next().ok_or("Missing DRAWTEXT_FIX text")?;
-    let text = text_pair.as_str().trim_matches(|c| c == '"' || c == '\'').to_string();
+    let text = text_pair
+        .as_str()
+        .trim_matches(|c| c == '"' || c == '\'')
+        .to_string();
     args.push(AstNode::Number(0.0)); // placeholder for text
 
     if let Some(p) = inner.next() {
@@ -759,7 +762,10 @@ fn parse_primary(pair: Pair<Rule>) -> Result<AstNode, String> {
 }
 
 fn parse_string_literal(pair: Pair<Rule>) -> Result<AstNode, String> {
-    let s = pair.as_str().trim_matches(|c| c == '"' || c == '\'').to_string();
+    let s = pair
+        .as_str()
+        .trim_matches(|c| c == '"' || c == '\'')
+        .to_string();
     Ok(AstNode::StringLit(s))
 }
 
@@ -790,10 +796,7 @@ fn parse_number(pair: Pair<Rule>) -> Result<AstNode, String> {
 }
 
 fn parse_variable(pair: Pair<Rule>) -> Result<AstNode, String> {
-    let raw_name = pair.into_inner()
-        .next()
-        .ok_or("Empty variable")?
-        .as_str();
+    let raw_name = pair.into_inner().next().ok_or("Empty variable")?.as_str();
     let bytes = raw_name.as_bytes();
 
     let map = |b: &str| -> AstNode {

@@ -37,7 +37,14 @@ impl OhlcvBar {
         }
     }
 
-    pub fn new_with_time(open: f64, high: f64, low: f64, close: f64, volume: f64, timestamp: i64) -> Self {
+    pub fn new_with_time(
+        open: f64,
+        high: f64,
+        low: f64,
+        close: f64,
+        volume: f64,
+        timestamp: i64,
+    ) -> Self {
         Self {
             open,
             high,

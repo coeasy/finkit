@@ -141,9 +141,7 @@ pub fn assert_approx_eq_slice(a: &[f64], b: &[f64], tol: f64) -> Result<(), Stri
             continue;
         }
         if (x - y).abs() > tol {
-            return Err(format!(
-                "slice mismatch at i={i}: {x} vs {y} (tol={tol})"
-            ));
+            return Err(format!("slice mismatch at i={i}: {x} vs {y} (tol={tol})"));
         }
     }
     Ok(())

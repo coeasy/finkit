@@ -95,7 +95,8 @@ impl FormulaExecutor {
                 let name_arc: VarName = Arc::from(name.clone());
                 match &value {
                     FormulaValue::Scalar(v) => {
-                        ctx.variables.insert(name_arc, Array1::from_elem(ctx.data_len, *v));
+                        ctx.variables
+                            .insert(name_arc, Array1::from_elem(ctx.data_len, *v));
                     }
                     FormulaValue::Array(arr) => {
                         ctx.variables.insert(name_arc, arr.clone());
@@ -108,7 +109,10 @@ impl FormulaExecutor {
                 let rhs_val = self.execute_val(expr, ctx)?;
                 let rhs = rhs_val.to_array(ctx.data_len);
                 let value = self.apply_compound_assign(op, &current, &rhs)?;
-                ctx.variables.insert(Arc::from(name.to_string()), FormulaContext::copy_array(&value));
+                ctx.variables.insert(
+                    Arc::from(name.to_string()),
+                    FormulaContext::copy_array(&value),
+                );
                 Ok(FormulaValue::Array(value))
             }
             AstNode::Output {
@@ -120,7 +124,8 @@ impl FormulaExecutor {
                 let name_arc: VarName = Arc::from(name.clone());
                 match &value {
                     FormulaValue::Scalar(v) => {
-                        ctx.variables.insert(name_arc, Array1::from_elem(ctx.data_len, *v));
+                        ctx.variables
+                            .insert(name_arc, Array1::from_elem(ctx.data_len, *v));
                     }
                     FormulaValue::Array(arr) => {
                         ctx.variables.insert(name_arc, arr.clone());
@@ -240,7 +245,11 @@ impl FormulaExecutor {
                 );
                 Ok(FormulaValue::Scalar(0.0))
             }
-            AstNode::DrawGeneric { command, args, color } => {
+            AstNode::DrawGeneric {
+                command,
+                args,
+                color,
+            } => {
                 let mut evaluated = Vec::with_capacity(args.len());
                 for arg in args {
                     let v = self.execute_val(arg, ctx)?;
@@ -251,76 +260,96 @@ impl FormulaExecutor {
                     ("DRAWLINE", n) if n >= 5 => {
                         let expand = evaluated[4][0] as i32;
                         ctx.draw_commands.borrow_mut().add_line(
-                            evaluated.remove(0), evaluated.remove(0),
-                            evaluated.remove(0), evaluated.remove(0),
-                            expand, color_str,
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            expand,
+                            color_str,
                         );
                     }
                     ("DRAWBAND", n) if n >= 2 => {
                         ctx.draw_commands.borrow_mut().add_band(
-                            evaluated.remove(0), color_str.clone(),
-                            evaluated.remove(0), color_str,
+                            evaluated.remove(0),
+                            color_str.clone(),
+                            evaluated.remove(0),
+                            color_str,
                         );
                     }
                     ("DRAWKLINE", n) if n >= 4 => {
                         ctx.draw_commands.borrow_mut().add_kline(
-                            evaluated.remove(0), evaluated.remove(0),
-                            evaluated.remove(0), evaluated.remove(0),
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            evaluated.remove(0),
                         );
                     }
                     ("DRAWRECTREL", n) if n >= 4 => {
                         ctx.draw_commands.borrow_mut().add_rect(
-                            evaluated.remove(0), evaluated.remove(0),
-                            evaluated.remove(0), evaluated.remove(0),
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            evaluated.remove(0),
                             color_str,
                         );
                     }
                     ("FILLRGN", n) if n >= 3 => {
                         ctx.draw_commands.borrow_mut().add_fill_rgn(
-                            evaluated.remove(0), evaluated.remove(0),
-                            evaluated.remove(0), color_str,
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            color_str,
                         );
                     }
                     ("PARTLINE", n) if n >= 2 => {
                         ctx.draw_commands.borrow_mut().add_part_line(
-                            evaluated.remove(0), evaluated.remove(0), color_str,
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            color_str,
                         );
                     }
                     ("POLYLINE", n) if n >= 2 => {
                         ctx.draw_commands.borrow_mut().add_poly_line(
-                            evaluated.remove(0), evaluated.remove(0), color_str,
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            color_str,
                         );
                     }
                     ("DRAWGBK", n) if n >= 1 => {
-                        ctx.draw_commands.borrow_mut().add_background(
-                            evaluated.remove(0), color_str,
-                        );
+                        ctx.draw_commands
+                            .borrow_mut()
+                            .add_background(evaluated.remove(0), color_str);
                     }
                     ("DRAWSL", n) if n >= 4 => {
                         ctx.draw_commands.borrow_mut().add_slope_line(
-                            evaluated.remove(0), evaluated.remove(0),
-                            evaluated.remove(0), evaluated.remove(0),
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            evaluated.remove(0),
                             color_str,
                         );
                     }
                     ("DRAWTEXT_FIX", n) if n >= 3 => {
                         let x = evaluated[0][0];
                         let y = evaluated[1][0];
-                        ctx.draw_commands.borrow_mut().add_text_fix(
-                            x, y, String::new(), color_str,
-                        );
+                        ctx.draw_commands
+                            .borrow_mut()
+                            .add_text_fix(x, y, String::new(), color_str);
                     }
                     ("DRAWNUMBER", n) if n >= 4 => {
                         let precision = evaluated[3][0] as i32;
                         ctx.draw_commands.borrow_mut().add_number(
-                            evaluated.remove(0), evaluated.remove(0),
-                            evaluated.remove(0), precision, color_str,
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            precision,
+                            color_str,
                         );
                     }
                     ("VERTLINE", n) if n >= 1 => {
-                        ctx.draw_commands.borrow_mut().add_vert_line(
-                            evaluated.remove(0), color_str,
-                        );
+                        ctx.draw_commands
+                            .borrow_mut()
+                            .add_vert_line(evaluated.remove(0), color_str);
                     }
                     _ => {}
                 }
@@ -381,8 +410,10 @@ impl FormulaExecutor {
                             max_iterations
                         )));
                     }
-                    ctx.variables
-                        .insert(Arc::from(var.to_string()), Array1::from_elem(ctx.data_len, i as f64));
+                    ctx.variables.insert(
+                        Arc::from(var.to_string()),
+                        Array1::from_elem(ctx.data_len, i as f64),
+                    );
                     for stmt in body {
                         result = self.execute_val(stmt, ctx)?;
                     }
@@ -485,9 +516,7 @@ impl FormulaExecutor {
             (FormulaValue::Scalar(v), UnaryOperator::Not) => {
                 Ok(FormulaValue::Scalar(if *v <= 0.0 { 1.0 } else { 0.0 }))
             }
-            (FormulaValue::Scalar(v), UnaryOperator::Neg) => {
-                Ok(FormulaValue::Scalar(-*v))
-            }
+            (FormulaValue::Scalar(v), UnaryOperator::Neg) => Ok(FormulaValue::Scalar(-*v)),
             (FormulaValue::Array(a), UnaryOperator::Not) => {
                 let result = self.apply_unary_op(op, a)?;
                 Ok(FormulaValue::Array(result))
@@ -535,32 +564,117 @@ fn apply_scalar_op(op: &BinaryOperator, l: f64, r: f64) -> Result<f64, FormulaEr
     }
 }
 
-fn apply_scalar_array_op(op: &BinaryOperator, scalar: f64, arr: &Array1<f64>, result: &mut Array1<f64>) -> Result<(), FormulaError> {
+fn apply_scalar_array_op(
+    op: &BinaryOperator,
+    scalar: f64,
+    arr: &Array1<f64>,
+    result: &mut Array1<f64>,
+) -> Result<(), FormulaError> {
     let len = arr.len();
     match op {
-        BinaryOperator::Add => { for i in 0..len { result[i] = scalar + arr[i]; } }
-        BinaryOperator::Sub => { for i in 0..len { result[i] = scalar - arr[i]; } }
-        BinaryOperator::Mul => { for i in 0..len { result[i] = scalar * arr[i]; } }
+        BinaryOperator::Add => {
+            for i in 0..len {
+                result[i] = scalar + arr[i];
+            }
+        }
+        BinaryOperator::Sub => {
+            for i in 0..len {
+                result[i] = scalar - arr[i];
+            }
+        }
+        BinaryOperator::Mul => {
+            for i in 0..len {
+                result[i] = scalar * arr[i];
+            }
+        }
         BinaryOperator::Div => {
             for i in 0..len {
-                result[i] = if arr[i].abs() < 1e-15 { f64::NAN } else { scalar / arr[i] };
+                result[i] = if arr[i].abs() < 1e-15 {
+                    f64::NAN
+                } else {
+                    scalar / arr[i]
+                };
             }
         }
         BinaryOperator::Mod => {
             for i in 0..len {
-                result[i] = if arr[i].abs() < 1e-15 { f64::NAN } else { scalar - (scalar / arr[i]).floor() * arr[i] };
+                result[i] = if arr[i].abs() < 1e-15 {
+                    f64::NAN
+                } else {
+                    scalar - (scalar / arr[i]).floor() * arr[i]
+                };
             }
         }
-        BinaryOperator::Pow => { for i in 0..len { result[i] = scalar.powf(arr[i]); } }
-        BinaryOperator::Gt => { for i in 0..len { result[i] = if scalar > arr[i] { 1.0 } else { 0.0 }; } }
-        BinaryOperator::Lt => { for i in 0..len { result[i] = if scalar < arr[i] { 1.0 } else { 0.0 }; } }
-        BinaryOperator::Gte => { for i in 0..len { result[i] = if scalar >= arr[i] { 1.0 } else { 0.0 }; } }
-        BinaryOperator::Lte => { for i in 0..len { result[i] = if scalar <= arr[i] { 1.0 } else { 0.0 }; } }
-        BinaryOperator::Eq => { for i in 0..len { result[i] = if (scalar - arr[i]).abs() < 1e-10 { 1.0 } else { 0.0 }; } }
-        BinaryOperator::Neq => { for i in 0..len { result[i] = if (scalar - arr[i]).abs() >= 1e-10 { 1.0 } else { 0.0 }; } }
-        BinaryOperator::And => { for i in 0..len { result[i] = if scalar > 0.0 && arr[i] > 0.0 { 1.0 } else { 0.0 }; } }
-        BinaryOperator::Or => { for i in 0..len { result[i] = if scalar > 0.0 || arr[i] > 0.0 { 1.0 } else { 0.0 }; } }
-        BinaryOperator::Xor => { for i in 0..len { result[i] = if (scalar > 0.0) != (arr[i] > 0.0) { 1.0 } else { 0.0 }; } }
+        BinaryOperator::Pow => {
+            for i in 0..len {
+                result[i] = scalar.powf(arr[i]);
+            }
+        }
+        BinaryOperator::Gt => {
+            for i in 0..len {
+                result[i] = if scalar > arr[i] { 1.0 } else { 0.0 };
+            }
+        }
+        BinaryOperator::Lt => {
+            for i in 0..len {
+                result[i] = if scalar < arr[i] { 1.0 } else { 0.0 };
+            }
+        }
+        BinaryOperator::Gte => {
+            for i in 0..len {
+                result[i] = if scalar >= arr[i] { 1.0 } else { 0.0 };
+            }
+        }
+        BinaryOperator::Lte => {
+            for i in 0..len {
+                result[i] = if scalar <= arr[i] { 1.0 } else { 0.0 };
+            }
+        }
+        BinaryOperator::Eq => {
+            for i in 0..len {
+                result[i] = if (scalar - arr[i]).abs() < 1e-10 {
+                    1.0
+                } else {
+                    0.0
+                };
+            }
+        }
+        BinaryOperator::Neq => {
+            for i in 0..len {
+                result[i] = if (scalar - arr[i]).abs() >= 1e-10 {
+                    1.0
+                } else {
+                    0.0
+                };
+            }
+        }
+        BinaryOperator::And => {
+            for i in 0..len {
+                result[i] = if scalar > 0.0 && arr[i] > 0.0 {
+                    1.0
+                } else {
+                    0.0
+                };
+            }
+        }
+        BinaryOperator::Or => {
+            for i in 0..len {
+                result[i] = if scalar > 0.0 || arr[i] > 0.0 {
+                    1.0
+                } else {
+                    0.0
+                };
+            }
+        }
+        BinaryOperator::Xor => {
+            for i in 0..len {
+                result[i] = if (scalar > 0.0) != (arr[i] > 0.0) {
+                    1.0
+                } else {
+                    0.0
+                };
+            }
+        }
         BinaryOperator::StringConcat => {
             return Err(FormulaError::InvalidOperation(
                 "String concatenation (&) is not supported for numeric values. Use STRCAT() function instead.".to_string()
@@ -570,36 +684,121 @@ fn apply_scalar_array_op(op: &BinaryOperator, scalar: f64, arr: &Array1<f64>, re
     Ok(())
 }
 
-fn apply_array_scalar_op(op: &BinaryOperator, arr: &Array1<f64>, scalar: f64, result: &mut Array1<f64>) -> Result<(), FormulaError> {
+fn apply_array_scalar_op(
+    op: &BinaryOperator,
+    arr: &Array1<f64>,
+    scalar: f64,
+    result: &mut Array1<f64>,
+) -> Result<(), FormulaError> {
     let len = arr.len();
     match op {
-        BinaryOperator::Add => { for i in 0..len { result[i] = arr[i] + scalar; } }
-        BinaryOperator::Sub => { for i in 0..len { result[i] = arr[i] - scalar; } }
-        BinaryOperator::Mul => { for i in 0..len { result[i] = arr[i] * scalar; } }
+        BinaryOperator::Add => {
+            for i in 0..len {
+                result[i] = arr[i] + scalar;
+            }
+        }
+        BinaryOperator::Sub => {
+            for i in 0..len {
+                result[i] = arr[i] - scalar;
+            }
+        }
+        BinaryOperator::Mul => {
+            for i in 0..len {
+                result[i] = arr[i] * scalar;
+            }
+        }
         BinaryOperator::Div => {
             if scalar.abs() < 1e-15 {
-                for i in 0..len { result[i] = f64::NAN; }
+                for i in 0..len {
+                    result[i] = f64::NAN;
+                }
             } else {
-                for i in 0..len { result[i] = arr[i] / scalar; }
+                for i in 0..len {
+                    result[i] = arr[i] / scalar;
+                }
             }
         }
         BinaryOperator::Mod => {
             if scalar.abs() < 1e-15 {
-                for i in 0..len { result[i] = f64::NAN; }
+                for i in 0..len {
+                    result[i] = f64::NAN;
+                }
             } else {
-                for i in 0..len { result[i] = arr[i] - (arr[i] / scalar).floor() * scalar; }
+                for i in 0..len {
+                    result[i] = arr[i] - (arr[i] / scalar).floor() * scalar;
+                }
             }
         }
-        BinaryOperator::Pow => { for i in 0..len { result[i] = arr[i].powf(scalar); } }
-        BinaryOperator::Gt => { for i in 0..len { result[i] = if arr[i] > scalar { 1.0 } else { 0.0 }; } }
-        BinaryOperator::Lt => { for i in 0..len { result[i] = if arr[i] < scalar { 1.0 } else { 0.0 }; } }
-        BinaryOperator::Gte => { for i in 0..len { result[i] = if arr[i] >= scalar { 1.0 } else { 0.0 }; } }
-        BinaryOperator::Lte => { for i in 0..len { result[i] = if arr[i] <= scalar { 1.0 } else { 0.0 }; } }
-        BinaryOperator::Eq => { for i in 0..len { result[i] = if (arr[i] - scalar).abs() < 1e-10 { 1.0 } else { 0.0 }; } }
-        BinaryOperator::Neq => { for i in 0..len { result[i] = if (arr[i] - scalar).abs() >= 1e-10 { 1.0 } else { 0.0 }; } }
-        BinaryOperator::And => { for i in 0..len { result[i] = if arr[i] > 0.0 && scalar > 0.0 { 1.0 } else { 0.0 }; } }
-        BinaryOperator::Or => { for i in 0..len { result[i] = if arr[i] > 0.0 || scalar > 0.0 { 1.0 } else { 0.0 }; } }
-        BinaryOperator::Xor => { for i in 0..len { result[i] = if (arr[i] > 0.0) != (scalar > 0.0) { 1.0 } else { 0.0 }; } }
+        BinaryOperator::Pow => {
+            for i in 0..len {
+                result[i] = arr[i].powf(scalar);
+            }
+        }
+        BinaryOperator::Gt => {
+            for i in 0..len {
+                result[i] = if arr[i] > scalar { 1.0 } else { 0.0 };
+            }
+        }
+        BinaryOperator::Lt => {
+            for i in 0..len {
+                result[i] = if arr[i] < scalar { 1.0 } else { 0.0 };
+            }
+        }
+        BinaryOperator::Gte => {
+            for i in 0..len {
+                result[i] = if arr[i] >= scalar { 1.0 } else { 0.0 };
+            }
+        }
+        BinaryOperator::Lte => {
+            for i in 0..len {
+                result[i] = if arr[i] <= scalar { 1.0 } else { 0.0 };
+            }
+        }
+        BinaryOperator::Eq => {
+            for i in 0..len {
+                result[i] = if (arr[i] - scalar).abs() < 1e-10 {
+                    1.0
+                } else {
+                    0.0
+                };
+            }
+        }
+        BinaryOperator::Neq => {
+            for i in 0..len {
+                result[i] = if (arr[i] - scalar).abs() >= 1e-10 {
+                    1.0
+                } else {
+                    0.0
+                };
+            }
+        }
+        BinaryOperator::And => {
+            for i in 0..len {
+                result[i] = if arr[i] > 0.0 && scalar > 0.0 {
+                    1.0
+                } else {
+                    0.0
+                };
+            }
+        }
+        BinaryOperator::Or => {
+            for i in 0..len {
+                result[i] = if arr[i] > 0.0 || scalar > 0.0 {
+                    1.0
+                } else {
+                    0.0
+                };
+            }
+        }
+        BinaryOperator::Xor => {
+            for i in 0..len {
+                result[i] = if (arr[i] > 0.0) != (scalar > 0.0) {
+                    1.0
+                } else {
+                    0.0
+                };
+            }
+        }
         BinaryOperator::StringConcat => {
             return Err(FormulaError::InvalidOperation(
                 "String concatenation (&) is not supported for numeric values. Use STRCAT() function instead.".to_string()
@@ -676,10 +875,7 @@ impl FormulaExecutor {
             UnaryOperator::Not => {
                 let len = val.len();
                 let mut result = Array1::zeros(len);
-                SimdOps::logical_not(
-                    val.as_slice().unwrap(),
-                    result.as_slice_mut().unwrap(),
-                );
+                SimdOps::logical_not(val.as_slice().unwrap(), result.as_slice_mut().unwrap());
                 Ok(result)
             }
             UnaryOperator::Neg => Ok(-val),
@@ -940,7 +1136,11 @@ impl FormulaExecutor {
                 let result = pool.get_buffer(ctx.data_len);
                 Ok(result)
             }
-            AstNode::DrawGeneric { command, args, color } => {
+            AstNode::DrawGeneric {
+                command,
+                args,
+                color,
+            } => {
                 let mut evaluated = Vec::with_capacity(args.len());
                 for arg in args {
                     evaluated.push(self.execute_with_pool_cached(arg, ctx, pool, name_cache)?);
@@ -951,36 +1151,47 @@ impl FormulaExecutor {
                         let expand = evaluated[4][0] as i32;
                         pool.return_buffer(evaluated.remove(4));
                         ctx.draw_commands.borrow_mut().add_line(
-                            evaluated.remove(0), evaluated.remove(0),
-                            evaluated.remove(0), evaluated.remove(0),
-                            expand, color_str,
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            expand,
+                            color_str,
                         );
                     }
                     "FILLRGN" if evaluated.len() >= 3 => {
                         ctx.draw_commands.borrow_mut().add_fill_rgn(
-                            evaluated.remove(0), evaluated.remove(0),
-                            evaluated.remove(0), color_str,
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            color_str,
                         );
                     }
                     "PARTLINE" if evaluated.len() >= 2 => {
                         ctx.draw_commands.borrow_mut().add_part_line(
-                            evaluated.remove(0), evaluated.remove(0), color_str,
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            color_str,
                         );
                     }
                     "POLYLINE" if evaluated.len() >= 2 => {
                         ctx.draw_commands.borrow_mut().add_poly_line(
-                            evaluated.remove(0), evaluated.remove(0), color_str,
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            color_str,
                         );
                     }
                     "DRAWGBK" if !evaluated.is_empty() => {
-                        ctx.draw_commands.borrow_mut().add_background(
-                            evaluated.remove(0), color_str,
-                        );
+                        ctx.draw_commands
+                            .borrow_mut()
+                            .add_background(evaluated.remove(0), color_str);
                     }
                     "DRAWSL" if evaluated.len() >= 4 => {
                         ctx.draw_commands.borrow_mut().add_slope_line(
-                            evaluated.remove(0), evaluated.remove(0),
-                            evaluated.remove(0), evaluated.remove(0),
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            evaluated.remove(0),
                             color_str,
                         );
                     }
@@ -990,22 +1201,25 @@ impl FormulaExecutor {
                         pool.return_buffer(evaluated.remove(0));
                         pool.return_buffer(evaluated.remove(0));
                         pool.return_buffer(evaluated.remove(0));
-                        ctx.draw_commands.borrow_mut().add_text_fix(
-                            x, y, String::new(), color_str,
-                        );
+                        ctx.draw_commands
+                            .borrow_mut()
+                            .add_text_fix(x, y, String::new(), color_str);
                     }
                     "DRAWNUMBER" if evaluated.len() >= 4 => {
                         let precision = evaluated[3][0] as i32;
                         pool.return_buffer(evaluated.remove(3));
                         ctx.draw_commands.borrow_mut().add_number(
-                            evaluated.remove(0), evaluated.remove(0),
-                            evaluated.remove(0), precision, color_str,
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            precision,
+                            color_str,
                         );
                     }
                     "VERTLINE" if !evaluated.is_empty() => {
-                        ctx.draw_commands.borrow_mut().add_vert_line(
-                            evaluated.remove(0), color_str,
-                        );
+                        ctx.draw_commands
+                            .borrow_mut()
+                            .add_vert_line(evaluated.remove(0), color_str);
                     }
                     _ => {
                         for buf in evaluated {
@@ -1065,7 +1279,8 @@ impl FormulaExecutor {
                     }
                     ctx.assign_var_no_copy(var_arc.clone(), loop_var);
                     for stmt in body {
-                        let new_result = self.execute_with_pool_cached(stmt, ctx, pool, name_cache)?;
+                        let new_result =
+                            self.execute_with_pool_cached(stmt, ctx, pool, name_cache)?;
                         pool.return_buffer(result);
                         result = new_result;
                     }
@@ -1083,7 +1298,8 @@ impl FormulaExecutor {
                         break;
                     }
                     for stmt in body {
-                        let new_result = self.execute_with_pool_cached(stmt, ctx, pool, name_cache)?;
+                        let new_result =
+                            self.execute_with_pool_cached(stmt, ctx, pool, name_cache)?;
                         pool.return_buffer(result);
                         result = new_result;
                     }
@@ -1249,7 +1465,11 @@ impl FormulaExecutor {
                 let result = pool.get_buffer(ctx.data_len);
                 Ok(result)
             }
-            AstNode::DrawGeneric { command, args, color } => {
+            AstNode::DrawGeneric {
+                command,
+                args,
+                color,
+            } => {
                 let mut evaluated = Vec::with_capacity(args.len());
                 for arg in args {
                     evaluated.push(self.execute_with_pool(arg, ctx, pool)?);
@@ -1260,36 +1480,47 @@ impl FormulaExecutor {
                         let expand = evaluated[4][0] as i32;
                         pool.return_buffer(evaluated.remove(4));
                         ctx.draw_commands.borrow_mut().add_line(
-                            evaluated.remove(0), evaluated.remove(0),
-                            evaluated.remove(0), evaluated.remove(0),
-                            expand, color_str,
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            expand,
+                            color_str,
                         );
                     }
                     "FILLRGN" if evaluated.len() >= 3 => {
                         ctx.draw_commands.borrow_mut().add_fill_rgn(
-                            evaluated.remove(0), evaluated.remove(0),
-                            evaluated.remove(0), color_str,
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            color_str,
                         );
                     }
                     "PARTLINE" if evaluated.len() >= 2 => {
                         ctx.draw_commands.borrow_mut().add_part_line(
-                            evaluated.remove(0), evaluated.remove(0), color_str,
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            color_str,
                         );
                     }
                     "POLYLINE" if evaluated.len() >= 2 => {
                         ctx.draw_commands.borrow_mut().add_poly_line(
-                            evaluated.remove(0), evaluated.remove(0), color_str,
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            color_str,
                         );
                     }
                     "DRAWGBK" if !evaluated.is_empty() => {
-                        ctx.draw_commands.borrow_mut().add_background(
-                            evaluated.remove(0), color_str,
-                        );
+                        ctx.draw_commands
+                            .borrow_mut()
+                            .add_background(evaluated.remove(0), color_str);
                     }
                     "DRAWSL" if evaluated.len() >= 4 => {
                         ctx.draw_commands.borrow_mut().add_slope_line(
-                            evaluated.remove(0), evaluated.remove(0),
-                            evaluated.remove(0), evaluated.remove(0),
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            evaluated.remove(0),
                             color_str,
                         );
                     }
@@ -1299,22 +1530,25 @@ impl FormulaExecutor {
                         pool.return_buffer(evaluated.remove(0));
                         pool.return_buffer(evaluated.remove(0));
                         pool.return_buffer(evaluated.remove(0));
-                        ctx.draw_commands.borrow_mut().add_text_fix(
-                            x, y, String::new(), color_str,
-                        );
+                        ctx.draw_commands
+                            .borrow_mut()
+                            .add_text_fix(x, y, String::new(), color_str);
                     }
                     "DRAWNUMBER" if evaluated.len() >= 4 => {
                         let precision = evaluated[3][0] as i32;
                         pool.return_buffer(evaluated.remove(3));
                         ctx.draw_commands.borrow_mut().add_number(
-                            evaluated.remove(0), evaluated.remove(0),
-                            evaluated.remove(0), precision, color_str,
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            evaluated.remove(0),
+                            precision,
+                            color_str,
                         );
                     }
                     "VERTLINE" if !evaluated.is_empty() => {
-                        ctx.draw_commands.borrow_mut().add_vert_line(
-                            evaluated.remove(0), color_str,
-                        );
+                        ctx.draw_commands
+                            .borrow_mut()
+                            .add_vert_line(evaluated.remove(0), color_str);
                     }
                     _ => {
                         for buf in evaluated {
@@ -1401,10 +1635,7 @@ impl FormulaExecutor {
         }
     }
 
-    fn copy_view_to_pool(
-        view: ndarray::ArrayView1<f64>,
-        pool: &mut BufferPool,
-    ) -> Array1<f64> {
+    fn copy_view_to_pool(view: ndarray::ArrayView1<f64>, pool: &mut BufferPool) -> Array1<f64> {
         let mut buf = pool.get_buffer(view.len());
         let out = buf.as_slice_mut().unwrap();
         let src = view.as_slice().unwrap();
@@ -1519,10 +1750,7 @@ impl FormulaExecutor {
         let mut result = pool.get_buffer(len);
         match op {
             UnaryOperator::Not => {
-                SimdOps::logical_not(
-                    val.as_slice().unwrap(),
-                    result.as_slice_mut().unwrap(),
-                );
+                SimdOps::logical_not(val.as_slice().unwrap(), result.as_slice_mut().unwrap());
             }
             UnaryOperator::Neg => {
                 for i in 0..len {
@@ -2698,7 +2926,8 @@ mod tests {
         let mut ctx1 = make_ctx(50);
         let mut ctx2 = make_ctx(50);
         let normal = execute_formula("RSI(CLOSE, 14)", &mut ctx1).unwrap();
-        let zero_copy_cached = execute_formula_zero_copy_cached("RSI(CLOSE, 14)", &mut ctx2).unwrap();
+        let zero_copy_cached =
+            execute_formula_zero_copy_cached("RSI(CLOSE, 14)", &mut ctx2).unwrap();
         for i in 0..50 {
             if normal[i].is_nan() {
                 assert!(zero_copy_cached[i].is_nan());

@@ -62,7 +62,13 @@ pub fn ad(high: &[f64], low: &[f64], close: &[f64], volume: &[f64]) -> Result<Ar
 /// AD zero-copy variant: writes result into pre-allocated slice.
 ///
 /// Same semantics as [`ad`] but writes directly into the caller-provided buffer.
-pub fn ad_into(high: &[f64], low: &[f64], close: &[f64], volume: &[f64], output: &mut [f64]) -> Result<()> {
+pub fn ad_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    volume: &[f64],
+    output: &mut [f64],
+) -> Result<()> {
     if high.len() != low.len() || high.len() != close.len() || high.len() != volume.len() {
         return Err(crate::error::TaError::InvalidParameter {
             name: "high, low, close, volume".to_string(),
@@ -597,8 +603,7 @@ pub fn vwap_mtf(
     session_start: &[bool],
 ) -> Result<Array1<f64>> {
     let len = high.len();
-    if len != low.len() || len != close.len() || len != volume.len() || len != session_start.len()
-    {
+    if len != low.len() || len != close.len() || len != volume.len() || len != session_start.len() {
         return Err(TaError::InvalidParameter {
             name: "high, low, close, volume, session_start".to_string(),
             constraint: "must have the same length".to_string(),

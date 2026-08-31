@@ -1,6 +1,6 @@
-use crate::streaming::traits::{StreamingIndicator};
+use crate::impl_indicator_meta;
 use crate::impl_standard_methods;
-use crate::{impl_indicator_meta};
+use crate::streaming::traits::StreamingIndicator;
 
 /// Streaming Linear Regression Angle (in degrees)
 ///
@@ -42,7 +42,9 @@ impl StreamingLinRegAngle {
     fn compute_angle(&self) -> Option<f64> {
         let n = self.period as f64;
         let denom = n * self.sum_x2 - self.sum_x * self.sum_x;
-        if denom.abs() < 1e-15 { return None; }
+        if denom.abs() < 1e-15 {
+            return None;
+        }
 
         let slope = (n * self.sum_xy - self.sum_x * self.sum_y) / denom;
         Some(slope.atan().to_degrees())
@@ -69,7 +71,11 @@ impl StreamingIndicator for StreamingLinRegAngle {
             self.head = (self.head + 1) % cap;
         }
 
-        let result = if self.len == self.period { self.compute_angle() } else { None };
+        let result = if self.len == self.period {
+            self.compute_angle()
+        } else {
+            None
+        };
         self.last_value = result;
         result
     }
@@ -84,12 +90,19 @@ impl StreamingIndicator for StreamingLinRegAngle {
         self.sum_xy = 0.0;
     }
 
-    fn is_ready(&self) -> bool { self.len >= self.period }
+    fn is_ready(&self) -> bool {
+        self.len >= self.period
+    }
 
     impl_standard_methods!();
 }
 
-impl_indicator_meta!(StreamingLinRegAngle, "LinRegAngle", "statistic", "Linear Regression Angle (degrees)");
+impl_indicator_meta!(
+    StreamingLinRegAngle,
+    "LinRegAngle",
+    "statistic",
+    "Linear Regression Angle (degrees)"
+);
 
 #[cfg(test)]
 mod tests {
@@ -114,7 +127,9 @@ mod tests {
     #[test]
     fn test_streaming_linreg_angle_reset() {
         let mut s = StreamingLinRegAngle::new(3);
-        s.next(1.0); s.next(2.0); s.next(3.0);
+        s.next(1.0);
+        s.next(2.0);
+        s.next(3.0);
         assert!(s.is_ready());
         s.reset();
         assert!(!s.is_ready());

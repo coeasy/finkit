@@ -1,5 +1,5 @@
-use polars::prelude::*;
 use super::series_ops::TaSeries;
+use polars::prelude::*;
 
 /// Accessor struct for chaining TA operations on a DataFrame.
 pub struct TaAccessor<'a> {
@@ -26,7 +26,12 @@ impl<'a> TaAccessor<'a> {
     }
 
     /// Compute Bollinger Bands on the named column.
-    pub fn bbands(&self, column: &str, period: usize, num_std: f64) -> PolarsResult<(Series, Series, Series)> {
+    pub fn bbands(
+        &self,
+        column: &str,
+        period: usize,
+        num_std: f64,
+    ) -> PolarsResult<(Series, Series, Series)> {
         let series = self.df.column(column)?.as_materialized_series();
         series.ta_bbands(period, num_std)
     }

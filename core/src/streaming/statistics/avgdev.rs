@@ -8,8 +8,8 @@
 //! O(1) version is non-trivial because the abs-deviation sum cannot be
 //! maintained incrementally with only the rolling mean.
 
-use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
 
 #[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

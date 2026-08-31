@@ -2,8 +2,8 @@
 //!
 //! Provides parallel parameter scanning for indicators using rayon.
 
+use super::sweepable::{SweepParams, SweepResult, Sweepable};
 use crate::error::Result;
-use super::sweepable::{Sweepable, SweepParams, SweepResult};
 
 /// Configuration for a parameter sweep dimension.
 #[derive(Debug, Clone)]
@@ -109,7 +109,11 @@ impl SweepEngine {
     fn expand_params(&self, ranges: &[ParamRange]) -> Vec<SweepParams> {
         match ranges.len() {
             0 => vec![],
-            1 => ranges[0].values().into_iter().map(SweepParams::Period).collect(),
+            1 => ranges[0]
+                .values()
+                .into_iter()
+                .map(SweepParams::Period)
+                .collect(),
             2 => {
                 let v0 = ranges[0].values();
                 let v1 = ranges[1].values();
@@ -193,7 +197,9 @@ mod tests {
     fn test_sweep_engine_sma_single_range() {
         let data = gen_data(200);
         let engine = SweepEngine::new();
-        let result = engine.run(&SmaSweepable, &data, &[ParamRange::new(5, 51, 5)]).unwrap();
+        let result = engine
+            .run(&SmaSweepable, &data, &[ParamRange::new(5, 51, 5)])
+            .unwrap();
         assert_eq!(result.param_count, 10);
         assert_eq!(result.results.len(), 10);
         assert_eq!(result.indicator_name, "SMA");
@@ -203,7 +209,9 @@ mod tests {
     fn test_sweep_engine_ema_single_range() {
         let data = gen_data(200);
         let engine = SweepEngine::new();
-        let result = engine.run(&EmaSweepable, &data, &[ParamRange::new(5, 26, 5)]).unwrap();
+        let result = engine
+            .run(&EmaSweepable, &data, &[ParamRange::new(5, 26, 5)])
+            .unwrap();
         assert_eq!(result.param_count, 5);
         assert_eq!(result.results.len(), 5);
         assert_eq!(result.indicator_name, "EMA");
@@ -213,7 +221,9 @@ mod tests {
     fn test_sweep_engine_rsi_single_range() {
         let data = gen_data(200);
         let engine = SweepEngine::new();
-        let result = engine.run(&RsiSweepable, &data, &[ParamRange::new(5, 31, 5)]).unwrap();
+        let result = engine
+            .run(&RsiSweepable, &data, &[ParamRange::new(5, 31, 5)])
+            .unwrap();
         assert_eq!(result.param_count, 6);
         assert_eq!(result.results.len(), 6);
     }
@@ -222,11 +232,13 @@ mod tests {
     fn test_sweep_engine_cartesian_product_2d() {
         let data = gen_data(200);
         let engine = SweepEngine::new();
-        let result = engine.run(
-            &SmaSweepable,
-            &data,
-            &[ParamRange::new(5, 16, 5), ParamRange::new(20, 41, 10)],
-        ).unwrap();
+        let result = engine
+            .run(
+                &SmaSweepable,
+                &data,
+                &[ParamRange::new(5, 16, 5), ParamRange::new(20, 41, 10)],
+            )
+            .unwrap();
         // 5,10,15 x 20,30,40 = 9 combinations
         assert_eq!(result.param_count, 9);
         assert_eq!(result.results.len(), 9);
@@ -236,15 +248,17 @@ mod tests {
     fn test_sweep_engine_cartesian_product_3d() {
         let data = gen_data(200);
         let engine = SweepEngine::new();
-        let result = engine.run(
-            &SmaSweepable,
-            &data,
-            &[
-                ParamRange::new(5, 11, 5),
-                ParamRange::new(10, 21, 10),
-                ParamRange::new(1, 3, 1),
-            ],
-        ).unwrap();
+        let result = engine
+            .run(
+                &SmaSweepable,
+                &data,
+                &[
+                    ParamRange::new(5, 11, 5),
+                    ParamRange::new(10, 21, 10),
+                    ParamRange::new(1, 3, 1),
+                ],
+            )
+            .unwrap();
         // 2 x 2 x 2 = 8
         assert_eq!(result.param_count, 8);
     }
@@ -253,7 +267,9 @@ mod tests {
     fn test_sweep_engine_sequential_mode() {
         let data = gen_data(200);
         let engine = SweepEngine::new().sequential();
-        let result = engine.run(&SmaSweepable, &data, &[ParamRange::new(5, 21, 5)]).unwrap();
+        let result = engine
+            .run(&SmaSweepable, &data, &[ParamRange::new(5, 21, 5)])
+            .unwrap();
         assert_eq!(result.param_count, 4);
     }
 
@@ -261,7 +277,9 @@ mod tests {
     fn test_sweep_engine_results_correctness() {
         let data = gen_data(200);
         let engine = SweepEngine::new();
-        let result = engine.run(&SmaSweepable, &data, &[ParamRange::new(10, 11, 1)]).unwrap();
+        let result = engine
+            .run(&SmaSweepable, &data, &[ParamRange::new(10, 11, 1)])
+            .unwrap();
         assert_eq!(result.param_count, 1);
         let expected = crate::math::moving_avg::sma(&data, 10).unwrap();
         for i in 0..data.len() {
@@ -298,8 +316,13 @@ mod tests {
         let data = gen_data(500);
         let ranges = [ParamRange::new(5, 51, 5)];
 
-        let par_result = SweepEngine::new().run(&SmaSweepable, &data, &ranges).unwrap();
-        let seq_result = SweepEngine::new().sequential().run(&SmaSweepable, &data, &ranges).unwrap();
+        let par_result = SweepEngine::new()
+            .run(&SmaSweepable, &data, &ranges)
+            .unwrap();
+        let seq_result = SweepEngine::new()
+            .sequential()
+            .run(&SmaSweepable, &data, &ranges)
+            .unwrap();
 
         assert_eq!(par_result.param_count, seq_result.param_count);
         for (pr, sr) in par_result.results.iter().zip(seq_result.results.iter()) {
@@ -317,11 +340,9 @@ mod tests {
     fn test_sweep_engine_large_param_space() {
         let data = gen_data(500);
         let engine = SweepEngine::new();
-        let result = engine.run(
-            &SmaSweepable,
-            &data,
-            &[ParamRange::new(2, 102, 1)],
-        ).unwrap();
+        let result = engine
+            .run(&SmaSweepable, &data, &[ParamRange::new(2, 102, 1)])
+            .unwrap();
         assert_eq!(result.param_count, 100);
         assert_eq!(result.results.len(), 100);
     }

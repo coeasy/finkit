@@ -19,7 +19,12 @@ unsafe impl GlobalAlloc for TrackingAllocator {
             let new_total = prev + size;
             let mut peak = PEAK.load(Ordering::SeqCst);
             while new_total > peak {
-                match PEAK.compare_exchange_weak(peak, new_total, Ordering::SeqCst, Ordering::SeqCst) {
+                match PEAK.compare_exchange_weak(
+                    peak,
+                    new_total,
+                    Ordering::SeqCst,
+                    Ordering::SeqCst,
+                ) {
                     Ok(_) => break,
                     Err(current) => peak = current,
                 }
@@ -33,7 +38,9 @@ unsafe impl GlobalAlloc for TrackingAllocator {
             ALLOCATED.fetch_sub(layout.size(), Ordering::SeqCst);
         }
         // SAFETY: Delegating to System allocator which is safe.
-        unsafe { System.dealloc(ptr, layout); }
+        unsafe {
+            System.dealloc(ptr, layout);
+        }
     }
 }
 
@@ -78,7 +85,10 @@ where
     let avg_time = total_time / 5.0;
     let avg_peak = peak_mem as f64 / 5.0 / 1024.0; // KB
 
-    println!("{:<20} time={:>8.3}ms  peak_mem={:>8.1}KB", name, avg_time, avg_peak);
+    println!(
+        "{:<20} time={:>8.3}ms  peak_mem={:>8.1}KB",
+        name, avg_time, avg_peak
+    );
 }
 
 fn generate_ohlcv(n: usize) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
@@ -210,6 +220,8 @@ fn main() {
     });
 
     println!("{}", "-".repeat(60));
-    println!("Note: Peak memory measured via custom global allocator tracking all alloc/dealloc calls.");
+    println!(
+        "Note: Peak memory measured via custom global allocator tracking all alloc/dealloc calls."
+    );
     println!("(Does not include pre-allocated output buffer for zero-alloc variants)");
 }

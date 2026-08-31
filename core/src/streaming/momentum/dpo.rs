@@ -1,6 +1,6 @@
+use crate::impl_standard_methods;
 use crate::streaming::overlap::sma::StreamingSma;
 use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
-use crate::impl_standard_methods;
 
 /// Streaming DPO (Detrended Price Oscillator 去趋势价格振荡器).
 ///

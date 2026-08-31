@@ -63,72 +63,136 @@ pub trait Float:
 
 impl Float for f64 {
     #[inline(always)]
-    fn zero() -> Self { 0.0 }
+    fn zero() -> Self {
+        0.0
+    }
     #[inline(always)]
-    fn one() -> Self { 1.0 }
+    fn one() -> Self {
+        1.0
+    }
     #[inline(always)]
-    fn two() -> Self { 2.0 }
+    fn two() -> Self {
+        2.0
+    }
     #[inline(always)]
-    fn hundred() -> Self { 100.0 }
+    fn hundred() -> Self {
+        100.0
+    }
     #[inline(always)]
-    fn nan() -> Self { f64::NAN }
+    fn nan() -> Self {
+        f64::NAN
+    }
     #[inline(always)]
-    fn neg_infinity() -> Self { f64::NEG_INFINITY }
+    fn neg_infinity() -> Self {
+        f64::NEG_INFINITY
+    }
     #[inline(always)]
-    fn infinity() -> Self { f64::INFINITY }
+    fn infinity() -> Self {
+        f64::INFINITY
+    }
     #[inline(always)]
-    fn from_usize(v: usize) -> Self { v as f64 }
+    fn from_usize(v: usize) -> Self {
+        v as f64
+    }
     #[inline(always)]
-    fn from_f64(v: f64) -> Self { v }
+    fn from_f64(v: f64) -> Self {
+        v
+    }
     #[inline(always)]
-    fn abs(self) -> Self { f64::abs(self) }
+    fn abs(self) -> Self {
+        f64::abs(self)
+    }
     #[inline(always)]
-    fn max(self, other: Self) -> Self { f64::max(self, other) }
+    fn max(self, other: Self) -> Self {
+        f64::max(self, other)
+    }
     #[inline(always)]
-    fn min(self, other: Self) -> Self { f64::min(self, other) }
+    fn min(self, other: Self) -> Self {
+        f64::min(self, other)
+    }
     #[inline(always)]
-    fn sqrt(self) -> Self { f64::sqrt(self) }
+    fn sqrt(self) -> Self {
+        f64::sqrt(self)
+    }
     #[inline(always)]
-    fn is_nan(self) -> bool { f64::is_nan(self) }
+    fn is_nan(self) -> bool {
+        f64::is_nan(self)
+    }
     #[inline(always)]
-    fn to_f64(self) -> f64 { self }
+    fn to_f64(self) -> f64 {
+        self
+    }
     #[inline(always)]
-    fn epsilon() -> Self { 1e-15 }
+    fn epsilon() -> Self {
+        1e-15
+    }
 }
 
 impl Float for f32 {
     #[inline(always)]
-    fn zero() -> Self { 0.0 }
+    fn zero() -> Self {
+        0.0
+    }
     #[inline(always)]
-    fn one() -> Self { 1.0 }
+    fn one() -> Self {
+        1.0
+    }
     #[inline(always)]
-    fn two() -> Self { 2.0 }
+    fn two() -> Self {
+        2.0
+    }
     #[inline(always)]
-    fn hundred() -> Self { 100.0 }
+    fn hundred() -> Self {
+        100.0
+    }
     #[inline(always)]
-    fn nan() -> Self { f32::NAN }
+    fn nan() -> Self {
+        f32::NAN
+    }
     #[inline(always)]
-    fn neg_infinity() -> Self { f32::NEG_INFINITY }
+    fn neg_infinity() -> Self {
+        f32::NEG_INFINITY
+    }
     #[inline(always)]
-    fn infinity() -> Self { f32::INFINITY }
+    fn infinity() -> Self {
+        f32::INFINITY
+    }
     #[inline(always)]
-    fn from_usize(v: usize) -> Self { v as f32 }
+    fn from_usize(v: usize) -> Self {
+        v as f32
+    }
     #[inline(always)]
-    fn from_f64(v: f64) -> Self { v as f32 }
+    fn from_f64(v: f64) -> Self {
+        v as f32
+    }
     #[inline(always)]
-    fn abs(self) -> Self { f32::abs(self) }
+    fn abs(self) -> Self {
+        f32::abs(self)
+    }
     #[inline(always)]
-    fn max(self, other: Self) -> Self { f32::max(self, other) }
+    fn max(self, other: Self) -> Self {
+        f32::max(self, other)
+    }
     #[inline(always)]
-    fn min(self, other: Self) -> Self { f32::min(self, other) }
+    fn min(self, other: Self) -> Self {
+        f32::min(self, other)
+    }
     #[inline(always)]
-    fn sqrt(self) -> Self { f32::sqrt(self) }
+    fn sqrt(self) -> Self {
+        f32::sqrt(self)
+    }
     #[inline(always)]
-    fn is_nan(self) -> bool { f32::is_nan(self) }
+    fn is_nan(self) -> bool {
+        f32::is_nan(self)
+    }
     #[inline(always)]
-    fn to_f64(self) -> f64 { self as f64 }
+    fn to_f64(self) -> f64 {
+        self as f64
+    }
     #[inline(always)]
-    fn epsilon() -> Self { 1e-6 }
+    fn epsilon() -> Self {
+        1e-6
+    }
 }
 
 // ---------------------------------------------------------------------------

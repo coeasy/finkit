@@ -47,8 +47,16 @@ impl StreamingBeta {
         self.count += 1;
 
         if let (Some(pa), Some(pb)) = (self.prev_asset, self.prev_bench) {
-            let ar = if pa.abs() > 1e-15 { (asset - pa) / pa } else { 0.0 };
-            let br = if pb.abs() > 1e-15 { (benchmark - pb) / pb } else { 0.0 };
+            let ar = if pa.abs() > 1e-15 {
+                (asset - pa) / pa
+            } else {
+                0.0
+            };
+            let br = if pb.abs() > 1e-15 {
+                (benchmark - pb) / pb
+            } else {
+                0.0
+            };
 
             // If window is full, evict the oldest pair and subtract from accumulators
             if self.asset_window.len() == self.period {
@@ -106,16 +114,30 @@ impl StreamingBeta {
         self.last_value = None;
     }
 
-    pub fn is_ready(&self) -> bool { self.asset_window.len() >= self.period }
-    pub fn count(&self) -> usize { self.count }
-    pub fn value(&self) -> Option<f64> { self.last_value }
+    pub fn is_ready(&self) -> bool {
+        self.asset_window.len() >= self.period
+    }
+    pub fn count(&self) -> usize {
+        self.count
+    }
+    pub fn value(&self) -> Option<f64> {
+        self.last_value
+    }
 }
 
 impl IndicatorMeta for StreamingBeta {
-    fn name() -> &'static str { "BETA" }
-    fn category() -> &'static str { "statistic" }
-    fn description() -> &'static str { "Rolling Beta Coefficient" }
-    fn warm_up_period(&self) -> usize { self.period + 1 }
+    fn name() -> &'static str {
+        "BETA"
+    }
+    fn category() -> &'static str {
+        "statistic"
+    }
+    fn description() -> &'static str {
+        "Rolling Beta Coefficient"
+    }
+    fn warm_up_period(&self) -> usize {
+        self.period + 1
+    }
 }
 
 #[cfg(test)]

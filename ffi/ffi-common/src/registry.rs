@@ -56,7 +56,10 @@ impl Registry {
     }
 
     /// Indicators belonging to a given category.
-    pub fn by_category<'a>(&'a self, category: &'a str) -> impl Iterator<Item = &'a Indicator> + 'a {
+    pub fn by_category<'a>(
+        &'a self,
+        category: &'a str,
+    ) -> impl Iterator<Item = &'a Indicator> + 'a {
         self.indicators
             .iter()
             .filter(move |i| i.category == category)
@@ -69,7 +72,11 @@ impl Registry {
 
     /// Sorted, de-duplicated list of categories present in the registry.
     pub fn categories(&self) -> Vec<&str> {
-        let mut cats: Vec<&str> = self.indicators.iter().map(|i| i.category.as_str()).collect();
+        let mut cats: Vec<&str> = self
+            .indicators
+            .iter()
+            .map(|i| i.category.as_str())
+            .collect();
         cats.sort_unstable();
         cats.dedup();
         cats
@@ -83,7 +90,10 @@ mod tests {
     #[test]
     fn embedded_registry_loads_and_parses() {
         let reg = Registry::embedded();
-        assert!(!reg.indicators.is_empty(), "registry must contain indicators");
+        assert!(
+            !reg.indicators.is_empty(),
+            "registry must contain indicators"
+        );
         // SMA is the canonical first entry in docs/indicator_registry.json.
         let sma = reg.find("SMA").expect("SMA should be registered");
         assert_eq!(sma.category, "overlap");
@@ -91,6 +101,9 @@ mod tests {
         // Categories must be non-empty and de-duplicated.
         let cats = reg.categories();
         assert!(cats.contains(&"overlap"));
-        assert_eq!(cats.len(), cats.iter().collect::<std::collections::HashSet<_>>().len());
+        assert_eq!(
+            cats.len(),
+            cats.iter().collect::<std::collections::HashSet<_>>().len()
+        );
     }
 }

@@ -115,7 +115,10 @@ fn long_run_watchlist_pipeline() {
         // make sure the batch and streaming paths are both alive at the
         // end of the run.
         assert!(b.is_finite(), "batch sma non-finite at {i}: {b}");
-        assert!(s.is_finite() || i < 20, "streaming sma non-finite at {i}: {s}");
+        assert!(
+            s.is_finite() || i < 20,
+            "streaming sma non-finite at {i}: {s}"
+        );
     }
 
     assert!(

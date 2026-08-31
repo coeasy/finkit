@@ -39,7 +39,9 @@ use alloc::vec::Vec;
 use crate::streaming as streaming_mod;
 /// Bring the inner streaming traits into scope so we can call their methods.
 #[cfg(all(feature = "std", feature = "indicators-all"))]
-use crate::streaming::{IndicatorMeta as InnerIndicatorMeta, StreamingIndicator as InnerStreamingIndicator};
+use crate::streaming::{
+    IndicatorMeta as InnerIndicatorMeta, StreamingIndicator as InnerStreamingIndicator,
+};
 
 // ---------------------------------------------------------------------------
 // Ohlcv — canonical bar-data input shape (6 fields).
@@ -596,7 +598,9 @@ impl StreamingIndicator for BollAdapter {
 
     fn new(config: Self::Config) -> Self {
         let (period, up, dn) = config;
-        Self(streaming_mod::indicators::StreamingBoll::new(period, up, dn))
+        Self(streaming_mod::indicators::StreamingBoll::new(
+            period, up, dn,
+        ))
     }
 
     fn update(&mut self, bar: &dyn Ohlcv) -> Option<Self::Output> {

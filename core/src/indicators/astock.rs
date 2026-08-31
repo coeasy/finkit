@@ -180,13 +180,7 @@ pub fn cost(
 }
 
 #[inline]
-fn compute_winner_ratio(
-    close: &[f64],
-    volume: &[f64],
-    start: usize,
-    end: usize,
-    cost: f64,
-) -> f64 {
+fn compute_winner_ratio(close: &[f64], volume: &[f64], start: usize, end: usize, cost: f64) -> f64 {
     let mut total = 0.0;
     let mut below = 0.0;
     for j in start..=end {
@@ -236,11 +230,7 @@ fn compute_winner_ratio(
 /// let result = main_net_inflow(&close, &volume, 10_000_000.0).unwrap();
 /// assert_eq!(result.len(), 5);
 /// ```
-pub fn main_net_inflow(
-    close: &[f64],
-    volume: &[f64],
-    large_threshold: f64,
-) -> Result<Array1<f64>> {
+pub fn main_net_inflow(close: &[f64], volume: &[f64], large_threshold: f64) -> Result<Array1<f64>> {
     if close.len() != volume.len() {
         return Err(TaError::InvalidParameter {
             name: "close, volume".to_string(),
@@ -551,10 +541,7 @@ pub fn rs_ratio(close: &[f64], benchmark_close: &[f64], period: usize) -> Result
 ///
 /// # Returns
 /// Array of net inflows. NaN inputs are coerced to 0.
-pub fn north_bound_flow(
-    hs_connect: &[f64],
-    sz_connect: &[f64],
-) -> Result<Array1<f64>> {
+pub fn north_bound_flow(hs_connect: &[f64], sz_connect: &[f64]) -> Result<Array1<f64>> {
     if hs_connect.len() != sz_connect.len() {
         return Err(TaError::InvalidParameter {
             name: "hs_connect, sz_connect".to_string(),
@@ -565,8 +552,16 @@ pub fn north_bound_flow(
     let len = hs_connect.len();
     let mut out = init_output(len);
     for i in 0..len {
-        let h = if hs_connect[i].is_nan() { 0.0 } else { hs_connect[i] };
-        let s = if sz_connect[i].is_nan() { 0.0 } else { sz_connect[i] };
+        let h = if hs_connect[i].is_nan() {
+            0.0
+        } else {
+            hs_connect[i]
+        };
+        let s = if sz_connect[i].is_nan() {
+            0.0
+        } else {
+            sz_connect[i]
+        };
         out[i] = h + s;
     }
     Ok(out)
@@ -584,11 +579,7 @@ pub fn north_bound_flow(
 ///
 /// # Returns
 /// Array of margin balances. NaN inputs are coerced to 0.
-pub fn margin_balance(
-    buy: &[f64],
-    repay: &[f64],
-    initial: f64,
-) -> Result<Array1<f64>> {
+pub fn margin_balance(buy: &[f64], repay: &[f64], initial: f64) -> Result<Array1<f64>> {
     if buy.len() != repay.len() {
         return Err(TaError::InvalidParameter {
             name: "buy, repay".to_string(),
@@ -612,11 +603,7 @@ pub fn margin_balance(
 ///
 /// Computes cumulative short-selling balance. Same structure as
 /// [`margin_balance`] but tracks the short leg of margin trading.
-pub fn short_balance(
-    sell: &[f64],
-    repay: &[f64],
-    initial: f64,
-) -> Result<Array1<f64>> {
+pub fn short_balance(sell: &[f64], repay: &[f64], initial: f64) -> Result<Array1<f64>> {
     if sell.len() != repay.len() {
         return Err(TaError::InvalidParameter {
             name: "sell, repay".to_string(),
@@ -639,10 +626,7 @@ pub fn short_balance(
 /// 融资买入额 (Daily Margin Buy Amount)
 ///
 /// Computes the total margin buy amount as `volume[i] * price[i]`.
-pub fn margin_buy_amount(
-    volume: &[f64],
-    price: &[f64],
-) -> Result<Array1<f64>> {
+pub fn margin_buy_amount(volume: &[f64], price: &[f64]) -> Result<Array1<f64>> {
     if volume.len() != price.len() {
         return Err(TaError::InvalidParameter {
             name: "volume, price".to_string(),
@@ -668,10 +652,7 @@ pub fn margin_buy_amount(
 /// # Arguments
 /// * `buyer` - Total buy amount from disclosed席位
 /// * `seller` - Total sell amount from disclosed席位
-pub fn dragon_tiger_net_buy(
-    buyer: &[f64],
-    seller: &[f64],
-) -> Result<Array1<f64>> {
+pub fn dragon_tiger_net_buy(buyer: &[f64], seller: &[f64]) -> Result<Array1<f64>> {
     if buyer.len() != seller.len() {
         return Err(TaError::InvalidParameter {
             name: "buyer, seller".to_string(),
@@ -769,7 +750,11 @@ pub fn limit_up_strength(
     let len = close.len();
     let mut out = init_output(len);
     for i in 0..len {
-        let lp = if limit_price[i].is_nan() { 0.0 } else { limit_price[i] };
+        let lp = if limit_price[i].is_nan() {
+            0.0
+        } else {
+            limit_price[i]
+        };
         let v = if volume[i].is_nan() { 0.0 } else { volume[i] };
         let c = if close[i].is_nan() { 0.0 } else { close[i] };
         if lp > 0.0 && (c - lp).abs() < 1e-9 * lp.max(1.0) {
@@ -787,10 +772,7 @@ pub fn limit_up_strength(
 /// # Arguments
 /// * `close` - Close prices
 /// * `limit_price` - Daily limit-up price
-pub fn consecutive_limit_days(
-    close: &[f64],
-    limit_price: &[f64],
-) -> Result<Array1<f64>> {
+pub fn consecutive_limit_days(close: &[f64], limit_price: &[f64]) -> Result<Array1<f64>> {
     if close.len() != limit_price.len() {
         return Err(TaError::InvalidParameter {
             name: "close, limit_price".to_string(),
@@ -824,10 +806,7 @@ pub fn consecutive_limit_days(
 /// * `bid_volume_1` - Bid volume at the first bid level (Level-1 ask side
 ///   on a sell-down day, or Level-1 bid side on a buy-up day; here we
 ///   treat the input as the user-supplied "封单量")
-pub fn seal_amount(
-    limit_up_signal: &[f64],
-    bid_volume_1: &[f64],
-) -> Result<Array1<f64>> {
+pub fn seal_amount(limit_up_signal: &[f64], bid_volume_1: &[f64]) -> Result<Array1<f64>> {
     if limit_up_signal.len() != bid_volume_1.len() {
         return Err(TaError::InvalidParameter {
             name: "limit_up_signal, bid_volume_1".to_string(),
@@ -838,8 +817,16 @@ pub fn seal_amount(
     let len = limit_up_signal.len();
     let mut out = Array1::<f64>::zeros(len);
     for i in 0..len {
-        let s = if limit_up_signal[i].is_nan() { 0.0 } else { limit_up_signal[i] };
-        let v = if bid_volume_1[i].is_nan() { 0.0 } else { bid_volume_1[i] };
+        let s = if limit_up_signal[i].is_nan() {
+            0.0
+        } else {
+            limit_up_signal[i]
+        };
+        let v = if bid_volume_1[i].is_nan() {
+            0.0
+        } else {
+            bid_volume_1[i]
+        };
         if s > 0.0 {
             out[i] = v;
         }
@@ -860,10 +847,7 @@ pub fn seal_amount(
 /// # Arguments
 /// * `turnover` - Turnover rate series (e.g. from [`turnover`])
 /// * `lookback` - Window size in bars
-pub fn turnover_percentile(
-    turnover: &[f64],
-    lookback: usize,
-) -> Result<Array1<f64>> {
+pub fn turnover_percentile(turnover: &[f64], lookback: usize) -> Result<Array1<f64>> {
     if lookback == 0 {
         return Err(TaError::InvalidParameter {
             name: "lookback".to_string(),
@@ -904,10 +888,7 @@ pub fn turnover_percentile(
 /// # Arguments
 /// * `volume` - Bar volumes
 /// * `vol_ma5` - Pre-computed 5-day SMA of volume (or any MA)
-pub fn volume_ratio(
-    volume: &[f64],
-    vol_ma5: &[f64],
-) -> Result<Array1<f64>> {
+pub fn volume_ratio(volume: &[f64], vol_ma5: &[f64]) -> Result<Array1<f64>> {
     if volume.len() != vol_ma5.len() {
         return Err(TaError::InvalidParameter {
             name: "volume, vol_ma5".to_string(),
@@ -935,10 +916,7 @@ pub fn volume_ratio(
 /// # Arguments
 /// * `bid_amount` - Total bid amount (委买量)
 /// * `ask_amount` - Total ask amount (委卖量)
-pub fn committee_ratio(
-    bid_amount: &[f64],
-    ask_amount: &[f64],
-) -> Result<Array1<f64>> {
+pub fn committee_ratio(bid_amount: &[f64], ask_amount: &[f64]) -> Result<Array1<f64>> {
     if bid_amount.len() != ask_amount.len() {
         return Err(TaError::InvalidParameter {
             name: "bid_amount, ask_amount".to_string(),
@@ -949,8 +927,16 @@ pub fn committee_ratio(
     let len = bid_amount.len();
     let mut out = init_output(len);
     for i in 0..len {
-        let b = if bid_amount[i].is_nan() { 0.0 } else { bid_amount[i] };
-        let a = if ask_amount[i].is_nan() { 0.0 } else { ask_amount[i] };
+        let b = if bid_amount[i].is_nan() {
+            0.0
+        } else {
+            bid_amount[i]
+        };
+        let a = if ask_amount[i].is_nan() {
+            0.0
+        } else {
+            ask_amount[i]
+        };
         let total = b + a;
         if total > 1e-15 {
             out[i] = (b - a) / total;
@@ -1032,7 +1018,10 @@ mod tests {
             assert!(
                 w[i] >= target - 1e-9, // cost() returns the boundary where winner >= target
                 "bar {}: winner({}) = {}, expected >= {}",
-                i, c[i], w[i], target
+                i,
+                c[i],
+                w[i],
+                target
             );
         }
     }

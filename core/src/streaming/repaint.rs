@@ -79,11 +79,7 @@ macro_rules! impl_compute_bar {
 #[macro_export]
 macro_rules! impl_next_with_time {
     ($input_type:ty, $output_type:ty) => {
-        fn next_with_time(
-            &mut self,
-            input: $input_type,
-            open_time: i64,
-        ) -> Option<$output_type> {
+        fn next_with_time(&mut self, input: $input_type, open_time: i64) -> Option<$output_type> {
             if open_time != 0 && open_time == self.last_open_time {
                 if let Some(snap) = self.snapshot.take() {
                     *self = *snap;

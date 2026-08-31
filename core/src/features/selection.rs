@@ -9,7 +9,12 @@ pub fn variance_threshold(matrix: &FeatureMatrix, min_var: f64) -> FeatureMatrix
         let col = matrix.column(i);
         let n = col.len() as f64;
         let mean = col.iter().filter(|v| !v.is_nan()).sum::<f64>() / n;
-        let var = col.iter().filter(|v| !v.is_nan()).map(|v| (v - mean).powi(2)).sum::<f64>() / n;
+        let var = col
+            .iter()
+            .filter(|v| !v.is_nan())
+            .map(|v| (v - mean).powi(2))
+            .sum::<f64>()
+            / n;
         if var >= min_var {
             result.add_column(matrix.features()[i].clone(), col.to_vec());
         }
@@ -23,9 +28,13 @@ pub fn correlation_filter(matrix: &FeatureMatrix, max_corr: f64) -> FeatureMatri
     let mut should_drop = vec![false; n_cols];
 
     for i in 0..n_cols {
-        if should_drop[i] { continue; }
+        if should_drop[i] {
+            continue;
+        }
         for (j, drop_flag) in should_drop.iter_mut().enumerate().skip(i + 1) {
-            if *drop_flag { continue; }
+            if *drop_flag {
+                continue;
+            }
             let corr = pearson_correlation(matrix.column(i), matrix.column(j));
             if corr.abs() > max_corr {
                 *drop_flag = true;
@@ -45,7 +54,11 @@ pub fn correlation_filter(matrix: &FeatureMatrix, max_corr: f64) -> FeatureMatri
 /// Compute mutual information between each feature and the target labels.
 ///
 /// Uses histogram-based MI estimation (discretization approach).
-pub fn mutual_information(matrix: &FeatureMatrix, labels: &[f64], num_bins: usize) -> FeatureRanking {
+pub fn mutual_information(
+    matrix: &FeatureMatrix,
+    labels: &[f64],
+    num_bins: usize,
+) -> FeatureRanking {
     let mut rankings = Vec::with_capacity(matrix.cols());
 
     for i in 0..matrix.cols() {
@@ -60,14 +73,20 @@ pub fn mutual_information(matrix: &FeatureMatrix, labels: &[f64], num_bins: usiz
 
 fn compute_mi(x: &[f64], y: &[f64], num_bins: usize) -> f64 {
     let n = x.len().min(y.len());
-    if n == 0 || num_bins == 0 { return 0.0; }
+    if n == 0 || num_bins == 0 {
+        return 0.0;
+    }
 
-    let valid: Vec<(f64, f64)> = x.iter().zip(y.iter())
+    let valid: Vec<(f64, f64)> = x
+        .iter()
+        .zip(y.iter())
         .filter(|(&a, &b)| !a.is_nan() && !b.is_nan())
         .map(|(&a, &b)| (a, b))
         .collect();
     let n_valid = valid.len() as f64;
-    if n_valid < 4.0 { return 0.0; }
+    if n_valid < 4.0 {
+        return 0.0;
+    }
 
     let x_vals: Vec<f64> = valid.iter().map(|v| v.0).collect();
     let y_vals: Vec<f64> = valid.iter().map(|v| v.1).collect();
@@ -109,15 +128,19 @@ fn discretize(data: &[f64], num_bins: usize) -> Vec<usize> {
         return vec![0; data.len()];
     }
     let bin_width = range / num_bins as f64;
-    data.iter().map(|&x| {
-        let bin = ((x - min) / bin_width).floor() as usize;
-        bin.min(num_bins - 1)
-    }).collect()
+    data.iter()
+        .map(|&x| {
+            let bin = ((x - min) / bin_width).floor() as usize;
+            bin.min(num_bins - 1)
+        })
+        .collect()
 }
 
 fn pearson_correlation(a: &[f64], b: &[f64]) -> f64 {
     let n = a.len().min(b.len());
-    if n < 3 { return 0.0; }
+    if n < 3 {
+        return 0.0;
+    }
 
     let mut sum_a = 0.0;
     let mut sum_b = 0.0;
@@ -130,7 +153,9 @@ fn pearson_correlation(a: &[f64], b: &[f64]) -> f64 {
             count += 1.0;
         }
     }
-    if count < 3.0 { return 0.0; }
+    if count < 3.0 {
+        return 0.0;
+    }
 
     let mean_a = sum_a / count;
     let mean_b = sum_b / count;
@@ -150,19 +175,29 @@ fn pearson_correlation(a: &[f64], b: &[f64]) -> f64 {
     }
 
     let denom = (var_a * var_b).sqrt();
-    if denom > 1e-15 { cov / denom } else { 0.0 }
+    if denom > 1e-15 {
+        cov / denom
+    } else {
+        0.0
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::Feature;
+    use super::*;
 
     #[test]
     fn test_variance_threshold() {
         let mut m = FeatureMatrix::new();
-        m.add_column(Feature::new("const", "cat", 0), vec![5.0, 5.0, 5.0, 5.0, 5.0]);
-        m.add_column(Feature::new("varied", "cat", 0), vec![1.0, 2.0, 3.0, 4.0, 5.0]);
+        m.add_column(
+            Feature::new("const", "cat", 0),
+            vec![5.0, 5.0, 5.0, 5.0, 5.0],
+        );
+        m.add_column(
+            Feature::new("varied", "cat", 0),
+            vec![1.0, 2.0, 3.0, 4.0, 5.0],
+        );
         let filtered = variance_threshold(&m, 0.1);
         assert_eq!(filtered.cols(), 1);
         assert_eq!(filtered.column_names(), vec!["varied"]);
@@ -189,7 +224,10 @@ mod tests {
         let noise: Vec<f64> = (0..100).map(|i| (i as f64 * 7.7).sin()).collect();
         m.add_column(Feature::new("signal", "cat", 0), x.clone());
         m.add_column(Feature::new("noise", "cat", 0), noise);
-        let labels: Vec<f64> = x.iter().map(|&v| if v > 50.0 { 1.0 } else { 0.0 }).collect();
+        let labels: Vec<f64> = x
+            .iter()
+            .map(|&v| if v > 50.0 { 1.0 } else { 0.0 })
+            .collect();
         let ranking = mutual_information(&m, &labels, 10);
         // "signal" should rank higher than "noise"
         assert_eq!(ranking.rankings[0].0, "signal");

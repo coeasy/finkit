@@ -1,6 +1,6 @@
+use crate::impl_standard_methods;
 use crate::streaming::rolling_minmax::{RollingMax, RollingMin};
 use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
-use crate::impl_standard_methods;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -76,7 +76,10 @@ impl StreamingStoch {
 
 impl StreamingIndicator<(f64, f64, f64), StochOutput> for StreamingStoch {
     #[inline]
-    #[cfg_attr(feature = "tracing", tracing::instrument(level = "trace", skip(self, input)))]
+    #[cfg_attr(
+        feature = "tracing",
+        tracing::instrument(level = "trace", skip(self, input))
+    )]
     fn next(&mut self, input: (f64, f64, f64)) -> Option<StochOutput> {
         crate::streaming_measure!("stoch", self.count, {
             let (high, low, close) = input;
@@ -125,7 +128,12 @@ impl StreamingIndicator<(f64, f64, f64), StochOutput> for StreamingStoch {
                 let evicted = self.fast_k_buf[self.fk_head];
                 self.fk_sum += fast_k - evicted;
             }
-            Self::ring_push(&mut self.fast_k_buf, &mut self.fk_head, &mut self.fk_len, fast_k);
+            Self::ring_push(
+                &mut self.fast_k_buf,
+                &mut self.fk_head,
+                &mut self.fk_len,
+                fast_k,
+            );
 
             if self.fk_len < self.k_slow {
                 self.last_value = None;
@@ -141,7 +149,12 @@ impl StreamingIndicator<(f64, f64, f64), StochOutput> for StreamingStoch {
                 let evicted = self.slow_k_buf[self.sk_head];
                 self.sk_sum += slow_k - evicted;
             }
-            Self::ring_push(&mut self.slow_k_buf, &mut self.sk_head, &mut self.sk_len, slow_k);
+            Self::ring_push(
+                &mut self.slow_k_buf,
+                &mut self.sk_head,
+                &mut self.sk_len,
+                slow_k,
+            );
 
             if self.sk_len < self.d_period {
                 self.last_value = None;
@@ -174,16 +187,22 @@ impl StreamingIndicator<(f64, f64, f64), StochOutput> for StreamingStoch {
         self.sk_len >= self.d_period
     }
 
-        impl_standard_methods!(output = StochOutput);
-
-
+    impl_standard_methods!(output = StochOutput);
 }
 
 impl IndicatorMeta for StreamingStoch {
-    fn name() -> &'static str { "STOCH" }
-    fn category() -> &'static str { "momentum" }
-    fn description() -> &'static str { "Stochastic Oscillator" }
-    fn warm_up_period(&self) -> usize { self.k_period + self.k_slow + self.d_period - 2 }
+    fn name() -> &'static str {
+        "STOCH"
+    }
+    fn category() -> &'static str {
+        "momentum"
+    }
+    fn description() -> &'static str {
+        "Stochastic Oscillator"
+    }
+    fn warm_up_period(&self) -> usize {
+        self.k_period + self.k_slow + self.d_period - 2
+    }
 }
 
 #[cfg(test)]
@@ -227,8 +246,16 @@ mod tests {
 
         for &d in &data {
             if let Some(out) = stoch.next(d) {
-                assert!(out.k >= -0.01 && out.k <= 100.01, "k out of range: {}", out.k);
-                assert!(out.d >= -0.01 && out.d <= 100.01, "d out of range: {}", out.d);
+                assert!(
+                    out.k >= -0.01 && out.k <= 100.01,
+                    "k out of range: {}",
+                    out.k
+                );
+                assert!(
+                    out.d >= -0.01 && out.d <= 100.01,
+                    "d out of range: {}",
+                    out.d
+                );
             }
         }
     }
@@ -260,7 +287,11 @@ mod tests {
             .map(|i| 50.0 + (i as f64 * 0.2).sin() * 10.0)
             .collect();
         let low: Vec<f64> = high.iter().map(|h| h - 3.0).collect();
-        let close: Vec<f64> = high.iter().zip(low.iter()).map(|(h, l)| (h + l) / 2.0).collect();
+        let close: Vec<f64> = high
+            .iter()
+            .zip(low.iter())
+            .map(|(h, l)| (h + l) / 2.0)
+            .collect();
 
         let batch = crate::indicators::momentum::stoch(&high, &low, &close, 14, 3, 3).unwrap();
 

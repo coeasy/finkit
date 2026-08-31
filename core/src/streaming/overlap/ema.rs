@@ -85,12 +85,14 @@ impl StreamingEma {
         self.last_open_time = t;
         self.next(bar.close())
     }
-
 }
 
 impl StreamingIndicator for StreamingEma {
     #[inline]
-    #[cfg_attr(feature = "tracing", tracing::instrument(level = "trace", skip(self, input)))]
+    #[cfg_attr(
+        feature = "tracing",
+        tracing::instrument(level = "trace", skip(self, input))
+    )]
     fn next(&mut self, input: f64) -> Option<f64> {
         #[cfg(feature = "metrics")]
         let __start = std::time::Instant::now();
@@ -238,7 +240,8 @@ mod tests {
 
         ema.compute_bar(&OhlcvBar::new_with_time(0.0, 0.0, 0.0, 10.0, 0.0, 4000));
         ema.compute_bar(&OhlcvBar::new_with_time(0.0, 0.0, 0.0, 20.0, 0.0, 4000));
-        let result_repaint = ema.compute_bar(&OhlcvBar::new_with_time(0.0, 0.0, 0.0, 3.0, 0.0, 4000));
+        let result_repaint =
+            ema.compute_bar(&OhlcvBar::new_with_time(0.0, 0.0, 0.0, 3.0, 0.0, 4000));
 
         let mut ema_clean = StreamingEma::new(3);
         ema_clean.next(1.0);
@@ -291,7 +294,8 @@ mod tests {
             .collect();
         let period = 14;
 
-        let batch = crate::math::moving_avg::ema_with_seed(&data, period, EmaSeed::FirstValue).unwrap();
+        let batch =
+            crate::math::moving_avg::ema_with_seed(&data, period, EmaSeed::FirstValue).unwrap();
 
         let mut streaming = StreamingEma::with_seed(period, EmaSeed::FirstValue);
         for (i, &val) in data.iter().enumerate() {

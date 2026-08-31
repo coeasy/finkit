@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamingVwap {
@@ -10,7 +10,9 @@ pub struct StreamingVwap {
 }
 
 impl Default for StreamingVwap {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl StreamingVwap {
@@ -26,7 +28,10 @@ impl StreamingVwap {
 
 impl StreamingIndicator<&dyn Ohlcv> for StreamingVwap {
     #[inline]
-    #[cfg_attr(feature = "tracing", tracing::instrument(level = "trace", skip(self, bar)))]
+    #[cfg_attr(
+        feature = "tracing",
+        tracing::instrument(level = "trace", skip(self, bar))
+    )]
     fn next(&mut self, bar: &dyn Ohlcv) -> Option<f64> {
         crate::streaming_measure!("vwap", self.count, {
             self.count += 1;
@@ -51,16 +56,26 @@ impl StreamingIndicator<&dyn Ohlcv> for StreamingVwap {
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { self.count >= 1 }
+    fn is_ready(&self) -> bool {
+        self.count >= 1
+    }
 
     impl_standard_methods!();
 }
 
 impl IndicatorMeta for StreamingVwap {
-    fn name() -> &'static str { "VWAP" }
-    fn category() -> &'static str { "volume" }
-    fn description() -> &'static str { "Volume Weighted Average Price" }
-    fn warm_up_period(&self) -> usize { 1 }
+    fn name() -> &'static str {
+        "VWAP"
+    }
+    fn category() -> &'static str {
+        "volume"
+    }
+    fn description() -> &'static str {
+        "Volume Weighted Average Price"
+    }
+    fn warm_up_period(&self) -> usize {
+        1
+    }
 }
 
 #[cfg(test)]
@@ -71,7 +86,9 @@ mod tests {
     #[test]
     fn test_streaming_vwap_basic() {
         let mut vwap = StreamingVwap::new();
-        let v1 = vwap.next(&OhlcvBar::new(10.0, 12.0, 9.0, 11.0, 100.0)).unwrap();
+        let v1 = vwap
+            .next(&OhlcvBar::new(10.0, 12.0, 9.0, 11.0, 100.0))
+            .unwrap();
         let tp1 = (12.0 + 9.0 + 11.0) / 3.0;
         assert!((v1 - tp1).abs() < 1e-10);
     }

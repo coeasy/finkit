@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
 
 /// Volume direction for VR classification.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

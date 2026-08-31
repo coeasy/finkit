@@ -87,7 +87,12 @@ impl StreamingIndicator for StreamingAlma {
     impl_standard_methods!();
 }
 
-impl_indicator_meta!(StreamingAlma, "ALMA", "overlap", "Arnaud Legoux Moving Average");
+impl_indicator_meta!(
+    StreamingAlma,
+    "ALMA",
+    "overlap",
+    "Arnaud Legoux Moving Average"
+);
 
 #[cfg(test)]
 mod tests {

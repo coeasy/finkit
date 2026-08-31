@@ -1,3 +1,4 @@
+use crate::formula::ast::AstNode;
 use crate::formula::bytecode::{compile_to_bytecode, Bytecode, BytecodeVM};
 use crate::formula::compiler::{CompiledFormula, FormulaCache};
 use crate::formula::debugger::FormulaDebugger;
@@ -5,7 +6,6 @@ use crate::formula::executor::FormulaExecutor;
 use crate::formula::jit::{JitCompiler, OptimizedBytecode};
 use crate::formula::optimizer::{DependencyAnalyzer, FormulaOptimizer};
 use crate::formula::params::{apply_params, parse_params, validate_params, ParamDef, ParamValues};
-use crate::formula::ast::AstNode;
 use crate::formula::parser::parse_formula;
 use crate::formula::templates::{FormulaTemplate, FormulaTemplates};
 use crate::formula::types::*;
@@ -137,7 +137,8 @@ impl FormulaEngine {
         source: &str,
         ctx: &mut FormulaContext,
     ) -> Result<MultiOutput, FormulaError> {
-        let vars_before: std::collections::HashSet<Arc<str>> = ctx.variables.keys().cloned().collect();
+        let vars_before: std::collections::HashSet<Arc<str>> =
+            ctx.variables.keys().cloned().collect();
         let final_value = self.eval(source, ctx)?;
         let mut multi = MultiOutput::new(final_value);
         for (name, value) in &ctx.variables {
@@ -202,21 +203,30 @@ impl FormulaEngine {
                         #[cfg(feature = "rayon")]
                         {
                             use rayon::prelude::*;
-                            let local_ctxs: Vec<_> = (0..group.len()).map(|_| ctx.clone()).collect();
+                            let local_ctxs: Vec<_> =
+                                (0..group.len()).map(|_| ctx.clone()).collect();
                             let results: Vec<_> = group
                                 .par_iter()
                                 .zip(local_ctxs.into_par_iter())
                                 .map(|(stmt, mut local_ctx)| {
                                     let mut local_exec = FormulaExecutor::new();
                                     let result = local_exec.execute(stmt, &mut local_ctx);
-                                    (result, local_ctx.variables, local_ctx.output_modifiers, local_ctx.draw_commands.into_inner())
+                                    (
+                                        result,
+                                        local_ctx.variables,
+                                        local_ctx.output_modifiers,
+                                        local_ctx.draw_commands.into_inner(),
+                                    )
                                 })
                                 .collect();
                             for (r, vars, mods, draws) in results {
                                 last_result = r?;
                                 ctx.variables.extend(vars);
                                 ctx.output_modifiers.extend(mods);
-                                ctx.draw_commands.borrow_mut().commands.extend(draws.commands);
+                                ctx.draw_commands
+                                    .borrow_mut()
+                                    .commands
+                                    .extend(draws.commands);
                             }
                         }
                         #[cfg(not(feature = "rayon"))]
@@ -474,11 +484,11 @@ mod tests {
         let mut engine = FormulaEngine::new();
         let mut ctx = make_ctx(30);
         let cases = [
-            "SMA(CLOSE",            // unterminated syntax error
-            "1 +",                  // incomplete expression
-            ")",                    // stray token
-            "FOOBAR(CLOSE, 20)",    // unknown function
-            "MA(CLOSE)",            // too few arguments
+            "SMA(CLOSE",         // unterminated syntax error
+            "1 +",               // incomplete expression
+            ")",                 // stray token
+            "FOOBAR(CLOSE, 20)", // unknown function
+            "MA(CLOSE)",         // too few arguments
         ];
         for src in cases {
             let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {

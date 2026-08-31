@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 
 /// Streaming Squeeze Momentum output.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -271,9 +271,7 @@ impl StreamingIndicator<(f64, f64, f64), SqueezeMomentumOutput> for StreamingSqu
             && self.atr_ready
     }
 
-        impl_standard_methods!(output = SqueezeMomentumOutput);
-
-
+    impl_standard_methods!(output = SqueezeMomentumOutput);
 }
 
 impl IndicatorMeta for StreamingSqueezeMomentum {

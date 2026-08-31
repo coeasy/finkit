@@ -79,16 +79,13 @@ impl FeatureStore for InMemoryFeatureStore {
             .lock()
             .map_err(|_| "feature store lock poisoned".to_string())?;
 
-        store
-            .entry(name.to_string())
-            .or_default()
-            .insert(
-                version.to_string(),
-                StoredFeature {
-                    data: data.to_vec(),
-                    feature_names: feature_names.to_vec(),
-                },
-            );
+        store.entry(name.to_string()).or_default().insert(
+            version.to_string(),
+            StoredFeature {
+                data: data.to_vec(),
+                feature_names: feature_names.to_vec(),
+            },
+        );
 
         Ok(())
     }
@@ -137,7 +134,9 @@ impl FeatureStore for InMemoryFeatureStore {
             .ok_or_else(|| format!("feature set '{name}' version '{version}' not found"))?;
 
         if versions.remove(version).is_none() {
-            return Err(format!("feature set '{name}' version '{version}' not found"));
+            return Err(format!(
+                "feature set '{name}' version '{version}' not found"
+            ));
         }
 
         if versions.is_empty() {
@@ -215,7 +214,10 @@ mod tests {
         store.invalidate("features", "v1").unwrap();
 
         assert!(store.load("features", "v1").is_err());
-        assert_eq!(store.list_versions("features").unwrap(), Vec::<String>::new());
+        assert_eq!(
+            store.list_versions("features").unwrap(),
+            Vec::<String>::new()
+        );
     }
 
     #[test]

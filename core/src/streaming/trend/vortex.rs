@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -48,7 +48,10 @@ impl StreamingVortex {
 
 impl StreamingIndicator<(f64, f64, f64), VortexOutput> for StreamingVortex {
     #[inline]
-    #[cfg_attr(feature = "tracing", tracing::instrument(level = "trace", skip(self, input)))]
+    #[cfg_attr(
+        feature = "tracing",
+        tracing::instrument(level = "trace", skip(self, input))
+    )]
     fn next(&mut self, input: (f64, f64, f64)) -> Option<VortexOutput> {
         crate::streaming_measure!("vortex", self.count, {
             let (high, low, close) = input;
@@ -124,9 +127,7 @@ impl StreamingIndicator<(f64, f64, f64), VortexOutput> for StreamingVortex {
         self.count > self.period
     }
 
-        impl_standard_methods!(output = VortexOutput);
-
-
+    impl_standard_methods!(output = VortexOutput);
 }
 
 impl IndicatorMeta for StreamingVortex {
@@ -202,9 +203,15 @@ mod tests {
     #[test]
     fn test_streaming_vs_batch_convergence() {
         let n = 50;
-        let high: Vec<f64> = (0..n).map(|i| 50.0 + (i as f64 * 0.3).sin() * 5.0).collect();
+        let high: Vec<f64> = (0..n)
+            .map(|i| 50.0 + (i as f64 * 0.3).sin() * 5.0)
+            .collect();
         let low: Vec<f64> = high.iter().map(|h| h - 2.0).collect();
-        let close: Vec<f64> = high.iter().zip(low.iter()).map(|(h, l)| (h + l) / 2.0).collect();
+        let close: Vec<f64> = high
+            .iter()
+            .zip(low.iter())
+            .map(|(h, l)| (h + l) / 2.0)
+            .collect();
         let period = 14;
 
         let batch = crate::indicators::momentum_ext::vortex(&high, &low, &close, period).unwrap();
@@ -216,14 +223,16 @@ mod tests {
                     assert!(
                         (out.vi_plus - batch.vi_plus[i]).abs() < 1e-10,
                         "VI+ mismatch at {i}: streaming={}, batch={}",
-                        out.vi_plus, batch.vi_plus[i]
+                        out.vi_plus,
+                        batch.vi_plus[i]
                     );
                 }
                 if !batch.vi_minus[i].is_nan() {
                     assert!(
                         (out.vi_minus - batch.vi_minus[i]).abs() < 1e-10,
                         "VI- mismatch at {i}: streaming={}, batch={}",
-                        out.vi_minus, batch.vi_minus[i]
+                        out.vi_minus,
+                        batch.vi_minus[i]
                     );
                 }
             }

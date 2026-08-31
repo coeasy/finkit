@@ -24,8 +24,8 @@
 
 use crate::error::{Result, TaError};
 use crate::patterns::common::{
-    body, gap_down, gap_up, init_signal, is_bearish, is_bullish, precompute_sma, Signal,
-    validate_ohlcv, validate_ohlcv_with_volume,
+    body, gap_down, gap_up, init_signal, is_bearish, is_bullish, precompute_sma, validate_ohlcv,
+    validate_ohlcv_with_volume, Signal,
 };
 use crate::utils::validate_input;
 use ndarray::Array1;
@@ -88,7 +88,9 @@ pub fn vcp(
         let a1 = last3[2].1 - window_l[last3[2].0];
         let a2 = last3[1].1 - window_l[last3[1].0];
         let a3 = last3[0].1 - window_l[last3[0].0];
-        if a1 > 0.0 && a2 > 0.0 && a3 > 0.0
+        if a1 > 0.0
+            && a2 > 0.0
+            && a3 > 0.0
             && a2 < a1 * contraction_pct
             && a3 < a2 * contraction_pct
         {
@@ -152,7 +154,9 @@ pub fn cup_and_handle(
             continue;
         }
         // Handle in [i-5, i]
-        let handle_high = (cup_end..i).map(|k| high[k]).fold(f64::NEG_INFINITY, f64::max);
+        let handle_high = (cup_end..i)
+            .map(|k| high[k])
+            .fold(f64::NEG_INFINITY, f64::max);
         let handle_low = (cup_end..i).map(|k| low[k]).fold(f64::INFINITY, f64::min);
         let handle_drop = cup_high_right - handle_low;
         if handle_drop > depth * handle_pct {
@@ -206,7 +210,9 @@ pub fn rounding_bottom(low: &[f64], curvature_threshold: f64) -> Result<PatternR
         // Smooth: max-min in the bottom region should be small
         let bottom_range = low[cup_start..cup_end]
             .iter()
-            .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &v| (lo.min(v), hi.max(v)));
+            .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &v| {
+                (lo.min(v), hi.max(v))
+            });
         let smoothness = (bottom_range.1 - bottom_range.0) / left_peak;
         if smoothness > 0.10 {
             continue;
@@ -251,11 +257,7 @@ pub fn rounding_top(high: &[f64], curvature_threshold: f64) -> Result<PatternRes
 // ============================================================================
 
 /// Island Reversal Up (向上岛形反转) — 向下跳空 + 向上跳空包夹
-pub fn island_reversal_up(
-    high: &[f64],
-    low: &[f64],
-    _gap_min: f64,
-) -> Result<PatternResult> {
+pub fn island_reversal_up(high: &[f64], low: &[f64], _gap_min: f64) -> Result<PatternResult> {
     validate_ohlcv(high, low, high, high, 4)?;
     let n = high.len();
     let mut out = init_signal(n);
@@ -281,11 +283,7 @@ pub fn island_reversal_up(
 }
 
 /// Island Reversal Down (向下岛形反转) — 向上跳空 + 向下跳空包夹
-pub fn island_reversal_down(
-    high: &[f64],
-    low: &[f64],
-    _gap_min: f64,
-) -> Result<PatternResult> {
+pub fn island_reversal_down(high: &[f64], low: &[f64], _gap_min: f64) -> Result<PatternResult> {
     validate_ohlcv(high, low, high, high, 4)?;
     let n = high.len();
     let mut out = init_signal(n);

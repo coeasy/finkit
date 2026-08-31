@@ -66,11 +66,19 @@ pub fn death_cross(
     detect_cross(&short_ma, &long_ma, &out, false)
 }
 
-fn detect_cross(short: &[f64], long_: &[f64], out: &Array1<i32>, bullish: bool) -> Result<PatternResult> {
+fn detect_cross(
+    short: &[f64],
+    long_: &[f64],
+    out: &Array1<i32>,
+    bullish: bool,
+) -> Result<PatternResult> {
     let mut out = out.clone();
     for i in 1..short.len() {
-        if !short[i].is_finite() || !long_[i].is_finite()
-            || !short[i - 1].is_finite() || !long_[i - 1].is_finite() {
+        if !short[i].is_finite()
+            || !long_[i].is_finite()
+            || !short[i - 1].is_finite()
+            || !long_[i - 1].is_finite()
+        {
             continue;
         }
         let crossed = if bullish {
@@ -106,8 +114,11 @@ pub fn silver_valley(
     // Find all golden cross points
     let mut crosses: Vec<usize> = Vec::new();
     for i in 1..n {
-        if !short_ma[i].is_finite() || !long_ma[i].is_finite()
-            || !short_ma[i - 1].is_finite() || !long_ma[i - 1].is_finite() {
+        if !short_ma[i].is_finite()
+            || !long_ma[i].is_finite()
+            || !short_ma[i - 1].is_finite()
+            || !long_ma[i - 1].is_finite()
+        {
             continue;
         }
         if short_ma[i - 1] <= long_ma[i - 1] && short_ma[i] > long_ma[i] {
@@ -138,8 +149,11 @@ pub fn gold_valley(
 
     let mut crosses: Vec<usize> = Vec::new();
     for i in 1..n {
-        if !short_ma[i].is_finite() || !long_ma[i].is_finite()
-            || !short_ma[i - 1].is_finite() || !long_ma[i - 1].is_finite() {
+        if !short_ma[i].is_finite()
+            || !long_ma[i].is_finite()
+            || !short_ma[i - 1].is_finite()
+            || !long_ma[i - 1].is_finite()
+        {
             continue;
         }
         if short_ma[i - 1] <= long_ma[i - 1] && short_ma[i] > long_ma[i] {
@@ -168,8 +182,11 @@ pub fn death_valley(
 
     let mut crosses: Vec<usize> = Vec::new();
     for i in 1..n {
-        if !short_ma[i].is_finite() || !long_ma[i].is_finite()
-            || !short_ma[i - 1].is_finite() || !long_ma[i - 1].is_finite() {
+        if !short_ma[i].is_finite()
+            || !long_ma[i].is_finite()
+            || !short_ma[i - 1].is_finite()
+            || !long_ma[i - 1].is_finite()
+        {
             continue;
         }
         if short_ma[i - 1] >= long_ma[i - 1] && short_ma[i] < long_ma[i] {
@@ -193,10 +210,7 @@ pub fn death_valley(
 /// # 规则
 /// 1. 5/10/20 MA 最大-最小 ≤ `convergence_pct × 中位数 MA`
 /// 2. 之后短期 MA 增速 > 长期 MA 增速
-pub fn golden_spider(
-    close: &[f64],
-    convergence_pct: f64,
-) -> Result<PatternResult> {
+pub fn golden_spider(close: &[f64], convergence_pct: f64) -> Result<PatternResult> {
     let n = close.len();
     let mut out = Array1::<i32>::zeros(n);
     let ma5 = precompute_sma(close, 5);
@@ -231,10 +245,7 @@ pub fn golden_spider(
 }
 
 /// 死蜘蛛 — 三线粘合后向下发散
-pub fn death_spider(
-    close: &[f64],
-    convergence_pct: f64,
-) -> Result<PatternResult> {
+pub fn death_spider(close: &[f64], convergence_pct: f64) -> Result<PatternResult> {
     let n = close.len();
     let mut out = Array1::<i32>::zeros(n);
     let ma5 = precompute_sma(close, 5);
@@ -283,9 +294,13 @@ pub fn bullish_alignment(close: &[f64], period: usize) -> Result<PatternResult> 
         // Check last `period` bars all satisfy the ordering
         let ok = (0..period.min(i + 1)).all(|k| {
             let j = i - k;
-            ma5[j].is_finite() && ma10[j].is_finite()
-                && ma20[j].is_finite() && ma60[j].is_finite()
-                && ma5[j] > ma10[j] && ma10[j] > ma20[j] && ma20[j] > ma60[j]
+            ma5[j].is_finite()
+                && ma10[j].is_finite()
+                && ma20[j].is_finite()
+                && ma60[j].is_finite()
+                && ma5[j] > ma10[j]
+                && ma10[j] > ma20[j]
+                && ma20[j] > ma60[j]
         });
         if ok {
             out[i] = 100;
@@ -306,9 +321,13 @@ pub fn bearish_alignment(close: &[f64], period: usize) -> Result<PatternResult> 
     for i in 60..n {
         let ok = (0..period.min(i + 1)).all(|k| {
             let j = i - k;
-            ma5[j].is_finite() && ma10[j].is_finite()
-                && ma20[j].is_finite() && ma60[j].is_finite()
-                && ma5[j] < ma10[j] && ma10[j] < ma20[j] && ma20[j] < ma60[j]
+            ma5[j].is_finite()
+                && ma10[j].is_finite()
+                && ma20[j].is_finite()
+                && ma60[j].is_finite()
+                && ma5[j] < ma10[j]
+                && ma10[j] < ma20[j]
+                && ma20[j] < ma60[j]
         });
         if ok {
             out[i] = -100;
@@ -464,9 +483,7 @@ pub fn ma_bullish_divergence(
             }
         }
         // Current: new low in close, but MA is above the previous MA low
-        if close[i] < close[min_close_idx]
-            && short_ma[i] > short_ma[min_ma_idx]
-        {
+        if close[i] < close[min_close_idx] && short_ma[i] > short_ma[min_ma_idx] {
             out[i] = 100;
         }
     }
@@ -497,9 +514,7 @@ pub fn ma_bearish_divergence(
                 max_ma_idx = k;
             }
         }
-        if close[i] > close[max_close_idx]
-            && short_ma[i] < short_ma[max_ma_idx]
-        {
+        if close[i] > close[max_close_idx] && short_ma[i] < short_ma[max_ma_idx] {
             out[i] = -100;
         }
     }
@@ -615,10 +630,18 @@ pub fn macd_histogram_divergence(
         let mut min_close_idx = i - 1;
         let mut min_hist_idx = i - 1;
         for k in (i - lookback)..i {
-            if close[k] > close[max_close_idx] { max_close_idx = k; }
-            if macd_hist[k] > macd_hist[max_hist_idx] { max_hist_idx = k; }
-            if close[k] < close[min_close_idx] { min_close_idx = k; }
-            if macd_hist[k] < macd_hist[min_hist_idx] { min_hist_idx = k; }
+            if close[k] > close[max_close_idx] {
+                max_close_idx = k;
+            }
+            if macd_hist[k] > macd_hist[max_hist_idx] {
+                max_hist_idx = k;
+            }
+            if close[k] < close[min_close_idx] {
+                min_close_idx = k;
+            }
+            if macd_hist[k] < macd_hist[min_hist_idx] {
+                min_hist_idx = k;
+            }
         }
         // 顶背离：价格新高但 hist 未新高
         if close[i] > close[max_close_idx] && macd_hist[i] < macd_hist[max_hist_idx] {
@@ -732,7 +755,10 @@ mod tests {
             close[i] = 40.0 + (i - 90) as f64;
         }
         let out = first_break_above_ma60(&close).unwrap();
-        assert!(out.iter().any(|&s| s == 100), "expected first break above MA60");
+        assert!(
+            out.iter().any(|&s| s == 100),
+            "expected first break above MA60"
+        );
     }
 
     #[test]
@@ -740,9 +766,9 @@ mod tests {
         let n = 30;
         // Two price lows but MA is rising
         let close = vec![
-            10.0, 9.0, 8.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0,
-            12.0, 11.0, 10.5, 10.0, 9.5, 10.0, 10.5, 11.0, 12.0, 13.0,
-            14.0, 14.5, 15.0, 15.5, 16.0, 16.5, 17.0, 17.5, 18.0, 18.5,
+            10.0, 9.0, 8.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 12.0, 11.0, 10.5, 10.0, 9.5,
+            10.0, 10.5, 11.0, 12.0, 13.0, 14.0, 14.5, 15.0, 15.5, 16.0, 16.5, 17.0, 17.5, 18.0,
+            18.5,
         ];
         let out = ma_bullish_divergence(&close, 5, 20).unwrap();
         assert_eq!(out.len(), n);

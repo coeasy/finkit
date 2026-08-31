@@ -10,9 +10,9 @@
 //! TRIMA. Each individual SMA is O(1) per call, so the composed indicator is
 //! also O(1) per input.
 
+use crate::impl_standard_methods;
 use crate::streaming::overlap::sma::StreamingSma;
 use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
-use crate::impl_standard_methods;
 
 #[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

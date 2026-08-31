@@ -208,7 +208,9 @@ fn main() {
     let n_a = aroon(&high, &low, 14).unwrap();
     let mut maxdiff = 0.0f64;
     for i in 0..N {
-        let d = (o_u[i] - n_a.aroon_up[i]).abs().max((o_d[i] - n_a.aroon_down[i]).abs());
+        let d = (o_u[i] - n_a.aroon_up[i])
+            .abs()
+            .max((o_d[i] - n_a.aroon_down[i]).abs());
         if d > maxdiff {
             maxdiff = d;
         }

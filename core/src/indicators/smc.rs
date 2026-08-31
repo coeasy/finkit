@@ -55,7 +55,12 @@ pub type OrderBlockResult = Array1<f64>;
 /// let ob = indicators::order_block(&high, &low, &close, 3).unwrap();
 /// assert_eq!(ob.len(), 10);
 /// ```
-pub fn order_block(high: &[f64], low: &[f64], close: &[f64], lookback: usize) -> Result<OrderBlockResult> {
+pub fn order_block(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    lookback: usize,
+) -> Result<OrderBlockResult> {
     if high.len() != low.len() || high.len() != close.len() {
         return Err(TaError::InvalidParameter {
             name: "high, low, close".to_string(),
@@ -474,7 +479,12 @@ pub struct SmcSignals {
 /// assert_eq!(sig.order_blocks.len(), 10);
 /// assert_eq!(sig.fair_value_gaps.len(), 10);
 /// ```
-pub fn smc_signals(high: &[f64], low: &[f64], close: &[f64], lookback: usize) -> Result<SmcSignals> {
+pub fn smc_signals(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    lookback: usize,
+) -> Result<SmcSignals> {
     Ok(SmcSignals {
         order_blocks: order_block(high, low, close, lookback)?,
         fair_value_gaps: fair_value_gap(high, low)?,
@@ -495,8 +505,7 @@ mod tests {
     fn sample_ohlcv() -> (Vec<f64>, Vec<f64>, Vec<f64>) {
         // 15-bar series with a clear up-impulse and a down-impulse.
         let high = vec![
-            10.0, 10.5, 11.0, 10.8, 10.6, 11.0, 12.5, 13.5, 13.2, 13.0, 12.0, 11.0, 10.0, 9.5,
-            10.5,
+            10.0, 10.5, 11.0, 10.8, 10.6, 11.0, 12.5, 13.5, 13.2, 13.0, 12.0, 11.0, 10.0, 9.5, 10.5,
         ];
         let low = vec![
             9.5, 10.0, 10.5, 10.2, 10.0, 10.5, 11.5, 12.5, 12.8, 12.5, 11.5, 10.5, 9.5, 9.0, 9.8,
@@ -589,7 +598,7 @@ mod tests {
     fn test_liquidity_zones_basic() {
         // Tight consolidation in first 4 bars (range 0.4), then breakout to 12+.
         let high = vec![10.2, 10.1, 10.3, 10.2, 12.0, 13.5, 12.5, 14.0, 13.5, 15.0];
-        let low = vec![10.0,  9.9, 10.1, 10.0, 11.5, 12.5, 12.0, 13.0, 12.8, 14.0];
+        let low = vec![10.0, 9.9, 10.1, 10.0, 11.5, 12.5, 12.0, 13.0, 12.8, 14.0];
         let lz = liquidity_zones(&high, &low, 3).unwrap();
         assert_eq!(lz.len(), 10);
         // At least one zone detected in the tight consolidation region.

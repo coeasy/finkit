@@ -23,9 +23,9 @@ pub mod moving_avg;
 // builds (its `FloatExt`/`f64_*` helpers route to `core`/`libm` accordingly).
 pub mod libm_shim;
 pub mod simd_kernels;
+pub mod simd_ops;
 #[cfg(feature = "std")]
 pub mod simd_ops_avx512;
-pub mod simd_ops;
 pub mod simd_ops_wasm;
 #[cfg(feature = "std")]
 pub mod statistics;

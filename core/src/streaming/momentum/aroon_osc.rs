@@ -1,6 +1,6 @@
+use crate::impl_standard_methods;
 use crate::streaming::momentum::aroon::StreamingAroon;
 use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
-use crate::impl_standard_methods;
 
 /// Streaming Aroon Oscillator.
 ///
@@ -55,10 +55,18 @@ impl StreamingIndicator<(f64, f64)> for StreamingAroonOsc {
 }
 
 impl IndicatorMeta for StreamingAroonOsc {
-    fn name() -> &'static str { "AROONOSC" }
-    fn category() -> &'static str { "momentum" }
-    fn description() -> &'static str { "Aroon Oscillator" }
-    fn warm_up_period(&self) -> usize { self.period + 1 }
+    fn name() -> &'static str {
+        "AROONOSC"
+    }
+    fn category() -> &'static str {
+        "momentum"
+    }
+    fn description() -> &'static str {
+        "Aroon Oscillator"
+    }
+    fn warm_up_period(&self) -> usize {
+        self.period + 1
+    }
 }
 
 #[cfg(test)]
@@ -79,7 +87,10 @@ mod tests {
             last = osc.next(d);
         }
         let v = last.unwrap();
-        assert!((-100.0..=100.0).contains(&v), "AROONOSC should be -100..100, got {v}");
+        assert!(
+            (-100.0..=100.0).contains(&v),
+            "AROONOSC should be -100..100, got {v}"
+        );
     }
 
     #[test]
@@ -103,7 +114,10 @@ mod tests {
             let out = osc.next((h, h - 2.0));
             if osc.is_ready() {
                 let v = out.unwrap();
-                assert!(v < 0.0, "In downtrend, AROONOSC should be negative, got {v}");
+                assert!(
+                    v < 0.0,
+                    "In downtrend, AROONOSC should be negative, got {v}"
+                );
             }
         }
     }

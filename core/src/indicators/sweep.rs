@@ -184,8 +184,7 @@ pub fn rsi_sweep(data: &[f64], periods: &[usize]) -> Result<Vec<Vec<f64>>> {
                     if avg_losses[j].abs() < 1e-15 {
                         results[j][i] = 100.0;
                     } else {
-                        results[j][i] =
-                            100.0 - 100.0 / (1.0 + avg_gains[j] / avg_losses[j]);
+                        results[j][i] = 100.0 - 100.0 / (1.0 + avg_gains[j] / avg_losses[j]);
                     }
                     initialized[j] = true;
                 }
@@ -234,7 +233,12 @@ mod tests {
             for (i, val) in results[j].iter().enumerate().take(p - 1) {
                 assert!(val.is_nan(), "period={}, i={} should be NaN", p, i);
             }
-            assert!(!results[j][p - 1].is_nan(), "period={}, i={} should not be NaN", p, p - 1);
+            assert!(
+                !results[j][p - 1].is_nan(),
+                "period={}, i={} should not be NaN",
+                p,
+                p - 1
+            );
         }
     }
 
@@ -248,12 +252,20 @@ mod tests {
             let expected = moving_avg::sma(&data, p).unwrap();
             for i in 0..data.len() {
                 if expected[i].is_nan() {
-                    assert!(results[j][i].is_nan(), "SMA mismatch at period={}, i={}", p, i);
+                    assert!(
+                        results[j][i].is_nan(),
+                        "SMA mismatch at period={}, i={}",
+                        p,
+                        i
+                    );
                 } else {
                     assert!(
                         (results[j][i] - expected[i]).abs() < 1e-10,
                         "SMA mismatch at period={}, i={}: got {} expected {}",
-                        p, i, results[j][i], expected[i]
+                        p,
+                        i,
+                        results[j][i],
+                        expected[i]
                     );
                 }
             }
@@ -270,12 +282,20 @@ mod tests {
             let expected = moving_avg::ema(&data, p).unwrap();
             for i in 0..data.len() {
                 if expected[i].is_nan() {
-                    assert!(results[j][i].is_nan(), "EMA mismatch at period={}, i={}", p, i);
+                    assert!(
+                        results[j][i].is_nan(),
+                        "EMA mismatch at period={}, i={}",
+                        p,
+                        i
+                    );
                 } else {
                     assert!(
                         (results[j][i] - expected[i]).abs() < 1e-10,
                         "EMA mismatch at period={}, i={}: got {} expected {}",
-                        p, i, results[j][i], expected[i]
+                        p,
+                        i,
+                        results[j][i],
+                        expected[i]
                     );
                 }
             }
@@ -292,12 +312,20 @@ mod tests {
             let expected = rsi(&data, p).unwrap();
             for i in 0..data.len() {
                 if expected[i].is_nan() {
-                    assert!(results[j][i].is_nan(), "RSI mismatch at period={}, i={}", p, i);
+                    assert!(
+                        results[j][i].is_nan(),
+                        "RSI mismatch at period={}, i={}",
+                        p,
+                        i
+                    );
                 } else {
                     assert!(
                         (results[j][i] - expected[i]).abs() < 1e-10,
                         "RSI mismatch at period={}, i={}: got {} expected {}",
-                        p, i, results[j][i], expected[i]
+                        p,
+                        i,
+                        results[j][i],
+                        expected[i]
                     );
                 }
             }

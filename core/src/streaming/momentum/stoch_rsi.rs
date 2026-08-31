@@ -1,6 +1,6 @@
 use crate::streaming::momentum::rsi::StreamingRsi;
-use crate::streaming::overlap::sma::StreamingSma;
 use crate::streaming::momentum::stoch::StochOutput;
+use crate::streaming::overlap::sma::StreamingSma;
 use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use std::collections::VecDeque;
 
@@ -20,7 +20,12 @@ pub struct StreamingStochRsi {
 }
 
 impl StreamingStochRsi {
-    pub fn new(rsi_period: usize, stoch_period: usize, fastk_period: usize, fastd_period: usize) -> Self {
+    pub fn new(
+        rsi_period: usize,
+        stoch_period: usize,
+        fastk_period: usize,
+        fastd_period: usize,
+    ) -> Self {
         Self {
             rsi_period,
             stoch_period,
@@ -55,8 +60,16 @@ impl StreamingIndicator for StreamingStochRsi {
             return None;
         }
 
-        let max = self.rsi_buffer.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-        let min = self.rsi_buffer.iter().cloned().fold(f64::INFINITY, f64::min);
+        let max = self
+            .rsi_buffer
+            .iter()
+            .cloned()
+            .fold(f64::NEG_INFINITY, f64::max);
+        let min = self
+            .rsi_buffer
+            .iter()
+            .cloned()
+            .fold(f64::INFINITY, f64::min);
 
         let range = max - min;
         let raw_k = if range.abs() > 1e-15 {
@@ -80,7 +93,11 @@ impl StreamingIndicator for StreamingStochRsi {
         };
         self.last_value = Some(result);
 
-        if k_val.is_nan() { None } else { Some(k_val) }
+        if k_val.is_nan() {
+            None
+        } else {
+            Some(k_val)
+        }
     }
 
     fn reset(&mut self) {
@@ -106,10 +123,18 @@ impl StreamingIndicator for StreamingStochRsi {
 }
 
 impl IndicatorMeta for StreamingStochRsi {
-    fn name() -> &'static str { "STOCHRSI" }
-    fn category() -> &'static str { "momentum" }
-    fn description() -> &'static str { "Stochastic RSI" }
-    fn warm_up_period(&self) -> usize { self.rsi_period + self.stoch_period }
+    fn name() -> &'static str {
+        "STOCHRSI"
+    }
+    fn category() -> &'static str {
+        "momentum"
+    }
+    fn description() -> &'static str {
+        "Stochastic RSI"
+    }
+    fn warm_up_period(&self) -> usize {
+        self.rsi_period + self.stoch_period
+    }
 }
 
 #[cfg(test)]
@@ -119,7 +144,9 @@ mod tests {
     #[test]
     fn test_streaming_stoch_rsi_basic() {
         let mut sr = StreamingStochRsi::new(14, 14, 3, 3);
-        let data: Vec<f64> = (0..80).map(|i| 100.0 + (i as f64 * 0.2).sin() * 10.0).collect();
+        let data: Vec<f64> = (0..80)
+            .map(|i| 100.0 + (i as f64 * 0.2).sin() * 10.0)
+            .collect();
         let mut last = None;
         for &d in &data {
             if let Some(v) = sr.next(d) {

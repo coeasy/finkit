@@ -278,9 +278,13 @@ pub fn stoch(
     let mut d_out = vec![f64::NAN; len];
 
     #[cfg(all(feature = "std", target_arch = "x86_64"))]
-    crate::math::simd_kernels::stoch_simd_into(high, low, close, k_period, k_slow, d_period, &mut k_out, &mut d_out);
+    crate::math::simd_kernels::stoch_simd_into(
+        high, low, close, k_period, k_slow, d_period, &mut k_out, &mut d_out,
+    );
     #[cfg(not(all(feature = "std", target_arch = "x86_64")))]
-    stoch_fused_pipeline(high, low, close, k_period, k_slow, d_period, &mut k_out, &mut d_out);
+    stoch_fused_pipeline(
+        high, low, close, k_period, k_slow, d_period, &mut k_out, &mut d_out,
+    );
 
     Ok(StochResult {
         k: Array1::from(k_out),
@@ -338,8 +342,14 @@ fn stoch_fused_pipeline(
             let new_l = *low_ptr.add(i);
 
             if i < k_period {
-                if new_h >= highest { highest = new_h; highest_idx = i; }
-                if new_l <= lowest { lowest = new_l; lowest_idx = i; }
+                if new_h >= highest {
+                    highest = new_h;
+                    highest_idx = i;
+                }
+                if new_l <= lowest {
+                    lowest = new_l;
+                    lowest_idx = i;
+                }
             } else {
                 let ws = i + 1 - k_period;
                 if highest_idx < ws {
@@ -348,7 +358,10 @@ fn stoch_fused_pipeline(
                     let mut k = ws + 1;
                     while k <= i {
                         let h = *high_ptr.add(k);
-                        if h >= highest { highest = h; highest_idx = k; }
+                        if h >= highest {
+                            highest = h;
+                            highest_idx = k;
+                        }
                         k += 1;
                     }
                 } else if new_h >= highest {
@@ -362,7 +375,10 @@ fn stoch_fused_pipeline(
                     let mut k = ws + 1;
                     while k <= i {
                         let l = *low_ptr.add(k);
-                        if l <= lowest { lowest = l; lowest_idx = k; }
+                        if l <= lowest {
+                            lowest = l;
+                            lowest_idx = k;
+                        }
                         k += 1;
                     }
                 } else if new_l <= lowest {
@@ -385,7 +401,9 @@ fn stoch_fused_pipeline(
                 k_sum += fk - old_fk;
                 *fast_k_ring.get_unchecked_mut(fk_ring_pos) = fk;
                 fk_ring_pos += 1;
-                if fk_ring_pos == k_slow { fk_ring_pos = 0; }
+                if fk_ring_pos == k_slow {
+                    fk_ring_pos = 0;
+                }
 
                 // Compute slow %K value
                 let k_val = k_sum * inv_k_slow;
@@ -395,7 +413,9 @@ fn stoch_fused_pipeline(
                 d_sum += k_val - old_k;
                 *k_ring.get_unchecked_mut(d_ring_pos) = k_val;
                 d_ring_pos += 1;
-                if d_ring_pos == d_period { d_ring_pos = 0; }
+                if d_ring_pos == d_period {
+                    d_ring_pos = 0;
+                }
 
                 // TA-Lib special rule: both Slow %K and %D start from slowd_start
                 if i >= slowd_start {
@@ -450,7 +470,9 @@ pub fn stoch_into(
     }
 
     #[cfg(all(feature = "std", target_arch = "x86_64"))]
-    crate::math::simd_kernels::stoch_simd_into(high, low, close, k_period, k_slow, d_period, k_out, d_out);
+    crate::math::simd_kernels::stoch_simd_into(
+        high, low, close, k_period, k_slow, d_period, k_out, d_out,
+    );
     #[cfg(not(all(feature = "std", target_arch = "x86_64")))]
     stoch_fused_pipeline(high, low, close, k_period, k_slow, d_period, k_out, d_out);
 
@@ -540,7 +562,11 @@ fn macd_inner(
     let mut hist = init_output(len);
 
     if len == 0 {
-        return Ok(MacdResult { macd: macd_line, signal, hist });
+        return Ok(MacdResult {
+            macd: macd_line,
+            signal,
+            hist,
+        });
     }
 
     // TA-Lib MACD DEFAULT 兼容模式（TA_MACD.c）:
@@ -604,7 +630,11 @@ fn macd_inner(
         }
     }
 
-    Ok(MacdResult { macd: macd_line, signal, hist })
+    Ok(MacdResult {
+        macd: macd_line,
+        signal,
+        hist,
+    })
 }
 
 /// Average Directional Index (ADX)
@@ -651,7 +681,12 @@ struct AdxFamilyResult {
 /// All ADX-family indicators share the same True Range and Directional
 /// Movement values. This function computes them once and derives all
 /// intermediate series in a single scan, avoiding redundant TR/DM passes.
-fn compute_adx_family(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<AdxFamilyResult> {
+fn compute_adx_family(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    period: usize,
+) -> Result<AdxFamilyResult> {
     if high.len() != low.len() || high.len() != close.len() {
         return Err(TaError::InvalidParameter {
             name: "high, low, close".to_string(),
@@ -673,8 +708,13 @@ fn compute_adx_family(high: &[f64], low: &[f64], close: &[f64], period: usize) -
         #[cfg(feature = "std")]
         {
             crate::math::simd_kernels::adx_warmup_into(
-                high, low, close, period - 1,
-                &mut smooth_plus_dm, &mut smooth_minus_dm, &mut smooth_tr,
+                high,
+                low,
+                close,
+                period - 1,
+                &mut smooth_plus_dm,
+                &mut smooth_minus_dm,
+                &mut smooth_tr,
             );
         }
         #[cfg(not(feature = "std"))]
@@ -683,8 +723,12 @@ fn compute_adx_family(high: &[f64], low: &[f64], close: &[f64], period: usize) -
                 let up_move = high[i] - high[i - 1];
                 let down_move = low[i - 1] - low[i];
                 smooth_tr += crate::utils::true_range(high[i], low[i], close[i - 1]);
-                if up_move > down_move && up_move > 0.0 { smooth_plus_dm += up_move; }
-                if down_move > up_move && down_move > 0.0 { smooth_minus_dm += down_move; }
+                if up_move > down_move && up_move > 0.0 {
+                    smooth_plus_dm += up_move;
+                }
+                if down_move > up_move && down_move > 0.0 {
+                    smooth_minus_dm += down_move;
+                }
             }
         }
     }
@@ -720,8 +764,16 @@ fn compute_adx_family(high: &[f64], low: &[f64], close: &[f64], period: usize) -
         let up_move = high[i] - high[i - 1];
         let down_move = low[i - 1] - low[i];
         let tr = crate::utils::true_range(high[i], low[i], close[i - 1]);
-        let pdm = if up_move > down_move && up_move > 0.0 { up_move } else { 0.0 };
-        let mdm = if down_move > up_move && down_move > 0.0 { down_move } else { 0.0 };
+        let pdm = if up_move > down_move && up_move > 0.0 {
+            up_move
+        } else {
+            0.0
+        };
+        let mdm = if down_move > up_move && down_move > 0.0 {
+            down_move
+        } else {
+            0.0
+        };
         // TA-Lib: prevDM -= prevDM / period; prevDM += newDM
         smooth_plus_dm = smooth_plus_dm - smooth_plus_dm / p + pdm;
         smooth_minus_dm = smooth_minus_dm - smooth_minus_dm / p + mdm;
@@ -742,8 +794,16 @@ fn compute_adx_family(high: &[f64], low: &[f64], close: &[f64], period: usize) -
             let up_move = high[i] - high[i - 1];
             let down_move = low[i - 1] - low[i];
             let tr = crate::utils::true_range(high[i], low[i], close[i - 1]);
-            let pdm = if up_move > down_move && up_move > 0.0 { up_move } else { 0.0 };
-            let mdm = if down_move > up_move && down_move > 0.0 { down_move } else { 0.0 };
+            let pdm = if up_move > down_move && up_move > 0.0 {
+                up_move
+            } else {
+                0.0
+            };
+            let mdm = if down_move > up_move && down_move > 0.0 {
+                down_move
+            } else {
+                0.0
+            };
             smooth_plus_dm = smooth_plus_dm - smooth_plus_dm / p + pdm;
             smooth_minus_dm = smooth_minus_dm - smooth_minus_dm / p + mdm;
             smooth_tr = smooth_tr - smooth_tr / p + tr;
@@ -768,7 +828,12 @@ fn compute_adx_family(high: &[f64], low: &[f64], close: &[f64], period: usize) -
 ///
 /// This is an optimization for `plus_di` and `minus_di` when called individually.
 /// It skips the expensive ADX RMA smoothing loop, saving ~33% computation.
-fn compute_di_only(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<(Vec<f64>, Vec<f64>)> {
+fn compute_di_only(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    period: usize,
+) -> Result<(Vec<f64>, Vec<f64>)> {
     if high.len() != low.len() || high.len() != close.len() {
         return Err(TaError::InvalidParameter {
             name: "high, low, close".to_string(),
@@ -789,8 +854,13 @@ fn compute_di_only(high: &[f64], low: &[f64], close: &[f64], period: usize) -> R
         #[cfg(feature = "std")]
         {
             crate::math::simd_kernels::adx_warmup_into(
-                high, low, close, period - 1,
-                &mut smooth_plus_dm, &mut smooth_minus_dm, &mut smooth_tr,
+                high,
+                low,
+                close,
+                period - 1,
+                &mut smooth_plus_dm,
+                &mut smooth_minus_dm,
+                &mut smooth_tr,
             );
         }
         #[cfg(not(feature = "std"))]
@@ -799,8 +869,12 @@ fn compute_di_only(high: &[f64], low: &[f64], close: &[f64], period: usize) -> R
                 let up_move = high[i] - high[i - 1];
                 let down_move = low[i - 1] - low[i];
                 smooth_tr += crate::utils::true_range(high[i], low[i], close[i - 1]);
-                if up_move > down_move && up_move > 0.0 { smooth_plus_dm += up_move; }
-                if down_move > up_move && down_move > 0.0 { smooth_minus_dm += down_move; }
+                if up_move > down_move && up_move > 0.0 {
+                    smooth_plus_dm += up_move;
+                }
+                if down_move > up_move && down_move > 0.0 {
+                    smooth_minus_dm += down_move;
+                }
             }
         }
     }
@@ -823,8 +897,16 @@ fn compute_di_only(high: &[f64], low: &[f64], close: &[f64], period: usize) -> R
         let up_move = high[i] - high[i - 1];
         let down_move = low[i - 1] - low[i];
         let tr = crate::utils::true_range(high[i], low[i], close[i - 1]);
-        let pdm = if up_move > down_move && up_move > 0.0 { up_move } else { 0.0 };
-        let mdm = if down_move > up_move && down_move > 0.0 { down_move } else { 0.0 };
+        let pdm = if up_move > down_move && up_move > 0.0 {
+            up_move
+        } else {
+            0.0
+        };
+        let mdm = if down_move > up_move && down_move > 0.0 {
+            down_move
+        } else {
+            0.0
+        };
         smooth_plus_dm = smooth_plus_dm - smooth_plus_dm / p + pdm;
         smooth_minus_dm = smooth_minus_dm - smooth_minus_dm / p + mdm;
         smooth_tr = smooth_tr - smooth_tr / p + tr;
@@ -931,8 +1013,14 @@ fn aroon_with_deques(high: &[f64], low: &[f64], period: usize) -> Result<AroonRe
         for k in 1..=period {
             let h = *high_ptr.add(k);
             let l = *low_ptr.add(k);
-            if h >= highest { highest = h; highest_idx = k; }
-            if l <= lowest { lowest = l; lowest_idx = k; }
+            if h >= highest {
+                highest = h;
+                highest_idx = k;
+            }
+            if l <= lowest {
+                lowest = l;
+                lowest_idx = k;
+            }
         }
 
         // First output at index `period`.
@@ -954,7 +1042,10 @@ fn aroon_with_deques(high: &[f64], low: &[f64], period: usize) -> Result<AroonRe
                 let mut k = ws + 1;
                 while k <= i {
                     let h = *high_ptr.add(k);
-                    if h >= highest { highest = h; highest_idx = k; }
+                    if h >= highest {
+                        highest = h;
+                        highest_idx = k;
+                    }
                     k += 1;
                 }
             } else if new_h >= highest {
@@ -970,7 +1061,10 @@ fn aroon_with_deques(high: &[f64], low: &[f64], period: usize) -> Result<AroonRe
                 let mut k = ws + 1;
                 while k <= i {
                     let l = *low_ptr.add(k);
-                    if l <= lowest { lowest = l; lowest_idx = k; }
+                    if l <= lowest {
+                        lowest = l;
+                        lowest_idx = k;
+                    }
                     k += 1;
                 }
             } else if new_l <= lowest {
@@ -978,10 +1072,8 @@ fn aroon_with_deques(high: &[f64], low: &[f64], period: usize) -> Result<AroonRe
                 lowest_idx = i;
             }
 
-            *up_out.get_unchecked_mut(i) =
-                (period - (i - highest_idx)) as f64 * inv_period;
-            *dn_out.get_unchecked_mut(i) =
-                (period - (i - lowest_idx)) as f64 * inv_period;
+            *up_out.get_unchecked_mut(i) = (period - (i - highest_idx)) as f64 * inv_period;
+            *dn_out.get_unchecked_mut(i) = (period - (i - lowest_idx)) as f64 * inv_period;
         }
     }
 
@@ -1226,12 +1318,18 @@ pub fn willr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<
         let mut lowest_idx = 0usize;
         let mut highest = *high_ptr.add(0);
         let mut lowest = *low_ptr.add(0);
-        
+
         for k in 1..period {
             let h = *high_ptr.add(k);
             let l = *low_ptr.add(k);
-            if h >= highest { highest = h; highest_idx = k; }
-            if l <= lowest { lowest = l; lowest_idx = k; }
+            if h >= highest {
+                highest = h;
+                highest_idx = k;
+            }
+            if l <= lowest {
+                lowest = l;
+                lowest_idx = k;
+            }
         }
 
         // First output at index period-1
@@ -1244,7 +1342,7 @@ pub fn willr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<
 
         // Slide window: [i-period+1..=i]
         for i in period..len {
-            let ws = i + 1 - period;  // window start
+            let ws = i + 1 - period; // window start
             let new_h = *high_ptr.add(i);
             let new_l = *low_ptr.add(i);
 
@@ -1256,7 +1354,10 @@ pub fn willr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<
                 let mut k = ws + 1;
                 while k <= i {
                     let h = *high_ptr.add(k);
-                    if h >= highest { highest = h; highest_idx = k; }
+                    if h >= highest {
+                        highest = h;
+                        highest_idx = k;
+                    }
                     k += 1;
                 }
             } else if new_h >= highest {
@@ -1272,7 +1373,10 @@ pub fn willr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<
                 let mut k = ws + 1;
                 while k <= i {
                     let l = *low_ptr.add(k);
-                    if l <= lowest { lowest = l; lowest_idx = k; }
+                    if l <= lowest {
+                        lowest = l;
+                        lowest_idx = k;
+                    }
                     k += 1;
                 }
             } else if new_l <= lowest {
@@ -1291,8 +1395,6 @@ pub fn willr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<
 
     Ok(Array1::from_vec(out))
 }
-
-
 
 /// Elder-Ray Indicator Result
 #[derive(Debug, Clone)]
@@ -1559,7 +1661,7 @@ pub fn cmo(input: &[f64], period: usize) -> Result<Array1<f64>> {
         let ch = changes[i];
         let up = if ch > 0.0 { ch } else { 0.0 };
         let down = if ch < 0.0 { -ch } else { 0.0 };
-        
+
         // RMA: new_value = (old_value * (period - 1) + new_value) / period
         sum_up = (sum_up * (period as f64 - 1.0) + up) * inv_period;
         sum_down = (sum_down * (period as f64 - 1.0) + down) * inv_period;
@@ -1704,7 +1806,11 @@ pub fn mfi(
         let tp_i = tp[i];
         let mf_val = tp_i * volume[i];
 
-        let (pos, neg) = if tp_i > prev_tp { (mf_val, 0.0) } else { (0.0, mf_val) };
+        let (pos, neg) = if tp_i > prev_tp {
+            (mf_val, 0.0)
+        } else {
+            (0.0, mf_val)
+        };
         prev_tp = tp_i;
 
         pos_sum += pos - pos_ring[ring_idx];
@@ -1871,9 +1977,9 @@ pub fn trix(input: &[f64], period: usize) -> Result<Array1<f64>> {
 
     let len = input.len();
     let mut output = init_output(len);
-    let s1 = period - 1;      // EMA1 首有效值位置
-    let s2 = 2 * s1;          // EMA2 首有效值位置
-    let _s3 = 3 * s1;         // EMA3 首有效值位置（文档用，TRIX 首有效值在 _s3 + 1）
+    let s1 = period - 1; // EMA1 首有效值位置
+    let s2 = 2 * s1; // EMA2 首有效值位置
+    let _s3 = 3 * s1; // EMA3 首有效值位置（文档用，TRIX 首有效值在 _s3 + 1）
     let k = smoothing_factor(period);
     let one_k = 1.0 - k;
     let inv_p = 1.0 / period as f64;
@@ -2004,8 +2110,14 @@ fn aroonosc_scan_inner(
         for k in (first_ws + 1)..=period {
             let h = *high_ptr.add(k);
             let l = *low_ptr.add(k);
-            if h >= highest { highest = h; highest_idx = k; }
-            if l <= lowest { lowest = l; lowest_idx = k; }
+            if h >= highest {
+                highest = h;
+                highest_idx = k;
+            }
+            if l <= lowest {
+                lowest = l;
+                lowest_idx = k;
+            }
         }
 
         let up = highest_idx as f64 * inv_period;
@@ -2023,7 +2135,10 @@ fn aroonosc_scan_inner(
                 let mut k = ws + 1;
                 while k <= i {
                     let h = *high_ptr.add(k);
-                    if h >= highest { highest = h; highest_idx = k; }
+                    if h >= highest {
+                        highest = h;
+                        highest_idx = k;
+                    }
                     k += 1;
                 }
             } else if new_h >= highest {
@@ -2037,7 +2152,10 @@ fn aroonosc_scan_inner(
                 let mut k = ws + 1;
                 while k <= i {
                     let l = *low_ptr.add(k);
-                    if l <= lowest { lowest = l; lowest_idx = k; }
+                    if l <= lowest {
+                        lowest = l;
+                        lowest_idx = k;
+                    }
                     k += 1;
                 }
             } else if new_l <= lowest {
@@ -2449,12 +2567,20 @@ pub fn stochrsi(
             let v = rsi_clean[i];
 
             while let Some(&back) = max_dq.back() {
-                if rsi_clean[back] <= v { max_dq.pop_back(); } else { break; }
+                if rsi_clean[back] <= v {
+                    max_dq.pop_back();
+                } else {
+                    break;
+                }
             }
             max_dq.push_back(i);
 
             while let Some(&back) = min_dq.back() {
-                if rsi_clean[back] >= v { min_dq.pop_back(); } else { break; }
+                if rsi_clean[back] >= v {
+                    min_dq.pop_back();
+                } else {
+                    break;
+                }
             }
             min_dq.push_back(i);
 
@@ -2464,10 +2590,18 @@ pub fn stochrsi(
                 seed_start
             };
             while let Some(&front) = max_dq.front() {
-                if front < ws { max_dq.pop_front(); } else { break; }
+                if front < ws {
+                    max_dq.pop_front();
+                } else {
+                    break;
+                }
             }
             while let Some(&front) = min_dq.front() {
-                if front < ws { min_dq.pop_front(); } else { break; }
+                if front < ws {
+                    min_dq.pop_front();
+                } else {
+                    break;
+                }
             }
 
             if i >= valid_start {
@@ -2492,11 +2626,7 @@ pub fn stochrsi(
             .iter()
             .map(|&v| if v.is_nan() { 0.0 } else { v })
             .collect();
-        simd_ops::simd_sma(
-            &raw_k_clean,
-            fastk_period,
-            fastk_ma.as_slice_mut().unwrap(),
-        );
+        simd_ops::simd_sma(&raw_k_clean, fastk_period, fastk_ma.as_slice_mut().unwrap());
     }
 
     // %D smoothing: SMA of %K, again with NaN→0.0 pre-mapping.
@@ -2528,10 +2658,7 @@ pub fn stochrsi(
         }
     }
 
-    Ok(StochResult {
-        k: out_k,
-        d: out_d,
-    })
+    Ok(StochResult { k: out_k, d: out_d })
 }
 
 /// Ultimate Oscillator (ULTOSC)
@@ -2583,9 +2710,21 @@ pub fn ultosc(
     let mut bp3_sum: f64 = bp[max_period + 1 - period3..=max_period].iter().sum();
     let mut tr3_sum: f64 = tr[max_period + 1 - period3..=max_period].iter().sum();
 
-    let avg1 = if tr1_sum.abs() > 1e-15 { bp1_sum / tr1_sum } else { 0.0 };
-    let avg2 = if tr2_sum.abs() > 1e-15 { bp2_sum / tr2_sum } else { 0.0 };
-    let avg3 = if tr3_sum.abs() > 1e-15 { bp3_sum / tr3_sum } else { 0.0 };
+    let avg1 = if tr1_sum.abs() > 1e-15 {
+        bp1_sum / tr1_sum
+    } else {
+        0.0
+    };
+    let avg2 = if tr2_sum.abs() > 1e-15 {
+        bp2_sum / tr2_sum
+    } else {
+        0.0
+    };
+    let avg3 = if tr3_sum.abs() > 1e-15 {
+        bp3_sum / tr3_sum
+    } else {
+        0.0
+    };
     output[max_period] = 100.0 * (4.0 * avg1 + 2.0 * avg2 + avg3) / 7.0;
 
     for i in max_period + 1..len {
@@ -2596,9 +2735,21 @@ pub fn ultosc(
         bp3_sum += bp[i] - bp[i - period3];
         tr3_sum += tr[i] - tr[i - period3];
 
-        let avg1 = if tr1_sum.abs() > 1e-15 { bp1_sum / tr1_sum } else { 0.0 };
-        let avg2 = if tr2_sum.abs() > 1e-15 { bp2_sum / tr2_sum } else { 0.0 };
-        let avg3 = if tr3_sum.abs() > 1e-15 { bp3_sum / tr3_sum } else { 0.0 };
+        let avg1 = if tr1_sum.abs() > 1e-15 {
+            bp1_sum / tr1_sum
+        } else {
+            0.0
+        };
+        let avg2 = if tr2_sum.abs() > 1e-15 {
+            bp2_sum / tr2_sum
+        } else {
+            0.0
+        };
+        let avg3 = if tr3_sum.abs() > 1e-15 {
+            bp3_sum / tr3_sum
+        } else {
+            0.0
+        };
 
         output[i] = 100.0 * (4.0 * avg1 + 2.0 * avg2 + avg3) / 7.0;
     }
@@ -2720,7 +2871,13 @@ pub fn macd_into(
 }
 
 /// ADX zero-copy variant: writes result into pre-allocated slice.
-pub fn adx_into(high: &[f64], low: &[f64], close: &[f64], period: usize, output: &mut [f64]) -> Result<()> {
+pub fn adx_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    period: usize,
+    output: &mut [f64],
+) -> Result<()> {
     let result = adx(high, low, close, period)?;
     if output.len() != high.len() {
         return Err(TaError::InvalidParameter {
@@ -2733,7 +2890,13 @@ pub fn adx_into(high: &[f64], low: &[f64], close: &[f64], period: usize, output:
 }
 
 /// CCI zero-copy variant: writes result into pre-allocated slice.
-pub fn cci_into(high: &[f64], low: &[f64], close: &[f64], period: usize, output: &mut [f64]) -> Result<()> {
+pub fn cci_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    period: usize,
+    output: &mut [f64],
+) -> Result<()> {
     let result = cci(high, low, close, period)?;
     if output.len() != high.len() {
         return Err(TaError::InvalidParameter {
@@ -2746,7 +2909,13 @@ pub fn cci_into(high: &[f64], low: &[f64], close: &[f64], period: usize, output:
 }
 
 /// Williams %R zero-copy variant: writes result into pre-allocated slice.
-pub fn willr_into(high: &[f64], low: &[f64], close: &[f64], period: usize, output: &mut [f64]) -> Result<()> {
+pub fn willr_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    period: usize,
+    output: &mut [f64],
+) -> Result<()> {
     if high.len() != low.len() || high.len() != close.len() {
         return Err(TaError::InvalidParameter {
             name: "high, low, close".to_string(),
@@ -2770,7 +2939,9 @@ pub fn willr_into(high: &[f64], low: &[f64], close: &[f64], period: usize, outpu
 
     // Initialize output with NaN
     for i in 0..start {
-        unsafe { *out_ptr.add(i) = f64::NAN; }
+        unsafe {
+            *out_ptr.add(i) = f64::NAN;
+        }
     }
 
     // Optimized sliding window with direct index tracking
@@ -2780,12 +2951,18 @@ pub fn willr_into(high: &[f64], low: &[f64], close: &[f64], period: usize, outpu
         let mut lowest_idx = 0usize;
         let mut highest = *high_ptr.add(0);
         let mut lowest = *low_ptr.add(0);
-        
+
         for k in 1..period {
             let h = *high_ptr.add(k);
             let l = *low_ptr.add(k);
-            if h >= highest { highest = h; highest_idx = k; }
-            if l <= lowest { lowest = l; lowest_idx = k; }
+            if h >= highest {
+                highest = h;
+                highest_idx = k;
+            }
+            if l <= lowest {
+                lowest = l;
+                lowest_idx = k;
+            }
         }
 
         // First output at index period-1
@@ -2808,7 +2985,10 @@ pub fn willr_into(high: &[f64], low: &[f64], close: &[f64], period: usize, outpu
                 let mut k = ws + 1;
                 while k <= i {
                     let h = *high_ptr.add(k);
-                    if h >= highest { highest = h; highest_idx = k; }
+                    if h >= highest {
+                        highest = h;
+                        highest_idx = k;
+                    }
                     k += 1;
                 }
             } else if new_h >= highest {
@@ -2822,7 +3002,10 @@ pub fn willr_into(high: &[f64], low: &[f64], close: &[f64], period: usize, outpu
                 let mut k = ws + 1;
                 while k <= i {
                     let l = *low_ptr.add(k);
-                    if l <= lowest { lowest = l; lowest_idx = k; }
+                    if l <= lowest {
+                        lowest = l;
+                        lowest_idx = k;
+                    }
                     k += 1;
                 }
             } else if new_l <= lowest {
@@ -3221,7 +3404,16 @@ mod tests {
         let mut macd_out = vec![0.0; input.len()];
         let mut signal_out = vec![0.0; input.len()];
         let mut hist_out = vec![0.0; input.len()];
-        macd_into(&input, 12, 26, 9, &mut macd_out, &mut signal_out, &mut hist_out).unwrap();
+        macd_into(
+            &input,
+            12,
+            26,
+            9,
+            &mut macd_out,
+            &mut signal_out,
+            &mut hist_out,
+        )
+        .unwrap();
         for i in 0..input.len() {
             let em = expected.macd[i];
             let am = macd_out[i];
@@ -3235,22 +3427,25 @@ mod tests {
             if es.is_nan() {
                 assert!(as_.is_nan());
             } else {
-            assert!((es - as_).abs() < 1e-9, "signal mismatch at {i}: {es} vs {as_}");
+                assert!(
+                    (es - as_).abs() < 1e-9,
+                    "signal mismatch at {i}: {es} vs {as_}"
+                );
+            }
         }
     }
-}
 
-// ===========================================================================
-// Zero-copy `_into` variants (B4 / TASK-315)
-//
-// Each `_into` function computes the indicator directly into a caller-owned
-// `&mut [f64]` buffer (zero per-call allocation from the caller's perspective)
-// by delegating to the canonical allocating batch implementation and copying
-// the result. This mirrors the existing `bbands_into`/`dema_into` convention
-// and guarantees numerical parity with the batch API.
-// ===========================================================================
+    // ===========================================================================
+    // Zero-copy `_into` variants (B4 / TASK-315)
+    //
+    // Each `_into` function computes the indicator directly into a caller-owned
+    // `&mut [f64]` buffer (zero per-call allocation from the caller's perspective)
+    // by delegating to the canonical allocating batch implementation and copying
+    // the result. This mirrors the existing `bbands_into`/`dema_into` convention
+    // and guarantees numerical parity with the batch API.
+    // ===========================================================================
 
-macro_rules! impl_into_delegate {
+    macro_rules! impl_into_delegate {
     ($name:ident, $batch:path, ($($arg:ident: $t:ty),* $(,)?)) => {
         pub fn $name($($arg: $t,)* output: &mut [f64]) -> Result<()> {
             let result = $batch($($arg),*)?;
@@ -3266,61 +3461,119 @@ macro_rules! impl_into_delegate {
     };
 }
 
-impl_into_delegate!(apo_into, apo, (input: &[f64], fast_period: usize, slow_period: usize));
-impl_into_delegate!(bop_into, bop, (open: &[f64], high: &[f64], low: &[f64], close: &[f64]));
-impl_into_delegate!(cmo_into, cmo, (input: &[f64], period: usize));
-impl_into_delegate!(dx_into, dx, (high: &[f64], low: &[f64], close: &[f64], period: usize));
-impl_into_delegate!(minus_di_into, minus_di, (high: &[f64], low: &[f64], close: &[f64], period: usize));
-impl_into_delegate!(minus_dm_into, minus_dm, (high: &[f64], low: &[f64]));
-impl_into_delegate!(plus_di_into, plus_di, (high: &[f64], low: &[f64], close: &[f64], period: usize));
-impl_into_delegate!(plus_dm_into, plus_dm, (high: &[f64], low: &[f64]));
-impl_into_delegate!(trix_into, trix, (input: &[f64], period: usize));
-impl_into_delegate!(adxr_into, adxr, (high: &[f64], low: &[f64], close: &[f64], period: usize));
-impl_into_delegate!(aroonosc_into, aroonosc, (high: &[f64], low: &[f64], period: usize));
-impl_into_delegate!(ppo_into, ppo, (input: &[f64], fast_period: usize, slow_period: usize));
-impl_into_delegate!(rocp_into, rocp, (input: &[f64], period: usize));
-impl_into_delegate!(rocr_into, rocr, (input: &[f64], period: usize));
-impl_into_delegate!(rocr100_into, rocr100, (input: &[f64], period: usize));
+    impl_into_delegate!(apo_into, apo, (input: &[f64], fast_period: usize, slow_period: usize));
+    impl_into_delegate!(bop_into, bop, (open: &[f64], high: &[f64], low: &[f64], close: &[f64]));
+    impl_into_delegate!(cmo_into, cmo, (input: &[f64], period: usize));
+    impl_into_delegate!(dx_into, dx, (high: &[f64], low: &[f64], close: &[f64], period: usize));
+    impl_into_delegate!(minus_di_into, minus_di, (high: &[f64], low: &[f64], close: &[f64], period: usize));
+    impl_into_delegate!(minus_dm_into, minus_dm, (high: &[f64], low: &[f64]));
+    impl_into_delegate!(plus_di_into, plus_di, (high: &[f64], low: &[f64], close: &[f64], period: usize));
+    impl_into_delegate!(plus_dm_into, plus_dm, (high: &[f64], low: &[f64]));
+    impl_into_delegate!(trix_into, trix, (input: &[f64], period: usize));
+    impl_into_delegate!(adxr_into, adxr, (high: &[f64], low: &[f64], close: &[f64], period: usize));
+    impl_into_delegate!(aroonosc_into, aroonosc, (high: &[f64], low: &[f64], period: usize));
+    impl_into_delegate!(ppo_into, ppo, (input: &[f64], fast_period: usize, slow_period: usize));
+    impl_into_delegate!(rocp_into, rocp, (input: &[f64], period: usize));
+    impl_into_delegate!(rocr_into, rocr, (input: &[f64], period: usize));
+    impl_into_delegate!(rocr100_into, rocr100, (input: &[f64], period: usize));
 
-#[cfg(test)]
-mod into_tests {
-    use super::*;
+    #[cfg(test)]
+    mod into_tests {
+        use super::*;
 
-    fn check_eq(a: &[f64], b: &[f64]) {
-        assert_eq!(a.len(), b.len(), "length mismatch");
-        for i in 0..a.len() {
-            if a[i].is_nan() {
-                assert!(b[i].is_nan(), "nan mismatch at {i}");
-            } else {
-                assert!((a[i] - b[i]).abs() < 1e-12, "value mismatch at {i}: {} vs {}", a[i], b[i]);
+        fn check_eq(a: &[f64], b: &[f64]) {
+            assert_eq!(a.len(), b.len(), "length mismatch");
+            for i in 0..a.len() {
+                if a[i].is_nan() {
+                    assert!(b[i].is_nan(), "nan mismatch at {i}");
+                } else {
+                    assert!(
+                        (a[i] - b[i]).abs() < 1e-12,
+                        "value mismatch at {i}: {} vs {}",
+                        a[i],
+                        b[i]
+                    );
+                }
             }
         }
-    }
 
-    #[test]
-    fn test_momentum_into_parity() {
-        let input = vec![1.0, 2.0, 3.0, 4.0, 5.0, 4.0, 3.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let high = vec![2.0, 3.0, 4.0, 5.0, 6.0, 5.0, 4.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
-        let low = vec![0.0, 1.0, 2.0, 3.0, 4.0, 3.0, 2.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
-        let open = vec![1.0, 2.0, 3.0, 4.0, 5.0, 4.0, 3.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let close = input.clone();
-        let n = input.len();
+        #[test]
+        fn test_momentum_into_parity() {
+            let input = vec![
+                1.0, 2.0, 3.0, 4.0, 5.0, 4.0, 3.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0,
+            ];
+            let high = vec![
+                2.0, 3.0, 4.0, 5.0, 6.0, 5.0, 4.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0,
+            ];
+            let low = vec![
+                0.0, 1.0, 2.0, 3.0, 4.0, 3.0, 2.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0,
+            ];
+            let open = vec![
+                1.0, 2.0, 3.0, 4.0, 5.0, 4.0, 3.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0,
+            ];
+            let close = input.clone();
+            let n = input.len();
 
-        let e = apo(&input, 3, 6).unwrap(); let mut o = vec![0.0; n]; apo_into(&input, 3, 6, &mut o).unwrap(); check_eq(e.as_slice().unwrap(), &o);
-        let e = bop(&open, &high, &low, &close).unwrap(); let mut o = vec![0.0; n]; bop_into(&open, &high, &low, &close, &mut o).unwrap(); check_eq(e.as_slice().unwrap(), &o);
-        let e = cmo(&input, 5).unwrap(); let mut o = vec![0.0; n]; cmo_into(&input, 5, &mut o).unwrap(); check_eq(e.as_slice().unwrap(), &o);
-        let e = dx(&high, &low, &close, 5).unwrap(); let mut o = vec![0.0; n]; dx_into(&high, &low, &close, 5, &mut o).unwrap(); check_eq(e.as_slice().unwrap(), &o);
-        let e = minus_di(&high, &low, &close, 5).unwrap(); let mut o = vec![0.0; n]; minus_di_into(&high, &low, &close, 5, &mut o).unwrap(); check_eq(e.as_slice().unwrap(), &o);
-        let e = plus_di(&high, &low, &close, 5).unwrap(); let mut o = vec![0.0; n]; plus_di_into(&high, &low, &close, 5, &mut o).unwrap(); check_eq(e.as_slice().unwrap(), &o);
-        let e = minus_dm(&high, &low).unwrap(); let mut o = vec![0.0; n]; minus_dm_into(&high, &low, &mut o).unwrap(); check_eq(e.as_slice().unwrap(), &o);
-        let e = plus_dm(&high, &low).unwrap(); let mut o = vec![0.0; n]; plus_dm_into(&high, &low, &mut o).unwrap(); check_eq(e.as_slice().unwrap(), &o);
-        let e = trix(&input, 5).unwrap(); let mut o = vec![0.0; n]; trix_into(&input, 5, &mut o).unwrap(); check_eq(e.as_slice().unwrap(), &o);
-        let e = adxr(&high, &low, &close, 5).unwrap(); let mut o = vec![0.0; n]; adxr_into(&high, &low, &close, 5, &mut o).unwrap(); check_eq(e.as_slice().unwrap(), &o);
-        let e = aroonosc(&high, &low, 5).unwrap(); let mut o = vec![0.0; n]; aroonosc_into(&high, &low, 5, &mut o).unwrap(); check_eq(e.as_slice().unwrap(), &o);
-        let e = ppo(&input, 3, 6).unwrap(); let mut o = vec![0.0; n]; ppo_into(&input, 3, 6, &mut o).unwrap(); check_eq(e.as_slice().unwrap(), &o);
-        let e = rocp(&input, 5).unwrap(); let mut o = vec![0.0; n]; rocp_into(&input, 5, &mut o).unwrap(); check_eq(e.as_slice().unwrap(), &o);
-        let e = rocr(&input, 5).unwrap(); let mut o = vec![0.0; n]; rocr_into(&input, 5, &mut o).unwrap(); check_eq(e.as_slice().unwrap(), &o);
-        let e = rocr100(&input, 5).unwrap(); let mut o = vec![0.0; n]; rocr100_into(&input, 5, &mut o).unwrap(); check_eq(e.as_slice().unwrap(), &o);
+            let e = apo(&input, 3, 6).unwrap();
+            let mut o = vec![0.0; n];
+            apo_into(&input, 3, 6, &mut o).unwrap();
+            check_eq(e.as_slice().unwrap(), &o);
+            let e = bop(&open, &high, &low, &close).unwrap();
+            let mut o = vec![0.0; n];
+            bop_into(&open, &high, &low, &close, &mut o).unwrap();
+            check_eq(e.as_slice().unwrap(), &o);
+            let e = cmo(&input, 5).unwrap();
+            let mut o = vec![0.0; n];
+            cmo_into(&input, 5, &mut o).unwrap();
+            check_eq(e.as_slice().unwrap(), &o);
+            let e = dx(&high, &low, &close, 5).unwrap();
+            let mut o = vec![0.0; n];
+            dx_into(&high, &low, &close, 5, &mut o).unwrap();
+            check_eq(e.as_slice().unwrap(), &o);
+            let e = minus_di(&high, &low, &close, 5).unwrap();
+            let mut o = vec![0.0; n];
+            minus_di_into(&high, &low, &close, 5, &mut o).unwrap();
+            check_eq(e.as_slice().unwrap(), &o);
+            let e = plus_di(&high, &low, &close, 5).unwrap();
+            let mut o = vec![0.0; n];
+            plus_di_into(&high, &low, &close, 5, &mut o).unwrap();
+            check_eq(e.as_slice().unwrap(), &o);
+            let e = minus_dm(&high, &low).unwrap();
+            let mut o = vec![0.0; n];
+            minus_dm_into(&high, &low, &mut o).unwrap();
+            check_eq(e.as_slice().unwrap(), &o);
+            let e = plus_dm(&high, &low).unwrap();
+            let mut o = vec![0.0; n];
+            plus_dm_into(&high, &low, &mut o).unwrap();
+            check_eq(e.as_slice().unwrap(), &o);
+            let e = trix(&input, 5).unwrap();
+            let mut o = vec![0.0; n];
+            trix_into(&input, 5, &mut o).unwrap();
+            check_eq(e.as_slice().unwrap(), &o);
+            let e = adxr(&high, &low, &close, 5).unwrap();
+            let mut o = vec![0.0; n];
+            adxr_into(&high, &low, &close, 5, &mut o).unwrap();
+            check_eq(e.as_slice().unwrap(), &o);
+            let e = aroonosc(&high, &low, 5).unwrap();
+            let mut o = vec![0.0; n];
+            aroonosc_into(&high, &low, 5, &mut o).unwrap();
+            check_eq(e.as_slice().unwrap(), &o);
+            let e = ppo(&input, 3, 6).unwrap();
+            let mut o = vec![0.0; n];
+            ppo_into(&input, 3, 6, &mut o).unwrap();
+            check_eq(e.as_slice().unwrap(), &o);
+            let e = rocp(&input, 5).unwrap();
+            let mut o = vec![0.0; n];
+            rocp_into(&input, 5, &mut o).unwrap();
+            check_eq(e.as_slice().unwrap(), &o);
+            let e = rocr(&input, 5).unwrap();
+            let mut o = vec![0.0; n];
+            rocr_into(&input, 5, &mut o).unwrap();
+            check_eq(e.as_slice().unwrap(), &o);
+            let e = rocr100(&input, 5).unwrap();
+            let mut o = vec![0.0; n];
+            rocr100_into(&input, 5, &mut o).unwrap();
+            check_eq(e.as_slice().unwrap(), &o);
+        }
     }
-}
 }

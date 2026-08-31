@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -115,7 +115,10 @@ impl StreamingMacd {
 
 impl StreamingIndicator<f64, MacdOutput> for StreamingMacd {
     #[inline]
-    #[cfg_attr(feature = "tracing", tracing::instrument(level = "trace", skip(self, input)))]
+    #[cfg_attr(
+        feature = "tracing",
+        tracing::instrument(level = "trace", skip(self, input))
+    )]
     fn next(&mut self, input: f64) -> Option<MacdOutput> {
         crate::streaming_measure!("macd", self.count, {
             self.count += 1;
@@ -197,9 +200,7 @@ impl StreamingIndicator<f64, MacdOutput> for StreamingMacd {
         self.signal_seeded
     }
 
-        impl_standard_methods!(output = MacdOutput);
-
-
+    impl_standard_methods!(output = MacdOutput);
 }
 
 impl IndicatorMeta for StreamingMacd {
@@ -272,13 +273,21 @@ mod tests {
         let data = [10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0];
         let mut macd = StreamingMacd::new(3, 5, 3);
         for (i, &v) in data.iter().enumerate() {
-            macd.compute_bar(&OhlcvBar::new_with_time(0.0, 0.0, 0.0, v, 0.0, (i + 1) as i64 * 1000));
+            macd.compute_bar(&OhlcvBar::new_with_time(
+                0.0,
+                0.0,
+                0.0,
+                v,
+                0.0,
+                (i + 1) as i64 * 1000,
+            ));
         }
 
         // Repaint bar 9 three times
         macd.compute_bar(&OhlcvBar::new_with_time(0.0, 0.0, 0.0, 100.0, 0.0, 9000));
         macd.compute_bar(&OhlcvBar::new_with_time(0.0, 0.0, 0.0, 200.0, 0.0, 9000));
-        let result_repaint = macd.compute_bar(&OhlcvBar::new_with_time(0.0, 0.0, 0.0, 18.0, 0.0, 9000));
+        let result_repaint =
+            macd.compute_bar(&OhlcvBar::new_with_time(0.0, 0.0, 0.0, 18.0, 0.0, 9000));
 
         // Clean path
         let mut macd_clean = StreamingMacd::new(3, 5, 3);

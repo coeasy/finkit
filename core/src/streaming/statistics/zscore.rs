@@ -1,6 +1,6 @@
-use crate::streaming::traits::{StreamingIndicator};
+use crate::impl_indicator_meta;
 use crate::impl_standard_methods;
-use crate::{impl_indicator_meta};
+use crate::streaming::traits::StreamingIndicator;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamingZscore {

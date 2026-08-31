@@ -11,12 +11,12 @@
 //! have been intentionally omitted from this first pass. The signal line
 //! is always an `Ema` for now, matching the typical TA-Lib usage.
 
-use crate::streaming::overlap::ema::StreamingEma;
-use crate::streaming::momentum::macd::MacdOutput;
-use crate::streaming::overlap::sma::StreamingSma;
-use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::impl_standard_methods;
 use crate::indicators::overlap::MaType;
+use crate::streaming::momentum::macd::MacdOutput;
+use crate::streaming::overlap::ema::StreamingEma;
+use crate::streaming::overlap::sma::StreamingSma;
+use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 
 /// Result of constructing a [`StreamingMacdExt`] with an unsupported MA type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -149,9 +149,7 @@ impl StreamingIndicator<f64, MacdOutput> for StreamingMacdExt {
         self.fast_state.is_ready() && self.slow_state.is_ready() && self.signal_ema.is_ready()
     }
 
-        impl_standard_methods!(output = MacdOutput);
-
-
+    impl_standard_methods!(output = MacdOutput);
 }
 
 impl IndicatorMeta for StreamingMacdExt {
@@ -242,10 +240,17 @@ mod tests {
         let slow = 26;
         let sig = 9;
         let batch = crate::indicators::momentum::macdext(
-            &data, fast, MaType::Ema, slow, MaType::Ema, sig, MaType::Ema,
+            &data,
+            fast,
+            MaType::Ema,
+            slow,
+            MaType::Ema,
+            sig,
+            MaType::Ema,
         )
         .unwrap();
-        let mut streaming = StreamingMacdExt::new(fast, MaType::Ema, slow, MaType::Ema, sig).unwrap();
+        let mut streaming =
+            StreamingMacdExt::new(fast, MaType::Ema, slow, MaType::Ema, sig).unwrap();
         for (i, &val) in data.iter().enumerate() {
             if let Some(s) = streaming.next(val) {
                 if !batch.macd[i].is_nan() {

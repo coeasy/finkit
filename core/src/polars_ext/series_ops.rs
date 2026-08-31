@@ -1,6 +1,6 @@
-use polars::prelude::*;
-use crate::math::moving_avg;
 use crate::indicators;
+use crate::math::moving_avg;
+use polars::prelude::*;
 
 /// Extension trait for Polars `Series` providing technical analysis operations.
 pub trait TaSeries {
@@ -47,9 +47,16 @@ impl TaSeries for Series {
         let values: Vec<f64> = ca.into_no_null_iter().collect();
         let result = indicators::bbands(&values, period, num_std, num_std)
             .map_err(|e| PolarsError::ComputeError(format!("{}", e).into()))?;
-        let upper = Float64Chunked::from_vec("upper".into(), result.upper.into_raw_vec_and_offset().0);
-        let middle = Float64Chunked::from_vec("middle".into(), result.middle.into_raw_vec_and_offset().0);
-        let lower = Float64Chunked::from_vec("lower".into(), result.lower.into_raw_vec_and_offset().0);
-        Ok((upper.into_series(), middle.into_series(), lower.into_series()))
+        let upper =
+            Float64Chunked::from_vec("upper".into(), result.upper.into_raw_vec_and_offset().0);
+        let middle =
+            Float64Chunked::from_vec("middle".into(), result.middle.into_raw_vec_and_offset().0);
+        let lower =
+            Float64Chunked::from_vec("lower".into(), result.lower.into_raw_vec_and_offset().0);
+        Ok((
+            upper.into_series(),
+            middle.into_series(),
+            lower.into_series(),
+        ))
     }
 }

@@ -1,7 +1,7 @@
-use crate::streaming::overlap::sma::StreamingSma;
-use crate::streaming::traits::{StreamingIndicator};
+use crate::impl_indicator_meta;
 use crate::impl_standard_methods;
-use crate::{impl_indicator_meta};
+use crate::streaming::overlap::sma::StreamingSma;
+use crate::streaming::traits::StreamingIndicator;
 use crate::streaming::Ohlcv;
 
 const EOM_DIVISOR: f64 = 100_000_000.0;
@@ -30,7 +30,12 @@ impl StreamingEom {
 
     #[inline]
     fn raw_eom(high: f64, low: f64, prev_high: f64, prev_low: f64, volume: f64) -> f64 {
-        if high.is_nan() || low.is_nan() || prev_high.is_nan() || prev_low.is_nan() || volume.is_nan() {
+        if high.is_nan()
+            || low.is_nan()
+            || prev_high.is_nan()
+            || prev_low.is_nan()
+            || volume.is_nan()
+        {
             return f64::NAN;
         }
 

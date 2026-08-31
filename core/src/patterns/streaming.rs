@@ -43,7 +43,7 @@
 //! }
 //! ```
 
-use crate::patterns::common::{Signal, init_signal};
+use crate::patterns::common::{init_signal, Signal};
 use crate::streaming::{Ohlcv, OhlcvBar};
 use ndarray::Array1;
 use std::collections::VecDeque;
@@ -210,12 +210,18 @@ pub struct StreamingYangEngulfing {
 impl StreamingYangEngulfing {
     /// Create a new detector.
     pub fn new() -> Self {
-        Self { prev_open: 0.0, prev_close: 0.0, has_prev: false }
+        Self {
+            prev_open: 0.0,
+            prev_close: 0.0,
+            has_prev: false,
+        }
     }
 }
 
 impl Default for StreamingYangEngulfing {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl StreamingPattern for StreamingYangEngulfing {
@@ -244,7 +250,9 @@ impl StreamingPattern for StreamingYangEngulfing {
         self.prev_close = 0.0;
         self.has_prev = false;
     }
-    fn is_ready(&self) -> bool { self.has_prev }
+    fn is_ready(&self) -> bool {
+        self.has_prev
+    }
 }
 
 // ============================================================================
@@ -315,7 +323,11 @@ impl StreamingPattern for StreamingHammer {
         }
         self.high_ring.push_back(bar.high());
         self.low_ring.push_back(bar.low());
-        if self.low_ring.len() == self.lookback { Some(sig) } else { None }
+        if self.low_ring.len() == self.lookback {
+            Some(sig)
+        } else {
+            None
+        }
     }
     fn reset(&mut self) {
         self.high_ring.clear();
@@ -352,15 +364,23 @@ pub struct StreamingThreeGapDowns {
 impl StreamingThreeGapDowns {
     pub fn new() -> Self {
         Self {
-            low1: 0.0, low2: 0.0, close1: 0.0, close2: 0.0,
-            open1: 0.0, open2: 0.0, is_bear1: false, is_bear2: false,
+            low1: 0.0,
+            low2: 0.0,
+            close1: 0.0,
+            close2: 0.0,
+            open1: 0.0,
+            open2: 0.0,
+            is_bear1: false,
+            is_bear2: false,
             initialized: false,
         }
     }
 }
 
 impl Default for StreamingThreeGapDowns {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl StreamingPattern for StreamingThreeGapDowns {
@@ -391,12 +411,18 @@ impl StreamingPattern for StreamingThreeGapDowns {
         if !self.initialized {
             self.initialized = self.is_bear1 && self.is_bear2; // need at least 2 bars
         }
-        if self.initialized { Some(sig) } else { None }
+        if self.initialized {
+            Some(sig)
+        } else {
+            None
+        }
     }
     fn reset(&mut self) {
         *self = Self::new();
     }
-    fn is_ready(&self) -> bool { self.initialized }
+    fn is_ready(&self) -> bool {
+        self.initialized
+    }
 }
 
 // ============================================================================
@@ -422,7 +448,9 @@ impl StreamingYangThroughThreeMA {
 }
 
 impl Default for StreamingYangThroughThreeMA {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl StreamingPattern for StreamingYangThroughThreeMA {
@@ -449,7 +477,9 @@ impl StreamingPattern for StreamingYangThroughThreeMA {
         self.ma10 = RingSMA::new(10);
         self.ma20 = RingSMA::new(20);
     }
-    fn is_ready(&self) -> bool { self.ma20.is_ready() }
+    fn is_ready(&self) -> bool {
+        self.ma20.is_ready()
+    }
 }
 
 // ============================================================================
@@ -506,7 +536,11 @@ impl StreamingPattern for StreamingHermitPointingWay {
             let body = (self.last_close - self.last_open).abs();
             let upper = self.last_high - self.last_open.max(self.last_close);
             // ATR proxy: not available streaming, use body-pct heuristic
-            let b_pct = if vol_ma5 > 0.0 { body / self.last_close } else { 0.0 };
+            let b_pct = if vol_ma5 > 0.0 {
+                body / self.last_close
+            } else {
+                0.0
+            };
             if uptrend
                 && body > 0.0
                 && b_pct < 0.01  // body small (proxy for <30% ATR)
@@ -540,7 +574,11 @@ impl StreamingPattern for StreamingHermitPointingWay {
         self.last_volume = bar.volume();
         self.has_bar = true;
         self.bar_count += 1;
-        if self.close_ring.len() >= self.lookback + 5 { Some(sig) } else { None }
+        if self.close_ring.len() >= self.lookback + 5 {
+            Some(sig)
+        } else {
+            None
+        }
     }
     fn reset(&mut self) {
         self.close_ring.clear();
@@ -592,9 +630,20 @@ impl StreamingPattern for StreamingDoubleBottom {
             // Find two troughs
             let n = self.low_ring.len();
             let mid = n / 2;
-            let min1 = self.low_ring.iter().take(mid).fold(f64::INFINITY, |a, &b| a.min(b));
-            let min2 = self.low_ring.iter().skip(mid).fold(f64::INFINITY, |a, &b| a.min(b));
-            let neckline = self.high_ring.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
+            let min1 = self
+                .low_ring
+                .iter()
+                .take(mid)
+                .fold(f64::INFINITY, |a, &b| a.min(b));
+            let min2 = self
+                .low_ring
+                .iter()
+                .skip(mid)
+                .fold(f64::INFINITY, |a, &b| a.min(b));
+            let neckline = self
+                .high_ring
+                .iter()
+                .fold(f64::NEG_INFINITY, |a, &b| a.max(b));
             if min1 > 0.0
                 && (min1 - min2).abs() / min1 <= self.tolerance_pct
                 && bar.close() > neckline
@@ -614,7 +663,11 @@ impl StreamingPattern for StreamingDoubleBottom {
         self.high_ring.push_back(bar.high());
         self.low_ring.push_back(bar.low());
         self.close_ring.push_back(bar.close());
-        if self.low_ring.len() == self.lookback { Some(sig) } else { None }
+        if self.low_ring.len() == self.lookback {
+            Some(sig)
+        } else {
+            None
+        }
     }
     fn reset(&mut self) {
         self.high_ring.clear();
@@ -657,8 +710,16 @@ impl StreamingPattern for StreamingDoubleTop {
         let sig = if self.high_ring.len() == self.lookback {
             let n = self.high_ring.len();
             let mid = n / 2;
-            let max1 = self.high_ring.iter().take(mid).fold(f64::NEG_INFINITY, |a, &b| a.max(b));
-            let max2 = self.high_ring.iter().skip(mid).fold(f64::NEG_INFINITY, |a, &b| a.max(b));
+            let max1 = self
+                .high_ring
+                .iter()
+                .take(mid)
+                .fold(f64::NEG_INFINITY, |a, &b| a.max(b));
+            let max2 = self
+                .high_ring
+                .iter()
+                .skip(mid)
+                .fold(f64::NEG_INFINITY, |a, &b| a.max(b));
             let neckline = self.low_ring.iter().fold(f64::INFINITY, |a, &b| a.min(b));
             if max1 > 0.0
                 && (max1 - max2).abs() / max1 <= self.tolerance_pct
@@ -679,14 +740,20 @@ impl StreamingPattern for StreamingDoubleTop {
         self.high_ring.push_back(bar.high());
         self.low_ring.push_back(bar.low());
         self.close_ring.push_back(bar.close());
-        if self.high_ring.len() == self.lookback { Some(sig) } else { None }
+        if self.high_ring.len() == self.lookback {
+            Some(sig)
+        } else {
+            None
+        }
     }
     fn reset(&mut self) {
         self.high_ring.clear();
         self.low_ring.clear();
         self.close_ring.clear();
     }
-    fn is_ready(&self) -> bool { self.high_ring.len() == self.lookback }
+    fn is_ready(&self) -> bool {
+        self.high_ring.len() == self.lookback
+    }
 }
 
 // ============================================================================
@@ -716,10 +783,26 @@ impl StreamingPattern for StreamingAscendingChannel {
         let sig = if self.high_ring.len() == self.lookback {
             let n = self.high_ring.len();
             let mid = n / 2;
-            let early_high_max = self.high_ring.iter().take(mid).fold(f64::NEG_INFINITY, |a, &b| a.max(b));
-            let late_high_max = self.high_ring.iter().skip(mid).fold(f64::NEG_INFINITY, |a, &b| a.max(b));
-            let early_low_min = self.low_ring.iter().take(mid).fold(f64::INFINITY, |a, &b| a.min(b));
-            let late_low_min = self.low_ring.iter().skip(mid).fold(f64::INFINITY, |a, &b| a.min(b));
+            let early_high_max = self
+                .high_ring
+                .iter()
+                .take(mid)
+                .fold(f64::NEG_INFINITY, |a, &b| a.max(b));
+            let late_high_max = self
+                .high_ring
+                .iter()
+                .skip(mid)
+                .fold(f64::NEG_INFINITY, |a, &b| a.max(b));
+            let early_low_min = self
+                .low_ring
+                .iter()
+                .take(mid)
+                .fold(f64::INFINITY, |a, &b| a.min(b));
+            let late_low_min = self
+                .low_ring
+                .iter()
+                .skip(mid)
+                .fold(f64::INFINITY, |a, &b| a.min(b));
             if late_high_max > early_high_max && late_low_min > early_low_min {
                 100
             } else {
@@ -734,13 +817,19 @@ impl StreamingPattern for StreamingAscendingChannel {
         }
         self.high_ring.push_back(bar.high());
         self.low_ring.push_back(bar.low());
-        if self.high_ring.len() == self.lookback { Some(sig) } else { None }
+        if self.high_ring.len() == self.lookback {
+            Some(sig)
+        } else {
+            None
+        }
     }
     fn reset(&mut self) {
         self.high_ring.clear();
         self.low_ring.clear();
     }
-    fn is_ready(&self) -> bool { self.high_ring.len() == self.lookback }
+    fn is_ready(&self) -> bool {
+        self.high_ring.len() == self.lookback
+    }
 }
 
 /// Streaming Descending Channel detector (lower highs + lower lows).
@@ -771,7 +860,10 @@ impl StreamingBoxBreakout {
 impl StreamingPattern for StreamingBoxBreakout {
     fn next(&mut self, bar: &OhlcvBar) -> Option<Signal> {
         let sig = if self.high_ring.len() == self.lookback {
-            let box_high = self.high_ring.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
+            let box_high = self
+                .high_ring
+                .iter()
+                .fold(f64::NEG_INFINITY, |a, &b| a.max(b));
             let box_low = self.low_ring.iter().fold(f64::INFINITY, |a, &b| a.min(b));
             if bar.close() > box_high {
                 100
@@ -789,13 +881,19 @@ impl StreamingPattern for StreamingBoxBreakout {
         }
         self.high_ring.push_back(bar.high());
         self.low_ring.push_back(bar.low());
-        if self.high_ring.len() == self.lookback { Some(sig) } else { None }
+        if self.high_ring.len() == self.lookback {
+            Some(sig)
+        } else {
+            None
+        }
     }
     fn reset(&mut self) {
         self.high_ring.clear();
         self.low_ring.clear();
     }
-    fn is_ready(&self) -> bool { self.high_ring.len() == self.lookback }
+    fn is_ready(&self) -> bool {
+        self.high_ring.len() == self.lookback
+    }
 }
 
 // ============================================================================
@@ -834,12 +932,28 @@ impl StreamingPattern for StreamingFlag {
             // Pole: from bar at index (0) to (pole_lookback-1)
             let pole_start = self.close_ring[0];
             let pole_end = self.close_ring[self.pole_lookback - 1];
-            let pole_change = if pole_start > 0.0 { (pole_end - pole_start) / pole_start } else { 0.0 };
+            let pole_change = if pole_start > 0.0 {
+                (pole_end - pole_start) / pole_start
+            } else {
+                0.0
+            };
             // Flag: from pole_lookback to total-1
             let flag_start = self.close_ring[self.pole_lookback];
-            let flag_max = self.high_ring.iter().skip(self.pole_lookback).fold(f64::NEG_INFINITY, |a, &b| a.max(b));
-            let flag_min = self.low_ring.iter().skip(self.pole_lookback).fold(f64::INFINITY, |a, &b| a.min(b));
-            let flag_range = if flag_start > 0.0 { (flag_max - flag_min) / flag_start } else { 1.0 };
+            let flag_max = self
+                .high_ring
+                .iter()
+                .skip(self.pole_lookback)
+                .fold(f64::NEG_INFINITY, |a, &b| a.max(b));
+            let flag_min = self
+                .low_ring
+                .iter()
+                .skip(self.pole_lookback)
+                .fold(f64::INFINITY, |a, &b| a.min(b));
+            let flag_range = if flag_start > 0.0 {
+                (flag_max - flag_min) / flag_start
+            } else {
+                1.0
+            };
             // Bullish flag: pole up > 5%, flag range < 3%
             if pole_change > 0.05 && flag_range < 0.03 {
                 100
@@ -860,7 +974,11 @@ impl StreamingPattern for StreamingFlag {
         self.low_ring.push_back(bar.low());
         self.close_ring.push_back(bar.close());
         self.bar_count += 1;
-        if self.close_ring.len() == total { Some(sig) } else { None }
+        if self.close_ring.len() == total {
+            Some(sig)
+        } else {
+            None
+        }
     }
     fn reset(&mut self) {
         self.high_ring.clear();
@@ -900,10 +1018,26 @@ impl StreamingPattern for StreamingTriangleConverge {
         let sig = if self.high_ring.len() == self.lookback {
             let n = self.high_ring.len();
             let mid = n / 2;
-            let early_high_max = self.high_ring.iter().take(mid).fold(f64::NEG_INFINITY, |a, &b| a.max(b));
-            let late_high_max = self.high_ring.iter().skip(mid).fold(f64::NEG_INFINITY, |a, &b| a.max(b));
-            let early_low_min = self.low_ring.iter().take(mid).fold(f64::INFINITY, |a, &b| a.min(b));
-            let late_low_min = self.low_ring.iter().skip(mid).fold(f64::INFINITY, |a, &b| a.min(b));
+            let early_high_max = self
+                .high_ring
+                .iter()
+                .take(mid)
+                .fold(f64::NEG_INFINITY, |a, &b| a.max(b));
+            let late_high_max = self
+                .high_ring
+                .iter()
+                .skip(mid)
+                .fold(f64::NEG_INFINITY, |a, &b| a.max(b));
+            let early_low_min = self
+                .low_ring
+                .iter()
+                .take(mid)
+                .fold(f64::INFINITY, |a, &b| a.min(b));
+            let late_low_min = self
+                .low_ring
+                .iter()
+                .skip(mid)
+                .fold(f64::INFINITY, |a, &b| a.min(b));
             // Convergence: late_high < early_high AND late_low > early_low
             if late_high_max < early_high_max && late_low_min > early_low_min {
                 100
@@ -919,13 +1053,19 @@ impl StreamingPattern for StreamingTriangleConverge {
         }
         self.high_ring.push_back(bar.high());
         self.low_ring.push_back(bar.low());
-        if self.high_ring.len() == self.lookback { Some(sig) } else { None }
+        if self.high_ring.len() == self.lookback {
+            Some(sig)
+        } else {
+            None
+        }
     }
     fn reset(&mut self) {
         self.high_ring.clear();
         self.low_ring.clear();
     }
-    fn is_ready(&self) -> bool { self.high_ring.len() == self.lookback }
+    fn is_ready(&self) -> bool {
+        self.high_ring.len() == self.lookback
+    }
 }
 
 // ============================================================================
@@ -956,10 +1096,26 @@ impl StreamingPattern for StreamingWedge {
         let sig = if self.high_ring.len() == self.lookback {
             let n = self.high_ring.len();
             let mid = n / 2;
-            let early_high = self.high_ring.iter().take(mid).fold(f64::NEG_INFINITY, |a, &b| a.max(b));
-            let late_high = self.high_ring.iter().skip(mid).fold(f64::NEG_INFINITY, |a, &b| a.max(b));
-            let early_low = self.low_ring.iter().take(mid).fold(f64::INFINITY, |a, &b| a.min(b));
-            let late_low = self.low_ring.iter().skip(mid).fold(f64::INFINITY, |a, &b| a.min(b));
+            let early_high = self
+                .high_ring
+                .iter()
+                .take(mid)
+                .fold(f64::NEG_INFINITY, |a, &b| a.max(b));
+            let late_high = self
+                .high_ring
+                .iter()
+                .skip(mid)
+                .fold(f64::NEG_INFINITY, |a, &b| a.max(b));
+            let early_low = self
+                .low_ring
+                .iter()
+                .take(mid)
+                .fold(f64::INFINITY, |a, &b| a.min(b));
+            let late_low = self
+                .low_ring
+                .iter()
+                .skip(mid)
+                .fold(f64::INFINITY, |a, &b| a.min(b));
             if late_high > early_high && late_low > early_low {
                 // Rising wedge: typically bearish reversal
                 -100
@@ -978,13 +1134,19 @@ impl StreamingPattern for StreamingWedge {
         }
         self.high_ring.push_back(bar.high());
         self.low_ring.push_back(bar.low());
-        if self.high_ring.len() == self.lookback { Some(sig) } else { None }
+        if self.high_ring.len() == self.lookback {
+            Some(sig)
+        } else {
+            None
+        }
     }
     fn reset(&mut self) {
         self.high_ring.clear();
         self.low_ring.clear();
     }
-    fn is_ready(&self) -> bool { self.high_ring.len() == self.lookback }
+    fn is_ready(&self) -> bool {
+        self.high_ring.len() == self.lookback
+    }
 }
 
 // ============================================================================
@@ -1036,7 +1198,11 @@ impl StreamingPattern for StreamingBullishAlignment {
         } else {
             self.consecutive = 0;
         }
-        let sig = if self.consecutive >= self.period { 100 } else { 0 };
+        let sig = if self.consecutive >= self.period {
+            100
+        } else {
+            0
+        };
         self.last_signal = sig;
         Some(sig)
     }
@@ -1048,7 +1214,9 @@ impl StreamingPattern for StreamingBullishAlignment {
         self.consecutive = 0;
         self.last_signal = 0;
     }
-    fn is_ready(&self) -> bool { self.ma60.is_ready() }
+    fn is_ready(&self) -> bool {
+        self.ma60.is_ready()
+    }
 }
 
 /// Streaming 空头排列 (Bearish MA Alignment) detector.
@@ -1084,14 +1252,20 @@ impl StreamingPattern for StreamingBearishAlignment {
         } else {
             self.inner.consecutive = 0;
         }
-        let sig = if self.inner.consecutive >= self.inner.period { -100 } else { 0 };
+        let sig = if self.inner.consecutive >= self.inner.period {
+            -100
+        } else {
+            0
+        };
         self.inner.last_signal = sig;
         Some(sig)
     }
     fn reset(&mut self) {
         self.inner.reset();
     }
-    fn is_ready(&self) -> bool { self.inner.ma60.is_ready() }
+    fn is_ready(&self) -> bool {
+        self.inner.ma60.is_ready()
+    }
 }
 
 // ============================================================================
@@ -1128,15 +1302,24 @@ impl StreamingMacdDivergence {
     /// Feed a bar + its current MACD histogram value.
     pub fn next_with_hist(&mut self, bar: &OhlcvBar, hist: f64) -> Option<Signal> {
         let sig = if self.close_ring.len() == self.lookback {
-            let max_close_idx = self.close_ring.iter().enumerate()
+            let max_close_idx = self
+                .close_ring
+                .iter()
+                .enumerate()
                 .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
                 .map(|(i, _)| i)
                 .unwrap_or(0);
-            let min_close_idx = self.close_ring.iter().enumerate()
+            let min_close_idx = self
+                .close_ring
+                .iter()
+                .enumerate()
                 .min_by(|a, b| a.1.partial_cmp(b.1).unwrap())
                 .map(|(i, _)| i)
                 .unwrap_or(0);
-            let max_hist = self.hist_ring.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
+            let max_hist = self
+                .hist_ring
+                .iter()
+                .fold(f64::NEG_INFINITY, |a, &b| a.max(b));
             let min_hist = self.hist_ring.iter().fold(f64::INFINITY, |a, &b| a.min(b));
             let max_close = self.close_ring[max_close_idx];
             let min_close = self.close_ring[min_close_idx];
@@ -1158,7 +1341,11 @@ impl StreamingMacdDivergence {
         }
         self.close_ring.push_back(bar.close());
         self.hist_ring.push_back(hist);
-        if self.close_ring.len() == self.lookback { Some(sig) } else { None }
+        if self.close_ring.len() == self.lookback {
+            Some(sig)
+        } else {
+            None
+        }
     }
 }
 
@@ -1172,7 +1359,9 @@ impl StreamingPattern for StreamingMacdDivergence {
         self.close_ring.clear();
         self.hist_ring.clear();
     }
-    fn is_ready(&self) -> bool { self.close_ring.len() == self.lookback }
+    fn is_ready(&self) -> bool {
+        self.close_ring.len() == self.lookback
+    }
 }
 
 // ============================================================================
@@ -1220,7 +1409,10 @@ impl StreamingPattern for StreamingConsolidation {
             return None;
         }
         // Compute band width
-        let max_c = self.close_ring.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
+        let max_c = self
+            .close_ring
+            .iter()
+            .fold(f64::NEG_INFINITY, |a, &b| a.max(b));
         let min_c = self.close_ring.iter().fold(f64::INFINITY, |a, &b| a.min(b));
         let mean = self.close_ring.iter().sum::<f64>() / self.lookback as f64;
         let is_tight = mean > 0.0 && (max_c - min_c) / mean <= self.band_ratio;
@@ -1235,7 +1427,9 @@ impl StreamingPattern for StreamingConsolidation {
         self.close_ring.clear();
         self.consecutive = 0;
     }
-    fn is_ready(&self) -> bool { self.close_ring.len() == self.lookback }
+    fn is_ready(&self) -> bool {
+        self.close_ring.len() == self.lookback
+    }
 }
 
 // ============================================================================
@@ -1306,12 +1500,16 @@ impl StreamingPattern for StreamingBottomBreakout {
         let prior_high = if self.high_ring.is_empty() {
             f64::NEG_INFINITY
         } else {
-            self.high_ring.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b))
+            self.high_ring
+                .iter()
+                .fold(f64::NEG_INFINITY, |a, &b| a.max(b))
         };
         let max_c = if self.close_ring.is_empty() {
             f64::NEG_INFINITY
         } else {
-            self.close_ring.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b))
+            self.close_ring
+                .iter()
+                .fold(f64::NEG_INFINITY, |a, &b| a.max(b))
         };
         let min_c = if self.close_ring.is_empty() {
             f64::INFINITY
@@ -1428,7 +1626,9 @@ impl StreamingPattern for StreamingStrongRebound {
     fn reset(&mut self) {
         self.close_ring.clear();
     }
-    fn is_ready(&self) -> bool { self.close_ring.len() == self.lookback + 1 }
+    fn is_ready(&self) -> bool {
+        self.close_ring.len() == self.lookback + 1
+    }
 }
 
 // ============================================================================
@@ -1469,7 +1669,10 @@ impl StreamingPattern for StreamingStrongDrop {
         if self.close_ring.len() < self.lookback + 1 {
             return None;
         }
-        let max_close = self.close_ring.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
+        let max_close = self
+            .close_ring
+            .iter()
+            .fold(f64::NEG_INFINITY, |a, &b| a.max(b));
         let sig = if max_close > 0.0
             && bar.close() <= max_close * (1.0 - self.drop_pct)
             && bar.close() < bar.open()
@@ -1483,7 +1686,9 @@ impl StreamingPattern for StreamingStrongDrop {
     fn reset(&mut self) {
         self.close_ring.clear();
     }
-    fn is_ready(&self) -> bool { self.close_ring.len() == self.lookback + 1 }
+    fn is_ready(&self) -> bool {
+        self.close_ring.len() == self.lookback + 1
+    }
 }
 
 // ============================================================================
@@ -1606,7 +1811,13 @@ mod tests {
         // Feed 10 bars of uptrend
         for i in 0..10 {
             let p = 10.0 + (i as f64) * 0.5;
-            let _ = h.next(&make_bar(p - 0.2, p + 0.5, p - 0.5, p + 0.2, 100.0 + (i as f64) * 10.0));
+            let _ = h.next(&make_bar(
+                p - 0.2,
+                p + 0.5,
+                p - 0.5,
+                p + 0.2,
+                100.0 + (i as f64) * 10.0,
+            ));
         }
         // Hermit pointing bar: small body, long upper shadow
         let _sig = h.next(&make_bar(11.5, 12.5, 11.4, 11.6, 200.0));
@@ -1618,10 +1829,18 @@ mod tests {
         let mut d = StreamingDoubleBottom::new(20, 0.05);
         // W-shape: down-up-down-up-breakout
         let mut prices = vec![10.0; 10];
-        for i in 10..15 { prices.push(10.0 - (i - 10) as f64 * 0.5); }
-        for i in 15..20 { prices.push(7.5 + (i - 15) as f64 * 0.4); }
-        for i in 20..25 { prices.push(9.5 - (i - 20) as f64 * 0.5); }
-        for i in 25..30 { prices.push(7.5 + (i - 25) as f64 * 0.5); }
+        for i in 10..15 {
+            prices.push(10.0 - (i - 10) as f64 * 0.5);
+        }
+        for i in 15..20 {
+            prices.push(7.5 + (i - 15) as f64 * 0.4);
+        }
+        for i in 20..25 {
+            prices.push(9.5 - (i - 20) as f64 * 0.5);
+        }
+        for i in 25..30 {
+            prices.push(7.5 + (i - 25) as f64 * 0.5);
+        }
         for (i, &p) in prices.iter().enumerate() {
             let bar = make_bar(p, p + 0.2, p - 0.2, p, 100.0);
             let _ = d.next(&bar);
@@ -1669,8 +1888,7 @@ mod tests {
     #[test]
     fn test_streaming_bottom_breakout() {
         // lookback 20, breakout 1%, vol 2x
-        let mut b = StreamingBottomBreakout::new(20, 0.01, 2.0)
-            .with_consolidation(20, 0.05);
+        let mut b = StreamingBottomBreakout::new(20, 0.01, 2.0).with_consolidation(20, 0.05);
         // Feed 20 bars of tight consolidation (10.00 ~ 10.04)
         for i in 0..20 {
             let p = 10.0 + ((i % 4) as f64) * 0.01;
@@ -1720,7 +1938,9 @@ mod tests {
             let p = 10.0 + (i as f64) * 0.5;
             let bar = make_bar(p - 0.2, p + 0.5, p - 0.5, p + 0.1, 1000.0);
             if let Some(sig) = bullish.next(&bar) {
-                if sig == 100 { fired += 1; }
+                if sig == 100 {
+                    fired += 1;
+                }
             }
         }
         // Monotonic uptrend: alignment should fire at least once after warm-up
@@ -1736,7 +1956,9 @@ mod tests {
             let p = 100.0 - (i as f64) * 0.5; // monotonic downtrend
             let bar = make_bar(p + 0.2, p + 0.5, p - 0.5, p - 0.1, 1000.0);
             if let Some(sig) = bearish.next(&bar) {
-                if sig == -100 { fired += 1; }
+                if sig == -100 {
+                    fired += 1;
+                }
             }
         }
         assert!(fired > 0, "expected bearish alignment to fire on downtrend");
@@ -1749,10 +1971,7 @@ mod tests {
         // Feed `lookback` bars first to warm up
         for i in 0..lookback {
             let p = 10.0 + (i as f64) * 0.1;
-            let _ = det.next_with_hist(
-                &make_bar(p, p + 0.1, p - 0.1, p, 100.0),
-                0.5,
-            );
+            let _ = det.next_with_hist(&make_bar(p, p + 0.1, p - 0.1, p, 100.0), 0.5);
         }
         // Bullish divergence: new low in price, but hist rises
         let sig = det.next_with_hist(

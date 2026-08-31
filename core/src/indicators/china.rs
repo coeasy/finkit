@@ -256,9 +256,7 @@ pub fn psy(close: &[f64], period: usize) -> Result<Array1<f64>> {
     let mut output = init_output(len);
 
     let inv_period = 100.0 / period as f64;
-    let mut up_count = (1..=period)
-        .filter(|&j| close[j] > close[j - 1])
-        .count() as f64;
+    let mut up_count = (1..=period).filter(|&j| close[j] > close[j - 1]).count() as f64;
     output[period] = up_count * inv_period;
 
     for i in period + 1..len {
@@ -813,7 +811,11 @@ mod tests {
         assert!(!result.k[8].is_nan());
         assert!(!result.d[8].is_nan());
         assert!(!result.j[8].is_nan());
-        assert_relative_eq!(result.j[8], 3.0 * result.k[8] - 2.0 * result.d[8], epsilon = 1e-10);
+        assert_relative_eq!(
+            result.j[8],
+            3.0 * result.k[8] - 2.0 * result.d[8],
+            epsilon = 1e-10
+        );
     }
 
     #[test]

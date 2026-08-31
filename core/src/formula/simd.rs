@@ -543,7 +543,10 @@ unsafe fn gt_avx512(a: &[f64], b: &[f64], result: &mut [f64]) {
         let va = _mm512_loadu_pd(a.as_ptr().add(off));
         let vb = _mm512_loadu_pd(b.as_ptr().add(off));
         let mask = _mm512_cmp_pd_mask(va, vb, _CMP_GT_OS);
-        _mm512_storeu_pd(result.as_mut_ptr().add(off), _mm512_mask_blend_pd(mask, zeros, ones));
+        _mm512_storeu_pd(
+            result.as_mut_ptr().add(off),
+            _mm512_mask_blend_pd(mask, zeros, ones),
+        );
     }
     for i in (chunks * 8)..len {
         result[i] = if a[i] > b[i] { 1.0 } else { 0.0 };
@@ -563,7 +566,10 @@ unsafe fn lt_avx512(a: &[f64], b: &[f64], result: &mut [f64]) {
         let va = _mm512_loadu_pd(a.as_ptr().add(off));
         let vb = _mm512_loadu_pd(b.as_ptr().add(off));
         let mask = _mm512_cmp_pd_mask(va, vb, _CMP_LT_OS);
-        _mm512_storeu_pd(result.as_mut_ptr().add(off), _mm512_mask_blend_pd(mask, zeros, ones));
+        _mm512_storeu_pd(
+            result.as_mut_ptr().add(off),
+            _mm512_mask_blend_pd(mask, zeros, ones),
+        );
     }
     for i in (chunks * 8)..len {
         result[i] = if a[i] < b[i] { 1.0 } else { 0.0 };
@@ -583,7 +589,10 @@ unsafe fn gte_avx512(a: &[f64], b: &[f64], result: &mut [f64]) {
         let va = _mm512_loadu_pd(a.as_ptr().add(off));
         let vb = _mm512_loadu_pd(b.as_ptr().add(off));
         let mask = _mm512_cmp_pd_mask(va, vb, _CMP_GE_OS);
-        _mm512_storeu_pd(result.as_mut_ptr().add(off), _mm512_mask_blend_pd(mask, zeros, ones));
+        _mm512_storeu_pd(
+            result.as_mut_ptr().add(off),
+            _mm512_mask_blend_pd(mask, zeros, ones),
+        );
     }
     for i in (chunks * 8)..len {
         result[i] = if a[i] >= b[i] { 1.0 } else { 0.0 };
@@ -603,7 +612,10 @@ unsafe fn lte_avx512(a: &[f64], b: &[f64], result: &mut [f64]) {
         let va = _mm512_loadu_pd(a.as_ptr().add(off));
         let vb = _mm512_loadu_pd(b.as_ptr().add(off));
         let mask = _mm512_cmp_pd_mask(va, vb, _CMP_LE_OS);
-        _mm512_storeu_pd(result.as_mut_ptr().add(off), _mm512_mask_blend_pd(mask, zeros, ones));
+        _mm512_storeu_pd(
+            result.as_mut_ptr().add(off),
+            _mm512_mask_blend_pd(mask, zeros, ones),
+        );
     }
     for i in (chunks * 8)..len {
         result[i] = if a[i] <= b[i] { 1.0 } else { 0.0 };
@@ -623,7 +635,10 @@ unsafe fn eq_avx512(a: &[f64], b: &[f64], result: &mut [f64]) {
         let va = _mm512_loadu_pd(a.as_ptr().add(off));
         let vb = _mm512_loadu_pd(b.as_ptr().add(off));
         let mask = _mm512_cmp_pd_mask(va, vb, _CMP_EQ_OQ);
-        _mm512_storeu_pd(result.as_mut_ptr().add(off), _mm512_mask_blend_pd(mask, zeros, ones));
+        _mm512_storeu_pd(
+            result.as_mut_ptr().add(off),
+            _mm512_mask_blend_pd(mask, zeros, ones),
+        );
     }
     for i in (chunks * 8)..len {
         result[i] = if a[i] == b[i] { 1.0 } else { 0.0 };
@@ -643,7 +658,10 @@ unsafe fn neq_avx512(a: &[f64], b: &[f64], result: &mut [f64]) {
         let va = _mm512_loadu_pd(a.as_ptr().add(off));
         let vb = _mm512_loadu_pd(b.as_ptr().add(off));
         let mask = _mm512_cmp_pd_mask(va, vb, _CMP_NEQ_UQ);
-        _mm512_storeu_pd(result.as_mut_ptr().add(off), _mm512_mask_blend_pd(mask, zeros, ones));
+        _mm512_storeu_pd(
+            result.as_mut_ptr().add(off),
+            _mm512_mask_blend_pd(mask, zeros, ones),
+        );
     }
     for i in (chunks * 8)..len {
         result[i] = if a[i] != b[i] { 1.0 } else { 0.0 };
@@ -668,7 +686,10 @@ unsafe fn select_avx512(
         let mask = _mm512_cmp_pd_mask(cond, zero, _CMP_NEQ_UQ);
         let tv = _mm512_loadu_pd(then_val.as_ptr().add(off));
         let ev = _mm512_loadu_pd(else_val.as_ptr().add(off));
-        _mm512_storeu_pd(result.as_mut_ptr().add(off), _mm512_mask_blend_pd(mask, ev, tv));
+        _mm512_storeu_pd(
+            result.as_mut_ptr().add(off),
+            _mm512_mask_blend_pd(mask, ev, tv),
+        );
     }
     for i in (chunks * 8)..len {
         result[i] = if condition[i] != 0.0 {
@@ -833,7 +854,11 @@ unsafe fn div_neon(a: &[f64], b: &[f64], result: &mut [f64]) {
         vst1q_f64(result.as_mut_ptr().add(off), blended);
     }
     for i in (chunks * 2)..len {
-        result[i] = if b[i].abs() < 1e-15 { f64::NAN } else { a[i] / b[i] };
+        result[i] = if b[i].abs() < 1e-15 {
+            f64::NAN
+        } else {
+            a[i] / b[i]
+        };
     }
 }
 
@@ -1125,7 +1150,11 @@ unsafe fn select_neon(
         vst1q_f64(result.as_mut_ptr().add(off), blended);
     }
     for i in (chunks * 2)..len {
-        result[i] = if condition[i] != 0.0 { then_val[i] } else { else_val[i] };
+        result[i] = if condition[i] != 0.0 {
+            then_val[i]
+        } else {
+            else_val[i]
+        };
     }
 }
 
@@ -2026,10 +2055,26 @@ impl SimdOps {
         let chunks = len / 4;
         for i in 0..chunks {
             let off = i * 4;
-            result[off] = if a[off] != 0.0 && b[off] != 0.0 { 1.0 } else { 0.0 };
-            result[off + 1] = if a[off + 1] != 0.0 && b[off + 1] != 0.0 { 1.0 } else { 0.0 };
-            result[off + 2] = if a[off + 2] != 0.0 && b[off + 2] != 0.0 { 1.0 } else { 0.0 };
-            result[off + 3] = if a[off + 3] != 0.0 && b[off + 3] != 0.0 { 1.0 } else { 0.0 };
+            result[off] = if a[off] != 0.0 && b[off] != 0.0 {
+                1.0
+            } else {
+                0.0
+            };
+            result[off + 1] = if a[off + 1] != 0.0 && b[off + 1] != 0.0 {
+                1.0
+            } else {
+                0.0
+            };
+            result[off + 2] = if a[off + 2] != 0.0 && b[off + 2] != 0.0 {
+                1.0
+            } else {
+                0.0
+            };
+            result[off + 3] = if a[off + 3] != 0.0 && b[off + 3] != 0.0 {
+                1.0
+            } else {
+                0.0
+            };
         }
         for i in (chunks * 4)..len {
             result[i] = if a[i] != 0.0 && b[i] != 0.0 { 1.0 } else { 0.0 };
@@ -2041,10 +2086,26 @@ impl SimdOps {
         let chunks = len / 4;
         for i in 0..chunks {
             let off = i * 4;
-            result[off] = if a[off] != 0.0 || b[off] != 0.0 { 1.0 } else { 0.0 };
-            result[off + 1] = if a[off + 1] != 0.0 || b[off + 1] != 0.0 { 1.0 } else { 0.0 };
-            result[off + 2] = if a[off + 2] != 0.0 || b[off + 2] != 0.0 { 1.0 } else { 0.0 };
-            result[off + 3] = if a[off + 3] != 0.0 || b[off + 3] != 0.0 { 1.0 } else { 0.0 };
+            result[off] = if a[off] != 0.0 || b[off] != 0.0 {
+                1.0
+            } else {
+                0.0
+            };
+            result[off + 1] = if a[off + 1] != 0.0 || b[off + 1] != 0.0 {
+                1.0
+            } else {
+                0.0
+            };
+            result[off + 2] = if a[off + 2] != 0.0 || b[off + 2] != 0.0 {
+                1.0
+            } else {
+                0.0
+            };
+            result[off + 3] = if a[off + 3] != 0.0 || b[off + 3] != 0.0 {
+                1.0
+            } else {
+                0.0
+            };
         }
         for i in (chunks * 4)..len {
             result[i] = if a[i] != 0.0 || b[i] != 0.0 { 1.0 } else { 0.0 };
@@ -2071,13 +2132,33 @@ impl SimdOps {
         let chunks = len / 4;
         for i in 0..chunks {
             let off = i * 4;
-            result[off] = if (a[off] != 0.0) != (b[off] != 0.0) { 1.0 } else { 0.0 };
-            result[off + 1] = if (a[off + 1] != 0.0) != (b[off + 1] != 0.0) { 1.0 } else { 0.0 };
-            result[off + 2] = if (a[off + 2] != 0.0) != (b[off + 2] != 0.0) { 1.0 } else { 0.0 };
-            result[off + 3] = if (a[off + 3] != 0.0) != (b[off + 3] != 0.0) { 1.0 } else { 0.0 };
+            result[off] = if (a[off] != 0.0) != (b[off] != 0.0) {
+                1.0
+            } else {
+                0.0
+            };
+            result[off + 1] = if (a[off + 1] != 0.0) != (b[off + 1] != 0.0) {
+                1.0
+            } else {
+                0.0
+            };
+            result[off + 2] = if (a[off + 2] != 0.0) != (b[off + 2] != 0.0) {
+                1.0
+            } else {
+                0.0
+            };
+            result[off + 3] = if (a[off + 3] != 0.0) != (b[off + 3] != 0.0) {
+                1.0
+            } else {
+                0.0
+            };
         }
         for i in (chunks * 4)..len {
-            result[i] = if (a[i] != 0.0) != (b[i] != 0.0) { 1.0 } else { 0.0 };
+            result[i] = if (a[i] != 0.0) != (b[i] != 0.0) {
+                1.0
+            } else {
+                0.0
+            };
         }
     }
 
@@ -2090,8 +2171,12 @@ impl SimdOps {
         #[cfg(target_arch = "x86_64")]
         match simd_level() {
             #[cfg(feature = "nightly-avx512")]
-            SimdLevel::Avx512 => return unsafe { select_avx512(condition, then_val, else_val, result, len) },
-            SimdLevel::Avx2 => return unsafe { select_avx2(condition, then_val, else_val, result, len) },
+            SimdLevel::Avx512 => {
+                return unsafe { select_avx512(condition, then_val, else_val, result, len) }
+            }
+            SimdLevel::Avx2 => {
+                return unsafe { select_avx2(condition, then_val, else_val, result, len) }
+            }
             _ => {}
         }
         #[cfg(target_arch = "aarch64")]
@@ -2233,7 +2318,11 @@ impl SimdOps {
 
         let mut sum_x: f64 = x[..period].iter().sum();
         let mut sum_y: f64 = y[..period].iter().sum();
-        let mut sum_xy: f64 = x[..period].iter().zip(y[..period].iter()).map(|(xi, yi)| xi * yi).sum();
+        let mut sum_xy: f64 = x[..period]
+            .iter()
+            .zip(y[..period].iter())
+            .map(|(xi, yi)| xi * yi)
+            .sum();
         let mut sum_x2: f64 = x[..period].iter().map(|xi| xi * xi).sum();
         let mut sum_y2: f64 = y[..period].iter().map(|yi| yi * yi).sum();
 
@@ -2302,7 +2391,11 @@ impl SimdOps {
 
         let mut sum_a: f64 = asset[..period].iter().sum();
         let mut sum_b: f64 = benchmark[..period].iter().sum();
-        let mut sum_ab: f64 = asset[..period].iter().zip(benchmark[..period].iter()).map(|(a, b)| a * b).sum();
+        let mut sum_ab: f64 = asset[..period]
+            .iter()
+            .zip(benchmark[..period].iter())
+            .map(|(a, b)| a * b)
+            .sum();
         let mut sum_b2: f64 = benchmark[..period].iter().map(|b| b * b).sum();
 
         let _mean_a = sum_a * inv_w;
@@ -2537,10 +2630,14 @@ impl SimdOps {
             let intercept = (sum_y - slope * sum_x) / p;
 
             let ss_tot: f64 = window.iter().map(|yi| (yi - mean_y).powi(2)).sum();
-            let ss_res: f64 = window.iter().enumerate().map(|(j, yi)| {
-                let predicted = slope * j as f64 + intercept;
-                (yi - predicted).powi(2)
-            }).sum();
+            let ss_res: f64 = window
+                .iter()
+                .enumerate()
+                .map(|(j, yi)| {
+                    let predicted = slope * j as f64 + intercept;
+                    (yi - predicted).powi(2)
+                })
+                .sum();
 
             result[i] = if ss_tot.abs() < 1e-15 {
                 1.0
@@ -2553,63 +2650,105 @@ impl SimdOps {
     pub fn simd_stddev_array(data: &Array1<f64>, period: usize) -> Array1<f64> {
         let len = data.len();
         let mut result = Array1::zeros(len);
-        Self::stddev(data.as_slice().unwrap(), period, result.as_slice_mut().unwrap());
+        Self::stddev(
+            data.as_slice().unwrap(),
+            period,
+            result.as_slice_mut().unwrap(),
+        );
         result
     }
 
     pub fn simd_zscore_optimized_array(data: &Array1<f64>, period: usize) -> Array1<f64> {
         let len = data.len();
         let mut result = Array1::zeros(len);
-        Self::zscore_optimized(data.as_slice().unwrap(), period, result.as_slice_mut().unwrap());
+        Self::zscore_optimized(
+            data.as_slice().unwrap(),
+            period,
+            result.as_slice_mut().unwrap(),
+        );
         result
     }
 
     pub fn simd_correl_array(x: &Array1<f64>, y: &Array1<f64>, period: usize) -> Array1<f64> {
         let len = x.len();
         let mut result = Array1::zeros(len);
-        Self::correl(x.as_slice().unwrap(), y.as_slice().unwrap(), period, result.as_slice_mut().unwrap());
+        Self::correl(
+            x.as_slice().unwrap(),
+            y.as_slice().unwrap(),
+            period,
+            result.as_slice_mut().unwrap(),
+        );
         result
     }
 
-    pub fn simd_beta_array(asset: &Array1<f64>, benchmark: &Array1<f64>, period: usize) -> Array1<f64> {
+    pub fn simd_beta_array(
+        asset: &Array1<f64>,
+        benchmark: &Array1<f64>,
+        period: usize,
+    ) -> Array1<f64> {
         let len = asset.len();
         let mut result = Array1::zeros(len);
-        Self::beta(asset.as_slice().unwrap(), benchmark.as_slice().unwrap(), period, result.as_slice_mut().unwrap());
+        Self::beta(
+            asset.as_slice().unwrap(),
+            benchmark.as_slice().unwrap(),
+            period,
+            result.as_slice_mut().unwrap(),
+        );
         result
     }
 
     pub fn simd_linear_reg_slope_array(data: &Array1<f64>, period: usize) -> Array1<f64> {
         let len = data.len();
         let mut result = Array1::zeros(len);
-        Self::linear_reg_slope(data.as_slice().unwrap(), period, result.as_slice_mut().unwrap());
+        Self::linear_reg_slope(
+            data.as_slice().unwrap(),
+            period,
+            result.as_slice_mut().unwrap(),
+        );
         result
     }
 
     pub fn simd_linear_reg_intercept_array(data: &Array1<f64>, period: usize) -> Array1<f64> {
         let len = data.len();
         let mut result = Array1::zeros(len);
-        Self::linear_reg_intercept(data.as_slice().unwrap(), period, result.as_slice_mut().unwrap());
+        Self::linear_reg_intercept(
+            data.as_slice().unwrap(),
+            period,
+            result.as_slice_mut().unwrap(),
+        );
         result
     }
 
     pub fn simd_linear_reg_array(data: &Array1<f64>, period: usize) -> Array1<f64> {
         let len = data.len();
         let mut result = Array1::zeros(len);
-        Self::linear_reg(data.as_slice().unwrap(), period, result.as_slice_mut().unwrap());
+        Self::linear_reg(
+            data.as_slice().unwrap(),
+            period,
+            result.as_slice_mut().unwrap(),
+        );
         result
     }
 
     pub fn simd_linear_reg_angle_array(data: &Array1<f64>, period: usize) -> Array1<f64> {
         let len = data.len();
         let mut result = Array1::zeros(len);
-        Self::linear_reg_angle(data.as_slice().unwrap(), period, result.as_slice_mut().unwrap());
+        Self::linear_reg_angle(
+            data.as_slice().unwrap(),
+            period,
+            result.as_slice_mut().unwrap(),
+        );
         result
     }
 
     pub fn simd_linear_reg_r2_array(data: &Array1<f64>, period: usize) -> Array1<f64> {
         let len = data.len();
         let mut result = Array1::zeros(len);
-        Self::linear_reg_r2(data.as_slice().unwrap(), period, result.as_slice_mut().unwrap());
+        Self::linear_reg_r2(
+            data.as_slice().unwrap(),
+            period,
+            result.as_slice_mut().unwrap(),
+        );
         result
     }
 }

@@ -11,9 +11,7 @@ impl Transform for PctChange {
         if input.len() < 2 {
             return vec![];
         }
-        input.windows(2)
-            .map(|w| (w[1] - w[0]) / w[0])
-            .collect()
+        input.windows(2).map(|w| (w[1] - w[0]) / w[0]).collect()
     }
 }
 

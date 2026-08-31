@@ -53,15 +53,14 @@ impl Transform for Pipeline {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::transforms::{LogReturn, ZScore, PctChange, MinMaxScaler, StandardScaler};
+    use crate::transforms::{LogReturn, MinMaxScaler, PctChange, StandardScaler, ZScore};
 
     #[test]
     fn test_pipeline_log_return_zscore() {
-        let data = vec![100.0, 105.0, 103.0, 108.0, 110.0, 107.0, 112.0, 115.0, 113.0, 118.0];
-        let result = Pipeline::new()
-            .add(LogReturn)
-            .add(ZScore)
-            .transform(&data);
+        let data = vec![
+            100.0, 105.0, 103.0, 108.0, 110.0, 107.0, 112.0, 115.0, 113.0, 118.0,
+        ];
+        let result = Pipeline::new().add(LogReturn).add(ZScore).transform(&data);
         assert_eq!(result.len(), 9);
         let sum: f64 = result.iter().sum();
         assert!(sum.abs() < 1e-10);

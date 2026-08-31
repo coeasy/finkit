@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
 
 /// Streaming Accumulation/Distribution Line
 ///
@@ -14,7 +14,9 @@ pub struct StreamingAd {
 }
 
 impl Default for StreamingAd {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl StreamingAd {
@@ -29,7 +31,10 @@ impl StreamingAd {
 
 impl StreamingIndicator<&dyn Ohlcv> for StreamingAd {
     #[inline]
-    #[cfg_attr(feature = "tracing", tracing::instrument(level = "trace", skip(self, bar)))]
+    #[cfg_attr(
+        feature = "tracing",
+        tracing::instrument(level = "trace", skip(self, bar))
+    )]
     fn next(&mut self, bar: &dyn Ohlcv) -> Option<f64> {
         crate::streaming_measure!("ad", self.count, {
             self.count += 1;
@@ -50,16 +55,26 @@ impl StreamingIndicator<&dyn Ohlcv> for StreamingAd {
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { self.count >= 1 }
+    fn is_ready(&self) -> bool {
+        self.count >= 1
+    }
 
     impl_standard_methods!();
 }
 
 impl IndicatorMeta for StreamingAd {
-    fn name() -> &'static str { "AD" }
-    fn category() -> &'static str { "volume" }
-    fn description() -> &'static str { "Accumulation/Distribution Line" }
-    fn warm_up_period(&self) -> usize { 1 }
+    fn name() -> &'static str {
+        "AD"
+    }
+    fn category() -> &'static str {
+        "volume"
+    }
+    fn description() -> &'static str {
+        "Accumulation/Distribution Line"
+    }
+    fn warm_up_period(&self) -> usize {
+        1
+    }
 }
 
 #[cfg(test)]
@@ -106,10 +121,18 @@ mod tests {
     #[test]
     fn test_streaming_vs_batch_convergence() {
         let n = 100;
-        let highs: Vec<f64> = (0..n).map(|i| 50.0 + (i as f64 * 0.1).sin() * 5.0 + 2.0).collect();
-        let lows: Vec<f64> = (0..n).map(|i| 50.0 + (i as f64 * 0.1).sin() * 5.0 - 2.0).collect();
-        let closes: Vec<f64> = (0..n).map(|i| 50.0 + (i as f64 * 0.1).sin() * 5.0).collect();
-        let volumes: Vec<f64> = (0..n).map(|i| 100.0 + (i as f64 * 0.2).cos() * 50.0).collect();
+        let highs: Vec<f64> = (0..n)
+            .map(|i| 50.0 + (i as f64 * 0.1).sin() * 5.0 + 2.0)
+            .collect();
+        let lows: Vec<f64> = (0..n)
+            .map(|i| 50.0 + (i as f64 * 0.1).sin() * 5.0 - 2.0)
+            .collect();
+        let closes: Vec<f64> = (0..n)
+            .map(|i| 50.0 + (i as f64 * 0.1).sin() * 5.0)
+            .collect();
+        let volumes: Vec<f64> = (0..n)
+            .map(|i| 100.0 + (i as f64 * 0.2).cos() * 50.0)
+            .collect();
 
         let batch = crate::indicators::ad(&highs, &lows, &closes, &volumes).unwrap();
 

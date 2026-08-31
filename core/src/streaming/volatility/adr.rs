@@ -1,6 +1,6 @@
-use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::impl_standard_methods;
 use crate::indicators::volatility_ext::AdrMode;
+use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 
 /// Streaming Average Day Range (ADR).
 ///
@@ -147,15 +147,20 @@ mod tests {
     #[test]
     fn test_streaming_vs_batch_convergence() {
         let n = 30;
-        let high: Vec<f64> = (0..n).map(|i| 110.0 + (i as f64 * 0.3).sin() * 5.0).collect();
-        let low: Vec<f64> = (0..n).map(|i| 90.0 + (i as f64 * 0.3).sin() * 5.0).collect();
-        let close: Vec<f64> = (0..n).map(|i| 100.0 + (i as f64 * 0.3).sin() * 5.0).collect();
+        let high: Vec<f64> = (0..n)
+            .map(|i| 110.0 + (i as f64 * 0.3).sin() * 5.0)
+            .collect();
+        let low: Vec<f64> = (0..n)
+            .map(|i| 90.0 + (i as f64 * 0.3).sin() * 5.0)
+            .collect();
+        let close: Vec<f64> = (0..n)
+            .map(|i| 100.0 + (i as f64 * 0.3).sin() * 5.0)
+            .collect();
         let period = 10;
 
-        let batch = crate::indicators::volatility_ext::adr(
-            &high, &low, &close, period, AdrMode::Absolute,
-        )
-        .unwrap();
+        let batch =
+            crate::indicators::volatility_ext::adr(&high, &low, &close, period, AdrMode::Absolute)
+                .unwrap();
 
         let mut streaming = StreamingAdr::new(period, AdrMode::Absolute);
         for i in 0..n {

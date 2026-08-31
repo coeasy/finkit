@@ -2143,12 +2143,7 @@ pub fn on_neck(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result
 /// Two Crows (CDL2CROWS) — bearish reversal
 ///
 /// Three-candle pattern: long bullish first, gap-up bearish second, bearish third that engulfs second.
-pub fn cdl_2crows(
-    open: &[f64],
-    high: &[f64],
-    low: &[f64],
-    close: &[f64],
-) -> Result<PatternResult> {
+pub fn cdl_2crows(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result<PatternResult> {
     if open.len() != high.len() || open.len() != low.len() || open.len() != close.len() {
         return Err(TaError::InvalidParameter {
             name: "open, high, low, close".to_string(),
@@ -2198,8 +2193,7 @@ pub fn cdl_doji_star(
         if is_doji && long_prev {
             if is_bullish(open[i - 1], close[i - 1]) && open[i].min(close[i]) > close[i - 1] {
                 output[i] = -100; // bearish doji star
-            } else if is_bearish(open[i - 1], close[i - 1])
-                && open[i].max(close[i]) < close[i - 1]
+            } else if is_bearish(open[i - 1], close[i - 1]) && open[i].max(close[i]) < close[i - 1]
             {
                 output[i] = 100; // bullish doji star
             }
@@ -2227,8 +2221,8 @@ pub fn cdl_gap_side_white(
     for i in 2..len {
         let bull2 = is_bullish(open[i - 1], close[i - 1]);
         let bull3 = is_bullish(open[i], close[i]);
-        let similar_size =
-            (body(open[i], close[i]) - body(open[i - 1], close[i - 1])).abs() < body(open[i - 1], close[i - 1]) * 0.3;
+        let similar_size = (body(open[i], close[i]) - body(open[i - 1], close[i - 1])).abs()
+            < body(open[i - 1], close[i - 1]) * 0.3;
         let similar_open = (open[i] - open[i - 1]).abs() < body(open[i - 1], close[i - 1]) * 0.3;
         if bull2 && bull3 && similar_size && similar_open {
             if is_bullish(open[i - 2], close[i - 2]) && open[i - 1] > close[i - 2] {
@@ -2391,11 +2385,7 @@ pub fn cdl_rise_fall_3methods(
             && low[i - 2] >= low[i - 4]
             && high[i - 1] <= high[i - 4]
             && low[i - 1] >= low[i - 4];
-        if bull_first
-            && within_range
-            && is_bullish(open[i], close[i])
-            && close[i] > close[i - 4]
-        {
+        if bull_first && within_range && is_bullish(open[i], close[i]) && close[i] > close[i - 4] {
             output[i] = 100; // rising three methods
         } else if bear_first
             && within_range
@@ -2409,12 +2399,7 @@ pub fn cdl_rise_fall_3methods(
 }
 
 /// Takuri (CDLTAKURI) — dragonfly doji variant with very long lower shadow
-pub fn cdl_takuri(
-    open: &[f64],
-    high: &[f64],
-    low: &[f64],
-    close: &[f64],
-) -> Result<PatternResult> {
+pub fn cdl_takuri(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result<PatternResult> {
     if open.len() != high.len() || open.len() != low.len() || open.len() != close.len() {
         return Err(TaError::InvalidParameter {
             name: "open, high, low, close".to_string(),
@@ -2656,12 +2641,7 @@ pub fn cdl_darkcloudcover(
 }
 
 /// CDLDOJI — Doji
-pub fn cdl_doji(
-    open: &[f64],
-    high: &[f64],
-    low: &[f64],
-    close: &[f64],
-) -> Result<PatternResult> {
+pub fn cdl_doji(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result<PatternResult> {
     doji(open, high, low, close, 0.1)
 }
 
@@ -2716,12 +2696,7 @@ pub fn cdl_gravestonedoji(
 }
 
 /// CDLHAMMER — Hammer (看涨反转)
-pub fn cdl_hammer(
-    open: &[f64],
-    high: &[f64],
-    low: &[f64],
-    close: &[f64],
-) -> Result<PatternResult> {
+pub fn cdl_hammer(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result<PatternResult> {
     hammer(open, high, low, close)
 }
 
@@ -2736,12 +2711,7 @@ pub fn cdl_hangingman(
 }
 
 /// CDLHARAMI — Harami Pattern
-pub fn cdl_harami(
-    open: &[f64],
-    high: &[f64],
-    low: &[f64],
-    close: &[f64],
-) -> Result<PatternResult> {
+pub fn cdl_harami(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result<PatternResult> {
     harami(open, high, low, close)
 }
 
@@ -2776,12 +2746,7 @@ pub fn cdl_identical3crows(
 }
 
 /// CDLINNECK — In Neck Pattern (看跌)
-pub fn cdl_inneck(
-    open: &[f64],
-    high: &[f64],
-    low: &[f64],
-    close: &[f64],
-) -> Result<PatternResult> {
+pub fn cdl_inneck(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result<PatternResult> {
     in_neck(open, high, low, close)
 }
 
@@ -2941,12 +2906,7 @@ pub fn cdl_morningstar(
 }
 
 /// CDLONSIDE — On Neck (与 in_neck 类似，简化实现)
-pub fn cdl_onside(
-    open: &[f64],
-    high: &[f64],
-    low: &[f64],
-    close: &[f64],
-) -> Result<PatternResult> {
+pub fn cdl_onside(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result<PatternResult> {
     on_neck(open, high, low, close)
 }
 
@@ -3253,30 +3213,38 @@ mod tests {
 
     #[test]
     fn test_cdl_takuri() {
-        let open = vec![10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0];
-        let high = vec![10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.01];
+        let open = vec![
+            10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0,
+        ];
+        let high = vec![
+            10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.01,
+        ];
         let low = vec![9.0, 9.0, 9.0, 9.0, 9.0, 9.0, 9.0, 9.0, 9.0, 9.0, 7.0];
-        let close = vec![10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0];
+        let close = vec![
+            10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0,
+        ];
         let result = cdl_takuri(&open, &high, &low, &close).unwrap();
         assert_eq!(result.len(), 11);
     }
 
     #[test]
     fn test_cdl_tristar() {
-        let open = vec![10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.2, 10.0];
-        let high = vec![10.5, 10.5, 10.5, 10.5, 10.5, 10.5, 10.5, 10.5, 10.5, 10.5, 10.7, 10.5];
+        let open = vec![
+            10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.2, 10.0,
+        ];
+        let high = vec![
+            10.5, 10.5, 10.5, 10.5, 10.5, 10.5, 10.5, 10.5, 10.5, 10.5, 10.7, 10.5,
+        ];
         let low = vec![9.5, 9.5, 9.5, 9.5, 9.5, 9.5, 9.5, 9.5, 9.5, 9.5, 9.7, 9.5];
-        let close = vec![10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.2, 10.0];
+        let close = vec![
+            10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.2, 10.0,
+        ];
         let result = cdl_tristar(&open, &high, &low, &close).unwrap();
         assert_eq!(result.len(), 12);
     }
 
     // 通用测试 helper: 生成简单测试数据
-    fn make_ohlc(
-        n: usize,
-        base: f64,
-        body_size: f64,
-    ) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
+    fn make_ohlc(n: usize, base: f64, body_size: f64) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
         let open: Vec<f64> = (0..n).map(|i| base + i as f64).collect();
         let high: Vec<f64> = open.iter().map(|x| x + 1.0).collect();
         let low: Vec<f64> = open.iter().map(|x| x - 1.0).collect();

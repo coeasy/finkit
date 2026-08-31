@@ -3,9 +3,9 @@
 //! O(1) per-bar incremental index of the rolling maximum / minimum. Returns
 //! the offset (0 = oldest bar in window) of the most extreme value.
 
-use crate::streaming::traits::StreamingIndicator;
+use crate::impl_indicator_meta;
 use crate::impl_standard_methods;
-use crate::{impl_indicator_meta};
+use crate::streaming::traits::StreamingIndicator;
 use std::collections::VecDeque;
 
 /// Streaming rolling `MAXINDEX`.
@@ -37,7 +37,7 @@ impl StreamingIndicator for StreamingMaxIndex {
     fn next(&mut self, input: f64) -> Option<f64> {
         self.count += 1;
         let offset = self.count - 1; // 0-based index of current bar
-        // Remove bars that have slid out of the window
+                                     // Remove bars that have slid out of the window
         while let Some(&(_, first_off)) = self.buf.front() {
             if offset.saturating_sub(first_off) >= self.period {
                 self.buf.pop_front();
@@ -74,12 +74,19 @@ impl StreamingIndicator for StreamingMaxIndex {
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { self.count >= self.period }
+    fn is_ready(&self) -> bool {
+        self.count >= self.period
+    }
 
     impl_standard_methods!();
 }
 
-impl_indicator_meta!(StreamingMaxIndex, "MAXINDEX", "math_operators", "Index of highest value over a rolling period");
+impl_indicator_meta!(
+    StreamingMaxIndex,
+    "MAXINDEX",
+    "math_operators",
+    "Index of highest value over a rolling period"
+);
 
 /// Streaming rolling `MININDEX`.
 #[derive(Clone)]
@@ -144,12 +151,19 @@ impl StreamingIndicator for StreamingMinIndex {
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { self.count >= self.period }
+    fn is_ready(&self) -> bool {
+        self.count >= self.period
+    }
 
     impl_standard_methods!();
 }
 
-impl_indicator_meta!(StreamingMinIndex, "MININDEX", "math_operators", "Index of lowest value over a rolling period");
+impl_indicator_meta!(
+    StreamingMinIndex,
+    "MININDEX",
+    "math_operators",
+    "Index of lowest value over a rolling period"
+);
 
 #[cfg(test)]
 mod tests {
@@ -241,7 +255,9 @@ mod tests {
 
     #[test]
     fn test_vs_batch_max() {
-        let data: Vec<f64> = (0..50).map(|i| (i as f64 * 0.3).sin() * 10.0 + 50.0).collect();
+        let data: Vec<f64> = (0..50)
+            .map(|i| (i as f64 * 0.3).sin() * 10.0 + 50.0)
+            .collect();
         let period = 5;
         let batch = crate::indicators::math_operators::maxindex(&data, period).unwrap();
         let mut s = StreamingMaxIndex::new(period);
@@ -249,8 +265,10 @@ mod tests {
             if let Some(sv) = s.next(v) {
                 // Batch uses Array1<i64> (offset 0..=period-1).
                 let expected = batch[i];
-                assert!((sv as i64 - expected).abs() <= 1,
-                        "Mismatch at {i}: streaming={sv}, batch={expected}");
+                assert!(
+                    (sv as i64 - expected).abs() <= 1,
+                    "Mismatch at {i}: streaming={sv}, batch={expected}"
+                );
             }
         }
     }

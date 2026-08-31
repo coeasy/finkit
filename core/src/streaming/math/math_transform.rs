@@ -16,8 +16,8 @@
 //! - Rounding: `ceil` / `floor`
 //! - Power: `sqrt`
 
-use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 
 // =====================================================================
 // Trigonometric functions (no domain constraints / partial domain constraints)
@@ -34,7 +34,10 @@ pub struct StreamingAcos {
 
 impl StreamingAcos {
     pub fn new() -> Self {
-        Self { count: 0, last_value: None }
+        Self {
+            count: 0,
+            last_value: None,
+        }
     }
 }
 
@@ -56,16 +59,26 @@ impl StreamingIndicator for StreamingAcos {
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { true }
+    fn is_ready(&self) -> bool {
+        true
+    }
 
     impl_standard_methods!();
 }
 
 impl IndicatorMeta for StreamingAcos {
-    fn name() -> &'static str { "ACOS" }
-    fn category() -> &'static str { "math_transform" }
-    fn description() -> &'static str { "Vector Arc Cosine" }
-    fn warm_up_period(&self) -> usize { 0 }
+    fn name() -> &'static str {
+        "ACOS"
+    }
+    fn category() -> &'static str {
+        "math_transform"
+    }
+    fn description() -> &'static str {
+        "Vector Arc Cosine"
+    }
+    fn warm_up_period(&self) -> usize {
+        0
+    }
 }
 
 /// Streaming Arc Sine (asin)
@@ -79,7 +92,10 @@ pub struct StreamingAsin {
 
 impl StreamingAsin {
     pub fn new() -> Self {
-        Self { count: 0, last_value: None }
+        Self {
+            count: 0,
+            last_value: None,
+        }
     }
 }
 
@@ -101,16 +117,26 @@ impl StreamingIndicator for StreamingAsin {
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { true }
+    fn is_ready(&self) -> bool {
+        true
+    }
 
     impl_standard_methods!();
 }
 
 impl IndicatorMeta for StreamingAsin {
-    fn name() -> &'static str { "ASIN" }
-    fn category() -> &'static str { "math_transform" }
-    fn description() -> &'static str { "Vector Arc Sine" }
-    fn warm_up_period(&self) -> usize { 0 }
+    fn name() -> &'static str {
+        "ASIN"
+    }
+    fn category() -> &'static str {
+        "math_transform"
+    }
+    fn description() -> &'static str {
+        "Vector Arc Sine"
+    }
+    fn warm_up_period(&self) -> usize {
+        0
+    }
 }
 
 /// Streaming Arc Tangent (atan)
@@ -122,7 +148,10 @@ pub struct StreamingAtan {
 
 impl StreamingAtan {
     pub fn new() -> Self {
-        Self { count: 0, last_value: None }
+        Self {
+            count: 0,
+            last_value: None,
+        }
     }
 }
 
@@ -140,16 +169,26 @@ impl StreamingIndicator for StreamingAtan {
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { true }
+    fn is_ready(&self) -> bool {
+        true
+    }
 
     impl_standard_methods!();
 }
 
 impl IndicatorMeta for StreamingAtan {
-    fn name() -> &'static str { "ATAN" }
-    fn category() -> &'static str { "math_transform" }
-    fn description() -> &'static str { "Vector Arc Tangent" }
-    fn warm_up_period(&self) -> usize { 0 }
+    fn name() -> &'static str {
+        "ATAN"
+    }
+    fn category() -> &'static str {
+        "math_transform"
+    }
+    fn description() -> &'static str {
+        "Vector Arc Tangent"
+    }
+    fn warm_up_period(&self) -> usize {
+        0
+    }
 }
 
 /// Streaming Cosine (cos)
@@ -161,7 +200,10 @@ pub struct StreamingCos {
 
 impl StreamingCos {
     pub fn new() -> Self {
-        Self { count: 0, last_value: None }
+        Self {
+            count: 0,
+            last_value: None,
+        }
     }
 }
 
@@ -179,16 +221,26 @@ impl StreamingIndicator for StreamingCos {
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { true }
+    fn is_ready(&self) -> bool {
+        true
+    }
 
     impl_standard_methods!();
 }
 
 impl IndicatorMeta for StreamingCos {
-    fn name() -> &'static str { "COS" }
-    fn category() -> &'static str { "math_transform" }
-    fn description() -> &'static str { "Vector Cosine" }
-    fn warm_up_period(&self) -> usize { 0 }
+    fn name() -> &'static str {
+        "COS"
+    }
+    fn category() -> &'static str {
+        "math_transform"
+    }
+    fn description() -> &'static str {
+        "Vector Cosine"
+    }
+    fn warm_up_period(&self) -> usize {
+        0
+    }
 }
 
 /// Streaming Hyperbolic Cosine (cosh)
@@ -200,7 +252,10 @@ pub struct StreamingCosh {
 
 impl StreamingCosh {
     pub fn new() -> Self {
-        Self { count: 0, last_value: None }
+        Self {
+            count: 0,
+            last_value: None,
+        }
     }
 }
 
@@ -218,16 +273,26 @@ impl StreamingIndicator for StreamingCosh {
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { true }
+    fn is_ready(&self) -> bool {
+        true
+    }
 
     impl_standard_methods!();
 }
 
 impl IndicatorMeta for StreamingCosh {
-    fn name() -> &'static str { "COSH" }
-    fn category() -> &'static str { "math_transform" }
-    fn description() -> &'static str { "Vector Hyperbolic Cosine" }
-    fn warm_up_period(&self) -> usize { 0 }
+    fn name() -> &'static str {
+        "COSH"
+    }
+    fn category() -> &'static str {
+        "math_transform"
+    }
+    fn description() -> &'static str {
+        "Vector Hyperbolic Cosine"
+    }
+    fn warm_up_period(&self) -> usize {
+        0
+    }
 }
 
 /// Streaming Sine (sin)
@@ -239,7 +304,10 @@ pub struct StreamingSin {
 
 impl StreamingSin {
     pub fn new() -> Self {
-        Self { count: 0, last_value: None }
+        Self {
+            count: 0,
+            last_value: None,
+        }
     }
 }
 
@@ -257,16 +325,26 @@ impl StreamingIndicator for StreamingSin {
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { true }
+    fn is_ready(&self) -> bool {
+        true
+    }
 
     impl_standard_methods!();
 }
 
 impl IndicatorMeta for StreamingSin {
-    fn name() -> &'static str { "SIN" }
-    fn category() -> &'static str { "math_transform" }
-    fn description() -> &'static str { "Vector Sine" }
-    fn warm_up_period(&self) -> usize { 0 }
+    fn name() -> &'static str {
+        "SIN"
+    }
+    fn category() -> &'static str {
+        "math_transform"
+    }
+    fn description() -> &'static str {
+        "Vector Sine"
+    }
+    fn warm_up_period(&self) -> usize {
+        0
+    }
 }
 
 /// Streaming Hyperbolic Sine (sinh)
@@ -278,7 +356,10 @@ pub struct StreamingSinh {
 
 impl StreamingSinh {
     pub fn new() -> Self {
-        Self { count: 0, last_value: None }
+        Self {
+            count: 0,
+            last_value: None,
+        }
     }
 }
 
@@ -296,16 +377,26 @@ impl StreamingIndicator for StreamingSinh {
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { true }
+    fn is_ready(&self) -> bool {
+        true
+    }
 
     impl_standard_methods!();
 }
 
 impl IndicatorMeta for StreamingSinh {
-    fn name() -> &'static str { "SINH" }
-    fn category() -> &'static str { "math_transform" }
-    fn description() -> &'static str { "Vector Hyperbolic Sine" }
-    fn warm_up_period(&self) -> usize { 0 }
+    fn name() -> &'static str {
+        "SINH"
+    }
+    fn category() -> &'static str {
+        "math_transform"
+    }
+    fn description() -> &'static str {
+        "Vector Hyperbolic Sine"
+    }
+    fn warm_up_period(&self) -> usize {
+        0
+    }
 }
 
 /// Streaming Tangent (tan)
@@ -317,7 +408,10 @@ pub struct StreamingTan {
 
 impl StreamingTan {
     pub fn new() -> Self {
-        Self { count: 0, last_value: None }
+        Self {
+            count: 0,
+            last_value: None,
+        }
     }
 }
 
@@ -335,16 +429,26 @@ impl StreamingIndicator for StreamingTan {
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { true }
+    fn is_ready(&self) -> bool {
+        true
+    }
 
     impl_standard_methods!();
 }
 
 impl IndicatorMeta for StreamingTan {
-    fn name() -> &'static str { "TAN" }
-    fn category() -> &'static str { "math_transform" }
-    fn description() -> &'static str { "Vector Tangent" }
-    fn warm_up_period(&self) -> usize { 0 }
+    fn name() -> &'static str {
+        "TAN"
+    }
+    fn category() -> &'static str {
+        "math_transform"
+    }
+    fn description() -> &'static str {
+        "Vector Tangent"
+    }
+    fn warm_up_period(&self) -> usize {
+        0
+    }
 }
 
 /// Streaming Hyperbolic Tangent (tanh)
@@ -356,7 +460,10 @@ pub struct StreamingTanh {
 
 impl StreamingTanh {
     pub fn new() -> Self {
-        Self { count: 0, last_value: None }
+        Self {
+            count: 0,
+            last_value: None,
+        }
     }
 }
 
@@ -374,16 +481,26 @@ impl StreamingIndicator for StreamingTanh {
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { true }
+    fn is_ready(&self) -> bool {
+        true
+    }
 
     impl_standard_methods!();
 }
 
 impl IndicatorMeta for StreamingTanh {
-    fn name() -> &'static str { "TANH" }
-    fn category() -> &'static str { "math_transform" }
-    fn description() -> &'static str { "Vector Hyperbolic Tangent" }
-    fn warm_up_period(&self) -> usize { 0 }
+    fn name() -> &'static str {
+        "TANH"
+    }
+    fn category() -> &'static str {
+        "math_transform"
+    }
+    fn description() -> &'static str {
+        "Vector Hyperbolic Tangent"
+    }
+    fn warm_up_period(&self) -> usize {
+        0
+    }
 }
 
 // =====================================================================
@@ -399,7 +516,10 @@ pub struct StreamingExp {
 
 impl StreamingExp {
     pub fn new() -> Self {
-        Self { count: 0, last_value: None }
+        Self {
+            count: 0,
+            last_value: None,
+        }
     }
 }
 
@@ -417,16 +537,26 @@ impl StreamingIndicator for StreamingExp {
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { true }
+    fn is_ready(&self) -> bool {
+        true
+    }
 
     impl_standard_methods!();
 }
 
 impl IndicatorMeta for StreamingExp {
-    fn name() -> &'static str { "EXP" }
-    fn category() -> &'static str { "math_transform" }
-    fn description() -> &'static str { "Vector Exponential" }
-    fn warm_up_period(&self) -> usize { 0 }
+    fn name() -> &'static str {
+        "EXP"
+    }
+    fn category() -> &'static str {
+        "math_transform"
+    }
+    fn description() -> &'static str {
+        "Vector Exponential"
+    }
+    fn warm_up_period(&self) -> usize {
+        0
+    }
 }
 
 /// Streaming Natural Logarithm (ln)
@@ -440,7 +570,10 @@ pub struct StreamingLn {
 
 impl StreamingLn {
     pub fn new() -> Self {
-        Self { count: 0, last_value: None }
+        Self {
+            count: 0,
+            last_value: None,
+        }
     }
 }
 
@@ -462,16 +595,26 @@ impl StreamingIndicator for StreamingLn {
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { true }
+    fn is_ready(&self) -> bool {
+        true
+    }
 
     impl_standard_methods!();
 }
 
 impl IndicatorMeta for StreamingLn {
-    fn name() -> &'static str { "LN" }
-    fn category() -> &'static str { "math_transform" }
-    fn description() -> &'static str { "Vector Natural Logarithm" }
-    fn warm_up_period(&self) -> usize { 0 }
+    fn name() -> &'static str {
+        "LN"
+    }
+    fn category() -> &'static str {
+        "math_transform"
+    }
+    fn description() -> &'static str {
+        "Vector Natural Logarithm"
+    }
+    fn warm_up_period(&self) -> usize {
+        0
+    }
 }
 
 /// Streaming Base-10 Logarithm (log10)
@@ -485,7 +628,10 @@ pub struct StreamingLog10 {
 
 impl StreamingLog10 {
     pub fn new() -> Self {
-        Self { count: 0, last_value: None }
+        Self {
+            count: 0,
+            last_value: None,
+        }
     }
 }
 
@@ -507,16 +653,26 @@ impl StreamingIndicator for StreamingLog10 {
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { true }
+    fn is_ready(&self) -> bool {
+        true
+    }
 
     impl_standard_methods!();
 }
 
 impl IndicatorMeta for StreamingLog10 {
-    fn name() -> &'static str { "LOG10" }
-    fn category() -> &'static str { "math_transform" }
-    fn description() -> &'static str { "Vector Base-10 Logarithm" }
-    fn warm_up_period(&self) -> usize { 0 }
+    fn name() -> &'static str {
+        "LOG10"
+    }
+    fn category() -> &'static str {
+        "math_transform"
+    }
+    fn description() -> &'static str {
+        "Vector Base-10 Logarithm"
+    }
+    fn warm_up_period(&self) -> usize {
+        0
+    }
 }
 
 // =====================================================================
@@ -532,7 +688,10 @@ pub struct StreamingCeil {
 
 impl StreamingCeil {
     pub fn new() -> Self {
-        Self { count: 0, last_value: None }
+        Self {
+            count: 0,
+            last_value: None,
+        }
     }
 }
 
@@ -550,16 +709,26 @@ impl StreamingIndicator for StreamingCeil {
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { true }
+    fn is_ready(&self) -> bool {
+        true
+    }
 
     impl_standard_methods!();
 }
 
 impl IndicatorMeta for StreamingCeil {
-    fn name() -> &'static str { "CEIL" }
-    fn category() -> &'static str { "math_transform" }
-    fn description() -> &'static str { "Vector Ceiling" }
-    fn warm_up_period(&self) -> usize { 0 }
+    fn name() -> &'static str {
+        "CEIL"
+    }
+    fn category() -> &'static str {
+        "math_transform"
+    }
+    fn description() -> &'static str {
+        "Vector Ceiling"
+    }
+    fn warm_up_period(&self) -> usize {
+        0
+    }
 }
 
 /// Streaming Floor (floor)
@@ -571,7 +740,10 @@ pub struct StreamingFloor {
 
 impl StreamingFloor {
     pub fn new() -> Self {
-        Self { count: 0, last_value: None }
+        Self {
+            count: 0,
+            last_value: None,
+        }
     }
 }
 
@@ -589,16 +761,26 @@ impl StreamingIndicator for StreamingFloor {
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { true }
+    fn is_ready(&self) -> bool {
+        true
+    }
 
     impl_standard_methods!();
 }
 
 impl IndicatorMeta for StreamingFloor {
-    fn name() -> &'static str { "FLOOR" }
-    fn category() -> &'static str { "math_transform" }
-    fn description() -> &'static str { "Vector Floor" }
-    fn warm_up_period(&self) -> usize { 0 }
+    fn name() -> &'static str {
+        "FLOOR"
+    }
+    fn category() -> &'static str {
+        "math_transform"
+    }
+    fn description() -> &'static str {
+        "Vector Floor"
+    }
+    fn warm_up_period(&self) -> usize {
+        0
+    }
 }
 
 /// Streaming Square Root (sqrt)
@@ -612,7 +794,10 @@ pub struct StreamingSqrt {
 
 impl StreamingSqrt {
     pub fn new() -> Self {
-        Self { count: 0, last_value: None }
+        Self {
+            count: 0,
+            last_value: None,
+        }
     }
 }
 
@@ -634,16 +819,26 @@ impl StreamingIndicator for StreamingSqrt {
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { true }
+    fn is_ready(&self) -> bool {
+        true
+    }
 
     impl_standard_methods!();
 }
 
 impl IndicatorMeta for StreamingSqrt {
-    fn name() -> &'static str { "SQRT" }
-    fn category() -> &'static str { "math_transform" }
-    fn description() -> &'static str { "Vector Square Root" }
-    fn warm_up_period(&self) -> usize { 0 }
+    fn name() -> &'static str {
+        "SQRT"
+    }
+    fn category() -> &'static str {
+        "math_transform"
+    }
+    fn description() -> &'static str {
+        "Vector Square Root"
+    }
+    fn warm_up_period(&self) -> usize {
+        0
+    }
 }
 
 #[cfg(test)]
@@ -1060,15 +1255,18 @@ mod tests {
     ) {
         assert_eq!(streaming.len(), batch.len(), "{name}: length mismatch");
         for (i, (s, b)) in streaming.iter().zip(batch.iter()).enumerate() {
-            assert!((s - b).abs() < 1e-10, "{name} mismatch at {i}: streaming={s} batch={b}");
+            assert!(
+                (s - b).abs() < 1e-10,
+                "{name} mismatch at {i}: streaming={s} batch={b}"
+            );
         }
     }
 
     #[test]
     fn test_streaming_vs_batch_cos() {
         let data: Vec<f64> = vec![
-            0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
-            0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95, 0.05,
+            0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65,
+            0.75, 0.85, 0.95, 0.05,
         ];
         let mut ind = StreamingCos::new();
         let streaming: Vec<f64> = data.iter().map(|&v| ind.next(v).unwrap()).collect();
@@ -1079,8 +1277,8 @@ mod tests {
     #[test]
     fn test_streaming_vs_batch_sin() {
         let data: Vec<f64> = vec![
-            0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
-            0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95, 0.05,
+            0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65,
+            0.75, 0.85, 0.95, 0.05,
         ];
         let mut ind = StreamingSin::new();
         let streaming: Vec<f64> = data.iter().map(|&v| ind.next(v).unwrap()).collect();
@@ -1091,8 +1289,8 @@ mod tests {
     #[test]
     fn test_streaming_vs_batch_tan() {
         let data: Vec<f64> = vec![
-            0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
-            0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95, 0.05,
+            0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65,
+            0.75, 0.85, 0.95, 0.05,
         ];
         let mut ind = StreamingTan::new();
         let streaming: Vec<f64> = data.iter().map(|&v| ind.next(v).unwrap()).collect();
@@ -1103,8 +1301,8 @@ mod tests {
     #[test]
     fn test_streaming_vs_batch_exp() {
         let data: Vec<f64> = vec![
-            0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
-            0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95, 0.05,
+            0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65,
+            0.75, 0.85, 0.95, 0.05,
         ];
         let mut ind = StreamingExp::new();
         let streaming: Vec<f64> = data.iter().map(|&v| ind.next(v).unwrap()).collect();

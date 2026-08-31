@@ -70,8 +70,8 @@ impl StreamingVwapBands {
             self.tp_ring_idx = (self.tp_ring_idx + 1) % self.period;
             self.rolling_sum += tp - old_tp;
             let new_mean = self.rolling_sum / self.period as f64;
-            self.rolling_m2 += (tp - new_mean) * (tp - old_mean)
-                - (old_tp - new_mean) * (old_tp - old_mean);
+            self.rolling_m2 +=
+                (tp - new_mean) * (tp - old_mean) - (old_tp - new_mean) * (old_tp - old_mean);
             if self.rolling_m2 < 0.0 {
                 self.rolling_m2 = 0.0;
             }
@@ -111,11 +111,18 @@ impl StreamingIndicator<&dyn Ohlcv> for StreamingVwapBands {
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { self.count >= self.period }
+    fn is_ready(&self) -> bool {
+        self.count >= self.period
+    }
     impl_standard_methods!();
 }
 
-impl_indicator_meta!(StreamingVwapBands, "VWAPBands", "volume", "VWAP Bands (upper/lower deviation bands)");
+impl_indicator_meta!(
+    StreamingVwapBands,
+    "VWAPBands",
+    "volume",
+    "VWAP Bands (upper/lower deviation bands)"
+);
 
 #[cfg(test)]
 mod tests {

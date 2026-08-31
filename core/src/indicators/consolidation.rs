@@ -78,7 +78,11 @@ pub fn consolidation_score(
             .iter()
             .cloned()
             .fold(f64::INFINITY, f64::min);
-        let amp = if close[t] > 0.0 { (hh - ll) / close[t] } else { 0.0 };
+        let amp = if close[t] > 0.0 {
+            (hh - ll) / close[t]
+        } else {
+            0.0
+        };
 
         let mut s = 0.0;
         if bb_width < 0.10 {
@@ -185,7 +189,14 @@ pub fn bottom_breakout(
     let n = close.len();
     let mut out = Array1::<i32>::zeros(n);
 
-    let sideways = is_sideways(high, low, close, consolidation_lookback, bb_period, bb_width)?;
+    let sideways = is_sideways(
+        high,
+        low,
+        close,
+        consolidation_lookback,
+        bb_period,
+        bb_width,
+    )?;
     let box_top = rolling_max(high, consolidation_lookback)?;
     let vol_ma5 = sma(volume, 5)?;
     let ma5 = sma(close, 5)?;
@@ -239,7 +250,14 @@ pub fn top_breakdown(
     let n = close.len();
     let mut out = Array1::<i32>::zeros(n);
 
-    let sideways = is_sideways(high, low, close, consolidation_lookback, bb_period, bb_width)?;
+    let sideways = is_sideways(
+        high,
+        low,
+        close,
+        consolidation_lookback,
+        bb_period,
+        bb_width,
+    )?;
     let box_bot = rolling_min(low, consolidation_lookback)?;
     let vol_ma5 = sma(volume, 5)?;
     let ma5 = sma(close, 5)?;
@@ -332,7 +350,9 @@ pub fn sideways_quality(
         if mean_c <= 0.0 {
             continue;
         }
-        let hi = high[start..=t].iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
+        let hi = high[start..=t]
+            .iter()
+            .fold(f64::NEG_INFINITY, |a, &b| a.max(b));
         let lo = low[start..=t].iter().fold(f64::INFINITY, |a, &b| a.min(b));
         let range = (hi - lo) / mean_c;
 
@@ -450,7 +470,14 @@ pub fn bottom_breakout_score(
     let n = close.len();
     let mut out = Array1::<f64>::zeros(n);
 
-    let sideways = is_sideways(high, low, close, consolidation_lookback, bb_period, bb_width)?;
+    let sideways = is_sideways(
+        high,
+        low,
+        close,
+        consolidation_lookback,
+        bb_period,
+        bb_width,
+    )?;
     let box_top = rolling_max(high, consolidation_lookback)?;
     let vol_ma5 = sma(volume, 5)?;
     let ma5 = sma(close, 5)?;
@@ -471,11 +498,23 @@ pub fn bottom_breakout_score(
         }
         let dur = side_dur[t] as f64;
         let s_dur = 25.0 * (dur / 10.0).clamp(0.0, 1.0);
-        let breakout_pct = if box_val > 0.0 { (close[t] - box_val) / box_val } else { 0.0 };
+        let breakout_pct = if box_val > 0.0 {
+            (close[t] - box_val) / box_val
+        } else {
+            0.0
+        };
         let s_break = 30.0 * (breakout_pct / 0.05).clamp(0.0, 1.0);
-        let vol_ratio = if vol_ma5[t] > 0.0 { volume[t] / vol_ma5[t] } else { 0.0 };
+        let vol_ratio = if vol_ma5[t] > 0.0 {
+            volume[t] / vol_ma5[t]
+        } else {
+            0.0
+        };
         let s_vol = 20.0 * (vol_ratio / 1.5).clamp(0.0, 1.0);
-        let ma5_dev = if ma5[t] > 0.0 { (close[t] - ma5[t]) / ma5[t] } else { 0.0 };
+        let ma5_dev = if ma5[t] > 0.0 {
+            (close[t] - ma5[t]) / ma5[t]
+        } else {
+            0.0
+        };
         let s_ma = 25.0 * (ma5_dev / 0.02).clamp(0.0, 1.0);
         out[t] = (s_dur + s_break + s_vol + s_ma).min(100.0);
     }
@@ -503,7 +542,14 @@ pub fn top_breakdown_score(
     let n = close.len();
     let mut out = Array1::<f64>::zeros(n);
 
-    let sideways = is_sideways(high, low, close, consolidation_lookback, bb_period, bb_width)?;
+    let sideways = is_sideways(
+        high,
+        low,
+        close,
+        consolidation_lookback,
+        bb_period,
+        bb_width,
+    )?;
     let box_bot = rolling_min(low, consolidation_lookback)?;
     let vol_ma5 = sma(volume, 5)?;
     let ma5 = sma(close, 5)?;
@@ -523,11 +569,23 @@ pub fn top_breakdown_score(
         }
         let dur = side_dur[t] as f64;
         let s_dur = 25.0 * (dur / 10.0).clamp(0.0, 1.0);
-        let breakdown_pct = if bot_val > 0.0 { (bot_val - close[t]) / bot_val } else { 0.0 };
+        let breakdown_pct = if bot_val > 0.0 {
+            (bot_val - close[t]) / bot_val
+        } else {
+            0.0
+        };
         let s_break = 30.0 * (breakdown_pct / 0.05).clamp(0.0, 1.0);
-        let vol_ratio = if vol_ma5[t] > 0.0 { volume[t] / vol_ma5[t] } else { 0.0 };
+        let vol_ratio = if vol_ma5[t] > 0.0 {
+            volume[t] / vol_ma5[t]
+        } else {
+            0.0
+        };
         let s_vol = 20.0 * (vol_ratio / 1.5).clamp(0.0, 1.0);
-        let ma5_dev = if ma5[t] > 0.0 { (ma5[t] - close[t]) / ma5[t] } else { 0.0 };
+        let ma5_dev = if ma5[t] > 0.0 {
+            (ma5[t] - close[t]) / ma5[t]
+        } else {
+            0.0
+        };
         let s_ma = 25.0 * (ma5_dev / 0.02).clamp(0.0, 1.0);
         out[t] = (s_dur + s_break + s_vol + s_ma).min(100.0);
     }
@@ -539,12 +597,7 @@ pub fn top_breakdown_score(
 // ============================================================================
 
 /// 简单 ATR：rolling mean of true range
-fn rolling_atr(
-    high: &[f64],
-    low: &[f64],
-    close: &[f64],
-    period: usize,
-) -> Result<Array1<f64>> {
+fn rolling_atr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Array1<f64>> {
     let n = close.len();
     let mut tr = vec![0.0_f64; n];
     for i in 0..n {
@@ -612,7 +665,11 @@ mod tests {
         let s = is_sideways(&h, &l, &c, 20, 20, 0.10).unwrap();
         // Bars 25-44 should be sideways
         let n_sideways = (20..45).filter(|&i| s[i]).count();
-        assert!(n_sideways > 10, "expected many sideways bars, got {}", n_sideways);
+        assert!(
+            n_sideways > 10,
+            "expected many sideways bars, got {}",
+            n_sideways
+        );
     }
 
     #[test]
@@ -621,7 +678,11 @@ mod tests {
         let s = consolidation_score(&h, &l, &c, 20, 14).unwrap();
         assert_eq!(s.len(), c.len());
         // Score at bar 30 should be high
-        assert!(s[35] > 50.0, "expected high consolidation score at 35, got {}", s[35]);
+        assert!(
+            s[35] > 50.0,
+            "expected high consolidation score at 35, got {}",
+            s[35]
+        );
     }
 
     #[test]
@@ -694,7 +755,11 @@ mod tests {
         let c: Vec<f64> = (0..n).map(|_| 10.0).collect();
         let score = sideways_quality(&h, &l, &c, 20).unwrap();
         // Score at the end of the box should be high
-        assert!(score[25] > 60.0, "expected high tightness, got {}", score[25]);
+        assert!(
+            score[25] > 60.0,
+            "expected high tightness, got {}",
+            score[25]
+        );
     }
 
     #[test]
@@ -705,7 +770,11 @@ mod tests {
         let l: Vec<f64> = (0..n).map(|i| 5.0 + (i as f64) * 0.5).collect();
         let c: Vec<f64> = (0..n).map(|i| 7.5 + (i as f64) * 0.5).collect();
         let score = sideways_quality(&h, &l, &c, 20).unwrap();
-        assert!(score[25] < 30.0, "expected low score for trending data, got {}", score[25]);
+        assert!(
+            score[25] < 30.0,
+            "expected low score for trending data, got {}",
+            score[25]
+        );
     }
 
     #[test]
@@ -716,7 +785,11 @@ mod tests {
         let h: Vec<f64> = c.iter().map(|x| x + 0.05).collect();
         let l: Vec<f64> = c.iter().map(|x| x - 0.05).collect();
         let tilt = sideways_tilt(&h, &l, &c, 20).unwrap();
-        assert!(tilt[25] > 0.0, "upward trend should have positive tilt, got {}", tilt[25]);
+        assert!(
+            tilt[25] > 0.0,
+            "upward trend should have positive tilt, got {}",
+            tilt[25]
+        );
     }
 
     #[test]
@@ -726,7 +799,11 @@ mod tests {
         let h: Vec<f64> = c.iter().map(|x| x + 0.05).collect();
         let l: Vec<f64> = c.iter().map(|x| x - 0.05).collect();
         let tilt = sideways_tilt(&h, &l, &c, 20).unwrap();
-        assert!(tilt[25] < 0.0, "downward trend should have negative tilt, got {}", tilt[25]);
+        assert!(
+            tilt[25] < 0.0,
+            "downward trend should have negative tilt, got {}",
+            tilt[25]
+        );
     }
 
     // ====================== Score variants ======================
@@ -736,7 +813,11 @@ mod tests {
         let (o, h, l, c, v) = synth_sideways_then_breakout();
         let s = bottom_breakout_score(&o, &h, &l, &c, &v, 20, 20, 0.10).unwrap();
         // Bar 45 should have a non-zero score
-        assert!(s[45] > 0.0, "expected positive breakout score at 45, got {}", s[45]);
+        assert!(
+            s[45] > 0.0,
+            "expected positive breakout score at 45, got {}",
+            s[45]
+        );
     }
 
     #[test]
@@ -772,6 +853,10 @@ mod tests {
             l[i] = c[i] - 0.05;
         }
         let s = top_breakdown_score(&o, &h, &l, &c, &v, 20, 20, 0.10).unwrap();
-        assert!(s[45] > 0.0, "expected positive breakdown score at 45, got {}", s[45]);
+        assert!(
+            s[45] > 0.0,
+            "expected positive breakdown score at 45, got {}",
+            s[45]
+        );
     }
 }

@@ -46,8 +46,7 @@ fn assert_arrays_match(
             panic!(
                 "formula {}: divergence at index {} between ast and {}: \
                  ast={}, {}={} (tolerance={})",
-                formula_name, i, path_name,
-                reference[i], path_name, candidate[i], TOLERANCE
+                formula_name, i, path_name, reference[i], path_name, candidate[i], TOLERANCE
             );
         }
     }
@@ -57,11 +56,7 @@ fn run_ast(engine: &mut FormulaEngine, source: &str, ctx: &mut FormulaContext) -
     engine.eval(source, ctx).expect("AST eval failed")
 }
 
-fn run_bytecode(
-    engine: &mut FormulaEngine,
-    source: &str,
-    ctx: &FormulaContext,
-) -> Array1<f64> {
+fn run_bytecode(engine: &mut FormulaEngine, source: &str, ctx: &FormulaContext) -> Array1<f64> {
     let bytecode = engine
         .compile_bytecode(source)
         .expect("bytecode compile failed");

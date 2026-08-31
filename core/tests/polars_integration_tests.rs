@@ -1,7 +1,7 @@
 #![cfg(feature = "fta-polars")]
 
-use polars::prelude::*;
 use finkit::polars_ext::{TaDataFrame, TaSeries};
+use polars::prelude::*;
 
 fn sample_close_series() -> Series {
     let data: Vec<f64> = (1..=50).map(|i| 100.0 + (i as f64).sin() * 10.0).collect();
@@ -51,7 +51,11 @@ fn test_series_ta_rsi() {
     let ca = result.f64().unwrap();
     for val in ca.into_no_null_iter() {
         if !val.is_nan() {
-            assert!((0.0..=100.0).contains(&val), "RSI value {} out of range", val);
+            assert!(
+                (0.0..=100.0).contains(&val),
+                "RSI value {} out of range",
+                val
+            );
         }
     }
 }

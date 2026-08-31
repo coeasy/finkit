@@ -361,7 +361,10 @@ mod tests {
             prev_train_len = train.len();
             assert!(no_overlap(train, test));
             assert_eq!(train.first(), Some(&0));
-            assert_eq!(train.last().copied().unwrap() + 1, test.first().copied().unwrap());
+            assert_eq!(
+                train.last().copied().unwrap() + 1,
+                test.first().copied().unwrap()
+            );
         }
     }
 

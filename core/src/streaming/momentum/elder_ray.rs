@@ -1,6 +1,6 @@
+use crate::impl_standard_methods;
 use crate::streaming::overlap::ema::StreamingEma;
 use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
-use crate::impl_standard_methods;
 
 /// Elder Ray output: bull power and bear power.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -62,16 +62,22 @@ impl StreamingIndicator<(f64, f64, f64), ElderRayOutput> for StreamingElderRay {
         self.ema.is_ready()
     }
 
-        impl_standard_methods!(output = ElderRayOutput);
-
-
+    impl_standard_methods!(output = ElderRayOutput);
 }
 
 impl IndicatorMeta for StreamingElderRay {
-    fn name() -> &'static str { "ElderRay" }
-    fn category() -> &'static str { "momentum" }
-    fn description() -> &'static str { "Elder Ray Index" }
-    fn warm_up_period(&self) -> usize { self.period }
+    fn name() -> &'static str {
+        "ElderRay"
+    }
+    fn category() -> &'static str {
+        "momentum"
+    }
+    fn description() -> &'static str {
+        "Elder Ray Index"
+    }
+    fn warm_up_period(&self) -> usize {
+        self.period
+    }
 }
 
 #[cfg(test)]
@@ -110,7 +116,11 @@ mod tests {
             last = er.next(d);
         }
         let v = last.unwrap();
-        assert!(v.bull_power > 0.0, "Bull power should be positive in uptrend, got {}", v.bull_power);
+        assert!(
+            v.bull_power > 0.0,
+            "Bull power should be positive in uptrend, got {}",
+            v.bull_power
+        );
     }
 
     #[test]

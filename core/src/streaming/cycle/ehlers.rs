@@ -1,7 +1,7 @@
 //! Streaming implementations of Ehlers Digital Signal Processing filters.
 
-use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 
 // ============================================================================
 // StreamingSuperSmoother —2-pole
@@ -29,12 +29,23 @@ impl StreamingSuperSmoother {
         let c2 = b1;
         let c3 = -a1 * a1;
         let c1 = 1.0 - c2 - c3;
-        Self { c1, c2, c3, prev1: 0.0, prev2: 0.0, prev_input: 0.0, count: 0, last_value: None }
+        Self {
+            c1,
+            c2,
+            c3,
+            prev1: 0.0,
+            prev2: 0.0,
+            prev_input: 0.0,
+            count: 0,
+            last_value: None,
+        }
     }
 }
 
 impl Default for StreamingSuperSmoother {
-    fn default() -> Self { Self::new(10) }
+    fn default() -> Self {
+        Self::new(10)
+    }
 }
 
 impl StreamingIndicator for StreamingSuperSmoother {
@@ -61,16 +72,26 @@ impl StreamingIndicator for StreamingSuperSmoother {
         self.count = 0;
         self.last_value = None;
     }
-    fn is_ready(&self) -> bool { self.count >= 3 }
+    fn is_ready(&self) -> bool {
+        self.count >= 3
+    }
 
     impl_standard_methods!();
 }
 
 impl IndicatorMeta for StreamingSuperSmoother {
-    fn name() -> &'static str { "SUPER_SMOOTHER" }
-    fn category() -> &'static str { "cycle" }
-    fn description() -> &'static str { "Ehlers 2-pole Super Smoother Filter" }
-    fn warm_up_period(&self) -> usize { 3 }
+    fn name() -> &'static str {
+        "SUPER_SMOOTHER"
+    }
+    fn category() -> &'static str {
+        "cycle"
+    }
+    fn description() -> &'static str {
+        "Ehlers 2-pole Super Smoother Filter"
+    }
+    fn warm_up_period(&self) -> usize {
+        3
+    }
 }
 
 // ============================================================================
@@ -102,12 +123,24 @@ impl StreamingSuperSmoother3Pole {
         let coef3 = -(c1 + b1 * c1);
         let coef4 = c1 * c1;
         let coef1 = 1.0 - coef2 - coef3 - coef4;
-        Self { coef1, coef2, coef3, coef4, prev1: 0.0, prev2: 0.0, prev3: 0.0, count: 0, last_value: None }
+        Self {
+            coef1,
+            coef2,
+            coef3,
+            coef4,
+            prev1: 0.0,
+            prev2: 0.0,
+            prev3: 0.0,
+            count: 0,
+            last_value: None,
+        }
     }
 }
 
 impl Default for StreamingSuperSmoother3Pole {
-    fn default() -> Self { Self::new(10) }
+    fn default() -> Self {
+        Self::new(10)
+    }
 }
 
 impl StreamingIndicator for StreamingSuperSmoother3Pole {
@@ -117,7 +150,9 @@ impl StreamingIndicator for StreamingSuperSmoother3Pole {
         let val = if self.count <= 3 {
             input
         } else {
-            self.coef1 * input + self.coef2 * self.prev1 + self.coef3 * self.prev2
+            self.coef1 * input
+                + self.coef2 * self.prev1
+                + self.coef3 * self.prev2
                 + self.coef4 * self.prev3
         };
         self.prev3 = self.prev2;
@@ -135,16 +170,26 @@ impl StreamingIndicator for StreamingSuperSmoother3Pole {
         self.count = 0;
         self.last_value = None;
     }
-    fn is_ready(&self) -> bool { self.count >= 4 }
+    fn is_ready(&self) -> bool {
+        self.count >= 4
+    }
 
     impl_standard_methods!();
 }
 
 impl IndicatorMeta for StreamingSuperSmoother3Pole {
-    fn name() -> &'static str { "SUPER_SMOOTHER_3POLE" }
-    fn category() -> &'static str { "cycle" }
-    fn description() -> &'static str { "Ehlers 3-pole Super Smoother Filter" }
-    fn warm_up_period(&self) -> usize { 4 }
+    fn name() -> &'static str {
+        "SUPER_SMOOTHER_3POLE"
+    }
+    fn category() -> &'static str {
+        "cycle"
+    }
+    fn description() -> &'static str {
+        "Ehlers 3-pole Super Smoother Filter"
+    }
+    fn warm_up_period(&self) -> usize {
+        4
+    }
 }
 
 // ============================================================================
@@ -188,16 +233,27 @@ impl StreamingRoofingFilter {
         let c1 = 1.0 - c2 - c3;
 
         Self {
-            hp_coef, alpha_hp, c1, c2, c3,
-            prev_input: 0.0, hp_prev1: 0.0, hp_prev2: 0.0,
-            ss_prev1: 0.0, ss_prev2: 0.0, hp_prev_input: 0.0,
-            count: 0, last_value: None,
+            hp_coef,
+            alpha_hp,
+            c1,
+            c2,
+            c3,
+            prev_input: 0.0,
+            hp_prev1: 0.0,
+            hp_prev2: 0.0,
+            ss_prev1: 0.0,
+            ss_prev2: 0.0,
+            hp_prev_input: 0.0,
+            count: 0,
+            last_value: None,
         }
     }
 }
 
 impl Default for StreamingRoofingFilter {
-    fn default() -> Self { Self::new(48, 10) }
+    fn default() -> Self {
+        Self::new(48, 10)
+    }
 }
 
 impl StreamingIndicator for StreamingRoofingFilter {
@@ -210,8 +266,7 @@ impl StreamingIndicator for StreamingRoofingFilter {
         } else if self.count == 2 {
             self.hp_coef * (input - self.prev_input)
         } else {
-            self.hp_coef * (input - self.prev_input)
-                + (2.0 * self.alpha_hp - 1.0) * self.hp_prev1
+            self.hp_coef * (input - self.prev_input) + (2.0 * self.alpha_hp - 1.0) * self.hp_prev1
                 - (self.alpha_hp * self.alpha_hp - 2.0 * self.alpha_hp + 1.0) * self.hp_prev2
         };
 
@@ -245,16 +300,26 @@ impl StreamingIndicator for StreamingRoofingFilter {
         self.count = 0;
         self.last_value = None;
     }
-    fn is_ready(&self) -> bool { self.count >= 3 }
+    fn is_ready(&self) -> bool {
+        self.count >= 3
+    }
 
     impl_standard_methods!();
 }
 
 impl IndicatorMeta for StreamingRoofingFilter {
-    fn name() -> &'static str { "ROOFING_FILTER" }
-    fn category() -> &'static str { "cycle" }
-    fn description() -> &'static str { "Ehlers Roofing Filter (HP + Super Smoother)" }
-    fn warm_up_period(&self) -> usize { 3 }
+    fn name() -> &'static str {
+        "ROOFING_FILTER"
+    }
+    fn category() -> &'static str {
+        "cycle"
+    }
+    fn description() -> &'static str {
+        "Ehlers Roofing Filter (HP + Super Smoother)"
+    }
+    fn warm_up_period(&self) -> usize {
+        3
+    }
 }
 
 // ============================================================================
@@ -280,15 +345,21 @@ impl StreamingDecycler {
         let alpha_hp = (0.707 * 2.0 * std::f64::consts::PI / hp_p).cos();
         let hp_coef = (1.0 + alpha_hp) / 2.0;
         Self {
-            hp_coef, alpha_hp,
-            prev_input: 0.0, hp_prev1: 0.0, hp_prev2: 0.0,
-            count: 0, last_value: None,
+            hp_coef,
+            alpha_hp,
+            prev_input: 0.0,
+            hp_prev1: 0.0,
+            hp_prev2: 0.0,
+            count: 0,
+            last_value: None,
         }
     }
 }
 
 impl Default for StreamingDecycler {
-    fn default() -> Self { Self::new(20) }
+    fn default() -> Self {
+        Self::new(20)
+    }
 }
 
 impl StreamingIndicator for StreamingDecycler {
@@ -301,8 +372,7 @@ impl StreamingIndicator for StreamingDecycler {
         } else if self.count == 2 {
             self.hp_coef * (input - self.prev_input)
         } else {
-            self.hp_coef * (input - self.prev_input)
-                + (2.0 * self.alpha_hp - 1.0) * self.hp_prev1
+            self.hp_coef * (input - self.prev_input) + (2.0 * self.alpha_hp - 1.0) * self.hp_prev1
                 - (self.alpha_hp * self.alpha_hp - 2.0 * self.alpha_hp + 1.0) * self.hp_prev2
         };
 
@@ -323,16 +393,26 @@ impl StreamingIndicator for StreamingDecycler {
         self.count = 0;
         self.last_value = None;
     }
-    fn is_ready(&self) -> bool { self.count >= 1 }
+    fn is_ready(&self) -> bool {
+        self.count >= 1
+    }
 
     impl_standard_methods!();
 }
 
 impl IndicatorMeta for StreamingDecycler {
-    fn name() -> &'static str { "DECYCLER" }
-    fn category() -> &'static str { "cycle" }
-    fn description() -> &'static str { "Ehlers Decycler (trend extraction)" }
-    fn warm_up_period(&self) -> usize { 1 }
+    fn name() -> &'static str {
+        "DECYCLER"
+    }
+    fn category() -> &'static str {
+        "cycle"
+    }
+    fn description() -> &'static str {
+        "Ehlers Decycler (trend extraction)"
+    }
+    fn warm_up_period(&self) -> usize {
+        1
+    }
 }
 
 // ============================================================================
@@ -366,16 +446,22 @@ impl StreamingBandpass {
         let delta = 1.0 / gamma;
         let alpha = delta - (delta * delta - 1.0).sqrt();
         Self {
-            alpha, beta,
-            input_prev1: 0.0, input_prev2: 0.0,
-            out_prev1: 0.0, out_prev2: 0.0,
-            count: 0, last_value: None,
+            alpha,
+            beta,
+            input_prev1: 0.0,
+            input_prev2: 0.0,
+            out_prev1: 0.0,
+            out_prev2: 0.0,
+            count: 0,
+            last_value: None,
         }
     }
 }
 
 impl Default for StreamingBandpass {
-    fn default() -> Self { Self::new(20, 0.3) }
+    fn default() -> Self {
+        Self::new(20, 0.3)
+    }
 }
 
 impl StreamingIndicator for StreamingBandpass {
@@ -407,16 +493,26 @@ impl StreamingIndicator for StreamingBandpass {
         self.count = 0;
         self.last_value = None;
     }
-    fn is_ready(&self) -> bool { self.count >= 3 }
+    fn is_ready(&self) -> bool {
+        self.count >= 3
+    }
 
     impl_standard_methods!();
 }
 
 impl IndicatorMeta for StreamingBandpass {
-    fn name() -> &'static str { "BANDPASS" }
-    fn category() -> &'static str { "cycle" }
-    fn description() -> &'static str { "Ehlers Bandpass Filter" }
-    fn warm_up_period(&self) -> usize { 3 }
+    fn name() -> &'static str {
+        "BANDPASS"
+    }
+    fn category() -> &'static str {
+        "cycle"
+    }
+    fn description() -> &'static str {
+        "Ehlers Bandpass Filter"
+    }
+    fn warm_up_period(&self) -> usize {
+        3
+    }
 }
 
 // ============================================================================
@@ -462,7 +558,9 @@ impl StreamingInstantaneousTrendline {
 }
 
 impl Default for StreamingInstantaneousTrendline {
-    fn default() -> Self { Self::new(0.07) }
+    fn default() -> Self {
+        Self::new(0.07)
+    }
 }
 
 impl StreamingIndicator for StreamingInstantaneousTrendline {
@@ -474,7 +572,8 @@ impl StreamingIndicator for StreamingInstantaneousTrendline {
             2 => (input + self.prev_input1) / 2.0,
             _ => {
                 self.c0 * input + self.c1 * self.prev_input1 - self.c2 * self.prev_input2
-                    + self.c3 * self.prev_out1 - self.c4 * self.prev_out2
+                    + self.c3 * self.prev_out1
+                    - self.c4 * self.prev_out2
             }
         };
         self.prev_input2 = self.prev_input1;
@@ -495,16 +594,26 @@ impl StreamingIndicator for StreamingInstantaneousTrendline {
         self.count = 0;
         self.last_value = None;
     }
-    fn is_ready(&self) -> bool { self.count >= 3 }
+    fn is_ready(&self) -> bool {
+        self.count >= 3
+    }
 
     impl_standard_methods!();
 }
 
 impl IndicatorMeta for StreamingInstantaneousTrendline {
-    fn name() -> &'static str { "INSTANTANEOUS_TRENDLINE" }
-    fn category() -> &'static str { "cycle" }
-    fn description() -> &'static str { "Ehlers Instantaneous Trendline (ITrend)" }
-    fn warm_up_period(&self) -> usize { 3 }
+    fn name() -> &'static str {
+        "INSTANTANEOUS_TRENDLINE"
+    }
+    fn category() -> &'static str {
+        "cycle"
+    }
+    fn description() -> &'static str {
+        "Ehlers Instantaneous Trendline (ITrend)"
+    }
+    fn warm_up_period(&self) -> usize {
+        3
+    }
 }
 
 // ============================================================================
@@ -526,7 +635,9 @@ mod tests {
         let mut ss = StreamingSuperSmoother::new(10);
         let data = test_data(100);
         let mut last = None;
-        for &v in &data { last = ss.next(v); }
+        for &v in &data {
+            last = ss.next(v);
+        }
         assert!(last.is_some());
         assert!(ss.is_ready());
     }
@@ -534,7 +645,9 @@ mod tests {
     #[test]
     fn test_streaming_super_smoother_reset() {
         let mut ss = StreamingSuperSmoother::new(10);
-        for i in 0..20 { ss.next(i as f64); }
+        for i in 0..20 {
+            ss.next(i as f64);
+        }
         assert!(ss.is_ready());
         ss.reset();
         assert!(!ss.is_ready());
@@ -552,7 +665,9 @@ mod tests {
         let mut ss = StreamingSuperSmoother3Pole::new(10);
         let data = test_data(100);
         let mut last = None;
-        for &v in &data { last = ss.next(v); }
+        for &v in &data {
+            last = ss.next(v);
+        }
         assert!(last.is_some());
     }
 
@@ -561,7 +676,11 @@ mod tests {
         let mut rf = StreamingRoofingFilter::new(48, 10);
         let data = test_data(200);
         let mut results = vec![];
-        for &v in &data { if let Some(r) = rf.next(v) { results.push(r); } }
+        for &v in &data {
+            if let Some(r) = rf.next(v) {
+                results.push(r);
+            }
+        }
         assert!(!results.is_empty());
         let has_pos = results.iter().any(|&v| v > 0.0);
         let has_neg = results.iter().any(|&v| v < 0.0);
@@ -573,7 +692,9 @@ mod tests {
         let mut dc = StreamingDecycler::new(20);
         let data = test_data(100);
         let mut last = None;
-        for &v in &data { last = dc.next(v); }
+        for &v in &data {
+            last = dc.next(v);
+        }
         assert!(last.is_some());
         assert!(dc.is_ready());
     }
@@ -583,7 +704,9 @@ mod tests {
         let mut bp = StreamingBandpass::new(20, 0.3);
         let data = test_data(100);
         let mut last = None;
-        for &v in &data { last = bp.next(v); }
+        for &v in &data {
+            last = bp.next(v);
+        }
         assert!(last.is_some());
     }
 
@@ -592,7 +715,9 @@ mod tests {
         let mut it = StreamingInstantaneousTrendline::new(0.07);
         let data: Vec<f64> = (0..100).map(|i| i as f64 * 0.5 + 10.0).collect();
         let mut last = None;
-        for &v in &data { last = it.next(v); }
+        for &v in &data {
+            last = it.next(v);
+        }
         assert!(last.is_some());
         // Should track a linear trend closely
         let final_val = last.unwrap();
@@ -603,7 +728,9 @@ mod tests {
     #[test]
     fn test_streaming_instantaneous_trendline_reset() {
         let mut it = StreamingInstantaneousTrendline::new(0.07);
-        for i in 0..50 { it.next(i as f64); }
+        for i in 0..50 {
+            it.next(i as f64);
+        }
         it.reset();
         assert_eq!(it.count(), 0);
         assert!(!it.is_ready());

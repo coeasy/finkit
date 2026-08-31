@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 
 /// Streaming Hilbert Transform - Phasor Components.
 ///
@@ -33,7 +33,9 @@ impl StreamingHtPhasor {
 }
 
 impl Default for StreamingHtPhasor {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl StreamingIndicator<f64, (f64, f64)> for StreamingHtPhasor {
@@ -49,15 +51,15 @@ impl StreamingIndicator<f64, (f64, f64)> for StreamingHtPhasor {
         let smooth = (4.0 * self.input_buf[7]
             + 3.0 * self.input_buf[6]
             + 2.0 * self.input_buf[5]
-            + self.input_buf[4]) / 10.0;
+            + self.input_buf[4])
+            / 10.0;
         Self::shift(&mut self.smooth_buf, smooth);
 
         if self.count < 10 {
             return None;
         }
 
-        let det = (0.0962 * self.smooth_buf[7]
-            + 0.5769 * self.smooth_buf[5]
+        let det = (0.0962 * self.smooth_buf[7] + 0.5769 * self.smooth_buf[5]
             - 0.5769 * self.smooth_buf[3]
             - 0.0962 * self.smooth_buf[1])
             * (0.075 * self.smooth_buf[6] + 0.54 * self.smooth_buf[4] + 0.075 * self.smooth_buf[2]);
@@ -68,8 +70,7 @@ impl StreamingIndicator<f64, (f64, f64)> for StreamingHtPhasor {
         }
 
         let in_phase = self.det_buf[1];
-        let quadrature = 0.0962 * self.det_buf[7]
-            + 0.5769 * self.det_buf[5]
+        let quadrature = 0.0962 * self.det_buf[7] + 0.5769 * self.det_buf[5]
             - 0.5769 * self.det_buf[3]
             - 0.0962 * self.det_buf[1];
 
@@ -85,16 +86,22 @@ impl StreamingIndicator<f64, (f64, f64)> for StreamingHtPhasor {
         self.count >= 16
     }
 
-        impl_standard_methods!(output = (f64, f64));
-
-
+    impl_standard_methods!(output = (f64, f64));
 }
 
 impl IndicatorMeta for StreamingHtPhasor {
-    fn name() -> &'static str { "HT_PHASOR" }
-    fn category() -> &'static str { "cycle" }
-    fn description() -> &'static str { "Hilbert Transform - Phasor Components" }
-    fn warm_up_period(&self) -> usize { 16 }
+    fn name() -> &'static str {
+        "HT_PHASOR"
+    }
+    fn category() -> &'static str {
+        "cycle"
+    }
+    fn description() -> &'static str {
+        "Hilbert Transform - Phasor Components"
+    }
+    fn warm_up_period(&self) -> usize {
+        16
+    }
 }
 
 #[cfg(test)]

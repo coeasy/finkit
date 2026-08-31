@@ -368,7 +368,10 @@ mod tests {
         let h = close.clone();
         let l = close.clone();
         let sig = trend_reversal_confirm(&o, &h, &l, &close, 5, 0.05, 2).unwrap();
-        assert!(sig.iter().all(|&v| v == 0), "monotonic uptrend should produce no reversals");
+        assert!(
+            sig.iter().all(|&v| v == 0),
+            "monotonic uptrend should produce no reversals"
+        );
     }
 
     #[test]

@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamingTypPrice {
@@ -69,7 +69,9 @@ mod tests {
     #[test]
     fn test_streaming_typprice_basic() {
         let mut typ = StreamingTypPrice::new();
-        let v = typ.next(&OhlcvBar::new(10.0, 12.0, 9.0, 11.0, 100.0)).unwrap();
+        let v = typ
+            .next(&OhlcvBar::new(10.0, 12.0, 9.0, 11.0, 100.0))
+            .unwrap();
         assert!((v - (12.0 + 9.0 + 11.0) / 3.0).abs() < 1e-10);
         assert!(typ.is_ready());
     }

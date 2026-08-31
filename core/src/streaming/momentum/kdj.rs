@@ -1,6 +1,6 @@
+use crate::impl_standard_methods;
 use crate::streaming::rolling_minmax::{RollingMax, RollingMin};
 use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
-use crate::impl_standard_methods;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -137,16 +137,22 @@ impl StreamingIndicator<(f64, f64, f64), KdjOutput> for StreamingKdj {
         self.k_valid && self.d_valid
     }
 
-        impl_standard_methods!(output = KdjOutput);
-
-
+    impl_standard_methods!(output = KdjOutput);
 }
 
 impl IndicatorMeta for StreamingKdj {
-    fn name() -> &'static str { "KDJ" }
-    fn category() -> &'static str { "momentum" }
-    fn description() -> &'static str { "Chinese Stochastic Oscillator (KDJ)" }
-    fn warm_up_period(&self) -> usize { self.n - 1 }
+    fn name() -> &'static str {
+        "KDJ"
+    }
+    fn category() -> &'static str {
+        "momentum"
+    }
+    fn description() -> &'static str {
+        "Chinese Stochastic Oscillator (KDJ)"
+    }
+    fn warm_up_period(&self) -> usize {
+        self.n - 1
+    }
 }
 
 #[cfg(test)]
@@ -202,7 +208,11 @@ mod tests {
             .map(|i| 50.0 + (i as f64 * 0.2).sin() * 10.0)
             .collect();
         let low: Vec<f64> = high.iter().map(|h| h - 3.0).collect();
-        let close: Vec<f64> = high.iter().zip(low.iter()).map(|(h, l)| (h + l) / 2.0).collect();
+        let close: Vec<f64> = high
+            .iter()
+            .zip(low.iter())
+            .map(|(h, l)| (h + l) / 2.0)
+            .collect();
 
         let batch = crate::indicators::china::kdj(&high, &low, &close, 9, 3, 3).unwrap();
 

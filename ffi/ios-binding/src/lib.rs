@@ -14,8 +14,8 @@
 use finkit::indicators;
 use finkit::math::moving_avg;
 use finkit::patterns;
-use std::slice;
 use finkit_ffi_common::panic::*;
+use std::slice;
 
 // Leak-detection allocator: installed only for the test binary. iOS indicators
 // write into a caller-owned buffer (no heap transfer across the FFI boundary),
@@ -23,8 +23,7 @@ use finkit_ffi_common::panic::*;
 // See `finkit_ffi_common::leak`.
 #[cfg(test)]
 #[global_allocator]
-static TEST_ALLOC: finkit_ffi_common::leak::CountingAlloc =
-    finkit_ffi_common::leak::CountingAlloc;
+static TEST_ALLOC: finkit_ffi_common::leak::CountingAlloc = finkit_ffi_common::leak::CountingAlloc;
 
 /// ABI version exported to the Swift wrapper so the framework can refuse
 /// to load a `.a` built against an incompatible core.
@@ -59,17 +58,7 @@ pub extern "C" fn alpha_ta_ffi_panic_test() -> i32 {
 
 include!("generated.rs");
 
-
-
-
-
-
 // ---- momentum --------------------------------------------------------------
-
-
-
-
-
 
 // ---- candlestick patterns --------------------------------------------------
 #[no_mangle]
@@ -91,11 +80,11 @@ pub extern "C" fn alpha_ta_detect_candlestick(
     let doji = patterns::candlestick::doji(o, h, l, c, 0.05).unwrap_or_default();
     let hammer = patterns::candlestick::hammer(o, h, l, c).unwrap_or_default();
     let engulfing = patterns::candlestick::engulfing(o, h, l, c).unwrap_or_default();
-    
+
     let count = doji.iter().filter(|&&x| x != 0).count()
         + hammer.iter().filter(|&&x| x != 0).count()
         + engulfing.iter().filter(|&&x| x != 0).count();
-    
+
     count as i32
 }
 
@@ -163,7 +152,11 @@ mod tests {
             let ret = crate::alpha_ta_sma(input.as_ptr(), n, 14, out.as_mut_ptr());
             assert_eq!(ret, 0);
             let cnt = crate::alpha_ta_detect_candlestick(
-                input.as_ptr(), input.as_ptr(), input.as_ptr(), input.as_ptr(), n,
+                input.as_ptr(),
+                input.as_ptr(),
+                input.as_ptr(),
+                input.as_ptr(),
+                n,
             );
             let _ = cnt;
         }
@@ -173,7 +166,9 @@ mod tests {
         assert!(
             growth < 256 * 1024,
             "heap grew by {} bytes across 400 indicator cycles (baseline={}, after={})",
-            after - baseline, baseline, after
+            after - baseline,
+            baseline,
+            after
         );
     }
 }

@@ -205,7 +205,9 @@ pub fn gann_angles(
     price_unit: f64,
     time_unit: f64,
 ) -> Result<GannAnglesResult> {
-    validate_param("pivot_idx", "less than data length", || pivot_idx < price.len())?;
+    validate_param("pivot_idx", "less than data length", || {
+        pivot_idx < price.len()
+    })?;
     validate_param("price_unit", "greater than 0", || price_unit > 0.0)?;
     validate_param("time_unit", "greater than 0", || time_unit > 0.0)?;
 
@@ -315,14 +317,26 @@ pub fn speed_resistance_lines(
     let len = high.len();
 
     // Determine start and end prices
-    let start_price = if is_uptrend { low[start_idx] } else { high[start_idx] };
-    let end_price = if is_uptrend { high[end_idx] } else { low[end_idx] };
+    let start_price = if is_uptrend {
+        low[start_idx]
+    } else {
+        high[start_idx]
+    };
+    let end_price = if is_uptrend {
+        high[end_idx]
+    } else {
+        low[end_idx]
+    };
 
     let price_range = end_price - start_price;
     let time_range = (end_idx - start_idx) as f64;
 
     // Calculate slopes
-    let full_slope = if time_range > 0.0 { price_range / time_range } else { 0.0 };
+    let full_slope = if time_range > 0.0 {
+        price_range / time_range
+    } else {
+        0.0
+    };
     let slope_2_3 = full_slope * 2.0 / 3.0;
     let slope_1_3 = full_slope / 3.0;
 

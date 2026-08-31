@@ -1,7 +1,7 @@
+use crate::impl_indicator_meta;
+use crate::impl_standard_methods;
 use crate::streaming::rolling_minmax::{RollingMax, RollingMin};
 use crate::streaming::traits::{Ohlcv, StreamingIndicator};
-use crate::impl_standard_methods;
-use crate::{impl_indicator_meta};
 
 /// Williams %R streaming indicator with O(1) amortized per-update complexity.
 ///
@@ -33,7 +33,10 @@ impl StreamingWillR {
 
 impl StreamingIndicator<&dyn Ohlcv> for StreamingWillR {
     #[inline]
-    #[cfg_attr(feature = "tracing", tracing::instrument(level = "trace", skip(self, bar)))]
+    #[cfg_attr(
+        feature = "tracing",
+        tracing::instrument(level = "trace", skip(self, bar))
+    )]
     fn next(&mut self, bar: &dyn Ohlcv) -> Option<f64> {
         crate::streaming_measure!("willr", self.count, {
             self.count += 1;
@@ -74,7 +77,9 @@ impl StreamingIndicator<&dyn Ohlcv> for StreamingWillR {
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { self.count >= self.period }
+    fn is_ready(&self) -> bool {
+        self.count >= self.period
+    }
 
     impl_standard_methods!();
 }
@@ -95,7 +100,9 @@ mod tests {
             OhlcvBar::new(10.0, 13.0, 9.0, 11.0, 100.0),
             OhlcvBar::new(11.0, 14.0, 10.0, 12.0, 100.0),
         ];
-        for bar in &bars[..2] { assert_eq!(w.next(bar), None); }
+        for bar in &bars[..2] {
+            assert_eq!(w.next(bar), None);
+        }
         let v = w.next(&bars[2]).unwrap();
         assert!((-100.0..=0.0).contains(&v));
     }
@@ -109,7 +116,13 @@ mod tests {
     fn test_streaming_willr_reset() {
         let mut w = StreamingWillR::new(3);
         for i in 0..5 {
-            w.next(&OhlcvBar::new(i as f64, i as f64 + 2.0, i as f64 - 1.0, i as f64 + 1.0, 100.0));
+            w.next(&OhlcvBar::new(
+                i as f64,
+                i as f64 + 2.0,
+                i as f64 - 1.0,
+                i as f64 + 1.0,
+                100.0,
+            ));
         }
         assert!(w.is_ready());
         w.reset();

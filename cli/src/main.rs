@@ -359,7 +359,11 @@ fn read_close_input_legacy(path: &Option<String>) -> io::Result<Vec<f64>> {
 
 fn output_single(name: &str, data: &[f64], format: &OutputFormat, output: &Option<String>) {
     let text = match format {
-        OutputFormat::Plain => data.iter().map(|v| format!("{v}")).collect::<Vec<_>>().join("\n"),
+        OutputFormat::Plain => data
+            .iter()
+            .map(|v| format!("{v}"))
+            .collect::<Vec<_>>()
+            .join("\n"),
         OutputFormat::Csv => {
             let mut out = format!("{name}\n");
             for v in data {
@@ -370,7 +374,13 @@ fn output_single(name: &str, data: &[f64], format: &OutputFormat, output: &Optio
         OutputFormat::Json => {
             let items: Vec<String> = data
                 .iter()
-                .map(|v| if v.is_nan() { "null".to_string() } else { format!("{v}") })
+                .map(|v| {
+                    if v.is_nan() {
+                        "null".to_string()
+                    } else {
+                        format!("{v}")
+                    }
+                })
                 .collect();
             format!("{{\"{name}\":[{}]}}", items.join(","))
         }
@@ -383,12 +393,19 @@ fn output_single(name: &str, data: &[f64], format: &OutputFormat, output: &Optio
     }
 }
 
-fn output_multi(names: &[&str], columns: &[&[f64]], format: &OutputFormat, output: &Option<String>) {
+fn output_multi(
+    names: &[&str],
+    columns: &[&[f64]],
+    format: &OutputFormat,
+    output: &Option<String>,
+) {
     let text = match format {
         OutputFormat::Plain => {
             let mut out = String::new();
             for (i, name) in names.iter().enumerate() {
-                if i > 0 { out.push_str("\n\n"); }
+                if i > 0 {
+                    out.push_str("\n\n");
+                }
                 out.push_str(&format!("{name}:\n"));
                 for v in columns[i] {
                     out.push_str(&format!("{v}\n"));
@@ -412,7 +429,13 @@ fn output_multi(names: &[&str], columns: &[&[f64]], format: &OutputFormat, outpu
             for (i, name) in names.iter().enumerate() {
                 let items: Vec<String> = columns[i]
                     .iter()
-                    .map(|v| if v.is_nan() { "null".to_string() } else { format!("{v}") })
+                    .map(|v| {
+                        if v.is_nan() {
+                            "null".to_string()
+                        } else {
+                            format!("{v}")
+                        }
+                    })
                     .collect();
                 parts.push(format!("\"{name}\":[{}]", items.join(",")));
             }
@@ -446,98 +469,322 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Sma { input, period, output, format } => {
+        Commands::Sma {
+            input,
+            period,
+            output,
+            format,
+        } => {
             let data = read_close_input_legacy(&input).expect("Failed to read input");
             let result = moving_avg::sma(&data, period).expect("SMA calculation failed");
-            output_single("sma", result.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"), &format, &output);
+            output_single(
+                "sma",
+                result
+                    .as_slice()
+                    .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"),
+                &format,
+                &output,
+            );
         }
-        Commands::Ema { input, period, output, format } => {
+        Commands::Ema {
+            input,
+            period,
+            output,
+            format,
+        } => {
             let data = read_close_input_legacy(&input).expect("Failed to read input");
             let result = moving_avg::ema(&data, period).expect("EMA calculation failed");
-            output_single("ema", result.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"), &format, &output);
+            output_single(
+                "ema",
+                result
+                    .as_slice()
+                    .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"),
+                &format,
+                &output,
+            );
         }
-        Commands::Wma { input, period, output, format } => {
+        Commands::Wma {
+            input,
+            period,
+            output,
+            format,
+        } => {
             let data = read_close_input_legacy(&input).expect("Failed to read input");
             let result = moving_avg::wma(&data, period).expect("WMA calculation failed");
-            output_single("wma", result.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"), &format, &output);
+            output_single(
+                "wma",
+                result
+                    .as_slice()
+                    .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"),
+                &format,
+                &output,
+            );
         }
-        Commands::Rsi { input, period, output, format } => {
+        Commands::Rsi {
+            input,
+            period,
+            output,
+            format,
+        } => {
             let data = read_close_input_legacy(&input).expect("Failed to read input");
             let result = indicators::rsi(&data, period).expect("RSI calculation failed");
-            output_single("rsi", result.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"), &format, &output);
+            output_single(
+                "rsi",
+                result
+                    .as_slice()
+                    .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"),
+                &format,
+                &output,
+            );
         }
-        Commands::Macd { input, fast, slow, signal, output, format } => {
+        Commands::Macd {
+            input,
+            fast,
+            slow,
+            signal,
+            output,
+            format,
+        } => {
             let data = read_close_input_legacy(&input).expect("Failed to read input");
-            let result = indicators::macd(&data, fast, slow, signal).expect("MACD calculation failed");
-            let macd_s = result.macd.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
-            let signal_s = result.signal.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
-            let hist_s = result.hist.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
-            output_multi(&["macd", "signal", "histogram"], &[macd_s, signal_s, hist_s], &format, &output);
+            let result =
+                indicators::macd(&data, fast, slow, signal).expect("MACD calculation failed");
+            let macd_s = result
+                .macd
+                .as_slice()
+                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
+            let signal_s = result
+                .signal
+                .as_slice()
+                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
+            let hist_s = result
+                .hist
+                .as_slice()
+                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
+            output_multi(
+                &["macd", "signal", "histogram"],
+                &[macd_s, signal_s, hist_s],
+                &format,
+                &output,
+            );
         }
-        Commands::Bbands { input, period, stddev, nbdevup, nbdevdn, output, format } => {
+        Commands::Bbands {
+            input,
+            period,
+            stddev,
+            nbdevup,
+            nbdevdn,
+            output,
+            format,
+        } => {
             let ohlcv = read_ohlcv_input(Some(&input)).expect("Failed to read OHLCV input");
             let (dev_up, dev_dn) = resolve_bbands_stddev(stddev, nbdevup, nbdevdn);
             let result = indicators::bbands(&ohlcv.close, period, dev_up, dev_dn)
                 .expect("BBANDS calculation failed");
-            let upper = result.upper.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
-            let middle = result.middle.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
-            let lower = result.lower.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
-            output_multi(&["upper", "middle", "lower"], &[upper, middle, lower], &format, &output);
+            let upper = result
+                .upper
+                .as_slice()
+                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
+            let middle = result
+                .middle
+                .as_slice()
+                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
+            let lower = result
+                .lower
+                .as_slice()
+                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
+            output_multi(
+                &["upper", "middle", "lower"],
+                &[upper, middle, lower],
+                &format,
+                &output,
+            );
         }
-        Commands::Atr { input, period, output, format } => {
+        Commands::Atr {
+            input,
+            period,
+            output,
+            format,
+        } => {
             let ohlcv = read_ohlcv_input(Some(&input)).expect("Failed to read OHLCV input");
             let result = indicators::atr(&ohlcv.high, &ohlcv.low, &ohlcv.close, period)
                 .expect("ATR calculation failed");
-            output_single("atr", result.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"), &format, &output);
+            output_single(
+                "atr",
+                result
+                    .as_slice()
+                    .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"),
+                &format,
+                &output,
+            );
         }
-        Commands::Stoch { input, fastk_period, slowk_period, slowd_period, output, format } => {
+        Commands::Stoch {
+            input,
+            fastk_period,
+            slowk_period,
+            slowd_period,
+            output,
+            format,
+        } => {
             let ohlcv = read_ohlcv_input(Some(&input)).expect("Failed to read OHLCV input");
-            let result = indicators::stoch(&ohlcv.high, &ohlcv.low, &ohlcv.close, fastk_period, slowk_period, slowd_period)
-                .expect("STOCH calculation failed");
-            let k = result.k.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
-            let d = result.d.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
+            let result = indicators::stoch(
+                &ohlcv.high,
+                &ohlcv.low,
+                &ohlcv.close,
+                fastk_period,
+                slowk_period,
+                slowd_period,
+            )
+            .expect("STOCH calculation failed");
+            let k = result
+                .k
+                .as_slice()
+                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
+            let d = result
+                .d
+                .as_slice()
+                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
             output_multi(&["k", "d"], &[k, d], &format, &output);
         }
-        Commands::Adx { input, period, output, format } => {
+        Commands::Adx {
+            input,
+            period,
+            output,
+            format,
+        } => {
             let ohlcv = read_ohlcv_input(Some(&input)).expect("Failed to read OHLCV input");
             let result = indicators::adx(&ohlcv.high, &ohlcv.low, &ohlcv.close, period)
                 .expect("ADX calculation failed");
-            output_single("adx", result.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"), &format, &output);
+            output_single(
+                "adx",
+                result
+                    .as_slice()
+                    .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"),
+                &format,
+                &output,
+            );
         }
-        Commands::Cci { input, period, output, format } => {
+        Commands::Cci {
+            input,
+            period,
+            output,
+            format,
+        } => {
             let ohlcv = read_ohlcv_input(Some(&input)).expect("Failed to read OHLCV input");
             let result = indicators::cci(&ohlcv.high, &ohlcv.low, &ohlcv.close, period)
                 .expect("CCI calculation failed");
-            output_single("cci", result.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"), &format, &output);
+            output_single(
+                "cci",
+                result
+                    .as_slice()
+                    .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"),
+                &format,
+                &output,
+            );
         }
-        Commands::Obv { input, output, format } => {
+        Commands::Obv {
+            input,
+            output,
+            format,
+        } => {
             let ohlcv = read_ohlcv_input(Some(&input)).expect("Failed to read OHLCV input");
-            let result = indicators::obv(&ohlcv.close, &ohlcv.volume)
-                .expect("OBV calculation failed");
-            output_single("obv", result.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"), &format, &output);
+            let result =
+                indicators::obv(&ohlcv.close, &ohlcv.volume).expect("OBV calculation failed");
+            output_single(
+                "obv",
+                result
+                    .as_slice()
+                    .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"),
+                &format,
+                &output,
+            );
         }
-        Commands::Willr { input, period, output, format } => {
+        Commands::Willr {
+            input,
+            period,
+            output,
+            format,
+        } => {
             let ohlcv = read_ohlcv_input(Some(&input)).expect("Failed to read OHLCV input");
             let result = indicators::willr(&ohlcv.high, &ohlcv.low, &ohlcv.close, period)
                 .expect("WILLR calculation failed");
-            output_single("willr", result.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"), &format, &output);
+            output_single(
+                "willr",
+                result
+                    .as_slice()
+                    .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"),
+                &format,
+                &output,
+            );
         }
-        Commands::Pattern { input, kind, name, format } => {
+        Commands::Pattern {
+            input,
+            kind,
+            name,
+            format,
+        } => {
             let ohlcv = read_ohlcv_input(Some(&input)).expect("Failed to read OHLCV input");
             match kind {
                 PatternKind::Candlestick => {
                     let pattern_name = name.as_deref().unwrap_or("doji");
                     let result = match pattern_name {
-                        "doji" => candlestick::doji(&ohlcv.open, &ohlcv.high, &ohlcv.low, &ohlcv.close, 0.1),
-                        "hammer" => candlestick::hammer(&ohlcv.open, &ohlcv.high, &ohlcv.low, &ohlcv.close),
-                        "engulfing" => candlestick::engulfing(&ohlcv.open, &ohlcv.high, &ohlcv.low, &ohlcv.close),
-                        "morning_star" => candlestick::morning_star(&ohlcv.open, &ohlcv.high, &ohlcv.low, &ohlcv.close),
-                        "evening_star" => candlestick::evening_star(&ohlcv.open, &ohlcv.high, &ohlcv.low, &ohlcv.close),
-                        "shooting_star" => candlestick::shooting_star(&ohlcv.open, &ohlcv.high, &ohlcv.low, &ohlcv.close),
-                        "hanging_man" => candlestick::hanging_man(&ohlcv.open, &ohlcv.high, &ohlcv.low, &ohlcv.close),
-                        "inverted_hammer" => candlestick::inverted_hammer(&ohlcv.open, &ohlcv.high, &ohlcv.low, &ohlcv.close),
-                        "dark_cloud" => candlestick::dark_cloud_cover(&ohlcv.open, &ohlcv.high, &ohlcv.low, &ohlcv.close),
-                        "piercing" => candlestick::piercing(&ohlcv.open, &ohlcv.high, &ohlcv.low, &ohlcv.close),
+                        "doji" => candlestick::doji(
+                            &ohlcv.open,
+                            &ohlcv.high,
+                            &ohlcv.low,
+                            &ohlcv.close,
+                            0.1,
+                        ),
+                        "hammer" => {
+                            candlestick::hammer(&ohlcv.open, &ohlcv.high, &ohlcv.low, &ohlcv.close)
+                        }
+                        "engulfing" => candlestick::engulfing(
+                            &ohlcv.open,
+                            &ohlcv.high,
+                            &ohlcv.low,
+                            &ohlcv.close,
+                        ),
+                        "morning_star" => candlestick::morning_star(
+                            &ohlcv.open,
+                            &ohlcv.high,
+                            &ohlcv.low,
+                            &ohlcv.close,
+                        ),
+                        "evening_star" => candlestick::evening_star(
+                            &ohlcv.open,
+                            &ohlcv.high,
+                            &ohlcv.low,
+                            &ohlcv.close,
+                        ),
+                        "shooting_star" => candlestick::shooting_star(
+                            &ohlcv.open,
+                            &ohlcv.high,
+                            &ohlcv.low,
+                            &ohlcv.close,
+                        ),
+                        "hanging_man" => candlestick::hanging_man(
+                            &ohlcv.open,
+                            &ohlcv.high,
+                            &ohlcv.low,
+                            &ohlcv.close,
+                        ),
+                        "inverted_hammer" => candlestick::inverted_hammer(
+                            &ohlcv.open,
+                            &ohlcv.high,
+                            &ohlcv.low,
+                            &ohlcv.close,
+                        ),
+                        "dark_cloud" => candlestick::dark_cloud_cover(
+                            &ohlcv.open,
+                            &ohlcv.high,
+                            &ohlcv.low,
+                            &ohlcv.close,
+                        ),
+                        "piercing" => candlestick::piercing(
+                            &ohlcv.open,
+                            &ohlcv.high,
+                            &ohlcv.low,
+                            &ohlcv.close,
+                        ),
                         other => {
                             eprintln!("Unknown candlestick pattern: {other}. Available: doji, hammer, engulfing, morning_star, evening_star, shooting_star, hanging_man, inverted_hammer, dark_cloud, piercing");
                             std::process::exit(1);
@@ -548,15 +795,24 @@ fn main() {
                             let signals: Vec<i32> = arr.to_vec();
                             match format {
                                 OutputFormat::Json => {
-                                    let items: Vec<String> = signals.iter().map(|v| format!("{v}")).collect();
-                                    println!("{{\"pattern\":\"{pattern_name}\",\"signals\":[{}]}}", items.join(","));
+                                    let items: Vec<String> =
+                                        signals.iter().map(|v| format!("{v}")).collect();
+                                    println!(
+                                        "{{\"pattern\":\"{pattern_name}\",\"signals\":[{}]}}",
+                                        items.join(",")
+                                    );
                                 }
                                 _ => {
-                                    for v in &signals { println!("{v}"); }
+                                    for v in &signals {
+                                        println!("{v}");
+                                    }
                                 }
                             }
                         }
-                        Err(e) => { eprintln!("Pattern error: {e}"); std::process::exit(1); }
+                        Err(e) => {
+                            eprintln!("Pattern error: {e}");
+                            std::process::exit(1);
+                        }
                     }
                 }
                 PatternKind::Chart => {
@@ -565,9 +821,15 @@ fn main() {
                         "double_top" => chart::double_top(&ohlcv.high, 20, 0.03),
                         "double_bottom" => chart::double_bottom(&ohlcv.low, 20, 0.03),
                         "head_shoulders" => chart::head_and_shoulders_top(&ohlcv.high, 30, 0.05),
-                        "head_shoulders_bottom" => chart::head_and_shoulders_bottom(&ohlcv.low, 30, 0.05),
-                        "ascending_triangle" => chart::ascending_triangle(&ohlcv.high, &ohlcv.low, 20, 0.03),
-                        "descending_triangle" => chart::descending_triangle(&ohlcv.high, &ohlcv.low, 20, 0.03),
+                        "head_shoulders_bottom" => {
+                            chart::head_and_shoulders_bottom(&ohlcv.low, 30, 0.05)
+                        }
+                        "ascending_triangle" => {
+                            chart::ascending_triangle(&ohlcv.high, &ohlcv.low, 20, 0.03)
+                        }
+                        "descending_triangle" => {
+                            chart::descending_triangle(&ohlcv.high, &ohlcv.low, 20, 0.03)
+                        }
                         other => {
                             eprintln!("Unknown chart pattern: {other}. Available: double_top, double_bottom, head_shoulders, head_shoulders_bottom, ascending_triangle, descending_triangle");
                             std::process::exit(1);
@@ -578,20 +840,35 @@ fn main() {
                             let signals: Vec<i32> = arr.to_vec();
                             match format {
                                 OutputFormat::Json => {
-                                    let items: Vec<String> = signals.iter().map(|v| format!("{v}")).collect();
-                                    println!("{{\"pattern\":\"{pattern_name}\",\"signals\":[{}]}}", items.join(","));
+                                    let items: Vec<String> =
+                                        signals.iter().map(|v| format!("{v}")).collect();
+                                    println!(
+                                        "{{\"pattern\":\"{pattern_name}\",\"signals\":[{}]}}",
+                                        items.join(",")
+                                    );
                                 }
                                 _ => {
-                                    for v in &signals { println!("{v}"); }
+                                    for v in &signals {
+                                        println!("{v}");
+                                    }
                                 }
                             }
                         }
-                        Err(e) => { eprintln!("Pattern error: {e}"); std::process::exit(1); }
+                        Err(e) => {
+                            eprintln!("Pattern error: {e}");
+                            std::process::exit(1);
+                        }
                     }
                 }
             }
         }
-        Commands::Formula { formula, input, expr, dialect, format } => {
+        Commands::Formula {
+            formula,
+            input,
+            expr,
+            dialect,
+            format,
+        } => {
             let expr_str = match (formula, expr) {
                 (Some(f), _) => f,
                 (None, Some(e)) => e,
@@ -615,9 +892,7 @@ fn main() {
             let dialect = finkit::formula::FormulaDialect::from_str(&dialect)
                 .unwrap_or(finkit::formula::FormulaDialect::AlphaTA);
             let result = match dialect {
-                finkit::formula::FormulaDialect::AlphaTA => {
-                    engine.eval(&expr_str, &mut ctx)
-                }
+                finkit::formula::FormulaDialect::AlphaTA => engine.eval(&expr_str, &mut ctx),
                 finkit::formula::FormulaDialect::Pine => {
                     let ast = finkit::formula::parse_formula_with_dialect(
                         &expr_str,
@@ -633,7 +908,14 @@ fn main() {
             };
             match result {
                 Ok(result) => {
-                    output_single("result", result.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"), &format, &None);
+                    output_single(
+                        "result",
+                        result
+                            .as_slice()
+                            .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"),
+                        &format,
+                        &None,
+                    );
                 }
                 Err(e) => {
                     eprintln!("Formula error: {e}");
@@ -641,25 +923,98 @@ fn main() {
                 }
             }
         }
-        Commands::Streaming { indicator, input, period, fast_period, slow_period, signal_period, nb_dev, output, format } => {
-            run_streaming(&indicator, &input, period, fast_period, slow_period, signal_period, nb_dev, output, format);
+        Commands::Streaming {
+            indicator,
+            input,
+            period,
+            fast_period,
+            slow_period,
+            signal_period,
+            nb_dev,
+            output,
+            format,
+        } => {
+            run_streaming(
+                &indicator,
+                &input,
+                period,
+                fast_period,
+                slow_period,
+                signal_period,
+                nb_dev,
+                output,
+                format,
+            );
         }
-        Commands::Transform { transform, input, period, output, format } => {
+        Commands::Transform {
+            transform,
+            input,
+            period,
+            output,
+            format,
+        } => {
             run_transform(&transform, input.as_deref(), period, output, format);
         }
-        Commands::Features { pack, input, period, output, format } => {
+        Commands::Features {
+            pack,
+            input,
+            period,
+            output,
+            format,
+        } => {
             run_features(&pack, &input, period, output, format);
         }
-        Commands::Sweep { indicator, input, period_min, period_max, period_step, metric, output, format } => {
-            run_sweep(&indicator, input.as_deref(), period_min, period_max, period_step, &metric, output, format);
+        Commands::Sweep {
+            indicator,
+            input,
+            period_min,
+            period_max,
+            period_step,
+            metric,
+            output,
+            format,
+        } => {
+            run_sweep(
+                &indicator,
+                input.as_deref(),
+                period_min,
+                period_max,
+                period_step,
+                &metric,
+                output,
+                format,
+            );
         }
-        Commands::Chart { input, chart_format, title, output } => {
+        Commands::Chart {
+            input,
+            chart_format,
+            title,
+            output,
+        } => {
             run_chart(&input, &chart_format, title.as_deref(), output);
         }
-        Commands::Calc { indicator, input, period, fast, slow, signal, stddev, output, format } => {
-            run_calc(&indicator, &input, period, fast, slow, signal, stddev, output, format);
+        Commands::Calc {
+            indicator,
+            input,
+            period,
+            fast,
+            slow,
+            signal,
+            stddev,
+            output,
+            format,
+        } => {
+            run_calc(
+                &indicator, &input, period, fast, slow, signal, stddev, output, format,
+            );
         }
-        Commands::Template { action, name, input, output, format } => {
+        Commands::Template {
+            action,
+            name,
+            input,
+            output,
+            format,
+        } => {
             run_template(&action, name.as_deref(), input.as_deref(), output, format);
         }
     }
@@ -667,8 +1022,11 @@ fn main() {
 
 // ─────────────────────── CLI subcommand implementations ───────────────────────
 
-use finkit::streaming::{StreamingIndicator, OhlcvBar};
-use finkit::transforms::{LogReturn, PctChange, ZScore, StandardScaler, MinMaxScaler, Rank, PercentileRank, Diff, DiffN, RollingMean, RollingStd, RollingSum, Transform};
+use finkit::streaming::{OhlcvBar, StreamingIndicator};
+use finkit::transforms::{
+    Diff, DiffN, LogReturn, MinMaxScaler, PctChange, PercentileRank, Rank, RollingMean, RollingStd,
+    RollingSum, StandardScaler, Transform, ZScore,
+};
 
 fn run_streaming(
     indicator: &str,
@@ -690,56 +1048,103 @@ fn run_streaming(
     match indicator {
         "sma" => {
             let mut ind = StreamingSma::new(period);
-            let vals: Vec<f64> = close.iter().map(|&v| ind.next(v).unwrap_or(f64::NAN)).collect();
+            let vals: Vec<f64> = close
+                .iter()
+                .map(|&v| ind.next(v).unwrap_or(f64::NAN))
+                .collect();
             output_single("streaming_sma", &vals, &format, &output);
         }
         "ema" => {
             let mut ind = StreamingEma::new(period);
-            let vals: Vec<f64> = close.iter().map(|&v| ind.next(v).unwrap_or(f64::NAN)).collect();
+            let vals: Vec<f64> = close
+                .iter()
+                .map(|&v| ind.next(v).unwrap_or(f64::NAN))
+                .collect();
             output_single("streaming_ema", &vals, &format, &output);
         }
         "rsi" => {
             let mut ind = StreamingRsi::new(period);
-            let vals: Vec<f64> = close.iter().map(|&v| ind.next(v).unwrap_or(f64::NAN)).collect();
+            let vals: Vec<f64> = close
+                .iter()
+                .map(|&v| ind.next(v).unwrap_or(f64::NAN))
+                .collect();
             output_single("streaming_rsi", &vals, &format, &output);
         }
         "atr" => {
             let mut ind = StreamingAtr::new(period);
-            let vals: Vec<f64> = high.iter().zip(low.iter()).zip(close.iter())
+            let vals: Vec<f64> = high
+                .iter()
+                .zip(low.iter())
+                .zip(close.iter())
                 .map(|((&h, &l), &c)| ind.next((h, l, c)).unwrap_or(f64::NAN))
                 .collect();
             output_single("streaming_atr", &vals, &format, &output);
         }
         "adx" => {
             let mut ind = StreamingAdx::new(period);
-            let vals: Vec<f64> = high.iter().zip(low.iter()).zip(close.iter())
+            let vals: Vec<f64> = high
+                .iter()
+                .zip(low.iter())
+                .zip(close.iter())
                 .map(|((&h, &l), &c)| ind.next((h, l, c)).unwrap_or(f64::NAN))
                 .collect();
             output_single("streaming_adx", &vals, &format, &output);
         }
         "stoch" => {
             let mut ind = StreamingStoch::new(period, 3, 3);
-            let vals: Vec<f64> = high.iter().zip(low.iter()).zip(close.iter())
+            let vals: Vec<f64> = high
+                .iter()
+                .zip(low.iter())
+                .zip(close.iter())
                 .map(|((&h, &l), &c)| ind.next((h, l, c)).map(|o| o.k).unwrap_or(f64::NAN))
                 .collect();
             output_single("streaming_stoch_k", &vals, &format, &output);
         }
         "macd" => {
             let mut ind = StreamingMacd::new(fast_period, slow_period, signal_period);
-            let macd_line: Vec<f64> = close.iter().map(|&v| ind.next(v).map(|o| o.macd).unwrap_or(f64::NAN)).collect();
-            let signal_line: Vec<f64> = close.iter().map(|&v| ind.next(v).map(|o| o.signal).unwrap_or(f64::NAN)).collect();
-            output_multi(&["macd", "signal"], &[&macd_line, &signal_line], &format, &output);
+            let macd_line: Vec<f64> = close
+                .iter()
+                .map(|&v| ind.next(v).map(|o| o.macd).unwrap_or(f64::NAN))
+                .collect();
+            let signal_line: Vec<f64> = close
+                .iter()
+                .map(|&v| ind.next(v).map(|o| o.signal).unwrap_or(f64::NAN))
+                .collect();
+            output_multi(
+                &["macd", "signal"],
+                &[&macd_line, &signal_line],
+                &format,
+                &output,
+            );
         }
         "boll" => {
             let mut ind = StreamingBoll::new(period, nb_dev, nb_dev);
-            let uppers: Vec<f64> = close.iter().map(|&v| ind.next(v).map(|o| o.upper).unwrap_or(f64::NAN)).collect();
-            let middles: Vec<f64> = close.iter().map(|&v| ind.next(v).map(|o| o.middle).unwrap_or(f64::NAN)).collect();
-            let lowers: Vec<f64> = close.iter().map(|&v| ind.next(v).map(|o| o.lower).unwrap_or(f64::NAN)).collect();
-            output_multi(&["upper", "middle", "lower"], &[&uppers, &middles, &lowers], &format, &output);
+            let uppers: Vec<f64> = close
+                .iter()
+                .map(|&v| ind.next(v).map(|o| o.upper).unwrap_or(f64::NAN))
+                .collect();
+            let middles: Vec<f64> = close
+                .iter()
+                .map(|&v| ind.next(v).map(|o| o.middle).unwrap_or(f64::NAN))
+                .collect();
+            let lowers: Vec<f64> = close
+                .iter()
+                .map(|&v| ind.next(v).map(|o| o.lower).unwrap_or(f64::NAN))
+                .collect();
+            output_multi(
+                &["upper", "middle", "lower"],
+                &[&uppers, &middles, &lowers],
+                &format,
+                &output,
+            );
         }
         "vwap" => {
             let mut ind = StreamingVwap::new();
-            let vals: Vec<f64> = high.iter().zip(low.iter()).zip(close.iter()).zip(volume.iter())
+            let vals: Vec<f64> = high
+                .iter()
+                .zip(low.iter())
+                .zip(close.iter())
+                .zip(volume.iter())
                 .map(|(((&h, &l), &c), &v)| {
                     let bar = OhlcvBar::new(0.0, h, l, c, v);
                     ind.next(&bar).unwrap_or(f64::NAN)
@@ -749,7 +1154,9 @@ fn run_streaming(
         }
         "obv" => {
             let mut ind = StreamingObv::new();
-            let vals: Vec<f64> = close.iter().zip(volume.iter())
+            let vals: Vec<f64> = close
+                .iter()
+                .zip(volume.iter())
                 .map(|(&c, &v)| {
                     let bar = OhlcvBar::new(0.0, 0.0, 0.0, c, v);
                     ind.next(&bar).unwrap_or(f64::NAN)
@@ -759,7 +1166,10 @@ fn run_streaming(
         }
         "supertrend" => {
             let mut ind = StreamingSuperTrend::new(period, nb_dev);
-            let vals: Vec<f64> = high.iter().zip(low.iter()).zip(close.iter())
+            let vals: Vec<f64> = high
+                .iter()
+                .zip(low.iter())
+                .zip(close.iter())
                 .map(|((&h, &l), &c)| {
                     let bar = OhlcvBar::new(0.0, h, l, c, 0.0);
                     ind.next(&bar).map(|o| o.supertrend).unwrap_or(f64::NAN)
@@ -819,36 +1229,94 @@ fn run_features(
     match pack {
         "alpha_pack" => {
             // Build a default alpha factor pack: sma, ema, rsi, macd_hist, atr, obv, returns, zscore
-            let sma = moving_avg::sma(close, period).expect("sma").as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)").to_vec();
-            let ema = moving_avg::ema(close, period).expect("ema").as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)").to_vec();
-            let rsi = indicators::rsi(close, period).expect("rsi").as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)").to_vec();
+            let sma = moving_avg::sma(close, period)
+                .expect("sma")
+                .as_slice()
+                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)")
+                .to_vec();
+            let ema = moving_avg::ema(close, period)
+                .expect("ema")
+                .as_slice()
+                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)")
+                .to_vec();
+            let rsi = indicators::rsi(close, period)
+                .expect("rsi")
+                .as_slice()
+                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)")
+                .to_vec();
             let macd = indicators::macd(close, 12, 26, 9).expect("macd");
-            let atr_v = indicators::atr(high, low, close, period).expect("atr").as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)").to_vec();
-            let obv_v = indicators::obv(close, volume).expect("obv").as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)").to_vec();
+            let atr_v = indicators::atr(high, low, close, period)
+                .expect("atr")
+                .as_slice()
+                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)")
+                .to_vec();
+            let obv_v = indicators::obv(close, volume)
+                .expect("obv")
+                .as_slice()
+                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)")
+                .to_vec();
             let returns: Vec<f64> = LogReturn.transform(close);
             let zscore: Vec<f64> = ZScore.transform(close);
             // Align all columns to the same length (the minimum, so log_return fits)
-            let len = sma.len().min(ema.len()).min(rsi.len())
-                .min(macd.macd.len()).min(macd.signal.len()).min(macd.hist.len())
-                .min(atr_v.len()).min(obv_v.len())
-                .min(returns.len() + 1).min(zscore.len());
+            let len = sma
+                .len()
+                .min(ema.len())
+                .min(rsi.len())
+                .min(macd.macd.len())
+                .min(macd.signal.len())
+                .min(macd.hist.len())
+                .min(atr_v.len())
+                .min(obv_v.len())
+                .min(returns.len() + 1)
+                .min(zscore.len());
             let sma = &sma[..len];
             let ema = &ema[..len];
             let rsi = &rsi[..len];
-            let macd_line = &macd.macd.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)")[..len];
-            let macd_sig = &macd.signal.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)")[..len];
-            let macd_hist = &macd.hist.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)")[..len];
+            let macd_line = &macd
+                .macd
+                .as_slice()
+                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)")[..len];
+            let macd_sig = &macd
+                .signal
+                .as_slice()
+                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)")[..len];
+            let macd_hist = &macd
+                .hist
+                .as_slice()
+                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)")[..len];
             let atr_v = &atr_v[..len];
             let obv_v = &obv_v[..len];
             // log_return is shorter by 1; prepend a NaN so length matches.
             let mut returns_aligned: Vec<f64> = Vec::with_capacity(len);
             returns_aligned.push(f64::NAN);
             returns_aligned.extend_from_slice(&returns[..returns.len().min(len.saturating_sub(1))]);
-            while returns_aligned.len() < len { returns_aligned.push(f64::NAN); }
+            while returns_aligned.len() < len {
+                returns_aligned.push(f64::NAN);
+            }
             let zscore = &zscore[..len];
-            let names = ["sma", "ema", "rsi", "macd", "macd_signal", "macd_hist", "atr", "obv", "log_return", "zscore"];
+            let names = [
+                "sma",
+                "ema",
+                "rsi",
+                "macd",
+                "macd_signal",
+                "macd_hist",
+                "atr",
+                "obv",
+                "log_return",
+                "zscore",
+            ];
             let cols: Vec<&[f64]> = vec![
-                sma, ema, rsi, macd_line, macd_sig, macd_hist, atr_v, obv_v, &returns_aligned, zscore,
+                sma,
+                ema,
+                rsi,
+                macd_line,
+                macd_sig,
+                macd_hist,
+                atr_v,
+                obv_v,
+                &returns_aligned,
+                zscore,
             ];
             output_multi(&names, &cols, &format, &output);
         }
@@ -881,7 +1349,9 @@ fn run_sweep(
     }
     let compute_metric = |vals: &[f64]| -> f64 {
         let valid: Vec<f64> = vals.iter().copied().filter(|v| v.is_finite()).collect();
-        if valid.is_empty() { return f64::NAN; }
+        if valid.is_empty() {
+            return f64::NAN;
+        }
         match metric {
             "mean" => valid.iter().sum::<f64>() / valid.len() as f64,
             "std" => {
@@ -891,16 +1361,26 @@ fn run_sweep(
             }
             "min" => valid.iter().cloned().fold(f64::INFINITY, f64::min),
             "max" => valid.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
-            "last" => *valid.last().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"),
+            "last" => *valid
+                .last()
+                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"),
             "slope" => {
                 // OLS slope of valid sequence on its index
                 let n = valid.len() as f64;
                 let xs: Vec<f64> = (0..valid.len()).map(|i| i as f64).collect();
                 let x_mean = xs.iter().sum::<f64>() / n;
                 let y_mean = valid.iter().sum::<f64>() / n;
-                let num: f64 = xs.iter().zip(valid.iter()).map(|(x, y)| (x - x_mean) * (y - y_mean)).sum();
+                let num: f64 = xs
+                    .iter()
+                    .zip(valid.iter())
+                    .map(|(x, y)| (x - x_mean) * (y - y_mean))
+                    .sum();
                 let den: f64 = xs.iter().map(|x| (x - x_mean).powi(2)).sum();
-                if den == 0.0 { 0.0 } else { num / den }
+                if den == 0.0 {
+                    0.0
+                } else {
+                    num / den
+                }
             }
             other => {
                 eprintln!("Unknown metric: {other}. Available: mean, std, min, max, last, slope");
@@ -914,16 +1394,30 @@ fn run_sweep(
             let mut p = period_min;
             while p <= period_max {
                 let vals = match indicator {
-                    "sma" => moving_avg::sma(&data, p).ok().map(|a| a.into_raw_vec_and_offset().0),
-                    "ema" => moving_avg::ema(&data, p).ok().map(|a| a.into_raw_vec_and_offset().0),
-                    "wma" => moving_avg::wma(&data, p).ok().map(|a| a.into_raw_vec_and_offset().0),
-                    "rsi" => indicators::rsi(&data, p).ok().map(|a| a.into_raw_vec_and_offset().0),
+                    "sma" => moving_avg::sma(&data, p)
+                        .ok()
+                        .map(|a| a.into_raw_vec_and_offset().0),
+                    "ema" => moving_avg::ema(&data, p)
+                        .ok()
+                        .map(|a| a.into_raw_vec_and_offset().0),
+                    "wma" => moving_avg::wma(&data, p)
+                        .ok()
+                        .map(|a| a.into_raw_vec_and_offset().0),
+                    "rsi" => indicators::rsi(&data, p)
+                        .ok()
+                        .map(|a| a.into_raw_vec_and_offset().0),
                     "atr" => {
                         let ohlcv = read_ohlcv_input(None::<&str>).ok();
-                        ohlcv.and_then(|d| indicators::atr(&d.high, &d.low, &d.close, p).ok().map(|a| a.into_raw_vec_and_offset().0))
+                        ohlcv.and_then(|d| {
+                            indicators::atr(&d.high, &d.low, &d.close, p)
+                                .ok()
+                                .map(|a| a.into_raw_vec_and_offset().0)
+                        })
                     }
                     other => {
-                        eprintln!("Unknown sweep indicator: {other}. Available: sma, ema, wma, rsi, atr");
+                        eprintln!(
+                            "Unknown sweep indicator: {other}. Available: sma, ema, wma, rsi, atr"
+                        );
                         std::process::exit(1);
                     }
                 };
@@ -941,10 +1435,18 @@ fn run_sweep(
             let mut p = period_min;
             while p <= period_max {
                 let vals = match indicator {
-                    "sma" => moving_avg::sma(&data, p).ok().map(|a| a.into_raw_vec_and_offset().0),
-                    "ema" => moving_avg::ema(&data, p).ok().map(|a| a.into_raw_vec_and_offset().0),
-                    "wma" => moving_avg::wma(&data, p).ok().map(|a| a.into_raw_vec_and_offset().0),
-                    "rsi" => indicators::rsi(&data, p).ok().map(|a| a.into_raw_vec_and_offset().0),
+                    "sma" => moving_avg::sma(&data, p)
+                        .ok()
+                        .map(|a| a.into_raw_vec_and_offset().0),
+                    "ema" => moving_avg::ema(&data, p)
+                        .ok()
+                        .map(|a| a.into_raw_vec_and_offset().0),
+                    "wma" => moving_avg::wma(&data, p)
+                        .ok()
+                        .map(|a| a.into_raw_vec_and_offset().0),
+                    "rsi" => indicators::rsi(&data, p)
+                        .ok()
+                        .map(|a| a.into_raw_vec_and_offset().0),
                     _ => None,
                 };
                 let v = vals.as_deref().map(compute_metric).unwrap_or(f64::NAN);
@@ -964,12 +1466,7 @@ fn run_sweep(
     }
 }
 
-fn run_chart(
-    input: &PathBuf,
-    chart_format: &str,
-    title: Option<&str>,
-    output: Option<String>,
-) {
+fn run_chart(input: &PathBuf, chart_format: &str, title: Option<&str>, output: Option<String>) {
     use finkit_visualization::config::ChartConfig;
     use finkit_visualization::data::KlineData;
     use finkit_visualization::renderer::{ChartRenderer, Renderer};
@@ -979,9 +1476,7 @@ fn run_chart(
         cfg.title = t.to_string();
     }
     let renderer = ChartRenderer::new(cfg);
-    let dates: Vec<String> = (0..ohlcv.close.len())
-        .map(|i| format!("bar_{i}"))
-        .collect();
+    let dates: Vec<String> = (0..ohlcv.close.len()).map(|i| format!("bar_{i}")).collect();
     let kline = KlineData::new(
         dates,
         ohlcv.open.clone(),
@@ -991,9 +1486,7 @@ fn run_chart(
         ohlcv.volume.clone(),
     );
     let payload = match chart_format {
-        "json" => {
-            renderer.render(&kline, &[]).expect("render failed")
-        }
+        "json" => renderer.render(&kline, &[]).expect("render failed"),
         "svg" | "html" => {
             // Generate a minimal SVG with the closing line as a quick visual preview.
             let mut svg = String::new();
@@ -1016,10 +1509,14 @@ fn run_chart(
             }
             let mut points = String::new();
             for (i, v) in closes.iter().enumerate() {
-                if v.is_nan() { continue; }
+                if v.is_nan() {
+                    continue;
+                }
                 let x = (i as f64 / (closes.len().max(1) - 1).max(1) as f64) * w as f64;
                 let y = h as f64 - ((v - min_v) / range) * h as f64;
-                if i > 0 { points.push(' '); }
+                if i > 0 {
+                    points.push(' ');
+                }
                 points.push_str(&format!("{:.2},{:.2}", x, y));
             }
             svg.push_str(&format!(
@@ -1063,76 +1560,174 @@ fn run_calc(
         "SMA" => {
             let ohlcv = read_ohlcv_input(Some(input)).expect("Failed to read input");
             let result = moving_avg::sma(&ohlcv.close, period).expect("SMA calculation failed");
-            output_single("sma", result.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"), &format, &output);
+            output_single(
+                "sma",
+                result
+                    .as_slice()
+                    .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"),
+                &format,
+                &output,
+            );
         }
         "EMA" => {
             let ohlcv = read_ohlcv_input(Some(input)).expect("Failed to read input");
             let result = moving_avg::ema(&ohlcv.close, period).expect("EMA calculation failed");
-            output_single("ema", result.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"), &format, &output);
+            output_single(
+                "ema",
+                result
+                    .as_slice()
+                    .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"),
+                &format,
+                &output,
+            );
         }
         "WMA" => {
             let ohlcv = read_ohlcv_input(Some(input)).expect("Failed to read input");
             let result = moving_avg::wma(&ohlcv.close, period).expect("WMA calculation failed");
-            output_single("wma", result.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"), &format, &output);
+            output_single(
+                "wma",
+                result
+                    .as_slice()
+                    .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"),
+                &format,
+                &output,
+            );
         }
         "RSI" => {
             let ohlcv = read_ohlcv_input(Some(input)).expect("Failed to read input");
             let result = indicators::rsi(&ohlcv.close, period).expect("RSI calculation failed");
-            output_single("rsi", result.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"), &format, &output);
+            output_single(
+                "rsi",
+                result
+                    .as_slice()
+                    .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"),
+                &format,
+                &output,
+            );
         }
         "MACD" => {
             let ohlcv = read_ohlcv_input(Some(input)).expect("Failed to read input");
-            let result = indicators::macd(&ohlcv.close, fast, slow, signal).expect("MACD calculation failed");
-            let macd_s = result.macd.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
-            let signal_s = result.signal.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
-            let hist_s = result.hist.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
-            output_multi(&["macd", "signal", "histogram"], &[macd_s, signal_s, hist_s], &format, &output);
+            let result = indicators::macd(&ohlcv.close, fast, slow, signal)
+                .expect("MACD calculation failed");
+            let macd_s = result
+                .macd
+                .as_slice()
+                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
+            let signal_s = result
+                .signal
+                .as_slice()
+                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
+            let hist_s = result
+                .hist
+                .as_slice()
+                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
+            output_multi(
+                &["macd", "signal", "histogram"],
+                &[macd_s, signal_s, hist_s],
+                &format,
+                &output,
+            );
         }
         "ATR" => {
             let ohlcv = read_ohlcv_input(Some(input)).expect("Failed to read input");
             let result = indicators::atr(&ohlcv.high, &ohlcv.low, &ohlcv.close, period)
                 .expect("ATR calculation failed");
-            output_single("atr", result.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"), &format, &output);
+            output_single(
+                "atr",
+                result
+                    .as_slice()
+                    .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"),
+                &format,
+                &output,
+            );
         }
         "BBANDS" | "BOLL" => {
             let ohlcv = read_ohlcv_input(Some(input)).expect("Failed to read input");
             let result = indicators::bbands(&ohlcv.close, period, stddev, stddev)
                 .expect("BBANDS calculation failed");
-            let upper = result.upper.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
-            let middle = result.middle.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
-            let lower = result.lower.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
-            output_multi(&["upper", "middle", "lower"], &[upper, middle, lower], &format, &output);
+            let upper = result
+                .upper
+                .as_slice()
+                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
+            let middle = result
+                .middle
+                .as_slice()
+                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
+            let lower = result
+                .lower
+                .as_slice()
+                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
+            output_multi(
+                &["upper", "middle", "lower"],
+                &[upper, middle, lower],
+                &format,
+                &output,
+            );
         }
         "ADX" => {
             let ohlcv = read_ohlcv_input(Some(input)).expect("Failed to read input");
             let result = indicators::adx(&ohlcv.high, &ohlcv.low, &ohlcv.close, period)
                 .expect("ADX calculation failed");
-            output_single("adx", result.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"), &format, &output);
+            output_single(
+                "adx",
+                result
+                    .as_slice()
+                    .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"),
+                &format,
+                &output,
+            );
         }
         "CCI" => {
             let ohlcv = read_ohlcv_input(Some(input)).expect("Failed to read input");
             let result = indicators::cci(&ohlcv.high, &ohlcv.low, &ohlcv.close, period)
                 .expect("CCI calculation failed");
-            output_single("cci", result.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"), &format, &output);
+            output_single(
+                "cci",
+                result
+                    .as_slice()
+                    .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"),
+                &format,
+                &output,
+            );
         }
         "OBV" => {
             let ohlcv = read_ohlcv_input(Some(input)).expect("Failed to read input");
-            let result = indicators::obv(&ohlcv.close, &ohlcv.volume)
-                .expect("OBV calculation failed");
-            output_single("obv", result.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"), &format, &output);
+            let result =
+                indicators::obv(&ohlcv.close, &ohlcv.volume).expect("OBV calculation failed");
+            output_single(
+                "obv",
+                result
+                    .as_slice()
+                    .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"),
+                &format,
+                &output,
+            );
         }
         "WILLR" => {
             let ohlcv = read_ohlcv_input(Some(input)).expect("Failed to read input");
             let result = indicators::willr(&ohlcv.high, &ohlcv.low, &ohlcv.close, period)
                 .expect("WILLR calculation failed");
-            output_single("willr", result.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"), &format, &output);
+            output_single(
+                "willr",
+                result
+                    .as_slice()
+                    .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)"),
+                &format,
+                &output,
+            );
         }
         "STOCH" => {
             let ohlcv = read_ohlcv_input(Some(input)).expect("Failed to read input");
             let result = indicators::stoch(&ohlcv.high, &ohlcv.low, &ohlcv.close, period, 3, 3)
                 .expect("STOCH calculation failed");
-            let k = result.k.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
-            let d = result.d.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
+            let k = result
+                .k
+                .as_slice()
+                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
+            let d = result
+                .d
+                .as_slice()
+                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
             output_multi(&["k", "d"], &[k, d], &format, &output);
         }
         other => {
@@ -1159,8 +1754,15 @@ fn run_template(
                 OutputFormat::Json => {
                     let mut parts = Vec::new();
                     for c in categories {
-                        let items: Vec<String> = templates.get_by_category(&c).iter()
-                            .map(|t| format!("{{\"name\":\"{}\",\"description\":\"{}\"}}", t.name, t.description))
+                        let items: Vec<String> = templates
+                            .get_by_category(&c)
+                            .iter()
+                            .map(|t| {
+                                format!(
+                                    "{{\"name\":\"{}\",\"description\":\"{}\"}}",
+                                    t.name, t.description
+                                )
+                            })
                             .collect();
                         parts.push(format!("\"{:?}\":[{}]", c, items.join(",")));
                     }
@@ -1188,15 +1790,24 @@ fn run_template(
             let results = engine.search_templates(kw);
             let text = match format {
                 OutputFormat::Json => {
-                    let items: Vec<String> = results.iter().map(|t|
-                        format!("{{\"name\":\"{}\",\"description\":\"{}\",\"category\":\"{:?}\"}}", t.name, t.description, t.category)
-                    ).collect();
+                    let items: Vec<String> = results
+                        .iter()
+                        .map(|t| {
+                            format!(
+                                "{{\"name\":\"{}\",\"description\":\"{}\",\"category\":\"{:?}\"}}",
+                                t.name, t.description, t.category
+                            )
+                        })
+                        .collect();
                     format!("[{}]", items.join(","))
                 }
                 _ => {
                     let mut out = String::new();
                     for t in results {
-                        out.push_str(&format!("- {} [{:?}]: {}\n", t.name, t.category, t.description));
+                        out.push_str(&format!(
+                            "- {} [{:?}]: {}\n",
+                            t.name, t.category, t.description
+                        ));
                     }
                     out
                 }
@@ -1260,7 +1871,9 @@ fn run_template(
             );
             match engine.eval(&source.0, &mut ctx) {
                 Ok(result) => {
-                    let vals = result.as_slice().expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
+                    let vals = result
+                        .as_slice()
+                        .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)");
                     output_single(&source.1, vals, &format, &output);
                 }
                 Err(e) => {

@@ -270,21 +270,27 @@ pub fn trange(high: &[f64], low: &[f64], close: &[f64]) -> Result<Array1<f64>> {
     let mut output = Array1::zeros(len);
 
     output[0] = high[0] - low[0];
-    
+
     // SIMD-accelerated true range calculation
     // Create prev_close slice (close[0..len-1]) for SIMD kernel
     let prev_close = &close[..len - 1];
     let high_slice = &high[1..];
     let low_slice = &low[1..];
     let output_slice = &mut output.as_slice_mut().unwrap()[1..];
-    
+
     crate::math::simd_ops::simd_true_range(high_slice, low_slice, prev_close, output_slice);
 
     Ok(output)
 }
 
 /// NATR zero-copy variant: writes result into pre-allocated slice.
-pub fn natr_into(high: &[f64], low: &[f64], close: &[f64], period: usize, output: &mut [f64]) -> Result<()> {
+pub fn natr_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    period: usize,
+    output: &mut [f64],
+) -> Result<()> {
     let result = natr(high, low, close, period)?;
     if output.len() != high.len() {
         return Err(TaError::InvalidParameter {
@@ -356,7 +362,12 @@ mod tests {
 }
 
 // Zero-copy `_into` variant (B4 / TASK-315)
-pub fn trange_into(high: &[f64], low: &[f64], close: &[f64], output: &mut [f64]) -> crate::error::Result<()> {
+pub fn trange_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    output: &mut [f64],
+) -> crate::error::Result<()> {
     let result = trange(high, low, close)?;
     if result.len() != output.len() {
         return Err(crate::error::TaError::InvalidParameter {

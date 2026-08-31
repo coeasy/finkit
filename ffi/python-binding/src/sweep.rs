@@ -1,9 +1,9 @@
 //! Python bindings for parameter sweep API.
 
-use pyo3::prelude::*;
 use finkit::indicators::sweep::{ema_sweep, rsi_sweep, sma_sweep};
 use finkit::indicators::sweep_engine::{ParamRange, SweepEngine};
 use finkit::indicators::sweepable::{EmaSweepable, RsiSweepable, SmaSweepable};
+use pyo3::prelude::*;
 
 /// Sweep SMA across multiple periods.
 ///
@@ -59,8 +59,8 @@ pub fn sweep_engine(
         .collect();
 
     let engine = SweepEngine::new();
-    let result = py.allow_threads(|| {
-        match indicator.to_lowercase().as_str() {
+    let result = py
+        .allow_threads(|| match indicator.to_lowercase().as_str() {
             "sma" => engine.run(&SmaSweepable, &data, &param_ranges),
             "ema" => engine.run(&EmaSweepable, &data, &param_ranges),
             "rsi" => engine.run(&RsiSweepable, &data, &param_ranges),
@@ -68,9 +68,8 @@ pub fn sweep_engine(
                 name: "indicator".to_string(),
                 constraint: format!("one of 'sma','ema','rsi', got '{other}'"),
             }),
-        }
-    })
-    .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+        })
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
 
     let dict = pyo3::types::PyDict::new(py);
     dict.set_item("indicator", result.indicator_name)?;

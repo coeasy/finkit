@@ -6,23 +6,22 @@
 use std::ffi::CString;
 use std::os::raw::{c_char, c_double, c_int};
 
-use ndarray::Array1;
-use serde_json;
 use finkit::formula::{FormulaContext, FormulaEngine};
-use finkit_ffi_common::panic::*;
 use finkit::indicators::{
     ad, adosc, adx, aroon, atr, bbands, beta, cci, correlation, dema, ema, ht_dcperiod, ht_dcphase,
     ht_phasor, ht_sine, ht_trendline, ht_trendmode, kama, linear_reg, macd, mom, natr, obv, roc,
     rsi, sma, std_dev, stoch, t3, tema, trange, tsf, willr, wma, zscore,
 };
+use finkit_ffi_common::panic::*;
+use ndarray::Array1;
+use serde_json;
 
 // Leak-detection allocator: installed only for the test binary so the FFI
 // ownership contract (alloc via `ta_*` + free via `ta_free_*`) can be checked
 // for heap growth. See `finkit_ffi_common::leak`.
 #[cfg(test)]
 #[global_allocator]
-static TEST_ALLOC: finkit_ffi_common::leak::CountingAlloc =
-    finkit_ffi_common::leak::CountingAlloc;
+static TEST_ALLOC: finkit_ffi_common::leak::CountingAlloc = finkit_ffi_common::leak::CountingAlloc;
 
 #[repr(C)]
 pub struct TaResult {
@@ -98,7 +97,6 @@ fn validate_input(input: *const c_double, length: c_int) -> Option<&'static [f64
 
 // ============ Moving Averages ============
 
-
 #[cfg(test)]
 #[no_mangle]
 pub extern "C" fn ta_ffi_panic_test() -> *mut TaResult {
@@ -110,8 +108,8 @@ include!("generated.rs");
 #[cfg(test)]
 mod tests {
     use super::*;
-    use finkit::indicators::sma;
     use finkit::indicators::rsi;
+    use finkit::indicators::sma;
 
     #[test]
     fn export_panic_test_returns_null_not_abort() {
@@ -157,7 +155,12 @@ mod tests {
             let src = std::ffi::CString::new("close").unwrap();
             let fe = crate::ta_formula_eval(
                 src.as_ptr(),
-                input.as_ptr(), input.as_ptr(), input.as_ptr(), input.as_ptr(), input.as_ptr(), n,
+                input.as_ptr(),
+                input.as_ptr(),
+                input.as_ptr(),
+                input.as_ptr(),
+                input.as_ptr(),
+                n,
             );
             crate::ta_free_string(fe);
         }
@@ -175,9 +178,17 @@ mod tests {
             let src = std::ffi::CString::new("close").unwrap();
             let fe = crate::ta_formula_eval(
                 src.as_ptr(),
-                input.as_ptr(), input.as_ptr(), input.as_ptr(), input.as_ptr(), input.as_ptr(), n,
+                input.as_ptr(),
+                input.as_ptr(),
+                input.as_ptr(),
+                input.as_ptr(),
+                input.as_ptr(),
+                n,
             );
-            assert!(!fe.is_null(), "ta_formula_eval must return a non-null CString to free");
+            assert!(
+                !fe.is_null(),
+                "ta_formula_eval must return a non-null CString to free"
+            );
             crate::ta_free_string(fe);
         }
 
@@ -187,49 +198,17 @@ mod tests {
             growth < 256 * 1024,
             "heap grew by {} bytes across 400 alloc/free cycles (baseline={}, after={}); \
              a forgotten ta_free_* would leak ~{} bytes/iter",
-            after - baseline, baseline, after, (after - baseline).max(0) as f64 / 400.0
+            after - baseline,
+            baseline,
+            after,
+            (after - baseline).max(0) as f64 / 400.0
         );
     }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 // ============ Momentum Indicators ============
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 // ============ Volume Indicators ============
-
-
-
-
 
 #[no_mangle]
 pub extern "C" fn ta_ad_osc(
@@ -264,35 +243,9 @@ pub extern "C" fn ta_ad_osc(
 
 // ============ Volatility Indicators ============
 
-
-
-
-
-
-
-
-
 // ============ Hilbert Transform Indicators ============
 
-
-
-
-
-
-
-
-
-
-
-
-
 // ============ Statistical Functions ============
-
-
-
-
-
-
 
 #[no_mangle]
 pub extern "C" fn ta_std_dev(
@@ -310,10 +263,6 @@ pub extern "C" fn ta_std_dev(
         Err(e) => make_error_result(&format!("{}", e)),
     }
 }
-
-
-
-
 
 #[no_mangle]
 pub extern "C" fn ta_version() -> *const c_char {
@@ -371,10 +320,19 @@ pub extern "C" fn ta_formula_eval(
         Ok(_final_value) => {
             let mut map = serde_json::Map::new();
             for (name, value) in &ctx.variables {
-                let arr: Vec<Option<f64>> = value.iter().map(|v| if v.is_nan() { None } else { Some(*v) }).collect();
-                map.insert(name.to_string(), serde_json::Value::Array(arr.into_iter().map(|v| serde_json::json!(v)).collect()));
+                let arr: Vec<Option<f64>> = value
+                    .iter()
+                    .map(|v| if v.is_nan() { None } else { Some(*v) })
+                    .collect();
+                map.insert(
+                    name.to_string(),
+                    serde_json::Value::Array(
+                        arr.into_iter().map(|v| serde_json::json!(v)).collect(),
+                    ),
+                );
             }
-            let json_str = serde_json::to_string(&serde_json::Value::Object(map)).unwrap_or_else(|_| "{}".to_string());
+            let json_str = serde_json::to_string(&serde_json::Value::Object(map))
+                .unwrap_or_else(|_| "{}".to_string());
             match CString::new(json_str) {
                 Ok(c_str) => c_str.into_raw(),
                 Err(_) => {
@@ -490,7 +448,6 @@ pub extern "C" fn ta_formula_eval_draw(
     volume: *const c_double,
     length: c_int,
 ) -> *mut c_char {
-
     if source.is_null()
         || open.is_null()
         || high.is_null()
@@ -627,9 +584,7 @@ pub extern "C" fn ta_formula_eval_debug(
 }
 
 #[no_mangle]
-pub extern "C" fn ta_formula_get_template(
-    name: *const c_char,
-) -> *mut c_char {
+pub extern "C" fn ta_formula_get_template(name: *const c_char) -> *mut c_char {
     use finkit::formula::FormulaEngine;
 
     if name.is_null() {
@@ -665,9 +620,7 @@ pub extern "C" fn ta_formula_get_template(
 }
 
 #[no_mangle]
-pub extern "C" fn ta_formula_search_templates(
-    keyword: *const c_char,
-) -> *mut c_char {
+pub extern "C" fn ta_formula_search_templates(keyword: *const c_char) -> *mut c_char {
     use finkit::formula::FormulaEngine;
 
     if keyword.is_null() {
@@ -716,23 +669,11 @@ pub extern "C" fn ta_formula_list_categories() -> *mut c_char {
 // ta_free_cstring.
 // ============================================================================
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 fn err_cstr<E: std::fmt::Display>(msg: E) -> *mut c_char {
     let s = format!("{{\"error\":\"{}\"}}", msg);
-    CString::new(s).map(|c| c.into_raw()).unwrap_or(std::ptr::null_mut())
+    CString::new(s)
+        .map(|c| c.into_raw())
+        .unwrap_or(std::ptr::null_mut())
 }
 
 #[no_mangle]
@@ -802,10 +743,19 @@ pub extern "C" fn ta_formula_eval_zc_exec(
         Ok(_final_value) => {
             let mut map = serde_json::Map::new();
             for (name, value) in &ctx.variables {
-                let arr: Vec<Option<f64>> = value.iter().map(|v| if v.is_nan() { None } else { Some(*v) }).collect();
-                map.insert(name.to_string(), serde_json::Value::Array(arr.into_iter().map(|v| serde_json::json!(v)).collect()));
+                let arr: Vec<Option<f64>> = value
+                    .iter()
+                    .map(|v| if v.is_nan() { None } else { Some(*v) })
+                    .collect();
+                map.insert(
+                    name.to_string(),
+                    serde_json::Value::Array(
+                        arr.into_iter().map(|v| serde_json::json!(v)).collect(),
+                    ),
+                );
             }
-            let json_str = serde_json::to_string(&serde_json::Value::Object(map)).unwrap_or_else(|_| "{}".to_string());
+            let json_str = serde_json::to_string(&serde_json::Value::Object(map))
+                .unwrap_or_else(|_| "{}".to_string());
             match CString::new(json_str) {
                 Ok(c_str) => c_str.into_raw(),
                 Err(_) => {

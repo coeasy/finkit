@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
 
 /// Streaming Anchored VWAP
 ///
@@ -15,7 +15,9 @@ pub struct StreamingAnchoredVwap {
 }
 
 impl Default for StreamingAnchoredVwap {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl StreamingAnchoredVwap {
@@ -58,16 +60,26 @@ impl StreamingIndicator<&dyn Ohlcv> for StreamingAnchoredVwap {
         self.anchor();
     }
 
-    fn is_ready(&self) -> bool { self.count >= 1 }
+    fn is_ready(&self) -> bool {
+        self.count >= 1
+    }
 
     impl_standard_methods!();
 }
 
 impl IndicatorMeta for StreamingAnchoredVwap {
-    fn name() -> &'static str { "AnchoredVWAP" }
-    fn category() -> &'static str { "volume" }
-    fn description() -> &'static str { "Anchored Volume Weighted Average Price" }
-    fn warm_up_period(&self) -> usize { 1 }
+    fn name() -> &'static str {
+        "AnchoredVWAP"
+    }
+    fn category() -> &'static str {
+        "volume"
+    }
+    fn description() -> &'static str {
+        "Anchored Volume Weighted Average Price"
+    }
+    fn warm_up_period(&self) -> usize {
+        1
+    }
 }
 
 #[cfg(test)]
@@ -125,10 +137,18 @@ mod tests {
     #[test]
     fn test_streaming_vs_batch_convergence() {
         let n = 50;
-        let highs: Vec<f64> = (0..n).map(|i| 50.0 + (i as f64 * 0.1).sin() * 5.0 + 2.0).collect();
-        let lows: Vec<f64> = (0..n).map(|i| 50.0 + (i as f64 * 0.1).sin() * 5.0 - 2.0).collect();
-        let closes: Vec<f64> = (0..n).map(|i| 50.0 + (i as f64 * 0.1).sin() * 5.0).collect();
-        let volumes: Vec<f64> = (0..n).map(|i| 100.0 + (i as f64 * 0.2).cos() * 50.0).collect();
+        let highs: Vec<f64> = (0..n)
+            .map(|i| 50.0 + (i as f64 * 0.1).sin() * 5.0 + 2.0)
+            .collect();
+        let lows: Vec<f64> = (0..n)
+            .map(|i| 50.0 + (i as f64 * 0.1).sin() * 5.0 - 2.0)
+            .collect();
+        let closes: Vec<f64> = (0..n)
+            .map(|i| 50.0 + (i as f64 * 0.1).sin() * 5.0)
+            .collect();
+        let volumes: Vec<f64> = (0..n)
+            .map(|i| 100.0 + (i as f64 * 0.2).cos() * 50.0)
+            .collect();
 
         let batch = crate::indicators::anchored_vwap(&highs, &lows, &closes, &volumes, 0).unwrap();
 

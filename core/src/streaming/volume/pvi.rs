@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::streaming::Ohlcv;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -44,7 +44,11 @@ impl StreamingIndicator<&dyn Ohlcv, f64> for StreamingPvi {
             return result;
         }
 
-        if close.is_nan() || self.prev_close.is_nan() || volume.is_nan() || self.prev_volume.is_nan() {
+        if close.is_nan()
+            || self.prev_close.is_nan()
+            || volume.is_nan()
+            || self.prev_volume.is_nan()
+        {
             self.last_value = None;
             return None;
         }
@@ -76,10 +80,18 @@ impl StreamingIndicator<&dyn Ohlcv, f64> for StreamingPvi {
 }
 
 impl IndicatorMeta for StreamingPvi {
-    fn name() -> &'static str { "PVI" }
-    fn category() -> &'static str { "volume" }
-    fn description() -> &'static str { "Positive Volume Index" }
-    fn warm_up_period(&self) -> usize { 1 }
+    fn name() -> &'static str {
+        "PVI"
+    }
+    fn category() -> &'static str {
+        "volume"
+    }
+    fn description() -> &'static str {
+        "Positive Volume Index"
+    }
+    fn warm_up_period(&self) -> usize {
+        1
+    }
 }
 
 #[cfg(test)]
@@ -91,11 +103,17 @@ mod tests {
     #[test]
     fn test_streaming_pvi_basic() {
         let mut pvi = StreamingPvi::new();
-        let v0 = pvi.next(&OhlcvBar::new(10.0, 12.0, 9.0, 10.0, 1000.0)).unwrap();
+        let v0 = pvi
+            .next(&OhlcvBar::new(10.0, 12.0, 9.0, 10.0, 1000.0))
+            .unwrap();
         assert_relative_eq!(v0, 1000.0, epsilon = 1e-10);
-        let v1 = pvi.next(&OhlcvBar::new(11.0, 13.0, 10.0, 11.0, 1100.0)).unwrap();
+        let v1 = pvi
+            .next(&OhlcvBar::new(11.0, 13.0, 10.0, 11.0, 1100.0))
+            .unwrap();
         assert_relative_eq!(v1, 1100.0, epsilon = 1e-10);
-        let v2 = pvi.next(&OhlcvBar::new(10.5, 12.5, 9.5, 10.5, 900.0)).unwrap();
+        let v2 = pvi
+            .next(&OhlcvBar::new(10.5, 12.5, 9.5, 10.5, 900.0))
+            .unwrap();
         assert_relative_eq!(v2, 1100.0, epsilon = 1e-10);
     }
 

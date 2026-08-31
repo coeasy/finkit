@@ -1,9 +1,9 @@
-use numpy::PyReadonlyArray1;
-use pyo3::prelude::*;
 use finkit::transforms::{
     Diff, DiffN, LogReturn, MinMaxScaler, PctChange, PercentileRank, Pipeline, Rank, RollingMean,
     RollingStd, RollingSum, StandardScaler, Transform, ZScore,
 };
+use numpy::PyReadonlyArray1;
+use pyo3::prelude::*;
 
 #[pyclass(name = "Pipeline")]
 pub struct PyPipeline {
@@ -91,11 +91,7 @@ impl PyPipeline {
         slf
     }
 
-    fn transform(
-        &self,
-        py: Python<'_>,
-        data: PyReadonlyArray1<'_, f64>,
-    ) -> PyResult<Vec<f64>> {
+    fn transform(&self, py: Python<'_>, data: PyReadonlyArray1<'_, f64>) -> PyResult<Vec<f64>> {
         let slice = data
             .as_slice()
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
@@ -104,10 +100,7 @@ impl PyPipeline {
 }
 
 #[pyfunction]
-pub fn transform_log_return(
-    py: Python<'_>,
-    data: PyReadonlyArray1<'_, f64>,
-) -> PyResult<Vec<f64>> {
+pub fn transform_log_return(py: Python<'_>, data: PyReadonlyArray1<'_, f64>) -> PyResult<Vec<f64>> {
     let slice = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
@@ -115,10 +108,7 @@ pub fn transform_log_return(
 }
 
 #[pyfunction]
-pub fn transform_zscore(
-    py: Python<'_>,
-    data: PyReadonlyArray1<'_, f64>,
-) -> PyResult<Vec<f64>> {
+pub fn transform_zscore(py: Python<'_>, data: PyReadonlyArray1<'_, f64>) -> PyResult<Vec<f64>> {
     let slice = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
@@ -126,10 +116,7 @@ pub fn transform_zscore(
 }
 
 #[pyfunction]
-pub fn transform_rank(
-    py: Python<'_>,
-    data: PyReadonlyArray1<'_, f64>,
-) -> PyResult<Vec<f64>> {
+pub fn transform_rank(py: Python<'_>, data: PyReadonlyArray1<'_, f64>) -> PyResult<Vec<f64>> {
     let slice = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
@@ -137,10 +124,7 @@ pub fn transform_rank(
 }
 
 #[pyfunction]
-pub fn transform_diff(
-    py: Python<'_>,
-    data: PyReadonlyArray1<'_, f64>,
-) -> PyResult<Vec<f64>> {
+pub fn transform_diff(py: Python<'_>, data: PyReadonlyArray1<'_, f64>) -> PyResult<Vec<f64>> {
     let slice = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;

@@ -1,6 +1,6 @@
-use crate::{impl_indicator_meta, impl_standard_methods};
 use crate::streaming::traits::{Ohlcv, StreamingIndicator};
 use crate::utils::true_range;
+use crate::{impl_indicator_meta, impl_standard_methods};
 
 #[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -70,7 +70,10 @@ impl StreamingAtr {
 
 impl StreamingIndicator<(f64, f64, f64)> for StreamingAtr {
     #[inline]
-    #[cfg_attr(feature = "tracing", tracing::instrument(level = "trace", skip(self, input)))]
+    #[cfg_attr(
+        feature = "tracing",
+        tracing::instrument(level = "trace", skip(self, input))
+    )]
     fn next(&mut self, input: (f64, f64, f64)) -> Option<f64> {
         crate::streaming_measure!("atr", self.count, {
             let (high, low, close) = input;
@@ -171,13 +174,21 @@ mod tests {
 
         let mut atr = StreamingAtr::new(3);
         for (i, &(h, l, c)) in bars.iter().enumerate() {
-            atr.compute_bar(&OhlcvBar::new_with_time(0.0, h, l, c, 0.0, (i + 1) as i64 * 1000));
+            atr.compute_bar(&OhlcvBar::new_with_time(
+                0.0,
+                h,
+                l,
+                c,
+                0.0,
+                (i + 1) as i64 * 1000,
+            ));
         }
 
         // Repaint bar 5 three times
         atr.compute_bar(&OhlcvBar::new_with_time(0.0, 50.0, 10.0, 30.0, 0.0, 5000));
         atr.compute_bar(&OhlcvBar::new_with_time(0.0, 60.0, 5.0, 25.0, 0.0, 5000));
-        let result_repaint = atr.compute_bar(&OhlcvBar::new_with_time(0.0, 16.0, 14.0, 15.0, 0.0, 5000));
+        let result_repaint =
+            atr.compute_bar(&OhlcvBar::new_with_time(0.0, 16.0, 14.0, 15.0, 0.0, 5000));
 
         // Clean path
         let mut atr_clean = StreamingAtr::new(3);

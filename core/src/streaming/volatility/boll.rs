@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -93,7 +93,10 @@ impl StreamingBoll {
 
 impl StreamingIndicator<f64, BollOutput> for StreamingBoll {
     #[inline]
-    #[cfg_attr(feature = "tracing", tracing::instrument(level = "trace", skip(self, input)))]
+    #[cfg_attr(
+        feature = "tracing",
+        tracing::instrument(level = "trace", skip(self, input))
+    )]
     fn next(&mut self, input: f64) -> Option<BollOutput> {
         crate::streaming_measure!("bbands", self.count, {
             self.count += 1;
@@ -149,9 +152,7 @@ impl StreamingIndicator<f64, BollOutput> for StreamingBoll {
         self.len >= self.period
     }
 
-        impl_standard_methods!(output = BollOutput);
-
-
+    impl_standard_methods!(output = BollOutput);
 }
 
 impl IndicatorMeta for StreamingBoll {
@@ -224,7 +225,8 @@ mod tests {
 
         boll.compute_bar(&OhlcvBar::new_with_time(0.0, 0.0, 0.0, 10.0, 0.0, 6000));
         boll.compute_bar(&OhlcvBar::new_with_time(0.0, 0.0, 0.0, 20.0, 0.0, 6000));
-        let result_repaint = boll.compute_bar(&OhlcvBar::new_with_time(0.0, 0.0, 0.0, 3.0, 0.0, 6000));
+        let result_repaint =
+            boll.compute_bar(&OhlcvBar::new_with_time(0.0, 0.0, 0.0, 3.0, 0.0, 6000));
 
         let mut boll_clean = StreamingBoll::new(5, 2.0, 2.0);
         boll_clean.next(1.0);

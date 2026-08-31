@@ -1,6 +1,6 @@
+use crate::impl_standard_methods;
 use crate::streaming::overlap::ema::StreamingEma;
 use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
-use crate::impl_standard_methods;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -64,9 +64,7 @@ impl StreamingIndicator<f64, ExpmaOutput> for StreamingExpma {
         self.ema_short.is_ready() && self.ema_long.is_ready()
     }
 
-        impl_standard_methods!(output = ExpmaOutput);
-
-
+    impl_standard_methods!(output = ExpmaOutput);
 }
 
 impl IndicatorMeta for StreamingExpma {

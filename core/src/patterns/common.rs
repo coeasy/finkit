@@ -813,7 +813,11 @@ mod tests {
         // idx=4 (val=3, neighbours 2/1) and idx=6 (val=3, neighbours 1/1) form clean peaks.
         let data = vec![3.0, 1.0, f64::NAN, 2.0, 3.0, 1.0, 3.0, 1.0];
         let peaks = detect_peaks(&data, 1, 0.0, None);
-        assert_eq!(peaks, vec![4, 6], "idx=4 and idx=6 (unaffected by NaN) should be emitted");
+        assert_eq!(
+            peaks,
+            vec![4, 6],
+            "idx=4 and idx=6 (unaffected by NaN) should be emitted"
+        );
     }
 
     #[test]

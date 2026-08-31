@@ -82,7 +82,12 @@ impl StreamingIndicator<&dyn Ohlcv> for StreamingVwma {
     impl_standard_methods!();
 }
 
-impl_indicator_meta!(StreamingVwma, "VWMA", "overlap", "Volume Weighted Moving Average");
+impl_indicator_meta!(
+    StreamingVwma,
+    "VWMA",
+    "overlap",
+    "Volume Weighted Moving Average"
+);
 
 #[cfg(test)]
 mod tests {

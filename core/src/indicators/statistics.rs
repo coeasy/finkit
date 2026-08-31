@@ -790,10 +790,9 @@ pub fn skewness(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
             sum_cu += new_v * new_v * new_v - old * old * old;
         }
         let mean = sum * inv_n;
-        let m2 = sum_sq * inv_n - mean * mean;            // 2nd central moment
-        let m3 = sum_cu * inv_n_pop - 3.0 * mean * sum_sq * inv_n_pop
-                 + 2.0 * mean * mean * mean;             // 3rd central moment
-        // skewness = m3 / m2^1.5
+        let m2 = sum_sq * inv_n - mean * mean; // 2nd central moment
+        let m3 = sum_cu * inv_n_pop - 3.0 * mean * sum_sq * inv_n_pop + 2.0 * mean * mean * mean; // 3rd central moment
+                                                                                                  // skewness = m3 / m2^1.5
         let denom = m2 * m2.sqrt();
         output[i] = if denom > 1e-15 { m3 / denom } else { 0.0 };
     }
@@ -863,10 +862,9 @@ pub fn kurtosis(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
         }
         let mean = sum * inv_n;
         let m2 = sum_sq * inv_n - mean * mean;
-        let m4 = sum_qu * inv_n_pop
-                 - 4.0 * mean * sum_cu * inv_n_pop
-                 + 6.0 * mean * mean * sum_sq * inv_n_pop
-                 - 3.0 * mean.powi(4);
+        let m4 = sum_qu * inv_n_pop - 4.0 * mean * sum_cu * inv_n_pop
+            + 6.0 * mean * mean * sum_sq * inv_n_pop
+            - 3.0 * mean.powi(4);
         // excess kurtosis = m4 / m2^2 - 3
         let denom = m2 * m2;
         output[i] = if denom > 1e-15 { m4 / denom - 3.0 } else { 0.0 };
@@ -1234,7 +1232,11 @@ mod tests {
             assert!(r[i].is_nan());
         }
         assert!(!r[4].is_nan());
-        assert!(r[4].abs() < 1e-9, "expected ~0 symmetric skew, got {}", r[4]);
+        assert!(
+            r[4].abs() < 1e-9,
+            "expected ~0 symmetric skew, got {}",
+            r[4]
+        );
     }
 
     #[test]

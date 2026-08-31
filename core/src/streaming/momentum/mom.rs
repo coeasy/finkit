@@ -1,5 +1,5 @@
-use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 
 #[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -25,15 +25,22 @@ impl StreamingMom {
     }
 
     #[inline]
-    fn cap(&self) -> usize { self.period + 1 }
+    fn cap(&self) -> usize {
+        self.period + 1
+    }
 
     #[inline]
-    fn oldest(&self) -> f64 { self.buf[self.head] }
+    fn oldest(&self) -> f64 {
+        self.buf[self.head]
+    }
 }
 
 impl StreamingIndicator for StreamingMom {
     #[inline]
-    #[cfg_attr(feature = "tracing", tracing::instrument(level = "trace", skip(self, input)))]
+    #[cfg_attr(
+        feature = "tracing",
+        tracing::instrument(level = "trace", skip(self, input))
+    )]
     fn next(&mut self, input: f64) -> Option<f64> {
         crate::streaming_measure!("mom", self.count, {
             self.count += 1;
@@ -65,16 +72,26 @@ impl StreamingIndicator for StreamingMom {
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { self.len > self.period }
+    fn is_ready(&self) -> bool {
+        self.len > self.period
+    }
 
     impl_standard_methods!();
 }
 
 impl IndicatorMeta for StreamingMom {
-    fn name() -> &'static str { "MOM" }
-    fn category() -> &'static str { "momentum" }
-    fn description() -> &'static str { "Momentum" }
-    fn warm_up_period(&self) -> usize { self.period + 1 }
+    fn name() -> &'static str {
+        "MOM"
+    }
+    fn category() -> &'static str {
+        "momentum"
+    }
+    fn description() -> &'static str {
+        "Momentum"
+    }
+    fn warm_up_period(&self) -> usize {
+        self.period + 1
+    }
 }
 
 #[cfg(test)]
@@ -98,7 +115,9 @@ mod tests {
     #[test]
     fn test_streaming_mom_reset() {
         let mut mom = StreamingMom::new(3);
-        for i in 0..10 { mom.next(i as f64); }
+        for i in 0..10 {
+            mom.next(i as f64);
+        }
         assert!(mom.is_ready());
         mom.reset();
         assert!(!mom.is_ready());
@@ -106,7 +125,9 @@ mod tests {
 
     #[test]
     fn test_streaming_vs_batch_convergence() {
-        let data: Vec<f64> = (0..50).map(|i| 50.0 + (i as f64 * 0.2).sin() * 10.0).collect();
+        let data: Vec<f64> = (0..50)
+            .map(|i| 50.0 + (i as f64 * 0.2).sin() * 10.0)
+            .collect();
         let period = 5;
         let batch = crate::indicators::momentum::mom(&data, period).unwrap();
         let mut streaming = StreamingMom::new(period);

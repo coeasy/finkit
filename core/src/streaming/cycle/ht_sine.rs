@@ -19,7 +19,10 @@ pub struct StreamingHtSine {
 
 impl StreamingHtSine {
     pub fn new() -> Self {
-        Self { state: HilbertState::new(), last_value: None }
+        Self {
+            state: HilbertState::new(),
+            last_value: None,
+        }
     }
 
     /// Returns (sine, lead_sine) tuple
@@ -34,7 +37,9 @@ impl StreamingHtSine {
 }
 
 impl Default for StreamingHtSine {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl StreamingIndicator for StreamingHtSine {
@@ -43,17 +48,34 @@ impl StreamingIndicator for StreamingHtSine {
         self.next_sine(input).map(|o| o.sine)
     }
 
-    fn reset(&mut self) { self.state.reset(); self.last_value = None; }
-    fn is_ready(&self) -> bool { self.state.count >= 32 }
-    fn count(&self) -> usize { self.state.count }
-    fn value(&self) -> Option<f64> { self.last_value }
+    fn reset(&mut self) {
+        self.state.reset();
+        self.last_value = None;
+    }
+    fn is_ready(&self) -> bool {
+        self.state.count >= 32
+    }
+    fn count(&self) -> usize {
+        self.state.count
+    }
+    fn value(&self) -> Option<f64> {
+        self.last_value
+    }
 }
 
 impl IndicatorMeta for StreamingHtSine {
-    fn name() -> &'static str { "HT_SINE" }
-    fn category() -> &'static str { "cycle" }
-    fn description() -> &'static str { "Hilbert Transform - Sine Wave" }
-    fn warm_up_period(&self) -> usize { 32 }
+    fn name() -> &'static str {
+        "HT_SINE"
+    }
+    fn category() -> &'static str {
+        "cycle"
+    }
+    fn description() -> &'static str {
+        "Hilbert Transform - Sine Wave"
+    }
+    fn warm_up_period(&self) -> usize {
+        32
+    }
 }
 
 #[cfg(test)]
@@ -61,7 +83,9 @@ mod tests {
     use super::*;
 
     fn sine_wave(n: usize, freq: f64, amp: f64, offset: f64) -> Vec<f64> {
-        (0..n).map(|i| amp * (i as f64 * freq).sin() + offset).collect()
+        (0..n)
+            .map(|i| amp * (i as f64 * freq).sin() + offset)
+            .collect()
     }
 
     #[test]
@@ -69,7 +93,9 @@ mod tests {
         let mut ht = StreamingHtSine::new();
         let data = sine_wave(100, 0.1, 1.0, 50.0);
         let mut last = None;
-        for &v in &data { last = ht.next_sine(v); }
+        for &v in &data {
+            last = ht.next_sine(v);
+        }
         let out = last.unwrap();
         assert!(out.sine >= -1.0 && out.sine <= 1.0);
         assert!(out.lead_sine >= -1.0 && out.lead_sine <= 1.0);
@@ -84,7 +110,9 @@ mod tests {
     #[test]
     fn test_streaming_ht_sine_reset() {
         let mut ht = StreamingHtSine::new();
-        for i in 0..50 { ht.next(i as f64); }
+        for i in 0..50 {
+            ht.next(i as f64);
+        }
         assert!(ht.is_ready());
         ht.reset();
         assert!(!ht.is_ready());

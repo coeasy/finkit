@@ -5,26 +5,29 @@
 use std::collections::HashMap;
 use std::os::raw::{c_char, c_double, c_int};
 
-use ndarray::Array1;
 use finkit::formula::{FormulaContext, FormulaEngine};
 use finkit::indicators;
 use finkit::math::moving_avg;
+use finkit_ffi_common::panic::*;
+use ndarray::Array1;
 use serde::Serialize;
 use std::ffi::CString;
-use finkit_ffi_common::panic::*;
 
 // Leak-detection allocator: installed only for the test binary so the FFI
 // ownership contract (alloc via `ta_*` + free via `ta_free_*`) can be checked
 // for heap growth. See `finkit_ffi_common::leak`.
 #[cfg(test)]
 #[global_allocator]
-static TEST_ALLOC: finkit_ffi_common::leak::CountingAlloc =
-    finkit_ffi_common::leak::CountingAlloc;
+static TEST_ALLOC: finkit_ffi_common::leak::CountingAlloc = finkit_ffi_common::leak::CountingAlloc;
 
 /// 将 `f64` 转为 JSON 友好的 `Option<f64>`，NaN/Inf 序列化为 `null`。
 #[inline]
 fn f64_to_json(v: f64) -> Option<f64> {
-    if v.is_finite() { Some(v) } else { None }
+    if v.is_finite() {
+        Some(v)
+    } else {
+        None
+    }
 }
 
 /// 将 `Array1<f64>` 转为 `Vec<Option<f64>>`。
@@ -84,7 +87,6 @@ pub extern "C" fn ta_free_cstring(s: *mut c_char) {
 // Overlap Studies
 // ============================================================================
 
-
 #[cfg(test)]
 #[no_mangle]
 pub extern "C" fn ta_ffi_panic_test() -> c_int {
@@ -96,8 +98,8 @@ include!("generated.rs");
 #[cfg(test)]
 mod tests {
     use super::*;
-    use finkit::math::moving_avg::sma;
     use finkit::indicators::momentum::rsi;
+    use finkit::math::moving_avg::sma;
 
     #[test]
     fn export_panic_test_returns_zero_not_abort() {
@@ -145,7 +147,12 @@ mod tests {
             let src = std::ffi::CString::new("close").unwrap().into_raw();
             let fe = crate::ta_formula_eval(
                 src,
-                input.as_ptr(), input.as_ptr(), input.as_ptr(), input.as_ptr(), input.as_ptr(), n,
+                input.as_ptr(),
+                input.as_ptr(),
+                input.as_ptr(),
+                input.as_ptr(),
+                input.as_ptr(),
+                n,
             );
             crate::ta_free_cstring(fe);
         }
@@ -155,9 +162,17 @@ mod tests {
             let src = std::ffi::CString::new("close").unwrap().into_raw();
             let fe = crate::ta_formula_eval(
                 src,
-                input.as_ptr(), input.as_ptr(), input.as_ptr(), input.as_ptr(), input.as_ptr(), n,
+                input.as_ptr(),
+                input.as_ptr(),
+                input.as_ptr(),
+                input.as_ptr(),
+                input.as_ptr(),
+                n,
             );
-            assert!(!fe.is_null(), "ta_formula_eval must return a non-null CString to free");
+            assert!(
+                !fe.is_null(),
+                "ta_formula_eval must return a non-null CString to free"
+            );
             crate::ta_free_cstring(fe);
 
             // Free-path smoke: a scalar and an array handed back to the free fns.
@@ -173,7 +188,9 @@ mod tests {
         assert!(
             growth < 256 * 1024,
             "heap grew by {} bytes across 400 alloc/free cycles (baseline={}, after={})",
-            after - baseline, baseline, after
+            after - baseline,
+            baseline,
+            after
         );
     }
 
@@ -188,10 +205,17 @@ mod tests {
         let input: Vec<c_double> = (0..n as usize).map(|i| (i as f64).sin()).collect();
         // `ta_formula_eval` *consumes* `source` (CString::from_raw), so transfer
         // ownership with `.into_raw()` and do not retain a Rust handle.
-        let src = std::ffi::CString::new("FOOBAR(CLOSE, 20)").unwrap().into_raw();
+        let src = std::ffi::CString::new("FOOBAR(CLOSE, 20)")
+            .unwrap()
+            .into_raw();
         let fe = crate::ta_formula_eval(
             src,
-            input.as_ptr(), input.as_ptr(), input.as_ptr(), input.as_ptr(), input.as_ptr(), n,
+            input.as_ptr(),
+            input.as_ptr(),
+            input.as_ptr(),
+            input.as_ptr(),
+            input.as_ptr(),
+            n,
         );
         assert!(
             !fe.is_null(),
@@ -208,50 +232,13 @@ mod tests {
     }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 // ============================================================================
 // Momentum Indicators
 // ============================================================================
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 // ============================================================================
 // Volume Indicators
 // ============================================================================
-
-
-
-
 
 #[no_mangle]
 pub extern "C" fn ta_ad_osc(
@@ -300,37 +287,13 @@ pub extern "C" fn ta_ad_osc(
 // Volatility Indicators
 // ============================================================================
 
-
-
-
-
-
-
 // ============================================================================
 // Hilbert Transform Indicators
 // ============================================================================
 
-
-
-
-
-
-
-
-
-
-
-
-
 // ============================================================================
 // Statistics Indicators
 // ============================================================================
-
-
-
-
-
-
 
 #[no_mangle]
 pub extern "C" fn ta_std_dev(
@@ -356,15 +319,9 @@ pub extern "C" fn ta_std_dev(
     }
 }
 
-
-
-
-
 // ============================================================================
 // Mama (MESA Adaptive Moving Average)
 // ============================================================================
-
-
 
 // ============================================================================
 // Utility
@@ -591,7 +548,8 @@ pub extern "C" fn ta_formula_eval_draw(
             let payload = serde_json::json!({
                 "drawCommands": draw_commands.commands,
             });
-            let json_str = serde_json::to_string(&payload).unwrap_or_else(|_| "{\"drawCommands\":[]}".to_string());
+            let json_str = serde_json::to_string(&payload)
+                .unwrap_or_else(|_| "{\"drawCommands\":[]}".to_string());
             // Caller must free with ta_free_cstring.
             match CString::new(json_str) {
                 Ok(c_str) => c_str.into_raw(),
@@ -665,7 +623,8 @@ pub extern "C" fn ta_formula_eval_debug(
             let payload = serde_json::json!({
                 "events": debugger.get_events(),
             });
-            let json_str = serde_json::to_string(&payload).unwrap_or_else(|_| "{\"events\":[]}".to_string());
+            let json_str =
+                serde_json::to_string(&payload).unwrap_or_else(|_| "{\"events\":[]}".to_string());
             // Caller must free with ta_free_cstring.
             match CString::new(json_str) {
                 Ok(c_str) => c_str.into_raw(),
@@ -692,9 +651,7 @@ pub extern "C" fn ta_formula_eval_debug(
 }
 
 #[no_mangle]
-pub extern "C" fn ta_formula_get_template(
-    name: *const c_char,
-) -> *mut c_char {
+pub extern "C" fn ta_formula_get_template(name: *const c_char) -> *mut c_char {
     use finkit::formula::FormulaEngine;
 
     if name.is_null() {
@@ -711,8 +668,7 @@ pub extern "C" fn ta_formula_get_template(
     let engine = FormulaEngine::new();
     match engine.get_template(&name_str) {
         Some(template) => {
-            let json_str =
-                serde_json::to_string(&template).unwrap_or_else(|_| "{}".to_string());
+            let json_str = serde_json::to_string(&template).unwrap_or_else(|_| "{}".to_string());
             // Caller must free with ta_free_cstring.
             match CString::new(json_str) {
                 Ok(c_str) => c_str.into_raw(),
@@ -732,9 +688,7 @@ pub extern "C" fn ta_formula_get_template(
 }
 
 #[no_mangle]
-pub extern "C" fn ta_formula_search_templates(
-    keyword: *const c_char,
-) -> *mut c_char {
+pub extern "C" fn ta_formula_search_templates(keyword: *const c_char) -> *mut c_char {
     use finkit::formula::FormulaEngine;
 
     if keyword.is_null() {
@@ -782,20 +736,6 @@ pub extern "C" fn ta_formula_list_categories() -> *mut c_char {
 // ============================================================================
 // Classic stock-trading chart patterns (FTA-native, added 2026-06-06).
 // ============================================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 #[no_mangle]
 pub extern "C" fn ta_formula_validate(source: *const c_char) -> c_int {

@@ -34,7 +34,9 @@ impl StreamingKama {
     }
 
     #[inline]
-    fn cap(&self) -> usize { self.period + 1 }
+    fn cap(&self) -> usize {
+        self.period + 1
+    }
 
     #[inline]
     fn ring_get(&self, i: usize) -> f64 {
@@ -73,7 +75,11 @@ impl StreamingIndicator for StreamingKama {
             volatility += (self.ring_get(i) - self.ring_get(i - 1)).abs();
         }
 
-        let er = if volatility.abs() > 1e-15 { direction / volatility } else { 0.0 };
+        let er = if volatility.abs() > 1e-15 {
+            direction / volatility
+        } else {
+            0.0
+        };
         let sc = (er * (self.fast_sc - self.slow_sc) + self.slow_sc).powi(2);
         self.kama += sc * (input - self.kama);
         let result = Some(self.kama);
@@ -89,11 +95,18 @@ impl StreamingIndicator for StreamingKama {
         self.last_value = None;
     }
 
-    fn is_ready(&self) -> bool { self.len >= self.period }
+    fn is_ready(&self) -> bool {
+        self.len >= self.period
+    }
     impl_standard_methods!();
 }
 
-impl_indicator_meta!(StreamingKama, "KAMA", "overlap", "Kaufman Adaptive Moving Average");
+impl_indicator_meta!(
+    StreamingKama,
+    "KAMA",
+    "overlap",
+    "Kaufman Adaptive Moving Average"
+);
 
 #[cfg(test)]
 mod tests {
@@ -103,7 +116,9 @@ mod tests {
     #[test]
     fn test_streaming_kama_basic() {
         let mut kama = StreamingKama::new(10);
-        for i in 0..15 { kama.next(i as f64 + 1.0); }
+        for i in 0..15 {
+            kama.next(i as f64 + 1.0);
+        }
         assert!(kama.is_ready());
     }
 
@@ -115,7 +130,9 @@ mod tests {
     #[test]
     fn test_streaming_kama_reset() {
         let mut kama = StreamingKama::new(5);
-        for i in 0..10 { kama.next(i as f64); }
+        for i in 0..10 {
+            kama.next(i as f64);
+        }
         assert!(kama.is_ready());
         kama.reset();
         assert!(!kama.is_ready());
@@ -123,13 +140,19 @@ mod tests {
 
     #[test]
     fn test_streaming_vs_batch_convergence() {
-        let data: Vec<f64> = (0..100).map(|i| 50.0 + (i as f64 * 0.1).sin() * 10.0).collect();
+        let data: Vec<f64> = (0..100)
+            .map(|i| 50.0 + (i as f64 * 0.1).sin() * 10.0)
+            .collect();
         let period = 10;
         let batch = crate::math::moving_avg::kama(&data, period, 2, 30).unwrap();
         let mut streaming = StreamingKama::new(period);
         for (i, &val) in data.iter().enumerate() {
             if let (Some(s), false) = (streaming.next(val), batch[i].is_nan()) {
-                assert!((s - batch[i]).abs() < 1e-10, "Mismatch at {i}: s={s}, b={}", batch[i]);
+                assert!(
+                    (s - batch[i]).abs() < 1e-10,
+                    "Mismatch at {i}: s={s}, b={}",
+                    batch[i]
+                );
             }
         }
     }

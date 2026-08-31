@@ -135,7 +135,10 @@ pub struct SmaSnapshot {
 
 impl StreamingIndicator for StreamingSma {
     #[inline]
-    #[cfg_attr(feature = "tracing", tracing::instrument(level = "trace", skip(self, input)))]
+    #[cfg_attr(
+        feature = "tracing",
+        tracing::instrument(level = "trace", skip(self, input))
+    )]
     fn next(&mut self, input: f64) -> Option<f64> {
         #[cfg(feature = "metrics")]
         let __start = std::time::Instant::now();
@@ -258,7 +261,8 @@ mod tests {
 
         sma.compute_bar(&OhlcvBar::new_with_time(0.0, 0.0, 0.0, 10.0, 0.0, 3000));
         sma.compute_bar(&OhlcvBar::new_with_time(0.0, 0.0, 0.0, 20.0, 0.0, 3000));
-        let result_repaint = sma.compute_bar(&OhlcvBar::new_with_time(0.0, 0.0, 0.0, 3.0, 0.0, 3000));
+        let result_repaint =
+            sma.compute_bar(&OhlcvBar::new_with_time(0.0, 0.0, 0.0, 3.0, 0.0, 3000));
 
         let mut sma_clean = StreamingSma::new(3);
         sma_clean.next(1.0);

@@ -1,6 +1,6 @@
-use crate::streaming::traits::{StreamingIndicator};
+use crate::impl_indicator_meta;
 use crate::impl_standard_methods;
-use crate::{impl_indicator_meta};
+use crate::streaming::traits::StreamingIndicator;
 
 /// Streaming Time Series Forecast
 ///
@@ -42,7 +42,9 @@ impl StreamingTsf {
     fn compute(&self) -> Option<f64> {
         let n = self.period as f64;
         let denom = n * self.sum_x2 - self.sum_x * self.sum_x;
-        if denom.abs() < 1e-15 { return None; }
+        if denom.abs() < 1e-15 {
+            return None;
+        }
 
         let slope = (n * self.sum_xy - self.sum_x * self.sum_y) / denom;
         let intercept = (self.sum_y - slope * self.sum_x) / n;
@@ -70,7 +72,11 @@ impl StreamingIndicator for StreamingTsf {
             self.head = (self.head + 1) % cap;
         }
 
-        let result = if self.len == self.period { self.compute() } else { None };
+        let result = if self.len == self.period {
+            self.compute()
+        } else {
+            None
+        };
         self.last_value = result;
         result
     }
@@ -85,7 +91,9 @@ impl StreamingIndicator for StreamingTsf {
         self.sum_xy = 0.0;
     }
 
-    fn is_ready(&self) -> bool { self.len >= self.period }
+    fn is_ready(&self) -> bool {
+        self.len >= self.period
+    }
 
     impl_standard_methods!();
 }
@@ -116,7 +124,9 @@ mod tests {
     #[test]
     fn test_streaming_tsf_reset() {
         let mut tsf = StreamingTsf::new(3);
-        tsf.next(1.0); tsf.next(2.0); tsf.next(3.0);
+        tsf.next(1.0);
+        tsf.next(2.0);
+        tsf.next(3.0);
         assert!(tsf.is_ready());
         tsf.reset();
         assert!(!tsf.is_ready());
@@ -124,7 +134,9 @@ mod tests {
 
     #[test]
     fn test_streaming_vs_batch_convergence() {
-        let data: Vec<f64> = (0..100).map(|i| 50.0 + (i as f64 * 0.1).sin() * 10.0).collect();
+        let data: Vec<f64> = (0..100)
+            .map(|i| 50.0 + (i as f64 * 0.1).sin() * 10.0)
+            .collect();
         let period = 14;
         let batch = crate::indicators::tsf(&data, period).unwrap();
 
