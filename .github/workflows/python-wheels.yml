@@ -11,6 +11,11 @@ on:
       - "visualization/**"
       - ".github/workflows/python-wheels.yml"
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Optional existing/new vX.Y.Z release tag to upload wheels to"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -19,12 +24,18 @@ concurrency:
   group: python-wheels-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  CARGO_TERM_COLOR: always
+  PYTHONUNBUFFERED: "1"
+
 jobs:
   build:
     name: CPython ${{ matrix.python }} / ${{ matrix.platform.name }}
     runs-on: ${{ matrix.platform.os }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
+      max-parallel: 8
       matrix:
         python: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
         exclude:
@@ -38,7 +49,7 @@ jobs:
             manylinux: "2_17"
             python_arch: x64
           - name: macos-x86_64
-            os: macos-14
+            os: macos-15-intel
             target: x86_64-apple-darwin
             manylinux: "off"
             python_arch: x64
@@ -80,6 +91,8 @@ jobs:
 
       - name: Install wheel and test outside the source tree
         shell: bash
+        env:
+          PIP_DISABLE_PIP_VERSION_CHECK: "1"
         run: |
           python - <<'PY'
           import os
@@ -88,22 +101,115 @@ jobs:
           from pathlib import Path
 
           dist = Path(os.environ["GITHUB_WORKSPACE"]) / "ffi/python-binding/dist"
-          wheel = next(dist.glob("finkit-0.1.0-*.whl"))
+          wheels = sorted(dist.glob("finkit-*.whl"))
+          if len(wheels) != 1:
+              raise SystemExit(f"expected exactly one wheel, found: {wheels}")
           subprocess.check_call([
               sys.executable,
               "-m",
               "pip",
               "install",
-              str(wheel),
+              "--force-reinstall",
+              "--no-cache-dir",
+              str(wheels[0]),
               "pytest",
           ])
           PY
           cd "$RUNNER_TEMP"
           python -m pytest "$GITHUB_WORKSPACE/ffi/python-binding/tests" -q
 
-      - name: Upload wheel
+      - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
         with:
           name: wheel-${{ matrix.platform.name }}-py${{ matrix.python }}
           path: ffi/python-binding/dist/*.whl
           if-no-files-found: error
+
+  validate:
+    name: Validate wheel set
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up validation Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Download wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: wheel-*
+          path: dist
+          merge-multiple: true
+
+      - name: Validate wheel metadata and coverage
+        env:
+          PIP_DISABLE_PIP_VERSION_CHECK: "1"
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --no-input twine
+          python -m twine check dist/*.whl
+          python - <<'PY'
+          import tomllib
+          from pathlib import Path
+          from packaging.utils import parse_wheel_filename
+
+          pyproject = tomllib.loads(
+              Path("ffi/python-binding/pyproject.toml").read_text()
+          )
+          expected_version = pyproject["project"]["version"]
+          wheels = sorted(Path("dist").glob("finkit-*.whl"))
+          if len(wheels) != 27:
+              raise SystemExit(f"expected 27 wheels, found {len(wheels)}")
+          for wheel in wheels:
+              name, version, _, tags = parse_wheel_filename(wheel.name)
+              if name != "finkit" or str(version) != expected_version:
+                  raise SystemExit(
+                      f"unexpected wheel metadata in {wheel.name}: "
+                      f"name={name!r}, version={version!r}"
+                  )
+              if not tags:
+                  raise SystemExit(f"wheel has no compatibility tags: {wheel.name}")
+          print(f"validated {len(wheels)} finkit {expected_version} wheels")
+          PY
+
+  release:
+    name: Upload wheels to GitHub Release
+    needs: validate
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: wheel-*
+          path: dist
+          merge-multiple: true
+
+      - name: Upload wheels
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          release_tag="$GITHUB_REF_NAME"
+          if [[ "$GITHUB_REF_TYPE" != "tag" ]]; then
+            release_tag="$RELEASE_TAG_INPUT"
+          fi
+          if [[ ! "$release_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag: $release_tag" >&2
+            exit 1
+          fi
+          if ! gh release view "$release_tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$release_tag"               --repo "$GITHUB_REPOSITORY"               --verify-tag               --title "$release_tag"               --generate-notes
+          fi
+          gh release upload "$release_tag"             --repo "$GITHUB_REPOSITORY"             --clobber             dist/*.whl
