@@ -33,7 +33,7 @@ python -m pip install --upgrade pip
 python -m pip install ./finkit-0.1.0-<匹配本机的 wheel>.whl
 ```
 
-如果对应 Release 尚未附带 wheel，可在仓库的 [Python wheels workflow](https://github.com/coeasy/finkit/actions/workflows/python-wheels.yml) 中下载同名 workflow artifact。安装本地 wheel 时，pip 会自动安装运行时依赖 NumPy。
+如果对应 Release 尚未附带 wheel，可打开仓库的 [Python wheels workflow](https://github.com/coeasy/finkit/actions/workflows/python-wheels.yml)，进入一条成功的运行记录，在 Artifacts 区域下载与本机平台和 Python 版本匹配的同名 workflow artifact。安装本地 wheel 时，pip 会自动安装运行时依赖 NumPy。
 
 验证安装：
 
@@ -176,7 +176,7 @@ cd ../..
 python -m pytest ffi/python-binding/tests -q
 ```
 
-每次推送到 `main`、创建 pull request 或推送 `v*` tag 时，GitHub Actions 的 Python wheels workflow 会为 4 个平台和 7 个 CPython 小版本构建 wheel，并将每个 wheel 作为独立 artifact 上传。发布流程还应在创建 Release 时把这些 artifacts 附加到 Release，避免用户直接下载源码包。
+每次推送到 `main`、创建 pull request 或推送 `v*` tag 时，GitHub Actions 的 Python wheels workflow 会为 4 个平台和 7 个 CPython 小版本构建 wheel，并将每个 wheel 作为独立 artifact 上传。推送版本 tag 且完整构建与汇总校验通过后，workflow 会自动把这些 wheel 附加到对应的 GitHub Release；对于已有 Release，也可以通过 workflow_dispatch 的 `release_tag` 参数补发。
 
 ## 常见问题
 
