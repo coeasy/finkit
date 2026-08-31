@@ -14,6 +14,7 @@
 | [API Reference](docs/api-reference.md) | Detailed API documentation for all indicators |
 | [Development Guide](docs/development.md) | Building, testing, and packaging instructions |
 | [Installation Guide](docs/installation.md) | Detailed installation for each language |
+| [Python Wheel Guide](docs/python.md) | CPython wheel matrix, source builds, and troubleshooting |
 | [Performance Benchmarks](docs/benchmark-results.md) | Performance comparison with TA-Lib |
 | [Benchmark vs TA-Lib](docs/BENCHMARK_VS_TALIB.md) | How to read the `bench-vs-talib` output |
 | [Indicator List](docs/indicators.md) | Complete list of all indicators |
@@ -57,15 +58,20 @@ read the results.
 
 ## Quick Start
 
-> **Note:** Package registry publishing (PyPI, npm, crates.io, Maven, NuGet) is
-> not yet active. Use [build from source](docs/development.md) until releases
-> are published.
+> **Python wheels:** CPython 3.8–3.14 wheels are built by GitHub Actions. Download
+> the matching artifact from the [v0.1.0 Release](https://github.com/coeasy/finkit/releases/tag/v0.1.0)
+> or follow the [Python Wheel Guide](docs/python.md). Other registries remain pending.
 
 ### Python
 
+Download the matching `finkit-0.1.0-*.whl` from the
+[v0.1.0 Release](https://github.com/coeasy/finkit/releases/tag/v0.1.0), then:
+
 ```bash
-pip install finkit
+python -m pip install ./finkit-0.1.0-<matching-wheel>.whl
 ```
+
+See [docs/python.md](docs/python.md) for source builds and wheel selection.
 
 ```python
 import finkit as ta
@@ -192,7 +198,7 @@ Detailed installation instructions for each language binding are available in [d
 
 | Language | Package Manager | Command |
 |----------|----------------|---------|
-| Python   | pip            | `pip install finkit` |
+| Python   | pip            | Install the matching v0.1.0 GitHub Release wheel |
 | Node.js  | npm            | `npm install finkit` |
 | Rust     | cargo          | `cargo add finkit` |
 | Java     | Maven          | Add dependency to `pom.xml` |
@@ -750,7 +756,7 @@ Planned (not yet enabled):
 - **perf-gate.yml** — Performance regression detection (baseline threshold)
 - **fuzz.yml** — Weekly fuzzing
 - **docs-check.yml** — SSOT validation (`gen_ssot_docs.py --check`) + link check
-- FFI binding build matrix (Python/Node/C) and ABI diff check
+- Python wheel build matrix (CPython 3.8–3.14 on four platform targets); see [python-wheels.yml](.github/workflows/python-wheels.yml)
 
 ## 可视化模块
 
