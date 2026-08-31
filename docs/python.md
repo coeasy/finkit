@@ -221,6 +221,7 @@ python -m pip install --force-reinstall ./finkit-0.1.0-*.whl
 - [总安装指南](installation.md)
 - [开发指南](development.md)
 - [发布页](https://github.com/coeasy/finkit/releases)
+
 ## 自动发布 Release wheel
 
 当向仓库推送符合 `vX.Y.Z` 格式的版本 tag 时，`Python wheels` workflow 会：
