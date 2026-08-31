@@ -241,7 +241,7 @@ def test_compute_indicators_c_contiguous():
     assert not close_non_c.flags["C_CONTIGUOUS"]
 
     close_non_c_as_c = np.ascontiguousarray(close_non_c)
-    assert close_f_as_c.flags["C_CONTIGUOUS"]
+    assert close_non_c_as_c.flags["C_CONTIGUOUS"]
 
     requests = [("sma", [14]), ("ema", [14])]
 
