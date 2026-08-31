@@ -1,0 +1,109 @@
+name: Python wheels
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - "core/**"
+      - "ffi/python-binding/**"
+      - "visualization/**"
+      - ".github/workflows/python-wheels.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: python-wheels-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: CPython ${{ matrix.python }} / ${{ matrix.platform.name }}
+    runs-on: ${{ matrix.platform.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        exclude:
+          - platform:
+              name: macos-arm64
+            python: "3.8"
+        platform:
+          - name: linux-x86_64
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            manylinux: "2_17"
+            python_arch: x64
+          - name: macos-x86_64
+            os: macos-14
+            target: x86_64-apple-darwin
+            manylinux: "off"
+            python_arch: x64
+          - name: macos-arm64
+            os: macos-14
+            target: aarch64-apple-darwin
+            manylinux: "off"
+            python_arch: arm64
+          - name: windows-x86_64
+            os: windows-2022
+            target: x86_64-pc-windows-msvc
+            manylinux: "off"
+            python_arch: x64
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+          architecture: ${{ matrix.platform.python_arch }}
+          cache: pip
+          cache-dependency-path: ffi/python-binding/pyproject.toml
+
+      - name: Build wheel
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        with:
+          command: build
+          maturin-version: v1.11.5
+          working-directory: ffi/python-binding
+          target: ${{ matrix.platform.target }}
+          manylinux: ${{ matrix.platform.manylinux }}
+          sccache: true
+          args: >-
+            --release --locked --out dist --compatibility pypi
+            ${{ runner.os == 'Linux' && format('--interpreter python{0}', matrix.python) || '--interpreter python' }}
+
+      - name: Install wheel and test outside the source tree
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          dist = Path(os.environ["GITHUB_WORKSPACE"]) / "ffi/python-binding/dist"
+          wheel = next(dist.glob("finkit-0.1.0-*.whl"))
+          subprocess.check_call([
+              sys.executable,
+              "-m",
+              "pip",
+              "install",
+              str(wheel),
+              "pytest",
+          ])
+          PY
+          cd "$RUNNER_TEMP"
+          python -m pytest "$GITHUB_WORKSPACE/ffi/python-binding/tests" -q
+
+      - name: Upload wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.platform.name }}-py${{ matrix.python }}
+          path: ffi/python-binding/dist/*.whl
+          if-no-files-found: error

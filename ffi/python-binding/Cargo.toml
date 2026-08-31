@@ -5,11 +5,12 @@ edition.workspace = true
 license.workspace = true
 description = "Python bindings for finkit"
 
+[lib]
+name = "finkit"
+crate-type = ["cdylib"]
+
 [lints]
 workspace = true
-
-[lib]
-crate-type = ["cdylib"]
 
 [dependencies]
 finkit = { path = "../../core", default-features = false, features = ["std", "serde", "indicators-all"] }

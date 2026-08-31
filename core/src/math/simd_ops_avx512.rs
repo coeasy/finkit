@@ -316,8 +316,10 @@ unsafe fn rsi_avx512(input: &[f64], period: usize, output: &mut [f64]) {
     }
     let mut avg_gain = _mm512_reduce_add_pd(gain_acc);
     let mut avg_loss = _mm512_reduce_add_pd(loss_acc);
-    // Tail: scalars for the last (count - chunks * 8) steps
-    let start_tail = chunks * 8;
+    // Tail: scalars for the last (count - chunks * 8) steps.
+    // The first change is input[1] - input[0]; when period < 8 there
+    // are no vector chunks, so the scalar tail must still start at 1.
+    let start_tail = (chunks * 8).max(1);
     for j in start_tail..=count {
         let diff = input[j] - input[j - 1];
         if diff > 0.0 {
@@ -796,6 +798,15 @@ mod tests {
                 b
             );
         }
+    }
+
+    #[test]
+    fn test_avx512_rsi_short_period() {
+        let data: Vec<f64> = (0..32).map(|i| 100.0 + i as f64).collect();
+        let mut output = vec![0.0; data.len()];
+        simd512_rsi(&data, 7, &mut output);
+        assert!(output[..7].iter().all(|value| value.is_nan()));
+        assert!(output[7].is_finite());
     }
 
     #[test]
