@@ -34,14 +34,14 @@ use ndarray::Array1;
 
 #[cfg(feature = "formula")]
 fn extract_array_bound(obj: &Bound<'_, PyAny>) -> PyResult<Vec<f64>> {
-    if let Ok(py_list) = obj.downcast::<pyo3::types::PyList>() {
+    if let Ok(py_list) = obj.cast::<pyo3::types::PyList>() {
         let vec: Vec<f64> = py_list
             .iter()
             .map(|item| item.extract::<f64>())
             .collect::<PyResult<Vec<f64>>>()?;
         return Ok(vec);
     }
-    if let Ok(py_tuple) = obj.downcast::<pyo3::types::PyTuple>() {
+    if let Ok(py_tuple) = obj.cast::<pyo3::types::PyTuple>() {
         let vec: Vec<f64> = py_tuple
             .iter()
             .map(|item| item.extract::<f64>())
@@ -56,14 +56,14 @@ fn extract_array_bound(obj: &Bound<'_, PyAny>) -> PyResult<Vec<f64>> {
 #[cfg(feature = "formula")]
 fn extract_array_pyobject(obj: Py<PyAny>) -> PyResult<Vec<f64>> {
     Python::attach(|py| {
-        if let Ok(py_list) = obj.downcast_bound::<pyo3::types::PyList>(py) {
+        if let Ok(py_list) = obj.cast_bound::<pyo3::types::PyList>(py) {
             let vec: Vec<f64> = py_list
                 .iter()
                 .map(|item| item.extract::<f64>())
                 .collect::<PyResult<Vec<f64>>>()?;
             return Ok(vec);
         }
-        if let Ok(py_tuple) = obj.downcast_bound::<pyo3::types::PyTuple>(py) {
+        if let Ok(py_tuple) = obj.cast_bound::<pyo3::types::PyTuple>(py) {
             let vec: Vec<f64> = py_tuple
                 .iter()
                 .map(|item| item.extract::<f64>())
