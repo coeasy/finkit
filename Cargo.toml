@@ -20,7 +20,7 @@ resolver = "2"
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.85" # D-5: MSRV 1.75 (workspace-wide)
+rust-version = "1.85" # workspace-wide MSRV for audited dependencies
 authors = ["Finkit Contributors"]
 description = "A high-performance Financial Technical Analysis library in Rust"
 license = "MIT OR Apache-2.0"
