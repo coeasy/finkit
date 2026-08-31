@@ -54,8 +54,8 @@ fn extract_array_bound(obj: &Bound<'_, PyAny>) -> PyResult<Vec<f64>> {
 }
 
 #[cfg(feature = "formula")]
-fn extract_array_pyobject(obj: PyObject) -> PyResult<Vec<f64>> {
-    Python::with_gil(|py| {
+fn extract_array_pyobject(obj: Py<PyAny>) -> PyResult<Vec<f64>> {
+    Python::attach(|py| {
         if let Ok(py_list) = obj.downcast_bound::<pyo3::types::PyList>(py) {
             let vec: Vec<f64> = py_list
                 .iter()
@@ -164,7 +164,7 @@ fn dx(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         indicators::dx(high, low, close, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -196,7 +196,7 @@ fn minus_di(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         indicators::minus_di(high, low, close, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -221,7 +221,7 @@ fn minus_dm(
     let low = low
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         indicators::minus_dm(high, low)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -253,7 +253,7 @@ fn plus_di(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         indicators::plus_di(high, low, close, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -278,7 +278,7 @@ fn plus_dm(
     let low = low
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         indicators::plus_dm(high, low)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -324,7 +324,7 @@ fn var(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         indicators::var(close, timeperiod, nbdev)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -357,7 +357,7 @@ fn cdl_doji_4prices(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         candlestick::doji_4prices(open, high, low, close)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -386,7 +386,7 @@ fn cdl_harami_cross(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         candlestick::harami_cross(open, high, low, close)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -416,7 +416,7 @@ fn cdl_morning_doji_star(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         candlestick::morning_doji_star(open, high, low, close, doji_pct)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -446,7 +446,7 @@ fn cdl_evening_doji_star(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         candlestick::evening_doji_star(open, high, low, close, doji_pct)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -475,7 +475,7 @@ fn cdl_three_inside_up(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         candlestick::three_inside_up(open, high, low, close)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -504,7 +504,7 @@ fn cdl_three_outside_up(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         candlestick::three_outside_up(open, high, low, close)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -533,7 +533,7 @@ fn cdl_three_inside_down(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         candlestick::three_inside_down(open, high, low, close)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -562,7 +562,7 @@ fn cdl_three_outside_down(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         candlestick::three_outside_down(open, high, low, close)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -591,7 +591,7 @@ fn cdl_piercing(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         candlestick::piercing(open, high, low, close)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -620,7 +620,7 @@ fn cdl_dark_cloud_cover(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         candlestick::dark_cloud_cover(open, high, low, close)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -649,7 +649,7 @@ fn cdl_belt_hold(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         candlestick::belt_hold(open, high, low, close)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -678,7 +678,7 @@ fn cdl_spinning_top(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         candlestick::spinning_top(open, high, low, close)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -707,7 +707,7 @@ fn cdl_high_wave(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         candlestick::high_wave(open, high, low, close)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -736,7 +736,7 @@ fn cdl_rickshaw_man(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         candlestick::rickshaw_man(open, high, low, close)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -765,7 +765,7 @@ fn cdl_short_line(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         candlestick::short_line(open, high, low, close)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -794,7 +794,7 @@ fn cdl_long_line(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         candlestick::long_line(open, high, low, close)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -823,7 +823,7 @@ fn cdl_kicking(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         candlestick::kicking(open, high, low, close)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -854,7 +854,7 @@ fn detect_head_shoulders(
     let high = high
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         let signals = chart::head_and_shoulders_top(high, min_bars, head_ratio)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
 
@@ -880,7 +880,7 @@ fn detect_head_shoulders_bottom(
     let low = low
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         let signals = chart::head_and_shoulders_bottom(low, min_bars, head_ratio)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
 
@@ -906,7 +906,7 @@ fn detect_double_top(
     let high = high
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         chart::double_top(high, lookback, tolerance)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -925,7 +925,7 @@ fn detect_double_bottom(
     let low = low
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         chart::double_bottom(low, lookback, tolerance)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -944,7 +944,7 @@ fn detect_triple_top(
     let high = high
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         chart::triple_top(high, lookback, tolerance)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -963,7 +963,7 @@ fn detect_triple_bottom(
     let low = low
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         chart::triple_bottom(low, lookback, tolerance)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -986,7 +986,7 @@ fn detect_ascending_triangle(
     let low = low
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         chart::ascending_triangle(high, low, lookback, tolerance)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -1009,7 +1009,7 @@ fn detect_descending_triangle(
     let low = low
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         chart::descending_triangle(high, low, lookback, tolerance)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -1031,7 +1031,7 @@ fn detect_symmetrical_triangle(
     let low = low
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         chart::symmetrical_triangle(high, low, lookback)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -1053,7 +1053,7 @@ fn detect_rising_wedge(
     let low = low
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         chart::rising_wedge(high, low, lookback)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -1075,7 +1075,7 @@ fn detect_falling_wedge(
     let low = low
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         chart::falling_wedge(high, low, lookback)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -1102,7 +1102,7 @@ fn detect_flag(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         chart::flag(high, low, close, flagpole_period, flag_period)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -1129,7 +1129,7 @@ fn detect_pennant(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         chart::pennant(high, low, close, flagpole_period, pennant_period)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -1152,7 +1152,7 @@ fn detect_rectangle(
     let low = low
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         chart::rectangle(high, low, lookback, tolerance)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -1210,7 +1210,7 @@ fn ichimoku(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         let displacement = kijun_period;
         indicators::ichimoku(
             high,
@@ -1269,7 +1269,7 @@ fn supertrend(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         indicators::supertrend(high, low, close, period, multiplier)
             .map(|res| {
                 (
@@ -1321,7 +1321,7 @@ fn vwap(
     let volume = volume
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         indicators::vwap(high, low, close, volume)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -1364,7 +1364,7 @@ fn anchored_vwap(
     let volume = volume
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         indicators::anchored_vwap(high, low, close, volume, start_index)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -1409,7 +1409,7 @@ fn vwap_bands(
     let volume = volume
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         indicators::vwap_bands(high, low, close, volume, timeperiod, nb_dev)
             .map(|res| {
                 (
@@ -1463,7 +1463,7 @@ fn elder_ray(
     let volume = volume
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         indicators::elder_ray(high, low, close, volume, period)
             .map(|res| {
                 (
@@ -1509,7 +1509,7 @@ fn donchian(
     let low = low
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         indicators::donchian(high, low, period)
             .map(|res| {
                 (
@@ -1570,7 +1570,7 @@ fn pivot_points(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         let pivot_method = match method {
             "standard" => PivotMethod::Standard,
             "fibonacci" => PivotMethod::Fibonacci,
@@ -1640,7 +1640,7 @@ fn volume_profile(
     let volume = volume
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.allow_threads(|| {
+    py.detach(|| {
         indicators::volume_profile(high, low, close, volume, num_bins)
             .map(|res| (res.poc, res.vah, res.val))
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -1673,7 +1673,7 @@ fn fibonacci_retracement(
     start_index: usize,
     end_index: usize,
 ) -> PyResult<pyo3::Bound<'_, pyo3::types::PyDict>> {
-    let result = py.allow_threads(|| {
+    let result = py.detach(|| {
         indicators::fibonacci_retracement(&high, &low, start_index, end_index)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
     })?;
@@ -1729,7 +1729,7 @@ pub fn formula_eval(
     close: &Bound<'_, PyAny>,
     volume: &Bound<'_, PyAny>,
     amount: Option<&Bound<'_, PyAny>>,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     let open_vec = extract_array_bound(open)?;
     let high_vec = extract_array_bound(high)?;
     let low_vec = extract_array_bound(low)?;
@@ -1754,7 +1754,7 @@ pub fn formula_eval(
     );
     let mut engine = FormulaEngine::new();
 
-    let result = py.allow_threads(|| {
+    let result = py.detach(|| {
         engine
             .eval(source, &mut ctx)
             .map_err(formula_error_to_pyerr)
@@ -1798,7 +1798,7 @@ pub fn formula_eval_dialect(
     volume: &Bound<'_, PyAny>,
     dialect: &str,
     amount: Option<&Bound<'_, PyAny>>,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     let open_vec = extract_array_bound(open)?;
     let high_vec = extract_array_bound(high)?;
     let low_vec = extract_array_bound(low)?;
@@ -1824,7 +1824,7 @@ pub fn formula_eval_dialect(
     let mut engine = FormulaEngine::new();
 
     let dialect = FormulaDialect::from_str(dialect).unwrap_or(FormulaDialect::AlphaTA);
-    let result = py.allow_threads(|| -> PyResult<Array1<f64>> {
+    let result = py.detach(|| -> PyResult<Array1<f64>> {
         let ast = match dialect {
             FormulaDialect::AlphaTA => {
                 return engine
@@ -1865,7 +1865,7 @@ pub fn formula_eval_dialect(
 #[pyfunction]
 #[cfg(feature = "formula")]
 pub fn formula_validate(py: Python<'_>, source: &str) -> PyResult<bool> {
-    py.allow_threads(|| match parse_formula(source) {
+    py.detach(|| match parse_formula(source) {
         Ok(_) => Ok(true),
         Err(_) => Ok(false),
     })
@@ -1892,12 +1892,12 @@ pub fn formula_validate(py: Python<'_>, source: &str) -> PyResult<bool> {
 pub fn formula_eval_bytecode(
     py: Python<'_>,
     source: &str,
-    open: PyObject,
-    high: PyObject,
-    low: PyObject,
-    close: PyObject,
-    volume: PyObject,
-) -> PyResult<PyObject> {
+    open: Py<PyAny>,
+    high: Py<PyAny>,
+    low: Py<PyAny>,
+    close: Py<PyAny>,
+    volume: Py<PyAny>,
+) -> PyResult<Py<PyAny>> {
     let open_vec = extract_array_pyobject(open)?;
     let high_vec = extract_array_pyobject(high)?;
     let low_vec = extract_array_pyobject(low)?;
@@ -1913,7 +1913,7 @@ pub fn formula_eval_bytecode(
     let (result, variables): (
         Array1<f64>,
         std::collections::HashMap<std::sync::Arc<str>, Array1<f64>>,
-    ) = py.allow_threads(|| {
+    ) = py.detach(|| {
         let ctx = FormulaContext::new(
             open_array,
             high_array,
@@ -1963,12 +1963,12 @@ pub fn formula_eval_bytecode(
 pub fn formula_eval_optimized(
     py: Python<'_>,
     source: &str,
-    open: PyObject,
-    high: PyObject,
-    low: PyObject,
-    close: PyObject,
-    volume: PyObject,
-) -> PyResult<PyObject> {
+    open: Py<PyAny>,
+    high: Py<PyAny>,
+    low: Py<PyAny>,
+    close: Py<PyAny>,
+    volume: Py<PyAny>,
+) -> PyResult<Py<PyAny>> {
     let open_vec = extract_array_pyobject(open)?;
     let high_vec = extract_array_pyobject(high)?;
     let low_vec = extract_array_pyobject(low)?;
@@ -1991,7 +1991,7 @@ pub fn formula_eval_optimized(
     );
     let mut engine = FormulaEngine::new();
 
-    let result = py.allow_threads(|| {
+    let result = py.detach(|| {
         engine
             .eval_optimized(source, &mut ctx)
             .map_err(formula_error_to_pyerr)
@@ -2030,12 +2030,12 @@ pub fn formula_eval_optimized(
 pub fn formula_eval_jit(
     py: Python<'_>,
     source: &str,
-    open: PyObject,
-    high: PyObject,
-    low: PyObject,
-    close: PyObject,
-    volume: PyObject,
-) -> PyResult<PyObject> {
+    open: Py<PyAny>,
+    high: Py<PyAny>,
+    low: Py<PyAny>,
+    close: Py<PyAny>,
+    volume: Py<PyAny>,
+) -> PyResult<Py<PyAny>> {
     let open_vec = extract_array_pyobject(open)?;
     let high_vec = extract_array_pyobject(high)?;
     let low_vec = extract_array_pyobject(low)?;
@@ -2058,7 +2058,7 @@ pub fn formula_eval_jit(
     );
     let mut engine = FormulaEngine::new();
 
-    let result = py.allow_threads(|| {
+    let result = py.detach(|| {
         engine
             .eval_jit(source, &mut ctx)
             .map_err(formula_error_to_pyerr)
@@ -2098,12 +2098,12 @@ pub fn formula_eval_jit(
 pub fn formula_eval_simd(
     py: Python<'_>,
     source: &str,
-    open: PyObject,
-    high: PyObject,
-    low: PyObject,
-    close: PyObject,
-    volume: PyObject,
-) -> PyResult<PyObject> {
+    open: Py<PyAny>,
+    high: Py<PyAny>,
+    low: Py<PyAny>,
+    close: Py<PyAny>,
+    volume: Py<PyAny>,
+) -> PyResult<Py<PyAny>> {
     let open_vec = extract_array_pyobject(open)?;
     let high_vec = extract_array_pyobject(high)?;
     let low_vec = extract_array_pyobject(low)?;
@@ -2126,7 +2126,7 @@ pub fn formula_eval_simd(
     );
     let mut engine = FormulaEngine::new();
 
-    let result = py.allow_threads(|| {
+    let result = py.detach(|| {
         engine
             .eval_simd(source, &mut ctx)
             .map_err(formula_error_to_pyerr)
@@ -2166,12 +2166,12 @@ pub fn formula_eval_simd(
 pub fn formula_eval_zero_copy(
     py: Python<'_>,
     source: &str,
-    open: PyObject,
-    high: PyObject,
-    low: PyObject,
-    close: PyObject,
-    volume: PyObject,
-) -> PyResult<PyObject> {
+    open: Py<PyAny>,
+    high: Py<PyAny>,
+    low: Py<PyAny>,
+    close: Py<PyAny>,
+    volume: Py<PyAny>,
+) -> PyResult<Py<PyAny>> {
     let open_vec = extract_array_pyobject(open)?;
     let high_vec = extract_array_pyobject(high)?;
     let low_vec = extract_array_pyobject(low)?;
@@ -2194,7 +2194,7 @@ pub fn formula_eval_zero_copy(
     );
     let mut engine = FormulaEngine::new();
 
-    let result = py.allow_threads(|| {
+    let result = py.detach(|| {
         engine
             .eval_zero_copy(source, &mut ctx)
             .map_err(formula_error_to_pyerr)
@@ -2224,7 +2224,7 @@ pub fn formula_eval_multi(
     close: &Bound<'_, PyAny>,
     volume: &Bound<'_, PyAny>,
     amount: Option<&Bound<'_, PyAny>>,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     let open_vec = extract_array_bound(open)?;
     let high_vec = extract_array_bound(high)?;
     let low_vec = extract_array_bound(low)?;
@@ -2249,7 +2249,7 @@ pub fn formula_eval_multi(
     );
     let mut engine = FormulaEngine::new();
 
-    let multi_output = py.allow_threads(|| {
+    let multi_output = py.detach(|| {
         engine
             .eval_multi(source, &mut ctx)
             .map_err(formula_error_to_pyerr)
@@ -2285,7 +2285,7 @@ pub fn formula_eval_draw(
     close: &Bound<'_, PyAny>,
     volume: &Bound<'_, PyAny>,
     amount: Option<&Bound<'_, PyAny>>,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     use ::finkit::formula::DrawCommand;
 
     let open_vec = extract_array_bound(open)?;
@@ -2312,7 +2312,7 @@ pub fn formula_eval_draw(
     );
     let mut engine = FormulaEngine::new();
 
-    let _result = py.allow_threads(|| {
+    let _result = py.detach(|| {
         engine
             .eval(source, &mut ctx)
             .map_err(formula_error_to_pyerr)
@@ -2491,12 +2491,12 @@ pub fn formula_eval_draw(
 pub fn formula_eval_debug(
     py: Python<'_>,
     source: &str,
-    open: PyObject,
-    high: PyObject,
-    low: PyObject,
-    close: PyObject,
-    volume: PyObject,
-) -> PyResult<PyObject> {
+    open: Py<PyAny>,
+    high: Py<PyAny>,
+    low: Py<PyAny>,
+    close: Py<PyAny>,
+    volume: Py<PyAny>,
+) -> PyResult<Py<PyAny>> {
     let open_vec = extract_array_pyobject(open)?;
     let high_vec = extract_array_pyobject(high)?;
     let low_vec = extract_array_pyobject(low)?;
@@ -2519,7 +2519,7 @@ pub fn formula_eval_debug(
     );
     let mut engine = FormulaEngine::new();
 
-    let (final_result, debugger) = py.allow_threads(|| {
+    let (final_result, debugger) = py.detach(|| {
         engine
             .eval_with_debug(source, &mut ctx)
             .map_err(formula_error_to_pyerr)
@@ -2564,7 +2564,7 @@ pub fn formula_eval_debug(
 /// - "parameters": parameter descriptions
 #[pyfunction]
 #[cfg(feature = "formula")]
-pub fn formula_get_template(py: Python<'_>, name: &str) -> PyResult<PyObject> {
+pub fn formula_get_template(py: Python<'_>, name: &str) -> PyResult<Py<PyAny>> {
     use ::finkit::formula::FormulaEngine;
 
     let dict = pyo3::types::PyDict::new(py);
@@ -2609,7 +2609,7 @@ pub fn formula_get_template(py: Python<'_>, name: &str) -> PyResult<PyObject> {
 /// List of matching template dictionaries.
 #[pyfunction]
 #[cfg(feature = "formula")]
-pub fn formula_search_templates(py: Python<'_>, keyword: &str) -> PyResult<PyObject> {
+pub fn formula_search_templates(py: Python<'_>, keyword: &str) -> PyResult<Py<PyAny>> {
     use ::finkit::formula::FormulaEngine;
 
     let engine = FormulaEngine::new();
@@ -2647,7 +2647,7 @@ pub fn formula_search_templates(py: Python<'_>, keyword: &str) -> PyResult<PyObj
 /// List of category names with their template counts.
 #[pyfunction]
 #[cfg(feature = "formula")]
-pub fn formula_list_categories(py: Python<'_>) -> PyResult<PyObject> {
+pub fn formula_list_categories(py: Python<'_>) -> PyResult<Py<PyAny>> {
     use ::finkit::formula::templates::FormulaTemplates;
 
     let templates = FormulaTemplates::new();
@@ -2839,7 +2839,7 @@ impl PyKlineChart {
         let data = self.data.inner.clone();
         let config = self.config.clone();
         let indicators = self.indicators.clone();
-        let svg = py.allow_threads(|| -> PyResult<String> {
+        let svg = py.detach(|| -> PyResult<String> {
             let mut chart = finkit_visualization::chart::KlineChart::new(config);
             chart
                 .build_draw_list(&data, &indicators)
@@ -2854,7 +2854,7 @@ impl PyKlineChart {
         let data = self.data.inner.clone();
         let config = self.config.clone();
         let indicators = self.indicators.clone();
-        let html = py.allow_threads(|| -> PyResult<String> {
+        let html = py.detach(|| -> PyResult<String> {
             let mut chart = finkit_visualization::chart::KlineChart::new(config);
             chart
                 .build_draw_list(&data, &indicators)
@@ -2869,7 +2869,7 @@ impl PyKlineChart {
         let data = self.data.inner.clone();
         let config = self.config.clone();
         let indicators = self.indicators.clone();
-        py.allow_threads(|| {
+        py.detach(|| {
             let mut chart = finkit_visualization::chart::KlineChart::new(config);
             chart
                 .build_draw_list(&data, &indicators)
@@ -2952,7 +2952,7 @@ fn compute_indicators<'py>(
 
     let indicator_requests = parse_indicator_requests(requests);
 
-    let results: Vec<(String, IndicatorResult)> = py.allow_threads(|| {
+    let results: Vec<(String, IndicatorResult)> = py.detach(|| {
         compute_all_indicators(
             open_vec.as_deref(),
             high_vec.as_deref(),
@@ -3001,7 +3001,7 @@ enum IndicatorResult {
     Error(String),
 }
 
-/// Compute all indicators in batch (called inside allow_threads).
+/// Compute all indicators in batch (called inside detach).
 fn compute_all_indicators(
     open: Option<&[f64]>,
     high: Option<&[f64]>,
