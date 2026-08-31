@@ -58,14 +58,15 @@ read the results.
 
 ## Quick Start
 
-> **Python wheels:** CPython 3.8–3.14 wheels are built by GitHub Actions. Download
-> the matching artifact from the [v0.1.0 Release](https://github.com/coeasy/finkit/releases/tag/v0.1.0)
-> or follow the [Python Wheel Guide](docs/python.md). Other registries remain pending.
+> **Python wheels:** CPython 3.8–3.14 wheels are built and tested by GitHub Actions.
+> Version tags automatically upload the complete wheel set to the matching GitHub Release.
+> For the current v0.1.0 backfill status and installation choices, see the
+> [Python Wheel Guide](docs/python.md).
 
 ### Python
 
-Download the matching `finkit-0.1.0-*.whl` from the
-[v0.1.0 Release](https://github.com/coeasy/finkit/releases/tag/v0.1.0), then:
+Download a matching `finkit-0.1.0-*.whl` from the GitHub Actions artifacts or
+the [v0.1.0 Release](https://github.com/coeasy/finkit/releases/tag/v0.1.0), then:
 
 ```bash
 python -m pip install ./finkit-0.1.0-<matching-wheel>.whl
