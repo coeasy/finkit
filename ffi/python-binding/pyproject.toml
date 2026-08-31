@@ -26,15 +26,22 @@ keywords = [
     "rust",
     "performance"
 ]
+dependencies = [
+    "numpy>=1.24",
+]
+optional-dependencies = { pandas = ["pandas>=1.5"], dev = ["maturin>=1.5,<2.0", "numpy>=1.24", "pandas>=1.5", "pytest>=8"] }
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Financial and Insurance Industry",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: Apache Software License",
+    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -51,34 +58,20 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Typing :: Typed",
 ]
-requires-python = ">=3.8"
+requires-python = ">=3.8,<3.15"
 
 [project.urls]
 Homepage = "https://github.com/coeasy/finkit"
-Documentation = "https://github.com/coeasy/finkit/tree/main/ffi/python-binding"
+Documentation = "https://github.com/coeasy/finkit/tree/main/docs/python.md"
 Repository = "https://github.com/coeasy/finkit"
 Issues = "https://github.com/coeasy/finkit/issues"
 Changelog = "https://github.com/coeasy/finkit/releases"
 
-[tool.cibuildwheel]
-build = "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-*"
-skip = ["*-musllinux_*", "pp*"]
-environment-pass = ["RUSTFLAGS"]
-test-command = "pip install pytest numpy && pytest {package}/tests -x -q"
-test-skip = ["*linux_aarch64*"]
-
-[tool.cibuildwheel.linux]
-archs = ["x86_64", "aarch64"]
-
-[tool.cibuildwheel.macos]
-archs = ["x86_64", "arm64"]
-
-[tool.cibuildwheel.windows]
-archs = ["AMD64"]
-
 [tool.maturin]
 features = ["pyo3/extension-module"]
-module-name = "finkit"
+module-name = "finkit.finkit"
+python-source = "."
+python-packages = ["finkit"]
 strip = true
 sdist-include = ["Cargo.lock"]
 include = ["finkit/py.typed"]
