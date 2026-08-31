@@ -149,11 +149,13 @@ jobs:
       - name: Validate wheel metadata and coverage
         env:
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
+          RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || inputs.release_tag }}
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check --no-input twine
           python -m twine check dist/*.whl
           python - <<'PY'
+          import os
           import tomllib
           from pathlib import Path
           from packaging.utils import parse_wheel_filename
@@ -162,6 +164,12 @@ jobs:
               Path("ffi/python-binding/pyproject.toml").read_text()
           )
           expected_version = pyproject["project"]["version"]
+          release_tag = os.environ.get("RELEASE_TAG", "")
+          if release_tag and release_tag.removeprefix("v") != expected_version:
+              raise SystemExit(
+                  f"release tag {release_tag!r} does not match "
+                  f"project version {expected_version!r}"
+              )
           wheels = sorted(Path("dist").glob("finkit-*.whl"))
           if len(wheels) != 27:
               raise SystemExit(f"expected 27 wheels, found {len(wheels)}")
