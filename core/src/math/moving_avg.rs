@@ -228,6 +228,7 @@ pub fn ema_with_seed(input: &[f64], period: usize, seed: EmaSeed) -> Result<Arra
     ema_inner(input, period, seed)
 }
 
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
 #[target_feature(enable = "avx2,fma")]
 unsafe fn ema_inner_avx2(input: &[f64], period: usize, output: &mut [f64]) {
     unsafe {
