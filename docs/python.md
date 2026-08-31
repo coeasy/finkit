@@ -221,3 +221,16 @@ python -m pip install --force-reinstall ./finkit-0.1.0-*.whl
 - [总安装指南](installation.md)
 - [开发指南](development.md)
 - [发布页](https://github.com/coeasy/finkit/releases)
+
+## 自动发布 Release wheel
+
+当向仓库推送符合 `vX.Y.Z` 格式的版本 tag 时，`Python wheels` workflow 会：
+
+1. 为支持的 Python 与操作系统组合构建 wheel；
+2. 在每个目标环境中安装 wheel 并运行 Python 绑定测试；
+3. 汇总 27 个 wheel，使用 `twine check` 校验元数据与兼容性标签；
+4. 将全部 wheel 自动上传到对应的 GitHub Release。
+
+如果需要为已经存在的 Release 补发 wheel，可在 Actions 页面手动运行该 workflow，并填写 `release_tag`，例如 `v0.1.0`。手动补发使用当前 `main` 的源码，因此应先确认源码版本与目标 tag 一致。
+
+构建失败时不会执行 Release 上传步骤；只有全部 wheel 构建、安装测试和汇总校验通过后才会发布。
