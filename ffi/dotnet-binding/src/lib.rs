@@ -176,7 +176,7 @@ mod tests {
             crate::ta_free_cstring(fe);
 
             // Free-path smoke: a scalar and an array handed back to the free fns.
-            let p = Box::into_raw(Box::new(3.14f64));
+            let p = Box::into_raw(Box::new(std::f64::consts::PI));
             crate::ta_free(p);
             let v = vec![1.0f64, 2.0, 3.0];
             let (vp, vl, _vc) = v.into_raw_parts();
