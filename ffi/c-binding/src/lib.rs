@@ -235,6 +235,12 @@ pub unsafe extern "C" fn ta_version() -> *mut c_char {
     })
 }
 
+/// Return the last FFI error code for the calling thread.
+#[no_mangle]
+pub extern "C" fn ta_last_error_code() -> i32 {
+    LAST_ERROR_CODE.with(|code| *code.borrow())
+}
+
 #[no_mangle]
 
 include!("generated.rs");
