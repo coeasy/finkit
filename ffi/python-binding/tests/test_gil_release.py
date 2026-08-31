@@ -2,6 +2,8 @@
 import threading
 import time
 
+import numpy as np
+
 
 def test_gil_release_concurrent():
     """Verify computation-heavy calls release the GIL by running them in parallel threads."""
@@ -11,8 +13,7 @@ def test_gil_release_concurrent():
         print("SKIP: finkit not installed")
         return
 
-    data = list(range(1, 10001))
-    data_f = [float(x) for x in data]
+    data_f = np.arange(1, 10001, dtype=np.float64)
     results = [None, None]
     errors = [None, None]
 
