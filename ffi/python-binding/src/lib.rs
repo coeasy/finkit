@@ -2256,24 +2256,92 @@ pub fn formula_eval_zero_copy(
     close: Py<PyAny>,
     volume: Py<PyAny>,
 ) -> PyResult<Py<PyAny>> {
+    // Preserve the legacy list/tuple API, but use the borrowed NumPy path
+    // whenever all five inputs are contiguous float64 arrays.
+    let direct_result: PyResult<Option<Array1<f64>>> = Python::attach(|py| {
+        let open_array = match open.bind(py).extract::<PyReadonlyArray1<'_, f64>>() {
+            Ok(value) => value,
+            Err(_) => return Ok(None),
+        };
+        let high_array = match high.bind(py).extract::<PyReadonlyArray1<'_, f64>>() {
+            Ok(value) => value,
+            Err(_) => return Ok(None),
+        };
+        let low_array = match low.bind(py).extract::<PyReadonlyArray1<'_, f64>>() {
+            Ok(value) => value,
+            Err(_) => return Ok(None),
+        };
+        let close_array = match close.bind(py).extract::<PyReadonlyArray1<'_, f64>>() {
+            Ok(value) => value,
+            Err(_) => return Ok(None),
+        };
+        let volume_array = match volume.bind(py).extract::<PyReadonlyArray1<'_, f64>>() {
+            Ok(value) => value,
+            Err(_) => return Ok(None),
+        };
+
+        let open = open_array.as_slice().map_err(|error| {
+            PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+                "open must be a contiguous float64 NumPy array: {error}"
+            ))
+        })?;
+        let high = high_array.as_slice().map_err(|error| {
+            PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+                "high must be a contiguous float64 NumPy array: {error}"
+            ))
+        })?;
+        let low = low_array.as_slice().map_err(|error| {
+            PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+                "low must be a contiguous float64 NumPy array: {error}"
+            ))
+        })?;
+        let close = close_array.as_slice().map_err(|error| {
+            PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+                "close must be a contiguous float64 NumPy array: {error}"
+            ))
+        })?;
+        let volume = volume_array.as_slice().map_err(|error| {
+            PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+                "volume must be a contiguous float64 NumPy array: {error}"
+            ))
+        })?;
+
+        if close.is_empty()
+            || [open, high, low, volume]
+                .iter()
+                .any(|values| values.len() != close.len())
+        {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "all OHLCV arrays must be non-empty and have equal lengths",
+            ));
+        }
+
+        let mut engine = FormulaEngine::new();
+        let formula = engine.compile(source).map_err(formula_error_to_pyerr)?;
+        engine
+            .eval_zero_copy_inputs(&formula, open, high, low, close, volume, None)
+            .map(Some)
+            .map_err(formula_error_to_pyerr)
+    })?;
+
+    if let Some(result) = direct_result {
+        let dict = pyo3::types::PyDict::new(py);
+        dict.set_item("__result__", PyArray1::from_vec(py, result.into_raw_vec()))?;
+        return Ok(dict.into());
+    }
+
     let open_vec = extract_array_pyobject(open)?;
     let high_vec = extract_array_pyobject(high)?;
     let low_vec = extract_array_pyobject(low)?;
     let close_vec = extract_array_pyobject(close)?;
     let volume_vec = extract_array_pyobject(volume)?;
 
-    let open_array = Array1::from_vec(open_vec);
-    let high_array = Array1::from_vec(high_vec);
-    let low_array = Array1::from_vec(low_vec);
-    let close_array = Array1::from_vec(close_vec);
-    let volume_array = Array1::from_vec(volume_vec);
-
     let mut ctx = FormulaContext::new(
-        open_array,
-        high_array,
-        low_array,
-        close_array,
-        volume_array,
+        Array1::from_vec(open_vec),
+        Array1::from_vec(high_vec),
+        Array1::from_vec(low_vec),
+        Array1::from_vec(close_vec),
+        Array1::from_vec(volume_vec),
         None,
     );
     let mut engine = FormulaEngine::new();
@@ -2285,14 +2353,10 @@ pub fn formula_eval_zero_copy(
     })?;
 
     let dict = pyo3::types::PyDict::new(py);
-
     for (name, value) in &ctx.variables {
-        let vec_value = value.to_vec();
-        dict.set_item(name.to_string(), vec_value)?;
+        dict.set_item(name.to_string(), value.to_vec())?;
     }
-
     dict.set_item("__result__", result.to_vec())?;
-
     Ok(dict.into())
 }
 
