@@ -2278,4 +2278,27 @@ mod tests {
             _ => false,
         }
     }
+    #[test]
+    fn test_cse_merges_duplicate_pure_subexpressions() {
+        let ast = crate::formula::parser::parse_formula(
+            "MA(CLOSE, 5) + MA(CLOSE, 5)",
+        )
+        .unwrap();
+        let optimized = FormulaOptimizer::optimize_with(&ast, OptLevel::Standard);
+        let rendered = format!("{optimized:?}");
+        assert!(rendered.contains("_CSE0"));
+        assert!(!rendered.contains("name: \"_CSE0\", expr: Variable(\"_CSE0\")"));
+    }
+
+    #[test]
+    fn test_required_lookback_is_conservative() {
+        let ast = crate::formula::parser::parse_formula(
+            "MA(CLOSE, 20) + HHV(HIGH, 5)",
+        )
+        .unwrap();
+        assert_eq!(FormulaOptimizer::required_lookback(&ast), Some(20));
+        let recursive = crate::formula::parser::parse_formula("EMA(CLOSE, 20)").unwrap();
+        assert_eq!(FormulaOptimizer::required_lookback(&recursive), None);
+    }
+
 }
