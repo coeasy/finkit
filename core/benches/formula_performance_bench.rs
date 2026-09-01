@@ -443,5 +443,6 @@ criterion_group!(
     benchmark_complex_formula,
     benchmark_bytecode_vs_ast,
     benchmark_zero_copy_performance,
+    benchmark_eval_into_reuse,
 );
 criterion_main!(performance_benches);
