@@ -316,14 +316,10 @@ impl FormulaEngine {
             return Ok(result);
         }
 
-        let mut context = FormulaContext::new(
-            Array1::from_vec(open.to_vec()),
-            Array1::from_vec(high.to_vec()),
-            Array1::from_vec(low.to_vec()),
-            Array1::from_vec(close.to_vec()),
-            Array1::from_vec(volume.to_vec()),
-            amount.map(|values| Array1::from_vec(values.to_vec())),
-        );
+        let mut context =
+            FormulaContext::from_borrowed_ohlcv(open, high, low, close, volume, amount.map(|values| {
+                Array1::from_vec(values.to_vec())
+            }));
         self.execute(formula, &mut context)
     }
 
