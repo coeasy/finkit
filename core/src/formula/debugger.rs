@@ -123,7 +123,7 @@ impl FormulaDebugger {
         &self,
         name: &str,
         ctx: &'a FormulaContext,
-    ) -> Option<&'a Array1<f64>> {
+    ) -> Option<&'a [f64]> {
         ctx.get_data(name)
     }
 
