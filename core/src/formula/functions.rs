@@ -280,25 +280,25 @@ fn fn_hhvbars(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>,
     let data_len = ctx.data_len;
     let mut output = nan_vec(data_len);
 
+    // Scan the source slice in place. The previous implementation allocated
+    // and copied a temporary window for every bar, which made this O(bars)
+    // allocations on top of the O(bars * period) scan.
     for i in 0..data_len {
         let window_start = (i + 1).saturating_sub(n);
-        let window: Vec<f64> = input.slice(s![window_start..=i]).to_vec();
+        let mut max_value = f64::NEG_INFINITY;
+        let mut max_index = None;
 
-        if window.is_empty() || window.iter().all(|v| v.is_nan()) {
-            continue;
-        }
-
-        let mut max_val = f64::NEG_INFINITY;
-        let mut max_idx = 0;
-
-        for (j, &v) in window.iter().enumerate() {
-            if !v.is_nan() && v > max_val {
-                max_val = v;
-                max_idx = j;
+        for j in window_start..=i {
+            let value = input[j];
+            if !value.is_nan() && value > max_value {
+                max_value = value;
+                max_index = Some(j);
             }
         }
 
-        output[i] = (i - (window_start + max_idx)) as f64;
+        if let Some(index) = max_index {
+            output[i] = (i - index) as f64;
+        }
     }
 
     Ok(output)
@@ -312,25 +312,24 @@ fn fn_llvbars(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>,
     let data_len = ctx.data_len;
     let mut output = nan_vec(data_len);
 
+    // Keep the first occurrence on ties, matching the old temporary-window
+    // implementation while avoiding one Vec allocation per bar.
     for i in 0..data_len {
         let window_start = (i + 1).saturating_sub(n);
-        let window: Vec<f64> = input.slice(s![window_start..=i]).to_vec();
+        let mut min_value = f64::INFINITY;
+        let mut min_index = None;
 
-        if window.is_empty() || window.iter().all(|v| v.is_nan()) {
-            continue;
-        }
-
-        let mut min_val = f64::INFINITY;
-        let mut min_idx = 0;
-
-        for (j, &v) in window.iter().enumerate() {
-            if !v.is_nan() && v < min_val {
-                min_val = v;
-                min_idx = j;
+        for j in window_start..=i {
+            let value = input[j];
+            if !value.is_nan() && value < min_value {
+                min_value = value;
+                min_index = Some(j);
             }
         }
 
-        output[i] = (i - (window_start + min_idx)) as f64;
+        if let Some(index) = min_index {
+            output[i] = (i - index) as f64;
+        }
     }
 
     Ok(output)
