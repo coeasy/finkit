@@ -81,6 +81,7 @@ inherits = "release"
 #   single-threaded throughput, not the Rust target-features default (SSE2).
 # - codegen-units = 1 ensures consistent LTO decisions across crates.
 lto = "fat"
+target-cpu = "native"
 codegen-units = 1
 opt-level = 3
 
