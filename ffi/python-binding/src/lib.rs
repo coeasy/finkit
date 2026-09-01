@@ -18,8 +18,12 @@ use finkit_visualization::error::VisualizationError;
 use finkit_visualization::language::Language;
 use numpy::PyReadonlyArray1;
 use pyo3::prelude::*;
+#[cfg(feature = "formula")]
+use formula_plan::PyCompiledFormula;
 
 mod features;
+#[cfg(feature = "formula")]
+mod formula_plan;
 mod streaming;
 mod sweep;
 mod transforms;
@@ -3752,6 +3756,7 @@ fn finkit(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Formula System
     #[cfg(feature = "formula")]
     {
+        m.add_class::<PyCompiledFormula>()?;
         m.add_function(wrap_pyfunction!(formula_eval, m)?)?;
         m.add_function(wrap_pyfunction!(formula_eval_dialect, m)?)?;
         m.add_function(wrap_pyfunction!(formula_eval_bytecode, m)?)?;
