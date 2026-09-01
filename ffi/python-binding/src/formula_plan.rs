@@ -355,7 +355,6 @@ impl PyCompiledFormula {
         })?;
         let compiled = Arc::clone(&self.compiled);
         let (execution, context, engine) = py.detach(move || {
-            let mut context = context;
             let execution = engine
                 .eval_last(&compiled, &context)
                 .map_err(formula_runtime_error);
