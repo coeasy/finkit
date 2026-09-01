@@ -60,16 +60,16 @@ read the results.
 
 > **Python wheels:** CPython 3.8–3.14 wheels are built and tested by GitHub Actions.
 > Version tags automatically upload the complete wheel set to the matching GitHub Release.
-> For the current v0.1.0 backfill status and installation choices, see the
+> For the current v0.1.2 backfill status and installation choices, see the
 > [Python Wheel Guide](docs/python.md).
 
 ### Python
 
-Download a matching `finkit-0.1.0-*.whl` from the GitHub Actions artifacts or
-the [v0.1.0 Release](https://github.com/coeasy/finkit/releases/tag/v0.1.0), then:
+Download a matching `finkit-0.1.2-*.whl` from the GitHub Actions artifacts or
+the [v0.1.2 Release](https://github.com/coeasy/finkit/releases/tag/v0.1.2), then:
 
 ```bash
-python -m pip install ./finkit-0.1.0-<matching-wheel>.whl
+python -m pip install ./finkit-0.1.2-<matching-wheel>.whl
 ```
 
 See [docs/python.md](docs/python.md) for source builds and wheel selection.
@@ -103,7 +103,7 @@ const macdResult = macd(close, 12, 26, 9);
 
 ```toml
 [dependencies]
-finkit = "0.1.0"
+finkit = "0.1.2"
 ```
 
 ```rust
@@ -135,7 +135,7 @@ rsi, _ := ta.RSI(close, 14)
 <dependency>
     <groupId>com.finkit</groupId>
     <artifactId>finkit</artifactId>
-    <version>0.1.0</version>
+    <version>0.1.2</version>
 </dependency>
 ```
 
@@ -199,7 +199,7 @@ Detailed installation instructions for each language binding are available in [d
 
 | Language | Package Manager | Command |
 |----------|----------------|---------|
-| Python   | pip            | Install the matching v0.1.0 GitHub Release wheel |
+| Python   | pip            | Install the matching v0.1.2 GitHub Release wheel |
 | Node.js  | npm            | `npm install finkit` |
 | Rust     | cargo          | `cargo add finkit` |
 | Java     | Maven          | Add dependency to `pom.xml` |
@@ -776,7 +776,7 @@ Finkit 内置高性能 K 线图可视化模块，支持纯 Rust 渲染，无需�
 
 ```toml
 [dependencies]
-finkit-visualization = { version = "0.1.0", features = ["svg"] }
+finkit-visualization = { version = "0.1.2", features = ["svg"] }
 ```
 
 ```rust
