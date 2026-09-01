@@ -1779,6 +1779,24 @@ result = engine.evaluate("""
 """, close=close)
 ```
 
+### 高频执行建议
+
+同一公式需要重复执行时，建议先编译一次，并复用输出缓冲区。Rust 集成可使用
+`FormulaEngine::eval_into`，减少最终结果和中间缓冲区的重复分配：
+
+```rust
+let mut engine = finkit::formula::FormulaEngine::new();
+let formula = engine.compile("MA(CLOSE, 20)")?;
+let mut output = ndarray::Array1::zeros(ctx.data_len);
+
+for _ in 0..iterations {
+    engine.eval_into(&formula, &mut ctx, &mut output)?;
+}
+```
+
+`output` 长度必须等于 `ctx.data_len`。第一次执行完成预热后，公式执行器会复用内部缓冲区，
+适合批量扫描、回测和实时循环。
+
 ### 支持的表达式
 
 | 表达式 | 说明 |
