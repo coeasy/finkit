@@ -628,12 +628,51 @@ def tanh(close: ArrayLike) -> Array1D:
 # Formula Engine
 # ============================================================================
 
-def parse_formula(source: str) -> Any:
-    """Parse a formula string into an AST."""
+class CompiledFormula:
+    """Reusable formula compilation plan for repeated evaluations."""
+
+    def __init__(self, source: str) -> None:
+        ...
+
+    @property
+    def source(self) -> str:
+        ...
+
+    def eval(
+        self,
+        open: ArrayLike,
+        high: ArrayLike,
+        low: ArrayLike,
+        close: ArrayLike,
+        volume: ArrayLike,
+        amount: Optional[ArrayLike] = ...,
+    ) -> Dict[str, Array1D]:
+        """Evaluate the compiled formula and return NumPy arrays."""
+        ...
+
+def formula_eval(
+    source: str,
+    open: ArrayLike,
+    high: ArrayLike,
+    low: ArrayLike,
+    close: ArrayLike,
+    volume: ArrayLike,
+    amount: Optional[ArrayLike] = ...,
+) -> Dict[str, Array1D]:
+    """Compile and execute a formula once."""
     ...
 
-def execute_formula(source: str, context: Dict[str, ArrayLike]) -> Array1D:
-    """Execute a formula string with the given context."""
+def formula_eval_dialect(
+    source: str,
+    open: ArrayLike,
+    high: ArrayLike,
+    low: ArrayLike,
+    close: ArrayLike,
+    volume: ArrayLike,
+    dialect: str = "alpha_ta",
+    amount: Optional[ArrayLike] = ...,
+) -> Dict[str, Array1D]:
+    """Compile and execute a formula using a named dialect."""
     ...
 
 # ============================================================================
@@ -765,7 +804,7 @@ __all__ = [
     "acos", "asin", "atan", "ceil", "cos", "cosh", "exp", "floor", "ln",
     "log10", "sin", "sinh", "sqrt", "tan", "tanh",
     # Formula Engine
-    "parse_formula", "execute_formula",
+    "CompiledFormula", "formula_eval", "formula_eval_dialect",
     # Visualization
     "KlineChart", "KlineData",
     # Streaming Indicators
