@@ -18,14 +18,17 @@ NumPy arrays:
 result = plan.eval_zero_copy(open_, high, low, close, volume)["__result__"]
 ~~~
 
-The direct MA/EMA/RSI/BOLLMID kernels borrow the NumPy buffers and do not create
-input Vec/ndarray copies. The result array is newly allocated, as it must be
-independent of the input array. Non-contiguous views are rejected instead of being
-silently copied. Use np.ascontiguousarray explicitly when a copy is acceptable.
+The zero-copy path borrows all contiguous OHLCV input buffers for the complete
+synchronous evaluation; it does not clone the input history into an owned context.
+The direct MA/EMA/RSI/BOLLMID kernels also avoid materialising input argument arrays.
+The result array is newly allocated, as it must be independent of the input array.
+Non-contiguous views are rejected instead of being silently copied. Use
+np.ascontiguousarray explicitly when a copy is acceptable.
 
-For formulas that contain arbitrary nested function calls, the public formula
-function ABI still needs owned argument arrays. The zero-copy API keeps the input
-boundary borrowed and falls back to the regular ABI for those intermediate arrays.
+Complex formulas still allocate owned intermediate argument/result arrays because
+the existing built-in function ABI is array-based. This does not copy the original
+NumPy OHLCV input into a second history buffer, and the borrowed context cannot
+escape the synchronous call.
 
 ## Range and last-bar evaluation
 
