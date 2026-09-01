@@ -699,6 +699,7 @@ impl FormulaEngine {
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
         let ast = parse_formula(source).map_err(FormulaError::ParseError)?;
+        let ast = FormulaOptimizer::optimize(&ast);
         let bytecode = compile_to_bytecode(&ast, source).map_err(FormulaError::RuntimeError)?;
         let mut jit = self.jit_compiler.borrow_mut();
         let optimized = jit.compile_cached(bytecode);
@@ -755,6 +756,7 @@ impl FormulaEngine {
     #[cfg(feature = "formula-jit")]
     pub fn compile_jit(&mut self, source: &str) -> Result<OptimizedBytecode, FormulaError> {
         let ast = parse_formula(source).map_err(FormulaError::ParseError)?;
+        let ast = FormulaOptimizer::optimize(&ast);
         let bytecode = compile_to_bytecode(&ast, source).map_err(FormulaError::RuntimeError)?;
         let mut jit = self.jit_compiler.borrow_mut();
         Ok(jit.compile_cached(bytecode))
