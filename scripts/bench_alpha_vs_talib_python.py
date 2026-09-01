@@ -259,7 +259,7 @@ def invoke_batch(finkit: Any, data: dict[str, np.ndarray], name: str, spec: dict
     if error_key in result:
         raise RuntimeError(str(result[error_key]))
     if spec["returns"] == 1:
-        key = prefix[:-1] if prefix.endswith("_") else prefix
+        key = prefix
         if key not in result:
             raise LookupError(f"batch result {key!r} is missing")
         return result[key]
