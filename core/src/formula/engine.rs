@@ -691,6 +691,28 @@ mod tests {
     }
 
     #[test]
+    fn test_simple_formula_dispatch_writes_reusable_output() {
+        let mut engine = FormulaEngine::new();
+        let formula = engine.compile("RSI(CLOSE, 14)").unwrap();
+        let mut ctx = make_ctx(64);
+        let mut output = Array1::zeros(64);
+        engine.eval_into(&formula, &mut ctx, &mut output).unwrap();
+
+        let reference = FormulaExecutor::new();
+        let ast = parse_formula("RSI(CLOSE, 14)").unwrap();
+        let mut reference_ctx = make_ctx(64);
+        let expected = reference.execute(&ast, &mut reference_ctx).unwrap();
+
+        for (actual, expected) in output.iter().zip(expected.iter()) {
+            assert!(
+                (actual.is_nan() && expected.is_nan())
+                    || (actual - expected).abs() < 1e-12,
+                "{actual} != {expected}"
+            );
+        }
+    }
+
+    #[test]
     fn test_simple_formula_dispatch_falls_back_for_nested_expression() {
         let mut engine = FormulaEngine::new();
         let mut ctx = make_ctx(32);
