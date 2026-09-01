@@ -713,6 +713,15 @@ impl FormulaEngine {
         self.eval(source, ctx)
     }
 
+    /// Execute an already compiled formula through the persistent pooled path.
+    pub fn execute_zero_copy_cached(
+        &self,
+        formula: &CompiledFormula,
+        ctx: &mut FormulaContext,
+    ) -> Result<Array1<f64>, FormulaError> {
+        self.executor.execute_zero_copy_cached(&formula.ast, ctx)
+    }
+
     pub fn eval_zero_copy(
         &mut self,
         source: &str,
