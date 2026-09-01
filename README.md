@@ -223,7 +223,7 @@ Real FFI benchmark against TA-Lib C 0.6.4 on 10,000 data points (Criterion.rs, `
 | BOLL(20,2)| 46.51    | 55.46         | **1.19x faster** |
 | ATR(14)   | 39.00    | 60.60         | **1.55x faster** |
 
-> Source: [docs/BENCHMARK_REPORT.md](docs/BENCHMARK_REPORT.md) @ 2026-05-30
+> Methodology and current summary: [docs/benchmark-results.md](docs/benchmark-results.md)
 
 ### Extended Indicators — Watch-List (within 25% of TA-Lib)
 
@@ -239,8 +239,7 @@ Real FFI benchmark against TA-Lib C 0.6.4 on 10,000 data points (Criterion.rs, `
 | ADOSC(3,10)| 25.44   | 25.36         | ⚠️ 1.00x |
 | STOCHF(14,3)| 88.25  | 74.81         | ⚠️ 0.85x |
 
-> Source: [docs/BENCHMARK_REPORT.md](docs/BENCHMARK_REPORT.md) @ 2026-05-30 (Watch List)
-> Optimization tracked in [optimization-continuation-2026-06-20.md](.trae/documents/optimization-continuation-2026-06-20.md)
+> Methodology and current summary: [docs/benchmark-results.md](docs/benchmark-results.md)
 
 ### Language Binding Overhead
 
