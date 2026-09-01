@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::formula::ast::*;
 use crate::formula::opt_level::OptLevel;
+use crate::formula::types::classify_builtin_var;
 
 pub struct FormulaOptimizer;
 
@@ -1238,7 +1239,8 @@ impl FormulaOptimizer {
     fn is_cse_candidate(ast: &AstNode) -> bool {
         fn is_pure(node: &AstNode) -> bool {
             match node {
-                AstNode::Number(_) | AstNode::Variable(_) | AstNode::StringLit(_) => true,
+                AstNode::Number(_) | AstNode::StringLit(_) => true,
+                AstNode::Variable(name) => classify_builtin_var(name).is_some(),
                 AstNode::BinaryOp { left, right, .. } => is_pure(left) && is_pure(right),
                 AstNode::UnaryOp { expr, .. } => is_pure(expr),
                 AstNode::FunctionCall { name, args } => {
@@ -1431,70 +1433,82 @@ impl FormulaOptimizer {
 
     /// Return the finite lookback needed by a formula, or None when the
     /// expression contains a recursive/stateful or unknown function.
+    ///
+    /// The value is the number of bars before the requested range that must be
+    /// included. Lookbacks compose additively through nested rolling functions
+    /// (for example, MA(MA(CLOSE, 5), 5) needs 8 prior bars).
     pub fn required_lookback(ast: &AstNode) -> Option<usize> {
-        fn merge(a: Option<usize>, b: Option<usize>) -> Option<usize> {
-            match (a, b) {
-                (Some(x), Some(y)) => Some(x.max(y)),
-                _ => None,
-            }
+        fn max_children<'a, I>(children: I) -> Option<usize>
+        where
+            I: Iterator<Item = &'a AstNode>,
+        {
+            children.try_fold(0usize, |acc, child| {
+                Some(acc.max(visit(child)?))
+            })
         }
+
+        fn add_offset(value: Option<usize>, offset: usize) -> Option<usize> {
+            value?.checked_add(offset)
+        }
+
         fn visit(node: &AstNode) -> Option<usize> {
             match node {
                 AstNode::Number(_) | AstNode::Variable(_) | AstNode::StringLit(_) => Some(0),
-                AstNode::BinaryOp { left, right, .. } => merge(visit(left), visit(right)),
+                AstNode::BinaryOp { left, right, .. } => {
+                    Some(visit(left)?.max(visit(right)?))
+                }
                 AstNode::UnaryOp { expr, .. } => visit(expr),
-                AstNode::IndexAccess { array, index } => merge(visit(array), visit(index)),
+                AstNode::IndexAccess { array, index } => {
+                    Some(visit(array)?.max(visit(index)?))
+                }
                 AstNode::Assignment { expr, .. }
                 | AstNode::Output { expr, .. }
                 | AstNode::CompoundAssignment { expr, .. } => visit(expr),
-                AstNode::Statements(stmts) => stmts.iter().map(visit).try_fold(0, |acc, item| {
-                    item.map(|value| acc.max(value))
-                }),
+                AstNode::Statements(stmts) => max_children(stmts.iter()),
                 AstNode::IfThenElse {
                     cond,
                     then_branch,
                     else_branch,
-                } => merge(merge(visit(cond), visit(then_branch)), visit(else_branch)),
+                } => Some(visit(cond)?.max(visit(then_branch)?).max(visit(else_branch)?)),
                 AstNode::FunctionCall { name, args } => {
                     let upper = name.to_ascii_uppercase();
-                    let mut result = args.iter().map(visit).try_fold(0, |acc, item| {
-                        item.map(|value| acc.max(value))
-                    })?;
-                    if matches!(upper.as_str(), "EMA" | "DMA" | "DEMA" | "TEMA" | "KAMA" | "MAMA") {
-                        return None;
-                    }
-                    if matches!(upper.as_str(), "CROSS" | "CROSSBELOW" | "LONGCROSS") {
-                        result = result.max(1);
-                    } else if let Some(AstNode::Number(period)) = args.get(1) {
-                        if period.is_finite() && *period >= 1.0 {
-                            let p = *period as usize;
-                            if matches!(
-                                upper.as_str(),
-                                "MA" | "SMA" | "WMA" | "TRIMA" | "RSI" | "HHV" | "LLV"
-                                    | "SUM" | "COUNT" | "EVERY" | "EXIST" | "FILTER" | "REF"
-                                    | "REFX" | "BARSLAST"
-                            ) {
-                                result = result.max(p.saturating_sub(1));
-                            } else if !matches!(
-                                upper.as_str(),
-                                "ABS" | "MAX" | "MIN" | "ADD" | "SUB" | "MULT" | "DIV"
-                                    | "POW" | "SQRT" | "EXP" | "LN" | "LOG10"
-                            ) {
+                    let args_lookback = max_children(args.iter())?;
+                    let offset = match upper.as_str() {
+                        // Recursive/stateful indicators need the full prefix.
+                        "EMA" | "DMA" | "DEMA" | "TEMA" | "KAMA" | "MAMA" => return None,
+                        // Cross detection looks at the previous bar.
+                        "CROSS" | "CROSSBELOW" | "LONGCROSS" => 1,
+                        // Rolling windows consume period - 1 previous bars.
+                        "MA" | "SMA" | "WMA" | "TRIMA" | "RSI" | "HHV" | "LLV"
+                        | "SUM" | "COUNT" | "EVERY" | "EXIST" | "FILTER" | "BARSLAST" => {
+                            let Some(AstNode::Number(period)) = args.get(1) else {
+                                return None;
+                            };
+                            if !period.is_finite() || *period < 1.0 {
                                 return None;
                             }
-                        } else if !matches!(
-                            upper.as_str(),
-                            "BARSCOUNT" | "BARPOS" | "CAPITAL" | "DRAWNULL"
-                        ) {
-                            return None;
+                            (*period as usize).saturating_sub(1)
                         }
-                    } else if !matches!(
-                        upper.as_str(),
-                        "BARSCOUNT" | "BARPOS" | "CAPITAL" | "DRAWNULL"
-                    ) && !args.is_empty() {
-                        return None;
-                    }
-                    Some(result)
+                        // REF/REFX shift the input by the requested period.
+                        "REF" | "REFX" => {
+                            let Some(AstNode::Number(period)) = args.get(1) else {
+                                return None;
+                            };
+                            if !period.is_finite() || *period < 0.0 {
+                                return None;
+                            }
+                            *period as usize
+                        }
+                        // Element-wise functions preserve their arguments'
+                        // lookback. Keep this list intentionally small.
+                        "ABS" | "MAX" | "MIN" | "ADD" | "SUB" | "MULT" | "DIV" | "POW"
+                        | "SQRT" | "EXP" | "LN" | "LOG10" => 0,
+                        // Known context-only functions do not read history.
+                        "BARSCOUNT" | "BARPOS" | "CAPITAL" | "DRAWNULL" => 0,
+                        // Unknown functions are evaluated conservatively.
+                        _ => return None,
+                    };
+                    add_offset(Some(args_lookback), offset)
                 }
                 AstNode::ForLoop { .. } | AstNode::WhileLoop { .. } => None,
                 AstNode::DrawText { .. }
@@ -1504,6 +1518,7 @@ impl FormulaOptimizer {
                 AstNode::ParamDecl { .. } => Some(0),
             }
         }
+
         visit(ast)
     }
 }
@@ -2290,6 +2305,22 @@ mod tests {
         let rendered = format!("{optimized:?}");
         assert!(rendered.contains("_CSE0"));
         assert!(!rendered.contains("name: \"_CSE0\", expr: Variable(\"_CSE0\")"));
+    }
+
+    #[test]
+    fn test_required_lookback_composes_nested_windows() {
+        let ast = crate::formula::parser::parse_formula("MA(MA(CLOSE, 5), 5)").unwrap();
+        assert_eq!(FormulaOptimizer::required_lookback(&ast), Some(8));
+    }
+
+    #[test]
+    fn test_cse_does_not_merge_mutable_formula_variables() {
+        let ast = crate::formula::parser::parse_formula(
+            "X := CLOSE; MA(X, 5) + MA(X, 5)",
+        )
+        .unwrap();
+        let optimized = FormulaOptimizer::optimize_with(&ast, OptLevel::Standard);
+        assert!(!format!("{optimized:?}").contains("_CSE"));
     }
 
     #[test]
