@@ -9,10 +9,10 @@
 
 use ::finkit::formula::{CompiledFormula, FormulaContext, FormulaEngine};
 use ndarray::Array1;
-use std::sync::Arc;
 use numpy::{PyArray1, PyReadonlyArray1};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
+use std::sync::Arc;
 
 fn read_array<'py>(name: &str, array: PyReadonlyArray1<'py, f64>) -> PyResult<Vec<f64>> {
     array
@@ -135,11 +135,9 @@ impl PyCompiledFormula {
                 Array1::from_vec(volume),
                 amount.map(Array1::from_vec),
             );
-            let execution = engine
-                .execute(&compiled, &mut context)
-                .map_err(|error| {
-                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())
-                });
+            let execution = engine.execute(&compiled, &mut context).map_err(|error| {
+                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())
+            });
             (execution, context.variables, engine)
         });
         self.engine = Some(engine);
