@@ -440,38 +440,30 @@ unsafe fn rsi_avx2(data: &[f64], period: usize, out: &mut [f64]) {
         *v = f64::NAN;
     }
 
-    let changes_len = len - 1;
-    let mut changes = alloc::vec![0.0_f64; changes_len];
-    let body = changes_len;
-    let chunks = body / 4;
+    // Accumulate the warm-up gains/losses directly from the input. The old
+    // implementation materialized every price change in a temporary Vec,
+    // which defeated the allocation-free `_into` contract on AVX2.
     let zero = _mm256_setzero_pd();
-    for c in 0..chunks {
-        let i = c * 4;
-        let curr = _mm256_loadu_pd(data.as_ptr().add(i + 1));
-        let prev = _mm256_loadu_pd(data.as_ptr().add(i));
-        _mm256_storeu_pd(changes.as_mut_ptr().add(i), _mm256_sub_pd(curr, prev));
-    }
-    for i in chunks * 4..body {
-        changes[i] = data[i + 1] - data[i];
-    }
-
     let mut gain_sum = zero;
     let mut loss_sum = zero;
     let gain_chunks = period / 4;
     for c in 0..gain_chunks {
         let off = c * 4;
-        let ch = _mm256_loadu_pd(changes.as_ptr().add(off));
-        let neg = _mm256_sub_pd(zero, ch);
-        gain_sum = _mm256_add_pd(gain_sum, _mm256_max_pd(ch, zero));
+        let curr = _mm256_loadu_pd(data.as_ptr().add(off + 1));
+        let prev = _mm256_loadu_pd(data.as_ptr().add(off));
+        let change = _mm256_sub_pd(curr, prev);
+        let neg = _mm256_sub_pd(zero, change);
+        gain_sum = _mm256_add_pd(gain_sum, _mm256_max_pd(change, zero));
         loss_sum = _mm256_add_pd(loss_sum, _mm256_max_pd(neg, zero));
     }
     let gain_arr: [f64; 4] = core::mem::transmute(gain_sum);
     let loss_arr: [f64; 4] = core::mem::transmute(loss_sum);
     let mut avg_gain = gain_arr[0] + gain_arr[1] + gain_arr[2] + gain_arr[3];
     let mut avg_loss = loss_arr[0] + loss_arr[1] + loss_arr[2] + loss_arr[3];
-    for &ch in &changes[gain_chunks * 4..period] {
-        avg_gain += ch.max(0.0);
-        avg_loss += (-ch).max(0.0);
+    for i in gain_chunks * 4..period {
+        let change = data[i + 1] - data[i];
+        avg_gain += change.max(0.0);
+        avg_loss += (-change).max(0.0);
     }
 
     let inv_period = 1.0 / period as f64;
