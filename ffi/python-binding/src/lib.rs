@@ -16,10 +16,10 @@ use finkit_visualization::config::{
 use finkit_visualization::data::KlineData;
 use finkit_visualization::error::VisualizationError;
 use finkit_visualization::language::Language;
-use numpy::PyReadonlyArray1;
-use pyo3::prelude::*;
 #[cfg(feature = "formula")]
 use formula_plan::PyCompiledFormula;
+use numpy::PyReadonlyArray1;
+use pyo3::prelude::*;
 
 mod features;
 #[cfg(feature = "formula")]
