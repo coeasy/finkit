@@ -2955,7 +2955,7 @@ fn parse_indicator_requests(requests: Vec<(String, Vec<f64>)>) -> Vec<IndicatorR
 /// print(results["sma_14"])
 /// ```
 #[pyfunction]
-#[pyo3(signature = (close, requests, open=None, high=None, low=None, volume=None))]
+#[pyo3(signature = (close, requests, open=None, high=None, low=None, volume=None, secondary=None))]
 fn compute_indicators<'py>(
     py: Python<'py>,
     close: PyReadonlyArray1<'_, f64>,
@@ -2964,6 +2964,7 @@ fn compute_indicators<'py>(
     high: Option<PyReadonlyArray1<'_, f64>>,
     low: Option<PyReadonlyArray1<'_, f64>>,
     volume: Option<PyReadonlyArray1<'_, f64>>,
+    secondary: Option<PyReadonlyArray1<'_, f64>>,
 ) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
     let close_slice = close
         .as_slice()
@@ -2973,6 +2974,8 @@ fn compute_indicators<'py>(
     let high_vec: Option<Vec<f64>> = high.as_ref().map(|arr| arr.as_array().to_vec());
     let low_vec: Option<Vec<f64>> = low.as_ref().map(|arr| arr.as_array().to_vec());
     let volume_vec: Option<Vec<f64>> = volume.as_ref().map(|arr| arr.as_array().to_vec());
+    let secondary_vec: Option<Vec<f64>> =
+        secondary.as_ref().map(|arr| arr.as_array().to_vec());
 
     let indicator_requests = parse_indicator_requests(requests);
 
@@ -2983,6 +2986,7 @@ fn compute_indicators<'py>(
             low_vec.as_deref(),
             close_slice,
             volume_vec.as_deref(),
+            secondary_vec.as_deref(),
             &indicator_requests,
         )
     });
@@ -3032,6 +3036,7 @@ fn compute_all_indicators(
     low: Option<&[f64]>,
     close: &[f64],
     volume: Option<&[f64]>,
+    secondary: Option<&[f64]>,
     requests: &[IndicatorRequest],
 ) -> Vec<(String, IndicatorResult)> {
     let mut results = Vec::with_capacity(requests.len());
@@ -3046,11 +3051,25 @@ fn compute_all_indicators(
                 .collect::<Vec<_>>()
                 .join("_")
         );
-        let result = compute_single_indicator(open, high, low, close, volume, req);
+        let result = compute_single_indicator(open, high, low, close, volume, secondary, req);
         results.push((key, result));
     }
 
     results
+}
+
+
+fn pattern_result(result: ::finkit::Result<candlestick::PatternResult>) -> IndicatorResult {
+    result
+        .map(|arr| {
+            IndicatorResult::Single(
+                arr.into_raw_vec()
+                    .into_iter()
+                    .map(|value| value as f64)
+                    .collect(),
+            )
+        })
+        .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
 }
 
 /// Compute a single indicator based on request.
@@ -3060,6 +3079,7 @@ fn compute_single_indicator(
     low: Option<&[f64]>,
     close: &[f64],
     volume: Option<&[f64]>,
+    secondary: Option<&[f64]>,
     req: &IndicatorRequest,
 ) -> IndicatorResult {
     let name = req.name.to_lowercase();
@@ -3236,6 +3256,310 @@ fn compute_single_indicator(
         "ht_trendline" => indicators::ht_trendline(close)
             .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
             .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+
+        "ma" => {
+            let period = params.first().copied().unwrap_or(14.0) as usize;
+            indicators::ma(close, period, indicators::MaType::Sma)
+                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
+        }
+        "trima" => {
+            let period = params.first().copied().unwrap_or(14.0) as usize;
+            moving_avg::trima(close, period)
+                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
+        }
+        "mavp" => match secondary {
+            Some(periods) => {
+                let min_period = params.first().copied().unwrap_or(2.0) as usize;
+                let max_period = params.get(1).copied().unwrap_or(30.0) as usize;
+                moving_avg::mavp(close, periods, min_period, max_period)
+                    .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
+            }
+            None => IndicatorResult::Error("MAVP requires a periods array as secondary data".to_string()),
+        },
+        "macdext" => {
+            let fast = params.first().copied().unwrap_or(12.0) as usize;
+            let slow = params.get(2).copied().unwrap_or(26.0) as usize;
+            let signal = params.get(4).copied().unwrap_or(9.0) as usize;
+            indicators::macdext(
+                close,
+                fast,
+                indicators::MaType::Sma,
+                slow,
+                indicators::MaType::Sma,
+                signal,
+                indicators::MaType::Sma,
+            )
+            .map(|res| {
+                IndicatorResult::Triple(
+                    res.macd.into_raw_vec(),
+                    res.signal.into_raw_vec(),
+                    res.hist.into_raw_vec(),
+                )
+            })
+            .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
+        }
+        "macdfix" => indicators::macdfix(close)
+            .map(|res| {
+                IndicatorResult::Triple(
+                    res.macd.into_raw_vec(),
+                    res.signal.into_raw_vec(),
+                    res.hist.into_raw_vec(),
+                )
+            })
+            .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+        "adxr" => match (high, low) {
+            (Some(h), Some(l)) => {
+                let period = params.first().copied().unwrap_or(14.0) as usize;
+                indicators::adxr(h, l, close, period)
+                    .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
+            }
+            _ => IndicatorResult::Error("ADXR requires high and low data".to_string()),
+        },
+        "aroonosc" => match (high, low) {
+            (Some(h), Some(l)) => {
+                let period = params.first().copied().unwrap_or(14.0) as usize;
+                indicators::aroonosc(h, l, period)
+                    .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
+            }
+            _ => IndicatorResult::Error("AroonOsc requires high and low data".to_string()),
+        },
+        "ppo" => {
+            let fast = params.first().copied().unwrap_or(12.0) as usize;
+            let slow = params.get(1).copied().unwrap_or(26.0) as usize;
+            indicators::ppo(close, fast, slow)
+                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
+        }
+        "rocp" => {
+            let period = params.first().copied().unwrap_or(10.0) as usize;
+            indicators::rocp(close, period)
+                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
+        }
+        "rocr" => {
+            let period = params.first().copied().unwrap_or(10.0) as usize;
+            indicators::rocr(close, period)
+                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
+        }
+        "rocr100" => {
+            let period = params.first().copied().unwrap_or(10.0) as usize;
+            indicators::rocr100(close, period)
+                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
+        }
+        "stochf" => match (high, low) {
+            (Some(h), Some(l)) => {
+                let fastk = params.first().copied().unwrap_or(5.0) as usize;
+                let fastd = params.get(1).copied().unwrap_or(3.0) as usize;
+                indicators::stochf(h, l, close, fastk, fastd)
+                    .map(|res| IndicatorResult::Double(res.k.into_raw_vec(), res.d.into_raw_vec()))
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
+            }
+            _ => IndicatorResult::Error("STOCHF requires high and low data".to_string()),
+        },
+        "stochrsi" => {
+            let rsi_period = params.first().copied().unwrap_or(14.0) as usize;
+            let stoch_period = params.get(1).copied().unwrap_or(5.0) as usize;
+            let fastk = params.get(2).copied().unwrap_or(3.0) as usize;
+            let fastd = params.get(3).copied().unwrap_or(0.0) as usize;
+            indicators::stochrsi(close, rsi_period, stoch_period, fastk, fastd)
+                .map(|res| IndicatorResult::Double(res.k.into_raw_vec(), res.d.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
+        }
+        "ultosc" => match (high, low) {
+            (Some(h), Some(l)) => {
+                let p1 = params.first().copied().unwrap_or(7.0) as usize;
+                let p2 = params.get(1).copied().unwrap_or(14.0) as usize;
+                let p3 = params.get(2).copied().unwrap_or(28.0) as usize;
+                indicators::ultosc(h, l, close, p1, p2, p3)
+                    .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
+            }
+            _ => IndicatorResult::Error("ULTOSC requires high and low data".to_string()),
+        },
+        "avgdev" => {
+            let period = params.first().copied().unwrap_or(14.0) as usize;
+            indicators::avgdev(close, period)
+                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
+        }
+        "linearreg_angle" => {
+            let period = params.first().copied().unwrap_or(14.0) as usize;
+            indicators::linearreg_angle(close, period)
+                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
+        }
+        "linearreg_intercept" => {
+            let period = params.first().copied().unwrap_or(14.0) as usize;
+            indicators::linearreg_intercept(close, period)
+                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
+        }
+        "linearreg_slope" => {
+            let period = params.first().copied().unwrap_or(14.0) as usize;
+            indicators::linearreg_slope(close, period)
+                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
+        }
+        "var" => {
+            let period = params.first().copied().unwrap_or(14.0) as usize;
+            indicators::var(close, period, 1.0)
+                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
+        }
+        "beta" => match secondary {
+            Some(other) => {
+                let period = params.first().copied().unwrap_or(14.0) as usize;
+                indicators::beta(close, other, period)
+                    .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
+            }
+            None => IndicatorResult::Error("BETA requires secondary data".to_string()),
+        },
+        "correl" | "correlation" => match secondary {
+            Some(other) => {
+                let period = params.first().copied().unwrap_or(14.0) as usize;
+                indicators::correlation(close, other, period)
+                    .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
+            }
+            None => IndicatorResult::Error("CORREL requires secondary data".to_string()),
+        },
+        "acos" => indicators::acos(close)
+            .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+            .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+        "asin" => indicators::asin(close)
+            .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+            .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+        "atan" => indicators::atan(close)
+            .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+            .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+        "ceil" => indicators::ceil(close)
+            .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+            .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+        "cos" => indicators::cos(close)
+            .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+            .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+        "cosh" => indicators::cosh(close)
+            .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+            .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+        "exp" => indicators::exp(close)
+            .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+            .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+        "floor" => indicators::floor(close)
+            .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+            .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+        "ln" => indicators::ln(close)
+            .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+            .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+        "log10" => indicators::log10(close)
+            .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+            .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+        "sin" => indicators::sin(close)
+            .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+            .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+        "sinh" => indicators::sinh(close)
+            .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+            .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+        "sqrt" => indicators::sqrt(close)
+            .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+            .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+        "tan" => indicators::tan(close)
+            .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+            .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+        "tanh" => indicators::tanh(close)
+            .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+            .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+        "add" => match secondary {
+            Some(other) => indicators::add(close, other)
+                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+            None => IndicatorResult::Error("ADD requires secondary data".to_string()),
+        },
+        "div" => match secondary {
+            Some(other) => indicators::div(close, other)
+                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+            None => IndicatorResult::Error("DIV requires secondary data".to_string()),
+        },
+        "mult" => match secondary {
+            Some(other) => indicators::mult(close, other)
+                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+            None => IndicatorResult::Error("MULT requires secondary data".to_string()),
+        },
+        "sub" => match secondary {
+            Some(other) => indicators::sub(close, other)
+                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+            None => IndicatorResult::Error("SUB requires secondary data".to_string()),
+        },
+        "max" => {
+            let period = params.first().copied().unwrap_or(30.0) as usize;
+            indicators::max(close, period)
+                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
+        }
+        "min" => {
+            let period = params.first().copied().unwrap_or(30.0) as usize;
+            indicators::min(close, period)
+                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
+        }
+        "sum" => {
+            let period = params.first().copied().unwrap_or(30.0) as usize;
+            indicators::sum(close, period)
+                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
+        }
+        "maxindex" => {
+            let period = params.first().copied().unwrap_or(30.0) as usize;
+            indicators::maxindex(close, period)
+                .map(|arr| {
+                    IndicatorResult::Single(
+                        arr.into_raw_vec().into_iter().map(|value| value as f64).collect(),
+                    )
+                })
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
+        }
+        "minindex" => {
+            let period = params.first().copied().unwrap_or(30.0) as usize;
+            indicators::minindex(close, period)
+                .map(|arr| {
+                    IndicatorResult::Single(
+                        arr.into_raw_vec().into_iter().map(|value| value as f64).collect(),
+                    )
+                })
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
+        }
+        "minmax" => {
+            let period = params.first().copied().unwrap_or(30.0) as usize;
+            indicators::minmax(close, period)
+                .map(|(min_values, max_values)| {
+                    IndicatorResult::Double(
+                        min_values.into_raw_vec(),
+                        max_values.into_raw_vec(),
+                    )
+                })
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
+        }
+        "minmaxindex" => {
+            let period = params.first().copied().unwrap_or(30.0) as usize;
+            indicators::minmaxindex(close, period)
+                .map(|(min_values, max_values)| {
+                    IndicatorResult::Double(
+                        min_values.into_raw_vec().into_iter().map(|value| value as f64).collect(),
+                        max_values.into_raw_vec().into_iter().map(|value| value as f64).collect(),
+                    )
+                })
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
+        },
         "zscore" => {
             let period = params.first().copied().unwrap_or(14.0) as usize;
             indicators::zscore(close, period)
@@ -3639,6 +3963,73 @@ fn compute_single_indicator(
                 _ => IndicatorResult::Error("HeikinAshi requires open, high and low".to_string()),
             },
             _ => IndicatorResult::Error("HeikinAshi requires open data".to_string()),
+        },
+        name if name.starts_with("cdl") => match (open, high, low) {
+            (Some(o), Some(h), Some(l)) => match name {
+                    "cdl2crows" => pattern_result(candlestick::cdl_2crows(o, h, l, close)),
+                    "cdl3blackcrows" => pattern_result(candlestick::cdl_3black_crows(o, h, l, close)),
+                    "cdl3inside" => pattern_result(candlestick::cdl_3inside(o, h, l, close)),
+                    "cdl3linestrike" => pattern_result(candlestick::cdl_3linestrike(o, h, l, close)),
+                    "cdl3outside" => pattern_result(candlestick::cdl_3outside(o, h, l, close)),
+                    "cdl3starsinsouth" => pattern_result(candlestick::cdl_3starsinsouth(o, h, l, close)),
+                    "cdl3whitesoldiers" => pattern_result(candlestick::cdl_3white_soldiers(o, h, l, close)),
+                    "cdlabandonedbaby" => pattern_result(candlestick::cdl_abandoned_baby(o, h, l, close)),
+                    "cdladvanceblock" => pattern_result(candlestick::cdl_advanceblock(o, h, l, close)),
+                    "cdlbelthold" => pattern_result(candlestick::cdl_belthold(o, h, l, close)),
+                    "cdlbreakaway" => pattern_result(candlestick::cdl_breakaway(o, h, l, close)),
+                    "cdlclosingmarubozu" => pattern_result(candlestick::cdl_closingmarubozu(o, h, l, close)),
+                    "cdlconcealbabyswall" => pattern_result(candlestick::cdl_concealbabyswall(o, h, l, close)),
+                    "cdlcounterattack" => pattern_result(candlestick::cdl_counterattack(o, h, l, close)),
+                    "cdldarkcloudcover" => pattern_result(candlestick::cdl_darkcloudcover(o, h, l, close)),
+                    "cdldoji" => pattern_result(candlestick::cdl_doji(o, h, l, close)),
+                    "cdldojistar" => pattern_result(candlestick::cdl_doji_star(o, h, l, close)),
+                    "cdldragonflydoji" => pattern_result(candlestick::cdl_dragonflydoji(o, h, l, close)),
+                    "cdlengulfing" => pattern_result(candlestick::cdl_engulfing(o, h, l, close)),
+                    "cdleveningdojistar" => pattern_result(candlestick::cdl_eveningdojistar(o, h, l, close)),
+                    "cdleveningstar" => pattern_result(candlestick::cdl_eveningstar(o, h, l, close)),
+                    "cdlgapsidesidewhite" => pattern_result(candlestick::cdl_gap_side_white(o, h, l, close)),
+                    "cdlgravestonedoji" => pattern_result(candlestick::cdl_gravestonedoji(o, h, l, close)),
+                    "cdlhammer" => pattern_result(candlestick::cdl_hammer(o, h, l, close)),
+                    "cdlhangingman" => pattern_result(candlestick::cdl_hangingman(o, h, l, close)),
+                    "cdlharami" => pattern_result(candlestick::cdl_harami(o, h, l, close)),
+                    "cdlharamicross" => pattern_result(candlestick::cdl_haramicross(o, h, l, close)),
+                    "cdlhighwave" => pattern_result(candlestick::cdl_highwave(o, h, l, close)),
+                    "cdlhikkake" => pattern_result(candlestick::cdl_hikkake(o, h, l, close)),
+                    "cdlhikkakemod" => pattern_result(candlestick::cdl_hikkake_mod(o, h, l, close)),
+                    "cdlhomingpigeon" => pattern_result(candlestick::cdl_homing_pigeon(o, h, l, close)),
+                    "cdlidentical3crows" => pattern_result(candlestick::cdl_identical3crows(o, h, l, close)),
+                    "cdlinneck" => pattern_result(candlestick::cdl_inneck(o, h, l, close)),
+                    "cdlinvertedhammer" => pattern_result(candlestick::cdl_invertedhammer(o, h, l, close)),
+                    "cdlkicking" => pattern_result(candlestick::cdl_kicking(o, h, l, close)),
+                    "cdlkickingbylength" => pattern_result(candlestick::cdl_kickingbylength(o, h, l, close)),
+                    "cdlladderbottom" => pattern_result(candlestick::cdl_ladder_bottom(o, h, l, close)),
+                    "cdllongleggeddoji" => pattern_result(candlestick::cdl_longleggeddoji(o, h, l, close)),
+                    "cdllongline" => pattern_result(candlestick::cdl_longline(o, h, l, close)),
+                    "cdlmarubozu" => pattern_result(candlestick::cdl_marubozu(o, h, l, close)),
+                    "cdlmatchinglow" => pattern_result(candlestick::cdl_matchinglow(o, h, l, close)),
+                    "cdlmathold" => pattern_result(candlestick::cdl_mathold(o, h, l, close)),
+                    "cdlmorningdojistar" => pattern_result(candlestick::cdl_morningdojistar(o, h, l, close)),
+                    "cdlmorningstar" => pattern_result(candlestick::cdl_morningstar(o, h, l, close)),
+                    "cdlonneck" => pattern_result(candlestick::cdl_onneck(o, h, l, close)),
+                    "cdlpiercing" => pattern_result(candlestick::cdl_piercing(o, h, l, close)),
+                    "cdlrickshawman" => pattern_result(candlestick::cdl_rickshawman(o, h, l, close)),
+                    "cdlrisefall3methods" => pattern_result(candlestick::cdl_rise_fall_3methods(o, h, l, close)),
+                    "cdlseparatinglines" => pattern_result(candlestick::cdl_separatinglines(o, h, l, close)),
+                    "cdlshootingstar" => pattern_result(candlestick::cdl_shootingstar(o, h, l, close)),
+                    "cdlshortline" => pattern_result(candlestick::cdl_shortline(o, h, l, close)),
+                    "cdlspinningtop" => pattern_result(candlestick::cdl_spinningtop(o, h, l, close)),
+                    "cdlstalledpattern" => pattern_result(candlestick::cdl_stalledpattern(o, h, l, close)),
+                    "cdlsticksandwich" => pattern_result(candlestick::cdl_sticksandwich(o, h, l, close)),
+                    "cdltakuri" => pattern_result(candlestick::cdl_takuri(o, h, l, close)),
+                    "cdltasukigap" => pattern_result(candlestick::cdl_tasukigap(o, h, l, close)),
+                    "cdlthrusting" => pattern_result(candlestick::cdl_thrusting(o, h, l, close)),
+                    "cdltristar" => pattern_result(candlestick::cdl_tristar(o, h, l, close)),
+                    "cdlunique3river" => pattern_result(candlestick::cdl_unique3river(o, h, l, close)),
+                    "cdlupsidegap2crows" => pattern_result(candlestick::cdl_upsidegap2crows(o, h, l, close)),
+                    "cdlxsidegap3methods" => pattern_result(candlestick::cdl_xsidegap3methods(o, h, l, close)),
+                _ => IndicatorResult::Error(format!("Unsupported candlestick function: {}", name)),
+            },
+            _ => IndicatorResult::Error("Candlestick functions require open, high and low data".to_string()),
         },
         _ => IndicatorResult::Error(format!("Unknown indicator: {}", name)),
     }
