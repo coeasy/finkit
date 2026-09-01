@@ -540,8 +540,8 @@ fn fn_em_zig(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, 
     ensure_args_len("EM_ZIG", args, 2)?;
     let _k = extract_f64_arg(args, 0, "EM_ZIG")?;
     let n = extract_f64_arg(args, 1, "EM_ZIG")?;
-    let high = ctx.high;
-    let low = ctx.low;
+    let high = ctx.high.as_slice();
+    let low = ctx.low.as_slice();
 
     match lib_zigzag(high, low, n) {
         Ok(result) => Ok(result.zigzag),
@@ -4021,7 +4021,7 @@ fn fn_tr(ctx: &FormulaContext, _args: &[Array1<f64>]) -> Result<Array1<f64>, For
     let mut out = Array1::zeros(len);
     let h = ctx.high;
     let l = ctx.low;
-    let c = ctx.close.as_slice().unwrap();
+    let c = ctx.close.as_slice();
     out[0] = h[0] - l[0];
     for i in 1..len {
         let hl = h[i] - l[i];
@@ -4474,7 +4474,7 @@ fn fn_mtm(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, For
 fn fn_close1(ctx: &FormulaContext, _args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let len = ctx.data_len;
     let mut out = nan_vec(len);
-    let c = ctx.close.as_slice().unwrap();
+    let c = ctx.close.as_slice();
     for i in 1..len {
         out[i] = c[i - 1];
     }
@@ -4484,7 +4484,7 @@ fn fn_close1(ctx: &FormulaContext, _args: &[Array1<f64>]) -> Result<Array1<f64>,
 fn fn_open1(ctx: &FormulaContext, _args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let len = ctx.data_len;
     let mut out = nan_vec(len);
-    let o = ctx.open.as_slice().unwrap();
+    let o = ctx.open.as_slice();
     for i in 1..len {
         out[i] = o[i - 1];
     }
@@ -4568,8 +4568,8 @@ fn compute_zigzag_pivots(
     ctx: &FormulaContext,
     threshold_pct: f64,
 ) -> (Vec<(usize, f64, bool)>, usize) {
-    let high = ctx.high;
-    let low = ctx.low;
+    let high = ctx.high.as_slice();
+    let low = ctx.low.as_slice();
     let data_len = ctx.data_len;
 
     let zz_result = lib_zigzag(high, low, threshold_pct);
@@ -4718,8 +4718,8 @@ fn fn_troughbars(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f6
 fn fn_zigzag(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("ZIGZAG", args, 2)?;
     let n = extract_f64_arg(args, 1, "ZIGZAG")?;
-    let high = ctx.high;
-    let low = ctx.low;
+    let high = ctx.high.as_slice();
+    let low = ctx.low.as_slice();
 
     match lib_zigzag(high, low, n) {
         Ok(result) => Ok(result.zigzag),
@@ -5720,7 +5720,7 @@ fn fn_low1(ctx: &FormulaContext, _args: &[Array1<f64>]) -> Result<Array1<f64>, F
 fn fn_vol1(ctx: &FormulaContext, _args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let len = ctx.data_len;
     let mut out = nan_vec(len);
-    let v = ctx.volume.as_slice().unwrap();
+    let v = ctx.volume.as_slice();
     for i in 1..len {
         out[i] = v[i - 1];
     }
@@ -5848,7 +5848,7 @@ fn fn_totalvol(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
     let data_len = ctx.data_len;
     let mut result = nan_vec(data_len);
 
-    let vol = ctx.volume.as_slice().unwrap();
+    let vol = ctx.volume.as_slice();
     for i in (n - 1)..data_len {
         let window_start = (i + 1).saturating_sub(n);
         let sum: f64 = (window_start..=i).map(|j| vol[j]).sum();
@@ -5863,7 +5863,7 @@ fn fn_maxprice(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
     let n = extract_n(args, 0, "MAXPRICE")?;
     let data_len = ctx.data_len;
 
-    let high = ctx.high;
+    let high = ctx.high.as_slice();
     match lib_stat::rolling_max(high, n) {
         Ok(result) => Ok(result),
         Err(_) => Ok(nan_vec(data_len)),
@@ -5875,7 +5875,7 @@ fn fn_minprice(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
     let n = extract_n(args, 0, "MINPRICE")?;
     let data_len = ctx.data_len;
 
-    let low = ctx.low;
+    let low = ctx.low.as_slice();
     match lib_stat::rolling_min(low, n) {
         Ok(result) => Ok(result),
         Err(_) => Ok(nan_vec(data_len)),
@@ -5885,8 +5885,8 @@ fn fn_minprice(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
 fn fn_fox_zig(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("FOX_ZIG", args, 2)?;
     let n = extract_f64_arg(args, 1, "FOX_ZIG")?;
-    let high = ctx.high;
-    let low = ctx.low;
+    let high = ctx.high.as_slice();
+    let low = ctx.low.as_slice();
 
     match lib_zigzag(high, low, n) {
         Ok(result) => Ok(result.zigzag),
