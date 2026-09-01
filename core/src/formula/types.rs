@@ -909,4 +909,17 @@ mod tests {
         let retrieved = ctx.get_variable_arc(&name).unwrap();
         assert_eq!(retrieved.len(), 5);
     }
+    #[test]
+    fn test_append_bar_is_amortized_and_keeps_data() {
+        let mut ctx = make_ctx(2);
+        ctx.reserve_bars(128);
+        let open_ptr = ctx.open.as_ptr();
+        ctx.append_bar(12.0, 13.0, 11.0, 12.5, 2000.0);
+        ctx.append_bar(12.5, 13.5, 11.5, 13.0, 2100.0);
+        assert_eq!(ctx.data_len, 4);
+        assert_eq!(ctx.close.as_slice(), &[10.0, 10.15, 12.5, 13.0]);
+        assert_eq!(ctx.volume.as_slice(), &[1000.0, 1010.0, 2000.0, 2100.0]);
+        assert_eq!(ctx.open.as_ptr(), open_ptr);
+    }
+
 }
