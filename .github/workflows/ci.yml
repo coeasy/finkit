@@ -52,6 +52,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - name: Check release version consistency
+        run: python scripts/check_versions.py
+
       - name: Verify generated registry snapshot
         run: git diff --exit-code -- docs/indicator_registry.json
       - name: Run core tests
