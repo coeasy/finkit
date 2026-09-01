@@ -79,4 +79,4 @@ graph TD
 - [Data flow](dataflow.md) — request lifecycle.
 - [Formula engine](formula-engine.md) — internal stages of formula eval.
 - [api-reference.md](../api-reference.md) — public API surface (English).
-- [BENCHMARK_REPORT.md](../BENCHMARK_REPORT.md) — performance baseline.
+- [Benchmark results](../benchmark-results.md) — current performance summary.
