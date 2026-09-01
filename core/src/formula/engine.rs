@@ -73,6 +73,20 @@ impl FormulaEngine {
         self.executor.execute(&formula.ast, ctx)
     }
 
+    /// Execute a compiled formula into a caller-provided output buffer.
+    ///
+    /// Reuse the same buffer and engine across calls to avoid allocating the
+    /// final result on every evaluation. The formula's intermediate buffers
+    /// are also recycled by the executor.
+    pub fn eval_into(
+        &self,
+        formula: &CompiledFormula,
+        ctx: &mut FormulaContext,
+        output: &mut Array1<f64>,
+    ) -> Result<(), FormulaError> {
+        self.executor.eval_into(&formula.ast, ctx, output)
+    }
+
     /// 便捷方法：编译并执行
     #[cfg_attr(feature = "tracing", tracing::instrument(level = "debug", skip_all, fields(source_len = source.len())))]
     pub fn eval(
