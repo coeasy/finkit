@@ -20,6 +20,9 @@ pub struct FormulaEngine {
     cache: FormulaCache,
     templates: FormulaTemplates,
     jit_compiler: RefCell<JitCompiler>,
+    /// Persistent bytecode cache and VM scratch buffers.
+    bytecode_cache: RefCell<HashMap<String, Bytecode>>,
+    bytecode_vm: RefCell<BytecodeVM>,
 }
 
 impl Default for FormulaEngine {
@@ -35,6 +38,8 @@ impl FormulaEngine {
             cache: FormulaCache::new(100),
             templates: FormulaTemplates::new(),
             jit_compiler: RefCell::new(JitCompiler::new()),
+            bytecode_cache: RefCell::new(HashMap::new()),
+            bytecode_vm: RefCell::new(BytecodeVM::new()),
         }
     }
 
@@ -44,6 +49,8 @@ impl FormulaEngine {
             cache: FormulaCache::new(cache_size),
             templates: FormulaTemplates::new(),
             jit_compiler: RefCell::new(JitCompiler::new()),
+            bytecode_cache: RefCell::new(HashMap::new()),
+            bytecode_vm: RefCell::new(BytecodeVM::new()),
         }
     }
 
@@ -54,6 +61,9 @@ impl FormulaEngine {
         }
 
         let ast = parse_formula(source).map_err(FormulaError::ParseError)?;
+        // Compile the optimized AST once so repeated evaluations share the
+        // same CSE and constant-folding decisions.
+        let ast = FormulaOptimizer::optimize(&ast);
         let formula = CompiledFormula {
             ast,
             source: source.to_string(),
@@ -93,7 +103,7 @@ impl FormulaEngine {
         };
 
         let input = match &args[0] {
-            AstNode::Variable(name) => ctx.get_data(name).and_then(|value| value.as_slice()),
+            AstNode::Variable(name) => ctx.get_data(name),
             _ => None,
         };
         let Some(input) = input else {
@@ -154,7 +164,7 @@ impl FormulaEngine {
         };
 
         let input = match &args[0] {
-            AstNode::Variable(name) => ctx.get_data(name).and_then(|value| value.as_slice()),
+            AstNode::Variable(name) => ctx.get_data(name),
             _ => None,
         }?;
 
@@ -225,6 +235,138 @@ impl FormulaEngine {
             return Ok(());
         }
         self.executor.eval_into(&formula.ast, ctx, output)
+    }
+
+    /// Evaluate only the requested half-open output range.
+    ///
+    /// For formulas with a finite dependency lookback, the executor receives
+    /// only the dependency window. Recursive/unknown functions conservatively
+    /// use the full prefix to preserve exact historical semantics.
+    pub fn eval_range(
+        &self,
+        formula: &CompiledFormula,
+        ctx: &FormulaContext,
+        start: usize,
+        end: usize,
+    ) -> Result<Array1<f64>, FormulaError> {
+        if start > end || end > ctx.data_len {
+            return Err(FormulaError::InvalidParameter(format!(
+                "invalid eval_range [{start}, {end}) for data_len {}",
+                ctx.data_len
+            )));
+        }
+        if start == end {
+            return Ok(Array1::zeros(0));
+        }
+        let window_start = FormulaOptimizer::required_lookback(&formula.ast)
+            .map(|lookback| start.saturating_sub(lookback))
+            .unwrap_or(0);
+        let mut window = ctx.window(window_start, end)?;
+        let result = self.execute(formula, &mut window)?;
+        let local_start = start - window_start;
+        Ok(result
+            .slice(ndarray::s![local_start..(local_start + end - start)])
+            .to_owned())
+    }
+
+    /// Evaluate the last bar only.
+    pub fn eval_last(
+        &self,
+        formula: &CompiledFormula,
+        ctx: &FormulaContext,
+    ) -> Result<f64, FormulaError> {
+        if ctx.data_len == 0 {
+            return Err(FormulaError::InvalidParameter(
+                "cannot eval_last an empty context".to_string(),
+            ));
+        }
+        let result = self.eval_range(formula, ctx, ctx.data_len - 1, ctx.data_len)?;
+        Ok(result[0])
+    }
+
+    /// Evaluate common NumPy-backed formulas directly from borrowed slices.
+    ///
+    /// The fast path never materialises an Array1 for the five OHLCV inputs.
+    /// Complex formulas fall back to the regular executor, where intermediate
+    /// arrays are required by the formula function ABI.
+    pub fn eval_zero_copy_inputs(
+        &self,
+        formula: &CompiledFormula,
+        open: &[f64],
+        high: &[f64],
+        low: &[f64],
+        close: &[f64],
+        volume: &[f64],
+        amount: Option<&[f64]>,
+    ) -> Result<Array1<f64>, FormulaError> {
+        if let Some(result) =
+            self.try_execute_simple_formula_slices(&formula.ast, open, high, low, close, volume)
+        {
+            return Ok(result);
+        }
+
+        let mut context = FormulaContext::new(
+            Array1::from_vec(open.to_vec()),
+            Array1::from_vec(high.to_vec()),
+            Array1::from_vec(low.to_vec()),
+            Array1::from_vec(close.to_vec()),
+            Array1::from_vec(volume.to_vec()),
+            amount.map(|values| Array1::from_vec(values.to_vec())),
+        );
+        self.execute(formula, &mut context)
+    }
+
+    fn try_execute_simple_formula_slices(
+        &self,
+        ast: &AstNode,
+        open: &[f64],
+        high: &[f64],
+        low: &[f64],
+        close: &[f64],
+        volume: &[f64],
+    ) -> Option<Array1<f64>> {
+        let (name, args) = match ast {
+            AstNode::FunctionCall { name, args } if args.len() >= 2 => (name.as_str(), args),
+            _ => return None,
+        };
+        let input = match &args[0] {
+            AstNode::Variable(name) if name.eq_ignore_ascii_case("C") || name.eq_ignore_ascii_case("CLOSE") => close,
+            AstNode::Variable(name) if name.eq_ignore_ascii_case("O") || name.eq_ignore_ascii_case("OPEN") => open,
+            AstNode::Variable(name) if name.eq_ignore_ascii_case("H") || name.eq_ignore_ascii_case("HIGH") => high,
+            AstNode::Variable(name) if name.eq_ignore_ascii_case("L") || name.eq_ignore_ascii_case("LOW") => low,
+            AstNode::Variable(name) if name.eq_ignore_ascii_case("V") || name.eq_ignore_ascii_case("VOL") || name.eq_ignore_ascii_case("VOLUME") => volume,
+            _ => return None,
+        };
+        if input.is_empty() || [open, high, low, close, volume].iter().any(|values| values.len() != input.len()) {
+            return None;
+        }
+        let period = match &args[1] {
+            AstNode::Number(value) if value.is_finite() && *value > 0.0 => *value as usize,
+            _ => return None,
+        };
+        if input.iter().any(|value| !value.is_finite()) {
+            return Some(Array1::from_elem(input.len(), f64::NAN));
+        }
+        let mut output = Array1::from_elem(input.len(), f64::NAN);
+        match name.to_ascii_uppercase().as_str() {
+            "MA" | "BOLLMID" => crate::math::simd_kernels::sma_simd_into(
+                input,
+                period,
+                output.as_slice_mut().expect("Array1 is contiguous"),
+            ),
+            "EMA" => crate::math::simd_kernels::ema_simd_into(
+                input,
+                period,
+                output.as_slice_mut().expect("Array1 is contiguous"),
+            ),
+            "RSI" => crate::math::simd_kernels::rsi_simd_into(
+                input,
+                period,
+                output.as_slice_mut().expect("Array1 is contiguous"),
+            ),
+            _ => return None,
+        }
+        Some(output)
     }
 
     /// 便捷方法：编译并执行
@@ -473,16 +615,27 @@ impl FormulaEngine {
     }
 
     pub fn compile_bytecode(&mut self, source: &str) -> Result<Bytecode, FormulaError> {
+        if let Some(bytecode) = self.bytecode_cache.borrow().get(source).cloned() {
+            return Ok(bytecode);
+        }
         let ast = parse_formula(source).map_err(FormulaError::ParseError)?;
-        compile_to_bytecode(&ast, source).map_err(FormulaError::RuntimeError)
+        let bytecode = compile_to_bytecode(&ast, source).map_err(FormulaError::RuntimeError)?;
+        self.bytecode_cache
+            .borrow_mut()
+            .insert(source.to_string(), bytecode.clone());
+        Ok(bytecode)
     }
 
+    /// Execute bytecode with the VM owned by this engine.
+    ///
+    /// Keeping the VM alive lets its stack, variable map, and hash tables
+    /// retain capacity between calls instead of reallocating every time.
     pub fn execute_bytecode(
         &self,
         bytecode: &Bytecode,
         ctx: &FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
-        let mut vm = BytecodeVM::new();
+        let mut vm = self.bytecode_vm.borrow_mut();
         let exec_result = vm.execute(bytecode, ctx)?;
         Ok(exec_result.final_value)
     }
