@@ -80,6 +80,66 @@ impl FormulaEngine {
         self.executor.execute(&formula.ast, ctx)
     }
 
+    /// Execute a simple built-in formula directly into a caller-owned buffer.
+    fn try_execute_simple_formula_into(
+        &self,
+        ast: &AstNode,
+        ctx: &FormulaContext,
+        output: &mut Array1<f64>,
+    ) -> bool {
+        let (name, args) = match ast {
+            AstNode::FunctionCall { name, args } if args.len() >= 2 => (name.as_str(), args),
+            _ => return false,
+        };
+
+        let input = match &args[0] {
+            AstNode::Variable(name) => ctx
+                .get_data_as_slice(name)
+                .or_else(|| ctx.variables.get(name).and_then(|value| value.as_slice())),
+            _ => None,
+        };
+        let Some(input) = input else {
+            return false;
+        };
+        if input.len() != output.len() {
+            return false;
+        }
+
+        let period_value = match &args[1] {
+            AstNode::Number(value) if value.is_finite() && *value > 0.0 => *value,
+            _ => return false,
+        };
+        let period = period_value as usize;
+        if period == 0 {
+            return false;
+        }
+
+        if input.iter().any(|value| !value.is_finite()) {
+            output.fill(f64::NAN);
+            return true;
+        }
+
+        match name {
+            "MA" | "BOLLMID" => crate::math::simd_kernels::sma_simd_into(
+                input,
+                period,
+                output.as_slice_mut().expect("Array1 is contiguous"),
+            ),
+            "EMA" => crate::math::simd_kernels::ema_simd_into(
+                input,
+                period,
+                output.as_slice_mut().expect("Array1 is contiguous"),
+            ),
+            "RSI" => crate::math::simd_kernels::rsi_simd_into(
+                input,
+                period,
+                output.as_slice_mut().expect("Array1 is contiguous"),
+            ),
+            _ => return false,
+        }
+        true
+    }
+
     /// Execute a simple built-in formula through the native SIMD kernel.
     ///
     /// This is deliberately conservative: only a single function call with a
@@ -158,6 +218,16 @@ impl FormulaEngine {
         ctx: &mut FormulaContext,
         output: &mut Array1<f64>,
     ) -> Result<(), FormulaError> {
+        if output.len() != ctx.data_len {
+            return Err(FormulaError::InvalidParameter(format!(
+                "output length {} != ctx.data_len {}",
+                output.len(),
+                ctx.data_len
+            )));
+        }
+        if self.try_execute_simple_formula_into(&formula.ast, ctx, output) {
+            return Ok(());
+        }
         self.executor.eval_into(&formula.ast, ctx, output)
     }
 
