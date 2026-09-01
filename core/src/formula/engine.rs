@@ -1469,4 +1469,31 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_borrowed_slice_path_supports_complex_formula() {
+        let ctx = make_ctx(32);
+        let mut compiler = FormulaEngine::new();
+        let compiled = compiler.compile("MA(CLOSE, 5) + 1").unwrap();
+        let borrowed = FormulaEngine::new()
+            .eval_zero_copy_inputs(
+                &compiled,
+                &ctx.open,
+                &ctx.high,
+                &ctx.low,
+                &ctx.close,
+                &ctx.volume,
+                None,
+            )
+            .unwrap();
+
+        let mut owned_ctx = make_ctx(32);
+        let mut engine = FormulaEngine::new();
+        let owned_formula = engine.compile("MA(CLOSE, 5) + 1").unwrap();
+        let owned = engine.execute(&owned_formula, &mut owned_ctx).unwrap();
+        for (a, b) in borrowed.iter().zip(owned.iter()) {
+            assert!((a - b).abs() < 1e-12 || (a.is_nan() && b.is_nan()));
+        }
+    }
+
+
 }
