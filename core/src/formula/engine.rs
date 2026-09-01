@@ -619,6 +619,7 @@ impl FormulaEngine {
             return Ok(bytecode);
         }
         let ast = parse_formula(source).map_err(FormulaError::ParseError)?;
+        let ast = FormulaOptimizer::optimize(&ast);
         let bytecode = compile_to_bytecode(&ast, source).map_err(FormulaError::RuntimeError)?;
         self.bytecode_cache
             .borrow_mut()
