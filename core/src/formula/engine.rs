@@ -70,7 +70,81 @@ impl FormulaEngine {
         formula: &CompiledFormula,
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
+        // Fast-path the common single-indicator formulas before entering the
+        // general AST executor. This avoids materialising input argument
+        // arrays and lets the SIMD _into kernels write directly into one
+        // result buffer. Complex formulas keep the existing semantics.
+        if let Some(result) = self.try_execute_simple_formula(&formula.ast, ctx) {
+            return Ok(result);
+        }
         self.executor.execute(&formula.ast, ctx)
+    }
+
+    /// Execute a simple built-in formula through the native SIMD kernel.
+    ///
+    /// This is deliberately conservative: only a single function call with a
+    /// literal period is specialised, so formulas with assignments, nested
+    /// expressions, or dynamic periods still use the general executor.
+    fn try_execute_simple_formula(
+        &self,
+        ast: &AstNode,
+        ctx: &FormulaContext,
+    ) -> Option<Array1<f64>> {
+        let (name, args) = match ast {
+            AstNode::FunctionCall { name, args } if args.len() >= 2 => (name.as_str(), args),
+            _ => return None,
+        };
+
+        let input = match &args[0] {
+            AstNode::Variable(name) => ctx
+                .get_data_as_slice(name)
+                .or_else(|| ctx.variables.get(name).and_then(|value| value.as_slice())),
+            _ => None,
+        }?;
+
+        let period_value = match &args[1] {
+            AstNode::Number(value) if value.is_finite() && *value > 0.0 => *value,
+            _ => return None,
+        };
+        let period = period_value as usize;
+        if period == 0 {
+            return None;
+        }
+
+        // The formula functions intentionally turn invalid market data into
+        // an all-NaN result. Preserve that behaviour while bypassing the
+        // allocation-heavy function-call path for valid input.
+        if input.iter().any(|value| !value.is_finite()) {
+            return Some(Array1::from_elem(ctx.data_len, f64::NAN));
+        }
+
+        let mut output = Array1::from_elem(input.len(), f64::NAN);
+        match name {
+            "MA" | "BOLLMID" => {
+                crate::math::simd_kernels::sma_simd_into(
+                    input,
+                    period,
+                    output.as_slice_mut().expect("Array1 is contiguous"),
+                );
+            }
+            "EMA" => {
+                crate::math::simd_kernels::ema_simd_into(
+                    input,
+                    period,
+                    output.as_slice_mut().expect("Array1 is contiguous"),
+                );
+            }
+            "RSI" => {
+                crate::math::simd_kernels::rsi_simd_into(
+                    input,
+                    period,
+                    output.as_slice_mut().expect("Array1 is contiguous"),
+                );
+            }
+            _ => return None,
+        }
+
+        Some(output)
     }
 
     /// Execute a compiled formula into a caller-provided output buffer.
@@ -520,6 +594,38 @@ mod tests {
                 ),
             }
         }
+    }
+
+    #[test]
+    fn test_simple_formula_dispatch_matches_general_executor() {
+        for source in ["MA(CLOSE, 20)", "EMA(CLOSE, 12)", "RSI(CLOSE, 14)", "BOLLMID(CLOSE, 20)"] {
+            let mut fast_engine = FormulaEngine::new();
+            let formula = fast_engine.compile(source).unwrap();
+            let mut fast_ctx = make_ctx(128);
+            let fast = fast_engine.execute(&formula, &mut fast_ctx).unwrap();
+
+            let ast = parse_formula(source).unwrap();
+            let executor = FormulaExecutor::new();
+            let mut reference_ctx = make_ctx(128);
+            let reference = executor.execute(&ast, &mut reference_ctx).unwrap();
+
+            assert_eq!(fast.len(), reference.len(), "{source}");
+            for (actual, expected) in fast.iter().zip(reference.iter()) {
+                assert!(
+                    (actual.is_nan() && expected.is_nan())
+                        || (actual - expected).abs() < 1e-12,
+                    "{source}: {actual} != {expected}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_simple_formula_dispatch_falls_back_for_nested_expression() {
+        let mut engine = FormulaEngine::new();
+        let mut ctx = make_ctx(32);
+        let result = engine.eval("MA(CLOSE, 20) + 1", &mut ctx).unwrap();
+        assert!(result.iter().skip(19).all(|value| value.is_finite()));
     }
 
     #[test]
