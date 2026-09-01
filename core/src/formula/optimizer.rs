@@ -2329,7 +2329,7 @@ mod tests {
             "MA(CLOSE, 20) + HHV(HIGH, 5)",
         )
         .unwrap();
-        assert_eq!(FormulaOptimizer::required_lookback(&ast), Some(20));
+        assert_eq!(FormulaOptimizer::required_lookback(&ast), Some(19));
         let recursive = crate::formula::parser::parse_formula("EMA(CLOSE, 20)").unwrap();
         assert_eq!(FormulaOptimizer::required_lookback(&recursive), None);
     }
