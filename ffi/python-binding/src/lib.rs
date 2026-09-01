@@ -3111,6 +3111,42 @@ fn compute_single_indicator(
                 .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
                 .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
         }
+        "accbands" => {
+            let period = params.first().copied().unwrap_or(20.0) as usize;
+            match (high, low) {
+                (Some(h), Some(l)) => indicators::accbands(h, l, close, period)
+                    .map(|res| {
+                        IndicatorResult::Triple(
+                            res.upper.into_raw_vec(),
+                            res.middle.into_raw_vec(),
+                            res.lower.into_raw_vec(),
+                        )
+                    })
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+                _ => IndicatorResult::Error("ACCBANDS requires high and low data".to_string()),
+            }
+        }
+        "imi" => {
+            let period = params.first().copied().unwrap_or(14.0) as usize;
+            match open {
+                Some(o) => indicators::imi(o, close, period)
+                    .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                    .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+                None => IndicatorResult::Error("IMI requires open data".to_string()),
+            }
+        }
+        "nvi" => match volume {
+            Some(v) => indicators::nvi(close, v)
+                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+            None => IndicatorResult::Error("NVI requires volume data".to_string()),
+        },
+        "pvi" => match volume {
+            Some(v) => indicators::pvi(close, v)
+                .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string())),
+            None => IndicatorResult::Error("PVI requires volume data".to_string()),
+        },
         "rsi" => {
             let period = params.first().copied().unwrap_or(14.0) as usize;
             indicators::rsi(close, period)
