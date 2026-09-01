@@ -45,3 +45,13 @@ def test_indicator_package_api_returns_numpy_array():
 
     assert isinstance(result, np.ndarray)
     assert result.shape == close.shape
+
+def test_legacy_formula_api_also_returns_numpy_arrays():
+    open_, high, low, close, volume = _ohlcv()
+
+    result = finkit.formula_eval(
+        "MA(CLOSE, 3)", open_, high, low, close, volume
+    )
+
+    assert isinstance(result["__result__"], np.ndarray)
+    assert result["__result__"].shape == close.shape
