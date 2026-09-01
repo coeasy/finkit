@@ -38,6 +38,13 @@ use ndarray::Array1;
 
 #[cfg(feature = "formula")]
 fn extract_array_bound(obj: &Bound<'_, PyAny>) -> PyResult<Vec<f64>> {
+    if let Ok(array) = obj.extract::<PyReadonlyArray1<'_, f64>>() {
+        return array.as_slice().map(|slice| slice.to_vec()).map_err(|error| {
+            PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+                "Expected a contiguous one-dimensional float64 NumPy array: {error}"
+            ))
+        });
+    }
     if let Ok(py_list) = obj.cast::<pyo3::types::PyList>() {
         let vec: Vec<f64> = py_list
             .iter()
@@ -53,13 +60,20 @@ fn extract_array_bound(obj: &Bound<'_, PyAny>) -> PyResult<Vec<f64>> {
         return Ok(vec);
     }
     Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
-        "Expected list or tuple of floats",
+        "Expected a one-dimensional float64 NumPy array, list, or tuple of floats",
     ))
 }
 
 #[cfg(feature = "formula")]
 fn extract_array_pyobject(obj: Py<PyAny>) -> PyResult<Vec<f64>> {
     Python::attach(|py| {
+        if let Ok(array) = obj.bind(py).extract::<PyReadonlyArray1<'_, f64>>() {
+            return array.as_slice().map(|slice| slice.to_vec()).map_err(|error| {
+                PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+                    "Expected a contiguous one-dimensional float64 NumPy array: {error}"
+                ))
+            });
+        }
         if let Ok(py_list) = obj.cast_bound::<pyo3::types::PyList>(py) {
             let vec: Vec<f64> = py_list
                 .iter()
@@ -75,7 +89,7 @@ fn extract_array_pyobject(obj: Py<PyAny>) -> PyResult<Vec<f64>> {
             return Ok(vec);
         }
         Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
-            "Expected list or tuple of floats",
+            "Expected a one-dimensional float64 NumPy array, list, or tuple of floats",
         ))
     })
 }
