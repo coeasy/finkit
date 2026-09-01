@@ -1506,6 +1506,7 @@ impl FormulaOptimizer {
         }
         visit(ast)
     }
+}
 
 /// Dependency analyzer for lazy evaluation.
 /// Analyzes which variables are needed by the final outputs.
