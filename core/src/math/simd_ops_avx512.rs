@@ -319,7 +319,7 @@ unsafe fn rsi_avx512(input: &[f64], period: usize, output: &mut [f64]) {
     // Tail: scalars for the last (count - chunks * 8) steps.
     // The first change is input[1] - input[0]; when period < 8 there
     // are no vector chunks, so the scalar tail must still start at 1.
-    let start_tail = (chunks * 8).max(1);
+    let start_tail = chunks * 8 + 1;
     for j in start_tail..=count {
         let diff = input[j] - input[j - 1];
         if diff > 0.0 {
