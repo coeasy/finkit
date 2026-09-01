@@ -1,6 +1,7 @@
 use ndarray::{Array1, ArrayView1};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
 use crate::formula::ast::OutputModifier;
@@ -415,14 +416,118 @@ impl Default for MoneyFlowData {
     }
 }
 
+/// A one-dimensional f64 input that can either own its storage or borrow a
+/// caller-owned contiguous buffer for the duration of a synchronous evaluation.
+///
+/// The borrowed constructor is crate-private so the raw pointer cannot escape
+/// the engine call that established the NumPy borrow. Cloning a borrowed series
+/// materializes an owned copy, which keeps existing parallel/context-clone
+/// semantics safe.
+#[derive(Debug)]
+pub struct FormulaSeries {
+    owned: Option<Vec<f64>>,
+    borrowed_ptr: usize,
+    len: usize,
+}
+
+impl FormulaSeries {
+    pub fn from_vec(values: Vec<f64>) -> Self {
+        let len = values.len();
+        Self {
+            owned: Some(values),
+            borrowed_ptr: 0,
+            len,
+        }
+    }
+
+    pub(crate) fn from_slice(values: &[f64]) -> Self {
+        Self {
+            owned: None,
+            borrowed_ptr: values.as_ptr() as usize,
+            len: values.len(),
+        }
+    }
+
+    pub fn as_slice(&self) -> &[f64] {
+        if let Some(values) = &self.owned {
+            values.as_slice()
+        } else {
+            // Safety: from_slice is crate-private and its caller keeps the
+            // source slice alive for the complete synchronous evaluation.
+            unsafe { std::slice::from_raw_parts(self.borrowed_ptr as *const f64, self.len) }
+        }
+    }
+
+    pub fn as_ptr(&self) -> *const f64 {
+        self.as_slice().as_ptr()
+    }
+
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    pub fn reserve(&mut self, additional: usize) {
+        self.make_owned();
+        self.owned
+            .as_mut()
+            .expect("FormulaSeries must be owned after make_owned")
+            .reserve(additional);
+        self.len = self.owned.as_ref().map_or(0, Vec::len);
+    }
+
+    pub fn push(&mut self, value: f64) {
+        self.make_owned();
+        self.owned
+            .as_mut()
+            .expect("FormulaSeries must be owned after make_owned")
+            .push(value);
+        self.len = self.owned.as_ref().map_or(0, Vec::len);
+    }
+
+    fn make_owned(&mut self) {
+        if self.owned.is_none() {
+            self.owned = Some(self.as_slice().to_vec());
+            self.borrowed_ptr = 0;
+        }
+    }
+}
+
+impl Clone for FormulaSeries {
+    fn clone(&self) -> Self {
+        Self::from_vec(self.as_slice().to_vec())
+    }
+}
+
+impl Deref for FormulaSeries {
+    type Target = [f64];
+
+    fn deref(&self) -> &Self::Target {
+        self.as_slice()
+    }
+}
+
+impl DerefMut for FormulaSeries {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.make_owned();
+        self.owned
+            .as_mut()
+            .expect("FormulaSeries must be owned after make_owned")
+            .as_mut_slice()
+    }
+}
+
 /// 公式上下文，存储数据绑定和变量
 pub struct FormulaContext {
     /// OHLCV数据
-    pub open: Vec<f64>,
-    pub high: Vec<f64>,
-    pub low: Vec<f64>,
-    pub close: Vec<f64>,
-    pub volume: Vec<f64>,
+    pub open: FormulaSeries,
+    pub high: FormulaSeries,
+    pub low: FormulaSeries,
+    pub close: FormulaSeries,
+    pub volume: FormulaSeries,
     pub amount: Option<Array1<f64>>,
     /// 时间序列（Unix timestamp per bar, seconds）
     pub datetime: Option<Array1<i64>>,
@@ -505,11 +610,53 @@ impl FormulaContext {
     ) -> Self {
         let data_len = open.len();
         Self {
-            open: open.into_raw_vec(),
-            high: high.into_raw_vec(),
-            low: low.into_raw_vec(),
-            close: close.into_raw_vec(),
-            volume: volume.into_raw_vec(),
+            open: FormulaSeries::from_vec(open.into_raw_vec()),
+            high: FormulaSeries::from_vec(high.into_raw_vec()),
+            low: FormulaSeries::from_vec(low.into_raw_vec()),
+            close: FormulaSeries::from_vec(close.into_raw_vec()),
+            volume: FormulaSeries::from_vec(volume.into_raw_vec()),
+            amount,
+            datetime: None,
+            index_data: None,
+            finance_data: None,
+            chip_data: None,
+            dynainfo: None,
+            capital: None,
+            block_data: None,
+            money_flow_data: None,
+            em_data: None,
+            string_table: Vec::new(),
+            variables: HashMap::new(),
+            output_modifiers: HashMap::new(),
+            draw_commands: RefCell::new(DrawResult::new()),
+            data_len,
+            period_data: HashMap::new(),
+            period_type: 0,
+            sandbox: ExecSandboxConfig::default(),
+            sandbox_state: std::cell::RefCell::new(ExecSandboxState::default()),
+        }
+    }
+
+    /// Create a context that borrows contiguous OHLCV slices.
+    ///
+    /// This is used by the synchronous Python/NumPy zero-copy path. The
+    /// returned context must not outlive the borrowed slices; the constructor
+    /// is crate-private to keep that lifetime invariant inside the engine.
+    pub(crate) fn from_borrowed_ohlcv(
+        open: &[f64],
+        high: &[f64],
+        low: &[f64],
+        close: &[f64],
+        volume: &[f64],
+        amount: Option<Array1<f64>>,
+    ) -> Self {
+        let data_len = close.len();
+        Self {
+            open: FormulaSeries::from_slice(open),
+            high: FormulaSeries::from_slice(high),
+            low: FormulaSeries::from_slice(low),
+            close: FormulaSeries::from_slice(close),
+            volume: FormulaSeries::from_slice(volume),
             amount,
             datetime: None,
             index_data: None,
@@ -693,11 +840,11 @@ impl FormulaContext {
             )));
         }
         let mut result = self.clone();
-        result.open = self.open[start..end].to_vec();
-        result.high = self.high[start..end].to_vec();
-        result.low = self.low[start..end].to_vec();
-        result.close = self.close[start..end].to_vec();
-        result.volume = self.volume[start..end].to_vec();
+        result.open = FormulaSeries::from_vec(self.open[start..end].to_vec());
+        result.high = FormulaSeries::from_vec(self.high[start..end].to_vec());
+        result.low = FormulaSeries::from_vec(self.low[start..end].to_vec());
+        result.close = FormulaSeries::from_vec(self.close[start..end].to_vec());
+        result.volume = FormulaSeries::from_vec(self.volume[start..end].to_vec());
         result.amount = self.amount.as_ref().map(|a| a.slice(ndarray::s![start..end]).to_owned());
         result.datetime = self.datetime.as_ref().map(|a| a.slice(ndarray::s![start..end]).to_owned());
         result.variables.clear();
