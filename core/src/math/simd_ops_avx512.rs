@@ -757,6 +757,8 @@ mod tests {
             }
         }
         let kk = 1.0 / period as f64;
+        avg_gain *= kk;
+        avg_loss *= kk;
         let mut prev = data[period];
         ref_out[period] = if avg_loss.abs() < 1e-15 {
             100.0
@@ -893,34 +895,5 @@ mod tests {
     fn test_avx512_availability_reporting() {
         // This always returns a bool — no panic regardless of hardware
         let _ = simd512_available();
-    }
-}
-
-#[cfg(all(test, feature = "std", target_arch = "x86_64"))]
-mod tests {
-    use super::simd512_rsi;
-
-    #[test]
-    fn test_rsi_seed_is_normalized_before_wilder_smoothing() {
-        let input: Vec<f64> = (0..128)
-            .map(|i| 100.0 + (i as f64 * 0.37).sin() * 2.0 + i as f64 * 0.01)
-            .collect();
-        let period = 14;
-        let mut actual = vec![f64::NAN; input.len()];
-        let mut expected = vec![f64::NAN; input.len()];
-
-        simd512_rsi(&input, period, &mut actual);
-        crate::math::simd_kernels::rsi_scalar(&input, period, &mut expected);
-
-        for (i, (&got, &want)) in actual.iter().zip(&expected).enumerate() {
-            if want.is_nan() {
-                assert!(got.is_nan(), "expected NaN at index {i}, got {got}");
-            } else {
-                assert!(
-                    (got - want).abs() < 1e-10,
-                    "RSI mismatch at index {i}: got {got}, expected {want}"
-                );
-            }
-        }
     }
 }
