@@ -127,7 +127,7 @@ impl FormulaEngine {
             return true;
         }
 
-        match name {
+        match name.to_ascii_uppercase().as_str() {
             "MA" | "BOLLMID" => crate::math::simd_kernels::sma_simd_into(
                 input,
                 period,
@@ -185,7 +185,7 @@ impl FormulaEngine {
         }
 
         let mut output = Array1::from_elem(input.len(), f64::NAN);
-        match name {
+        match name.to_ascii_uppercase().as_str() {
             "MA" | "BOLLMID" => {
                 crate::math::simd_kernels::sma_simd_into(
                     input,
@@ -299,6 +299,17 @@ impl FormulaEngine {
         volume: &[f64],
         amount: Option<&[f64]>,
     ) -> Result<Array1<f64>, FormulaError> {
+        if close.is_empty()
+            || [open, high, low, close, volume]
+                .iter()
+                .any(|values| values.len() != close.len())
+            || amount.is_some_and(|values| values.len() != close.len())
+        {
+            return Err(FormulaError::InvalidParameter(
+                "zero-copy formula inputs must be non-empty and have equal lengths".to_string(),
+            ));
+        }
+
         if let Some(result) =
             self.try_execute_simple_formula_slices(&formula.ast, open, high, low, close, volume)
         {
@@ -340,10 +351,14 @@ impl FormulaEngine {
         if input.is_empty() || [open, high, low, close, volume].iter().any(|values| values.len() != input.len()) {
             return None;
         }
-        let period = match &args[1] {
-            AstNode::Number(value) if value.is_finite() && *value > 0.0 => *value as usize,
+        let period_value = match &args[1] {
+            AstNode::Number(value) if value.is_finite() && *value > 0.0 => *value,
             _ => return None,
         };
+        let period = period_value as usize;
+        if period == 0 || (period as f64 - period_value).abs() > f64::EPSILON {
+            return None;
+        }
         if input.iter().any(|value| !value.is_finite()) {
             return Some(Array1::from_elem(input.len(), f64::NAN));
         }
