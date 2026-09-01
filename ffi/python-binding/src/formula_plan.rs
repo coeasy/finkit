@@ -91,6 +91,9 @@ fn result_dict<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let output = PyDict::new(py);
     for (name, value) in &context.variables {
+        if name.as_ref().starts_with("_CSE") {
+            continue;
+        }
         output.set_item(
             name.as_ref(),
             PyArray1::from_vec(py, value.clone().into_raw_vec()),
