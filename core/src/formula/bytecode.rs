@@ -417,6 +417,10 @@ impl BytecodeVM {
         bytecode: &Bytecode,
         ctx: &FormulaContext,
     ) -> Result<ExecResult, FormulaError> {
+        // Reuse VM allocations between calls while keeping each execution
+        // semantically isolated.
+        self.stack.clear();
+        self.variables.clear();
         let mut outputs = AHashMap::new();
         let mut final_value = Array1::zeros(ctx.data_len);
         let mut draw_commands = DrawResult::new();
