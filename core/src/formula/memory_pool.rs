@@ -23,11 +23,12 @@ impl BufferPool {
     }
 
     pub fn return_buffer(&mut self, buffer: Array1<f64>) {
+        let max_buffers_per_size = self.max_buffers_per_size;
         let buffers = self
             .array_pool_by_size
             .entry(buffer.len())
             .or_insert_with(Vec::new);
-        if buffers.len() < self.max_buffers_per_size {
+        if buffers.len() < max_buffers_per_size {
             buffers.push(buffer);
         }
     }
