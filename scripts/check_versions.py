@@ -26,6 +26,8 @@ DOC_VERSION_FILES = (
     ROOT / "docs" / "generated" / "version-matrix.md",
     ROOT / "docs" / "installation.md",
     ROOT / "docs" / "python.md",
+    ROOT / "ffi" / "python-binding" / "README.md",
+    ROOT / "examples" / "README.md",
     ROOT / "docs" / "indicator_registry.json",
 )
 

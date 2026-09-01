@@ -27,14 +27,14 @@
 
 ### 安装已构建 wheel（推荐）
 
-从 [GitHub Releases](https://github.com/coeasy/finkit/releases) 下载与本机操作系统和 CPU 架构匹配的 `finkit-0.1.0-*.whl`。ABI3 wheel 不需要按 CPython 小版本分别选择：
+从 [GitHub Releases](https://github.com/coeasy/finkit/releases) 下载与本机操作系统和 CPU 架构匹配的 `finkit-0.1.2-*.whl`。ABI3 wheel 不需要按 CPython 小版本分别选择：
 
 ```bash
 python -m pip install --upgrade pip
-python -m pip install ./finkit-0.1.0-<matching-wheel>.whl
+python -m pip install ./finkit-0.1.2-<matching-wheel>.whl
 ```
 
-wheel 支持 CPython 3.8+（GIL-enabled）、Linux x86_64、macOS Intel/Apple Silicon 和 Windows x86_64。ABI3 仍按操作系统和 CPU 架构分别提供原生 wheel；Linux ARM64、musllinux、PyPy 和 free-threaded Python 不在 v0.1.0 矩阵中。pip 会自动安装 NumPy；Pandas accessor 通过 `finkit[pandas]` 可选安装。
+wheel 支持 CPython 3.8+（GIL-enabled）、Linux x86_64、macOS Intel/Apple Silicon 和 Windows x86_64。ABI3 仍按操作系统和 CPU 架构分别提供原生 wheel；Linux ARM64、musllinux、PyPy 和 free-threaded Python 不在 v0.1.2 矩阵中。pip 会自动安装 NumPy；Pandas accessor 通过 `finkit[pandas]` 可选安装。
 
 ### 从源码编译
 
