@@ -4019,8 +4019,8 @@ fn fn_reverse(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>,
 fn fn_tr(ctx: &FormulaContext, _args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let len = ctx.data_len;
     let mut out = Array1::zeros(len);
-    let h = ctx.high;
-    let l = ctx.low;
+    let h = ctx.high.as_slice();
+    let l = ctx.low.as_slice();
     let c = ctx.close.as_slice();
     out[0] = h[0] - l[0];
     for i in 1..len {
@@ -5700,7 +5700,7 @@ pub fn get_builtin_functions() -> HashMap<String, FormulaFn> {
 fn fn_high1(ctx: &FormulaContext, _args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let len = ctx.data_len;
     let mut out = nan_vec(len);
-    let h = ctx.high;
+    let h = ctx.high.as_slice();
     for i in 1..len {
         out[i] = h[i - 1];
     }
@@ -5710,7 +5710,7 @@ fn fn_high1(ctx: &FormulaContext, _args: &[Array1<f64>]) -> Result<Array1<f64>, 
 fn fn_low1(ctx: &FormulaContext, _args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let len = ctx.data_len;
     let mut out = nan_vec(len);
-    let l = ctx.low;
+    let l = ctx.low.as_slice();
     for i in 1..len {
         out[i] = l[i - 1];
     }
