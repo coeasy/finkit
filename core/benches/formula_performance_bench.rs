@@ -408,6 +408,27 @@ fn benchmark_zero_copy_performance(c: &mut Criterion) {
     group.finish();
 }
 
+fn benchmark_eval_into_reuse(c: &mut Criterion) {
+    let mut group = c.benchmark_group("eval_into_reuse");
+    group.sampling_mode(criterion::SamplingMode::Flat);
+
+    for data_len in [1000, 10000, 100000] {
+        group.throughput(Throughput::Elements(data_len as u64));
+        group.bench_with_input(BenchmarkId::new("MA_20", data_len), &data_len, |b, len| {
+            let mut engine = FormulaEngine::new();
+            let formula = engine.compile("MA(CLOSE, 20)").unwrap();
+            b.iter_batched(
+                || (create_ctx(*len), Array1::zeros(*len)),
+                |(mut ctx, mut output)| {
+                    let _ = black_box(engine.eval_into(&formula, &mut ctx, &mut output));
+                },
+                BatchSize::SmallInput,
+            )
+        });
+    }
+    group.finish();
+}
+
 criterion_group!(
     performance_benches,
     benchmark_ma_performance,
@@ -418,5 +439,6 @@ criterion_group!(
     benchmark_complex_formula,
     benchmark_bytecode_vs_ast,
     benchmark_zero_copy_performance,
+    benchmark_eval_into_reuse,
 );
 criterion_main!(performance_benches);

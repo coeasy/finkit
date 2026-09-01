@@ -957,9 +957,13 @@ impl FormulaExecutor {
             )));
         }
         let mut pool = self.buffer_pool.borrow_mut();
-        let result = self.execute_with_pool(ast, ctx, &mut pool)?;
+        let mut name_cache = self.name_cache.borrow_mut();
+        let result = self.execute_with_pool_cached(ast, ctx, &mut pool, &mut name_cache)?;
         // 关键：直接 assign 到 caller 提供的 buffer,无 clone
         output.assign(&result);
+        // The result is no longer needed after the copy. Returning it to the
+        // pool makes repeated eval_into calls allocation-free after warm-up.
+        pool.return_buffer(result);
         Ok(())
     }
 
