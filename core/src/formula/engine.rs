@@ -1450,7 +1450,8 @@ mod tests {
             .unwrap();
         let mut owned_ctx = make_ctx(32);
         let mut engine = FormulaEngine::new();
-        let owned = engine.execute(&engine.compile("MA(CLOSE, 5)").unwrap(), &mut owned_ctx).unwrap();
+        let owned_formula = engine.compile("MA(CLOSE, 5)").unwrap();
+        let owned = engine.execute(&owned_formula, &mut owned_ctx).unwrap();
         assert_eq!(borrowed.len(), owned.len());
         for (a, b) in borrowed.iter().zip(owned.iter()) {
             assert!((a - b).abs() < 1e-12 || (a.is_nan() && b.is_nan()));
