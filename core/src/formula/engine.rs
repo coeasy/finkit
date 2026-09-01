@@ -1407,4 +1407,51 @@ mod tests {
             assert!((result2[i] - expected).abs() < 1e-10);
         }
     }
+    #[test]
+    fn test_eval_range_and_last_match_full_evaluation() {
+        let mut engine = FormulaEngine::new();
+        let formula = engine.compile("MA(CLOSE, 5)").unwrap();
+        let mut full_ctx = make_ctx(40);
+        let full = engine.execute(&formula, &mut full_ctx).unwrap();
+
+        let range_ctx = make_ctx(40);
+        let range = engine.eval_range(&formula, &range_ctx, 10, 25).unwrap();
+        assert_eq!(range.len(), 15);
+        for (offset, value) in range.iter().enumerate() {
+            assert!((*value - full[10 + offset]).abs() < 1e-12);
+        }
+
+        let last_ctx = make_ctx(40);
+        let last = engine.eval_last(&formula, &last_ctx).unwrap();
+        assert!((last - full[39]).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_borrowed_slice_fast_path_matches_owned_context() {
+        let ctx = make_ctx(32);
+        let formula = FormulaEngine::new();
+        let compiled = {
+            let mut compiler = FormulaEngine::new();
+            compiler.compile("MA(CLOSE, 5)").unwrap()
+        };
+        let borrowed = formula
+            .eval_zero_copy_inputs(
+                &compiled,
+                &ctx.open,
+                &ctx.high,
+                &ctx.low,
+                &ctx.close,
+                &ctx.volume,
+                None,
+            )
+            .unwrap();
+        let mut owned_ctx = make_ctx(32);
+        let mut engine = FormulaEngine::new();
+        let owned = engine.execute(&engine.compile("MA(CLOSE, 5)").unwrap(), &mut owned_ctx).unwrap();
+        assert_eq!(borrowed.len(), owned.len());
+        for (a, b) in borrowed.iter().zip(owned.iter()) {
+            assert!((a - b).abs() < 1e-12 || (a.is_nan() && b.is_nan()));
+        }
+    }
+
 }
