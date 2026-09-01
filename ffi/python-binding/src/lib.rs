@@ -18,7 +18,7 @@ use finkit_visualization::error::VisualizationError;
 use finkit_visualization::language::Language;
 #[cfg(feature = "formula")]
 use formula_plan::PyCompiledFormula;
-use numpy::PyReadonlyArray1;
+use numpy::{PyArray1, PyReadonlyArray1};
 use pyo3::prelude::*;
 
 mod features;
@@ -2187,6 +2187,66 @@ pub fn formula_eval_simd(
 /// The special key "__result__" contains the final expression result.
 #[pyfunction]
 #[cfg(feature = "formula")]
+/// Evaluate a contiguous float64 NumPy input without copying the OHLCV
+/// buffers. Direct MA/EMA/RSI/BOLLMID formulas use borrowed slices; complex
+/// formulas fall back to the regular formula ABI for intermediate arrays.
+#[pyfunction]
+#[pyo3(signature = (source, open, high, low, close, volume))]
+#[cfg(feature = "formula")]
+pub fn formula_eval_numpy_zero_copy(
+    py: Python<'_>,
+    source: &str,
+    open: PyReadonlyArray1<'_, f64>,
+    high: PyReadonlyArray1<'_, f64>,
+    low: PyReadonlyArray1<'_, f64>,
+    close: PyReadonlyArray1<'_, f64>,
+    volume: PyReadonlyArray1<'_, f64>,
+) -> PyResult<Py<PyAny>> {
+    let open = open.as_slice().map_err(|error| {
+        PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+            "open must be a contiguous float64 NumPy array: {error}"
+        ))
+    })?;
+    let high = high.as_slice().map_err(|error| {
+        PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+            "high must be a contiguous float64 NumPy array: {error}"
+        ))
+    })?;
+    let low = low.as_slice().map_err(|error| {
+        PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+            "low must be a contiguous float64 NumPy array: {error}"
+        ))
+    })?;
+    let close = close.as_slice().map_err(|error| {
+        PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+            "close must be a contiguous float64 NumPy array: {error}"
+        ))
+    })?;
+    let volume = volume.as_slice().map_err(|error| {
+        PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+            "volume must be a contiguous float64 NumPy array: {error}"
+        ))
+    })?;
+    if close.is_empty()
+        || [open, high, low, volume]
+            .iter()
+            .any(|values| values.len() != close.len())
+    {
+        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+            "all OHLCV arrays must be non-empty and have equal lengths",
+        ));
+    }
+
+    let mut engine = FormulaEngine::new();
+    let formula = engine.compile(source).map_err(formula_error_to_pyerr)?;
+    let result = engine
+        .eval_zero_copy_inputs(&formula, open, high, low, close, volume, None)
+        .map_err(formula_error_to_pyerr)?;
+    let dict = pyo3::types::PyDict::new(py);
+    dict.set_item("__result__", PyArray1::from_vec(py, result.into_raw_vec()))?;
+    Ok(dict.into())
+}
+
 pub fn formula_eval_zero_copy(
     py: Python<'_>,
     source: &str,
@@ -4211,6 +4271,7 @@ fn finkit(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.add_function(wrap_pyfunction!(formula_eval_jit, m)?)?;
         m.add_function(wrap_pyfunction!(formula_eval_simd, m)?)?;
         m.add_function(wrap_pyfunction!(formula_eval_zero_copy, m)?)?;
+        m.add_function(wrap_pyfunction!(formula_eval_numpy_zero_copy, m)?)?;
         m.add_function(wrap_pyfunction!(formula_eval_multi, m)?)?;
         m.add_function(wrap_pyfunction!(formula_eval_draw, m)?)?;
         m.add_function(wrap_pyfunction!(formula_eval_debug, m)?)?;
