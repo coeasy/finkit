@@ -2432,6 +2432,66 @@ pub fn chande_forecast_oscillator(input: &[f64], period: usize) -> Result<Array1
     Ok(Array1::from_vec(output))
 }
 
+
+/// Intraday Momentum Index (IMI)
+///
+/// Computes the percentage of upward open-to-close movement within the
+/// trailing period. The rolling sums are updated in O(1) per bar.
+pub fn imi(open: &[f64], close: &[f64], period: usize) -> Result<Array1<f64>> {
+    if open.len() != close.len() {
+        return Err(TaError::InvalidParameter {
+            name: "open, close".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    if period < 2 {
+        return Err(TaError::InvalidParameter {
+            name: "period".to_string(),
+            constraint: "at least 2".to_string(),
+        });
+    }
+    validate_input(close.len(), period)?;
+
+    let len = close.len();
+    let mut output = init_output(len);
+    let mut up_sum = 0.0;
+    let mut down_sum = 0.0;
+
+    for i in 0..period {
+        let delta = close[i] - open[i];
+        if delta > 0.0 {
+            up_sum += delta;
+        } else {
+            down_sum -= delta;
+        }
+    }
+
+    for i in (period - 1)..len {
+        if i >= period {
+            let old_delta = close[i - period] - open[i - period];
+            if old_delta > 0.0 {
+                up_sum -= old_delta;
+            } else {
+                down_sum += old_delta;
+            }
+            let delta = close[i] - open[i];
+            if delta > 0.0 {
+                up_sum += delta;
+            } else {
+                down_sum -= delta;
+            }
+        }
+        let total = up_sum + down_sum;
+        output[i] = if total != 0.0 {
+            100.0 * up_sum / total
+        } else {
+            f64::NAN
+        };
+    }
+
+    Ok(output)
+}
+
 #[cfg(test)]
 mod cfo_tests {
     use super::*;
