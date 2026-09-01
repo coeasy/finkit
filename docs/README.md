@@ -24,6 +24,7 @@ The two navigation entry points are:
 | [Features](features.md) | Capabilities and platform overview |
 | [Formula engine](formula.md) | Formula syntax and evaluation |
 | [Formula runtime](formula-runtime.md) | Zero-copy NumPy, range evaluation, streaming append, and VM reuse |
+| [Formula runtime contract](formula-runtime-contract.md) | Ownership, warm-up, range/last/append semantics, and concurrency guarantees |
 | [Formula templates](formula-templates.md) | Reusable formula patterns |
 | [Formula performance](formula-performance.md) | Formula optimization and performance notes |
 | [Formula debugger](formula-debugger.md) | Formula debugging workflow |

@@ -398,6 +398,14 @@ impl PyCompiledFormula {
         Ok(())
     }
 
+    /// Discard the retained stream context while keeping the compiled plan and caches.
+    ///
+    /// The next eval(), eval_range(), or eval_last() call with arrays starts a
+    /// fresh context. This does not invalidate the compiled formula.
+    fn reset(&mut self) {
+        self.stream_context = None;
+    }
+
     fn __repr__(&self) -> String {
         format!("CompiledFormula({:?})", self.source)
     }

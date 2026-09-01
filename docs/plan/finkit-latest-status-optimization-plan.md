@@ -1,5 +1,7 @@
 # Finkit 最新代码核对、功能梳理与优化改进方案
 
+- 执行更新：2026-09-01：已提交 CI preflight、version-consistency、docs-check、README/SSOT 口径修正；CI runner 初始化问题和正式 Release 仍待解除。
+
 - 核对日期：2026-09-01
 - 仓库：coeasy/finkit
 - 核对分支：main
@@ -30,7 +32,7 @@ main 最近的提交集中在以下方向：
 
 1. workspace、Python、Node 和生成文档已经统一到 0.1.2，但 GitHub Releases 当前仍只有 v0.1.0；
 2. main 最新 CI 和 Python wheels 工作流均失败；失败作业返回的 steps 为空，当前连接器无法取得实际日志，因此不能臆断具体根因；
-3. README 描述了 release.yml、perf-gate.yml、fuzz.yml、docs-check.yml，但当前 .github/workflows 目录核对到的主要工作流只有 ci.yml 和 python-wheels.yml；
+3. README 已同步为 ci.yml、python-wheels.yml 和 docs-check.yml；perf-gate/fuzz 仍属于后续门禁；
 4. 仍保留多条历史 feature/fix/release 分支，所有核对到的分支均未保护；
 5. PR #1 仍是面向 v0.1.0 的旧开放 PR，和当前 v0.1.2 状态不一致。
 
@@ -133,14 +135,14 @@ OHLCV / 参数
 | 领域 | 成熟度 | 已有基础 | 主要缺口 |
 |---|---|---|---|
 | 批量指标 | A：源码和测试均有 | 指标分类多、TA-Lib 对比和 golden 测试 | 计数、NaN/warm-up、性能结果和版本口径需统一 |
-| Streaming | B：源码较完整 | O(1)/bar 设计、builder、checkpoint、repaint、registry | 98 与生成文档 24 的统计冲突；边界和状态契约需补齐 |
+| Streaming | B：源码较完整 | O(1)/bar 设计、builder、checkpoint、repaint、registry | README 历史口径 98、registry 145 与生成文档直接扫描 24 曾不一致；现已拆分说明，仍需继续收敛为同一 SSOT 展示 |
 | Formula | B：核心已成形 | AST/Bytecode/优化/缓存/增量/zero-copy 入口 | 需要把 ownership、copy、lookback、last 语义写成稳定契约 |
 | SIMD/JIT | C：能力存在但宣传需收敛 | feature、AVX-512、JIT 入口和基准 | SIMD 当前覆盖有限，JIT 仍偏实验；缺少能力矩阵和性能门槛 |
-| Feature Engineering | B：源码有、文档展示不全 | FeatureSet、FeatureMatrix 及多种变换 | generated/features.md 只列 3 个模块，未解释 public/internal 范围 |
+| Feature Engineering | B：源码有、文档展示不全 | FeatureSet、FeatureMatrix 及多种变换 | generated/features.md 只列 3 个 direct public submodule；现已补充 internal re-export 说明 |
 | Factor API | D：规划缺口 | 可复用公式和 FeatureSet 可作为基础 | 尚无核对到独立公共 Factor DAG；需先做产品决策 |
 | Python 发布 | B：构建配置有 | ABI3、平台矩阵、Python 3.8–3.14 兼容 job | 最新 wheels 工作流失败；当前可见 release 仍是 v0.1.0 |
 | 其他 FFI | B/C：代码与元数据有 | 多语言 binding crate、C header、Node 平台包 | 缺统一 golden fixture、安装 smoke test 和工件清单 |
-| CI/CD | C：门禁正在补强 | fmt、clippy、test、doc、audit、版本检查 | 最新 main 未绿；README 与实际工作流不一致 |
+| CI/CD | C：门禁正在补强 | fmt、clippy、test、doc、audit、版本检查 | 最新 main 仍未绿；README/workflow 名称已完成同步 |
 | 文档/SSOT | C：文档量大 | generated docs、version matrix、indicator registry | 生成范围、计数口径、版本和工作流说明存在漂移 |
 | 仓库治理 | C | 分支和 PR 历史完整 | main 未保护；历史分支和旧 PR 未清理 |
 

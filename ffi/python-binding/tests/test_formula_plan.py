@@ -93,3 +93,13 @@ def test_legacy_zero_copy_api_uses_numpy_result_for_contiguous_arrays():
     np.testing.assert_allclose(
         result["__result__"], finkit.sma(close, timeperiod=3), equal_nan=True
     )
+
+
+def test_compiled_formula_reset_discards_stream_context():
+    open_, high, low, close, volume = _ohlcv(8)
+    plan = finkit.CompiledFormula("MA(CLOSE, 3)")
+    plan.eval(open_, high, low, close, volume)
+    plan.append_bar(20.0, 21.0, 19.0, 21.0, 1200.0)
+    plan.reset()
+    with pytest.raises(ValueError, match=r"previous eval"):
+        plan.eval_last()
