@@ -1057,6 +1057,18 @@ mod tests {
         assert_eq!(retrieved.len(), 5);
     }
     #[test]
+    fn test_borrowed_series_keeps_input_pointer_and_clones_safely() {
+        let values = vec![1.0, 2.0, 3.0];
+        let borrowed = FormulaSeries::from_slice(&values);
+        assert_eq!(borrowed.as_ptr(), values.as_ptr());
+        assert_eq!(borrowed.as_slice(), values.as_slice());
+
+        let cloned = borrowed.clone();
+        assert_ne!(cloned.as_ptr(), values.as_ptr());
+        assert_eq!(cloned.as_slice(), values.as_slice());
+    }
+
+    #[test]
     fn test_append_bar_is_amortized_and_keeps_data() {
         let mut ctx = make_ctx(2);
         ctx.reserve_bars(128);
