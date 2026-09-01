@@ -80,7 +80,7 @@ jobs:
           sccache: true
           args: >-
             --release --locked --out dist --compatibility pypi
-            --interpreter python
+            ${{ runner.os == 'Linux' && '--interpreter python3.12' || '--interpreter python' }}
 
       - name: Install wheel and test outside the source tree
         shell: bash
