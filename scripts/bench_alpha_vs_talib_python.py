@@ -172,13 +172,14 @@ def spec_for(name: str) -> dict[str, Any]:
     if name == "MAVP":
         return {"inputs": ("close", "periods"), "params": (2, 30, 0), "returns": 1, "category": "Overlap"}
     if name == "BBANDS":
-        return {"inputs": ("close",), "params": (20, 2.0, 2.0, 0), "returns": 3, "category": "Overlap"}
+        return {"inputs": ("close",), "params": (20, 2.0, 2.0, 0), "alpha_params": (20, 2.0, 2.0), "returns": 3, "category": "Overlap"}
     if name == "ACCBANDS":
         return {"inputs": ("high", "low", "close"), "params": (20,), "returns": 3, "category": "Overlap"}
     if name in {"MA", "SMA", "EMA", "WMA", "DEMA", "TEMA", "TRIMA", "KAMA", "T3", "MIDPOINT", "MIDPRICE"}:
         inputs = ("high", "low") if name == "MIDPRICE" else ("close",)
         params = (20, 0) if name == "MA" else ((20, 0.7) if name == "T3" else (20,))
-        return {"inputs": inputs, "params": params, "returns": 1, "category": "Overlap"}
+        alpha_params = (20,) if name == "MA" else params
+        return {"inputs": inputs, "params": params, "alpha_params": alpha_params, "returns": 1, "category": "Overlap"}
     if name == "MAMA":
         return {"inputs": ("close",), "params": (0.5, 0.05), "returns": 2, "category": "Overlap"}
     if name in {"SAR"}:
@@ -186,13 +187,14 @@ def spec_for(name: str) -> dict[str, Any]:
     if name == "SAREXT":
         return {"inputs": ("high", "low"), "params": (), "returns": 1, "category": "Overlap"}
     if name in {"MACD", "MACDFIX"}:
-        return {"inputs": ("close",), "params": ((12, 26, 9) if name == "MACD" else (9,)), "returns": 3, "category": "Momentum"}
+        params = (12, 26, 9) if name == "MACD" else (9,)
+        return {"inputs": ("close",), "params": params, "alpha_params": params if name == "MACD" else (), "returns": 3, "category": "Momentum"}
     if name == "MACDEXT":
         return {"inputs": ("close",), "params": (12, 0, 26, 0, 9, 0), "returns": 3, "category": "Momentum"}
     if name == "STOCH":
-        return {"inputs": ("high", "low", "close"), "params": (5, 3, 0, 3, 0), "returns": 2, "category": "Momentum"}
+        return {"inputs": ("high", "low", "close"), "params": (5, 3, 0, 3, 0), "alpha_params": (5, 3, 3), "returns": 2, "category": "Momentum"}
     if name == "STOCHF":
-        return {"inputs": ("high", "low", "close"), "params": (5, 3, 0), "returns": 2, "category": "Momentum"}
+        return {"inputs": ("high", "low", "close"), "params": (5, 3, 0), "alpha_params": (5, 3), "returns": 2, "category": "Momentum"}
     if name == "STOCHRSI":
         return {"inputs": ("close",), "params": (14, 5, 3, 0), "returns": 2, "category": "Momentum"}
     if name == "AROON":
@@ -210,7 +212,8 @@ def spec_for(name: str) -> dict[str, Any]:
             inputs = ("open", "close")
         else:
             inputs = ("close",)
-        return {"inputs": inputs, "params": (14,), "returns": 1, "category": "Momentum" if name != "AVGDEV" else "Statistic"}
+        alpha_params = () if name in {"MINUS_DM", "PLUS_DM"} else (14,)
+        return {"inputs": inputs, "params": (14,), "alpha_params": alpha_params, "returns": 1, "category": "Momentum" if name != "AVGDEV" else "Statistic"}
     if name in {"AD", "OBV"}:
         inputs = ("high", "low", "close", "volume") if name == "AD" else ("close", "volume")
         return {"inputs": inputs, "params": (), "returns": 1, "category": "Volume"}
@@ -227,7 +230,7 @@ def spec_for(name: str) -> dict[str, Any]:
     if name in {"LINEARREG", "LINEARREG_ANGLE", "LINEARREG_INTERCEPT", "LINEARREG_SLOPE", "STDDEV", "TSF", "VAR"}:
         return {"inputs": ("close",), "params": (30,), "returns": 1, "category": "Statistic"}
     if name in {"APO", "PPO"}:
-        return {"inputs": ("close",), "params": (12, 26, 0) if name == "PPO" else (12, 26, 0), "returns": 1, "category": "Momentum"}
+        return {"inputs": ("close",), "params": (12, 26, 0), "alpha_params": (12, 26), "returns": 1, "category": "Momentum"}
     if name in {"ROC", "ROCP", "ROCR", "ROCR100", "MOM"}:
         return {"inputs": ("close",), "params": (14,), "returns": 1, "category": "Momentum"}
     return {"inputs": ("close",), "params": (), "returns": 1, "category": "Other"}
@@ -244,12 +247,20 @@ def invoke_batch(finkit: Any, data: dict[str, np.ndarray], name: str, spec: dict
     if not callable(batch):
         raise LookupError("finkit.compute_indicators is not available")
     request = [(name.lower(), list(spec["params"]))]
+    primary = data["math"] if name in MATH_TRANSFORMS else data["close"]
+    if name == "MAVP":
+        secondary = data["periods"]
+    elif name in {"BETA", "CORREL", "ADD", "DIV", "MULT", "SUB"}:
+        secondary = data["alternate"]
+    else:
+        secondary = None
     result = batch(
-        close=data["close"],
+        close=primary,
         open=data["open"],
         high=data["high"],
         low=data["low"],
         volume=data["volume"],
+        secondary=secondary,
         requests=request,
     )
     prefix = f"{name.lower()}_" + "_".join(str(value) for value in spec["params"])
@@ -274,7 +285,7 @@ def invoke_batch(finkit: Any, data: dict[str, np.ndarray], name: str, spec: dict
 
 def invoke_direct(fn: Callable[..., Any], data: dict[str, np.ndarray], spec: dict[str, Any]) -> Any:
     args = [data[key] for key in spec["inputs"]]
-    return fn(*args, *spec["params"])
+    return fn(*args, *spec.get("alpha_params", spec["params"]))
 
 
 def normalise_output(value: Any) -> list[np.ndarray]:
