@@ -1232,25 +1232,32 @@ impl FormulaOptimizer {
     }
 
     fn is_cse_candidate(ast: &AstNode) -> bool {
-        match ast {
-            AstNode::BinaryOp { left, right, .. } => {
-                Self::is_cse_candidate(left) && Self::is_cse_candidate(right)
+        fn is_pure(node: &AstNode) -> bool {
+            match node {
+                AstNode::Number(_) | AstNode::Variable(_) | AstNode::StringLit(_) => true,
+                AstNode::BinaryOp { left, right, .. } => is_pure(left) && is_pure(right),
+                AstNode::UnaryOp { expr, .. } => is_pure(expr),
+                AstNode::FunctionCall { name, args } => {
+                    let upper = name.to_ascii_uppercase();
+                    !upper.starts_with("DRAW")
+                        && !matches!(
+                            upper.as_str(),
+                            "ALERT" | "ALERTONCE" | "SELECT" | "SMARTSELECT"
+                        )
+                        && args.iter().all(is_pure)
+                }
+                AstNode::IndexAccess { array, index } => is_pure(array) && is_pure(index),
+                _ => false,
             }
-            AstNode::UnaryOp { expr, .. } => Self::is_cse_candidate(expr),
-            AstNode::FunctionCall { name, args } => {
-                let upper = name.to_ascii_uppercase();
-                !upper.starts_with("DRAW")
-                    && !matches!(
-                        upper.as_str(),
-                        "ALERT" | "ALERTONCE" | "SELECT" | "SMARTSELECT"
-                    )
-                    && args.iter().all(Self::is_cse_candidate)
-            }
-            AstNode::IndexAccess { array, index } => {
-                Self::is_cse_candidate(array) && Self::is_cse_candidate(index)
-            }
-            _ => false,
         }
+
+        matches!(
+            ast,
+            AstNode::BinaryOp { .. }
+                | AstNode::UnaryOp { .. }
+                | AstNode::FunctionCall { .. }
+                | AstNode::IndexAccess { .. }
+        ) && is_pure(ast)
     }
 
     fn ast_to_key(ast: &AstNode) -> String {
