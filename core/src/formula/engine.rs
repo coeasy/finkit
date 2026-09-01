@@ -700,7 +700,7 @@ impl FormulaEngine {
         let ast = parse_formula(source).map_err(FormulaError::ParseError)?;
         let bytecode = compile_to_bytecode(&ast, source).map_err(FormulaError::RuntimeError)?;
         let mut jit = self.jit_compiler.borrow_mut();
-        let optimized = jit.compile(bytecode);
+        let optimized = jit.compile_cached(bytecode);
         jit.execute(&optimized, ctx).map(|r| r.final_value)
     }
 
@@ -747,7 +747,7 @@ impl FormulaEngine {
         let ast = parse_formula(source).map_err(FormulaError::ParseError)?;
         let bytecode = compile_to_bytecode(&ast, source).map_err(FormulaError::RuntimeError)?;
         let mut jit = self.jit_compiler.borrow_mut();
-        Ok(jit.compile(bytecode))
+        Ok(jit.compile_cached(bytecode))
     }
 
     #[cfg(feature = "formula-jit")]
