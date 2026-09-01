@@ -328,15 +328,17 @@ unsafe fn rsi_avx512(input: &[f64], period: usize, output: &mut [f64]) {
             avg_loss -= diff;
         }
     }
+    // Convert the initial Wilder sums into averages before smoothing.
+    // Keeping the sums here would apply the decay factor to a value that is
+    // period times too large after the seed.
+    let k = 1.0 / period as f64;
+    avg_gain *= k;
+    avg_loss *= k;
     let mut prev = input[count];
 
     // Seed RSI value
     output[count] = if avg_loss.abs() < 1e-15 {
-        if avg_gain.abs() < 1e-15 {
-            f64::NAN
-        } else {
-            100.0
-        }
+        100.0
     } else {
         let rs = avg_gain / avg_loss;
         100.0 - 100.0 / (1.0 + rs)
@@ -352,11 +354,7 @@ unsafe fn rsi_avx512(input: &[f64], period: usize, output: &mut [f64]) {
         avg_gain = (g - avg_gain).mul_add(k, avg_gain);
         avg_loss = (l - avg_loss).mul_add(k, avg_loss);
         output[i] = if avg_loss.abs() < 1e-15 {
-            if avg_gain.abs() < 1e-15 {
-                f64::NAN
-            } else {
-                100.0
-            }
+            100.0
         } else {
             let rs = avg_gain / avg_loss;
             100.0 - 100.0 / (1.0 + rs)
@@ -387,13 +385,11 @@ fn rsi_scalar_fallback(input: &[f64], period: usize, output: &mut [f64]) {
         }
     }
     let k = 1.0 / period as f64;
+    avg_gain *= k;
+    avg_loss *= k;
     let mut prev = input[period];
     output[period] = if avg_loss.abs() < 1e-15 {
-        if avg_gain.abs() < 1e-15 {
-            f64::NAN
-        } else {
-            100.0
-        }
+        100.0
     } else {
         let rs = avg_gain / avg_loss;
         100.0 - 100.0 / (1.0 + rs)
@@ -407,11 +403,7 @@ fn rsi_scalar_fallback(input: &[f64], period: usize, output: &mut [f64]) {
         avg_gain = (g - avg_gain).mul_add(k, avg_gain);
         avg_loss = (l - avg_loss).mul_add(k, avg_loss);
         output[i] = if avg_loss.abs() < 1e-15 {
-            if avg_gain.abs() < 1e-15 {
-                f64::NAN
-            } else {
-                100.0
-            }
+            100.0
         } else {
             let rs = avg_gain / avg_loss;
             100.0 - 100.0 / (1.0 + rs)
