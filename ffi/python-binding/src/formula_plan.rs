@@ -9,6 +9,7 @@
 
 use ::finkit::formula::{CompiledFormula, FormulaContext, FormulaEngine};
 use ndarray::Array1;
+use std::sync::Arc;
 use numpy::{PyArray1, PyReadonlyArray1};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -71,8 +72,8 @@ fn validate_lengths(
 #[pyclass(name = "CompiledFormula", unsendable)]
 pub struct PyCompiledFormula {
     source: String,
-    engine: FormulaEngine,
-    compiled: CompiledFormula,
+    engine: Option<FormulaEngine>,
+    compiled: Arc<CompiledFormula>,
 }
 
 #[pymethods]
@@ -85,8 +86,8 @@ impl PyCompiledFormula {
             .map_err(|error| PyErr::new::<pyo3::exceptions::PySyntaxError, _>(error.to_string()))?;
         Ok(Self {
             source,
-            engine,
-            compiled,
+            engine: Some(engine),
+            compiled: Arc::new(compiled),
         })
     }
 
@@ -119,7 +120,13 @@ impl PyCompiledFormula {
 
         validate_lengths(&open, &high, &low, &close, &volume, amount.as_deref())?;
 
-        let (result, variables) = py.detach(|| {
+        let mut engine = self.engine.take().ok_or_else(|| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "compiled formula is already being evaluated",
+            )
+        })?;
+        let compiled = Arc::clone(&self.compiled);
+        let (execution, variables, engine) = py.detach(move || {
             let mut context = FormulaContext::new(
                 Array1::from_vec(open),
                 Array1::from_vec(high),
@@ -128,14 +135,15 @@ impl PyCompiledFormula {
                 Array1::from_vec(volume),
                 amount.map(Array1::from_vec),
             );
-            let result = self
-                .engine
-                .execute(&self.compiled, &mut context)
+            let execution = engine
+                .execute(&compiled, &mut context)
                 .map_err(|error| {
                     PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())
-                })?;
-            Ok::<_, PyErr>((result, context.variables))
-        })?;
+                });
+            (execution, context.variables, engine)
+        });
+        self.engine = Some(engine);
+        let result = execution?;
 
         let output = PyDict::new(py);
         for (name, value) in variables {
