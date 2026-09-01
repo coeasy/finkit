@@ -13,10 +13,7 @@ use numpy::{PyArray1, PyReadonlyArray1};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
-fn read_array<'py>(
-    name: &str,
-    array: PyReadonlyArray1<'py, f64>,
-) -> PyResult<Vec<f64>> {
+fn read_array<'py>(name: &str, array: PyReadonlyArray1<'py, f64>) -> PyResult<Vec<f64>> {
     array
         .as_slice()
         .map(|slice| slice.to_vec())
@@ -51,16 +48,16 @@ fn validate_lengths(
     ];
     for (name, length) in inputs {
         if length != expected {
-            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                format!("formula input {name} has length {length}, expected {expected}"),
-            ));
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                "formula input {name} has length {length}, expected {expected}"
+            )));
         }
     }
     if let Some(length) = amount.map(<[f64]>::len) {
         if length != expected {
-            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                format!("formula input amount has length {length}, expected {expected}"),
-            ));
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                "formula input amount has length {length}, expected {expected}"
+            )));
         }
     }
     Ok(expected)
@@ -116,16 +113,11 @@ impl PyCompiledFormula {
         let low = read_array("low", low)?;
         let close = read_array("close", close)?;
         let volume = read_array("volume", volume)?;
-        let amount = amount.map(|array| read_array("amount", array)).transpose()?;
+        let amount = amount
+            .map(|array| read_array("amount", array))
+            .transpose()?;
 
-        validate_lengths(
-            &open,
-            &high,
-            &low,
-            &close,
-            &volume,
-            amount.as_deref(),
-        )?;
+        validate_lengths(&open, &high, &low, &close, &volume, amount.as_deref())?;
 
         let (result, variables) = py.detach(|| {
             let mut context = FormulaContext::new(
@@ -147,15 +139,9 @@ impl PyCompiledFormula {
 
         let output = PyDict::new(py);
         for (name, value) in variables {
-            output.set_item(
-                name.as_ref(),
-                PyArray1::from_vec(py, value.into_raw_vec()),
-            )?;
+            output.set_item(name.as_ref(), PyArray1::from_vec(py, value.into_raw_vec()))?;
         }
-        output.set_item(
-            "__result__",
-            PyArray1::from_vec(py, result.into_raw_vec()),
-        )?;
+        output.set_item("__result__", PyArray1::from_vec(py, result.into_raw_vec()))?;
         Ok(output)
     }
 
