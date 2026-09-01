@@ -1333,7 +1333,7 @@ mod tests {
     #[test]
     fn test_rsi_simd_matches_scalar() {
         let data = generate_series(5_000);
-        for period in [5, 14, 21] {
+        for period in [2, 3, 4, 5, 14, 21] {
             let mut scalar = alloc::vec![f64::NAN; data.len()];
             rsi_scalar(&data, period, &mut scalar);
             let simd = rsi_simd(&data, period);
