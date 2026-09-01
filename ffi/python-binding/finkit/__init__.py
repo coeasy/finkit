@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from functools import wraps
 
+import numpy as np
+
 from . import finkit as _native
 from .finkit import *  # noqa: F401,F403 — re-export native module
 
@@ -63,6 +65,26 @@ def _translate_native_errors(name, function):
     return wrapped
 
 
+def _as_numpy_result(name, function):
+    """Expose numeric native results as NumPy arrays consistently.
+
+    The Rust extension returns Vec values so that the low-level ABI stays
+    simple.  The package-level API is the NumPy-facing interface documented
+    by the type stubs.
+    """
+
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        value = function(*args, **kwargs)
+        if isinstance(value, tuple):
+            return tuple(np.asarray(item) if isinstance(item, (list, tuple)) else item for item in value)
+        if isinstance(value, list):
+            return np.asarray(value)
+        return value
+
+    return wrapped
+
+
 for _name in (
     "sma",
     "ema",
@@ -96,7 +118,8 @@ for _name in (
     "tsf",
 ):
     if _name in globals():
-        globals()[_name] = _translate_native_errors(_name, globals()[_name])
+        wrapped = _translate_native_errors(_name, globals()[_name])
+        globals()[_name] = _as_numpy_result(_name, wrapped)
 
 
 def register_accessor():
