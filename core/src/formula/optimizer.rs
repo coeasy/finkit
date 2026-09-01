@@ -1116,7 +1116,10 @@ impl FormulaOptimizer {
         }
 
         let mut assignments = Vec::with_capacity(expr_map.len());
-        for (name, expr) in expr_map.values() {
+        let mut ordered: Vec<(&String, &AstNode)> =
+            expr_map.values().map(|(name, expr)| (name, expr)).collect();
+        ordered.sort_by(|a, b| a.0.cmp(b.0));
+        for (name, expr) in ordered {
             // Protect the root of the generated assignment from being replaced
             // by itself; nested candidates may still be shared safely.
             assignments.push(AstNode::Assignment {
