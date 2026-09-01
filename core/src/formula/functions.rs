@@ -3159,7 +3159,7 @@ fn resolve_hlc_args<'a>(
 ) -> Result<(&'a [f64], &'a [f64], &'a [f64], usize), FormulaError> {
     if args.len() >= 4 {
         let n = extract_n(args, 3, name)?;
-        Ok((&args[0], &args[1], &args[2], n))
+        Ok((args[0].as_slice().unwrap(), args[1].as_slice().unwrap(), args[2].as_slice().unwrap(), n))
     } else if args.len() >= 2 {
         let n = extract_n(args, 1, name)?;
         Ok((&ctx.high, &ctx.low, &ctx.close, n))
@@ -3179,7 +3179,7 @@ fn resolve_hl_args<'a>(
 ) -> Result<(&'a [f64], &'a [f64], usize), FormulaError> {
     if args.len() >= 3 {
         let n = extract_n(args, 2, name)?;
-        Ok((&args[0], &args[1], n))
+        Ok((args[0].as_slice().unwrap(), args[1].as_slice().unwrap(), n))
     } else if !args.is_empty() {
         let n = extract_n(args, 0, name)?;
         Ok((&ctx.high, &ctx.low, n))
