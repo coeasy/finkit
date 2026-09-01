@@ -627,7 +627,7 @@ impl BytecodeVM {
                 let data = ctx.get_data(name).ok_or_else(|| {
                     FormulaError::RuntimeError(format!("Data not available: {}", name))
                 })?;
-                self.stack.push(FormulaValue::Array(data.clone()));
+                self.stack.push(FormulaValue::Array(Array1::from_vec(data.to_vec())));
                 Ok(())
             }
             OpCode::Index => {
