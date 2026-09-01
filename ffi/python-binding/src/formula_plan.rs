@@ -183,9 +183,10 @@ impl PyCompiledFormula {
 
     /// Evaluate without copying the contiguous NumPy OHLCV inputs.
     ///
-    /// This is a borrowed-input fast path for direct MA/EMA/RSI/BOLLMID
-    /// formulas. Complex formulas retain full semantics through the regular
-    /// executor and may allocate intermediate arrays.
+    /// The complete synchronous evaluation borrows the contiguous NumPy OHLCV
+    /// buffers. Direct MA/EMA/RSI/BOLLMID formulas additionally avoid input
+    /// argument materialisation; complex formulas may allocate intermediates
+    /// required by the existing array-based built-in ABI.
     #[pyo3(signature = (open, high, low, close, volume, amount=None))]
     #[allow(clippy::too_many_arguments)]
     fn eval_zero_copy<'py>(
