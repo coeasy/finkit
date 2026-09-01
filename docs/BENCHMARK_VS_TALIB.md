@@ -134,7 +134,6 @@ A `❌` in `summary.md` (or a precision row > 1e-9) indicates a regression.
 
 * [BENCHMARK_REPORT.md](BENCHMARK_REPORT.md) — the long-form report
   (auto-generated, refreshed on every bench run).
-* `competitive-benchmark.md` — Finkit vs `ta-rs` (Rust TA ecosystem)
-  (planned; not yet published).
+* [Benchmark results](benchmark-results.md) — concise performance summary.
 * `EFFICIENCY_COMPARISON.md` — broader ecosystem comparison (planned;
   not yet published).
