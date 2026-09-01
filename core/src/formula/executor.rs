@@ -934,7 +934,7 @@ impl FormulaExecutor {
 
     /// 零分配热路径：复用 caller 预分配的 `output` buffer。
     ///
-    /// 内部走 `execute_with_pool` 路径,但最后一根 buffer 通过 `assign` 写回到
+    /// 内部走带缓存的 pooled execution 路径,但最后一根 buffer 通过 `assign` 写回到
     /// caller 提供的 `output`,**不再产生任何 Array1 分配**。
     ///
     /// # 零分配保证
