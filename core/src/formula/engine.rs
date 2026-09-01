@@ -93,9 +93,7 @@ impl FormulaEngine {
         };
 
         let input = match &args[0] {
-            AstNode::Variable(name) => ctx
-                .get_data_as_slice(name)
-                .or_else(|| ctx.variables.get(name).and_then(|value| value.as_slice())),
+            AstNode::Variable(name) => ctx.get_data(name).and_then(|value| value.as_slice()),
             _ => None,
         };
         let Some(input) = input else {
@@ -156,9 +154,7 @@ impl FormulaEngine {
         };
 
         let input = match &args[0] {
-            AstNode::Variable(name) => ctx
-                .get_data_as_slice(name)
-                .or_else(|| ctx.variables.get(name).and_then(|value| value.as_slice())),
+            AstNode::Variable(name) => ctx.get_data(name).and_then(|value| value.as_slice()),
             _ => None,
         }?;
 
