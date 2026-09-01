@@ -130,6 +130,29 @@ maturin sdist --out dist
 
 如果目标平台没有预构建 wheel，请使用目标平台上的 CPython 3.8+（GIL-enabled）解释器构建；无需为 3.9、3.10 等每个小版本重复构建。CI 仍会在 Linux 上用 CPython 3.8–3.14 安装同一个 Linux ABI3 wheel，验证其运行时兼容性。
 
+## 可复用公式编译计划
+
+高频执行同一公式时，使用 `CompiledFormula` 只编译一次，再重复传入新的行情数组。输入应为一维、连续的 `float64` NumPy 数组；对象会校验长度一致性，并在 Rust 线程中执行计算，避免每次调用都重新解析公式。
+
+```python
+import finkit as ta
+import numpy as np
+
+size = 1000
+open_ = np.arange(size, dtype=np.float64)
+high = open_ + 1.0
+low = open_ - 1.0
+close = open_ + 0.5
+volume = np.full(size, 1000.0, dtype=np.float64)
+
+plan = ta.CompiledFormula("MA(CLOSE, 3)")
+result = plan.eval(open_, high, low, close, volume)
+
+assert isinstance(result["__result__"], np.ndarray)
+```
+
+`result` 是字典：最终表达式放在 `__result__`，公式中的命名赋值也会以 NumPy 数组形式返回。与旧的 `formula_eval*` 函数相比，这个对象适合循环或批量场景；旧接口仍保留用于兼容。当前 Python 边界会把输入复制到 Rust 计算上下文，收益主要来自复用编译计划和 NumPy 数组边界，尚不是完全零拷贝执行。
+
 ## NumPy 和 Pandas 用法
 
 指标函数接收一维、`float64` NumPy 数组。Pandas 不是运行时必需依赖；使用 DataFrame 时显式转换列：
