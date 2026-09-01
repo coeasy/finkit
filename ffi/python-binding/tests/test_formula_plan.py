@@ -55,3 +55,30 @@ def test_legacy_formula_api_also_returns_numpy_arrays():
 
     assert isinstance(result["__result__"], np.ndarray)
     assert result["__result__"].shape == close.shape
+
+
+def test_compiled_formula_zero_copy_rejects_non_contiguous_inputs():
+    open_, high, low, close, volume = _ohlcv(32)
+    plan = finkit.CompiledFormula("MA(CLOSE, 3)")
+    with pytest.raises((TypeError, ValueError)):
+        plan.eval_zero_copy(
+            open_[::2], high[::2], low[::2], close[::2], volume[::2]
+        )
+
+
+def test_compiled_formula_eval_range_matches_full_result():
+    open_, high, low, close, volume = _ohlcv(64)
+    plan = finkit.CompiledFormula("MA(CLOSE, 5)")
+    full = plan.eval(open_, high, low, close, volume)["__result__"]
+    partial = plan.eval_range(open_, high, low, close, volume, 10, 32)["__result__"]
+    np.testing.assert_allclose(partial, full[10:32], equal_nan=True)
+
+
+def test_compiled_formula_append_bar_and_eval_last():
+    open_, high, low, close, volume = _ohlcv(8)
+    plan = finkit.CompiledFormula("MA(CLOSE, 3)")
+    plan.eval(open_, high, low, close, volume)
+    plan.reserve_bars(2)
+    plan.append_bar(20.0, 21.0, 19.0, 21.0, 1200.0)
+    plan.append_bar(21.0, 22.0, 20.0, 22.0, 1300.0)
+    assert plan.eval_last() == pytest.approx(np.mean([close[-1], 21.0, 22.0]))
