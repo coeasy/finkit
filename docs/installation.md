@@ -23,11 +23,11 @@ Finkit Python wheel 由 GitHub Actions 使用 maturin 构建。完整的版本�
 
 ### 已构建 wheel
 
-从 [GitHub Releases](https://github.com/coeasy/finkit/releases) 下载匹配本机的 `finkit-0.1.0-*.whl`，然后执行：
+从 [GitHub Releases](https://github.com/coeasy/finkit/releases) 下载匹配本机的 `finkit-0.1.2-*.whl`，然后执行：
 
 ```bash
 python -m pip install --upgrade pip
-python -m pip install ./finkit-0.1.0-<matching-wheel>.whl
+python -m pip install ./finkit-0.1.2-<matching-wheel>.whl
 ```
 
 支持 CPython 3.8–3.14，以及 Linux x86_64、macOS x86_64/arm64 和 Windows x86_64。pip 会自动安装 NumPy 运行时依赖。
@@ -125,7 +125,7 @@ cargo add finkit
 
 ```toml
 [dependencies]
-finkit = "0.1.0"
+finkit = "0.1.2"
 ```
 
 ### Option 3: Build from Source
@@ -145,7 +145,7 @@ cargo build --release --all-features
 
 ```toml
 [dependencies]
-finkit = { version = "0.1.0", features = ["formula"] }
+finkit = { version = "0.1.2", features = ["formula"] }
 ```
 
 Available features:
@@ -180,7 +180,7 @@ Add to your `pom.xml`:
 <dependency>
     <groupId>com.finkit</groupId>
     <artifactId>finkit</artifactId>
-    <version>0.1.0</version>
+    <version>0.1.2</version>
 </dependency>
 ```
 
@@ -190,7 +190,7 @@ Add to your `build.gradle`:
 
 ```gradle
 dependencies {
-    implementation 'com.finkit:finkit:0.1.0'
+    implementation 'com.finkit:finkit:0.1.2'
 }
 ```
 

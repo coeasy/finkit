@@ -20,6 +20,9 @@ pub struct FormulaEngine {
     cache: FormulaCache,
     templates: FormulaTemplates,
     jit_compiler: RefCell<JitCompiler>,
+    /// Persistent bytecode cache and VM scratch buffers.
+    bytecode_cache: RefCell<HashMap<String, Bytecode>>,
+    bytecode_vm: RefCell<BytecodeVM>,
 }
 
 impl Default for FormulaEngine {
@@ -35,6 +38,8 @@ impl FormulaEngine {
             cache: FormulaCache::new(100),
             templates: FormulaTemplates::new(),
             jit_compiler: RefCell::new(JitCompiler::new()),
+            bytecode_cache: RefCell::new(HashMap::new()),
+            bytecode_vm: RefCell::new(BytecodeVM::new()),
         }
     }
 
@@ -44,6 +49,8 @@ impl FormulaEngine {
             cache: FormulaCache::new(cache_size),
             templates: FormulaTemplates::new(),
             jit_compiler: RefCell::new(JitCompiler::new()),
+            bytecode_cache: RefCell::new(HashMap::new()),
+            bytecode_vm: RefCell::new(BytecodeVM::new()),
         }
     }
 
@@ -54,6 +61,9 @@ impl FormulaEngine {
         }
 
         let ast = parse_formula(source).map_err(FormulaError::ParseError)?;
+        // Compile the optimized AST once so repeated evaluations share the
+        // same CSE and constant-folding decisions.
+        let ast = FormulaOptimizer::optimize(&ast);
         let formula = CompiledFormula {
             ast,
             source: source.to_string(),
@@ -70,7 +80,137 @@ impl FormulaEngine {
         formula: &CompiledFormula,
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
+        // Fast-path the common single-indicator formulas before entering the
+        // general AST executor. This avoids materialising input argument
+        // arrays and lets the SIMD _into kernels write directly into one
+        // result buffer. Complex formulas keep the existing semantics.
+        if let Some(result) = self.try_execute_simple_formula(&formula.ast, ctx) {
+            return Ok(result);
+        }
         self.executor.execute(&formula.ast, ctx)
+    }
+
+    /// Execute a simple built-in formula directly into a caller-owned buffer.
+    fn try_execute_simple_formula_into(
+        &self,
+        ast: &AstNode,
+        ctx: &FormulaContext,
+        output: &mut Array1<f64>,
+    ) -> bool {
+        let (name, args) = match ast {
+            AstNode::FunctionCall { name, args } if args.len() >= 2 => (name.as_str(), args),
+            _ => return false,
+        };
+
+        let input = match &args[0] {
+            AstNode::Variable(name) => ctx.get_data(name),
+            _ => None,
+        };
+        let Some(input) = input else {
+            return false;
+        };
+        if input.len() != output.len() {
+            return false;
+        }
+
+        let period_value = match &args[1] {
+            AstNode::Number(value) if value.is_finite() && *value > 0.0 => *value,
+            _ => return false,
+        };
+        let period = period_value as usize;
+        if period == 0 {
+            return false;
+        }
+
+        if input.iter().any(|value| !value.is_finite()) {
+            output.fill(f64::NAN);
+            return true;
+        }
+
+        match name.to_ascii_uppercase().as_str() {
+            "MA" | "BOLLMID" => crate::math::simd_kernels::sma_simd_into(
+                input,
+                period,
+                output.as_slice_mut().expect("Array1 is contiguous"),
+            ),
+            "EMA" => crate::math::simd_kernels::ema_simd_into(
+                input,
+                period,
+                output.as_slice_mut().expect("Array1 is contiguous"),
+            ),
+            "RSI" => crate::math::simd_kernels::rsi_simd_into(
+                input,
+                period,
+                output.as_slice_mut().expect("Array1 is contiguous"),
+            ),
+            _ => return false,
+        }
+        true
+    }
+
+    /// Execute a simple built-in formula through the native SIMD kernel.
+    ///
+    /// This is deliberately conservative: only a single function call with a
+    /// literal period is specialised, so formulas with assignments, nested
+    /// expressions, or dynamic periods still use the general executor.
+    fn try_execute_simple_formula(
+        &self,
+        ast: &AstNode,
+        ctx: &FormulaContext,
+    ) -> Option<Array1<f64>> {
+        let (name, args) = match ast {
+            AstNode::FunctionCall { name, args } if args.len() >= 2 => (name.as_str(), args),
+            _ => return None,
+        };
+
+        let input = match &args[0] {
+            AstNode::Variable(name) => ctx.get_data(name),
+            _ => None,
+        }?;
+
+        let period_value = match &args[1] {
+            AstNode::Number(value) if value.is_finite() && *value > 0.0 => *value,
+            _ => return None,
+        };
+        let period = period_value as usize;
+        if period == 0 {
+            return None;
+        }
+
+        // The formula functions intentionally turn invalid market data into
+        // an all-NaN result. Preserve that behaviour while bypassing the
+        // allocation-heavy function-call path for valid input.
+        if input.iter().any(|value| !value.is_finite()) {
+            return Some(Array1::from_elem(ctx.data_len, f64::NAN));
+        }
+
+        let mut output = Array1::from_elem(input.len(), f64::NAN);
+        match name.to_ascii_uppercase().as_str() {
+            "MA" | "BOLLMID" => {
+                crate::math::simd_kernels::sma_simd_into(
+                    input,
+                    period,
+                    output.as_slice_mut().expect("Array1 is contiguous"),
+                );
+            }
+            "EMA" => {
+                crate::math::simd_kernels::ema_simd_into(
+                    input,
+                    period,
+                    output.as_slice_mut().expect("Array1 is contiguous"),
+                );
+            }
+            "RSI" => {
+                crate::math::simd_kernels::rsi_simd_into(
+                    input,
+                    period,
+                    output.as_slice_mut().expect("Array1 is contiguous"),
+                );
+            }
+            _ => return None,
+        }
+
+        Some(output)
     }
 
     /// Execute a compiled formula into a caller-provided output buffer.
@@ -84,7 +224,160 @@ impl FormulaEngine {
         ctx: &mut FormulaContext,
         output: &mut Array1<f64>,
     ) -> Result<(), FormulaError> {
+        if output.len() != ctx.data_len {
+            return Err(FormulaError::InvalidParameter(format!(
+                "output length {} != ctx.data_len {}",
+                output.len(),
+                ctx.data_len
+            )));
+        }
+        if self.try_execute_simple_formula_into(&formula.ast, ctx, output) {
+            return Ok(());
+        }
         self.executor.eval_into(&formula.ast, ctx, output)
+    }
+
+    /// Evaluate only the requested half-open output range.
+    ///
+    /// For formulas with a finite dependency lookback, the executor receives
+    /// only the dependency window. Recursive/unknown functions conservatively
+    /// use the full prefix to preserve exact historical semantics.
+    pub fn eval_range(
+        &self,
+        formula: &CompiledFormula,
+        ctx: &FormulaContext,
+        start: usize,
+        end: usize,
+    ) -> Result<Array1<f64>, FormulaError> {
+        if start > end || end > ctx.data_len {
+            return Err(FormulaError::InvalidParameter(format!(
+                "invalid eval_range [{start}, {end}) for data_len {}",
+                ctx.data_len
+            )));
+        }
+        if start == end {
+            return Ok(Array1::zeros(0));
+        }
+        let window_start = FormulaOptimizer::required_lookback(&formula.ast)
+            .map(|lookback| start.saturating_sub(lookback))
+            .unwrap_or(0);
+        let mut window = ctx.window(window_start, end)?;
+        let result = self.execute(formula, &mut window)?;
+        let local_start = start - window_start;
+        Ok(result
+            .slice(ndarray::s![local_start..(local_start + end - start)])
+            .to_owned())
+    }
+
+    /// Evaluate the last bar only.
+    pub fn eval_last(
+        &self,
+        formula: &CompiledFormula,
+        ctx: &FormulaContext,
+    ) -> Result<f64, FormulaError> {
+        if ctx.data_len == 0 {
+            return Err(FormulaError::InvalidParameter(
+                "cannot eval_last an empty context".to_string(),
+            ));
+        }
+        let result = self.eval_range(formula, ctx, ctx.data_len - 1, ctx.data_len)?;
+        Ok(result[0])
+    }
+
+    /// Evaluate common NumPy-backed formulas directly from borrowed slices.
+    ///
+    /// The fast path never materialises an Array1 for the five OHLCV inputs.
+    /// Complex formulas fall back to the regular executor, where intermediate
+    /// arrays are required by the formula function ABI.
+    pub fn eval_zero_copy_inputs(
+        &self,
+        formula: &CompiledFormula,
+        open: &[f64],
+        high: &[f64],
+        low: &[f64],
+        close: &[f64],
+        volume: &[f64],
+        amount: Option<&[f64]>,
+    ) -> Result<Array1<f64>, FormulaError> {
+        if close.is_empty()
+            || [open, high, low, close, volume]
+                .iter()
+                .any(|values| values.len() != close.len())
+            || amount.is_some_and(|values| values.len() != close.len())
+        {
+            return Err(FormulaError::InvalidParameter(
+                "zero-copy formula inputs must be non-empty and have equal lengths".to_string(),
+            ));
+        }
+
+        if let Some(result) =
+            self.try_execute_simple_formula_slices(&formula.ast, open, high, low, close, volume)
+        {
+            return Ok(result);
+        }
+
+        let mut context =
+            FormulaContext::from_borrowed_ohlcv(open, high, low, close, volume, amount.map(|values| {
+                Array1::from_vec(values.to_vec())
+            }));
+        self.execute(formula, &mut context)
+    }
+
+    fn try_execute_simple_formula_slices(
+        &self,
+        ast: &AstNode,
+        open: &[f64],
+        high: &[f64],
+        low: &[f64],
+        close: &[f64],
+        volume: &[f64],
+    ) -> Option<Array1<f64>> {
+        let (name, args) = match ast {
+            AstNode::FunctionCall { name, args } if args.len() >= 2 => (name.as_str(), args),
+            _ => return None,
+        };
+        let input = match &args[0] {
+            AstNode::Variable(name) if name.eq_ignore_ascii_case("C") || name.eq_ignore_ascii_case("CLOSE") => close,
+            AstNode::Variable(name) if name.eq_ignore_ascii_case("O") || name.eq_ignore_ascii_case("OPEN") => open,
+            AstNode::Variable(name) if name.eq_ignore_ascii_case("H") || name.eq_ignore_ascii_case("HIGH") => high,
+            AstNode::Variable(name) if name.eq_ignore_ascii_case("L") || name.eq_ignore_ascii_case("LOW") => low,
+            AstNode::Variable(name) if name.eq_ignore_ascii_case("V") || name.eq_ignore_ascii_case("VOL") || name.eq_ignore_ascii_case("VOLUME") => volume,
+            _ => return None,
+        };
+        if input.is_empty() || [open, high, low, close, volume].iter().any(|values| values.len() != input.len()) {
+            return None;
+        }
+        let period_value = match &args[1] {
+            AstNode::Number(value) if value.is_finite() && *value > 0.0 => *value,
+            _ => return None,
+        };
+        let period = period_value as usize;
+        if period == 0 || (period as f64 - period_value).abs() > f64::EPSILON {
+            return None;
+        }
+        if input.iter().any(|value| !value.is_finite()) {
+            return Some(Array1::from_elem(input.len(), f64::NAN));
+        }
+        let mut output = Array1::from_elem(input.len(), f64::NAN);
+        match name.to_ascii_uppercase().as_str() {
+            "MA" | "BOLLMID" => crate::math::simd_kernels::sma_simd_into(
+                input,
+                period,
+                output.as_slice_mut().expect("Array1 is contiguous"),
+            ),
+            "EMA" => crate::math::simd_kernels::ema_simd_into(
+                input,
+                period,
+                output.as_slice_mut().expect("Array1 is contiguous"),
+            ),
+            "RSI" => crate::math::simd_kernels::rsi_simd_into(
+                input,
+                period,
+                output.as_slice_mut().expect("Array1 is contiguous"),
+            ),
+            _ => return None,
+        }
+        Some(output)
     }
 
     /// 便捷方法：编译并执行
@@ -333,16 +626,28 @@ impl FormulaEngine {
     }
 
     pub fn compile_bytecode(&mut self, source: &str) -> Result<Bytecode, FormulaError> {
+        if let Some(bytecode) = self.bytecode_cache.borrow().get(source).cloned() {
+            return Ok(bytecode);
+        }
         let ast = parse_formula(source).map_err(FormulaError::ParseError)?;
-        compile_to_bytecode(&ast, source).map_err(FormulaError::RuntimeError)
+        let ast = FormulaOptimizer::optimize(&ast);
+        let bytecode = compile_to_bytecode(&ast, source).map_err(FormulaError::RuntimeError)?;
+        self.bytecode_cache
+            .borrow_mut()
+            .insert(source.to_string(), bytecode.clone());
+        Ok(bytecode)
     }
 
+    /// Execute bytecode with the VM owned by this engine.
+    ///
+    /// Keeping the VM alive lets its stack, variable map, and hash tables
+    /// retain capacity between calls instead of reallocating every time.
     pub fn execute_bytecode(
         &self,
         bytecode: &Bytecode,
         ctx: &FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
-        let mut vm = BytecodeVM::new();
+        let mut vm = self.bytecode_vm.borrow_mut();
         let exec_result = vm.execute(bytecode, ctx)?;
         Ok(exec_result.final_value)
     }
@@ -405,9 +710,10 @@ impl FormulaEngine {
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
         let ast = parse_formula(source).map_err(FormulaError::ParseError)?;
+        let ast = FormulaOptimizer::optimize(&ast);
         let bytecode = compile_to_bytecode(&ast, source).map_err(FormulaError::RuntimeError)?;
         let mut jit = self.jit_compiler.borrow_mut();
-        let optimized = jit.compile(bytecode);
+        let optimized = jit.compile_cached(bytecode);
         jit.execute(&optimized, ctx).map(|r| r.final_value)
     }
 
@@ -418,6 +724,15 @@ impl FormulaEngine {
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
         self.eval(source, ctx)
+    }
+
+    /// Execute an already compiled formula through the persistent pooled path.
+    pub fn execute_zero_copy_cached(
+        &self,
+        formula: &CompiledFormula,
+        ctx: &mut FormulaContext,
+    ) -> Result<Array1<f64>, FormulaError> {
+        self.executor.execute_zero_copy_cached(&formula.ast, ctx)
     }
 
     pub fn eval_zero_copy(
@@ -452,9 +767,10 @@ impl FormulaEngine {
     #[cfg(feature = "formula-jit")]
     pub fn compile_jit(&mut self, source: &str) -> Result<OptimizedBytecode, FormulaError> {
         let ast = parse_formula(source).map_err(FormulaError::ParseError)?;
+        let ast = FormulaOptimizer::optimize(&ast);
         let bytecode = compile_to_bytecode(&ast, source).map_err(FormulaError::RuntimeError)?;
         let mut jit = self.jit_compiler.borrow_mut();
-        Ok(jit.compile(bytecode))
+        Ok(jit.compile_cached(bytecode))
     }
 
     #[cfg(feature = "formula-jit")]
@@ -520,6 +836,60 @@ mod tests {
                 ),
             }
         }
+    }
+
+    #[test]
+    fn test_simple_formula_dispatch_matches_general_executor() {
+        for source in ["MA(CLOSE, 20)", "EMA(CLOSE, 12)", "RSI(CLOSE, 14)", "BOLLMID(CLOSE, 20)"] {
+            let mut fast_engine = FormulaEngine::new();
+            let formula = fast_engine.compile(source).unwrap();
+            let mut fast_ctx = make_ctx(128);
+            let fast = fast_engine.execute(&formula, &mut fast_ctx).unwrap();
+
+            let ast = parse_formula(source).unwrap();
+            let executor = FormulaExecutor::new();
+            let mut reference_ctx = make_ctx(128);
+            let reference = executor.execute(&ast, &mut reference_ctx).unwrap();
+
+            assert_eq!(fast.len(), reference.len(), "{source}");
+            for (actual, expected) in fast.iter().zip(reference.iter()) {
+                assert!(
+                    (actual.is_nan() && expected.is_nan())
+                        || (actual - expected).abs() < 1e-12,
+                    "{source}: {actual} != {expected}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_simple_formula_dispatch_writes_reusable_output() {
+        let mut engine = FormulaEngine::new();
+        let formula = engine.compile("RSI(CLOSE, 14)").unwrap();
+        let mut ctx = make_ctx(64);
+        let mut output = Array1::zeros(64);
+        engine.eval_into(&formula, &mut ctx, &mut output).unwrap();
+
+        let reference = FormulaExecutor::new();
+        let ast = parse_formula("RSI(CLOSE, 14)").unwrap();
+        let mut reference_ctx = make_ctx(64);
+        let expected = reference.execute(&ast, &mut reference_ctx).unwrap();
+
+        for (actual, expected) in output.iter().zip(expected.iter()) {
+            assert!(
+                (actual.is_nan() && expected.is_nan())
+                    || (actual - expected).abs() < 1e-12,
+                "{actual} != {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_simple_formula_dispatch_falls_back_for_nested_expression() {
+        let mut engine = FormulaEngine::new();
+        let mut ctx = make_ctx(32);
+        let result = engine.eval("MA(CLOSE, 20) + 1", &mut ctx).unwrap();
+        assert!(result.iter().skip(19).all(|value| value.is_finite()));
     }
 
     #[test]
@@ -1051,4 +1421,79 @@ mod tests {
             assert!((result2[i] - expected).abs() < 1e-10);
         }
     }
+    #[test]
+    fn test_eval_range_and_last_match_full_evaluation() {
+        let mut engine = FormulaEngine::new();
+        let formula = engine.compile("MA(CLOSE, 5)").unwrap();
+        let mut full_ctx = make_ctx(40);
+        let full = engine.execute(&formula, &mut full_ctx).unwrap();
+
+        let range_ctx = make_ctx(40);
+        let range = engine.eval_range(&formula, &range_ctx, 10, 25).unwrap();
+        assert_eq!(range.len(), 15);
+        for (offset, value) in range.iter().enumerate() {
+            assert!((*value - full[10 + offset]).abs() < 1e-12);
+        }
+
+        let last_ctx = make_ctx(40);
+        let last = engine.eval_last(&formula, &last_ctx).unwrap();
+        assert!((last - full[39]).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_borrowed_slice_fast_path_matches_owned_context() {
+        let ctx = make_ctx(32);
+        let formula = FormulaEngine::new();
+        let compiled = {
+            let mut compiler = FormulaEngine::new();
+            compiler.compile("MA(CLOSE, 5)").unwrap()
+        };
+        let borrowed = formula
+            .eval_zero_copy_inputs(
+                &compiled,
+                &ctx.open,
+                &ctx.high,
+                &ctx.low,
+                &ctx.close,
+                &ctx.volume,
+                None,
+            )
+            .unwrap();
+        let mut owned_ctx = make_ctx(32);
+        let mut engine = FormulaEngine::new();
+        let owned_formula = engine.compile("MA(CLOSE, 5)").unwrap();
+        let owned = engine.execute(&owned_formula, &mut owned_ctx).unwrap();
+        assert_eq!(borrowed.len(), owned.len());
+        for (a, b) in borrowed.iter().zip(owned.iter()) {
+            assert!((a - b).abs() < 1e-12 || (a.is_nan() && b.is_nan()));
+        }
+    }
+
+    #[test]
+    fn test_borrowed_slice_path_supports_complex_formula() {
+        let ctx = make_ctx(32);
+        let mut compiler = FormulaEngine::new();
+        let compiled = compiler.compile("MA(CLOSE, 5) + 1").unwrap();
+        let borrowed = FormulaEngine::new()
+            .eval_zero_copy_inputs(
+                &compiled,
+                &ctx.open,
+                &ctx.high,
+                &ctx.low,
+                &ctx.close,
+                &ctx.volume,
+                None,
+            )
+            .unwrap();
+
+        let mut owned_ctx = make_ctx(32);
+        let mut engine = FormulaEngine::new();
+        let owned_formula = engine.compile("MA(CLOSE, 5) + 1").unwrap();
+        let owned = engine.execute(&owned_formula, &mut owned_ctx).unwrap();
+        for (a, b) in borrowed.iter().zip(owned.iter()) {
+            assert!((a - b).abs() < 1e-12 || (a.is_nan() && b.is_nan()));
+        }
+    }
+
+
 }

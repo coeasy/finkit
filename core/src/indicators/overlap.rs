@@ -168,6 +168,53 @@ pub fn bbands(
     })
 }
 
+
+/// Acceleration Bands (ACCBANDS)
+///
+/// Builds upper/lower price bands from the high/low range and smooths all
+/// three series with the same simple moving average as TA-Lib.
+pub fn accbands(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    period: usize,
+) -> Result<BbandsResult> {
+    if high.len() != low.len() || high.len() != close.len() {
+        return Err(TaError::InvalidParameter {
+            name: "high, low, close".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    if period < 2 {
+        return Err(TaError::InvalidParameter {
+            name: "period".to_string(),
+            constraint: "at least 2".to_string(),
+        });
+    }
+    validate_input(close.len(), period)?;
+
+    let len = close.len();
+    let mut upper_raw = Vec::with_capacity(len);
+    let mut lower_raw = Vec::with_capacity(len);
+    for i in 0..len {
+        let sum = high[i] + low[i];
+        if sum != 0.0 {
+            let factor = 4.0 * (high[i] - low[i]) / sum;
+            upper_raw.push(high[i] * (1.0 + factor));
+            lower_raw.push(low[i] * (1.0 - factor));
+        } else {
+            upper_raw.push(high[i]);
+            lower_raw.push(low[i]);
+        }
+    }
+
+    Ok(BbandsResult {
+        upper: moving_avg::sma(&upper_raw, period)?,
+        middle: moving_avg::sma(close, period)?,
+        lower: moving_avg::sma(&lower_raw, period)?,
+    })
+}
+
 /// Midpoint (MIDPOINT)
 ///
 /// MIDPOINT = (highest_high + lowest_low) / 2

@@ -1,6 +1,7 @@
 use crate::formula::ast::AstNode;
 use crate::formula::executor::FormulaExecutor;
 use crate::formula::parser::parse_formula;
+use crate::formula::optimizer::FormulaOptimizer;
 use crate::formula::types::*;
 use ahash::AHasher;
 use lru::LruCache;
@@ -126,6 +127,7 @@ impl FormulaCompiler {
         }
 
         let ast = parse_formula(source).map_err(FormulaError::ParseError)?;
+        let ast = FormulaOptimizer::optimize(&ast);
         let formula = CompiledFormula {
             ast,
             source: source.to_string(),

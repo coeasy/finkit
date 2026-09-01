@@ -1,6 +1,6 @@
 # Python 安装与发布指南
 
-Finkit 的 Python 绑定使用 PyO3 和 maturin 构建。v0.1.0 发布的是带原生 Rust 扩展的 ABI3 wheel：同一平台/架构的 wheel 可被多个 CPython 版本复用，安装时不需要本地 Rust 工具链。
+Finkit 的 Python 绑定使用 PyO3 和 maturin 构建。v0.1.2 发布的是带原生 Rust 扩展的 ABI3 wheel：同一平台/架构的 wheel 可被多个 CPython 版本复用，安装时不需要本地 Rust 工具链。
 
 ## 支持矩阵
 
@@ -10,7 +10,7 @@ Finkit 的 Python 绑定使用 PyO3 和 maturin 构建。v0.1.0 发布的是带�
 | --- | --- | --- |
 | CPython 3.8+（GIL-enabled） | ✅ | 发布使用 ABI3 wheel；CI 在 3.8–3.14 验证 |
 | PyPy | 未承诺 | 当前发布流程只构建 CPython wheel |
-| CPython free-threaded（`python3.14t`） | 未承诺 | 不属于 v0.1.0 的发布矩阵 |
+| CPython free-threaded（`python3.14t`） | 未承诺 | 不属于 v0.1.2 的发布矩阵 |
 
 ### 操作系统与架构
 
@@ -21,16 +21,16 @@ Finkit 的 Python 绑定使用 PyO3 和 maturin 构建。v0.1.0 发布的是带�
 | macOS Apple Silicon | `macosx_*_arm64` |
 | Windows x86_64 | `win_amd64` |
 
-当前 v0.1.0 发布矩阵包含 4 个平台/架构：Linux x86_64、macOS Intel、macOS Apple Silicon 和 Windows x86_64。ABI3 只解决 CPython 版本兼容，不会把原生扩展变成 `py3-none-any`；Linux ARM64、32 位 Windows、musllinux、PyPy 和 free-threaded Python 仍需源码构建或后续单独适配。
+当前 v0.1.2 发布矩阵包含 4 个平台/架构：Linux x86_64、macOS Intel、macOS Apple Silicon 和 Windows x86_64。ABI3 只解决 CPython 版本兼容，不会把原生扩展变成 `py3-none-any`；Linux ARM64、32 位 Windows、musllinux、PyPy 和 free-threaded Python 仍需源码构建或后续单独适配。
 
 ## 安装已构建 wheel
 
-1. 在 [GitHub Releases](https://github.com/coeasy/finkit/releases) 下载与本机操作系统和 CPU 架构匹配的 `finkit-0.1.0-*.whl`。
+1. 在 [GitHub Releases](https://github.com/coeasy/finkit/releases) 下载与本机操作系统和 CPU 架构匹配的 `finkit-0.1.2-*.whl`。
 2. 在目标虚拟环境中安装。ABI3 wheel 不需要按 CPython 3.8、3.9 等小版本分别挑选；pip 会根据平台标签选择兼容 wheel：
 
 ```bash
 python -m pip install --upgrade pip
-python -m pip install ./finkit-0.1.0-<匹配本机的 wheel>.whl
+python -m pip install ./finkit-0.1.2-<匹配本机的 wheel>.whl
 ```
 
 如果对应 Release 尚未附带 wheel，可打开仓库的 [Python wheels workflow](https://github.com/coeasy/finkit/actions/workflows/python-wheels.yml)，进入一条成功的运行记录，在 Artifacts 区域下载与本机平台匹配的 artifact。安装本地 wheel 时，pip 会自动安装运行时依赖 NumPy。
@@ -61,7 +61,7 @@ wheel 文件名中的标签对应以下信息：
 不要只按文件名中的 Python 版本选择；系统和 CPU 架构标签也必须匹配。通常让 pip 直接安装目录中的 wheel 最安全：
 
 ```bash
-python -m pip install ./dist/finkit-0.1.0-*.whl
+python -m pip install ./dist/finkit-0.1.2-*.whl
 ```
 
 ## 从源码安装
@@ -119,7 +119,7 @@ python -m pytest ffi/python-binding/tests -q
 ```bash
 python -m pip install "maturin>=1.5,<2.0"
 maturin build --release --locked --out dist --compatibility pypi --interpreter python
-python -m pip install ./dist/finkit-0.1.0-*.whl
+python -m pip install ./dist/finkit-0.1.2-*.whl
 ```
 
 要在本机生成源码包：
@@ -191,7 +191,7 @@ maturin sdist --out dist
 maturin build --release --locked --out dist --compatibility pypi --interpreter python
 
 # 安装 wheel 后运行完整 Python 测试
-python -m pip install ./dist/finkit-0.1.0-*.whl
+python -m pip install ./dist/finkit-0.1.2-*.whl
 cd ../..
 python -m pytest ffi/python-binding/tests -q
 ```
@@ -228,7 +228,7 @@ python -c "import sys; print(sys.executable)"
 
 ```bash
 python -m pip install --upgrade pip numpy
-python -m pip install --force-reinstall ./finkit-0.1.0-*.whl
+python -m pip install --force-reinstall ./finkit-0.1.2-*.whl
 ```
 
 ### 源码构建找不到 Rust 或链接器
@@ -251,6 +251,6 @@ python -m pip install --force-reinstall ./finkit-0.1.0-*.whl
 3. 使用 `twine check` 校验元数据、版本和兼容性标签；
 4. 将 4 个 wheel 自动上传到对应的 GitHub Release。
 
-如果需要为已经存在的 Release 补发 wheel，可在 Actions 页面手动运行该 workflow，并填写 `release_tag`，例如 `v0.1.0`。手动补发使用当前 `main` 的源码，因此应先确认源码版本与目标 tag 一致。
+如果需要为已经存在的 Release 补发 wheel，可在 Actions 页面手动运行该 workflow，并填写 `release_tag`，例如 `v0.1.2`。手动补发使用当前 `main` 的源码，因此应先确认源码版本与目标 tag 一致。
 
 构建失败时不会执行 Release 上传步骤；只有全部平台构建、安装测试和汇总校验通过后才会发布。

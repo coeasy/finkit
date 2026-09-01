@@ -280,25 +280,25 @@ fn fn_hhvbars(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>,
     let data_len = ctx.data_len;
     let mut output = nan_vec(data_len);
 
+    // Scan the source slice in place. The previous implementation allocated
+    // and copied a temporary window for every bar, which made this O(bars)
+    // allocations on top of the O(bars * period) scan.
     for i in 0..data_len {
         let window_start = (i + 1).saturating_sub(n);
-        let window: Vec<f64> = input.slice(s![window_start..=i]).to_vec();
+        let mut max_value = f64::NEG_INFINITY;
+        let mut max_index = None;
 
-        if window.is_empty() || window.iter().all(|v| v.is_nan()) {
-            continue;
-        }
-
-        let mut max_val = f64::NEG_INFINITY;
-        let mut max_idx = 0;
-
-        for (j, &v) in window.iter().enumerate() {
-            if !v.is_nan() && v > max_val {
-                max_val = v;
-                max_idx = j;
+        for j in window_start..=i {
+            let value = input[j];
+            if !value.is_nan() && value > max_value {
+                max_value = value;
+                max_index = Some(j);
             }
         }
 
-        output[i] = (i - (window_start + max_idx)) as f64;
+        if let Some(index) = max_index {
+            output[i] = (i - index) as f64;
+        }
     }
 
     Ok(output)
@@ -312,25 +312,24 @@ fn fn_llvbars(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>,
     let data_len = ctx.data_len;
     let mut output = nan_vec(data_len);
 
+    // Keep the first occurrence on ties, matching the old temporary-window
+    // implementation while avoiding one Vec allocation per bar.
     for i in 0..data_len {
         let window_start = (i + 1).saturating_sub(n);
-        let window: Vec<f64> = input.slice(s![window_start..=i]).to_vec();
+        let mut min_value = f64::INFINITY;
+        let mut min_index = None;
 
-        if window.is_empty() || window.iter().all(|v| v.is_nan()) {
-            continue;
-        }
-
-        let mut min_val = f64::INFINITY;
-        let mut min_idx = 0;
-
-        for (j, &v) in window.iter().enumerate() {
-            if !v.is_nan() && v < min_val {
-                min_val = v;
-                min_idx = j;
+        for j in window_start..=i {
+            let value = input[j];
+            if !value.is_nan() && value < min_value {
+                min_value = value;
+                min_index = Some(j);
             }
         }
 
-        output[i] = (i - (window_start + min_idx)) as f64;
+        if let Some(index) = min_index {
+            output[i] = (i - index) as f64;
+        }
     }
 
     Ok(output)
@@ -541,8 +540,8 @@ fn fn_em_zig(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, 
     ensure_args_len("EM_ZIG", args, 2)?;
     let _k = extract_f64_arg(args, 0, "EM_ZIG")?;
     let n = extract_f64_arg(args, 1, "EM_ZIG")?;
-    let high = ctx.high.as_slice().unwrap();
-    let low = ctx.low.as_slice().unwrap();
+    let high = ctx.high.as_slice();
+    let low = ctx.low.as_slice();
 
     match lib_zigzag(high, low, n) {
         Ok(result) => Ok(result.zigzag),
@@ -2301,8 +2300,8 @@ fn fn_midprice(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
     let n = extract_n(args, 2, "MIDPRICE")?;
 
     let data_len = ctx.data_len;
-    let high_values = high.as_slice().unwrap();
-    let low_values = low.as_slice().unwrap();
+    let high_values = high;
+    let low_values = low;
 
     let max_vals = match lib_stat::rolling_max(high_values, n) {
         Ok(r) => r,
@@ -2372,8 +2371,8 @@ fn fn_stoch(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, F
     };
 
     let data_len = ctx.data_len;
-    let high_values = high.as_slice().unwrap();
-    let low_values = low.as_slice().unwrap();
+    let high_values = high;
+    let low_values = low;
     let close_values = close.as_slice().unwrap();
 
     match lib_momentum::stoch(high_values, low_values, close_values, fastk, slowk, slowd) {
@@ -2419,8 +2418,8 @@ fn fn_kdj_line(
     let (n, m1, m2) = extract_kdj_params(args);
 
     let data_len = ctx.data_len;
-    let high_values = high.as_slice().unwrap();
-    let low_values = low.as_slice().unwrap();
+    let high_values = high;
+    let low_values = low;
     let close_values = close.as_slice().unwrap();
 
     match lib_kdj(high_values, low_values, close_values, n, m1, m2) {
@@ -2516,8 +2515,8 @@ fn fn_cmf(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, For
     let n = extract_n(args, 4, "CMF")?;
 
     let data_len = ctx.data_len;
-    let high_values = high.as_slice().unwrap();
-    let low_values = low.as_slice().unwrap();
+    let high_values = high;
+    let low_values = low;
     let close_values = close.as_slice().unwrap();
     let volume_values = volume.as_slice().unwrap();
 
@@ -2534,8 +2533,8 @@ fn fn_fisher(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, 
     let n = extract_n(args, 2, "FISHER")?;
 
     let data_len = ctx.data_len;
-    let high_values = high.as_slice().unwrap();
-    let low_values = low.as_slice().unwrap();
+    let high_values = high;
+    let low_values = low;
 
     match lib_fisher(high_values, low_values, n) {
         Ok(result) => Ok(result.fisher),
@@ -2553,8 +2552,8 @@ fn fn_fisher_signal(
     let n = extract_n(args, 2, "FISHER_SIGNAL")?;
 
     let data_len = ctx.data_len;
-    let high_values = high.as_slice().unwrap();
-    let low_values = low.as_slice().unwrap();
+    let high_values = high;
+    let low_values = low;
 
     match lib_fisher(high_values, low_values, n) {
         Ok(result) => Ok(result.signal),
@@ -2588,8 +2587,8 @@ fn fn_chop(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, Fo
     let n = extract_n(args, 3, "CHOP")?;
 
     let data_len = ctx.data_len;
-    let high_values = high.as_slice().unwrap();
-    let low_values = low.as_slice().unwrap();
+    let high_values = high;
+    let low_values = low;
     let close_values = close.as_slice().unwrap();
 
     match lib_chop(high_values, low_values, close_values, n) {
@@ -3068,8 +3067,8 @@ fn fn_dx(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, Form
     let (high, low, close, n) = resolve_hlc_args("DX", ctx, args)?;
     let data_len = ctx.data_len;
     match crate::indicators::momentum::dx(
-        high.as_slice().unwrap(),
-        low.as_slice().unwrap(),
+        high,
+        low,
         close.as_slice().unwrap(),
         n,
     ) {
@@ -3082,8 +3081,8 @@ fn fn_plus_di(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>,
     let (high, low, close, n) = resolve_hlc_args("PLUS_DI", ctx, args)?;
     let data_len = ctx.data_len;
     match crate::indicators::momentum::plus_di(
-        high.as_slice().unwrap(),
-        low.as_slice().unwrap(),
+        high,
+        low,
         close.as_slice().unwrap(),
         n,
     ) {
@@ -3096,8 +3095,8 @@ fn fn_minus_di(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
     let (high, low, close, n) = resolve_hlc_args("MINUS_DI", ctx, args)?;
     let data_len = ctx.data_len;
     match crate::indicators::momentum::minus_di(
-        high.as_slice().unwrap(),
-        low.as_slice().unwrap(),
+        high,
+        low,
         close.as_slice().unwrap(),
         n,
     ) {
@@ -3110,8 +3109,8 @@ fn fn_adxr(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, Fo
     let (high, low, close, n) = resolve_hlc_args("ADXR", ctx, args)?;
     let data_len = ctx.data_len;
     match crate::indicators::momentum::adxr(
-        high.as_slice().unwrap(),
-        low.as_slice().unwrap(),
+        high,
+        low,
         close.as_slice().unwrap(),
         n,
     ) {
@@ -3124,8 +3123,8 @@ fn fn_aroonosc(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
     let (high, low, n) = resolve_hl_args("AROONOSC", ctx, args)?;
     let data_len = ctx.data_len;
     match crate::indicators::momentum::aroonosc(
-        high.as_slice().unwrap(),
-        low.as_slice().unwrap(),
+        high,
+        low,
         n,
     ) {
         Ok(r) => Ok(r),
@@ -3136,7 +3135,7 @@ fn fn_aroonosc(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
 fn fn_aroon_up(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let (high, low, n) = resolve_hl_args("AROON_UP", ctx, args)?;
     let data_len = ctx.data_len;
-    match crate::indicators::momentum::aroon(high.as_slice().unwrap(), low.as_slice().unwrap(), n) {
+    match crate::indicators::momentum::aroon(high, low, n) {
         Ok(r) => Ok(r.aroon_up),
         Err(_) => Ok(nan_vec(data_len)),
     }
@@ -3145,7 +3144,7 @@ fn fn_aroon_up(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
 fn fn_aroon_dn(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let (high, low, n) = resolve_hl_args("AROON_DN", ctx, args)?;
     let data_len = ctx.data_len;
-    match crate::indicators::momentum::aroon(high.as_slice().unwrap(), low.as_slice().unwrap(), n) {
+    match crate::indicators::momentum::aroon(high, low, n) {
         Ok(r) => Ok(r.aroon_down),
         Err(_) => Ok(nan_vec(data_len)),
     }
@@ -3157,10 +3156,10 @@ fn resolve_hlc_args<'a>(
     name: &str,
     ctx: &'a FormulaContext,
     args: &'a [Array1<f64>],
-) -> Result<(&'a Array1<f64>, &'a Array1<f64>, &'a Array1<f64>, usize), FormulaError> {
+) -> Result<(&'a [f64], &'a [f64], &'a [f64], usize), FormulaError> {
     if args.len() >= 4 {
         let n = extract_n(args, 3, name)?;
-        Ok((&args[0], &args[1], &args[2], n))
+        Ok((args[0].as_slice().unwrap(), args[1].as_slice().unwrap(), args[2].as_slice().unwrap(), n))
     } else if args.len() >= 2 {
         let n = extract_n(args, 1, name)?;
         Ok((&ctx.high, &ctx.low, &ctx.close, n))
@@ -3177,10 +3176,10 @@ fn resolve_hl_args<'a>(
     name: &str,
     ctx: &'a FormulaContext,
     args: &'a [Array1<f64>],
-) -> Result<(&'a Array1<f64>, &'a Array1<f64>, usize), FormulaError> {
+) -> Result<(&'a [f64], &'a [f64], usize), FormulaError> {
     if args.len() >= 3 {
         let n = extract_n(args, 2, name)?;
-        Ok((&args[0], &args[1], n))
+        Ok((args[0].as_slice().unwrap(), args[1].as_slice().unwrap(), n))
     } else if !args.is_empty() {
         let n = extract_n(args, 0, name)?;
         Ok((&ctx.high, &ctx.low, n))
@@ -3265,8 +3264,8 @@ fn fn_ultosc(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, 
     };
     let data_len = ctx.data_len;
     match lib_momentum::ultosc(
-        high.as_slice().unwrap(),
-        low.as_slice().unwrap(),
+        high,
+        low,
         close.as_slice().unwrap(),
         p1,
         p2,
@@ -3296,7 +3295,7 @@ fn resolve_hlc_for_ultosc<'a>(
 fn fn_plus_dm(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let (high, low) = resolve_hl_for_dm("PLUS_DM", ctx, args)?;
     let data_len = ctx.data_len;
-    match lib_momentum::plus_dm(high.as_slice().unwrap(), low.as_slice().unwrap()) {
+    match lib_momentum::plus_dm(high, low) {
         Ok(r) => Ok(r),
         Err(_) => Ok(nan_vec(data_len)),
     }
@@ -3305,7 +3304,7 @@ fn fn_plus_dm(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>,
 fn fn_minus_dm(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let (high, low) = resolve_hl_for_dm("MINUS_DM", ctx, args)?;
     let data_len = ctx.data_len;
-    match lib_momentum::minus_dm(high.as_slice().unwrap(), low.as_slice().unwrap()) {
+    match lib_momentum::minus_dm(high, low) {
         Ok(r) => Ok(r),
         Err(_) => Ok(nan_vec(data_len)),
     }
@@ -4020,9 +4019,9 @@ fn fn_reverse(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>,
 fn fn_tr(ctx: &FormulaContext, _args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let len = ctx.data_len;
     let mut out = Array1::zeros(len);
-    let h = ctx.high.as_slice().unwrap();
-    let l = ctx.low.as_slice().unwrap();
-    let c = ctx.close.as_slice().unwrap();
+    let h = ctx.high.as_slice();
+    let l = ctx.low.as_slice();
+    let c = ctx.close.as_slice();
     out[0] = h[0] - l[0];
     for i in 1..len {
         let hl = h[i] - l[i];
@@ -4475,7 +4474,7 @@ fn fn_mtm(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, For
 fn fn_close1(ctx: &FormulaContext, _args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let len = ctx.data_len;
     let mut out = nan_vec(len);
-    let c = ctx.close.as_slice().unwrap();
+    let c = ctx.close.as_slice();
     for i in 1..len {
         out[i] = c[i - 1];
     }
@@ -4485,7 +4484,7 @@ fn fn_close1(ctx: &FormulaContext, _args: &[Array1<f64>]) -> Result<Array1<f64>,
 fn fn_open1(ctx: &FormulaContext, _args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let len = ctx.data_len;
     let mut out = nan_vec(len);
-    let o = ctx.open.as_slice().unwrap();
+    let o = ctx.open.as_slice();
     for i in 1..len {
         out[i] = o[i - 1];
     }
@@ -4569,8 +4568,8 @@ fn compute_zigzag_pivots(
     ctx: &FormulaContext,
     threshold_pct: f64,
 ) -> (Vec<(usize, f64, bool)>, usize) {
-    let high = ctx.high.as_slice().unwrap();
-    let low = ctx.low.as_slice().unwrap();
+    let high = ctx.high.as_slice();
+    let low = ctx.low.as_slice();
     let data_len = ctx.data_len;
 
     let zz_result = lib_zigzag(high, low, threshold_pct);
@@ -4719,8 +4718,8 @@ fn fn_troughbars(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f6
 fn fn_zigzag(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("ZIGZAG", args, 2)?;
     let n = extract_f64_arg(args, 1, "ZIGZAG")?;
-    let high = ctx.high.as_slice().unwrap();
-    let low = ctx.low.as_slice().unwrap();
+    let high = ctx.high.as_slice();
+    let low = ctx.low.as_slice();
 
     match lib_zigzag(high, low, n) {
         Ok(result) => Ok(result.zigzag),
@@ -5701,7 +5700,7 @@ pub fn get_builtin_functions() -> HashMap<String, FormulaFn> {
 fn fn_high1(ctx: &FormulaContext, _args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let len = ctx.data_len;
     let mut out = nan_vec(len);
-    let h = ctx.high.as_slice().unwrap();
+    let h = ctx.high.as_slice();
     for i in 1..len {
         out[i] = h[i - 1];
     }
@@ -5711,7 +5710,7 @@ fn fn_high1(ctx: &FormulaContext, _args: &[Array1<f64>]) -> Result<Array1<f64>, 
 fn fn_low1(ctx: &FormulaContext, _args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let len = ctx.data_len;
     let mut out = nan_vec(len);
-    let l = ctx.low.as_slice().unwrap();
+    let l = ctx.low.as_slice();
     for i in 1..len {
         out[i] = l[i - 1];
     }
@@ -5721,7 +5720,7 @@ fn fn_low1(ctx: &FormulaContext, _args: &[Array1<f64>]) -> Result<Array1<f64>, F
 fn fn_vol1(ctx: &FormulaContext, _args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let len = ctx.data_len;
     let mut out = nan_vec(len);
-    let v = ctx.volume.as_slice().unwrap();
+    let v = ctx.volume.as_slice();
     for i in 1..len {
         out[i] = v[i - 1];
     }
@@ -5849,7 +5848,7 @@ fn fn_totalvol(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
     let data_len = ctx.data_len;
     let mut result = nan_vec(data_len);
 
-    let vol = ctx.volume.as_slice().unwrap();
+    let vol = ctx.volume.as_slice();
     for i in (n - 1)..data_len {
         let window_start = (i + 1).saturating_sub(n);
         let sum: f64 = (window_start..=i).map(|j| vol[j]).sum();
@@ -5864,7 +5863,7 @@ fn fn_maxprice(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
     let n = extract_n(args, 0, "MAXPRICE")?;
     let data_len = ctx.data_len;
 
-    let high = ctx.high.as_slice().unwrap();
+    let high = ctx.high.as_slice();
     match lib_stat::rolling_max(high, n) {
         Ok(result) => Ok(result),
         Err(_) => Ok(nan_vec(data_len)),
@@ -5876,7 +5875,7 @@ fn fn_minprice(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
     let n = extract_n(args, 0, "MINPRICE")?;
     let data_len = ctx.data_len;
 
-    let low = ctx.low.as_slice().unwrap();
+    let low = ctx.low.as_slice();
     match lib_stat::rolling_min(low, n) {
         Ok(result) => Ok(result),
         Err(_) => Ok(nan_vec(data_len)),
@@ -5886,8 +5885,8 @@ fn fn_minprice(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
 fn fn_fox_zig(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("FOX_ZIG", args, 2)?;
     let n = extract_f64_arg(args, 1, "FOX_ZIG")?;
-    let high = ctx.high.as_slice().unwrap();
-    let low = ctx.low.as_slice().unwrap();
+    let high = ctx.high.as_slice();
+    let low = ctx.low.as_slice();
 
     match lib_zigzag(high, low, n) {
         Ok(result) => Ok(result.zigzag),
@@ -6594,4 +6593,24 @@ mod talib_compat_tests {
             assert!((r_min[i] - 0.0).abs() < 1e-10);
         }
     }
+    #[test]
+    fn test_hhvbars_llvbars_keep_values_without_window_allocations() {
+        let input = Array1::from_vec(vec![3.0, 1.0, 2.0, 2.0, 4.0]);
+        let mut ctx = FormulaContext::new(
+            input.clone(),
+            input.clone(),
+            input.clone(),
+            input.clone(),
+            input.clone(),
+            None,
+        );
+        let mut engine = FormulaEngine::new();
+
+        let hhv = engine.eval("HHVBARS(CLOSE, 3)", &mut ctx).unwrap();
+        let llv = engine.eval("LLVBARS(CLOSE, 3)", &mut ctx).unwrap();
+
+        assert_eq!(hhv.to_vec(), vec![0.0, 1.0, 2.0, 1.0, 0.0]);
+        assert_eq!(llv.to_vec(), vec![0.0, 0.0, 1.0, 2.0, 2.0]);
+    }
+
 }

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-01
+
+### Changed
+- 将公式运行时升级为可复用的零拷贝/增量执行模型：公共子表达式合并、`eval_range`/`eval_last`、容量增长式 `append_bar`、持久化 Bytecode/JIT 与缓冲池。
+- Python ABI3 wheel 发布矩阵与版本元数据统一为 `0.1.2`，覆盖 CPython 3.8–3.14 的 Linux x86_64、macOS x86_64/arm64 和 Windows x86_64。
+
+### Fixed
+- 加固 GitHub Actions 的权限与并发控制，移除旧版 `v0.1.0` 强制回写逻辑，统一使用版本 tag 发布 wheel。
+
 ### Added
 - Comprehensive CI/CD pipeline with fmt, clippy, and security audits
 - Multi-language binding tests (Python, Node.js, Go, .NET, Java, WASM, CLI)

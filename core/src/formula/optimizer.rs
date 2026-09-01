@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::formula::ast::*;
 use crate::formula::opt_level::OptLevel;
+use crate::formula::types::classify_builtin_var;
 
 pub struct FormulaOptimizer;
 
@@ -1097,101 +1098,172 @@ impl FormulaOptimizer {
     }
 
     fn common_subexpression_elimination(ast: &AstNode) -> AstNode {
+        let mut counts: HashMap<String, usize> = HashMap::new();
+        let mut nodes: HashMap<String, AstNode> = HashMap::new();
+        let mut order: Vec<String> = Vec::new();
+        Self::cse_collect(ast, &mut counts, &mut nodes, &mut order);
+
         let mut expr_map: HashMap<String, (String, AstNode)> = HashMap::new();
-        Self::cse_collect(ast, &mut expr_map);
+        for key in order {
+            if counts.get(&key).copied().unwrap_or(0) >= 2 {
+                let name = format!("_CSE{}", expr_map.len());
+                if let Some(node) = nodes.get(&key) {
+                    expr_map.insert(key, (name, node.clone()));
+                }
+            }
+        }
+        if expr_map.is_empty() {
+            return ast.clone();
+        }
 
-        let mut new_assignments: Vec<AstNode> = Vec::new();
-
-        for (_key, (var_name, expr)) in expr_map.iter() {
-            new_assignments.push(AstNode::Assignment {
-                name: var_name.clone(),
-                expr: Box::new(expr.clone()),
+        let mut assignments = Vec::with_capacity(expr_map.len());
+        let mut ordered: Vec<(&String, &AstNode)> =
+            expr_map.values().map(|(name, expr)| (name, expr)).collect();
+        ordered.sort_by(|a, b| a.0.cmp(b.0));
+        for (name, expr) in ordered {
+            // Protect the root of the generated assignment from being replaced
+            // by itself; nested candidates may still be shared safely.
+            assignments.push(AstNode::Assignment {
+                name: name.clone(),
+                expr: Box::new(Self::cse_replace_inner(expr, &expr_map, true)),
             });
         }
 
-        let mut replaced = Self::cse_replace(ast, &expr_map);
-
-        if !new_assignments.is_empty() {
-            match &replaced {
-                AstNode::Statements(stmts) => {
-                    let mut all = new_assignments;
-                    all.extend(stmts.clone());
-                    replaced = AstNode::Statements(all);
-                }
-                _ => {
-                    let mut all = new_assignments;
-                    all.push(replaced);
-                    replaced = AstNode::Statements(all);
-                }
+        let replaced = Self::cse_replace_inner(ast, &expr_map, false);
+        match replaced {
+            AstNode::Statements(mut statements) => {
+                assignments.append(&mut statements);
+                AstNode::Statements(assignments)
+            }
+            other => {
+                assignments.push(other);
+                AstNode::Statements(assignments)
             }
         }
-
-        replaced
     }
 
-    fn cse_collect(ast: &AstNode, expr_map: &mut HashMap<String, (String, AstNode)>) {
+    fn cse_collect(
+        ast: &AstNode,
+        counts: &mut HashMap<String, usize>,
+        nodes: &mut HashMap<String, AstNode>,
+        order: &mut Vec<String>,
+    ) {
         match ast {
-            AstNode::Statements(stmts) => {
-                for stmt in stmts {
-                    Self::cse_collect(stmt, expr_map);
-                }
+            AstNode::BinaryOp { left, right, .. } => {
+                Self::cse_collect(left, counts, nodes, order);
+                Self::cse_collect(right, counts, nodes, order);
             }
-            AstNode::BinaryOp { op: _, left, right } => {
-                Self::cse_collect(left, expr_map);
-                Self::cse_collect(right, expr_map);
-
-                let key = Self::ast_to_key(ast);
-                if matches!(ast, AstNode::BinaryOp { .. }) && !expr_map.contains_key(&key) {
-                    expr_map.insert(key, (format!("_CSE{}", expr_map.len()), ast.clone()));
-                }
+            AstNode::UnaryOp { expr, .. }
+            | AstNode::Assignment { expr, .. }
+            | AstNode::Output { expr, .. }
+            | AstNode::CompoundAssignment { expr, .. } => {
+                Self::cse_collect(expr, counts, nodes, order);
             }
-            AstNode::UnaryOp { expr, .. } => {
-                Self::cse_collect(expr, expr_map);
-            }
-            AstNode::FunctionCall { args, .. } => {
+            AstNode::FunctionCall { args, .. }
+            | AstNode::DrawGeneric { args, .. } => {
                 for arg in args {
-                    Self::cse_collect(arg, expr_map);
+                    Self::cse_collect(arg, counts, nodes, order);
                 }
             }
             AstNode::IndexAccess { array, index } => {
-                Self::cse_collect(array, expr_map);
-                Self::cse_collect(index, expr_map);
+                Self::cse_collect(array, counts, nodes, order);
+                Self::cse_collect(index, counts, nodes, order);
             }
-            AstNode::Assignment { expr, .. } | AstNode::Output { expr, .. } => {
-                Self::cse_collect(expr, expr_map);
-            }
-            AstNode::CompoundAssignment { expr, .. } => {
-                Self::cse_collect(expr, expr_map);
+            AstNode::Statements(stmts) => {
+                for stmt in stmts {
+                    Self::cse_collect(stmt, counts, nodes, order);
+                }
             }
             AstNode::IfThenElse {
                 cond,
                 then_branch,
                 else_branch,
             } => {
-                Self::cse_collect(cond, expr_map);
-                Self::cse_collect(then_branch, expr_map);
-                Self::cse_collect(else_branch, expr_map);
+                Self::cse_collect(cond, counts, nodes, order);
+                Self::cse_collect(then_branch, counts, nodes, order);
+                Self::cse_collect(else_branch, counts, nodes, order);
             }
             AstNode::ForLoop {
-                var: _,
-                start,
-                end,
-                body,
+                start, end, body, ..
             } => {
-                Self::cse_collect(start, expr_map);
-                Self::cse_collect(end, expr_map);
-                for s in body {
-                    Self::cse_collect(s, expr_map);
+                Self::cse_collect(start, counts, nodes, order);
+                Self::cse_collect(end, counts, nodes, order);
+                for stmt in body {
+                    Self::cse_collect(stmt, counts, nodes, order);
                 }
             }
             AstNode::WhileLoop { cond, body } => {
-                Self::cse_collect(cond, expr_map);
-                for s in body {
-                    Self::cse_collect(s, expr_map);
+                Self::cse_collect(cond, counts, nodes, order);
+                for stmt in body {
+                    Self::cse_collect(stmt, counts, nodes, order);
                 }
+            }
+            AstNode::DrawText { cond, price, .. } => {
+                Self::cse_collect(cond, counts, nodes, order);
+                Self::cse_collect(price, counts, nodes, order);
+            }
+            AstNode::DrawIcon {
+                cond, price, icon, ..
+            } => {
+                Self::cse_collect(cond, counts, nodes, order);
+                Self::cse_collect(price, counts, nodes, order);
+                Self::cse_collect(icon, counts, nodes, order);
+            }
+            AstNode::StickLine {
+                cond,
+                price1,
+                price2,
+                width,
+                ..
+            } => {
+                Self::cse_collect(cond, counts, nodes, order);
+                Self::cse_collect(price1, counts, nodes, order);
+                Self::cse_collect(price2, counts, nodes, order);
+                Self::cse_collect(width, counts, nodes, order);
             }
             _ => {}
         }
+
+        // Record after children so nested CSE assignments are emitted first.
+        if Self::is_cse_candidate(ast) {
+            let key = Self::ast_to_key(ast);
+            let count = counts.entry(key.clone()).or_insert(0);
+            if *count == 0 {
+                nodes.insert(key.clone(), ast.clone());
+                order.push(key.clone());
+            }
+            *count += 1;
+        }
+    }
+
+    fn is_cse_candidate(ast: &AstNode) -> bool {
+        fn is_pure(node: &AstNode) -> bool {
+            match node {
+                AstNode::Number(_) | AstNode::StringLit(_) => true,
+                AstNode::Variable(name) => classify_builtin_var(name).is_some(),
+                AstNode::BinaryOp { left, right, .. } => is_pure(left) && is_pure(right),
+                AstNode::UnaryOp { expr, .. } => is_pure(expr),
+                AstNode::FunctionCall { name, args } => {
+                    let upper = name.to_ascii_uppercase();
+                    !upper.starts_with("DRAW")
+                        && !matches!(
+                            upper.as_str(),
+                            "ALERT" | "ALERTONCE" | "SELECT" | "SMARTSELECT"
+                        )
+                        && args.iter().all(is_pure)
+                }
+                AstNode::IndexAccess { array, index } => is_pure(array) && is_pure(index),
+                _ => false,
+            }
+        }
+
+        matches!(
+            ast,
+            AstNode::BinaryOp { .. }
+                | AstNode::UnaryOp { .. }
+                | AstNode::FunctionCall { .. }
+                | AstNode::IndexAccess { .. }
+        ) && is_pure(ast)
     }
 
     fn ast_to_key(ast: &AstNode) -> String {
@@ -1220,54 +1292,46 @@ impl FormulaOptimizer {
         }
     }
 
-    fn cse_replace(ast: &AstNode, expr_map: &HashMap<String, (String, AstNode)>) -> AstNode {
+    fn cse_replace_inner(
+        ast: &AstNode,
+        expr_map: &HashMap<String, (String, AstNode)>,
+        protect_root: bool,
+    ) -> AstNode {
+        if !protect_root && Self::is_cse_candidate(ast) {
+            if let Some((name, _)) = expr_map.get(&Self::ast_to_key(ast)) {
+                return AstNode::Variable(name.clone());
+            }
+        }
+
         match ast {
-            AstNode::Statements(stmts) => {
-                let replaced: Vec<AstNode> = stmts
-                    .iter()
-                    .map(|s| Self::cse_replace(s, expr_map))
-                    .collect();
-                if replaced.len() == 1 {
-                    replaced.into_iter().next().unwrap()
-                } else {
-                    AstNode::Statements(replaced)
-                }
-            }
-            AstNode::BinaryOp { .. } => {
-                let key = Self::ast_to_key(ast);
-                if expr_map.contains_key(&key) {
-                    let (var_name, _) = expr_map.get(&key).unwrap();
-                    AstNode::Variable(var_name.clone())
-                } else {
-                    ast.clone()
-                }
-            }
+            AstNode::BinaryOp { op, left, right } => AstNode::BinaryOp {
+                op: op.clone(),
+                left: Box::new(Self::cse_replace_inner(left, expr_map, false)),
+                right: Box::new(Self::cse_replace_inner(right, expr_map, false)),
+            },
             AstNode::UnaryOp { op, expr } => AstNode::UnaryOp {
                 op: op.clone(),
-                expr: Box::new(Self::cse_replace(expr, expr_map)),
+                expr: Box::new(Self::cse_replace_inner(expr, expr_map, false)),
             },
-            AstNode::FunctionCall { name, args } => {
-                let replaced_args: Vec<AstNode> = args
+            AstNode::FunctionCall { name, args } => AstNode::FunctionCall {
+                name: name.clone(),
+                args: args
                     .iter()
-                    .map(|a| Self::cse_replace(a, expr_map))
-                    .collect();
-                AstNode::FunctionCall {
-                    name: name.clone(),
-                    args: replaced_args,
-                }
-            }
+                    .map(|arg| Self::cse_replace_inner(arg, expr_map, false))
+                    .collect(),
+            },
             AstNode::IndexAccess { array, index } => AstNode::IndexAccess {
-                array: Box::new(Self::cse_replace(array, expr_map)),
-                index: Box::new(Self::cse_replace(index, expr_map)),
+                array: Box::new(Self::cse_replace_inner(array, expr_map, false)),
+                index: Box::new(Self::cse_replace_inner(index, expr_map, false)),
             },
             AstNode::Assignment { name, expr } => AstNode::Assignment {
                 name: name.clone(),
-                expr: Box::new(Self::cse_replace(expr, expr_map)),
+                expr: Box::new(Self::cse_replace_inner(expr, expr_map, false)),
             },
             AstNode::CompoundAssignment { name, op, expr } => AstNode::CompoundAssignment {
                 name: name.clone(),
                 op: op.clone(),
-                expr: Box::new(Self::cse_replace(expr, expr_map)),
+                expr: Box::new(Self::cse_replace_inner(expr, expr_map, false)),
             },
             AstNode::Output {
                 name,
@@ -1275,17 +1339,23 @@ impl FormulaOptimizer {
                 modifier,
             } => AstNode::Output {
                 name: name.clone(),
-                expr: Box::new(Self::cse_replace(expr, expr_map)),
+                expr: Box::new(Self::cse_replace_inner(expr, expr_map, false)),
                 modifier: modifier.clone(),
             },
+            AstNode::Statements(stmts) => AstNode::Statements(
+                stmts
+                    .iter()
+                    .map(|stmt| Self::cse_replace_inner(stmt, expr_map, false))
+                    .collect(),
+            ),
             AstNode::IfThenElse {
                 cond,
                 then_branch,
                 else_branch,
             } => AstNode::IfThenElse {
-                cond: Box::new(Self::cse_replace(cond, expr_map)),
-                then_branch: Box::new(Self::cse_replace(then_branch, expr_map)),
-                else_branch: Box::new(Self::cse_replace(else_branch, expr_map)),
+                cond: Box::new(Self::cse_replace_inner(cond, expr_map, false)),
+                then_branch: Box::new(Self::cse_replace_inner(then_branch, expr_map, false)),
+                else_branch: Box::new(Self::cse_replace_inner(else_branch, expr_map, false)),
             },
             AstNode::ForLoop {
                 var,
@@ -1294,18 +1364,18 @@ impl FormulaOptimizer {
                 body,
             } => AstNode::ForLoop {
                 var: var.clone(),
-                start: Box::new(Self::cse_replace(start, expr_map)),
-                end: Box::new(Self::cse_replace(end, expr_map)),
+                start: Box::new(Self::cse_replace_inner(start, expr_map, false)),
+                end: Box::new(Self::cse_replace_inner(end, expr_map, false)),
                 body: body
                     .iter()
-                    .map(|s| Self::cse_replace(s, expr_map))
+                    .map(|stmt| Self::cse_replace_inner(stmt, expr_map, false))
                     .collect(),
             },
             AstNode::WhileLoop { cond, body } => AstNode::WhileLoop {
-                cond: Box::new(Self::cse_replace(cond, expr_map)),
+                cond: Box::new(Self::cse_replace_inner(cond, expr_map, false)),
                 body: body
                     .iter()
-                    .map(|s| Self::cse_replace(s, expr_map))
+                    .map(|stmt| Self::cse_replace_inner(stmt, expr_map, false))
                     .collect(),
             },
             AstNode::DrawText {
@@ -1314,8 +1384,8 @@ impl FormulaOptimizer {
                 text,
                 color,
             } => AstNode::DrawText {
-                cond: Box::new(Self::cse_replace(cond, expr_map)),
-                price: Box::new(Self::cse_replace(price, expr_map)),
+                cond: Box::new(Self::cse_replace_inner(cond, expr_map, false)),
+                price: Box::new(Self::cse_replace_inner(price, expr_map, false)),
                 text: text.clone(),
                 color: color.clone(),
             },
@@ -1325,9 +1395,9 @@ impl FormulaOptimizer {
                 icon,
                 color,
             } => AstNode::DrawIcon {
-                cond: Box::new(Self::cse_replace(cond, expr_map)),
-                price: Box::new(Self::cse_replace(price, expr_map)),
-                icon: Box::new(Self::cse_replace(icon, expr_map)),
+                cond: Box::new(Self::cse_replace_inner(cond, expr_map, false)),
+                price: Box::new(Self::cse_replace_inner(price, expr_map, false)),
+                icon: Box::new(Self::cse_replace_inner(icon, expr_map, false)),
                 color: color.clone(),
             },
             AstNode::StickLine {
@@ -1338,15 +1408,118 @@ impl FormulaOptimizer {
                 empty,
                 color,
             } => AstNode::StickLine {
-                cond: Box::new(Self::cse_replace(cond, expr_map)),
-                price1: Box::new(Self::cse_replace(price1, expr_map)),
-                price2: Box::new(Self::cse_replace(price2, expr_map)),
-                width: Box::new(Self::cse_replace(width, expr_map)),
+                cond: Box::new(Self::cse_replace_inner(cond, expr_map, false)),
+                price1: Box::new(Self::cse_replace_inner(price1, expr_map, false)),
+                price2: Box::new(Self::cse_replace_inner(price2, expr_map, false)),
+                width: Box::new(Self::cse_replace_inner(width, expr_map, false)),
                 empty: *empty,
+                color: color.clone(),
+            },
+            AstNode::DrawGeneric {
+                command,
+                args,
+                color,
+            } => AstNode::DrawGeneric {
+                command: command.clone(),
+                args: args
+                    .iter()
+                    .map(|arg| Self::cse_replace_inner(arg, expr_map, false))
+                    .collect(),
                 color: color.clone(),
             },
             _ => ast.clone(),
         }
+    }
+
+    /// Return the finite lookback needed by a formula, or None when the
+    /// expression contains a recursive/stateful or unknown function.
+    ///
+    /// The value is the number of bars before the requested range that must be
+    /// included. Lookbacks compose additively through nested rolling functions
+    /// (for example, MA(MA(CLOSE, 5), 5) needs 8 prior bars).
+    pub fn required_lookback(ast: &AstNode) -> Option<usize> {
+        fn max_children<'a, I>(children: I) -> Option<usize>
+        where
+            I: Iterator<Item = &'a AstNode>,
+        {
+            children.try_fold(0usize, |acc, child| {
+                Some(acc.max(visit(child)?))
+            })
+        }
+
+        fn add_offset(value: Option<usize>, offset: usize) -> Option<usize> {
+            value?.checked_add(offset)
+        }
+
+        fn visit(node: &AstNode) -> Option<usize> {
+            match node {
+                AstNode::Number(_) | AstNode::Variable(_) | AstNode::StringLit(_) => Some(0),
+                AstNode::BinaryOp { left, right, .. } => {
+                    Some(visit(left)?.max(visit(right)?))
+                }
+                AstNode::UnaryOp { expr, .. } => visit(expr),
+                AstNode::IndexAccess { array, index } => {
+                    Some(visit(array)?.max(visit(index)?))
+                }
+                AstNode::Assignment { expr, .. }
+                | AstNode::Output { expr, .. }
+                | AstNode::CompoundAssignment { expr, .. } => visit(expr),
+                AstNode::Statements(stmts) => max_children(stmts.iter()),
+                AstNode::IfThenElse {
+                    cond,
+                    then_branch,
+                    else_branch,
+                } => Some(visit(cond)?.max(visit(then_branch)?).max(visit(else_branch)?)),
+                AstNode::FunctionCall { name, args } => {
+                    let upper = name.to_ascii_uppercase();
+                    let args_lookback = max_children(args.iter())?;
+                    let offset = match upper.as_str() {
+                        // Recursive/stateful indicators need the full prefix.
+                        "EMA" | "DMA" | "DEMA" | "TEMA" | "KAMA" | "MAMA" => return None,
+                        // Cross detection looks at the previous bar.
+                        "CROSS" | "CROSSBELOW" | "LONGCROSS" => 1,
+                        // Rolling windows consume period - 1 previous bars.
+                        "MA" | "SMA" | "WMA" | "TRIMA" | "RSI" | "HHV" | "LLV"
+                        | "SUM" | "COUNT" | "EVERY" | "EXIST" | "FILTER" | "BARSLAST" => {
+                            let Some(AstNode::Number(period)) = args.get(1) else {
+                                return None;
+                            };
+                            if !period.is_finite() || *period < 1.0 {
+                                return None;
+                            }
+                            (*period as usize).saturating_sub(1)
+                        }
+                        // REF/REFX shift the input by the requested period.
+                        "REF" | "REFX" => {
+                            let Some(AstNode::Number(period)) = args.get(1) else {
+                                return None;
+                            };
+                            if !period.is_finite() || *period < 0.0 {
+                                return None;
+                            }
+                            *period as usize
+                        }
+                        // Element-wise functions preserve their arguments'
+                        // lookback. Keep this list intentionally small.
+                        "ABS" | "MAX" | "MIN" | "ADD" | "SUB" | "MULT" | "DIV" | "POW"
+                        | "SQRT" | "EXP" | "LN" | "LOG10" => 0,
+                        // Known context-only functions do not read history.
+                        "BARSCOUNT" | "BARPOS" | "CAPITAL" | "DRAWNULL" => 0,
+                        // Unknown functions are evaluated conservatively.
+                        _ => return None,
+                    };
+                    add_offset(Some(args_lookback), offset)
+                }
+                AstNode::ForLoop { .. } | AstNode::WhileLoop { .. } => None,
+                AstNode::DrawText { .. }
+                | AstNode::DrawIcon { .. }
+                | AstNode::StickLine { .. }
+                | AstNode::DrawGeneric { .. } => None,
+                AstNode::ParamDecl { .. } => Some(0),
+            }
+        }
+
+        visit(ast)
     }
 }
 
@@ -2122,4 +2295,43 @@ mod tests {
             _ => false,
         }
     }
+    #[test]
+    fn test_cse_merges_duplicate_pure_subexpressions() {
+        let ast = crate::formula::parser::parse_formula(
+            "MA(CLOSE, 5) + MA(CLOSE, 5)",
+        )
+        .unwrap();
+        let optimized = FormulaOptimizer::optimize_with(&ast, OptLevel::Standard);
+        let rendered = format!("{optimized:?}");
+        assert!(rendered.contains("_CSE0"));
+        assert!(!rendered.contains("name: \"_CSE0\", expr: Variable(\"_CSE0\")"));
+    }
+
+    #[test]
+    fn test_required_lookback_composes_nested_windows() {
+        let ast = crate::formula::parser::parse_formula("MA(MA(CLOSE, 5), 5)").unwrap();
+        assert_eq!(FormulaOptimizer::required_lookback(&ast), Some(8));
+    }
+
+    #[test]
+    fn test_cse_does_not_merge_mutable_formula_variables() {
+        let ast = crate::formula::parser::parse_formula(
+            "X := CLOSE; MA(X, 5) + MA(X, 5)",
+        )
+        .unwrap();
+        let optimized = FormulaOptimizer::optimize_with(&ast, OptLevel::Standard);
+        assert!(!format!("{optimized:?}").contains("_CSE"));
+    }
+
+    #[test]
+    fn test_required_lookback_is_conservative() {
+        let ast = crate::formula::parser::parse_formula(
+            "MA(CLOSE, 20) + HHV(HIGH, 5)",
+        )
+        .unwrap();
+        assert_eq!(FormulaOptimizer::required_lookback(&ast), Some(19));
+        let recursive = crate::formula::parser::parse_formula("EMA(CLOSE, 20)").unwrap();
+        assert_eq!(FormulaOptimizer::required_lookback(&recursive), None);
+    }
+
 }

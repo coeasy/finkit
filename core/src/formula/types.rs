@@ -1,6 +1,7 @@
 use ndarray::{Array1, ArrayView1};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
 use crate::formula::ast::OutputModifier;
@@ -415,14 +416,118 @@ impl Default for MoneyFlowData {
     }
 }
 
+/// A one-dimensional f64 input that can either own its storage or borrow a
+/// caller-owned contiguous buffer for the duration of a synchronous evaluation.
+///
+/// The borrowed constructor is crate-private so the raw pointer cannot escape
+/// the engine call that established the NumPy borrow. Cloning a borrowed series
+/// materializes an owned copy, which keeps existing parallel/context-clone
+/// semantics safe.
+#[derive(Debug)]
+pub struct FormulaSeries {
+    owned: Option<Vec<f64>>,
+    borrowed_ptr: usize,
+    len: usize,
+}
+
+impl FormulaSeries {
+    pub fn from_vec(values: Vec<f64>) -> Self {
+        let len = values.len();
+        Self {
+            owned: Some(values),
+            borrowed_ptr: 0,
+            len,
+        }
+    }
+
+    pub(crate) fn from_slice(values: &[f64]) -> Self {
+        Self {
+            owned: None,
+            borrowed_ptr: values.as_ptr() as usize,
+            len: values.len(),
+        }
+    }
+
+    pub fn as_slice(&self) -> &[f64] {
+        if let Some(values) = &self.owned {
+            values.as_slice()
+        } else {
+            // Safety: from_slice is crate-private and its caller keeps the
+            // source slice alive for the complete synchronous evaluation.
+            unsafe { std::slice::from_raw_parts(self.borrowed_ptr as *const f64, self.len) }
+        }
+    }
+
+    pub fn as_ptr(&self) -> *const f64 {
+        self.as_slice().as_ptr()
+    }
+
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    pub fn reserve(&mut self, additional: usize) {
+        self.make_owned();
+        self.owned
+            .as_mut()
+            .expect("FormulaSeries must be owned after make_owned")
+            .reserve(additional);
+        self.len = self.owned.as_ref().map_or(0, Vec::len);
+    }
+
+    pub fn push(&mut self, value: f64) {
+        self.make_owned();
+        self.owned
+            .as_mut()
+            .expect("FormulaSeries must be owned after make_owned")
+            .push(value);
+        self.len = self.owned.as_ref().map_or(0, Vec::len);
+    }
+
+    fn make_owned(&mut self) {
+        if self.owned.is_none() {
+            self.owned = Some(self.as_slice().to_vec());
+            self.borrowed_ptr = 0;
+        }
+    }
+}
+
+impl Clone for FormulaSeries {
+    fn clone(&self) -> Self {
+        Self::from_vec(self.as_slice().to_vec())
+    }
+}
+
+impl Deref for FormulaSeries {
+    type Target = [f64];
+
+    fn deref(&self) -> &Self::Target {
+        self.as_slice()
+    }
+}
+
+impl DerefMut for FormulaSeries {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.make_owned();
+        self.owned
+            .as_mut()
+            .expect("FormulaSeries must be owned after make_owned")
+            .as_mut_slice()
+    }
+}
+
 /// 公式上下文，存储数据绑定和变量
 pub struct FormulaContext {
     /// OHLCV数据
-    pub open: Array1<f64>,
-    pub high: Array1<f64>,
-    pub low: Array1<f64>,
-    pub close: Array1<f64>,
-    pub volume: Array1<f64>,
+    pub open: FormulaSeries,
+    pub high: FormulaSeries,
+    pub low: FormulaSeries,
+    pub close: FormulaSeries,
+    pub volume: FormulaSeries,
     pub amount: Option<Array1<f64>>,
     /// 时间序列（Unix timestamp per bar, seconds）
     pub datetime: Option<Array1<i64>>,
@@ -505,11 +610,53 @@ impl FormulaContext {
     ) -> Self {
         let data_len = open.len();
         Self {
-            open,
-            high,
-            low,
-            close,
-            volume,
+            open: FormulaSeries::from_vec(open.into_raw_vec()),
+            high: FormulaSeries::from_vec(high.into_raw_vec()),
+            low: FormulaSeries::from_vec(low.into_raw_vec()),
+            close: FormulaSeries::from_vec(close.into_raw_vec()),
+            volume: FormulaSeries::from_vec(volume.into_raw_vec()),
+            amount,
+            datetime: None,
+            index_data: None,
+            finance_data: None,
+            chip_data: None,
+            dynainfo: None,
+            capital: None,
+            block_data: None,
+            money_flow_data: None,
+            em_data: None,
+            string_table: Vec::new(),
+            variables: HashMap::new(),
+            output_modifiers: HashMap::new(),
+            draw_commands: RefCell::new(DrawResult::new()),
+            data_len,
+            period_data: HashMap::new(),
+            period_type: 0,
+            sandbox: ExecSandboxConfig::default(),
+            sandbox_state: std::cell::RefCell::new(ExecSandboxState::default()),
+        }
+    }
+
+    /// Create a context that borrows contiguous OHLCV slices.
+    ///
+    /// This is used by the synchronous Python/NumPy zero-copy path. The
+    /// returned context must not outlive the borrowed slices; the constructor
+    /// is crate-private to keep that lifetime invariant inside the engine.
+    pub(crate) fn from_borrowed_ohlcv(
+        open: &[f64],
+        high: &[f64],
+        low: &[f64],
+        close: &[f64],
+        volume: &[f64],
+        amount: Option<Array1<f64>>,
+    ) -> Self {
+        let data_len = close.len();
+        Self {
+            open: FormulaSeries::from_slice(open),
+            high: FormulaSeries::from_slice(high),
+            low: FormulaSeries::from_slice(low),
+            close: FormulaSeries::from_slice(close),
+            volume: FormulaSeries::from_slice(volume),
             amount,
             datetime: None,
             index_data: None,
@@ -603,32 +750,42 @@ impl FormulaContext {
         self
     }
 
-    /// 增量更新：追加新的 bar 数据
+    /// Reserve capacity for streaming bars before appending.
+    pub fn reserve_bars(&mut self, additional: usize) {
+        self.open.reserve(additional);
+        self.high.reserve(additional);
+        self.low.reserve(additional);
+        self.close.reserve(additional);
+        self.volume.reserve(additional);
+    }
+
+    /// Append a new bar in amortized O(1) time.
+    ///
+    /// OHLCV is backed by Vec, so appending no longer concatenates the entire
+    /// history on every call. Call reserve_bars first for predictable capacity.
     pub fn append_bar(&mut self, open: f64, high: f64, low: f64, close: f64, volume: f64) {
-        use ndarray::concatenate;
-        use ndarray::Axis;
-        self.open = concatenate![Axis(0), self.open, Array1::from_vec(vec![open])];
-        self.high = concatenate![Axis(0), self.high, Array1::from_vec(vec![high])];
-        self.low = concatenate![Axis(0), self.low, Array1::from_vec(vec![low])];
-        self.close = concatenate![Axis(0), self.close, Array1::from_vec(vec![close])];
-        self.volume = concatenate![Axis(0), self.volume, Array1::from_vec(vec![volume])];
-        self.data_len += 1;
+        self.open.push(open);
+        self.high.push(high);
+        self.low.push(low);
+        self.close.push(close);
+        self.volume.push(volume);
+        self.data_len = self.close.len();
     }
 
     /// 获取数据数组
-    pub fn get_data(&self, name: &str) -> Option<&Array1<f64>> {
+    pub fn get_data(&self, name: &str) -> Option<&[f64]> {
         match classify_builtin_var(name) {
             Some(BuiltinVar::Open) => Some(&self.open),
             Some(BuiltinVar::High) => Some(&self.high),
             Some(BuiltinVar::Low) => Some(&self.low),
             Some(BuiltinVar::Close) => Some(&self.close),
             Some(BuiltinVar::Volume) => Some(&self.volume),
-            Some(BuiltinVar::Amount) => self.amount.as_ref(),
+            Some(BuiltinVar::Amount) => self.amount.as_ref().and_then(|value| value.as_slice().ok()),
             _ => {
                 if name.eq_ignore_ascii_case("A") {
-                    self.amount.as_ref()
+                    self.amount.as_ref().and_then(|value| value.as_slice().ok())
                 } else {
-                    self.variables.get(name)
+                    self.variables.get(name).and_then(|value| value.as_slice().ok())
                 }
             }
         }
@@ -655,23 +812,66 @@ impl FormulaContext {
     }
 
     pub fn close_view(&self) -> ArrayView1<'_, f64> {
-        self.close.view()
+        ArrayView1::from(self.close.as_slice())
     }
 
     pub fn open_view(&self) -> ArrayView1<'_, f64> {
-        self.open.view()
+        ArrayView1::from(self.open.as_slice())
     }
 
     pub fn high_view(&self) -> ArrayView1<'_, f64> {
-        self.high.view()
+        ArrayView1::from(self.high.as_slice())
     }
 
     pub fn low_view(&self) -> ArrayView1<'_, f64> {
-        self.low.view()
+        ArrayView1::from(self.low.as_slice())
     }
 
     pub fn volume_view(&self) -> ArrayView1<'_, f64> {
-        self.volume.view()
+        ArrayView1::from(self.volume.as_slice())
+    }
+
+    /// Create a context containing only the requested half-open bar range.
+    pub fn window(&self, start: usize, end: usize) -> Result<Self, FormulaError> {
+        if start > end || end > self.data_len {
+            return Err(FormulaError::InvalidParameter(format!(
+                "invalid formula window [{start}, {end}) for data_len {}",
+                self.data_len
+            )));
+        }
+        let result = Self {
+            open: FormulaSeries::from_vec(self.open[start..end].to_vec()),
+            high: FormulaSeries::from_vec(self.high[start..end].to_vec()),
+            low: FormulaSeries::from_vec(self.low[start..end].to_vec()),
+            close: FormulaSeries::from_vec(self.close[start..end].to_vec()),
+            volume: FormulaSeries::from_vec(self.volume[start..end].to_vec()),
+            amount: self
+                .amount
+                .as_ref()
+                .map(|a| a.slice(ndarray::s![start..end]).to_owned()),
+            datetime: self
+                .datetime
+                .as_ref()
+                .map(|a| a.slice(ndarray::s![start..end]).to_owned()),
+            index_data: self.index_data.clone(),
+            finance_data: self.finance_data.clone(),
+            chip_data: self.chip_data.clone(),
+            dynainfo: self.dynainfo.clone(),
+            capital: self.capital,
+            block_data: self.block_data.clone(),
+            money_flow_data: self.money_flow_data.clone(),
+            em_data: self.em_data.clone(),
+            string_table: self.string_table.clone(),
+            variables: HashMap::new(),
+            output_modifiers: self.output_modifiers.clone(),
+            draw_commands: RefCell::new(self.draw_commands.borrow().clone()),
+            data_len: end - start,
+            period_data: self.period_data.clone(),
+            period_type: self.period_type,
+            sandbox: self.sandbox,
+            sandbox_state: RefCell::new(self.sandbox_state.borrow().clone()),
+        };
+        Ok(result)
     }
 
     pub fn copy_array(arr: &Array1<f64>) -> Array1<f64> {
@@ -878,4 +1078,29 @@ mod tests {
         let retrieved = ctx.get_variable_arc(&name).unwrap();
         assert_eq!(retrieved.len(), 5);
     }
+    #[test]
+    fn test_borrowed_series_keeps_input_pointer_and_clones_safely() {
+        let values = vec![1.0, 2.0, 3.0];
+        let borrowed = FormulaSeries::from_slice(&values);
+        assert_eq!(borrowed.as_ptr(), values.as_ptr());
+        assert_eq!(borrowed.as_slice(), values.as_slice());
+
+        let cloned = borrowed.clone();
+        assert_ne!(cloned.as_ptr(), values.as_ptr());
+        assert_eq!(cloned.as_slice(), values.as_slice());
+    }
+
+    #[test]
+    fn test_append_bar_is_amortized_and_keeps_data() {
+        let mut ctx = make_ctx(2);
+        ctx.reserve_bars(128);
+        let open_ptr = ctx.open.as_ptr();
+        ctx.append_bar(12.0, 13.0, 11.0, 12.5, 2000.0);
+        ctx.append_bar(12.5, 13.5, 11.5, 13.0, 2100.0);
+        assert_eq!(ctx.data_len, 4);
+        assert_eq!(ctx.close.as_slice(), &[10.0, 10.15, 12.5, 13.0]);
+        assert_eq!(ctx.volume.as_slice(), &[1000.0, 1010.0, 2000.0, 2100.0]);
+        assert_eq!(ctx.open.as_ptr(), open_ptr);
+    }
+
 }

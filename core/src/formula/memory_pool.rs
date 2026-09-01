@@ -3,12 +3,14 @@ use std::collections::HashMap;
 
 pub struct BufferPool {
     array_pool_by_size: HashMap<usize, Vec<Array1<f64>>>,
+    max_buffers_per_size: usize,
 }
 
 impl BufferPool {
-    pub fn new(_size_hint: usize, _initial_count: usize) -> Self {
+    pub fn new(_size_hint: usize, initial_count: usize) -> Self {
         Self {
             array_pool_by_size: HashMap::new(),
+            max_buffers_per_size: initial_count.max(1),
         }
     }
 
@@ -21,10 +23,27 @@ impl BufferPool {
     }
 
     pub fn return_buffer(&mut self, buffer: Array1<f64>) {
-        self.array_pool_by_size
+        let max_buffers_per_size = self.max_buffers_per_size;
+        let buffers = self
+            .array_pool_by_size
             .entry(buffer.len())
-            .or_insert_with(Vec::new)
-            .push(buffer);
+            .or_insert_with(Vec::new);
+        if buffers.len() < max_buffers_per_size {
+            buffers.push(buffer);
+        }
+    }
+
+    /// Number of reusable arrays currently retained by the pool.
+    pub fn cached_buffer_count(&self) -> usize {
+        self.array_pool_by_size.values().map(Vec::len).sum()
+    }
+
+    /// Number of f64 slots retained by the pool.
+    pub fn cached_elements(&self) -> usize {
+        self.array_pool_by_size
+            .iter()
+            .map(|(size, buffers)| size * buffers.len())
+            .sum()
     }
 
     pub fn clear(&mut self) {

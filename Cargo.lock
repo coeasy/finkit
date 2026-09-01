@@ -703,7 +703,7 @@ checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
 
 [[package]]
 name = "finkit"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "ahash",
  "approx",
@@ -731,7 +731,7 @@ dependencies = [
 
 [[package]]
 name = "finkit-android"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "android_logger",
  "finkit",
@@ -741,7 +741,7 @@ dependencies = [
 
 [[package]]
 name = "finkit-cli"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "assert_cmd",
  "clap",
@@ -756,7 +756,7 @@ dependencies = [
 
 [[package]]
 name = "finkit-dotnet"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "finkit",
  "finkit-ffi-common",
@@ -768,7 +768,7 @@ dependencies = [
 
 [[package]]
 name = "finkit-ffi"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "finkit",
  "finkit-visualization",
@@ -779,7 +779,7 @@ dependencies = [
 
 [[package]]
 name = "finkit-ffi-common"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -787,7 +787,7 @@ dependencies = [
 
 [[package]]
 name = "finkit-go"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "finkit",
  "finkit-ffi-common",
@@ -799,7 +799,7 @@ dependencies = [
 
 [[package]]
 name = "finkit-ios"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "finkit",
  "finkit-ffi-common",
@@ -809,7 +809,7 @@ dependencies = [
 
 [[package]]
 name = "finkit-java"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "finkit",
  "finkit-ffi-common",
@@ -822,7 +822,7 @@ dependencies = [
 
 [[package]]
 name = "finkit-node"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "finkit",
  "finkit-visualization",
@@ -836,7 +836,7 @@ dependencies = [
 
 [[package]]
 name = "finkit-python"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "finkit",
  "finkit-visualization",
@@ -847,7 +847,7 @@ dependencies = [
 
 [[package]]
 name = "finkit-visualization"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "finkit",
  "fontdue",
@@ -859,7 +859,7 @@ dependencies = [
 
 [[package]]
 name = "finkit-wasm"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "console_error_panic_hook",
  "finkit",

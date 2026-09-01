@@ -20,6 +20,7 @@ pub struct JitCompiler {
     builtin_vec: Vec<(String, FormulaFn)>,
 }
 
+#[derive(Clone)]
 pub struct OptimizedBytecode {
     bytecode: Bytecode,
     buffer_size: usize,
@@ -94,6 +95,17 @@ impl JitCompiler {
             cached_function_indices,
             is_hot,
         }
+    }
+
+    /// Compile once per source and retain the optimized VM program.
+    pub fn compile_cached(&mut self, bytecode: Bytecode) -> OptimizedBytecode {
+        if let Some(cached) = self.optimized_cache.get(&bytecode.source) {
+            return cached.clone();
+        }
+        let source = bytecode.source.clone();
+        let optimized = self.compile(bytecode);
+        self.optimized_cache.insert(source, optimized.clone());
+        optimized
     }
 
     pub fn execute(
@@ -527,7 +539,7 @@ impl JitCompiler {
                     let data = ctx.get_data(name).ok_or_else(|| {
                         FormulaError::RuntimeError(format!("Data not available: {}", name))
                     })?;
-                    stack.push(data.clone());
+                    stack.push(Array1::from_vec(data.to_vec()));
                 }
                 OpCode::Index => {
                     let idx_val = stack
