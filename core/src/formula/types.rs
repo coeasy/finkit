@@ -839,16 +839,38 @@ impl FormulaContext {
                 self.data_len
             )));
         }
-        let mut result = self.clone();
-        result.open = FormulaSeries::from_vec(self.open[start..end].to_vec());
-        result.high = FormulaSeries::from_vec(self.high[start..end].to_vec());
-        result.low = FormulaSeries::from_vec(self.low[start..end].to_vec());
-        result.close = FormulaSeries::from_vec(self.close[start..end].to_vec());
-        result.volume = FormulaSeries::from_vec(self.volume[start..end].to_vec());
-        result.amount = self.amount.as_ref().map(|a| a.slice(ndarray::s![start..end]).to_owned());
-        result.datetime = self.datetime.as_ref().map(|a| a.slice(ndarray::s![start..end]).to_owned());
-        result.variables.clear();
-        result.data_len = end - start;
+        let result = Self {
+            open: FormulaSeries::from_vec(self.open[start..end].to_vec()),
+            high: FormulaSeries::from_vec(self.high[start..end].to_vec()),
+            low: FormulaSeries::from_vec(self.low[start..end].to_vec()),
+            close: FormulaSeries::from_vec(self.close[start..end].to_vec()),
+            volume: FormulaSeries::from_vec(self.volume[start..end].to_vec()),
+            amount: self
+                .amount
+                .as_ref()
+                .map(|a| a.slice(ndarray::s![start..end]).to_owned()),
+            datetime: self
+                .datetime
+                .as_ref()
+                .map(|a| a.slice(ndarray::s![start..end]).to_owned()),
+            index_data: self.index_data.clone(),
+            finance_data: self.finance_data.clone(),
+            chip_data: self.chip_data.clone(),
+            dynainfo: self.dynainfo.clone(),
+            capital: self.capital,
+            block_data: self.block_data.clone(),
+            money_flow_data: self.money_flow_data.clone(),
+            em_data: self.em_data.clone(),
+            string_table: self.string_table.clone(),
+            variables: HashMap::new(),
+            output_modifiers: self.output_modifiers.clone(),
+            draw_commands: RefCell::new(self.draw_commands.borrow().clone()),
+            data_len: end - start,
+            period_data: self.period_data.clone(),
+            period_type: self.period_type,
+            sandbox: self.sandbox,
+            sandbox_state: RefCell::new(self.sandbox_state.borrow().clone()),
+        };
         Ok(result)
     }
 
