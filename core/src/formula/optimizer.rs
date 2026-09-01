@@ -1147,16 +1147,6 @@ impl FormulaOptimizer {
         nodes: &mut HashMap<String, AstNode>,
         order: &mut Vec<String>,
     ) {
-        if Self::is_cse_candidate(ast) {
-            let key = Self::ast_to_key(ast);
-            let count = counts.entry(key.clone()).or_insert(0);
-            if *count == 0 {
-                nodes.insert(key.clone(), ast.clone());
-                order.push(key.clone());
-            }
-            *count += 1;
-        }
-
         match ast {
             AstNode::BinaryOp { left, right, .. } => {
                 Self::cse_collect(left, counts, nodes, order);
@@ -1231,6 +1221,17 @@ impl FormulaOptimizer {
                 Self::cse_collect(width, counts, nodes, order);
             }
             _ => {}
+        }
+
+        // Record after children so nested CSE assignments are emitted first.
+        if Self::is_cse_candidate(ast) {
+            let key = Self::ast_to_key(ast);
+            let count = counts.entry(key.clone()).or_insert(0);
+            if *count == 0 {
+                nodes.insert(key.clone(), ast.clone());
+                order.push(key.clone());
+            }
+            *count += 1;
         }
     }
 
