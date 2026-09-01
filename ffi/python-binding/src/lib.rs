@@ -2185,8 +2185,6 @@ pub fn formula_eval_simd(
 /// # Returns
 /// Dictionary with output variable names as keys and arrays as values.
 /// The special key "__result__" contains the final expression result.
-#[pyfunction]
-#[cfg(feature = "formula")]
 /// Evaluate a contiguous float64 NumPy input without copying the OHLCV
 /// buffers. Direct MA/EMA/RSI/BOLLMID formulas use borrowed slices; complex
 /// formulas fall back to the regular formula ABI for intermediate arrays.
@@ -2247,6 +2245,8 @@ pub fn formula_eval_numpy_zero_copy(
     Ok(dict.into())
 }
 
+#[pyfunction]
+#[cfg(feature = "formula")]
 pub fn formula_eval_zero_copy(
     py: Python<'_>,
     source: &str,
