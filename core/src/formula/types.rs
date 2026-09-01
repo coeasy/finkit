@@ -418,11 +418,11 @@ impl Default for MoneyFlowData {
 /// 公式上下文，存储数据绑定和变量
 pub struct FormulaContext {
     /// OHLCV数据
-    pub open: Array1<f64>,
-    pub high: Array1<f64>,
-    pub low: Array1<f64>,
-    pub close: Array1<f64>,
-    pub volume: Array1<f64>,
+    pub open: Vec<f64>,
+    pub high: Vec<f64>,
+    pub low: Vec<f64>,
+    pub close: Vec<f64>,
+    pub volume: Vec<f64>,
     pub amount: Option<Array1<f64>>,
     /// 时间序列（Unix timestamp per bar, seconds）
     pub datetime: Option<Array1<i64>>,
@@ -505,11 +505,11 @@ impl FormulaContext {
     ) -> Self {
         let data_len = open.len();
         Self {
-            open,
-            high,
-            low,
-            close,
-            volume,
+            open: open.into_raw_vec(),
+            high: high.into_raw_vec(),
+            low: low.into_raw_vec(),
+            close: close.into_raw_vec(),
+            volume: volume.into_raw_vec(),
             amount,
             datetime: None,
             index_data: None,
@@ -603,32 +603,42 @@ impl FormulaContext {
         self
     }
 
-    /// 增量更新：追加新的 bar 数据
+    /// Reserve capacity for streaming bars before appending.
+    pub fn reserve_bars(&mut self, additional: usize) {
+        self.open.reserve(additional);
+        self.high.reserve(additional);
+        self.low.reserve(additional);
+        self.close.reserve(additional);
+        self.volume.reserve(additional);
+    }
+
+    /// Append a new bar in amortized O(1) time.
+    ///
+    /// OHLCV is backed by Vec, so appending no longer concatenates the entire
+    /// history on every call. Call reserve_bars first for predictable capacity.
     pub fn append_bar(&mut self, open: f64, high: f64, low: f64, close: f64, volume: f64) {
-        use ndarray::concatenate;
-        use ndarray::Axis;
-        self.open = concatenate![Axis(0), self.open, Array1::from_vec(vec![open])];
-        self.high = concatenate![Axis(0), self.high, Array1::from_vec(vec![high])];
-        self.low = concatenate![Axis(0), self.low, Array1::from_vec(vec![low])];
-        self.close = concatenate![Axis(0), self.close, Array1::from_vec(vec![close])];
-        self.volume = concatenate![Axis(0), self.volume, Array1::from_vec(vec![volume])];
-        self.data_len += 1;
+        self.open.push(open);
+        self.high.push(high);
+        self.low.push(low);
+        self.close.push(close);
+        self.volume.push(volume);
+        self.data_len = self.close.len();
     }
 
     /// 获取数据数组
-    pub fn get_data(&self, name: &str) -> Option<&Array1<f64>> {
+    pub fn get_data(&self, name: &str) -> Option<&[f64]> {
         match classify_builtin_var(name) {
             Some(BuiltinVar::Open) => Some(&self.open),
             Some(BuiltinVar::High) => Some(&self.high),
             Some(BuiltinVar::Low) => Some(&self.low),
             Some(BuiltinVar::Close) => Some(&self.close),
             Some(BuiltinVar::Volume) => Some(&self.volume),
-            Some(BuiltinVar::Amount) => self.amount.as_ref(),
+            Some(BuiltinVar::Amount) => self.amount.as_deref(),
             _ => {
                 if name.eq_ignore_ascii_case("A") {
-                    self.amount.as_ref()
+                    self.amount.as_deref()
                 } else {
-                    self.variables.get(name)
+                    self.variables.get(name).and_then(|value| value.as_slice().ok())
                 }
             }
         }
@@ -655,23 +665,44 @@ impl FormulaContext {
     }
 
     pub fn close_view(&self) -> ArrayView1<'_, f64> {
-        self.close.view()
+        ArrayView1::from(self.close.as_slice())
     }
 
     pub fn open_view(&self) -> ArrayView1<'_, f64> {
-        self.open.view()
+        ArrayView1::from(self.open.as_slice())
     }
 
     pub fn high_view(&self) -> ArrayView1<'_, f64> {
-        self.high.view()
+        ArrayView1::from(self.high.as_slice())
     }
 
     pub fn low_view(&self) -> ArrayView1<'_, f64> {
-        self.low.view()
+        ArrayView1::from(self.low.as_slice())
     }
 
     pub fn volume_view(&self) -> ArrayView1<'_, f64> {
-        self.volume.view()
+        ArrayView1::from(self.volume.as_slice())
+    }
+
+    /// Create a context containing only the requested half-open bar range.
+    pub fn window(&self, start: usize, end: usize) -> Result<Self, FormulaError> {
+        if start > end || end > self.data_len {
+            return Err(FormulaError::InvalidParameter(format!(
+                "invalid formula window [{start}, {end}) for data_len {}",
+                self.data_len
+            )));
+        }
+        let mut result = self.clone();
+        result.open = self.open[start..end].to_vec();
+        result.high = self.high[start..end].to_vec();
+        result.low = self.low[start..end].to_vec();
+        result.close = self.close[start..end].to_vec();
+        result.volume = self.volume[start..end].to_vec();
+        result.amount = self.amount.as_ref().map(|a| a.slice(ndarray::s![start..end]).to_owned());
+        result.datetime = self.datetime.as_ref().map(|a| a.slice(ndarray::s![start..end]).to_owned());
+        result.variables.clear();
+        result.data_len = end - start;
+        Ok(result)
     }
 
     pub fn copy_array(arr: &Array1<f64>) -> Array1<f64> {
