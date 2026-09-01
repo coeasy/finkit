@@ -1,598 +1,448 @@
 #!/usr/bin/env python3
-# ----------------------------------------------------------------------------
-# AlphaTA vs TA-Lib — Full 158-function Python-level performance comparison.
-#
-# For each TA-Lib function:
-#   1. Generate fixed random OHLCV data (seeded for reproducibility).
-#   2. Call talib.<FUNC> (time it).
-#   3. Call finkit.<func> (time it).
-#   4. Compare outputs (max abs diff ≤ 1e-6).
-#   5. Calculate speedup ratio.
-#
-# Outputs:
-#   dist/bench/python_comparison.json       — machine-readable
-#   dist/bench/python_comparison.md         — Markdown report
-#   dist/bench/python_comparison_summary.md — summary table
-#
-# Usage:
-#   python scripts/bench_alpha_vs_talib_python.py --scale 10K
-#   python scripts/bench_alpha_vs_talib_python.py --scale 100K --output dist/bench/
-#
-# Exit codes:
-#   0  all functions compared successfully
-#   1  at least one function had precision mismatch (> 1e-6)
-#   2  missing dependency (finkit / talib not installed)
-# ----------------------------------------------------------------------------
+"""Full TA-Lib v0.6.4 Python API comparison for finkit.
+
+The benchmark scope is the 161 functions exported by TA-Lib Python v0.6.4
+(`_ta_lib.pyi`).  It deliberately records unsupported functions instead of
+silently dropping them, so a green process means only that the report was
+generated; use ``--strict`` to make incomplete coverage fail the command.
+
+Example::
+
+    python scripts/bench_alpha_vs_talib_python.py --scale 100K --repeat 7 \
+        --output dist/bench/talib-v064 --strict
+"""
+
 from __future__ import annotations
 
 import argparse
 import json
-import os
+import math
+import statistics
 import sys
 import time
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Callable
 
 import numpy as np
 
-# ---- import guards --------------------------------------------------------
-try:
-    import finkit
-except ImportError:
-    print("[bench] finkit not installed; build and install the wheel first",
-          file=sys.stderr)
-    sys.exit(2)
 
-try:
-    import talib
-except ImportError:
-    print("[bench] talib not installed; pip install TA-Lib", file=sys.stderr)
-    sys.exit(2)
+# This is the public Python surface in TA-Lib v0.6.4.  NVI/PVI are present in
+# the C source tree as unfinished templates, but are intentionally not in the
+# Python package and therefore are outside this executable comparison scope.
+TALIB_V064_FUNCTIONS = tuple(
+    """
+    BBANDS DEMA EMA HT_TRENDLINE KAMA MA MAMA MAVP MIDPOINT MIDPRICE SAR SAREXT
+    SMA T3 TEMA TRIMA WMA
+    ADX ADXR APO AROON AROONOSC BOP CCI CMO DX MACD MACDEXT MACDFIX MFI
+    MINUS_DI MINUS_DM MOM PLUS_DI PLUS_DM PPO ROC ROCP ROCR ROCR100 RSI
+    STOCH STOCHF STOCHRSI TRIX ULTOSC WILLR
+    AD ADOSC OBV
+    ATR NATR TRANGE
+    AVGPRICE MEDPRICE TYPPRICE WCLPRICE
+    HT_DCPERIOD HT_DCPHASE HT_PHASOR HT_SINE HT_TRENDMODE
+    CDL2CROWS CDL3BLACKCROWS CDL3INSIDE CDL3LINESTRIKE CDL3OUTSIDE
+    CDL3STARSINSOUTH CDL3WHITESOLDIERS CDLABANDONEDBABY CDLADVANCEBLOCK
+    CDLBELTHOLD CDLBREAKAWAY CDLCLOSINGMARUBOZU CDLCONCEALBABYSWALL
+    CDLCOUNTERATTACK CDLDARKCLOUDCOVER CDLDOJI CDLDOJISTAR CDLDRAGONFLYDOJI
+    CDLENGULFING CDLEVENINGDOJISTAR CDLEVENINGSTAR CDLGAPSIDESIDEWHITE
+    CDLGRAVESTONEDOJI CDLHAMMER CDLHANGINGMAN CDLHARAMI CDLHARAMICROSS
+    CDLHIGHWAVE CDLHIKKAKE CDLHIKKAKEMOD CDLHOMINGPIGEON CDLIDENTICAL3CROWS
+    CDLINNECK CDLINVERTEDHAMMER CDLKICKING CDLKICKINGBYLENGTH
+    CDLLADDERBOTTOM CDLLONGLEGGEDDOJI CDLLONGLINE CDLMARUBOZU CDLMATCHINGLOW
+    CDLMATHOLD CDLMORNINGDOJISTAR CDLMORNINGSTAR CDLONNECK CDLPIERCING
+    CDLRICKSHAWMAN CDLRISEFALL3METHODS CDLSEPARATINGLINES CDLSHOOTINGSTAR
+    CDLSHORTLINE CDLSPINNINGTOP CDLSTALLEDPATTERN CDLSTICKSANDWICH CDLTAKURI
+    CDLTASUKIGAP CDLTHRUSTING CDLTRISTAR CDLUNIQUE3RIVER CDLUPsideGAP2CROWS
+    CDLXSIDEGAP3METHODS
+    BETA CORREL LINEARREG LINEARREG_ANGLE LINEARREG_INTERCEPT LINEARREG_SLOPE
+    STDDEV TSF VAR
+    ACOS ASIN ATAN CEIL COS COSH EXP FLOOR LN LOG10 SIN SINH SQRT TAN TANH
+    ADD DIV MAX MAXINDEX MIN MININDEX MINMAX MINMAXINDEX MULT SUB SUM
+    ACCBANDS AVGDEV IMI
+    """.replace("CDLUPsideGAP2CROWS", "CDLUPSIDEGAP2CROWS").split()
+)
 
+# Keep the spelling check close to the source list.  A typo here must never
+# silently reduce the comparison matrix.
+if len(TALIB_V064_FUNCTIONS) != 161 or len(set(TALIB_V064_FUNCTIONS)) != 161:
+    raise RuntimeError("the TA-Lib v0.6.4 function list must contain 161 unique names")
 
-# ----------------------------------------------------------------------------
-# Function registry — 158 TA-Lib functions mapped to finkit equivalents.
-#
-# Each entry:
-#   talib:   TA-Lib function name (uppercase)
-#   alpha:   finkit function name (lowercase) — None if no equivalent
-#   category: indicator category
-#   inputs:  list of input array keys from the OHLCV tuple
-#   params:  dict of keyword parameters
-#   returns: expected number of output arrays (1, 2, or 3)
-# ----------------------------------------------------------------------------
-FUNCTIONS = [
-    # ========================================================================
-    # Overlap Studies (18)
-    # ========================================================================
-    {"talib": "SMA",        "alpha": "sma",        "category": "Overlap",  "inputs": ["close"],   "params": {"timeperiod": 30},         "returns": 1},
-    {"talib": "EMA",        "alpha": "ema",        "category": "Overlap",  "inputs": ["close"],   "params": {"timeperiod": 30},         "returns": 1},
-    {"talib": "WMA",        "alpha": "wma",        "category": "Overlap",  "inputs": ["close"],   "params": {"timeperiod": 30},         "returns": 1},
-    {"talib": "DEMA",       "alpha": "dema",       "category": "Overlap",  "inputs": ["close"],   "params": {"timeperiod": 30},         "returns": 1},
-    {"talib": "TEMA",       "alpha": "tema",       "category": "Overlap",  "inputs": ["close"],   "params": {"timeperiod": 30},         "returns": 1},
-    {"talib": "TRIMA",      "alpha": "trima",      "category": "Overlap",  "inputs": ["close"],   "params": {"timeperiod": 30},         "returns": 1},
-    {"talib": "KAMA",       "alpha": "kama",       "category": "Overlap",  "inputs": ["close"],   "params": {"timeperiod": 30},         "returns": 1},
-    {"talib": "MAVP",       "alpha": None,          "category": "Overlap",  "inputs": ["close"],   "params": {},                          "returns": 1},  # MAVP needs variable periods
-    {"talib": "T3",         "alpha": "t3",         "category": "Overlap",  "inputs": ["close"],   "params": {"timeperiod": 5, "vfactor": 0.7}, "returns": 1},
-    {"talib": "MA",         "alpha": "sma",        "category": "Overlap",  "inputs": ["close"],   "params": {"timeperiod": 30},         "returns": 1},  # MA default = SMA
-    {"talib": "BBANDS",     "alpha": "bollinger_bands", "category": "Overlap", "inputs": ["close"], "params": {"timeperiod": 20, "nbdevup": 2.0, "nbdevdn": 2.0}, "returns": 3},
-    {"talib": "SAR",        "alpha": "sar",        "category": "Overlap",  "inputs": ["high", "low"], "params": {"acceleration": 0.02, "maximum": 0.2}, "returns": 1},
-    {"talib": "SAREXT",     "alpha": "sar",        "category": "Overlap",  "inputs": ["high", "low"], "params": {"acceleration": 0.02, "maximum": 0.2}, "returns": 1},  # SAREXT with default params
-    {"talib": "MIDPOINT",   "alpha": "midpoint",   "category": "Overlap",  "inputs": ["close"],   "params": {"timeperiod": 14},         "returns": 1},
-    {"talib": "MIDPRICE",   "alpha": "midprice",   "category": "Overlap",  "inputs": ["high", "low"], "params": {"timeperiod": 14},      "returns": 1},
-    {"talib": "HT_TRENDLINE","alpha": "ht_trendline","category": "Overlap", "inputs": ["close"],   "params": {},                          "returns": 1},
-    {"talib": "MAMA",       "alpha": "mama",       "category": "Overlap",  "inputs": ["close"],   "params": {"fastlimit": 0.5, "slowlimit": 0.05}, "returns": 2},
-    {"talib": "FRAMA",      "alpha": None,          "category": "Overlap",  "inputs": ["close"],   "params": {},                          "returns": 1},  # FRAMA not in finkit
-
-    # ========================================================================
-    # Momentum (30)
-    # ========================================================================
-    {"talib": "RSI",        "alpha": "rsi",        "category": "Momentum", "inputs": ["close"],   "params": {"timeperiod": 14},         "returns": 1},
-    {"talib": "MACD",       "alpha": "macd",       "category": "Momentum", "inputs": ["close"],   "params": {"fastperiod": 12, "slowperiod": 26, "signalperiod": 9}, "returns": 3},
-    {"talib": "MACDEXT",    "alpha": "macd",       "category": "Momentum", "inputs": ["close"],   "params": {"fastperiod": 12, "slowperiod": 26, "signalperiod": 9}, "returns": 3},
-    {"talib": "MACDFIX",    "alpha": "macd",       "category": "Momentum", "inputs": ["close"],   "params": {"fastperiod": 12, "slowperiod": 26, "signalperiod": 9}, "returns": 3},
-    {"talib": "STOCH",      "alpha": "stoch",      "category": "Momentum", "inputs": ["high", "low", "close"], "params": {"fastk_period": 5, "slowk_period": 3, "slowd_period": 3}, "returns": 2},
-    {"talib": "STOCHF",     "alpha": "stochf",     "category": "Momentum", "inputs": ["high", "low", "close"], "params": {"fastk_period": 5, "fastd_period": 3}, "returns": 2},
-    {"talib": "STOCHRSI",   "alpha": "stochrsi",   "category": "Momentum", "inputs": ["close"],   "params": {"timeperiod": 14, "fastk_period": 5, "fastd_period": 3}, "returns": 2},
-    {"talib": "WILLR",      "alpha": "willr",      "category": "Momentum", "inputs": ["high", "low", "close"], "params": {"timeperiod": 14}, "returns": 1},
-    {"talib": "ADX",        "alpha": "adx",        "category": "Momentum", "inputs": ["high", "low", "close"], "params": {"timeperiod": 14}, "returns": 1},
-    {"talib": "ADXR",       "alpha": "adxr",       "category": "Momentum", "inputs": ["high", "low", "close"], "params": {"timeperiod": 14}, "returns": 1},
-    {"talib": "APO",        "alpha": "apo",        "category": "Momentum", "inputs": ["close"],   "params": {"fastperiod": 12, "slowperiod": 26}, "returns": 1},
-    {"talib": "PPO",        "alpha": "ppo",        "category": "Momentum", "inputs": ["close"],   "params": {"fastperiod": 12, "slowperiod": 26}, "returns": 1},
-    {"talib": "AROON",      "alpha": "aroon",      "category": "Momentum", "inputs": ["high", "low"], "params": {"timeperiod": 14},      "returns": 2},
-    {"talib": "AROONOSC",   "alpha": "aroonosc",   "category": "Momentum", "inputs": ["high", "low"], "params": {"timeperiod": 14},      "returns": 1},
-    {"talib": "BOP",        "alpha": "bop",        "category": "Momentum", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CCI",        "alpha": "cci",        "category": "Momentum", "inputs": ["high", "low", "close"], "params": {"timeperiod": 14}, "returns": 1},
-    {"talib": "CMO",        "alpha": "cmo",        "category": "Momentum", "inputs": ["close"],   "params": {"timeperiod": 14},         "returns": 1},
-    {"talib": "DX",         "alpha": "dx",         "category": "Momentum", "inputs": ["high", "low", "close"], "params": {"timeperiod": 14}, "returns": 1},
-    {"talib": "MFI",        "alpha": "mfi",        "category": "Momentum", "inputs": ["high", "low", "close", "volume"], "params": {"timeperiod": 14}, "returns": 1},
-    {"talib": "MINUS_DI",   "alpha": "minus_di",   "category": "Momentum", "inputs": ["high", "low", "close"], "params": {"timeperiod": 14}, "returns": 1},
-    {"talib": "MINUS_DM",   "alpha": "minus_dm",   "category": "Momentum", "inputs": ["high", "low"], "params": {"timeperiod": 14},      "returns": 1},
-    {"talib": "MOM",        "alpha": "mom",        "category": "Momentum", "inputs": ["close"],   "params": {"timeperiod": 10},         "returns": 1},
-    {"talib": "PLUS_DI",    "alpha": "plus_di",    "category": "Momentum", "inputs": ["high", "low", "close"], "params": {"timeperiod": 14}, "returns": 1},
-    {"talib": "PLUS_DM",    "alpha": "plus_dm",    "category": "Momentum", "inputs": ["high", "low"], "params": {"timeperiod": 14},      "returns": 1},
-    {"talib": "ROC",        "alpha": "roc",        "category": "Momentum", "inputs": ["close"],   "params": {"timeperiod": 10},         "returns": 1},
-    {"talib": "ROCP",       "alpha": "rocp",       "category": "Momentum", "inputs": ["close"],   "params": {"timeperiod": 10},         "returns": 1},
-    {"talib": "ROCR",       "alpha": "rocr",       "category": "Momentum", "inputs": ["close"],   "params": {"timeperiod": 10},         "returns": 1},
-    {"talib": "ROCR100",    "alpha": "rocr100",    "category": "Momentum", "inputs": ["close"],   "params": {"timeperiod": 10},         "returns": 1},
-    {"talib": "TRIX",       "alpha": "trix",       "category": "Momentum", "inputs": ["close"],   "params": {"timeperiod": 30},         "returns": 1},
-    {"talib": "ULTOSC",     "alpha": "ultosc",     "category": "Momentum", "inputs": ["high", "low", "close"], "params": {"timeperiod1": 7, "timeperiod2": 14, "timeperiod3": 28}, "returns": 1},
-
-    # ========================================================================
-    # Volume (3)
-    # ========================================================================
-    {"talib": "AD",         "alpha": "ad",         "category": "Volume",   "inputs": ["high", "low", "close", "volume"], "params": {}, "returns": 1},
-    {"talib": "ADOSC",      "alpha": "adosc",      "category": "Volume",   "inputs": ["high", "low", "close", "volume"], "params": {"fastperiod": 3, "slowperiod": 10}, "returns": 1},
-    {"talib": "OBV",        "alpha": "obv",        "category": "Volume",   "inputs": ["close", "volume"], "params": {},                "returns": 1},
-
-    # ========================================================================
-    # Volatility (3)
-    # ========================================================================
-    {"talib": "ATR",        "alpha": "atr",        "category": "Volatility","inputs": ["high", "low", "close"], "params": {"timeperiod": 14}, "returns": 1},
-    {"talib": "NATR",       "alpha": "natr",       "category": "Volatility","inputs": ["high", "low", "close"], "params": {"timeperiod": 14}, "returns": 1},
-    {"talib": "TRANGE",     "alpha": "trange",     "category": "Volatility","inputs": ["high", "low", "close"], "params": {},             "returns": 1},
-
-    # ========================================================================
-    # Price Transform (4)
-    # ========================================================================
-    {"talib": "AVGPRICE",   "alpha": "avgprice",   "category": "Price",    "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "MEDPRICE",   "alpha": "medprice",   "category": "Price",    "inputs": ["high", "low"], "params": {},                     "returns": 1},
-    {"talib": "TYPPRICE",   "alpha": "typprice",   "category": "Price",    "inputs": ["high", "low", "close"], "params": {},             "returns": 1},
-    {"talib": "WCLPRICE",   "alpha": "wclprice",   "category": "Price",    "inputs": ["high", "low", "close"], "params": {},             "returns": 1},
-
-    # ========================================================================
-    # Cycle (6)
-    # ========================================================================
-    {"talib": "HT_DCPERIOD",  "alpha": "ht_dcperiod",  "category": "Cycle", "inputs": ["close"], "params": {}, "returns": 1},
-    {"talib": "HT_DCPHASE",   "alpha": "ht_dcphase",   "category": "Cycle", "inputs": ["close"], "params": {}, "returns": 1},
-    {"talib": "HT_PHASOR",    "alpha": "ht_phasor",    "category": "Cycle", "inputs": ["close"], "params": {}, "returns": 2},
-    {"talib": "HT_SINE",      "alpha": "ht_sine",      "category": "Cycle", "inputs": ["close"], "params": {}, "returns": 2},
-    {"talib": "HT_TRENDMODE", "alpha": "ht_trendmode", "category": "Cycle", "inputs": ["close"], "params": {}, "returns": 1},
-
-    # ========================================================================
-    # Statistics (9)
-    # ========================================================================
-    {"talib": "BETA",      "alpha": "beta",      "category": "Statistics", "inputs": ["high", "low"], "params": {"timeperiod": 5},  "returns": 1},
-    {"talib": "CORREL",    "alpha": "correl",    "category": "Statistics", "inputs": ["high", "low"], "params": {"timeperiod": 30}, "returns": 1},
-    {"talib": "LINEARREG", "alpha": "linearreg", "category": "Statistics", "inputs": ["close"],   "params": {"timeperiod": 14}, "returns": 1},
-    {"talib": "LINEARREG_ANGLE",     "alpha": "linearreg_angle",     "category": "Statistics", "inputs": ["close"], "params": {"timeperiod": 14}, "returns": 1},
-    {"talib": "LINEARREG_INTERCEPT", "alpha": "linearreg_intercept", "category": "Statistics", "inputs": ["close"], "params": {"timeperiod": 14}, "returns": 1},
-    {"talib": "LINEARREG_SLOPE",     "alpha": "linearreg_slope",     "category": "Statistics", "inputs": ["close"], "params": {"timeperiod": 14}, "returns": 1},
-    {"talib": "STDDEV",    "alpha": "stddev",    "category": "Statistics", "inputs": ["close"],   "params": {"timeperiod": 5, "nbdev": 1.0}, "returns": 1},
-    {"talib": "TSF",       "alpha": "tsf",       "category": "Statistics", "inputs": ["close"],   "params": {"timeperiod": 14}, "returns": 1},
-    {"talib": "VAR",       "alpha": "var",       "category": "Statistics", "inputs": ["close"],   "params": {"timeperiod": 5, "nbdev": 1.0}, "returns": 1},
-
-    # ========================================================================
-    # Math Transform (15)
-    # ========================================================================
-    {"talib": "ACOS",  "alpha": "acos",  "category": "MathTransform", "inputs": ["close"], "params": {}, "returns": 1},
-    {"talib": "ASIN",  "alpha": "asin",  "category": "MathTransform", "inputs": ["close"], "params": {}, "returns": 1},
-    {"talib": "ATAN",  "alpha": "atan",  "category": "MathTransform", "inputs": ["close"], "params": {}, "returns": 1},
-    {"talib": "CEIL",  "alpha": "ceil",  "category": "MathTransform", "inputs": ["close"], "params": {}, "returns": 1},
-    {"talib": "COS",   "alpha": "cos",   "category": "MathTransform", "inputs": ["close"], "params": {}, "returns": 1},
-    {"talib": "COSH",  "alpha": "cosh",  "category": "MathTransform", "inputs": ["close"], "params": {}, "returns": 1},
-    {"talib": "EXP",   "alpha": "exp",   "category": "MathTransform", "inputs": ["close"], "params": {}, "returns": 1},
-    {"talib": "FLOOR", "alpha": "floor", "category": "MathTransform", "inputs": ["close"], "params": {}, "returns": 1},
-    {"talib": "LN",    "alpha": "ln",    "category": "MathTransform", "inputs": ["close"], "params": {}, "returns": 1},
-    {"talib": "LOG10", "alpha": "log10", "category": "MathTransform", "inputs": ["close"], "params": {}, "returns": 1},
-    {"talib": "SIN",   "alpha": "sin",   "category": "MathTransform", "inputs": ["close"], "params": {}, "returns": 1},
-    {"talib": "SINH",  "alpha": "sinh",  "category": "MathTransform", "inputs": ["close"], "params": {}, "returns": 1},
-    {"talib": "SQRT",  "alpha": "sqrt",  "category": "MathTransform", "inputs": ["close"], "params": {}, "returns": 1},
-    {"talib": "TAN",   "alpha": "tan",   "category": "MathTransform", "inputs": ["close"], "params": {}, "returns": 1},
-    {"talib": "TANH",  "alpha": "tanh",  "category": "MathTransform", "inputs": ["close"], "params": {}, "returns": 1},
-
-    # ========================================================================
-    # Math Operators (12 + 2)
-    # ========================================================================
-    {"talib": "ADD",          "alpha": "add",          "category": "MathOperator", "inputs": ["high", "low"], "params": {},                "returns": 1},
-    {"talib": "DIV",          "alpha": "div",          "category": "MathOperator", "inputs": ["high", "low"], "params": {},                "returns": 1},
-    {"talib": "MAX",          "alpha": "max",          "category": "MathOperator", "inputs": ["close"],      "params": {"timeperiod": 30}, "returns": 1},
-    {"talib": "MAXINDEX",     "alpha": "maxindex",     "category": "MathOperator", "inputs": ["close"],      "params": {"timeperiod": 30}, "returns": 1},
-    {"talib": "MIN",          "alpha": "min",          "category": "MathOperator", "inputs": ["close"],      "params": {"timeperiod": 30}, "returns": 1},
-    {"talib": "MININDEX",     "alpha": "minindex",     "category": "MathOperator", "inputs": ["close"],      "params": {"timeperiod": 30}, "returns": 1},
-    {"talib": "MINMAX",       "alpha": "minmax",       "category": "MathOperator", "inputs": ["close"],      "params": {"timeperiod": 30}, "returns": 2},
-    {"talib": "MINMAXINDEX",  "alpha": "minmaxindex",  "category": "MathOperator", "inputs": ["close"],      "params": {"timeperiod": 30}, "returns": 2},
-    {"talib": "MULT",         "alpha": "mult",         "category": "MathOperator", "inputs": ["high", "low"], "params": {},                "returns": 1},
-    {"talib": "SUB",          "alpha": "sub",          "category": "MathOperator", "inputs": ["high", "low"], "params": {},                "returns": 1},
-    {"talib": "SUM",          "alpha": "sum",          "category": "MathOperator", "inputs": ["close"],      "params": {"timeperiod": 30}, "returns": 1},
-    {"talib": "PERCENTRANK",  "alpha": "percentrank",  "category": "MathOperator", "inputs": ["close"],      "params": {"timeperiod": 30}, "returns": 1},
-    {"talib": "SKEWNESS",     "alpha": "skewness",     "category": "MathOperator", "inputs": ["close"],      "params": {"timeperiod": 30}, "returns": 1},
-    {"talib": "KURTOSIS",     "alpha": "kurtosis",     "category": "MathOperator", "inputs": ["close"],      "params": {"timeperiod": 30}, "returns": 1},
-
-    # ========================================================================
-    # Pattern Recognition (61) — CDL_* functions
-    # ========================================================================
-    {"talib": "CDL2CROWS",           "alpha": "cdl2crows",           "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDL3BLACKCROWS",      "alpha": "cdl3blackcrows",      "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDL3INSIDE",          "alpha": "cdl3inside",          "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDL3LINESTRIKE",      "alpha": "cdl3linestrike",      "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDL3OUTSIDE",         "alpha": "cdl3outside",         "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDL3STARSINSOUTH",    "alpha": "cdl3starsinsouth",    "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDL3WHITESOLDIERS",   "alpha": "cdl3whitesoldiers",   "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLABANDONEDBABY",    "alpha": "cdlabandonedbaby",    "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {"penetration": 0.3}, "returns": 1},
-    {"talib": "CDLADVANCEBLOCK",     "alpha": "cdladvanceblock",     "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLBELTHOLD",         "alpha": "cdlbelthold",         "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLBREAKAWAY",        "alpha": "cdlbreakaway",        "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLCLOSINGMARUBOZU",  "alpha": "cdlclosingmarubozu",  "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLCONCEALBABYSWALL", "alpha": "cdlconcealbabyswall", "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLCOUNTERATTACK",    "alpha": "cdlcounterattack",    "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLDARKCLOUDCOVER",   "alpha": "cdldarkcloudcover",   "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {"penetration": 0.5}, "returns": 1},
-    {"talib": "CDLDOJI",             "alpha": "cdldoji",             "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLDOJISTAR",         "alpha": "cdldojistar",         "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLDRAGONFLYDOJI",    "alpha": "cdldragonflydoji",    "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLENGULFING",        "alpha": "cdlengulfing",        "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLEVENINGDOJISTAR",  "alpha": "cdleveningdojistar",  "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {"penetration": 0.3}, "returns": 1},
-    {"talib": "CDLEVENINGSTAR",      "alpha": "cdleveningstar",      "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {"penetration": 0.3}, "returns": 1},
-    {"talib": "CDLGAPSIDESIDEWHITE", "alpha": "cdlgapsidesidewhite", "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLGRAVESTONEDOJI",   "alpha": "cdlgravestonedoji",   "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLHAMMER",           "alpha": "cdlhammer",           "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLHANGINGMAN",       "alpha": "cdlhangingman",       "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLHARAMI",           "alpha": "cdlharami",           "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLHARAMICROSS",      "alpha": "cdlharamicross",      "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLHIGHWAVE",         "alpha": "cdlhighwave",         "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLHIKKAKE",          "alpha": "cdlhikkake",          "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLHIKKAKEMOD",       "alpha": "cdlhikkakemod",       "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLHOMINGPIGEON",     "alpha": "cdlhomingsoldier",    "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLIDENTICAL3CROWS",  "alpha": "cdlidentical3crows",  "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLINNECK",           "alpha": "cdlinneck",           "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLINVERTEDHAMMER",   "alpha": "cdlinvertedhammer",   "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLKICKING",          "alpha": "cdlkicking",          "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLKICKINGBYLENGTH",  "alpha": "cdlkickingbylength",  "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLLADDERBOTTOM",     "alpha": "cdlladderbottom",     "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLLONGLEGGEDDOJI",   "alpha": "cdllongleggeddoji",   "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLLONGLINE",         "alpha": "cdllongline",         "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLMARUBOZU",         "alpha": "cdlmarubozu",         "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLMATCHINGLOW",      "alpha": "cdlmatchinglow",      "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLMATHOLD",          "alpha": "cdlmathold",          "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {"penetration": 0.5}, "returns": 1},
-    {"talib": "CDLMORNINGDOJISTAR",  "alpha": "cdlmorningdojistar",  "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {"penetration": 0.3}, "returns": 1},
-    {"talib": "CDLMORNINGSTAR",      "alpha": "cdlmorningstar",      "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {"penetration": 0.3}, "returns": 1},
-    {"talib": "CDLONNECK",           "alpha": "cdlonneck",           "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLPIERCING",         "alpha": "cdlpiercing",         "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLRICKSHAWMAN",      "alpha": "cdlrickshawman",      "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLRISEFALL3METHODS", "alpha": "cdlrisefall3methods", "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLSEPARATINGLINES",  "alpha": "cdlseparatinglines",  "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLSHOOTINGSTAR",     "alpha": "cdlshootingstar",     "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLSHORTLINE",        "alpha": "cdlshortline",        "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLSPINNINGTOP",      "alpha": "cdlspinningtop",      "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLSTALLEDPATTERN",   "alpha": "cdlstalledpattern",   "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLSTICKSANDWICH",    "alpha": "cdlsticksandwich",    "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLTAKURI",           "alpha": "cdltakuri",           "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLTASUKIGAP",        "alpha": "cdltasukigap",        "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLTHRUSTING",        "alpha": "cdlthrusting",        "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLTRISTAR",          "alpha": "cdltristar",          "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLUNIQUE3RIVER",     "alpha": "cdlunique3river",     "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLUPSIDEGAP2CROWS",  "alpha": "cdlupsidegap2crows",  "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-    {"talib": "CDLXSIDEGAP3METHODS", "alpha": "cdlxsidegap3methods", "category": "Pattern", "inputs": ["open", "high", "low", "close"], "params": {}, "returns": 1},
-]
+PATTERN_NAMES = frozenset(name for name in TALIB_V064_FUNCTIONS if name.startswith("CDL"))
+MATH_TRANSFORMS = frozenset(
+    "ACOS ASIN ATAN CEIL COS COSH EXP FLOOR LN LOG10 SIN SINH SQRT TAN TANH".split()
+)
+MATH_OPERATORS = frozenset(
+    "ADD DIV MAX MAXINDEX MIN MININDEX MINMAX MINMAXINDEX MULT SUB SUM".split()
+)
 
 
-# ----------------------------------------------------------------------------
-# Input data generation
-# ----------------------------------------------------------------------------
-def gen_inputs(n: int = 10_000, seed: int = 42) -> dict:
-    """Generate fixed random OHLCV data for reproducible benchmarks."""
+# Existing direct finkit names.  The lower-case TA-Lib name remains the
+# fallback for names whose public spelling already matches finkit's API.
+FINKIT_ALIASES = {
+    "BBANDS": "bollinger_bands",
+    "CORREL": "correlation",
+    "STDDEV": "std_dev",
+    "LINEARREG": "linear_reg",
+    "HT_DCPERIOD": "ht_dcperiod",
+    "HT_DCPHASE": "ht_dcphase",
+    "HT_PHASOR": "ht_phasor",
+    "HT_SINE": "ht_sine",
+    "HT_TRENDMODE": "ht_trendmode",
+    "HT_TRENDLINE": "ht_trendline",
+    "CDLDOJI": "cdl_doji",
+    "CDLDRAGONFLYDOJI": "cdl_dragonfly_doji",
+    "CDLGRAVESTONEDOJI": "cdl_gravestone_doji",
+    "CDLLONGLEGGEDDOJI": "cdl_long_legged_doji",
+    "CDLHAMMER": "cdl_hammer",
+    "CDLINVERTEDHAMMER": "cdl_inverted_hammer",
+    "CDLHANGINGMAN": "cdl_hanging_man",
+    "CDLSHOOTINGSTAR": "cdl_shooting_star",
+    "CDLENGULFING": "cdl_engulfing",
+    "CDLHARAMI": "cdl_harami",
+    "CDLHARAMICROSS": "cdl_harami_cross",
+    "CDLMORNINGSTAR": "cdl_morning_star",
+    "CDLEVENINGSTAR": "cdl_evening_star",
+    "CDLMORNINGDOJISTAR": "cdl_morning_doji_star",
+    "CDLEVENINGDOJISTAR": "cdl_evening_doji_star",
+    "CDLMARUBOZU": "cdl_marubozu",
+    "CDL3WHITESOLDIERS": "cdl_three_white_soldiers",
+    "CDL3BLACKCROWS": "cdl_three_black_crows",
+    "CDLPIERCING": "cdl_piercing",
+    "CDLDARKCLOUDCOVER": "cdl_dark_cloud_cover",
+    "CDLBELTHOLD": "cdl_belt_hold",
+    "CDLSPINNINGTOP": "cdl_spinning_top",
+    "CDLHIGHWAVE": "cdl_high_wave",
+    "CDLRICKSHAWMAN": "cdl_rickshaw_man",
+    "CDLSHORTLINE": "cdl_short_line",
+    "CDLLONGLINE": "cdl_long_line",
+    "CDLKICKING": "cdl_kicking",
+}
+
+
+def parse_scale(value: str) -> int:
+    """Parse 10K/100K/1M or a positive integer."""
+    text = value.strip().upper().replace(",", "")
+    multiplier = 1
+    if text.endswith("K"):
+        multiplier, text = 1_000, text[:-1]
+    elif text.endswith("M"):
+        multiplier, text = 1_000_000, text[:-1]
+    size = int(text) * multiplier
+    if size < 64:
+        raise argparse.ArgumentTypeError("scale must be at least 64 bars")
+    return size
+
+
+def make_data(n: int, seed: int) -> dict[str, np.ndarray]:
+    """Create deterministic, internally consistent OHLCV arrays."""
     rng = np.random.default_rng(seed)
-    close = np.cumsum(rng.standard_normal(n).astype(np.float64)) + 100.0
-    # Ensure positive prices
-    close = np.maximum(close, 1.0)
-    high = close + rng.uniform(0.1, 1.5, n).astype(np.float64)
-    low = np.maximum(close - rng.uniform(0.1, 1.5, n).astype(np.float64), 0.5)
-    open_ = close + rng.standard_normal(n).astype(np.float64) * 0.2
-    volume = rng.integers(1_000, 1_000_000, n).astype(np.float64)
+    close = 100.0 * np.exp(np.cumsum(rng.normal(0.0, 0.006, n)))
+    open_price = close * (1.0 + rng.normal(0.0, 0.002, n))
+    spread = np.abs(rng.normal(0.006, 0.002, n)) * close
+    high = np.maximum(open_price, close) + spread
+    low = np.minimum(open_price, close) - spread
+    volume = rng.integers(100_000, 10_000_000, n).astype(np.float64)
+    periods = rng.integers(2, 31, n).astype(np.float64)
+    math_data = np.clip(close / np.nanmax(close), 0.05, 0.95)
+    alternate = close * (1.0 + rng.normal(0.0, 0.01, n))
     return {
-        "open": open_,
-        "high": high,
-        "low": low,
-        "close": close,
+        "open": open_price.astype(np.float64),
+        "high": high.astype(np.float64),
+        "low": low.astype(np.float64),
+        "close": close.astype(np.float64),
         "volume": volume,
+        "periods": periods,
+        "math": math_data.astype(np.float64),
+        "alternate": alternate.astype(np.float64),
     }
 
 
-# ----------------------------------------------------------------------------
-# Timing utility
-# ----------------------------------------------------------------------------
-def time_call(func, *args, repeat: int = 5, **kwargs) -> float:
-    """Time a function call, returning the median time in seconds."""
-    times = []
-    for _ in range(repeat):
-        t0 = time.perf_counter()
-        _ = func(*args, **kwargs)
-        t1 = time.perf_counter()
-        times.append(t1 - t0)
-    return float(np.median(times))
+def spec_for(name: str) -> dict[str, Any]:
+    """Return one deterministic TA-Lib call specification."""
+    if name in PATTERN_NAMES:
+        return {"inputs": ("open", "high", "low", "close"), "params": (), "returns": 1, "category": "Pattern"}
+    if name in MATH_TRANSFORMS:
+        return {"inputs": ("math",), "params": (), "returns": 1, "category": "Math Transform"}
+    if name in MATH_OPERATORS:
+        if name in {"ADD", "DIV", "MULT", "SUB"}:
+            return {"inputs": ("close", "alternate"), "params": (), "returns": 1, "category": "Math Operator"}
+        returns = 2 if name in {"MINMAX", "MINMAXINDEX"} else 1
+        return {"inputs": ("close",), "params": (30,), "returns": returns, "category": "Math Operator"}
+    if name == "MAVP":
+        return {"inputs": ("close", "periods"), "params": (2, 30, 0), "returns": 1, "category": "Overlap"}
+    if name == "BBANDS":
+        return {"inputs": ("close",), "params": (20, 2.0, 2.0, 0), "returns": 3, "category": "Overlap"}
+    if name == "ACCBANDS":
+        return {"inputs": ("high", "low", "close"), "params": (20,), "returns": 3, "category": "Overlap"}
+    if name in {"MA", "SMA", "EMA", "WMA", "DEMA", "TEMA", "TRIMA", "KAMA", "T3", "MIDPOINT", "MIDPRICE"}:
+        inputs = ("high", "low") if name == "MIDPRICE" else ("close",)
+        params = (20, 0) if name == "MA" else ((20, 0.7) if name == "T3" else (20,))
+        return {"inputs": inputs, "params": params, "returns": 1, "category": "Overlap"}
+    if name == "MAMA":
+        return {"inputs": ("close",), "params": (0.5, 0.05), "returns": 2, "category": "Overlap"}
+    if name in {"SAR"}:
+        return {"inputs": ("high", "low"), "params": (0.02, 0.2), "returns": 1, "category": "Overlap"}
+    if name == "SAREXT":
+        return {"inputs": ("high", "low"), "params": (), "returns": 1, "category": "Overlap"}
+    if name in {"MACD", "MACDFIX"}:
+        return {"inputs": ("close",), "params": ((12, 26, 9) if name == "MACD" else (9,)), "returns": 3, "category": "Momentum"}
+    if name == "MACDEXT":
+        return {"inputs": ("close",), "params": (12, 0, 26, 0, 9, 0), "returns": 3, "category": "Momentum"}
+    if name == "STOCH":
+        return {"inputs": ("high", "low", "close"), "params": (5, 3, 0, 3, 0), "returns": 2, "category": "Momentum"}
+    if name == "STOCHF":
+        return {"inputs": ("high", "low", "close"), "params": (5, 3, 0), "returns": 2, "category": "Momentum"}
+    if name == "STOCHRSI":
+        return {"inputs": ("close",), "params": (14, 5, 3, 0), "returns": 2, "category": "Momentum"}
+    if name == "AROON":
+        return {"inputs": ("high", "low"), "params": (14,), "returns": 2, "category": "Momentum"}
+    if name == "ULTOSC":
+        return {"inputs": ("high", "low", "close"), "params": (7, 14, 28), "returns": 1, "category": "Momentum"}
+    if name == "ADOSC":
+        return {"inputs": ("high", "low", "close", "volume"), "params": (3, 10), "returns": 1, "category": "Volume"}
+    if name in {"ADX", "ADXR", "ATR", "NATR", "CCI", "CMO", "DX", "MFI", "MINUS_DI", "MINUS_DM", "PLUS_DI", "PLUS_DM", "RSI", "TRIX", "WILLR", "AVGDEV", "IMI"}:
+        if name in {"ADX", "ADXR", "ATR", "NATR", "CCI", "DX", "MINUS_DI", "MINUS_DM", "PLUS_DI", "PLUS_DM", "WILLR"}:
+            inputs = ("high", "low", "close")
+        elif name == "MFI":
+            inputs = ("high", "low", "close", "volume")
+        elif name == "IMI":
+            inputs = ("open", "close")
+        else:
+            inputs = ("close",)
+        return {"inputs": inputs, "params": (14,), "returns": 1, "category": "Momentum" if name != "AVGDEV" else "Statistic"}
+    if name in {"AD", "OBV"}:
+        inputs = ("high", "low", "close", "volume") if name == "AD" else ("close", "volume")
+        return {"inputs": inputs, "params": (), "returns": 1, "category": "Volume"}
+    if name in {"HT_DCPERIOD", "HT_DCPHASE", "HT_TRENDLINE", "HT_TRENDMODE", "HT_PHASOR", "HT_SINE"}:
+        return {"inputs": ("close",), "params": (), "returns": 2 if name in {"HT_PHASOR", "HT_SINE"} else 1, "category": "Cycle"}
+    if name in {"AVGPRICE"}:
+        return {"inputs": ("open", "high", "low", "close"), "params": (), "returns": 1, "category": "Price Transform"}
+    if name in {"MEDPRICE"}:
+        return {"inputs": ("high", "low"), "params": (), "returns": 1, "category": "Price Transform"}
+    if name in {"TYPPRICE", "WCLPRICE"}:
+        return {"inputs": ("high", "low", "close"), "params": (), "returns": 1, "category": "Price Transform"}
+    if name in {"BETA", "CORREL"}:
+        return {"inputs": ("close", "alternate"), "params": (30,), "returns": 1, "category": "Statistic"}
+    if name in {"LINEARREG", "LINEARREG_ANGLE", "LINEARREG_INTERCEPT", "LINEARREG_SLOPE", "STDDEV", "TSF", "VAR"}:
+        return {"inputs": ("close",), "params": (30,), "returns": 1, "category": "Statistic"}
+    if name in {"APO", "PPO"}:
+        return {"inputs": ("close",), "params": (12, 26, 0) if name == "PPO" else (12, 26, 0), "returns": 1, "category": "Momentum"}
+    if name in {"ROC", "ROCP", "ROCR", "ROCR100", "MOM"}:
+        return {"inputs": ("close",), "params": (14,), "returns": 1, "category": "Momentum"}
+    return {"inputs": ("close",), "params": (), "returns": 1, "category": "Other"}
 
 
-def to_list(result):
-    """Normalize result to a list of numpy arrays."""
-    if isinstance(result, tuple):
-        return [np.asarray(r, dtype=np.float64) for r in result]
-    return [np.asarray(result, dtype=np.float64)]
+def resolve_direct(finkit: Any, name: str) -> Callable[..., Any] | None:
+    candidate = FINKIT_ALIASES.get(name, name.lower())
+    fn = getattr(finkit, candidate, None)
+    return fn if callable(fn) else None
 
 
-def compare_arrays(alpha_arrs: list, talib_arrs: list) -> dict:
-    """Compare two lists of arrays, return max abs diff and match ratio."""
+def invoke_batch(finkit: Any, data: dict[str, np.ndarray], name: str, spec: dict[str, Any]) -> Any:
+    batch = getattr(finkit, "compute_indicators", None)
+    if not callable(batch):
+        raise LookupError("finkit.compute_indicators is not available")
+    request = [(name.lower(), list(spec["params"]))]
+    result = batch(
+        close=data["close"],
+        open=data["open"],
+        high=data["high"],
+        low=data["low"],
+        volume=data["volume"],
+        requests=request,
+    )
+    prefix = f"{name.lower()}_" + "_".join(str(value) for value in spec["params"])
+    if not spec["params"]:
+        prefix = f"{name.lower()}_"
+    error_key = f"{prefix}_error"
+    if error_key in result:
+        raise RuntimeError(str(result[error_key]))
+    if spec["returns"] == 1:
+        key = prefix[:-1] if prefix.endswith("_") else prefix
+        if key not in result:
+            raise LookupError(f"batch result {key!r} is missing")
+        return result[key]
+    values = []
+    for index in range(spec["returns"]):
+        key = f"{prefix}{index}"
+        if key not in result:
+            raise LookupError(f"batch result {key!r} is missing")
+        values.append(result[key])
+    return tuple(values)
+
+
+def invoke_direct(fn: Callable[..., Any], data: dict[str, np.ndarray], spec: dict[str, Any]) -> Any:
+    args = [data[key] for key in spec["inputs"]]
+    return fn(*args, *spec["params"])
+
+
+def normalise_output(value: Any) -> list[np.ndarray]:
+    if isinstance(value, (tuple, list)):
+        return [np.asarray(item, dtype=np.float64).reshape(-1) for item in value]
+    return [np.asarray(value, dtype=np.float64).reshape(-1)]
+
+
+def compare_outputs(alpha: Any, talib: Any) -> dict[str, Any]:
+    left = normalise_output(alpha)
+    right = normalise_output(talib)
+    if len(left) != len(right):
+        return {"shape_mismatch": True, "output_count": [len(left), len(right)], "max_abs_diff": math.inf, "max_rel_diff": math.inf, "finite_match_ratio": 0.0, "precision_ok": False}
     max_abs = 0.0
-    valid_count = 0
-    total_count = 0
-    for a, t in zip(alpha_arrs, talib_arrs):
-        if a.shape != t.shape:
-            return {"max_abs": float("inf"), "match_ratio": 0.0, "shape_mismatch": True}
-        valid = np.isfinite(t) & np.isfinite(a)
-        if valid.any():
-            diff = np.abs(a[valid] - t[valid])
-            max_abs = max(max_abs, float(diff.max()) if diff.size > 0 else 0.0)
-        valid_count += int(valid.sum())
-        total_count += a.size
-    match_ratio = valid_count / total_count if total_count > 0 else 0.0
-    return {"max_abs": max_abs, "match_ratio": match_ratio, "shape_mismatch": False}
-
-
-# ----------------------------------------------------------------------------
-# Main benchmark logic
-# ----------------------------------------------------------------------------
-def run_benchmark(scale: int, output_dir: str, repeat: int = 5):
-    """Run the full 158-function comparison benchmark."""
-    data = gen_inputs(scale)
-    results = []
-    skipped = []
-    errors = []
-
-    total = len(FUNCTIONS)
-    print(f"\n[bench] Comparing {total} functions at scale={scale} bars")
-    print(f"[bench] Data: {scale} bars OHLCV (seed=42)")
-    print(f"[bench] Repeat: {repeat} iterations per function (median)\n")
-
-    for i, spec in enumerate(FUNCTIONS, 1):
-        talib_name = spec["talib"]
-        alpha_name = spec["alpha"]
-        category = spec["category"]
-
-        # Get TA-Lib function
-        talib_func = getattr(talib, talib_name, None)
-        if talib_func is None:
-            skipped.append({"name": talib_name, "reason": "not in talib"})
+    max_rel = 0.0
+    finite_total = 0
+    finite_equal = 0
+    shape_mismatch = False
+    precision_ok = True
+    for a, b in zip(left, right):
+        if a.shape != b.shape:
+            shape_mismatch = True
+            precision_ok = False
             continue
+        a_finite = np.isfinite(a)
+        b_finite = np.isfinite(b)
+        both = a_finite & b_finite
+        finite_total += int(np.count_nonzero(both))
+        finite_equal += int(np.count_nonzero(a_finite == b_finite))
+        if np.any(both):
+            delta = np.abs(a[both] - b[both])
+            scale = np.maximum(np.abs(b[both]), 1e-12)
+            max_abs = max(max_abs, float(np.max(delta)))
+            max_rel = max(max_rel, float(np.max(delta / scale)))
+        precision_ok = precision_ok and bool(np.allclose(a, b, rtol=1e-6, atol=1e-8, equal_nan=True))
+    return {"shape_mismatch": shape_mismatch, "output_count": len(left), "max_abs_diff": max_abs, "max_rel_diff": max_rel, "finite_match_ratio": finite_equal / max(a.size if left else 1, 1), "precision_ok": precision_ok}
 
-        # Skip if no finkit equivalent
-        if alpha_name is None:
-            skipped.append({"name": talib_name, "reason": "no finkit equivalent"})
+
+def median_time(fn: Callable[[], Any], repeat: int, warmup: int) -> tuple[float, Any]:
+    for _ in range(warmup):
+        fn()
+    samples = []
+    last = None
+    for _ in range(repeat):
+        started = time.perf_counter_ns()
+        last = fn()
+        samples.append((time.perf_counter_ns() - started) / 1_000_000.0)
+    return statistics.median(samples), last
+
+
+def run(args: argparse.Namespace) -> int:
+    try:
+        import finkit
+        import talib
+    except ImportError as exc:
+        print(f"[bench] missing dependency: {exc}", file=sys.stderr)
+        return 2
+
+    data = make_data(args.scale, args.seed)
+    results: list[dict[str, Any]] = []
+    for index, name in enumerate(TALIB_V064_FUNCTIONS, 1):
+        spec = spec_for(name)
+        talib_fn = getattr(talib, name, None)
+        row: dict[str, Any] = {"index": index, "name": name, **spec, "status": "unavailable"}
+        if talib_fn is None:
+            row["reason"] = "not exported by installed TA-Lib Python package"
+            results.append(row)
             continue
-
-        alpha_func = getattr(finkit, alpha_name, None)
-        if alpha_func is None:
-            skipped.append({"name": talib_name, "reason": f"finkit.{alpha_name} not found"})
+        direct = resolve_direct(finkit, name)
+        if direct is not None:
+            alpha_call = lambda fn=direct, s=spec: invoke_direct(fn, data, s)
+            row["adapter"] = "direct"
+        elif callable(getattr(finkit, "compute_indicators", None)):
+            alpha_call = lambda n=name, s=spec: invoke_batch(finkit, data, n, s)
+            row["adapter"] = "compute_indicators"
+        else:
+            row["reason"] = "no direct finkit function and no batch API"
+            results.append(row)
             continue
-
-        # Prepare inputs
-        inputs = [data[k] for k in spec["inputs"]]
-        params = spec["params"]
-
-        # Time TA-Lib
+        talib_call = lambda fn=talib_fn, s=spec: fn(*(data[key] for key in s["inputs"]), *s["params"])
         try:
-            talib_time = time_call(talib_func, *inputs, repeat=repeat, **params)
-            talib_result = talib_func(*inputs, **params)
-            talib_arrs = to_list(talib_result)
-        except Exception as e:
-            errors.append({"name": talib_name, "side": "talib", "error": str(e)})
-            continue
+            talib_ms, talib_value = median_time(talib_call, args.repeat, args.warmup)
+            alpha_ms, alpha_value = median_time(alpha_call, args.repeat, args.warmup)
+            comparison = compare_outputs(alpha_value, talib_value)
+            row.update(comparison)
+            row.update({"talib_ms": talib_ms, "finkit_ms": alpha_ms, "speedup": talib_ms / alpha_ms if alpha_ms else math.inf})
+            row["status"] = "pass" if comparison["precision_ok"] else "precision-fail"
+        except Exception as exc:  # one broken signature must not hide the other 160 rows
+            row.update({"status": "error", "reason": f"{type(exc).__name__}: {exc}"})
+        results.append(row)
+        marker = "OK" if row["status"] == "pass" else row["status"].upper()
+        speed = f"{row.get('speedup', 0.0):.2f}x" if "speedup" in row else "-"
+        diff = f"{row.get('max_abs_diff', math.inf):.2e}" if "max_abs_diff" in row else "-"
+        print(f"[{index:3d}/{len(TALIB_V064_FUNCTIONS)}] {marker:14s} {name:24s} speedup={speed:>8s} diff={diff}")
 
-        # Time finkit
-        try:
-            alpha_time = time_call(alpha_func, *inputs, repeat=repeat, **params)
-            alpha_result = alpha_func(*inputs, **params)
-            alpha_arrs = to_list(alpha_result)
-        except Exception as e:
-            errors.append({"name": talib_name, "side": "finkit", "error": str(e)})
-            continue
-
-        # Compare outputs
-        cmp = compare_arrays(alpha_arrs, talib_arrs)
-        speedup = talib_time / alpha_time if alpha_time > 0 else float("inf")
-
-        entry = {
-            "talib_name": talib_name,
-            "alpha_name": alpha_name,
-            "category": category,
-            "inputs": spec["inputs"],
-            "params": params,
-            "talib_time_ms": talib_time * 1000,
-            "alpha_time_ms": alpha_time * 1000,
-            "speedup": speedup,
-            "max_abs_diff": cmp["max_abs"],
-            "match_ratio": cmp["match_ratio"],
-            "shape_mismatch": cmp["shape_mismatch"],
-            "precision_ok": cmp["max_abs"] < 1e-6,
-        }
-        results.append(entry)
-
-        status = "✓" if entry["precision_ok"] else "⚠"
-        print(f"  [{i:3d}/{total}] {status} {talib_name:25s} | "
-              f"talib={talib_time*1000:8.3f}ms  alpha={alpha_time*1000:8.3f}ms  "
-              f"speedup={speedup:6.2f}x  diff={cmp['max_abs']:.2e}")
-
-    # Summary
-    compared = len(results)
-    precision_pass = sum(1 for r in results if r["precision_ok"])
-    precision_fail = compared - precision_pass
-    avg_speedup = np.mean([r["speedup"] for r in results]) if results else 0
-    max_speedup = max((r["speedup"] for r in results), default=0)
-    min_speedup = min((r["speedup"] for r in results), default=0)
-
+    compared = [row for row in results if "speedup" in row]
+    passed = [row for row in compared if row["status"] == "pass"]
+    speedups = [row["speedup"] for row in compared if math.isfinite(row["speedup"]) and row["speedup"] > 0]
     summary = {
+        "scope": "TA-Lib Python v0.6.4",
+        "talib_version": getattr(talib, "__version__", "unknown"),
+        "finkit_version": getattr(finkit, "__version__", "unknown"),
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "scale": scale,
-        "repeat": repeat,
-        "total_functions": total,
-        "compared": compared,
-        "skipped": len(skipped),
-        "errors": len(errors),
-        "precision_pass": precision_pass,
-        "precision_fail": precision_fail,
-        "avg_speedup": float(avg_speedup),
-        "max_speedup": float(max_speedup),
-        "min_speedup": float(min_speedup),
+        "scale": args.scale,
+        "seed": args.seed,
+        "repeat": args.repeat,
+        "warmup": args.warmup,
+        "total_functions": len(results),
+        "compared": len(compared),
+        "unavailable": sum(row["status"] == "unavailable" for row in results),
+        "errors": sum(row["status"] == "error" for row in results),
+        "precision_pass": len(passed),
+        "precision_fail": sum(row["status"] == "precision-fail" for row in results),
+        "median_speedup": float(statistics.median(speedups)) if speedups else None,
+        "geomean_speedup": float(math.exp(statistics.mean(math.log(x) for x in speedups))) if speedups else None,
+        "faster_than_talib": sum(x >= 1.0 for x in speedups),
+        "slower_than_talib": sum(x < 1.0 for x in speedups),
     }
-
-    print(f"\n[bench] Summary:")
-    print(f"  Compared:     {compared}/{total}")
-    print(f"  Skipped:      {len(skipped)}")
-    print(f"  Errors:       {len(errors)}")
-    print(f"  Precision OK: {precision_pass}/{compared}")
-    print(f"  Avg speedup:  {avg_speedup:.2f}x")
-    print(f"  Max speedup:  {max_speedup:.2f}x")
-    print(f"  Min speedup:  {min_speedup:.2f}x")
-
-    # Write outputs
-    os.makedirs(output_dir, exist_ok=True)
-
-    # JSON
-    json_path = os.path.join(output_dir, "python_comparison.json")
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump({"summary": summary, "results": results, "skipped": skipped, "errors": errors}, f, indent=2, ensure_ascii=False)
-    print(f"\n[bench] JSON:       {json_path}")
-
-    # Markdown report
-    md_path = os.path.join(output_dir, "python_comparison.md")
-    write_markdown_report(md_path, summary, results, skipped, errors)
-    print(f"[bench] Markdown:   {md_path}")
-
-    # Summary table
-    summary_path = os.path.join(output_dir, "python_comparison_summary.md")
-    write_summary_table(summary_path, summary, results)
-    print(f"[bench] Summary:    {summary_path}")
-
-    return 0 if precision_fail == 0 else 1
+    payload = {"summary": summary, "results": results, "functions": list(TALIB_V064_FUNCTIONS)}
+    output = Path(args.output)
+    output.mkdir(parents=True, exist_ok=True)
+    (output / "python_comparison.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    write_report(output / "python_comparison.md", summary, results)
+    write_summary(output / "python_comparison_summary.md", summary, results)
+    print(f"\n[bench] compared={summary['compared']}/{summary['total_functions']} precision={summary['precision_pass']}/{summary['compared']} median_speedup={summary['median_speedup']}")
+    print(f"[bench] JSON: {output / 'python_comparison.json'}")
+    return 1 if args.strict and (summary["unavailable"] or summary["errors"] or summary["precision_fail"]) else 0
 
 
-def write_markdown_report(path, summary, results, skipped, errors):
-    """Write the full Markdown report."""
-    with open(path, "w", encoding="utf-8") as f:
-        f.write("# AlphaTA vs TA-Lib: Python-Level Performance Comparison\n\n")
-        f.write(f"**Date:** {summary['timestamp']}\n\n")
-        f.write(f"**Scale:** {summary['scale']:,} bars OHLCV (seed=42)\n\n")
-        f.write(f"**Repeat:** {summary['repeat']} iterations (median)\n\n")
-        f.write(f"**Functions compared:** {summary['compared']}/{summary['total_functions']}\n\n")
-        f.write("---\n\n")
-
-        # Summary stats
-        f.write("## Summary\n\n")
-        f.write(f"| Metric | Value |\n|--------|-------|\n")
-        f.write(f"| Total functions | {summary['total_functions']} |\n")
-        f.write(f"| Compared | {summary['compared']} |\n")
-        f.write(f"| Skipped | {summary['skipped']} |\n")
-        f.write(f"| Errors | {summary['errors']} |\n")
-        f.write(f"| Precision pass (≤1e-6) | {summary['precision_pass']} |\n")
-        f.write(f"| Precision fail | {summary['precision_fail']} |\n")
-        f.write(f"| Average speedup | {summary['avg_speedup']:.2f}x |\n")
-        f.write(f"| Max speedup | {summary['max_speedup']:.2f}x |\n")
-        f.write(f"| Min speedup | {summary['min_speedup']:.2f}x |\n\n")
-
-        # Per-category breakdown
-        categories = {}
-        for r in results:
-            cat = r["category"]
-            if cat not in categories:
-                categories[cat] = []
-            categories[cat].append(r)
-
-        f.write("## Per-Category Breakdown\n\n")
-        f.write("| Category | Functions | Avg Speedup | Max Speedup | Precision Pass |\n")
-        f.write("|----------|-----------|-------------|-------------|----------------|\n")
-        for cat in sorted(categories.keys()):
-            cat_results = categories[cat]
-            avg_sp = np.mean([r["speedup"] for r in cat_results])
-            max_sp = max(r["speedup"] for r in cat_results)
-            pass_count = sum(1 for r in cat_results if r["precision_ok"])
-            f.write(f"| {cat} | {len(cat_results)} | {avg_sp:.2f}x | {max_sp:.2f}x | {pass_count}/{len(cat_results)} |\n")
-
-        # Detailed results
-        f.write("\n## Detailed Results\n\n")
-        for cat in sorted(categories.keys()):
-            cat_results = categories[cat]
-            f.write(f"### {cat} ({len(cat_results)} functions)\n\n")
-            f.write("| TA-Lib | AlphaTA | talib (ms) | alpha (ms) | Speedup | Max Diff | Status |\n")
-            f.write("|--------|---------|------------|------------|---------|----------|--------|\n")
-            for r in sorted(cat_results, key=lambda x: -x["speedup"]):
-                status = "✅" if r["precision_ok"] else "⚠️"
-                f.write(f"| {r['talib_name']} | {r['alpha_name']} | {r['talib_time_ms']:.3f} | "
-                        f"{r['alpha_time_ms']:.3f} | {r['speedup']:.2f}x | "
-                        f"{r['max_abs_diff']:.2e} | {status} |\n")
-            f.write("\n")
-
-        # Skipped
-        if skipped:
-            f.write("## Skipped Functions\n\n")
-            f.write("| Function | Reason |\n|----------|--------|\n")
-            for s in skipped:
-                f.write(f"| {s['name']} | {s['reason']} |\n")
-            f.write("\n")
-
-        # Errors
-        if errors:
-            f.write("## Errors\n\n")
-            f.write("| Function | Side | Error |\n|----------|------|-------|\n")
-            for e in errors:
-                f.write(f"| {e['name']} | {e['side']} | {e['error'][:100]} |\n")
+def write_report(path: Path, summary: dict[str, Any], rows: list[dict[str, Any]]) -> None:
+    lines = ["# finkit vs TA-Lib v0.6.4 — Full Python API comparison", "", f"- Scope: `{summary['scope']}` ({summary['total_functions']} functions)", f"- TA-Lib: `{summary['talib_version']}`; finkit: `{summary['finkit_version']}`", f"- Compared: **{summary['compared']}/{summary['total_functions']}**; precision pass: **{summary['precision_pass']}**", f"- Median speedup: **{summary['median_speedup']}x**; geometric mean: **{summary['geomean_speedup']}x**", "", "`speedup > 1.0x` means finkit completed faster. NaN positions are compared as equal; the first warm-up calls are excluded.", "", "## Per-function result", "", "| # | Function | Category | Adapter | Status | finkit ms | TA-Lib ms | Speedup | Max abs diff |", "|---:|---|---|---|---|---:|---:|---:|---:|"]
+    for row in rows:
+        finkit_ms = row.get("finkit_ms", "-")
+        talib_ms = row.get("talib_ms", "-")
+        speedup = row.get("speedup", "-")
+        diff = row.get("max_abs_diff", row.get("reason", "-"))
+        finkit_text = f"{finkit_ms:.4f}" if isinstance(finkit_ms, (float, int)) else str(finkit_ms)
+        talib_text = f"{talib_ms:.4f}" if isinstance(talib_ms, (float, int)) else str(talib_ms)
+        speedup_text = f"{speedup:.2f}" if isinstance(speedup, (float, int)) else str(speedup)
+        lines.append(f"| {row['index']} | `{row['name']}` | {row['category']} | {row.get('adapter', '-')} | {row['status']} | {finkit_text} | {talib_text} | {speedup_text} | {diff} |")
+    missing = [row for row in rows if row["status"] in {"unavailable", "error", "precision-fail"}]
+    if missing:
+        lines.extend(["", "## Action list", "", "The following rows need implementation, binding, signature, or numerical-parity work:", ""])
+        lines.extend(f"- `{row['name']}` — **{row['status']}**: {row.get('reason', 'precision mismatch')}" for row in missing)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def write_summary_table(path, summary, results):
-    """Write a condensed summary table."""
-    with open(path, "w", encoding="utf-8") as f:
-        f.write("# AlphaTA vs TA-Lib: Performance Summary\n\n")
-        f.write(f"**Scale:** {summary['scale']:,} bars | **Repeat:** {summary['repeat']}x | "
-                f"**Date:** {summary['timestamp'][:10]}\n\n")
-
-        # Top 10 fastest
-        f.write("## Top 10 Fastest (AlphaTA vs TA-Lib)\n\n")
-        f.write("| Function | Category | talib (ms) | alpha (ms) | Speedup |\n")
-        f.write("|----------|----------|------------|------------|---------|\n")
-        top10 = sorted(results, key=lambda x: -x["speedup"])[:10]
-        for r in top10:
-            f.write(f"| {r['talib_name']} | {r['category']} | {r['talib_time_ms']:.3f} | "
-                    f"{r['alpha_time_ms']:.3f} | **{r['speedup']:.2f}x** |\n")
-
-        # Bottom 5
-        f.write("\n## Bottom 5 (closest to TA-Lib speed)\n\n")
-        f.write("| Function | Category | talib (ms) | alpha (ms) | Speedup |\n")
-        f.write("|----------|----------|------------|------------|---------|\n")
-        bottom5 = sorted(results, key=lambda x: x["speedup"])[:5]
-        for r in bottom5:
-            f.write(f"| {r['talib_name']} | {r['category']} | {r['talib_time_ms']:.3f} | "
-                    f"{r['alpha_time_ms']:.3f} | **{r['speedup']:.2f}x** |\n")
-
-        # Precision summary
-        f.write(f"\n## Precision\n\n")
-        f.write(f"- **Pass (≤1e-6):** {summary['precision_pass']}/{summary['compared']}\n")
-        f.write(f"- **Fail:** {summary['precision_fail']}/{summary['compared']}\n")
-        if summary["precision_fail"] > 0:
-            fails = [r for r in results if not r["precision_ok"]]
-            f.write("\n| Function | Max Diff |\n|----------|----------|\n")
-            for r in fails:
-                f.write(f"| {r['talib_name']} | {r['max_abs_diff']:.2e} |\n")
+def write_summary(path: Path, summary: dict[str, Any], rows: list[dict[str, Any]]) -> None:
+    lines = ["# Full TA-Lib comparison summary", "", "| Metric | Value |", "|---|---:|"]
+    lines.extend(f"| {key} | {value} |" for key, value in summary.items())
+    lines.extend(["", "## Slowest finkit rows", "", "| Function | Speedup | Max abs diff |", "|---|---:|---:|"])
+    ranked = sorted((row for row in rows if "speedup" in row), key=lambda row: row["speedup"])[:20]
+    lines.extend(f"| `{row['name']}` | {row['speedup']:.2f}x | {row['max_abs_diff']:.2e} |" for row in ranked)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-# ----------------------------------------------------------------------------
-# CLI
-# ----------------------------------------------------------------------------
-def main():
-    parser = argparse.ArgumentParser(
-        description="AlphaTA vs TA-Lib: Full 158-function Python-level comparison")
-    parser.add_argument("--scale", type=str, default="10K",
-                        choices=["1K", "10K", "100K", "1M"],
-                        help="Data size (number of bars)")
-    parser.add_argument("--output", type=str, default="dist/bench",
-                        help="Output directory for reports")
-    parser.add_argument("--repeat", type=int, default=5,
-                        help="Number of timing iterations per function (median)")
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--scale", type=parse_scale, default=10_000, help="bars: 10K, 100K, 1M (default: 10K)")
+    parser.add_argument("--repeat", type=int, default=7, help="timed samples per function")
+    parser.add_argument("--warmup", type=int, default=2, help="warm-up calls per function")
+    parser.add_argument("--seed", type=int, default=42, help="random seed")
+    parser.add_argument("--output", default="dist/bench/talib-v064", help="output directory")
+    parser.add_argument("--strict", action="store_true", help="return non-zero for missing/error/precision-fail rows")
     args = parser.parse_args()
-
-    scale_map = {"1K": 1_000, "10K": 10_000, "100K": 100_000, "1M": 1_000_000}
-    scale = scale_map[args.scale]
-
-    print(f"[bench] AlphaTA version: {getattr(finkit, '__version__', 'unknown')}")
-    print(f"[bench] TA-Lib version: {talib.__version__}")
-    print(f"[bench] NumPy version: {np.__version__}")
-
-    return run_benchmark(scale, args.output, args.repeat)
+    if args.repeat < 1 or args.warmup < 0:
+        parser.error("repeat must be positive and warmup must not be negative")
+    return run(args)
 
 
 if __name__ == "__main__":
