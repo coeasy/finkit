@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from functools import wraps
 
+import numpy as np
+
 from . import finkit as _native
 from .finkit import *  # noqa: F401,F403 — re-export native module
 
@@ -63,40 +65,39 @@ def _translate_native_errors(name, function):
     return wrapped
 
 
-for _name in (
-    "sma",
-    "ema",
-    "wma",
-    "dema",
-    "tema",
-    "kama",
-    "mama",
-    "t3",
-    "bollinger_bands",
-    "rsi",
-    "macd",
-    "stoch",
-    "adx",
-    "aroon",
-    "cci",
-    "mom",
-    "roc",
-    "willr",
-    "apo",
-    "bop",
-    "cmo",
-    "dx",
-    "mfi",
-    "trix",
-    "atr",
-    "natr",
-    "zscore",
-    "std_dev",
-    "linear_reg",
-    "tsf",
-):
-    if _name in globals():
-        globals()[_name] = _translate_native_errors(_name, globals()[_name])
+def _as_numpy_result(name, function):
+    """Expose native numeric results as NumPy arrays consistently.
+
+    The low-level Rust ABI may return Vec values, dictionaries, or tuples.
+    Convert nested numeric containers at the package boundary so every public
+    numeric API follows the NumPy-facing type contract.
+    """
+
+    def convert(value):
+        if isinstance(value, dict):
+            return {key: convert(item) for key, item in value.items()}
+        if isinstance(value, tuple):
+            return tuple(convert(item) for item in value)
+        if isinstance(value, list):
+            if not value or all(
+                not isinstance(item, (dict, list, tuple)) for item in value
+            ):
+                return np.asarray(value)
+            return [convert(item) for item in value]
+        return value
+
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        return convert(function(*args, **kwargs))
+
+    return wrapped
+
+
+for _name in _native_all:
+    _function = globals().get(_name)
+    if callable(_function) and not isinstance(_function, type):
+        wrapped = _translate_native_errors(_name, _function)
+        globals()[_name] = _as_numpy_result(_name, wrapped)
 
 
 def register_accessor():

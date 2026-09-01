@@ -343,7 +343,7 @@ mod cache_data_structure_tests {
             "test",
             CompiledFormula {
                 ast: AstNode::Number(2.0),
-                source: "test_updated".to_string(),
+                source: "test".to_string(),
             },
         );
 

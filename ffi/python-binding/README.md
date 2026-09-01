@@ -21,20 +21,20 @@
 - **15+图表形态识别**: 头肩顶/底、双顶/底、三角形等
 - **零GIL竞争**: 完全释放Python GIL，支持真正并行计算
 - **跨平台**: Windows/macOS/Linux
-- **CPython 3.8–3.14**: 每个小版本提供独立 wheel
+- **CPython 3.8+（GIL-enabled）**: 使用稳定 ABI3 wheel，多个小版本复用同一 wheel
 
 ## 安装
 
 ### 安装已构建 wheel（推荐）
 
-从 [GitHub Releases](https://github.com/coeasy/finkit/releases) 下载与本机 Python、系统和架构匹配的 `finkit-0.1.0-*.whl`：
+从 [GitHub Releases](https://github.com/coeasy/finkit/releases) 下载与本机操作系统和 CPU 架构匹配的 `finkit-0.1.0-*.whl`。ABI3 wheel 不需要按 CPython 小版本分别选择：
 
 ```bash
 python -m pip install --upgrade pip
 python -m pip install ./finkit-0.1.0-<matching-wheel>.whl
 ```
 
-wheel 支持 CPython 3.8–3.14、Linux x86_64、macOS Intel/Apple Silicon 和 Windows x86_64（macOS arm64 不提供 CPython 3.8 wheel）。pip 会自动安装 NumPy；Pandas accessor 通过 `finkit[pandas]` 可选安装。
+wheel 支持 CPython 3.8+（GIL-enabled）、Linux x86_64、macOS Intel/Apple Silicon 和 Windows x86_64。ABI3 仍按操作系统和 CPU 架构分别提供原生 wheel；Linux ARM64、musllinux、PyPy 和 free-threaded Python 不在 v0.1.0 矩阵中。pip 会自动安装 NumPy；Pandas accessor 通过 `finkit[pandas]` 可选安装。
 
 ### 从源码编译
 
@@ -77,6 +77,18 @@ print(f"MACD: {macd[-1]:.4f}, Signal: {signal[-1]:.4f}")
 upper, middle, lower = ta.bollinger_bands(close, timeperiod=5)
 print(f"BB: {upper[-1]:.2f} / {middle[-1]:.2f} / {lower[-1]:.2f}")
 ```
+
+## 高频公式计算
+
+同一公式需要反复执行时，推荐复用编译计划，避免每次调用都解析公式：
+
+```python
+plan = ta.CompiledFormula("MA(CLOSE, 3)")
+result = plan.eval(open_, high, low, close, volume)
+ma = result["__result__"]
+```
+
+输入使用一维、连续的 float64 NumPy 数组；result 中还会包含公式命名赋值产生的数组。旧的 formula_eval* 接口继续保留。
 
 ## 完整指标列表
 
@@ -233,11 +245,10 @@ python -m pytest tests/test_accessor.py -q
 
 ## 性能对比
 
-```
-指标计算 (100,000条数据, RSI):
-- pandas-ta:     45.2 ms
-- ta-lib (C):    12.8 ms
-- Finkit:     3.2 ms  ✅ 比pandas-ta快14倍
+性能数据与输入规模、CPU、编译参数有关。请使用仓库中的 Rust benchmark 和实际数据集测量，不要把单机结果直接当作所有环境的保证：
+
+```bash
+cargo bench -p finkit --bench formula_bench
 ```
 
 ## 开发
@@ -256,10 +267,10 @@ python -m pytest ffi/python-binding/tests -q
 # 构建源码包和 wheel
 cd ffi/python-binding
 maturin sdist --out dist
-maturin build --release --locked --out dist
+maturin build --release --locked --out dist --compatibility pypi --interpreter python
 ```
 
-发布前请同时检查 wheel 的 Python、平台和架构标签；CI 通过 [python-wheels.yml](../../.github/workflows/python-wheels.yml) 为支持矩阵逐个构建并测试。
+发布前请检查 ABI3、平台和架构标签；CI 通过 [python-wheels.yml](../../.github/workflows/python-wheels.yml) 构建 4 个平台 wheel，并在 CPython 3.8–3.14 上验证 Linux ABI3 wheel。
 
 ## 许可证
 

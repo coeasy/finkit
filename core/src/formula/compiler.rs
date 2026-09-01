@@ -45,15 +45,21 @@ impl FormulaCache {
         let hash = compute_hash(source);
         // 先更新计数再返回引用，避免与返回的 `&CompiledFormula` 借用冲突
         self.counter += 1;
-        // LruCache::get 会将命中的条目提升为最近使用
-        self.cache.get(&hash)
+        // Hash 只是索引；必须再次比较 source，避免极低概率的 hash 碰撞
+        match self.cache.get(&hash) {
+            Some(formula) if formula.source == source => Some(formula),
+            _ => None,
+        }
     }
 
     pub fn get_cloned(&mut self, source: &str) -> Option<CompiledFormula> {
         let hash = compute_hash(source);
         self.counter += 1;
-        // LruCache::get 已更新 LRU 顺序；cloned() 拿到 owned 值
-        self.cache.get(&hash).cloned()
+        // Hash 只是索引；必须再次比较 source，避免返回碰撞项
+        self.cache
+            .get(&hash)
+            .filter(|formula| formula.source == source)
+            .cloned()
     }
 
     pub fn insert(&mut self, source: &str, formula: CompiledFormula) {
@@ -73,7 +79,9 @@ impl FormulaCache {
 
     pub fn contains(&self, source: &str) -> bool {
         let hash = compute_hash(source);
-        self.cache.contains(&hash)
+        self.cache
+            .peek(&hash)
+            .is_some_and(|formula| formula.source == source)
     }
 
     pub fn clear(&mut self) {
@@ -86,7 +94,15 @@ impl FormulaCache {
 
     pub fn remove(&mut self, source: &str) -> Option<CompiledFormula> {
         let hash = compute_hash(source);
-        self.cache.pop(&hash)
+        if self
+            .cache
+            .peek(&hash)
+            .is_some_and(|formula| formula.source == source)
+        {
+            self.cache.pop(&hash)
+        } else {
+            None
+        }
     }
 }
 
@@ -169,6 +185,23 @@ mod tests {
         cache.insert("42", formula);
         assert!(cache.get("42").is_some());
         assert!(cache.contains("42"));
+    }
+
+    #[test]
+    fn test_cache_rejects_hash_collision_entry() {
+        let mut cache = FormulaCache::new(10);
+        let requested = "requested";
+        let collision = CompiledFormula {
+            ast: AstNode::Number(99.0),
+            source: "different-source".to_string(),
+        };
+        cache.cache.put(compute_hash(requested), collision);
+
+        assert!(cache.get(requested).is_none());
+        assert!(cache.get_cloned(requested).is_none());
+        assert!(!cache.contains(requested));
+        assert!(cache.remove(requested).is_none());
+        assert_eq!(cache.len(), 1);
     }
 
     #[test]

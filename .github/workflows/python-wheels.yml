@@ -6,7 +6,10 @@ on:
     tags: ["v*"]
   pull_request:
     paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
       - "core/**"
+      - "ffi/ffi-common/**"
       - "ffi/python-binding/**"
       - "visualization/**"
       - ".github/workflows/python-wheels.yml"
@@ -30,53 +33,43 @@ env:
 
 jobs:
   build:
-    name: CPython ${{ matrix.python }} / ${{ matrix.platform.name }}
+    name: ABI3 ${{ matrix.platform.name }}
     runs-on: ${{ matrix.platform.os }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      max-parallel: 8
+      max-parallel: 4
       matrix:
-        python: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
-        exclude:
-          - platform:
-              name: macos-arm64
-            python: "3.8"
         platform:
           - name: linux-x86_64
             os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             manylinux: "2_17"
-            python_arch: x64
           - name: macos-x86_64
             os: macos-15-intel
             target: x86_64-apple-darwin
             manylinux: "off"
-            python_arch: x64
           - name: macos-arm64
             os: macos-14
             target: aarch64-apple-darwin
             manylinux: "off"
-            python_arch: arm64
           - name: windows-x86_64
             os: windows-2022
             target: x86_64-pc-windows-msvc
             manylinux: "off"
-            python_arch: x64
 
     steps:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python }}
+      - name: Set up build Python
         uses: actions/setup-python@v6
         with:
-          python-version: ${{ matrix.python }}
-          architecture: ${{ matrix.platform.python_arch }}
+          python-version: "3.12"
           cache: pip
           cache-dependency-path: ffi/python-binding/pyproject.toml
 
-      - name: Build wheel
+      - name: Build ABI3 wheel
         uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
           command: build
@@ -87,7 +80,7 @@ jobs:
           sccache: true
           args: >-
             --release --locked --out dist --compatibility pypi
-            ${{ runner.os == 'Linux' && format('--interpreter python{0}', matrix.python) || '--interpreter python' }}
+            ${{ runner.os == 'Linux' && '--interpreter python3.12' || '--interpreter python' }}
 
       - name: Install wheel and test outside the source tree
         shell: bash
@@ -121,13 +114,49 @@ jobs:
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
         with:
-          name: wheel-${{ matrix.platform.name }}-py${{ matrix.python }}
+          name: wheel-${{ matrix.platform.name }}
           path: ffi/python-binding/dist/*.whl
           if-no-files-found: error
 
+  compatibility:
+    name: Python ${{ matrix.python }} compatibility
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 7
+      matrix:
+        python: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: ffi/python-binding/pyproject.toml
+
+      - name: Download Linux ABI3 wheel
+        uses: actions/download-artifact@v4
+        with:
+          name: wheel-linux-x86_64
+          path: dist
+
+      - name: Install and test ABI3 wheel
+        shell: bash
+        env:
+          PIP_DISABLE_PIP_VERSION_CHECK: "1"
+        run: |
+          python -m pip install --force-reinstall --no-cache-dir dist/finkit-*.whl pytest
+          cd "$RUNNER_TEMP"
+          python -m pytest "$GITHUB_WORKSPACE/ffi/python-binding/tests" -q
+
   validate:
     name: Validate wheel set
-    needs: build
+    needs: [build, compatibility]
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     steps:
@@ -170,9 +199,19 @@ jobs:
                   f"release tag {release_tag!r} does not match "
                   f"project version {expected_version!r}"
               )
+
           wheels = sorted(Path("dist").glob("finkit-*.whl"))
-          if len(wheels) != 27:
-              raise SystemExit(f"expected 27 wheels, found {len(wheels)}")
+          if len(wheels) != 4:
+              raise SystemExit(f"expected 4 ABI3 wheels, found {len(wheels)}")
+
+          required_platforms = {
+              "manylinux_2_17_x86_64": False,
+              "macosx_x86_64": False,
+              "macosx_arm64": False,
+              "win_amd64": False,
+          }
+          has_cp38_abi3 = False
+
           for wheel in wheels:
               name, version, _, tags = parse_wheel_filename(wheel.name)
               if name != "finkit" or str(version) != expected_version:
@@ -182,7 +221,25 @@ jobs:
                   )
               if not tags:
                   raise SystemExit(f"wheel has no compatibility tags: {wheel.name}")
-          print(f"validated {len(wheels)} finkit {expected_version} wheels")
+              for tag in tags:
+                  has_cp38_abi3 |= (
+                      tag.interpreter == "cp38" and tag.abi == "abi3"
+                  )
+                  if tag.platform == "manylinux_2_17_x86_64":
+                      required_platforms["manylinux_2_17_x86_64"] = True
+                  if tag.platform.startswith("macosx_") and tag.platform.endswith("_x86_64"):
+                      required_platforms["macosx_x86_64"] = True
+                  if tag.platform.startswith("macosx_") and tag.platform.endswith("_arm64"):
+                      required_platforms["macosx_arm64"] = True
+                  if tag.platform == "win_amd64":
+                      required_platforms["win_amd64"] = True
+
+          if not has_cp38_abi3:
+              raise SystemExit("wheel set is missing the cp38-abi3 compatibility tag")
+          missing = [name for name, present in required_platforms.items() if not present]
+          if missing:
+              raise SystemExit(f"missing platform coverage: {missing}")
+          print(f"validated {len(wheels)} ABI3 finkit {expected_version} wheels")
           PY
 
   release:
@@ -218,6 +275,21 @@ jobs:
             exit 1
           fi
           if ! gh release view "$release_tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release create "$release_tag"               --repo "$GITHUB_REPOSITORY"               --verify-tag               --title "$release_tag"               --generate-notes
+            if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+              gh release create "$release_tag" \
+                --repo "$GITHUB_REPOSITORY" \
+                --verify-tag \
+                --title "$release_tag" \
+                --generate-notes
+            else
+              gh release create "$release_tag" \
+                --repo "$GITHUB_REPOSITORY" \
+                --target "$GITHUB_SHA" \
+                --title "$release_tag" \
+                --generate-notes
+            fi
           fi
-          gh release upload "$release_tag"             --repo "$GITHUB_REPOSITORY"             --clobber             dist/*.whl
+          gh release upload "$release_tag" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber \
+            dist/*.whl
