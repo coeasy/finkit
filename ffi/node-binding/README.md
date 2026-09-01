@@ -221,7 +221,7 @@ All candlestick functions return `number[]` where:
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/) >= 16
-- [Rust](https://rustup.rs/) >= 1.70
+- [Rust](https://rustup.rs/) >= 1.85 (workspace MSRV)
 - `@napi-rs/cli` >= 2.18
 
 ```bash

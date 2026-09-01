@@ -25,9 +25,11 @@
 
 ## 安装
 
+> 当前源码版本和 wheel 元数据已统一到 `0.1.2`；GitHub `v0.1.2` Release 尚未完成。发布前请使用成功的 [Python wheels workflow](https://github.com/coeasy/finkit/actions/workflows/python-wheels.yml) artifact 或源码构建。
+
 ### 安装已构建 wheel（推荐）
 
-从 [GitHub Releases](https://github.com/coeasy/finkit/releases) 下载与本机操作系统和 CPU 架构匹配的 `finkit-0.1.2-*.whl`。ABI3 wheel 不需要按 CPython 小版本分别选择：
+当 `v0.1.2` Release 发布后，从 [GitHub Releases](https://github.com/coeasy/finkit/releases) 下载与本机操作系统和 CPU 架构匹配的 `finkit-0.1.2-*.whl`；发布前请使用成功 workflow 的 wheel artifact。ABI3 wheel 不需要按 CPython 小版本分别选择：
 
 ```bash
 python -m pip install --upgrade pip

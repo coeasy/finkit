@@ -9,6 +9,13 @@ on:
       - "scripts/check_versions.py"
       - "scripts/gen_ssot_docs.py"
       - ".github/workflows/docs-check.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "CHANGELOG.md"
+      - "examples/README.md"
+      - "ffi/**/Cargo.toml"
+      - "ffi/**/README.md"
+      - "ffi/node-binding/package*.json"
   pull_request:
     paths:
       - "docs/**"

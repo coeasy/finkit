@@ -69,7 +69,7 @@ The two navigation entry points are:
 - [Indicator registry](indicator_registry.json) is the canonical machine-readable indicator catalog.
 - `scripts/gen_ssot_docs.py` generates derived indicator documentation.
 - `scripts/gen_c_header.py` generates the C FFI header.
-- CI verifies generated registry changes before accepting core changes.
+- [Docs Check workflow](../.github/workflows/docs-check.yml) verifies all generated SSOT documents and release-version consistency before accepting changes.
 
 ## Documentation maintenance
 

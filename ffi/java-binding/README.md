@@ -200,7 +200,7 @@ System.setProperty("java.library.path", "/path/to/native/lib");
 ## Building from Source
 
 ### Prerequisites
-- Rust 1.70+
+- Rust 1.85+ (workspace MSRV)
 - Java 8+ (JDK)
 - Maven 3.6+
 

@@ -6,7 +6,7 @@ This guide explains how to contribute to Finkit, build from source, and develop 
 
 ### Prerequisites
 
-- **Rust**: 1.70+ (install via [rustup](https://rustup.rs/))
+- **Rust**: 1.85+ (workspace MSRV; install via [rustup](https://rustup.rs/))
 - **Git**: For version control
 - **Python**: 3.8+ (for Python binding development)
 - **Node.js**: 16+ (for Node.js binding development)

@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.2] - 2026-09-01
+## [0.1.2] - Pending release (source baseline 2026-09-01)
+
+> The `0.1.2` source metadata is ready on `main`; the GitHub Release and downloadable assets are still pending.
 
 ### Changed
 - 将公式运行时升级为可复用的零拷贝/增量执行模型：公共子表达式合并、`eval_range`/`eval_last`、容量增长式 `append_bar`、持久化 Bytecode/JIT 与缓冲池。

@@ -29,12 +29,24 @@ mkdir -p "${OUT}"
 
 DO_PRECISION=0
 BENCH_FILTER=""
-for arg in "$@"; do
-  case "$arg" in
-    --precision|--with-precision) DO_PRECISION=1 ;;
-    --bench-filter)              shift; BENCH_FILTER="${1:-}" ;;
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --precision|--with-precision)
+      DO_PRECISION=1
+      shift
+      ;;
+    --bench-filter)
+      shift
+      BENCH_FILTER="${1:-}"
+      [[ $# -gt 0 ]] && shift
+      ;;
     -h|--help)
-      sed -n '2,21p' "$0"; exit 0 ;;
+      sed -n '2,21p' "$0"
+      exit 0
+      ;;
+    *)
+      shift
+      ;;
   esac
 done
 

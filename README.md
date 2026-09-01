@@ -66,8 +66,10 @@ read the results.
 
 ### Python
 
-Download a matching `finkit-0.1.2-*.whl` from the GitHub Actions artifacts or
-the [v0.1.2 Release](https://github.com/coeasy/finkit/releases/tag/v0.1.2), then:
+If the `v0.1.2` GitHub Release is available, download a matching
+`finkit-0.1.2-*.whl` from [Releases](https://github.com/coeasy/finkit/releases).
+Until then, use a successful [Python wheels workflow](https://github.com/coeasy/finkit/actions/workflows/python-wheels.yml)
+artifact or build from source:
 
 ```bash
 python -m pip install ./finkit-0.1.2-<matching-wheel>.whl
@@ -200,7 +202,7 @@ Detailed installation instructions for each language binding are available in [d
 
 | Language | Package Manager | Command |
 |----------|----------------|---------|
-| Python   | pip            | Install the matching v0.1.2 GitHub Release wheel |
+| Python   | pip            | Install a v0.1.2 Release wheel or verified Actions artifact |
 | Node.js  | npm            | `npm install finkit` |
 | Rust     | cargo          | `cargo add finkit` |
 | Java     | Maven          | Add dependency to `pom.xml` |
