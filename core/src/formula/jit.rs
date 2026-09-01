@@ -527,7 +527,7 @@ impl JitCompiler {
                     let data = ctx.get_data(name).ok_or_else(|| {
                         FormulaError::RuntimeError(format!("Data not available: {}", name))
                     })?;
-                    stack.push(data.clone());
+                    stack.push(Array1::from_vec(data.to_vec()));
                 }
                 OpCode::Index => {
                     let idx_val = stack
