@@ -3,9 +3,10 @@
 > **SSOT** — auto-generated from `core/src/features/mod.rs`.
 > Do not edit manually. Regenerate: `python scripts/gen_ssot_docs.py --generate`
 
-Feature engineering submodules: **3**
+Direct public submodules declared with `pub mod`: **3**
 
 Feature engineering transforms raw OHLCV data into ML-ready feature matrices.
+Feature symbols from internal modules are re-exported by `finkit::features`; the count above is not the total API symbol count.
 
 ## Module Reference
 

@@ -39,6 +39,7 @@ FFI_LIB = ROOT / "ffi" / "c-binding" / "src" / "lib.rs"
 WORKSPACE_CARGO = ROOT / "Cargo.toml"
 GENERATED_DIR = ROOT / "docs" / "generated"
 DEFAULT_CRITERION_DIR = ROOT / "target" / "criterion"
+INDICATOR_REGISTRY = ROOT / "docs" / "indicator_registry.json"
 
 OUT_INDICATORS = GENERATED_DIR / "indicators.md"
 OUT_STREAMING = GENERATED_DIR / "streaming-indicators.md"
@@ -380,19 +381,37 @@ def format_indicators_md(catalog: dict[str, list[str]]) -> str:
     return "\n".join(lines)
 
 
-def format_streaming_md(catalog: dict[str, list[str]]) -> str:
+def read_registered_streaming_count() -> int | None:
+    """Read the authoritative streaming count from the indicator registry."""
+    if not INDICATOR_REGISTRY.is_file():
+        return None
+    data = json.loads(INDICATOR_REGISTRY.read_text(encoding="utf-8"))
+    indicators = data.get("indicators", [])
+    return sum(1 for item in indicators if item.get("streaming") is True)
+
+
+def format_streaming_md(
+    catalog: dict[str, list[str]], registered_count: int | None = None
+) -> str:
     """Generate streaming indicators documentation."""
     total_structs = sum(len(structs) for structs in catalog.values())
+    registered_label = (
+        f"Registered indicator entries marked streaming in `docs/indicator_registry.json`: **{registered_count}**"
+        if registered_count is not None
+        else "Registered streaming indicator entries: **not available**"
+    )
     lines = [
         "# Streaming Indicators Catalog",
         "",
         "> **SSOT** — auto-generated from `core/src/streaming/mod.rs` and submodule `pub struct` exports.",
         "> Do not edit manually. Regenerate: `python scripts/gen_ssot_docs.py --generate`",
         "",
-        f"Streaming indicator modules: **{len(catalog)}** | "
-        f"Public indicator structs: **{total_structs}**",
+        f"Streaming source modules: **{len(catalog)}** | "
+        f"Direct public structs: **{total_structs}**",
+        registered_label,
         "",
         "Streaming indicators provide O(1) per-bar updates via the `StreamingIndicator` trait.",
+        "The source scan lists directly detected public structs; the registered count is the user-facing indicator count.",
         "",
     ]
 
@@ -483,9 +502,10 @@ def format_features_md(modules: list[str]) -> str:
         "> **SSOT** — auto-generated from `core/src/features/mod.rs`.",
         "> Do not edit manually. Regenerate: `python scripts/gen_ssot_docs.py --generate`",
         "",
-        f"Feature engineering submodules: **{len(modules)}**",
+        f"Direct public submodules declared with `pub mod`: **{len(modules)}**",
         "",
         "Feature engineering transforms raw OHLCV data into ML-ready feature matrices.",
+        "Feature symbols from internal modules are re-exported by `finkit::features`; the count above is not the total API symbol count.",
         "",
         "## Module Reference",
         "",
@@ -727,7 +747,9 @@ def generate_all(criterion_dir: Path) -> dict[Path, str]:
 
     # Add streaming indicators doc if data available
     if streaming_catalog:
-        outputs[OUT_STREAMING] = format_streaming_md(streaming_catalog)
+        outputs[OUT_STREAMING] = format_streaming_md(
+            streaming_catalog, read_registered_streaming_count()
+        )
 
     # Add formula functions doc if data available
     if formula_functions:

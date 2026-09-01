@@ -3,9 +3,11 @@
 > **SSOT** — auto-generated from `core/src/streaming/mod.rs` and submodule `pub struct` exports.
 > Do not edit manually. Regenerate: `python scripts/gen_ssot_docs.py --generate`
 
-Streaming indicator modules: **5** | Public indicator structs: **24**
+Streaming source modules: **5** | Direct public structs: **24**
+Registered indicator entries marked streaming in `docs/indicator_registry.json`: **145**
 
 Streaming indicators provide O(1) per-bar updates via the `StreamingIndicator` trait.
+The source scan lists directly detected public structs; the registered count is the user-facing indicator count.
 
 ## builder
 

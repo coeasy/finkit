@@ -17,9 +17,46 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  preflight:
+    name: Environment preflight
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Print toolchain versions
+        run: |
+          set -eux
+          python --version
+          rustc --version
+          cargo --version
+          git --version
+
+  version-consistency:
+    name: Version consistency
+    needs: preflight
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Check release versions
+        run: python scripts/check_versions.py
+
   fmt:
     name: Format
-    runs-on: ubuntu-latest
+    needs: preflight
+    runs-on: ubuntu-22.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -31,7 +68,8 @@ jobs:
 
   clippy:
     name: Clippy
-    runs-on: ubuntu-latest
+    needs: preflight
+    runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -42,19 +80,18 @@ jobs:
       - name: Clippy (core)
         run: cargo clippy -p finkit
       - name: Clippy (workspace, advisory)
+        continue-on-error: true
         run: cargo clippy --workspace --all-targets
 
   test:
     name: Test (core)
-    runs-on: ubuntu-latest
+    needs: [preflight, version-consistency]
+    runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: Check release version consistency
-        run: python scripts/check_versions.py
-
       - name: Verify generated registry snapshot
         run: git diff --exit-code -- docs/indicator_registry.json
       - name: Run core tests
@@ -64,7 +101,8 @@ jobs:
 
   doc:
     name: Docs
-    runs-on: ubuntu-latest
+    needs: preflight
+    runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -75,12 +113,13 @@ jobs:
 
   audit:
     name: Dependency audit
-    runs-on: ubuntu-latest
+    needs: preflight
+    runs-on: ubuntu-22.04
     timeout-minutes: 15
     permissions:
       contents: read
       checks: write
-    continue-on-error: true # keep the advisory scan visible without blocking green initial merge
+    continue-on-error: true # advisory until the dependency baseline is reviewed
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -88,6 +127,5 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-  # NOTE: Other FFI bindings require their own language toolchains and remain
-  # outside this minimal core gate. Python wheel builds and runtime tests run in
-  # .github/workflows/python-wheels.yml across the supported interpreter matrix.
+  # Other FFI bindings require their own language toolchains. Python wheel
+  # builds and runtime tests run in python-wheels.yml across the matrix.

@@ -13,6 +13,7 @@
 | [Documentation Index](docs/README.md) | Full usage guide and examples |
 | [API Reference](docs/api-reference.md) | Detailed API documentation for all indicators |
 | [Development Guide](docs/development.md) | Building, testing, and packaging instructions |
+| [Latest Optimization Plan](docs/plan/finkit-latest-status-optimization-plan.md) | Current code audit, release blockers and prioritized improvements |
 | [Installation Guide](docs/installation.md) | Detailed installation for each language |
 | [Python Wheel Guide](docs/python.md) | CPython wheel matrix, source builds, and troubleshooting |
 | [Performance Benchmarks](docs/benchmark-results.md) | Performance comparison with TA-Lib |
@@ -23,15 +24,15 @@
 
 - **High Performance**: Core indicators 1.3x–3.2x faster than TA-Lib C (real FFI benchmarks), SIMD-accelerated math
 - **150+ Batch Indicators**: Complete coverage of overlap, momentum, volume, volatility, cycle, price transform, and statistics
-- **98 Streaming Indicators**: O(1) per-bar incremental updates with checkpoint/restore
+- **145 Registered Streaming Indicator Entries**: O(1) per-bar incremental updates with checkpoint/restore; the count is generated from docs/indicator_registry.json
 - **60+ Candlestick Patterns**: Full recognition of common candlestick patterns
 - **15+ Chart Patterns**: Head & Shoulders, Double Top/Bottom, Triangles, Wedges, etc.
-- **Formula Engine**: Expression-based computation (`MA(CLOSE, 20)`) with JIT + SIMD
+- **Formula Engine**: Expression-based computation (`MA(CLOSE, 20)`) with AST/Bytecode optimization, range/last/incremental execution, and bounded zero-copy fast paths
 - **Transform Pipeline**: Composable data transforms (LogReturn, ZScore, MinMaxScaler)
 - **Builder API**: Type-safe fluent builders for all streaming indicators
 - **Multi-Language Support**: Python, Node.js, Java, Go, .NET, C++, Rust, WebAssembly, CLI
 - **Cross-Platform**: Linux, macOS, Windows, Android, iOS
-- **Multi-Package Install**: build locally or install from source (registry publishing pending; see [installation guide](docs/installation.md))
+- **Multi-Package Install**: build locally or install from source; published artifacts are gated by matching CI and release metadata (see [installation guide](docs/installation.md))
 
 ## ⚡ One-Click Build
 
@@ -751,12 +752,15 @@ CI runs on every push and pull request to `main`:
 - `cargo test -p finkit` + doc tests
 - `cargo doc` / `cargo audit`
 
-Planned (not yet enabled):
-- **release.yml** — Unified release pipeline for all language bindings
-- **perf-gate.yml** — Performance regression detection (baseline threshold)
-- **fuzz.yml** — Weekly fuzzing
-- **docs-check.yml** — SSOT validation (`gen_ssot_docs.py --check`) + link check
+Current workflows:
+- **ci.yml** — Rust format, clippy, version consistency, core tests, docs and dependency audit
+- **python-wheels.yml** — ABI3 wheel build, CPython compatibility matrix, wheel metadata validation and tag-triggered upload
+- **docs-check.yml** — Generated SSOT and release-version consistency
 - Python wheel build matrix (CPython 3.8–3.14 on four platform targets); see [python-wheels.yml](.github/workflows/python-wheels.yml)
+
+Planned follow-ups:
+- **perf-gate.yml** — Performance regression detection against a checked-in baseline
+- **fuzz.yml** — Scheduled and manual fuzzing
 
 ## 可视化模块
 

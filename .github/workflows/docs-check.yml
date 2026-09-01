@@ -1,0 +1,43 @@
+name: Docs Check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "README.md"
+      - "scripts/check_versions.py"
+      - "scripts/gen_ssot_docs.py"
+      - ".github/workflows/docs-check.yml"
+  pull_request:
+    paths:
+      - "docs/**"
+      - "README.md"
+      - "scripts/check_versions.py"
+      - "scripts/gen_ssot_docs.py"
+      - ".github/workflows/docs-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-check-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify generated docs and versions
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Check release versions
+        run: python scripts/check_versions.py
+      - name: Check generated SSOT docs
+        run: python scripts/gen_ssot_docs.py --check
