@@ -6593,4 +6593,24 @@ mod talib_compat_tests {
             assert!((r_min[i] - 0.0).abs() < 1e-10);
         }
     }
+    #[test]
+    fn test_hhvbars_llvbars_keep_values_without_window_allocations() {
+        let input = Array1::from_vec(vec![3.0, 1.0, 2.0, 2.0, 4.0]);
+        let mut ctx = FormulaContext::new(
+            input.clone(),
+            input.clone(),
+            input.clone(),
+            input.clone(),
+            input.clone(),
+            None,
+        );
+        let mut engine = FormulaEngine::new();
+
+        let hhv = engine.eval("HHVBARS(CLOSE, 3)", &mut ctx).unwrap();
+        let llv = engine.eval("LLVBARS(CLOSE, 3)", &mut ctx).unwrap();
+
+        assert_eq!(hhv.to_vec(), vec![0.0, 1.0, 2.0, 1.0, 0.0]);
+        assert_eq!(llv.to_vec(), vec![0.0, 0.0, 1.0, 2.0, 2.0]);
+    }
+
 }
