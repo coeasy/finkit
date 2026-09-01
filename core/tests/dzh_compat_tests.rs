@@ -346,7 +346,7 @@ fn test_dzh_int_frac_sum() {
         RESULT: SUM
     "#;
     let result = engine.eval(source, &mut ctx).unwrap();
-    let close = ctx.close.as_slice().unwrap();
+    let close = ctx.close.as_slice();
     for i in 0..50 {
         if !result[i].is_nan() && !close[i].is_nan() {
             assert!((result[i] - close[i]).abs() < 1e-10);
@@ -368,7 +368,7 @@ fn test_dzh_reverse() {
     let mut ctx = make_ctx(50);
     let result = engine.eval("REVERSE(CLOSE)", &mut ctx).unwrap();
     assert_eq!(result.len(), 50);
-    let close = ctx.close.as_slice().unwrap();
+    let close = ctx.close.as_slice();
     for i in 0..50 {
         assert!((result[i] - close[49 - i]).abs() < 1e-10);
     }
