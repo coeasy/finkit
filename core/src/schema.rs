@@ -36,11 +36,16 @@ impl FunctionApiSchema {
         Self::from_registry(&builtin_function_registry())
     }
 
-    /// Resolve one canonical function by name in the owned schema.
+    /// Resolve a canonical function name or compatibility alias.
     pub fn get(&self, name: &str) -> Option<&FunctionApiSpec> {
-        self.functions
-            .iter()
-            .find(|spec| spec.name.eq_ignore_ascii_case(name))
+        let requested = name.trim();
+        self.functions.iter().find(|spec| {
+            spec.name.eq_ignore_ascii_case(requested)
+                || spec
+                    .aliases
+                    .iter()
+                    .any(|alias| alias.eq_ignore_ascii_case(requested))
+        })
     }
 }
 
@@ -196,5 +201,13 @@ mod tests {
         assert!(!sma.stateful);
         assert_eq!(sma.effect, "pure");
         assert_eq!(sma.params[0].name, "period");
+    }
+
+    #[test]
+    fn schema_lookup_resolves_aliases_case_insensitively() {
+        let schema = FunctionApiSchema::builtin();
+        assert_eq!(schema.get("ma").unwrap().name, "SMA");
+        assert_eq!(schema.get("boll").unwrap().name, "BBANDS");
+        assert!(schema.get("not-a-function").is_none());
     }
 }
