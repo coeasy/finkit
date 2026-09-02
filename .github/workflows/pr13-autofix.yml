@@ -1,0 +1,139 @@
+name: PR 13 one-time compile repair
+
+on:
+  push:
+    branches:
+      - fix/contract-and-ci-hardening-v012
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out PR branch
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Apply targeted compile repairs
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def patch_function(text: str, name: str, replacements):
+              marker = f"fn {name}("
+              start = text.find(marker)
+              if start < 0:
+                  raise SystemExit(f"missing function {name}")
+              end = text.find("\nfn ", start + len(marker))
+              if end < 0:
+                  end = len(text)
+              block = text[start:end]
+              for old, new in replacements:
+                  if old not in block:
+                      raise SystemExit(f"missing replacement target in {name}: {old!r}")
+                  block = block.replace(old, new, 1)
+              return text[:start] + block + text[end:]
+
+          path = Path("core/src/formula/functions.rs")
+          text = path.read_text()
+          for name in (
+              "fn_midprice",
+              "fn_stoch",
+              "fn_kdj_line",
+              "fn_cmf",
+              "fn_fisher",
+              "fn_fisher_signal",
+              "fn_chop",
+          ):
+              text = patch_function(
+                  text,
+                  name,
+                  [
+                      ("    let high_values = high;", "    let high_values = high.as_slice().unwrap();"),
+                      ("    let low_values = low;", "    let low_values = low.as_slice().unwrap();"),
+                  ],
+              )
+
+          call_replacements = {
+              "crate::indicators::momentum::dx(high, low, close.as_slice().unwrap(), n)":
+                  "crate::indicators::momentum::dx(high, low, close, n)",
+              "crate::indicators::momentum::plus_di(high, low, close.as_slice().unwrap(), n)":
+                  "crate::indicators::momentum::plus_di(high, low, close, n)",
+              "crate::indicators::momentum::minus_di(high, low, close.as_slice().unwrap(), n)":
+                  "crate::indicators::momentum::minus_di(high, low, close, n)",
+              "crate::indicators::momentum::adxr(high, low, close.as_slice().unwrap(), n)":
+                  "crate::indicators::momentum::adxr(high, low, close, n)",
+              "lib_momentum::ultosc(high, low, close.as_slice().unwrap(), p1, p2, p3)":
+                  "lib_momentum::ultosc(high.as_slice().unwrap(), low.as_slice().unwrap(), close.as_slice().unwrap(), p1, p2, p3)",
+              "lib_momentum::plus_dm(high, low)":
+                  "lib_momentum::plus_dm(high.as_slice().unwrap(), low.as_slice().unwrap())",
+              "lib_momentum::minus_dm(high, low)":
+                  "lib_momentum::minus_dm(high.as_slice().unwrap(), low.as_slice().unwrap())",
+          }
+          for old, new in call_replacements.items():
+              if old not in text:
+                  raise SystemExit(f"missing functions.rs call target: {old}")
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+
+          path = Path("core/src/formula/types.rs")
+          text = path.read_text()
+          old = ".and_then(|value| value.as_slice().ok())"
+          if text.count(old) != 3:
+              raise SystemExit(f"expected 3 Option::ok misuse sites, found {text.count(old)}")
+          path.write_text(text.replace(old, ".and_then(|value| value.as_slice())"))
+
+          path = Path("core/src/formula/optimizer.rs")
+          text = path.read_text()
+          old = "fn max_children<'a, I>(children: I) -> Option<usize>"
+          if text.count(old) != 1:
+              raise SystemExit("max_children signature changed unexpectedly")
+          path.write_text(text.replace(old, "fn max_children<'a, I>(mut children: I) -> Option<usize>", 1))
+
+          path = Path("core/src/factors.rs")
+          text = path.read_text()
+          old = '''        if let Some(dependency) = factor
+              .dependencies
+              .iter()
+              .find(|dependency| dependency.trim().is_empty())
+          {'''
+          new = '''        if factor
+              .dependencies
+              .iter()
+              .any(|dependency| dependency.trim().is_empty())
+          {'''
+          if old not in text:
+              raise SystemExit("factor dependency validation target changed unexpectedly")
+          path.write_text(text.replace(old, new, 1))
+          PY
+
+      - name: Format repaired sources
+        run: cargo fmt --all
+
+      - name: Verify workspace compiles
+        run: cargo check --workspace --all-targets --locked
+
+      - name: Commit repaired sources
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add core/src/formula/functions.rs core/src/formula/types.rs core/src/formula/optimizer.rs core/src/factors.rs
+          if git diff --cached --quiet; then
+            echo "No source changes to commit"
+            exit 0
+          fi
+          git commit -m "fix: repair slice migration compile regressions"
+          git push origin HEAD:${GITHUB_REF_NAME}
