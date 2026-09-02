@@ -1,6 +1,6 @@
 # Finkit 最新代码核对、功能梳理与优化改进方案
 
-- 执行更新：2026-09-02：PR #11 已合并 v0.1.2 发布元数据与 CI/文档修复，PR #12 已将旧 PR #1 中仍缺失的 Factor Engine、Runtime Contract、Function Registry 和终端公式兼容层移植到当前主线；本轮继续收敛 Registry 别名安全、Runtime 借用路径、Cargo.lock 门禁、Docs Check 触发范围和文档状态。CI runner 初始化问题与正式 v0.1.2 Release 仍待处理。
+- 执行更新：2026-09-02：PR #11 已合并 v0.1.2 发布元数据与 CI/文档修复，PR #12 已将旧 PR #1 中仍缺失的 Factor Engine、Runtime Contract、Function Registry 和终端公式兼容层移植到当前主线；本轮继续收敛 Registry 别名安全、Factor 名称校验、Runtime 借用路径、Cargo.lock 门禁、Docs Check 触发范围和文档状态。CI runner 初始化问题与正式 v0.1.2 Release 仍待处理。
 
 - 核对日期：2026-09-02
 - 仓库：coeasy/finkit
@@ -17,7 +17,7 @@
 - 当前 `main`：`2c2ba4d`；PR #11/#12 已合并，当前无开放 PR。
 - PR #1 的旧 v0.1.0 发布工作流、旧版本元数据和重复代码未带入主线。
 - 新增核心公共模块：Factor Engine、Runtime/MarketFrame、Function Registry、FormulaTerminal compatibility。
-- 本轮继续修复 Function Registry 别名冲突、Runtime Preserve/Error 借用路径、MarketFrame 别名查询分配，以及 CI Cargo.lock/Docs Check 漏检。
+- 本轮继续修复 Function Registry 别名冲突、Factor 空名称、Runtime Preserve/Error 借用路径、MarketFrame 别名查询分配，以及 CI Cargo.lock/Docs Check 漏检。
 - 当前 GitHub Release 仍只有 `v0.1.0`；CI/Python wheels 仍在 runner preflight 阶段失败，未进入编译和测试步骤。
 
 ## 1. 结论摘要

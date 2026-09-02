@@ -99,6 +99,11 @@ impl FactorContext {
     /// Insert a named input series while enforcing row alignment.
     pub fn insert(&mut self, name: impl Into<String>, values: Vec<f64>) -> FactorResult<()> {
         let name = name.into();
+        if name.trim().is_empty() {
+            return Err(FactorError::InvalidParameter(
+                "factor input name must not be empty".to_string(),
+            ));
+        }
         if let Some(expected) = self.len {
             if values.len() != expected {
                 return Err(FactorError::LengthMismatch {
@@ -214,6 +219,21 @@ impl FactorRegistry {
 
     /// Register a factor. Duplicate names are rejected.
     pub fn register(&mut self, factor: FactorDefinition) -> FactorResult<()> {
+        if factor.name.trim().is_empty() {
+            return Err(FactorError::InvalidParameter(
+                "factor name must not be empty".to_string(),
+            ));
+        }
+        if let Some(dependency) = factor
+            .dependencies
+            .iter()
+            .find(|dependency| dependency.trim().is_empty())
+        {
+            return Err(FactorError::InvalidParameter(format!(
+                "factor dependency must not be empty: {}",
+                factor.name
+            )));
+        }
         if self.factors.contains_key(&factor.name) {
             return Err(FactorError::DuplicateFactor(factor.name));
         }
@@ -567,7 +587,7 @@ pub fn neutralize(values: &[f64], exposure: &[f64]) -> FactorResult<Vec<f64>> {
         .collect())
 }
 
-/// Build the stable v0.1.0 built-in price-factor registry.
+/// Build the stable v0.1.2 built-in price-factor registry.
 pub fn builtin_factor_registry() -> FactorRegistry {
     let mut registry = FactorRegistry::new();
     for period in [5_usize, 20, 60] {
@@ -665,6 +685,27 @@ fn collect_dependencies(
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[test]
+    fn factor_names_must_not_be_empty() {
+        let mut context = FactorContext::new();
+        assert!(matches!(
+            context.insert("   ", vec![]),
+            Err(FactorError::InvalidParameter(_))
+        ));
+
+        let mut registry = FactorRegistry::new();
+        let error = registry
+            .register(FactorDefinition::new(
+                "",
+                ["close"],
+                FactorKind::TimeSeries,
+                FactorDirection::Neutral,
+                Arc::new(|_| Ok(Vec::new())),
+            ))
+            .unwrap_err();
+        assert!(error.to_string().contains("factor name must not be empty"));
+    }
 
     #[test]
     fn dependency_results_are_cached_once() {

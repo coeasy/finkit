@@ -52,7 +52,9 @@ assert_eq!(momentum.len(), context.len());
 ```
 
 Built-in factors are deliberately small reference factors. Register custom
-factors with `FactorDefinition::new` and return one value per context row.
+factors with `FactorDefinition::new` and return one value per context row. Factor
+and dependency names must be non-empty, and every computed result must remain
+aligned with the context row count.
 
 ## Function metadata registry
 
