@@ -194,11 +194,7 @@ impl<'a> BorrowedFactorContext<'a> {
     }
 
     /// Builder-style borrowed insertion helper.
-    pub fn with_series(
-        mut self,
-        name: impl Into<String>,
-        values: &'a [f64],
-    ) -> FactorResult<Self> {
+    pub fn with_series(mut self, name: impl Into<String>, values: &'a [f64]) -> FactorResult<Self> {
         self.insert(name, values)?;
         Ok(self)
     }
@@ -629,11 +625,7 @@ impl crate::compute::FactorPlan {
         engine: &FactorEngine,
         context: &FactorContext,
     ) -> FactorResult<BTreeMap<String, Vec<f64>>> {
-        engine.evaluate_precompiled_raw(
-            self.execution_order(),
-            self.required_raw_inputs(),
-            context,
-        )
+        engine.evaluate_precompiled_raw(self.execution_order(), self.required_raw_inputs(), context)
     }
 
     /// Execute this plan in precompiled order over zero-copy borrowed input.
@@ -642,11 +634,7 @@ impl crate::compute::FactorPlan {
         engine: &FactorEngine,
         context: &BorrowedFactorContext<'_>,
     ) -> FactorResult<BTreeMap<String, Vec<f64>>> {
-        engine.evaluate_precompiled_raw(
-            self.execution_order(),
-            self.required_raw_inputs(),
-            context,
-        )
+        engine.evaluate_precompiled_raw(self.execution_order(), self.required_raw_inputs(), context)
     }
 }
 
