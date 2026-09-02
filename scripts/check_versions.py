@@ -3,7 +3,8 @@
 
 The canonical version is [workspace.package].version in Cargo.toml. This check
 covers Rust package manifests, Cargo.lock workspace packages, Python metadata,
-Node's root and platform packages, .NET/Java binding metadata, and release-facing documentation.
+Node's root and platform packages, .NET/Java binding metadata,
+release-facing documentation.
 """
 
 from __future__ import annotations
@@ -90,6 +91,8 @@ def read_node_lock_versions() -> dict[str, str]:
     for name, version in sorted((root.get("optionalDependencies") or {}).items()):
         versions[f"{relative} optionalDependencies.{name}"] = version
     return versions
+
+
 def read_xml_project_version(path: Path, tag: str) -> str:
     """Read a required release version tag from an XML binding manifest."""
     text = path.read_text(encoding="utf-8")

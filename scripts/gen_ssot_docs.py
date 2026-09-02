@@ -144,6 +144,7 @@ def read_node_version() -> str | None:
     version = data.get("version")
     return str(version) if version else None
 
+
 def read_xml_project_version(path: Path, tag: str) -> str | None:
     """Read the first release version tag from an XML binding manifest."""
     if not path.is_file():
@@ -152,6 +153,8 @@ def read_xml_project_version(path: Path, tag: str) -> str | None:
     pattern = rf"(?m)^[ \t]*<{re.escape(tag)}>([^<]+)</{re.escape(tag)}>[ \t]*$"
     match = re.search(pattern, text)
     return match.group(1).strip() if match else None
+
+
 def parse_indicator_modules() -> list[str]:
     modules: list[str] = []
     for line in INDICATORS_MOD.read_text(encoding="utf-8").splitlines():
