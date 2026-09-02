@@ -11,6 +11,28 @@ impl FormulaOptimizer {
         Self::optimize_with(ast, OptLevel::default())
     }
 
+    /// Optimize an AST for normal execution while preserving assignment side effects.
+    ///
+    /// Formula assignments are observable through `FormulaContext::variables`, so
+    /// statement-level dead-code elimination is only valid for explicit lazy/optimizer
+    /// use, not for the normal compiled execution contract.
+    pub(crate) fn optimize_for_execution(ast: &AstNode) -> AstNode {
+        let level = OptLevel::default();
+        let mut node = ast.clone();
+        if level >= OptLevel::Basic {
+            node = Self::constant_folding(&node);
+        }
+        if level >= OptLevel::Standard {
+            node = Self::algebraic_simplify(&node);
+            node = Self::strength_reduction(&node);
+            node = Self::common_subexpression_elimination(&node);
+        }
+        if level >= OptLevel::Aggressive {
+            node = Self::loop_invariant_code_motion(&node);
+        }
+        node
+    }
+
     /// 按指定 [`OptLevel`] 优化 AST。
     ///
     /// 等级递进：

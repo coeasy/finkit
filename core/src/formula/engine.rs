@@ -62,8 +62,9 @@ impl FormulaEngine {
 
         let ast = parse_formula(source).map_err(FormulaError::ParseError)?;
         // Compile the optimized AST once so repeated evaluations share the
-        // same CSE and constant-folding decisions.
-        let ast = FormulaOptimizer::optimize(&ast);
+        // same CSE and constant-folding decisions while preserving assignment
+        // side effects exposed through FormulaContext::variables.
+        let ast = FormulaOptimizer::optimize_for_execution(&ast);
         let formula = CompiledFormula {
             ast,
             source: source.to_string(),
@@ -84,8 +85,13 @@ impl FormulaEngine {
         // general AST executor. This avoids materialising input argument
         // arrays and lets the SIMD _into kernels write directly into one
         // result buffer. Complex formulas keep the existing semantics.
-        if let Some(result) = self.try_execute_simple_formula(&formula.ast, ctx) {
-            return Ok(result);
+        let sandbox_unlimited = ctx.sandbox.timeout_ms.is_none()
+            && ctx.sandbox.max_recursion_depth.is_none()
+            && ctx.sandbox.max_memory_bytes.is_none();
+        if sandbox_unlimited {
+            if let Some(result) = self.try_execute_simple_formula(&formula.ast, ctx) {
+                return Ok(result);
+            }
         }
         self.executor.execute(&formula.ast, ctx)
     }
@@ -230,6 +236,14 @@ impl FormulaEngine {
                 output.len(),
                 ctx.data_len
             )));
+        }
+        let sandbox_unlimited = ctx.sandbox.timeout_ms.is_none()
+            && ctx.sandbox.max_recursion_depth.is_none()
+            && ctx.sandbox.max_memory_bytes.is_none();
+        if !sandbox_unlimited {
+            let result = self.executor.execute(&formula.ast, ctx)?;
+            output.assign(&result);
+            return Ok(());
         }
         if self.try_execute_simple_formula_into(&formula.ast, ctx, output) {
             return Ok(());
