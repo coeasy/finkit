@@ -18,7 +18,7 @@ env:
 
 jobs:
   repair-pr13:
-    name: Repair PR 13 slice migration
+    name: Repair PR 13 workspace regressions
     if: github.event_name == 'push' && github.ref_name == 'fix/contract-and-ci-hardening-v012' && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-22.04
     timeout-minutes: 45
@@ -96,6 +96,45 @@ jobs:
           text = text.replace(first, "if factor", 1)
           text = text.replace(second, ".any(|dependency| dependency.trim().is_empty())", 1)
           path.write_text(text)
+
+          path = Path("core/src/patterns/candlestick.rs")
+          text = path.read_text()
+          old = '''/// CDLINNECK — In Neck Pattern (看跌)
+pub fn cdl_inneck(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result<PatternResult> {
+    in_neck(open, high, low, close)
+}
+'''
+          new = old + '''
+/// CDLONNECK — On Neck Pattern (看跌)
+pub fn cdl_onneck(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result<PatternResult> {
+    on_neck(open, high, low, close)
+}
+'''
+          if text.count(old) != 1 or "pub fn cdl_onneck(" in text:
+              raise SystemExit("CDLONNECK wrapper target changed")
+          path.write_text(text.replace(old, new, 1))
+
+          path = Path("ffi/python-binding/src/lib.rs")
+          text = path.read_text()
+          old = "let direct_result: PyResult<Option<Array1<f64>>> = Python::attach(|py| {"
+          new = "let direct_result: Option<Array1<f64>> = Python::attach(|py| {"
+          if text.count(old) != 1:
+              raise SystemExit("Python zero-copy result target changed")
+          path.write_text(text.replace(old, new, 1))
+
+          path = Path("ffi/python-binding/src/formula_plan.rs")
+          text = path.read_text()
+          old = "let mut engine = self.engine.take().ok_or_else(|| {"
+          if text.count(old) != 4:
+              raise SystemExit(f"expected 4 unnecessary mutable engines, found {text.count(old)}")
+          path.write_text(text.replace(old, "let engine = self.engine.take().ok_or_else(|| {"))
+
+          path = Path("ffi/android-binding/src/lib.rs")
+          text = path.read_text()
+          old = "    mut env: JNIEnv,"
+          if text.count(old) != 1:
+              raise SystemExit(f"expected 1 unnecessary mutable JNI env, found {text.count(old)}")
+          path.write_text(text.replace(old, "    env: JNIEnv,", 1))
           PY
       - name: Format and verify
         run: |
@@ -106,12 +145,12 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add core/src/formula/functions.rs core/src/formula/types.rs core/src/formula/optimizer.rs core/src/factors.rs
+          git add core/src/formula/functions.rs core/src/formula/types.rs core/src/formula/optimizer.rs core/src/factors.rs core/src/patterns/candlestick.rs ffi/python-binding/src/lib.rs ffi/python-binding/src/formula_plan.rs ffi/android-binding/src/lib.rs
           if git diff --cached --quiet; then
             echo "No source changes to commit"
             exit 0
           fi
-          git commit -m "fix: repair slice migration compile regressions"
+          git commit -m "fix: repair workspace compile regressions"
           git push origin HEAD:${GITHUB_REF_NAME}
 
   workspace-check:
