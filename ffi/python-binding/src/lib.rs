@@ -2258,7 +2258,7 @@ pub fn formula_eval_zero_copy(
 ) -> PyResult<Py<PyAny>> {
     // Preserve the legacy list/tuple API, but use the borrowed NumPy path
     // whenever all five inputs are contiguous float64 arrays.
-    let direct_result: PyResult<Option<Array1<f64>>> = Python::attach(|py| {
+    let direct_result: Option<Array1<f64>> = Python::attach(|py| {
         let open_array = match open.bind(py).extract::<PyReadonlyArray1<'_, f64>>() {
             Ok(value) => value,
             Err(_) => return Ok(None),

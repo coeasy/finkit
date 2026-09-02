@@ -2300,8 +2300,8 @@ fn fn_midprice(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
     let n = extract_n(args, 2, "MIDPRICE")?;
 
     let data_len = ctx.data_len;
-    let high_values = high;
-    let low_values = low;
+    let high_values = high.as_slice().unwrap();
+    let low_values = low.as_slice().unwrap();
 
     let max_vals = match lib_stat::rolling_max(high_values, n) {
         Ok(r) => r,
@@ -2371,8 +2371,8 @@ fn fn_stoch(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, F
     };
 
     let data_len = ctx.data_len;
-    let high_values = high;
-    let low_values = low;
+    let high_values = high.as_slice().unwrap();
+    let low_values = low.as_slice().unwrap();
     let close_values = close.as_slice().unwrap();
 
     match lib_momentum::stoch(high_values, low_values, close_values, fastk, slowk, slowd) {
@@ -2418,8 +2418,8 @@ fn fn_kdj_line(
     let (n, m1, m2) = extract_kdj_params(args);
 
     let data_len = ctx.data_len;
-    let high_values = high;
-    let low_values = low;
+    let high_values = high.as_slice().unwrap();
+    let low_values = low.as_slice().unwrap();
     let close_values = close.as_slice().unwrap();
 
     match lib_kdj(high_values, low_values, close_values, n, m1, m2) {
@@ -2515,8 +2515,8 @@ fn fn_cmf(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, For
     let n = extract_n(args, 4, "CMF")?;
 
     let data_len = ctx.data_len;
-    let high_values = high;
-    let low_values = low;
+    let high_values = high.as_slice().unwrap();
+    let low_values = low.as_slice().unwrap();
     let close_values = close.as_slice().unwrap();
     let volume_values = volume.as_slice().unwrap();
 
@@ -2533,8 +2533,8 @@ fn fn_fisher(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, 
     let n = extract_n(args, 2, "FISHER")?;
 
     let data_len = ctx.data_len;
-    let high_values = high;
-    let low_values = low;
+    let high_values = high.as_slice().unwrap();
+    let low_values = low.as_slice().unwrap();
 
     match lib_fisher(high_values, low_values, n) {
         Ok(result) => Ok(result.fisher),
@@ -2552,8 +2552,8 @@ fn fn_fisher_signal(
     let n = extract_n(args, 2, "FISHER_SIGNAL")?;
 
     let data_len = ctx.data_len;
-    let high_values = high;
-    let low_values = low;
+    let high_values = high.as_slice().unwrap();
+    let low_values = low.as_slice().unwrap();
 
     match lib_fisher(high_values, low_values, n) {
         Ok(result) => Ok(result.signal),
@@ -2587,8 +2587,8 @@ fn fn_chop(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, Fo
     let n = extract_n(args, 3, "CHOP")?;
 
     let data_len = ctx.data_len;
-    let high_values = high;
-    let low_values = low;
+    let high_values = high.as_slice().unwrap();
+    let low_values = low.as_slice().unwrap();
     let close_values = close.as_slice().unwrap();
 
     match lib_chop(high_values, low_values, close_values, n) {
@@ -3066,7 +3066,7 @@ fn fn_dmi(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, For
 fn fn_dx(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let (high, low, close, n) = resolve_hlc_args("DX", ctx, args)?;
     let data_len = ctx.data_len;
-    match crate::indicators::momentum::dx(high, low, close.as_slice().unwrap(), n) {
+    match crate::indicators::momentum::dx(high, low, close, n) {
         Ok(r) => Ok(r),
         Err(_) => Ok(nan_vec(data_len)),
     }
@@ -3075,7 +3075,7 @@ fn fn_dx(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, Form
 fn fn_plus_di(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let (high, low, close, n) = resolve_hlc_args("PLUS_DI", ctx, args)?;
     let data_len = ctx.data_len;
-    match crate::indicators::momentum::plus_di(high, low, close.as_slice().unwrap(), n) {
+    match crate::indicators::momentum::plus_di(high, low, close, n) {
         Ok(r) => Ok(r),
         Err(_) => Ok(nan_vec(data_len)),
     }
@@ -3084,7 +3084,7 @@ fn fn_plus_di(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>,
 fn fn_minus_di(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let (high, low, close, n) = resolve_hlc_args("MINUS_DI", ctx, args)?;
     let data_len = ctx.data_len;
-    match crate::indicators::momentum::minus_di(high, low, close.as_slice().unwrap(), n) {
+    match crate::indicators::momentum::minus_di(high, low, close, n) {
         Ok(r) => Ok(r),
         Err(_) => Ok(nan_vec(data_len)),
     }
@@ -3093,7 +3093,7 @@ fn fn_minus_di(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
 fn fn_adxr(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let (high, low, close, n) = resolve_hlc_args("ADXR", ctx, args)?;
     let data_len = ctx.data_len;
-    match crate::indicators::momentum::adxr(high, low, close.as_slice().unwrap(), n) {
+    match crate::indicators::momentum::adxr(high, low, close, n) {
         Ok(r) => Ok(r),
         Err(_) => Ok(nan_vec(data_len)),
     }
@@ -3244,7 +3244,14 @@ fn fn_ultosc(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, 
         28
     };
     let data_len = ctx.data_len;
-    match lib_momentum::ultosc(high, low, close.as_slice().unwrap(), p1, p2, p3) {
+    match lib_momentum::ultosc(
+        high.as_slice().unwrap(),
+        low.as_slice().unwrap(),
+        close.as_slice().unwrap(),
+        p1,
+        p2,
+        p3,
+    ) {
         Ok(r) => Ok(r),
         Err(_) => Ok(nan_vec(data_len)),
     }
@@ -3269,7 +3276,7 @@ fn resolve_hlc_for_ultosc<'a>(
 fn fn_plus_dm(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let (high, low) = resolve_hl_for_dm("PLUS_DM", ctx, args)?;
     let data_len = ctx.data_len;
-    match lib_momentum::plus_dm(high, low) {
+    match lib_momentum::plus_dm(high.as_slice().unwrap(), low.as_slice().unwrap()) {
         Ok(r) => Ok(r),
         Err(_) => Ok(nan_vec(data_len)),
     }
@@ -3278,7 +3285,7 @@ fn fn_plus_dm(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>,
 fn fn_minus_dm(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let (high, low) = resolve_hl_for_dm("MINUS_DM", ctx, args)?;
     let data_len = ctx.data_len;
-    match lib_momentum::minus_dm(high, low) {
+    match lib_momentum::minus_dm(high.as_slice().unwrap(), low.as_slice().unwrap()) {
         Ok(r) => Ok(r),
         Err(_) => Ok(nan_vec(data_len)),
     }

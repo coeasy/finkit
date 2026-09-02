@@ -1437,7 +1437,7 @@ impl FormulaOptimizer {
     /// included. Lookbacks compose additively through nested rolling functions
     /// (for example, MA(MA(CLOSE, 5), 5) needs 8 prior bars).
     pub fn required_lookback(ast: &AstNode) -> Option<usize> {
-        fn max_children<'a, I>(children: I) -> Option<usize>
+        fn max_children<'a, I>(mut children: I) -> Option<usize>
         where
             I: Iterator<Item = &'a AstNode>,
         {

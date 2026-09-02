@@ -100,7 +100,7 @@ include!("generated.rs");
 
 #[no_mangle]
 pub extern "system" fn Java_com_finkit_indicators_Finkit_version(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _class: JClass,
 ) -> jstring {
     match env.new_string(env!("CARGO_PKG_VERSION")) {

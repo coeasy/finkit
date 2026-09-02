@@ -220,10 +220,10 @@ impl FactorRegistry {
                 "factor name must not be empty".to_string(),
             ));
         }
-        if let Some(dependency) = factor
+        if factor
             .dependencies
             .iter()
-            .find(|dependency| dependency.trim().is_empty())
+            .any(|dependency| dependency.trim().is_empty())
         {
             return Err(FactorError::InvalidParameter(format!(
                 "factor dependency must not be empty: {}",

@@ -162,7 +162,7 @@ impl PyCompiledFormula {
             .transpose()?;
         validate_lengths(&open, &high, &low, &close, &volume, amount.as_deref())?;
 
-        let mut engine = self.engine.take().ok_or_else(|| {
+        let engine = self.engine.take().ok_or_else(|| {
             PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
                 "compiled formula is already being evaluated",
             )
@@ -236,7 +236,7 @@ impl PyCompiledFormula {
             .transpose()?;
         validate_lengths(open, high, low, close, volume, amount)?;
 
-        let mut engine = self.engine.take().ok_or_else(|| {
+        let engine = self.engine.take().ok_or_else(|| {
             PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
                 "compiled formula is already being evaluated",
             )
@@ -281,7 +281,7 @@ impl PyCompiledFormula {
             ));
         }
 
-        let mut engine = self.engine.take().ok_or_else(|| {
+        let engine = self.engine.take().ok_or_else(|| {
             PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
                 "compiled formula is already being evaluated",
             )
@@ -343,7 +343,7 @@ impl PyCompiledFormula {
             }
         };
 
-        let mut engine = self.engine.take().ok_or_else(|| {
+        let engine = self.engine.take().ok_or_else(|| {
             PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
                 "compiled formula is already being evaluated",
             )
