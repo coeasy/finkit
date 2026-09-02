@@ -28,7 +28,7 @@ Canonical workspace version: **`0.1.2`**
 
 ## Benchmark data
 
-Criterion JSON benchmarks indexed: **84** (from `target/criterion/` when present).
+Criterion JSON benchmarks indexed: **0** (from `target/criterion/` when present).
 
 Full benchmark report: `python scripts/gen_benchmark_report.py` → `docs/BENCHMARK_REPORT.md`.
 
