@@ -129,6 +129,27 @@ public static class Indicators
     private static extern int ta_mama(IntPtr input, int length, double fastLimit, double slowLimit, IntPtr outMama, IntPtr outFama);
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int ta_darvas_box(IntPtr high, IntPtr low, IntPtr close, int length, int lookback, int confirmation, IntPtr outTop, IntPtr outBottom, IntPtr outSignal);
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int ta_renko(IntPtr high, IntPtr low, int length, double boxSize, IntPtr outBricks, IntPtr outDirection);
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int ta_kagi(IntPtr close, int length, double reversal, IntPtr outKagi, IntPtr outDirection);
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int ta_point_and_figure(IntPtr high, IntPtr low, int length, double boxSize, int reversal, IntPtr outPnf, IntPtr outColumn, IntPtr outNewColumn);
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int ta_three_line_break(IntPtr close, int length, int lines, IntPtr outLine, IntPtr outDirection);
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int ta_williams_alligator(IntPtr close, int length, IntPtr outJaw, IntPtr outTeeth, IntPtr outLips);
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int ta_heikin_ashi(IntPtr open, IntPtr high, IntPtr low, IntPtr close, int length, IntPtr outOpen, IntPtr outHigh, IntPtr outLow, IntPtr outClose);
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern IntPtr ta_formula_eval(string source, IntPtr open, IntPtr high, IntPtr low, IntPtr close, IntPtr volume, int length);
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
@@ -161,6 +182,17 @@ public static class Indicators
     private static double[] AllocateAndInitialize(int length)
     {
         return new double[length];
+    }
+
+    private static void EnsureSameLength(params double[][] arrays)
+    {
+        if (arrays.Length == 0) return;
+        int length = arrays[0].Length;
+        for (int i = 1; i < arrays.Length; i++)
+        {
+            if (arrays[i].Length != length)
+                throw new ArgumentException("All input arrays must have the same length");
+        }
     }
 
     // ========================================================================
@@ -1014,6 +1046,171 @@ public static class Indicators
             }
         }
         return new MamaResult(mama, fama);
+    }
+
+    // ========================================================================
+    // Chart Transforms
+    // ========================================================================
+
+    /// <summary>Computes Darvas boxes for an OHLC series.</summary>
+    public static DarvasBoxResult DarvasBox(double[] high, double[] low, double[] close, int lookback = 5, int confirmation = 3)
+    {
+        EnsureSameLength(high, low, close);
+        var boxTop = new double[high.Length];
+        var boxBottom = new double[high.Length];
+        var signal = new int[high.Length];
+        unsafe
+        {
+            fixed (double* pHigh = high)
+            fixed (double* pLow = low)
+            fixed (double* pClose = close)
+            fixed (double* pTop = boxTop)
+            fixed (double* pBottom = boxBottom)
+            fixed (int* pSignal = signal)
+            {
+                int result = ta_darvas_box(
+                    (IntPtr)pHigh, (IntPtr)pLow, (IntPtr)pClose, high.Length,
+                    lookback, confirmation, (IntPtr)pTop, (IntPtr)pBottom, (IntPtr)pSignal);
+                if (result != 0) throw new InvalidOperationException($"DarvasBox failed with error code {result}");
+            }
+        }
+        return new DarvasBoxResult(boxTop, boxBottom, signal);
+    }
+
+    /// <summary>Computes Renko bricks for an OHLC range.</summary>
+    public static RenkoResult Renko(double[] high, double[] low, double boxSize)
+    {
+        EnsureSameLength(high, low);
+        var bricks = new double[high.Length];
+        var direction = new int[high.Length];
+        unsafe
+        {
+            fixed (double* pHigh = high)
+            fixed (double* pLow = low)
+            fixed (double* pBricks = bricks)
+            fixed (int* pDirection = direction)
+            {
+                int result = ta_renko(
+                    (IntPtr)pHigh, (IntPtr)pLow, high.Length, boxSize,
+                    (IntPtr)pBricks, (IntPtr)pDirection);
+                if (result != 0) throw new InvalidOperationException($"Renko failed with error code {result}");
+            }
+        }
+        return new RenkoResult(bricks, direction);
+    }
+
+    /// <summary>Computes Kagi values for a close series.</summary>
+    public static KagiResult Kagi(double[] close, double reversal)
+    {
+        var values = new double[close.Length];
+        var direction = new int[close.Length];
+        unsafe
+        {
+            fixed (double* pClose = close)
+            fixed (double* pValues = values)
+            fixed (int* pDirection = direction)
+            {
+                int result = ta_kagi(
+                    (IntPtr)pClose, close.Length, reversal,
+                    (IntPtr)pValues, (IntPtr)pDirection);
+                if (result != 0) throw new InvalidOperationException($"Kagi failed with error code {result}");
+            }
+        }
+        return new KagiResult(values, direction);
+    }
+
+    /// <summary>Computes point-and-figure columns for an OHLC range.</summary>
+    public static PointAndFigureResult PointAndFigure(double[] high, double[] low, double boxSize, int reversal = 3)
+    {
+        EnsureSameLength(high, low);
+        var values = new double[high.Length];
+        var column = new int[high.Length];
+        var newColumn = new int[high.Length];
+        unsafe
+        {
+            fixed (double* pHigh = high)
+            fixed (double* pLow = low)
+            fixed (double* pValues = values)
+            fixed (int* pColumn = column)
+            fixed (int* pNewColumn = newColumn)
+            {
+                int result = ta_point_and_figure(
+                    (IntPtr)pHigh, (IntPtr)pLow, high.Length, boxSize, reversal,
+                    (IntPtr)pValues, (IntPtr)pColumn, (IntPtr)pNewColumn);
+                if (result != 0) throw new InvalidOperationException($"PointAndFigure failed with error code {result}");
+            }
+        }
+        return new PointAndFigureResult(values, column, newColumn);
+    }
+
+    /// <summary>Computes three-line-break values for a close series.</summary>
+    public static ThreeLineBreakResult ThreeLineBreak(double[] close, int lines = 3)
+    {
+        var values = new double[close.Length];
+        var direction = new int[close.Length];
+        unsafe
+        {
+            fixed (double* pClose = close)
+            fixed (double* pValues = values)
+            fixed (int* pDirection = direction)
+            {
+                int result = ta_three_line_break(
+                    (IntPtr)pClose, close.Length, lines,
+                    (IntPtr)pValues, (IntPtr)pDirection);
+                if (result != 0) throw new InvalidOperationException($"ThreeLineBreak failed with error code {result}");
+            }
+        }
+        return new ThreeLineBreakResult(values, direction);
+    }
+
+    /// <summary>Computes Williams Alligator lines for a close series.</summary>
+    public static WilliamsAlligatorResult WilliamsAlligator(double[] close)
+    {
+        var jaw = new double[close.Length];
+        var teeth = new double[close.Length];
+        var lips = new double[close.Length];
+        unsafe
+        {
+            fixed (double* pClose = close)
+            fixed (double* pJaw = jaw)
+            fixed (double* pTeeth = teeth)
+            fixed (double* pLips = lips)
+            {
+                int result = ta_williams_alligator(
+                    (IntPtr)pClose, close.Length,
+                    (IntPtr)pJaw, (IntPtr)pTeeth, (IntPtr)pLips);
+                if (result != 0) throw new InvalidOperationException($"WilliamsAlligator failed with error code {result}");
+            }
+        }
+        return new WilliamsAlligatorResult(jaw, teeth, lips);
+    }
+
+    /// <summary>Computes Heikin-Ashi OHLC values.</summary>
+    public static HeikinAshiResult HeikinAshi(double[] open, double[] high, double[] low, double[] close)
+    {
+        EnsureSameLength(open, high, low, close);
+        var outOpen = new double[open.Length];
+        var outHigh = new double[open.Length];
+        var outLow = new double[open.Length];
+        var outClose = new double[open.Length];
+        unsafe
+        {
+            fixed (double* pOpen = open)
+            fixed (double* pHigh = high)
+            fixed (double* pLow = low)
+            fixed (double* pClose = close)
+            fixed (double* pOutOpen = outOpen)
+            fixed (double* pOutHigh = outHigh)
+            fixed (double* pOutLow = outLow)
+            fixed (double* pOutClose = outClose)
+            {
+                int result = ta_heikin_ashi(
+                    (IntPtr)pOpen, (IntPtr)pHigh, (IntPtr)pLow, (IntPtr)pClose, open.Length,
+                    (IntPtr)pOutOpen, (IntPtr)pOutHigh, (IntPtr)pOutLow, (IntPtr)pOutClose);
+                if (result != 0) throw new InvalidOperationException($"HeikinAshi failed with error code {result}");
+            }
+        }
+        return new HeikinAshiResult(outOpen, outHigh, outLow, outClose);
     }
 
     // ========================================================================
