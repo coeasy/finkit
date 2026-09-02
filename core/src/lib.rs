@@ -75,6 +75,15 @@ pub mod sector;
 #[cfg(feature = "std")]
 /// 选股因子合成 + 横截面排序.
 pub mod selectors;
+#[cfg(feature = "std")]
+/// Dependency-aware production factor engine and factor transforms.
+pub mod factors;
+#[cfg(feature = "std")]
+/// Canonical indicator/formula metadata registry for bindings and introspection.
+pub mod registry;
+#[cfg(feature = "std")]
+/// Zero-copy aligned market-frame and warm-up/NaN runtime contracts.
+pub mod runtime;
 #[cfg(all(feature = "std", feature = "indicators-all"))]
 /// Streaming (incremental) O(1) per-bar indicator updates.
 pub mod streaming;
