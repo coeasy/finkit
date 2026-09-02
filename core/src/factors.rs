@@ -1114,7 +1114,10 @@ mod tests {
 
         let borrowed_result = engine.evaluate_borrowed("momentum_5", &borrowed).unwrap();
         let owned_result = engine.evaluate("momentum_5", &owned).unwrap();
-        assert_eq!(borrowed_result, owned_result);
+        assert!(borrowed_result
+            .iter()
+            .zip(&owned_result)
+            .all(|(left, right)| (left.is_nan() && right.is_nan()) || left == right));
     }
 
     #[test]
