@@ -1824,7 +1824,7 @@ fn set_int_field(env: &mut JNIEnv, obj: &JObject, field: &str, arr: jintArray) {
 }
 
 fn build_dto2(mut env: JNIEnv, a: &Array1<f64>, b: &Array1<i32>) -> jobject {
-    let cls = env.find_class("com/finkit/DoubleOutput").unwrap();
+    let cls = env.find_class("com/finkit/DoubleIntOutput").unwrap();
     let obj = env.alloc_object(&cls).unwrap();
     let a_arr = to_double_array(&mut env, a.to_vec());
     let b_arr = {
@@ -1840,7 +1840,7 @@ fn build_dto2(mut env: JNIEnv, a: &Array1<f64>, b: &Array1<i32>) -> jobject {
 
 /// Triple of (double[], double[], int[]) — used by Darvas Box.
 fn build_dto_2d_1i(mut env: JNIEnv, a: &Array1<f64>, b: &Array1<f64>, c: &Array1<i32>) -> jobject {
-    let cls = env.find_class("com/finkit/TripleOutput").unwrap();
+    let cls = env.find_class("com/finkit/DoubleDoubleIntOutput").unwrap();
     let obj = env.alloc_object(&cls).unwrap();
     let a_arr = to_double_array(&mut env, a.to_vec());
     let b_arr = to_double_array(&mut env, b.to_vec());
@@ -1858,7 +1858,7 @@ fn build_dto_2d_1i(mut env: JNIEnv, a: &Array1<f64>, b: &Array1<f64>, c: &Array1
 
 /// Triple of (double[], int[], int[]) — used by Point & Figure.
 fn build_dto3(mut env: JNIEnv, a: &Array1<f64>, b: &Array1<i32>, c: &Array1<i32>) -> jobject {
-    let cls = env.find_class("com/finkit/TripleOutput").unwrap();
+    let cls = env.find_class("com/finkit/DoubleIntIntOutput").unwrap();
     let obj = env.alloc_object(&cls).unwrap();
     let a_arr = to_double_array(&mut env, a.to_vec());
     let b_arr = {
@@ -1881,7 +1881,7 @@ fn build_dto3(mut env: JNIEnv, a: &Array1<f64>, b: &Array1<i32>, c: &Array1<i32>
 
 /// Triple of (double[], double[], double[]) — used by Williams Alligator.
 fn build_dto_3d(mut env: JNIEnv, a: &Array1<f64>, b: &Array1<f64>, c: &Array1<f64>) -> jobject {
-    let cls = env.find_class("com/finkit/TripleOutput").unwrap();
+    let cls = env.find_class("com/finkit/TripleDoubleOutput").unwrap();
     let obj = env.alloc_object(&cls).unwrap();
     let a_arr = to_double_array(&mut env, a.to_vec());
     let b_arr = to_double_array(&mut env, b.to_vec());
