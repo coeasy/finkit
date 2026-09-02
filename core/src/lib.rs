@@ -82,6 +82,9 @@ pub mod risk;
 /// Zero-copy aligned market-frame and warm-up/NaN runtime contracts.
 pub mod runtime;
 #[cfg(feature = "std")]
+/// Owned machine-readable API schema derived from the canonical registry.
+pub mod schema;
+#[cfg(feature = "std")]
 /// 申万一级 31 行业板块轮动.
 pub mod sector;
 #[cfg(feature = "std")]
