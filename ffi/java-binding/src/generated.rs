@@ -775,7 +775,10 @@ pub extern "system" fn Java_com_finkit_Indicators_renko(
     ffi_catch_ptr(|| {
 let h = get_double_array(&mut env, high);
     let l = get_double_array(&mut env, low);
-    let r = indicators::renko(&h, &l, box_size).unwrap();
+    let r = match indicators::renko(&h, &l, box_size) {
+        Ok(result) => result,
+        Err(_) => return std::ptr::null_mut(),
+    };
     build_dto2(env, &r.bricks, &r.direction)
     })
 }
@@ -789,7 +792,10 @@ pub extern "system" fn Java_com_finkit_Indicators_kagi(
 ) -> jobject {
     ffi_catch_ptr(|| {
 let c = get_double_array(&mut env, close);
-    let r = indicators::kagi(&c, reversal).unwrap();
+    let r = match indicators::kagi(&c, reversal) {
+        Ok(result) => result,
+        Err(_) => return std::ptr::null_mut(),
+    };
     build_dto2(env, &r.kagi, &r.direction)
     })
 }
