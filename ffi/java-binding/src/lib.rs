@@ -218,6 +218,8 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaEvalMulti(
     close: JDoubleArray,
     volume: JDoubleArray,
 ) -> jni::sys::jstring {
+    ffi_catch_ptr(|| {
+
     let source_str: String = match env.get_string(&source) {
         Ok(s) => s.into(),
         Err(_) => return std::ptr::null_mut(),
@@ -265,6 +267,8 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaEvalMulti(
         }
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 #[no_mangle]
@@ -278,6 +282,8 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaEvalDraw(
     close: JDoubleArray,
     volume: JDoubleArray,
 ) -> jni::sys::jstring {
+    ffi_catch_ptr(|| {
+
     let source_str: String = match env.get_string(&source) {
         Ok(s) => s.into(),
         Err(_) => return std::ptr::null_mut(),
@@ -313,6 +319,8 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaEvalDraw(
         }
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 #[no_mangle]
@@ -326,6 +334,8 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaEvalDebug(
     close: JDoubleArray,
     volume: JDoubleArray,
 ) -> jni::sys::jstring {
+    ffi_catch_ptr(|| {
+
     let source_str: String = match env.get_string(&source) {
         Ok(s) => s.into(),
         Err(_) => return std::ptr::null_mut(),
@@ -360,6 +370,8 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaEvalDebug(
         }
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 #[no_mangle]
@@ -368,6 +380,8 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaGetTemplate(
     _class: JClass,
     name: JString,
 ) -> jni::sys::jstring {
+    ffi_catch_ptr(|| {
+
     let name_str: String = match env.get_string(&name) {
         Ok(s) => s.into(),
         Err(_) => return std::ptr::null_mut(),
@@ -385,6 +399,8 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaGetTemplate(
         }
         None => std::ptr::null_mut(),
     }
+
+    })
 }
 
 #[no_mangle]
@@ -393,6 +409,8 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaSearchTemplates(
     _class: JClass,
     keyword: JString,
 ) -> jni::sys::jstring {
+    ffi_catch_ptr(|| {
+
     let keyword_str: String = match env.get_string(&keyword) {
         Ok(s) => s.into(),
         Err(_) => return std::ptr::null_mut(),
@@ -406,6 +424,8 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaSearchTemplates(
         Ok(jstr) => jstr.into_raw(),
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 #[no_mangle]
@@ -413,6 +433,8 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaListCategories(
     env: JNIEnv,
     _class: JClass,
 ) -> jni::sys::jstring {
+    ffi_catch_ptr(|| {
+
     use finkit::formula::templates::FormulaTemplates;
 
     let categories = FormulaTemplates::categories();
@@ -422,6 +444,8 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaListCategories(
         Ok(jstr) => jstr.into_raw(),
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 // ============================================================================
@@ -1530,6 +1554,8 @@ pub extern "system" fn Java_com_finkit_KlineChart_klineDataNew(
     closes: JDoubleArray,
     volumes: JDoubleArray,
 ) -> jni::sys::jlong {
+    ffi_catch_i64(|| {
+
     let dates_vec = get_string_array(&mut env, dates);
     let opens_vec = get_double_array(&mut env, opens);
     let highs_vec = get_double_array(&mut env, highs);
@@ -1547,6 +1573,8 @@ pub extern "system" fn Java_com_finkit_KlineChart_klineDataNew(
     let handle = KLINE_DATA_HANDLE.fetch_add(1, Ordering::SeqCst);
     KLINE_DATA_MAP.write().unwrap().insert(handle, data);
     handle
+
+    })
 }
 
 #[no_mangle]
@@ -1564,11 +1592,15 @@ pub extern "system" fn Java_com_finkit_KlineChart_klineDataValidate(
     _class: JClass,
     handle: jni::sys::jlong,
 ) -> jni::sys::jboolean {
+    ffi_catch_u8(|| {
+
     let map = KLINE_DATA_MAP.read().unwrap();
     match map.get(&handle) {
         Some(data) => data.validate() as jni::sys::jboolean,
         None => 0,
     }
+
+    })
 }
 
 #[no_mangle]
@@ -1581,6 +1613,8 @@ pub extern "system" fn Java_com_finkit_KlineChart_klineChartNew(
     width: jint,
     height: jint,
 ) -> jni::sys::jlong {
+    ffi_catch_i64(|| {
+
     let data_map = KLINE_DATA_MAP.read().unwrap();
     let data = match data_map.get(&data_handle) {
         Some(d) => d.clone(),
@@ -1608,6 +1642,8 @@ pub extern "system" fn Java_com_finkit_KlineChart_klineChartNew(
         .unwrap()
         .insert(handle, (chart, Some(data)));
     handle
+
+    })
 }
 
 #[no_mangle]
@@ -1700,6 +1736,8 @@ pub extern "system" fn Java_com_finkit_KlineChart_klineChartToSvg(
     _class: JClass,
     handle: jni::sys::jlong,
 ) -> jni::sys::jstring {
+    ffi_catch_ptr(|| {
+
     let map = KLINE_CHART_MAP.read().unwrap();
     if let Some((chart, _)) = map.get(&handle) {
         match chart.to_svg_string() {
@@ -1712,6 +1750,8 @@ pub extern "system" fn Java_com_finkit_KlineChart_klineChartToSvg(
         }
     }
     std::ptr::null_mut()
+
+    })
 }
 
 // ============================================================================
@@ -2013,6 +2053,8 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaValidate(
     _class: JClass,
     source: JString,
 ) -> jboolean {
+    ffi_catch_u8(|| {
+
     let source_str: String = match env.get_string(&source) {
         Ok(s) => s.into(),
         Err(_) => return 0,
@@ -2023,6 +2065,8 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaValidate(
         Ok(_) => 1,
         Err(_) => 0,
     }
+
+    })
 }
 
 #[no_mangle]
