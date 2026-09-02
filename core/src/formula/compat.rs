@@ -23,6 +23,15 @@ pub enum FormulaTerminal {
     TradingView,
 }
 
+/// All declared formula terminals in stable discovery order.
+pub const FORMULA_TERMINALS: &[FormulaTerminal] = &[
+    FormulaTerminal::Finkit,
+    FormulaTerminal::TongDaXin,
+    FormulaTerminal::TongHuaShun,
+    FormulaTerminal::EastMoney,
+    FormulaTerminal::TradingView,
+];
+
 /// Declared compatibility strength for a terminal adapter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CompatibilityLevel {
@@ -30,6 +39,16 @@ pub enum CompatibilityLevel {
     Native,
     /// A documented common syntax/function subset is supported.
     CommonSubset,
+}
+
+impl CompatibilityLevel {
+    /// Stable lowercase identifier for schema/CLI consumers.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Native => "native",
+            Self::CommonSubset => "common_subset",
+        }
+    }
 }
 
 impl FormulaTerminal {
@@ -43,6 +62,11 @@ impl FormulaTerminal {
             "pine" | "tradingview" | "tv" => Some(Self::TradingView),
             _ => None,
         }
+    }
+
+    /// Return every declared terminal in stable discovery order.
+    pub const fn all() -> &'static [Self] {
+        FORMULA_TERMINALS
     }
 
     /// Canonical parser used by this terminal.
@@ -119,10 +143,29 @@ mod tests {
     }
 
     #[test]
+    fn terminal_discovery_is_stable_and_complete() {
+        assert_eq!(
+            FormulaTerminal::all(),
+            &[
+                FormulaTerminal::Finkit,
+                FormulaTerminal::TongDaXin,
+                FormulaTerminal::TongHuaShun,
+                FormulaTerminal::EastMoney,
+                FormulaTerminal::TradingView,
+            ]
+        );
+    }
+
+    #[test]
     fn external_terminals_are_explicit_subset_contracts() {
         assert_eq!(
             FormulaTerminal::Finkit.compatibility_level(),
             CompatibilityLevel::Native
+        );
+        assert_eq!(CompatibilityLevel::Native.as_str(), "native");
+        assert_eq!(
+            CompatibilityLevel::CommonSubset.as_str(),
+            "common_subset"
         );
         for terminal in [
             FormulaTerminal::TongDaXin,
