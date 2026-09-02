@@ -15,6 +15,7 @@
 
 pub mod ast;
 pub mod bytecode;
+pub mod compat;
 pub mod compiler;
 pub mod debugger;
 pub mod drawing;
@@ -36,6 +37,7 @@ pub mod types;
 
 pub use ast::*;
 pub use bytecode::{compile_to_bytecode, Bytecode, BytecodeVM, ExecResult, OpCode};
+pub use compat::{normalize_terminal_source, CompatibilityLevel, FormulaTerminal};
 pub use compiler::{CompiledFormula, FormulaCache, FormulaCompiler};
 pub use debugger::{DebugEvent, FormulaDebugger, FormulaErrorWithLocation};
 pub use drawing::{DrawCommand, DrawResult};
@@ -61,19 +63,21 @@ pub use types::*;
 /// Formula language dialect selector.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FormulaDialect {
-    /// AlphaTA / TDX-style formula language (default).
+    /// Finkit / AlphaTA / TDX-style formula language (default).
     #[default]
     AlphaTA,
-    /// Pine Script v5 subset.
+    /// TradingView Pine Script v5 subset.
     Pine,
 }
 
 impl FormulaDialect {
     /// Parse a dialect name from CLI / FFI / Python bindings.
     pub fn from_str(s: &str) -> Option<Self> {
-        match s.to_ascii_lowercase().as_str() {
-            "alpha_ta" | "tdx" | "default" | "" => Some(Self::AlphaTA),
-            "pine" => Some(Self::Pine),
+        match s.trim().to_ascii_lowercase().as_str() {
+            "alpha_ta" | "alphata" | "finkit" | "tdx" | "tongdaxin" | "通达信" | "ths"
+            | "tonghuashun" | "同花顺" | "eastmoney" | "em" | "dfcf" | "东方财富"
+            | "default" | "" => Some(Self::AlphaTA),
+            "pine" | "tradingview" | "tv" => Some(Self::Pine),
             _ => None,
         }
     }
@@ -103,6 +107,16 @@ pub fn parse_formula_with_dialect(
     }
 }
 
+
+/// Parse source using a named trading-terminal compatibility adapter.
+pub fn parse_formula_for_terminal(
+    source: &str,
+    terminal: FormulaTerminal,
+) -> Result<AstNode, String> {
+    let normalized = normalize_terminal_source(source, terminal);
+    parse_formula_with_dialect(&normalized, terminal.canonical_dialect())
+}
+
 #[cfg(test)]
 mod dialect_tests {
     use super::*;
@@ -111,6 +125,16 @@ mod dialect_tests {
     fn alpha_ta_dialect_parses_tdx_formula() {
         let ast = parse_formula_with_dialect("CLOSE + OPEN", FormulaDialect::AlphaTA).unwrap();
         assert!(matches!(ast, AstNode::BinaryOp { .. }));
+    }
+
+    #[test]
+    fn tdx_terminal_parses_assignment_and_cross() {
+        let source = "MA5:=MA(CLOSE,5); CROSS(CLOSE,MA5);";
+        let ast = parse_formula_for_terminal(source, FormulaTerminal::TongDaXin).unwrap();
+        assert!(matches!(
+            ast,
+            AstNode::Statements(_) | AstNode::Assignment { .. }
+        ));
     }
 
     #[test]
