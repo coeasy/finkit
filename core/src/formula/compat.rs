@@ -2,9 +2,9 @@
 //!
 //! Finkit keeps one canonical AST/runtime. Terminal names are resolved to the
 //! closest canonical parser instead of maintaining divergent executors. The
-//! v0.1.2 China-terminal adapters intentionally target the common TDX-style
-//! formula subset; terminal-specific extensions can be added without changing
-//! the execution engine.
+//! v0.1.2 external-terminal adapters intentionally target documented common
+//! subsets; terminal-specific extensions can be added without changing the
+//! execution engine.
 
 use super::FormulaDialect;
 
@@ -13,7 +13,7 @@ use super::FormulaDialect;
 pub enum FormulaTerminal {
     /// Native Finkit / AlphaTA-compatible formula syntax.
     Finkit,
-    /// 通达信 formula syntax.
+    /// 通达信 common formula subset.
     TongDaXin,
     /// 同花顺 common formula subset.
     TongHuaShun,
@@ -26,7 +26,7 @@ pub enum FormulaTerminal {
 /// Declared compatibility strength for a terminal adapter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CompatibilityLevel {
-    /// Native parser/runtime support.
+    /// Native Finkit parser/runtime contract.
     Native,
     /// A documented common syntax/function subset is supported.
     CommonSubset,
@@ -56,10 +56,16 @@ impl FormulaTerminal {
     }
 
     /// Compatibility strength shipped in v0.1.2.
+    ///
+    /// Only Finkit's own language is a native contract. External terminal
+    /// adapters deliberately advertise subset compatibility until their
+    /// terminal-specific golden matrices are complete.
     pub const fn compatibility_level(self) -> CompatibilityLevel {
         match self {
-            Self::Finkit | Self::TongDaXin | Self::TradingView => CompatibilityLevel::Native,
-            Self::TongHuaShun | Self::EastMoney => CompatibilityLevel::CommonSubset,
+            Self::Finkit => CompatibilityLevel::Native,
+            Self::TongDaXin | Self::TongHuaShun | Self::EastMoney | Self::TradingView => {
+                CompatibilityLevel::CommonSubset
+            }
         }
     }
 
@@ -110,6 +116,25 @@ mod tests {
             FormulaTerminal::from_str("TradingView"),
             Some(FormulaTerminal::TradingView)
         );
+    }
+
+    #[test]
+    fn external_terminals_are_explicit_subset_contracts() {
+        assert_eq!(
+            FormulaTerminal::Finkit.compatibility_level(),
+            CompatibilityLevel::Native
+        );
+        for terminal in [
+            FormulaTerminal::TongDaXin,
+            FormulaTerminal::TongHuaShun,
+            FormulaTerminal::EastMoney,
+            FormulaTerminal::TradingView,
+        ] {
+            assert_eq!(
+                terminal.compatibility_level(),
+                CompatibilityLevel::CommonSubset
+            );
+        }
     }
 
     #[test]
