@@ -17,30 +17,9 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  preflight:
-    name: Environment preflight
-    runs-on: ubuntu-22.04
-    timeout-minutes: 10
-    steps:
-      - name: Check out source
-        uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-      - name: Print toolchain versions
-        run: |
-          set -eux
-          python --version
-          rustc --version
-          cargo --version
-          git --version
-
+  # Validation jobs run independently; the advisory preflight must not fan out a single skip.
   version-consistency:
     name: Version consistency
-    needs: preflight
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     steps:
@@ -55,7 +34,6 @@ jobs:
 
   fmt:
     name: Format
-    needs: preflight
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     steps:
@@ -68,7 +46,6 @@ jobs:
 
   clippy:
     name: Clippy
-    needs: preflight
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
@@ -85,7 +62,7 @@ jobs:
 
   test:
     name: Test (core)
-    needs: [preflight, version-consistency]
+    needs: version-consistency
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
@@ -101,7 +78,6 @@ jobs:
 
   doc:
     name: Docs
-    needs: preflight
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
@@ -113,7 +89,6 @@ jobs:
 
   audit:
     name: Dependency audit
-    needs: preflight
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     permissions:
