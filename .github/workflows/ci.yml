@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, fix/contract-and-ci-hardening-v012]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -17,142 +17,6 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  repair-pr13:
-    name: Repair PR 13 workspace regressions
-    if: github.event_name == 'push' && github.ref_name == 'fix/contract-and-ci-hardening-v012' && github.actor != 'github-actions[bot]'
-    runs-on: ubuntu-22.04
-    timeout-minutes: 45
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-      - name: Apply targeted compile repairs
-        shell: bash
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          def patch_function(text, name, replacements):
-              marker = f"fn {name}("
-              start = text.find(marker)
-              if start < 0:
-                  raise SystemExit(f"missing function {name}")
-              end = text.find("\nfn ", start + len(marker))
-              if end < 0:
-                  end = len(text)
-              block = text[start:end]
-              for old, new in replacements:
-                  if old not in block:
-                      raise SystemExit(f"missing target in {name}: {old!r}")
-                  block = block.replace(old, new, 1)
-              return text[:start] + block + text[end:]
-
-          path = Path("core/src/formula/functions.rs")
-          text = path.read_text()
-          for name in ("fn_midprice", "fn_stoch", "fn_kdj_line", "fn_cmf", "fn_fisher", "fn_fisher_signal", "fn_chop"):
-              text = patch_function(text, name, [
-                  ("    let high_values = high;", "    let high_values = high.as_slice().unwrap();"),
-                  ("    let low_values = low;", "    let low_values = low.as_slice().unwrap();"),
-              ])
-          for old, new in {
-              "crate::indicators::momentum::dx(high, low, close.as_slice().unwrap(), n)": "crate::indicators::momentum::dx(high, low, close, n)",
-              "crate::indicators::momentum::plus_di(high, low, close.as_slice().unwrap(), n)": "crate::indicators::momentum::plus_di(high, low, close, n)",
-              "crate::indicators::momentum::minus_di(high, low, close.as_slice().unwrap(), n)": "crate::indicators::momentum::minus_di(high, low, close, n)",
-              "crate::indicators::momentum::adxr(high, low, close.as_slice().unwrap(), n)": "crate::indicators::momentum::adxr(high, low, close, n)",
-              "lib_momentum::ultosc(high, low, close.as_slice().unwrap(), p1, p2, p3)": "lib_momentum::ultosc(high.as_slice().unwrap(), low.as_slice().unwrap(), close.as_slice().unwrap(), p1, p2, p3)",
-              "lib_momentum::plus_dm(high, low)": "lib_momentum::plus_dm(high.as_slice().unwrap(), low.as_slice().unwrap())",
-              "lib_momentum::minus_dm(high, low)": "lib_momentum::minus_dm(high.as_slice().unwrap(), low.as_slice().unwrap())",
-          }.items():
-              if old not in text:
-                  raise SystemExit(f"missing call target: {old}")
-              text = text.replace(old, new, 1)
-          path.write_text(text)
-
-          path = Path("core/src/formula/types.rs")
-          text = path.read_text()
-          old = ".and_then(|value| value.as_slice().ok())"
-          if text.count(old) != 3:
-              raise SystemExit(f"expected 3 Option::ok sites, found {text.count(old)}")
-          path.write_text(text.replace(old, ".and_then(|value| value.as_slice())"))
-
-          path = Path("core/src/formula/optimizer.rs")
-          text = path.read_text()
-          old = "fn max_children<'a, I>(children: I) -> Option<usize>"
-          if old not in text:
-              raise SystemExit("max_children signature changed")
-          path.write_text(text.replace(old, "fn max_children<'a, I>(mut children: I) -> Option<usize>", 1))
-
-          path = Path("core/src/factors.rs")
-          text = path.read_text()
-          first = "if let Some(dependency) = factor"
-          second = ".find(|dependency| dependency.trim().is_empty())"
-          if text.count(first) != 1 or text.count(second) != 1:
-              raise SystemExit("factor validation target changed")
-          text = text.replace(first, "if factor", 1)
-          text = text.replace(second, ".any(|dependency| dependency.trim().is_empty())", 1)
-          path.write_text(text)
-
-          path = Path("core/src/patterns/candlestick.rs")
-          text = path.read_text()
-          old = '''/// CDLINNECK — In Neck Pattern (看跌)
-pub fn cdl_inneck(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result<PatternResult> {
-    in_neck(open, high, low, close)
-}
-'''
-          new = old + '''
-/// CDLONNECK — On Neck Pattern (看跌)
-pub fn cdl_onneck(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result<PatternResult> {
-    on_neck(open, high, low, close)
-}
-'''
-          if text.count(old) != 1 or "pub fn cdl_onneck(" in text:
-              raise SystemExit("CDLONNECK wrapper target changed")
-          path.write_text(text.replace(old, new, 1))
-
-          path = Path("ffi/python-binding/src/lib.rs")
-          text = path.read_text()
-          old = "let direct_result: PyResult<Option<Array1<f64>>> = Python::attach(|py| {"
-          new = "let direct_result: Option<Array1<f64>> = Python::attach(|py| {"
-          if text.count(old) != 1:
-              raise SystemExit("Python zero-copy result target changed")
-          path.write_text(text.replace(old, new, 1))
-
-          path = Path("ffi/python-binding/src/formula_plan.rs")
-          text = path.read_text()
-          old = "let mut engine = self.engine.take().ok_or_else(|| {"
-          if text.count(old) != 4:
-              raise SystemExit(f"expected 4 unnecessary mutable engines, found {text.count(old)}")
-          path.write_text(text.replace(old, "let engine = self.engine.take().ok_or_else(|| {"))
-
-          path = Path("ffi/android-binding/src/lib.rs")
-          text = path.read_text()
-          old = "    mut env: JNIEnv,"
-          if text.count(old) != 1:
-              raise SystemExit(f"expected 1 unnecessary mutable JNI env, found {text.count(old)}")
-          path.write_text(text.replace(old, "    env: JNIEnv,", 1))
-          PY
-      - name: Format and verify
-        run: |
-          cargo fmt --all
-          cargo check --workspace --all-targets --locked
-      - name: Commit source repair
-        shell: bash
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add core/src/formula/functions.rs core/src/formula/types.rs core/src/formula/optimizer.rs core/src/factors.rs core/src/patterns/candlestick.rs ffi/python-binding/src/lib.rs ffi/python-binding/src/formula_plan.rs ffi/android-binding/src/lib.rs
-          if git diff --cached --quiet; then
-            echo "No source changes to commit"
-            exit 0
-          fi
-          git commit -m "fix: repair workspace compile regressions"
-          git push origin HEAD:${GITHUB_REF_NAME}
-
   workspace-check:
     name: Workspace compile check
     runs-on: ubuntu-22.04
@@ -164,6 +28,7 @@ pub fn cdl_onneck(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Res
       - name: Check every workspace crate
         run: cargo check --workspace --all-targets --locked
 
+  # Validation jobs run independently; the advisory preflight must not fan out a single skip.
   version-consistency:
     name: Version consistency
     runs-on: ubuntu-22.04
@@ -240,10 +105,13 @@ pub fn cdl_onneck(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Res
     permissions:
       contents: read
       checks: write
-    continue-on-error: true
+    continue-on-error: true # advisory until the dependency baseline is reviewed
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: rustsec/audit-check@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+
+  # Other FFI bindings require their own language toolchains. Python wheel
+  # builds and runtime tests run in python-wheels.yml across the matrix.
