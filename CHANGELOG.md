@@ -10,8 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.2] - Pending release (source baseline 2026-09-02)
 
 - Added cross-language version checks for .NET and Java binding metadata, with SSOT version-matrix coverage.
+- Connected the remaining Android, Go, and .NET generated indicator/chart entrypoints and hardened pre-epoch formula timestamp conversion with regression coverage.
 
-> The `0.1.2` source metadata is ready on `main`; the GitHub Release and downloadable assets are still pending.
+> The `0.1.2` source metadata is ready on the repair branch in PR #13; the GitHub Release and downloadable assets are still pending until CI verification and merge.
 
 ### Changed
 - 将公式运行时升级为可复用的零拷贝/增量执行模型：公共子表达式合并、`eval_range`/`eval_last`、容量增长式 `append_bar`、持久化 Bytecode/JIT 与缓冲池。
