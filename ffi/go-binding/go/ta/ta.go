@@ -63,6 +63,15 @@ extern int ta_formula_validate(const char *source);
 extern char* ta_formula_get_template(const char *name);
 extern char* ta_formula_search_templates(const char *keyword);
 extern char* ta_formula_list_categories();
+
+extern char* ta_darvas_box_json(const double *high, const double *low, const double *close, int length, int lookback, int confirmation);
+extern char* ta_renko_json(const double *high, const double *low, int length, double box_size);
+extern char* ta_kagi_json(const double *close, int length, double reversal);
+extern char* ta_point_and_figure_json(const double *high, const double *low, int length, double box_size, int reversal);
+extern char* ta_three_line_break_json(const double *close, int length, int lines);
+extern char* ta_williams_alligator_json(const double *close, int length);
+extern char* ta_heikin_ashi_json(const double *open, const double *high, const double *low, const double *close, int length);
+
 extern void ta_free_string(char *s);
 
 extern void* ta_streaming_sma_new(int period);
@@ -1144,6 +1153,61 @@ func FormulaSearchTemplates(keyword string) (string, error) {
 // FormulaListCategories returns all formula template categories as JSON.
 func FormulaListCategories() (string, error) {
 	return formulaJSONResult(C.ta_formula_list_categories())
+}
+
+// DarvasBoxJSON returns the Darvas box result as JSON.
+func DarvasBoxJSON(high, low, close []float64, lookback, confirmation int) (string, error) {
+	if len(high) != len(low) || len(high) != len(close) {
+		return "", errors.New("all input arrays must have the same length")
+	}
+	return formulaJSONResult(C.ta_darvas_box_json(
+		toCSlice(high), toCSlice(low), toCSlice(close), cInt(len(high)),
+		cInt(lookback), cInt(confirmation),
+	))
+}
+
+// RenkoJSON returns the Renko result as JSON.
+func RenkoJSON(high, low []float64, boxSize float64) (string, error) {
+	if len(high) != len(low) {
+		return "", errors.New("all input arrays must have the same length")
+	}
+	return formulaJSONResult(C.ta_renko_json(toCSlice(high), toCSlice(low), cInt(len(high)), C.double(boxSize)))
+}
+
+// KagiJSON returns the Kagi result as JSON.
+func KagiJSON(close []float64, reversal float64) (string, error) {
+	return formulaJSONResult(C.ta_kagi_json(toCSlice(close), cInt(len(close)), C.double(reversal)))
+}
+
+// PointAndFigureJSON returns the point-and-figure result as JSON.
+func PointAndFigureJSON(high, low []float64, boxSize float64, reversal int) (string, error) {
+	if len(high) != len(low) {
+		return "", errors.New("all input arrays must have the same length")
+	}
+	return formulaJSONResult(C.ta_point_and_figure_json(
+		toCSlice(high), toCSlice(low), cInt(len(high)),
+		C.double(boxSize), cInt(reversal),
+	))
+}
+
+// ThreeLineBreakJSON returns the three-line-break result as JSON.
+func ThreeLineBreakJSON(close []float64, lines int) (string, error) {
+	return formulaJSONResult(C.ta_three_line_break_json(toCSlice(close), cInt(len(close)), cInt(lines)))
+}
+
+// WilliamsAlligatorJSON returns the Williams Alligator result as JSON.
+func WilliamsAlligatorJSON(close []float64) (string, error) {
+	return formulaJSONResult(C.ta_williams_alligator_json(toCSlice(close), cInt(len(close))))
+}
+
+// HeikinAshiJSON returns the Heikin-Ashi result as JSON.
+func HeikinAshiJSON(open, high, low, close []float64) (string, error) {
+	if len(open) != len(high) || len(open) != len(low) || len(open) != len(close) {
+		return "", errors.New("all input arrays must have the same length")
+	}
+	return formulaJSONResult(C.ta_heikin_ashi_json(
+		toCSlice(open), toCSlice(high), toCSlice(low), toCSlice(close), cInt(len(open)),
+	))
 }
 
 // FormulaEvalZeroCopy evaluates a formula string with zero-copy optimization.
