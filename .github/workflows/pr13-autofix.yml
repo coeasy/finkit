@@ -93,17 +93,8 @@ jobs:
 
           path = Path("core/src/patterns/candlestick.rs")
           text = path.read_text()
-          old = '''/// CDLINNECK — In Neck Pattern (看跌)
-pub fn cdl_inneck(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result<PatternResult> {
-    in_neck(open, high, low, close)
-}
-'''
-          new = old + '''
-/// CDLONNECK — On Neck Pattern (看跌)
-pub fn cdl_onneck(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result<PatternResult> {
-    on_neck(open, high, low, close)
-}
-'''
+          old = "/// CDLINNECK — In Neck Pattern (看跌)\npub fn cdl_inneck(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result<PatternResult> {\n    in_neck(open, high, low, close)\n}\n"
+          new = old + "\n/// CDLONNECK — On Neck Pattern (看跌)\npub fn cdl_onneck(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result<PatternResult> {\n    on_neck(open, high, low, close)\n}\n"
           if text.count(old) != 1 or "pub fn cdl_onneck(" in text:
               raise SystemExit("CDLONNECK wrapper target changed")
           path.write_text(text.replace(old, new, 1))
