@@ -44,8 +44,8 @@ jobs:
 
           replace_once(
               "core/src/formula/engine.rs",
-              "        let ast = FormulaOptimizer::optimize(&ast);",
-              "        let ast = FormulaOptimizer::optimize_for_execution(&ast);",
+              "        let ast = parse_formula(source).map_err(FormulaError::ParseError)?;\n        // Compile the optimized AST once so repeated evaluations share the\n        // same CSE and constant-folding decisions.\n        let ast = FormulaOptimizer::optimize(&ast);\n        let formula = CompiledFormula {",
+              "        let ast = parse_formula(source).map_err(FormulaError::ParseError)?;\n        // Compile the optimized AST once so repeated evaluations share the\n        // same CSE and constant-folding decisions while preserving assignment\n        // side effects exposed through FormulaContext::variables.\n        let ast = FormulaOptimizer::optimize_for_execution(&ast);\n        let formula = CompiledFormula {",
           )
 
           replace_once(
