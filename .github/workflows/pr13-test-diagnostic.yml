@@ -65,17 +65,38 @@ jobs:
           cargo test -p finkit --locked formula::sandbox::tests -- --nocapture
 
       - name: Verify full core suite
-        run: cargo test -p finkit --locked
+        id: core
+        shell: bash
+        run: |
+          set +e
+          cargo test -p finkit --locked -- --nocapture 2>&1 | tee /tmp/pr13-core.log
+          status=${PIPESTATUS[0]}
+          tail -n 600 /tmp/pr13-core.log > .ci-pr13-full-test-failures.txt
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
 
-      - name: Verify workspace compile
-        run: cargo check --workspace --all-targets --locked
-
-      - name: Commit verified repair and remove diagnostics
+      - name: Capture remaining core failures
+        if: steps.core.outputs.status != '0'
         shell: bash
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git rm -f .github/workflows/pr13-test-diagnostic.yml .ci-pr13-test-failures.txt
-          git add core/src/formula/grammar.pest core/src/formula/engine.rs
+          git add .ci-pr13-full-test-failures.txt
+          git commit -m "chore: capture remaining PR 13 core failures"
+          git push
+          exit 1
+
+      - name: Verify workspace compile
+        if: steps.core.outputs.status == '0'
+        run: cargo check --workspace --all-targets --locked
+
+      - name: Commit verified repair and remove diagnostics
+        if: steps.core.outputs.status == '0'
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          rm -f .github/workflows/pr13-test-diagnostic.yml .ci-pr13-test-failures.txt .ci-pr13-full-test-failures.txt
+          git add -A
           git commit -m "fix: enforce formula sandbox and terminal parsing"
           git push
