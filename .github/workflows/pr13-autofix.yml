@@ -115,10 +115,11 @@ jobs:
 
           path = Path("ffi/android-binding/src/lib.rs")
           text = path.read_text()
-          old = "    mut env: JNIEnv,"
+          old = "pub extern \"system\" fn Java_com_finkit_indicators_Finkit_version(\n    mut env: JNIEnv,"
+          new = "pub extern \"system\" fn Java_com_finkit_indicators_Finkit_version(\n    env: JNIEnv,"
           if text.count(old) != 1:
-              raise SystemExit(f"expected 1 unnecessary mutable JNI env, found {text.count(old)}")
-          path.write_text(text.replace(old, "    env: JNIEnv,", 1))
+              raise SystemExit("Android version JNI target changed")
+          path.write_text(text.replace(old, new, 1))
           PY
 
       - name: Format repaired sources
