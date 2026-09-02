@@ -241,15 +241,8 @@ impl PyCompiledFormula {
                 "compiled formula is already being evaluated",
             )
         })?;
-        let execution = engine.eval_zero_copy_inputs(
-            &self.compiled,
-            open,
-            high,
-            low,
-            close,
-            volume,
-            amount,
-        );
+        let execution =
+            engine.eval_zero_copy_inputs(&self.compiled, open, high, low, close, volume, amount);
         self.engine = Some(engine);
         let result = execution.map_err(formula_runtime_error)?;
         let output = PyDict::new(py);
@@ -324,11 +317,13 @@ impl PyCompiledFormula {
         amount: Option<PyReadonlyArray1<'py, f64>>,
     ) -> PyResult<f64> {
         let context = match (open, high, low, close, volume, amount) {
-            (None, None, None, None, None, None) => self.stream_context.take().ok_or_else(|| {
-                PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                    "eval_last() without arrays requires a previous eval() or eval_range()",
-                )
-            })?,
+            (None, None, None, None, None, None) => {
+                self.stream_context.take().ok_or_else(|| {
+                    PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                        "eval_last() without arrays requires a previous eval() or eval_range()",
+                    )
+                })?
+            }
             (Some(open), Some(high), Some(low), Some(close), Some(volume), amount) => {
                 let open = read_array("open", open)?;
                 let high = read_array("high", high)?;

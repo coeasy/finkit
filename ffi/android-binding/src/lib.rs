@@ -18,8 +18,8 @@
 use jni::objects::{JClass, JDoubleArray};
 use jni::sys::{jarray, jdoubleArray, jint, jsize, jstring};
 use jni::JNIEnv;
-use std::panic;
 use std::os::raw::c_char;
+use std::panic;
 
 // ---- helpers ---------------------------------------------------------------
 
@@ -97,7 +97,6 @@ fn dispatch_ta(name: &str, data: &[f64], period: usize) -> Vec<f64> {
 }
 
 include!("generated.rs");
-
 
 #[no_mangle]
 pub extern "system" fn Java_com_finkit_indicators_Finkit_version(

@@ -3066,12 +3066,7 @@ fn fn_dmi(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, For
 fn fn_dx(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let (high, low, close, n) = resolve_hlc_args("DX", ctx, args)?;
     let data_len = ctx.data_len;
-    match crate::indicators::momentum::dx(
-        high,
-        low,
-        close.as_slice().unwrap(),
-        n,
-    ) {
+    match crate::indicators::momentum::dx(high, low, close.as_slice().unwrap(), n) {
         Ok(r) => Ok(r),
         Err(_) => Ok(nan_vec(data_len)),
     }
@@ -3080,12 +3075,7 @@ fn fn_dx(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, Form
 fn fn_plus_di(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let (high, low, close, n) = resolve_hlc_args("PLUS_DI", ctx, args)?;
     let data_len = ctx.data_len;
-    match crate::indicators::momentum::plus_di(
-        high,
-        low,
-        close.as_slice().unwrap(),
-        n,
-    ) {
+    match crate::indicators::momentum::plus_di(high, low, close.as_slice().unwrap(), n) {
         Ok(r) => Ok(r),
         Err(_) => Ok(nan_vec(data_len)),
     }
@@ -3094,12 +3084,7 @@ fn fn_plus_di(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>,
 fn fn_minus_di(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let (high, low, close, n) = resolve_hlc_args("MINUS_DI", ctx, args)?;
     let data_len = ctx.data_len;
-    match crate::indicators::momentum::minus_di(
-        high,
-        low,
-        close.as_slice().unwrap(),
-        n,
-    ) {
+    match crate::indicators::momentum::minus_di(high, low, close.as_slice().unwrap(), n) {
         Ok(r) => Ok(r),
         Err(_) => Ok(nan_vec(data_len)),
     }
@@ -3108,12 +3093,7 @@ fn fn_minus_di(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
 fn fn_adxr(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let (high, low, close, n) = resolve_hlc_args("ADXR", ctx, args)?;
     let data_len = ctx.data_len;
-    match crate::indicators::momentum::adxr(
-        high,
-        low,
-        close.as_slice().unwrap(),
-        n,
-    ) {
+    match crate::indicators::momentum::adxr(high, low, close.as_slice().unwrap(), n) {
         Ok(r) => Ok(r),
         Err(_) => Ok(nan_vec(data_len)),
     }
@@ -3122,11 +3102,7 @@ fn fn_adxr(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, Fo
 fn fn_aroonosc(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     let (high, low, n) = resolve_hl_args("AROONOSC", ctx, args)?;
     let data_len = ctx.data_len;
-    match crate::indicators::momentum::aroonosc(
-        high,
-        low,
-        n,
-    ) {
+    match crate::indicators::momentum::aroonosc(high, low, n) {
         Ok(r) => Ok(r),
         Err(_) => Ok(nan_vec(data_len)),
     }
@@ -3159,7 +3135,12 @@ fn resolve_hlc_args<'a>(
 ) -> Result<(&'a [f64], &'a [f64], &'a [f64], usize), FormulaError> {
     if args.len() >= 4 {
         let n = extract_n(args, 3, name)?;
-        Ok((args[0].as_slice().unwrap(), args[1].as_slice().unwrap(), args[2].as_slice().unwrap(), n))
+        Ok((
+            args[0].as_slice().unwrap(),
+            args[1].as_slice().unwrap(),
+            args[2].as_slice().unwrap(),
+            n,
+        ))
     } else if args.len() >= 2 {
         let n = extract_n(args, 1, name)?;
         Ok((&ctx.high, &ctx.low, &ctx.close, n))
@@ -3263,14 +3244,7 @@ fn fn_ultosc(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, 
         28
     };
     let data_len = ctx.data_len;
-    match lib_momentum::ultosc(
-        high,
-        low,
-        close.as_slice().unwrap(),
-        p1,
-        p2,
-        p3,
-    ) {
+    match lib_momentum::ultosc(high, low, close.as_slice().unwrap(), p1, p2, p3) {
         Ok(r) => Ok(r),
         Err(_) => Ok(nan_vec(data_len)),
     }
@@ -3682,8 +3656,7 @@ fn ts_to_date_parts(ts: i64) -> (i32, u32, u32, u32, u32, u32) {
     let year_of_era =
         (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
     let year = year_of_era + era * 400;
-    let day_of_year = day_of_era
-        - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
     let month_part = (5 * day_of_year + 2) / 153;
     let day = day_of_year - (153 * month_part + 2) / 5 + 1;
     let month = month_part + if month_part < 10 { 3 } else { -9 };
@@ -6603,5 +6576,4 @@ mod talib_compat_tests {
         assert_eq!(hhv.to_vec(), vec![0.0, 1.0, 2.0, 1.0, 0.0]);
         assert_eq!(llv.to_vec(), vec![0.0, 0.0, 1.0, 2.0, 2.0]);
     }
-
 }

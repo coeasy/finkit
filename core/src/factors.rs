@@ -120,11 +120,7 @@ impl FactorContext {
     }
 
     /// Builder-style insertion helper.
-    pub fn with_series(
-        mut self,
-        name: impl Into<String>,
-        values: Vec<f64>,
-    ) -> FactorResult<Self> {
+    pub fn with_series(mut self, name: impl Into<String>, values: Vec<f64>) -> FactorResult<Self> {
         self.insert(name, values)?;
         Ok(self)
     }
@@ -442,7 +438,11 @@ pub fn rolling_volatility(values: &[f64], period: usize) -> FactorResult<Vec<f64
 
 /// Z-score finite values while preserving NaNs and infinities as NaN.
 pub fn zscore(values: &[f64]) -> Vec<f64> {
-    let finite: Vec<f64> = values.iter().copied().filter(|value| value.is_finite()).collect();
+    let finite: Vec<f64> = values
+        .iter()
+        .copied()
+        .filter(|value| value.is_finite())
+        .collect();
     if finite.is_empty() {
         return vec![f64::NAN; values.len()];
     }
@@ -514,7 +514,11 @@ pub fn winsorize(values: &[f64], lower: f64, upper: f64) -> FactorResult<Vec<f64
             "winsorize quantiles must satisfy 0 <= lower <= upper <= 1".to_string(),
         ));
     }
-    let mut sorted: Vec<f64> = values.iter().copied().filter(|value| value.is_finite()).collect();
+    let mut sorted: Vec<f64> = values
+        .iter()
+        .copied()
+        .filter(|value| value.is_finite())
+        .collect();
     if sorted.is_empty() {
         return Ok(vec![f64::NAN; values.len()]);
     }

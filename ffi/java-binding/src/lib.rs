@@ -219,55 +219,54 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaEvalMulti(
     volume: JDoubleArray,
 ) -> jni::sys::jstring {
     ffi_catch_ptr(|| {
+        let source_str: String = match env.get_string(&source) {
+            Ok(s) => s.into(),
+            Err(_) => return std::ptr::null_mut(),
+        };
 
-    let source_str: String = match env.get_string(&source) {
-        Ok(s) => s.into(),
-        Err(_) => return std::ptr::null_mut(),
-    };
+        let open_vec = get_double_array(&mut env, open);
+        let high_vec = get_double_array(&mut env, high);
+        let low_vec = get_double_array(&mut env, low);
+        let close_vec = get_double_array(&mut env, close);
+        let volume_vec = get_double_array(&mut env, volume);
 
-    let open_vec = get_double_array(&mut env, open);
-    let high_vec = get_double_array(&mut env, high);
-    let low_vec = get_double_array(&mut env, low);
-    let close_vec = get_double_array(&mut env, close);
-    let volume_vec = get_double_array(&mut env, volume);
+        let open_arr = Array1::from_vec(open_vec);
+        let high_arr = Array1::from_vec(high_vec);
+        let low_arr = Array1::from_vec(low_vec);
+        let close_arr = Array1::from_vec(close_vec);
+        let volume_arr = Array1::from_vec(volume_vec);
 
-    let open_arr = Array1::from_vec(open_vec);
-    let high_arr = Array1::from_vec(high_vec);
-    let low_arr = Array1::from_vec(low_vec);
-    let close_arr = Array1::from_vec(close_vec);
-    let volume_arr = Array1::from_vec(volume_vec);
+        let mut ctx = FormulaContext::new(open_arr, high_arr, low_arr, close_arr, volume_arr, None);
+        let mut engine = FormulaEngine::new();
 
-    let mut ctx = FormulaContext::new(open_arr, high_arr, low_arr, close_arr, volume_arr, None);
-    let mut engine = FormulaEngine::new();
+        match engine.eval_multi(&source_str, &mut ctx) {
+            Ok(multi) => {
+                let mut names_vec = Vec::new();
+                let mut values_vec = Vec::new();
+                for name in multi.names() {
+                    names_vec.push(name.clone());
+                    if let Some(arr) = multi.get(name) {
+                        values_vec.push(arr.to_vec());
+                    } else {
+                        values_vec.push(vec![]);
+                    }
+                }
 
-    match engine.eval_multi(&source_str, &mut ctx) {
-        Ok(multi) => {
-            let mut names_vec = Vec::new();
-            let mut values_vec = Vec::new();
-            for name in multi.names() {
-                names_vec.push(name.clone());
-                if let Some(arr) = multi.get(name) {
-                    values_vec.push(arr.to_vec());
-                } else {
-                    values_vec.push(vec![]);
+                let json_value = serde_json::json!({
+                    "names": names_vec,
+                    "values": values_vec,
+                    "__result__": multi.final_value.to_vec(),
+                });
+                let json_str =
+                    serde_json::to_string(&json_value).unwrap_or_else(|_| "{}".to_string());
+                match env.new_string(json_str) {
+                    // Caller must free with freeJString.
+                    Ok(jstr) => jstr.into_raw(),
+                    Err(_) => std::ptr::null_mut(),
                 }
             }
-
-            let json_value = serde_json::json!({
-                "names": names_vec,
-                "values": values_vec,
-                "__result__": multi.final_value.to_vec(),
-            });
-            let json_str = serde_json::to_string(&json_value).unwrap_or_else(|_| "{}".to_string());
-            match env.new_string(json_str) {
-                // Caller must free with freeJString.
-                Ok(jstr) => jstr.into_raw(),
-                Err(_) => std::ptr::null_mut(),
-            }
+            Err(_) => std::ptr::null_mut(),
         }
-        Err(_) => std::ptr::null_mut(),
-    }
-
     })
 }
 
@@ -283,43 +282,42 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaEvalDraw(
     volume: JDoubleArray,
 ) -> jni::sys::jstring {
     ffi_catch_ptr(|| {
+        let source_str: String = match env.get_string(&source) {
+            Ok(s) => s.into(),
+            Err(_) => return std::ptr::null_mut(),
+        };
 
-    let source_str: String = match env.get_string(&source) {
-        Ok(s) => s.into(),
-        Err(_) => return std::ptr::null_mut(),
-    };
+        let open_vec = get_double_array(&mut env, open);
+        let high_vec = get_double_array(&mut env, high);
+        let low_vec = get_double_array(&mut env, low);
+        let close_vec = get_double_array(&mut env, close);
+        let volume_vec = get_double_array(&mut env, volume);
 
-    let open_vec = get_double_array(&mut env, open);
-    let high_vec = get_double_array(&mut env, high);
-    let low_vec = get_double_array(&mut env, low);
-    let close_vec = get_double_array(&mut env, close);
-    let volume_vec = get_double_array(&mut env, volume);
+        let open_arr = Array1::from_vec(open_vec);
+        let high_arr = Array1::from_vec(high_vec);
+        let low_arr = Array1::from_vec(low_vec);
+        let close_arr = Array1::from_vec(close_vec);
+        let volume_arr = Array1::from_vec(volume_vec);
 
-    let open_arr = Array1::from_vec(open_vec);
-    let high_arr = Array1::from_vec(high_vec);
-    let low_arr = Array1::from_vec(low_vec);
-    let close_arr = Array1::from_vec(close_vec);
-    let volume_arr = Array1::from_vec(volume_vec);
+        let mut ctx = FormulaContext::new(open_arr, high_arr, low_arr, close_arr, volume_arr, None);
+        let mut engine = FormulaEngine::new();
 
-    let mut ctx = FormulaContext::new(open_arr, high_arr, low_arr, close_arr, volume_arr, None);
-    let mut engine = FormulaEngine::new();
-
-    match engine.eval(&source_str, &mut ctx) {
-        Ok(_final_value) => {
-            let draw_commands = ctx.draw_commands.borrow();
-            let json_value = serde_json::json!({
-                "drawCommands": draw_commands.commands,
-            });
-            let json_str = serde_json::to_string(&json_value).unwrap_or_else(|_| "{}".to_string());
-            match env.new_string(json_str) {
-                // Caller must free with freeJString.
-                Ok(jstr) => jstr.into_raw(),
-                Err(_) => std::ptr::null_mut(),
+        match engine.eval(&source_str, &mut ctx) {
+            Ok(_final_value) => {
+                let draw_commands = ctx.draw_commands.borrow();
+                let json_value = serde_json::json!({
+                    "drawCommands": draw_commands.commands,
+                });
+                let json_str =
+                    serde_json::to_string(&json_value).unwrap_or_else(|_| "{}".to_string());
+                match env.new_string(json_str) {
+                    // Caller must free with freeJString.
+                    Ok(jstr) => jstr.into_raw(),
+                    Err(_) => std::ptr::null_mut(),
+                }
             }
+            Err(_) => std::ptr::null_mut(),
         }
-        Err(_) => std::ptr::null_mut(),
-    }
-
     })
 }
 
@@ -335,42 +333,41 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaEvalDebug(
     volume: JDoubleArray,
 ) -> jni::sys::jstring {
     ffi_catch_ptr(|| {
+        let source_str: String = match env.get_string(&source) {
+            Ok(s) => s.into(),
+            Err(_) => return std::ptr::null_mut(),
+        };
 
-    let source_str: String = match env.get_string(&source) {
-        Ok(s) => s.into(),
-        Err(_) => return std::ptr::null_mut(),
-    };
+        let open_vec = get_double_array(&mut env, open);
+        let high_vec = get_double_array(&mut env, high);
+        let low_vec = get_double_array(&mut env, low);
+        let close_vec = get_double_array(&mut env, close);
+        let volume_vec = get_double_array(&mut env, volume);
 
-    let open_vec = get_double_array(&mut env, open);
-    let high_vec = get_double_array(&mut env, high);
-    let low_vec = get_double_array(&mut env, low);
-    let close_vec = get_double_array(&mut env, close);
-    let volume_vec = get_double_array(&mut env, volume);
+        let open_arr = Array1::from_vec(open_vec);
+        let high_arr = Array1::from_vec(high_vec);
+        let low_arr = Array1::from_vec(low_vec);
+        let close_arr = Array1::from_vec(close_vec);
+        let volume_arr = Array1::from_vec(volume_vec);
 
-    let open_arr = Array1::from_vec(open_vec);
-    let high_arr = Array1::from_vec(high_vec);
-    let low_arr = Array1::from_vec(low_vec);
-    let close_arr = Array1::from_vec(close_vec);
-    let volume_arr = Array1::from_vec(volume_vec);
+        let mut ctx = FormulaContext::new(open_arr, high_arr, low_arr, close_arr, volume_arr, None);
+        let mut engine = FormulaEngine::new();
 
-    let mut ctx = FormulaContext::new(open_arr, high_arr, low_arr, close_arr, volume_arr, None);
-    let mut engine = FormulaEngine::new();
-
-    match engine.eval_with_debug(&source_str, &mut ctx) {
-        Ok((_final_value, debugger)) => {
-            let json_value = serde_json::json!({
-                "events": debugger.get_events(),
-            });
-            let json_str = serde_json::to_string(&json_value).unwrap_or_else(|_| "{}".to_string());
-            match env.new_string(json_str) {
-                // Caller must free with freeJString.
-                Ok(jstr) => jstr.into_raw(),
-                Err(_) => std::ptr::null_mut(),
+        match engine.eval_with_debug(&source_str, &mut ctx) {
+            Ok((_final_value, debugger)) => {
+                let json_value = serde_json::json!({
+                    "events": debugger.get_events(),
+                });
+                let json_str =
+                    serde_json::to_string(&json_value).unwrap_or_else(|_| "{}".to_string());
+                match env.new_string(json_str) {
+                    // Caller must free with freeJString.
+                    Ok(jstr) => jstr.into_raw(),
+                    Err(_) => std::ptr::null_mut(),
+                }
             }
+            Err(_) => std::ptr::null_mut(),
         }
-        Err(_) => std::ptr::null_mut(),
-    }
-
     })
 }
 
@@ -381,25 +378,23 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaGetTemplate(
     name: JString,
 ) -> jni::sys::jstring {
     ffi_catch_ptr(|| {
+        let name_str: String = match env.get_string(&name) {
+            Ok(s) => s.into(),
+            Err(_) => return std::ptr::null_mut(),
+        };
 
-    let name_str: String = match env.get_string(&name) {
-        Ok(s) => s.into(),
-        Err(_) => return std::ptr::null_mut(),
-    };
-
-    let engine = FormulaEngine::new();
-    match engine.get_template(&name_str) {
-        Some(template) => {
-            let json_str = serde_json::to_string(template).unwrap_or_else(|_| "{}".to_string());
-            match env.new_string(json_str) {
-                // Caller must free with freeJString.
-                Ok(jstr) => jstr.into_raw(),
-                Err(_) => std::ptr::null_mut(),
+        let engine = FormulaEngine::new();
+        match engine.get_template(&name_str) {
+            Some(template) => {
+                let json_str = serde_json::to_string(template).unwrap_or_else(|_| "{}".to_string());
+                match env.new_string(json_str) {
+                    // Caller must free with freeJString.
+                    Ok(jstr) => jstr.into_raw(),
+                    Err(_) => std::ptr::null_mut(),
+                }
             }
+            None => std::ptr::null_mut(),
         }
-        None => std::ptr::null_mut(),
-    }
-
     })
 }
 
@@ -410,21 +405,19 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaSearchTemplates(
     keyword: JString,
 ) -> jni::sys::jstring {
     ffi_catch_ptr(|| {
+        let keyword_str: String = match env.get_string(&keyword) {
+            Ok(s) => s.into(),
+            Err(_) => return std::ptr::null_mut(),
+        };
 
-    let keyword_str: String = match env.get_string(&keyword) {
-        Ok(s) => s.into(),
-        Err(_) => return std::ptr::null_mut(),
-    };
-
-    let engine = FormulaEngine::new();
-    let templates = engine.search_templates(&keyword_str);
-    let json_str = serde_json::to_string(&templates).unwrap_or_else(|_| "[]".to_string());
-    match env.new_string(json_str) {
-        // Caller must free with freeJString.
-        Ok(jstr) => jstr.into_raw(),
-        Err(_) => std::ptr::null_mut(),
-    }
-
+        let engine = FormulaEngine::new();
+        let templates = engine.search_templates(&keyword_str);
+        let json_str = serde_json::to_string(&templates).unwrap_or_else(|_| "[]".to_string());
+        match env.new_string(json_str) {
+            // Caller must free with freeJString.
+            Ok(jstr) => jstr.into_raw(),
+            Err(_) => std::ptr::null_mut(),
+        }
     })
 }
 
@@ -434,17 +427,15 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaListCategories(
     _class: JClass,
 ) -> jni::sys::jstring {
     ffi_catch_ptr(|| {
+        use finkit::formula::templates::FormulaTemplates;
 
-    use finkit::formula::templates::FormulaTemplates;
-
-    let categories = FormulaTemplates::categories();
-    let json_str = serde_json::to_string(&categories).unwrap_or_else(|_| "[]".to_string());
-    match env.new_string(json_str) {
-        // Caller must free with freeJString.
-        Ok(jstr) => jstr.into_raw(),
-        Err(_) => std::ptr::null_mut(),
-    }
-
+        let categories = FormulaTemplates::categories();
+        let json_str = serde_json::to_string(&categories).unwrap_or_else(|_| "[]".to_string());
+        match env.new_string(json_str) {
+            // Caller must free with freeJString.
+            Ok(jstr) => jstr.into_raw(),
+            Err(_) => std::ptr::null_mut(),
+        }
     })
 }
 
@@ -462,15 +453,13 @@ pub extern "system" fn Java_com_finkit_Indicators_dx(
     period: jint,
 ) -> jdoubleArray {
     ffi_catch_ptr(|| {
-
-    let high_vec = get_double_array(&mut env, high);
-    let low_vec = get_double_array(&mut env, low);
-    let close_vec = get_double_array(&mut env, close);
-    match indicators::dx(&high_vec, &low_vec, &close_vec, period as usize) {
-        Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
-        Err(_) => std::ptr::null_mut(),
-    }
-
+        let high_vec = get_double_array(&mut env, high);
+        let low_vec = get_double_array(&mut env, low);
+        let close_vec = get_double_array(&mut env, close);
+        match indicators::dx(&high_vec, &low_vec, &close_vec, period as usize) {
+            Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
+            Err(_) => std::ptr::null_mut(),
+        }
     })
 }
 
@@ -484,15 +473,13 @@ pub extern "system" fn Java_com_finkit_Indicators_plusDi(
     period: jint,
 ) -> jdoubleArray {
     ffi_catch_ptr(|| {
-
-    let high_vec = get_double_array(&mut env, high);
-    let low_vec = get_double_array(&mut env, low);
-    let close_vec = get_double_array(&mut env, close);
-    match indicators::plus_di(&high_vec, &low_vec, &close_vec, period as usize) {
-        Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
-        Err(_) => std::ptr::null_mut(),
-    }
-
+        let high_vec = get_double_array(&mut env, high);
+        let low_vec = get_double_array(&mut env, low);
+        let close_vec = get_double_array(&mut env, close);
+        match indicators::plus_di(&high_vec, &low_vec, &close_vec, period as usize) {
+            Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
+            Err(_) => std::ptr::null_mut(),
+        }
     })
 }
 
@@ -506,15 +493,13 @@ pub extern "system" fn Java_com_finkit_Indicators_minusDi(
     period: jint,
 ) -> jdoubleArray {
     ffi_catch_ptr(|| {
-
-    let high_vec = get_double_array(&mut env, high);
-    let low_vec = get_double_array(&mut env, low);
-    let close_vec = get_double_array(&mut env, close);
-    match indicators::minus_di(&high_vec, &low_vec, &close_vec, period as usize) {
-        Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
-        Err(_) => std::ptr::null_mut(),
-    }
-
+        let high_vec = get_double_array(&mut env, high);
+        let low_vec = get_double_array(&mut env, low);
+        let close_vec = get_double_array(&mut env, close);
+        match indicators::minus_di(&high_vec, &low_vec, &close_vec, period as usize) {
+            Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
+            Err(_) => std::ptr::null_mut(),
+        }
     })
 }
 
@@ -541,13 +526,11 @@ pub extern "system" fn Java_com_finkit_Indicators_htDcperiod(
     input: JDoubleArray,
 ) -> jdoubleArray {
     ffi_catch_ptr(|| {
-
-    let input_vec = get_double_array(&mut env, input);
-    match indicators::ht_dcperiod(&input_vec) {
-        Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
-        Err(_) => std::ptr::null_mut(),
-    }
-
+        let input_vec = get_double_array(&mut env, input);
+        match indicators::ht_dcperiod(&input_vec) {
+            Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
+            Err(_) => std::ptr::null_mut(),
+        }
     })
 }
 
@@ -558,13 +541,11 @@ pub extern "system" fn Java_com_finkit_Indicators_htDcphase(
     input: JDoubleArray,
 ) -> jdoubleArray {
     ffi_catch_ptr(|| {
-
-    let input_vec = get_double_array(&mut env, input);
-    match indicators::ht_dcphase(&input_vec) {
-        Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
-        Err(_) => std::ptr::null_mut(),
-    }
-
+        let input_vec = get_double_array(&mut env, input);
+        match indicators::ht_dcphase(&input_vec) {
+            Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
+            Err(_) => std::ptr::null_mut(),
+        }
     })
 }
 
@@ -607,13 +588,11 @@ pub extern "system" fn Java_com_finkit_Indicators_htTrendmode(
     input: JDoubleArray,
 ) -> jdoubleArray {
     ffi_catch_ptr(|| {
-
-    let input_vec = get_double_array(&mut env, input);
-    match indicators::ht_trendmode(&input_vec) {
-        Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
-        Err(_) => std::ptr::null_mut(),
-    }
-
+        let input_vec = get_double_array(&mut env, input);
+        match indicators::ht_trendmode(&input_vec) {
+            Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
+            Err(_) => std::ptr::null_mut(),
+        }
     })
 }
 
@@ -624,13 +603,11 @@ pub extern "system" fn Java_com_finkit_Indicators_htTrendline(
     input: JDoubleArray,
 ) -> jdoubleArray {
     ffi_catch_ptr(|| {
-
-    let input_vec = get_double_array(&mut env, input);
-    match indicators::ht_trendline(&input_vec) {
-        Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
-        Err(_) => std::ptr::null_mut(),
-    }
-
+        let input_vec = get_double_array(&mut env, input);
+        match indicators::ht_trendline(&input_vec) {
+            Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
+            Err(_) => std::ptr::null_mut(),
+        }
     })
 }
 
@@ -646,13 +623,11 @@ pub extern "system" fn Java_com_finkit_Indicators_percentRank(
     period: jint,
 ) -> jdoubleArray {
     ffi_catch_ptr(|| {
-
-    let input_vec = get_double_array(&mut env, input);
-    match indicators::percent_rank(&input_vec, period as usize) {
-        Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
-        Err(_) => std::ptr::null_mut(),
-    }
-
+        let input_vec = get_double_array(&mut env, input);
+        match indicators::percent_rank(&input_vec, period as usize) {
+            Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
+            Err(_) => std::ptr::null_mut(),
+        }
     })
 }
 
@@ -665,13 +640,11 @@ pub extern "system" fn Java_com_finkit_Indicators_stdDev(
     nbDev: jdouble,
 ) -> jdoubleArray {
     ffi_catch_ptr(|| {
-
-    let input_vec = get_double_array(&mut env, input);
-    match indicators::std_dev(&input_vec, period as usize, nbDev) {
-        Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
-        Err(_) => std::ptr::null_mut(),
-    }
-
+        let input_vec = get_double_array(&mut env, input);
+        match indicators::std_dev(&input_vec, period as usize, nbDev) {
+            Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
+            Err(_) => std::ptr::null_mut(),
+        }
     })
 }
 
@@ -683,13 +656,11 @@ pub extern "system" fn Java_com_finkit_Indicators_linearReg(
     period: jint,
 ) -> jdoubleArray {
     ffi_catch_ptr(|| {
-
-    let input_vec = get_double_array(&mut env, input);
-    match indicators::linear_reg(&input_vec, period as usize) {
-        Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
-        Err(_) => std::ptr::null_mut(),
-    }
-
+        let input_vec = get_double_array(&mut env, input);
+        match indicators::linear_reg(&input_vec, period as usize) {
+            Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
+            Err(_) => std::ptr::null_mut(),
+        }
     })
 }
 
@@ -907,13 +878,11 @@ pub extern "system" fn Java_com_finkit_ChartPatterns_detectHeadShouldersTop(
     headRatio: jdouble,
 ) -> jintArray {
     ffi_catch_ptr(|| {
-
-    let high_vec = get_double_array(&mut env, high);
-    match chart::head_and_shoulders_top(&high_vec, minBars as usize, headRatio) {
-        Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
-        Err(_) => std::ptr::null_mut(),
-    }
-
+        let high_vec = get_double_array(&mut env, high);
+        match chart::head_and_shoulders_top(&high_vec, minBars as usize, headRatio) {
+            Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
+            Err(_) => std::ptr::null_mut(),
+        }
     })
 }
 
@@ -926,13 +895,11 @@ pub extern "system" fn Java_com_finkit_ChartPatterns_detectHeadShouldersBottom(
     headRatio: jdouble,
 ) -> jintArray {
     ffi_catch_ptr(|| {
-
-    let low_vec = get_double_array(&mut env, low);
-    match chart::head_and_shoulders_bottom(&low_vec, minBars as usize, headRatio) {
-        Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
-        Err(_) => std::ptr::null_mut(),
-    }
-
+        let low_vec = get_double_array(&mut env, low);
+        match chart::head_and_shoulders_bottom(&low_vec, minBars as usize, headRatio) {
+            Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
+            Err(_) => std::ptr::null_mut(),
+        }
     })
 }
 
@@ -945,13 +912,11 @@ pub extern "system" fn Java_com_finkit_ChartPatterns_detectDoubleTop(
     tolerance: jdouble,
 ) -> jintArray {
     ffi_catch_ptr(|| {
-
-    let high_vec = get_double_array(&mut env, high);
-    match chart::double_top(&high_vec, lookback as usize, tolerance) {
-        Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
-        Err(_) => std::ptr::null_mut(),
-    }
-
+        let high_vec = get_double_array(&mut env, high);
+        match chart::double_top(&high_vec, lookback as usize, tolerance) {
+            Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
+            Err(_) => std::ptr::null_mut(),
+        }
     })
 }
 
@@ -964,13 +929,11 @@ pub extern "system" fn Java_com_finkit_ChartPatterns_detectDoubleBottom(
     tolerance: jdouble,
 ) -> jintArray {
     ffi_catch_ptr(|| {
-
-    let low_vec = get_double_array(&mut env, low);
-    match chart::double_bottom(&low_vec, lookback as usize, tolerance) {
-        Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
-        Err(_) => std::ptr::null_mut(),
-    }
-
+        let low_vec = get_double_array(&mut env, low);
+        match chart::double_bottom(&low_vec, lookback as usize, tolerance) {
+            Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
+            Err(_) => std::ptr::null_mut(),
+        }
     })
 }
 
@@ -983,13 +946,11 @@ pub extern "system" fn Java_com_finkit_ChartPatterns_detectTripleTop(
     tolerance: jdouble,
 ) -> jintArray {
     ffi_catch_ptr(|| {
-
-    let high_vec = get_double_array(&mut env, high);
-    match chart::triple_top(&high_vec, lookback as usize, tolerance) {
-        Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
-        Err(_) => std::ptr::null_mut(),
-    }
-
+        let high_vec = get_double_array(&mut env, high);
+        match chart::triple_top(&high_vec, lookback as usize, tolerance) {
+            Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
+            Err(_) => std::ptr::null_mut(),
+        }
     })
 }
 
@@ -1002,13 +963,11 @@ pub extern "system" fn Java_com_finkit_ChartPatterns_detectTripleBottom(
     tolerance: jdouble,
 ) -> jintArray {
     ffi_catch_ptr(|| {
-
-    let low_vec = get_double_array(&mut env, low);
-    match chart::triple_bottom(&low_vec, lookback as usize, tolerance) {
-        Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
-        Err(_) => std::ptr::null_mut(),
-    }
-
+        let low_vec = get_double_array(&mut env, low);
+        match chart::triple_bottom(&low_vec, lookback as usize, tolerance) {
+            Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
+            Err(_) => std::ptr::null_mut(),
+        }
     })
 }
 
@@ -1022,14 +981,12 @@ pub extern "system" fn Java_com_finkit_ChartPatterns_detectAscendingTriangle(
     tolerance: jdouble,
 ) -> jintArray {
     ffi_catch_ptr(|| {
-
-    let high_vec = get_double_array(&mut env, high);
-    let low_vec = get_double_array(&mut env, low);
-    match chart::ascending_triangle(&high_vec, &low_vec, lookback as usize, tolerance) {
-        Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
-        Err(_) => std::ptr::null_mut(),
-    }
-
+        let high_vec = get_double_array(&mut env, high);
+        let low_vec = get_double_array(&mut env, low);
+        match chart::ascending_triangle(&high_vec, &low_vec, lookback as usize, tolerance) {
+            Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
+            Err(_) => std::ptr::null_mut(),
+        }
     })
 }
 
@@ -1043,14 +1000,12 @@ pub extern "system" fn Java_com_finkit_ChartPatterns_detectDescendingTriangle(
     tolerance: jdouble,
 ) -> jintArray {
     ffi_catch_ptr(|| {
-
-    let high_vec = get_double_array(&mut env, high);
-    let low_vec = get_double_array(&mut env, low);
-    match chart::descending_triangle(&high_vec, &low_vec, lookback as usize, tolerance) {
-        Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
-        Err(_) => std::ptr::null_mut(),
-    }
-
+        let high_vec = get_double_array(&mut env, high);
+        let low_vec = get_double_array(&mut env, low);
+        match chart::descending_triangle(&high_vec, &low_vec, lookback as usize, tolerance) {
+            Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
+            Err(_) => std::ptr::null_mut(),
+        }
     })
 }
 
@@ -1063,14 +1018,12 @@ pub extern "system" fn Java_com_finkit_ChartPatterns_detectSymmetricalTriangle(
     lookback: jint,
 ) -> jintArray {
     ffi_catch_ptr(|| {
-
-    let high_vec = get_double_array(&mut env, high);
-    let low_vec = get_double_array(&mut env, low);
-    match chart::symmetrical_triangle(&high_vec, &low_vec, lookback as usize) {
-        Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
-        Err(_) => std::ptr::null_mut(),
-    }
-
+        let high_vec = get_double_array(&mut env, high);
+        let low_vec = get_double_array(&mut env, low);
+        match chart::symmetrical_triangle(&high_vec, &low_vec, lookback as usize) {
+            Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
+            Err(_) => std::ptr::null_mut(),
+        }
     })
 }
 
@@ -1083,14 +1036,12 @@ pub extern "system" fn Java_com_finkit_ChartPatterns_detectRisingWedge(
     lookback: jint,
 ) -> jintArray {
     ffi_catch_ptr(|| {
-
-    let high_vec = get_double_array(&mut env, high);
-    let low_vec = get_double_array(&mut env, low);
-    match chart::rising_wedge(&high_vec, &low_vec, lookback as usize) {
-        Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
-        Err(_) => std::ptr::null_mut(),
-    }
-
+        let high_vec = get_double_array(&mut env, high);
+        let low_vec = get_double_array(&mut env, low);
+        match chart::rising_wedge(&high_vec, &low_vec, lookback as usize) {
+            Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
+            Err(_) => std::ptr::null_mut(),
+        }
     })
 }
 
@@ -1103,14 +1054,12 @@ pub extern "system" fn Java_com_finkit_ChartPatterns_detectFallingWedge(
     lookback: jint,
 ) -> jintArray {
     ffi_catch_ptr(|| {
-
-    let high_vec = get_double_array(&mut env, high);
-    let low_vec = get_double_array(&mut env, low);
-    match chart::falling_wedge(&high_vec, &low_vec, lookback as usize) {
-        Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
-        Err(_) => std::ptr::null_mut(),
-    }
-
+        let high_vec = get_double_array(&mut env, high);
+        let low_vec = get_double_array(&mut env, low);
+        match chart::falling_wedge(&high_vec, &low_vec, lookback as usize) {
+            Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
+            Err(_) => std::ptr::null_mut(),
+        }
     })
 }
 
@@ -1125,21 +1074,19 @@ pub extern "system" fn Java_com_finkit_ChartPatterns_detectPennant(
     pennantPeriod: jint,
 ) -> jintArray {
     ffi_catch_ptr(|| {
-
-    let high_vec = get_double_array(&mut env, high);
-    let low_vec = get_double_array(&mut env, low);
-    let close_vec = get_double_array(&mut env, close);
-    match chart::pennant(
-        &high_vec,
-        &low_vec,
-        &close_vec,
-        flagpolePeriod as usize,
-        pennantPeriod as usize,
-    ) {
-        Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
-        Err(_) => std::ptr::null_mut(),
-    }
-
+        let high_vec = get_double_array(&mut env, high);
+        let low_vec = get_double_array(&mut env, low);
+        let close_vec = get_double_array(&mut env, close);
+        match chart::pennant(
+            &high_vec,
+            &low_vec,
+            &close_vec,
+            flagpolePeriod as usize,
+            pennantPeriod as usize,
+        ) {
+            Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
+            Err(_) => std::ptr::null_mut(),
+        }
     })
 }
 
@@ -1154,21 +1101,19 @@ pub extern "system" fn Java_com_finkit_ChartPatterns_detectFlag(
     flagPeriod: jint,
 ) -> jintArray {
     ffi_catch_ptr(|| {
-
-    let high_vec = get_double_array(&mut env, high);
-    let low_vec = get_double_array(&mut env, low);
-    let close_vec = get_double_array(&mut env, close);
-    match chart::flag(
-        &high_vec,
-        &low_vec,
-        &close_vec,
-        flagpolePeriod as usize,
-        flagPeriod as usize,
-    ) {
-        Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
-        Err(_) => std::ptr::null_mut(),
-    }
-
+        let high_vec = get_double_array(&mut env, high);
+        let low_vec = get_double_array(&mut env, low);
+        let close_vec = get_double_array(&mut env, close);
+        match chart::flag(
+            &high_vec,
+            &low_vec,
+            &close_vec,
+            flagpolePeriod as usize,
+            flagPeriod as usize,
+        ) {
+            Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
+            Err(_) => std::ptr::null_mut(),
+        }
     })
 }
 
@@ -1182,14 +1127,12 @@ pub extern "system" fn Java_com_finkit_ChartPatterns_detectRectangle(
     tolerance: jdouble,
 ) -> jintArray {
     ffi_catch_ptr(|| {
-
-    let high_vec = get_double_array(&mut env, high);
-    let low_vec = get_double_array(&mut env, low);
-    match chart::rectangle(&high_vec, &low_vec, lookback as usize, tolerance) {
-        Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
-        Err(_) => std::ptr::null_mut(),
-    }
-
+        let high_vec = get_double_array(&mut env, high);
+        let low_vec = get_double_array(&mut env, low);
+        match chart::rectangle(&high_vec, &low_vec, lookback as usize, tolerance) {
+            Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
+            Err(_) => std::ptr::null_mut(),
+        }
     })
 }
 
@@ -1289,16 +1232,14 @@ pub extern "system" fn Java_com_finkit_Indicators_vwap(
     volume: JDoubleArray,
 ) -> jdoubleArray {
     ffi_catch_ptr(|| {
-
-    let high_vec = get_double_array(&mut env, high);
-    let low_vec = get_double_array(&mut env, low);
-    let close_vec = get_double_array(&mut env, close);
-    let volume_vec = get_double_array(&mut env, volume);
-    match indicators::vwap(&high_vec, &low_vec, &close_vec, &volume_vec) {
-        Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
-        Err(_) => std::ptr::null_mut(),
-    }
-
+        let high_vec = get_double_array(&mut env, high);
+        let low_vec = get_double_array(&mut env, low);
+        let close_vec = get_double_array(&mut env, close);
+        let volume_vec = get_double_array(&mut env, volume);
+        match indicators::vwap(&high_vec, &low_vec, &close_vec, &volume_vec) {
+            Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
+            Err(_) => std::ptr::null_mut(),
+        }
     })
 }
 
@@ -1313,22 +1254,20 @@ pub extern "system" fn Java_com_finkit_Indicators_anchoredVwap(
     startIndex: jint,
 ) -> jdoubleArray {
     ffi_catch_ptr(|| {
-
-    let high_vec = get_double_array(&mut env, high);
-    let low_vec = get_double_array(&mut env, low);
-    let close_vec = get_double_array(&mut env, close);
-    let volume_vec = get_double_array(&mut env, volume);
-    match indicators::anchored_vwap(
-        &high_vec,
-        &low_vec,
-        &close_vec,
-        &volume_vec,
-        startIndex as usize,
-    ) {
-        Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
-        Err(_) => std::ptr::null_mut(),
-    }
-
+        let high_vec = get_double_array(&mut env, high);
+        let low_vec = get_double_array(&mut env, low);
+        let close_vec = get_double_array(&mut env, close);
+        let volume_vec = get_double_array(&mut env, volume);
+        match indicators::anchored_vwap(
+            &high_vec,
+            &low_vec,
+            &close_vec,
+            &volume_vec,
+            startIndex as usize,
+        ) {
+            Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
+            Err(_) => std::ptr::null_mut(),
+        }
     })
 }
 
@@ -1555,25 +1494,23 @@ pub extern "system" fn Java_com_finkit_KlineChart_klineDataNew(
     volumes: JDoubleArray,
 ) -> jni::sys::jlong {
     ffi_catch_i64(|| {
-
-    let dates_vec = get_string_array(&mut env, dates);
-    let opens_vec = get_double_array(&mut env, opens);
-    let highs_vec = get_double_array(&mut env, highs);
-    let lows_vec = get_double_array(&mut env, lows);
-    let closes_vec = get_double_array(&mut env, closes);
-    let volumes_vec = get_double_array(&mut env, volumes);
-    let data = finkit_visualization::data::KlineData::new(
-        dates_vec,
-        opens_vec,
-        highs_vec,
-        lows_vec,
-        closes_vec,
-        volumes_vec,
-    );
-    let handle = KLINE_DATA_HANDLE.fetch_add(1, Ordering::SeqCst);
-    KLINE_DATA_MAP.write().unwrap().insert(handle, data);
-    handle
-
+        let dates_vec = get_string_array(&mut env, dates);
+        let opens_vec = get_double_array(&mut env, opens);
+        let highs_vec = get_double_array(&mut env, highs);
+        let lows_vec = get_double_array(&mut env, lows);
+        let closes_vec = get_double_array(&mut env, closes);
+        let volumes_vec = get_double_array(&mut env, volumes);
+        let data = finkit_visualization::data::KlineData::new(
+            dates_vec,
+            opens_vec,
+            highs_vec,
+            lows_vec,
+            closes_vec,
+            volumes_vec,
+        );
+        let handle = KLINE_DATA_HANDLE.fetch_add(1, Ordering::SeqCst);
+        KLINE_DATA_MAP.write().unwrap().insert(handle, data);
+        handle
     })
 }
 
@@ -1593,13 +1530,11 @@ pub extern "system" fn Java_com_finkit_KlineChart_klineDataValidate(
     handle: jni::sys::jlong,
 ) -> jni::sys::jboolean {
     ffi_catch_u8(|| {
-
-    let map = KLINE_DATA_MAP.read().unwrap();
-    match map.get(&handle) {
-        Some(data) => data.validate() as jni::sys::jboolean,
-        None => 0,
-    }
-
+        let map = KLINE_DATA_MAP.read().unwrap();
+        match map.get(&handle) {
+            Some(data) => data.validate() as jni::sys::jboolean,
+            None => 0,
+        }
     })
 }
 
@@ -1614,35 +1549,33 @@ pub extern "system" fn Java_com_finkit_KlineChart_klineChartNew(
     height: jint,
 ) -> jni::sys::jlong {
     ffi_catch_i64(|| {
+        let data_map = KLINE_DATA_MAP.read().unwrap();
+        let data = match data_map.get(&data_handle) {
+            Some(d) => d.clone(),
+            None => return -1,
+        };
+        drop(data_map);
 
-    let data_map = KLINE_DATA_MAP.read().unwrap();
-    let data = match data_map.get(&data_handle) {
-        Some(d) => d.clone(),
-        None => return -1,
-    };
-    drop(data_map);
-
-    let lang_str: String = env.get_string(&language).unwrap().into();
-    let title_str: String = env.get_string(&title).unwrap().into();
-    let lang = match lang_str.as_str() {
-        "zh-CN" | "zh" => finkit_visualization::language::Language::ZhCn,
-        _ => finkit_visualization::language::Language::EnUs,
-    };
-    let config = finkit_visualization::config::ChartConfigBuilder::new()
-        .with_title(&title_str)
-        .with_language(lang)
-        .with_dimensions(width as u32, height as u32)
-        .build();
-    let mut chart = finkit_visualization::chart::KlineChart::new(config);
-    chart.set_data(data.clone());
-    let _ = chart.build_draw_list(&data, &[]);
-    let handle = KLINE_CHART_HANDLE.fetch_add(1, Ordering::SeqCst);
-    KLINE_CHART_MAP
-        .write()
-        .unwrap()
-        .insert(handle, (chart, Some(data)));
-    handle
-
+        let lang_str: String = env.get_string(&language).unwrap().into();
+        let title_str: String = env.get_string(&title).unwrap().into();
+        let lang = match lang_str.as_str() {
+            "zh-CN" | "zh" => finkit_visualization::language::Language::ZhCn,
+            _ => finkit_visualization::language::Language::EnUs,
+        };
+        let config = finkit_visualization::config::ChartConfigBuilder::new()
+            .with_title(&title_str)
+            .with_language(lang)
+            .with_dimensions(width as u32, height as u32)
+            .build();
+        let mut chart = finkit_visualization::chart::KlineChart::new(config);
+        chart.set_data(data.clone());
+        let _ = chart.build_draw_list(&data, &[]);
+        let handle = KLINE_CHART_HANDLE.fetch_add(1, Ordering::SeqCst);
+        KLINE_CHART_MAP
+            .write()
+            .unwrap()
+            .insert(handle, (chart, Some(data)));
+        handle
     })
 }
 
@@ -1737,20 +1670,18 @@ pub extern "system" fn Java_com_finkit_KlineChart_klineChartToSvg(
     handle: jni::sys::jlong,
 ) -> jni::sys::jstring {
     ffi_catch_ptr(|| {
-
-    let map = KLINE_CHART_MAP.read().unwrap();
-    if let Some((chart, _)) = map.get(&handle) {
-        match chart.to_svg_string() {
-            Ok(svg) => {
-                let jstr = env.new_string(svg).unwrap();
-                // Caller must free with freeJString.
-                return jstr.into_raw();
+        let map = KLINE_CHART_MAP.read().unwrap();
+        if let Some((chart, _)) = map.get(&handle) {
+            match chart.to_svg_string() {
+                Ok(svg) => {
+                    let jstr = env.new_string(svg).unwrap();
+                    // Caller must free with freeJString.
+                    return jstr.into_raw();
+                }
+                Err(_) => return std::ptr::null_mut(),
             }
-            Err(_) => return std::ptr::null_mut(),
         }
-    }
-    std::ptr::null_mut()
-
+        std::ptr::null_mut()
     })
 }
 
@@ -1769,19 +1700,17 @@ pub extern "system" fn Java_com_finkit_Indicators_darvasBox(
     confirmation: jint,
 ) -> jobject {
     ffi_catch_ptr(|| {
-
-    let h = get_double_array(&mut env, high);
-    let l = get_double_array(&mut env, low);
-    let c = get_double_array(&mut env, close);
-    let lb = if lookback > 0 { lookback as usize } else { 5 };
-    let conf = if confirmation > 0 {
-        confirmation as usize
-    } else {
-        3
-    };
-    let r = indicators::darvas_box(&h, &l, &c, lb, conf).unwrap();
-    build_dto_2d_1i(env, &r.box_top, &r.box_bottom, &r.signal)
-
+        let h = get_double_array(&mut env, high);
+        let l = get_double_array(&mut env, low);
+        let c = get_double_array(&mut env, close);
+        let lb = if lookback > 0 { lookback as usize } else { 5 };
+        let conf = if confirmation > 0 {
+            confirmation as usize
+        } else {
+            3
+        };
+        let r = indicators::darvas_box(&h, &l, &c, lb, conf).unwrap();
+        build_dto_2d_1i(env, &r.box_top, &r.box_bottom, &r.signal)
     })
 }
 
@@ -1795,13 +1724,11 @@ pub extern "system" fn Java_com_finkit_Indicators_pointAndFigure(
     reversal: jint,
 ) -> jobject {
     ffi_catch_ptr(|| {
-
-    let h = get_double_array(&mut env, high);
-    let l = get_double_array(&mut env, low);
-    let rev = if reversal > 0 { reversal as usize } else { 3 };
-    let r = indicators::point_and_figure(&h, &l, box_size, rev).unwrap();
-    build_dto3(env, &r.pnf, &r.column_type, &r.new_column)
-
+        let h = get_double_array(&mut env, high);
+        let l = get_double_array(&mut env, low);
+        let rev = if reversal > 0 { reversal as usize } else { 3 };
+        let r = indicators::point_and_figure(&h, &l, box_size, rev).unwrap();
+        build_dto3(env, &r.pnf, &r.column_type, &r.new_column)
     })
 }
 
@@ -1813,11 +1740,9 @@ pub extern "system" fn Java_com_finkit_Indicators_threeLineBreak(
     lines: jint,
 ) -> jobject {
     ffi_catch_ptr(|| {
-
-    let c = get_double_array(&mut env, close);
-    let r = indicators::three_line_break(&c, lines as usize).unwrap();
-    build_dto2(env, &r.line, &r.direction)
-
+        let c = get_double_array(&mut env, close);
+        let r = indicators::three_line_break(&c, lines as usize).unwrap();
+        build_dto2(env, &r.line, &r.direction)
     })
 }
 
@@ -1828,11 +1753,9 @@ pub extern "system" fn Java_com_finkit_Indicators_williamsAlligator(
     close: JDoubleArray,
 ) -> jobject {
     ffi_catch_ptr(|| {
-
-    let c = get_double_array(&mut env, close);
-    let r = indicators::williams_alligator(&c).unwrap();
-    build_dto_3d(env, &r.jaw, &r.teeth, &r.lips)
-
+        let c = get_double_array(&mut env, close);
+        let r = indicators::williams_alligator(&c).unwrap();
+        build_dto_3d(env, &r.jaw, &r.teeth, &r.lips)
     })
 }
 
@@ -1846,14 +1769,12 @@ pub extern "system" fn Java_com_finkit_Indicators_heikinAshi(
     close: JDoubleArray,
 ) -> jobject {
     ffi_catch_ptr(|| {
-
-    let o = get_double_array(&mut env, open);
-    let h = get_double_array(&mut env, high);
-    let l = get_double_array(&mut env, low);
-    let c = get_double_array(&mut env, close);
-    let r = indicators::heikin_ashi(&o, &h, &l, &c).unwrap();
-    build_dto4(env, &r.ha_open, &r.ha_high, &r.ha_low, &r.ha_close)
-
+        let o = get_double_array(&mut env, open);
+        let h = get_double_array(&mut env, high);
+        let l = get_double_array(&mut env, low);
+        let c = get_double_array(&mut env, close);
+        let r = indicators::heikin_ashi(&o, &h, &l, &c).unwrap();
+        build_dto4(env, &r.ha_open, &r.ha_high, &r.ha_low, &r.ha_close)
     })
 }
 
@@ -1968,82 +1889,80 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaEval(
     volume: JDoubleArray,
 ) -> jobject {
     ffi_catch_ptr(|| {
+        let source_str: String = match env.get_string(&source) {
+            Ok(s) => s.into(),
+            Err(_) => return std::ptr::null_mut(),
+        };
 
-    let source_str: String = match env.get_string(&source) {
-        Ok(s) => s.into(),
-        Err(_) => return std::ptr::null_mut(),
-    };
+        let open_vec = get_double_array(&mut env, open);
+        let high_vec = get_double_array(&mut env, high);
+        let low_vec = get_double_array(&mut env, low);
+        let close_vec = get_double_array(&mut env, close);
+        let volume_vec = get_double_array(&mut env, volume);
 
-    let open_vec = get_double_array(&mut env, open);
-    let high_vec = get_double_array(&mut env, high);
-    let low_vec = get_double_array(&mut env, low);
-    let close_vec = get_double_array(&mut env, close);
-    let volume_vec = get_double_array(&mut env, volume);
+        let _data_len = open_vec.len();
+        let open_arr = Array1::from_vec(open_vec);
+        let high_arr = Array1::from_vec(high_vec);
+        let low_arr = Array1::from_vec(low_vec);
+        let close_arr = Array1::from_vec(close_vec);
+        let volume_arr = Array1::from_vec(volume_vec);
 
-    let _data_len = open_vec.len();
-    let open_arr = Array1::from_vec(open_vec);
-    let high_arr = Array1::from_vec(high_vec);
-    let low_arr = Array1::from_vec(low_vec);
-    let close_arr = Array1::from_vec(close_vec);
-    let volume_arr = Array1::from_vec(volume_vec);
+        let mut ctx = FormulaContext::new(open_arr, high_arr, low_arr, close_arr, volume_arr, None);
+        let mut engine = FormulaEngine::new();
 
-    let mut ctx = FormulaContext::new(open_arr, high_arr, low_arr, close_arr, volume_arr, None);
-    let mut engine = FormulaEngine::new();
+        let result = engine.eval(&source_str, &mut ctx);
+        match result {
+            Ok(final_value) => {
+                let hashmap_class = match env.find_class("java/util/HashMap") {
+                    Ok(c) => c,
+                    Err(_) => return std::ptr::null_mut(),
+                };
+                let hashmap = match env.new_object(&hashmap_class, "()V", &[]) {
+                    Ok(o) => o,
+                    Err(_) => return std::ptr::null_mut(),
+                };
 
-    let result = engine.eval(&source_str, &mut ctx);
-    match result {
-        Ok(final_value) => {
-            let hashmap_class = match env.find_class("java/util/HashMap") {
-                Ok(c) => c,
-                Err(_) => return std::ptr::null_mut(),
-            };
-            let hashmap = match env.new_object(&hashmap_class, "()V", &[]) {
-                Ok(o) => o,
-                Err(_) => return std::ptr::null_mut(),
-            };
+                let put_method = "put";
+                let put_sig = "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;";
 
-            let put_method = "put";
-            let put_sig = "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;";
+                for (name, value) in ctx.variables {
+                    let java_arr = to_double_array(&mut env, value.into_raw_vec_and_offset().0);
+                    let j_name = match env.new_string(name.as_ref()) {
+                        Ok(s) => s,
+                        Err(_) => return std::ptr::null_mut(),
+                    };
+                    let j_obj = unsafe { JObject::from_raw(java_arr) };
+                    let _ = env.call_method(
+                        &hashmap,
+                        put_method,
+                        put_sig,
+                        &[
+                            JValue::Object(&JObject::from(j_name)),
+                            JValue::Object(&j_obj),
+                        ],
+                    );
+                }
 
-            for (name, value) in ctx.variables {
-                let java_arr = to_double_array(&mut env, value.into_raw_vec_and_offset().0);
-                let j_name = match env.new_string(name.as_ref()) {
+                let java_final = to_double_array(&mut env, final_value.into_raw_vec_and_offset().0);
+                let j_final_key = match env.new_string("__final__") {
                     Ok(s) => s,
                     Err(_) => return std::ptr::null_mut(),
                 };
-                let j_obj = unsafe { JObject::from_raw(java_arr) };
+                let j_final_obj = unsafe { JObject::from_raw(java_final) };
                 let _ = env.call_method(
                     &hashmap,
                     put_method,
                     put_sig,
                     &[
-                        JValue::Object(&JObject::from(j_name)),
-                        JValue::Object(&j_obj),
+                        JValue::Object(&JObject::from(j_final_key)),
+                        JValue::Object(&j_final_obj),
                     ],
                 );
+
+                hashmap.into_raw()
             }
-
-            let java_final = to_double_array(&mut env, final_value.into_raw_vec_and_offset().0);
-            let j_final_key = match env.new_string("__final__") {
-                Ok(s) => s,
-                Err(_) => return std::ptr::null_mut(),
-            };
-            let j_final_obj = unsafe { JObject::from_raw(java_final) };
-            let _ = env.call_method(
-                &hashmap,
-                put_method,
-                put_sig,
-                &[
-                    JValue::Object(&JObject::from(j_final_key)),
-                    JValue::Object(&j_final_obj),
-                ],
-            );
-
-            hashmap.into_raw()
+            Err(_) => std::ptr::null_mut(),
         }
-        Err(_) => std::ptr::null_mut(),
-    }
-
     })
 }
 
@@ -2054,18 +1973,16 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaValidate(
     source: JString,
 ) -> jboolean {
     ffi_catch_u8(|| {
+        let source_str: String = match env.get_string(&source) {
+            Ok(s) => s.into(),
+            Err(_) => return 0,
+        };
 
-    let source_str: String = match env.get_string(&source) {
-        Ok(s) => s.into(),
-        Err(_) => return 0,
-    };
-
-    let mut engine = FormulaEngine::new();
-    match engine.compile(&source_str) {
-        Ok(_) => 1,
-        Err(_) => 0,
-    }
-
+        let mut engine = FormulaEngine::new();
+        match engine.compile(&source_str) {
+            Ok(_) => 1,
+            Err(_) => 0,
+        }
     })
 }
 
@@ -2081,18 +1998,16 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaEvalJit(
     volume: JDoubleArray,
 ) -> jobject {
     ffi_catch_ptr(|| {
-
-    formula_eval_helper(
-        &mut env,
-        source,
-        open,
-        high,
-        low,
-        close,
-        volume,
-        |engine, source, ctx| engine.eval_jit(source, ctx),
-    )
-
+        formula_eval_helper(
+            &mut env,
+            source,
+            open,
+            high,
+            low,
+            close,
+            volume,
+            |engine, source, ctx| engine.eval_jit(source, ctx),
+        )
     })
 }
 
@@ -2108,18 +2023,16 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaEvalSimd(
     volume: JDoubleArray,
 ) -> jobject {
     ffi_catch_ptr(|| {
-
-    formula_eval_helper(
-        &mut env,
-        source,
-        open,
-        high,
-        low,
-        close,
-        volume,
-        |engine, source, ctx| engine.eval_simd(source, ctx),
-    )
-
+        formula_eval_helper(
+            &mut env,
+            source,
+            open,
+            high,
+            low,
+            close,
+            volume,
+            |engine, source, ctx| engine.eval_simd(source, ctx),
+        )
     })
 }
 
@@ -2135,17 +2048,15 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaEvalZeroCopy(
     volume: JDoubleArray,
 ) -> jobject {
     ffi_catch_ptr(|| {
-
-    formula_eval_helper(
-        &mut env,
-        source,
-        open,
-        high,
-        low,
-        close,
-        volume,
-        |engine, source, ctx| engine.eval_zero_copy(source, ctx),
-    )
-
+        formula_eval_helper(
+            &mut env,
+            source,
+            open,
+            high,
+            low,
+            close,
+            volume,
+            |engine, source, ctx| engine.eval_zero_copy(source, ctx),
+        )
     })
 }

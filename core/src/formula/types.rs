@@ -780,12 +780,16 @@ impl FormulaContext {
             Some(BuiltinVar::Low) => Some(&self.low),
             Some(BuiltinVar::Close) => Some(&self.close),
             Some(BuiltinVar::Volume) => Some(&self.volume),
-            Some(BuiltinVar::Amount) => self.amount.as_ref().and_then(|value| value.as_slice().ok()),
+            Some(BuiltinVar::Amount) => {
+                self.amount.as_ref().and_then(|value| value.as_slice().ok())
+            }
             _ => {
                 if name.eq_ignore_ascii_case("A") {
                     self.amount.as_ref().and_then(|value| value.as_slice().ok())
                 } else {
-                    self.variables.get(name).and_then(|value| value.as_slice().ok())
+                    self.variables
+                        .get(name)
+                        .and_then(|value| value.as_slice().ok())
                 }
             }
         }
@@ -1102,5 +1106,4 @@ mod tests {
         assert_eq!(ctx.volume.as_slice(), &[1000.0, 1010.0, 2000.0, 2100.0]);
         assert_eq!(ctx.open.as_ptr(), open_ptr);
     }
-
 }

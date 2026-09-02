@@ -75,8 +75,8 @@ impl FormulaDialect {
     pub fn from_str(s: &str) -> Option<Self> {
         match s.trim().to_ascii_lowercase().as_str() {
             "alpha_ta" | "alphata" | "finkit" | "tdx" | "tongdaxin" | "通达信" | "ths"
-            | "tonghuashun" | "同花顺" | "eastmoney" | "em" | "dfcf" | "东方财富"
-            | "default" | "" => Some(Self::AlphaTA),
+            | "tonghuashun" | "同花顺" | "eastmoney" | "em" | "dfcf" | "东方财富" | "default"
+            | "" => Some(Self::AlphaTA),
             "pine" | "tradingview" | "tv" => Some(Self::Pine),
             _ => None,
         }
@@ -106,7 +106,6 @@ pub fn parse_formula_with_dialect(
         }
     }
 }
-
 
 /// Parse source using a named trading-terminal compatibility adapter.
 pub fn parse_formula_for_terminal(

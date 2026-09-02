@@ -57,6 +57,9 @@ pub mod backtest;
 /// Parallel batch API: run multiple independent indicator jobs in parallel
 /// over the same input slice. Disabled in no_std builds.
 pub mod batch;
+#[cfg(feature = "std")]
+/// Dependency-aware production factor engine and factor transforms.
+pub mod factors;
 #[cfg(all(feature = "std", feature = "indicators-all", feature = "formula"))]
 /// Feature engineering: multi-period features, signal detection, and ML label generation.
 pub mod features;
@@ -67,23 +70,20 @@ pub mod multi_period_resonance;
 /// Polars DataFrame zero-copy integration for technical analysis.
 pub mod polars_ext;
 #[cfg(feature = "std")]
+/// Canonical indicator/formula metadata registry for bindings and introspection.
+pub mod registry;
+#[cfg(feature = "std")]
 /// Portfolio risk metrics: VaR / CVaR / MDD / Sharpe / Sortino / Calmar.
 pub mod risk;
+#[cfg(feature = "std")]
+/// Zero-copy aligned market-frame and warm-up/NaN runtime contracts.
+pub mod runtime;
 #[cfg(feature = "std")]
 /// 申万一级 31 行业板块轮动.
 pub mod sector;
 #[cfg(feature = "std")]
 /// 选股因子合成 + 横截面排序.
 pub mod selectors;
-#[cfg(feature = "std")]
-/// Dependency-aware production factor engine and factor transforms.
-pub mod factors;
-#[cfg(feature = "std")]
-/// Canonical indicator/formula metadata registry for bindings and introspection.
-pub mod registry;
-#[cfg(feature = "std")]
-/// Zero-copy aligned market-frame and warm-up/NaN runtime contracts.
-pub mod runtime;
 #[cfg(all(feature = "std", feature = "indicators-all"))]
 /// Streaming (incremental) O(1) per-bar indicator updates.
 pub mod streaming;

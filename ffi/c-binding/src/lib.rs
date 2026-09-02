@@ -261,7 +261,6 @@ pub unsafe extern "C" fn finkit_free_string(s: *mut c_char) {
     })
 }
 
-
 #[no_mangle]
 
 include!("generated.rs");

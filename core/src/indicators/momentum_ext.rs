@@ -2432,7 +2432,6 @@ pub fn chande_forecast_oscillator(input: &[f64], period: usize) -> Result<Array1
     Ok(Array1::from_vec(output))
 }
 
-
 /// Intraday Momentum Index (IMI)
 ///
 /// Computes the percentage of upward open-to-close movement within the

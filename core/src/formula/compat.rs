@@ -94,10 +94,22 @@ mod tests {
 
     #[test]
     fn aliases_cover_major_declared_terminals() {
-        assert_eq!(FormulaTerminal::from_str("通达信"), Some(FormulaTerminal::TongDaXin));
-        assert_eq!(FormulaTerminal::from_str("ths"), Some(FormulaTerminal::TongHuaShun));
-        assert_eq!(FormulaTerminal::from_str("东方财富"), Some(FormulaTerminal::EastMoney));
-        assert_eq!(FormulaTerminal::from_str("TradingView"), Some(FormulaTerminal::TradingView));
+        assert_eq!(
+            FormulaTerminal::from_str("通达信"),
+            Some(FormulaTerminal::TongDaXin)
+        );
+        assert_eq!(
+            FormulaTerminal::from_str("ths"),
+            Some(FormulaTerminal::TongHuaShun)
+        );
+        assert_eq!(
+            FormulaTerminal::from_str("东方财富"),
+            Some(FormulaTerminal::EastMoney)
+        );
+        assert_eq!(
+            FormulaTerminal::from_str("TradingView"),
+            Some(FormulaTerminal::TradingView)
+        );
     }
 
     #[test]

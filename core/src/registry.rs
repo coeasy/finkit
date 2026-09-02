@@ -193,24 +193,9 @@ impl FunctionRegistry {
     }
 }
 
-const PERIOD_14: &[ParamSpec] = &[ParamSpec::new(
-    "period",
-    "usize",
-    Some("14"),
-    Some("> 0"),
-)];
-const PERIOD_20: &[ParamSpec] = &[ParamSpec::new(
-    "period",
-    "usize",
-    Some("20"),
-    Some("> 0"),
-)];
-const PERIOD_REQUIRED: &[ParamSpec] = &[ParamSpec::new(
-    "period",
-    "usize",
-    None,
-    Some("> 0"),
-)];
+const PERIOD_14: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("14"), Some("> 0"))];
+const PERIOD_20: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("20"), Some("> 0"))];
+const PERIOD_REQUIRED: &[ParamSpec] = &[ParamSpec::new("period", "usize", None, Some("> 0"))];
 const MACD_PARAMS: &[ParamSpec] = &[
     ParamSpec::new("fast_period", "usize", Some("12"), Some("> 0")),
     ParamSpec::new("slow_period", "usize", Some("26"), Some("> fast_period")),
@@ -220,12 +205,7 @@ const BBANDS_PARAMS: &[ParamSpec] = &[
     ParamSpec::new("period", "usize", Some("20"), Some("> 1")),
     ParamSpec::new("stddev", "f64", Some("2.0"), Some(">= 0")),
 ];
-const REF_PARAMS: &[ParamSpec] = &[ParamSpec::new(
-    "bars",
-    "usize",
-    None,
-    Some(">= 0"),
-)];
+const REF_PARAMS: &[ParamSpec] = &[ParamSpec::new("bars", "usize", None, Some(">= 0"))];
 const TWO_SERIES: &[ParamSpec] = &[];
 
 /// Build the stable v0.1.2 public function registry.
