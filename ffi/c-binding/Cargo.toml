@@ -13,7 +13,6 @@ crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 finkit = { path = "../../core" }
-finkit-visualization = { path = "../../visualization", features = ["svg"] }
 libc = "0.2"
 serde_json = { workspace = true }
 ndarray = { workspace = true }

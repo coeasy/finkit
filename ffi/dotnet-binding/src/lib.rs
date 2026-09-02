@@ -11,7 +11,7 @@ use finkit::math::moving_avg;
 use finkit_ffi_common::panic::*;
 use ndarray::Array1;
 use serde::Serialize;
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 
 // Leak-detection allocator: installed only for the test binary so the FFI
 // ownership contract (alloc via `ta_*` + free via `ta_free_*`) can be checked
@@ -47,6 +47,8 @@ struct MultiOutputDto {
 // ============================================================================
 // Memory Management
 // ============================================================================
+
+static VERSION: &[u8] = concat!(env!("CARGO_PKG_VERSION"), "\0").as_bytes();
 
 #[no_mangle]
 pub extern "C" fn ta_free(ptr: *mut c_double) {
@@ -134,8 +136,8 @@ mod tests {
     // exercise `ta_free` / `ta_free_array` directly. Loops assert the live
     // heap returns to baseline (catches a forgotten free).
     //
-    // NOTE: `ta_formula_eval` *consumes* the `source` CString (it calls
-    // `CString::from_raw` on it), so we transfer ownership with `.into_raw()`
+    // NOTE: `ta_formula_eval` *borrows* the `source` CString (it calls
+    // `CString::from_raw` on it), so we keep the CString alive for the duration of the call
     // and must NOT retain a Rust `CString` for it — otherwise it is freed twice.
     #[test]
     fn ffi_heap_no_leak_formula_eval_cycle() {
@@ -144,9 +146,9 @@ mod tests {
         let input: Vec<c_double> = (0..n as usize).map(|i| (i as f64).sin()).collect();
 
         for _ in 0..16 {
-            let src = std::ffi::CString::new("close").unwrap().into_raw();
+            let src = std::ffi::CString::new("close").unwrap();
             let fe = crate::ta_formula_eval(
-                src,
+                src.as_ptr(),
                 input.as_ptr(),
                 input.as_ptr(),
                 input.as_ptr(),
@@ -159,9 +161,9 @@ mod tests {
         let baseline = live_bytes();
 
         for _ in 0..400 {
-            let src = std::ffi::CString::new("close").unwrap().into_raw();
+            let src = std::ffi::CString::new("close").unwrap();
             let fe = crate::ta_formula_eval(
-                src,
+                src.as_ptr(),
                 input.as_ptr(),
                 input.as_ptr(),
                 input.as_ptr(),
@@ -203,13 +205,11 @@ mod tests {
     fn ffi_formula_eval_surfaces_error_not_null() {
         let n: c_int = 64;
         let input: Vec<c_double> = (0..n as usize).map(|i| (i as f64).sin()).collect();
-        // `ta_formula_eval` *consumes* `source` (CString::from_raw), so transfer
+        // `ta_formula_eval` *borrows* `source` (CString::from_raw), so transfer
         // ownership with `.into_raw()` and do not retain a Rust handle.
-        let src = std::ffi::CString::new("FOOBAR(CLOSE, 20)")
-            .unwrap()
-            .into_raw();
+        let src = std::ffi::CString::new("FOOBAR(CLOSE, 20)").unwrap();
         let fe = crate::ta_formula_eval(
-            src,
+            src.as_ptr(),
             input.as_ptr(),
             input.as_ptr(),
             input.as_ptr(),
@@ -329,87 +329,92 @@ pub extern "C" fn ta_std_dev(
 
 #[no_mangle]
 pub extern "C" fn ta_version() -> *const c_char {
-    c"0.1.0".as_ptr()
+    VERSION.as_ptr().cast()
 }
 
 // ============================================================================
 // Formula Engine
 // ============================================================================
 
-#[no_mangle]
-pub extern "C" fn ta_formula_eval(
-    source: *const c_char,
-    open: *const c_double,
-    high: *const c_double,
-    low: *const c_double,
-    close: *const c_double,
-    volume: *const c_double,
-    length: c_int,
+enum FormulaEvalMode { Standard, Jit, Simd }
+
+fn read_c_string(ptr: *const c_char) -> Option<String> {
+    if ptr.is_null() { return None; }
+    unsafe { CStr::from_ptr(ptr) }.to_str().ok().map(str::to_owned)
+}
+
+fn eval_formula_mode(
+    source: *const c_char, open: *const c_double, high: *const c_double,
+    low: *const c_double, close: *const c_double, volume: *const c_double,
+    length: c_int, mode: FormulaEvalMode,
 ) -> *mut c_char {
-    if source.is_null()
-        || open.is_null()
-        || high.is_null()
-        || low.is_null()
-        || close.is_null()
-        || volume.is_null()
-        || length <= 0
+    if source.is_null() || open.is_null() || high.is_null() || low.is_null()
+        || close.is_null() || volume.is_null() || length <= 0
     {
-        let err = CString::new("invalid input").unwrap();
-        // Caller must free with ta_free_cstring.
-        return err.into_raw();
+        return CString::new("invalid input").unwrap().into_raw();
     }
-
-    let source_str = match unsafe { CString::from_raw(source as *mut c_char) }.into_string() {
-        Ok(s) => s,
-        Err(_) => return std::ptr::null_mut(),
+    let Some(source_str) = read_c_string(source) else {
+        return CString::new("invalid utf-8").unwrap().into_raw();
     };
-
-    let open_slice = unsafe { std::slice::from_raw_parts(open, length as usize) };
-    let high_slice = unsafe { std::slice::from_raw_parts(high, length as usize) };
-    let low_slice = unsafe { std::slice::from_raw_parts(low, length as usize) };
-    let close_slice = unsafe { std::slice::from_raw_parts(close, length as usize) };
-    let volume_slice = unsafe { std::slice::from_raw_parts(volume, length as usize) };
-
-    let open_arr = Array1::from_vec(open_slice.to_vec());
-    let high_arr = Array1::from_vec(high_slice.to_vec());
-    let low_arr = Array1::from_vec(low_slice.to_vec());
-    let close_arr = Array1::from_vec(close_slice.to_vec());
-    let volume_arr = Array1::from_vec(volume_slice.to_vec());
-
+    let length = length as usize;
+    let open_arr = Array1::from(unsafe { std::slice::from_raw_parts(open, length) }.to_vec());
+    let high_arr = Array1::from(unsafe { std::slice::from_raw_parts(high, length) }.to_vec());
+    let low_arr = Array1::from(unsafe { std::slice::from_raw_parts(low, length) }.to_vec());
+    let close_arr = Array1::from(unsafe { std::slice::from_raw_parts(close, length) }.to_vec());
+    let volume_arr = Array1::from(unsafe { std::slice::from_raw_parts(volume, length) }.to_vec());
     let mut ctx = FormulaContext::new(open_arr, high_arr, low_arr, close_arr, volume_arr, None);
     let mut engine = FormulaEngine::new();
-
-    match engine.eval(&source_str, &mut ctx) {
-        Ok(_final_value) => {
-            let var_map: HashMap<String, Vec<Option<f64>>> = ctx
-                .variables
-                .iter()
-                .map(|(name, value)| (name.to_string(), arr_to_json(value)))
-                .collect();
-            let json_str = serde_json::to_string(&var_map).unwrap_or_else(|_| "{}".to_string());
-            // Caller must free with ta_free_cstring.
-            match CString::new(json_str) {
-                Ok(c_str) => c_str.into_raw(),
-                Err(_) => {
-                    // Caller must free with ta_free_cstring.
-                    let err = CString::new("output serialization error").unwrap();
-                    err.into_raw()
-                }
-            }
+    let evaluation = match mode {
+        FormulaEvalMode::Standard => engine.eval(&source_str, &mut ctx),
+        FormulaEvalMode::Jit => engine.eval_jit(&source_str, &mut ctx),
+        FormulaEvalMode::Simd => engine.eval_simd(&source_str, &mut ctx),
+    };
+    match evaluation {
+        Ok(_) => {
+            let var_map: HashMap<String, Vec<Option<f64>>> = ctx.variables.iter()
+                .map(|(name, value)| (name.to_string(), arr_to_json(value))).collect();
+            let json = serde_json::to_string(&var_map).unwrap_or_else(|_| "{}".to_string());
+            CString::new(json)
+                .unwrap_or_else(|_| CString::new("output serialization error").unwrap())
+                .into_raw()
         }
-        Err(e) => {
-            let err_msg = format!("error: {}", e);
-            // Caller must free with ta_free_cstring.
-            match CString::new(err_msg) {
-                Ok(c_str) => c_str.into_raw(),
-                Err(_) => {
-                    // Caller must free with ta_free_cstring.
-                    let err = CString::new("evaluation error").unwrap();
-                    err.into_raw()
-                }
-            }
-        }
+        Err(error) => CString::new(format!("error: {}", error))
+            .unwrap_or_else(|_| CString::new("evaluation error").unwrap())
+            .into_raw(),
     }
+}
+
+#[no_mangle]
+pub extern "C" fn ta_formula_eval(
+    source: *const c_char, open: *const c_double, high: *const c_double,
+    low: *const c_double, close: *const c_double, volume: *const c_double,
+    length: c_int,
+) -> *mut c_char {
+    ffi_catch_ptr(|| eval_formula_mode(
+        source, open, high, low, close, volume, length, FormulaEvalMode::Standard,
+    ))
+}
+
+#[no_mangle]
+pub extern "C" fn ta_formula_eval_jit(
+    source: *const c_char, open: *const c_double, high: *const c_double,
+    low: *const c_double, close: *const c_double, volume: *const c_double,
+    length: c_int,
+) -> *mut c_char {
+    ffi_catch_ptr(|| eval_formula_mode(
+        source, open, high, low, close, volume, length, FormulaEvalMode::Jit,
+    ))
+}
+
+#[no_mangle]
+pub extern "C" fn ta_formula_eval_simd(
+    source: *const c_char, open: *const c_double, high: *const c_double,
+    low: *const c_double, close: *const c_double, volume: *const c_double,
+    length: c_int,
+) -> *mut c_char {
+    ffi_catch_ptr(|| eval_formula_mode(
+        source, open, high, low, close, volume, length, FormulaEvalMode::Simd,
+    ))
 }
 
 #[no_mangle]
@@ -435,7 +440,7 @@ pub extern "C" fn ta_formula_eval_multi(
         return err.into_raw();
     }
 
-    let source_str = match unsafe { CString::from_raw(source as *mut c_char) }.into_string() {
+    let source_str = match unsafe { CStr::from_ptr(source) }.to_str().map(str::to_owned) {
         Ok(s) => s,
         Err(_) => return std::ptr::null_mut(),
     };
@@ -522,7 +527,7 @@ pub extern "C" fn ta_formula_eval_draw(
         return err.into_raw();
     }
 
-    let source_str = match unsafe { CString::from_raw(source as *mut c_char) }.into_string() {
+    let source_str = match unsafe { CStr::from_ptr(source) }.to_str().map(str::to_owned) {
         Ok(s) => s,
         Err(_) => return std::ptr::null_mut(),
     };
@@ -598,7 +603,7 @@ pub extern "C" fn ta_formula_eval_debug(
         return err.into_raw();
     }
 
-    let source_str = match unsafe { CString::from_raw(source as *mut c_char) }.into_string() {
+    let source_str = match unsafe { CStr::from_ptr(source) }.to_str().map(str::to_owned) {
         Ok(s) => s,
         Err(_) => return std::ptr::null_mut(),
     };
@@ -660,7 +665,7 @@ pub extern "C" fn ta_formula_get_template(name: *const c_char) -> *mut c_char {
         return err.into_raw();
     }
 
-    let name_str = match unsafe { CString::from_raw(name as *mut c_char) }.into_string() {
+    let name_str = match unsafe { CStr::from_ptr(name) }.to_str().map(str::to_owned) {
         Ok(s) => s,
         Err(_) => return std::ptr::null_mut(),
     };
@@ -697,7 +702,7 @@ pub extern "C" fn ta_formula_search_templates(keyword: *const c_char) -> *mut c_
         return err.into_raw();
     }
 
-    let keyword_str = match unsafe { CString::from_raw(keyword as *mut c_char) }.into_string() {
+    let keyword_str = match unsafe { CStr::from_ptr(keyword) }.to_str().map(str::to_owned) {
         Ok(s) => s,
         Err(_) => return std::ptr::null_mut(),
     };
@@ -743,7 +748,7 @@ pub extern "C" fn ta_formula_validate(source: *const c_char) -> c_int {
         return 0;
     }
 
-    let source_str = match unsafe { CString::from_raw(source as *mut c_char) }.into_string() {
+    let source_str = match unsafe { CStr::from_ptr(source) }.to_str().map(str::to_owned) {
         Ok(s) => s,
         Err(_) => return 0,
     };
@@ -787,7 +792,7 @@ pub extern "C" fn ta_formula_eval_zc_exec(
         return err.into_raw();
     }
 
-    let source_str = match unsafe { CString::from_raw(source as *mut c_char) }.into_string() {
+    let source_str = match unsafe { CStr::from_ptr(source) }.to_str().map(str::to_owned) {
         Ok(s) => s,
         Err(_) => return std::ptr::null_mut(),
     };

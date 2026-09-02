@@ -17,7 +17,7 @@
 #![allow(missing_debug_implementations)]
 
 use jni::objects::{JClass, JDoubleArray};
-use jni::sys::{jarray, jdoubleArray, jint, jsize};
+use jni::sys::{jarray, jdoubleArray, jint, jsize, jstring};
 use jni::JNIEnv;
 use std::panic;
 
@@ -46,7 +46,7 @@ fn from_double_array(env: &mut JNIEnv, arr: jdoubleArray) -> Vec<f64> {
 // function bodies but expose them under a fresh JNI symbol name.
 
 macro_rules! shim_indicator {
-    ($name:ident, $arg_ty:ty, $out_ty:ty) => {
+    ($name:ident, $dispatch:literal, $arg_ty:ty, $out_ty:ty) => {
         #[no_mangle]
         pub extern "system" fn $name(
             mut env: JNIEnv,
@@ -57,7 +57,7 @@ macro_rules! shim_indicator {
             panic::catch_unwind(panic::AssertUnwindSafe(|| {
                 let data = from_double_array(&mut env, input);
                 // Delegate to the matching pure-Rust core function.
-                let result = dispatch_ta(stringify!($name), &data, period as usize);
+                let result = dispatch_ta($dispatch, &data, period as usize);
                 to_double_array(&mut env, result)
             }))
             .unwrap_or(std::ptr::null_mut())
@@ -97,6 +97,26 @@ fn dispatch_ta(name: &str, data: &[f64], period: usize) -> Vec<f64> {
 }
 
 include!("generated.rs");
+
+
+#[no_mangle]
+pub extern "system" fn Java_com_finkit_indicators_Finkit_version(
+    mut env: JNIEnv,
+    _class: JClass,
+) -> jstring {
+    match env.new_string(env!("CARGO_PKG_VERSION")) {
+        Ok(value) => value.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_finkit_indicators_Finkit_abiVersion(
+    _env: JNIEnv,
+    _class: JClass,
+) -> jint {
+    1
+}
 
 /// ABI version exported to the Android side so the wrapper can refuse
 /// to load a `.so` built against an incompatible core.

@@ -4,7 +4,7 @@
 #![allow(deprecated)]
 
 use std::ffi::CString;
-use std::os::raw::{c_char, c_double, c_int};
+use std::os::raw::{c_char, c_double, c_int, c_void};
 
 use finkit::formula::{FormulaContext, FormulaEngine};
 use finkit::indicators::{
@@ -12,6 +12,11 @@ use finkit::indicators::{
     ht_phasor, ht_sine, ht_trendline, ht_trendmode, kama, linear_reg, macd, mom, natr, obv, roc,
     rsi, sma, std_dev, stoch, t3, tema, trange, tsf, willr, wma, zscore,
 };
+use finkit::streaming::indicators::{
+    BollOutput, MacdOutput, StreamingAtr, StreamingBoll, StreamingEma, StreamingMacd, StreamingRsi,
+    StreamingSma,
+};
+use finkit::streaming::StreamingIndicator;
 use finkit_ffi_common::panic::*;
 use ndarray::Array1;
 use serde_json;
@@ -30,6 +35,8 @@ pub struct TaResult {
     pub capacity: c_int,
     pub error: *mut c_char,
 }
+
+static VERSION: &[u8] = concat!(env!("CARGO_PKG_VERSION"), "\0").as_bytes();
 
 #[no_mangle]
 pub extern "C" fn ta_free_result(result: *mut TaResult) {
@@ -101,6 +108,203 @@ fn validate_input(input: *const c_double, length: c_int) -> Option<&'static [f64
 #[no_mangle]
 pub extern "C" fn ta_ffi_panic_test() -> *mut TaResult {
     ffi_catch_ptr(|| -> *mut TaResult { panic!("ffi panic injection test") })
+}
+
+
+fn boxed_handle<T>(value: T) -> *mut c_void {
+    Box::into_raw(Box::new(value)).cast()
+}
+
+#[no_mangle]
+pub extern "C" fn ta_streaming_sma_new(period: c_int) -> *mut c_void {
+    if period <= 0 { return std::ptr::null_mut(); }
+    ffi_catch_ptr(|| boxed_handle(StreamingSma::new(period as usize)))
+}
+
+#[no_mangle]
+pub extern "C" fn ta_streaming_sma_update(handle: *mut c_void, value: c_double) -> c_double {
+    ffi_catch_f64(|| unsafe {
+        (handle as *mut StreamingSma).as_mut()
+            .and_then(|indicator| indicator.next(value))
+            .unwrap_or(f64::NAN)
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn ta_streaming_sma_reset(handle: *mut c_void) {
+    ffi_catch_void(|| unsafe {
+        if let Some(indicator) = (handle as *mut StreamingSma).as_mut() { indicator.reset(); }
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn ta_streaming_sma_free(handle: *mut c_void) {
+    ffi_catch_void(|| unsafe {
+        if !handle.is_null() { drop(Box::from_raw(handle as *mut StreamingSma)); }
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn ta_streaming_ema_new(period: c_int) -> *mut c_void {
+    if period <= 0 { return std::ptr::null_mut(); }
+    ffi_catch_ptr(|| boxed_handle(StreamingEma::new(period as usize)))
+}
+
+#[no_mangle]
+pub extern "C" fn ta_streaming_ema_update(handle: *mut c_void, value: c_double) -> c_double {
+    ffi_catch_f64(|| unsafe {
+        (handle as *mut StreamingEma).as_mut()
+            .and_then(|indicator| indicator.next(value))
+            .unwrap_or(f64::NAN)
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn ta_streaming_ema_reset(handle: *mut c_void) {
+    ffi_catch_void(|| unsafe {
+        if let Some(indicator) = (handle as *mut StreamingEma).as_mut() { indicator.reset(); }
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn ta_streaming_ema_free(handle: *mut c_void) {
+    ffi_catch_void(|| unsafe {
+        if !handle.is_null() { drop(Box::from_raw(handle as *mut StreamingEma)); }
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn ta_streaming_rsi_new(period: c_int) -> *mut c_void {
+    if period <= 0 { return std::ptr::null_mut(); }
+    ffi_catch_ptr(|| boxed_handle(StreamingRsi::new(period as usize)))
+}
+
+#[no_mangle]
+pub extern "C" fn ta_streaming_rsi_update(handle: *mut c_void, value: c_double) -> c_double {
+    ffi_catch_f64(|| unsafe {
+        (handle as *mut StreamingRsi).as_mut()
+            .and_then(|indicator| indicator.next(value))
+            .unwrap_or(f64::NAN)
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn ta_streaming_rsi_reset(handle: *mut c_void) {
+    ffi_catch_void(|| unsafe {
+        if let Some(indicator) = (handle as *mut StreamingRsi).as_mut() { indicator.reset(); }
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn ta_streaming_rsi_free(handle: *mut c_void) {
+    ffi_catch_void(|| unsafe {
+        if !handle.is_null() { drop(Box::from_raw(handle as *mut StreamingRsi)); }
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn ta_streaming_macd_new(fast: c_int, slow: c_int, signal: c_int) -> *mut c_void {
+    if fast <= 0 || slow <= 0 || signal <= 0 { return std::ptr::null_mut(); }
+    ffi_catch_ptr(|| boxed_handle(StreamingMacd::new(fast as usize, slow as usize, signal as usize)))
+}
+
+#[no_mangle]
+pub extern "C" fn ta_streaming_macd_update(
+    handle: *mut c_void, value: c_double, macd_out: *mut c_double,
+    signal_out: *mut c_double, hist_out: *mut c_double,
+) -> c_int {
+    ffi_catch_i32(|| unsafe {
+        if macd_out.is_null() || signal_out.is_null() || hist_out.is_null() { return 0; }
+        let Some(indicator) = (handle as *mut StreamingMacd).as_mut() else { return 0; };
+        match indicator.next(value) {
+            Some(MacdOutput { macd, signal, histogram }) => {
+                *macd_out = macd; *signal_out = signal; *hist_out = histogram; 1
+            }
+            None => 0,
+        }
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn ta_streaming_macd_reset(handle: *mut c_void) {
+    ffi_catch_void(|| unsafe {
+        if let Some(indicator) = (handle as *mut StreamingMacd).as_mut() { indicator.reset(); }
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn ta_streaming_macd_free(handle: *mut c_void) {
+    ffi_catch_void(|| unsafe {
+        if !handle.is_null() { drop(Box::from_raw(handle as *mut StreamingMacd)); }
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn ta_streaming_bbands_new(period: c_int, nb_dev_up: c_double, nb_dev_dn: c_double) -> *mut c_void {
+    if period <= 1 { return std::ptr::null_mut(); }
+    ffi_catch_ptr(|| boxed_handle(StreamingBoll::new(period as usize, nb_dev_up, nb_dev_dn)))
+}
+
+#[no_mangle]
+pub extern "C" fn ta_streaming_bbands_update(
+    handle: *mut c_void, value: c_double, upper_out: *mut c_double,
+    middle_out: *mut c_double, lower_out: *mut c_double,
+) -> c_int {
+    ffi_catch_i32(|| unsafe {
+        if upper_out.is_null() || middle_out.is_null() || lower_out.is_null() { return 0; }
+        let Some(indicator) = (handle as *mut StreamingBoll).as_mut() else { return 0; };
+        match indicator.next(value) {
+            Some(BollOutput { upper, middle, lower }) => {
+                *upper_out = upper; *middle_out = middle; *lower_out = lower; 1
+            }
+            None => 0,
+        }
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn ta_streaming_bbands_reset(handle: *mut c_void) {
+    ffi_catch_void(|| unsafe {
+        if let Some(indicator) = (handle as *mut StreamingBoll).as_mut() { indicator.reset(); }
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn ta_streaming_bbands_free(handle: *mut c_void) {
+    ffi_catch_void(|| unsafe {
+        if !handle.is_null() { drop(Box::from_raw(handle as *mut StreamingBoll)); }
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn ta_streaming_atr_new(period: c_int) -> *mut c_void {
+    if period <= 0 { return std::ptr::null_mut(); }
+    ffi_catch_ptr(|| boxed_handle(StreamingAtr::new(period as usize)))
+}
+
+#[no_mangle]
+pub extern "C" fn ta_streaming_atr_update_hlc(
+    handle: *mut c_void, high: c_double, low: c_double, close: c_double,
+) -> c_double {
+    ffi_catch_f64(|| unsafe {
+        (handle as *mut StreamingAtr).as_mut()
+            .and_then(|indicator| indicator.next((high, low, close)))
+            .unwrap_or(f64::NAN)
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn ta_streaming_atr_reset(handle: *mut c_void) {
+    ffi_catch_void(|| unsafe {
+        if let Some(indicator) = (handle as *mut StreamingAtr).as_mut() { indicator.reset(); }
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn ta_streaming_atr_free(handle: *mut c_void) {
+    ffi_catch_void(|| unsafe {
+        if !handle.is_null() { drop(Box::from_raw(handle as *mut StreamingAtr)); }
+    })
 }
 
 include!("generated.rs");
@@ -266,7 +470,7 @@ pub extern "C" fn ta_std_dev(
 
 #[no_mangle]
 pub extern "C" fn ta_version() -> *const c_char {
-    c"0.1.0".as_ptr()
+    VERSION.as_ptr().cast()
 }
 
 // ============ Formula Engine ============

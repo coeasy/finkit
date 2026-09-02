@@ -52,6 +52,10 @@ public final class Indicators {
         }
     }
 
+    static void ensureLoaded() {
+        // Calling this method triggers class initialization and native loading.
+    }
+
     // =========================================================================
     // Overlap Studies
     // =========================================================================

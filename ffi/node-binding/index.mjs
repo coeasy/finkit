@@ -1,158 +1,166 @@
-// ESM entry point
+// ESM entry point. Keep this surface identical to the generated CommonJS entry point.
 import { createRequire } from 'module'
-import { platform, arch } from 'process'
-import { readFileSync } from 'fs'
-import { join, dirname } from 'path'
-import { fileURLToPath } from 'url'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
 const require = createRequire(import.meta.url)
+const binding = require('./index.js')
 
-let nativeBinding = null
-
-try {
-  nativeBinding = require('./finkit.node')
-} catch (e) {
-  let pkgName = null
-  const platformKey = `${platform}-${arch}`
-
-  switch (platformKey) {
-    case 'darwin-arm64':
-      pkgName = 'finkit-darwin-arm64'
-      break
-    case 'darwin-x64':
-      pkgName = 'finkit-darwin-x64'
-      break
-    case 'linux-arm64':
-      try {
-        if (readFileSync('/usr/bin/ldd', 'utf8').includes('musl')) {
-          pkgName = 'finkit-linux-arm64-musl'
-        } else {
-          pkgName = 'finkit-linux-arm64-gnu'
-        }
-      } catch {
-        pkgName = 'finkit-linux-arm64-gnu'
-      }
-      break
-    case 'linux-x64':
-      try {
-        if (readFileSync('/usr/bin/ldd', 'utf8').includes('musl')) {
-          pkgName = 'finkit-linux-x64-musl'
-        } else {
-          pkgName = 'finkit-linux-x64-gnu'
-        }
-      } catch {
-        pkgName = 'finkit-linux-x64-gnu'
-      }
-      break
-    case 'win32-x64':
-      pkgName = 'finkit-win32-x64-msvc'
-      break
-    case 'win32-arm64':
-      pkgName = 'finkit-win32-arm64-msvc'
-      break
-    default:
-      throw new Error(`Unsupported platform: ${platformKey}`)
-  }
-
-  if (pkgName) {
-    try {
-      nativeBinding = await import(pkgName)
-    } catch (err) {
-      throw new Error(
-        `Failed to load native binding for ${platformKey}. ` +
-        `Try installing ${pkgName} manually. ` +
-        `Original error: ${err.message}`
-      )
-    }
-  }
-}
-
-if (!nativeBinding) {
-  throw new Error('Failed to load native Rust TA-Lib binding')
-}
-
-export const sma = nativeBinding.sma
-export const ema = nativeBinding.ema
-export const wma = nativeBinding.wma
-export const dema = nativeBinding.dema
-export const tema = nativeBinding.tema
-export const kama = nativeBinding.kama
-export const mama = nativeBinding.mama
-export const t3 = nativeBinding.t3
-export const rsi = nativeBinding.rsi
-export const macd = nativeBinding.macd
-export const macdAsync = nativeBinding.macd_async
-export const stoch = nativeBinding.stoch
-export const adx = nativeBinding.adx
-export const atr = nativeBinding.atr
-export const obv = nativeBinding.obv
-export const sar = nativeBinding.sar
-export const aroon = nativeBinding.aroon
-export const cci = nativeBinding.cci
-export const mom = nativeBinding.mom
-export const roc = nativeBinding.roc
-export const willr = nativeBinding.willr
-export const apo = nativeBinding.apo
-export const bop = nativeBinding.bop
-export const cmo = nativeBinding.cmo
-export const dx = nativeBinding.dx
-export const mfi = nativeBinding.mfi
-export const minusDi = nativeBinding.minus_di
-export const plusDi = nativeBinding.plus_di
-export const trix = nativeBinding.trix
-export const ad = nativeBinding.ad
-export const adosc = nativeBinding.adosc
-export const bollingerBands = nativeBinding.bollinger_bands
-export const natr = nativeBinding.natr
-export const trange = nativeBinding.trange
-export const htDcperiod = nativeBinding.ht_dcperiod
-export const htDcphase = nativeBinding.ht_dcphase
-export const htPhasor = nativeBinding.ht_phasor
-export const htSine = nativeBinding.ht_sine
-export const htTrendmode = nativeBinding.ht_trendmode
-export const htTrendline = nativeBinding.ht_trendline
-export const avgprice = nativeBinding.avgprice
-export const medprice = nativeBinding.medprice
-export const typprice = nativeBinding.typprice
-export const wclprice = nativeBinding.wclprice
-export const zscore = nativeBinding.zscore
-export const percentRank = nativeBinding.percent_rank
-export const beta = nativeBinding.beta
-export const correlation = nativeBinding.correlation
-export const stdDev = nativeBinding.std_dev
-export const linearReg = nativeBinding.linear_reg
-export const tsf = nativeBinding.tsf
-export const cdlDoji = nativeBinding.cdl_doji
-export const cdlDragonflyDoji = nativeBinding.cdl_dragonfly_doji
-export const cdlGravestoneDoji = nativeBinding.cdl_gravestone_doji
-export const cdlLongLeggedDoji = nativeBinding.cdl_long_legged_doji
-export const cdlHammer = nativeBinding.cdl_hammer
-export const cdlInvertedHammer = nativeBinding.cdl_inverted_hammer
-export const cdlHangingMan = nativeBinding.cdl_hanging_man
-export const cdlShootingStar = nativeBinding.cdl_shooting_star
-export const cdlEngulfing = nativeBinding.cdl_engulfing
-export const cdlHarami = nativeBinding.cdl_harami
-export const cdlHaramiCross = nativeBinding.cdl_harami_cross
-export const cdlMorningStar = nativeBinding.cdl_morning_star
-export const cdlEveningStar = nativeBinding.cdl_evening_star
-export const cdlMorningDojiStar = nativeBinding.cdl_morning_doji_star
-export const cdlEveningDojiStar = nativeBinding.cdl_evening_doji_star
-export const cdlThreeWhiteSoldiers = nativeBinding.cdl_three_white_soldiers
-export const cdlThreeBlackCrows = nativeBinding.cdl_three_black_crows
-export const cdlMarubozu = nativeBinding.cdl_marubozu
-export const cdlPiercing = nativeBinding.cdl_piercing
-export const cdlDarkCloudCover = nativeBinding.cdl_dark_cloud_cover
-export const cdlBeltHold = nativeBinding.cdl_belt_hold
-export const cdlSpinningTop = nativeBinding.cdl_spinning_top
-export const cdlHighWave = nativeBinding.cdl_high_wave
-export const cdlRickshawMan = nativeBinding.cdl_rickshaw_man
-export const cdlTweezerTop = nativeBinding.cdl_tweezer_top
-export const cdlTweezerBot = nativeBinding.cdl_tweezer_bot
-export const cdlKicking = nativeBinding.cdl_kicking
-export const detectHeadShoulders = nativeBinding.detect_head_shoulders
-export const detectDoubleTop = nativeBinding.detect_double_top
-export const detectDoubleBottom = nativeBinding.detect_double_bottom
-export const detectHeadShouldersBottom = nativeBinding.detect_head_shoulders_bottom
-export const detectTripleTop = nativeBinding.detect_triple_top
-export const detectTripleBottom = nativeBinding.detect_triple_bottom
+export const NapiStreamingSma = binding.NapiStreamingSma
+export const NapiStreamingEma = binding.NapiStreamingEma
+export const NapiStreamingWma = binding.NapiStreamingWma
+export const NapiStreamingDema = binding.NapiStreamingDema
+export const NapiStreamingTema = binding.NapiStreamingTema
+export const NapiStreamingKama = binding.NapiStreamingKama
+export const NapiStreamingT3 = binding.NapiStreamingT3
+export const NapiStreamingRsi = binding.NapiStreamingRsi
+export const NapiStreamingMom = binding.NapiStreamingMom
+export const NapiStreamingRoc = binding.NapiStreamingRoc
+export const NapiStreamingMacd = binding.NapiStreamingMacd
+export const NapiStreamingBoll = binding.NapiStreamingBoll
+export const NapiStreamingAtr = binding.NapiStreamingAtr
+export const NapiStreamingAdx = binding.NapiStreamingAdx
+export const NapiStreamingCci = binding.NapiStreamingCci
+export const NapiStreamingStoch = binding.NapiStreamingStoch
+export const NapiStreamingAroon = binding.NapiStreamingAroon
+export const NapiStreamingObv = binding.NapiStreamingObv
+export const NapiStreamingVwap = binding.NapiStreamingVwap
+export const NapiStreamingWillr = binding.NapiStreamingWillr
+export const NapiStreamingMfi = binding.NapiStreamingMfi
+export const NapiStreamingNatr = binding.NapiStreamingNatr
+export const NapiStreamingTrange = binding.NapiStreamingTrange
+export const NapiStreamingDonchian = binding.NapiStreamingDonchian
+export const NapiStreamingIchimoku = binding.NapiStreamingIchimoku
+export const NapiStreamingSupertrend = binding.NapiStreamingSupertrend
+export const NapiStreamingKeltner = binding.NapiStreamingKeltner
+export const sweepSma = binding.sweepSma
+export const sweepEma = binding.sweepEma
+export const sweepRsi = binding.sweepRsi
+export const sweepEngineRun = binding.sweepEngineRun
+export const Pipeline = binding.Pipeline
+export const transformLogReturn = binding.transformLogReturn
+export const transformZscore = binding.transformZscore
+export const transformRank = binding.transformRank
+export const transformDiff = binding.transformDiff
+export const transformRollingMean = binding.transformRollingMean
+export const sma = binding.sma
+export const ema = binding.ema
+export const wma = binding.wma
+export const dema = binding.dema
+export const tema = binding.tema
+export const kama = binding.kama
+export const darvasBox = binding.darvasBox
+export const renko = binding.renko
+export const kagi = binding.kagi
+export const pointAndFigure = binding.pointAndFigure
+export const threeLineBreak = binding.threeLineBreak
+export const williamsAlligator = binding.williamsAlligator
+export const heikinAshi = binding.heikinAshi
+export const mama = binding.mama
+export const t3 = binding.t3
+export const rsi = binding.rsi
+export const macd = binding.macd
+export const macdAsync = binding.macdAsync
+export const stoch = binding.stoch
+export const adx = binding.adx
+export const atr = binding.atr
+export const obv = binding.obv
+export const sar = binding.sar
+export const aroon = binding.aroon
+export const cci = binding.cci
+export const mom = binding.mom
+export const roc = binding.roc
+export const willr = binding.willr
+export const apo = binding.apo
+export const bop = binding.bop
+export const cmo = binding.cmo
+export const dx = binding.dx
+export const mfi = binding.mfi
+export const minusDi = binding.minusDi
+export const plusDi = binding.plusDi
+export const trix = binding.trix
+export const ad = binding.ad
+export const adosc = binding.adosc
+export const bollingerBands = binding.bollingerBands
+export const natr = binding.natr
+export const trange = binding.trange
+export const htDcperiod = binding.htDcperiod
+export const htDcphase = binding.htDcphase
+export const htPhasor = binding.htPhasor
+export const htSine = binding.htSine
+export const htTrendmode = binding.htTrendmode
+export const htTrendline = binding.htTrendline
+export const avgprice = binding.avgprice
+export const medprice = binding.medprice
+export const typprice = binding.typprice
+export const wclprice = binding.wclprice
+export const zscore = binding.zscore
+export const percentRank = binding.percentRank
+export const beta = binding.beta
+export const correlation = binding.correlation
+export const stdDev = binding.stdDev
+export const linearReg = binding.linearReg
+export const tsf = binding.tsf
+export const cdlDoji = binding.cdlDoji
+export const cdlDragonflyDoji = binding.cdlDragonflyDoji
+export const cdlGravestoneDoji = binding.cdlGravestoneDoji
+export const cdlLongLeggedDoji = binding.cdlLongLeggedDoji
+export const cdlHammer = binding.cdlHammer
+export const cdlInvertedHammer = binding.cdlInvertedHammer
+export const cdlHangingMan = binding.cdlHangingMan
+export const cdlShootingStar = binding.cdlShootingStar
+export const cdlEngulfing = binding.cdlEngulfing
+export const cdlHarami = binding.cdlHarami
+export const cdlHaramiCross = binding.cdlHaramiCross
+export const cdlMorningStar = binding.cdlMorningStar
+export const cdlEveningStar = binding.cdlEveningStar
+export const cdlMorningDojiStar = binding.cdlMorningDojiStar
+export const cdlEveningDojiStar = binding.cdlEveningDojiStar
+export const cdlThreeWhiteSoldiers = binding.cdlThreeWhiteSoldiers
+export const cdlThreeBlackCrows = binding.cdlThreeBlackCrows
+export const cdlMarubozu = binding.cdlMarubozu
+export const cdlPiercing = binding.cdlPiercing
+export const cdlDarkCloudCover = binding.cdlDarkCloudCover
+export const cdlBeltHold = binding.cdlBeltHold
+export const cdlSpinningTop = binding.cdlSpinningTop
+export const cdlHighWave = binding.cdlHighWave
+export const cdlRickshawMan = binding.cdlRickshawMan
+export const cdlTweezerTop = binding.cdlTweezerTop
+export const cdlTweezerBot = binding.cdlTweezerBot
+export const cdlKicking = binding.cdlKicking
+export const detectHeadShoulders = binding.detectHeadShoulders
+export const detectDoubleTop = binding.detectDoubleTop
+export const detectDoubleBottom = binding.detectDoubleBottom
+export const detectHeadShouldersBottom = binding.detectHeadShouldersBottom
+export const detectTripleTop = binding.detectTripleTop
+export const detectTripleBottom = binding.detectTripleBottom
+export const ichimoku = binding.ichimoku
+export const supertrend = binding.supertrend
+export const vwap = binding.vwap
+export const anchoredVwap = binding.anchoredVwap
+export const vwapBands = binding.vwapBands
+export const elderRay = binding.elderRay
+export const donchian = binding.donchian
+export const PivotMethod = binding.PivotMethod
+export const pivotPoints = binding.pivotPoints
+export const volumeProfile = binding.volumeProfile
+export const fibonacciRetracement = binding.fibonacciRetracement
+export const klineDataNew = binding.klineDataNew
+export const klineDataValidate = binding.klineDataValidate
+export const KlineChartNapi = binding.KlineChartNapi
+export const vortex = binding.vortex
+export const inertiaIndicator = binding.inertiaIndicator
+export const vzo = binding.vzo
+export const volumeMomentum = binding.volumeMomentum
+export const volumeRoc = binding.volumeRoc
+export const chandeForecastOscillator = binding.chandeForecastOscillator
+export const twiggsMoneyFlow = binding.twiggsMoneyFlow
+export const formulaEval = binding.formulaEval
+export const formulaEvalMulti = binding.formulaEvalMulti
+export const formulaEvalDraw = binding.formulaEvalDraw
+export const formulaEvalDebug = binding.formulaEvalDebug
+export const formulaGetTemplate = binding.formulaGetTemplate
+export const formulaSearchTemplates = binding.formulaSearchTemplates
+export const formulaListCategories = binding.formulaListCategories
+export const formulaValidate = binding.formulaValidate
+export const formulaEvalJit = binding.formulaEvalJit
+export const formulaEvalSimd = binding.formulaEvalSimd
+export const formulaEvalZeroCopy = binding.formulaEvalZeroCopy
