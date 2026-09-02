@@ -15,6 +15,7 @@ The two navigation entry points are:
 | [Installation guide](installation.md) | Installation overview for all bindings |
 | [Development guide](development.md) | Local build, test, packaging, and contribution workflow |
 | [Quick start](src/quickstart.md) | Five-minute cross-language introduction |
+| [Compute Engine upgrade plan](plan/finkit-compute-engine-upgrade-plan-v012.md) | v0.1.2 architecture roadmap for Compute IR, Unified Runtime, FactorPlan, Registry SSOT, performance, and quality gates |
 
 ## User guide
 
