@@ -22,7 +22,7 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Apply targeted parser and sandbox repairs
+      - name: Apply targeted parser sandbox and optimizer repairs
         shell: bash
         run: |
           python - <<'PY'
@@ -44,6 +44,12 @@ jobs:
 
           replace_once(
               "core/src/formula/engine.rs",
+              "        let ast = FormulaOptimizer::optimize(&ast);",
+              "        let ast = FormulaOptimizer::optimize_for_execution(&ast);",
+          )
+
+          replace_once(
+              "core/src/formula/engine.rs",
               "        if let Some(result) = self.try_execute_simple_formula(&formula.ast, ctx) {\n            return Ok(result);\n        }\n        self.executor.execute(&formula.ast, ctx)",
               "        let sandbox_unlimited = ctx.sandbox.timeout_ms.is_none()\n            && ctx.sandbox.max_recursion_depth.is_none()\n            && ctx.sandbox.max_memory_bytes.is_none();\n        if sandbox_unlimited {\n            if let Some(result) = self.try_execute_simple_formula(&formula.ast, ctx) {\n                return Ok(result);\n            }\n        }\n        self.executor.execute(&formula.ast, ctx)",
           )
@@ -52,6 +58,12 @@ jobs:
               "core/src/formula/engine.rs",
               "        if self.try_execute_simple_formula_into(&formula.ast, ctx, output) {\n            return Ok(());\n        }\n        self.executor.eval_into(&formula.ast, ctx, output)",
               "        let sandbox_unlimited = ctx.sandbox.timeout_ms.is_none()\n            && ctx.sandbox.max_recursion_depth.is_none()\n            && ctx.sandbox.max_memory_bytes.is_none();\n        if !sandbox_unlimited {\n            let result = self.executor.execute(&formula.ast, ctx)?;\n            output.assign(&result);\n            return Ok(());\n        }\n        if self.try_execute_simple_formula_into(&formula.ast, ctx, output) {\n            return Ok(());\n        }\n        self.executor.eval_into(&formula.ast, ctx, output)",
+          )
+
+          replace_once(
+              "core/src/formula/optimizer.rs",
+              "    pub fn optimize(ast: &AstNode) -> AstNode {\n        Self::optimize_with(ast, OptLevel::default())\n    }",
+              "    pub fn optimize(ast: &AstNode) -> AstNode {\n        Self::optimize_with(ast, OptLevel::default())\n    }\n\n    /// Optimize an AST for normal execution while preserving assignment side effects.\n    ///\n    /// Formula assignments are observable through `FormulaContext::variables`, so\n    /// statement-level dead-code elimination is only valid for explicit lazy/optimizer\n    /// use, not for the normal compiled execution contract.\n    pub(crate) fn optimize_for_execution(ast: &AstNode) -> AstNode {\n        let level = OptLevel::default();\n        let mut node = ast.clone();\n        if level >= OptLevel::Basic {\n            node = Self::constant_folding(&node);\n        }\n        if level >= OptLevel::Standard {\n            node = Self::algebraic_simplify(&node);\n            node = Self::strength_reduction(&node);\n            node = Self::common_subexpression_elimination(&node);\n        }\n        if level >= OptLevel::Aggressive {\n            node = Self::loop_invariant_code_motion(&node);\n        }\n        node\n    }",
           )
           PY
 
@@ -63,6 +75,8 @@ jobs:
           cargo test -p finkit --locked formula::dialect_tests::tdx_terminal_parses_assignment_and_cross -- --exact
           cargo test -p finkit --locked formula::sandbox::tests::sandbox_limits_memory_enforced -- --exact
           cargo test -p finkit --locked formula::sandbox::tests -- --nocapture
+          cargo test -p finkit --locked --test formula_engine_integration
+          cargo test -p finkit --locked formula::optimizer::tests::test_dead_code_elimination_removes_unused_assignment -- --exact
 
       - name: Verify full core suite
         id: core
@@ -82,7 +96,7 @@ jobs:
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add .ci-pr13-full-test-failures.txt
-          git commit -m "chore: capture remaining PR 13 core failures"
+          git commit -m "chore: capture remaining PR 13 core failures" || true
           git push
           exit 1
 
@@ -98,5 +112,5 @@ jobs:
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           rm -f .github/workflows/pr13-test-diagnostic.yml .ci-pr13-test-failures.txt .ci-pr13-full-test-failures.txt
           git add -A
-          git commit -m "fix: enforce formula sandbox and terminal parsing"
+          git commit -m "fix: preserve formula runtime semantics under optimization"
           git push
