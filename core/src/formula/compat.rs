@@ -8,6 +8,9 @@
 
 use super::FormulaDialect;
 
+/// Stable schema identifier for terminal compatibility discovery.
+pub const FORMULA_TERMINAL_SCHEMA_VERSION: &str = "finkit.formula-terminal.v1";
+
 /// Formula source terminal understood by the compatibility layer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FormulaTerminal {
@@ -144,6 +147,7 @@ mod tests {
 
     #[test]
     fn terminal_discovery_is_stable_and_complete() {
+        assert_eq!(FORMULA_TERMINAL_SCHEMA_VERSION, "finkit.formula-terminal.v1");
         assert_eq!(
             FormulaTerminal::all(),
             &[
