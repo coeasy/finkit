@@ -18,14 +18,14 @@ forward-filling. Use `normalized` when an owned `Vec<f64>` is required.
 ```rust
 use finkit::runtime::{MarketFrame, NanPolicy};
 
+let open = [9.5, 10.0, 10.5];
+let high = [10.2, 10.7, 11.2];
+let low = [9.0, 9.8, 10.0];
 let close = [10.0, 10.5, 11.0];
-let frame = MarketFrame::new(
-    &[9.5, 10.0, 10.5],
-    &[10.2, 10.7, 11.2],
-    &[9.0, 9.8, 10.0],
-    &close,
-    &[100.0, 120.0, 140.0],
-)?;
+let volume = [100.0, 120.0, 140.0];
+let amount = [1_000.0, 1_200.0, 1_400.0];
+let frame = MarketFrame::new(&open, &high, &low, &close, &volume)?
+    .with_amount(&amount)?;
 let close_view = frame.series(" CLOSE ").expect("close column");
 let borrowed = close_view.normalized_cow(NanPolicy::Preserve)?;
 assert_eq!(borrowed.as_ref(), &close);
