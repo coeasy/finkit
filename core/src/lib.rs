@@ -31,12 +31,12 @@ extern crate std;
 // `math` subset) to resolve.
 extern crate alloc;
 
-#[cfg(all(feature = "std", not(feature = "no_std")))]
-/// Domain error types for indicator computations and the formula engine.
-pub mod error;
 #[cfg(feature = "std")]
 /// Unified semantic compute plans, factor plans, and runtime execution policies.
 pub mod compute;
+#[cfg(all(feature = "std", not(feature = "no_std")))]
+/// Domain error types for indicator computations and the formula engine.
+pub mod error;
 #[cfg(feature = "formula")]
 /// Formula engine with AST parsing, bytecode compilation, JIT optimization, and SIMD acceleration.
 pub mod formula;
