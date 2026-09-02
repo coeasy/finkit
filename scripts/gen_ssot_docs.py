@@ -37,6 +37,8 @@ FEATURES_MOD = ROOT / "core" / "src" / "features" / "mod.rs"
 PINE_BUILTIN = ROOT / "core" / "src" / "formula" / "pine" / "builtin_table.rs"
 FFI_LIB = ROOT / "ffi" / "c-binding" / "src" / "lib.rs"
 WORKSPACE_CARGO = ROOT / "Cargo.toml"
+DOTNET_PROJECT = ROOT / "ffi" / "dotnet-binding" / "src" / "Finkit" / "Finkit.csproj"
+JAVA_POM = ROOT / "ffi" / "java-binding" / "pom.xml"
 GENERATED_DIR = ROOT / "docs" / "generated"
 DEFAULT_CRITERION_DIR = ROOT / "target" / "criterion"
 INDICATOR_REGISTRY = ROOT / "docs" / "indicator_registry.json"
@@ -142,7 +144,14 @@ def read_node_version() -> str | None:
     version = data.get("version")
     return str(version) if version else None
 
-
+def read_xml_project_version(path: Path, tag: str) -> str | None:
+    """Read the first release version tag from an XML binding manifest."""
+    if not path.is_file():
+        return None
+    text = path.read_text(encoding="utf-8")
+    pattern = rf"(?m)^[ \t]*<{re.escape(tag)}>([^<]+)</{re.escape(tag)}>[ \t]*$"
+    match = re.search(pattern, text)
+    return match.group(1).strip() if match else None
 def parse_indicator_modules() -> list[str]:
     modules: list[str] = []
     for line in INDICATORS_MOD.read_text(encoding="utf-8").splitlines():
@@ -632,7 +641,7 @@ def format_version_matrix_md(
     lines = [
         "# Version Matrix",
         "",
-        "> **SSOT** — auto-generated from workspace `Cargo.toml` and binding manifests.",
+        "> **SSOT** — auto-generated from workspace `Cargo.toml` and binding manifests (including .NET and Java metadata).",
         "> Do not edit manually. Regenerate: `python scripts/gen_ssot_docs.py --generate`",
         "",
         f"Canonical workspace version: **`{canonical}`**",
@@ -721,6 +730,32 @@ def build_version_rows(canonical: str) -> list[tuple[str, str, str, str, str]]:
             )
         )
 
+    for package, path, tag, source in (
+        (
+            "finkit-dotnet (.csproj)",
+            DOTNET_PROJECT,
+            "Version",
+            "Version",
+        ),
+        (
+            "finkit-java (pom.xml)",
+            JAVA_POM,
+            "version",
+            "project.version",
+        ),
+    ):
+        xml_ver = read_xml_project_version(path, tag)
+        if xml_ver is not None:
+            match = "✅" if xml_ver == canonical else "❌"
+            rows.append(
+                (
+                    package,
+                    path.relative_to(ROOT).as_posix(),
+                    xml_ver,
+                    source,
+                    match,
+                )
+            )
     return rows
 
 

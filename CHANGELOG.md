@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.2] - Pending release (source baseline 2026-09-01)
 
+- Added cross-language version checks for .NET and Java binding metadata, with SSOT version-matrix coverage.
+
 > The `0.1.2` source metadata is ready on `main`; the GitHub Release and downloadable assets are still pending.
 
 ### Changed

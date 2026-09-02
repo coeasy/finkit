@@ -18,6 +18,8 @@ Canonical workspace version: **`0.1.2`**
 | finkit-dotnet | `ffi/dotnet-binding/Cargo.toml` | 0.1.2 | workspace | ✅ |
 | finkit-ios | `ffi/ios-binding/Cargo.toml` | 0.1.2 | workspace | ✅ |
 | finkit-java | `ffi/java-binding/Cargo.toml` | 0.1.2 | workspace | ✅ |
+| finkit-dotnet (.csproj) | `ffi/dotnet-binding/src/Finkit/Finkit.csproj` | 0.1.2 | Version | ✅ |
+| finkit-java (pom.xml) | `ffi/java-binding/pom.xml` | 0.1.2 | project.version | ✅ |
 | finkit-android | `ffi/android-binding/Cargo.toml` | 0.1.2 | workspace | ✅ |
 | finkit-cli | `cli/Cargo.toml` | 0.1.2 | workspace | ✅ |
 | finkit-wasm | `wasm/Cargo.toml` | 0.1.2 | workspace | ✅ |
