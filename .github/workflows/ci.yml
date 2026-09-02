@@ -89,19 +89,13 @@ jobs:
 
           path = Path("core/src/factors.rs")
           text = path.read_text()
-          old = '''        if let Some(dependency) = factor
-              .dependencies
-              .iter()
-              .find(|dependency| dependency.trim().is_empty())
-          {'''
-          new = '''        if factor
-              .dependencies
-              .iter()
-              .any(|dependency| dependency.trim().is_empty())
-          {'''
-          if old not in text:
+          first = "if let Some(dependency) = factor"
+          second = ".find(|dependency| dependency.trim().is_empty())"
+          if text.count(first) != 1 or text.count(second) != 1:
               raise SystemExit("factor validation target changed")
-          path.write_text(text.replace(old, new, 1))
+          text = text.replace(first, "if factor", 1)
+          text = text.replace(second, ".any(|dependency| dependency.trim().is_empty())", 1)
+          path.write_text(text)
           PY
       - name: Format and verify
         run: |
