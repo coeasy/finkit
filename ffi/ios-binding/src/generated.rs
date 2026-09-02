@@ -12,12 +12,14 @@ pub extern "C" fn alpha_ta_sma(
     out: *mut f64,
 ) -> i32 {
     ffi_catch_i32_neg(|| {
-if period <= 0 || len < period {
+if input.is_null() || out.is_null() || period <= 0 || len < period {
         return -1;
     }
     let data = from_raw(input, len);
     let result = moving_avg::sma(data, period as usize).unwrap_or_default();
-    write_result(out, result.as_slice().unwrap());
+    if !write_result(out, result.as_slice().unwrap()) {
+        return -1;
+    }
     0
     })
 }
@@ -30,12 +32,14 @@ pub extern "C" fn alpha_ta_ema(
     out: *mut f64,
 ) -> i32 {
     ffi_catch_i32_neg(|| {
-if period <= 0 || len < period {
+if input.is_null() || out.is_null() || period <= 0 || len < period {
         return -1;
     }
     let data = from_raw(input, len);
     let result = moving_avg::ema(data, period as usize).unwrap_or_default();
-    write_result(out, result.as_slice().unwrap());
+    if !write_result(out, result.as_slice().unwrap()) {
+        return -1;
+    }
     0
     })
 }
@@ -48,12 +52,14 @@ pub extern "C" fn alpha_ta_wma(
     out: *mut f64,
 ) -> i32 {
     ffi_catch_i32_neg(|| {
-if period <= 0 || len < period {
+if input.is_null() || out.is_null() || period <= 0 || len < period {
         return -1;
     }
     let data = from_raw(input, len);
     let result = moving_avg::wma(data, period as usize).unwrap_or_default();
-    write_result(out, result.as_slice().unwrap());
+    if !write_result(out, result.as_slice().unwrap()) {
+        return -1;
+    }
     0
     })
 }
@@ -66,12 +72,14 @@ pub extern "C" fn alpha_ta_dema(
     out: *mut f64,
 ) -> i32 {
     ffi_catch_i32_neg(|| {
-if period <= 0 || len < period {
+if input.is_null() || out.is_null() || period <= 0 || len < period {
         return -1;
     }
     let data = from_raw(input, len);
     let result = moving_avg::dema(data, period as usize).unwrap_or_default();
-    write_result(out, result.as_slice().unwrap());
+    if !write_result(out, result.as_slice().unwrap()) {
+        return -1;
+    }
     0
     })
 }
@@ -84,12 +92,14 @@ pub extern "C" fn alpha_ta_tema(
     out: *mut f64,
 ) -> i32 {
     ffi_catch_i32_neg(|| {
-if period <= 0 || len < period {
+if input.is_null() || out.is_null() || period <= 0 || len < period {
         return -1;
     }
     let data = from_raw(input, len);
     let result = moving_avg::tema(data, period as usize).unwrap_or_default();
-    write_result(out, result.as_slice().unwrap());
+    if !write_result(out, result.as_slice().unwrap()) {
+        return -1;
+    }
     0
     })
 }
@@ -102,12 +112,14 @@ pub extern "C" fn alpha_ta_midpoint(
     out: *mut f64,
 ) -> i32 {
     ffi_catch_i32_neg(|| {
-if period <= 0 || len < period {
+if input.is_null() || out.is_null() || period <= 0 || len < period {
         return -1;
     }
     let data = from_raw(input, len);
     let result = indicators::midpoint(data, period as usize).unwrap_or_default();
-    write_result(out, result.as_slice().unwrap());
+    if !write_result(out, result.as_slice().unwrap()) {
+        return -1;
+    }
     0
     })
 }
@@ -120,12 +132,14 @@ pub extern "C" fn alpha_ta_rsi(
     out: *mut f64,
 ) -> i32 {
     ffi_catch_i32_neg(|| {
-if period <= 0 || len < period {
+if input.is_null() || out.is_null() || period <= 0 || len < period {
         return -1;
     }
     let data = from_raw(input, len);
     let result = indicators::rsi(data, period as usize).unwrap_or_default();
-    write_result(out, result.as_slice().unwrap());
+    if !write_result(out, result.as_slice().unwrap()) {
+        return -1;
+    }
     0
     })
 }
@@ -138,12 +152,14 @@ pub extern "C" fn alpha_ta_mom(
     out: *mut f64,
 ) -> i32 {
     ffi_catch_i32_neg(|| {
-if period <= 0 || len < period {
+if input.is_null() || out.is_null() || period <= 0 || len < period {
         return -1;
     }
     let data = from_raw(input, len);
     let result = indicators::mom(data, period as usize).unwrap_or_default();
-    write_result(out, result.as_slice().unwrap());
+    if !write_result(out, result.as_slice().unwrap()) {
+        return -1;
+    }
     0
     })
 }
@@ -156,12 +172,14 @@ pub extern "C" fn alpha_ta_roc(
     out: *mut f64,
 ) -> i32 {
     ffi_catch_i32_neg(|| {
-if period <= 0 || len < period {
+if input.is_null() || out.is_null() || period <= 0 || len < period {
         return -1;
     }
     let data = from_raw(input, len);
     let result = indicators::roc(data, period as usize).unwrap_or_default();
-    write_result(out, result.as_slice().unwrap());
+    if !write_result(out, result.as_slice().unwrap()) {
+        return -1;
+    }
     0
     })
 }
@@ -174,12 +192,14 @@ pub extern "C" fn alpha_ta_cmo(
     out: *mut f64,
 ) -> i32 {
     ffi_catch_i32_neg(|| {
-if period <= 0 || len < period {
+if input.is_null() || out.is_null() || period <= 0 || len < period {
         return -1;
     }
     let data = from_raw(input, len);
     let result = indicators::cmo(data, period as usize).unwrap_or_default();
-    write_result(out, result.as_slice().unwrap());
+    if !write_result(out, result.as_slice().unwrap()) {
+        return -1;
+    }
     0
     })
 }
@@ -192,12 +212,14 @@ pub extern "C" fn alpha_ta_trix(
     out: *mut f64,
 ) -> i32 {
     ffi_catch_i32_neg(|| {
-if period <= 0 || len < period {
+if input.is_null() || out.is_null() || period <= 0 || len < period {
         return -1;
     }
     let data = from_raw(input, len);
     let result = indicators::trix(data, period as usize).unwrap_or_default();
-    write_result(out, result.as_slice().unwrap());
+    if !write_result(out, result.as_slice().unwrap()) {
+        return -1;
+    }
     0
     })
 }
@@ -210,12 +232,14 @@ pub extern "C" fn alpha_ta_zscore(
     out: *mut f64,
 ) -> i32 {
     ffi_catch_i32_neg(|| {
-if period <= 0 || len < period {
+if input.is_null() || out.is_null() || period <= 0 || len < period {
         return -1;
     }
     let data = from_raw(input, len);
     let result = indicators::zscore(data, period as usize).unwrap_or_default();
-    write_result(out, result.as_slice().unwrap());
+    if !write_result(out, result.as_slice().unwrap()) {
+        return -1;
+    }
     0
     })
 }
@@ -228,12 +252,14 @@ pub extern "C" fn alpha_ta_tsf(
     out: *mut f64,
 ) -> i32 {
     ffi_catch_i32_neg(|| {
-if period <= 0 || len < period {
+if input.is_null() || out.is_null() || period <= 0 || len < period {
         return -1;
     }
     let data = from_raw(input, len);
     let result = indicators::tsf(data, period as usize).unwrap_or_default();
-    write_result(out, result.as_slice().unwrap());
+    if !write_result(out, result.as_slice().unwrap()) {
+        return -1;
+    }
     0
     })
 }
@@ -246,12 +272,14 @@ pub extern "C" fn alpha_ta_linear_reg(
     out: *mut f64,
 ) -> i32 {
     ffi_catch_i32_neg(|| {
-if period <= 0 || len < period {
+if input.is_null() || out.is_null() || period <= 0 || len < period {
         return -1;
     }
     let data = from_raw(input, len);
     let result = indicators::linearreg(data, period as usize).unwrap_or_default();
-    write_result(out, result.as_slice().unwrap());
+    if !write_result(out, result.as_slice().unwrap()) {
+        return -1;
+    }
     0
     })
 }
@@ -264,12 +292,14 @@ pub extern "C" fn alpha_ta_percent_rank(
     out: *mut f64,
 ) -> i32 {
     ffi_catch_i32_neg(|| {
-if period <= 0 || len < period {
+if input.is_null() || out.is_null() || period <= 0 || len < period {
         return -1;
     }
     let data = from_raw(input, len);
     let result = indicators::percent_rank(data, period as usize).unwrap_or_default();
-    write_result(out, result.as_slice().unwrap());
+    if !write_result(out, result.as_slice().unwrap()) {
+        return -1;
+    }
     0
     })
 }

@@ -39,13 +39,14 @@ fn from_raw<'a>(input: *const f64, len: i32) -> &'a [f64] {
     unsafe { slice::from_raw_parts(input, len as usize) }
 }
 
-fn write_result(out: *mut f64, values: &[f64]) {
+fn write_result(out: *mut f64, values: &[f64]) -> bool {
     if out.is_null() {
-        return;
+        return false;
     }
     unsafe {
         std::ptr::copy_nonoverlapping(values.as_ptr(), out, values.len());
     }
+    true
 }
 
 // ---- moving averages -------------------------------------------------------
