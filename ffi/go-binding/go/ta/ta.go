@@ -58,6 +58,9 @@ extern const char* ta_version();
 extern void ta_free_result(TaResult *result);
 
 extern char* ta_formula_eval(const char *source, const double *open, const double *high, const double *low, const double *close, const double *volume, int length);
+extern char* ta_formula_eval_multi(const char *source, const double *open, const double *high, const double *low, const double *close, const double *volume, int length);
+extern char* ta_formula_eval_draw(const char *source, const double *open, const double *high, const double *low, const double *close, const double *volume, int length);
+extern char* ta_formula_eval_debug(const char *source, const double *open, const double *high, const double *low, const double *close, const double *volume, int length);
 extern char* ta_formula_eval_zc_exec(const char *source, const double *open, const double *high, const double *low, const double *close, const double *volume, int length);
 extern int ta_formula_validate(const char *source);
 extern char* ta_formula_get_template(const char *name);
@@ -1120,6 +1123,45 @@ func FormulaValidate(source string) bool {
 
 	result := C.ta_formula_validate(cSource)
 	return result == 1
+}
+
+// FormulaEvalMultiJSON evaluates multiple formula outputs and returns the native JSON payload.
+func FormulaEvalMultiJSON(source string, open, high, low, close, volume []float64) (string, error) {
+	length := len(open)
+	if len(high) != length || len(low) != length || len(close) != length || len(volume) != length {
+		return "", errors.New("all input arrays must have the same length")
+	}
+	cSource := C.CString(source)
+	defer C.free(unsafe.Pointer(cSource))
+	return formulaJSONResult(C.ta_formula_eval_multi(
+		cSource, toCSlice(open), toCSlice(high), toCSlice(low), toCSlice(close), toCSlice(volume), cInt(length),
+	))
+}
+
+// FormulaEvalDrawJSON evaluates drawing-oriented formula output as JSON.
+func FormulaEvalDrawJSON(source string, open, high, low, close, volume []float64) (string, error) {
+	length := len(open)
+	if len(high) != length || len(low) != length || len(close) != length || len(volume) != length {
+		return "", errors.New("all input arrays must have the same length")
+	}
+	cSource := C.CString(source)
+	defer C.free(unsafe.Pointer(cSource))
+	return formulaJSONResult(C.ta_formula_eval_draw(
+		cSource, toCSlice(open), toCSlice(high), toCSlice(low), toCSlice(close), toCSlice(volume), cInt(length),
+	))
+}
+
+// FormulaEvalDebugJSON evaluates a formula with debug metadata and returns JSON.
+func FormulaEvalDebugJSON(source string, open, high, low, close, volume []float64) (string, error) {
+	length := len(open)
+	if len(high) != length || len(low) != length || len(close) != length || len(volume) != length {
+		return "", errors.New("all input arrays must have the same length")
+	}
+	cSource := C.CString(source)
+	defer C.free(unsafe.Pointer(cSource))
+	return formulaJSONResult(C.ta_formula_eval_debug(
+		cSource, toCSlice(open), toCSlice(high), toCSlice(low), toCSlice(close), toCSlice(volume), cInt(length),
+	))
 }
 
 // formulaJSONResult validates and owns a JSON string returned by the native layer.
