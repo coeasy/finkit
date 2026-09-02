@@ -14,7 +14,7 @@
 
 ## 0. 2026-09-02 最新执行记录
 
-- 当前 `main`：`2c2ba4d`；PR #11/#12 已合并，PR #13 保持开放；当前修复分支最新提交为 `1d9842a`，已完成五轮远程检查并继续追加绑定契约、JNI 结果类型、panic 隔离、时间戳边界和 CI workspace-check 修复。
+- 当前 `main`：`2c2ba4d`；PR #11/#12 已合并，PR #13 保持开放；当前修复分支已完成五轮远程检查并继续追加绑定契约、JNI 结果类型、panic 隔离、时间戳边界和 CI workspace-check 修复。
 - PR #1 的旧 v0.1.0 发布工作流、旧版本元数据和重复代码未带入主线。
 - 新增核心公共模块：Factor Engine、Runtime/MarketFrame、Function Registry、FormulaTerminal compatibility。
 - 本轮五轮复核已修复 Function Registry 别名冲突、Factor 空名称、Runtime Preserve/Error 借用路径、MarketFrame 别名查询分配、多语言绑定入口孤儿、Java DTO/JNI panic、Android 生成 shim、Go 模板/图形 JSON/公式诊断、.NET 图形 ABI、Java 图形错误返回和公式时间戳边界，并复核 Core Contracts 示例与实际签名；同时将 .NET csproj/Java pom 纳入版本检查与 SSOT 版本矩阵。
