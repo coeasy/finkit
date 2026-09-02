@@ -60,6 +60,9 @@ extern void ta_free_result(TaResult *result);
 extern char* ta_formula_eval(const char *source, const double *open, const double *high, const double *low, const double *close, const double *volume, int length);
 extern char* ta_formula_eval_zc_exec(const char *source, const double *open, const double *high, const double *low, const double *close, const double *volume, int length);
 extern int ta_formula_validate(const char *source);
+extern char* ta_formula_get_template(const char *name);
+extern char* ta_formula_search_templates(const char *keyword);
+extern char* ta_formula_list_categories();
 extern void ta_free_string(char *s);
 
 extern void* ta_streaming_sma_new(int period);
@@ -1108,6 +1111,39 @@ func FormulaValidate(source string) bool {
 
 	result := C.ta_formula_validate(cSource)
 	return result == 1
+}
+
+// formulaJSONResult validates and owns a JSON string returned by the native layer.
+func formulaJSONResult(result *C.char) (string, error) {
+	if result == nil {
+		return "", errors.New("native formula call returned a null result")
+	}
+	defer C.ta_free_string(result)
+
+	value := C.GoString(result)
+	if !json.Valid([]byte(value)) {
+		return "", errors.New(value)
+	}
+	return value, nil
+}
+
+// FormulaGetTemplate returns one named formula template as JSON.
+func FormulaGetTemplate(name string) (string, error) {
+	cName := C.CString(name)
+	defer C.free(unsafe.Pointer(cName))
+	return formulaJSONResult(C.ta_formula_get_template(cName))
+}
+
+// FormulaSearchTemplates searches formula templates and returns the JSON array.
+func FormulaSearchTemplates(keyword string) (string, error) {
+	cKeyword := C.CString(keyword)
+	defer C.free(unsafe.Pointer(cKeyword))
+	return formulaJSONResult(C.ta_formula_search_templates(cKeyword))
+}
+
+// FormulaListCategories returns all formula template categories as JSON.
+func FormulaListCategories() (string, error) {
+	return formulaJSONResult(C.ta_formula_list_categories())
 }
 
 // FormulaEvalZeroCopy evaluates a formula string with zero-copy optimization.
