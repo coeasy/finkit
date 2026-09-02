@@ -1,6 +1,8 @@
 # Installation Guide
 
-This document provides detailed installation instructions for each language binding of FTA.
+This document provides detailed installation instructions for each language binding of Finkit.
+
+> **Release status:** the source baseline is `0.1.2`, but the GitHub `v0.1.2` Release is still pending. Until it is published, use a successful [Python wheels workflow](https://github.com/coeasy/finkit/actions/workflows/python-wheels.yml) artifact or build from source.
 
 ## Prerequisites
 

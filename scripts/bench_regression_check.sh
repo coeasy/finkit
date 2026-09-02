@@ -255,7 +255,7 @@ else
     echo "Recommendations:"
     echo "  1. Review recent code changes for performance impact"
     echo "  2. Run detailed benchmarks: cargo bench --bench talib_c_comparison --features talib-c"
-    echo "  3. Generate report: python scripts/bench_report.py"
+    echo "  3. Generate report: python scripts/gen_benchmark_report.py"
     echo "  4. If regression is acceptable, update baseline: docs/benchmark-baseline.json"
     exit 1
 fi

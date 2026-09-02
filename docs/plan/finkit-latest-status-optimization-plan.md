@@ -1,6 +1,6 @@
 # Finkit 最新代码核对、功能梳理与优化改进方案
 
-- 执行更新：2026-09-01：已提交 CI preflight、version-consistency、docs-check、README/SSOT 口径修正；CI runner 初始化问题和正式 Release 仍待解除。
+- 执行更新：2026-09-01：已提交 CI preflight、version-consistency、docs-check、Formula runtime contract/reset、绑定版本对齐和 crate/CLI 发布资产流程；本轮继续修复发布口径、Node lockfile、MSRV 文档及性能门禁脚本；CI runner 初始化问题和正式 Release 仍待解除。
 
 - 核对日期：2026-09-01
 - 仓库：coeasy/finkit

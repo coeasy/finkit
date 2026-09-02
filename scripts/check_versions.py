@@ -19,6 +19,7 @@ CARGO_TOML = ROOT / "Cargo.toml"
 CARGO_LOCK = ROOT / "Cargo.lock"
 PYPROJECT = ROOT / "ffi" / "python-binding" / "pyproject.toml"
 NODE_PACKAGE = ROOT / "ffi" / "node-binding" / "package.json"
+NODE_LOCK = ROOT / "ffi" / "node-binding" / "package-lock.json"
 NODE_PLATFORM_DIR = ROOT / "ffi" / "node-binding" / "npm"
 DOC_VERSION_FILES = (
     ROOT / "README.md",
@@ -74,6 +75,19 @@ def read_node_versions() -> dict[str, str]:
     return versions
 
 
+def read_node_lock_versions() -> dict[str, str]:
+    data = json.loads(NODE_LOCK.read_text(encoding="utf-8"))
+    root = data.get("packages", {}).get("")
+    if not isinstance(root, dict):
+        raise ValueError(f"root package entry not found in {NODE_LOCK}")
+    versions: dict[str, str] = {}
+    relative = str(NODE_LOCK.relative_to(ROOT))
+    versions[relative] = data.get("version", "")
+    versions[f"{relative} packages[\"\"]"] = root.get("version", "")
+    for name, version in sorted((root.get("optionalDependencies") or {}).items()):
+        versions[f"{relative} optionalDependencies.{name}"] = version
+    return versions
+
 def read_cargo_package_versions() -> dict[str, str]:
     versions: dict[str, str] = {}
     for path in sorted(ROOT.rglob("Cargo.toml")):
@@ -124,6 +138,10 @@ def collect_errors(canonical: str) -> list[str]:
         if version != canonical:
             errors.append(f"{path}: {version} != {canonical}")
 
+    for path, version in sorted(read_node_lock_versions().items()):
+        if version != canonical:
+            errors.append(f"{path}: {version} != {canonical}")
+
     for path in DOC_VERSION_FILES:
         if not path.exists():
             errors.append(f"missing release-facing document: {path.relative_to(ROOT)}")
@@ -168,6 +186,18 @@ def fix_versions(canonical: str) -> None:
             json.dumps(data, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
         )
+
+    lock_data = json.loads(NODE_LOCK.read_text(encoding="utf-8"))
+    lock_data["version"] = canonical
+    lock_root = lock_data.setdefault("packages", {}).setdefault("", {})
+    lock_root["version"] = canonical
+    lock_root["optionalDependencies"] = {
+        name: canonical for name in (lock_root.get("optionalDependencies") or {})
+    }
+    NODE_LOCK.write_text(
+        json.dumps(lock_data, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
 
     for path, version in read_cargo_package_versions().items():
         if version == "workspace":

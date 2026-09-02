@@ -5,7 +5,7 @@ Go bindings for the finkit technical analysis library, using CGO for high-perfor
 ## Requirements
 
 - **Go**: 1.21 or later
-- **Rust**: 1.70 or later
+- **Rust**: 1.85 or later (workspace MSRV)
 - **CGO**: Enabled (usually enabled by default)
 
 ## Build
