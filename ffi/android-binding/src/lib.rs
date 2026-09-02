@@ -42,8 +42,8 @@ fn from_double_array(env: &mut JNIEnv, arr: jdoubleArray) -> Vec<f64> {
 //
 // The JVM binding exports its JNI symbols under the class name
 // `com.rusttalib.Indicators` (legacy package). On Android we use
-// `com.finkit.indicators.Indicators`, so we forward to the same Rust
-// function bodies but expose them under a fresh JNI symbol name.
+// `com.finkit.indicators.Finkit`, so we forward to the same Rust
+// core functions under a fresh JNI symbol name.
 
 macro_rules! shim_indicator {
     ($name:ident, $dispatch:literal, $arg_ty:ty, $out_ty:ty) => {

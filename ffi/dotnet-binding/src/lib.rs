@@ -136,9 +136,8 @@ mod tests {
     // exercise `ta_free` / `ta_free_array` directly. Loops assert the live
     // heap returns to baseline (catches a forgotten free).
     //
-    // NOTE: `ta_formula_eval` *borrows* the `source` CString (it calls
-    // `CString::from_raw` on it), so we keep the CString alive for the duration of the call
-    // and must NOT retain a Rust `CString` for it — otherwise it is freed twice.
+    // NOTE: `ta_formula_eval` borrows the NUL-terminated source string for the
+    // duration of the call; the caller-owned CString remains valid until return.
     #[test]
     fn ffi_heap_no_leak_formula_eval_cycle() {
         use finkit_ffi_common::leak::live_bytes;
@@ -205,8 +204,8 @@ mod tests {
     fn ffi_formula_eval_surfaces_error_not_null() {
         let n: c_int = 64;
         let input: Vec<c_double> = (0..n as usize).map(|i| (i as f64).sin()).collect();
-        // `ta_formula_eval` *borrows* `source` (CString::from_raw), so transfer
-        // ownership with `.into_raw()` and do not retain a Rust handle.
+        // `ta_formula_eval` borrows `source`; keep the caller-owned CString alive
+        // until the native call returns.
         let src = std::ffi::CString::new("FOOBAR(CLOSE, 20)").unwrap();
         let fe = crate::ta_formula_eval(
             src.as_ptr(),

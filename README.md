@@ -756,7 +756,7 @@ CI runs on every push and pull request to `main`:
 - `cargo doc` / `cargo audit`
 
 Current workflows:
-- **ci.yml** — Rust format, clippy, version consistency, core tests, docs and dependency audit
+- **ci.yml** — Rust format, workspace compile check, clippy, version consistency, core tests, docs and dependency audit
 - **python-wheels.yml** — ABI3 wheel build, CPython compatibility matrix, wheel metadata validation and tag-triggered upload
 - **docs-check.yml** — Generated SSOT and release-version consistency
 - Python wheel build matrix (CPython 3.8–3.14 on four platform targets); see [python-wheels.yml](.github/workflows/python-wheels.yml)

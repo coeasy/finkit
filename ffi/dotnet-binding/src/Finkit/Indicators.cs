@@ -163,24 +163,6 @@ public static class Indicators
         return new double[length];
     }
 
-    private static unsafe IntPtr PinArray(double[] array)
-    {
-        fixed (double* p = array)
-        {
-            return (IntPtr)p;
-        }
-    }
-
-    private static unsafe double[] AllocateAndPin(int length, out IntPtr pinned)
-    {
-        var arr = new double[length];
-        fixed (double* p = arr)
-        {
-            pinned = (IntPtr)p;
-        }
-        return arr;
-    }
-
     // ========================================================================
     // Overlap Studies
     // ========================================================================
