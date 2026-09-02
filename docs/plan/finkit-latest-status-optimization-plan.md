@@ -165,7 +165,7 @@ OHLCV / 参数
 执行项：
 
 1. 重新运行一次 CI 和 Python wheels，记录 run、attempt、job、runner image 和 failure annotation；
-2. 增加独立的 workflow-health / preflight job，只做 checkout、Rust toolchain、Python、Cargo 和 maturin 可用性打印；
+2. 保留轻量 workflow-health 信息作为诊断，但不得让任何实际构建/测试 job 依赖单点 preflight；当前 CI 已改为独立校验，并新增 workspace 全量 compile check；
 3. 将版本检查独立成 version-consistency job，并在 test job 中保留一次调用；
 4. 对 workflow action 版本、权限、concurrency、runner image 和 Python 路径做最小化排查；
 5. 只有核心 CI 和 wheels 全绿后才允许创建 v0.1.2 Release。

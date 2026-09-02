@@ -251,6 +251,8 @@ pub extern "C" fn ta_ad_osc(
     slow_period: c_int,
     out: *mut c_double,
 ) -> c_int {
+    ffi_catch_i32(|| {
+
     if high.is_null()
         || low.is_null()
         || close.is_null()
@@ -281,6 +283,8 @@ pub extern "C" fn ta_ad_osc(
         }
         Err(_) => -2,
     }
+
+    })
 }
 
 // ============================================================================
@@ -303,6 +307,8 @@ pub extern "C" fn ta_std_dev(
     nb_dev: c_double,
     out: *mut c_double,
 ) -> c_int {
+    ffi_catch_i32(|| {
+
     if input.is_null() || out.is_null() || length <= 0 || period <= 0 {
         return -1;
     }
@@ -317,6 +323,8 @@ pub extern "C" fn ta_std_dev(
         }
         Err(_) => -2,
     }
+
+    })
 }
 
 // ============================================================================
@@ -427,6 +435,8 @@ pub extern "C" fn ta_formula_eval_multi(
     volume: *const c_double,
     length: c_int,
 ) -> *mut c_char {
+    ffi_catch_ptr(|| {
+
     if source.is_null()
         || open.is_null()
         || high.is_null()
@@ -502,6 +512,8 @@ pub extern "C" fn ta_formula_eval_multi(
             }
         }
     }
+
+    })
 }
 
 #[no_mangle]
@@ -514,6 +526,8 @@ pub extern "C" fn ta_formula_eval_draw(
     volume: *const c_double,
     length: c_int,
 ) -> *mut c_char {
+    ffi_catch_ptr(|| {
+
     if source.is_null()
         || open.is_null()
         || high.is_null()
@@ -578,6 +592,8 @@ pub extern "C" fn ta_formula_eval_draw(
             }
         }
     }
+
+    })
 }
 
 #[no_mangle]
@@ -590,6 +606,8 @@ pub extern "C" fn ta_formula_eval_debug(
     volume: *const c_double,
     length: c_int,
 ) -> *mut c_char {
+    ffi_catch_ptr(|| {
+
     if source.is_null()
         || open.is_null()
         || high.is_null()
@@ -653,10 +671,14 @@ pub extern "C" fn ta_formula_eval_debug(
             }
         }
     }
+
+    })
 }
 
 #[no_mangle]
 pub extern "C" fn ta_formula_get_template(name: *const c_char) -> *mut c_char {
+    ffi_catch_ptr(|| {
+
     use finkit::formula::FormulaEngine;
 
     if name.is_null() {
@@ -690,10 +712,14 @@ pub extern "C" fn ta_formula_get_template(name: *const c_char) -> *mut c_char {
             err.into_raw()
         }
     }
+
+    })
 }
 
 #[no_mangle]
 pub extern "C" fn ta_formula_search_templates(keyword: *const c_char) -> *mut c_char {
+    ffi_catch_ptr(|| {
+
     use finkit::formula::FormulaEngine;
 
     if keyword.is_null() {
@@ -719,10 +745,14 @@ pub extern "C" fn ta_formula_search_templates(keyword: *const c_char) -> *mut c_
             err.into_raw()
         }
     }
+
+    })
 }
 
 #[no_mangle]
 pub extern "C" fn ta_formula_list_categories() -> *mut c_char {
+    ffi_catch_ptr(|| {
+
     use finkit::formula::templates::FormulaTemplates;
 
     let categories = FormulaTemplates::categories();
@@ -736,6 +766,8 @@ pub extern "C" fn ta_formula_list_categories() -> *mut c_char {
             err.into_raw()
         }
     }
+
+    })
 }
 
 // ============================================================================
@@ -744,6 +776,8 @@ pub extern "C" fn ta_formula_list_categories() -> *mut c_char {
 
 #[no_mangle]
 pub extern "C" fn ta_formula_validate(source: *const c_char) -> c_int {
+    ffi_catch_i32(|| {
+
     if source.is_null() {
         return 0;
     }
@@ -758,15 +792,21 @@ pub extern "C" fn ta_formula_validate(source: *const c_char) -> c_int {
         Ok(_) => 1,
         Err(_) => 0,
     }
+
+    })
 }
 
 #[no_mangle]
 pub extern "C" fn ta_free_string(s: *mut c_char) {
+    ffi_catch_void(|| {
+
     if !s.is_null() {
         unsafe {
             let _ = CString::from_raw(s);
         }
     }
+
+    })
 }
 
 #[no_mangle]
@@ -779,6 +819,8 @@ pub extern "C" fn ta_formula_eval_zc_exec(
     volume: *const c_double,
     length: c_int,
 ) -> *mut c_char {
+    ffi_catch_ptr(|| {
+
     if source.is_null()
         || open.is_null()
         || high.is_null()
@@ -843,4 +885,6 @@ pub extern "C" fn ta_formula_eval_zc_exec(
             }
         }
     }
+
+    })
 }

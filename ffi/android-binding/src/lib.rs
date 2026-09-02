@@ -7,9 +7,8 @@
 // `System.loadLibrary("finkit_android")` invocation in a Kotlin/Java
 // Android module.
 //
-// The actual computation lives in the `finkit-java` crate; this file is
-// just a relabelling shim so we can produce a separate Android `.aar`
-// without recompiling the full indicator surface.
+// The computation delegates directly to the shared Rust core; this file is
+// the Android-specific JNI surface used to produce a separate `.aar`.
 // ----------------------------------------------------------------------------
 #![allow(non_snake_case)]
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -20,6 +19,7 @@ use jni::objects::{JClass, JDoubleArray};
 use jni::sys::{jarray, jdoubleArray, jint, jsize, jstring};
 use jni::JNIEnv;
 use std::panic;
+use std::os::raw::c_char;
 
 // ---- helpers ---------------------------------------------------------------
 
@@ -125,21 +125,13 @@ pub extern "system" fn finkit_android_abi_version() -> jint {
     1
 }
 
-/// Library version, mirrors `Cargo.toml`.
+/// Library version for native tooling, mirrors `Cargo.toml`.
+///
+/// JNI callers must use `Finkit.version()`, which receives a live `JNIEnv`.
 #[no_mangle]
-pub extern "system" fn finkit_android_version() -> jdoubleArray {
-    // Version is encoded as a 3-element double array: [major, minor, patch].
-    let v: [f64; 3] = {
-        let ver = env!("CARGO_PKG_VERSION");
-        let parts: Vec<&str> = ver.split('.').collect();
-        [
-            parts.first().and_then(|s| s.parse().ok()).unwrap_or(0.0),
-            parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0.0),
-            parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0.0),
-        ]
-    };
-    let mut env = unsafe { std::mem::zeroed::<JNIEnv>() };
-    to_double_array(&mut env, v.to_vec())
+pub extern "C" fn finkit_android_version() -> *const c_char {
+    static VERSION: &[u8] = concat!(env!("CARGO_PKG_VERSION"), "\\0").as_bytes();
+    VERSION.as_ptr().cast()
 }
 
 #[cfg(test)]
