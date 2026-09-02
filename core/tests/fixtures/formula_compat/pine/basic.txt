@@ -1,0 +1,5 @@
+//@version=5
+indicator("RSI")
+length = input(14)
+rsi = ta.rsi(close, length)
+plot(rsi)
