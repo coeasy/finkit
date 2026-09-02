@@ -11,6 +11,7 @@ use crate::factors::{FactorContext, FactorEngine, FactorError, FactorRegistry, F
 use crate::registry::{FunctionSpec, LookbackSpec};
 use crate::runtime::{MarketFrame, NanPolicy, RuntimeError, WarmupPolicy};
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
 
 /// Stable identifier for one node in a compute graph.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -75,7 +76,7 @@ pub struct ComputeCapabilities {
     pub deterministic: bool,
     /// The operation supports incremental/streaming evaluation.
     pub streaming: bool,
-    /// The operation carries mutable state between updates.
+    /// The operation itself carries mutable state between updates.
     pub stateful: bool,
     /// Historical dependency requirement.
     pub lookback: LookbackRequirement,
@@ -86,14 +87,15 @@ pub struct ComputeCapabilities {
 impl ComputeCapabilities {
     /// Build capability metadata from the canonical function registry.
     ///
-    /// Registry entries describe public functions, which are pure value
-    /// computations by default. Formula assignments/drawings override the
-    /// effect when they are lowered from the AST into compute nodes.
+    /// Registry entries describe public value functions, so the operation is
+    /// pure and stateless by default even when a separate streaming adapter is
+    /// available. Formula assignments, drawings, and explicit stateful nodes
+    /// override these defaults when lowered into compute nodes.
     pub fn from_function_spec(spec: &FunctionSpec) -> Self {
         Self {
             deterministic: spec.deterministic,
             streaming: spec.streaming,
-            stateful: spec.streaming,
+            stateful: false,
             lookback: spec.lookback.into(),
             effect: ComputeEffect::Pure,
         }
@@ -144,10 +146,30 @@ pub enum ComputePlanError {
     },
     /// A node has an empty semantic operation name.
     EmptyOperation(ComputeNodeId),
-    /// The dependency graph contains a cycle. The list contains the nodes that
+    /// The dependency graph contains a cycle. The list contains nodes that
     /// remain cyclic after deterministic topological sorting.
     DependencyCycle(Vec<ComputeNodeId>),
 }
+
+impl fmt::Display for ComputePlanError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::DuplicateNode(id) => write!(f, "duplicate compute node id: {}", id.0),
+            Self::UnknownDependency { node, dependency } => write!(
+                f,
+                "compute node {} references unknown dependency {}",
+                node.0, dependency.0
+            ),
+            Self::EmptyOperation(id) => write!(f, "compute node {} has an empty operation", id.0),
+            Self::DependencyCycle(nodes) => {
+                let ids: Vec<String> = nodes.iter().map(|id| id.0.to_string()).collect();
+                write!(f, "compute dependency cycle: {}", ids.join(" -> "))
+            }
+        }
+    }
+}
+
+impl std::error::Error for ComputePlanError {}
 
 /// Validated immutable compute graph with deterministic execution order.
 #[derive(Debug, Clone)]
@@ -162,10 +184,12 @@ impl ComputePlan {
     /// Validate a graph and compile a stable topological execution order.
     pub fn compile(nodes: impl IntoIterator<Item = ComputeNode>) -> Result<Self, ComputePlanError> {
         let mut by_id = BTreeMap::new();
-        for node in nodes {
+        for mut node in nodes {
             if node.operation.trim().is_empty() {
                 return Err(ComputePlanError::EmptyOperation(node.id));
             }
+            node.dependencies.sort_unstable();
+            node.dependencies.dedup();
             let id = node.id;
             if by_id.insert(id, node).is_some() {
                 return Err(ComputePlanError::DuplicateNode(id));
@@ -225,9 +249,7 @@ impl ComputePlan {
             return Err(ComputePlanError::DependencyCycle(cycle));
         }
 
-        let supports_streaming = by_id
-            .values()
-            .all(|node| node.capabilities.streaming);
+        let supports_streaming = by_id.values().all(|node| node.capabilities.streaming);
         let has_observable_effects = by_id
             .values()
             .any(|node| !node.capabilities.effect.is_pure());
@@ -258,6 +280,21 @@ impl ComputePlan {
     /// Whether at least one node has an observable side effect.
     pub const fn has_observable_effects(&self) -> bool {
         self.has_observable_effects
+    }
+
+    /// Return the maximum fixed lookback when every node has a concrete fixed
+    /// requirement. Parameterized or dynamic lookbacks return `None` because
+    /// they cannot be resolved safely before runtime parameters are known.
+    pub fn max_fixed_lookback(&self) -> Option<usize> {
+        self.nodes
+            .values()
+            .try_fold(0usize, |current, node| match node.capabilities.lookback {
+                LookbackRequirement::None => Some(current),
+                LookbackRequirement::Fixed(value) => Some(current.max(value)),
+                LookbackRequirement::PeriodMinusOne
+                | LookbackRequirement::Period
+                | LookbackRequirement::Dynamic => None,
+            })
     }
 
     /// Number of nodes in the plan.
@@ -479,7 +516,7 @@ mod tests {
         ComputeCapabilities {
             deterministic: true,
             streaming,
-            stateful: streaming,
+            stateful: false,
             lookback: LookbackRequirement::None,
             effect: ComputeEffect::Pure,
         }
@@ -488,7 +525,12 @@ mod tests {
     #[test]
     fn compute_plan_is_stable_and_retains_effect_metadata() {
         let nodes = vec![
-            ComputeNode::new(ComputeNodeId(2), "MA", vec![ComputeNodeId(1)], pure_capabilities(true)),
+            ComputeNode::new(
+                ComputeNodeId(2),
+                "MA",
+                vec![ComputeNodeId(1)],
+                pure_capabilities(true),
+            ),
             ComputeNode::new(ComputeNodeId(1), "CLOSE", vec![], pure_capabilities(true)),
             ComputeNode::new(
                 ComputeNodeId(3),
@@ -511,10 +553,30 @@ mod tests {
         );
         assert!(plan.supports_streaming());
         assert!(plan.has_observable_effects());
+        assert_eq!(plan.max_fixed_lookback(), Some(0));
         assert_eq!(
             plan.node(ComputeNodeId(3)).unwrap().capabilities.effect,
             ComputeEffect::WriteVariable("SELL".to_string())
         );
+    }
+
+    #[test]
+    fn compute_plan_normalizes_duplicate_dependencies() {
+        let plan = ComputePlan::compile([
+            ComputeNode::new(ComputeNodeId(1), "SOURCE", vec![], pure_capabilities(true)),
+            ComputeNode::new(
+                ComputeNodeId(2),
+                "SUM",
+                vec![ComputeNodeId(1), ComputeNodeId(1)],
+                pure_capabilities(true),
+            ),
+        ])
+        .unwrap();
+        assert_eq!(
+            plan.execution_order(),
+            &[ComputeNodeId(1), ComputeNodeId(2)]
+        );
+        assert_eq!(plan.node(ComputeNodeId(2)).unwrap().dependencies.len(), 1);
     }
 
     #[test]
@@ -554,10 +616,8 @@ mod tests {
         let capabilities = ComputeCapabilities::from_function_spec(sma);
         assert!(capabilities.deterministic);
         assert!(capabilities.streaming);
-        assert_eq!(
-            capabilities.lookback,
-            LookbackRequirement::PeriodMinusOne
-        );
+        assert!(!capabilities.stateful);
+        assert_eq!(capabilities.lookback, LookbackRequirement::PeriodMinusOne);
         assert!(capabilities.effect.is_pure());
     }
 
@@ -585,15 +645,27 @@ mod tests {
                     Ok(base
                         .iter()
                         .zip(volume)
-                        .map(|(left, right)| left + right)
+                        .map(|(left, right)| *left + *right)
                         .collect())
                 }),
             ))
             .unwrap();
 
         let plan = FactorPlan::compile(&registry, &["score"]).unwrap();
-        assert_eq!(plan.execution_order(), &["base", "score"]);
-        assert_eq!(plan.required_raw_inputs(), &["close", "volume"]);
+        assert_eq!(
+            plan.execution_order()
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            vec!["base", "score"]
+        );
+        assert_eq!(
+            plan.required_raw_inputs()
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            vec!["close", "volume"]
+        );
 
         let context = FactorContext::new()
             .with_series("close", vec![1.0, 2.0])
@@ -607,14 +679,7 @@ mod tests {
 
     #[test]
     fn compute_input_enforces_runtime_nan_policy() {
-        let frame = MarketFrame::new(
-            &[1.0],
-            &[2.0],
-            &[0.5],
-            &[f64::NAN],
-            &[10.0],
-        )
-        .unwrap();
+        let frame = MarketFrame::new(&[1.0], &[2.0], &[0.5], &[f64::NAN], &[10.0]).unwrap();
         let result = ComputeInput::new(
             frame,
             ExecutionPolicy {
@@ -622,6 +687,9 @@ mod tests {
                 warmup: WarmupPolicy::Nan,
             },
         );
-        assert!(matches!(result, Err(RuntimeError::NonFinite { field: "close", .. })));
+        assert!(matches!(
+            result,
+            Err(RuntimeError::NonFinite { field: "close", .. })
+        ));
     }
 }
