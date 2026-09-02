@@ -1,0 +1,61 @@
+name: PR13 Test Diagnostic
+
+on:
+  push:
+    branches:
+      - fix/contract-and-ci-hardening-v012
+    paths-ignore:
+      - .ci-pr13-test-failures.txt
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Capture core test failure
+        id: core-test
+        shell: bash
+        run: |
+          set +e
+          cargo test -p finkit --locked -- --nocapture > /tmp/core-test.log 2>&1
+          status=$?
+          set -e
+          {
+            echo "Source commit: $GITHUB_SHA"
+            echo "Exit status: $status"
+            echo
+            echo "=== Failure excerpts ==="
+            grep -E -B 6 -A 14 'panicked at|assertion .* failed|FAILED|failures:|test result:' /tmp/core-test.log || true
+            echo
+            echo "=== Final 500 log lines ==="
+            tail -n 500 /tmp/core-test.log
+          } > .ci-pr13-test-failures.txt
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+      - name: Commit diagnostic report
+        if: steps.core-test.outputs.status != '0'
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .ci-pr13-test-failures.txt
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "chore: capture PR 13 core test failures"
+          git push
+
+      - name: Fail if core tests fail
+        if: steps.core-test.outputs.status != '0'
+        run: exit 1
