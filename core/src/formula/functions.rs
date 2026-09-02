@@ -3666,50 +3666,33 @@ fn datetime_component(ctx: &FormulaContext, extract: fn(i64) -> f64) -> Array1<f
 }
 
 fn ts_to_date_parts(ts: i64) -> (i32, u32, u32, u32, u32, u32) {
-    let total_days = (ts / 86400) as i32;
-    let time_of_day = ts.rem_euclid(86400) as u32;
+    const SECONDS_PER_DAY: i64 = 86_400;
+    let total_days = ts.div_euclid(SECONDS_PER_DAY);
+    let time_of_day = ts.rem_euclid(SECONDS_PER_DAY) as u32;
     let hour = time_of_day / 3600;
     let minute = (time_of_day % 3600) / 60;
     let second = time_of_day % 60;
 
-    let mut y = 1970;
-    let mut remaining = total_days;
-    loop {
-        let days_in_year = if y % 4 == 0 && (y % 100 != 0 || y % 400 == 0) {
-            366
-        } else {
-            365
-        };
-        if remaining < days_in_year {
-            break;
-        }
-        remaining -= days_in_year;
-        y += 1;
-    }
-    let leap = y % 4 == 0 && (y % 100 != 0 || y % 400 == 0);
-    let month_days: [i32; 12] = [
-        31,
-        if leap { 29 } else { 28 },
-        31,
-        30,
-        31,
-        30,
-        31,
-        31,
-        30,
-        31,
-        30,
-        31,
-    ];
-    let mut m = 0u32;
-    for md in &month_days {
-        if remaining < *md {
-            break;
-        }
-        remaining -= *md;
-        m += 1;
-    }
-    (y, m + 1, remaining as u32 + 1, hour, minute, second)
+    // Civil date conversion from days since 1970-01-01. This is constant-time,
+    // supports dates before the Unix epoch, and avoids narrowing i64 day counts.
+    // The 719468 offset changes the origin to 0000-03-01 for leap-year math.
+    let z = total_days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let day_of_era = z - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let year = year_of_era + era * 400;
+    let day_of_year = day_of_era
+        - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_part = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * month_part + 2) / 5 + 1;
+    let month = month_part + if month_part < 10 { 3 } else { -9 };
+    let year = year + if month <= 2 { 1 } else { 0 };
+
+    // The public formula API exposes a 32-bit year. Saturate only for the
+    // physically unreachable i64-second extremes that cannot fit that type.
+    let year = year.clamp(i32::MIN as i64, i32::MAX as i64) as i32;
+    (year, month as u32, day as u32, hour, minute, second)
 }
 
 fn fn_year(ctx: &FormulaContext, _args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
@@ -6593,6 +6576,14 @@ mod talib_compat_tests {
             assert!((r_min[i] - 0.0).abs() < 1e-10);
         }
     }
+    #[test]
+    fn ts_to_date_parts_handles_epoch_boundaries() {
+        assert_eq!(ts_to_date_parts(0), (1970, 1, 1, 0, 0, 0));
+        assert_eq!(ts_to_date_parts(-1), (1969, 12, 31, 23, 59, 59));
+        assert_eq!(ts_to_date_parts(-86_400), (1969, 12, 31, 0, 0, 0));
+        assert_eq!(ts_to_date_parts(1_704_067_200), (2024, 1, 1, 0, 0, 0));
+    }
+
     #[test]
     fn test_hhvbars_llvbars_keep_values_without_window_allocations() {
         let input = Array1::from_vec(vec![3.0, 1.0, 2.0, 2.0, 4.0]);
