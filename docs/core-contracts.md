@@ -110,11 +110,15 @@ nodes are also chained in source execution order. This means future DCE/CSE or
 backend lowering no longer has to guess whether an apparently unused statement
 is externally observable.
 
-## Factor Engine and FactorPlan
+## Factor Engine, borrowed runtime, and FactorPlan
 
 `FactorRegistry` stores named factor definitions and their dependencies.
-`FactorEngine` evaluates dependencies once per request, detects cycles, checks
-aligned output lengths, and supports weighted composite scores.
+`FactorEngine` preserves the existing owned `FactorContext` API while sharing
+one internal raw-context abstraction with the new `BorrowedFactorContext`.
+Custom `FactorFn` callbacks still receive `FactorInputs` and therefore do not
+need to change when callers move from owned to borrowed market data.
+
+The owned path remains available:
 
 ```rust
 use finkit::factors::{builtin_factor_registry, FactorContext, FactorEngine};
@@ -126,28 +130,63 @@ let momentum = engine.evaluate("momentum_5", &context)?;
 assert_eq!(momentum.len(), context.len());
 ```
 
+For an existing `MarketFrame`, use `BorrowedFactorContext::from_market_frame`.
+The OHLCV and optional amount columns are borrowed as `&[f64]`; no second
+numeric `Vec<f64>` copy is required just to enter the factor engine. Timestamps
+are intentionally excluded because `MarketFrame` stores them as `i64`, while
+raw factor series use `f64`.
+
+```rust
+use finkit::factors::{
+    builtin_factor_registry, BorrowedFactorContext, FactorEngine,
+};
+use finkit::runtime::MarketFrame;
+
+let open = [9.5, 10.0, 10.5];
+let high = [10.2, 10.7, 11.2];
+let low = [9.0, 9.8, 10.0];
+let close = [10.0, 10.5, 11.0];
+let volume = [100.0, 120.0, 140.0];
+let frame = MarketFrame::new(&open, &high, &low, &close, &volume)?;
+let context = BorrowedFactorContext::from_market_frame(frame)?;
+let engine = FactorEngine::new(builtin_factor_registry());
+let momentum = engine.evaluate_borrowed("momentum_5", &context)?;
+assert_eq!(context.get("close").expect("close").as_ptr(), close.as_ptr());
+assert_eq!(momentum.len(), close.len());
+```
+
 `FactorPlan` moves graph discovery into an explicit compile phase. It validates
-targets, resolves factor dependencies, detects cycles, produces a stable
-dependency-first order, and records the required raw-series manifest before
-numerical execution starts.
+targets, resolves dependencies, detects cycles, produces a stable dependency-first
+execution order, and records the required raw-series manifest before numerical
+execution starts.
 
 ```rust
 use finkit::compute::FactorPlan;
-use finkit::factors::{builtin_factor_registry, FactorEngine};
+use finkit::factors::{
+    builtin_factor_registry, BorrowedFactorContext, FactorEngine,
+};
 
 let registry = builtin_factor_registry();
-let plan = FactorPlan::compile(&registry, &["momentum_5"])?;
+let plan = FactorPlan::compile(&registry, &["reversal_5"])?;
 let engine = FactorEngine::new(registry);
-let values = plan.execute(&engine, &context)?;
+let close = [100.0, 101.0, 103.0, 104.0, 105.0, 106.0];
+let context = BorrowedFactorContext::new().with_series("close", &close)?;
+let values = plan.execute_borrowed(&engine, &context)?;
 assert!(values.contains_key("momentum_5"));
+assert!(values.contains_key("reversal_5"));
 ```
 
-The first v0.1.2 implementation deliberately delegates numerical evaluation to
-the existing `FactorEngine`, preserving established results while creating a
-stable planning seam. A plan detects if factor dependencies have changed since
-it was compiled instead of silently executing stale graph assumptions.
+The optimized plan path now executes directly in the precompiled topological
+order instead of recursively rediscovering the dependency graph on every call.
+Use `execute_precompiled` for owned input and `execute_borrowed` for borrowed
+input. Both validate the raw-input manifest and reject stale plans when the
+registry dependency graph no longer matches the graph that was compiled.
 
-Built-in factors are deliberately small reference factors. Register custom
+`FactorPlan::execute` remains as the compatibility entry point using the
+established recursive evaluator, so existing callers are not forced to migrate
+in v0.1.2.
+
+Built-in factors remain deliberately small reference factors. Register custom
 factors with `FactorDefinition::new` and return one value per context row. Factor
 and dependency names must be non-empty, and every computed result must remain
 aligned with the context row count.
@@ -209,11 +248,13 @@ assert_eq!(arena.stats().cached_buffers, 1);
 
 The arena does not replace caller-owned `_into` output APIs. Its purpose is to
 reuse unavoidable intermediate memory across Formula/Factor/Batch planners
-without letting idle retained memory grow without bound.
+without letting idle retained memory grow without bound. Backend-wide arena
+integration remains incremental; the presence of the shared type is not a claim
+that every existing indicator/formula implementation already uses it.
 
 ## Formula optimizer equivalence contract
 
-The integration suite now compares raw AST execution against the normal
+The integration suite compares raw AST execution against the normal
 execution-optimized compile path for formulas with multiple assignments and
 named outputs. It verifies both the final numeric result and every observable
 `FormulaContext::variables` entry.
@@ -236,6 +277,11 @@ let ast = parse_formula_for_terminal(
 )?;
 ```
 
-The v0.1.2 adapter normalizes transport artifacts such as UTF-8 BOM and line
-endings. It does not claim full semantic compatibility with every terminal;
+Only Finkit's own language is advertised as `Native` in v0.1.2. TongDaXin,
+TongHuaShun, EastMoney, and TradingView/Pine adapters are explicitly
+`CommonSubset` contracts. Golden fixtures under `core/tests/fixtures/formula_compat`
+exercise representative parser/semantic behavior for each external terminal.
+
+The adapters normalize transport artifacts such as UTF-8 BOM and line endings.
+They do not claim full semantic compatibility with every external terminal;
 terminal-specific syntax remains an explicit future extension point.
