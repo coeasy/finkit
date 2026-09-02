@@ -69,23 +69,23 @@ pub extern "C" fn alpha_ta_detect_candlestick(
     close: *const f64,
     len: i32,
 ) -> i32 {
-    if open.is_null() || high.is_null() || low.is_null() || close.is_null() || len <= 0 {
-        return -1;
-    }
-    let o = from_raw(open, len);
-    let h = from_raw(high, len);
-    let l = from_raw(low, len);
-    let c = from_raw(close, len);
-    // Return count of detected patterns (sum of non-zero signals)
-    let doji = patterns::candlestick::doji(o, h, l, c, 0.05).unwrap_or_default();
-    let hammer = patterns::candlestick::hammer(o, h, l, c).unwrap_or_default();
-    let engulfing = patterns::candlestick::engulfing(o, h, l, c).unwrap_or_default();
+    ffi_catch_i32_neg(|| {
+        if open.is_null() || high.is_null() || low.is_null() || close.is_null() || len <= 0 {
+            return -1;
+        }
+        let o = from_raw(open, len);
+        let h = from_raw(high, len);
+        let l = from_raw(low, len);
+        let c = from_raw(close, len);
+        // Return count of detected patterns (sum of non-zero signals).
+        let doji = patterns::candlestick::doji(o, h, l, c, 0.05).unwrap_or_default();
+        let hammer = patterns::candlestick::hammer(o, h, l, c).unwrap_or_default();
+        let engulfing = patterns::candlestick::engulfing(o, h, l, c).unwrap_or_default();
 
-    let count = doji.iter().filter(|&&x| x != 0).count()
-        + hammer.iter().filter(|&&x| x != 0).count()
-        + engulfing.iter().filter(|&&x| x != 0).count();
-
-    count as i32
+        (doji.iter().filter(|&&x| x != 0).count()
+            + hammer.iter().filter(|&&x| x != 0).count()
+            + engulfing.iter().filter(|&&x| x != 0).count()) as i32
+    })
 }
 
 #[cfg(test)]

@@ -17,6 +17,17 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  workspace-check:
+    name: Workspace compile check
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Check every workspace crate
+        run: cargo check --workspace --all-targets --locked
+
   # Validation jobs run independently; the advisory preflight must not fan out a single skip.
   version-consistency:
     name: Version consistency

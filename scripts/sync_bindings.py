@@ -333,8 +333,10 @@ def guard_for(lang: str, ret: str) -> str | None:
     elif lang == "java":
         # jdoubleArray / jobject are both `*mut _jobject`; `ffi_catch_ptr`
         # infers `T` from the closure's return type, so no turbofish.
-        if ret in ("jdoubleArray", "jobject"):
+        if ret in ("jdoubleArray", "jobject", "jintArray", "jstring"):
             return "ffi_catch_ptr"
+        if ret == "()":
+            return "ffi_catch_void"
     return None
 
 

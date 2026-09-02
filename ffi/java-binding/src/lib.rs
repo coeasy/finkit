@@ -437,6 +437,8 @@ pub extern "system" fn Java_com_finkit_Indicators_dx(
     close: JDoubleArray,
     period: jint,
 ) -> jdoubleArray {
+    ffi_catch_ptr(|| {
+
     let high_vec = get_double_array(&mut env, high);
     let low_vec = get_double_array(&mut env, low);
     let close_vec = get_double_array(&mut env, close);
@@ -444,10 +446,12 @@ pub extern "system" fn Java_com_finkit_Indicators_dx(
         Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_finkit_Indicators_plus_di(
+pub extern "system" fn Java_com_finkit_Indicators_plusDi(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -455,6 +459,8 @@ pub extern "system" fn Java_com_finkit_Indicators_plus_di(
     close: JDoubleArray,
     period: jint,
 ) -> jdoubleArray {
+    ffi_catch_ptr(|| {
+
     let high_vec = get_double_array(&mut env, high);
     let low_vec = get_double_array(&mut env, low);
     let close_vec = get_double_array(&mut env, close);
@@ -462,10 +468,12 @@ pub extern "system" fn Java_com_finkit_Indicators_plus_di(
         Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_finkit_Indicators_minus_di(
+pub extern "system" fn Java_com_finkit_Indicators_minusDi(
     mut env: JNIEnv,
     _class: JClass,
     high: JDoubleArray,
@@ -473,6 +481,8 @@ pub extern "system" fn Java_com_finkit_Indicators_minus_di(
     close: JDoubleArray,
     period: jint,
 ) -> jdoubleArray {
+    ffi_catch_ptr(|| {
+
     let high_vec = get_double_array(&mut env, high);
     let low_vec = get_double_array(&mut env, low);
     let close_vec = get_double_array(&mut env, close);
@@ -480,6 +490,8 @@ pub extern "system" fn Java_com_finkit_Indicators_minus_di(
         Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 // ============================================================================
@@ -504,11 +516,15 @@ pub extern "system" fn Java_com_finkit_Indicators_htDcperiod(
     _class: JClass,
     input: JDoubleArray,
 ) -> jdoubleArray {
+    ffi_catch_ptr(|| {
+
     let input_vec = get_double_array(&mut env, input);
     match indicators::ht_dcperiod(&input_vec) {
         Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 #[no_mangle]
@@ -517,11 +533,15 @@ pub extern "system" fn Java_com_finkit_Indicators_htDcphase(
     _class: JClass,
     input: JDoubleArray,
 ) -> jdoubleArray {
+    ffi_catch_ptr(|| {
+
     let input_vec = get_double_array(&mut env, input);
     match indicators::ht_dcphase(&input_vec) {
         Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 #[no_mangle]
@@ -562,11 +582,15 @@ pub extern "system" fn Java_com_finkit_Indicators_htTrendmode(
     _class: JClass,
     input: JDoubleArray,
 ) -> jdoubleArray {
+    ffi_catch_ptr(|| {
+
     let input_vec = get_double_array(&mut env, input);
     match indicators::ht_trendmode(&input_vec) {
         Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 #[no_mangle]
@@ -575,11 +599,15 @@ pub extern "system" fn Java_com_finkit_Indicators_htTrendline(
     _class: JClass,
     input: JDoubleArray,
 ) -> jdoubleArray {
+    ffi_catch_ptr(|| {
+
     let input_vec = get_double_array(&mut env, input);
     match indicators::ht_trendline(&input_vec) {
         Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 // ============================================================================
@@ -593,11 +621,15 @@ pub extern "system" fn Java_com_finkit_Indicators_percentRank(
     input: JDoubleArray,
     period: jint,
 ) -> jdoubleArray {
+    ffi_catch_ptr(|| {
+
     let input_vec = get_double_array(&mut env, input);
     match indicators::percent_rank(&input_vec, period as usize) {
         Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 #[no_mangle]
@@ -608,11 +640,15 @@ pub extern "system" fn Java_com_finkit_Indicators_stdDev(
     period: jint,
     nbDev: jdouble,
 ) -> jdoubleArray {
+    ffi_catch_ptr(|| {
+
     let input_vec = get_double_array(&mut env, input);
     match indicators::std_dev(&input_vec, period as usize, nbDev) {
         Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 #[no_mangle]
@@ -622,11 +658,15 @@ pub extern "system" fn Java_com_finkit_Indicators_linearReg(
     input: JDoubleArray,
     period: jint,
 ) -> jdoubleArray {
+    ffi_catch_ptr(|| {
+
     let input_vec = get_double_array(&mut env, input);
     match indicators::linear_reg(&input_vec, period as usize) {
         Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 // ============================================================================
@@ -842,11 +882,15 @@ pub extern "system" fn Java_com_finkit_ChartPatterns_detectHeadShouldersTop(
     minBars: jint,
     headRatio: jdouble,
 ) -> jintArray {
+    ffi_catch_ptr(|| {
+
     let high_vec = get_double_array(&mut env, high);
     match chart::head_and_shoulders_top(&high_vec, minBars as usize, headRatio) {
         Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 #[no_mangle]
@@ -857,11 +901,15 @@ pub extern "system" fn Java_com_finkit_ChartPatterns_detectHeadShouldersBottom(
     minBars: jint,
     headRatio: jdouble,
 ) -> jintArray {
+    ffi_catch_ptr(|| {
+
     let low_vec = get_double_array(&mut env, low);
     match chart::head_and_shoulders_bottom(&low_vec, minBars as usize, headRatio) {
         Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 #[no_mangle]
@@ -872,11 +920,15 @@ pub extern "system" fn Java_com_finkit_ChartPatterns_detectDoubleTop(
     lookback: jint,
     tolerance: jdouble,
 ) -> jintArray {
+    ffi_catch_ptr(|| {
+
     let high_vec = get_double_array(&mut env, high);
     match chart::double_top(&high_vec, lookback as usize, tolerance) {
         Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 #[no_mangle]
@@ -887,11 +939,15 @@ pub extern "system" fn Java_com_finkit_ChartPatterns_detectDoubleBottom(
     lookback: jint,
     tolerance: jdouble,
 ) -> jintArray {
+    ffi_catch_ptr(|| {
+
     let low_vec = get_double_array(&mut env, low);
     match chart::double_bottom(&low_vec, lookback as usize, tolerance) {
         Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 #[no_mangle]
@@ -902,11 +958,15 @@ pub extern "system" fn Java_com_finkit_ChartPatterns_detectTripleTop(
     lookback: jint,
     tolerance: jdouble,
 ) -> jintArray {
+    ffi_catch_ptr(|| {
+
     let high_vec = get_double_array(&mut env, high);
     match chart::triple_top(&high_vec, lookback as usize, tolerance) {
         Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 #[no_mangle]
@@ -917,11 +977,15 @@ pub extern "system" fn Java_com_finkit_ChartPatterns_detectTripleBottom(
     lookback: jint,
     tolerance: jdouble,
 ) -> jintArray {
+    ffi_catch_ptr(|| {
+
     let low_vec = get_double_array(&mut env, low);
     match chart::triple_bottom(&low_vec, lookback as usize, tolerance) {
         Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 #[no_mangle]
@@ -933,12 +997,16 @@ pub extern "system" fn Java_com_finkit_ChartPatterns_detectAscendingTriangle(
     lookback: jint,
     tolerance: jdouble,
 ) -> jintArray {
+    ffi_catch_ptr(|| {
+
     let high_vec = get_double_array(&mut env, high);
     let low_vec = get_double_array(&mut env, low);
     match chart::ascending_triangle(&high_vec, &low_vec, lookback as usize, tolerance) {
         Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 #[no_mangle]
@@ -950,12 +1018,16 @@ pub extern "system" fn Java_com_finkit_ChartPatterns_detectDescendingTriangle(
     lookback: jint,
     tolerance: jdouble,
 ) -> jintArray {
+    ffi_catch_ptr(|| {
+
     let high_vec = get_double_array(&mut env, high);
     let low_vec = get_double_array(&mut env, low);
     match chart::descending_triangle(&high_vec, &low_vec, lookback as usize, tolerance) {
         Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 #[no_mangle]
@@ -966,12 +1038,16 @@ pub extern "system" fn Java_com_finkit_ChartPatterns_detectSymmetricalTriangle(
     low: JDoubleArray,
     lookback: jint,
 ) -> jintArray {
+    ffi_catch_ptr(|| {
+
     let high_vec = get_double_array(&mut env, high);
     let low_vec = get_double_array(&mut env, low);
     match chart::symmetrical_triangle(&high_vec, &low_vec, lookback as usize) {
         Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 #[no_mangle]
@@ -982,12 +1058,16 @@ pub extern "system" fn Java_com_finkit_ChartPatterns_detectRisingWedge(
     low: JDoubleArray,
     lookback: jint,
 ) -> jintArray {
+    ffi_catch_ptr(|| {
+
     let high_vec = get_double_array(&mut env, high);
     let low_vec = get_double_array(&mut env, low);
     match chart::rising_wedge(&high_vec, &low_vec, lookback as usize) {
         Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 #[no_mangle]
@@ -998,12 +1078,16 @@ pub extern "system" fn Java_com_finkit_ChartPatterns_detectFallingWedge(
     low: JDoubleArray,
     lookback: jint,
 ) -> jintArray {
+    ffi_catch_ptr(|| {
+
     let high_vec = get_double_array(&mut env, high);
     let low_vec = get_double_array(&mut env, low);
     match chart::falling_wedge(&high_vec, &low_vec, lookback as usize) {
         Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 #[no_mangle]
@@ -1016,6 +1100,8 @@ pub extern "system" fn Java_com_finkit_ChartPatterns_detectPennant(
     flagpolePeriod: jint,
     pennantPeriod: jint,
 ) -> jintArray {
+    ffi_catch_ptr(|| {
+
     let high_vec = get_double_array(&mut env, high);
     let low_vec = get_double_array(&mut env, low);
     let close_vec = get_double_array(&mut env, close);
@@ -1029,6 +1115,8 @@ pub extern "system" fn Java_com_finkit_ChartPatterns_detectPennant(
         Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 #[no_mangle]
@@ -1041,6 +1129,8 @@ pub extern "system" fn Java_com_finkit_ChartPatterns_detectFlag(
     flagpolePeriod: jint,
     flagPeriod: jint,
 ) -> jintArray {
+    ffi_catch_ptr(|| {
+
     let high_vec = get_double_array(&mut env, high);
     let low_vec = get_double_array(&mut env, low);
     let close_vec = get_double_array(&mut env, close);
@@ -1054,6 +1144,8 @@ pub extern "system" fn Java_com_finkit_ChartPatterns_detectFlag(
         Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 #[no_mangle]
@@ -1065,12 +1157,16 @@ pub extern "system" fn Java_com_finkit_ChartPatterns_detectRectangle(
     lookback: jint,
     tolerance: jdouble,
 ) -> jintArray {
+    ffi_catch_ptr(|| {
+
     let high_vec = get_double_array(&mut env, high);
     let low_vec = get_double_array(&mut env, low);
     match chart::rectangle(&high_vec, &low_vec, lookback as usize, tolerance) {
         Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 // ============================================================================
@@ -1168,6 +1264,8 @@ pub extern "system" fn Java_com_finkit_Indicators_vwap(
     close: JDoubleArray,
     volume: JDoubleArray,
 ) -> jdoubleArray {
+    ffi_catch_ptr(|| {
+
     let high_vec = get_double_array(&mut env, high);
     let low_vec = get_double_array(&mut env, low);
     let close_vec = get_double_array(&mut env, close);
@@ -1176,6 +1274,8 @@ pub extern "system" fn Java_com_finkit_Indicators_vwap(
         Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 #[no_mangle]
@@ -1188,6 +1288,8 @@ pub extern "system" fn Java_com_finkit_Indicators_anchoredVwap(
     volume: JDoubleArray,
     startIndex: jint,
 ) -> jdoubleArray {
+    ffi_catch_ptr(|| {
+
     let high_vec = get_double_array(&mut env, high);
     let low_vec = get_double_array(&mut env, low);
     let close_vec = get_double_array(&mut env, close);
@@ -1202,6 +1304,8 @@ pub extern "system" fn Java_com_finkit_Indicators_anchoredVwap(
         Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 #[no_mangle]
@@ -1624,6 +1728,8 @@ pub extern "system" fn Java_com_finkit_Indicators_darvasBox(
     lookback: jint,
     confirmation: jint,
 ) -> jobject {
+    ffi_catch_ptr(|| {
+
     let h = get_double_array(&mut env, high);
     let l = get_double_array(&mut env, low);
     let c = get_double_array(&mut env, close);
@@ -1635,6 +1741,8 @@ pub extern "system" fn Java_com_finkit_Indicators_darvasBox(
     };
     let r = indicators::darvas_box(&h, &l, &c, lb, conf).unwrap();
     build_dto_2d_1i(env, &r.box_top, &r.box_bottom, &r.signal)
+
+    })
 }
 
 #[no_mangle]
@@ -1646,11 +1754,15 @@ pub extern "system" fn Java_com_finkit_Indicators_pointAndFigure(
     box_size: jdouble,
     reversal: jint,
 ) -> jobject {
+    ffi_catch_ptr(|| {
+
     let h = get_double_array(&mut env, high);
     let l = get_double_array(&mut env, low);
     let rev = if reversal > 0 { reversal as usize } else { 3 };
     let r = indicators::point_and_figure(&h, &l, box_size, rev).unwrap();
     build_dto3(env, &r.pnf, &r.column_type, &r.new_column)
+
+    })
 }
 
 #[no_mangle]
@@ -1660,9 +1772,13 @@ pub extern "system" fn Java_com_finkit_Indicators_threeLineBreak(
     close: JDoubleArray,
     lines: jint,
 ) -> jobject {
+    ffi_catch_ptr(|| {
+
     let c = get_double_array(&mut env, close);
     let r = indicators::three_line_break(&c, lines as usize).unwrap();
     build_dto2(env, &r.line, &r.direction)
+
+    })
 }
 
 #[no_mangle]
@@ -1671,9 +1787,13 @@ pub extern "system" fn Java_com_finkit_Indicators_williamsAlligator(
     _class: JClass,
     close: JDoubleArray,
 ) -> jobject {
+    ffi_catch_ptr(|| {
+
     let c = get_double_array(&mut env, close);
     let r = indicators::williams_alligator(&c).unwrap();
     build_dto_3d(env, &r.jaw, &r.teeth, &r.lips)
+
+    })
 }
 
 #[no_mangle]
@@ -1685,12 +1805,16 @@ pub extern "system" fn Java_com_finkit_Indicators_heikinAshi(
     low: JDoubleArray,
     close: JDoubleArray,
 ) -> jobject {
+    ffi_catch_ptr(|| {
+
     let o = get_double_array(&mut env, open);
     let h = get_double_array(&mut env, high);
     let l = get_double_array(&mut env, low);
     let c = get_double_array(&mut env, close);
     let r = indicators::heikin_ashi(&o, &h, &l, &c).unwrap();
     build_dto4(env, &r.ha_open, &r.ha_high, &r.ha_low, &r.ha_close)
+
+    })
 }
 
 fn set_int_field(env: &mut JNIEnv, obj: &JObject, field: &str, arr: jintArray) {
@@ -1803,6 +1927,8 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaEval(
     close: JDoubleArray,
     volume: JDoubleArray,
 ) -> jobject {
+    ffi_catch_ptr(|| {
+
     let source_str: String = match env.get_string(&source) {
         Ok(s) => s.into(),
         Err(_) => return std::ptr::null_mut(),
@@ -1877,6 +2003,8 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaEval(
         }
         Err(_) => std::ptr::null_mut(),
     }
+
+    })
 }
 
 #[no_mangle]
@@ -1908,6 +2036,8 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaEvalJit(
     close: JDoubleArray,
     volume: JDoubleArray,
 ) -> jobject {
+    ffi_catch_ptr(|| {
+
     formula_eval_helper(
         &mut env,
         source,
@@ -1918,6 +2048,8 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaEvalJit(
         volume,
         |engine, source, ctx| engine.eval_jit(source, ctx),
     )
+
+    })
 }
 
 #[no_mangle]
@@ -1931,6 +2063,8 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaEvalSimd(
     close: JDoubleArray,
     volume: JDoubleArray,
 ) -> jobject {
+    ffi_catch_ptr(|| {
+
     formula_eval_helper(
         &mut env,
         source,
@@ -1941,6 +2075,8 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaEvalSimd(
         volume,
         |engine, source, ctx| engine.eval_simd(source, ctx),
     )
+
+    })
 }
 
 #[no_mangle]
@@ -1954,6 +2090,8 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaEvalZeroCopy(
     close: JDoubleArray,
     volume: JDoubleArray,
 ) -> jobject {
+    ffi_catch_ptr(|| {
+
     formula_eval_helper(
         &mut env,
         source,
@@ -1964,4 +2102,6 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaEvalZeroCopy(
         volume,
         |engine, source, ctx| engine.eval_zero_copy(source, ctx),
     )
+
+    })
 }
