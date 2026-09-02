@@ -182,9 +182,10 @@ Use `execute_precompiled` for owned input and `execute_borrowed` for borrowed
 input. Both validate the raw-input manifest and reject stale plans when the
 registry dependency graph no longer matches the graph that was compiled.
 
-`FactorPlan::execute` remains as the compatibility entry point using the
-established recursive evaluator, so existing callers are not forced to migrate
-in v0.1.2.
+`FactorPlan::execute` keeps its existing source signature but now validates the
+context/registry and delegates to the precompiled topology, so existing callers
+receive the optimized path without migrating API calls. `execute_precompiled`
+remains available when callers want to state that execution mode explicitly.
 
 Built-in factors remain deliberately small reference factors. Register custom
 factors with `FactorDefinition::new` and return one value per context row. Factor

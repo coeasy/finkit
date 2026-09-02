@@ -434,8 +434,7 @@ impl FactorPlan {
     ) -> FactorResult<BTreeMap<String, Vec<f64>>> {
         self.validate_context(context)?;
         self.validate_engine(engine)?;
-        let targets: Vec<&str> = self.targets.iter().map(String::as_str).collect();
-        engine.evaluate_many(&targets, context)
+        self.execute_precompiled(engine, context)
     }
 
     fn validate_engine(&self, engine: &FactorEngine) -> FactorResult<()> {

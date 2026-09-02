@@ -19,11 +19,9 @@ fn run_schema(args: &[&str]) -> Value {
 fn full_schema_is_machine_readable_and_versioned() {
     let schema = run_schema(&["--compact"]);
     assert_eq!(schema["schema_version"], "finkit.function.v1");
-    assert!(
-        schema["functions"]
-            .as_array()
-            .is_some_and(|items| !items.is_empty())
-    );
+    assert!(schema["functions"]
+        .as_array()
+        .is_some_and(|items| !items.is_empty()));
 }
 
 #[test]
@@ -38,10 +36,7 @@ fn schema_cli_resolves_compatibility_aliases() {
 #[test]
 fn terminal_schema_reports_real_compatibility_strength() {
     let schema = run_schema(&["--terminals", "--compact"]);
-    assert_eq!(
-        schema["schema_version"],
-        "finkit.formula-terminal.v1"
-    );
+    assert_eq!(schema["schema_version"], "finkit.formula-terminal.v1");
     let terminals = schema["terminals"].as_array().expect("terminal array");
 
     let finkit = terminals

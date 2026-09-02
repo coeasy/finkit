@@ -147,7 +147,10 @@ mod tests {
 
     #[test]
     fn terminal_discovery_is_stable_and_complete() {
-        assert_eq!(FORMULA_TERMINAL_SCHEMA_VERSION, "finkit.formula-terminal.v1");
+        assert_eq!(
+            FORMULA_TERMINAL_SCHEMA_VERSION,
+            "finkit.formula-terminal.v1"
+        );
         assert_eq!(
             FormulaTerminal::all(),
             &[
@@ -167,10 +170,7 @@ mod tests {
             CompatibilityLevel::Native
         );
         assert_eq!(CompatibilityLevel::Native.as_str(), "native");
-        assert_eq!(
-            CompatibilityLevel::CommonSubset.as_str(),
-            "common_subset"
-        );
+        assert_eq!(CompatibilityLevel::CommonSubset.as_str(), "common_subset");
         for terminal in [
             FormulaTerminal::TongDaXin,
             FormulaTerminal::TongHuaShun,
