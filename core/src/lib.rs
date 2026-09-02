@@ -32,6 +32,9 @@ extern crate std;
 extern crate alloc;
 
 #[cfg(feature = "std")]
+/// Bounded reusable scratch-buffer arena shared by compute backends.
+pub mod buffer_arena;
+#[cfg(feature = "std")]
 /// Unified semantic compute plans, factor plans, and runtime execution policies.
 pub mod compute;
 #[cfg(all(feature = "std", not(feature = "no_std")))]
