@@ -158,7 +158,6 @@ impl FunctionRegistry {
         Ok(())
     }
 
-
     /// Resolve a canonical name or alias case-insensitively.
     pub fn get(&self, name: &str) -> Option<&FunctionSpec> {
         let normalized = normalize_name(name);

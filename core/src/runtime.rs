@@ -132,7 +132,6 @@ impl<'a> SeriesView<'a> {
     pub fn normalized(&self, policy: NanPolicy) -> Result<Vec<f64>, RuntimeError> {
         Ok(self.normalized_cow(policy)?.into_owned())
     }
-
 }
 
 /// Zero-copy aligned OHLCV(+amount,+timestamp) market frame.
@@ -268,7 +267,6 @@ impl<'a> MarketFrame<'a> {
             None
         }
     }
-
 }
 
 /// Apply a public warm-up policy to an aligned output.
