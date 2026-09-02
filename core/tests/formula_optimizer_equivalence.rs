@@ -94,7 +94,5 @@ fn execution_optimizer_preserves_buy_and_sell_assignments() {
 
 #[test]
 fn execution_optimizer_preserves_named_outputs() {
-    assert_execution_equivalent(
-        "MA5:=MA(CLOSE,5);UPPER:MA5+2;LOWER:MA5-2;UPPER;",
-    );
+    assert_execution_equivalent("MA5:=MA(CLOSE,5);UPPER:MA5+2;LOWER:MA5-2;UPPER;");
 }

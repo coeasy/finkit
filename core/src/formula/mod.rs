@@ -40,9 +40,7 @@ pub use ast::*;
 pub use bytecode::{compile_to_bytecode, Bytecode, BytecodeVM, ExecResult, OpCode};
 pub use compat::{normalize_terminal_source, CompatibilityLevel, FormulaTerminal};
 pub use compiler::{CompiledFormula, FormulaCache, FormulaCompiler};
-pub use compute_ir::{
-    lower_formula_ast, lower_formula_ast_with_registry, FormulaComputePlan,
-};
+pub use compute_ir::{lower_formula_ast, lower_formula_ast_with_registry, FormulaComputePlan};
 pub use debugger::{DebugEvent, FormulaDebugger, FormulaErrorWithLocation};
 pub use drawing::{DrawCommand, DrawResult};
 pub use engine::{FormulaEngine, FormulaResult};

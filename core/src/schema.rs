@@ -77,7 +77,11 @@ impl FunctionApiSpec {
         let capabilities = ComputeCapabilities::from_function_spec(spec);
         Self {
             name: spec.name.to_string(),
-            aliases: spec.aliases.iter().map(|alias| (*alias).to_string()).collect(),
+            aliases: spec
+                .aliases
+                .iter()
+                .map(|alias| (*alias).to_string())
+                .collect(),
             category: category_name(spec.category).to_string(),
             input: input_name(spec.input).to_string(),
             params: spec.params.iter().map(ParamApiSpec::from_spec).collect(),
@@ -165,7 +169,11 @@ mod tests {
     #[test]
     fn builtin_schema_is_deterministically_sorted() {
         let schema = FunctionApiSchema::builtin();
-        let names: Vec<&str> = schema.functions.iter().map(|spec| spec.name.as_str()).collect();
+        let names: Vec<&str> = schema
+            .functions
+            .iter()
+            .map(|spec| spec.name.as_str())
+            .collect();
         let mut sorted = names.clone();
         sorted.sort_unstable();
         assert_eq!(names, sorted);

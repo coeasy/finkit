@@ -110,7 +110,11 @@ impl<'a> FormulaLowerer<'a> {
                 let dependencies = args.iter().map(|arg| self.lower(arg)).collect();
                 let capabilities = self.function_capabilities(name);
                 if capabilities.effect.is_pure() {
-                    self.add_node(format!("CALL:{}", canonical_name(name)), dependencies, capabilities)
+                    self.add_node(
+                        format!("CALL:{}", canonical_name(name)),
+                        dependencies,
+                        capabilities,
+                    )
                 } else {
                     self.add_effect(
                         format!("CALL:{}", canonical_name(name)),
@@ -176,7 +180,10 @@ impl<'a> FormulaLowerer<'a> {
                 id
             }
             AstNode::Statements(statements) => {
-                let dependencies = statements.iter().map(|statement| self.lower(statement)).collect();
+                let dependencies = statements
+                    .iter()
+                    .map(|statement| self.lower(statement))
+                    .collect();
                 self.add_pure("STATEMENTS", dependencies)
             }
             AstNode::ParamDecl { name, .. } => self.add_node(
@@ -470,7 +477,10 @@ mod tests {
             .find(|&id| plan.node(id).unwrap().operation == "DRAW_TEXT")
             .unwrap();
 
-        assert_eq!(plan.node(draw).unwrap().capabilities.effect, ComputeEffect::Draw);
+        assert_eq!(
+            plan.node(draw).unwrap().capabilities.effect,
+            ComputeEffect::Draw
+        );
         assert!(plan.node(draw).unwrap().dependencies.contains(&assignment));
     }
 }
