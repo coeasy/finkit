@@ -28,6 +28,7 @@
 - **60+ Candlestick Patterns**: Full recognition of common candlestick patterns
 - **15+ Chart Patterns**: Head & Shoulders, Double Top/Bottom, Triangles, Wedges, etc.
 - **Formula Engine**: Expression-based computation (`MA(CLOSE, 20)`) with AST/Bytecode optimization, range/last/incremental execution, and bounded zero-copy fast paths
+- **Factor and Runtime Contracts**: Dependency-aware factor evaluation, aligned zero-copy `MarketFrame`, explicit warm-up/NaN policies, and canonical function metadata discovery
 - **Transform Pipeline**: Composable data transforms (LogReturn, ZScore, MinMaxScaler)
 - **Builder API**: Type-safe fluent builders for all streaming indicators
 - **Multi-Language Support**: Python, Node.js, Java, Go, .NET, C++, Rust, WebAssembly, CLI

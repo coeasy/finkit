@@ -6,23 +6,28 @@ on:
     paths:
       - "docs/**"
       - "README.md"
-      - "scripts/check_versions.py"
-      - "scripts/gen_ssot_docs.py"
-      - ".github/workflows/docs-check.yml"
+      - "core/**"
+      - "ffi/**"
+      - "visualization/**"
+      - "examples/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - "CHANGELOG.md"
-      - "examples/README.md"
-      - "ffi/**/Cargo.toml"
-      - "ffi/**/README.md"
-      - "ffi/node-binding/package*.json"
+      - "scripts/**"
+      - ".github/workflows/*.yml"
   pull_request:
     paths:
       - "docs/**"
       - "README.md"
-      - "scripts/check_versions.py"
-      - "scripts/gen_ssot_docs.py"
-      - ".github/workflows/docs-check.yml"
+      - "core/**"
+      - "ffi/**"
+      - "visualization/**"
+      - "examples/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "CHANGELOG.md"
+      - "scripts/**"
+      - ".github/workflows/*.yml"
   workflow_dispatch:
 
 permissions:

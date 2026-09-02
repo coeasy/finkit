@@ -122,22 +122,42 @@ impl FunctionRegistry {
     /// Register a function and all of its aliases.
     pub fn register(&mut self, spec: FunctionSpec) -> Result<(), String> {
         let canonical = normalize_name(spec.name);
+        if canonical.is_empty() {
+            return Err("function name must not be empty".to_string());
+        }
         if self.specs.contains_key(&canonical) {
             return Err(format!("function already registered: {}", spec.name));
         }
+        if self.aliases.contains_key(&canonical) {
+            return Err(format!("function name conflicts with alias: {}", spec.name));
+        }
+
+        // Validate every alias before mutating either map. This keeps the
+        // operation atomic and prevents ambiguous canonical/alias lookups.
+        let mut normalized_aliases = BTreeMap::new();
         for alias in spec.aliases {
             let normalized = normalize_name(alias);
+            if normalized.is_empty() {
+                return Err(format!("function alias must not be empty: {alias}"));
+            }
+            if normalized == canonical {
+                return Err(format!("function alias matches canonical name: {alias}"));
+            }
+            if normalized_aliases.insert(normalized.clone(), ()).is_some() {
+                return Err(format!("duplicate function alias: {alias}"));
+            }
             if self.aliases.contains_key(&normalized) || self.specs.contains_key(&normalized) {
                 return Err(format!("function alias already registered: {alias}"));
             }
         }
-        for alias in spec.aliases {
-            self.aliases
-                .insert(normalize_name(alias), canonical.clone());
+
+        for alias in normalized_aliases.keys() {
+            self.aliases.insert(alias.clone(), canonical.clone());
         }
         self.specs.insert(canonical, spec);
         Ok(())
     }
+
 
     /// Resolve a canonical name or alias case-insensitively.
     pub fn get(&self, name: &str) -> Option<&FunctionSpec> {
@@ -209,7 +229,7 @@ const REF_PARAMS: &[ParamSpec] = &[ParamSpec::new(
 )];
 const TWO_SERIES: &[ParamSpec] = &[];
 
-/// Build the stable v0.1.0 public function registry.
+/// Build the stable v0.1.2 public function registry.
 pub fn builtin_function_registry() -> FunctionRegistry {
     let mut registry = FunctionRegistry::new();
     let specs = [
@@ -477,6 +497,57 @@ mod tests {
             })
             .unwrap_err();
         assert!(error.contains("alias"));
+    }
+
+    #[test]
+    fn canonical_name_cannot_shadow_an_existing_alias() {
+        let mut registry = FunctionRegistry::new();
+        registry
+            .register(FunctionSpec {
+                name: "ONE",
+                aliases: &["ALIAS"],
+                category: FunctionCategory::Formula,
+                input: InputKind::Dynamic,
+                params: &[],
+                outputs: 1,
+                lookback: LookbackSpec::None,
+                streaming: true,
+                deterministic: true,
+            })
+            .unwrap();
+        let error = registry
+            .register(FunctionSpec {
+                name: "alias",
+                aliases: &[],
+                category: FunctionCategory::Formula,
+                input: InputKind::Dynamic,
+                params: &[],
+                outputs: 1,
+                lookback: LookbackSpec::None,
+                streaming: true,
+                deterministic: true,
+            })
+            .unwrap_err();
+        assert!(error.contains("conflicts with alias"));
+    }
+
+    #[test]
+    fn aliases_must_be_unique_within_one_spec() {
+        let mut registry = FunctionRegistry::new();
+        let error = registry
+            .register(FunctionSpec {
+                name: "ONE",
+                aliases: &["ALIAS", "alias"],
+                category: FunctionCategory::Formula,
+                input: InputKind::Dynamic,
+                params: &[],
+                outputs: 1,
+                lookback: LookbackSpec::None,
+                streaming: true,
+                deterministic: true,
+            })
+            .unwrap_err();
+        assert!(error.contains("duplicate function alias"));
     }
 
     #[test]

@@ -4,6 +4,7 @@
 //! These types provide a stable, zero-copy boundary for language bindings,
 //! formula execution, factor computation, and future backend dispatch.
 
+use std::borrow::Cow;
 use std::fmt;
 
 /// Missing-value handling requested by a calculation boundary.
@@ -94,11 +95,11 @@ impl<'a> SeriesView<'a> {
         self.values.is_empty()
     }
 
-    /// Apply a missing-value policy and return an owned normalized buffer only
-    /// when transformation is required.
-    pub fn normalized(&self, policy: NanPolicy) -> Result<Vec<f64>, RuntimeError> {
+    /// Apply a missing-value policy without allocating when the input can be
+    /// borrowed as-is.
+    pub fn normalized_cow(&self, policy: NanPolicy) -> Result<Cow<'a, [f64]>, RuntimeError> {
         match policy {
-            NanPolicy::Preserve => Ok(self.values.to_vec()),
+            NanPolicy::Preserve => Ok(Cow::Borrowed(self.values)),
             NanPolicy::Error => {
                 if let Some(index) = self.values.iter().position(|value| !value.is_finite()) {
                     return Err(RuntimeError::NonFinite {
@@ -106,9 +107,12 @@ impl<'a> SeriesView<'a> {
                         index,
                     });
                 }
-                Ok(self.values.to_vec())
+                Ok(Cow::Borrowed(self.values))
             }
             NanPolicy::ForwardFill => {
+                if self.values.iter().all(|value| value.is_finite()) {
+                    return Ok(Cow::Borrowed(self.values));
+                }
                 let mut output = Vec::with_capacity(self.values.len());
                 let mut last = f64::NAN;
                 for &value in self.values {
@@ -117,10 +121,18 @@ impl<'a> SeriesView<'a> {
                     }
                     output.push(last);
                 }
-                Ok(output)
+                Ok(Cow::Owned(output))
             }
         }
     }
+
+    /// Apply a missing-value policy and always return an owned buffer.
+    ///
+    /// Use [`Self::normalized_cow`] when callers can consume a borrowed slice.
+    pub fn normalized(&self, policy: NanPolicy) -> Result<Vec<f64>, RuntimeError> {
+        Ok(self.normalized_cow(policy)?.into_owned())
+    }
+
 }
 
 /// Zero-copy aligned OHLCV(+amount,+timestamp) market frame.
@@ -232,17 +244,31 @@ impl<'a> MarketFrame<'a> {
     }
 
     /// Resolve a standard field name using common terminal aliases.
+    ///
+    /// Matching is allocation-free so repeated formula/runtime lookups do not
+    /// create a temporary uppercase string.
     pub fn series(&self, name: &str) -> Option<SeriesView<'a>> {
-        match name.trim().to_ascii_uppercase().as_str() {
-            "O" | "OPEN" => Some(SeriesView::new("open", self.open)),
-            "H" | "HIGH" => Some(SeriesView::new("high", self.high)),
-            "L" | "LOW" => Some(SeriesView::new("low", self.low)),
-            "C" | "CLOSE" => Some(SeriesView::new("close", self.close)),
-            "V" | "VOL" | "VOLUME" => Some(SeriesView::new("volume", self.volume)),
-            "AMOUNT" | "TURNOVER" => self.amount.map(|values| SeriesView::new("amount", values)),
-            _ => None,
+        let key = name.trim();
+        if key.eq_ignore_ascii_case("O") || key.eq_ignore_ascii_case("OPEN") {
+            Some(SeriesView::new("open", self.open))
+        } else if key.eq_ignore_ascii_case("H") || key.eq_ignore_ascii_case("HIGH") {
+            Some(SeriesView::new("high", self.high))
+        } else if key.eq_ignore_ascii_case("L") || key.eq_ignore_ascii_case("LOW") {
+            Some(SeriesView::new("low", self.low))
+        } else if key.eq_ignore_ascii_case("C") || key.eq_ignore_ascii_case("CLOSE") {
+            Some(SeriesView::new("close", self.close))
+        } else if key.eq_ignore_ascii_case("V")
+            || key.eq_ignore_ascii_case("VOL")
+            || key.eq_ignore_ascii_case("VOLUME")
+        {
+            Some(SeriesView::new("volume", self.volume))
+        } else if key.eq_ignore_ascii_case("AMOUNT") || key.eq_ignore_ascii_case("TURNOVER") {
+            self.amount.map(|values| SeriesView::new("amount", values))
+        } else {
+            None
         }
     }
+
 }
 
 /// Apply a public warm-up policy to an aligned output.
@@ -290,6 +316,16 @@ mod tests {
         let frame = MarketFrame::new(&[1.0], &[2.0], &[0.5], &[1.5], &[10.0]).unwrap();
         assert_eq!(frame.series("C").unwrap().values, &[1.5]);
         assert_eq!(frame.series("VOL").unwrap().values, &[10.0]);
+    }
+
+    #[test]
+    fn preserve_policy_borrows_finite_input() {
+        let input = [1.0, 2.0, 3.0];
+        let series = SeriesView::new("close", &input);
+        match series.normalized_cow(NanPolicy::Preserve).unwrap() {
+            std::borrow::Cow::Borrowed(values) => assert_eq!(values.as_ptr(), input.as_ptr()),
+            std::borrow::Cow::Owned(_) => panic!("preserve policy unexpectedly allocated"),
+        }
     }
 
     #[test]

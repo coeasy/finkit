@@ -29,6 +29,9 @@ Finkit/
 │   ├── src/
 │   │   ├── lib.rs              # Library entry point
 │   │   ├── error.rs            # Error types
+│   │   ├── factors.rs          # Dependency-aware factor evaluation
+│   │   ├── registry.rs          # Function metadata and aliases
+│   │   ├── runtime.rs           # Aligned MarketFrame and runtime policies
 │   │   ├── utils.rs            # Utility functions
 │   │   ├── indicators/         # Technical indicators
 │   │   │   ├── mod.rs

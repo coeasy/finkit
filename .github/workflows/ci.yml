@@ -78,10 +78,10 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
       - name: Clippy (core)
-        run: cargo clippy -p finkit
+        run: cargo clippy -p finkit --locked
       - name: Clippy (workspace, advisory)
         continue-on-error: true
-        run: cargo clippy --workspace --all-targets
+        run: cargo clippy --workspace --all-targets --locked
 
   test:
     name: Test (core)
@@ -95,9 +95,9 @@ jobs:
       - name: Verify generated registry snapshot
         run: git diff --exit-code -- docs/indicator_registry.json
       - name: Run core tests
-        run: cargo test -p finkit
+        run: cargo test -p finkit --locked
       - name: Run core docs tests
-        run: cargo test -p finkit --doc
+        run: cargo test -p finkit --doc --locked
 
   doc:
     name: Docs
@@ -109,7 +109,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Build docs
-        run: cargo doc -p finkit --no-deps
+        run: cargo doc -p finkit --no-deps --locked
 
   audit:
     name: Dependency audit

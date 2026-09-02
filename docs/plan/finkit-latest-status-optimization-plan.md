@@ -1,16 +1,24 @@
 # Finkit 最新代码核对、功能梳理与优化改进方案
 
-- 执行更新：2026-09-01：已提交 CI preflight、version-consistency、docs-check、Formula runtime contract/reset、绑定版本对齐和 crate/CLI 发布资产流程；本轮继续修复发布口径、Node lockfile、MSRV 文档及性能门禁脚本；CI runner 初始化问题和正式 Release 仍待解除。
+- 执行更新：2026-09-02：PR #11 已合并 v0.1.2 发布元数据与 CI/文档修复，PR #12 已将旧 PR #1 中仍缺失的 Factor Engine、Runtime Contract、Function Registry 和终端公式兼容层移植到当前主线；本轮继续收敛 Registry 别名安全、Runtime 借用路径、Cargo.lock 门禁、Docs Check 触发范围和文档状态。CI runner 初始化问题与正式 v0.1.2 Release 仍待处理。
 
-- 核对日期：2026-09-01
+- 核对日期：2026-09-02
 - 仓库：coeasy/finkit
 - 核对分支：main
-- 核对基线：5a5a7acaefaca9b407a77e865eb10a23d84f03db
+- 核对基线：2c2ba4d6805bd9eb2176b14edb461a955aad1f67
 - 源码版本：0.1.2
 - 当前可见 GitHub Release：v0.1.0
 - 方案目标：先完成 0.1.x 稳定化、发布闭环和 API 契约，再扩大功能面
 
 > 本文区分“源码/API 已存在”“文档已声明”“测试已覆盖”和“可发布”。只有四者同时闭环，功能才视为可对外承诺。
+
+## 0. 2026-09-02 最新执行记录
+
+- 当前 `main`：`2c2ba4d`；PR #11/#12 已合并，当前无开放 PR。
+- PR #1 的旧 v0.1.0 发布工作流、旧版本元数据和重复代码未带入主线。
+- 新增核心公共模块：Factor Engine、Runtime/MarketFrame、Function Registry、FormulaTerminal compatibility。
+- 本轮继续修复 Function Registry 别名冲突、Runtime Preserve/Error 借用路径、MarketFrame 别名查询分配，以及 CI Cargo.lock/Docs Check 漏检。
+- 当前 GitHub Release 仍只有 `v0.1.0`；CI/Python wheels 仍在 runner preflight 阶段失败，未进入编译和测试步骤。
 
 ## 1. 结论摘要
 
@@ -34,9 +42,9 @@ main 最近的提交集中在以下方向：
 2. main 最新 CI 和 Python wheels 工作流均失败；失败作业返回的 steps 为空，当前连接器无法取得实际日志，因此不能臆断具体根因；
 3. README 已同步为 ci.yml、python-wheels.yml 和 docs-check.yml；perf-gate/fuzz 仍属于后续门禁；
 4. 仍保留多条历史 feature/fix/release 分支，所有核对到的分支均未保护；
-5. PR #1 仍是面向 v0.1.0 的旧开放 PR，和当前 v0.1.2 状态不一致。
+5. PR #1 已关闭；其仍有价值的核心模块已通过 PR #12 移植，当前没有开放 PR。
 
-结论：v0.1.2 先按“发布阻断”处理，暂不建议继续叠加大范围新功能。
+结论：核心模块补齐后，v0.1.2 继续以发布闭环、API 契约和可验证性为主，暂不扩大默认 feature。
 
 ### 1.3 公式运行时是当前最值得沉淀的差异化能力
 
@@ -110,11 +118,11 @@ OHLCV / 参数
 - rolling stats、normalization、labels、regime、market structure、microstructure、PCA、Fourier、wavelet、GARCH、selection、importance、time features 等源码模块；
 - backtest、risk、sector、selectors、transforms、Polars 和 visualization 等相邻模块。
 
-当前没有核对到独立的 core/src/factor 公共模块。因此：
+当前已补齐独立的 `core/src/factors.rs`、`core/src/runtime.rs`、`core/src/registry.rs` 和 `core/src/formula/compat.rs` 公共模块。因此：
 
-- 不能把“standalone Factor DAG API”描述成当前已交付能力；
-- 当前更准确的表述是：Finkit 有 FeatureSet/FeatureEngine、公式依赖图和优化器，可作为因子构建基础；
-- 若要正式提供 Factor API，应单独定义 Factor、FactorGraph、依赖、窗口、缓存和输出契约，并配套跨语言接口。
+- Finkit 已具备一个 Rust 侧 dependency-aware Factor Engine、对齐的 MarketFrame/runtime policy、函数元数据 registry 和终端公式兼容入口；
+- 这些能力目前仍主要是 Rust core contract，尚未完成 C/Python/Node 等绑定的统一暴露和跨语言 golden fixture；
+- 不能把它们描述成已经完成的跨语言 Factor SDK；下一步应先补 parity、错误契约和安装 smoke test。
 
 建议保持核心边界：指标、公式和数据变换是核心；回测、风险、选股和可视化作为可选扩展，不能反向污染最小安装。
 
@@ -139,7 +147,7 @@ OHLCV / 参数
 | Formula | B：核心已成形 | AST/Bytecode/优化/缓存/增量/zero-copy 入口 | 需要把 ownership、copy、lookback、last 语义写成稳定契约 |
 | SIMD/JIT | C：能力存在但宣传需收敛 | feature、AVX-512、JIT 入口和基准 | SIMD 当前覆盖有限，JIT 仍偏实验；缺少能力矩阵和性能门槛 |
 | Feature Engineering | B：源码有、文档展示不全 | FeatureSet、FeatureMatrix 及多种变换 | generated/features.md 只列 3 个 direct public submodule；现已补充 internal re-export 说明 |
-| Factor API | D：规划缺口 | 可复用公式和 FeatureSet 可作为基础 | 尚无核对到独立公共 Factor DAG；需先做产品决策 |
+| Factor API | C：Rust core 已具备初版 | FactorContext/Registry/Engine、依赖缓存、cycle 检测和 composite | 尚未跨语言暴露；需补 golden fixture、错误契约和参数/窗口 metadata |
 | Python 发布 | B：构建配置有 | ABI3、平台矩阵、Python 3.8–3.14 兼容 job | 最新 wheels 工作流失败；当前可见 release 仍是 v0.1.0 |
 | 其他 FFI | B/C：代码与元数据有 | 多语言 binding crate、C header、Node 平台包 | 缺统一 golden fixture、安装 smoke test 和工件清单 |
 | CI/CD | C：门禁正在补强 | fmt、clippy、test、doc、audit、版本检查 | 最新 main 仍未绿；README/workflow 名称已完成同步 |
@@ -204,7 +212,7 @@ OHLCV / 参数
 
 执行项：
 
-- 关闭或更新仍描述 v0.1.0 的 PR #1；
+- 已关闭仍描述 v0.1.0 的 PR #1，并通过 PR #12 保留其未合并的核心模块；
 - 标记历史分支为 archived，合并确认后删除已无用途分支；
 - 对 main 开启 branch protection：必需 CI、版本检查、docs check 和至少一名 review；
 - 发布分支只从经过检查的 main/tag 产生，禁止旧 release 分支重新覆盖发布线。
