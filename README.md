@@ -6,9 +6,9 @@
 
 Finkit is a high-performance financial technical-analysis, formula, factor, and streaming-computation library written in Rust. It focuses on reusable calculation infrastructure and native-language bindings rather than trading execution, brokerage, or a full research platform.
 
-Current release: **v0.1.3**.
+Current published release: **v0.1.3**.
 
-## What is ready
+## What is ready in v0.1.3
 
 - Rust core: batch indicators, streaming indicators, formula engine, factor/runtime infrastructure, transforms, patterns, risk helpers, and optional Polars integration.
 - Python: verified ABI3 wheels for CPython 3.8-3.14 on Linux x86_64, Windows x86_64, macOS x86_64, and macOS arm64.
@@ -21,14 +21,32 @@ Current release: **v0.1.3**.
 
 ## Distribution status
 
-The GitHub `v0.1.3` Release is the authoritative distribution for this version. It contains:
+The GitHub `v0.1.3` Release is the authoritative distribution for that version. It contains:
 
 - four Python `cp38-abi3` wheels;
 - `finkit-0.1.3.crate`;
 - `finkit-cli-linux-x86_64`;
 - `SHA256SUMS`.
 
-Public package registries are a separate contract. Do **not** assume PyPI, crates.io, npm, Maven Central, NuGet, or a public Go module is available unless that exact package/version has actually been published and verified.
+Public package registries are a separate contract. Do **not** assume PyPI, crates.io, npm, Maven Central, NuGet, a public Go module, Android Maven coordinates, or Swift package coordinates are available unless that exact package/version has actually been published and verified.
+
+## Next-release multi-language expansion
+
+The next-release branch expands the permanent multi-language gate beyond Node/Java/C++/Rust. The `Multilang release` workflow now requires target-specific validation for:
+
+| Target | Next-release gate |
+| --- | --- |
+| Go/CGO | Rust native build, `go test`, external-module example |
+| .NET | Rust native build, .NET 8 tests, NuGet RID inspection |
+| WebAssembly | real `wasm32-unknown-unknown` release build |
+| Android | four NDK ABIs, Gradle AAR build, AAR native payload inspection |
+| iOS | arm64 device + universal arm64/x86_64 simulator XCFramework |
+| Node.js | native tests + platform/root npm package candidates |
+| Java/JNI | packaged native JAR + JVM runtime smoke |
+| C/C++ | CMake build/test/install SDK candidate |
+| Rust/CLI | crate + Linux CLI packaging |
+
+These are **validation targets**, not retroactive v0.1.3 Release assets. A language moves from “source exists” to “CI validated” only when its final-head job is green, and it becomes a published distribution only after the resulting artifact is released and a clean consumer install succeeds.
 
 ## Documentation
 
@@ -41,11 +59,12 @@ Start here:
 | [Installation](docs/installation.md) | Release assets, source builds, prerequisites and verification |
 | [Complete usage guide](docs/usage.md) | Python/Rust usage, formulas, streaming and runtime conventions |
 | [CLI guide](docs/cli.md) | Input formats, commands and CLI troubleshooting |
-| [Language bindings](docs/language-bindings.md) | Node, Java/JNI, C/C++, Go, .NET, mobile/WASM build/status matrix |
+| [Language bindings](docs/language-bindings.md) | Python/Rust/Node/Java/C/C++/Go/.NET/Android/iOS/WASM support matrix |
 | [Runtime and factors](docs/runtime-and-factors.md) | MarketFrame, factor plans, dependency validation and reuse |
+| [Troubleshooting](docs/troubleshooting.md) | Installation, data alignment, formula/runtime and cross-language build diagnosis |
 | [Python guide](docs/python.md) | NumPy, ABI3 wheels, `CompiledFormula`, pandas and troubleshooting |
 | [Indicators](docs/indicators.md) | Indicator reference |
-| [Formula engine](docs/formula.md) | Formula syntax and terminal compatibility |
+| [Formula engine](docs/formula.md) | Formula syntax, execution and binding-specific debug guidance |
 | [API reference](docs/api-reference.md) | Public API overview |
 | [Development](docs/development.md) | Build, test, benchmark, package and CI workflow |
 
@@ -162,11 +181,17 @@ Across language bindings:
 - Python's lowest-overhead path uses contiguous one-dimensional `numpy.float64` arrays;
 - zero-copy borrowed inputs must not be resized or mutated concurrently while evaluation is running.
 
-## Other language bindings
+## Multi-language source guides
 
-Node.js, Java/JNI, and C/C++ are verified source-build paths in v0.1.3. Go, .NET, Android, iOS, and WASM remain source/development integrations rather than public v0.1.3 package-distribution contracts.
+Binding-specific instructions:
 
-See [docs/language-bindings.md](docs/language-bindings.md) for exact prerequisites and build commands.
+- [Go/CGO](ffi/go-binding/README.md)
+- [.NET](ffi/dotnet-binding/README.md)
+- [Android](ffi/android-binding/README.md)
+- [iOS](ffi/ios-binding/README.md)
+- [WebAssembly](wasm/README.md)
+
+See [docs/language-bindings.md](docs/language-bindings.md) for exact support and publication semantics.
 
 ## Build and verify the workspace
 
@@ -180,6 +205,8 @@ python scripts/check_versions.py
 python scripts/gen_ssot_docs.py --check
 python scripts/check_docs_links.py
 ```
+
+Multi-language package/target validation is defined in `.github/workflows/multilang-release.yml`.
 
 ## Performance
 

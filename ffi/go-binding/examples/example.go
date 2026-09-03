@@ -5,10 +5,12 @@ import (
 	"math"
 	"os"
 
-	"github.com/coeasy/finkit/go/ta"
+	"github.com/coeasy/finkit/ffi/go-binding/go/ta"
 )
 
 func main() {
+	// Keep the example long enough for the strictest indicator below.
+	// MACD(12,26,9) requires slowperiod + signalperiod - 1 = 34 bars.
 	closes := []float64{
 		44.34, 44.09, 43.61, 44.33, 44.83,
 		45.10, 45.42, 45.84, 46.08, 45.89,
@@ -16,6 +18,8 @@ func main() {
 		46.03, 46.41, 46.22, 45.64, 46.21,
 		46.25, 45.71, 46.45, 45.78, 45.35,
 		44.03, 44.18, 44.22, 44.57, 43.42,
+		43.85, 44.12, 44.48, 44.31, 44.76,
+		45.02, 45.37, 45.19, 45.66, 45.91,
 	}
 
 	highs := make([]float64, len(closes))

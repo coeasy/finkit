@@ -1,79 +1,59 @@
-# ----------------------------------------------------------------------------
-# AlphaTA iOS .xcframework builder.
+#!/usr/bin/env bash
+# Build the Finkit iOS XCFramework from the Rust static library.
 #
-# Produces `AlphaTA.xcframework` containing the AlphaTA static library
-# compiled for the four iOS targets Apple supports as of 2026:
-#   * aarch64-apple-ios          (physical iPhone / iPad)
-#   * aarch64-apple-ios-sim     (Apple Silicon simulator)
-#   * x86_64-apple-ios          (legacy Intel device, kept for completeness)
-#   * x86_64-apple-ios-sim      (Intel Mac simulator)
+# Rust's iOS targets used here are:
+#   * aarch64-apple-ios      - physical arm64 iPhone/iPad
+#   * aarch64-apple-ios-sim  - Apple Silicon simulator
+#   * x86_64-apple-ios       - Intel simulator
 #
-# Required toolchains:
-#   * Xcode 15+ (provides `xcodebuild`, `lipo`, `lldb`)
-#   * `rustup target add aarch64-apple-ios aarch64-apple-ios-sim \
-#                      x86_64-apple-ios x86_64-apple-ios-sim`
-#   * `cargo install --locked cargo-lipo` (only when producing a universal
-#     static lib; the script below builds per-target lipo manually so
-#     cargo-lipo is optional).
-# ----------------------------------------------------------------------------
+# The two simulator libraries are combined with lipo into one universal
+# simulator slice before xcodebuild creates the final XCFramework.
 
 set -euo pipefail
 
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-ROOT="$( cd "${SCRIPT_DIR}/../.." && pwd )"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 OUT="${ROOT}/dist/ios"
-mkdir -p "${OUT}"
+WORK="${OUT}/_work"
+HEADERS="${WORK}/headers"
 
-VERSION="$( grep -E '^version' "${ROOT}/Cargo.toml" | head -1 | sed -E 's/.*"([^"]+)".*/\1/' )"
+DEVICE_TARGET="aarch64-apple-ios"
+SIM_ARM_TARGET="aarch64-apple-ios-sim"
+SIM_X64_TARGET="x86_64-apple-ios"
 
-TARGETS=(
-  "aarch64-apple-ios"
-  "aarch64-apple-ios-sim"
-  "x86_64-apple-ios"
-  "x86_64-apple-ios-sim"
-)
+rm -rf "${WORK}" "${OUT}/Finkit.xcframework"
+mkdir -p "${OUT}" "${WORK}" "${HEADERS}"
+
+cp "${ROOT}/ffi/ios-binding/include/finkit.h" "${HEADERS}/"
+cp "${ROOT}/ffi/ios-binding/include/module.modulemap" "${HEADERS}/"
+cp "${ROOT}/ffi/ios-binding/include/Finkit.swift" "${HEADERS}/"
 
 build_target() {
   local target="$1"
-  echo "[build-ios] cargo build --release --target ${target} -p finkit-ios"
-  ( cd "${ROOT}" && cargo build --release --target "${target}" -p finkit-ios )
+  echo "[build-ios] cargo build --release --locked --target ${target} -p finkit-ios"
+  (cd "${ROOT}" && cargo build --release --locked --target "${target}" -p finkit-ios)
 }
 
-# 1. Compile for every target
-for t in "${TARGETS[@]}"; do
-  build_target "${t}"
+build_target "${DEVICE_TARGET}"
+build_target "${SIM_ARM_TARGET}"
+build_target "${SIM_X64_TARGET}"
+
+DEVICE_LIB="${ROOT}/target/${DEVICE_TARGET}/release/libfinkit_ios.a"
+SIM_ARM_LIB="${ROOT}/target/${SIM_ARM_TARGET}/release/libfinkit_ios.a"
+SIM_X64_LIB="${ROOT}/target/${SIM_X64_TARGET}/release/libfinkit_ios.a"
+SIM_UNIVERSAL_LIB="${WORK}/libfinkit_ios_simulator.a"
+
+for lib in "${DEVICE_LIB}" "${SIM_ARM_LIB}" "${SIM_X64_LIB}"; do
+  test -f "${lib}"
 done
 
-# 2. Lay out the .xcframework skeleton
-SLICES=(
-  "ios-arm64:aarch64-apple-ios"
-  "ios-arm64-simulator:aarch64-apple-ios-sim"
-  "ios:x86_64-apple-ios"
-  "ios-x86_64-simulator:x86_64-apple-ios-sim"
-)
+lipo -create "${SIM_ARM_LIB}" "${SIM_X64_LIB}" -output "${SIM_UNIVERSAL_LIB}"
+lipo -info "${SIM_UNIVERSAL_LIB}"
 
-WORK="${OUT}/_work"
-rm -rf "${WORK}"
-mkdir -p "${WORK}"
-
-for slice in "${SLICES[@]}"; do
-  name="${slice%%:*}"
-  target="${slice##*:}"
-  mkdir -p "${WORK}/${name}/Headers"
-  cp "${ROOT}/target/${target}/release/libfinkit_ios.a" "${WORK}/${name}/"
-  cp "${ROOT}/ffi/ios-binding/include/finkit.h"  "${WORK}/${name}/Headers/"
-  cp "${ROOT}/ffi/ios-binding/include/Finkit.swift" "${WORK}/${name}/Headers/"
-done
-
-# 3. Generate the .xcframework
-rm -rf "${OUT}/Finkit.xcframework"
 xcodebuild -create-xcframework \
-  -library "${WORK}/ios-arm64/libfinkit_ios.a"            -headers "${WORK}/ios-arm64/Headers" \
-  -library "${WORK}/ios-arm64-simulator/libfinkit_ios.a"  -headers "${WORK}/ios-arm64-simulator/Headers" \
-  -library "${WORK}/ios/libfinkit_ios.a"                  -headers "${WORK}/ios/Headers" \
-  -library "${WORK}/ios-x86_64-simulator/libfinkit_ios.a" -headers "${WORK}/ios-x86_64-simulator/Headers" \
+  -library "${DEVICE_LIB}" -headers "${HEADERS}" \
+  -library "${SIM_UNIVERSAL_LIB}" -headers "${HEADERS}" \
   -output "${OUT}/Finkit.xcframework"
 
-echo
 echo "[build-ios] OK: ${OUT}/Finkit.xcframework"
-ls -la "${OUT}/Finkit.xcframework"
+find "${OUT}/Finkit.xcframework" -maxdepth 3 -type f -print

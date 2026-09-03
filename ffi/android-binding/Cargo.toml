@@ -13,8 +13,10 @@ workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
-# finkit provides all the pure-Rust indicators the android shims delegate to.
-finkit = { path = "../../core" }
+# The Android Java API currently exposes indicators only. Keep the mobile
+# native library on the smallest core feature set that implements that public
+# surface instead of pulling formula/JIT/metrics/tracing into every ABI.
+finkit = { path = "../../core", default-features = false, features = ["indicators-all"] }
 
 jni = { workspace = true }
 ndarray = { workspace = true }

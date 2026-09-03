@@ -215,17 +215,30 @@ See [formula-performance.md](formula-performance.md).
 
 ## 13. Debugging
 
-When a formula behaves unexpectedly:
+Formula-debug support is **binding-specific**, not one universally named cross-language API.
+
+The current Go/CGO source exposes:
+
+```go
+debugJSON, err := ta.FormulaEvalDebugJSON(source, open, high, low, close, volume)
+```
+
+That wrapper is backed by the Go native binding's `ta_formula_eval_debug` symbol, which calls the core formula engine's `eval_with_debug` path and serializes debugger events as JSON.
+
+Do not infer that Python, Node, Java, .NET, or the C/C++ SDK exposes the same method name or payload without checking that binding's public wrapper. The removed legacy debugger document was incorrect because it generalized debugger calls across every language without verifying those wrappers.
+
+For every binding, the common diagnostic workflow is still:
 
 1. validate the grammar/dialect;
 2. reduce the expression to the smallest failing subexpression;
-3. confirm the function exists in the generated catalog;
-4. inspect warm-up/lookback alignment;
-5. compare with a fixed golden dataset;
-6. distinguish syntax support from semantic parity with the source terminal;
-7. use the formula debugger workflow where appropriate.
+3. confirm every function exists in the generated catalog;
+4. verify OHLCV lengths, ordering, and binding-specific dtype/shape requirements;
+5. inspect warm-up/lookback alignment;
+6. compare the minimal expression against a fixed golden dataset;
+7. add assignments and nested functions back one at a time;
+8. distinguish syntax support from semantic parity with the source terminal.
 
-See [formula-debugger.md](formula-debugger.md).
+See [troubleshooting.md](troubleshooting.md) for formula, Go debug, Python, CLI, native-binding, runtime, Android, iOS, .NET, and WASM diagnosis.
 
 ## 14. Templates
 
