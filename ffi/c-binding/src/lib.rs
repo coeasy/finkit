@@ -254,8 +254,8 @@ pub unsafe extern "C" fn ta_ffi_panic_test() -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::ffi::CStr;
     use finkit::error::{FfiError, FormulaError, IndicatorError};
+    use std::ffi::CStr;
 
     // These tests cover the Phase 6 FFI error-code mapping. Each test
     // exercises a different branch of `map_ta_error` to guarantee that
@@ -416,10 +416,7 @@ mod tests {
     fn export_panic_test_returns_internal_error_not_abort() {
         let code = unsafe { ta_ffi_panic_test() };
         assert_eq!(code, FfiStatus::InternalError.as_i32());
-        assert_eq!(
-            unsafe { ta_last_error_code() },
-            FfiStatus::InternalError.as_i32()
-        );
+        assert_eq!(read_code(), FfiStatus::InternalError.as_i32());
     }
 
     #[test]
