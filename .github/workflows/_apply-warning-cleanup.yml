@@ -32,15 +32,23 @@ jobs:
           python-version: "3.12"
       - name: Apply asserted source transformations
         run: python scripts/_apply_warning_cleanup.py
-      - name: Regenerate binding sources from SSOT
-        run: python scripts/sync_bindings.py --generate
       - name: Format Rust sources
         run: cargo fmt --all
-      - name: Verify binding SSOT and warning contracts
+      - name: Verify warning contracts and diff hygiene
         run: |
-          python scripts/sync_bindings.py --check
           python scripts/check_warning_contracts.py
           git diff --check
+      - name: Verify stale binding generator fails closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          OUTPUT="$(python scripts/sync_bindings.py --check --lang dotnet 2>&1)"
+          RC=$?
+          set -e
+          test "$RC" -ne 0
+          grep -q "has no ffi metadata; refusing" <<< "$OUTPUT"
+          printf '%s\n' "$OUTPUT"
       - name: Check host core and .NET without Rust warnings
         env:
           RUSTFLAGS: "-D warnings"
@@ -63,7 +71,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add core/src/formula/simd.rs \
                   core/src/indicators/statistics.rs \
-                  docs/indicator_registry.json \
+                  scripts/sync_bindings.py \
                   ffi/*-binding/src/generated.rs
           git commit -m "fix: eliminate cross-platform compiler warnings"
           git push origin HEAD:fix/arm-simd-dotnet-warning-cleanup
