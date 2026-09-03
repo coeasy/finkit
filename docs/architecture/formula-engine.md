@@ -56,7 +56,7 @@ hash.
 | Type    | `FormulaError::TypeMismatch` | Hard fail; return Err |
 | Run     | `FormulaError::RuntimeError` | Per-call; `eval_partial` |
 
-See [ADR-0009](../adr/0009-error-recovery-strategy.md) for the rationale.
+See [Formula runtime contract](../formula-runtime-contract.md) for the runtime execution contract.
 
 ## Cross-references
 

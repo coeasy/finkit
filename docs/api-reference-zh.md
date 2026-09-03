@@ -1822,7 +1822,7 @@ for _ in 0..iterations {
 
 ## 相关文档
 
-- [快速入门指南](src/quickstart.md)
+- [完整使用指南](usage.md)
 - [文档索引](README.md)
 - [开发指南](development.md)
 - [指标完整列表](indicators.md)
