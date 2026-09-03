@@ -47,11 +47,14 @@ jobs:
         run: npm run build
       - working-directory: ffi/node-binding
         run: npm test
-      - working-directory: ffi/node-binding
-        run: npm run artifacts
-      - working-directory: ffi/node-binding/npm/linux-x64-gnu
-        run: test -f finkit.node
+      - name: Stage Linux native npm package
+        working-directory: ffi/node-binding
         shell: bash
+        run: |
+          set -euo pipefail
+          test -f finkit.linux-x64-gnu.node
+          cp finkit.linux-x64-gnu.node npm/linux-x64-gnu/finkit.node
+          test -f npm/linux-x64-gnu/finkit.node
       - working-directory: ffi/node-binding/npm/linux-x64-gnu
         run: mkdir -p dist && npm pack --pack-destination dist
         shell: bash
