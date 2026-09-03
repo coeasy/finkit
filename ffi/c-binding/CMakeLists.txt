@@ -14,7 +14,6 @@ option(FINKIT_BUILD_EXAMPLES "Build finkit C/C++ binding examples" ON)
 option(FINKIT_AUTO_BUILD_RS  "Auto-invoke `cargo build` when the prebuilt FFI library is missing" ON)
 option(FINKIT_INSTALL_CMAKECONFIG "Generate and install finkit-config.cmake" ON)
 
-find_package(PkgConfig REQUIRED)
 include(GNUInstallDirs)
 
 # ----------------------------------------------------------------------------
