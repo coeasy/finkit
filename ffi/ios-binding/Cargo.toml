@@ -16,7 +16,10 @@ workspace = true
 crate-type = ["staticlib"]
 
 [dependencies]
-finkit = { path = "../../core" }
+# The current Swift/C surface is indicator-only. Avoid carrying the core's
+# formula/JIT/metrics/tracing default features into each Apple target until
+# those APIs are intentionally exposed by the iOS binding.
+finkit = { path = "../../core", default-features = false, features = ["indicators-all"] }
 libc = "0.2"
 ndarray = { workspace = true }
 finkit-ffi-common = { path = "../ffi-common" }
