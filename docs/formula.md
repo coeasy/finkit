@@ -215,17 +215,20 @@ See [formula-performance.md](formula-performance.md).
 
 ## 13. Debugging
 
-When a formula behaves unexpectedly:
+The current public v0.1.3 API does not expose a cross-language step debugger. Diagnose formulas with the interfaces that are actually shipped:
 
 1. validate the grammar/dialect;
 2. reduce the expression to the smallest failing subexpression;
-3. confirm the function exists in the generated catalog;
-4. inspect warm-up/lookback alignment;
-5. compare with a fixed golden dataset;
-6. distinguish syntax support from semantic parity with the source terminal;
-7. use the formula debugger workflow where appropriate.
+3. confirm every function exists in the generated catalog;
+4. verify OHLCV lengths, ordering, and dtype/shape requirements;
+5. inspect warm-up/lookback alignment;
+6. compare the minimal expression against a fixed golden dataset;
+7. add assignments and nested functions back one at a time;
+8. distinguish syntax support from semantic parity with the source terminal.
 
-See [formula-debugger.md](formula-debugger.md).
+Do not use undocumented names such as `formula_eval_debug`, `FormulaEvalDebug`, or `ta_formula_eval_debug` unless a future release explicitly adds and tests them.
+
+See [troubleshooting.md](troubleshooting.md) for a complete diagnosis workflow covering formulas, Python, CLI, native bindings, runtime reuse, and source builds.
 
 ## 14. Templates
 
