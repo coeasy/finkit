@@ -1,5 +1,5 @@
 PR14 core diagnostic
-commit=f061415841327d68663ca663cd82c9ee33048c33
+commit=b49119e446ff2a5dd0d10c25daa7223c66ecd68a
 
 buffer_arena                 status=0
 compute                      status=0
