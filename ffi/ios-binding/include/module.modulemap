@@ -1,5 +1,4 @@
-framework module Finkit {
-    umbrella header "finkit.h"
+module FinkitC {
     header "finkit.h"
     export *
 }
