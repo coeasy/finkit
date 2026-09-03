@@ -334,7 +334,7 @@ inline StochResult stoch(const std::vector<double>& high, const std::vector<doub
 
 inline std::vector<double> adx(const std::vector<double>& high, const std::vector<double>& low,
                                const std::vector<double>& close, int32_t period = 14) {
-    return detail::ohl_single_output_func(high, low, close, period, ta_adx, "adx");
+    return detail::ohlc_single_output_func(high, low, close, period, ta_adx, "adx");
 }
 
 inline AroonResult aroon(const std::vector<double>& high, const std::vector<double>& low, int32_t period = 14) {
@@ -350,7 +350,7 @@ inline AroonResult aroon(const std::vector<double>& high, const std::vector<doub
 
 inline std::vector<double> cci(const std::vector<double>& high, const std::vector<double>& low,
                                const std::vector<double>& close, int32_t period = 14) {
-    return detail::ohl_single_output_func(high, low, close, period, ta_cci, "cci");
+    return detail::ohlc_single_output_func(high, low, close, period, ta_cci, "cci");
 }
 
 inline std::vector<double> mom(const std::vector<double>& input, int32_t period = 10) {
@@ -363,7 +363,7 @@ inline std::vector<double> roc(const std::vector<double>& input, int32_t period 
 
 inline std::vector<double> willr(const std::vector<double>& high, const std::vector<double>& low,
                                  const std::vector<double>& close, int32_t period = 14) {
-    return detail::ohl_single_output_func(high, low, close, period, ta_willr, "willr");
+    return detail::ohlc_single_output_func(high, low, close, period, ta_willr, "willr");
 }
 
 inline std::vector<double> apo(const std::vector<double>& input, int32_t fast_period = 12, int32_t slow_period = 26) {
@@ -415,17 +415,17 @@ inline std::vector<double> trix(const std::vector<double>& input, int32_t period
 
 inline std::vector<double> atr(const std::vector<double>& high, const std::vector<double>& low,
                                const std::vector<double>& close, int32_t period = 14) {
-    return detail::ohl_single_output_func(high, low, close, period, ta_atr, "atr");
+    return detail::ohlc_single_output_func(high, low, close, period, ta_atr, "atr");
 }
 
 inline std::vector<double> natr(const std::vector<double>& high, const std::vector<double>& low,
                                 const std::vector<double>& close, int32_t period = 14) {
-    return detail::ohl_single_output_func(high, low, close, period, ta_natr, "natr");
+    return detail::ohlc_single_output_func(high, low, close, period, ta_natr, "natr");
 }
 
 inline std::vector<double> trange(const std::vector<double>& high, const std::vector<double>& low,
                                   const std::vector<double>& close) {
-    return detail::ohl_single_output_func_no_param(high, low, close, ta_trange, "trange");
+    return detail::ohlc_single_output_func_no_param(high, low, close, ta_trange, "trange");
 }
 
 // ============================================================
@@ -581,12 +581,12 @@ inline std::vector<double> medprice(const std::vector<double>& high, const std::
 
 inline std::vector<double> typprice(const std::vector<double>& high, const std::vector<double>& low,
                                     const std::vector<double>& close) {
-    return detail::ohl_single_output_func_no_param(high, low, close, ta_typprice, "typprice");
+    return detail::ohlc_single_output_func_no_param(high, low, close, ta_typprice, "typprice");
 }
 
 inline std::vector<double> wclprice(const std::vector<double>& high, const std::vector<double>& low,
                                     const std::vector<double>& close) {
-    return detail::ohl_single_output_func_no_param(high, low, close, ta_wclprice, "wclprice");
+    return detail::ohlc_single_output_func_no_param(high, low, close, ta_wclprice, "wclprice");
 }
 
 // ============================================================
