@@ -24,18 +24,34 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: multilang-release-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   version-contract:
     runs-on: ubuntu-22.04
     timeout-minutes: 10
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - run: python scripts/check_versions.py
+      - id: version
+        name: Read workspace version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(python -c 'import pathlib,re; text=pathlib.Path("Cargo.toml").read_text(); print(re.search(r"(?ms)^\[workspace\.package\].*?^version\s*=\s*\"([^\"]+)\"", text).group(1))')"
+          test -n "$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Finkit version: $VERSION"
 
   node-linux:
+    needs: version-contract
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
@@ -78,6 +94,7 @@ jobs:
           if-no-files-found: error
 
   java-linux:
+    needs: version-contract
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
@@ -92,14 +109,16 @@ jobs:
       - run: mkdir -p ffi/java-binding/natives/linux-x86_64 && cp target/release/libfinkit_java.so ffi/java-binding/natives/linux-x86_64/
         shell: bash
       - run: mvn -B -f ffi/java-binding/pom.xml -DskipTests package
-      - run: jar tf ffi/java-binding/target/finkit-0.1.3.jar | grep -q 'natives/linux-x86_64/libfinkit_java.so'
-        shell: bash
-      - name: Smoke test embedded JNI loader
+      - name: Verify and smoke-test packaged JNI library
         shell: bash
         run: |
+          set -euo pipefail
+          JAR="ffi/java-binding/target/finkit-${{ needs.version-contract.outputs.version }}.jar"
+          test -f "$JAR"
+          jar tf "$JAR" | grep -q 'natives/linux-x86_64/libfinkit_java.so'
           printf '%s\n' 'import com.finkit.Indicators;' 'public final class FinkitSmoke { public static void main(String[] args) { double[] out = Indicators.sma(new double[]{1,2,3,4,5}, 3); if (out.length != 5 || Math.abs(out[4] - 4.0) > 1e-9) throw new RuntimeException("bad SMA"); } }' > "$RUNNER_TEMP/FinkitSmoke.java"
-          javac -cp ffi/java-binding/target/finkit-0.1.3.jar "$RUNNER_TEMP/FinkitSmoke.java"
-          java -cp "ffi/java-binding/target/finkit-0.1.3.jar:$RUNNER_TEMP" FinkitSmoke
+          javac -cp "$JAR" "$RUNNER_TEMP/FinkitSmoke.java"
+          java -cp "$JAR:$RUNNER_TEMP" FinkitSmoke
       - uses: actions/upload-artifact@v4
         with:
           name: release-java-linux
@@ -107,6 +126,7 @@ jobs:
           if-no-files-found: error
 
   cpp-linux:
+    needs: version-contract
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
@@ -117,10 +137,13 @@ jobs:
       - run: cmake --build build/cpp --config Release --parallel 2
       - run: ctest --test-dir build/cpp -C Release --output-on-failure
       - run: cmake --install build/cpp --config Release --prefix dist/cpp/linux-x86_64
-      - run: grep -R '0.1.3' dist/cpp/linux-x86_64/lib*/cmake/finkit/finkit-config-version.cmake
+      - name: Verify and package C/C++ SDK
         shell: bash
-      - run: tar -czf finkit-cpp-0.1.3-linux-x86_64.tar.gz -C dist/cpp/linux-x86_64 .
-        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.version-contract.outputs.version }}"
+          grep -R "$VERSION" dist/cpp/linux-x86_64/lib*/cmake/finkit/finkit-config-version.cmake
+          tar -czf "finkit-cpp-${VERSION}-linux-x86_64.tar.gz" -C dist/cpp/linux-x86_64 .
       - uses: actions/upload-artifact@v4
         with:
           name: release-cpp-linux-x86_64
@@ -128,6 +151,7 @@ jobs:
           if-no-files-found: error
 
   go-linux:
+    needs: version-contract
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
@@ -144,7 +168,7 @@ jobs:
           CGO_ENABLED: "1"
           LD_LIBRARY_PATH: ${{ github.workspace }}/target/release
         run: go test ./...
-      - name: Build Go example
+      - name: Build external Go example
         working-directory: ffi/go-binding
         env:
           CGO_ENABLED: "1"
@@ -172,6 +196,7 @@ jobs:
           if-no-files-found: error
 
   dotnet-linux:
+    needs: version-contract
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
@@ -191,11 +216,15 @@ jobs:
         env:
           LD_LIBRARY_PATH: ${{ github.workspace }}/target/release
         run: dotnet test ffi/dotnet-binding/src/Finkit.Tests/Finkit.Tests.csproj -c Release --framework net8.0
-      - name: Pack NuGet candidate
-        run: dotnet pack ffi/dotnet-binding/src/Finkit/Finkit.csproj -c Release -o dist/dotnet
-      - name: Verify Linux native asset in package
+      - name: Pack and inspect NuGet candidate
         shell: bash
-        run: unzip -l dist/dotnet/Finkit.0.1.3.nupkg | grep -q 'runtimes/linux-x64/native/libfinkit_dotnet.so'
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.version-contract.outputs.version }}"
+          dotnet pack ffi/dotnet-binding/src/Finkit/Finkit.csproj -c Release -o dist/dotnet
+          NUPKG="dist/dotnet/Finkit.${VERSION}.nupkg"
+          test -f "$NUPKG"
+          unzip -l "$NUPKG" | grep -q 'runtimes/linux-x64/native/libfinkit_dotnet.so'
       - uses: actions/upload-artifact@v4
         with:
           name: release-dotnet-linux-x86_64
@@ -203,6 +232,7 @@ jobs:
           if-no-files-found: error
 
   wasm32:
+    needs: version-contract
     runs-on: ubuntu-22.04
     timeout-minutes: 35
     steps:
@@ -225,6 +255,7 @@ jobs:
           if-no-files-found: error
 
   android-aar:
+    needs: version-contract
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     steps:
@@ -282,6 +313,7 @@ jobs:
           if-no-files-found: error
 
   ios-xcframework:
+    needs: version-contract
     runs-on: macos-14
     timeout-minutes: 60
     steps:
@@ -304,6 +336,7 @@ jobs:
           if-no-files-found: error
 
   rust-package:
+    needs: version-contract
     runs-on: ubuntu-22.04
     timeout-minutes: 25
     steps:
