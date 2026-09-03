@@ -34,10 +34,25 @@ def fix_consumer_cmake(path: Path) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def fix_cpp_ohlc_helpers() -> None:
+    path = ROOT / "ffi/c-binding/include/finkit.hpp"
+    text = path.read_text(encoding="utf-8")
+    text = text.replace(
+        "detail::ohl_single_output_func(high, low, close,",
+        "detail::ohlc_single_output_func(high, low, close,",
+    )
+    text = text.replace(
+        "detail::ohl_single_output_func_no_param(high, low, close,",
+        "detail::ohlc_single_output_func_no_param(high, low, close,",
+    )
+    path.write_text(text, encoding="utf-8")
+
+
 def main() -> None:
     fix_java_duplicates()
     fix_consumer_cmake(ROOT / "ffi/c-binding/tests/CMakeLists.txt")
     fix_consumer_cmake(ROOT / "ffi/c-binding/examples/CMakeLists.txt")
+    fix_cpp_ohlc_helpers()
 
 
 if __name__ == "__main__":
