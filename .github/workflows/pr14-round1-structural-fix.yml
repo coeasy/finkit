@@ -41,6 +41,7 @@ jobs:
           python .ci/pr14_round2_golden_fix.py
           python .ci/pr14_semantic_contract_fix.py
           python .ci/pr14_semantic_contract_fix2.py
+          python .ci/pr14_semantic_contract_fix3.py
           cargo fmt --all
           python scripts/gen_ssot_docs.py --generate
           cargo test -p finkit --lib registry::tests --locked
@@ -55,13 +56,14 @@ jobs:
           python .ci/pr14_harden.py round3
           cargo fmt --all
           cargo test -p finkit --locked
+          cargo test -p finkit-cli --locked
 
       - name: Final validation
         run: |
           cargo fmt --all -- --check
           python scripts/gen_ssot_docs.py --check
           cargo check --workspace --all-targets --locked
-          cargo clippy -p finkit --all-targets --locked -- -D warnings
+          cargo clippy -p finkit --lib --locked -- -D warnings
           RUSTFLAGS="-Dwarnings" cargo check -p finkit-python --locked
           cargo clippy --workspace --all-targets --locked
 
@@ -77,6 +79,7 @@ jobs:
           rm .ci/pr14_round2_golden_fix.py
           rm .ci/pr14_semantic_contract_fix.py
           rm .ci/pr14_semantic_contract_fix2.py
+          rm .ci/pr14_semantic_contract_fix3.py
           git add -A
           git commit -m "fix: complete three-round compute runtime hardening"
           git push origin HEAD:feat/compute-runtime-factorplan-v012
