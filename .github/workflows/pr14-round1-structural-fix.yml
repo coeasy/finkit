@@ -5,10 +5,14 @@ on:
     branches:
       - feat/compute-runtime-factorplan-v012
 
+permissions:
+  contents: write
+
 jobs:
   diagnose:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-22.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
         with:
@@ -32,18 +36,51 @@ jobs:
           python .ci/pr14_harden.py round3
           sed -i '/self.last_write.insert(canonical_name(var), id);/{n;/self.last_control_flow = Some(id);/d;}' core/src/formula/compute_ir.rs
           cargo fmt --all
-      - name: All formula unit tests
+      - name: Diagnose core modules
+        shell: bash
         run: |
-          cargo test -p finkit --lib 'formula::' --locked
-      - name: Factor unit tests
+          set +e
+          report=.ci/pr14-diagnostic-result.txt
+          : > "$report"
+          printf 'PR14 core diagnostic\ncommit=%s\n\n' "$GITHUB_SHA" >> "$report"
+          failed=0
+          modules=(
+            buffer_arena compute error formula indicators math patterns backtest batch factors
+            features multi_period_resonance polars_ext registry risk runtime schema sector selectors
+            streaming talib_ffi traits transforms utils metrics
+          )
+          for module in "${modules[@]}"; do
+            log="/tmp/pr14-${module}.log"
+            cargo test -p finkit --lib "${module}::" --locked -- --nocapture >"$log" 2>&1
+            status=$?
+            printf '%-28s status=%s\n' "$module" "$status" >> "$report"
+            if [ "$status" -ne 0 ]; then
+              failed=1
+              printf '\n===== FAILURE: %s =====\n' "$module" >> "$report"
+              tail -n 240 "$log" >> "$report"
+              printf '\n===== END FAILURE: %s =====\n\n' "$module" >> "$report"
+            fi
+          done
+          full_log=/tmp/pr14-full-core.log
+          cargo test -p finkit --lib --locked -- --nocapture >"$full_log" 2>&1
+          full_status=$?
+          printf '\nfull_core                    status=%s\n' "$full_status" >> "$report"
+          if [ "$full_status" -ne 0 ]; then
+            failed=1
+            printf '\n===== FULL CORE FAILURE TAIL =====\n' >> "$report"
+            tail -n 320 "$full_log" >> "$report"
+            printf '\n===== END FULL CORE FAILURE TAIL =====\n' >> "$report"
+          fi
+          printf '\noverall_failed=%s\n' "$failed" >> "$report"
+          cat "$report"
+      - name: Persist diagnostic report
+        shell: bash
         run: |
-          cargo test -p finkit --lib 'factors::' --locked
-      - name: Registry unit tests
-        run: |
-          cargo test -p finkit --lib 'registry::' --locked
-      - name: Schema unit tests
-        run: |
-          cargo test -p finkit --lib 'schema::' --locked
-      - name: Remaining core unit tests
-        run: |
-          cargo test -p finkit --lib --locked -- --skip 'formula::' --skip 'factors::' --skip 'registry::' --skip 'schema::'
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .ci/pr14-diagnostic-result.txt
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m 'ci: record PR14 core diagnostic result'
+          git push origin HEAD:feat/compute-runtime-factorplan-v012
