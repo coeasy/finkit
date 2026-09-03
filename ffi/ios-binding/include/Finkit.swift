@@ -4,6 +4,7 @@
 // compatibility. New source code should use the Finkit/FinkitError names.
 
 import Foundation
+import FinkitC
 
 public enum FinkitError: Error, CustomStringConvertible {
     case abiMismatch(expected: Int, got: Int)
