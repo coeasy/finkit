@@ -85,7 +85,7 @@ mod cache_miss_tests {
 
     #[test]
     fn test_cache_miss_new_formula() {
-        let mut engine = FormulaEngine::new();
+        let engine = FormulaEngine::new();
 
         assert!(!engine.cache_hit("CLOSE + OPEN"));
     }

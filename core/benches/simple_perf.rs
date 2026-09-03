@@ -29,7 +29,7 @@ fn generate_test_data(n: usize) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<
     (open, high, low, close, volume)
 }
 
-fn benchmark_indicator<F>(name: &str, iterations: usize, f: F) -> f64
+fn benchmark_indicator<F>(_name: &str, iterations: usize, f: F) -> f64
 where
     F: Fn(),
 {

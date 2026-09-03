@@ -324,7 +324,7 @@ fn benchmark_bytecode_vs_ast(c: &mut Criterion) {
             let bytecode = engine.compile_bytecode(formula_src).unwrap();
             b.iter_batched(
                 || create_ctx(data_len),
-                |mut ctx| {
+                |ctx| {
                     let _ = black_box(engine.execute_bytecode(&bytecode, &ctx).unwrap());
                 },
                 BatchSize::SmallInput,

@@ -380,10 +380,6 @@ unsafe fn bbands_simd128(
 mod tests {
     use super::*;
 
-    fn approx_eq(a: f64, b: f64, tol: f64) -> bool {
-        (a - b).abs() < tol
-    }
-
     #[test]
     fn test_simd128_availability_does_not_panic() {
         // On non-wasm32 builds, this returns false; on wasm32+simd128, true.

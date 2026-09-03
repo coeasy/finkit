@@ -9,7 +9,7 @@
 //! baseline and prints a per-script table plus the recomputed pass rate.
 
 use finkit::formula::pine::{map_pine_to_alphata, parse_pine};
-use finkit::formula::{FormulaContext, FormulaDialect, FormulaEngine};
+use finkit::formula::{FormulaContext, FormulaEngine};
 use ndarray::Array1;
 use std::collections::HashMap;
 use std::path::Path;

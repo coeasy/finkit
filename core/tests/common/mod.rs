@@ -6,7 +6,5 @@
 //!
 //! 子模块：
 //! - [`golden_loader`] — 黄金 CSV 加载与容差断言 helper
-//! - [`property_templates`] — proptest 不变量断言 helper（Phase 9 使用）
 
 pub mod golden_loader;
-pub mod property_templates;
