@@ -1,0 +1,66 @@
+name: Apply docs link fixes
+
+on:
+  push:
+    branches:
+      - docs/refresh-v013-user-guide
+    paths:
+      - ".github/workflows/docs-link-fix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: docs/refresh-v013-user-guide
+      - name: Repair stale local documentation links
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          replacements = {
+              "docs/api-reference-zh.md": [
+                  ("[快速入门指南](src/quickstart.md)", "[完整使用指南](usage.md)", 1),
+              ],
+              "docs/architecture/formula-engine.md": [
+                  (
+                      "See [ADR-0009](../adr/0009-error-recovery-strategy.md) for the rationale.",
+                      "See [Formula runtime contract](../formula-runtime-contract.md) for the runtime execution contract.",
+                      1,
+                  ),
+              ],
+              "docs/formula/pine-grammar.md": [
+                  ("../PINE_COMPAT_MATRIX.md", "../generated/pine-compatibility.md", 2),
+              ],
+              "docs/migration/pine-to-alphata.md": [
+                  ("../PINE_COMPAT_MATRIX.md", "../generated/pine-compatibility.md", 2),
+              ],
+          }
+
+          for filename, changes in replacements.items():
+              path = Path(filename)
+              text = path.read_text(encoding="utf-8")
+              for old, new, expected in changes:
+                  actual = text.count(old)
+                  if actual != expected:
+                      raise SystemExit(
+                          f"{filename}: expected {expected} occurrence(s) of {old!r}, found {actual}"
+                      )
+                  text = text.replace(old, new)
+              path.write_text(text, encoding="utf-8")
+          PY
+      - name: Commit repairs and remove this one-shot workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/api-reference-zh.md docs/architecture/formula-engine.md docs/formula/pine-grammar.md docs/migration/pine-to-alphata.md
+          git rm .github/workflows/docs-link-fix.yml
+          git commit -m "docs: repair stale local links"
+          git push origin HEAD:docs/refresh-v013-user-guide
