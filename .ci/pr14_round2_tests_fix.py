@@ -121,3 +121,41 @@ if text.count(old) != 1:
     raise SystemExit("schema_cli.rs: MA alias test not found")
 text = text.replace(old, new, 1)
 path.write_text(text, encoding="utf-8")
+
+path = Path("core/src/compute.rs")
+text = path.read_text(encoding="utf-8")
+old = '''    #[test]
+    fn registry_specs_map_to_compute_capabilities() {
+        let registry = builtin_function_registry();
+        let sma = registry.get("SMA").unwrap();
+        let capabilities = ComputeCapabilities::from_function_spec(sma);
+        assert!(capabilities.deterministic);
+        assert!(capabilities.streaming);
+        assert!(!capabilities.stateful);
+        assert_eq!(capabilities.lookback, LookbackRequirement::PeriodMinusOne);
+        assert!(capabilities.effect.is_pure());
+    }
+'''
+new = '''    #[test]
+    fn registry_specs_map_to_compute_capabilities() {
+        let registry = builtin_function_registry();
+
+        let ma = ComputeCapabilities::from_function_spec(registry.get("MA").unwrap());
+        assert!(ma.deterministic);
+        assert!(ma.streaming);
+        assert!(!ma.stateful);
+        assert_eq!(ma.lookback, LookbackRequirement::PeriodMinusOne);
+        assert!(ma.effect.is_pure());
+
+        let sma = ComputeCapabilities::from_function_spec(registry.get("SMA").unwrap());
+        assert!(sma.deterministic);
+        assert!(sma.streaming);
+        assert!(!sma.stateful);
+        assert_eq!(sma.lookback, LookbackRequirement::Dynamic);
+        assert!(sma.effect.is_pure());
+    }
+'''
+if text.count(old) != 1:
+    raise SystemExit("compute.rs: stale SMA compute capability contract test not found")
+text = text.replace(old, new, 1)
+path.write_text(text, encoding="utf-8")
