@@ -11,6 +11,14 @@ use crate::formula::types::*;
 
 type FormulaFn = fn(&FormulaContext, &[Array1<f64>]) -> Result<Array1<f64>, FormulaError>;
 
+const MAX_LOOP_ITERATIONS: usize = 10_000;
+
+fn loop_iteration_limit_error(kind: &str) -> FormulaError {
+    FormulaError::RuntimeError(format!(
+        "{kind} loop exceeded maximum iterations ({MAX_LOOP_ITERATIONS})"
+    ))
+}
+
 fn color_to_string(color: &Option<ColorSpec>) -> String {
     match color {
         None => String::new(),
@@ -402,13 +410,9 @@ impl FormulaExecutor {
                     arr[0]
                 }) as i64;
                 let mut result = FormulaValue::Scalar(0.0);
-                let max_iterations = 10000i64;
                 for (count, i) in (start_i..=end_i).enumerate() {
-                    if count as i64 >= max_iterations {
-                        return Err(FormulaError::RuntimeError(format!(
-                            "FOR loop exceeded maximum iterations ({})",
-                            max_iterations
-                        )));
+                    if count >= MAX_LOOP_ITERATIONS {
+                        return Err(loop_iteration_limit_error("FOR"));
                     }
                     ctx.variables.insert(
                         Arc::from(var.to_string()),
@@ -422,16 +426,20 @@ impl FormulaExecutor {
             }
             AstNode::WhileLoop { cond, body } => {
                 let mut result = FormulaValue::Scalar(0.0);
-                let max_iterations = 10000usize;
-                for _ in 0..max_iterations {
+                let mut iterations = 0usize;
+                loop {
                     let cond_val = self.execute_val(cond, ctx)?;
                     let cond_arr = cond_val.to_array(ctx.data_len);
                     if !cond_arr.iter().any(|&v| v > 0.0) {
                         break;
                     }
+                    if iterations >= MAX_LOOP_ITERATIONS {
+                        return Err(loop_iteration_limit_error("WHILE"));
+                    }
                     for stmt in body {
                         result = self.execute_val(stmt, ctx)?;
                     }
+                    iterations += 1;
                 }
                 Ok(result)
             }
@@ -1268,14 +1276,10 @@ impl FormulaExecutor {
                 pool.return_buffer(start_val);
                 pool.return_buffer(end_val);
                 let mut result = pool.get_buffer(ctx.data_len);
-                let max_iterations = 10000i64;
                 let var_arc = name_cache.get_or_create(var);
                 for (count, i) in (start_i..=end_i).enumerate() {
-                    if count as i64 >= max_iterations {
-                        return Err(FormulaError::RuntimeError(format!(
-                            "FOR loop exceeded maximum iterations ({})",
-                            max_iterations
-                        )));
+                    if count >= MAX_LOOP_ITERATIONS {
+                        return Err(loop_iteration_limit_error("FOR"));
                     }
                     let mut loop_var = pool.get_buffer(ctx.data_len);
                     for j in 0..ctx.data_len {
@@ -1293,13 +1297,17 @@ impl FormulaExecutor {
             }
             AstNode::WhileLoop { cond, body } => {
                 let mut result = pool.get_buffer(ctx.data_len);
-                let max_iterations = 10000usize;
-                for _ in 0..max_iterations {
+                let mut iterations = 0usize;
+                loop {
                     let cond_val = self.execute_with_pool_cached(cond, ctx, pool, name_cache)?;
                     let should_break = !cond_val.iter().any(|&v| v > 0.0);
                     pool.return_buffer(cond_val);
                     if should_break {
                         break;
+                    }
+                    if iterations >= MAX_LOOP_ITERATIONS {
+                        pool.return_buffer(result);
+                        return Err(loop_iteration_limit_error("WHILE"));
                     }
                     for stmt in body {
                         let new_result =
@@ -1307,6 +1315,7 @@ impl FormulaExecutor {
                         pool.return_buffer(result);
                         result = new_result;
                     }
+                    iterations += 1;
                 }
                 Ok(result)
             }
@@ -1597,13 +1606,9 @@ impl FormulaExecutor {
                 pool.return_buffer(start_val);
                 pool.return_buffer(end_val);
                 let mut result = pool.get_buffer(ctx.data_len);
-                let max_iterations = 10000i64;
                 for (count, i) in (start_i..=end_i).enumerate() {
-                    if count as i64 >= max_iterations {
-                        return Err(FormulaError::RuntimeError(format!(
-                            "FOR loop exceeded maximum iterations ({})",
-                            max_iterations
-                        )));
+                    if count >= MAX_LOOP_ITERATIONS {
+                        return Err(loop_iteration_limit_error("FOR"));
                     }
                     let mut loop_var = pool.get_buffer(ctx.data_len);
                     for j in 0..ctx.data_len {
@@ -1620,19 +1625,24 @@ impl FormulaExecutor {
             }
             AstNode::WhileLoop { cond, body } => {
                 let mut result = pool.get_buffer(ctx.data_len);
-                let max_iterations = 10000usize;
-                for _ in 0..max_iterations {
+                let mut iterations = 0usize;
+                loop {
                     let cond_val = self.execute_with_pool(cond, ctx, pool)?;
                     let should_break = !cond_val.iter().any(|&v| v > 0.0);
                     pool.return_buffer(cond_val);
                     if should_break {
                         break;
                     }
+                    if iterations >= MAX_LOOP_ITERATIONS {
+                        pool.return_buffer(result);
+                        return Err(loop_iteration_limit_error("WHILE"));
+                    }
                     for stmt in body {
                         let new_result = self.execute_with_pool(stmt, ctx, pool)?;
                         pool.return_buffer(result);
                         result = new_result;
                     }
+                    iterations += 1;
                 }
                 Ok(result)
             }

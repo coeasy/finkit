@@ -169,8 +169,14 @@ def collect_errors(canonical: str) -> list[str]:
             version = json.loads(text).get("version")
             if version != canonical:
                 errors.append(f"{path.relative_to(ROOT)}: {version} != {canonical}")
-        elif "0.1.0" in text:
-            errors.append(f"{path.relative_to(ROOT)}: contains legacy 0.1.0 reference")
+        else:
+            release_versions = set(re.findall(r"(?<!\d)0\.1\.\d+(?!\d)", text))
+            stale_versions = sorted(version for version in release_versions if version != canonical)
+            if stale_versions:
+                errors.append(
+                    f"{path.relative_to(ROOT)}: contains stale release version(s) "
+                    f"{', '.join(stale_versions)}; expected {canonical}"
+                )
 
     return errors
 
@@ -264,7 +270,8 @@ def fix_versions(canonical: str) -> None:
         if not path.exists() or path.name == "indicator_registry.json":
             continue
         text = path.read_text(encoding="utf-8")
-        path.write_text(text.replace("0.1.0", canonical), encoding="utf-8")
+        text = re.sub(r"(?<!\d)0\.1\.\d+(?!\d)", canonical, text)
+        path.write_text(text, encoding="utf-8")
 
     registry = json.loads(
         (ROOT / "docs" / "indicator_registry.json").read_text(encoding="utf-8")

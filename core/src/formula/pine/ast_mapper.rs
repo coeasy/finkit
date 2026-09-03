@@ -214,6 +214,33 @@ impl<'a> PineAstMapper<'a> {
         names: &[String],
         expr: &PineAstNode,
     ) -> Result<AstNode, PineMapperError> {
+        if names.is_empty() {
+            return Err(PineMapperError {
+                message: "tuple assignment requires at least one target".to_string(),
+            });
+        }
+
+        if let PineAstNode::FunctionCall {
+            namespace, name, ..
+        } = expr
+        {
+            let expected = match (namespace.as_deref(), name.as_str()) {
+                (Some("ta"), "macd" | "bb" | "dmi") => Some(3usize),
+                (Some("ta"), "supertrend" | "aroon") => Some(2usize),
+                _ => None,
+            };
+            if let Some(expected) = expected {
+                if names.len() != expected {
+                    return Err(PineMapperError {
+                        message: format!(
+                            "ta.{name} returns {expected} values but tuple has {} targets",
+                            names.len()
+                        ),
+                    });
+                }
+            }
+        }
+
         if let PineAstNode::FunctionCall {
             namespace,
             name,
@@ -297,14 +324,14 @@ impl<'a> PineAstMapper<'a> {
                             &names[1],
                             AstNode::FunctionCall {
                                 name: "MINUS_DI".to_string(),
-                                args: vec![cl.clone(), l1],
+                                args: vec![cl.clone(), l1.clone()],
                             },
                         ),
                         assignment(
                             &names[2],
                             AstNode::FunctionCall {
                                 name: "ADX".to_string(),
-                                args: vec![hi, lo, cl, l2],
+                                args: vec![hi, lo, cl, l1, l2],
                             },
                         ),
                     ])
@@ -339,14 +366,14 @@ impl<'a> PineAstMapper<'a> {
                             &names[0],
                             AstNode::FunctionCall {
                                 name: "AROON_UP".to_string(),
-                                args: vec![cl.clone(), length.clone()],
+                                args: vec![hi, length.clone()],
                             },
                         ),
                         assignment(
                             &names[1],
                             AstNode::FunctionCall {
                                 name: "AROON_DN".to_string(),
-                                args: vec![cl, length],
+                                args: vec![lo, length],
                             },
                         ),
                     ])
@@ -397,23 +424,33 @@ impl<'a> PineAstMapper<'a> {
                         .iter()
                         .map(|(_, a)| self.map_node(a))
                         .collect::<Result<_, _>>()?;
-                    if mapped_args.len() >= 2 {
+                    if let Some(value) = mapped_args.first() {
+                        let replacement =
+                            mapped_args.get(1).cloned().unwrap_or(AstNode::Number(0.0));
                         return Ok(AstNode::FunctionCall {
                             name: "IF".to_string(),
                             args: vec![
                                 AstNode::FunctionCall {
                                     name: "ISNA".to_string(),
-                                    args: vec![mapped_args[0].clone()],
+                                    args: vec![value.clone()],
                                 },
-                                mapped_args[1].clone(),
-                                mapped_args[0].clone(),
+                                replacement,
+                                value.clone(),
                             ],
                         });
                     }
                 }
                 "na" => {
-                    // `na` is a constant NaN value in Pine, not a function call.
-                    return Ok(AstNode::Number(f64::NAN));
+                    if let Some((_, value)) = args.first() {
+                        return Ok(AstNode::FunctionCall {
+                            name: "ISNA".to_string(),
+                            args: vec![self.map_node(value)?],
+                        });
+                    }
+                    return Err(PineMapperError {
+                        message: "na(x) requires one argument; bare na is parsed as NaLiteral"
+                            .to_string(),
+                    });
                 }
                 "fixnan" => {
                     let mapped_args: Vec<AstNode> = args
@@ -457,10 +494,11 @@ impl<'a> PineAstMapper<'a> {
                     });
                 }
                 "cci" => {
+                    let source = mapped_args.get(0).cloned().unwrap_or(v("CLOSE"));
                     let n = mapped_args.get(1).cloned().unwrap_or(AstNode::Number(20.0));
                     return Ok(AstNode::FunctionCall {
                         name: "CCI".to_string(),
-                        args: vec![v("HIGH"), v("LOW"), v("CLOSE"), n],
+                        args: vec![source, n],
                     });
                 }
                 "wpr" | "williamspercentr" => {
@@ -471,9 +509,10 @@ impl<'a> PineAstMapper<'a> {
                     });
                 }
                 "vwap" => {
+                    let source = mapped_args.get(0).cloned().unwrap_or(v("CLOSE"));
                     return Ok(AstNode::FunctionCall {
                         name: "VWAP".to_string(),
-                        args: vec![v("HIGH"), v("LOW"), v("CLOSE"), v("VOL")],
+                        args: vec![source, v("VOL")],
                     });
                 }
                 "obv" => {
@@ -484,10 +523,11 @@ impl<'a> PineAstMapper<'a> {
                 }
                 "sar" => {
                     let start = mapped_args.get(0).cloned().unwrap_or(AstNode::Number(0.02));
+                    let increment = mapped_args.get(1).cloned().unwrap_or(AstNode::Number(0.02));
                     let maximum = mapped_args.get(2).cloned().unwrap_or(AstNode::Number(0.2));
                     return Ok(AstNode::FunctionCall {
                         name: "SAR".to_string(),
-                        args: vec![v("HIGH"), v("LOW"), start, maximum],
+                        args: vec![v("HIGH"), v("LOW"), start, increment, maximum],
                     });
                 }
                 "stoch" => {
@@ -496,16 +536,27 @@ impl<'a> PineAstMapper<'a> {
                     let low = mapped_args.get(2).cloned().unwrap_or(v("LOW"));
                     let n = mapped_args.get(3).cloned().unwrap_or(AstNode::Number(14.0));
                     return Ok(AstNode::FunctionCall {
-                        name: "STOCH".to_string(),
-                        args: vec![high, low, source, n],
+                        // Pine ta.stoch is the unsmoothed stochastic value.  STOCHF
+                        // with fast-D period 1 preserves that contract; generic STOCH
+                        // keeps its terminal slow-K defaults independently.
+                        name: "STOCHF".to_string(),
+                        args: vec![high, low, source, n, AstNode::Number(1.0)],
+                    });
+                }
+                "change" => {
+                    let source = mapped_args.get(0).cloned().unwrap_or(v("CLOSE"));
+                    let n = mapped_args.get(1).cloned().unwrap_or(AstNode::Number(1.0));
+                    return Ok(AstNode::FunctionCall {
+                        name: "MOM".to_string(),
+                        args: vec![source, n],
                     });
                 }
                 "sma" => {
                     let source = mapped_args.get(0).cloned().unwrap_or(v("CLOSE"));
                     let n = mapped_args.get(1).cloned().unwrap_or(AstNode::Number(1.0));
                     return Ok(AstNode::FunctionCall {
-                        name: "SMA".to_string(),
-                        args: vec![source, n, AstNode::Number(1.0)],
+                        name: "MA".to_string(),
+                        args: vec![source, n],
                     });
                 }
                 "vwma" => {
@@ -630,7 +681,8 @@ mod tests {
         let pine = parse_pine(src).unwrap();
         let ast = map_pine_to_alphata(&pine).unwrap();
         let json = format!("{:?}", ast);
-        assert!(json.contains("SMA"));
+        assert!(json.contains("FunctionCall { name: \"MA\""));
+        assert!(!json.contains("FunctionCall { name: \"SMA\""));
         assert!(json.contains("CLOSE"));
     }
 
@@ -641,5 +693,55 @@ mod tests {
         let ast = map_pine_to_alphata(&pine).unwrap();
         let json = format!("{:?}", ast);
         assert!(json.contains("PLOT"));
+    }
+}
+
+#[cfg(test)]
+mod pr14_semantic_mapper_v3_tests {
+    use super::*;
+    use crate::formula::pine::parser::parse_pine;
+
+    fn mapped(source: &str) -> String {
+        let pine = parse_pine(source).unwrap();
+        format!("{:?}", map_pine_to_alphata(&pine).unwrap())
+    }
+
+    #[test]
+    fn pine_change_defaults_to_one_bar_momentum() {
+        let debug = mapped("//@version=5\nindicator(\"C\")\nc = ta.change(close)\n");
+        assert!(debug.contains("FunctionCall { name: \"MOM\""));
+        assert!(debug.contains("Number(1.0)"));
+    }
+
+    #[test]
+    fn pine_stoch_uses_unsmoothed_fast_k_contract() {
+        let debug = mapped("//@version=5\nindicator(\"S\")\ns = ta.stoch(close, high, low, 3)\n");
+        assert!(debug.contains("FunctionCall { name: \"STOCHF\""));
+        assert!(debug.contains("Number(1.0)"));
+    }
+
+    #[test]
+    fn pine_aroon_preserves_high_low_sources() {
+        let debug = mapped("//@version=5\nindicator(\"A\")\n[u, d] = ta.aroon(3)\n");
+        assert!(debug.contains("AROON_UP"));
+        assert!(debug.contains("AROON_DN"));
+        assert!(debug.contains("Variable(\"HIGH\")"));
+        assert!(debug.contains("Variable(\"LOW\")"));
+    }
+}
+
+#[cfg(test)]
+mod pr14_tuple_arity_tests {
+    use super::*;
+    use crate::formula::pine::parser::parse_pine;
+
+    #[test]
+    fn malformed_multi_return_tuple_is_an_error_not_a_panic() {
+        let pine =
+            parse_pine("//@version=5\nindicator(\"M\")\n[a, b] = ta.macd(close, 12, 26, 9)\n")
+                .unwrap();
+        let err = map_pine_to_alphata(&pine).unwrap_err();
+        assert!(err.message.contains("ta.macd returns 3 values"));
+        assert!(err.message.contains("tuple has 2 targets"));
     }
 }

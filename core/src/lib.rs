@@ -31,6 +31,12 @@ extern crate std;
 // `math` subset) to resolve.
 extern crate alloc;
 
+#[cfg(feature = "std")]
+/// Bounded reusable scratch-buffer arena shared by compute backends.
+pub mod buffer_arena;
+#[cfg(feature = "std")]
+/// Unified semantic compute plans, factor plans, and runtime execution policies.
+pub mod compute;
 #[cfg(all(feature = "std", not(feature = "no_std")))]
 /// Domain error types for indicator computations and the formula engine.
 pub mod error;
@@ -78,6 +84,9 @@ pub mod risk;
 #[cfg(feature = "std")]
 /// Zero-copy aligned market-frame and warm-up/NaN runtime contracts.
 pub mod runtime;
+#[cfg(feature = "std")]
+/// Owned machine-readable API schema derived from the canonical registry.
+pub mod schema;
 #[cfg(feature = "std")]
 /// 申万一级 31 行业板块轮动.
 pub mod sector;

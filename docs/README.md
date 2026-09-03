@@ -15,6 +15,7 @@ The two navigation entry points are:
 | [Installation guide](installation.md) | Installation overview for all bindings |
 | [Development guide](development.md) | Local build, test, packaging, and contribution workflow |
 | [Quick start](src/quickstart.md) | Five-minute cross-language introduction |
+| [Compute Engine upgrade plan](plan/finkit-compute-engine-upgrade-plan-v012.md) | v0.1.2 architecture roadmap for Compute IR, Unified Runtime, FactorPlan, Registry SSOT, performance, and quality gates |
 
 ## User guide
 
@@ -25,7 +26,8 @@ The two navigation entry points are:
 | [Formula engine](formula.md) | Formula syntax and evaluation |
 | [Formula runtime](formula-runtime.md) | Zero-copy NumPy, range evaluation, streaming append, and VM reuse |
 | [Formula runtime contract](formula-runtime-contract.md) | Ownership, warm-up, range/last/append semantics, and concurrency guarantees |
-| [Core contracts](core-contracts.md) | Factor Engine, Runtime MarketFrame, NaN/warm-up policy, and function registry |
+| [Core contracts](core-contracts.md) | Compute IR, Factor Engine/FactorPlan, Runtime MarketFrame, NaN/warm-up policy, and function registry |
+| [Canonical function schema](function-schema.md) | Versioned JSON contract and `finkit-schema` CLI for SDK/docs tooling |
 | [Formula templates](formula-templates.md) | Reusable formula patterns |
 | [Formula performance](formula-performance.md) | Formula optimization and performance notes |
 | [Formula debugger](formula-debugger.md) | Formula debugging workflow |
@@ -68,6 +70,7 @@ The two navigation entry points are:
 ## Generated source of truth
 
 - [Indicator registry](indicator_registry.json) is the canonical machine-readable indicator catalog.
+- `FunctionRegistry` / `FunctionApiSchema` is the canonical function metadata contract; `finkit-schema` exports it as versioned JSON.
 - `scripts/gen_ssot_docs.py` generates derived indicator documentation.
 - `scripts/gen_c_header.py` generates the C FFI header.
 - [Docs Check workflow](../.github/workflows/docs-check.yml) verifies all generated SSOT documents and release-version consistency before accepting changes.

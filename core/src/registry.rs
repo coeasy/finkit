@@ -196,6 +196,10 @@ impl FunctionRegistry {
 const PERIOD_14: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("14"), Some("> 0"))];
 const PERIOD_20: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("20"), Some("> 0"))];
 const PERIOD_REQUIRED: &[ParamSpec] = &[ParamSpec::new("period", "usize", None, Some("> 0"))];
+const SMA_PARAMS: &[ParamSpec] = &[
+    ParamSpec::new("period", "usize", None, Some("> 0")),
+    ParamSpec::new("m", "f64", Some("1"), Some("> 0")),
+];
 const MACD_PARAMS: &[ParamSpec] = &[
     ParamSpec::new("fast_period", "usize", Some("12"), Some("> 0")),
     ParamSpec::new("slow_period", "usize", Some("26"), Some("> fast_period")),
@@ -213,13 +217,24 @@ pub fn builtin_function_registry() -> FunctionRegistry {
     let mut registry = FunctionRegistry::new();
     let specs = [
         FunctionSpec {
-            name: "SMA",
-            aliases: &["MA"],
+            name: "MA",
+            aliases: &[],
             category: FunctionCategory::Overlap,
             input: InputKind::Series,
             params: PERIOD_REQUIRED,
             outputs: 1,
             lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "SMA",
+            aliases: &[],
+            category: FunctionCategory::Overlap,
+            input: InputKind::Series,
+            params: SMA_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::Dynamic,
             streaming: true,
             deterministic: true,
         },
@@ -293,7 +308,7 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             name: "CCI",
             aliases: &[],
             category: FunctionCategory::Momentum,
-            input: InputKind::Hlc,
+            input: InputKind::Dynamic,
             params: PERIOD_14,
             outputs: 1,
             lookback: LookbackSpec::PeriodMinusOne,
@@ -326,7 +341,7 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             name: "OBV",
             aliases: &[],
             category: FunctionCategory::Volume,
-            input: InputKind::Hlcv,
+            input: InputKind::Dynamic,
             params: &[],
             outputs: 1,
             lookback: LookbackSpec::None,
@@ -337,8 +352,8 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             name: "VWAP",
             aliases: &[],
             category: FunctionCategory::Volume,
-            input: InputKind::Hlcv,
-            params: PERIOD_20,
+            input: InputKind::Dynamic,
+            params: &[],
             outputs: 1,
             lookback: LookbackSpec::Dynamic,
             streaming: true,
@@ -438,6 +453,19 @@ fn normalize_name(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ma_and_sma_have_distinct_canonical_contracts() {
+        let registry = builtin_function_registry();
+        let ma = registry.get("MA").unwrap();
+        let sma = registry.get("SMA").unwrap();
+        assert_eq!(ma.name, "MA");
+        assert_eq!(sma.name, "SMA");
+        assert_eq!(ma.lookback, LookbackSpec::PeriodMinusOne);
+        assert_eq!(sma.lookback, LookbackSpec::Dynamic);
+        assert_eq!(ma.params.len(), 1);
+        assert_eq!(sma.params.len(), 2);
+    }
 
     #[test]
     fn aliases_resolve_case_insensitively() {

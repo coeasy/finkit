@@ -28,7 +28,6 @@ jobs:
       - name: Check every workspace crate
         run: cargo check --workspace --all-targets --locked
 
-  # Validation jobs run independently; the advisory preflight must not fan out a single skip.
   version-consistency:
     name: Version consistency
     runs-on: ubuntu-22.04
@@ -67,8 +66,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Clippy (core)
         run: cargo clippy -p finkit --locked
-      - name: Clippy (workspace, advisory)
-        continue-on-error: true
+      - name: Clippy (workspace)
         run: cargo clippy --workspace --all-targets --locked
 
   test:
@@ -86,6 +84,21 @@ jobs:
         run: cargo test -p finkit --locked
       - name: Run core docs tests
         run: cargo test -p finkit --doc --locked
+
+  regression-gates:
+    name: Memory and performance regression
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Zero-allocation hot-path contract
+        run: cargo test -p finkit --test memory_regression --release --locked -- --test-threads=1
+      - name: Relative performance contract
+        run: cargo test -p finkit --test performance_regression --release --locked -- --test-threads=1
+      - name: Compile benchmark suite
+        run: cargo bench -p finkit --no-run --locked
 
   doc:
     name: Docs
@@ -105,7 +118,6 @@ jobs:
     permissions:
       contents: read
       checks: write
-    continue-on-error: true # advisory until the dependency baseline is reviewed
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

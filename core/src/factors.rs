@@ -3,8 +3,11 @@
 //! The factor layer is intentionally data-source agnostic: callers provide
 //! named numeric series, while the engine resolves factor dependencies,
 //! caches intermediate values, detects cycles, and supports time-series and
-//! cross-sectional post-processing.
+//! cross-sectional post-processing. Raw inputs can be owned (`FactorContext`)
+//! or borrowed (`BorrowedFactorContext`) without changing custom factor
+//! callbacks.
 
+use crate::runtime::MarketFrame;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::Arc;
@@ -83,7 +86,13 @@ pub enum FactorDirection {
     Neutral,
 }
 
-/// Immutable named raw-series input for factor evaluation.
+/// Internal abstraction shared by owned and borrowed raw factor contexts.
+trait RawFactorContext {
+    fn raw_get(&self, name: &str) -> Option<&[f64]>;
+    fn row_count(&self) -> usize;
+}
+
+/// Owned named raw-series input for factor evaluation.
 #[derive(Debug, Clone, Default)]
 pub struct FactorContext {
     series: BTreeMap<String, Vec<f64>>,
@@ -99,20 +108,9 @@ impl FactorContext {
     /// Insert a named input series while enforcing row alignment.
     pub fn insert(&mut self, name: impl Into<String>, values: Vec<f64>) -> FactorResult<()> {
         let name = name.into();
-        if name.trim().is_empty() {
-            return Err(FactorError::InvalidParameter(
-                "factor input name must not be empty".to_string(),
-            ));
-        }
-        if let Some(expected) = self.len {
-            if values.len() != expected {
-                return Err(FactorError::LengthMismatch {
-                    name,
-                    expected,
-                    actual: values.len(),
-                });
-            }
-        } else {
+        validate_series_name(&name)?;
+        validate_series_len(self.len, &name, values.len())?;
+        if self.len.is_none() {
             self.len = Some(values.len());
         }
         self.series.insert(name, values);
@@ -130,6 +128,21 @@ impl FactorContext {
         self.series.get(name).map(Vec::as_slice)
     }
 
+    /// Create a zero-copy borrowed view of all owned series.
+    ///
+    /// Only the string-key map is rebuilt; numeric buffers remain borrowed
+    /// directly from this context.
+    pub fn as_borrowed(&self) -> BorrowedFactorContext<'_> {
+        BorrowedFactorContext {
+            series: self
+                .series
+                .iter()
+                .map(|(name, values)| (name.clone(), values.as_slice()))
+                .collect(),
+            len: self.len,
+        }
+    }
+
     /// Number of aligned rows in this context.
     pub fn len(&self) -> usize {
         self.len.unwrap_or(0)
@@ -139,15 +152,126 @@ impl FactorContext {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
+}
 
-    fn raw(&self) -> &BTreeMap<String, Vec<f64>> {
-        &self.series
+impl RawFactorContext for FactorContext {
+    fn raw_get(&self, name: &str) -> Option<&[f64]> {
+        self.get(name)
     }
+
+    fn row_count(&self) -> usize {
+        self.len()
+    }
+}
+
+/// Zero-copy named raw-series input for factor evaluation.
+///
+/// This context is the preferred boundary for `MarketFrame`, NumPy/FFI
+/// adapters, and other owners that can guarantee input lifetimes for the
+/// duration of one factor evaluation.
+#[derive(Debug, Clone, Default)]
+pub struct BorrowedFactorContext<'a> {
+    series: BTreeMap<String, &'a [f64]>,
+    len: Option<usize>,
+}
+
+impl<'a> BorrowedFactorContext<'a> {
+    /// Create an empty borrowed context.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Insert a borrowed named series while enforcing row alignment.
+    pub fn insert(&mut self, name: impl Into<String>, values: &'a [f64]) -> FactorResult<()> {
+        let name = name.into();
+        validate_series_name(&name)?;
+        validate_series_len(self.len, &name, values.len())?;
+        if self.len.is_none() {
+            self.len = Some(values.len());
+        }
+        self.series.insert(name, values);
+        Ok(())
+    }
+
+    /// Builder-style borrowed insertion helper.
+    pub fn with_series(mut self, name: impl Into<String>, values: &'a [f64]) -> FactorResult<Self> {
+        self.insert(name, values)?;
+        Ok(self)
+    }
+
+    /// Build a borrowed factor context directly from an aligned market frame.
+    ///
+    /// The OHLCV/amount slices are not copied. Timestamps are intentionally not
+    /// inserted because their integer representation is not a numeric factor
+    /// series of `f64` values.
+    pub fn from_market_frame(frame: MarketFrame<'a>) -> FactorResult<Self> {
+        frame
+            .validate()
+            .map_err(|error| FactorError::InvalidParameter(error.to_string()))?;
+        let mut context = Self::new()
+            .with_series("open", frame.open)?
+            .with_series("high", frame.high)?
+            .with_series("low", frame.low)?
+            .with_series("close", frame.close)?
+            .with_series("volume", frame.volume)?;
+        if let Some(amount) = frame.amount {
+            context.insert("amount", amount)?;
+        }
+        Ok(context)
+    }
+
+    /// Return a borrowed raw input series by name.
+    pub fn get(&self, name: &str) -> Option<&'a [f64]> {
+        self.series.get(name).copied()
+    }
+
+    /// Number of aligned rows in this context.
+    pub fn len(&self) -> usize {
+        self.len.unwrap_or(0)
+    }
+
+    /// Whether the context contains no rows.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+impl RawFactorContext for BorrowedFactorContext<'_> {
+    fn raw_get(&self, name: &str) -> Option<&[f64]> {
+        self.series.get(name).copied()
+    }
+
+    fn row_count(&self) -> usize {
+        self.len()
+    }
+}
+
+fn validate_series_name(name: &str) -> FactorResult<()> {
+    if name.trim().is_empty() {
+        Err(FactorError::InvalidParameter(
+            "factor input name must not be empty".to_string(),
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+fn validate_series_len(expected: Option<usize>, name: &str, actual: usize) -> FactorResult<()> {
+    if let Some(expected) = expected {
+        if actual != expected {
+            return Err(FactorError::LengthMismatch {
+                name: name.to_string(),
+                expected,
+                actual,
+            });
+        }
+    }
+    Ok(())
 }
 
 /// Read-only view available to a factor computation closure.
 pub struct FactorInputs<'a> {
-    raw: &'a BTreeMap<String, Vec<f64>>,
+    raw: &'a dyn RawFactorContext,
     computed: &'a BTreeMap<String, Vec<f64>>,
 }
 
@@ -158,8 +282,7 @@ impl<'a> FactorInputs<'a> {
             return Ok(values.as_slice());
         }
         self.raw
-            .get(name)
-            .map(Vec::as_slice)
+            .raw_get(name)
             .ok_or_else(|| FactorError::MissingInput(name.to_string()))
     }
 }
@@ -275,8 +398,62 @@ impl FactorEngine {
         &self.registry
     }
 
-    /// Evaluate a single factor and all of its dependencies.
+    /// Evaluate a single factor and all of its dependencies from owned input.
     pub fn evaluate(&self, name: &str, context: &FactorContext) -> FactorResult<Vec<f64>> {
+        self.evaluate_one_raw(name, context)
+    }
+
+    /// Evaluate a single factor from zero-copy borrowed input.
+    pub fn evaluate_borrowed(
+        &self,
+        name: &str,
+        context: &BorrowedFactorContext<'_>,
+    ) -> FactorResult<Vec<f64>> {
+        self.evaluate_one_raw(name, context)
+    }
+
+    /// Evaluate multiple factors while sharing a dependency cache.
+    pub fn evaluate_many(
+        &self,
+        names: &[&str],
+        context: &FactorContext,
+    ) -> FactorResult<BTreeMap<String, Vec<f64>>> {
+        self.evaluate_many_raw(names, context)
+    }
+
+    /// Evaluate multiple factors over borrowed raw input while sharing the
+    /// same dependency cache.
+    pub fn evaluate_many_borrowed(
+        &self,
+        names: &[&str],
+        context: &BorrowedFactorContext<'_>,
+    ) -> FactorResult<BTreeMap<String, Vec<f64>>> {
+        self.evaluate_many_raw(names, context)
+    }
+
+    /// Build a direction-aware weighted composite score from owned input.
+    pub fn composite(
+        &self,
+        weighted_factors: &[(&str, f64)],
+        context: &FactorContext,
+    ) -> FactorResult<Vec<f64>> {
+        self.composite_raw(weighted_factors, context)
+    }
+
+    /// Build a direction-aware weighted composite score from borrowed input.
+    pub fn composite_borrowed(
+        &self,
+        weighted_factors: &[(&str, f64)],
+        context: &BorrowedFactorContext<'_>,
+    ) -> FactorResult<Vec<f64>> {
+        self.composite_raw(weighted_factors, context)
+    }
+
+    fn evaluate_one_raw(
+        &self,
+        name: &str,
+        context: &dyn RawFactorContext,
+    ) -> FactorResult<Vec<f64>> {
         let mut cache = BTreeMap::new();
         let mut visiting = Vec::new();
         self.evaluate_inner(name, context, &mut cache, &mut visiting)?;
@@ -285,11 +462,10 @@ impl FactorEngine {
             .ok_or_else(|| FactorError::UnknownFactor(name.to_string()))
     }
 
-    /// Evaluate multiple factors while sharing a single dependency cache.
-    pub fn evaluate_many(
+    fn evaluate_many_raw(
         &self,
         names: &[&str],
-        context: &FactorContext,
+        context: &dyn RawFactorContext,
     ) -> FactorResult<BTreeMap<String, Vec<f64>>> {
         let mut cache = BTreeMap::new();
         for &name in names {
@@ -299,24 +475,19 @@ impl FactorEngine {
         Ok(cache)
     }
 
-    /// Build a direction-aware weighted composite score.
-    ///
-    /// Missing factor values are ignored on each row and the remaining
-    /// weights are re-normalized row-by-row, avoiding the dilution bug common
-    /// in simple global-weight implementations.
-    pub fn composite(
+    fn composite_raw(
         &self,
         weighted_factors: &[(&str, f64)],
-        context: &FactorContext,
+        context: &dyn RawFactorContext,
     ) -> FactorResult<Vec<f64>> {
         if weighted_factors.is_empty() {
-            return Ok(vec![f64::NAN; context.len()]);
+            return Ok(vec![f64::NAN; context.row_count()]);
         }
         let names: Vec<&str> = weighted_factors.iter().map(|(name, _)| *name).collect();
-        let values = self.evaluate_many(&names, context)?;
-        let mut output = vec![f64::NAN; context.len()];
+        let values = self.evaluate_many_raw(&names, context)?;
+        let mut output = vec![f64::NAN; context.row_count()];
 
-        for row in 0..context.len() {
+        for row in 0..context.row_count() {
             let mut weighted_sum = 0.0;
             let mut effective_weight = 0.0;
             for &(name, weight) in weighted_factors {
@@ -345,7 +516,7 @@ impl FactorEngine {
     fn evaluate_inner(
         &self,
         name: &str,
-        context: &FactorContext,
+        context: &dyn RawFactorContext,
         cache: &mut BTreeMap<String, Vec<f64>>,
         visiting: &mut Vec<String>,
     ) -> FactorResult<()> {
@@ -367,26 +538,96 @@ impl FactorEngine {
         for dependency in &factor.dependencies {
             if self.registry.get(dependency).is_some() {
                 self.evaluate_inner(dependency, context, cache, visiting)?;
-            } else if !context.raw().contains_key(dependency) {
+            } else if context.raw_get(dependency).is_none() {
                 return Err(FactorError::MissingInput(dependency.clone()));
             }
         }
 
+        self.compute_factor(factor, context, cache)?;
+        visiting.pop();
+        Ok(())
+    }
+
+    fn compute_factor(
+        &self,
+        factor: &FactorDefinition,
+        context: &dyn RawFactorContext,
+        cache: &mut BTreeMap<String, Vec<f64>>,
+    ) -> FactorResult<()> {
         let inputs = FactorInputs {
-            raw: context.raw(),
+            raw: context,
             computed: cache,
         };
         let result = (factor.compute)(&inputs)?;
-        if result.len() != context.len() {
+        if result.len() != context.row_count() {
             return Err(FactorError::LengthMismatch {
                 name: factor.name.clone(),
-                expected: context.len(),
+                expected: context.row_count(),
                 actual: result.len(),
             });
         }
-        cache.insert(name.to_string(), result);
-        visiting.pop();
+        cache.insert(factor.name.clone(), result);
         Ok(())
+    }
+
+    pub(crate) fn evaluate_precompiled(
+        &self,
+        execution_order: &[String],
+        required_raw_inputs: &[String],
+        context: &FactorContext,
+    ) -> FactorResult<BTreeMap<String, Vec<f64>>> {
+        self.evaluate_precompiled_raw(execution_order, required_raw_inputs, context)
+    }
+
+    pub(crate) fn evaluate_precompiled_borrowed(
+        &self,
+        execution_order: &[String],
+        required_raw_inputs: &[String],
+        context: &BorrowedFactorContext<'_>,
+    ) -> FactorResult<BTreeMap<String, Vec<f64>>> {
+        self.evaluate_precompiled_raw(execution_order, required_raw_inputs, context)
+    }
+
+    fn evaluate_precompiled_raw(
+        &self,
+        execution_order: &[String],
+        required_raw_inputs: &[String],
+        context: &dyn RawFactorContext,
+    ) -> FactorResult<BTreeMap<String, Vec<f64>>> {
+        let allowed_raw: BTreeSet<&str> = required_raw_inputs.iter().map(String::as_str).collect();
+        for input in &allowed_raw {
+            if context.raw_get(input).is_none() {
+                return Err(FactorError::MissingInput((*input).to_string()));
+            }
+        }
+
+        let mut cache = BTreeMap::new();
+        for name in execution_order {
+            let factor = self
+                .registry
+                .get(name)
+                .ok_or_else(|| FactorError::UnknownFactor(name.clone()))?;
+            for dependency in &factor.dependencies {
+                if self.registry.get(dependency).is_some() {
+                    if !cache.contains_key(dependency) {
+                        return Err(FactorError::InvalidParameter(format!(
+                            "stale factor plan: dependency {dependency} must execute before {name}"
+                        )));
+                    }
+                } else {
+                    if !allowed_raw.contains(dependency.as_str()) {
+                        return Err(FactorError::InvalidParameter(format!(
+                            "stale factor plan: raw dependency changed for {name}: {dependency}"
+                        )));
+                    }
+                    if context.raw_get(dependency).is_none() {
+                        return Err(FactorError::MissingInput(dependency.clone()));
+                    }
+                }
+            }
+            self.compute_factor(factor, context, &mut cache)?;
+        }
+        Ok(cache)
     }
 }
 
@@ -688,6 +929,7 @@ fn collect_dependencies(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::compute::FactorPlan;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[test]
@@ -836,5 +1078,88 @@ mod tests {
         let registry = builtin_factor_registry();
         let dependencies = dependency_set(&registry, "reversal_5").unwrap();
         assert!(dependencies.contains("momentum_5"));
+    }
+
+    #[test]
+    fn market_frame_is_borrowed_without_copying_numeric_columns() {
+        let open = [1.0, 2.0, 3.0];
+        let high = [2.0, 3.0, 4.0];
+        let low = [0.5, 1.5, 2.5];
+        let close = [1.5, 2.5, 3.5];
+        let volume = [10.0, 20.0, 30.0];
+        let frame = MarketFrame::new(&open, &high, &low, &close, &volume).unwrap();
+        let context = BorrowedFactorContext::from_market_frame(frame).unwrap();
+
+        assert_eq!(context.get("close").unwrap().as_ptr(), close.as_ptr());
+        assert_eq!(context.get("volume").unwrap().as_ptr(), volume.as_ptr());
+    }
+
+    #[test]
+    fn borrowed_and_owned_factor_execution_are_equivalent() {
+        let close = [10.0, 11.0, 12.0, 13.0, 14.0, 15.0];
+        let borrowed = BorrowedFactorContext::new()
+            .with_series("close", &close)
+            .unwrap();
+        let owned = FactorContext::new()
+            .with_series("close", close.to_vec())
+            .unwrap();
+        let engine = FactorEngine::new(builtin_factor_registry());
+
+        let borrowed_result = engine.evaluate_borrowed("momentum_5", &borrowed).unwrap();
+        let owned_result = engine.evaluate("momentum_5", &owned).unwrap();
+        assert!(borrowed_result
+            .iter()
+            .zip(&owned_result)
+            .all(|(left, right)| (left.is_nan() && right.is_nan()) || left == right));
+    }
+
+    #[test]
+    fn factor_plan_executes_precompiled_order_for_borrowed_input() {
+        let registry = builtin_factor_registry();
+        let plan = FactorPlan::compile(&registry, &["reversal_5"]).unwrap();
+        let engine = FactorEngine::new(registry);
+        let close = [10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0];
+        let context = BorrowedFactorContext::new()
+            .with_series("close", &close)
+            .unwrap();
+
+        let values = plan.execute_borrowed(&engine, &context).unwrap();
+        assert!(values.contains_key("momentum_5"));
+        assert!(values.contains_key("reversal_5"));
+    }
+
+    #[test]
+    fn precompiled_plan_rejects_changed_dependency_graph() {
+        let mut original = FactorRegistry::new();
+        original
+            .register(FactorDefinition::new(
+                "score",
+                ["close"],
+                FactorKind::TimeSeries,
+                FactorDirection::Neutral,
+                Arc::new(|inputs| Ok(inputs.get("close")?.to_vec())),
+            ))
+            .unwrap();
+        let plan = FactorPlan::compile(&original, &["score"]).unwrap();
+
+        let mut changed = FactorRegistry::new();
+        changed
+            .register(FactorDefinition::new(
+                "score",
+                ["volume"],
+                FactorKind::TimeSeries,
+                FactorDirection::Neutral,
+                Arc::new(|inputs| Ok(inputs.get("volume")?.to_vec())),
+            ))
+            .unwrap();
+        let context = FactorContext::new()
+            .with_series("close", vec![1.0, 2.0])
+            .unwrap()
+            .with_series("volume", vec![10.0, 20.0])
+            .unwrap();
+        let error = plan
+            .execute_precompiled(&FactorEngine::new(changed), &context)
+            .unwrap_err();
+        assert!(error.to_string().contains("stale factor plan"));
     }
 }

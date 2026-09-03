@@ -1,4 +1,5 @@
 use crate::formula::ast::AstNode;
+use crate::formula::compute_ir::FormulaComputePlan;
 use crate::formula::executor::FormulaExecutor;
 use crate::formula::optimizer::FormulaOptimizer;
 use crate::formula::parser::parse_formula;
@@ -127,6 +128,9 @@ impl FormulaCompiler {
         }
 
         let ast = parse_formula(source).map_err(FormulaError::ParseError)?;
+        FormulaComputePlan::compile(&ast).map_err(|error| {
+            FormulaError::InvalidOperation(format!("formula compute planning failed: {error}"))
+        })?;
         let ast = FormulaOptimizer::optimize(&ast);
         let formula = CompiledFormula {
             ast,

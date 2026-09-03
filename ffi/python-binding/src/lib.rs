@@ -3932,12 +3932,6 @@ fn compute_single_indicator(
             }
             _ => IndicatorResult::Error("MidPrice requires high and low data".to_string()),
         },
-        "beta" => IndicatorResult::Error(
-            "Beta requires benchmark data (use individual function)".to_string(),
-        ),
-        "correl" | "correlation" => IndicatorResult::Error(
-            "Correlation requires second series data (use individual function)".to_string(),
-        ),
         "vortex" => match (high, low) {
             (Some(h), Some(l)) => {
                 let period = params.first().copied().unwrap_or(14.0) as usize;

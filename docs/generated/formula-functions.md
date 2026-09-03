@@ -3,7 +3,7 @@
 > **SSOT** — auto-generated from `core/src/formula/functions.rs`.
 > Do not edit manually. Regenerate: `python scripts/gen_ssot_docs.py --generate`
 
-Built-in formula functions: **233**
+Built-in formula functions: **230**
 
 These functions are available in the formula DSL for expressions like `SMA(CLOSE, 20)`.
 
@@ -49,7 +49,6 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `BOLLMID` |
 | `BOLLWIDTH` |
 | `BOP` |
-| `CCI` |
 | `CEIL` |
 | `CEILING` |
 | `CHECKSIG` |
@@ -197,7 +196,6 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `ROUND` |
 | `RSI` |
 | `RS_RATIO` |
-| `SAR` |
 | `SAREXT` |
 | `SELECTCOND` |
 | `SIGN` |
@@ -235,7 +233,6 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `ULTOSC` |
 | `VALUEWHEN` |
 | `VAR` |
-| `VWAP` |
 | `VWMA` |
 | `WCLPRICE` |
 | `WILLIAMS_ALLIGATOR` |
