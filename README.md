@@ -43,9 +43,10 @@ Start here:
 | [CLI guide](docs/cli.md) | Input formats, commands and CLI troubleshooting |
 | [Language bindings](docs/language-bindings.md) | Node, Java/JNI, C/C++, Go, .NET, mobile/WASM build/status matrix |
 | [Runtime and factors](docs/runtime-and-factors.md) | MarketFrame, factor plans, dependency validation and reuse |
+| [Troubleshooting](docs/troubleshooting.md) | Installation, data alignment, formula/runtime, CLI, native-loader and build diagnosis |
 | [Python guide](docs/python.md) | NumPy, ABI3 wheels, `CompiledFormula`, pandas and troubleshooting |
 | [Indicators](docs/indicators.md) | Indicator reference |
-| [Formula engine](docs/formula.md) | Formula syntax and terminal compatibility |
+| [Formula engine](docs/formula.md) | Formula syntax, execution and compatibility boundaries |
 | [API reference](docs/api-reference.md) | Public API overview |
 | [Development](docs/development.md) | Build, test, benchmark, package and CI workflow |
 
