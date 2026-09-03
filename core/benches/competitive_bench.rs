@@ -304,7 +304,7 @@ fn bench_fta_momentum_ext(c: &mut Criterion) {
         b.iter(|| black_box(indicators::connors_rsi(&close, 3, 2, 100).unwrap()))
     });
     group.bench_function(BenchmarkId::new("fta_stoch_rsi", DATA_LEN), |b| {
-        b.iter(|| black_box(indicators::stoch_rsi(&close, 14, 14, 3, 3).unwrap()))
+        b.iter(|| black_box(indicators::stochrsi(&close, 14, 14, 3, 3).unwrap()))
     });
     group.bench_function(BenchmarkId::new("fta_rvi_10", DATA_LEN), |b| {
         b.iter(|| black_box(indicators::rvi(&open, &high, &low, &close, 10).unwrap()))

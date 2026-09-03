@@ -32,8 +32,8 @@ fn generate_test_data(n: usize) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<
     (open, high, low, close, volume)
 }
 
-fn test_indicator_accuracy(c: &mut Criterion) {
-    let (open, high, low, close, volume) = generate_test_data(1000);
+fn test_indicator_accuracy(_c: &mut Criterion) {
+    let (_open, high, low, close, volume) = generate_test_data(1000);
 
     println!("\n=== AlphaTA Accuracy Test Report ===\n");
 
@@ -251,7 +251,7 @@ fn test_indicator_accuracy(c: &mut Criterion) {
     }
 
     // HT_PHASOR
-    if let Ok((inphase, quadrature)) = indicators::ht_phasor(&close) {
+    if let Ok((inphase, _quadrature)) = indicators::ht_phasor(&close) {
         let valid_count = inphase.iter().filter(|x| !x.is_nan()).count();
         println!(
             "✓ HT_PHASOR: {} valid values, inphase={:.4}",
@@ -260,7 +260,7 @@ fn test_indicator_accuracy(c: &mut Criterion) {
     }
 
     // HT_SINE
-    if let Ok((sine, lead_sine)) = indicators::ht_sine(&close) {
+    if let Ok((sine, _lead_sine)) = indicators::ht_sine(&close) {
         let valid_count = sine.iter().filter(|x| !x.is_nan()).count();
         println!(
             "✓ HT_SINE: {} valid values, sine={:.4}",

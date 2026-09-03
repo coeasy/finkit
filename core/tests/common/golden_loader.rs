@@ -22,9 +22,6 @@ use std::path::Path;
 /// 标准数值容差（与 TA-Lib / 同花顺绝对值输出对齐）
 pub const DEFAULT_TOLERANCE: f64 = 1e-9;
 
-/// 百分比模式容差（hv / natr 等以百分号为单位的指标）
-pub const PERCENT_TOLERANCE: f64 = 1e-6;
-
 /// 从黄金 CSV 文件加载第一列数值。
 ///
 /// 行为约定：

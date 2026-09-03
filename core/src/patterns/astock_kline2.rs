@@ -778,7 +778,6 @@ mod tests {
 
     #[test]
     fn test_tweezer_bottom() {
-        let n = 5;
         // bar 0: yin (open 10.0, close 9.5), low=9.0
         // bar 1: yang (open 9.5, close 10.0), low=9.0
         // → low match (|9.0-9.0|=0), cur yang → fire at 1
@@ -805,7 +804,6 @@ mod tests {
 
     #[test]
     fn test_tower_bottom() {
-        let n = 10;
         let o = vec![12.0, 11.5, 11.3, 11.2, 11.0, 10.8, 10.6, 10.5, 10.4, 10.3];
         let c = vec![11.0, 11.0, 11.0, 11.0, 10.8, 10.5, 10.4, 10.3, 10.2, 11.5];
         let h = vec![12.0, 11.6, 11.4, 11.2, 11.0, 10.9, 10.7, 10.6, 10.5, 11.6];
@@ -822,7 +820,6 @@ mod tests {
 
     #[test]
     fn test_tower_top() {
-        let n = 10;
         let o = vec![9.0, 9.5, 9.7, 9.8, 10.0, 10.2, 10.4, 10.5, 10.6, 10.5];
         let c = vec![9.5, 9.7, 9.8, 10.0, 10.2, 10.4, 10.5, 10.6, 10.7, 8.5];
         let h = vec![9.5, 9.7, 9.8, 10.0, 10.2, 10.4, 10.5, 10.6, 10.7, 10.6];
@@ -833,26 +830,7 @@ mod tests {
 
     #[test]
     fn test_kneading_line() {
-        let n = 5;
-        let o = vec![10.0, 9.0, 10.5];
-        let h = vec![10.2, 9.7, 11.0];
-        let l = vec![9.8, 8.7, 10.3];
-        let c = vec![9.5, 9.5, 10.7];
-        // bar 0: yin (close < open), body 0.5
-        // bar 1: yin, body 0.5, up 0.2, lo 0.3
-        // bar 2: yang, body 0.2 (smaller)
-        // Hmm bodies not equal
-        // Try:
-        let o = vec![10.0, 9.0, 9.5];
-        let h = vec![10.5, 9.7, 10.0];
-        let l = vec![8.5, 8.7, 8.5];
-        let c = vec![9.0, 9.5, 9.0];
-        // bar 0: yin body 1.0
-        // bar 1: yang body 0.5, up 0.2, lo 0.3 → up < 0.3*b=0.15? 0.2>0.15 ✓, lo < 0.15? 0.3>0.15 ✓
-        // bar 2: yin body 0.5
-        // check ratio: |1.0-0.5|/1.0=0.5 > 0.3
-        // Just check length
-        let _ = (o, h, l, c);
+        // Keep this as a smoke/shape contract; dedicated pattern fixtures live elsewhere.
         let (o, h, l, c, _) = flat_synth(5);
         let r = kneading_line(&o, &h, &l, &c).unwrap();
         assert_eq!(r.len(), 5);
@@ -860,23 +838,7 @@ mod tests {
 
     #[test]
     fn test_rising_sun() {
-        let n = 5;
-        let o = vec![10.0, 11.0];
-        let h = vec![10.3, 11.5];
-        let l = vec![9.5, 9.5];
-        let c = vec![9.8, 11.4];
-        // bar 0: yin, body 0.2
-        // bar 1: yang, open 11.0, close 11.4, body 0.4
-        // prev close 9.8, cur open 11.0 → open > prev close → no
-        // Use:
-        let o = vec![10.0, 9.5];
-        let h = vec![10.3, 11.5];
-        let l = vec![9.5, 9.0];
-        let c = vec![9.8, 11.0];
-        // bar 0: yin, body 0.2 (open 10.0 close 9.8)
-        // bar 1: yang, open 9.5 < prev close 9.8 ✓
-        //        close 11.0 > prev open 10.0 ✓
-        // Need ATR warmup → use longer:
+        // Use a full warmup series so the fixture exercises the real ATR path.
         let mut o = vec![10.0; 15];
         let mut h = vec![10.0; 15];
         let mut l = vec![10.0; 15];
@@ -898,7 +860,6 @@ mod tests {
 
     #[test]
     fn test_separation_lines() {
-        let n = 5;
         // bar 0: yin (open 10.5, close 10.0)
         // bar 1: yang (open 10.0, close 10.5)
         // o-c1 = 10.0-10.0=0, c-o1=10.5-10.5=0 → match
@@ -912,56 +873,6 @@ mod tests {
 
     #[test]
     fn test_meeting_lines() {
-        // bar 0: yin (10.5→10.0)
-        // bar 1: yang (10.5→10.0) — wait yang means close>open, so yang would be 10.0→10.5
-        // meeting lines: opens equal, closes equal
-        let o = vec![10.5, 10.5];
-        let h = vec![10.6, 10.6];
-        let l = vec![9.9, 9.9];
-        let c = vec![10.0, 10.0];
-        // bar 0: yin, bar 1: yin (close=open, doji-like, not yang)
-        // Let's use:
-        let o = vec![10.5, 10.5];
-        let h = vec![10.7, 10.7];
-        let l = vec![9.9, 9.9];
-        let c = vec![10.0, 10.0];
-        // both doji-ish — neither bullish nor bearish
-        // Try:
-        let o = vec![10.5, 9.5];
-        let h = vec![10.7, 10.7];
-        let l = vec![9.9, 9.0];
-        let c = vec![10.0, 10.5];
-        // bar 0: yin (10.5→10.0), bar 1: yang (9.5→10.5)
-        // opens: |9.5-10.5|/10.5 = 0.095 > 0.005 → no
-        // Use exactly equal:
-        let o = vec![10.5, 10.5];
-        let h = vec![10.7, 10.7];
-        let l = vec![9.9, 9.9];
-        let c = vec![10.0, 10.5];
-        // bar 0: yin, bar 1: yang
-        // opens equal: |10.5-10.5|=0 ✓
-        // closes: |10.0-10.5|/10.0 = 0.05 > 0.005 → no
-        // meeting lines typically means closes equal, not opens
-        // For closes equal: bar 0 close = bar 1 close
-        let o = vec![10.0, 9.5];
-        let h = vec![10.5, 10.5];
-        let l = vec![9.5, 9.0];
-        let c = vec![10.5, 10.5];
-        // bar 0: yang (10.0→10.5), bar 1: yang (9.5→10.5) — same direction
-        // Try:
-        let o = vec![9.5, 10.0];
-        let h = vec![10.5, 10.5];
-        let l = vec![9.0, 9.5];
-        let c = vec![10.5, 10.5];
-        // bar 0: yang, bar 1: yang
-        // Try yin+yang:
-        let o = vec![10.5, 9.5];
-        let h = vec![10.7, 10.5];
-        let l = vec![9.9, 9.0];
-        let c = vec![9.5, 10.5];
-        // bar 0: yin, bar 1: yang
-        // opens equal: |9.5-10.5|=1 > 0.005 → no
-        // Just verify length:
         let (o, h, l, c, _) = flat_synth(5);
         let r = meeting_lines(&o, &h, &l, &c).unwrap();
         assert_eq!(r.len(), 5);
@@ -999,7 +910,6 @@ mod tests {
         c[4] = 11.5;
         h[4] = 11.6;
         l[4] = 10.2;
-        let r = rising_three_methods(&o, &h, &l, &c).unwrap();
         // ATR might be small, body checks pass, but small_bearish.body > b1*0.5?
         // b1 = 1.5, small bodies: 0.2, 0.2, 0.2. 0.2 < 0.5*1.5=0.75 ✓
         // low[1,2,3] = 10.5, 10.3, 10.1 > low[0]=9.4 ✓
@@ -1094,7 +1004,6 @@ mod tests {
     #[test]
     fn test_input_validation() {
         let empty: Vec<f64> = vec![];
-        let v: Vec<f64> = vec![];
         assert!(v_shape_reversal(&empty, &empty, &empty, &empty, 1, 0.05, 0.05).is_err());
         assert!(tweezer_bottom(&empty, &empty, &empty, &empty, 0.005).is_err());
         let o = vec![1.0, 2.0];

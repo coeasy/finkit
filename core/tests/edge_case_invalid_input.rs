@@ -1,25 +1,25 @@
 //! Edge case: NaN / ±Inf input rejection (R-1).
 //!
 //! Verifies that the public batch indicator entry points return
-//! `Err(TaError::InvalidParameter { .. })` (and never panic) when the
+//! `Err(TaError::Indicator(IndicatorError::InvalidParameter { .. }))` (and never panic) when the
 //! input slice contains non-finite floating-point values. Also covers
 //! the `metrics` + `tracing` warning paths by simply ensuring the error
 //! surfaces.
 
-use finkit::error::TaError;
+use finkit::error::{IndicatorError, TaError};
 use finkit::indicators::{bbands, macd, rsi};
 use finkit::math::moving_avg::{dema, ema, kama, sma, wma};
 
 fn assert_invalid_param(err: finkit::error::Result<ndarray::Array1<f64>>, needle: &str) {
     match err {
-        Err(TaError::InvalidParameter { name, constraint }) => {
+        Err(TaError::Indicator(IndicatorError::InvalidParameter { param, reason })) => {
             assert!(
-                name == "input" || name == "period" || name == "output" || name == "close",
-                "unexpected param name: {name}"
+                param == "input" || param == "period" || param == "output" || param == "close",
+                "unexpected param name: {param}"
             );
             assert!(
-                constraint.contains(needle),
-                "constraint {constraint:?} should contain {needle:?}"
+                reason.contains(needle),
+                "reason {reason:?} should contain {needle:?}"
             );
         }
         Err(other) => panic!("expected InvalidParameter, got {other:?}"),
@@ -104,9 +104,9 @@ fn sma_still_works_on_clean_input() {
 fn sma_zero_period_returns_error() {
     let input = vec![1.0, 2.0, 3.0];
     match sma(&input, 0) {
-        Err(TaError::InvalidParameter { name, constraint }) => {
-            assert_eq!(name, "period");
-            assert!(constraint.contains("greater than 0"));
+        Err(TaError::Indicator(IndicatorError::InvalidParameter { param, reason })) => {
+            assert_eq!(param, "period");
+            assert!(reason.contains("greater than 0"));
         }
         other => panic!("expected InvalidParameter, got {other:?}"),
     }
