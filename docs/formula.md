@@ -122,7 +122,7 @@ low = np.ascontiguousarray(low, dtype=np.float64)
 close = np.ascontiguousarray(close, dtype=np.float64)
 volume = np.ascontiguousarray(volume, dtype=np.float64)
 
-out = plan.eval_zero_copy(open_, high, low_, close, volume)
+out = plan.eval_zero_copy(open_, high, low, close, volume)
 ```
 
 The OHLCV arrays are borrowed during the synchronous call. Do not resize or mutate them concurrently while evaluation is running.
