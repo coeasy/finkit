@@ -1,68 +1,79 @@
 # Finkit Documentation
 
-This directory is the canonical documentation set for the current Finkit codebase. It is organized around what users can actually install and run from the `v0.1.3` baseline, with implementation details separated from user-facing instructions.
+This directory is the canonical documentation set for the current Finkit codebase and the published **v0.1.3** baseline. Documentation is organized around tasks users can actually perform today; historical plans and stale release assumptions belong in Git history, not in the active documentation tree.
 
 ## Start here
 
-1. [Installation](installation.md) — choose a Release asset or build a binding from source.
-2. [Complete usage guide](usage.md) — Python, Rust, CLI, formulas, streaming, factors/runtime, and other bindings.
-3. [Python guide](python.md) — ABI3 wheel selection, NumPy rules, reusable formulas, troubleshooting.
-4. [Indicators](indicators.md) — indicator catalog and parameter reference.
-5. [Formula engine](formula.md) — formula language and compatibility.
-6. [Development](development.md) — build, test, benchmark, package, and CI workflow.
+New users should follow this order:
 
-## Release and distribution status
+1. [Getting started](getting-started.md) — first successful indicator/formula/CLI run.
+2. [Installation](installation.md) — verified release assets, source builds, prerequisites, checksums.
+3. [Complete usage guide](usage.md) — data conventions, Python/Rust usage, formulas, streaming, factors/runtime.
+4. [CLI guide](cli.md) — file formats, indicator/formula/streaming commands, troubleshooting.
+5. [Language bindings](language-bindings.md) — Python, Rust, Node.js, Java/JNI, C/C++, Go, .NET, mobile/WASM status.
+6. [Runtime and factors](runtime-and-factors.md) — MarketFrame, factor plans, dependency safety and reuse.
 
-Current source/release version: **0.1.3**.
+## What is actually distributed in v0.1.3
 
-The GitHub `v0.1.3` Release currently publishes the verified binary/source artifacts below:
+The GitHub `v0.1.3` Release is the authoritative binary/source distribution for this version. It contains:
 
 - Python ABI3 wheel — Linux x86_64;
 - Python ABI3 wheel — Windows x86_64;
 - Python ABI3 wheel — macOS x86_64;
 - Python ABI3 wheel — macOS arm64;
-- `finkit-0.1.3.crate` source package;
+- `finkit-0.1.3.crate`;
 - `finkit-cli-linux-x86_64`;
 - `SHA256SUMS`.
 
-Node.js, Java/JNI, and C/C++ are validated by the repository's multi-language CI from source, but their packages are not part of the current GitHub Release asset set. Go, .NET, Android, iOS, and WASM remain source/development integrations rather than v0.1.3 public binary-distribution contracts.
+Node.js, Java/JNI, and C/C++ build/package paths are verified by multi-language CI from source, but those packages are not claimed as public registry distributions in v0.1.3. Go, .NET, Android, iOS, and WASM remain source/development integrations.
 
-Registry publication is independent from repository packaging. Do not document `pip install finkit`, `cargo add finkit`, `npm install finkit`, Maven Central, NuGet, or `go get` as generally available until the corresponding registry entry has actually been published and verified.
+Registry publication is a separate contract. Do not document `pip install finkit`, `cargo add finkit`, `npm install finkit`, Maven Central, NuGet, or public `go get` installation as generally available until that exact package/version is actually published and smoke-tested.
 
-## User documentation
+## User guides
 
 | Document | Purpose |
 | --- | --- |
-| [installation.md](installation.md) | Supported release assets, prerequisites, source builds, installation verification |
-| [usage.md](usage.md) | End-to-end examples and runtime conventions |
-| [python.md](python.md) | Python ABI3, NumPy, `CompiledFormula`, pandas, troubleshooting |
+| [getting-started.md](getting-started.md) | Fast path from installation to verified calculations |
+| [installation.md](installation.md) | Release assets, prerequisites, source builds and installation verification |
+| [usage.md](usage.md) | End-to-end usage patterns and data/runtime conventions |
+| [python.md](python.md) | ABI3 wheels, NumPy, `CompiledFormula`, pandas and troubleshooting |
+| [cli.md](cli.md) | CLI input formats, indicator/formula/streaming commands |
+| [language-bindings.md](language-bindings.md) | Binding support matrix and source-build instructions |
+| [runtime-and-factors.md](runtime-and-factors.md) | Factor/runtime workflow, dependency validation, reuse and alignment |
 | [indicators.md](indicators.md) | Human-readable indicator reference |
 | [features.md](features.md) | Feature/capability overview |
-| [formula.md](formula.md) | Formula syntax and evaluation |
-| [formula/grammar.md](formula/grammar.md) | Formula grammar reference |
-| [formula/pine-grammar.md](formula/pine-grammar.md) | Pine grammar/compatibility reference |
+
+## Formula system
+
+| Document | Purpose |
+| --- | --- |
+| [formula.md](formula.md) | Formula syntax and evaluation reference |
+| [formula/grammar.md](formula/grammar.md) | Core formula grammar |
+| [formula/pine-grammar.md](formula/pine-grammar.md) | Supported Pine grammar subset |
 | [formula-runtime.md](formula-runtime.md) | Persistent compiled plans and incremental execution |
-| [formula-runtime-contract.md](formula-runtime-contract.md) | Ownership, range/last/append, warm-up and concurrency semantics |
+| [formula-runtime-contract.md](formula-runtime-contract.md) | Ownership, `eval_range`, `eval_last`, append, warm-up and concurrency semantics |
 | [formula-templates.md](formula-templates.md) | Reusable formula patterns |
 | [formula-debugger.md](formula-debugger.md) | Formula debugging workflow |
 | [formula-performance.md](formula-performance.md) | Formula optimization and benchmark notes |
-| [migration/pine-to-alphata.md](migration/pine-to-alphata.md) | Pine/terminal formula migration guidance |
+| [migration/pine-to-finkit.md](migration/pine-to-finkit.md) | Pine indicator migration guidance and semantic boundaries |
+
+For exact supported functions and Pine mappings, prefer the generated catalogs over hard-coded counts or compatibility percentages.
 
 ## API and architecture
 
 | Document | Purpose |
 | --- | --- |
-| [api-reference.md](api-reference.md) | Public API reference |
+| [api-reference.md](api-reference.md) | Public API overview |
 | [api-reference-zh.md](api-reference-zh.md) | 中文 API 参考 |
-| [core-contracts.md](core-contracts.md) | ComputePlan/FactorPlan/MarketFrame/function registry contracts |
+| [core-contracts.md](core-contracts.md) | ComputePlan, FactorPlan, MarketFrame and registry contracts |
 | [function-schema.md](function-schema.md) | Versioned machine-readable function schema |
 | [architecture/overview.md](architecture/overview.md) | Crate/binding architecture |
-| [architecture/dataflow.md](architecture/dataflow.md) | Batch, streaming, formula, and binding data flow |
+| [architecture/dataflow.md](architecture/dataflow.md) | Batch, streaming, formula and binding data flow |
 | [architecture/formula-engine.md](architecture/formula-engine.md) | Formula parser/compiler/runtime internals |
 | [ffi/memory-contract.md](ffi/memory-contract.md) | C ABI ownership/lifetime contract |
-| [ffi/error-codes.md](ffi/error-codes.md) | Cross-language error codes |
+| [ffi/error-codes.md](ffi/error-codes.md) | Cross-language/native error codes |
 
-## Performance and quality
+## Performance and engineering quality
 
 | Document | Purpose |
 | --- | --- |
@@ -70,13 +81,13 @@ Registry publication is independent from repository packaging. Do not document `
 | [BENCHMARK_VS_TALIB.md](BENCHMARK_VS_TALIB.md) | TA-Lib comparison methodology |
 | [BENCHMARK_REPORT.md](BENCHMARK_REPORT.md) | Generated benchmark snapshot |
 | [FUZZING.md](FUZZING.md) | Fuzz targets and crash reproduction |
-| [development.md](development.md) | Required local and CI checks |
+| [development.md](development.md) | Build, test, benchmark, package and CI workflow |
 
-Benchmark numbers are measured snapshots, not universal guarantees. Re-run the benchmark harness on the target CPU/compiler before making latency or throughput commitments.
+Benchmark values are measured snapshots, not universal latency/throughput guarantees. Re-run the benchmark harness on the target CPU/compiler/runtime before making production commitments.
 
-## Generated source of truth
+## Generated source of truth — do not delete as “old docs”
 
-The following files are generated or machine-readable contracts and should be kept even when simplifying user documentation:
+The following files are generated or machine-readable contracts and are intentionally retained even when simplifying prose documentation:
 
 - `indicator_registry.json` — canonical indicator registry snapshot;
 - `generated/indicators.md` — generated indicator catalog;
@@ -88,19 +99,41 @@ The following files are generated or machine-readable contracts and should be ke
 - `generated/version-matrix.md` — generated release/version matrix;
 - `benchmark-baseline.json` — performance-gate baseline where used by CI/scripts.
 
-`scripts/gen_ssot_docs.py --check` and `scripts/check_versions.py` are CI gates for these contracts. `scripts/check_docs_links.py` is also run by Docs Check so repository-local Markdown links fail CI when a referenced file is removed or moved.
+`scripts/gen_ssot_docs.py --check` and `scripts/check_versions.py` validate these contracts. `scripts/check_docs_links.py` makes broken repository-local Markdown links fail Docs Check.
 
-## Documentation policy
+## Documentation cleanup policy
 
-The documentation tree intentionally does **not** keep completed release plans, obsolete version roadmaps, stale PRD snapshots, duplicate mdBook placeholder pages, or release notes for version lines that never became the current product baseline. Git history and closed pull requests remain the historical record.
+Active `docs/` should not contain:
 
-When updating docs:
+- completed release plans or old version roadmaps;
+- stale PRD/progress snapshots;
+- temporary repair notes;
+- duplicated directory placeholder READMEs when a canonical guide already exists;
+- old package/brand names in filenames that imply a current public API;
+- unverified registry-install commands;
+- hard-coded capability counts/compatibility percentages that are already generated from SSOT.
 
-- describe only behavior present in current code;
-- distinguish “buildable from source” from “published package”;
-- distinguish “CI validated” from “available as a GitHub Release asset”;
-- link exact machine-generated catalogs instead of hard-coding counts that can drift;
-- keep examples executable against current public APIs;
-- update `README.md`, `docs/README.md`, installation/usage docs, and binding READMEs together when a release contract changes.
+Git history and closed pull requests remain the historical record.
 
-_Last reviewed against `v0.1.3` and the current main branch: 2026-09-03._
+## Updating documentation safely
+
+When code or release behavior changes:
+
+1. update the user-facing guide that owns the behavior;
+2. update `README.md` and this index when the public installation/support contract changes;
+3. update binding-specific docs together with package metadata;
+4. regenerate SSOT docs through the generator rather than hand-editing generated files;
+5. run link/version/SSOT checks;
+6. distinguish **buildable from source**, **CI validated**, **GitHub Release asset**, and **public registry package**.
+
+Recommended validation:
+
+```bash
+python scripts/check_versions.py
+python scripts/gen_ssot_docs.py --check
+python scripts/check_docs_links.py
+cargo fmt --all -- --check
+cargo test --workspace --doc --locked
+```
+
+_Last reviewed against `v0.1.3` and current `main`: 2026-09-03._
