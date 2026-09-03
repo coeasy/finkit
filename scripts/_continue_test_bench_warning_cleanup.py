@@ -28,6 +28,31 @@ def main() -> int:
         "unnecessary mutable cache-miss engine",
     )
 
+    replace_once(
+        "core/tests/edge_case_invalid_input.rs",
+        '''//! `Err(TaError::InvalidParameter { .. })` (and never panic) when the\n''',
+        '''//! `Err(TaError::Indicator(IndicatorError::InvalidParameter { .. }))` (and never panic) when the\n''',
+        "invalid-input error model documentation",
+    )
+    replace_once(
+        "core/tests/edge_case_invalid_input.rs",
+        "use finkit::error::TaError;\n",
+        "use finkit::error::{IndicatorError, TaError};\n",
+        "canonical invalid-input error import",
+    )
+    replace_once(
+        "core/tests/edge_case_invalid_input.rs",
+        '''        Err(TaError::InvalidParameter { name, constraint }) => {\n            assert!(\n                name == "input" || name == "period" || name == "output" || name == "close",\n                "unexpected param name: {name}"\n            );\n            assert!(\n                constraint.contains(needle),\n                "constraint {constraint:?} should contain {needle:?}"\n            );\n        }\n''',
+        '''        Err(TaError::Indicator(IndicatorError::InvalidParameter { param, reason })) => {\n            assert!(\n                param == "input" || param == "period" || param == "output" || param == "close",\n                "unexpected param name: {param}"\n            );\n            assert!(\n                reason.contains(needle),\n                "reason {reason:?} should contain {needle:?}"\n            );\n        }\n''',
+        "canonical invalid-input helper match",
+    )
+    replace_once(
+        "core/tests/edge_case_invalid_input.rs",
+        '''        Err(TaError::InvalidParameter { name, constraint }) => {\n            assert_eq!(name, "period");\n            assert!(constraint.contains("greater than 0"));\n        }\n''',
+        '''        Err(TaError::Indicator(IndicatorError::InvalidParameter { param, reason })) => {\n            assert_eq!(param, "period");\n            assert!(reason.contains("greater than 0"));\n        }\n''',
+        "canonical zero-period error match",
+    )
+
     path = ROOT / "core/benches/simd_statistics_bench.rs"
     text = path.read_text(encoding="utf-8")
     start = text.index("fn bench_linear_reg(c: &mut Criterion)")
