@@ -1,35 +1,52 @@
-# Finkit Go Binding
+# Finkit Go/CGO Binding
 
-Go bindings for the finkit technical analysis library, using CGO for high-performance FFI.
+This directory contains the Go/CGO binding source for Finkit.
+
+## v0.1.3 status
+
+The binding is available for repository/source development, but it is **not** part of the verified `v0.1.3` GitHub Release asset matrix. The nested Go module currently lives at `ffi/go-binding/go/go.mod` and declares:
+
+```text
+module github.com/coeasy/finkit
+```
+
+Because that module is nested below `ffi/go-binding/go/` and still depends on a separately built native Rust library, the repository does not document `go get github.com/coeasy/finkit/go/ta` as a stable public v0.1.3 installation contract.
 
 ## Requirements
 
-- **Go**: 1.21 or later
-- **Rust**: 1.85 or later (workspace MSRV)
-- **CGO**: Enabled (usually enabled by default)
+- Go 1.21+;
+- CGO enabled;
+- Rust 1.85+;
+- a C compiler/linker compatible with the host Go toolchain.
 
-## Build
+Check CGO:
 
 ```bash
-# Build the Rust library
-make build
-
-# Or manually
-cd ../..
-cargo build --release -p finkit-go
+go env CGO_ENABLED
 ```
 
-The compiled library will be available in `../../target/release/`.
+## Build the native Rust library
 
-## Usage
+From the repository root:
 
-Import the package in your Go code:
-
-```go
-import "github.com/coeasy/finkit/go/ta"
+```bash
+cargo build -p finkit-go --release --locked
 ```
 
-Example:
+The Rust package name is `finkit-go` and produces the native library used by the CGO layer.
+
+## Work with the nested Go source
+
+```bash
+cd ffi/go-binding/go
+go test ./...
+```
+
+When integrating from a repository checkout, ensure the linker can locate the native library produced by the Rust build. Exact linker configuration is platform-specific; inspect the CGO directives and build scripts in this directory before packaging an application.
+
+## API example
+
+The Go source exposes indicator wrappers in the binding package. A repository-development example has the following shape:
 
 ```go
 package main
@@ -40,84 +57,33 @@ import (
 )
 
 func main() {
-    prices := []float64{44.0, 44.25, 44.5, 43.75, 44.5, 44.25, 45.5, 45.5, 45.5, 46.0}
-    
-    // Calculate RSI
-    rsi, err := ta.Rsi(prices, 14)
+    close := []float64{1, 2, 3, 4, 5}
+    sma, err := ta.Sma(close, 3)
     if err != nil {
         panic(err)
     }
-    fmt.Println("RSI:", rsi)
-    
-    // Calculate MACD
-    macd, err := ta.Macd(prices, 12, 26, 9)
-    if err != nil {
-        panic(err)
-    }
-    fmt.Println("MACD:", macd.Macd)
+    fmt.Println(sma)
 }
 ```
 
-## Available Indicators
+Treat the import path above as a source-layout example, not as proof that a remotely versioned Go module can currently be installed with `go get`.
 
-### Moving Averages
-- `Sma` - Simple Moving Average
-- `Ema` - Exponential Moving Average
-- `Wma` - Weighted Moving Average
-- `Dema` - Double Exponential Moving Average
-- `Tema` - Triple Exponential Moving Average
-- `Kama` - Kaufman Adaptive Moving Average
-- `T3` - T3 Moving Average
+## Before making Go a public release contract
 
-### Momentum Indicators
-- `Rsi` - Relative Strength Index
-- `Macd` - Moving Average Convergence Divergence
-- `Stoch` - Stochastic Oscillator
-- `Adx` - Average Directional Index
-- `Aroon` - Aroon Indicator
-- `Cci` - Commodity Channel Index
-- `Mom` - Momentum
-- `Roc` - Rate of Change
-- `Willr` - Williams %R
+A production Go distribution should first resolve all of the following:
 
-### Volume Indicators
-- `Obv` - On Balance Volume
-- `Ad` - Accumulation/Distribution Line
-- `AdOsc` - Chaikin A/D Oscillator
+1. choose a public module root/path that matches the repository directory layout;
+2. define the version/tag convention for the Go module;
+3. decide whether users receive prebuilt native libraries or must have Rust installed;
+4. verify Linux/macOS/Windows CGO linking on the advertised architectures;
+5. run an install test from a clean external Go module using the published tag/artifact;
+6. only then document a `go get` command.
 
-### Volatility Indicators
-- `Atr` - Average True Range
-- `Natr` - Normalized ATR
-- `Trange` - True Range
-- `Bbands` - Bollinger Bands
+## Related documentation
 
-### Hilbert Transform Indicators
-- `HtDcPeriod` - Dominant Cycle Period
-- `HtDcPhase` - Dominant Cycle Phase
-- `HtPhasor` - Phasor Components
-- `HtSine` - Sine Wave
-- `HtTrendMode` - Trend vs Cycle Mode
-- `HtTrendLine` - Instantaneous Trendline
-
-### Statistical Functions
-- `ZScore` - Z-Score
-- `Beta` - Beta Coefficient
-- `Correlation` - Pearson Correlation
-- `StdDev` - Standard Deviation
-- `LinearReg` - Linear Regression
-- `Tsf` - Time Series Forecast
-
-## Test
-
-```bash
-make test
-```
-
-## Clean
-
-```bash
-make clean
-```
+- [Installation guide](../../docs/installation.md)
+- [Complete usage guide](../../docs/usage.md)
+- [FFI memory contract](../../docs/ffi/memory-contract.md)
 
 ## License
 
