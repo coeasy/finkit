@@ -42,6 +42,7 @@ jobs:
           python .ci/pr14_semantic_contract_fix.py
           python .ci/pr14_semantic_contract_fix2.py
           python .ci/pr14_semantic_contract_fix3.py
+          python .ci/pr14_semantic_contract_fix4.py
           cargo fmt --all
           python scripts/gen_ssot_docs.py --generate
           cargo test -p finkit --lib registry::tests --locked
@@ -49,6 +50,7 @@ jobs:
           cargo test -p finkit --lib formula::functions::pr14_semantic_contract_tests --locked
           cargo test -p finkit --lib formula::pine --locked
           cargo test -p finkit --test formula_terminal_golden --locked
+          cargo test -p finkit --test polars_integration_tests --features finkit-polars --locked
           cargo test -p finkit-cli --test schema_cli --locked
 
       - name: Round 3 control flow repair
@@ -80,6 +82,7 @@ jobs:
           rm .ci/pr14_semantic_contract_fix.py
           rm .ci/pr14_semantic_contract_fix2.py
           rm .ci/pr14_semantic_contract_fix3.py
+          rm .ci/pr14_semantic_contract_fix4.py
           git add -A
           git commit -m "fix: complete three-round compute runtime hardening"
           git push origin HEAD:feat/compute-runtime-factorplan-v012
