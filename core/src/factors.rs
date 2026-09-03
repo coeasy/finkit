@@ -570,6 +570,24 @@ impl FactorEngine {
         Ok(())
     }
 
+    pub(crate) fn evaluate_precompiled(
+        &self,
+        execution_order: &[String],
+        required_raw_inputs: &[String],
+        context: &FactorContext,
+    ) -> FactorResult<BTreeMap<String, Vec<f64>>> {
+        self.evaluate_precompiled_raw(execution_order, required_raw_inputs, context)
+    }
+
+    pub(crate) fn evaluate_precompiled_borrowed(
+        &self,
+        execution_order: &[String],
+        required_raw_inputs: &[String],
+        context: &BorrowedFactorContext<'_>,
+    ) -> FactorResult<BTreeMap<String, Vec<f64>>> {
+        self.evaluate_precompiled_raw(execution_order, required_raw_inputs, context)
+    }
+
     fn evaluate_precompiled_raw(
         &self,
         execution_order: &[String],
@@ -610,31 +628,6 @@ impl FactorEngine {
             self.compute_factor(factor, context, &mut cache)?;
         }
         Ok(cache)
-    }
-}
-
-impl crate::compute::FactorPlan {
-    /// Execute this plan in its precompiled topological order over owned input.
-    ///
-    /// Unlike the compatibility `FactorPlan::execute` entry point introduced
-    /// in the first planning phase, this method does not recursively traverse
-    /// dependencies on every call. It also rejects a registry whose dependency
-    /// graph no longer matches the compiled order/raw-input manifest.
-    pub fn execute_precompiled(
-        &self,
-        engine: &FactorEngine,
-        context: &FactorContext,
-    ) -> FactorResult<BTreeMap<String, Vec<f64>>> {
-        engine.evaluate_precompiled_raw(self.execution_order(), self.required_raw_inputs(), context)
-    }
-
-    /// Execute this plan in precompiled order over zero-copy borrowed input.
-    pub fn execute_borrowed(
-        &self,
-        engine: &FactorEngine,
-        context: &BorrowedFactorContext<'_>,
-    ) -> FactorResult<BTreeMap<String, Vec<f64>>> {
-        engine.evaluate_precompiled_raw(self.execution_order(), self.required_raw_inputs(), context)
     }
 }
 

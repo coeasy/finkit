@@ -109,7 +109,7 @@ fn fn_sma(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, For
     }
     let input = &args[0];
     let n = extract_n(args, 1, "SMA")?;
-    // Pine `ta.sma(src, length)` passes only 2 args (m defaults to 1 = plain SMA).
+    // Terminal SMA(X, N[, M]) is recursive smoothing. With two arguments, M defaults to 1; it is not the same algorithm as simple MA(X, N).
     let m = if args.len() == 3 {
         extract_f64_arg(args, 2, "SMA")?
     } else {
@@ -1906,29 +1906,40 @@ fn fn_mfi(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, For
 }
 
 fn fn_cci(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
-    ensure_args_len("CCI", args, 4)?;
-    let high = &args[0];
-    let low = &args[1];
-    let close = &args[2];
-    let n = extract_n(args, 3, "CCI")?;
+    let (source, n) = match args.len() {
+        2 => (args[0].clone(), extract_n(args, 1, "CCI")?),
+        len if len >= 4 => {
+            let high = &args[0];
+            let low = &args[1];
+            let close = &args[2];
+            let n = extract_n(args, 3, "CCI")?;
+            let data_len = high.len().min(low.len()).min(close.len());
+            let mut typical = Array1::zeros(data_len);
+            for i in 0..data_len {
+                typical[i] = (high[i] + low[i] + close[i]) / 3.0;
+            }
+            (typical, n)
+        }
+        _ => {
+            return Err(FormulaError::InvalidParameter(format!(
+                "CCI requires (source, period) or (high, low, close, period), got {} arguments",
+                args.len()
+            )))
+        }
+    };
 
-    let data_len = ctx.data_len;
-    let mut tp = Array1::zeros(data_len);
-    for i in 0..data_len {
-        tp[i] = (high[i] + low[i] + close[i]) / 3.0;
-    }
-
+    let data_len = source.len().min(ctx.data_len);
     let mut result = nan_vec(data_len);
     for i in (n - 1)..data_len {
-        let window_start = (i + 1).saturating_sub(n);
-        let sum: f64 = (window_start..=i).map(|j| tp[j]).sum();
+        let window_start = i + 1 - n;
+        let sum: f64 = (window_start..=i).map(|j| source[j]).sum();
         let mean = sum / n as f64;
         let mean_dev: f64 = (window_start..=i)
-            .map(|j| (tp[j] - mean).abs())
+            .map(|j| (source[j] - mean).abs())
             .sum::<f64>()
             / n as f64;
         if mean_dev > 1e-15 {
-            result[i] = (tp[i] - mean) / (0.015 * mean_dev);
+            result[i] = (source[i] - mean) / (0.015 * mean_dev);
         }
     }
 
@@ -2602,82 +2613,98 @@ fn fn_adx(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, For
     let high = &args[0];
     let low = &args[1];
     let close = &args[2];
-    let n = extract_n(args, 3, "ADX")?;
+    let di_n = extract_n(args, 3, "ADX")?;
 
+    let high_values = high.as_slice().unwrap();
+    let low_values = low.as_slice().unwrap();
+    let close_values = close.as_slice().unwrap();
     let data_len = ctx.data_len;
-    let mut plus_dm = Array1::zeros(data_len);
-    let mut minus_dm = Array1::zeros(data_len);
-    let mut tr = Array1::zeros(data_len);
 
-    tr[0] = high[0] - low[0];
-    for i in 1..data_len {
-        let up_move = high[i] - high[i - 1];
-        let down_move = low[i - 1] - low[i];
-        plus_dm[i] = if up_move > down_move && up_move > 0.0 {
-            up_move
-        } else {
-            0.0
+    // Preserve the established four-argument ADX contract exactly.  Pine's
+    // ta.dmi(diLength, adxSmoothing) uses the five-argument form below.
+    if args.len() == 4 {
+        return match lib_momentum::adx(high_values, low_values, close_values, di_n) {
+            Ok(result) => Ok(result),
+            Err(_) => Ok(nan_vec(data_len)),
         };
-        minus_dm[i] = if down_move > up_move && down_move > 0.0 {
-            down_move
-        } else {
-            0.0
-        };
-        let hl = high[i] - low[i];
-        let hc = (high[i] - close[i - 1]).abs();
-        let lc = (low[i] - close[i - 1]).abs();
-        tr[i] = hl.max(hc).max(lc);
     }
 
-    let atr_vals = match lib_ma::sma(tr.as_slice().unwrap(), n) {
-        Ok(r) => r,
+    let adx_n = extract_n(args, 4, "ADX")?;
+    let plus_di = match lib_momentum::plus_di(high_values, low_values, close_values, di_n) {
+        Ok(result) => result,
         Err(_) => return Ok(nan_vec(data_len)),
     };
-    let apdm_vals = match lib_ma::sma(plus_dm.as_slice().unwrap(), n) {
-        Ok(r) => r,
-        Err(_) => return Ok(nan_vec(data_len)),
-    };
-    let amdm_vals = match lib_ma::sma(minus_dm.as_slice().unwrap(), n) {
-        Ok(r) => r,
+    let minus_di = match lib_momentum::minus_di(high_values, low_values, close_values, di_n) {
+        Ok(result) => result,
         Err(_) => return Ok(nan_vec(data_len)),
     };
 
     let mut dx = nan_vec(data_len);
     for i in 0..data_len {
-        if !atr_vals[i].is_nan() && atr_vals[i].abs() > 1e-15 {
-            let pdi = apdm_vals[i] / atr_vals[i] * 100.0;
-            let mdi = amdm_vals[i] / atr_vals[i] * 100.0;
-            let sum = pdi + mdi;
-            if sum.abs() > 1e-15 {
-                dx[i] = (pdi - mdi).abs() / sum * 100.0;
-            }
+        let plus = plus_di[i];
+        let minus = minus_di[i];
+        if plus.is_finite() && minus.is_finite() {
+            let sum = plus + minus;
+            dx[i] = if sum.abs() > 1e-15 {
+                (plus - minus).abs() / sum * 100.0
+            } else {
+                0.0
+            };
         }
     }
 
-    let dx_vec: Vec<f64> = dx
-        .iter()
-        .map(|&v| if v.is_nan() { 0.0 } else { v })
-        .collect();
-    match lib_ma::sma(&dx_vec, n) {
-        Ok(result) => Ok(result),
-        Err(_) => Ok(nan_vec(data_len)),
+    // Pine ta.dmi smooths DX with Wilder/RMA using adxSmoothing.  Seed the
+    // recursion with the arithmetic mean of the first adx_n valid DX values,
+    // then use alpha = 1/adx_n.  This keeps diLength and adxSmoothing distinct.
+    let mut output = nan_vec(data_len);
+    let Some(first_valid) = dx.iter().position(|value| value.is_finite()) else {
+        return Ok(output);
+    };
+    let Some(seed_end) = first_valid.checked_add(adx_n - 1) else {
+        return Ok(output);
+    };
+    if seed_end >= data_len || (first_valid..=seed_end).any(|i| !dx[i].is_finite()) {
+        return Ok(output);
     }
+
+    let seed = (first_valid..=seed_end).map(|i| dx[i]).sum::<f64>() / adx_n as f64;
+    output[seed_end] = seed;
+    let mut previous = seed;
+    for i in (seed_end + 1)..data_len {
+        let value = dx[i];
+        if value.is_finite() {
+            previous = (value + (adx_n as f64 - 1.0) * previous) / adx_n as f64;
+            output[i] = previous;
+        }
+    }
+
+    Ok(output)
 }
 
 fn fn_sar(_ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
-    ensure_args_len("SAR", args, 4)?;
+    if args.len() < 4 || args.len() > 5 {
+        return Err(FormulaError::InvalidParameter(format!(
+            "SAR requires 4 arguments (high, low, step, max) or 5 arguments (high, low, start, increment, max), got {}",
+            args.len()
+        )));
+    }
     let high = &args[0];
     let low = &args[1];
-    let af_step = if args.len() > 2 && !args[2].is_empty() && !args[2][0].is_nan() {
-        args[2][0]
+    let af_start = extract_f64_arg(args, 2, "SAR")?;
+    let (af_increment, af_max) = if args.len() == 5 {
+        (
+            extract_f64_arg(args, 3, "SAR")?,
+            extract_f64_arg(args, 4, "SAR")?,
+        )
     } else {
-        0.02
+        (af_start, extract_f64_arg(args, 3, "SAR")?)
     };
-    let af_max = if args.len() > 3 && !args[3].is_empty() && !args[3][0].is_nan() {
-        args[3][0]
-    } else {
-        0.2
-    };
+    if !(af_start > 0.0 && af_increment > 0.0 && af_max >= af_start) {
+        return Err(FormulaError::InvalidParameter(
+            "SAR acceleration factors must satisfy start > 0, increment > 0, max >= start"
+                .to_string(),
+        ));
+    }
 
     let data_len = high.len().min(low.len());
     if data_len < 2 {
@@ -2686,7 +2713,7 @@ fn fn_sar(_ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, Fo
 
     let mut result = nan_vec(data_len);
     let mut is_long = high[1] - low[1] > 0.0;
-    let mut af = af_step;
+    let mut af = af_start;
     let mut ep = if is_long { high[0] } else { low[0] };
     result[0] = if is_long { low[0] } else { high[0] };
 
@@ -2702,13 +2729,11 @@ fn fn_sar(_ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, Fo
             if low[i] < sar {
                 is_long = false;
                 sar = ep;
-                af = af_step;
+                af = af_start;
                 ep = low[i];
-            } else {
-                if high[i] > ep {
-                    ep = high[i];
-                    af = (af + af_step).min(af_max);
-                }
+            } else if high[i] > ep {
+                ep = high[i];
+                af = (af + af_increment).min(af_max);
             }
         } else {
             sar = sar.max(high[i - 1]);
@@ -2718,13 +2743,11 @@ fn fn_sar(_ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, Fo
             if high[i] > sar {
                 is_long = true;
                 sar = ep;
-                af = af_step;
+                af = af_start;
                 ep = high[i];
-            } else {
-                if low[i] < ep {
-                    ep = low[i];
-                    af = (af + af_step).min(af_max);
-                }
+            } else if low[i] < ep {
+                ep = low[i];
+                af = (af + af_increment).min(af_max);
             }
         }
 
@@ -2874,22 +2897,39 @@ fn fn_supertrend(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f6
 }
 
 fn fn_vwap(_ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
-    ensure_args_len("VWAP", args, 4)?;
-    let high = &args[0];
-    let low = &args[1];
-    let close = &args[2];
-    let volume = &args[3];
-    let len = high.len().min(low.len()).min(close.len()).min(volume.len());
-    let mut result = Array1::zeros(len);
-    let mut cum_tp_vol = 0.0f64;
-    let mut cum_vol = 0.0f64;
-    for i in 0..len {
-        let tp = (high[i] + low[i] + close[i]) / 3.0;
-        cum_tp_vol += tp * volume[i];
-        cum_vol += volume[i];
-        if cum_vol.abs() > 1e-15 {
-            result[i] = cum_tp_vol / cum_vol;
+    let (price, volume) = match args.len() {
+        2 => (args[0].clone(), &args[1]),
+        len if len >= 4 => {
+            let high = &args[0];
+            let low = &args[1];
+            let close = &args[2];
+            let data_len = high.len().min(low.len()).min(close.len());
+            let mut typical = Array1::zeros(data_len);
+            for i in 0..data_len {
+                typical[i] = (high[i] + low[i] + close[i]) / 3.0;
+            }
+            (typical, &args[3])
         }
+        _ => {
+            return Err(FormulaError::InvalidParameter(format!(
+                "VWAP requires (source, volume) or (high, low, close, volume), got {} arguments",
+                args.len()
+            )))
+        }
+    };
+
+    let len = price.len().min(volume.len());
+    let mut result = Array1::zeros(len);
+    let mut cum_price_volume = 0.0f64;
+    let mut cum_volume = 0.0f64;
+    for i in 0..len {
+        cum_price_volume += price[i] * volume[i];
+        cum_volume += volume[i];
+        result[i] = if cum_volume.abs() > 1e-15 {
+            cum_price_volume / cum_volume
+        } else {
+            f64::NAN
+        };
     }
     Ok(result)
 }
@@ -5657,6 +5697,28 @@ pub fn get_builtin_functions() -> HashMap<String, FormulaFn> {
     map.insert("TURNOVER".to_string(), fn_turnover as FormulaFn);
     map.insert("RS_RATIO".to_string(), fn_rs_ratio as FormulaFn);
 
+    // Registry aliases are executable compatibility names, not merely documentation.
+    // If an alias already has an implementation, it must be the exact same function as
+    // its canonical target. This fail-fast invariant prevents MA/SMA-style semantic
+    // collisions from silently entering the formula runtime again.
+    let registry = crate::registry::builtin_function_registry();
+    for spec in registry.iter() {
+        let Some(&canonical_fn) = map.get(spec.name) else {
+            continue;
+        };
+        for &alias in spec.aliases {
+            if let Some(&existing_fn) = map.get(alias) {
+                assert!(
+                    std::ptr::fn_addr_eq(existing_fn, canonical_fn),
+                    "formula alias {alias} resolves to a different implementation than canonical {}",
+                    spec.name
+                );
+            } else {
+                map.insert(alias.to_string(), canonical_fn);
+            }
+        }
+    }
+
     map
 }
 
@@ -6582,5 +6644,134 @@ mod talib_compat_tests {
 
         assert_eq!(hhv.to_vec(), vec![0.0, 1.0, 2.0, 1.0, 0.0]);
         assert_eq!(llv.to_vec(), vec![0.0, 0.0, 1.0, 2.0, 2.0]);
+    }
+}
+
+#[cfg(test)]
+mod pr14_semantic_contract_tests {
+    use super::*;
+    use ndarray::array;
+
+    fn context(close: Array1<f64>, volume: Array1<f64>) -> FormulaContext {
+        let len = close.len();
+        let open = close.clone();
+        let high = close.mapv(|v| v + 1.0);
+        let low = close.mapv(|v| v - 1.0);
+        assert_eq!(volume.len(), len);
+        FormulaContext::new(open, high, low, close, volume, None)
+    }
+
+    fn scalar(len: usize, value: f64) -> Array1<f64> {
+        Array1::from_elem(len, value)
+    }
+
+    #[test]
+    fn ma_and_terminal_sma_are_distinct_algorithms() {
+        let values = array![1.0, 2.0, 3.0, 4.0, 5.0];
+        let ctx = context(values.clone(), Array1::ones(values.len()));
+        let n = scalar(values.len(), 3.0);
+        let ma = fn_ma(&ctx, &[values.clone(), n.clone()]).unwrap();
+        let sma = fn_sma(&ctx, &[values, n]).unwrap();
+        assert!(ma[0].is_nan());
+        assert!((ma[2] - 2.0).abs() < 1e-12);
+        assert!((sma[2] - (17.0 / 9.0)).abs() < 1e-12);
+        assert_ne!(ma[4], sma[4]);
+    }
+
+    #[test]
+    fn registry_aliases_cannot_shadow_different_formula_implementations() {
+        let map = get_builtin_functions();
+        let registry = crate::registry::builtin_function_registry();
+        for spec in registry.iter() {
+            let Some(&canonical_fn) = map.get(spec.name) else {
+                continue;
+            };
+            for &alias in spec.aliases {
+                let alias_fn = *map
+                    .get(alias)
+                    .unwrap_or_else(|| panic!("registry alias {alias} is not executable"));
+                assert!(
+                    std::ptr::fn_addr_eq(alias_fn, canonical_fn),
+                    "alias {alias} differs from canonical {}",
+                    spec.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn pine_source_overloads_preserve_requested_series() {
+        let close = array![10.0, 20.0, 30.0, 40.0];
+        let volume = array![1.0, 2.0, 1.0, 2.0];
+        let ctx = context(close.clone(), volume.clone());
+        let n = scalar(close.len(), 3.0);
+
+        let cci = fn_cci(&ctx, &[close.clone(), n]).unwrap();
+        assert!(cci[2].is_finite());
+
+        let vwap = fn_vwap(&ctx, &[close, volume]).unwrap();
+        assert!((vwap[0] - 10.0).abs() < 1e-12);
+        assert!((vwap[1] - (50.0 / 3.0)).abs() < 1e-12);
+        assert!((vwap[2] - 20.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn adx_keeps_di_length_distinct_from_adx_smoothing() {
+        let close = ndarray::array![10.0, 10.5, 11.0, 10.7, 11.6, 12.2, 11.9, 12.8, 13.4, 13.1];
+        let volume = Array1::ones(close.len());
+        let ctx = context(close.clone(), volume);
+        let high = close.mapv(|v| v + 0.8);
+        let low = close.mapv(|v| v - 0.6);
+        let len = close.len();
+        let di3 = scalar(len, 3.0);
+        let adx2 = scalar(len, 2.0);
+        let adx5 = scalar(len, 5.0);
+        let fast = fn_adx(
+            &ctx,
+            &[high.clone(), low.clone(), close.clone(), di3.clone(), adx2],
+        )
+        .unwrap();
+        let slow = fn_adx(&ctx, &[high, low, close, di3, adx5]).unwrap();
+        assert!(fast
+            .iter()
+            .zip(slow.iter())
+            .any(|(a, b)| a.is_finite() && b.is_finite() && (*a - *b).abs() > 1e-12));
+    }
+
+    #[test]
+    fn sar_keeps_legacy_four_arg_form_and_separate_increment() {
+        let high = array![10.0, 11.0, 12.0, 13.0, 14.0, 15.0];
+        let low = array![9.0, 10.0, 11.0, 12.0, 13.0, 14.0];
+        let len = high.len();
+        let ctx = context(array![9.5, 10.5, 11.5, 12.5, 13.5, 14.5], Array1::ones(len));
+        let start = scalar(len, 0.02);
+        let inc_small = scalar(len, 0.01);
+        let inc_large = scalar(len, 0.05);
+        let max = scalar(len, 0.2);
+
+        let legacy = fn_sar(
+            &ctx,
+            &[high.clone(), low.clone(), start.clone(), max.clone()],
+        )
+        .unwrap();
+        let small = fn_sar(
+            &ctx,
+            &[
+                high.clone(),
+                low.clone(),
+                start.clone(),
+                inc_small,
+                max.clone(),
+            ],
+        )
+        .unwrap();
+        let large = fn_sar(&ctx, &[high, low, start, inc_large, max]).unwrap();
+        assert_eq!(legacy.len(), len);
+        assert_eq!(small.len(), len);
+        assert_eq!(large.len(), len);
+        assert!(small
+            .iter()
+            .zip(large.iter())
+            .any(|(a, b)| (*a - *b).abs() > 1e-12));
     }
 }

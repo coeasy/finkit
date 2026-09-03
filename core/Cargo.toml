@@ -92,9 +92,9 @@ name = "parallel_batch_bench"
 harness = false
 required-features = ["rayon"]
 
-# B1: Memory profiling benchmark — uses dhat-rs to measure peak heap
-# allocation per indicator at 1M / 10M scales. Outputs a JSON report
-# consumed by `.github/scripts/check_memory_regression.py`.
+# B1: Optional dhat-rs profiling entry point. The blocking allocation
+# regression contract lives in `core/tests/memory_regression.rs`, where the
+# caller-owned `_into` hot path is required to stay allocation-free.
 [[bench]]
 name = "memory_profile"
 harness = false

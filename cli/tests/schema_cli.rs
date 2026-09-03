@@ -25,12 +25,15 @@ fn full_schema_is_machine_readable_and_versioned() {
 }
 
 #[test]
-fn schema_cli_resolves_compatibility_aliases() {
-    let schema = run_schema(&["--function", "ma", "--compact"]);
-    assert_eq!(schema["schema_version"], "finkit.function.v1");
-    assert_eq!(schema["function"]["name"], "SMA");
-    assert_eq!(schema["function"]["effect"], "pure");
-    assert_eq!(schema["function"]["lookback"], "period_minus_one");
+fn schema_cli_resolves_canonical_names_and_compatibility_aliases() {
+    let ma = run_schema(&["--function", "ma", "--compact"]);
+    assert_eq!(ma["schema_version"], "finkit.function.v1");
+    assert_eq!(ma["function"]["name"], "MA");
+    assert_eq!(ma["function"]["effect"], "pure");
+    assert_eq!(ma["function"]["lookback"], "period_minus_one");
+
+    let boll = run_schema(&["--function", "boll", "--compact"]);
+    assert_eq!(boll["function"]["name"], "BBANDS");
 }
 
 #[test]

@@ -68,6 +68,7 @@ struct FormulaLowerer<'a> {
     next_id: usize,
     last_write: BTreeMap<String, ComputeNodeId>,
     last_effect: Option<ComputeNodeId>,
+    last_control_flow: Option<ComputeNodeId>,
 }
 
 impl<'a> FormulaLowerer<'a> {
@@ -78,6 +79,7 @@ impl<'a> FormulaLowerer<'a> {
             next_id: 0,
             last_write: BTreeMap::new(),
             last_effect: None,
+            last_control_flow: None,
         }
     }
 
@@ -108,19 +110,11 @@ impl<'a> FormulaLowerer<'a> {
             }
             AstNode::FunctionCall { name, args } => {
                 let dependencies = args.iter().map(|arg| self.lower(arg)).collect();
-                let capabilities = self.function_capabilities(name);
+                let (operation_name, capabilities) = self.function_metadata(name);
                 if capabilities.effect.is_pure() {
-                    self.add_node(
-                        format!("CALL:{}", canonical_name(name)),
-                        dependencies,
-                        capabilities,
-                    )
+                    self.add_node(format!("CALL:{operation_name}"), dependencies, capabilities)
                 } else {
-                    self.add_effect(
-                        format!("CALL:{}", canonical_name(name)),
-                        dependencies,
-                        capabilities,
-                    )
+                    self.add_effect(format!("CALL:{operation_name}"), dependencies, capabilities)
                 }
             }
             AstNode::IndexAccess { array, index } => {
@@ -259,29 +253,50 @@ impl<'a> FormulaLowerer<'a> {
             }
             AstNode::WhileLoop { cond, .. } => {
                 let cond = self.lower(cond);
-                self.add_effect("WHILE_LOOP", vec![cond], opaque_control_flow_capabilities())
+                let id =
+                    self.add_effect("WHILE_LOOP", vec![cond], opaque_control_flow_capabilities());
+                self.last_control_flow = Some(id);
+                id
             }
         }
     }
 
     fn lower_variable(&mut self, name: &str) -> ComputeNodeId {
         let key = canonical_name(name);
-        let dependencies = self.last_write.get(&key).copied().into_iter().collect();
+        let mut dependencies = Vec::with_capacity(2);
+        if let Some(write) = self.last_write.get(&key).copied() {
+            dependencies.push(write);
+        }
+        if let Some(barrier) = self.last_control_flow {
+            if !dependencies.contains(&barrier) {
+                dependencies.push(barrier);
+            }
+        }
         self.add_pure(format!("VARIABLE:{key}"), dependencies)
     }
 
-    fn function_capabilities(&self, name: &str) -> ComputeCapabilities {
+    fn function_metadata(&self, name: &str) -> (String, ComputeCapabilities) {
         self.registry.get(name).map_or_else(
-            || ComputeCapabilities {
-                // Unknown/custom formula functions are deliberately conservative.
-                // Once registered in the SSOT they regain precise capabilities.
-                deterministic: false,
-                streaming: false,
-                stateful: true,
-                lookback: LookbackRequirement::Dynamic,
-                effect: ComputeEffect::Stateful,
+            || {
+                (
+                    canonical_name(name),
+                    ComputeCapabilities {
+                        // Unknown/custom formula functions are deliberately conservative.
+                        // Once registered in the SSOT they regain precise capabilities.
+                        deterministic: false,
+                        streaming: false,
+                        stateful: true,
+                        lookback: LookbackRequirement::Dynamic,
+                        effect: ComputeEffect::Stateful,
+                    },
+                )
             },
-            ComputeCapabilities::from_function_spec,
+            |spec| {
+                (
+                    canonical_name(spec.name),
+                    ComputeCapabilities::from_function_spec(spec),
+                )
+            },
         )
     }
 
@@ -432,6 +447,21 @@ mod tests {
     }
 
     #[test]
+    fn ma_and_sma_keep_distinct_canonical_operations() {
+        let ma = FormulaComputePlan::compile(&parse_formula("MA(CLOSE,5)").unwrap()).unwrap();
+        let sma = FormulaComputePlan::compile(&parse_formula("SMA(CLOSE,5,1)").unwrap()).unwrap();
+
+        let ma_node = ma.plan().node(ma.root()).unwrap();
+        let sma_node = sma.plan().node(sma.root()).unwrap();
+        assert_eq!(ma_node.operation, "CALL:MA");
+        assert_eq!(sma_node.operation, "CALL:SMA");
+        assert_ne!(
+            ma_node.capabilities.lookback,
+            sma_node.capabilities.lookback
+        );
+    }
+
+    #[test]
     fn unknown_function_is_conservative_until_registered() {
         let ast = AstNode::FunctionCall {
             name: "CUSTOM_FN".to_string(),
@@ -446,6 +476,41 @@ mod tests {
         assert!(capabilities.stateful);
         assert_eq!(capabilities.effect, ComputeEffect::Stateful);
         assert_eq!(capabilities.lookback, LookbackRequirement::Dynamic);
+    }
+
+    #[test]
+    fn reads_after_opaque_control_flow_depend_on_the_control_barrier() {
+        let ast = AstNode::Statements(vec![
+            AstNode::Assignment {
+                name: "X".to_string(),
+                expr: Box::new(AstNode::Number(0.0)),
+            },
+            AstNode::WhileLoop {
+                cond: Box::new(AstNode::Number(0.0)),
+                body: vec![AstNode::Assignment {
+                    name: "X".to_string(),
+                    expr: Box::new(AstNode::Number(1.0)),
+                }],
+            },
+            AstNode::Variable("X".to_string()),
+        ]);
+        let formula_plan = FormulaComputePlan::compile(&ast).unwrap();
+        let plan = formula_plan.plan();
+        let barrier = plan
+            .execution_order()
+            .iter()
+            .copied()
+            .find(|&id| plan.node(id).unwrap().operation == "WHILE_LOOP")
+            .unwrap();
+        let read = plan
+            .execution_order()
+            .iter()
+            .copied()
+            .filter(|&id| plan.node(id).unwrap().operation == "VARIABLE:X")
+            .last()
+            .unwrap();
+
+        assert!(plan.node(read).unwrap().dependencies.contains(&barrier));
     }
 
     #[test]

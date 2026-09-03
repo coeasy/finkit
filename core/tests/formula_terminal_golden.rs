@@ -64,5 +64,47 @@ fn tdx_golden_fixture_preserves_assignment_and_named_output_effects() {
 #[test]
 fn pine_golden_fixture_parses_as_documented_subset() {
     let ast = parse_formula_for_terminal(PINE, FormulaTerminal::TradingView).unwrap();
-    assert!(!format!("{ast:?}").is_empty());
+    let debug = format!("{ast:?}");
+    assert!(!debug.is_empty());
+    assert!(debug.contains("FunctionCall { name: \"MA\""));
+    assert!(!debug.contains("FunctionCall { name: \"SMA\""));
+}
+
+#[test]
+fn pine_golden_fixture_preserves_semantic_distinctions() {
+    let ast = parse_formula_for_terminal(PINE, FormulaTerminal::TradingView).unwrap();
+    let debug = format!("{ast:?}");
+    assert!(debug.contains("MA"), "ta.sma must lower to simple MA");
+    assert!(
+        debug.contains("HHV"),
+        "ta.highest must lower to rolling HHV"
+    );
+    assert!(debug.contains("LLV"), "ta.lowest must lower to rolling LLV");
+    assert!(
+        debug.contains("ISNA"),
+        "na(x) must lower to an ISNA predicate"
+    );
+    assert!(debug.contains("CCI"));
+    assert!(debug.contains("VWAP"));
+    assert!(debug.contains("SAR"));
+    assert!(
+        debug.contains("Number(3.0)"),
+        "DMI lengths must survive tuple lowering"
+    );
+    assert!(
+        debug.contains("STOCHF"),
+        "ta.stoch must keep Pine fast-K semantics"
+    );
+    assert!(debug.contains("AROON_UP") && debug.contains("AROON_DN"));
+    assert!(
+        debug.contains("MOM"),
+        "ta.change must lower to one-bar momentum by default"
+    );
+    let plus = debug.find("PLUS_DI").expect("DMI +DI lowering");
+    let minus = debug.find("MINUS_DI").expect("DMI -DI lowering");
+    let adx = debug.find("ADX").expect("DMI ADX lowering");
+    assert!(
+        plus < minus && minus < adx,
+        "DMI tuple order must be +DI, -DI, ADX"
+    );
 }

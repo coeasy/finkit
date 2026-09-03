@@ -1,4 +1,4 @@
-#![cfg(feature = "fta-polars")]
+#![cfg(feature = "finkit-polars")]
 
 use finkit::polars_ext::{TaDataFrame, TaSeries};
 use polars::prelude::*;

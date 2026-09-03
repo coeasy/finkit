@@ -7,7 +7,9 @@
 //! performs the same up-front dependency validation for the existing factor
 //! engine while preserving its public execution contract.
 
-use crate::factors::{FactorContext, FactorEngine, FactorError, FactorRegistry, FactorResult};
+use crate::factors::{
+    BorrowedFactorContext, FactorContext, FactorEngine, FactorError, FactorRegistry, FactorResult,
+};
 use crate::registry::{FunctionSpec, LookbackSpec};
 use crate::runtime::{MarketFrame, NanPolicy, RuntimeError, WarmupPolicy};
 use std::collections::{BTreeMap, BTreeSet};
@@ -412,29 +414,61 @@ impl FactorPlan {
         &self.required_raw_inputs
     }
 
-    /// Validate raw inputs before numerical execution starts.
+    /// Validate owned raw inputs before numerical execution starts.
     pub fn validate_context(&self, context: &FactorContext) -> FactorResult<()> {
+        self.validate_raw_inputs(|name| context.get(name).is_some())
+    }
+
+    /// Validate borrowed raw inputs before numerical execution starts.
+    pub fn validate_borrowed_context(
+        &self,
+        context: &BorrowedFactorContext<'_>,
+    ) -> FactorResult<()> {
+        self.validate_raw_inputs(|name| context.get(name).is_some())
+    }
+
+    fn validate_raw_inputs(&self, mut contains: impl FnMut(&str) -> bool) -> FactorResult<()> {
         for input in &self.required_raw_inputs {
-            if context.get(input).is_none() {
+            if !contains(input) {
                 return Err(FactorError::MissingInput(input.clone()));
             }
         }
         Ok(())
     }
 
-    /// Execute the plan through the current factor engine implementation.
-    ///
-    /// This preserves the existing memoization and result semantics. A future
-    /// optimized backend can consume [`Self::execution_order`] directly
-    /// without changing this public planning contract.
+    /// Execute the plan through the precompiled topological order.
     pub fn execute(
+        &self,
+        engine: &FactorEngine,
+        context: &FactorContext,
+    ) -> FactorResult<BTreeMap<String, Vec<f64>>> {
+        self.execute_precompiled(engine, context)
+    }
+
+    /// Execute this plan in precompiled order over owned input.
+    pub fn execute_precompiled(
         &self,
         engine: &FactorEngine,
         context: &FactorContext,
     ) -> FactorResult<BTreeMap<String, Vec<f64>>> {
         self.validate_context(context)?;
         self.validate_engine(engine)?;
-        self.execute_precompiled(engine, context)
+        engine.evaluate_precompiled(self.execution_order(), self.required_raw_inputs(), context)
+    }
+
+    /// Execute this plan in precompiled order over zero-copy borrowed input.
+    pub fn execute_borrowed(
+        &self,
+        engine: &FactorEngine,
+        context: &BorrowedFactorContext<'_>,
+    ) -> FactorResult<BTreeMap<String, Vec<f64>>> {
+        self.validate_borrowed_context(context)?;
+        self.validate_engine(engine)?;
+        engine.evaluate_precompiled_borrowed(
+            self.execution_order(),
+            self.required_raw_inputs(),
+            context,
+        )
     }
 
     fn validate_engine(&self, engine: &FactorEngine) -> FactorResult<()> {
@@ -449,7 +483,7 @@ impl FactorPlan {
                 .expect("every planned factor stores its dependencies");
             if &current.dependencies != planned {
                 return Err(FactorError::InvalidParameter(format!(
-                    "factor plan is stale because dependencies changed for {name}"
+                    "stale factor plan: dependencies changed for {name}"
                 )));
             }
         }
@@ -611,13 +645,20 @@ mod tests {
     #[test]
     fn registry_specs_map_to_compute_capabilities() {
         let registry = builtin_function_registry();
-        let sma = registry.get("SMA").unwrap();
-        let capabilities = ComputeCapabilities::from_function_spec(sma);
-        assert!(capabilities.deterministic);
-        assert!(capabilities.streaming);
-        assert!(!capabilities.stateful);
-        assert_eq!(capabilities.lookback, LookbackRequirement::PeriodMinusOne);
-        assert!(capabilities.effect.is_pure());
+
+        let ma = ComputeCapabilities::from_function_spec(registry.get("MA").unwrap());
+        assert!(ma.deterministic);
+        assert!(ma.streaming);
+        assert!(!ma.stateful);
+        assert_eq!(ma.lookback, LookbackRequirement::PeriodMinusOne);
+        assert!(ma.effect.is_pure());
+
+        let sma = ComputeCapabilities::from_function_spec(registry.get("SMA").unwrap());
+        assert!(sma.deterministic);
+        assert!(sma.streaming);
+        assert!(!sma.stateful);
+        assert_eq!(sma.lookback, LookbackRequirement::Dynamic);
+        assert!(sma.effect.is_pure());
     }
 
     #[test]
@@ -674,6 +715,62 @@ mod tests {
         let engine = FactorEngine::new(registry);
         let values = plan.execute(&engine, &context).unwrap();
         assert_eq!(values["score"], vec![11.0, 22.0]);
+    }
+
+    #[test]
+    fn factor_plan_direct_paths_reject_stale_registry_dependencies() {
+        fn identity(name: &'static str, dependency: &'static str) -> FactorDefinition {
+            FactorDefinition::new(
+                name,
+                [dependency],
+                FactorKind::TimeSeries,
+                FactorDirection::HigherBetter,
+                Arc::new(move |inputs| Ok(inputs.get(dependency)?.to_vec())),
+            )
+        }
+
+        let mut original = FactorRegistry::new();
+        original.register(identity("target", "close")).unwrap();
+        original.register(identity("other", "volume")).unwrap();
+        let plan = FactorPlan::compile(&original, &["target", "other"]).unwrap();
+        assert_eq!(
+            plan.required_raw_inputs()
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            vec!["close", "volume"]
+        );
+
+        let mut changed = FactorRegistry::new();
+        changed.register(identity("target", "volume")).unwrap();
+        changed.register(identity("other", "volume")).unwrap();
+        let engine = FactorEngine::new(changed);
+
+        let owned = FactorContext::new()
+            .with_series("close", vec![1.0, 2.0])
+            .unwrap()
+            .with_series("volume", vec![10.0, 20.0])
+            .unwrap();
+        let owned_error = plan.execute_precompiled(&engine, &owned).unwrap_err();
+        assert!(matches!(
+            owned_error,
+            FactorError::InvalidParameter(message)
+                if message.contains("stale factor plan") && message.contains("target")
+        ));
+
+        let close = [1.0, 2.0];
+        let volume = [10.0, 20.0];
+        let borrowed = BorrowedFactorContext::new()
+            .with_series("close", &close)
+            .unwrap()
+            .with_series("volume", &volume)
+            .unwrap();
+        let borrowed_error = plan.execute_borrowed(&engine, &borrowed).unwrap_err();
+        assert!(matches!(
+            borrowed_error,
+            FactorError::InvalidParameter(message)
+                if message.contains("stale factor plan") && message.contains("target")
+        ));
     }
 
     #[test]

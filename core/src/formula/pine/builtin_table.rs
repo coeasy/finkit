@@ -75,7 +75,14 @@ fn build_lookup(entries: &[BuiltinMapping]) -> HashMap<String, BuiltinMapping> {
     let mut map = HashMap::new();
     for entry in entries {
         let key = make_key(entry.namespace.as_deref(), &entry.pine_name);
-        map.insert(key, entry.clone());
+        match map.entry(key.clone()) {
+            std::collections::hash_map::Entry::Vacant(slot) => {
+                slot.insert(entry.clone());
+            }
+            std::collections::hash_map::Entry::Occupied(_) => {
+                panic!("duplicate Pine builtin mapping key: {key}");
+            }
+        }
     }
     map
 }
@@ -87,10 +94,10 @@ fn default_mappings() -> Vec<BuiltinMapping> {
         BuiltinMapping {
             namespace: Some("ta".to_string()),
             pine_name: "sma".to_string(),
-            alpha_ta_name: "SMA".to_string(),
+            alpha_ta_name: "MA".to_string(),
             multi_return: false,
-            return_names: vec!["SMA".to_string()],
-            description: "Simple Moving Average — ta.sma(source, length) → SMA".to_string(),
+            return_names: vec!["MA".to_string()],
+            description: "Simple Moving Average — ta.sma(source, length) → MA".to_string(),
         },
         BuiltinMapping {
             namespace: Some("ta".to_string()),
@@ -129,10 +136,10 @@ fn default_mappings() -> Vec<BuiltinMapping> {
         BuiltinMapping {
             namespace: Some("ta".to_string()),
             pine_name: "stoch".to_string(),
-            alpha_ta_name: "STOCH".to_string(),
-            multi_return: true,
-            return_names: vec!["K".to_string(), "D".to_string()],
-            description: "Stochastic / KDJ — ta.stoch(...) → K, D (maps to KDJ/STOCH)".to_string(),
+            alpha_ta_name: "STOCHF".to_string(),
+            multi_return: false,
+            return_names: vec!["STOCHF".to_string()],
+            description: "Stochastic oscillator — ta.stoch(source, peak, valley, period) → unsmoothed STOCHF K".to_string(),
         },
         BuiltinMapping {
             namespace: Some("ta".to_string()),
@@ -279,12 +286,12 @@ fn default_mappings() -> Vec<BuiltinMapping> {
             alpha_ta_name: "ADX".to_string(),
             multi_return: true,
             return_names: vec![
-                "ADX".to_string(),
                 "PLUS_DI".to_string(),
                 "MINUS_DI".to_string(),
+                "ADX".to_string(),
             ],
             description:
-                "Directional Movement Index — ta.dmi(diLength, adxSmoothing) → ADX, +DI, -DI"
+                "Directional Movement Index — ta.dmi(diLength, adxSmoothing) → +DI, -DI, ADX"
                     .to_string(),
         },
         BuiltinMapping {
@@ -339,18 +346,18 @@ fn default_mappings() -> Vec<BuiltinMapping> {
         BuiltinMapping {
             namespace: Some("ta".to_string()),
             pine_name: "highest".to_string(),
-            alpha_ta_name: "MAX".to_string(),
+            alpha_ta_name: "HHV".to_string(),
             multi_return: false,
-            return_names: vec!["MAX".to_string()],
-            description: "Highest value — ta.highest(source, length) → HHV / MAX".to_string(),
+            return_names: vec!["HHV".to_string()],
+            description: "Rolling highest value — ta.highest(source, length) → HHV".to_string(),
         },
         BuiltinMapping {
             namespace: Some("ta".to_string()),
             pine_name: "lowest".to_string(),
-            alpha_ta_name: "MIN".to_string(),
+            alpha_ta_name: "LLV".to_string(),
             multi_return: false,
-            return_names: vec!["MIN".to_string()],
-            description: "Lowest value — ta.lowest(source, length) → LLV / MIN".to_string(),
+            return_names: vec!["LLV".to_string()],
+            description: "Rolling lowest value — ta.lowest(source, length) → LLV".to_string(),
         },
         BuiltinMapping {
             namespace: Some("ta".to_string()),
@@ -396,7 +403,7 @@ mod tests {
     fn test_resolve_ta_sma() {
         let table = PineBuiltinTable::new();
         let m = table.resolve(Some("ta"), "sma").unwrap();
-        assert_eq!(m.alpha_ta_name, "SMA");
+        assert_eq!(m.alpha_ta_name, "MA");
     }
 
     #[test]
@@ -418,6 +425,87 @@ mod tests {
     fn test_mapping_doc_not_empty() {
         let doc = mapping_doc();
         assert!(doc.contains("ta.sma"));
-        assert!(doc.contains("SMA"));
+        assert!(doc.contains("| ta | sma | MA |"));
+    }
+}
+
+#[cfg(test)]
+mod pr14_semantic_mapping_tests {
+    use super::*;
+
+    #[test]
+    fn similarly_named_builtins_keep_distinct_semantics() {
+        let table = PineBuiltinTable::new();
+        assert_eq!(
+            table.resolve(Some("ta"), "sma").unwrap().alpha_ta_name,
+            "MA"
+        );
+        assert_eq!(
+            table.resolve(Some("ta"), "highest").unwrap().alpha_ta_name,
+            "HHV"
+        );
+        assert_eq!(
+            table.resolve(Some("ta"), "lowest").unwrap().alpha_ta_name,
+            "LLV"
+        );
+        assert_eq!(
+            table.resolve(Some("math"), "max").unwrap().alpha_ta_name,
+            "MAX"
+        );
+        assert_eq!(
+            table.resolve(Some("math"), "min").unwrap().alpha_ta_name,
+            "MIN"
+        );
+    }
+
+    #[test]
+    fn stochastic_metadata_matches_single_series_lowering() {
+        let table = PineBuiltinTable::new();
+        let stoch = table.resolve(Some("ta"), "stoch").unwrap();
+        assert!(!stoch.multi_return);
+        assert_eq!(stoch.alpha_ta_name, "STOCHF");
+        assert_eq!(stoch.return_names, ["STOCHF"]);
+    }
+
+    #[test]
+    fn dmi_metadata_matches_tuple_lowering_order() {
+        let table = PineBuiltinTable::new();
+        let dmi = table.resolve(Some("ta"), "dmi").unwrap();
+        assert_eq!(dmi.return_names, ["PLUS_DI", "MINUS_DI", "ADX"]);
+    }
+}
+
+#[cfg(test)]
+mod pr14_semantic_mapping_v3_tests {
+    use super::*;
+
+    #[test]
+    fn stochastic_metadata_matches_unsmoothed_mapper_target() {
+        let table = PineBuiltinTable::new();
+        let stoch = table.resolve(Some("ta"), "stoch").unwrap();
+        assert!(!stoch.multi_return);
+        assert_eq!(stoch.alpha_ta_name, "STOCHF");
+        assert_eq!(stoch.return_names, ["STOCHF"]);
+    }
+}
+
+#[cfg(test)]
+mod pr14_mapping_integrity_tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn default_mapping_keys_are_unique() {
+        let entries = default_mappings();
+        let mut seen = HashSet::new();
+        for entry in &entries {
+            let key = make_key(entry.namespace.as_deref(), &entry.pine_name);
+            assert!(
+                seen.insert(key.clone()),
+                "duplicate Pine mapping key: {key}"
+            );
+        }
+        let table = PineBuiltinTable::new();
+        assert_eq!(table.entries().len(), seen.len());
     }
 }
