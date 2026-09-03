@@ -33,7 +33,7 @@ ci = replace_once(ci, anchor, job + anchor, "CI regression gate insertion")
 ci_path.write_text(ci, encoding="utf-8")
 
 cargo_path = Path("core/Cargo.toml")
-cargo = cargo_path.read_text(encoding="utf-8")ncargo = cargo
+cargo = cargo_path.read_text(encoding="utf-8")
 old = '''# B1: Memory profiling benchmark — uses dhat-rs to measure peak heap
 # allocation per indicator at 1M / 10M scales. Outputs a JSON report
 # consumed by `.github/scripts/check_memory_regression.py`.
