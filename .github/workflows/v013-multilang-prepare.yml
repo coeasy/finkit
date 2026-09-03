@@ -1,0 +1,221 @@
+name: v0.1.3 multilang prepare
+
+on:
+  push:
+    branches: ["release/v0.1.3"]
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/v0.1.3
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Finalize multilang interfaces
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path('.')
+
+          cmake = root / 'ffi/c-binding/CMakeLists.txt'
+          text = cmake.read_text(encoding='utf-8')
+          text, count = re.subn(
+              r'(project\(finkit\s*\n\s*VERSION\s+)1\.0\.0',
+              r'\g<1>0.1.3',
+              text,
+              count=1,
+          )
+          if count not in (0, 1):
+              raise SystemExit('unexpected CMake version replacement count')
+          cmake.write_text(text, encoding='utf-8')
+
+          indicators = root / 'ffi/java-binding/java/src/main/java/com/finkit/Indicators.java'
+          text = indicators.read_text(encoding='utf-8')
+          old = '''    static {
+                  loadNativeLibrary();
+              }
+
+              private static void loadNativeLibrary() {
+                  String libName = "finkit_java";
+                  String os = System.getProperty("os.name", "").toLowerCase();
+                  String arch = System.getProperty("os.arch", "").toLowerCase();
+
+                  if (os.contains("win")) {
+                      System.loadLibrary(libName);
+                  } else if (os.contains("mac")) {
+                      System.loadLibrary(libName);
+                  } else if (os.contains("nix") || os.contains("nux") || os.contains("aix")) {
+                      System.loadLibrary(libName);
+                  } else {
+                      System.loadLibrary(libName);
+                  }
+              }
+          '''
+          new = '''    static {
+                  NativeLoader.load();
+              }
+          '''
+          if old in text:
+              text = text.replace(old, new, 1)
+              indicators.write_text(text, encoding='utf-8')
+          elif 'NativeLoader.load();' not in text:
+              raise SystemExit('Indicators native-loader anchor not found')
+
+          loader = root / 'ffi/java-binding/java/src/main/java/com/finkit/NativeLoader.java'
+          loader.write_text('''package com.finkit;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.Locale;
+
+/** Loads the platform JNI library from the packaged JAR with a system-library fallback. */
+final class NativeLoader {
+    private static final String LIBRARY_NAME = "finkit_java";
+    private static volatile boolean loaded;
+
+    private NativeLoader() {
+    }
+
+    static synchronized void load() {
+        if (loaded) {
+            return;
+        }
+
+        String explicitPath = System.getProperty("finkit.native.path", "").trim();
+        if (!explicitPath.isEmpty()) {
+            System.load(Path.of(explicitPath).toAbsolutePath().toString());
+            loaded = true;
+            return;
+        }
+
+        UnsatisfiedLinkError embeddedFailure = null;
+        String mappedName = System.mapLibraryName(LIBRARY_NAME);
+        String resourcePath = "/natives/" + platformKey() + "/" + mappedName;
+
+        try (InputStream input = NativeLoader.class.getResourceAsStream(resourcePath)) {
+            if (input != null) {
+                Path directory = Files.createTempDirectory("finkit-native-");
+                Path library = directory.resolve(mappedName);
+                Files.copy(input, library, StandardCopyOption.REPLACE_EXISTING);
+                directory.toFile().deleteOnExit();
+                library.toFile().deleteOnExit();
+                System.load(library.toAbsolutePath().toString());
+                loaded = true;
+                return;
+            }
+        } catch (IOException | UnsatisfiedLinkError error) {
+            embeddedFailure = new UnsatisfiedLinkError(
+                    "Failed to load embedded Finkit native library " + resourcePath + ": " + error.getMessage());
+            embeddedFailure.initCause(error);
+        }
+
+        try {
+            System.loadLibrary(LIBRARY_NAME);
+            loaded = true;
+        } catch (UnsatisfiedLinkError error) {
+            if (embeddedFailure != null) {
+                error.addSuppressed(embeddedFailure);
+            }
+            throw error;
+        }
+    }
+
+    private static String platformKey() {
+        String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
+        String arch = System.getProperty("os.arch", "").toLowerCase(Locale.ROOT);
+
+        String normalizedOs;
+        if (os.contains("win")) {
+            normalizedOs = "windows";
+        } else if (os.contains("mac") || os.contains("darwin")) {
+            normalizedOs = "macos";
+        } else if (os.contains("nix") || os.contains("nux") || os.contains("aix") || os.contains("linux")) {
+            normalizedOs = "linux";
+        } else {
+            throw new UnsatisfiedLinkError("Unsupported operating system: " + os);
+        }
+
+        String normalizedArch;
+        if (arch.equals("amd64") || arch.equals("x86_64") || arch.equals("x64")) {
+            normalizedArch = "x86_64";
+        } else if (arch.equals("aarch64") || arch.equals("arm64")) {
+            normalizedArch = "aarch64";
+        } else {
+            throw new UnsatisfiedLinkError("Unsupported architecture: " + arch);
+        }
+
+        return normalizedOs + "-" + normalizedArch;
+    }
+}
+''', encoding='utf-8')
+
+          versions = root / 'scripts/check_versions.py'
+          text = versions.read_text(encoding='utf-8')
+          if 'CMAKE_PROJECT = ROOT / "ffi" / "c-binding" / "CMakeLists.txt"' not in text:
+              text = text.replace(
+                  'JAVA_POM = ROOT / "ffi" / "java-binding" / "pom.xml"\n',
+                  'JAVA_POM = ROOT / "ffi" / "java-binding" / "pom.xml"\n'
+                  'CMAKE_PROJECT = ROOT / "ffi" / "c-binding" / "CMakeLists.txt"\n',
+                  1,
+              )
+
+          if 'def read_cmake_project_version()' not in text:
+              anchor = 'def read_cargo_package_versions() -> dict[str, str]:\n'
+              helper = '''def read_cmake_project_version() -> str:\n    text = CMAKE_PROJECT.read_text(encoding="utf-8")\n    match = re.search(\n        r"project\\(finkit\\s+VERSION\\s+([0-9]+\\.[0-9]+\\.[0-9]+)",\n        text,\n        re.MULTILINE,\n    )\n    if not match:\n        raise ValueError(f"CMake project version not found in {CMAKE_PROJECT}")\n    return match.group(1)\n\n\n'''
+              if anchor not in text:
+                  raise SystemExit('check_versions read helper anchor not found')
+              text = text.replace(anchor, helper + anchor, 1)
+
+          collect_anchor = '''    for path, tag in XML_PROJECT_VERSIONS:\n        version = read_xml_project_version(path, tag)\n        if version != canonical:\n            errors.append(f"{path.relative_to(ROOT)}: {version} != {canonical}")\n'''
+          collect_extra = collect_anchor + '''\n    cmake_version = read_cmake_project_version()\n    if cmake_version != canonical:\n        errors.append(f"{CMAKE_PROJECT.relative_to(ROOT)}: {cmake_version} != {canonical}")\n'''
+          if 'cmake_version = read_cmake_project_version()' not in text:
+              if collect_anchor not in text:
+                  raise SystemExit('check_versions collect anchor not found')
+              text = text.replace(collect_anchor, collect_extra, 1)
+
+          fix_anchor = '''def fix_versions(canonical: str) -> None:\n    for path, tag in XML_PROJECT_VERSIONS:\n        replace_xml_project_version(path, tag, canonical)\n    replace_first_version(PYPROJECT, canonical)\n'''
+          fix_extra = '''def fix_versions(canonical: str) -> None:\n    for path, tag in XML_PROJECT_VERSIONS:\n        replace_xml_project_version(path, tag, canonical)\n\n    cmake_text = CMAKE_PROJECT.read_text(encoding="utf-8")\n    cmake_text, count = re.subn(\n        r"(project\\(finkit\\s+VERSION\\s+)[0-9]+\\.[0-9]+\\.[0-9]+",\n        rf"\\g<1>{canonical}",\n        cmake_text,\n        count=1,\n        flags=re.MULTILINE,\n    )\n    if count != 1:\n        raise ValueError(f"failed to update CMake version in {CMAKE_PROJECT}")\n    CMAKE_PROJECT.write_text(cmake_text, encoding="utf-8")\n\n    replace_first_version(PYPROJECT, canonical)\n'''
+          if 'failed to update CMake version in {CMAKE_PROJECT}' not in text:
+              if fix_anchor not in text:
+                  raise SystemExit('check_versions fix anchor not found')
+              text = text.replace(fix_anchor, fix_extra, 1)
+
+          versions.write_text(text, encoding='utf-8')
+          PY
+
+          python scripts/check_versions.py
+          git diff --check
+
+      - name: Commit interface closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No interface changes remain"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ffi/c-binding/CMakeLists.txt \
+                  ffi/java-binding/java/src/main/java/com/finkit/Indicators.java \
+                  ffi/java-binding/java/src/main/java/com/finkit/NativeLoader.java \
+                  scripts/check_versions.py
+          git commit -m "fix: finalize v0.1.3 multilang interfaces"
+          git push origin HEAD:release/v0.1.3
