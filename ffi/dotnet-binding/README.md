@@ -9,17 +9,32 @@ The binding source exists in the published v0.1.3 repository, but a NuGet packag
 For the next release, the multi-language workflow adds a Linux validation gate that:
 
 1. builds `libfinkit_dotnet.so` from Rust;
-2. runs the .NET 8 test project against that native library;
+2. runs the managed/native tests with the binding-local .NET 8 SDK contract;
 3. stages the Linux native library into the standard NuGet RID layout;
-4. creates a `.nupkg` candidate;
+4. creates a Linux `.nupkg` candidate without relying on runner-global SDK defaults;
 5. inspects the archive for `runtimes/linux-x64/native/libfinkit_dotnet.so`.
 
 A green package-candidate job is still not a public NuGet publication.
 
+## SDK contract
+
+`ffi/dotnet-binding/global.json` pins binding validation to the .NET 8 SDK family while allowing the latest installed .NET 8 feature band. This prevents a newer preinstalled GitHub runner SDK from silently changing CLI/MSBuild behavior.
+
+Check it from the binding directory:
+
+```bash
+cd ffi/dotnet-binding
+dotnet --version
+```
+
+The current CI expects the reported SDK version to begin with `8.`.
+
+The library project declares `net6.0` and `net8.0`; the permanent Linux smoke/test gate executes the .NET 8 target.
+
 ## Requirements
 
 - .NET 8 SDK for the current validation/test path;
-- .NET 6 support is also declared by the library project;
+- .NET 6 targeting support for the declared library target;
 - Rust 1.85+;
 - a native compiler/linker for the target platform.
 
@@ -41,18 +56,23 @@ Expected native filenames:
 
 ## Test on Linux
 
+From the repository root:
+
 ```bash
-LD_LIBRARY_PATH="$PWD/target/release:${LD_LIBRARY_PATH:-}" \
-  dotnet test ffi/dotnet-binding/src/Finkit.Tests/Finkit.Tests.csproj \
+cargo build -p finkit-dotnet --release --locked
+cd ffi/dotnet-binding
+LD_LIBRARY_PATH="../../target/release:${LD_LIBRARY_PATH:-}" \
+  dotnet test src/Finkit.Tests/Finkit.Tests.csproj \
   -c Release --framework net8.0
 ```
 
-This verifies a real managed-to-native call rather than only compiling the C# project.
+This verifies real managed-to-native calls rather than only compiling the C# project. The ADX test intentionally provides more than `period * 2` bars because that is the core ADX minimum-history contract.
 
 ## Build the managed library
 
 ```bash
-dotnet build ffi/dotnet-binding/src/Finkit/Finkit.csproj -c Release
+cd ffi/dotnet-binding
+dotnet build src/Finkit/Finkit.csproj -c Release
 ```
 
 Basic usage:
@@ -64,6 +84,19 @@ double[] close = { 1, 2, 3, 4, 5 };
 double[] sma = Indicators.Sma(close, 3);
 Console.WriteLine(sma[^1]);
 ```
+
+## Native loading
+
+`NativeBootstrap.cs` registers an assembly-level `DllImportResolver` for `finkit_dotnet`.
+
+It checks, in order:
+
+- explicit `FINKIT_NATIVE_PATH`;
+- app/assembly-local native files;
+- standard `runtimes/<rid>/native/` locations;
+- the operating system's normal native-library search path.
+
+This keeps source tests and packaged NuGet candidates on the same loading model.
 
 ## Native package layout
 
@@ -85,22 +118,26 @@ runtimes/osx-x64/native/
 runtimes/osx-arm64/native/
 ```
 
-For example, the Linux candidate workflow stages the native library and packs with:
+For the validated Linux candidate:
 
 ```bash
+cargo build -p finkit-dotnet --release --locked
 mkdir -p ffi/dotnet-binding/native/linux-x64/native
 cp target/release/libfinkit_dotnet.so \
   ffi/dotnet-binding/native/linux-x64/native/
 
-dotnet pack ffi/dotnet-binding/src/Finkit/Finkit.csproj \
-  -c Release -o dist/dotnet
+cd ffi/dotnet-binding
+dotnet pack src/Finkit/Finkit.csproj -c Release
+unzip -l src/Finkit/bin/Release/Finkit.0.1.3.nupkg
 ```
 
-Then inspect the archive instead of assuming the RID was included:
+CI copies that verified package to a GitHub artifact name like:
 
-```bash
-unzip -l dist/dotnet/Finkit.0.1.3.nupkg
+```text
+finkit-dotnet-<version>-linux-x64.nupkg
 ```
+
+The platform suffix is intentional: the current permanent package gate proves Linux x64 native content. Windows/macOS RID declarations are not promoted to verified distribution status until their native-runner package tests pass too.
 
 ## Formula and indicator scope
 
