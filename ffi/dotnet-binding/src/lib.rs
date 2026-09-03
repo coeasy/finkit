@@ -1,6 +1,11 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 #![allow(missing_docs)]
 #![allow(missing_debug_implementations)]
+// The generated .NET ABI preserves legacy exported symbols such as
+// `ta_linear_reg` while the Rust API transitions to TA-Lib-style names such as
+// `linearreg`. Those compatibility shims intentionally call deprecated aliases
+// until the registry itself moves to the replacement without breaking ABI.
+#![allow(deprecated)]
 
 use std::collections::HashMap;
 use std::os::raw::{c_char, c_double, c_int};

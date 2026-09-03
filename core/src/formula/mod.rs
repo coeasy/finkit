@@ -32,6 +32,11 @@ pub mod params;
 pub mod parser;
 pub mod pine;
 pub mod sandbox;
+// AArch64 guarantees NEON in the Finkit dispatch model, so the scalar fallback
+// statements that follow unconditional NEON returns are intentionally
+// unreachable on that architecture. Keep unreachable-code diagnostics enabled
+// everywhere else so genuine control-flow regressions are still reported.
+#[cfg_attr(target_arch = "aarch64", allow(unreachable_code))]
 pub mod simd;
 pub mod templates;
 pub mod types;
