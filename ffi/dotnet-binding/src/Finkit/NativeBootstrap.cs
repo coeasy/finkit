@@ -13,7 +13,9 @@ namespace Finkit;
 /// </summary>
 internal static class NativeBootstrap
 {
+#pragma warning disable CA2255 // Library initialization is intentional: the resolver must be installed before the first P/Invoke call.
     [ModuleInitializer]
+#pragma warning restore CA2255
     internal static void Initialize()
     {
         try
