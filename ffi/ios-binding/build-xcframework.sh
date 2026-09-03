@@ -25,6 +25,7 @@ rm -rf "${WORK}" "${OUT}/Finkit.xcframework"
 mkdir -p "${OUT}" "${WORK}" "${HEADERS}"
 
 cp "${ROOT}/ffi/ios-binding/include/finkit.h" "${HEADERS}/"
+cp "${ROOT}/ffi/ios-binding/include/module.modulemap" "${HEADERS}/"
 cp "${ROOT}/ffi/ios-binding/include/Finkit.swift" "${HEADERS}/"
 
 build_target() {
@@ -55,4 +56,4 @@ xcodebuild -create-xcframework \
   -output "${OUT}/Finkit.xcframework"
 
 echo "[build-ios] OK: ${OUT}/Finkit.xcframework"
-find "${OUT}/Finkit.xcframework" -maxdepth 2 -type f -print
+find "${OUT}/Finkit.xcframework" -maxdepth 3 -type f -print
