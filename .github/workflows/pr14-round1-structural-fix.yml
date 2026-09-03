@@ -1,4 +1,4 @@
-name: PR14 materialize verified repairs
+name: PR14 final cleanup
 
 on:
   push:
@@ -9,56 +9,66 @@ permissions:
   contents: write
 
 jobs:
-  materialize:
+  cleanup:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-22.04
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
           ref: feat/compute-runtime-factorplan-v012
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-      - name: Apply verified v0.1.3 repair set
+      - name: Harden release-version checks and clean PR-only repair assets
+        shell: bash
         run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('scripts/check_versions.py')
+          text = path.read_text(encoding='utf-8')
+          old_check = '''        elif "0.1.0" in text:
+              errors.append(f"{path.relative_to(ROOT)}: contains legacy 0.1.0 reference")
+          '''
+          new_check = '''        else:
+              release_versions = set(re.findall(r"(?<!\\d)0\\.1\\.\\d+(?!\\d)", text))
+              stale_versions = sorted(version for version in release_versions if version != canonical)
+              if stale_versions:
+                  errors.append(
+                      f"{path.relative_to(ROOT)}: contains stale release version(s) "
+                      f"{', '.join(stale_versions)}; expected {canonical}"
+                  )
+          '''
+          if text.count(old_check) != 1:
+              raise SystemExit('version-check contract anchor changed')
+          text = text.replace(old_check, new_check, 1)
+
+          old_fix = '''        path.write_text(text.replace("0.1.0", canonical), encoding="utf-8")
+          '''
+          new_fix = '''        text = re.sub(r"(?<!\\d)0\\.1\\.\\d+(?!\\d)", canonical, text)
+              path.write_text(text, encoding="utf-8")
+          '''
+          if text.count(old_fix) != 1:
+              raise SystemExit('version-fix contract anchor changed')
+          text = text.replace(old_fix, new_fix, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+
           python scripts/check_versions.py --fix
-          python .ci/pr14_harden.py round1
-          python .ci/pr14_round1_compat_fix.py
-          python .ci/pr14_round2_fix.py
-          python .ci/pr14_round2_tests_fix.py
-          python .ci/pr14_round2_golden_fix.py
-          python .ci/pr14_semantic_contract_fix.py
-          python .ci/pr14_semantic_contract_fix2.py
-          python .ci/pr14_semantic_contract_fix3.py
-          python .ci/pr14_semantic_contract_fix4.py
-          python .ci/pr14_semantic_contract_fix5.py
-          python .ci/pr14_formula_compute_ir_integration.py
-          python .ci/pr14_harden.py round3
-          sed -i '/self.last_write.insert(canonical_name(var), id);/{n;/self.last_control_flow = Some(id);/d;}' core/src/formula/compute_ir.rs
-          python .ci/pr14_final_ci_gate.py
           python scripts/gen_ssot_docs.py --generate
-          python scripts/check_versions.py --fix
-          cargo fmt --all
-      - name: Verify deterministic generated state
-        run: |
-          cargo fmt --all -- --check
           python scripts/check_versions.py
           python scripts/gen_ssot_docs.py --check
-      - name: Commit production repairs
+          rm -f .ci/pr14*
+          rmdir .ci 2>/dev/null || true
+
+      - name: Commit final production cleanup
         shell: bash
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          # GITHUB_TOKEN has contents:write but does not carry GitHub App
-          # workflow permission. Materialize all production changes first;
-          # workflow files are applied separately through the connected GitHub
-          # integration after this commit lands.
           git restore --source=HEAD -- .github/workflows
           git add -A
           if git diff --cached --quiet; then
-            echo 'No materialized changes to commit.'
+            echo 'No cleanup changes to commit.'
             exit 0
           fi
-          git commit -m 'feat: materialize v0.1.3 compute engine hardening'
+          git commit -m 'chore: finalize v0.1.3 release metadata and cleanup'
           git push origin HEAD:feat/compute-runtime-factorplan-v012
