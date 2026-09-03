@@ -26,7 +26,11 @@ def fix_java_javadocs() -> None:
     text = chart.read_text(encoding="utf-8")
     text = text.replace(
         "Head and Shoulders Bottom (Inverse H&S) detection.",
+        "Head and Shoulders Bottom (inverse head-and-shoulders) detection.",
+    )
+    text = text.replace(
         "Head and Shoulders Bottom (Inverse Head and Shoulders) detection.",
+        "Head and Shoulders Bottom (inverse head-and-shoulders) detection.",
     )
     chart.write_text(text, encoding="utf-8")
 
@@ -184,6 +188,101 @@ bool series_non_negative(const std::vector<double>& values) {
     path.write_text(text, encoding="utf-8")
 
 
+def replace_exact(path: Path, old: str, new: str, label: str) -> None:
+    text = path.read_text(encoding="utf-8")
+    if old in text:
+        text = text.replace(old, new, 1)
+        path.write_text(text, encoding="utf-8")
+        return
+    if new not in text:
+        raise RuntimeError(f"{label} anchor not found: {path}")
+
+
+def fix_rust_warning_contracts() -> None:
+    core_registry = ROOT / "core/src/registry.rs"
+    replace_exact(
+        core_registry,
+        'const PERIOD_20: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("20"), Some("> 0"))];\n',
+        "",
+        "unused PERIOD_20",
+    )
+
+    c_lib = ROOT / "ffi/c-binding/src/lib.rs"
+    replace_exact(c_lib, "use std::ffi::{CStr, CString};\n", "use std::ffi::CString;\n", "CStr import")
+    replace_exact(
+        c_lib,
+        '''/// Best-effort calculation error handler for non-`TaError` error types
+/// (e.g. `VisualizationError`). Records the formatted message and
+/// returns the generic legacy code.
+fn calc_error_display(err: impl std::fmt::Display) -> i32 {
+    set_last_error(err);
+    set_last_error_code(TA_ERR_CALCULATION);
+    TA_ERR_CALCULATION
+}
+
+''',
+        "",
+        "dead calc_error_display",
+    )
+    replace_exact(
+        c_lib,
+        "    let dst_slice = std::slice::from_raw_parts_mut(dst, copy_len);\n",
+        "    let dst_slice = unsafe { std::slice::from_raw_parts_mut(dst, copy_len) };\n",
+        "copy_result unsafe block",
+    )
+    # The same statement occurs in copy_int_result; consume the second occurrence too.
+    text = c_lib.read_text(encoding="utf-8")
+    old_slice = "    let dst_slice = std::slice::from_raw_parts_mut(dst, copy_len);\n"
+    if old_slice in text:
+        c_lib.write_text(
+            text.replace(old_slice, "    let dst_slice = unsafe { std::slice::from_raw_parts_mut(dst, copy_len) };\n", 1),
+            encoding="utf-8",
+        )
+    elif text.count("unsafe { std::slice::from_raw_parts_mut(dst, copy_len) }") < 2:
+        raise RuntimeError("copy_int_result unsafe anchor not found")
+
+    replace_exact(
+        c_lib,
+        '''fn ffi_catch_i64<F>(f: F) -> i64
+where
+    F: FnOnce() -> i64,
+{
+    match catch_unwind(AssertUnwindSafe(f)) {
+        Ok(v) => v,
+        Err(_) => {
+            set_last_error("internal error: panic at FFI boundary");
+            set_last_error_code(FfiStatus::InternalError.as_i32());
+            0
+        }
+    }
+}
+
+''',
+        "",
+        "dead ffi_catch_i64",
+    )
+    replace_exact(c_lib, "    ffi_catch_ptr(|| unsafe {\n", "    ffi_catch_ptr(|| {\n", "unnecessary ta_version unsafe")
+    replace_exact(
+        c_lib,
+        "            drop(CString::from_raw(s));\n",
+        "            drop(unsafe { CString::from_raw(s) });\n",
+        "CString::from_raw unsafe block",
+    )
+    replace_exact(c_lib, '#[no_mangle]\n\ninclude!("generated.rs");\n', 'include!("generated.rs");\n', "no_mangle macro attribute")
+    replace_exact(c_lib, "mod tests {\n    use super::*;\n", "mod tests {\n    use super::*;\n    use std::ffi::CStr;\n", "test CStr import")
+
+    # Update both the registry SSOT and the generated C wrapper so regeneration
+    # keeps the non-deprecated TA-Lib-compatible name.
+    for path in (ROOT / "docs/indicator_registry.json", ROOT / "ffi/c-binding/src/generated.rs"):
+        text = path.read_text(encoding="utf-8")
+        old = "indicators::linear_reg(data, period as usize)"
+        new = "indicators::linearreg(data, period as usize)"
+        if old in text:
+            path.write_text(text.replace(old, new), encoding="utf-8")
+        elif new not in text:
+            raise RuntimeError(f"linearreg compatibility anchor not found: {path}")
+
+
 def main() -> None:
     fix_java_duplicates()
     fix_java_javadocs()
@@ -191,6 +290,7 @@ def main() -> None:
     fix_consumer_cmake(ROOT / "ffi/c-binding/examples/CMakeLists.txt")
     fix_cpp_ohlc_helpers()
     fix_cpp_test_contract()
+    fix_rust_warning_contracts()
 
 
 if __name__ == "__main__":
