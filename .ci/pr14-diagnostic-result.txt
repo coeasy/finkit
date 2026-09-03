@@ -1,0 +1,601 @@
+PR14 core diagnostic
+commit=f37770f1a83f57ef69a02cc3a4a81c209f774672
+
+buffer_arena                 status=0
+compute                      status=101
+
+===== FAILURE: compute =====
+
+[1m[33mwarning[0m[1m: unused variable: `c`[0m
+   [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:875:13
+    [1m[94m|[0m
+[1m[94m875[0m [1m[94m|[0m         let c = vec![9.8, 11.0];
+    [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_c`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `n`[0m
+   [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:901:13
+    [1m[94m|[0m
+[1m[94m901[0m [1m[94m|[0m         let n = 5;
+    [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_n`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `o`[0m
+   [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:918:13
+    [1m[94m|[0m
+[1m[94m918[0m [1m[94m|[0m         let o = vec![10.5, 10.5];
+    [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_o`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `h`[0m
+   [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:919:13
+    [1m[94m|[0m
+[1m[94m919[0m [1m[94m|[0m         let h = vec![10.6, 10.6];
+    [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_h`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `l`[0m
+   [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:920:13
+    [1m[94m|[0m
+[1m[94m920[0m [1m[94m|[0m         let l = vec![9.9, 9.9];
+    [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_l`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `c`[0m
+   [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:921:13
+    [1m[94m|[0m
+[1m[94m921[0m [1m[94m|[0m         let c = vec![10.0, 10.0];
+    [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_c`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `o`[0m
+   [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:924:13
+    [1m[94m|[0m
+[1m[94m924[0m [1m[94m|[0m         let o = vec![10.5, 10.5];
+    [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_o`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `h`[0m
+   [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:925:13
+    [1m[94m|[0m
+[1m[94m925[0m [1m[94m|[0m         let h = vec![10.7, 10.7];
+    [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_h`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `l`[0m
+   [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:926:13
+    [1m[94m|[0m
+[1m[94m926[0m [1m[94m|[0m         let l = vec![9.9, 9.9];
+    [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_l`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `c`[0m
+   [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:927:13
+    [1m[94m|[0m
+[1m[94m927[0m [1m[94m|[0m         let c = vec![10.0, 10.0];
+    [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_c`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `o`[0m
+   [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:930:13
+    [1m[94m|[0m
+[1m[94m930[0m [1m[94m|[0m         let o = vec![10.5, 9.5];
+    [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_o`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `h`[0m
+   [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:931:13
+    [1m[94m|[0m
+[1m[94m931[0m [1m[94m|[0m         let h = vec![10.7, 10.7];
+    [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_h`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `l`[0m
+   [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:932:13
+    [1m[94m|[0m
+[1m[94m932[0m [1m[94m|[0m         let l = vec![9.9, 9.0];
+    [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_l`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `c`[0m
+   [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:933:13
+    [1m[94m|[0m
+[1m[94m933[0m [1m[94m|[0m         let c = vec![10.0, 10.5];
+    [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_c`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `o`[0m
+   [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:937:13
+    [1m[94m|[0m
+[1m[94m937[0m [1m[94m|[0m         let o = vec![10.5, 10.5];
+    [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_o`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `h`[0m
+   [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:938:13
+    [1m[94m|[0m
+[1m[94m938[0m [1m[94m|[0m         let h = vec![10.7, 10.7];
+    [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_h`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `l`[0m
+   [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:939:13
+    [1m[94m|[0m
+[1m[94m939[0m [1m[94m|[0m         let l = vec![9.9, 9.9];
+    [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_l`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `c`[0m
+   [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:940:13
+    [1m[94m|[0m
+[1m[94m940[0m [1m[94m|[0m         let c = vec![10.0, 10.5];
+    [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_c`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `o`[0m
+   [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:946:13
+    [1m[94m|[0m
+[1m[94m946[0m [1m[94m|[0m         let o = vec![10.0, 9.5];
+    [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_o`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `h`[0m
+   [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:947:13
+    [1m[94m|[0m
+[1m[94m947[0m [1m[94m|[0m         let h = vec![10.5, 10.5];
+    [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_h`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `l`[0m
+   [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:948:13
+    [1m[94m|[0m
+[1m[94m948[0m [1m[94m|[0m         let l = vec![9.5, 9.0];
+    [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_l`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `c`[0m
+   [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:949:13
+    [1m[94m|[0m
+[1m[94m949[0m [1m[94m|[0m         let c = vec![10.5, 10.5];
+    [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_c`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `o`[0m
+   [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:952:13
+    [1m[94m|[0m
+[1m[94m952[0m [1m[94m|[0m         let o = vec![9.5, 10.0];
+    [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_o`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `h`[0m
+   [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:953:13
+    [1m[94m|[0m
+[1m[94m953[0m [1m[94m|[0m         let h = vec![10.5, 10.5];
+    [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_h`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `l`[0m
+   [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:954:13
+    [1m[94m|[0m
+[1m[94m954[0m [1m[94m|[0m         let l = vec![9.0, 9.5];
+    [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_l`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `c`[0m
+   [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:955:13
+    [1m[94m|[0m
+[1m[94m955[0m [1m[94m|[0m         let c = vec![10.5, 10.5];
+    [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_c`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `o`[0m
+   [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:958:13
+    [1m[94m|[0m
+[1m[94m958[0m [1m[94m|[0m         let o = vec![10.5, 9.5];
+    [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_o`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `h`[0m
+   [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:959:13
+    [1m[94m|[0m
+[1m[94m959[0m [1m[94m|[0m         let h = vec![10.7, 10.5];
+    [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_h`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `l`[0m
+   [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:960:13
+    [1m[94m|[0m
+[1m[94m960[0m [1m[94m|[0m         let l = vec![9.9, 9.0];
+    [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_l`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `c`[0m
+   [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:961:13
+    [1m[94m|[0m
+[1m[94m961[0m [1m[94m|[0m         let c = vec![9.5, 10.5];
+    [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_c`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `r`[0m
+    [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:1002:13
+     [1m[94m|[0m
+[1m[94m1002[0m [1m[94m|[0m         let r = rising_three_methods(&o, &h, &l, &c).unwrap();
+     [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_r`[0m
+
+[1m[33mwarning[0m[1m: unused variable: `v`[0m
+    [1m[94m--> [0mcore/src/patterns/astock_kline2.rs:1097:13
+     [1m[94m|[0m
+[1m[94m1097[0m [1m[94m|[0m         let v: Vec<f64> = vec![];
+     [1m[94m|[0m             [1m[33m^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_v`[0m
+
+[1m[33mwarning[0m[1m: function `approx_eq` is never used[0m
+   [1m[94m--> [0mcore/src/math/simd_ops_wasm.rs:383:8
+    [1m[94m|[0m
+[1m[94m383[0m [1m[94m|[0m     fn approx_eq(a: f64, b: f64, tol: f64) -> bool {
+    [1m[94m|[0m        [1m[33m^^^^^^^^^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+[1m[33mwarning[0m[1m: function `synth_uptrend` is never used[0m
+    [1m[94m--> [0mcore/src/patterns/astock_kline.rs:1486:8
+     [1m[94m|[0m
+[1m[94m1486[0m [1m[94m|[0m     fn synth_uptrend(n: usize) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
+     [1m[94m|[0m        [1m[33m^^^^^^^^^^^^^[0m
+
+[1m[33mwarning[0m[1m: constant `PERIOD_20` is never used[0m
+   [1m[94m--> [0mcore/src/registry.rs:197:7
+    [1m[94m|[0m
+[1m[94m197[0m [1m[94m|[0m const PERIOD_20: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("20"), Some("> 0"))];
+    [1m[94m|[0m       [1m[33m^^^^^^^^^[0m
+
+[1m[33mwarning[0m: `finkit` (lib test) generated 53 warnings (run `cargo fix --lib -p finkit --tests` to apply 50 suggestions)
+[1m[92m    Finished[0m `test` profile [optimized + debuginfo] target(s) in 0.12s
+[1m[92m     Running[0m unittests src/lib.rs (target/debug/deps/finkit-c1cfefe3919b3e36)
+
+running 7 tests
+test compute::tests::compute_input_enforces_runtime_nan_policy ... ok
+test compute::tests::compute_plan_rejects_unknown_dependency_and_cycle ... ok
+test compute::tests::compute_plan_normalizes_duplicate_dependencies ... ok
+test compute::tests::compute_plan_is_stable_and_retains_effect_metadata ... ok
+
+thread 'compute::tests::registry_specs_map_to_compute_capabilities' (4262) panicked at core/src/compute.rs:653:9:
+assertion `left == right` failed
+  left: Dynamic
+ right: PeriodMinusOne
+test compute::tests::factor_plan_compiles_dependencies_and_executes_existing_engine ... note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+ok
+test compute::tests::factor_plan_direct_paths_reject_stale_registry_dependencies ... ok
+test compute::tests::registry_specs_map_to_compute_capabilities ... FAILED
+
+failures:
+
+failures:
+    compute::tests::registry_specs_map_to_compute_capabilities
+
+test result: FAILED. 6 passed; 1 failed; 0 ignored; 0 measured; 2672 filtered out; finished in 0.00s
+
+[1m[91merror[0m: test failed, to rerun pass `-p finkit --lib`
+
+===== END FAILURE: compute =====
+
+error                        status=0
+formula                      status=0
+indicators                   status=0
+math                         status=0
+patterns                     status=0
+backtest                     status=0
+batch                        status=0
+factors                      status=0
+features                     status=0
+multi_period_resonance       status=0
+polars_ext                   status=0
+registry                     status=0
+risk                         status=0
+runtime                      status=0
+schema                       status=0
+sector                       status=0
+selectors                    status=0
+streaming                    status=0
+talib_ffi                    status=0
+traits                       status=0
+transforms                   status=0
+utils                        status=0
+metrics                      status=0
+
+full_core                    status=101
+
+===== FULL CORE FAILURE TAIL =====
+RingBuffer capacity must be > 0
+test streaming::ring_buffer::tests::new_panics_on_zero_capacity - should panic ... ok
+test streaming::ring_buffer::tests::push_evicts_oldest_when_full ... ok
+test streaming::ring_buffer::tests::push_fills_buffer ... ok
+test streaming::ring_buffer::tests::push_returns_none_until_full ... ok
+test streaming::ring_buffer::tests::push_wraps_multiple_times ... ok
+test streaming::ring_buffer::tests::single_capacity_buffer ... ok
+test streaming::ring_buffer::tests::sum_after_eviction ... ok
+test streaming::ring_buffer::tests::sum_empty_buffer ... ok
+test streaming::ring_buffer::tests::sum_on_f64_buffer ... ok
+test streaming::ring_buffer::tests::with_generic_tuple_type ... ok
+test streaming::statistics::avgdev::tests::test_streaming_avgdev_basic ... ok
+test streaming::statistics::avgdev::tests::test_streaming_avgdev_meta ... ok
+test streaming::statistics::avgdev::tests::test_streaming_avgdev_period_one ... ok
+test streaming::statistics::avgdev::tests::test_streaming_avgdev_rolling ... ok
+test streaming::statistics::avgdev::tests::test_streaming_vs_batch_convergence ... ok
+test streaming::statistics::beta::tests::test_streaming_beta_basic ... ok
+test streaming::statistics::beta::tests::test_streaming_beta_meta ... ok
+test streaming::statistics::beta::tests::test_streaming_beta_reset ... ok
+test streaming::statistics::beta::tests::test_streaming_beta_welford_stability ... ok
+test streaming::statistics::correl::tests::test_streaming_correl_meta ... ok
+test streaming::statistics::correl::tests::test_streaming_correl_perfect_negative ... ok
+test streaming::statistics::correl::tests::test_streaming_correl_perfect_positive ... ok
+test streaming::statistics::correl::tests::test_streaming_correl_reset ... ok
+test streaming::statistics::correl::tests::test_streaming_correl_vs_batch ... ok
+test streaming::statistics::linreg::tests::test_streaming_linreg_basic ... ok
+test streaming::statistics::linreg::tests::test_streaming_linreg_meta ... ok
+test streaming::statistics::linreg::tests::test_streaming_linreg_reset ... ok
+test streaming::statistics::linreg::tests::test_streaming_vs_batch_convergence ... ok
+test streaming::statistics::linreg_angle::tests::test_streaming_linreg_angle_basic ... ok
+test streaming::statistics::linreg_angle::tests::test_streaming_linreg_angle_flat ... ok
+test streaming::statistics::linreg_angle::tests::test_streaming_linreg_angle_meta ... ok
+test streaming::statistics::linreg_angle::tests::test_streaming_linreg_angle_reset ... ok
+test streaming::statistics::linreg_intercept::tests::test_streaming_linreg_intercept_basic ... ok
+test streaming::statistics::linreg_intercept::tests::test_streaming_linreg_intercept_constant ... ok
+test streaming::statistics::linreg_intercept::tests::test_streaming_linreg_intercept_meta ... ok
+test streaming::statistics::linreg_intercept::tests::test_streaming_linreg_intercept_reset ... ok
+test streaming::statistics::linreg_slope::tests::test_streaming_linreg_slope_basic ... ok
+test streaming::statistics::linreg_slope::tests::test_streaming_linreg_slope_constant ... ok
+test streaming::statistics::linreg_slope::tests::test_streaming_linreg_slope_meta ... ok
+test streaming::statistics::linreg_slope::tests::test_streaming_linreg_slope_reset ... ok
+test streaming::statistics::max_min_index::tests::test_max_index_basic ... ok
+test streaming::statistics::max_min_index::tests::test_max_index_reset ... ok
+test streaming::statistics::max_min_index::tests::test_max_index_ties_equal_max ... ok
+test streaming::statistics::max_min_index::tests::test_max_index_ties_keep_earliest ... ok
+test streaming::statistics::max_min_index::tests::test_meta ... ok
+test streaming::statistics::max_min_index::tests::test_min_index_basic ... ok
+test streaming::statistics::max_min_index::tests::test_vs_batch_max ... ok
+test streaming::statistics::max_min_index::tests::test_min_index_ties_keep_earliest ... ok
+test streaming::statistics::percent_rank::tests::test_percent_rank_basic ... ok
+test streaming::statistics::percent_rank::tests::test_meta ... ok
+test streaming::statistics::percent_rank::tests::test_percent_rank_median ... ok
+test streaming::statistics::percent_rank::tests::test_percent_rank_reset ... ok
+test streaming::statistics::zscore::tests::test_streaming_zscore_basic ... ok
+test streaming::statistics::zscore::tests::test_streaming_vs_batch_convergence ... ok
+test streaming::statistics::zscore::tests::test_streaming_zscore_meta ... ok
+test streaming::statistics::zscore::tests::test_streaming_zscore_reset ... ok
+test streaming::trend::adx::tests::test_streaming_adx_meta ... ok
+test streaming::trend::adx::tests::test_streaming_adx_basic ... ok
+test streaming::trend::adx::tests::test_streaming_adx_reset ... ok
+test streaming::trend::adx::tests::test_streaming_adx_trending_market ... ok
+test streaming::trend::adxr::tests::test_streaming_adxr_meta ... ok
+test streaming::trend::adxr::tests::test_streaming_adxr_basic ... ok
+test streaming::trend::adxr::tests::test_streaming_adxr_reset ... ok
+test streaming::trend::dx::tests::test_streaming_dx_meta ... ok
+test streaming::trend::dx::tests::test_streaming_dx_basic ... ok
+test streaming::trend::dx::tests::test_streaming_dx_reset ... ok
+test streaming::trend::ht_measurement::tests::test_ht_measurement_basic ... ok
+test streaming::trend::ht_measurement::tests::test_ht_measurement_meta ... ok
+test streaming::trend::ht_measurement::tests::test_ht_measurement_reset ... ok
+test streaming::trend::ht_trendline::tests::test_streaming_ht_trendline_basic ... ok
+test streaming::trend::ht_trendline::tests::test_streaming_ht_trendline_meta ... ok
+test streaming::trend::ht_trendline::tests::test_streaming_ht_trendline_reset ... ok
+test streaming::trend::ht_trendline::tests::test_streaming_ht_trendline_tracks_mean ... ok
+test streaming::trend::ht_trendmode::tests::test_streaming_ht_trendmode_basic ... ok
+test streaming::trend::ht_trendmode::tests::test_streaming_ht_trendmode_binary ... ok
+test streaming::trend::ht_trendmode::tests::test_streaming_ht_trendmode_meta ... ok
+test streaming::trend::ht_trendmode::tests::test_streaming_ht_trendmode_reset ... ok
+test streaming::trend::inertia::tests::test_streaming_inertia_basic ... ok
+test streaming::trend::inertia::tests::test_streaming_inertia_meta ... ok
+test streaming::trend::inertia::tests::test_streaming_inertia_reset ... ok
+test streaming::trend::inertia::tests::test_streaming_vs_batch_convergence ... ok
+test streaming::trend::minus_di::tests::test_streaming_minus_di_basic ... ok
+test streaming::trend::minus_di::tests::test_streaming_minus_di_meta ... ok
+test streaming::trend::minus_di::tests::test_streaming_minus_di_downtrend ... ok
+test streaming::trend::minus_dm::tests::test_streaming_minus_dm ... ok
+test streaming::trend::minus_di::tests::test_streaming_minus_di_reset ... ok
+test streaming::trend::minus_dm::tests::test_streaming_minus_dm_reset ... ok
+test streaming::trend::minus_dm::tests::test_streaming_minus_dm_up_dominates ... ok
+test streaming::trend::plus_di::tests::test_streaming_plus_di_basic ... ok
+test streaming::trend::plus_di::tests::test_streaming_plus_di_meta ... ok
+test streaming::trend::plus_di::tests::test_streaming_plus_di_reset ... ok
+test streaming::trend::plus_di::tests::test_streaming_plus_di_uptrend ... ok
+test streaming::trend::plus_dm::tests::test_streaming_plus_dm ... ok
+test streaming::trend::plus_dm::tests::test_streaming_plus_dm_down_dominates ... ok
+test streaming::trend::plus_dm::tests::test_streaming_plus_dm_reset ... ok
+test streaming::trend::sar::tests::test_streaming_sar_first_bar ... ok
+test streaming::trend::sar::tests::test_streaming_sar_meta ... ok
+test streaming::trend::sar::tests::test_streaming_sar_reset ... ok
+test streaming::trend::sar::tests::test_streaming_vs_batch_convergence ... ok
+test streaming::trend::supertrend::tests::test_streaming_supertrend_basic ... ok
+test streaming::trend::supertrend::tests::test_streaming_supertrend_meta ... ok
+test streaming::trend::supertrend::tests::test_streaming_supertrend_reset ... ok
+test streaming::trend::supertrend::tests::test_streaming_supertrend_uptrend ... ok
+test streaming::trend::vortex::tests::test_streaming_vortex_basic ... ok
+test streaming::trend::vortex::tests::test_streaming_vortex_meta ... ok
+test streaming::trend::vortex::tests::test_streaming_vortex_reset ... ok
+test streaming::trend::vortex::tests::test_streaming_vs_batch_convergence ... ok
+test streaming::types::tests::test_ohlcv_array ... ok
+test streaming::types::tests::test_ohlcv_bar_basic ... ok
+test streaming::types::tests::test_ohlcv_bar_copy ... ok
+test streaming::types::tests::test_ohlcv_bar_default_time ... ok
+test streaming::types::tests::test_ohlcv_bar_new_with_time ... ok
+test streaming::types::tests::test_ohlcv_derived_prices ... ok
+test streaming::types::tests::test_ohlcv_true_range ... ok
+test streaming::volatility::adr::tests::test_streaming_adr_basic ... ok
+test streaming::types::tests::test_ohlcv_tuple ... ok
+test streaming::volatility::adr::tests::test_streaming_adr_meta ... ok
+test streaming::volatility::adr::tests::test_streaming_adr_reset ... ok
+test streaming::volatility::adr::tests::test_streaming_vs_batch_convergence ... ok
+test streaming::volatility::atr::tests::test_streaming_atr_basic ... ok
+test streaming::volatility::atr::tests::test_streaming_atr_meta ... ok
+test streaming::volatility::atr::tests::test_streaming_atr_repaint ... ok
+test streaming::volatility::atr::tests::test_streaming_atr_reset ... ok
+test streaming::volatility::atr::tests::test_streaming_vs_batch_convergence ... ok
+test streaming::volatility::boll::tests::test_streaming_boll_basic ... ok
+test streaming::volatility::boll::tests::test_streaming_boll_meta ... ok
+test streaming::volatility::boll::tests::test_streaming_boll_repaint ... ok
+test streaming::volatility::boll::tests::test_streaming_boll_reset ... ok
+test streaming::volatility::boll::tests::test_streaming_vs_batch_convergence ... ok
+test streaming::volatility::chaikin_vol::tests::test_streaming_chaikin_vol_basic ... ok
+test streaming::volatility::chaikin_vol::tests::test_streaming_chaikin_vol_meta ... ok
+test streaming::volatility::chaikin_vol::tests::test_streaming_chaikin_vol_reset ... ok
+test streaming::volatility::chaikin_vol::tests::test_streaming_vs_batch_convergence ... ok
+test streaming::volatility::chop_streaming::tests::test_streaming_chop_basic ... ok
+test streaming::volatility::chop_streaming::tests::test_streaming_chop_reset ... ok
+test streaming::volatility::chop_streaming::tests::test_streaming_chop_meta ... ok
+test streaming::volatility::chop_streaming::tests::test_streaming_vs_batch_convergence ... ok
+test streaming::volatility::donchian::tests::test_streaming_donchian_basic ... ok
+test streaming::volatility::donchian::tests::test_streaming_donchian_meta ... ok
+test streaming::volatility::donchian::tests::test_streaming_donchian_reset ... ok
+test streaming::volatility::donchian::tests::test_streaming_vs_batch_convergence ... ok
+test streaming::volatility::ene::tests::test_streaming_ene_basic ... ok
+test streaming::volatility::ene::tests::test_streaming_ene_meta ... ok
+test streaming::volatility::ene::tests::test_streaming_ene_reset ... ok
+test streaming::volatility::hv::tests::test_streaming_hv_basic ... ok
+test streaming::volatility::hv::tests::test_streaming_hv_meta ... ok
+test streaming::volatility::hv::tests::test_streaming_hv_reset ... ok
+test streaming::volatility::hv::tests::test_streaming_vs_batch_convergence ... ok
+test streaming::volatility::keltner::tests::test_streaming_keltner_basic ... ok
+test streaming::volatility::keltner::tests::test_streaming_keltner_default ... ok
+test streaming::volatility::keltner::tests::test_streaming_keltner_formula ... ok
+test streaming::volatility::keltner::tests::test_streaming_keltner_meta ... ok
+test streaming::volatility::keltner::tests::test_streaming_keltner_reset ... ok
+test streaming::volatility::natr::tests::test_streaming_natr_basic ... ok
+test streaming::volatility::natr::tests::test_streaming_natr_meta ... ok
+test streaming::volatility::stddev::tests::test_streaming_stddev_basic ... ok
+test streaming::volatility::natr::tests::test_streaming_natr_reset ... ok
+test streaming::volatility::stddev::tests::test_streaming_stddev_meta ... ok
+test streaming::volatility::stddev::tests::test_streaming_stddev_reset ... ok
+test streaming::volatility::stddev::tests::test_streaming_vs_batch_convergence ... ok
+test streaming::volatility::stddev::tests::test_streaming_stddev_welford_stability ... ok
+test streaming::volatility::trange::tests::test_streaming_trange_basic ... ok
+test streaming::volatility::trange::tests::test_streaming_trange_meta ... ok
+test streaming::volatility::ulcer_index::tests::test_streaming_ulcer_index_basic ... ok
+test streaming::volatility::trange::tests::test_streaming_trange_reset ... ok
+test streaming::volatility::ulcer_index::tests::test_streaming_ulcer_index_meta ... ok
+test streaming::volatility::ulcer_index::tests::test_streaming_ulcer_index_reset ... ok
+test streaming::volatility::ulcer_index::tests::test_streaming_vs_batch_convergence ... ok
+test streaming::volatility::var::tests::test_streaming_var_basic ... ok
+test streaming::volatility::var::tests::test_streaming_var_meta ... ok
+test streaming::volatility::var::tests::test_streaming_var_reset ... ok
+test streaming::volatility::var::tests::test_streaming_var_welford_stability ... ok
+test streaming::volume::ad::tests::test_streaming_ad_basic ... ok
+test streaming::volume::ad::tests::test_streaming_ad_meta ... ok
+test streaming::volume::ad::tests::test_streaming_ad_reset ... ok
+test streaming::volume::adosc::tests::test_streaming_adosc_basic ... ok
+test streaming::volume::ad::tests::test_streaming_vs_batch_convergence ... ok
+test streaming::volume::adosc::tests::test_streaming_adosc_meta ... ok
+test streaming::volume::adosc::tests::test_streaming_adosc_reset ... ok
+test streaming::volume::cmf::tests::test_streaming_cmf_basic ... ok
+test streaming::volume::adosc::tests::test_streaming_vs_batch_convergence ... ok
+test streaming::volume::cmf::tests::test_streaming_cmf_meta ... ok
+test streaming::volume::cmf::tests::test_streaming_cmf_reset ... ok
+test streaming::volume::cmf::tests::test_streaming_vs_batch_convergence ... ok
+test streaming::volume::eom::tests::test_streaming_eom_basic ... ok
+test streaming::volume::eom::tests::test_streaming_eom_meta ... ok
+test streaming::volume::eom::tests::test_streaming_eom_reset ... ok
+test streaming::volume::eom::tests::test_streaming_vs_batch_convergence ... ok
+test streaming::volume::force_index::tests::test_streaming_force_index_basic ... ok
+test streaming::volume::force_index::tests::test_streaming_force_index_meta ... ok
+test streaming::volume::force_index::tests::test_streaming_force_index_reset ... ok
+test streaming::volume::force_index::tests::test_streaming_vs_batch_convergence ... ok
+test streaming::volume::kvo::tests::test_streaming_kvo_basic ... ok
+test streaming::volume::kvo::tests::test_streaming_kvo_meta ... ok
+test streaming::volume::kvo::tests::test_streaming_kvo_reset ... ok
+test streaming::volume::kvo::tests::test_streaming_vs_batch_convergence ... ok
+test streaming::volume::mfi::tests::test_streaming_mfi_basic ... ok
+test streaming::volume::mfi::tests::test_streaming_mfi_meta ... ok
+test streaming::volume::mfi::tests::test_streaming_mfi_reset ... ok
+test streaming::volume::nvi::tests::test_streaming_nvi_basic ... ok
+test streaming::volume::nvi::tests::test_streaming_nvi_meta ... ok
+test streaming::volume::mfi::tests::test_streaming_mfi_parity_with_linear_scan ... ok
+test streaming::volume::nvi::tests::test_streaming_nvi_reset ... ok
+test streaming::volume::nvi::tests::test_streaming_vs_batch_convergence ... ok
+test streaming::volume::obv::tests::test_streaming_obv_basic ... ok
+test streaming::volume::obv::tests::test_streaming_obv_meta ... ok
+test streaming::volume::obv::tests::test_streaming_obv_reset ... ok
+test streaming::volume::pvi::tests::test_streaming_pvi_basic ... ok
+test streaming::volume::pvi::tests::test_streaming_pvi_meta ... ok
+test streaming::volume::pvi::tests::test_streaming_pvi_reset ... ok
+test streaming::volume::pvi::tests::test_streaming_vs_batch_convergence ... ok
+test streaming::volume::pvt::tests::test_streaming_pvt_basic ... ok
+test streaming::volume::pvt::tests::test_streaming_pvt_meta ... ok
+test streaming::volume::pvt::tests::test_streaming_pvt_reset ... ok
+test streaming::volume::pvt::tests::test_streaming_vs_batch_convergence ... ok
+test streaming::volume::twiggs_mf::tests::test_streaming_twiggs_basic ... ok
+test streaming::volume::twiggs_mf::tests::test_streaming_twiggs_meta ... ok
+test streaming::volume::twiggs_mf::tests::test_streaming_twiggs_reset ... ok
+test streaming::volume::twiggs_mf::tests::test_streaming_vs_batch_convergence ... ok
+test streaming::volume::volume_momentum::tests::test_streaming_volume_momentum_basic ... ok
+test streaming::volume::volume_momentum::tests::test_streaming_volume_momentum_meta ... ok
+test streaming::volume::volume_momentum::tests::test_streaming_volume_momentum_reset ... ok
+test streaming::volume::volume_momentum::tests::test_streaming_volume_roc_basic ... ok
+test streaming::volume::volume_momentum::tests::test_streaming_vs_batch_volume_momentum ... ok
+test streaming::volume::volume_momentum::tests::test_streaming_vs_batch_volume_roc ... ok
+test streaming::volume::volume_oscillator::tests::test_streaming_volume_oscillator ... ok
+test streaming::volume::volume_oscillator::tests::test_streaming_volume_oscillator_reset ... ok
+test streaming::volume::vr::tests::test_streaming_vr_basic ... ok
+test streaming::volume::vr::tests::test_streaming_vr_meta ... ok
+test streaming::volume::vr::tests::test_streaming_vr_reset ... ok
+test streaming::volume::vr::tests::test_streaming_vs_batch_convergence ... ok
+test streaming::volume::vzo::tests::test_streaming_vs_batch_convergence ... ok
+test streaming::volume::vzo::tests::test_streaming_vzo_basic ... ok
+test streaming::volume::vzo::tests::test_streaming_vzo_meta ... ok
+test streaming::volume::vzo::tests::test_streaming_vzo_reset ... ok
+test traits::tests::test_ad_adapter_basic ... ok
+test traits::tests::test_atr_adapter_basic ... ok
+test traits::tests::test_boll_adapter_basic ... ok
+test traits::tests::test_ema_convergence_returns_3_times_n_plus_1 ... ok
+test traits::tests::test_ema_streaming_vs_batch_after_convergence ... ok
+test traits::tests::test_kdj_adapter_basic ... ok
+test traits::tests::test_macd_adapter_config ... ok
+test traits::tests::test_mfi_adapter_basic ... ok
+test traits::tests::test_obv_adapter_convergence ... ok
+test traits::tests::test_ohlcv_array_adapter ... ok
+test traits::tests::test_ohlcv_bar_implements_ohlcv ... ok
+test traits::tests::test_ohlcv_bar_to_inner_ohlcv_bridge ... ok
+test traits::tests::test_ohlcv_tuple_implements_ohlcv ... ok
+test traits::tests::test_repaint_handling ... ok
+test traits::tests::test_rsi_convergence_after_period_plus_1 ... ok
+test traits::tests::test_sma_adapter_implements_streaming_indicator ... ok
+test traits::tests::test_sma_convergence_returns_n ... ok
+test traits::tests::test_sma_streaming_vs_batch_after_convergence ... ok
+test traits::tests::test_stoch_adapter_basic ... ok
+test transforms::diff::tests::test_diff_basic ... ok
+test transforms::diff::tests::test_diff_empty ... ok
+test traits::tests::test_vwap_adapter_convergence ... ok
+test transforms::diff::tests::test_diff_n_order0 ... ok
+test transforms::diff::tests::test_diff_n_order2 ... ok
+test transforms::diff::tests::test_diff_n_too_many_orders ... ok
+test transforms::diff::tests::test_diff_negative ... ok
+test transforms::log_return::tests::test_basic ... ok
+test transforms::log_return::tests::test_constant_prices ... ok
+test transforms::log_return::tests::test_empty_input ... ok
+test transforms::pct_change::tests::test_basic ... ok
+test transforms::pct_change::tests::test_empty_input ... ok
+test transforms::pct_change::tests::test_negative_change ... ok
+test transforms::pct_change::tests::test_zero_division ... ok
+test transforms::pipeline::tests::test_pipeline_empty ... ok
+test transforms::pipeline::tests::test_pipeline_log_return_zscore ... ok
+test transforms::pipeline::tests::test_pipeline_minmax_after_standard ... ok
+test transforms::pipeline::tests::test_pipeline_single_step ... ok
+test transforms::rank::tests::test_percentile_rank_basic ... ok
+test transforms::rank::tests::test_percentile_rank_empty ... ok
+test transforms::rank::tests::test_rank_all_same ... ok
+test transforms::rank::tests::test_rank_basic ... ok
+test transforms::rank::tests::test_rank_empty ... ok
+test transforms::rank::tests::test_rank_single ... ok
+test transforms::rank::tests::test_rank_ties ... ok
+test transforms::rolling::tests::test_rolling_mean_basic ... ok
+test transforms::rolling::tests::test_rolling_mean_empty ... ok
+test transforms::rolling::tests::test_rolling_mean_window_larger_than_input ... ok
+test transforms::rolling::tests::test_rolling_mean_window_zero ... ok
+test transforms::rolling::tests::test_rolling_std_basic ... ok
+test transforms::rolling::tests::test_rolling_std_constant ... ok
+test transforms::rolling::tests::test_rolling_std_empty ... ok
+test transforms::rolling::tests::test_rolling_std_large_values ... ok
+test transforms::rolling::tests::test_rolling_sum_basic ... ok
+test transforms::rolling::tests::test_rolling_sum_empty ... ok
+test transforms::scaler::tests::test_minmax_basic ... ok
+test transforms::scaler::tests::test_minmax_constant ... ok
+test transforms::scaler::tests::test_minmax_empty ... ok
+test transforms::scaler::tests::test_standard_scaler_basic ... ok
+test transforms::scaler::tests::test_standard_scaler_constant ... ok
+test transforms::scaler::tests::test_standard_scaler_single ... ok
+test transforms::zscore::tests::test_basic ... ok
+test transforms::zscore::tests::test_constant_input ... ok
+test transforms::zscore::tests::test_empty_input ... ok
+test utils::tests::test_all_nan ... ok
+test utils::tests::test_clamp_min ... ok
+test utils::tests::test_init_output ... ok
+test utils::tests::test_smoothing_factor ... ok
+test utils::tests::test_to_array ... ok
+test utils::tests::test_true_range ... ok
+test utils::tests::test_validate_input ... ok
+test utils::tests::test_validate_param ... ok
+Bytecode vs AST speedup: 1.07x (bytecode: 97.837869ms, AST: 104.752216ms)
+test formula::bytecode::tests::test_performance_bytecode_vs_ast ... ok
+simd_sin_cos speedup: 7.24x (simd=3.3 ns/elem, scalar=23.8 ns/elem)
+test math::simd_ops::tests::test_simd_sin_cos_throughput ... ok
+
+failures:
+
+failures:
+    compute::tests::registry_specs_map_to_compute_capabilities
+
+test result: FAILED. 2677 passed; 1 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.68s
+
+[1m[91merror[0m: test failed, to rerun pass `-p finkit --lib`
+
+===== END FULL CORE FAILURE TAIL =====
+
+overall_failed=1
