@@ -43,8 +43,10 @@ jobs:
           git add ffi/c-binding/CMakeLists.txt \
                   ffi/c-binding/include/finkit.hpp \
                   ffi/c-binding/tests/CMakeLists.txt \
+                  ffi/c-binding/tests/test_indicators.cpp \
                   ffi/c-binding/examples/CMakeLists.txt \
                   ffi/java-binding/java/src/main/java/com/finkit/Indicators.java \
+                  ffi/java-binding/java/src/main/java/com/finkit/ChartPatterns.java \
                   ffi/java-binding/java/src/main/java/com/finkit/NativeLoader.java \
                   ffi/node-binding/package.json \
                   scripts/check_versions.py
