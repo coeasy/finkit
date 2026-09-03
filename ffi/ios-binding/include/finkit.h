@@ -1,5 +1,5 @@
-#ifndef ALPHA_TA_IOS_H
-#define ALPHA_TA_IOS_H
+#ifndef FINKIT_IOS_H
+#define FINKIT_IOS_H
 
 #include <stdint.h>
 
@@ -7,7 +7,15 @@
 extern "C" {
 #endif
 
-/// ABI version of the bundled static lib. Bumped whenever the symbol set
+/*
+ * Finkit iOS C ABI.
+ *
+ * The alpha_ta_* symbol prefix is retained for binary/source compatibility
+ * with the first iOS binding implementation. New Swift-facing APIs use the
+ * Finkit name; changing these C symbols is a separate ABI-breaking decision.
+ */
+
+/// ABI version of the bundled static library. Bumped whenever the symbol set
 /// changes in a backwards-incompatible way.
 int32_t alpha_ta_ios_abi_version(void);
 
@@ -33,12 +41,11 @@ int32_t alpha_ta_linear_reg(const double *input, int32_t len, int32_t period, do
 int32_t alpha_ta_percent_rank(const double *input, int32_t len, int32_t period, double *out);
 
 // ---- candlestick patterns --------------------------------------------------
-/// Returns the number of candlestick patterns detected in the supplied OHLC
-/// series. The returned value is the total number of non-zero detections
-/// across the built-in Doji, Hammer, and Engulfing detectors.
+/// Returns the total number of non-zero detections across the built-in
+/// Doji, Hammer, and Engulfing detectors. Returns a negative value on error.
 int32_t alpha_ta_detect_candlestick(const double *open, const double *high,
-                                  const double *low,  const double *close,
-                                  int32_t len);
+                                    const double *low, const double *close,
+                                    int32_t len);
 
 #ifdef __cplusplus
 }
