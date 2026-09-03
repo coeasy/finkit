@@ -2,14 +2,15 @@ package com.finkit.indicators;
 
 /**
  * High-performance financial technical analysis for Android, backed by
- * the finkit Rust core via JNI.
+ * the Finkit Rust core via JNI.
  *
- * <p>Call {@link #init()} once (typically from {@code Application.onCreate})
- * to load the native library, then call the static indicator methods.
+ * <p>The class loads {@code finkit_android} automatically when it is first
+ * referenced. The AAR must therefore contain the matching native library
+ * under {@code jni/<abi>/} for the device ABI.
  *
- * <p>All public methods are thread-safe — the underlying Rust functions
- * are pure (no shared mutable state), so the JNI overhead is dominated
- * by the {@code double[]} marshalling.
+ * <p>All public indicator methods delegate to pure Rust calculations. The
+ * JNI boundary copies Java {@code double[]} inputs into Rust-owned buffers
+ * for the duration of each call.
  */
 public final class Finkit {
 
@@ -24,7 +25,7 @@ public final class Finkit {
 
     private Finkit() { /* no instances */ }
 
-    /** Returns the bundled native library version, e.g. {@code "0.1.2"}. */
+    /** Returns the bundled native library version, for example {@code "0.1.3"}. */
     public static native String version();
 
     /** Returns the JNI ABI version, used by the wrapper to refuse mismatched builds. */
