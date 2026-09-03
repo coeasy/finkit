@@ -5,7 +5,7 @@ import (
 	"math"
 	"os"
 
-	"github.com/coeasy/finkit/go/ta"
+	"github.com/coeasy/finkit/ffi/go-binding/go/ta"
 )
 
 func main() {
