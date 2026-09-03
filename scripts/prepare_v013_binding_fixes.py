@@ -21,6 +21,21 @@ def fix_java_duplicates() -> None:
         raise RuntimeError("Java canonical advanced section not found")
 
 
+def fix_java_javadocs() -> None:
+    chart = ROOT / "ffi/java-binding/java/src/main/java/com/finkit/ChartPatterns.java"
+    text = chart.read_text(encoding="utf-8")
+    text = text.replace(
+        "Head and Shoulders Bottom (Inverse H&S) detection.",
+        "Head and Shoulders Bottom (Inverse H&amp;S) detection.",
+    )
+    chart.write_text(text, encoding="utf-8")
+
+    indicators = ROOT / "ffi/java-binding/java/src/main/java/com/finkit/Indicators.java"
+    text = indicators.read_text(encoding="utf-8")
+    text = text.replace("     * @result ", "     * @param result ")
+    indicators.write_text(text, encoding="utf-8")
+
+
 def fix_consumer_cmake(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     old = '# Find parent project\nfind_package(finkit REQUIRED PATHS "${CMAKE_CURRENT_SOURCE_DIR}/..")\n'
@@ -50,6 +65,7 @@ def fix_cpp_ohlc_helpers() -> None:
 
 def main() -> None:
     fix_java_duplicates()
+    fix_java_javadocs()
     fix_consumer_cmake(ROOT / "ffi/c-binding/tests/CMakeLists.txt")
     fix_consumer_cmake(ROOT / "ffi/c-binding/examples/CMakeLists.txt")
     fix_cpp_ohlc_helpers()
