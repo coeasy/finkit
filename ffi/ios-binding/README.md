@@ -9,7 +9,8 @@ The source integration contains:
 - a Rust C ABI static library;
 - generated indicator entry points;
 - the `finkit.h` C header;
-- a Swift-facing `Finkit` wrapper;
+- a Clang module map named `FinkitC`;
+- a Swift-facing `Finkit` wrapper that imports `FinkitC`;
 - an XCFramework build script for physical arm64 devices and both Apple Silicon/Intel simulators.
 
 The historical `alpha_ta_*` C symbols are intentionally retained as an internal compatibility ABI. New Swift code should use `Finkit`, not the deprecated `AlphaTA` alias.
@@ -43,18 +44,24 @@ Output:
 dist/ios/Finkit.xcframework
 ```
 
-The script performs locked Rust builds, combines simulator architectures with `lipo`, then calls `xcodebuild -create-xcframework`.
+The script performs locked Rust builds, combines simulator architectures with `lipo`, packages `finkit.h` + `module.modulemap` + the Swift wrapper source, then calls `xcodebuild -create-xcframework`.
 
 ## Swift API
 
-The checked-in Swift wrapper exposes a focused native subset including:
+The low-level import module is intentionally named `FinkitC` so it does not collide with the public Swift type:
+
+```swift
+import FinkitC
+```
+
+The checked-in `Finkit.swift` wrapper then exposes a focused native subset including:
 
 - SMA, EMA, WMA, DEMA, TEMA;
 - RSI, ROC, MOM, CMO, TRIX;
 - midpoint, z-score, TSF, linear regression, percent rank;
 - candlestick detection count.
 
-Example source usage once the wrapper/header are integrated into the consuming target:
+Example source usage once the XCFramework and wrapper source are integrated into the consuming target:
 
 ```swift
 let prices: [Double] = [1, 2, 3, 4, 5, 6]
@@ -62,11 +69,13 @@ let sma = try Finkit.sma(prices, period: 3)
 print(sma)
 ```
 
+The multi-language CI type-checks `Finkit.swift` against the module map copied into the built XCFramework. This catches missing C imports and Swift wrapper signature errors in addition to native Rust/Xcode packaging failures.
+
 ## Packaging boundary
 
-The CI XCFramework artifact verifies that the Rust device/simulator libraries and headers can be packaged together. It does not by itself constitute a Swift Package Manager, CocoaPods, or binary registry publication.
+The XCFramework candidate verifies that device/simulator Rust libraries and the C module can be packaged together and that the Swift wrapper type-checks against that module.
 
-Before advertising a one-command iOS dependency, the project should additionally provide and test a consumer package/module definition from a clean application project.
+It still does not by itself constitute a Swift Package Manager, CocoaPods, or binary registry publication. Before advertising a one-command iOS dependency, provide and clean-test a consumer package/module definition from a separate application project.
 
 ## ABI compatibility
 
@@ -83,6 +92,7 @@ New code should use the Finkit names.
 
 - [Language bindings](../../docs/language-bindings.md)
 - [Installation guide](../../docs/installation.md)
+- [Troubleshooting](../../docs/troubleshooting.md)
 - [Generated indicator catalog](../../docs/generated/indicators.md)
 
 ## License
