@@ -27,6 +27,7 @@ jobs:
           python scripts/prepare_v013_multilang.py
           python scripts/prepare_v013_platform_compat.py
           python scripts/prepare_v013_node_package.py
+          python scripts/prepare_v013_binding_fixes.py
           python scripts/check_versions.py
           git diff --check
 
@@ -40,6 +41,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add ffi/c-binding/CMakeLists.txt \
+                  ffi/c-binding/tests/CMakeLists.txt \
+                  ffi/c-binding/examples/CMakeLists.txt \
                   ffi/java-binding/java/src/main/java/com/finkit/Indicators.java \
                   ffi/java-binding/java/src/main/java/com/finkit/NativeLoader.java \
                   ffi/node-binding/package.json \
