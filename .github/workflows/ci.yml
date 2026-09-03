@@ -15,6 +15,7 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
 
 jobs:
   workspace-check:
@@ -76,8 +77,6 @@ jobs:
     needs: version-consistency
     runs-on: ubuntu-22.04
     timeout-minutes: 45
-    env:
-      RUSTFLAGS: "-D warnings"
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -94,8 +93,6 @@ jobs:
     needs: version-consistency
     runs-on: ubuntu-22.04
     timeout-minutes: 30
-    env:
-      RUSTFLAGS: "-D warnings"
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -105,12 +102,24 @@ jobs:
       - name: Test visualization integration flow
         run: cargo test -p finkit-visualization --locked
 
+  package-contract:
+    name: Rust package contract
+    needs: version-consistency
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Verify packaged core crate compiles from packaged contents
+        run: cargo package -p finkit --locked
+      - name: Build release CLI against the release core
+        run: cargo build -p finkit-cli --release --locked
+
   regression-gates:
     name: Memory and performance regression
     runs-on: ubuntu-22.04
     timeout-minutes: 30
-    env:
-      RUSTFLAGS: "-D warnings"
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
