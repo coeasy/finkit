@@ -1,4 +1,4 @@
-name: PR14 core regression diagnostic
+name: PR14 final gate diagnostic
 
 on:
   push:
@@ -9,10 +9,10 @@ permissions:
   contents: write
 
 jobs:
-  diagnose:
+  final-gates:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-22.04
-    timeout-minutes: 45
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v7
         with:
@@ -20,7 +20,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt,clippy
-      - name: Apply v0.1.3 repairs
+      - uses: Swatinem/rust-cache@v2
+      - name: Apply complete v0.1.3 repair set
         run: |
           python scripts/check_versions.py --fix
           python .ci/pr14_harden.py round1
@@ -36,52 +37,60 @@ jobs:
           python .ci/pr14_formula_compute_ir_integration.py
           python .ci/pr14_harden.py round3
           sed -i '/self.last_write.insert(canonical_name(var), id);/{n;/self.last_control_flow = Some(id);/d;}' core/src/formula/compute_ir.rs
+          python .ci/pr14_final_ci_gate.py
+          python scripts/gen_ssot_docs.py
+          python scripts/check_versions.py --fix
           cargo fmt --all
-      - name: Diagnose core modules
+      - name: Run final gate matrix
         shell: bash
         run: |
           set +e
-          report=.ci/pr14-diagnostic-result.txt
+          report=.ci/pr14-final-gate-result.txt
           : > "$report"
-          printf 'PR14 core diagnostic\ncommit=%s\n\n' "$GITHUB_SHA" >> "$report"
+          printf 'PR14 final gate diagnostic\ncommit=%s\n\n' "$GITHUB_SHA" >> "$report"
           failed=0
-          modules=(
-            buffer_arena compute error formula indicators math patterns backtest batch factors
-            features multi_period_resonance polars_ext registry risk runtime schema sector selectors
-            streaming talib_ffi traits transforms utils metrics
-          )
-          for module in "${modules[@]}"; do
-            log="/tmp/pr14-${module}.log"
-            cargo test -p finkit --lib "${module}::" --locked -- --nocapture >"$log" 2>&1
+          run_gate() {
+            name="$1"
+            shift
+            log="/tmp/pr14-${name}.log"
+            "$@" >"$log" 2>&1
             status=$?
-            printf '%-28s status=%s\n' "$module" "$status" >> "$report"
+            printf '%-34s status=%s\n' "$name" "$status" >> "$report"
             if [ "$status" -ne 0 ]; then
               failed=1
-              printf '\n===== FAILURE: %s =====\n' "$module" >> "$report"
-              tail -n 240 "$log" >> "$report"
-              printf '\n===== END FAILURE: %s =====\n\n' "$module" >> "$report"
+              printf '\n===== FAILURE: %s =====\n' "$name" >> "$report"
+              tail -n 260 "$log" >> "$report"
+              printf '\n===== END FAILURE: %s =====\n\n' "$name" >> "$report"
             fi
-          done
-          full_log=/tmp/pr14-full-core.log
-          cargo test -p finkit --lib --locked -- --nocapture >"$full_log" 2>&1
-          full_status=$?
-          printf '\nfull_core                    status=%s\n' "$full_status" >> "$report"
-          if [ "$full_status" -ne 0 ]; then
-            failed=1
-            printf '\n===== FULL CORE FAILURE TAIL =====\n' >> "$report"
-            tail -n 320 "$full_log" >> "$report"
-            printf '\n===== END FULL CORE FAILURE TAIL =====\n' >> "$report"
-          fi
+          }
+          run_gate core cargo test -p finkit --locked
+          run_gate cli cargo test -p finkit-cli --locked
+          run_gate polars cargo test -p finkit --test polars_integration_tests --features finkit-polars --locked
+          run_gate memory cargo test -p finkit --test memory_regression --release --locked -- --test-threads=1
+          run_gate performance cargo test -p finkit --test performance_regression --release --locked -- --test-threads=1
+          run_gate bench_compile cargo bench -p finkit --no-run --locked
+          run_gate workspace_check cargo check --workspace --all-targets --locked
+          run_gate python_check cargo check -p finkit-python --all-targets --locked
+          run_gate clippy_core cargo clippy -p finkit --locked
+          run_gate clippy_workspace cargo clippy --workspace --all-targets --locked
+          run_gate format cargo fmt --all -- --check
+          run_gate versions python scripts/check_versions.py
+          run_gate ssot python scripts/gen_ssot_docs.py --check
           printf '\noverall_failed=%s\n' "$failed" >> "$report"
           cat "$report"
-      - name: Persist diagnostic report
+          exit "$failed"
+      - name: Persist final gate report
+        if: always()
         shell: bash
         run: |
+          if [ ! -f .ci/pr14-final-gate-result.txt ]; then
+            exit 0
+          fi
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add .ci/pr14-diagnostic-result.txt
+          git add .ci/pr14-final-gate-result.txt
           if git diff --cached --quiet; then
             exit 0
           fi
-          git commit -m 'ci: record PR14 core diagnostic result'
+          git commit -m 'ci: record PR14 final gate result'
           git push origin HEAD:feat/compute-runtime-factorplan-v012
