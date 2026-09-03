@@ -93,3 +93,31 @@ if text.count(old) != 1:
     raise SystemExit("schema.rs: alias lookup test not found")
 text = text.replace(old, new, 1)
 path.write_text(text, encoding="utf-8")
+
+path = Path("cli/tests/schema_cli.rs")
+text = path.read_text(encoding="utf-8")
+old = '''#[test]
+fn schema_cli_resolves_compatibility_aliases() {
+    let schema = run_schema(&["--function", "ma", "--compact"]);
+    assert_eq!(schema["schema_version"], "finkit.function.v1");
+    assert_eq!(schema["function"]["name"], "SMA");
+    assert_eq!(schema["function"]["effect"], "pure");
+    assert_eq!(schema["function"]["lookback"], "period_minus_one");
+}
+'''
+new = '''#[test]
+fn schema_cli_resolves_canonical_names_and_compatibility_aliases() {
+    let ma = run_schema(&["--function", "ma", "--compact"]);
+    assert_eq!(ma["schema_version"], "finkit.function.v1");
+    assert_eq!(ma["function"]["name"], "MA");
+    assert_eq!(ma["function"]["effect"], "pure");
+    assert_eq!(ma["function"]["lookback"], "period_minus_one");
+
+    let boll = run_schema(&["--function", "boll", "--compact"]);
+    assert_eq!(boll["function"]["name"], "BBANDS");
+}
+'''
+if text.count(old) != 1:
+    raise SystemExit("schema_cli.rs: MA alias test not found")
+text = text.replace(old, new, 1)
+path.write_text(text, encoding="utf-8")
