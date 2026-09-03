@@ -1,0 +1,76 @@
+name: PR14 round1 structural fix
+
+on:
+  push:
+    branches:
+      - feat/compute-runtime-factorplan-v012
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/compute-runtime-factorplan-v012
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt,clippy
+      - name: Repair FactorPlan validation and module ownership
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          compute = Path('core/src/compute.rs')
+          s = compute.read_text(encoding='utf-8')
+          s = s.replace(
+              'use crate::factors::{FactorContext, FactorEngine, FactorError, FactorRegistry, FactorResult};',
+              'use crate::factors::{\n    BorrowedFactorContext, FactorContext, FactorEngine, FactorError, FactorRegistry, FactorResult,\n};',
+              1,
+          )
+          old = '''    /// Validate raw inputs before numerical execution starts.\n    pub fn validate_context(&self, context: &FactorContext) -> FactorResult<()> {\n        for input in &self.required_raw_inputs {\n            if context.get(input).is_none() {\n                return Err(FactorError::MissingInput(input.clone()));\n            }\n        }\n        Ok(())\n    }\n\n    /// Execute the plan through the current factor engine implementation.\n    ///\n    /// This preserves the existing memoization and result semantics. A future\n    /// optimized backend can consume [`Self::execution_order`] directly\n    /// without changing this public planning contract.\n    pub fn execute(\n        &self,\n        engine: &FactorEngine,\n        context: &FactorContext,\n    ) -> FactorResult<BTreeMap<String, Vec<f64>>> {\n        self.validate_context(context)?;\n        self.validate_engine(engine)?;\n        self.execute_precompiled(engine, context)\n    }\n\n    fn validate_engine(&self, engine: &FactorEngine) -> FactorResult<()> {\n'''
+          new = '''    /// Validate owned raw inputs before numerical execution starts.\n    pub fn validate_context(&self, context: &FactorContext) -> FactorResult<()> {\n        self.validate_raw_inputs(|name| context.get(name).is_some())\n    }\n\n    /// Validate borrowed raw inputs before numerical execution starts.\n    pub fn validate_borrowed_context(\n        &self,\n        context: &BorrowedFactorContext<'_>,\n    ) -> FactorResult<()> {\n        self.validate_raw_inputs(|name| context.get(name).is_some())\n    }\n\n    fn validate_raw_inputs(&self, mut contains: impl FnMut(&str) -> bool) -> FactorResult<()> {\n        for input in &self.required_raw_inputs {\n            if !contains(input) {\n                return Err(FactorError::MissingInput(input.clone()));\n            }\n        }\n        Ok(())\n    }\n\n    /// Execute the plan through the precompiled topological order.\n    pub fn execute(\n        &self,\n        engine: &FactorEngine,\n        context: &FactorContext,\n    ) -> FactorResult<BTreeMap<String, Vec<f64>>> {\n        self.execute_precompiled(engine, context)\n    }\n\n    /// Execute this plan in precompiled order over owned input.\n    pub fn execute_precompiled(\n        &self,\n        engine: &FactorEngine,\n        context: &FactorContext,\n    ) -> FactorResult<BTreeMap<String, Vec<f64>>> {\n        self.validate_context(context)?;\n        self.validate_engine(engine)?;\n        engine.evaluate_precompiled(self.execution_order(), self.required_raw_inputs(), context)\n    }\n\n    /// Execute this plan in precompiled order over zero-copy borrowed input.\n    pub fn execute_borrowed(\n        &self,\n        engine: &FactorEngine,\n        context: &BorrowedFactorContext<'_>,\n    ) -> FactorResult<BTreeMap<String, Vec<f64>>> {\n        self.validate_borrowed_context(context)?;\n        self.validate_engine(engine)?;\n        engine.evaluate_precompiled_borrowed(\n            self.execution_order(),\n            self.required_raw_inputs(),\n            context,\n        )\n    }\n\n    fn validate_engine(&self, engine: &FactorEngine) -> FactorResult<()> {\n'''
+          if old not in s:
+              raise SystemExit('FactorPlan execution block not found')
+          s = s.replace(old, new, 1)
+          compute.write_text(s, encoding='utf-8')
+
+          factors = Path('core/src/factors.rs')
+          s = factors.read_text(encoding='utf-8')
+          marker = '''    fn evaluate_precompiled_raw(\n        &self,\n        execution_order: &[String],\n        required_raw_inputs: &[String],\n        context: &dyn RawFactorContext,\n    ) -> FactorResult<BTreeMap<String, Vec<f64>>> {\n'''
+          wrapper = '''    pub(crate) fn evaluate_precompiled(\n        &self,\n        execution_order: &[String],\n        required_raw_inputs: &[String],\n        context: &FactorContext,\n    ) -> FactorResult<BTreeMap<String, Vec<f64>>> {\n        self.evaluate_precompiled_raw(execution_order, required_raw_inputs, context)\n    }\n\n    pub(crate) fn evaluate_precompiled_borrowed(\n        &self,\n        execution_order: &[String],\n        required_raw_inputs: &[String],\n        context: &BorrowedFactorContext<'_>,\n    ) -> FactorResult<BTreeMap<String, Vec<f64>>> {\n        self.evaluate_precompiled_raw(execution_order, required_raw_inputs, context)\n    }\n\n'''
+          if marker not in s:
+              raise SystemExit('evaluate_precompiled_raw marker not found')
+          s = s.replace(marker, wrapper + marker, 1)
+          start = s.find('\nimpl crate::compute::FactorPlan {')
+          end_marker = '\n}\n\n/// Simple return over `period` bars with NaN warm-up values.'
+          end = s.find(end_marker, start)
+          if start < 0 or end < 0:
+              raise SystemExit('split FactorPlan impl block not found')
+          s = s[:start] + '\n' + s[end + 3:]
+          factors.write_text(s, encoding='utf-8')
+          PY
+      - name: Apply rustfmt
+        run: cargo fmt --all
+      - name: Run round 1 core tests
+        run: cargo test -p finkit --locked
+      - name: Run round 1 workspace check
+        run: cargo check --workspace --all-targets --locked
+      - name: Run round 1 clippy
+        run: cargo clippy -p finkit --all-targets --locked -- -D warnings
+      - name: Commit round 1 repairs
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add core/src/compute.rs core/src/factors.rs
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "fix: centralize factor plan validation and execution"
+          git push origin HEAD:feat/compute-runtime-factorplan-v012
