@@ -1,26 +1,30 @@
 # Installation Guide
 
-This guide describes the installation paths that are actually supported by the current Finkit `v0.1.3` repository and Release.
+This guide distinguishes the installation paths actually published in Finkit **v0.1.3** from the additional multi-language package candidates being validated for the next release.
 
 ## 1. Choose an installation path
 
-| Target | Recommended path | v0.1.3 status |
-| --- | --- | --- |
-| Python | Install a wheel from the GitHub `v0.1.3` Release | Verified release path |
-| Rust library | Git tag/local path, or unpack the `.crate` Release asset | Verified package artifact; registry publication is separate |
-| CLI | Download Linux x86_64 Release binary or build from source | Linux Release binary verified |
-| Node.js | Build from `ffi/node-binding` | CI build/test/npm-pack path verified; no registry assumption |
-| Java | Build JNI + Maven JAR from `ffi/java-binding` | CI package/Javadoc/loader smoke verified; no Maven Central assumption |
-| C/C++ | Build/install from `ffi/c-binding` | CMake build/test/install path verified in CI |
-| Go | Build from repository source | Source/development integration; not a public v0.1.3 module contract |
-| .NET | Build from repository source | Source/development integration; no verified NuGet release |
-| Android/iOS/WASM | Build from repository source | Development/experimental for v0.1.3 |
+| Target | Recommended path today | Published v0.1.3 status | Next-release validation |
+| --- | --- | --- | --- |
+| Python | Install a wheel from the GitHub `v0.1.3` Release | Verified Release wheels | existing wheel matrix retained |
+| Rust library | Git tag/local path, or unpack the `.crate` asset | Verified Release artifact | crate packaging gate |
+| CLI | Download Linux x86_64 binary or build from source | Verified Release binary | Linux CLI packaging gate |
+| Node.js | Build from `ffi/node-binding` | CI build/test/npm-pack path | native/root package-candidate gate |
+| Java/JNI | Build JNI + Maven JAR | CI package/Javadoc/loader smoke | JAR package-candidate gate |
+| C/C++ | Build/install from `ffi/c-binding` | CI CMake build/test/install | SDK package-candidate gate |
+| Go/CGO | Build from `ffi/go-binding` | source only in v0.1.3 | Linux `go test` + external module gate |
+| .NET | Build from `ffi/dotnet-binding` | source only in v0.1.3 | Linux tests + NuGet candidate inspection |
+| Android | Build Rust JNI + AAR | source only in v0.1.3 | four-ABI AAR gate |
+| iOS | Build XCFramework from source | source only in v0.1.3 | device/simulator XCFramework gate |
+| WASM | Build `finkit-wasm` for wasm32 | source only in v0.1.3 | real wasm32 target gate |
 
-The GitHub Release is at:
+The published `v0.1.3` GitHub Release is:
 
 `https://github.com/coeasy/finkit/releases/tag/v0.1.3`
 
-The published `v0.1.3` assets are four Python ABI3 wheels, `finkit-0.1.3.crate`, `finkit-cli-linux-x86_64`, and `SHA256SUMS`.
+Its assets are four Python ABI3 wheels, `finkit-0.1.3.crate`, `finkit-cli-linux-x86_64`, and `SHA256SUMS`.
+
+A next-release CI artifact is not automatically a v0.1.3 asset, a final future Release asset, or a public registry package.
 
 ## 2. Common source-build prerequisites
 
@@ -36,10 +40,15 @@ Clone the repository:
 ```bash
 git clone https://github.com/coeasy/finkit.git
 cd finkit
+```
+
+To reproduce the published v0.1.3 source contract:
+
+```bash
 git checkout v0.1.3
 ```
 
-For development on the latest main branch, omit the tag checkout.
+For next-release multi-language work, use the current development branch/main once the changes are merged.
 
 Verify the Rust workspace before building a binding:
 
@@ -50,29 +59,25 @@ cargo test -p finkit --locked
 
 ## 3. Python
 
-### Supported wheel matrix
+### Supported v0.1.3 wheel matrix
 
 The `v0.1.3` Release uses CPython stable ABI (`cp38-abi3`). One wheel per platform is reused by supported GIL-enabled CPython versions.
 
 | Platform | Release wheel family | CI compatibility |
 | --- | --- | --- |
 | Linux x86_64 | `finkit-0.1.3-cp38-abi3-manylinux_2_17_x86_64...whl` | CPython 3.8-3.14 |
-| Windows x86_64 | `finkit-0.1.3-cp38-abi3-win_amd64.whl` | Build/install smoke verified |
-| macOS x86_64 | `finkit-0.1.3-cp38-abi3-macosx_*_x86_64.whl` | Build/install smoke verified |
-| macOS arm64 | `finkit-0.1.3-cp38-abi3-macosx_*_arm64.whl` | Build/install smoke verified |
+| Windows x86_64 | `finkit-0.1.3-cp38-abi3-win_amd64.whl` | build/install smoke verified |
+| macOS x86_64 | `finkit-0.1.3-cp38-abi3-macosx_*_x86_64.whl` | build/install smoke verified |
+| macOS arm64 | `finkit-0.1.3-cp38-abi3-macosx_*_arm64.whl` | build/install smoke verified |
 
 Not part of the v0.1.3 wheel matrix: Linux arm64, musllinux, 32-bit Windows, PyPy, and free-threaded CPython.
 
 ### Install a Release wheel
 
-Download the wheel matching the operating system and CPU architecture, then run:
-
 ```bash
 python -m pip install --upgrade pip
 python -m pip install ./finkit-0.1.3-<matching-platform>.whl
 ```
-
-NumPy is a required runtime dependency and is declared by the package metadata.
 
 Verify:
 
@@ -98,7 +103,6 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install "maturin>=1.5,<2.0" "numpy>=1.24" pytest
-
 cd ffi/python-binding
 maturin develop --release
 cd ../..
@@ -112,34 +116,33 @@ py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install "maturin>=1.5,<2.0" "numpy>=1.24" pytest
-
 Set-Location ffi/python-binding
 maturin develop --release
 Set-Location ../..
 python -m pytest ffi/python-binding/tests -q
 ```
 
-See [python.md](python.md) for wheel selection, `CompiledFormula`, pandas integration, and troubleshooting.
+See [python.md](python.md) for `CompiledFormula`, NumPy contracts, pandas integration, and troubleshooting.
 
 ## 4. Rust library
 
-The workspace package is named `finkit`. The repository produces `finkit-0.1.3.crate` as a Release asset, but the presence of that artifact does not imply crates.io publication.
+The workspace package is named `finkit`. The repository produces `finkit-0.1.3.crate` as a Release asset, but that does not imply crates.io publication.
 
-### Git tag dependency
+Git tag dependency:
 
 ```toml
 [dependencies]
 finkit = { git = "https://github.com/coeasy/finkit", tag = "v0.1.3" }
 ```
 
-### Local path dependency
+Local path dependency:
 
 ```toml
 [dependencies]
 finkit = { path = "../finkit/core" }
 ```
 
-### Build the package directly
+Build/package:
 
 ```bash
 cargo build -p finkit --release --locked
@@ -147,11 +150,9 @@ cargo test -p finkit --locked
 cargo package -p finkit --locked --no-verify
 ```
 
-Common optional features include `rayon`, `finkit-polars`, `talib-c`, `nightly-avx512`, and `precision-f32`; the default feature set already enables the standard library, formula support, serialization, observability scaffolding, formula JIT/SIMD, and the full indicator categories. Inspect `core/Cargo.toml` before disabling defaults because indicator categories have transitive dependencies.
-
 ## 5. CLI
 
-### Linux x86_64 Release binary
+Download the v0.1.3 Linux x86_64 binary:
 
 ```bash
 curl -L -o finkit-cli \
@@ -160,52 +161,36 @@ chmod +x finkit-cli
 ./finkit-cli --help
 ```
 
-Verify the downloaded file with `SHA256SUMS` from the same Release before production use.
+Verify it with `SHA256SUMS` from the same Release.
 
-### Build the CLI from source
+Build from source:
 
 ```bash
 cargo build -p finkit-cli --release --locked
 ./target/release/finkit-cli --help
 ```
 
-The package is `finkit-cli`; its Clap application name is `finkit`. Documentation examples use the produced `finkit-cli` executable path to avoid ambiguity.
-
 ## 6. Node.js
 
-The Node binding uses NAPI-RS and is configured as package `finkit` version `0.1.3`. The repository validates native build/test/package logic, but v0.1.3 documentation does not claim an npm registry release.
+The Node binding uses NAPI-RS.
 
-Prerequisites:
-
-- Node.js 16+;
-- npm;
-- Rust;
-- platform native build tools.
-
-Build and test:
+Requirements: Node.js 16+, npm, Rust, and native build tools.
 
 ```bash
 cd ffi/node-binding
-npm install
+npm ci
 npm run build
 npm test
 npm pack
 ```
 
-The root JS loader expects a platform-specific native `.node` package/artifact. For distribution work, ensure the optional platform package declared in `package.json` is actually built and staged; do not publish a root npm package whose declared platform packages are missing.
+The root JavaScript loader expects a platform-specific native `.node` package. For release work, the platform package must contain `finkit.node` before the root package is treated as distributable.
+
+Do not assume an npm registry release exists until it is published and clean-install tested.
 
 ## 7. Java/JNI
 
-The Java binding source is under `ffi/java-binding`. The CI path builds the Rust JNI library, embeds the native resource into the JAR, runs Maven package/Javadoc, and executes a JNI loader smoke test.
-
-Prerequisites:
-
-- Rust 1.85+;
-- JDK compatible with the project source/target level;
-- Maven;
-- native compiler/linker.
-
-Linux source build example:
+Linux source/package example:
 
 ```bash
 cargo build -p finkit-java --release --locked
@@ -214,15 +199,11 @@ cp target/release/libfinkit_java.so ffi/java-binding/natives/linux-x86_64/
 mvn -B -f ffi/java-binding/pom.xml -DskipTests package
 ```
 
-The Java `NativeLoader` first supports an explicit `finkit.native.path`, then packaged `/natives/<os>-<arch>/...` resources, then a normal `System.loadLibrary("finkit_java")` fallback. Match the native resource directory and filename to the target OS/architecture when packaging another platform.
+The Java loader supports an explicit `finkit.native.path`, packaged `/natives/<os>-<arch>/...` resources, and `System.loadLibrary("finkit_java")` fallback.
 
-Do not assume `com.finkit:finkit:0.1.3` is downloadable from Maven Central until the registry publication is independently verified.
+Do not assume `com.finkit:finkit:0.1.3` is downloadable from Maven Central until publication is independently verified.
 
 ## 8. C/C++ SDK
-
-The C/C++ wrapper is under `ffi/c-binding` and links to the Rust C FFI library.
-
-Linux example:
 
 ```bash
 cargo build -p finkit-ffi --release --locked
@@ -236,32 +217,161 @@ ctest --test-dir build/cpp -C Release --output-on-failure
 cmake --install build/cpp --config Release --prefix dist/cpp
 ```
 
-The installed SDK exports CMake package metadata so downstream consumers can use `find_package(finkit CONFIG REQUIRED)` after setting `CMAKE_PREFIX_PATH` to the installation prefix.
+Installed consumers should prefer the exported CMake package and `find_package(finkit CONFIG REQUIRED)` instead of hard-coding a shared-library path.
 
-Do not point CMake users directly at a guessed `libfinkit_ffi.so` path when an installed package can be used; the installed CMake config is the preferred consumer contract.
+## 9. Go/CGO
 
-## 9. Go
+The corrected nested module path for the next-release source is:
 
-The Go source currently lives below `ffi/go-binding/go/` and its nested `go.mod` declares `module github.com/coeasy/finkit`. This layout is useful for repository development but is not a clean public versioned Go-module release contract for v0.1.3.
+```text
+github.com/coeasy/finkit/ffi/go-binding/go
+```
 
-Use it only from a source checkout while the module path/native CGO distribution is being finalized. Do **not** document `go get github.com/coeasy/finkit/go/ta` as a supported public v0.1.3 install command.
+Package import:
 
-## 10. .NET, Android, iOS, WASM
+```go
+import "github.com/coeasy/finkit/ffi/go-binding/go/ta"
+```
 
-These directories contain source integrations, but they are not part of the verified `v0.1.3` GitHub Release asset matrix. Build them from the repository only when developing or validating those bindings. Registry/binary installation commands should be added to documentation only after a real artifact exists and an install smoke test succeeds.
+Build/test from a checkout:
 
-## 11. Verify versions and generated contracts
+```bash
+cargo build -p finkit-go --release --locked
+cd ffi/go-binding/go
+LD_LIBRARY_PATH="../../../target/release:${LD_LIBRARY_PATH:-}" go test ./...
+```
 
-After changing package or release metadata, run:
+On macOS use `DYLD_LIBRARY_PATH`; on Windows make the DLL visible through `PATH` or the executable directory.
+
+The next-release CI additionally creates a temporary external Go module and runs the repository example so module identity is validated outside the nested module itself.
+
+Do **not** advertise a plain public `go get` flow until a matching nested-module tag and native-library distribution strategy are actually published and smoke-tested.
+
+See [../ffi/go-binding/README.md](../ffi/go-binding/README.md).
+
+## 10. .NET
+
+Build the native library:
+
+```bash
+cargo build -p finkit-dotnet --release --locked
+```
+
+Linux managed/native tests:
+
+```bash
+LD_LIBRARY_PATH="$PWD/target/release:${LD_LIBRARY_PATH:-}" \
+  dotnet test ffi/dotnet-binding/src/Finkit.Tests/Finkit.Tests.csproj \
+  -c Release --framework net8.0
+```
+
+For a Linux NuGet candidate, stage the native library into its RID source directory and pack:
+
+```bash
+mkdir -p ffi/dotnet-binding/native/linux-x64/native
+cp target/release/libfinkit_dotnet.so \
+  ffi/dotnet-binding/native/linux-x64/native/
+dotnet pack ffi/dotnet-binding/src/Finkit/Finkit.csproj \
+  -c Release -o dist/dotnet
+```
+
+The package project also defines Windows x64, macOS x64, and macOS arm64 native RID paths, but those platforms are only release-supported after native-runner build/package tests pass.
+
+Do not advertise a public NuGet install command until the package exists in a feed and an external project can restore/run it.
+
+See [../ffi/dotnet-binding/README.md](../ffi/dotnet-binding/README.md).
+
+## 11. Android
+
+Android uses the Rust `finkit-android` JNI crate plus a standard Gradle Android Library project.
+
+Install target/tooling support:
+
+```bash
+cargo install cargo-ndk --locked
+rustup target add \
+  aarch64-linux-android \
+  armv7-linux-androideabi \
+  x86_64-linux-android \
+  i686-linux-android
+```
+
+Build native ABI libraries:
+
+```bash
+cargo ndk \
+  --platform 24 \
+  -t arm64-v8a \
+  -t armeabi-v7a \
+  -t x86_64 \
+  -t x86 \
+  -o ffi/android-binding/android/src/main/jniLibs \
+  build --release --locked -p finkit-android
+```
+
+Assemble the AAR:
+
+```bash
+cd ffi/android-binding/android
+gradle assembleRelease
+```
+
+The next-release gate inspects the AAR to ensure all four advertised ABIs contain `libfinkit_android.so`.
+
+See [../ffi/android-binding/README.md](../ffi/android-binding/README.md).
+
+## 12. iOS / Swift
+
+Install Rust targets on macOS:
+
+```bash
+rustup target add \
+  aarch64-apple-ios \
+  aarch64-apple-ios-sim \
+  x86_64-apple-ios
+```
+
+Build:
+
+```bash
+bash ffi/ios-binding/build-xcframework.sh
+```
+
+Output:
+
+```text
+dist/ios/Finkit.xcframework
+```
+
+The build uses one physical arm64 slice and one universal simulator slice made from Apple Silicon + Intel simulator libraries. New Swift source uses `Finkit`; legacy `AlphaTA` is only a deprecated compatibility alias.
+
+See [../ffi/ios-binding/README.md](../ffi/ios-binding/README.md).
+
+## 13. WebAssembly
+
+```bash
+rustup target add wasm32-unknown-unknown
+cargo build -p finkit-wasm \
+  --target wasm32-unknown-unknown \
+  --release --locked
+```
+
+Raw output:
+
+```text
+target/wasm32-unknown-unknown/release/finkit_wasm.wasm
+```
+
+This verifies the real WASM target. JavaScript/TypeScript glue and an npm/browser package remain separate packaging work and must be tested for the chosen `web`, `bundler`, or Node runtime.
+
+See [../wasm/README.md](../wasm/README.md).
+
+## 14. Verify versions and generated contracts
 
 ```bash
 python scripts/check_versions.py
 python scripts/gen_ssot_docs.py --check
-```
-
-For a complete repository validation:
-
-```bash
+python scripts/check_docs_links.py
 cargo fmt --all -- --check
 cargo check --workspace --locked
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
@@ -269,7 +379,9 @@ cargo test -p finkit --locked
 cargo test --workspace --doc --locked
 ```
 
-## 12. Troubleshooting
+The full next-release target/package matrix is defined in `.github/workflows/multilang-release.yml`.
+
+## 15. Troubleshooting
 
 ### Python wheel is rejected as unsupported
 
@@ -280,23 +392,21 @@ python -VV
 python -c "import platform; print(platform.system(), platform.machine())"
 ```
 
-A `cp38-abi3` wheel can span supported CPython minor versions but cannot cross operating systems or CPU architectures.
-
 ### Native binding cannot load
 
-Confirm that the native library was built for the same OS, architecture, and runtime ABI as the language process. For Java, check packaged `natives/<platform>/` resources or set `-Dfinkit.native.path=/absolute/path/to/library` where supported. For Node, verify the expected platform package contains `finkit.node`.
+Confirm that the native library matches the language process OS/architecture and that the runtime loader can find it. A successful compile does not guarantee runtime native-library discovery.
 
 ### Source build fails before compilation
-
-Check the toolchain first:
 
 ```bash
 rustc --version
 cargo --version
 ```
 
-On Windows use an MSVC-compatible Rust toolchain and Visual Studio C++ Build Tools. On macOS install Xcode Command Line Tools. On Linux install the distribution's compiler/linker build essentials.
+On Windows use an MSVC-compatible Rust toolchain and Visual Studio C++ Build Tools. On macOS install a complete Xcode/Xcode Command Line Tools setup. On Linux install compiler/linker build essentials plus any binding-specific SDK.
 
 ### Registry command cannot find Finkit
 
-That is not evidence that the source package is broken. Registry publication is not the same as GitHub Release packaging. Use the verified Release/source instructions above and only switch to a registry command once that registry contains the exact package/version.
+Registry publication is not the same as a GitHub Actions artifact or GitHub Release asset. Use the verified Release/source instructions above until the exact package/version is visible and clean-install tested in the target registry.
+
+For deeper diagnosis, see [troubleshooting.md](troubleshooting.md).
