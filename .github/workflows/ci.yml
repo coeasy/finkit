@@ -36,7 +36,7 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v7
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Check release versions
@@ -76,13 +76,15 @@ jobs:
     needs: version-consistency
     runs-on: ubuntu-22.04
     timeout-minutes: 45
+    env:
+      RUSTFLAGS: "-D warnings"
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Verify generated registry snapshot
         run: git diff --exit-code -- docs/indicator_registry.json
-      - name: Run core tests
+      - name: Run core tests with compiler warnings denied
         run: cargo test -p finkit --locked
       - name: Run core docs tests
         run: cargo test -p finkit --doc --locked
@@ -91,6 +93,8 @@ jobs:
     name: Memory and performance regression
     runs-on: ubuntu-22.04
     timeout-minutes: 30
+    env:
+      RUSTFLAGS: "-D warnings"
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -99,7 +103,7 @@ jobs:
         run: cargo test -p finkit --test memory_regression --release --locked -- --test-threads=1
       - name: Relative performance contract
         run: cargo test -p finkit --test performance_regression --release --locked -- --test-threads=1
-      - name: Compile benchmark suite
+      - name: Compile benchmark suite with compiler warnings denied
         run: cargo bench -p finkit --no-run --locked
 
   doc:
