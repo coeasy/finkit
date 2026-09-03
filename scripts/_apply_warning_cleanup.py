@@ -149,10 +149,11 @@ def canonicalize_registry() -> None:
         return value
 
     data = walk(data)
-    if replacements < 1:
-        raise SystemExit("indicator registry: expected at least one indicators::linear_reg call")
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    print(f"updated indicator registry: canonicalized {replacements} linear regression binding call(s)")
+    if replacements:
+        path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        print(f"updated indicator registry: canonicalized {replacements} linear regression binding call(s)")
+    else:
+        print("indicator registry already uses canonical linearreg calls; generated sources will be refreshed from SSOT")
 
 
 def main() -> int:
