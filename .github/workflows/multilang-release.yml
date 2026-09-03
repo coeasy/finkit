@@ -20,6 +20,8 @@ on:
   push:
     branches:
       - "release/v*"
+    tags:
+      - "v*"
 
 permissions:
   contents: read
@@ -41,12 +43,16 @@ jobs:
           python-version: "3.12"
       - run: python scripts/check_versions.py
       - id: version
-        name: Read workspace version
+        name: Read and validate workspace version
         shell: bash
         run: |
           set -euo pipefail
           VERSION="$(python -c 'import pathlib,re; text=pathlib.Path("Cargo.toml").read_text(); print(re.search(r"(?ms)^\[workspace\.package\].*?^version\s*=\s*\"([^\"]+)\"", text).group(1))')"
           test -n "$VERSION"
+          if [[ "$GITHUB_REF_TYPE" == "tag" && "$GITHUB_REF_NAME" != "v$VERSION" ]]; then
+            echo "release tag $GITHUB_REF_NAME does not match workspace version v$VERSION" >&2
+            exit 1
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Finkit version: $VERSION"
 
@@ -187,12 +193,22 @@ jobs:
           cp examples/example.go "$RUNNER_TEMP/finkit-go-example/main.go"
           cd "$RUNNER_TEMP/finkit-go-example"
           go run .
+      - name: Package Go source and Linux native library
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.version-contract.outputs.version }}"
+          ROOT="dist/go/finkit-go-${VERSION}-linux-x86_64"
+          mkdir -p "$ROOT/lib"
+          cp -R ffi/go-binding/go "$ROOT/go"
+          cp ffi/go-binding/README.md "$ROOT/README.md"
+          cp target/release/libfinkit_go.so "$ROOT/lib/"
+          tar -czf "dist/go/finkit-go-${VERSION}-linux-x86_64.tar.gz" -C dist/go "finkit-go-${VERSION}-linux-x86_64"
+          rm -rf "$ROOT"
       - uses: actions/upload-artifact@v4
         with:
           name: release-go-linux-x86_64
-          path: |
-            target/release/libfinkit_go.so
-            ffi/go-binding/go
+          path: dist/go/*.tar.gz
           if-no-files-found: error
 
   dotnet-linux:
@@ -245,13 +261,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          VERSION="${{ needs.version-contract.outputs.version }}"
           mkdir -p dist/wasm
-          cp target/wasm32-unknown-unknown/release/finkit_wasm.wasm dist/wasm/
-          test -s dist/wasm/finkit_wasm.wasm
+          cp target/wasm32-unknown-unknown/release/finkit_wasm.wasm "dist/wasm/finkit-wasm-${VERSION}.wasm"
+          test -s "dist/wasm/finkit-wasm-${VERSION}.wasm"
       - uses: actions/upload-artifact@v4
         with:
           name: release-wasm32
-          path: dist/wasm/finkit_wasm.wasm
+          path: dist/wasm/finkit-wasm-*.wasm
           if-no-files-found: error
 
   android-aar:
@@ -296,20 +313,23 @@ jobs:
       - name: Assemble Android AAR
         working-directory: ffi/android-binding/android
         run: gradle --no-daemon assembleRelease
-      - name: Verify AAR native payloads
+      - name: Verify and stage AAR
         shell: bash
         run: |
           set -euo pipefail
+          VERSION="${{ needs.version-contract.outputs.version }}"
           AAR="$(find ffi/android-binding/android/build/outputs/aar -name '*.aar' | head -1)"
           test -n "$AAR"
           unzip -l "$AAR" | grep -q 'jni/arm64-v8a/libfinkit_android.so'
           unzip -l "$AAR" | grep -q 'jni/armeabi-v7a/libfinkit_android.so'
           unzip -l "$AAR" | grep -q 'jni/x86_64/libfinkit_android.so'
           unzip -l "$AAR" | grep -q 'jni/x86/libfinkit_android.so'
+          mkdir -p dist/android
+          cp "$AAR" "dist/android/finkit-android-${VERSION}.aar"
       - uses: actions/upload-artifact@v4
         with:
           name: release-android-aar
-          path: ffi/android-binding/android/build/outputs/aar/*.aar
+          path: dist/android/*.aar
           if-no-files-found: error
 
   ios-xcframework:
@@ -336,12 +356,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          VERSION="${{ needs.version-contract.outputs.version }}"
           test -d dist/ios/Finkit.xcframework
-          ditto -c -k --sequesterRsrc --keepParent dist/ios/Finkit.xcframework dist/ios/Finkit.xcframework.zip
+          ditto -c -k --sequesterRsrc --keepParent dist/ios/Finkit.xcframework "dist/ios/finkit-ios-${VERSION}.xcframework.zip"
       - uses: actions/upload-artifact@v4
         with:
           name: release-ios-xcframework
-          path: dist/ios/Finkit.xcframework.zip
+          path: dist/ios/finkit-ios-*.xcframework.zip
           if-no-files-found: error
 
   rust-package:
@@ -360,3 +381,58 @@ jobs:
           name: release-rust
           path: dist/rust/*
           if-no-files-found: error
+
+  publish-release-assets:
+    name: Publish multi-language release assets
+    needs:
+      - version-contract
+      - node-linux
+      - java-linux
+      - cpp-linux
+      - go-linux
+      - dotnet-linux
+      - wasm32
+      - android-aar
+      - ios-xcframework
+      - rust-package
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download all validated artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+      - name: Keep only multi-language supplemental assets and generate checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f release-assets/finkit-*.crate release-assets/finkit-cli-*
+          find release-assets -type f -maxdepth 1 -print | sort
+          test -n "$(find release-assets -maxdepth 1 -type f -print -quit)"
+          (cd release-assets && sha256sum * > SHA256SUMS.multilang)
+      - name: Create or update GitHub Release and upload supplemental assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE_TAG="$GITHUB_REF_NAME"
+          VERSION="${{ needs.version-contract.outputs.version }}"
+          test "$RELEASE_TAG" = "v$VERSION"
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --title "$RELEASE_TAG" \
+              --generate-notes || gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
+          fi
+          gh release upload "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber \
+            release-assets/*
