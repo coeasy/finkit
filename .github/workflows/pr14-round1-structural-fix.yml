@@ -82,12 +82,22 @@ jobs:
       - name: Round 2N schema CLI tests
         run: cargo test -p finkit-cli --test schema_cli --locked
 
-      - name: Round 3 control flow repair
+      - name: Round 3A apply control flow repair
         run: |
           python .ci/pr14_harden.py round3
           cargo fmt --all
-          cargo test -p finkit --locked
-          cargo test -p finkit-cli --locked
+
+      - name: Round 3B core library tests
+        run: cargo test -p finkit --lib --locked
+
+      - name: Round 3C core integration tests
+        run: cargo test -p finkit --tests --locked
+
+      - name: Round 3D core doctests
+        run: cargo test -p finkit --doc --locked
+
+      - name: Round 3E CLI tests
+        run: cargo test -p finkit-cli --locked
 
       - name: Final validation
         run: |
