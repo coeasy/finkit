@@ -6,8 +6,11 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Find the parent project
-find_package(finkit REQUIRED PATHS "${CMAKE_CURRENT_SOURCE_DIR}/..")
+# Reuse the parent build targets when included from the source tree.
+# Only resolve an installed SDK when this directory is configured standalone.
+if(NOT TARGET finkit OR NOT TARGET finkit_headers)
+    find_package(finkit CONFIG REQUIRED)
+endif()
 
 add_executable(example example.cpp)
 target_link_libraries(example finkit finkit_headers)

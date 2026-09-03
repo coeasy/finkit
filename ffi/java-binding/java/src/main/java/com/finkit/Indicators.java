@@ -33,23 +33,7 @@ public final class Indicators {
     // =========================================================================
 
     static {
-        loadNativeLibrary();
-    }
-
-    private static void loadNativeLibrary() {
-        String libName = "finkit_java";
-        String os = System.getProperty("os.name", "").toLowerCase();
-        String arch = System.getProperty("os.arch", "").toLowerCase();
-
-        if (os.contains("win")) {
-            System.loadLibrary(libName);
-        } else if (os.contains("mac")) {
-            System.loadLibrary(libName);
-        } else if (os.contains("nix") || os.contains("nux") || os.contains("aix")) {
-            System.loadLibrary(libName);
-        } else {
-            System.loadLibrary(libName);
-        }
+        NativeLoader.load();
     }
 
     static void ensureLoaded() {
@@ -157,7 +141,7 @@ public final class Indicators {
      * @param input     input data series
      * @param fastLimit fast limit (typically 0.5)
      * @param slowLimit slow limit (typically 0.05)
-     * @result result object containing mama and fama arrays
+     * @param result result object containing mama and fama arrays
      */
     public static native void mama(double[] input, double fastLimit, double slowLimit, MamaResult result);
 
@@ -172,7 +156,7 @@ public final class Indicators {
      * @param timePeriod  number of periods for the SMA (must be &gt; 0)
      * @param nbDevUp     number of standard deviations for the upper band (typically 2.0)
      * @param nbDevDn     number of standard deviations for the lower band (typically 2.0)
-     * @result result object containing upper, middle, and lower arrays
+     * @param result result object containing upper, middle, and lower arrays
      */
     public static native void bbands(double[] input, int timePeriod, double nbDevUp, double nbDevDn, BbandsResult result);
 
@@ -210,7 +194,7 @@ public final class Indicators {
      * @param close       close price series
      * @param acceleration acceleration factor (typically 0.02)
      * @param maximum     maximum acceleration factor (typically 0.2)
-     * @result result object containing sar and af (acceleration factor) arrays
+     * @param result result object containing sar and af (acceleration factor) arrays
      */
     public static native void sar(double[] high, double[] low, double[] close, double acceleration, double maximum, SarResult result);
 
@@ -242,7 +226,7 @@ public final class Indicators {
      * @param fastPeriod   fast EMA period (typically 12)
      * @param slowPeriod   slow EMA period (typically 26)
      * @param signalPeriod signal EMA period (typically 9)
-     * @result result object containing macd, signal, and hist arrays
+     * @param result result object containing macd, signal, and hist arrays
      */
     public static native void macd(double[] input, int fastPeriod, int slowPeriod, int signalPeriod, MacdResult result);
 
@@ -258,7 +242,7 @@ public final class Indicators {
      * @param fastK   fast %K period (typically 14)
      * @param slowK   slow %K period (typically 3)
      * @param slowD   slow %D period (typically 3)
-     * @result result object containing k and d arrays
+     * @param result result object containing k and d arrays
      */
     public static native void stoch(double[] high, double[] low, double[] close, int fastK, int slowK, int slowD, StochResult result);
 
@@ -286,7 +270,7 @@ public final class Indicators {
      * @param high   high price series
      * @param low    low price series
      * @param period number of periods (must be &gt; 0)
-     * @result result object containing aroonUp and aroonDown arrays
+     * @param result result object containing aroonUp and aroonDown arrays
      */
     public static native void aroon(double[] high, double[] low, int period, AroonResult result);
 
@@ -627,7 +611,7 @@ public final class Indicators {
      * <p>Minimum 12 bars of data required for valid output.
      *
      * @param input input data series
-     * @result result object containing inPhase and quadrature arrays
+     * @param result result object containing inPhase and quadrature arrays
      */
     public static native void htPhasor(double[] input, HtPhasorResult result);
 
@@ -641,7 +625,7 @@ public final class Indicators {
      * <p>Minimum 32 bars of data required for valid output.
      *
      * @param input input data series
-     * @result result object containing sine and leadSine arrays
+     * @param result result object containing sine and leadSine arrays
      */
     public static native void htSine(double[] input, HtSineResult result);
 
@@ -761,47 +745,6 @@ public final class Indicators {
      * @return TSF values
      */
     public static native double[] tsf(double[] input, int period);
-
-    // =========================================================================
-    // ========================================================================
-    // Advanced indicators and chart transforms
-    // ========================================================================
-
-    public static native void ichimoku(double[] high, double[] low, double[] close,
-                                                   int tenkanPeriod, int kijunPeriod,
-                                                   int senkouBPeriod, int displacement,
-                                                   IchimokuResult result);
-
-    public static native void supertrend(double[] high, double[] low, double[] close,
-                                                      int atrPeriod, double multiplier,
-                                                      SupertrendResult result);
-
-    public static native double[] vwap(double[] high, double[] low, double[] close, double[] volume);
-    public static native double[] anchoredVwap(double[] high, double[] low, double[] close,
-                                                double[] volume, int startIndex);
-    public static native void vwapBands(double[] high, double[] low, double[] close, double[] volume,
-                                        int timePeriod, double nbDev, VwapBandsResult result);
-    public static native void elderRay(double[] high, double[] low, double[] close, double[] volume,
-                                       int period, ElderRayResult result);
-    public static native void donchian(double[] high, double[] low, int period,
-                                       DonchianResult result);
-    public static native void volumeProfile(double[] high, double[] low, double[] close,
-                                            double[] volume, int numBins,
-                                            VolumeProfileResult result);
-    public static native void fibonacciRetracement(double[] high, double[] low,
-                                                    int startIndex, int endIndex,
-                                                    FibonacciRetracementResult result);
-
-    public static native DoubleDoubleIntOutput darvasBox(double[] high, double[] low, double[] close,
-                                                          int lookback, int confirmation);
-    public static native DoubleIntIntOutput pointAndFigure(double[] high, double[] low,
-                                                            double boxSize, int reversal);
-    public static native DoubleIntOutput threeLineBreak(double[] close, int lines);
-    public static native TripleDoubleOutput williamsAlligator(double[] close);
-    public static native QuadOutput heikinAshi(double[] open, double[] high, double[] low,
-                                                double[] close);
-    public static native DoubleIntOutput renko(double[] high, double[] low, double boxSize);
-    public static native DoubleIntOutput kagi(double[] close, double reversal);
 
     // ========================================================================
     // Advanced indicators, chart transforms, and formula JSON helpers

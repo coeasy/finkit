@@ -3,7 +3,7 @@ use finkit::indicators;
 use finkit::math::moving_avg;
 use finkit::patterns::candlestick;
 use std::cell::RefCell;
-use std::ffi::{CStr, CString};
+use std::ffi::CString;
 use std::os::raw::c_char;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::slice;
@@ -152,24 +152,15 @@ fn calc_error(err: &TaError) -> i32 {
     map_ta_error(err)
 }
 
-/// Best-effort calculation error handler for non-`TaError` error types
-/// (e.g. `VisualizationError`). Records the formatted message and
-/// returns the generic legacy code.
-fn calc_error_display(err: impl std::fmt::Display) -> i32 {
-    set_last_error(err);
-    set_last_error_code(TA_ERR_CALCULATION);
-    TA_ERR_CALCULATION
-}
-
 unsafe fn copy_result(dst: *mut f64, src: &ndarray::Array1<f64>, dst_len: usize) {
     let copy_len = src.len().min(dst_len);
-    let dst_slice = std::slice::from_raw_parts_mut(dst, copy_len);
+    let dst_slice = unsafe { std::slice::from_raw_parts_mut(dst, copy_len) };
     dst_slice.copy_from_slice(&src.as_slice().unwrap()[..copy_len]);
 }
 
 unsafe fn copy_int_result(dst: *mut i32, src: &ndarray::Array1<i32>, dst_len: usize) {
     let copy_len = src.len().min(dst_len);
-    let dst_slice = std::slice::from_raw_parts_mut(dst, copy_len);
+    let dst_slice = unsafe { std::slice::from_raw_parts_mut(dst, copy_len) };
     dst_slice.copy_from_slice(&src.as_slice().unwrap()[..copy_len]);
 }
 
@@ -186,20 +177,6 @@ where
     match catch_unwind(AssertUnwindSafe(f)) {
         Ok(v) => v,
         Err(_) => internal_error_i32(),
-    }
-}
-
-fn ffi_catch_i64<F>(f: F) -> i64
-where
-    F: FnOnce() -> i64,
-{
-    match catch_unwind(AssertUnwindSafe(f)) {
-        Ok(v) => v,
-        Err(_) => {
-            set_last_error("internal error: panic at FFI boundary");
-            set_last_error_code(FfiStatus::InternalError.as_i32());
-            0
-        }
     }
 }
 
@@ -229,7 +206,7 @@ where
 
 #[no_mangle]
 pub unsafe extern "C" fn ta_version() -> *mut c_char {
-    ffi_catch_ptr(|| unsafe {
+    ffi_catch_ptr(|| {
         let v = env!("CARGO_PKG_VERSION");
         CString::new(v).unwrap().into_raw()
     })
@@ -256,12 +233,10 @@ pub extern "C" fn ta_last_error() -> *mut c_char {
 pub unsafe extern "C" fn finkit_free_string(s: *mut c_char) {
     ffi_catch_void(|| {
         if !s.is_null() {
-            drop(CString::from_raw(s));
+            drop(unsafe { CString::from_raw(s) });
         }
     })
 }
-
-#[no_mangle]
 
 include!("generated.rs");
 
@@ -280,6 +255,7 @@ pub unsafe extern "C" fn ta_ffi_panic_test() -> i32 {
 mod tests {
     use super::*;
     use finkit::error::{FfiError, FormulaError, IndicatorError};
+    use std::ffi::CStr;
 
     // These tests cover the Phase 6 FFI error-code mapping. Each test
     // exercises a different branch of `map_ta_error` to guarantee that
@@ -440,10 +416,7 @@ mod tests {
     fn export_panic_test_returns_internal_error_not_abort() {
         let code = unsafe { ta_ffi_panic_test() };
         assert_eq!(code, FfiStatus::InternalError.as_i32());
-        assert_eq!(
-            unsafe { ta_last_error_code() },
-            FfiStatus::InternalError.as_i32()
-        );
+        assert_eq!(read_code(), FfiStatus::InternalError.as_i32());
     }
 
     #[test]

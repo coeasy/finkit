@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 project(finkit
-    VERSION 1.0.0
+    VERSION 0.1.3
     DESCRIPTION "Finkit - Financial Technical Analysis Library C/C++ Bindings"
     LANGUAGES CXX C
 )
@@ -14,7 +14,6 @@ option(FINKIT_BUILD_EXAMPLES "Build finkit C/C++ binding examples" ON)
 option(FINKIT_AUTO_BUILD_RS  "Auto-invoke `cargo build` when the prebuilt FFI library is missing" ON)
 option(FINKIT_INSTALL_CMAKECONFIG "Generate and install finkit-config.cmake" ON)
 
-find_package(PkgConfig REQUIRED)
 include(GNUInstallDirs)
 
 # ----------------------------------------------------------------------------

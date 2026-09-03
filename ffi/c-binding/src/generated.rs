@@ -1502,7 +1502,7 @@ pub unsafe extern "C" fn ta_linear_reg(
         return invalid_input();
     }
     let data = slice::from_raw_parts(input, len as usize);
-    match indicators::linear_reg(data, period as usize) {
+    match indicators::linearreg(data, period as usize) {
         Ok(result) => {
             copy_result(output, &result, len as usize);
             TA_OK

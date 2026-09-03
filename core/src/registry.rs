@@ -194,7 +194,6 @@ impl FunctionRegistry {
 }
 
 const PERIOD_14: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("14"), Some("> 0"))];
-const PERIOD_20: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("20"), Some("> 0"))];
 const PERIOD_REQUIRED: &[ParamSpec] = &[ParamSpec::new("period", "usize", None, Some("> 0"))];
 const SMA_PARAMS: &[ParamSpec] = &[
     ParamSpec::new("period", "usize", None, Some("> 0")),
