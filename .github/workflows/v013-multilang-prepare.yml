@@ -25,6 +25,7 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/prepare_v013_multilang.py
+          python scripts/prepare_v013_platform_compat.py
           python scripts/check_versions.py
           git diff --check
 
