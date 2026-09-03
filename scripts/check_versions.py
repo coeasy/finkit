@@ -24,6 +24,7 @@ NODE_LOCK = ROOT / "ffi" / "node-binding" / "package-lock.json"
 NODE_PLATFORM_DIR = ROOT / "ffi" / "node-binding" / "npm"
 DOTNET_PROJECT = ROOT / "ffi" / "dotnet-binding" / "src" / "Finkit" / "Finkit.csproj"
 JAVA_POM = ROOT / "ffi" / "java-binding" / "pom.xml"
+CMAKE_PROJECT = ROOT / "ffi" / "c-binding" / "CMakeLists.txt"
 XML_PROJECT_VERSIONS = ((DOTNET_PROJECT, "Version"), (JAVA_POM, "version"))
 DOC_VERSION_FILES = (
     ROOT / "README.md",
@@ -102,6 +103,18 @@ def read_xml_project_version(path: Path, tag: str) -> str:
         raise ValueError(f"{tag} version not found in {path}")
     return match.group(1).strip()
 
+def read_cmake_project_version() -> str:
+    text = CMAKE_PROJECT.read_text(encoding="utf-8")
+    match = re.search(
+        r"project\(finkit\s+VERSION\s+([0-9]+\.[0-9]+\.[0-9]+)",
+        text,
+        re.MULTILINE,
+    )
+    if not match:
+        raise ValueError(f"CMake project version not found in {CMAKE_PROJECT}")
+    return match.group(1)
+
+
 def read_cargo_package_versions() -> dict[str, str]:
     versions: dict[str, str] = {}
     for path in sorted(ROOT.rglob("Cargo.toml")):
@@ -160,6 +173,10 @@ def collect_errors(canonical: str) -> list[str]:
         version = read_xml_project_version(path, tag)
         if version != canonical:
             errors.append(f"{path.relative_to(ROOT)}: {version} != {canonical}")
+
+    cmake_version = read_cmake_project_version()
+    if cmake_version != canonical:
+        errors.append(f"{CMAKE_PROJECT.relative_to(ROOT)}: {cmake_version} != {canonical}")
     for path in DOC_VERSION_FILES:
         if not path.exists():
             errors.append(f"missing release-facing document: {path.relative_to(ROOT)}")
@@ -206,6 +223,19 @@ def replace_xml_project_version(path: Path, tag: str, canonical: str) -> None:
 def fix_versions(canonical: str) -> None:
     for path, tag in XML_PROJECT_VERSIONS:
         replace_xml_project_version(path, tag, canonical)
+
+    cmake_text = CMAKE_PROJECT.read_text(encoding="utf-8")
+    cmake_text, count = re.subn(
+        r"(project\(finkit\s+VERSION\s+)[0-9]+\.[0-9]+\.[0-9]+",
+        rf"\g<1>{canonical}",
+        cmake_text,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    if count != 1:
+        raise ValueError(f"failed to update CMake version in {CMAKE_PROJECT}")
+    CMAKE_PROJECT.write_text(cmake_text, encoding="utf-8")
+
     replace_first_version(PYPROJECT, canonical)
 
     node_paths = [NODE_PACKAGE, *sorted(NODE_PLATFORM_DIR.glob("*/package.json"))]

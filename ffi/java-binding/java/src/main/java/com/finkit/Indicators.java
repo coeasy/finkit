@@ -33,23 +33,7 @@ public final class Indicators {
     // =========================================================================
 
     static {
-        loadNativeLibrary();
-    }
-
-    private static void loadNativeLibrary() {
-        String libName = "finkit_java";
-        String os = System.getProperty("os.name", "").toLowerCase();
-        String arch = System.getProperty("os.arch", "").toLowerCase();
-
-        if (os.contains("win")) {
-            System.loadLibrary(libName);
-        } else if (os.contains("mac")) {
-            System.loadLibrary(libName);
-        } else if (os.contains("nix") || os.contains("nux") || os.contains("aix")) {
-            System.loadLibrary(libName);
-        } else {
-            System.loadLibrary(libName);
-        }
+        NativeLoader.load();
     }
 
     static void ensureLoaded() {
