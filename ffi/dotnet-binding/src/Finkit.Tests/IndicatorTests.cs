@@ -165,19 +165,23 @@ public class IndicatorTests
     [Fact]
     public void Adx_ReturnsNonNegativeValues()
     {
-        var high = new double[] { 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0, 31.0, 32.0, 33.0 };
-        var low = new double[] { 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0, 31.0 };
-        var close = new double[] { 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0, 31.0, 32.0 };
+        const int period = 14;
+        // The core ADX contract requires at least period * 2 bars. Use a
+        // comfortably longer, non-constant series so the test validates the
+        // managed/native bridge and post-warm-up range instead of exercising
+        // the expected insufficient-history error path.
+        var close = Enumerable.Range(0, 64)
+            .Select(i => 100.0 + i * 0.25 + Math.Sin(i * 0.35) * 2.0)
+            .ToArray();
+        var high = close.Select((value, i) => value + 1.0 + (i % 3) * 0.1).ToArray();
+        var low = close.Select((value, i) => value - 1.0 - (i % 2) * 0.1).ToArray();
 
-        var result = Indicators.Adx(high, low, close, 14);
+        var result = Indicators.Adx(high, low, close, period);
 
-        for (int i = 0; i < result.Length; i++)
-        {
-            if (!double.IsNaN(result[i]))
-            {
-                Assert.True(result[i] >= 0, $"ADX[{i}] = {result[i]}, expected >= 0");
-            }
-        }
+        Assert.Equal(close.Length, result.Length);
+        var finite = result.Where(value => !double.IsNaN(value)).ToArray();
+        Assert.NotEmpty(finite);
+        Assert.All(finite, value => Assert.InRange(value, 0.0, 100.0));
     }
 
     [Fact]
