@@ -51,8 +51,7 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.source>1.8</maven.compiler.source>
-        <maven.compiler.target>1.8</maven.compiler.target>
+        <maven.compiler.release>8</maven.compiler.release>
     </properties>
 
     <build>
@@ -73,9 +72,12 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.11.0</version>
                 <configuration>
-                    <source>1.8</source>
-                    <target>1.8</target>
+                    <release>${maven.compiler.release}</release>
                     <encoding>UTF-8</encoding>
+                    <showWarnings>true</showWarnings>
+                    <compilerArgs>
+                        <arg>-Werror</arg>
+                    </compilerArgs>
                 </configuration>
             </plugin>
 
@@ -102,9 +104,8 @@
                     <encoding>UTF-8</encoding>
                     <docencoding>UTF-8</docencoding>
                     <charset>UTF-8</charset>
-                    <links>
-                        <link>https://docs.oracle.com/javase/8/docs/api/</link>
-                    </links>
+                    <doclint>all,-missing</doclint>
+                    <failOnWarnings>true</failOnWarnings>
                     <bottom>
                         <![CDATA[Copyright &#169; {inceptionYear}&#x2013;{currentYear} finkit Contributors. Released under the MIT License.]]>
                     </bottom>
