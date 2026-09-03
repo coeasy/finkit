@@ -43,6 +43,7 @@ jobs:
           cargo test -p finkit --lib registry::tests --locked
           cargo test -p finkit --lib formula::compute_ir --locked
           cargo test -p finkit --lib formula::pine --locked
+          cargo test -p finkit-cli --test schema_cli --locked
 
       - name: Round 3 control flow repair
         run: |
