@@ -1,4 +1,4 @@
-name: PR14 three-round hardening
+name: PR14 round3 diagnostic
 
 on:
   push:
@@ -9,14 +9,14 @@ permissions:
   contents: write
 
 concurrency:
-  group: pr14-three-round-hardening-${{ github.ref }}
+  group: pr14-round3-diagnostic-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  harden:
+  diagnose:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
@@ -24,108 +24,26 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt,clippy
-
-      - name: Synchronize v0.1.3 release metadata
-        run: python scripts/check_versions.py --fix
-
-      - name: Round 1 apply structural and binding repair
+      - name: Apply v0.1.3 repairs
         run: |
+          python scripts/check_versions.py --fix
           python .ci/pr14_harden.py round1
           python .ci/pr14_round1_compat_fix.py
-          cargo fmt --all
-
-      - name: Round 2A base registry repair
-        run: |
           python .ci/pr14_round2_fix.py
           python .ci/pr14_round2_tests_fix.py
           python .ci/pr14_round2_golden_fix.py
-
-      - name: Round 2B semantic contract repair 1
-        run: python .ci/pr14_semantic_contract_fix.py
-
-      - name: Round 2C semantic contract repair 2
-        run: python .ci/pr14_semantic_contract_fix2.py
-
-      - name: Round 2D semantic contract repair 3
-        run: python .ci/pr14_semantic_contract_fix3.py
-
-      - name: Round 2E semantic contract repair 4
-        run: python .ci/pr14_semantic_contract_fix4.py
-
-      - name: Round 2F Pine mapping integrity repair
-        run: python .ci/pr14_semantic_contract_fix5.py
-
-      - name: Round 2G format and generated docs
-        run: |
-          cargo fmt --all
-          python scripts/gen_ssot_docs.py --generate
-          python scripts/check_versions.py --fix
-
-      - name: Round 2H registry tests
-        run: cargo test -p finkit --lib registry::tests --locked
-
-      - name: Round 2I compute IR tests
-        run: cargo test -p finkit --lib formula::compute_ir --locked
-
-      - name: Round 2J semantic contract tests
-        run: cargo test -p finkit --lib formula::functions::pr14_semantic_contract_tests --locked
-
-      - name: Round 2K Pine tests
-        run: cargo test -p finkit --lib formula::pine --locked
-
-      - name: Round 2L terminal golden tests
-        run: cargo test -p finkit --test formula_terminal_golden --locked
-
-      - name: Round 2M Polars integration tests
-        run: cargo test -p finkit --test polars_integration_tests --features finkit-polars --locked
-
-      - name: Round 2N schema CLI tests
-        run: cargo test -p finkit-cli --test schema_cli --locked
-
-      - name: Round 3A apply control flow repair
-        run: |
+          python .ci/pr14_semantic_contract_fix.py
+          python .ci/pr14_semantic_contract_fix2.py
+          python .ci/pr14_semantic_contract_fix3.py
+          python .ci/pr14_semantic_contract_fix4.py
+          python .ci/pr14_semantic_contract_fix5.py
           python .ci/pr14_harden.py round3
           cargo fmt --all
-
-      - name: Round 3B core library tests
-        run: cargo test -p finkit --lib --locked
-
-      - name: Round 3C core integration tests
-        run: cargo test -p finkit --tests --locked
-
-      - name: Round 3D core doctests
-        run: cargo test -p finkit --doc --locked
-
-      - name: Round 3E CLI tests
-        run: cargo test -p finkit-cli --locked
-
-      - name: Final validation
-        run: |
-          python scripts/check_versions.py
-          cargo fmt --all -- --check
-          python scripts/gen_ssot_docs.py --check
-          cargo test -p finkit factor_plan_direct_paths_reject_stale_registry_dependencies --locked
-          cargo test -p finkit precompiled_plan_rejects_changed_dependency_graph --locked
-          cargo check --workspace --all-targets --locked
-          cargo clippy -p finkit --all-targets --locked -- -D warnings
-          RUSTFLAGS="-Dwarnings" cargo check -p finkit-python --locked
-          cargo clippy --workspace --all-targets --locked -- -D warnings
-
-      - name: Commit repairs and clean temporary files
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          rm .github/workflows/pr14-round1-structural-fix.yml
-          rm .ci/pr14_harden.py
-          rm .ci/pr14_round1_compat_fix.py
-          rm .ci/pr14_round2_fix.py
-          rm .ci/pr14_round2_tests_fix.py
-          rm .ci/pr14_round2_golden_fix.py
-          rm .ci/pr14_semantic_contract_fix.py
-          rm .ci/pr14_semantic_contract_fix2.py
-          rm .ci/pr14_semantic_contract_fix3.py
-          rm .ci/pr14_semantic_contract_fix4.py
-          rm .ci/pr14_semantic_contract_fix5.py
-          git add -A
-          git commit -m "fix: complete v0.1.3 compute runtime hardening"
-          git push origin HEAD:feat/compute-runtime-factorplan-v012
+      - name: Round3 compute IR unit tests
+        run: cargo test -p finkit --lib formula::compute_ir --locked
+      - name: Round3 executor unit tests
+        run: cargo test -p finkit --lib formula::executor --locked
+      - name: Round3 remaining formula unit tests
+        run: cargo test -p finkit --lib formula:: --locked
+      - name: Round3 non-formula core unit tests
+        run: cargo test -p finkit --lib --locked -- --skip formula::
