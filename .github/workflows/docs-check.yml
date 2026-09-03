@@ -6,6 +6,7 @@ on:
     paths:
       - "docs/**"
       - "README.md"
+      - "CONTRIBUTING.md"
       - "core/**"
       - "ffi/**"
       - "visualization/**"
@@ -19,6 +20,7 @@ on:
     paths:
       - "docs/**"
       - "README.md"
+      - "CONTRIBUTING.md"
       - "core/**"
       - "ffi/**"
       - "visualization/**"
@@ -39,7 +41,7 @@ concurrency:
 
 jobs:
   verify:
-    name: Verify generated docs and versions
+    name: Verify docs, generated SSOT and versions
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     steps:
@@ -53,3 +55,5 @@ jobs:
         run: python scripts/check_versions.py
       - name: Check generated SSOT docs
         run: python scripts/gen_ssot_docs.py --check
+      - name: Check local documentation links
+        run: python scripts/check_docs_links.py
