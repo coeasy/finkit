@@ -27,14 +27,14 @@ def main() -> int:
     # expressions keep the fallback available everywhere else without compiling
     # dead code on aarch64.
     if re.search(
-        r'#[cfg\(target_arch = "aarch64"\)]\s*\{\s*return unsafe',
+        r'#\[cfg\(target_arch = "aarch64"\)\]\s*\{\s*return unsafe',
         simd,
         flags=re.MULTILINE,
     ):
         fail("aarch64 SIMD dispatch must not use an unconditional `return unsafe` before fallback code")
 
     if re.search(
-        r'#[cfg\(target_arch = "aarch64"\)]\s*\{\s*return SimdLevel::Neon;',
+        r'#\[cfg\(target_arch = "aarch64"\)\]\s*\{\s*return SimdLevel::Neon;',
         simd,
         flags=re.MULTILINE,
     ):
@@ -42,7 +42,7 @@ def main() -> int:
 
     statistics = (ROOT / "core/src/indicators/statistics.rs").read_text(encoding="utf-8")
     if re.search(
-        r'#[deprecated\([^\]]*\)]\s*pub fn linear_reg\s*\(',
+        r'#\[deprecated\([^\]]*\)\]\s*pub fn linear_reg\s*\(',
         statistics,
         flags=re.MULTILINE,
     ):
