@@ -62,18 +62,18 @@ read the results.
 
 > **Python wheels:** CPython 3.8–3.14 wheels are built and tested by GitHub Actions.
 > Version tags automatically upload the complete wheel set to the matching GitHub Release.
-> For the current v0.1.2 backfill status and installation choices, see the
+> For the current v0.1.3 backfill status and installation choices, see the
 > [Python Wheel Guide](docs/python.md).
 
 ### Python
 
-If the `v0.1.2` GitHub Release is available, download a matching
-`finkit-0.1.2-*.whl` from [Releases](https://github.com/coeasy/finkit/releases).
+If the `v0.1.3` GitHub Release is available, download a matching
+`finkit-0.1.3-*.whl` from [Releases](https://github.com/coeasy/finkit/releases).
 Until then, use a successful [Python wheels workflow](https://github.com/coeasy/finkit/actions/workflows/python-wheels.yml)
 artifact or build from source:
 
 ```bash
-python -m pip install ./finkit-0.1.2-<matching-wheel>.whl
+python -m pip install ./finkit-0.1.3-<matching-wheel>.whl
 ```
 
 See [docs/python.md](docs/python.md) for source builds and wheel selection.
@@ -107,7 +107,7 @@ const macdResult = macd(close, 12, 26, 9);
 
 ```toml
 [dependencies]
-finkit = "0.1.2"
+finkit = "0.1.3"
 ```
 
 ```rust
@@ -139,7 +139,7 @@ rsi, _ := ta.RSI(close, 14)
 <dependency>
     <groupId>com.finkit</groupId>
     <artifactId>finkit</artifactId>
-    <version>0.1.2</version>
+    <version>0.1.3</version>
 </dependency>
 ```
 
@@ -203,7 +203,7 @@ Detailed installation instructions for each language binding are available in [d
 
 | Language | Package Manager | Command |
 |----------|----------------|---------|
-| Python   | pip            | Install a v0.1.2 Release wheel or verified Actions artifact |
+| Python   | pip            | Install a v0.1.3 Release wheel or verified Actions artifact |
 | Node.js  | npm            | `npm install finkit` |
 | Rust     | cargo          | `cargo add finkit` |
 | Java     | Maven          | Add dependency to `pom.xml` |
@@ -783,7 +783,7 @@ Finkit 内置高性能 K 线图可视化模块，支持纯 Rust 渲染，无需�
 
 ```toml
 [dependencies]
-finkit-visualization = { version = "0.1.2", features = ["svg"] }
+finkit-visualization = { version = "0.1.3", features = ["svg"] }
 ```
 
 ```rust
