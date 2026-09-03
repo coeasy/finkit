@@ -16,13 +16,13 @@ The public Go package is therefore:
 github.com/coeasy/finkit/ffi/go-binding/go/ta
 ```
 
-This layout now matches the repository directory structure and can be tested from a checkout without inventing an alternative import path. Public remote installation is still a separate release contract because a nested module needs a compatible subdirectory tag and a native-library distribution strategy before `go get` can be advertised as a clean end-user install path.
+The next-release Linux gate validates both repository-source consumption and a standalone archive containing the Go module plus `libfinkit_go.so`. Public remote `go get` remains a separate contract because the nested module still needs a compatible published tag and a long-term cross-platform native-library delivery strategy.
 
 ## Requirements
 
 - Go 1.21+;
 - CGO enabled;
-- Rust 1.85+;
+- Rust 1.85+ when building the native library from source;
 - a C compiler/linker compatible with the host Go toolchain.
 
 Check CGO:
@@ -43,9 +43,9 @@ LD_LIBRARY_PATH="../../../target/release:${LD_LIBRARY_PATH:-}" go test ./...
 
 On macOS use `DYLD_LIBRARY_PATH` instead of `LD_LIBRARY_PATH` when the dynamic loader cannot find `libfinkit_go.dylib`. On Windows place `finkit_go.dll` on `PATH` or next to the test/application executable.
 
-The CGO package also contains repository-relative linker flags based on `${SRCDIR}` so compilation does not depend on the caller's working directory.
+The CGO package contains `${SRCDIR}`-relative linker search paths. Linux first checks the packaged module-local location `go/native/linux-x86_64/`, then falls back to the repository `target/release` path used by source development.
 
-The convenience Makefile performs the same source build/test flow:
+The convenience Makefile performs the source build/test flow:
 
 ```bash
 make -C ffi/go-binding test
@@ -72,7 +72,7 @@ func main() {
 }
 ```
 
-The full repository example is in `ffi/go-binding/examples/example.go`.
+The full repository example is in `ffi/go-binding/examples/example.go`. It intentionally contains enough history for the strictest included example (`MACD(12,26,9)` needs at least 34 bars).
 
 ## Formula support
 
@@ -87,6 +87,29 @@ The Go binding exposes formula validation/evaluation in addition to indicator wr
 - formula template helpers.
 
 `FormulaEvalDebugJSON` is backed by the native `ta_formula_eval_debug` entry point and returns the current formula debugger event payload as JSON. This debugger surface is binding-specific; do not assume every other language binding exposes the same method name or payload.
+
+## Standalone Linux candidate
+
+The multi-language workflow packages a candidate archive named like:
+
+```text
+finkit-go-<version>-linux-x86_64.tar.gz
+```
+
+Its relevant layout is:
+
+```text
+finkit-go-<version>-linux-x86_64/
+├── README.md
+└── go/
+    ├── go.mod
+    ├── ta/
+    └── native/
+        └── linux-x86_64/
+            └── libfinkit_go.so
+```
+
+CI does not stop at creating the tarball. It extracts the archive into a clean temporary directory, creates a separate Go module with a local `replace` pointing at the extracted `go/` directory, and runs the real example with only the packaged native-library directory on `LD_LIBRARY_PATH`. This verifies that the candidate does not accidentally depend on the repository's `target/release` tree.
 
 ## Local external-module integration
 
@@ -117,8 +140,8 @@ This `replace` workflow is intended for source integration. It is not a claim th
 Before documenting a plain `go get` workflow, the project should verify all of the following:
 
 1. publish a nested-module tag matching the module directory convention;
-2. decide whether users receive prebuilt native libraries or need Rust locally;
-3. verify CGO compile and runtime loading on every advertised OS/architecture;
+2. decide and document the native-library strategy for every advertised OS/architecture;
+3. verify CGO compile and runtime loading on every advertised target;
 4. test installation from a clean external module using the published tag;
 5. ensure the Go module version and Finkit release version remain aligned;
 6. only then advertise the public `go get` command.
@@ -128,6 +151,7 @@ Before documenting a plain `go get` workflow, the project should verify all of t
 - [Installation guide](../../docs/installation.md)
 - [Language bindings](../../docs/language-bindings.md)
 - [Complete usage guide](../../docs/usage.md)
+- [Troubleshooting](../../docs/troubleshooting.md)
 - [FFI memory contract](../../docs/ffi/memory-contract.md)
 
 ## License
