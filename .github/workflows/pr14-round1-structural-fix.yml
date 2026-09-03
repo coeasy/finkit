@@ -38,7 +38,7 @@ jobs:
           python .ci/pr14_harden.py round3
           sed -i '/self.last_write.insert(canonical_name(var), id);/{n;/self.last_control_flow = Some(id);/d;}' core/src/formula/compute_ir.rs
           python .ci/pr14_final_ci_gate.py
-          python scripts/gen_ssot_docs.py
+          python scripts/gen_ssot_docs.py --generate
           python scripts/check_versions.py --fix
           cargo fmt --all
       - name: Run final gate matrix
