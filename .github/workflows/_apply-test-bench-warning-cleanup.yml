@@ -7,6 +7,7 @@ on:
     paths:
       - "scripts/_apply_test_bench_warning_cleanup.py"
       - "scripts/_continue_test_bench_warning_cleanup.py"
+      - "scripts/_strict_test_followups.py"
       - ".github/workflows/_apply-test-bench-warning-cleanup.yml"
 
 permissions:
@@ -46,6 +47,7 @@ jobs:
           grep -q "unused linear-reg scalar result buffer: expected one match.*found 4" <<< "$OUTPUT"
           printf '%s\n' "$OUTPUT"
           python scripts/_continue_test_bench_warning_cleanup.py
+          python scripts/_strict_test_followups.py
       - name: Format Rust sources
         run: cargo fmt --all
       - name: Verify diff hygiene
