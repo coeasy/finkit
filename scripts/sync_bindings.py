@@ -130,6 +130,13 @@ def save_registry(reg: dict) -> None:
 
 def indicators_with_ffi(reg: dict) -> list[dict]:
     out = [i for i in reg.get("indicators", []) if i.get("ffi", {}).get("c_name")]
+    if not out:
+        raise SystemExit(
+            "docs/indicator_registry.json has no ffi metadata; refusing to generate or "
+            "validate empty binding files. Run scripts/enrich_registry_ffi.py only as an "
+            "intentional registry migration, then review the resulting diff before using "
+            "sync_bindings.py."
+        )
     out.sort(key=lambda i: i["ffi"].get("order", 0))
     return out
 

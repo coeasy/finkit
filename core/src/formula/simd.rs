@@ -39,9 +39,12 @@ fn simd_level() -> SimdLevel {
         }
         #[cfg(target_arch = "aarch64")]
         {
-            return SimdLevel::Neon;
+            SimdLevel::Neon
         }
-        SimdLevel::Scalar
+        #[cfg(not(target_arch = "aarch64"))]
+        {
+            SimdLevel::Scalar
+        }
     })
 }
 
@@ -1445,9 +1448,12 @@ impl SimdOps {
         }
         #[cfg(target_arch = "aarch64")]
         {
-            return unsafe { add_neon(a, b, result) };
+            unsafe { add_neon(a, b, result) }
         }
-        add_fallback(a, b, result)
+        #[cfg(not(target_arch = "aarch64"))]
+        {
+            add_fallback(a, b, result)
+        }
     }
 
     #[inline]
@@ -1461,9 +1467,12 @@ impl SimdOps {
         }
         #[cfg(target_arch = "aarch64")]
         {
-            return unsafe { sub_neon(a, b, result) };
+            unsafe { sub_neon(a, b, result) }
         }
-        sub_fallback(a, b, result)
+        #[cfg(not(target_arch = "aarch64"))]
+        {
+            sub_fallback(a, b, result)
+        }
     }
 
     #[inline]
@@ -1477,9 +1486,12 @@ impl SimdOps {
         }
         #[cfg(target_arch = "aarch64")]
         {
-            return unsafe { mul_neon(a, b, result) };
+            unsafe { mul_neon(a, b, result) }
         }
-        mul_fallback(a, b, result)
+        #[cfg(not(target_arch = "aarch64"))]
+        {
+            mul_fallback(a, b, result)
+        }
     }
 
     #[inline]
@@ -1493,9 +1505,12 @@ impl SimdOps {
         }
         #[cfg(target_arch = "aarch64")]
         {
-            return unsafe { div_neon(a, b, result) };
+            unsafe { div_neon(a, b, result) }
         }
-        div_fallback(a, b, result)
+        #[cfg(not(target_arch = "aarch64"))]
+        {
+            div_fallback(a, b, result)
+        }
     }
 
     #[inline]
@@ -1507,9 +1522,12 @@ impl SimdOps {
         }
         #[cfg(target_arch = "aarch64")]
         {
-            return unsafe { mod_neon(a, b, result) };
+            unsafe { mod_neon(a, b, result) }
         }
-        mod_fallback(a, b, result)
+        #[cfg(not(target_arch = "aarch64"))]
+        {
+            mod_fallback(a, b, result)
+        }
     }
 
     #[inline]
@@ -1533,9 +1551,12 @@ impl SimdOps {
         }
         #[cfg(target_arch = "aarch64")]
         {
-            return unsafe { gt_neon(a, b, result) };
+            unsafe { gt_neon(a, b, result) }
         }
-        cmp_fallback(a, b, result, |a, b| a > b)
+        #[cfg(not(target_arch = "aarch64"))]
+        {
+            cmp_fallback(a, b, result, |a, b| a > b)
+        }
     }
 
     #[inline]
@@ -1549,9 +1570,12 @@ impl SimdOps {
         }
         #[cfg(target_arch = "aarch64")]
         {
-            return unsafe { lt_neon(a, b, result) };
+            unsafe { lt_neon(a, b, result) }
         }
-        cmp_fallback(a, b, result, |a, b| a < b)
+        #[cfg(not(target_arch = "aarch64"))]
+        {
+            cmp_fallback(a, b, result, |a, b| a < b)
+        }
     }
 
     #[inline]
@@ -1565,9 +1589,12 @@ impl SimdOps {
         }
         #[cfg(target_arch = "aarch64")]
         {
-            return unsafe { gte_neon(a, b, result) };
+            unsafe { gte_neon(a, b, result) }
         }
-        cmp_fallback(a, b, result, |a, b| a >= b)
+        #[cfg(not(target_arch = "aarch64"))]
+        {
+            cmp_fallback(a, b, result, |a, b| a >= b)
+        }
     }
 
     #[inline]
@@ -1581,9 +1608,12 @@ impl SimdOps {
         }
         #[cfg(target_arch = "aarch64")]
         {
-            return unsafe { lte_neon(a, b, result) };
+            unsafe { lte_neon(a, b, result) }
         }
-        cmp_fallback(a, b, result, |a, b| a <= b)
+        #[cfg(not(target_arch = "aarch64"))]
+        {
+            cmp_fallback(a, b, result, |a, b| a <= b)
+        }
     }
 
     #[inline]
@@ -1597,9 +1627,12 @@ impl SimdOps {
         }
         #[cfg(target_arch = "aarch64")]
         {
-            return unsafe { eq_neon(a, b, result) };
+            unsafe { eq_neon(a, b, result) }
         }
-        cmp_fallback(a, b, result, |a, b| a == b)
+        #[cfg(not(target_arch = "aarch64"))]
+        {
+            cmp_fallback(a, b, result, |a, b| a == b)
+        }
     }
 
     #[inline]
@@ -1613,9 +1646,12 @@ impl SimdOps {
         }
         #[cfg(target_arch = "aarch64")]
         {
-            return unsafe { neq_neon(a, b, result) };
+            unsafe { neq_neon(a, b, result) }
         }
-        cmp_fallback(a, b, result, |a, b| a != b)
+        #[cfg(not(target_arch = "aarch64"))]
+        {
+            cmp_fallback(a, b, result, |a, b| a != b)
+        }
     }
 
     #[inline]
@@ -1629,9 +1665,12 @@ impl SimdOps {
         }
         #[cfg(target_arch = "aarch64")]
         {
-            return unsafe { abs_neon(data, result) };
+            unsafe { abs_neon(data, result) }
         }
-        abs_fallback(data, result)
+        #[cfg(not(target_arch = "aarch64"))]
+        {
+            abs_fallback(data, result)
+        }
     }
 
     #[inline]
@@ -1645,9 +1684,12 @@ impl SimdOps {
         }
         #[cfg(target_arch = "aarch64")]
         {
-            return unsafe { max_elementwise_neon(a, b, result) };
+            unsafe { max_elementwise_neon(a, b, result) }
         }
-        max_elementwise_fallback(a, b, result)
+        #[cfg(not(target_arch = "aarch64"))]
+        {
+            max_elementwise_fallback(a, b, result)
+        }
     }
 
     #[inline]
@@ -1661,9 +1703,12 @@ impl SimdOps {
         }
         #[cfg(target_arch = "aarch64")]
         {
-            return unsafe { min_elementwise_neon(a, b, result) };
+            unsafe { min_elementwise_neon(a, b, result) }
         }
-        min_elementwise_fallback(a, b, result)
+        #[cfg(not(target_arch = "aarch64"))]
+        {
+            min_elementwise_fallback(a, b, result)
+        }
     }
 
     #[inline]
@@ -1723,9 +1768,12 @@ impl SimdOps {
         }
         #[cfg(target_arch = "aarch64")]
         {
-            return unsafe { hhv_neon(data, period, result) };
+            unsafe { hhv_neon(data, period, result) }
         }
-        hhv_fallback(data, period, result)
+        #[cfg(not(target_arch = "aarch64"))]
+        {
+            hhv_fallback(data, period, result)
+        }
     }
 
     #[inline]
@@ -1739,9 +1787,12 @@ impl SimdOps {
         }
         #[cfg(target_arch = "aarch64")]
         {
-            return unsafe { llv_neon(data, period, result) };
+            unsafe { llv_neon(data, period, result) }
         }
-        llv_fallback(data, period, result)
+        #[cfg(not(target_arch = "aarch64"))]
+        {
+            llv_fallback(data, period, result)
+        }
     }
 
     #[inline]
@@ -2181,14 +2232,17 @@ impl SimdOps {
         }
         #[cfg(target_arch = "aarch64")]
         {
-            return unsafe { select_neon(condition, then_val, else_val, result, len) };
+            unsafe { select_neon(condition, then_val, else_val, result, len) }
         }
-        for i in 0..len {
-            result[i] = if condition[i] != 0.0 {
-                then_val[i]
-            } else {
-                else_val[i]
-            };
+        #[cfg(not(target_arch = "aarch64"))]
+        {
+            for i in 0..len {
+                result[i] = if condition[i] != 0.0 {
+                    then_val[i]
+                } else {
+                    else_val[i]
+                };
+            }
         }
     }
 
