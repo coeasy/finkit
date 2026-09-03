@@ -1,65 +1,108 @@
-# finkit Android Bindings
+# Finkit Android Binding
 
-Android (JNI) bindings for [finkit](https://github.com/coeasy/finkit), the
-high-performance financial technical analysis library. The library is written
-in Rust and shipped to Android as a `.so` inside an Android Archive (`.aar`).
+Finkit's Android binding packages the Rust JNI library as an Android Archive (`.aar`) with the Java API under `com.finkit.indicators.Finkit`.
 
-## Layout
+## Current support contract
 
-```
-ffi/android-binding/
-├── Cargo.toml                # the Rust crate that produces libfinkit_android.so
-├── src/lib.rs                # JNI shim around finkit-java
-└── android/                  # Android library Gradle module
-    ├── build.gradle.yaml
-    └── src/main/
-        ├── AndroidManifest.xml
-        └── java/com/finkit/indicators/Finkit.java
-```
+The Android source contains:
 
-## Building the AAR
+- the Rust `finkit-android` JNI crate;
+- generated JNI indicator shims;
+- the Java `Finkit` wrapper;
+- a standard Gradle Android Library project;
+- a `jniLibs` staging path for Rust `.so` files.
 
-Pre-requisites:
+The multi-language CI builds the native Android libraries and assembles the AAR before Android can be described as a validated release target. A GitHub Actions artifact is not the same as publication to Maven Central or another Android package registry.
 
-- Android NDK 25 or later
-- `ANDROID_NDK_HOME` and `ANDROID_HOME` set
-- A recent Rust toolchain (`rustup default stable` + `rustup target add aarch64-linux-android24 ...`)
+## Requirements
+
+- Rust 1.85+;
+- Android SDK with platform 34;
+- Android NDK 25+;
+- Java 17 for the Android Gradle Plugin;
+- Gradle 8.7+;
+- `cargo-ndk`.
+
+Install Rust/NDK helpers:
 
 ```bash
-# 1. Build the .so for all four ABIs (arm64, armv7, x86_64, x86)
-cargo build --release -p finkit-android --target aarch64-linux-android24
-cargo build --release -p finkit-android --target armv7-linux-androideabi24
-cargo build --release -p finkit-android --target x86_64-linux-android24
-cargo build --release -p finkit-android --target i686-linux-android24
-
-# 2. Assemble the .aar
-cd ffi/android-binding/android
-./gradlew :aar
-# → app/build/outputs/aar/finkit-android-release.aar
+cargo install cargo-ndk --locked
+rustup target add \
+  aarch64-linux-android \
+  armv7-linux-androideabi \
+  x86_64-linux-android \
+  i686-linux-android
 ```
 
-## Using the AAR
+## Build native libraries
 
-```gradle
-// settings.gradle.kts
-dependencyResolutionManagement {
-    repositories {
-        flatDir { dirs("libs") }
-    }
-}
+From the repository root:
 
-// app/build.gradle.kts
+```bash
+cargo ndk \
+  --platform 24 \
+  -t arm64-v8a \
+  -t armeabi-v7a \
+  -t x86_64 \
+  -t x86 \
+  -o ffi/android-binding/android/src/main/jniLibs \
+  build --release -p finkit-android --locked
+```
+
+The output directory should contain ABI-specific copies of `libfinkit_android.so`.
+
+## Assemble the AAR
+
+```bash
+cd ffi/android-binding/android
+gradle assembleRelease
+```
+
+The release AAR is written below:
+
+```text
+build/outputs/aar/
+```
+
+Before distributing it, inspect the archive and confirm that the advertised ABIs contain `libfinkit_android.so`.
+
+## Use the AAR
+
+For a local application, copy the AAR into the app's `libs/` directory and add it as a file dependency. For example:
+
+```kotlin
 dependencies {
     implementation(files("libs/finkit-android-release.aar"))
 }
 ```
 
+Java/Kotlin usage:
+
 ```kotlin
 import com.finkit.indicators.Finkit
 
-val prices = doubleArrayOf(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0)
-val sma = Finkit.sma(prices, period = 3)
+val prices = doubleArrayOf(1.0, 2.0, 3.0, 4.0, 5.0, 6.0)
+val sma = Finkit.sma(prices, 3)
+println(Finkit.version())
 ```
+
+`Finkit` loads `finkit_android` automatically when the class is first referenced. There is no separate `init()` call.
+
+## API scope
+
+The current Android wrapper includes a focused generated subset covering moving averages, momentum, and statistics, including SMA, EMA, WMA, DEMA, TEMA, midpoint, RSI, ROC, MOM, CMO, TRIX, z-score, TSF, linear regression, and percent rank.
+
+Do not infer complete parity with Python/Rust solely because both bindings use the same core. Binding API coverage and package validation are separate contracts.
+
+## Distribution status
+
+Until a new release actually attaches and smoke-tests the AAR, treat Android as a CI-validated/source-build target rather than a public registry package. Do not advertise Maven coordinates that have not been published.
+
+## Related documentation
+
+- [Language bindings](../../docs/language-bindings.md)
+- [Installation guide](../../docs/installation.md)
+- [Generated indicator catalog](../../docs/generated/indicators.md)
 
 ## License
 
