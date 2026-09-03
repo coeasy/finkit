@@ -7,7 +7,6 @@ contents API, then the maintenance workflow deletes it before the PR is merged.
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -130,36 +129,54 @@ pub fn linear_reg(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
     print("updated statistics.rs: compatibility alias is warning-free until its actual transition")
 
 
-def canonicalize_registry() -> None:
-    path = ROOT / "docs/indicator_registry.json"
-    data = json.loads(path.read_text(encoding="utf-8"))
+def rewrite_generated_bindings() -> None:
+    old = "indicators::linear_reg("
+    new = "indicators::linearreg("
     replacements = 0
+    changed: list[str] = []
+    for path in sorted((ROOT / "ffi").glob("**/generated.rs")):
+        text = path.read_text(encoding="utf-8")
+        count = text.count(old)
+        if not count:
+            continue
+        replacements += count
+        path.write_text(text.replace(old, new), encoding="utf-8")
+        changed.append(str(path.relative_to(ROOT)))
+    if replacements < 1:
+        raise SystemExit("generated bindings: expected at least one indicators::linear_reg call")
+    print(f"updated generated bindings: canonicalized {replacements} call(s) in {', '.join(changed)}")
 
-    def walk(value):
-        nonlocal replacements
-        if isinstance(value, dict):
-            return {k: walk(v) for k, v in value.items()}
-        if isinstance(value, list):
-            return [walk(v) for v in value]
-        if isinstance(value, str):
-            count = value.count("indicators::linear_reg(")
-            if count:
-                replacements += count
-                return value.replace("indicators::linear_reg(", "indicators::linearreg(")
-        return value
 
-    data = walk(data)
-    if replacements:
-        path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        print(f"updated indicator registry: canonicalized {replacements} linear regression binding call(s)")
-    else:
-        print("indicator registry already uses canonical linearreg calls; generated sources will be refreshed from SSOT")
+def make_sync_bindings_fail_closed() -> None:
+    path = ROOT / "scripts/sync_bindings.py"
+    text = path.read_text(encoding="utf-8")
+    old = '''def indicators_with_ffi(reg: dict) -> list[dict]:
+    out = [i for i in reg.get("indicators", []) if i.get("ffi", {}).get("c_name")]
+    out.sort(key=lambda i: i["ffi"].get("order", 0))
+    return out
+'''
+    new = '''def indicators_with_ffi(reg: dict) -> list[dict]:
+    out = [i for i in reg.get("indicators", []) if i.get("ffi", {}).get("c_name")]
+    if not out:
+        raise SystemExit(
+            "docs/indicator_registry.json has no ffi metadata; refusing to generate or "
+            "validate empty binding files. Run scripts/enrich_registry_ffi.py only as an "
+            "intentional registry migration, then review the resulting diff before using "
+            "sync_bindings.py."
+        )
+    out.sort(key=lambda i: i["ffi"].get("order", 0))
+    return out
+'''
+    text = replace_once(text, old, new, "sync_bindings empty-registry guard")
+    path.write_text(text, encoding="utf-8")
+    print("updated sync_bindings.py: fail closed when registry lacks FFI metadata")
 
 
 def main() -> int:
     rewrite_simd()
     rewrite_statistics()
-    canonicalize_registry()
+    rewrite_generated_bindings()
+    make_sync_bindings_fail_closed()
     return 0
 
 
