@@ -122,7 +122,7 @@ low = np.ascontiguousarray(low, dtype=np.float64)
 close = np.ascontiguousarray(close, dtype=np.float64)
 volume = np.ascontiguousarray(volume, dtype=np.float64)
 
-out = plan.eval_zero_copy(open_, high, low, close, volume)
+out = plan.eval_zero_copy(open_, high, low_, close, volume)
 ```
 
 The OHLCV arrays are borrowed during the synchronous call. Do not resize or mutate them concurrently while evaluation is running.
@@ -215,20 +215,30 @@ See [formula-performance.md](formula-performance.md).
 
 ## 13. Debugging
 
-The current public v0.1.3 API does not expose a cross-language step debugger. Diagnose formulas with the interfaces that are actually shipped:
+Formula-debug support is **binding-specific**, not one universally named cross-language API.
+
+The current Go/CGO source exposes:
+
+```go
+debugJSON, err := ta.FormulaEvalDebugJSON(source, open, high, low, close, volume)
+```
+
+That wrapper is backed by the Go native binding's `ta_formula_eval_debug` symbol, which calls the core formula engine's `eval_with_debug` path and serializes debugger events as JSON.
+
+Do not infer that Python, Node, Java, .NET, or the C/C++ SDK exposes the same method name or payload without checking that binding's public wrapper. The removed legacy debugger document was incorrect because it generalized debugger calls across every language without verifying those wrappers.
+
+For every binding, the common diagnostic workflow is still:
 
 1. validate the grammar/dialect;
 2. reduce the expression to the smallest failing subexpression;
 3. confirm every function exists in the generated catalog;
-4. verify OHLCV lengths, ordering, and dtype/shape requirements;
+4. verify OHLCV lengths, ordering, and binding-specific dtype/shape requirements;
 5. inspect warm-up/lookback alignment;
 6. compare the minimal expression against a fixed golden dataset;
 7. add assignments and nested functions back one at a time;
 8. distinguish syntax support from semantic parity with the source terminal.
 
-Do not use undocumented names such as `formula_eval_debug`, `FormulaEvalDebug`, or `ta_formula_eval_debug` unless a future release explicitly adds and tests them.
-
-See [troubleshooting.md](troubleshooting.md) for a complete diagnosis workflow covering formulas, Python, CLI, native bindings, runtime reuse, and source builds.
+See [troubleshooting.md](troubleshooting.md) for formula, Go debug, Python, CLI, native-binding, runtime, Android, iOS, .NET, and WASM diagnosis.
 
 ## 14. Templates
 
