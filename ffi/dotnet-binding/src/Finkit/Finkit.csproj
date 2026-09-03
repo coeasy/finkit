@@ -10,18 +10,13 @@
     <LangVersion>10.0</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
-    <!-- NuGet Package Metadata
-         PackageId aligned to the "Finkit" identity (matches the Rust
-         crate name, the GitHub repo and the C/Python/Node/Go/Java packages).
-         The .NET assembly and root namespace use `Finkit` to keep
-         the .NET-side casing consistent with the public API. -->
     <PackageId>Finkit</PackageId>
     <Title>Finkit - .NET Bindings</Title>
     <Version>0.1.3</Version>
     <Authors>Finkit Contributors</Authors>
     <Company>Finkit</Company>
-    <Description>High-performance financial technical analysis indicators library for .NET, powered by Rust. Includes SMA, EMA, RSI, MACD, Bollinger Bands, Stochastic, ADX, ATR, Hilbert Transform, and 40+ more indicators.</Description>
-    <PackageTags>technical-analysis;trading;finance;indicators;rsi;macd;moving-average;bollinger-bands;atr;stochastic;adx;hilbert-transform;finkit</PackageTags>
+    <Description>High-performance financial technical analysis indicators library for .NET, powered by Rust.</Description>
+    <PackageTags>technical-analysis;trading;finance;indicators;rsi;macd;moving-average;bollinger-bands;atr;stochastic;adx;finkit</PackageTags>
     <PackageLicenseExpression>MIT OR Apache-2.0</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/coeasy/finkit</PackageProjectUrl>
     <RepositoryUrl>https://github.com/coeasy/finkit</RepositoryUrl>
@@ -29,11 +24,6 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <Copyright>Copyright (c) Finkit Contributors</Copyright>
 
-    <!-- Multi-RID support for the NuGet runtime asset layout.
-         The build script places the native binary under
-           dist/dotnet/<plat>/runtimes/<rid>/native/
-         so the consumer can `dotnet add package Finkit` and the correct
-         lib is copied next to the assembly at restore time. -->
     <RuntimeIdentifiers>win-x64;linux-x64;osx-x64;osx-arm64</RuntimeIdentifiers>
   </PropertyGroup>
 
@@ -46,19 +36,29 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Stage finkit_dotnet.dll next to the .NET assembly. The build script
-         copies the compiled native binary to ../native/win-x64/native/ before
-         invoking `dotnet pack` and removes it afterwards. Packing the file
-         under the standard `runtimes/<rid>/native/` RID layout makes the
-         resulting nupkg consumable via `dotnet add package Finkit` without
-         any extra restore flags. The build script stages the binary at a
-         known path so we can glob for it without the recursive subpath
-         leaking into the nupkg layout. -->
     <None Include="..\..\native\win-x64\native\*.dll" Pack="true"
           Condition="Exists('..\..\native\win-x64\native')">
       <Pack>true</Pack>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <PackagePath>runtimes\win-x64\native\</PackagePath>
+    </None>
+    <None Include="..\..\native\linux-x64\native\*.so" Pack="true"
+          Condition="Exists('..\..\native\linux-x64\native')">
+      <Pack>true</Pack>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <PackagePath>runtimes\linux-x64\native\</PackagePath>
+    </None>
+    <None Include="..\..\native\osx-x64\native\*.dylib" Pack="true"
+          Condition="Exists('..\..\native\osx-x64\native')">
+      <Pack>true</Pack>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <PackagePath>runtimes\osx-x64\native\</PackagePath>
+    </None>
+    <None Include="..\..\native\osx-arm64\native\*.dylib" Pack="true"
+          Condition="Exists('..\..\native\osx-arm64\native')">
+      <Pack>true</Pack>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <PackagePath>runtimes\osx-arm64\native\</PackagePath>
     </None>
   </ItemGroup>
 
