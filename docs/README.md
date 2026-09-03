@@ -9,9 +9,10 @@ New users should follow this order:
 1. [Getting started](getting-started.md) — first successful indicator/formula/CLI run.
 2. [Installation](installation.md) — verified release assets, source builds, prerequisites, checksums.
 3. [Complete usage guide](usage.md) — data conventions, Python/Rust usage, formulas, streaming, factors/runtime.
-4. [CLI guide](cli.md) — file formats, indicator/formula/streaming commands, troubleshooting.
+4. [CLI guide](cli.md) — file formats and indicator/formula/streaming commands.
 5. [Language bindings](language-bindings.md) — Python, Rust, Node.js, Java/JNI, C/C++, Go, .NET, mobile/WASM status.
 6. [Runtime and factors](runtime-and-factors.md) — MarketFrame, factor plans, dependency safety and reuse.
+7. [Troubleshooting](troubleshooting.md) — installation, NumPy/NaN, OHLCV alignment, formula, runtime, CLI, native-loader and build diagnosis.
 
 ## What is actually distributed in v0.1.3
 
@@ -40,6 +41,7 @@ Registry publication is a separate contract. Do not document `pip install finkit
 | [cli.md](cli.md) | CLI input formats, indicator/formula/streaming commands |
 | [language-bindings.md](language-bindings.md) | Binding support matrix and source-build instructions |
 | [runtime-and-factors.md](runtime-and-factors.md) | Factor/runtime workflow, dependency validation, reuse and alignment |
+| [troubleshooting.md](troubleshooting.md) | Failure isolation and current supported recovery workflows |
 | [indicators.md](indicators.md) | Human-readable indicator reference |
 | [features.md](features.md) | Feature/capability overview |
 
@@ -47,17 +49,16 @@ Registry publication is a separate contract. Do not document `pip install finkit
 
 | Document | Purpose |
 | --- | --- |
-| [formula.md](formula.md) | Formula syntax and evaluation reference |
+| [formula.md](formula.md) | Formula syntax, evaluation and supported debugging workflow |
 | [formula/grammar.md](formula/grammar.md) | Core formula grammar |
 | [formula/pine-grammar.md](formula/pine-grammar.md) | Supported Pine grammar subset |
 | [formula-runtime.md](formula-runtime.md) | Persistent compiled plans and incremental execution |
 | [formula-runtime-contract.md](formula-runtime-contract.md) | Ownership, `eval_range`, `eval_last`, append, warm-up and concurrency semantics |
 | [formula-templates.md](formula-templates.md) | Reusable formula patterns |
-| [formula-debugger.md](formula-debugger.md) | Formula debugging workflow |
 | [formula-performance.md](formula-performance.md) | Formula optimization and benchmark notes |
 | [migration/pine-to-finkit.md](migration/pine-to-finkit.md) | Pine indicator migration guidance and semantic boundaries |
 
-For exact supported functions and Pine mappings, prefer the generated catalogs over hard-coded counts or compatibility percentages.
+For exact supported functions and Pine mappings, prefer the generated catalogs over hard-coded counts or compatibility percentages. Public API documentation must describe shipped interfaces only; planned or hypothetical APIs must not be presented as available functionality.
 
 ## API and architecture
 
@@ -111,7 +112,9 @@ Active `docs/` should not contain:
 - duplicated directory placeholder READMEs when a canonical guide already exists;
 - old package/brand names in filenames that imply a current public API;
 - unverified registry-install commands;
-- hard-coded capability counts/compatibility percentages that are already generated from SSOT.
+- hard-coded capability counts/compatibility percentages that are already generated from SSOT;
+- examples that call APIs absent from the current source and release contract;
+- future features written as if they are already shipped.
 
 Git history and closed pull requests remain the historical record.
 
@@ -124,7 +127,8 @@ When code or release behavior changes:
 3. update binding-specific docs together with package metadata;
 4. regenerate SSOT docs through the generator rather than hand-editing generated files;
 5. run link/version/SSOT checks;
-6. distinguish **buildable from source**, **CI validated**, **GitHub Release asset**, and **public registry package**.
+6. distinguish **buildable from source**, **CI validated**, **GitHub Release asset**, and **public registry package**;
+7. verify every public API used in examples exists in the current source tree or generated API contract.
 
 Recommended validation:
 
