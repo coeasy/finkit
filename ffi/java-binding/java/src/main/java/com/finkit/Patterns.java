@@ -21,7 +21,7 @@ package com.finkit;
  * }
  * }</pre>
  *
- * @since 0.1.0
+ * @since 0.1.2
  */
 public final class Patterns {
 

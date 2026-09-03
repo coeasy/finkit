@@ -11,6 +11,28 @@ impl FormulaOptimizer {
         Self::optimize_with(ast, OptLevel::default())
     }
 
+    /// Optimize an AST for normal execution while preserving assignment side effects.
+    ///
+    /// Formula assignments are observable through `FormulaContext::variables`, so
+    /// statement-level dead-code elimination is only valid for explicit lazy/optimizer
+    /// use, not for the normal compiled execution contract.
+    pub(crate) fn optimize_for_execution(ast: &AstNode) -> AstNode {
+        let level = OptLevel::default();
+        let mut node = ast.clone();
+        if level >= OptLevel::Basic {
+            node = Self::constant_folding(&node);
+        }
+        if level >= OptLevel::Standard {
+            node = Self::algebraic_simplify(&node);
+            node = Self::strength_reduction(&node);
+            node = Self::common_subexpression_elimination(&node);
+        }
+        if level >= OptLevel::Aggressive {
+            node = Self::loop_invariant_code_motion(&node);
+        }
+        node
+    }
+
     /// 按指定 [`OptLevel`] 优化 AST。
     ///
     /// 等级递进：
@@ -1159,8 +1181,7 @@ impl FormulaOptimizer {
             | AstNode::CompoundAssignment { expr, .. } => {
                 Self::cse_collect(expr, counts, nodes, order);
             }
-            AstNode::FunctionCall { args, .. }
-            | AstNode::DrawGeneric { args, .. } => {
+            AstNode::FunctionCall { args, .. } | AstNode::DrawGeneric { args, .. } => {
                 for arg in args {
                     Self::cse_collect(arg, counts, nodes, order);
                 }
@@ -1438,13 +1459,11 @@ impl FormulaOptimizer {
     /// included. Lookbacks compose additively through nested rolling functions
     /// (for example, MA(MA(CLOSE, 5), 5) needs 8 prior bars).
     pub fn required_lookback(ast: &AstNode) -> Option<usize> {
-        fn max_children<'a, I>(children: I) -> Option<usize>
+        fn max_children<'a, I>(mut children: I) -> Option<usize>
         where
             I: Iterator<Item = &'a AstNode>,
         {
-            children.try_fold(0usize, |acc, child| {
-                Some(acc.max(visit(child)?))
-            })
+            children.try_fold(0usize, |acc, child| Some(acc.max(visit(child)?)))
         }
 
         fn add_offset(value: Option<usize>, offset: usize) -> Option<usize> {
@@ -1454,13 +1473,9 @@ impl FormulaOptimizer {
         fn visit(node: &AstNode) -> Option<usize> {
             match node {
                 AstNode::Number(_) | AstNode::Variable(_) | AstNode::StringLit(_) => Some(0),
-                AstNode::BinaryOp { left, right, .. } => {
-                    Some(visit(left)?.max(visit(right)?))
-                }
+                AstNode::BinaryOp { left, right, .. } => Some(visit(left)?.max(visit(right)?)),
                 AstNode::UnaryOp { expr, .. } => visit(expr),
-                AstNode::IndexAccess { array, index } => {
-                    Some(visit(array)?.max(visit(index)?))
-                }
+                AstNode::IndexAccess { array, index } => Some(visit(array)?.max(visit(index)?)),
                 AstNode::Assignment { expr, .. }
                 | AstNode::Output { expr, .. }
                 | AstNode::CompoundAssignment { expr, .. } => visit(expr),
@@ -1469,7 +1484,11 @@ impl FormulaOptimizer {
                     cond,
                     then_branch,
                     else_branch,
-                } => Some(visit(cond)?.max(visit(then_branch)?).max(visit(else_branch)?)),
+                } => Some(
+                    visit(cond)?
+                        .max(visit(then_branch)?)
+                        .max(visit(else_branch)?),
+                ),
                 AstNode::FunctionCall { name, args } => {
                     let upper = name.to_ascii_uppercase();
                     let args_lookback = max_children(args.iter())?;
@@ -1479,8 +1498,8 @@ impl FormulaOptimizer {
                         // Cross detection looks at the previous bar.
                         "CROSS" | "CROSSBELOW" | "LONGCROSS" => 1,
                         // Rolling windows consume period - 1 previous bars.
-                        "MA" | "SMA" | "WMA" | "TRIMA" | "RSI" | "HHV" | "LLV"
-                        | "SUM" | "COUNT" | "EVERY" | "EXIST" | "FILTER" | "BARSLAST" => {
+                        "MA" | "SMA" | "WMA" | "TRIMA" | "RSI" | "HHV" | "LLV" | "SUM"
+                        | "COUNT" | "EVERY" | "EXIST" | "FILTER" | "BARSLAST" => {
                             let Some(AstNode::Number(period)) = args.get(1) else {
                                 return None;
                             };
@@ -1501,8 +1520,8 @@ impl FormulaOptimizer {
                         }
                         // Element-wise functions preserve their arguments'
                         // lookback. Keep this list intentionally small.
-                        "ABS" | "MAX" | "MIN" | "ADD" | "SUB" | "MULT" | "DIV" | "POW"
-                        | "SQRT" | "EXP" | "LN" | "LOG10" => 0,
+                        "ABS" | "MAX" | "MIN" | "ADD" | "SUB" | "MULT" | "DIV" | "POW" | "SQRT"
+                        | "EXP" | "LN" | "LOG10" => 0,
                         // Known context-only functions do not read history.
                         "BARSCOUNT" | "BARPOS" | "CAPITAL" | "DRAWNULL" => 0,
                         // Unknown functions are evaluated conservatively.
@@ -2297,10 +2316,7 @@ mod tests {
     }
     #[test]
     fn test_cse_merges_duplicate_pure_subexpressions() {
-        let ast = crate::formula::parser::parse_formula(
-            "MA(CLOSE, 5) + MA(CLOSE, 5)",
-        )
-        .unwrap();
+        let ast = crate::formula::parser::parse_formula("MA(CLOSE, 5) + MA(CLOSE, 5)").unwrap();
         let optimized = FormulaOptimizer::optimize_with(&ast, OptLevel::Standard);
         let rendered = format!("{optimized:?}");
         assert!(rendered.contains("_CSE0"));
@@ -2315,23 +2331,16 @@ mod tests {
 
     #[test]
     fn test_cse_does_not_merge_mutable_formula_variables() {
-        let ast = crate::formula::parser::parse_formula(
-            "X := CLOSE; MA(X, 5) + MA(X, 5)",
-        )
-        .unwrap();
+        let ast = crate::formula::parser::parse_formula("X := CLOSE; MA(X, 5) + MA(X, 5)").unwrap();
         let optimized = FormulaOptimizer::optimize_with(&ast, OptLevel::Standard);
         assert!(!format!("{optimized:?}").contains("_CSE"));
     }
 
     #[test]
     fn test_required_lookback_is_conservative() {
-        let ast = crate::formula::parser::parse_formula(
-            "MA(CLOSE, 20) + HHV(HIGH, 5)",
-        )
-        .unwrap();
+        let ast = crate::formula::parser::parse_formula("MA(CLOSE, 20) + HHV(HIGH, 5)").unwrap();
         assert_eq!(FormulaOptimizer::required_lookback(&ast), Some(19));
         let recursive = crate::formula::parser::parse_formula("EMA(CLOSE, 20)").unwrap();
         assert_eq!(FormulaOptimizer::required_lookback(&recursive), None);
     }
-
 }

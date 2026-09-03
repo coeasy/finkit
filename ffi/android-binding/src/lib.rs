@@ -7,9 +7,8 @@
 // `System.loadLibrary("finkit_android")` invocation in a Kotlin/Java
 // Android module.
 //
-// The actual computation lives in the `finkit-java` crate; this file is
-// just a relabelling shim so we can produce a separate Android `.aar`
-// without recompiling the full indicator surface.
+// The computation delegates directly to the shared Rust core; this file is
+// the Android-specific JNI surface used to produce a separate `.aar`.
 // ----------------------------------------------------------------------------
 #![allow(non_snake_case)]
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -17,8 +16,9 @@
 #![allow(missing_debug_implementations)]
 
 use jni::objects::{JClass, JDoubleArray};
-use jni::sys::{jarray, jdoubleArray, jint, jsize};
+use jni::sys::{jarray, jdoubleArray, jint, jsize, jstring};
 use jni::JNIEnv;
+use std::os::raw::c_char;
 use std::panic;
 
 // ---- helpers ---------------------------------------------------------------
@@ -42,11 +42,11 @@ fn from_double_array(env: &mut JNIEnv, arr: jdoubleArray) -> Vec<f64> {
 //
 // The JVM binding exports its JNI symbols under the class name
 // `com.rusttalib.Indicators` (legacy package). On Android we use
-// `com.finkit.indicators.Indicators`, so we forward to the same Rust
-// function bodies but expose them under a fresh JNI symbol name.
+// `com.finkit.indicators.Finkit`, so we forward to the same Rust
+// core functions under a fresh JNI symbol name.
 
 macro_rules! shim_indicator {
-    ($name:ident, $arg_ty:ty, $out_ty:ty) => {
+    ($name:ident, $dispatch:literal, $arg_ty:ty, $out_ty:ty) => {
         #[no_mangle]
         pub extern "system" fn $name(
             mut env: JNIEnv,
@@ -57,7 +57,7 @@ macro_rules! shim_indicator {
             panic::catch_unwind(panic::AssertUnwindSafe(|| {
                 let data = from_double_array(&mut env, input);
                 // Delegate to the matching pure-Rust core function.
-                let result = dispatch_ta(stringify!($name), &data, period as usize);
+                let result = dispatch_ta($dispatch, &data, period as usize);
                 to_double_array(&mut env, result)
             }))
             .unwrap_or(std::ptr::null_mut())
@@ -98,6 +98,25 @@ fn dispatch_ta(name: &str, data: &[f64], period: usize) -> Vec<f64> {
 
 include!("generated.rs");
 
+#[no_mangle]
+pub extern "system" fn Java_com_finkit_indicators_Finkit_version(
+    env: JNIEnv,
+    _class: JClass,
+) -> jstring {
+    match env.new_string(env!("CARGO_PKG_VERSION")) {
+        Ok(value) => value.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_finkit_indicators_Finkit_abiVersion(
+    _env: JNIEnv,
+    _class: JClass,
+) -> jint {
+    1
+}
+
 /// ABI version exported to the Android side so the wrapper can refuse
 /// to load a `.so` built against an incompatible core.
 #[no_mangle]
@@ -105,21 +124,13 @@ pub extern "system" fn finkit_android_abi_version() -> jint {
     1
 }
 
-/// Library version, mirrors `Cargo.toml`.
+/// Library version for native tooling, mirrors `Cargo.toml`.
+///
+/// JNI callers must use `Finkit.version()`, which receives a live `JNIEnv`.
 #[no_mangle]
-pub extern "system" fn finkit_android_version() -> jdoubleArray {
-    // Version is encoded as a 3-element double array: [major, minor, patch].
-    let v: [f64; 3] = {
-        let ver = env!("CARGO_PKG_VERSION");
-        let parts: Vec<&str> = ver.split('.').collect();
-        [
-            parts.first().and_then(|s| s.parse().ok()).unwrap_or(0.0),
-            parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0.0),
-            parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0.0),
-        ]
-    };
-    let mut env = unsafe { std::mem::zeroed::<JNIEnv>() };
-    to_double_array(&mut env, v.to_vec())
+pub extern "C" fn finkit_android_version() -> *const c_char {
+    static VERSION: &[u8] = concat!(env!("CARGO_PKG_VERSION"), "\\0").as_bytes();
+    VERSION.as_ptr().cast()
 }
 
 #[cfg(test)]

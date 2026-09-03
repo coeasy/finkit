@@ -58,8 +58,23 @@ extern const char* ta_version();
 extern void ta_free_result(TaResult *result);
 
 extern char* ta_formula_eval(const char *source, const double *open, const double *high, const double *low, const double *close, const double *volume, int length);
+extern char* ta_formula_eval_multi(const char *source, const double *open, const double *high, const double *low, const double *close, const double *volume, int length);
+extern char* ta_formula_eval_draw(const char *source, const double *open, const double *high, const double *low, const double *close, const double *volume, int length);
+extern char* ta_formula_eval_debug(const char *source, const double *open, const double *high, const double *low, const double *close, const double *volume, int length);
 extern char* ta_formula_eval_zc_exec(const char *source, const double *open, const double *high, const double *low, const double *close, const double *volume, int length);
 extern int ta_formula_validate(const char *source);
+extern char* ta_formula_get_template(const char *name);
+extern char* ta_formula_search_templates(const char *keyword);
+extern char* ta_formula_list_categories();
+
+extern char* ta_darvas_box_json(const double *high, const double *low, const double *close, int length, int lookback, int confirmation);
+extern char* ta_renko_json(const double *high, const double *low, int length, double box_size);
+extern char* ta_kagi_json(const double *close, int length, double reversal);
+extern char* ta_point_and_figure_json(const double *high, const double *low, int length, double box_size, int reversal);
+extern char* ta_three_line_break_json(const double *close, int length, int lines);
+extern char* ta_williams_alligator_json(const double *close, int length);
+extern char* ta_heikin_ashi_json(const double *open, const double *high, const double *low, const double *close, int length);
+
 extern void ta_free_string(char *s);
 
 extern void* ta_streaming_sma_new(int period);
@@ -1108,6 +1123,133 @@ func FormulaValidate(source string) bool {
 
 	result := C.ta_formula_validate(cSource)
 	return result == 1
+}
+
+// FormulaEvalMultiJSON evaluates multiple formula outputs and returns the native JSON payload.
+func FormulaEvalMultiJSON(source string, open, high, low, close, volume []float64) (string, error) {
+	length := len(open)
+	if len(high) != length || len(low) != length || len(close) != length || len(volume) != length {
+		return "", errors.New("all input arrays must have the same length")
+	}
+	cSource := C.CString(source)
+	defer C.free(unsafe.Pointer(cSource))
+	return formulaJSONResult(C.ta_formula_eval_multi(
+		cSource, toCSlice(open), toCSlice(high), toCSlice(low), toCSlice(close), toCSlice(volume), cInt(length),
+	))
+}
+
+// FormulaEvalDrawJSON evaluates drawing-oriented formula output as JSON.
+func FormulaEvalDrawJSON(source string, open, high, low, close, volume []float64) (string, error) {
+	length := len(open)
+	if len(high) != length || len(low) != length || len(close) != length || len(volume) != length {
+		return "", errors.New("all input arrays must have the same length")
+	}
+	cSource := C.CString(source)
+	defer C.free(unsafe.Pointer(cSource))
+	return formulaJSONResult(C.ta_formula_eval_draw(
+		cSource, toCSlice(open), toCSlice(high), toCSlice(low), toCSlice(close), toCSlice(volume), cInt(length),
+	))
+}
+
+// FormulaEvalDebugJSON evaluates a formula with debug metadata and returns JSON.
+func FormulaEvalDebugJSON(source string, open, high, low, close, volume []float64) (string, error) {
+	length := len(open)
+	if len(high) != length || len(low) != length || len(close) != length || len(volume) != length {
+		return "", errors.New("all input arrays must have the same length")
+	}
+	cSource := C.CString(source)
+	defer C.free(unsafe.Pointer(cSource))
+	return formulaJSONResult(C.ta_formula_eval_debug(
+		cSource, toCSlice(open), toCSlice(high), toCSlice(low), toCSlice(close), toCSlice(volume), cInt(length),
+	))
+}
+
+// formulaJSONResult validates and owns a JSON string returned by the native layer.
+func formulaJSONResult(result *C.char) (string, error) {
+	if result == nil {
+		return "", errors.New("native formula call returned a null result")
+	}
+	defer C.ta_free_string(result)
+
+	value := C.GoString(result)
+	if !json.Valid([]byte(value)) {
+		return "", errors.New(value)
+	}
+	return value, nil
+}
+
+// FormulaGetTemplate returns one named formula template as JSON.
+func FormulaGetTemplate(name string) (string, error) {
+	cName := C.CString(name)
+	defer C.free(unsafe.Pointer(cName))
+	return formulaJSONResult(C.ta_formula_get_template(cName))
+}
+
+// FormulaSearchTemplates searches formula templates and returns the JSON array.
+func FormulaSearchTemplates(keyword string) (string, error) {
+	cKeyword := C.CString(keyword)
+	defer C.free(unsafe.Pointer(cKeyword))
+	return formulaJSONResult(C.ta_formula_search_templates(cKeyword))
+}
+
+// FormulaListCategories returns all formula template categories as JSON.
+func FormulaListCategories() (string, error) {
+	return formulaJSONResult(C.ta_formula_list_categories())
+}
+
+// DarvasBoxJSON returns the Darvas box result as JSON.
+func DarvasBoxJSON(high, low, close []float64, lookback, confirmation int) (string, error) {
+	if len(high) != len(low) || len(high) != len(close) {
+		return "", errors.New("all input arrays must have the same length")
+	}
+	return formulaJSONResult(C.ta_darvas_box_json(
+		toCSlice(high), toCSlice(low), toCSlice(close), cInt(len(high)),
+		cInt(lookback), cInt(confirmation),
+	))
+}
+
+// RenkoJSON returns the Renko result as JSON.
+func RenkoJSON(high, low []float64, boxSize float64) (string, error) {
+	if len(high) != len(low) {
+		return "", errors.New("all input arrays must have the same length")
+	}
+	return formulaJSONResult(C.ta_renko_json(toCSlice(high), toCSlice(low), cInt(len(high)), C.double(boxSize)))
+}
+
+// KagiJSON returns the Kagi result as JSON.
+func KagiJSON(close []float64, reversal float64) (string, error) {
+	return formulaJSONResult(C.ta_kagi_json(toCSlice(close), cInt(len(close)), C.double(reversal)))
+}
+
+// PointAndFigureJSON returns the point-and-figure result as JSON.
+func PointAndFigureJSON(high, low []float64, boxSize float64, reversal int) (string, error) {
+	if len(high) != len(low) {
+		return "", errors.New("all input arrays must have the same length")
+	}
+	return formulaJSONResult(C.ta_point_and_figure_json(
+		toCSlice(high), toCSlice(low), cInt(len(high)),
+		C.double(boxSize), cInt(reversal),
+	))
+}
+
+// ThreeLineBreakJSON returns the three-line-break result as JSON.
+func ThreeLineBreakJSON(close []float64, lines int) (string, error) {
+	return formulaJSONResult(C.ta_three_line_break_json(toCSlice(close), cInt(len(close)), cInt(lines)))
+}
+
+// WilliamsAlligatorJSON returns the Williams Alligator result as JSON.
+func WilliamsAlligatorJSON(close []float64) (string, error) {
+	return formulaJSONResult(C.ta_williams_alligator_json(toCSlice(close), cInt(len(close))))
+}
+
+// HeikinAshiJSON returns the Heikin-Ashi result as JSON.
+func HeikinAshiJSON(open, high, low, close []float64) (string, error) {
+	if len(open) != len(high) || len(open) != len(low) || len(open) != len(close) {
+		return "", errors.New("all input arrays must have the same length")
+	}
+	return formulaJSONResult(C.ta_heikin_ashi_json(
+		toCSlice(open), toCSlice(high), toCSlice(low), toCSlice(close), cInt(len(open)),
+	))
 }
 
 // FormulaEvalZeroCopy evaluates a formula string with zero-copy optimization.

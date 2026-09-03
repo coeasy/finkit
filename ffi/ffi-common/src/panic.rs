@@ -46,6 +46,14 @@ pub fn ffi_catch_i64<F: FnOnce() -> i64>(f: F) -> i64 {
     catch_unwind(AssertUnwindSafe(f)).unwrap_or(0)
 }
 
+/// Run `f`, returning its `u8` result, or `0` if it panics.
+///
+/// JNI uses `u8` for `jboolean`, so this keeps Java boolean exports panic-safe.
+#[inline]
+pub fn ffi_catch_u8<F: FnOnce() -> u8>(f: F) -> u8 {
+    catch_unwind(AssertUnwindSafe(f)).unwrap_or(0)
+}
+
 /// Run `f`, returning its `f64` result, or `NaN` if it panics.
 #[inline]
 pub fn ffi_catch_f64<F: FnOnce() -> f64>(f: F) -> f64 {

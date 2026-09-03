@@ -1,7 +1,7 @@
 use crate::formula::ast::AstNode;
 use crate::formula::executor::FormulaExecutor;
-use crate::formula::parser::parse_formula;
 use crate::formula::optimizer::FormulaOptimizer;
+use crate::formula::parser::parse_formula;
 use crate::formula::types::*;
 use ahash::AHasher;
 use lru::LruCache;

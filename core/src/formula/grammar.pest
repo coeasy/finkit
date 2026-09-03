@@ -8,7 +8,7 @@ brace_comment = _{ "{" ~ (!"}" ~ ANY)* ~ "}" }
 COMMENT = _{ line_comment | hash_comment | block_comment | brace_comment }
 
 // 程序入口
-program = _{ SOI ~ (param_decl ~ ";")? ~ statement ~ (";" ~ statement)* ~ EOI }
+program = _{ SOI ~ (param_decl ~ ";")? ~ statement ~ (";" ~ statement)* ~ ";"? ~ EOI }
 
 // 参数声明: PARAMS: N1(5,100,12), N2(5,100,26)
 param_decl = { "PARAMS" ~ ":" ~ param_item ~ ("," ~ param_item)* }

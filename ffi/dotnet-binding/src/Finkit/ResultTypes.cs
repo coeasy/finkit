@@ -156,3 +156,105 @@ public class HtSineResult
         LeadSine = leadSine;
     }
 }
+
+
+/// <summary>Result from Darvas box calculation.</summary>
+public class DarvasBoxResult
+{
+    public double[] BoxTop { get; }
+    public double[] BoxBottom { get; }
+    public int[] Signal { get; }
+
+    public DarvasBoxResult(double[] boxTop, double[] boxBottom, int[] signal)
+    {
+        BoxTop = boxTop;
+        BoxBottom = boxBottom;
+        Signal = signal;
+    }
+}
+
+/// <summary>Result from Renko calculation.</summary>
+public class RenkoResult
+{
+    public double[] Bricks { get; }
+    public int[] Direction { get; }
+
+    public RenkoResult(double[] bricks, int[] direction)
+    {
+        Bricks = bricks;
+        Direction = direction;
+    }
+}
+
+/// <summary>Result from Kagi calculation.</summary>
+public class KagiResult
+{
+    public double[] Values { get; }
+    public int[] Direction { get; }
+
+    public KagiResult(double[] values, int[] direction)
+    {
+        Values = values;
+        Direction = direction;
+    }
+}
+
+/// <summary>Result from point-and-figure calculation.</summary>
+public class PointAndFigureResult
+{
+    public double[] Values { get; }
+    public int[] Column { get; }
+    public int[] NewColumn { get; }
+
+    public PointAndFigureResult(double[] values, int[] column, int[] newColumn)
+    {
+        Values = values;
+        Column = column;
+        NewColumn = newColumn;
+    }
+}
+
+/// <summary>Result from three-line-break calculation.</summary>
+public class ThreeLineBreakResult
+{
+    public double[] Values { get; }
+    public int[] Direction { get; }
+
+    public ThreeLineBreakResult(double[] values, int[] direction)
+    {
+        Values = values;
+        Direction = direction;
+    }
+}
+
+/// <summary>Result from Williams Alligator calculation.</summary>
+public class WilliamsAlligatorResult
+{
+    public double[] Jaw { get; }
+    public double[] Teeth { get; }
+    public double[] Lips { get; }
+
+    public WilliamsAlligatorResult(double[] jaw, double[] teeth, double[] lips)
+    {
+        Jaw = jaw;
+        Teeth = teeth;
+        Lips = lips;
+    }
+}
+
+/// <summary>Result from Heikin-Ashi calculation.</summary>
+public class HeikinAshiResult
+{
+    public double[] Open { get; }
+    public double[] High { get; }
+    public double[] Low { get; }
+    public double[] Close { get; }
+
+    public HeikinAshiResult(double[] open, double[] high, double[] low, double[] close)
+    {
+        Open = open;
+        High = high;
+        Low = low;
+        Close = close;
+    }
+}

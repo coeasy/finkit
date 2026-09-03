@@ -17,30 +17,20 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  preflight:
-    name: Environment preflight
+  workspace-check:
+    name: Workspace compile check
     runs-on: ubuntu-22.04
-    timeout-minutes: 10
+    timeout-minutes: 45
     steps:
-      - name: Check out source
-        uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-      - name: Print toolchain versions
-        run: |
-          set -eux
-          python --version
-          rustc --version
-          cargo --version
-          git --version
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Check every workspace crate
+        run: cargo check --workspace --all-targets --locked
 
+  # Validation jobs run independently; the advisory preflight must not fan out a single skip.
   version-consistency:
     name: Version consistency
-    needs: preflight
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     steps:
@@ -55,7 +45,6 @@ jobs:
 
   fmt:
     name: Format
-    needs: preflight
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     steps:
@@ -68,7 +57,6 @@ jobs:
 
   clippy:
     name: Clippy
-    needs: preflight
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
@@ -78,14 +66,14 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
       - name: Clippy (core)
-        run: cargo clippy -p finkit
+        run: cargo clippy -p finkit --locked
       - name: Clippy (workspace, advisory)
         continue-on-error: true
-        run: cargo clippy --workspace --all-targets
+        run: cargo clippy --workspace --all-targets --locked
 
   test:
     name: Test (core)
-    needs: [preflight, version-consistency]
+    needs: version-consistency
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
@@ -95,13 +83,12 @@ jobs:
       - name: Verify generated registry snapshot
         run: git diff --exit-code -- docs/indicator_registry.json
       - name: Run core tests
-        run: cargo test -p finkit
+        run: cargo test -p finkit --locked
       - name: Run core docs tests
-        run: cargo test -p finkit --doc
+        run: cargo test -p finkit --doc --locked
 
   doc:
     name: Docs
-    needs: preflight
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
@@ -109,11 +96,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Build docs
-        run: cargo doc -p finkit --no-deps
+        run: cargo doc -p finkit --no-deps --locked
 
   audit:
     name: Dependency audit
-    needs: preflight
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     permissions:

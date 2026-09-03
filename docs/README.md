@@ -25,6 +25,7 @@ The two navigation entry points are:
 | [Formula engine](formula.md) | Formula syntax and evaluation |
 | [Formula runtime](formula-runtime.md) | Zero-copy NumPy, range evaluation, streaming append, and VM reuse |
 | [Formula runtime contract](formula-runtime-contract.md) | Ownership, warm-up, range/last/append semantics, and concurrency guarantees |
+| [Core contracts](core-contracts.md) | Factor Engine, Runtime MarketFrame, NaN/warm-up policy, and function registry |
 | [Formula templates](formula-templates.md) | Reusable formula patterns |
 | [Formula performance](formula-performance.md) | Formula optimization and performance notes |
 | [Formula debugger](formula-debugger.md) | Formula debugging workflow |
@@ -75,4 +76,4 @@ The two navigation entry points are:
 
 Keep end-user installation and API instructions in the sections above. Keep implementation details in `architecture/` and `src/`. Historical planning, progress snapshots, duplicate indexes, and obsolete brand-specific documents have been removed from this tree. Update this index whenever a canonical document is added or moved.
 
-_Last reviewed: 2026-09-01._
+_Last reviewed: 2026-09-02._

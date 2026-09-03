@@ -73,15 +73,7 @@ debug = 1
 
 [profile.bench]
 inherits = "release"
-# 1M-scale linear regression gate (A-10) requires aggressive optimization:
-# - lto = "fat" enables cross-crate inlining to keep hot indicator loops
-#   in a single code page, cutting ns/bar at 1M inputs.
-# - target-cpu = "native" lets the compiler emit AVX2/FMA/BMI2 for the local
-#   benchmark host so the 1M baseline we commit reflects achievable
-#   single-threaded throughput, not the Rust target-features default (SSE2).
-# - codegen-units = 1 ensures consistent LTO decisions across crates.
 lto = "fat"
-target-cpu = "native"
 codegen-units = 1
 opt-level = 3
 

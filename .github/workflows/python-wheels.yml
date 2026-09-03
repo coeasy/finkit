@@ -32,27 +32,8 @@ env:
   PYTHONUNBUFFERED: "1"
 
 jobs:
-  preflight:
-    name: Build environment preflight
-    runs-on: ubuntu-22.04
-    timeout-minutes: 10
-    steps:
-      - name: Check out source
-        uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-      - name: Print toolchain versions
-        run: |
-          set -eux
-          python --version
-          rustc --version
-          cargo --version
+  # Build jobs are independent so a runner preflight cannot skip the matrix.
   build:
-    needs: preflight
     name: ABI3 ${{ matrix.platform.name }}
     runs-on: ${{ matrix.platform.os }}
     timeout-minutes: 45

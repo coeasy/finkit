@@ -1,6 +1,6 @@
 # Version Matrix
 
-> **SSOT** — auto-generated from workspace `Cargo.toml` and binding manifests.
+> **SSOT** — auto-generated from workspace `Cargo.toml` and binding manifests (including .NET and Java metadata).
 > Do not edit manually. Regenerate: `python scripts/gen_ssot_docs.py --generate`
 
 Canonical workspace version: **`0.1.2`**
@@ -23,10 +23,12 @@ Canonical workspace version: **`0.1.2`**
 | finkit-wasm | `wasm/Cargo.toml` | 0.1.2 | workspace | ✅ |
 | finkit-python (pyproject) | `ffi/python-binding/pyproject.toml` | 0.1.2 | project.version | ✅ |
 | finkit-node (package.json) | `ffi/node-binding/package.json` | 0.1.2 | version | ✅ |
+| finkit-dotnet (.csproj) | `ffi/dotnet-binding/src/Finkit/Finkit.csproj` | 0.1.2 | Version | ✅ |
+| finkit-java (pom.xml) | `ffi/java-binding/pom.xml` | 0.1.2 | project.version | ✅ |
 
 ## Benchmark data
 
-Criterion JSON benchmarks indexed: **84** (from `target/criterion/` when present).
+Criterion JSON benchmarks indexed: **0** (from `target/criterion/` when present).
 
 Full benchmark report: `python scripts/gen_benchmark_report.py` → `docs/BENCHMARK_REPORT.md`.
 

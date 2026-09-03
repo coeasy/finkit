@@ -1063,7 +1063,7 @@ pub extern "C" fn ta_renko(
     out_dir: *mut c_int,
 ) -> c_int {
     ffi_catch_i32(|| {
-if high.is_null() || low.is_null() || length <= 0 || box_size <= 0.0 {
+if high.is_null() || low.is_null() || out_bricks.is_null() || length <= 0 || box_size <= 0.0 {
         return -1;
     }
     unsafe {
@@ -1092,7 +1092,7 @@ pub extern "C" fn ta_kagi(
     out_dir: *mut c_int,
 ) -> c_int {
     ffi_catch_i32(|| {
-if close.is_null() || length <= 0 || reversal <= 0.0 {
+if close.is_null() || out_kagi.is_null() || length <= 0 || reversal <= 0.0 {
         return -1;
     }
     unsafe {
@@ -1123,7 +1123,7 @@ pub extern "C" fn ta_point_and_figure(
     out_new: *mut c_int,
 ) -> c_int {
     ffi_catch_i32(|| {
-if high.is_null() || low.is_null() || length <= 0 || box_size <= 0.0 {
+if high.is_null() || low.is_null() || out_pnf.is_null() || length <= 0 || box_size <= 0.0 {
         return -1;
     }
     unsafe {
@@ -1156,7 +1156,7 @@ pub extern "C" fn ta_three_line_break(
     out_dir: *mut c_int,
 ) -> c_int {
     ffi_catch_i32(|| {
-if close.is_null() || length <= 0 || lines <= 0 {
+if close.is_null() || out_line.is_null() || length <= 0 || lines <= 0 {
         return -1;
     }
     unsafe {
@@ -1184,7 +1184,7 @@ pub extern "C" fn ta_williams_alligator(
     out_lips: *mut c_double,
 ) -> c_int {
     ffi_catch_i32(|| {
-if close.is_null() || length <= 0 {
+if close.is_null() || out_jaw.is_null() || out_teeth.is_null() || out_lips.is_null() || length <= 0 {
         return -1;
     }
     unsafe {

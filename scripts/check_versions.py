@@ -3,7 +3,8 @@
 
 The canonical version is [workspace.package].version in Cargo.toml. This check
 covers Rust package manifests, Cargo.lock workspace packages, Python metadata,
-Node's root and platform packages, and release-facing documentation.
+Node's root and platform packages, .NET/Java binding metadata,
+release-facing documentation.
 """
 
 from __future__ import annotations
@@ -21,6 +22,9 @@ PYPROJECT = ROOT / "ffi" / "python-binding" / "pyproject.toml"
 NODE_PACKAGE = ROOT / "ffi" / "node-binding" / "package.json"
 NODE_LOCK = ROOT / "ffi" / "node-binding" / "package-lock.json"
 NODE_PLATFORM_DIR = ROOT / "ffi" / "node-binding" / "npm"
+DOTNET_PROJECT = ROOT / "ffi" / "dotnet-binding" / "src" / "Finkit" / "Finkit.csproj"
+JAVA_POM = ROOT / "ffi" / "java-binding" / "pom.xml"
+XML_PROJECT_VERSIONS = ((DOTNET_PROJECT, "Version"), (JAVA_POM, "version"))
 DOC_VERSION_FILES = (
     ROOT / "README.md",
     ROOT / "docs" / "api-reference.md",
@@ -88,6 +92,16 @@ def read_node_lock_versions() -> dict[str, str]:
         versions[f"{relative} optionalDependencies.{name}"] = version
     return versions
 
+
+def read_xml_project_version(path: Path, tag: str) -> str:
+    """Read a required release version tag from an XML binding manifest."""
+    text = path.read_text(encoding="utf-8")
+    pattern = rf"(?m)^[ \t]*<{re.escape(tag)}>([^<]+)</{re.escape(tag)}>[ \t]*$"
+    match = re.search(pattern, text)
+    if not match:
+        raise ValueError(f"{tag} version not found in {path}")
+    return match.group(1).strip()
+
 def read_cargo_package_versions() -> dict[str, str]:
     versions: dict[str, str] = {}
     for path in sorted(ROOT.rglob("Cargo.toml")):
@@ -142,6 +156,10 @@ def collect_errors(canonical: str) -> list[str]:
         if version != canonical:
             errors.append(f"{path}: {version} != {canonical}")
 
+    for path, tag in XML_PROJECT_VERSIONS:
+        version = read_xml_project_version(path, tag)
+        if version != canonical:
+            errors.append(f"{path.relative_to(ROOT)}: {version} != {canonical}")
     for path in DOC_VERSION_FILES:
         if not path.exists():
             errors.append(f"missing release-facing document: {path.relative_to(ROOT)}")
@@ -169,8 +187,19 @@ def replace_first_version(path: Path, canonical: str) -> None:
         raise ValueError(f"failed to update version in {path}")
     path.write_text(updated, encoding="utf-8")
 
+def replace_xml_project_version(path: Path, tag: str, canonical: str) -> None:
+    text = path.read_text(encoding="utf-8")
+    pattern = rf"(?m)^([ \t]*<{re.escape(tag)}>)[^<]+(</{re.escape(tag)}>[ \t]*)$"
+    replacement = rf"\g<1>{canonical}\g<2>"
+    updated, count = re.subn(pattern, replacement, text, count=1)
+    if count != 1:
+        raise ValueError(f"failed to update {tag} version in {path}")
+    path.write_text(updated, encoding="utf-8")
+
 
 def fix_versions(canonical: str) -> None:
+    for path, tag in XML_PROJECT_VERSIONS:
+        replace_xml_project_version(path, tag, canonical)
     replace_first_version(PYPROJECT, canonical)
 
     node_paths = [NODE_PACKAGE, *sorted(NODE_PLATFORM_DIR.glob("*/package.json"))]

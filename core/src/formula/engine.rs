@@ -62,8 +62,9 @@ impl FormulaEngine {
 
         let ast = parse_formula(source).map_err(FormulaError::ParseError)?;
         // Compile the optimized AST once so repeated evaluations share the
-        // same CSE and constant-folding decisions.
-        let ast = FormulaOptimizer::optimize(&ast);
+        // same CSE and constant-folding decisions while preserving assignment
+        // side effects exposed through FormulaContext::variables.
+        let ast = FormulaOptimizer::optimize_for_execution(&ast);
         let formula = CompiledFormula {
             ast,
             source: source.to_string(),
@@ -84,8 +85,13 @@ impl FormulaEngine {
         // general AST executor. This avoids materialising input argument
         // arrays and lets the SIMD _into kernels write directly into one
         // result buffer. Complex formulas keep the existing semantics.
-        if let Some(result) = self.try_execute_simple_formula(&formula.ast, ctx) {
-            return Ok(result);
+        let sandbox_unlimited = ctx.sandbox.timeout_ms.is_none()
+            && ctx.sandbox.max_recursion_depth.is_none()
+            && ctx.sandbox.max_memory_bytes.is_none();
+        if sandbox_unlimited {
+            if let Some(result) = self.try_execute_simple_formula(&formula.ast, ctx) {
+                return Ok(result);
+            }
         }
         self.executor.execute(&formula.ast, ctx)
     }
@@ -231,6 +237,14 @@ impl FormulaEngine {
                 ctx.data_len
             )));
         }
+        let sandbox_unlimited = ctx.sandbox.timeout_ms.is_none()
+            && ctx.sandbox.max_recursion_depth.is_none()
+            && ctx.sandbox.max_memory_bytes.is_none();
+        if !sandbox_unlimited {
+            let result = self.executor.execute(&formula.ast, ctx)?;
+            output.assign(&result);
+            return Ok(());
+        }
         if self.try_execute_simple_formula_into(&formula.ast, ctx, output) {
             return Ok(());
         }
@@ -316,10 +330,14 @@ impl FormulaEngine {
             return Ok(result);
         }
 
-        let mut context =
-            FormulaContext::from_borrowed_ohlcv(open, high, low, close, volume, amount.map(|values| {
-                Array1::from_vec(values.to_vec())
-            }));
+        let mut context = FormulaContext::from_borrowed_ohlcv(
+            open,
+            high,
+            low,
+            close,
+            volume,
+            amount.map(|values| Array1::from_vec(values.to_vec())),
+        );
         self.execute(formula, &mut context)
     }
 
@@ -337,14 +355,40 @@ impl FormulaEngine {
             _ => return None,
         };
         let input = match &args[0] {
-            AstNode::Variable(name) if name.eq_ignore_ascii_case("C") || name.eq_ignore_ascii_case("CLOSE") => close,
-            AstNode::Variable(name) if name.eq_ignore_ascii_case("O") || name.eq_ignore_ascii_case("OPEN") => open,
-            AstNode::Variable(name) if name.eq_ignore_ascii_case("H") || name.eq_ignore_ascii_case("HIGH") => high,
-            AstNode::Variable(name) if name.eq_ignore_ascii_case("L") || name.eq_ignore_ascii_case("LOW") => low,
-            AstNode::Variable(name) if name.eq_ignore_ascii_case("V") || name.eq_ignore_ascii_case("VOL") || name.eq_ignore_ascii_case("VOLUME") => volume,
+            AstNode::Variable(name)
+                if name.eq_ignore_ascii_case("C") || name.eq_ignore_ascii_case("CLOSE") =>
+            {
+                close
+            }
+            AstNode::Variable(name)
+                if name.eq_ignore_ascii_case("O") || name.eq_ignore_ascii_case("OPEN") =>
+            {
+                open
+            }
+            AstNode::Variable(name)
+                if name.eq_ignore_ascii_case("H") || name.eq_ignore_ascii_case("HIGH") =>
+            {
+                high
+            }
+            AstNode::Variable(name)
+                if name.eq_ignore_ascii_case("L") || name.eq_ignore_ascii_case("LOW") =>
+            {
+                low
+            }
+            AstNode::Variable(name)
+                if name.eq_ignore_ascii_case("V")
+                    || name.eq_ignore_ascii_case("VOL")
+                    || name.eq_ignore_ascii_case("VOLUME") =>
+            {
+                volume
+            }
             _ => return None,
         };
-        if input.is_empty() || [open, high, low, close, volume].iter().any(|values| values.len() != input.len()) {
+        if input.is_empty()
+            || [open, high, low, close, volume]
+                .iter()
+                .any(|values| values.len() != input.len())
+        {
             return None;
         }
         let period_value = match &args[1] {
@@ -840,7 +884,12 @@ mod tests {
 
     #[test]
     fn test_simple_formula_dispatch_matches_general_executor() {
-        for source in ["MA(CLOSE, 20)", "EMA(CLOSE, 12)", "RSI(CLOSE, 14)", "BOLLMID(CLOSE, 20)"] {
+        for source in [
+            "MA(CLOSE, 20)",
+            "EMA(CLOSE, 12)",
+            "RSI(CLOSE, 14)",
+            "BOLLMID(CLOSE, 20)",
+        ] {
             let mut fast_engine = FormulaEngine::new();
             let formula = fast_engine.compile(source).unwrap();
             let mut fast_ctx = make_ctx(128);
@@ -854,8 +903,7 @@ mod tests {
             assert_eq!(fast.len(), reference.len(), "{source}");
             for (actual, expected) in fast.iter().zip(reference.iter()) {
                 assert!(
-                    (actual.is_nan() && expected.is_nan())
-                        || (actual - expected).abs() < 1e-12,
+                    (actual.is_nan() && expected.is_nan()) || (actual - expected).abs() < 1e-12,
                     "{source}: {actual} != {expected}"
                 );
             }
@@ -877,8 +925,7 @@ mod tests {
 
         for (actual, expected) in output.iter().zip(expected.iter()) {
             assert!(
-                (actual.is_nan() && expected.is_nan())
-                    || (actual - expected).abs() < 1e-12,
+                (actual.is_nan() && expected.is_nan()) || (actual - expected).abs() < 1e-12,
                 "{actual} != {expected}"
             );
         }
@@ -1494,6 +1541,4 @@ mod tests {
             assert!((a - b).abs() < 1e-12 || (a.is_nan() && b.is_nan()));
         }
     }
-
-
 }

@@ -2750,6 +2750,11 @@ pub fn cdl_inneck(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Res
     in_neck(open, high, low, close)
 }
 
+/// CDLONNECK — On Neck Pattern (看跌)
+pub fn cdl_onneck(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result<PatternResult> {
+    on_neck(open, high, low, close)
+}
+
 /// CDLINVERTEDHAMMER — Inverted Hammer (看涨反转)
 pub fn cdl_invertedhammer(
     open: &[f64],

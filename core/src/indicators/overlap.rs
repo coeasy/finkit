@@ -168,17 +168,11 @@ pub fn bbands(
     })
 }
 
-
 /// Acceleration Bands (ACCBANDS)
 ///
 /// Builds upper/lower price bands from the high/low range and smooths all
 /// three series with the same simple moving average as TA-Lib.
-pub fn accbands(
-    high: &[f64],
-    low: &[f64],
-    close: &[f64],
-    period: usize,
-) -> Result<BbandsResult> {
+pub fn accbands(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<BbandsResult> {
     if high.len() != low.len() || high.len() != close.len() {
         return Err(TaError::InvalidParameter {
             name: "high, low, close".to_string(),

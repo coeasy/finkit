@@ -17,7 +17,7 @@
          the .NET-side casing consistent with the public API. -->
     <PackageId>Finkit</PackageId>
     <Title>Finkit - .NET Bindings</Title>
-    <Version>0.1.0</Version>
+    <Version>0.1.2</Version>
     <Authors>Finkit Contributors</Authors>
     <Company>Finkit</Company>
     <Description>High-performance financial technical analysis indicators library for .NET, powered by Rust. Includes SMA, EMA, RSI, MACD, Bollinger Bands, Stochastic, ADX, ATR, Hilbert Transform, and 40+ more indicators.</Description>

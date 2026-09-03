@@ -11,7 +11,7 @@ use finkit::math::moving_avg;
 use finkit_ffi_common::panic::*;
 use ndarray::Array1;
 use serde::Serialize;
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 
 // Leak-detection allocator: installed only for the test binary so the FFI
 // ownership contract (alloc via `ta_*` + free via `ta_free_*`) can be checked
@@ -47,6 +47,8 @@ struct MultiOutputDto {
 // ============================================================================
 // Memory Management
 // ============================================================================
+
+static VERSION: &[u8] = concat!(env!("CARGO_PKG_VERSION"), "\0").as_bytes();
 
 #[no_mangle]
 pub extern "C" fn ta_free(ptr: *mut c_double) {
@@ -134,9 +136,8 @@ mod tests {
     // exercise `ta_free` / `ta_free_array` directly. Loops assert the live
     // heap returns to baseline (catches a forgotten free).
     //
-    // NOTE: `ta_formula_eval` *consumes* the `source` CString (it calls
-    // `CString::from_raw` on it), so we transfer ownership with `.into_raw()`
-    // and must NOT retain a Rust `CString` for it — otherwise it is freed twice.
+    // NOTE: `ta_formula_eval` borrows the NUL-terminated source string for the
+    // duration of the call; the caller-owned CString remains valid until return.
     #[test]
     fn ffi_heap_no_leak_formula_eval_cycle() {
         use finkit_ffi_common::leak::live_bytes;
@@ -144,9 +145,9 @@ mod tests {
         let input: Vec<c_double> = (0..n as usize).map(|i| (i as f64).sin()).collect();
 
         for _ in 0..16 {
-            let src = std::ffi::CString::new("close").unwrap().into_raw();
+            let src = std::ffi::CString::new("close").unwrap();
             let fe = crate::ta_formula_eval(
-                src,
+                src.as_ptr(),
                 input.as_ptr(),
                 input.as_ptr(),
                 input.as_ptr(),
@@ -159,9 +160,9 @@ mod tests {
         let baseline = live_bytes();
 
         for _ in 0..400 {
-            let src = std::ffi::CString::new("close").unwrap().into_raw();
+            let src = std::ffi::CString::new("close").unwrap();
             let fe = crate::ta_formula_eval(
-                src,
+                src.as_ptr(),
                 input.as_ptr(),
                 input.as_ptr(),
                 input.as_ptr(),
@@ -203,13 +204,11 @@ mod tests {
     fn ffi_formula_eval_surfaces_error_not_null() {
         let n: c_int = 64;
         let input: Vec<c_double> = (0..n as usize).map(|i| (i as f64).sin()).collect();
-        // `ta_formula_eval` *consumes* `source` (CString::from_raw), so transfer
-        // ownership with `.into_raw()` and do not retain a Rust handle.
-        let src = std::ffi::CString::new("FOOBAR(CLOSE, 20)")
-            .unwrap()
-            .into_raw();
+        // `ta_formula_eval` borrows `source`; keep the caller-owned CString alive
+        // until the native call returns.
+        let src = std::ffi::CString::new("FOOBAR(CLOSE, 20)").unwrap();
         let fe = crate::ta_formula_eval(
-            src,
+            src.as_ptr(),
             input.as_ptr(),
             input.as_ptr(),
             input.as_ptr(),
@@ -251,36 +250,38 @@ pub extern "C" fn ta_ad_osc(
     slow_period: c_int,
     out: *mut c_double,
 ) -> c_int {
-    if high.is_null()
-        || low.is_null()
-        || close.is_null()
-        || volume.is_null()
-        || out.is_null()
-        || length <= 0
-    {
-        return -1;
-    }
-    let high_slice = unsafe { std::slice::from_raw_parts(high, length as usize) };
-    let low_slice = unsafe { std::slice::from_raw_parts(low, length as usize) };
-    let close_slice = unsafe { std::slice::from_raw_parts(close, length as usize) };
-    let volume_slice = unsafe { std::slice::from_raw_parts(volume, length as usize) };
-    match indicators::adosc(
-        high_slice,
-        low_slice,
-        close_slice,
-        volume_slice,
-        fast_period as usize,
-        slow_period as usize,
-    ) {
-        Ok(result) => {
-            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
-            for i in 0..length as usize {
-                out_slice[i] = result[i];
-            }
-            0
+    ffi_catch_i32(|| {
+        if high.is_null()
+            || low.is_null()
+            || close.is_null()
+            || volume.is_null()
+            || out.is_null()
+            || length <= 0
+        {
+            return -1;
         }
-        Err(_) => -2,
-    }
+        let high_slice = unsafe { std::slice::from_raw_parts(high, length as usize) };
+        let low_slice = unsafe { std::slice::from_raw_parts(low, length as usize) };
+        let close_slice = unsafe { std::slice::from_raw_parts(close, length as usize) };
+        let volume_slice = unsafe { std::slice::from_raw_parts(volume, length as usize) };
+        match indicators::adosc(
+            high_slice,
+            low_slice,
+            close_slice,
+            volume_slice,
+            fast_period as usize,
+            slow_period as usize,
+        ) {
+            Ok(result) => {
+                let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
+                for i in 0..length as usize {
+                    out_slice[i] = result[i];
+                }
+                0
+            }
+            Err(_) => -2,
+        }
+    })
 }
 
 // ============================================================================
@@ -303,20 +304,22 @@ pub extern "C" fn ta_std_dev(
     nb_dev: c_double,
     out: *mut c_double,
 ) -> c_int {
-    if input.is_null() || out.is_null() || length <= 0 || period <= 0 {
-        return -1;
-    }
-    let input_slice = unsafe { std::slice::from_raw_parts(input, length as usize) };
-    match indicators::std_dev(input_slice, period as usize, nb_dev) {
-        Ok(result) => {
-            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
-            for i in 0..length as usize {
-                out_slice[i] = result[i];
-            }
-            0
+    ffi_catch_i32(|| {
+        if input.is_null() || out.is_null() || length <= 0 || period <= 0 {
+            return -1;
         }
-        Err(_) => -2,
-    }
+        let input_slice = unsafe { std::slice::from_raw_parts(input, length as usize) };
+        match indicators::std_dev(input_slice, period as usize, nb_dev) {
+            Ok(result) => {
+                let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
+                for i in 0..length as usize {
+                    out_slice[i] = result[i];
+                }
+                0
+            }
+            Err(_) => -2,
+        }
+    })
 }
 
 // ============================================================================
@@ -329,12 +332,82 @@ pub extern "C" fn ta_std_dev(
 
 #[no_mangle]
 pub extern "C" fn ta_version() -> *const c_char {
-    c"0.1.0".as_ptr()
+    VERSION.as_ptr().cast()
 }
 
 // ============================================================================
 // Formula Engine
 // ============================================================================
+
+enum FormulaEvalMode {
+    Standard,
+    Jit,
+    Simd,
+}
+
+fn read_c_string(ptr: *const c_char) -> Option<String> {
+    if ptr.is_null() {
+        return None;
+    }
+    unsafe { CStr::from_ptr(ptr) }
+        .to_str()
+        .ok()
+        .map(str::to_owned)
+}
+
+fn eval_formula_mode(
+    source: *const c_char,
+    open: *const c_double,
+    high: *const c_double,
+    low: *const c_double,
+    close: *const c_double,
+    volume: *const c_double,
+    length: c_int,
+    mode: FormulaEvalMode,
+) -> *mut c_char {
+    if source.is_null()
+        || open.is_null()
+        || high.is_null()
+        || low.is_null()
+        || close.is_null()
+        || volume.is_null()
+        || length <= 0
+    {
+        return CString::new("invalid input").unwrap().into_raw();
+    }
+    let Some(source_str) = read_c_string(source) else {
+        return CString::new("invalid utf-8").unwrap().into_raw();
+    };
+    let length = length as usize;
+    let open_arr = Array1::from(unsafe { std::slice::from_raw_parts(open, length) }.to_vec());
+    let high_arr = Array1::from(unsafe { std::slice::from_raw_parts(high, length) }.to_vec());
+    let low_arr = Array1::from(unsafe { std::slice::from_raw_parts(low, length) }.to_vec());
+    let close_arr = Array1::from(unsafe { std::slice::from_raw_parts(close, length) }.to_vec());
+    let volume_arr = Array1::from(unsafe { std::slice::from_raw_parts(volume, length) }.to_vec());
+    let mut ctx = FormulaContext::new(open_arr, high_arr, low_arr, close_arr, volume_arr, None);
+    let mut engine = FormulaEngine::new();
+    let evaluation = match mode {
+        FormulaEvalMode::Standard => engine.eval(&source_str, &mut ctx),
+        FormulaEvalMode::Jit => engine.eval_jit(&source_str, &mut ctx),
+        FormulaEvalMode::Simd => engine.eval_simd(&source_str, &mut ctx),
+    };
+    match evaluation {
+        Ok(_) => {
+            let var_map: HashMap<String, Vec<Option<f64>>> = ctx
+                .variables
+                .iter()
+                .map(|(name, value)| (name.to_string(), arr_to_json(value)))
+                .collect();
+            let json = serde_json::to_string(&var_map).unwrap_or_else(|_| "{}".to_string());
+            CString::new(json)
+                .unwrap_or_else(|_| CString::new("output serialization error").unwrap())
+                .into_raw()
+        }
+        Err(error) => CString::new(format!("error: {}", error))
+            .unwrap_or_else(|_| CString::new("evaluation error").unwrap())
+            .into_raw(),
+    }
+}
 
 #[no_mangle]
 pub extern "C" fn ta_formula_eval(
@@ -346,70 +419,66 @@ pub extern "C" fn ta_formula_eval(
     volume: *const c_double,
     length: c_int,
 ) -> *mut c_char {
-    if source.is_null()
-        || open.is_null()
-        || high.is_null()
-        || low.is_null()
-        || close.is_null()
-        || volume.is_null()
-        || length <= 0
-    {
-        let err = CString::new("invalid input").unwrap();
-        // Caller must free with ta_free_cstring.
-        return err.into_raw();
-    }
+    ffi_catch_ptr(|| {
+        eval_formula_mode(
+            source,
+            open,
+            high,
+            low,
+            close,
+            volume,
+            length,
+            FormulaEvalMode::Standard,
+        )
+    })
+}
 
-    let source_str = match unsafe { CString::from_raw(source as *mut c_char) }.into_string() {
-        Ok(s) => s,
-        Err(_) => return std::ptr::null_mut(),
-    };
+#[no_mangle]
+pub extern "C" fn ta_formula_eval_jit(
+    source: *const c_char,
+    open: *const c_double,
+    high: *const c_double,
+    low: *const c_double,
+    close: *const c_double,
+    volume: *const c_double,
+    length: c_int,
+) -> *mut c_char {
+    ffi_catch_ptr(|| {
+        eval_formula_mode(
+            source,
+            open,
+            high,
+            low,
+            close,
+            volume,
+            length,
+            FormulaEvalMode::Jit,
+        )
+    })
+}
 
-    let open_slice = unsafe { std::slice::from_raw_parts(open, length as usize) };
-    let high_slice = unsafe { std::slice::from_raw_parts(high, length as usize) };
-    let low_slice = unsafe { std::slice::from_raw_parts(low, length as usize) };
-    let close_slice = unsafe { std::slice::from_raw_parts(close, length as usize) };
-    let volume_slice = unsafe { std::slice::from_raw_parts(volume, length as usize) };
-
-    let open_arr = Array1::from_vec(open_slice.to_vec());
-    let high_arr = Array1::from_vec(high_slice.to_vec());
-    let low_arr = Array1::from_vec(low_slice.to_vec());
-    let close_arr = Array1::from_vec(close_slice.to_vec());
-    let volume_arr = Array1::from_vec(volume_slice.to_vec());
-
-    let mut ctx = FormulaContext::new(open_arr, high_arr, low_arr, close_arr, volume_arr, None);
-    let mut engine = FormulaEngine::new();
-
-    match engine.eval(&source_str, &mut ctx) {
-        Ok(_final_value) => {
-            let var_map: HashMap<String, Vec<Option<f64>>> = ctx
-                .variables
-                .iter()
-                .map(|(name, value)| (name.to_string(), arr_to_json(value)))
-                .collect();
-            let json_str = serde_json::to_string(&var_map).unwrap_or_else(|_| "{}".to_string());
-            // Caller must free with ta_free_cstring.
-            match CString::new(json_str) {
-                Ok(c_str) => c_str.into_raw(),
-                Err(_) => {
-                    // Caller must free with ta_free_cstring.
-                    let err = CString::new("output serialization error").unwrap();
-                    err.into_raw()
-                }
-            }
-        }
-        Err(e) => {
-            let err_msg = format!("error: {}", e);
-            // Caller must free with ta_free_cstring.
-            match CString::new(err_msg) {
-                Ok(c_str) => c_str.into_raw(),
-                Err(_) => {
-                    // Caller must free with ta_free_cstring.
-                    let err = CString::new("evaluation error").unwrap();
-                    err.into_raw()
-                }
-            }
-        }
-    }
+#[no_mangle]
+pub extern "C" fn ta_formula_eval_simd(
+    source: *const c_char,
+    open: *const c_double,
+    high: *const c_double,
+    low: *const c_double,
+    close: *const c_double,
+    volume: *const c_double,
+    length: c_int,
+) -> *mut c_char {
+    ffi_catch_ptr(|| {
+        eval_formula_mode(
+            source,
+            open,
+            high,
+            low,
+            close,
+            volume,
+            length,
+            FormulaEvalMode::Simd,
+        )
+    })
 }
 
 #[no_mangle]
@@ -422,81 +491,86 @@ pub extern "C" fn ta_formula_eval_multi(
     volume: *const c_double,
     length: c_int,
 ) -> *mut c_char {
-    if source.is_null()
-        || open.is_null()
-        || high.is_null()
-        || low.is_null()
-        || close.is_null()
-        || volume.is_null()
-        || length <= 0
-    {
-        let err = CString::new("invalid input").unwrap();
-        // Caller must free with ta_free_cstring.
-        return err.into_raw();
-    }
-
-    let source_str = match unsafe { CString::from_raw(source as *mut c_char) }.into_string() {
-        Ok(s) => s,
-        Err(_) => return std::ptr::null_mut(),
-    };
-
-    let open_slice = unsafe { std::slice::from_raw_parts(open, length as usize) };
-    let high_slice = unsafe { std::slice::from_raw_parts(high, length as usize) };
-    let low_slice = unsafe { std::slice::from_raw_parts(low, length as usize) };
-    let close_slice = unsafe { std::slice::from_raw_parts(close, length as usize) };
-    let volume_slice = unsafe { std::slice::from_raw_parts(volume, length as usize) };
-
-    let open_arr = Array1::from_vec(open_slice.to_vec());
-    let high_arr = Array1::from_vec(high_slice.to_vec());
-    let low_arr = Array1::from_vec(low_slice.to_vec());
-    let close_arr = Array1::from_vec(close_slice.to_vec());
-    let volume_arr = Array1::from_vec(volume_slice.to_vec());
-
-    let mut ctx = FormulaContext::new(open_arr, high_arr, low_arr, close_arr, volume_arr, None);
-    let mut engine = FormulaEngine::new();
-
-    match engine.eval_multi(&source_str, &mut ctx) {
-        Ok(multi) => {
-            let names: Vec<String> = multi.names().iter().map(|n| (*n).clone()).collect();
-            let values: Vec<Vec<Option<f64>>> = names
-                .iter()
-                .map(|name| {
-                    multi
-                        .get(name)
-                        .map(|arr| arr_to_json(arr))
-                        .unwrap_or_default()
-                })
-                .collect();
-            let result = arr_to_json(&multi.final_value);
-            let dto = MultiOutputDto {
-                names,
-                values,
-                result,
-            };
-            let json_str = serde_json::to_string(&dto).unwrap_or_else(|_| "{}".to_string());
+    ffi_catch_ptr(|| {
+        if source.is_null()
+            || open.is_null()
+            || high.is_null()
+            || low.is_null()
+            || close.is_null()
+            || volume.is_null()
+            || length <= 0
+        {
+            let err = CString::new("invalid input").unwrap();
             // Caller must free with ta_free_cstring.
-            match CString::new(json_str) {
-                Ok(c_str) => c_str.into_raw(),
-                Err(_) => {
-                    // Caller must free with ta_free_cstring.
-                    let err = CString::new("output serialization error").unwrap();
-                    err.into_raw()
+            return err.into_raw();
+        }
+
+        let source_str = match unsafe { CStr::from_ptr(source) }
+            .to_str()
+            .map(str::to_owned)
+        {
+            Ok(s) => s,
+            Err(_) => return std::ptr::null_mut(),
+        };
+
+        let open_slice = unsafe { std::slice::from_raw_parts(open, length as usize) };
+        let high_slice = unsafe { std::slice::from_raw_parts(high, length as usize) };
+        let low_slice = unsafe { std::slice::from_raw_parts(low, length as usize) };
+        let close_slice = unsafe { std::slice::from_raw_parts(close, length as usize) };
+        let volume_slice = unsafe { std::slice::from_raw_parts(volume, length as usize) };
+
+        let open_arr = Array1::from_vec(open_slice.to_vec());
+        let high_arr = Array1::from_vec(high_slice.to_vec());
+        let low_arr = Array1::from_vec(low_slice.to_vec());
+        let close_arr = Array1::from_vec(close_slice.to_vec());
+        let volume_arr = Array1::from_vec(volume_slice.to_vec());
+
+        let mut ctx = FormulaContext::new(open_arr, high_arr, low_arr, close_arr, volume_arr, None);
+        let mut engine = FormulaEngine::new();
+
+        match engine.eval_multi(&source_str, &mut ctx) {
+            Ok(multi) => {
+                let names: Vec<String> = multi.names().iter().map(|n| (*n).clone()).collect();
+                let values: Vec<Vec<Option<f64>>> = names
+                    .iter()
+                    .map(|name| {
+                        multi
+                            .get(name)
+                            .map(|arr| arr_to_json(arr))
+                            .unwrap_or_default()
+                    })
+                    .collect();
+                let result = arr_to_json(&multi.final_value);
+                let dto = MultiOutputDto {
+                    names,
+                    values,
+                    result,
+                };
+                let json_str = serde_json::to_string(&dto).unwrap_or_else(|_| "{}".to_string());
+                // Caller must free with ta_free_cstring.
+                match CString::new(json_str) {
+                    Ok(c_str) => c_str.into_raw(),
+                    Err(_) => {
+                        // Caller must free with ta_free_cstring.
+                        let err = CString::new("output serialization error").unwrap();
+                        err.into_raw()
+                    }
+                }
+            }
+            Err(e) => {
+                let err_msg = format!("error: {}", e);
+                // Caller must free with ta_free_cstring.
+                match CString::new(err_msg) {
+                    Ok(c_str) => c_str.into_raw(),
+                    Err(_) => {
+                        // Caller must free with ta_free_cstring.
+                        let err = CString::new("evaluation error").unwrap();
+                        err.into_raw()
+                    }
                 }
             }
         }
-        Err(e) => {
-            let err_msg = format!("error: {}", e);
-            // Caller must free with ta_free_cstring.
-            match CString::new(err_msg) {
-                Ok(c_str) => c_str.into_raw(),
-                Err(_) => {
-                    // Caller must free with ta_free_cstring.
-                    let err = CString::new("evaluation error").unwrap();
-                    err.into_raw()
-                }
-            }
-        }
-    }
+    })
 }
 
 #[no_mangle]
@@ -509,70 +583,75 @@ pub extern "C" fn ta_formula_eval_draw(
     volume: *const c_double,
     length: c_int,
 ) -> *mut c_char {
-    if source.is_null()
-        || open.is_null()
-        || high.is_null()
-        || low.is_null()
-        || close.is_null()
-        || volume.is_null()
-        || length <= 0
-    {
-        let err = CString::new("invalid input").unwrap();
-        // Caller must free with ta_free_cstring.
-        return err.into_raw();
-    }
-
-    let source_str = match unsafe { CString::from_raw(source as *mut c_char) }.into_string() {
-        Ok(s) => s,
-        Err(_) => return std::ptr::null_mut(),
-    };
-
-    let open_slice = unsafe { std::slice::from_raw_parts(open, length as usize) };
-    let high_slice = unsafe { std::slice::from_raw_parts(high, length as usize) };
-    let low_slice = unsafe { std::slice::from_raw_parts(low, length as usize) };
-    let close_slice = unsafe { std::slice::from_raw_parts(close, length as usize) };
-    let volume_slice = unsafe { std::slice::from_raw_parts(volume, length as usize) };
-
-    let open_arr = Array1::from_vec(open_slice.to_vec());
-    let high_arr = Array1::from_vec(high_slice.to_vec());
-    let low_arr = Array1::from_vec(low_slice.to_vec());
-    let close_arr = Array1::from_vec(close_slice.to_vec());
-    let volume_arr = Array1::from_vec(volume_slice.to_vec());
-
-    let mut ctx = FormulaContext::new(open_arr, high_arr, low_arr, close_arr, volume_arr, None);
-    let mut engine = FormulaEngine::new();
-
-    match engine.eval(&source_str, &mut ctx) {
-        Ok(_final_value) => {
-            let draw_commands = ctx.draw_commands.borrow();
-            let payload = serde_json::json!({
-                "drawCommands": draw_commands.commands,
-            });
-            let json_str = serde_json::to_string(&payload)
-                .unwrap_or_else(|_| "{\"drawCommands\":[]}".to_string());
+    ffi_catch_ptr(|| {
+        if source.is_null()
+            || open.is_null()
+            || high.is_null()
+            || low.is_null()
+            || close.is_null()
+            || volume.is_null()
+            || length <= 0
+        {
+            let err = CString::new("invalid input").unwrap();
             // Caller must free with ta_free_cstring.
-            match CString::new(json_str) {
-                Ok(c_str) => c_str.into_raw(),
-                Err(_) => {
-                    // Caller must free with ta_free_cstring.
-                    let err = CString::new("output serialization error").unwrap();
-                    err.into_raw()
+            return err.into_raw();
+        }
+
+        let source_str = match unsafe { CStr::from_ptr(source) }
+            .to_str()
+            .map(str::to_owned)
+        {
+            Ok(s) => s,
+            Err(_) => return std::ptr::null_mut(),
+        };
+
+        let open_slice = unsafe { std::slice::from_raw_parts(open, length as usize) };
+        let high_slice = unsafe { std::slice::from_raw_parts(high, length as usize) };
+        let low_slice = unsafe { std::slice::from_raw_parts(low, length as usize) };
+        let close_slice = unsafe { std::slice::from_raw_parts(close, length as usize) };
+        let volume_slice = unsafe { std::slice::from_raw_parts(volume, length as usize) };
+
+        let open_arr = Array1::from_vec(open_slice.to_vec());
+        let high_arr = Array1::from_vec(high_slice.to_vec());
+        let low_arr = Array1::from_vec(low_slice.to_vec());
+        let close_arr = Array1::from_vec(close_slice.to_vec());
+        let volume_arr = Array1::from_vec(volume_slice.to_vec());
+
+        let mut ctx = FormulaContext::new(open_arr, high_arr, low_arr, close_arr, volume_arr, None);
+        let mut engine = FormulaEngine::new();
+
+        match engine.eval(&source_str, &mut ctx) {
+            Ok(_final_value) => {
+                let draw_commands = ctx.draw_commands.borrow();
+                let payload = serde_json::json!({
+                    "drawCommands": draw_commands.commands,
+                });
+                let json_str = serde_json::to_string(&payload)
+                    .unwrap_or_else(|_| "{\"drawCommands\":[]}".to_string());
+                // Caller must free with ta_free_cstring.
+                match CString::new(json_str) {
+                    Ok(c_str) => c_str.into_raw(),
+                    Err(_) => {
+                        // Caller must free with ta_free_cstring.
+                        let err = CString::new("output serialization error").unwrap();
+                        err.into_raw()
+                    }
+                }
+            }
+            Err(e) => {
+                let err_msg = format!("error: {}", e);
+                // Caller must free with ta_free_cstring.
+                match CString::new(err_msg) {
+                    Ok(c_str) => c_str.into_raw(),
+                    Err(_) => {
+                        // Caller must free with ta_free_cstring.
+                        let err = CString::new("evaluation error").unwrap();
+                        err.into_raw()
+                    }
                 }
             }
         }
-        Err(e) => {
-            let err_msg = format!("error: {}", e);
-            // Caller must free with ta_free_cstring.
-            match CString::new(err_msg) {
-                Ok(c_str) => c_str.into_raw(),
-                Err(_) => {
-                    // Caller must free with ta_free_cstring.
-                    let err = CString::new("evaluation error").unwrap();
-                    err.into_raw()
-                }
-            }
-        }
-    }
+    })
 }
 
 #[no_mangle]
@@ -585,152 +664,167 @@ pub extern "C" fn ta_formula_eval_debug(
     volume: *const c_double,
     length: c_int,
 ) -> *mut c_char {
-    if source.is_null()
-        || open.is_null()
-        || high.is_null()
-        || low.is_null()
-        || close.is_null()
-        || volume.is_null()
-        || length <= 0
-    {
-        let err = CString::new("invalid input").unwrap();
-        // Caller must free with ta_free_cstring.
-        return err.into_raw();
-    }
-
-    let source_str = match unsafe { CString::from_raw(source as *mut c_char) }.into_string() {
-        Ok(s) => s,
-        Err(_) => return std::ptr::null_mut(),
-    };
-
-    let open_slice = unsafe { std::slice::from_raw_parts(open, length as usize) };
-    let high_slice = unsafe { std::slice::from_raw_parts(high, length as usize) };
-    let low_slice = unsafe { std::slice::from_raw_parts(low, length as usize) };
-    let close_slice = unsafe { std::slice::from_raw_parts(close, length as usize) };
-    let volume_slice = unsafe { std::slice::from_raw_parts(volume, length as usize) };
-
-    let open_arr = Array1::from_vec(open_slice.to_vec());
-    let high_arr = Array1::from_vec(high_slice.to_vec());
-    let low_arr = Array1::from_vec(low_slice.to_vec());
-    let close_arr = Array1::from_vec(close_slice.to_vec());
-    let volume_arr = Array1::from_vec(volume_slice.to_vec());
-
-    let mut ctx = FormulaContext::new(open_arr, high_arr, low_arr, close_arr, volume_arr, None);
-    let mut engine = FormulaEngine::new();
-
-    match engine.eval_with_debug(&source_str, &mut ctx) {
-        Ok((_final_value, debugger)) => {
-            let payload = serde_json::json!({
-                "events": debugger.get_events(),
-            });
-            let json_str =
-                serde_json::to_string(&payload).unwrap_or_else(|_| "{\"events\":[]}".to_string());
+    ffi_catch_ptr(|| {
+        if source.is_null()
+            || open.is_null()
+            || high.is_null()
+            || low.is_null()
+            || close.is_null()
+            || volume.is_null()
+            || length <= 0
+        {
+            let err = CString::new("invalid input").unwrap();
             // Caller must free with ta_free_cstring.
-            match CString::new(json_str) {
-                Ok(c_str) => c_str.into_raw(),
-                Err(_) => {
-                    // Caller must free with ta_free_cstring.
-                    let err = CString::new("output serialization error").unwrap();
-                    err.into_raw()
+            return err.into_raw();
+        }
+
+        let source_str = match unsafe { CStr::from_ptr(source) }
+            .to_str()
+            .map(str::to_owned)
+        {
+            Ok(s) => s,
+            Err(_) => return std::ptr::null_mut(),
+        };
+
+        let open_slice = unsafe { std::slice::from_raw_parts(open, length as usize) };
+        let high_slice = unsafe { std::slice::from_raw_parts(high, length as usize) };
+        let low_slice = unsafe { std::slice::from_raw_parts(low, length as usize) };
+        let close_slice = unsafe { std::slice::from_raw_parts(close, length as usize) };
+        let volume_slice = unsafe { std::slice::from_raw_parts(volume, length as usize) };
+
+        let open_arr = Array1::from_vec(open_slice.to_vec());
+        let high_arr = Array1::from_vec(high_slice.to_vec());
+        let low_arr = Array1::from_vec(low_slice.to_vec());
+        let close_arr = Array1::from_vec(close_slice.to_vec());
+        let volume_arr = Array1::from_vec(volume_slice.to_vec());
+
+        let mut ctx = FormulaContext::new(open_arr, high_arr, low_arr, close_arr, volume_arr, None);
+        let mut engine = FormulaEngine::new();
+
+        match engine.eval_with_debug(&source_str, &mut ctx) {
+            Ok((_final_value, debugger)) => {
+                let payload = serde_json::json!({
+                    "events": debugger.get_events(),
+                });
+                let json_str = serde_json::to_string(&payload)
+                    .unwrap_or_else(|_| "{\"events\":[]}".to_string());
+                // Caller must free with ta_free_cstring.
+                match CString::new(json_str) {
+                    Ok(c_str) => c_str.into_raw(),
+                    Err(_) => {
+                        // Caller must free with ta_free_cstring.
+                        let err = CString::new("output serialization error").unwrap();
+                        err.into_raw()
+                    }
+                }
+            }
+            Err(e) => {
+                let err_msg = format!("error: {}", e);
+                // Caller must free with ta_free_cstring.
+                match CString::new(err_msg) {
+                    Ok(c_str) => c_str.into_raw(),
+                    Err(_) => {
+                        // Caller must free with ta_free_cstring.
+                        let err = CString::new("evaluation error").unwrap();
+                        err.into_raw()
+                    }
                 }
             }
         }
-        Err(e) => {
-            let err_msg = format!("error: {}", e);
-            // Caller must free with ta_free_cstring.
-            match CString::new(err_msg) {
-                Ok(c_str) => c_str.into_raw(),
-                Err(_) => {
-                    // Caller must free with ta_free_cstring.
-                    let err = CString::new("evaluation error").unwrap();
-                    err.into_raw()
-                }
-            }
-        }
-    }
+    })
 }
 
 #[no_mangle]
 pub extern "C" fn ta_formula_get_template(name: *const c_char) -> *mut c_char {
-    use finkit::formula::FormulaEngine;
+    ffi_catch_ptr(|| {
+        use finkit::formula::FormulaEngine;
 
-    if name.is_null() {
-        let err = CString::new("invalid input").unwrap();
-        // Caller must free with ta_free_cstring.
-        return err.into_raw();
-    }
-
-    let name_str = match unsafe { CString::from_raw(name as *mut c_char) }.into_string() {
-        Ok(s) => s,
-        Err(_) => return std::ptr::null_mut(),
-    };
-
-    let engine = FormulaEngine::new();
-    match engine.get_template(&name_str) {
-        Some(template) => {
-            let json_str = serde_json::to_string(&template).unwrap_or_else(|_| "{}".to_string());
+        if name.is_null() {
+            let err = CString::new("invalid input").unwrap();
             // Caller must free with ta_free_cstring.
-            match CString::new(json_str) {
-                Ok(c_str) => c_str.into_raw(),
-                Err(_) => {
-                    // Caller must free with ta_free_cstring.
-                    let err = CString::new("output serialization error").unwrap();
-                    err.into_raw()
+            return err.into_raw();
+        }
+
+        let name_str = match unsafe { CStr::from_ptr(name) }.to_str().map(str::to_owned) {
+            Ok(s) => s,
+            Err(_) => return std::ptr::null_mut(),
+        };
+
+        let engine = FormulaEngine::new();
+        match engine.get_template(&name_str) {
+            Some(template) => {
+                let json_str =
+                    serde_json::to_string(&template).unwrap_or_else(|_| "{}".to_string());
+                // Caller must free with ta_free_cstring.
+                match CString::new(json_str) {
+                    Ok(c_str) => c_str.into_raw(),
+                    Err(_) => {
+                        // Caller must free with ta_free_cstring.
+                        let err = CString::new("output serialization error").unwrap();
+                        err.into_raw()
+                    }
                 }
             }
+            None => {
+                // Caller must free with ta_free_cstring.
+                let err = CString::new(format!("template '{}' not found", name_str)).unwrap();
+                err.into_raw()
+            }
         }
-        None => {
-            // Caller must free with ta_free_cstring.
-            let err = CString::new(format!("template '{}' not found", name_str)).unwrap();
-            err.into_raw()
-        }
-    }
+    })
 }
 
 #[no_mangle]
 pub extern "C" fn ta_formula_search_templates(keyword: *const c_char) -> *mut c_char {
-    use finkit::formula::FormulaEngine;
+    ffi_catch_ptr(|| {
+        use finkit::formula::FormulaEngine;
 
-    if keyword.is_null() {
-        let err = CString::new("invalid input").unwrap();
-        // Caller must free with ta_free_cstring.
-        return err.into_raw();
-    }
-
-    let keyword_str = match unsafe { CString::from_raw(keyword as *mut c_char) }.into_string() {
-        Ok(s) => s,
-        Err(_) => return std::ptr::null_mut(),
-    };
-
-    let engine = FormulaEngine::new();
-    let templates = engine.search_templates(&keyword_str);
-    let json_str = serde_json::to_string(&templates).unwrap_or_else(|_| "[]".to_string());
-    // Caller must free with ta_free_cstring.
-    match CString::new(json_str) {
-        Ok(c_str) => c_str.into_raw(),
-        Err(_) => {
+        if keyword.is_null() {
+            let err = CString::new("invalid input").unwrap();
             // Caller must free with ta_free_cstring.
-            let err = CString::new("output serialization error").unwrap();
-            err.into_raw()
+            return err.into_raw();
         }
-    }
+
+        let keyword_str = match unsafe { CStr::from_ptr(keyword) }
+            .to_str()
+            .map(str::to_owned)
+        {
+            Ok(s) => s,
+            Err(_) => return std::ptr::null_mut(),
+        };
+
+        let engine = FormulaEngine::new();
+        let templates = engine.search_templates(&keyword_str);
+        let json_str = serde_json::to_string(&templates).unwrap_or_else(|_| "[]".to_string());
+        // Caller must free with ta_free_cstring.
+        match CString::new(json_str) {
+            Ok(c_str) => c_str.into_raw(),
+            Err(_) => {
+                // Caller must free with ta_free_cstring.
+                let err = CString::new("output serialization error").unwrap();
+                err.into_raw()
+            }
+        }
+    })
 }
 
 #[no_mangle]
 pub extern "C" fn ta_formula_list_categories() -> *mut c_char {
-    use finkit::formula::templates::FormulaTemplates;
+    ffi_catch_ptr(|| {
+        use finkit::formula::templates::FormulaTemplates;
 
-    let categories = FormulaTemplates::categories();
-    let json_str = serde_json::to_string(&categories).unwrap_or_else(|_| "[]".to_string());
-    // Caller must free with ta_free_cstring.
-    match CString::new(json_str) {
-        Ok(c_str) => c_str.into_raw(),
-        Err(_) => {
-            // Caller must free with ta_free_cstring.
-            let err = CString::new("output serialization error").unwrap();
-            err.into_raw()
+        let categories = FormulaTemplates::categories();
+        let json_str = serde_json::to_string(&categories).unwrap_or_else(|_| "[]".to_string());
+        // Caller must free with ta_free_cstring.
+        match CString::new(json_str) {
+            Ok(c_str) => c_str.into_raw(),
+            Err(_) => {
+                // Caller must free with ta_free_cstring.
+                let err = CString::new("output serialization error").unwrap();
+                err.into_raw()
+            }
         }
-    }
+    })
 }
 
 // ============================================================================
@@ -739,29 +833,36 @@ pub extern "C" fn ta_formula_list_categories() -> *mut c_char {
 
 #[no_mangle]
 pub extern "C" fn ta_formula_validate(source: *const c_char) -> c_int {
-    if source.is_null() {
-        return 0;
-    }
+    ffi_catch_i32(|| {
+        if source.is_null() {
+            return 0;
+        }
 
-    let source_str = match unsafe { CString::from_raw(source as *mut c_char) }.into_string() {
-        Ok(s) => s,
-        Err(_) => return 0,
-    };
+        let source_str = match unsafe { CStr::from_ptr(source) }
+            .to_str()
+            .map(str::to_owned)
+        {
+            Ok(s) => s,
+            Err(_) => return 0,
+        };
 
-    let mut engine = FormulaEngine::new();
-    match engine.compile(&source_str) {
-        Ok(_) => 1,
-        Err(_) => 0,
-    }
+        let mut engine = FormulaEngine::new();
+        match engine.compile(&source_str) {
+            Ok(_) => 1,
+            Err(_) => 0,
+        }
+    })
 }
 
 #[no_mangle]
 pub extern "C" fn ta_free_string(s: *mut c_char) {
-    if !s.is_null() {
-        unsafe {
-            let _ = CString::from_raw(s);
+    ffi_catch_void(|| {
+        if !s.is_null() {
+            unsafe {
+                let _ = CString::from_raw(s);
+            }
         }
-    }
+    })
 }
 
 #[no_mangle]
@@ -774,68 +875,73 @@ pub extern "C" fn ta_formula_eval_zc_exec(
     volume: *const c_double,
     length: c_int,
 ) -> *mut c_char {
-    if source.is_null()
-        || open.is_null()
-        || high.is_null()
-        || low.is_null()
-        || close.is_null()
-        || volume.is_null()
-        || length <= 0
-    {
-        let err = CString::new("invalid input").unwrap();
-        // Caller must free with ta_free_cstring.
-        return err.into_raw();
-    }
-
-    let source_str = match unsafe { CString::from_raw(source as *mut c_char) }.into_string() {
-        Ok(s) => s,
-        Err(_) => return std::ptr::null_mut(),
-    };
-
-    let open_slice = unsafe { std::slice::from_raw_parts(open, length as usize) };
-    let high_slice = unsafe { std::slice::from_raw_parts(high, length as usize) };
-    let low_slice = unsafe { std::slice::from_raw_parts(low, length as usize) };
-    let close_slice = unsafe { std::slice::from_raw_parts(close, length as usize) };
-    let volume_slice = unsafe { std::slice::from_raw_parts(volume, length as usize) };
-
-    let open_arr = Array1::from_vec(open_slice.to_vec());
-    let high_arr = Array1::from_vec(high_slice.to_vec());
-    let low_arr = Array1::from_vec(low_slice.to_vec());
-    let close_arr = Array1::from_vec(close_slice.to_vec());
-    let volume_arr = Array1::from_vec(volume_slice.to_vec());
-
-    let mut ctx = FormulaContext::new(open_arr, high_arr, low_arr, close_arr, volume_arr, None);
-    let mut engine = FormulaEngine::new();
-
-    match engine.eval_zero_copy(&source_str, &mut ctx) {
-        Ok(_final_value) => {
-            let var_map: HashMap<String, Vec<Option<f64>>> = ctx
-                .variables
-                .iter()
-                .map(|(name, value)| (name.to_string(), arr_to_json(value)))
-                .collect();
-            let json_str = serde_json::to_string(&var_map).unwrap_or_else(|_| "{}".to_string());
+    ffi_catch_ptr(|| {
+        if source.is_null()
+            || open.is_null()
+            || high.is_null()
+            || low.is_null()
+            || close.is_null()
+            || volume.is_null()
+            || length <= 0
+        {
+            let err = CString::new("invalid input").unwrap();
             // Caller must free with ta_free_cstring.
-            match CString::new(json_str) {
-                Ok(c_str) => c_str.into_raw(),
-                Err(_) => {
-                    // Caller must free with ta_free_cstring.
-                    let err = CString::new("output serialization error").unwrap();
-                    err.into_raw()
+            return err.into_raw();
+        }
+
+        let source_str = match unsafe { CStr::from_ptr(source) }
+            .to_str()
+            .map(str::to_owned)
+        {
+            Ok(s) => s,
+            Err(_) => return std::ptr::null_mut(),
+        };
+
+        let open_slice = unsafe { std::slice::from_raw_parts(open, length as usize) };
+        let high_slice = unsafe { std::slice::from_raw_parts(high, length as usize) };
+        let low_slice = unsafe { std::slice::from_raw_parts(low, length as usize) };
+        let close_slice = unsafe { std::slice::from_raw_parts(close, length as usize) };
+        let volume_slice = unsafe { std::slice::from_raw_parts(volume, length as usize) };
+
+        let open_arr = Array1::from_vec(open_slice.to_vec());
+        let high_arr = Array1::from_vec(high_slice.to_vec());
+        let low_arr = Array1::from_vec(low_slice.to_vec());
+        let close_arr = Array1::from_vec(close_slice.to_vec());
+        let volume_arr = Array1::from_vec(volume_slice.to_vec());
+
+        let mut ctx = FormulaContext::new(open_arr, high_arr, low_arr, close_arr, volume_arr, None);
+        let mut engine = FormulaEngine::new();
+
+        match engine.eval_zero_copy(&source_str, &mut ctx) {
+            Ok(_final_value) => {
+                let var_map: HashMap<String, Vec<Option<f64>>> = ctx
+                    .variables
+                    .iter()
+                    .map(|(name, value)| (name.to_string(), arr_to_json(value)))
+                    .collect();
+                let json_str = serde_json::to_string(&var_map).unwrap_or_else(|_| "{}".to_string());
+                // Caller must free with ta_free_cstring.
+                match CString::new(json_str) {
+                    Ok(c_str) => c_str.into_raw(),
+                    Err(_) => {
+                        // Caller must free with ta_free_cstring.
+                        let err = CString::new("output serialization error").unwrap();
+                        err.into_raw()
+                    }
+                }
+            }
+            Err(e) => {
+                let err_msg = format!("error: {}", e);
+                // Caller must free with ta_free_cstring.
+                match CString::new(err_msg) {
+                    Ok(c_str) => c_str.into_raw(),
+                    Err(_) => {
+                        // Caller must free with ta_free_cstring.
+                        let err = CString::new("evaluation error").unwrap();
+                        err.into_raw()
+                    }
                 }
             }
         }
-        Err(e) => {
-            let err_msg = format!("error: {}", e);
-            // Caller must free with ta_free_cstring.
-            match CString::new(err_msg) {
-                Ok(c_str) => c_str.into_raw(),
-                Err(_) => {
-                    // Caller must free with ta_free_cstring.
-                    let err = CString::new("evaluation error").unwrap();
-                    err.into_raw()
-                }
-            }
-        }
-    }
+    })
 }

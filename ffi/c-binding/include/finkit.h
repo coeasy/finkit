@@ -133,51 +133,7 @@ TA_API ta_result_t ta_three_line_break(const double *close, double *out_line, in
 TA_API ta_result_t ta_williams_alligator(const double *close, double *out_jaw, double *out_teeth, double *out_lips, int32_t len);
 TA_API ta_result_t ta_heikin_ashi(const double *open, const double *high, const double *low, const double *close, double *out_o, double *out_h, double *out_l, double *out_c, int32_t len);
 
-/* ── K-line visualization ────────────────────────────────────────────────── */
-
-typedef int64_t finkit_kline_data_t;
-typedef int64_t finkit_kline_chart_t;
-
-TA_API finkit_kline_data_t finkit_kline_data_new(
-    const char * const *dates,
-    const double *opens,
-    const double *highs,
-    const double *lows,
-    const double *closes,
-    const double *volumes,
-    int32_t len);
-TA_API void finkit_kline_data_free(finkit_kline_data_t handle);
-TA_API int32_t finkit_kline_data_validate(finkit_kline_data_t handle);
-
-TA_API finkit_kline_chart_t finkit_kline_chart_new(
-    finkit_kline_data_t data_handle,
-    const char *language,
-    const char *title,
-    uint32_t width,
-    uint32_t height);
-TA_API void finkit_kline_chart_free(finkit_kline_chart_t handle);
-
-TA_API int32_t finkit_kline_chart_add_ma(
-    finkit_kline_chart_t handle,
-    const int32_t *periods,
-    int32_t periods_len);
-TA_API int32_t finkit_kline_chart_add_macd(
-    finkit_kline_chart_t handle,
-    int32_t fast,
-    int32_t slow,
-    int32_t signal);
-TA_API int32_t finkit_kline_chart_add_rsi(
-    finkit_kline_chart_t handle,
-    int32_t period);
-TA_API int32_t finkit_kline_chart_add_boll(
-    finkit_kline_chart_t handle,
-    int32_t period,
-    double nb_dev);
-
-TA_API int32_t finkit_kline_chart_save_as_svg(
-    finkit_kline_chart_t handle,
-    const char *path);
-TA_API char *finkit_kline_chart_to_svg(finkit_kline_chart_t handle);
+/* K-line visualization is exposed by the Python/Node bindings. */
 
 #ifdef __cplusplus
 }

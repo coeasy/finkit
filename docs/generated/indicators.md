@@ -3,7 +3,7 @@
 > **SSOT** — auto-generated from `core/src/indicators/mod.rs` and submodule `pub fn` exports.
 > Do not edit manually. Regenerate: `python scripts/gen_ssot_docs.py --generate`
 
-Modules exported from `indicators/mod.rs`: **34** | Public indicator functions: **315**
+Modules exported from `indicators/mod.rs`: **34** | Public indicator functions: **317**
 
 ## astock
 
@@ -234,6 +234,7 @@ Modules exported from `indicators/mod.rs`: **34** | Public indicator functions: 
 | `connors_rsi` |
 | `coppock` |
 | `fisher` |
+| `imi` |
 | `inertia` |
 | `kst` |
 | `qstick` |
@@ -250,6 +251,7 @@ Modules exported from `indicators/mod.rs`: **34** | Public indicator functions: 
 
 | Function |
 |----------|
+| `accbands` |
 | `alma` |
 | `bbands` |
 | `bbands_into` |

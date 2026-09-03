@@ -21,7 +21,7 @@ package com.finkit;
  * double[] sma = Indicators.sma(prices, 3);
  * }</pre>
  *
- * @since 0.1.0
+ * @since 0.1.2
  */
 public final class Indicators {
 
@@ -50,6 +50,10 @@ public final class Indicators {
         } else {
             System.loadLibrary(libName);
         }
+    }
+
+    static void ensureLoaded() {
+        // Calling this method triggers class initialization and native loading.
     }
 
     // =========================================================================
@@ -759,6 +763,94 @@ public final class Indicators {
     public static native double[] tsf(double[] input, int period);
 
     // =========================================================================
+    // ========================================================================
+    // Advanced indicators and chart transforms
+    // ========================================================================
+
+    public static native void ichimoku(double[] high, double[] low, double[] close,
+                                                   int tenkanPeriod, int kijunPeriod,
+                                                   int senkouBPeriod, int displacement,
+                                                   IchimokuResult result);
+
+    public static native void supertrend(double[] high, double[] low, double[] close,
+                                                      int atrPeriod, double multiplier,
+                                                      SupertrendResult result);
+
+    public static native double[] vwap(double[] high, double[] low, double[] close, double[] volume);
+    public static native double[] anchoredVwap(double[] high, double[] low, double[] close,
+                                                double[] volume, int startIndex);
+    public static native void vwapBands(double[] high, double[] low, double[] close, double[] volume,
+                                        int timePeriod, double nbDev, VwapBandsResult result);
+    public static native void elderRay(double[] high, double[] low, double[] close, double[] volume,
+                                       int period, ElderRayResult result);
+    public static native void donchian(double[] high, double[] low, int period,
+                                       DonchianResult result);
+    public static native void volumeProfile(double[] high, double[] low, double[] close,
+                                            double[] volume, int numBins,
+                                            VolumeProfileResult result);
+    public static native void fibonacciRetracement(double[] high, double[] low,
+                                                    int startIndex, int endIndex,
+                                                    FibonacciRetracementResult result);
+
+    public static native DoubleDoubleIntOutput darvasBox(double[] high, double[] low, double[] close,
+                                                          int lookback, int confirmation);
+    public static native DoubleIntIntOutput pointAndFigure(double[] high, double[] low,
+                                                            double boxSize, int reversal);
+    public static native DoubleIntOutput threeLineBreak(double[] close, int lines);
+    public static native TripleDoubleOutput williamsAlligator(double[] close);
+    public static native QuadOutput heikinAshi(double[] open, double[] high, double[] low,
+                                                double[] close);
+    public static native DoubleIntOutput renko(double[] high, double[] low, double boxSize);
+    public static native DoubleIntOutput kagi(double[] close, double reversal);
+
+    // ========================================================================
+    // Advanced indicators, chart transforms, and formula JSON helpers
+    // ========================================================================
+
+    public static native void ichimoku(double[] high, double[] low, double[] close,
+                                        int tenkanPeriod, int kijunPeriod,
+                                        int senkouBPeriod, int displacement,
+                                        IchimokuResult result);
+    public static native void supertrend(double[] high, double[] low, double[] close,
+                                         int atrPeriod, double multiplier,
+                                         SupertrendResult result);
+    public static native double[] vwap(double[] high, double[] low, double[] close, double[] volume);
+    public static native double[] anchoredVwap(double[] high, double[] low, double[] close,
+                                               double[] volume, int startIndex);
+    public static native void vwapBands(double[] high, double[] low, double[] close, double[] volume,
+                                        int timePeriod, double nbDev, VwapBandsResult result);
+    public static native void elderRay(double[] high, double[] low, double[] close, double[] volume,
+                                       int period, ElderRayResult result);
+    public static native void donchian(double[] high, double[] low, int period,
+                                       DonchianResult result);
+    public static native void volumeProfile(double[] high, double[] low, double[] close,
+                                            double[] volume, int numBins,
+                                            VolumeProfileResult result);
+    public static native void fibonacciRetracement(double[] high, double[] low,
+                                                    int startIndex, int endIndex,
+                                                    FibonacciRetracementResult result);
+
+    public static native DoubleDoubleIntOutput darvasBox(double[] high, double[] low, double[] close,
+                                                          int lookback, int confirmation);
+    public static native DoubleIntIntOutput pointAndFigure(double[] high, double[] low,
+                                                            double boxSize, int reversal);
+    public static native DoubleIntOutput threeLineBreak(double[] close, int lines);
+    public static native TripleDoubleOutput williamsAlligator(double[] close);
+    public static native QuadOutput heikinAshi(double[] open, double[] high, double[] low,
+                                                double[] close);
+    public static native DoubleIntOutput renko(double[] high, double[] low, double boxSize);
+    public static native DoubleIntOutput kagi(double[] close, double reversal);
+
+    public static native String formulaEvalMulti(
+        String source, double[] open, double[] high, double[] low, double[] close, double[] volume);
+    public static native String formulaEvalDraw(
+        String source, double[] open, double[] high, double[] low, double[] close, double[] volume);
+    public static native String formulaEvalDebug(
+        String source, double[] open, double[] high, double[] low, double[] close, double[] volume);
+    public static native String formulaGetTemplate(String name);
+    public static native String formulaSearchTemplates(String keyword);
+    public static native String formulaListCategories();
+
     // Additional Result Classes
     // =========================================================================
 

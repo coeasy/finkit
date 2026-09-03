@@ -3,7 +3,7 @@ use finkit::indicators;
 use finkit::math::moving_avg;
 use finkit::patterns::candlestick;
 use std::cell::RefCell;
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::slice;
@@ -242,6 +242,26 @@ pub extern "C" fn ta_last_error_code() -> i32 {
 }
 
 #[no_mangle]
+pub extern "C" fn ta_last_error() -> *mut c_char {
+    ffi_catch_ptr(|| {
+        let message = LAST_ERROR.with(|error| error.borrow().clone());
+        CString::new(message)
+            .map(CString::into_raw)
+            .unwrap_or_else(|_| std::ptr::null_mut())
+    })
+}
+
+/// Free a string allocated by a Finkit C-ABI function.
+#[no_mangle]
+pub unsafe extern "C" fn finkit_free_string(s: *mut c_char) {
+    ffi_catch_void(|| {
+        if !s.is_null() {
+            drop(CString::from_raw(s));
+        }
+    })
+}
+
+#[no_mangle]
 
 include!("generated.rs");
 
@@ -268,6 +288,17 @@ mod tests {
 
     fn read_code() -> i32 {
         LAST_ERROR_CODE.with(|c| *c.borrow())
+    }
+
+    #[test]
+    fn last_error_roundtrip_and_free() {
+        reset_last_error();
+        set_last_error("roundtrip error");
+        let ptr = ta_last_error();
+        assert!(!ptr.is_null());
+        let message = unsafe { CStr::from_ptr(ptr) }.to_str().unwrap();
+        assert_eq!(message, "roundtrip error");
+        unsafe { finkit_free_string(ptr) };
     }
 
     #[test]
