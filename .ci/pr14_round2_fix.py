@@ -81,10 +81,12 @@ if text.count(marker) != 1:
 text = text.replace(marker, regression + marker, 1)
 registry.write_text(text, encoding="utf-8")
 
+# Keep the original comment here so the later semantic-contract patch can replace it
+# with the precise MA-vs-SMA explanation after all round-2 compatibility edits land.
 replace_exact(
     "core/src/formula/functions.rs",
     "// Pine `ta.sma(src, length)` passes only 2 args (m defaults to 1 = plain SMA).",
-    "// The two-argument compatibility form defaults M to 1.",
+    "// Pine `ta.sma(src, length)` passes only 2 args (m defaults to 1 = plain SMA).",
 )
 
 mapper = Path("core/src/formula/pine/ast_mapper.rs")
