@@ -10,7 +10,7 @@ The binding is available for repository/source development, but it is **not** pa
 module github.com/coeasy/finkit
 ```
 
-Because that module is nested below `ffi/go-binding/go/` and still depends on a separately built native Rust library, the repository does not document `go get github.com/coeasy/finkit/go/ta` as a stable public v0.1.3 installation contract.
+Its Go package is under `ffi/go-binding/go/ta`, so **inside that nested module** the package import path is `github.com/coeasy/finkit/ta`. Because the module itself is nested below `ffi/go-binding/go/` while its declared module path points at the repository root, this is not yet a clean remotely versioned public-module layout. The repository therefore does not document a `go get` command as a stable public v0.1.3 installation contract.
 
 ## Requirements
 
@@ -44,16 +44,31 @@ go test ./...
 
 When integrating from a repository checkout, ensure the linker can locate the native library produced by the Rust build. Exact linker configuration is platform-specific; inspect the CGO directives and build scripts in this directory before packaging an application.
 
-## API example
+## Local external-module example
 
-The Go source exposes indicator wrappers in the binding package. A repository-development example has the following shape:
+For development before the public module layout is finalized, an external Go project can point the declared module path at the nested checkout explicitly.
+
+Example `go.mod`:
+
+```go
+module example.com/my-finkit-app
+
+go 1.21
+
+require github.com/coeasy/finkit v0.0.0
+
+replace github.com/coeasy/finkit => ../finkit/ffi/go-binding/go
+```
+
+Then import the actual package inside that local module:
 
 ```go
 package main
 
 import (
     "fmt"
-    "github.com/coeasy/finkit/go/ta"
+
+    "github.com/coeasy/finkit/ta"
 )
 
 func main() {
@@ -66,7 +81,7 @@ func main() {
 }
 ```
 
-Treat the import path above as a source-layout example, not as proof that a remotely versioned Go module can currently be installed with `go get`.
+This local `replace` workflow is a development technique, not proof that `github.com/coeasy/finkit` is currently a remotely installable Go module at v0.1.3.
 
 ## Before making Go a public release contract
 
