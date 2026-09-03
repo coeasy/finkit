@@ -25,14 +25,11 @@ jobs:
         with:
           components: rustfmt,clippy
 
-      - name: Round 1 structural and binding repair
+      - name: Round 1 apply structural and binding repair
         run: |
           python .ci/pr14_harden.py round1
           python .ci/pr14_round1_compat_fix.py
           cargo fmt --all
-          cargo test -p finkit factor_plan_direct_paths_reject_stale_registry_dependencies --locked
-          cargo test -p finkit precompiled_plan_rejects_changed_dependency_graph --locked
-          RUSTFLAGS="-Dwarnings" cargo check -p finkit-python --locked
 
       - name: Round 2A base registry repair
         run: |
@@ -89,6 +86,8 @@ jobs:
         run: |
           cargo fmt --all -- --check
           python scripts/gen_ssot_docs.py --check
+          cargo test -p finkit factor_plan_direct_paths_reject_stale_registry_dependencies --locked
+          cargo test -p finkit precompiled_plan_rejects_changed_dependency_graph --locked
           cargo check --workspace --all-targets --locked
           cargo clippy -p finkit --lib --locked -- -D warnings
           RUSTFLAGS="-Dwarnings" cargo check -p finkit-python --locked
