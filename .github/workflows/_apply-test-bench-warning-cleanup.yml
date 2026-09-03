@@ -6,6 +6,7 @@ on:
       - "fix/test-bench-warnings-actions"
     paths:
       - "scripts/_apply_test_bench_warning_cleanup.py"
+      - "scripts/_continue_test_bench_warning_cleanup.py"
       - ".github/workflows/_apply-test-bench-warning-cleanup.yml"
 
 permissions:
@@ -31,7 +32,20 @@ jobs:
         with:
           python-version: "3.12"
       - name: Apply asserted warning cleanup
-        run: python scripts/_apply_test_bench_warning_cleanup.py
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          OUTPUT="$(python scripts/_apply_test_bench_warning_cleanup.py 2>&1)"
+          RC=$?
+          set -e
+          if [[ "$RC" -eq 0 ]]; then
+            echo "primary cleanup unexpectedly bypassed the contextual guard" >&2
+            exit 1
+          fi
+          grep -q "unused linear-reg scalar result buffer: expected one match.*found 4" <<< "$OUTPUT"
+          printf '%s\n' "$OUTPUT"
+          python scripts/_continue_test_bench_warning_cleanup.py
       - name: Format Rust sources
         run: cargo fmt --all
       - name: Verify diff hygiene
