@@ -323,6 +323,15 @@ jobs:
           targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
       - name: Build XCFramework
         run: bash ffi/ios-binding/build-xcframework.sh
+      - name: Typecheck Swift wrapper against packaged C module
+        shell: bash
+        run: |
+          set -euo pipefail
+          HEADERS="$(find dist/ios/Finkit.xcframework -type d -name Headers | head -1)"
+          test -n "$HEADERS"
+          test -f "$HEADERS/module.modulemap"
+          test -f "$HEADERS/finkit.h"
+          xcrun swiftc -typecheck -I "$HEADERS" ffi/ios-binding/include/Finkit.swift
       - name: Package XCFramework
         shell: bash
         run: |
