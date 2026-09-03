@@ -1327,7 +1327,7 @@ fn linear_reg(
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
     py.detach(|| {
-        indicators::linear_reg(close, timeperiod)
+        indicators::linearreg(close, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
     })

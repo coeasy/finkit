@@ -991,7 +991,7 @@ if input.is_null() || out.is_null() || length <= 0 || period <= 0 {
         return -1;
     }
     let input_slice = unsafe { std::slice::from_raw_parts(input, length as usize) };
-    match indicators::linear_reg(input_slice, period as usize) {
+    match indicators::linearreg(input_slice, period as usize) {
         Ok(result) => {
             let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
             for i in 0..length as usize {

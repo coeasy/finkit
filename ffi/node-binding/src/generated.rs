@@ -745,7 +745,7 @@ pub fn tsf(input: Vec<f64>, timeperiod: u32) -> Result<Vec<f64>> {
 /// @returns Array of linear regression values
 #[napi]
 pub fn linear_reg(input: Vec<f64>, timeperiod: u32) -> Result<Vec<f64>> {
-    indicators::linear_reg(&input, timeperiod as usize)
+    indicators::linearreg(&input, timeperiod as usize)
         .map(|arr| arr.into_raw_vec())
         .map_err(|e| Error::new(Status::InvalidArg, format!("{}", e)))
 }

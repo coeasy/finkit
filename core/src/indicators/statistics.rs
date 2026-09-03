@@ -551,7 +551,9 @@ pub fn var(input: &[f64], period: usize, nb_dev: f64) -> Result<Array1<f64>> {
 /// let result = indicators::linear_reg(&data, 5).unwrap();
 /// assert_eq!(result.len(), 10);
 /// ```
-#[deprecated(since = "0.2.0", note = "Use `linearreg` (TA-Lib naming convention)")]
+///
+/// Legacy spelling retained for source compatibility in the 0.1.x line.
+/// New internal code and generated bindings use [`linearreg`].
 pub fn linear_reg(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
     linreg(input, timeperiod)
 }
