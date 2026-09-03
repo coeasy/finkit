@@ -1,46 +1,89 @@
-# AlphaTA-ios
+# Finkit iOS Binding
 
-iOS bindings for [AlphaTA](https://github.com/coeasy/finkit), the
-high-performance financial technical analysis library.
+The iOS binding compiles the Rust `finkit-ios` crate as a static library and packages device/simulator slices into `Finkit.xcframework`.
 
-The Rust crate is compiled as a `staticlib` and packaged into an Apple
-`.xcframework` (one slice per supported target). The Swift wrapper
-(`Finkit.swift`) sits on top of the C ABI and provides a friendly,
-allocation-free API.
+## Current support contract
 
-## Building the .xcframework
+The source integration contains:
 
-Pre-requisites:
+- a Rust C ABI static library;
+- generated indicator entry points;
+- the `finkit.h` C header;
+- a Swift-facing `Finkit` wrapper;
+- an XCFramework build script for physical arm64 devices and both Apple Silicon/Intel simulators.
 
-- Xcode 15 or later (provides `xcodebuild`)
-- Rust toolchain with the four iOS targets installed:
-  ```bash
-  rustup target add aarch64-apple-ios \
-                    aarch64-apple-ios-sim \
-                    x86_64-apple-ios \
-                    x86_64-apple-ios-sim
-  ```
+The historical `alpha_ta_*` C symbols are intentionally retained as an internal compatibility ABI. New Swift code should use `Finkit`, not the deprecated `AlphaTA` alias.
+
+## Requirements
+
+- macOS with Xcode 15+;
+- Rust 1.85+;
+- these Rust targets:
 
 ```bash
-./ffi/ios-binding/build-xcframework.sh
-# → dist/ios/Finkit.xcframework
+rustup target add \
+  aarch64-apple-ios \
+  aarch64-apple-ios-sim \
+  x86_64-apple-ios
 ```
 
-## Using the .xcframework
+`aarch64-apple-ios` is the physical-device target. The two simulator targets are combined into one universal simulator library before the XCFramework is created.
 
-1. In Xcode, drag `Finkit.xcframework` into your project.
-2. In *Build Settings*, ensure *Validate Workspace* is **Yes** and the
-   framework is added to *Frameworks, Libraries, and Embedded Content* as
-   *Embed & Sign*.
-3. In any Swift file:
+## Build the XCFramework
+
+From the repository root:
+
+```bash
+bash ffi/ios-binding/build-xcframework.sh
+```
+
+Output:
+
+```text
+dist/ios/Finkit.xcframework
+```
+
+The script performs locked Rust builds, combines simulator architectures with `lipo`, then calls `xcodebuild -create-xcframework`.
+
+## Swift API
+
+The checked-in Swift wrapper exposes a focused native subset including:
+
+- SMA, EMA, WMA, DEMA, TEMA;
+- RSI, ROC, MOM, CMO, TRIX;
+- midpoint, z-score, TSF, linear regression, percent rank;
+- candlestick detection count.
+
+Example source usage once the wrapper/header are integrated into the consuming target:
 
 ```swift
-import Finkit
-
-let prices: [Double] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-let sma = try AlphaTA.sma(prices, period: 3)
-print(sma) // [0, 0, 2, 3, 4, 5, 6, 7, 8, 9]
+let prices: [Double] = [1, 2, 3, 4, 5, 6]
+let sma = try Finkit.sma(prices, period: 3)
+print(sma)
 ```
+
+## Packaging boundary
+
+The CI XCFramework artifact verifies that the Rust device/simulator libraries and headers can be packaged together. It does not by itself constitute a Swift Package Manager, CocoaPods, or binary registry publication.
+
+Before advertising a one-command iOS dependency, the project should additionally provide and test a consumer package/module definition from a clean application project.
+
+## ABI compatibility
+
+The C header continues to declare `alpha_ta_*` names so existing integrations are not silently broken. The Swift wrapper exposes deprecated aliases:
+
+```swift
+AlphaTA      // deprecated alias of Finkit
+AlphaTAError // deprecated alias of FinkitError
+```
+
+New code should use the Finkit names.
+
+## Related documentation
+
+- [Language bindings](../../docs/language-bindings.md)
+- [Installation guide](../../docs/installation.md)
+- [Generated indicator catalog](../../docs/generated/indicators.md)
 
 ## License
 
