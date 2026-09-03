@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: pr14-three-round-hardening-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   harden:
     if: github.actor != 'github-actions[bot]'
@@ -31,6 +35,7 @@ jobs:
       - name: Round 2 registry and canonical IR repair
         run: |
           python .ci/pr14_round2_fix.py
+          python .ci/pr14_round2_tests_fix.py
           cargo fmt --all
           python scripts/gen_ssot_docs.py
           cargo test -p finkit --lib registry::tests --locked
@@ -59,6 +64,7 @@ jobs:
           rm .github/workflows/pr14-round1-structural-fix.yml
           rm .ci/pr14_harden.py
           rm .ci/pr14_round2_fix.py
+          rm .ci/pr14_round2_tests_fix.py
           git add -A
           git commit -m "fix: complete three-round compute runtime hardening"
           git push origin HEAD:feat/compute-runtime-factorplan-v012
