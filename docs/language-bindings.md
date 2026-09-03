@@ -30,21 +30,23 @@ Do not retroactively describe the v0.1.3 Release as containing Go, NuGet, AAR, X
 
 ## Next-release multi-language target
 
-The expanded `Multilang release` workflow now defines build/package gates for:
+The next-release validation layer is split across `Multilang release` and `Multilang cross-platform`.
 
-| Target | Validation target | Candidate artifact |
+| Target | CI-validated target | Candidate artifact |
 | --- | --- | --- |
-| Node.js | Linux native build, tests, platform/root `npm pack` | `.tgz` packages |
+| Node.js | Linux x86_64 GNU, Windows x64 MSVC, macOS arm64; native runtime tests and platform package inspection | platform `.tgz` packages |
 | Java/JNI | Linux Rust JNI build, JAR resource check, runtime SMA smoke | JAR |
 | C/C++ | Linux CMake build/test/install | SDK `.tar.gz` |
-| Go/CGO | Linux Rust native build, `go test`, external-module example | Go module source + `libfinkit_go.so` |
-| .NET | Linux Rust native build, .NET 8 tests, NuGet RID inspection | `.nupkg` candidate |
+| Go/CGO | Linux Rust native build, `go test`, external-module example and packaged consumer smoke | Go module source + `libfinkit_go.so` |
+| .NET | Linux x64, Windows x64 and macOS arm64; .NET 8 tests plus NuGet RID inspection | `.nupkg` candidates |
 | WASM | real `wasm32-unknown-unknown` build | raw `.wasm` module |
 | Android | four NDK ABI builds + Gradle AAR assembly + archive inspection | `.aar` candidate |
 | iOS | arm64 device + arm64/x86_64 simulator build + XCFramework packaging | `.xcframework.zip` candidate |
 | Rust/CLI | crate packaging + Linux CLI release build | `.crate` + CLI |
 
-A gate is considered supported only after the corresponding CI job is green. Even then, the output is a **candidate artifact** until the release workflow publishes it and a clean consumer smoke test succeeds.
+These are **validated candidate artifacts**, not public registry packages. A target is only listed as CI-validated after a real hosted runner completed its build, language-level smoke/test path and package-content checks.
+
+The current Node package manifest declares additional optional packages such as macOS x64, Linux arm64, musl variants and Windows arm64. Those targets remain outside the proven candidate matrix until they receive equivalent real-runner or cross-build package validation. The same rule applies to the declared `.NET` `osx-x64` RID.
 
 ## Python
 
@@ -88,9 +90,15 @@ npm test
 npm pack
 ```
 
-The release gate additionally stages the platform-specific native payload into the matching npm platform package and packs both the platform package and the root package.
+The next-release gates have now proven these native package candidates on real GitHub-hosted runners:
 
-Do not publish the root npm package unless every optional platform package it declares is available for the advertised support matrix.
+- `linux-x64-gnu`;
+- `win32-x64-msvc`;
+- `darwin-arm64`.
+
+Each validated path builds the native module, runs the Node smoke tests, stages the native payload into the matching npm platform package, runs `npm pack`, and uploads the resulting package candidate.
+
+The root npm package still declares additional optional platform packages. Do not publish or advertise the root package as universally installable until every platform in the advertised support matrix is built and package-tested.
 
 ## Java/JNI
 
@@ -159,7 +167,7 @@ cd ffi/go-binding/go
 LD_LIBRARY_PATH="../../../target/release:${LD_LIBRARY_PATH:-}" go test ./...
 ```
 
-The release gate also builds an **external temporary module** using a local `replace` directive and runs the repository example. That catches module-path mistakes that same-module tests can miss.
+The release gate also builds an **external temporary module** using a local `replace` directive and runs the repository example. The packaged candidate is then unpacked into another clean temporary consumer and executed again against the staged native library. This catches module-path and delivery mistakes that same-module tests can miss.
 
 The Go binding includes indicator, streaming, formula, and template APIs. In particular, its formula debug wrapper is `FormulaEvalDebugJSON`; debugger method names are not assumed to be identical in other languages.
 
@@ -171,25 +179,24 @@ See [../ffi/go-binding/README.md](../ffi/go-binding/README.md).
 
 The .NET binding uses P/Invoke and targets .NET 6 and .NET 8.
 
-Linux source validation:
-
-```bash
-cargo build -p finkit-dotnet --release --locked
-LD_LIBRARY_PATH="$PWD/target/release:${LD_LIBRARY_PATH:-}" \
-  dotnet test ffi/dotnet-binding/src/Finkit.Tests/Finkit.Tests.csproj \
-  -c Release --framework net8.0
-```
-
-The project defines standard runtime asset paths for:
+The project defines native package paths for:
 
 - `win-x64`;
 - `linux-x64`;
 - `osx-x64`;
 - `osx-arm64`.
 
-The Linux release gate stages `libfinkit_dotnet.so`, packs a NuGet candidate, and verifies that the `.nupkg` contains `runtimes/linux-x64/native/libfinkit_dotnet.so`.
+The next-release validation currently proves three of those RIDs:
 
-This proves the Linux packaging path when CI is green; it does **not** prove the Windows/macOS RID assets until those targets are built and inspected too. Do not document `dotnet add package Finkit` as a public feed install until NuGet publication is real.
+| RID | Validation |
+| --- | --- |
+| `linux-x64` | native Rust build, .NET 8 tests, NuGet pack, `runtimes/linux-x64/native/libfinkit_dotnet.so` inspection |
+| `win-x64` | native Rust build, 18 .NET 8 tests, NuGet pack, `runtimes/win-x64/native/finkit_dotnet.dll` inspection |
+| `osx-arm64` | native Rust build on a real arm64 macOS runner, 18 .NET 8 tests, NuGet pack, `runtimes/osx-arm64/native/libfinkit_dotnet.dylib` inspection |
+
+`osx-x64` is still a declared package RID, not a proven candidate target. It must receive its own build/package verification before being listed as validated.
+
+Do not document `dotnet add package Finkit` as a public feed install until an actual NuGet publication and clean consumer install test exist.
 
 See [../ffi/dotnet-binding/README.md](../ffi/dotnet-binding/README.md).
 
@@ -197,7 +204,7 @@ See [../ffi/dotnet-binding/README.md](../ffi/dotnet-binding/README.md).
 
 Android consists of the Rust `finkit-android` JNI crate plus a standard Gradle Android Library project under `ffi/android-binding/android`.
 
-The intended release gate builds these ABIs with `cargo-ndk`:
+The validated release gate builds these ABIs with `cargo-ndk`:
 
 - `arm64-v8a`;
 - `armeabi-v7a`;
@@ -262,4 +269,4 @@ python scripts/gen_ssot_docs.py --check
 python scripts/check_docs_links.py
 ```
 
-Multi-language packaging is defined by `.github/workflows/multilang-release.yml`. See [development.md](development.md) and [troubleshooting.md](troubleshooting.md) for diagnosis details.
+Multi-language packaging is defined by `.github/workflows/multilang-release.yml` and `.github/workflows/multilang-cross-platform.yml`. See [development.md](development.md) and [troubleshooting.md](troubleshooting.md) for diagnosis details.

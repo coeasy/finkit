@@ -1,0 +1,222 @@
+name: Multilang cross-platform
+
+on:
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "ffi/node-binding/**"
+      - "ffi/dotnet-binding/**"
+      - "scripts/check_versions.py"
+      - ".github/workflows/multilang-cross-platform.yml"
+  push:
+    branches:
+      - "release/v*"
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: multilang-cross-platform-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  version-contract:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: python scripts/check_versions.py
+      - id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(python -c 'import pathlib,re; text=pathlib.Path("Cargo.toml").read_text(); print(re.search(r"(?ms)^\[workspace\.package\].*?^version\s*=\s*\"([^\"]+)\"", text).group(1))')"
+          test -n "$VERSION"
+          if [[ "$GITHUB_REF_TYPE" == "tag" && "$GITHUB_REF_NAME" != "v$VERSION" ]]; then
+            echo "release tag $GITHUB_REF_NAME does not match workspace version v$VERSION" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  node-windows-x64:
+    needs: version-contract
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: ffi/node-binding/package-lock.json
+      - working-directory: ffi/node-binding
+        run: npm ci
+      - working-directory: ffi/node-binding
+        run: npm run build
+      - working-directory: ffi/node-binding
+        run: npm test
+      - name: Stage and pack Windows x64 native package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $root = "ffi/node-binding"
+          $native = Join-Path $root "finkit.win32-x64-msvc.node"
+          $pkg = Join-Path $root "npm/win32-x64-msvc"
+          if (-not (Test-Path $native)) { throw "missing $native" }
+          Copy-Item $native (Join-Path $pkg "finkit.node") -Force
+          New-Item -ItemType Directory -Force -Path (Join-Path $pkg "dist") | Out-Null
+          Push-Location $pkg
+          npm pack --pack-destination dist
+          Pop-Location
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-node-win32-x64-msvc
+          path: ffi/node-binding/npm/win32-x64-msvc/dist/*.tgz
+          if-no-files-found: error
+
+  node-macos:
+    needs: version-contract
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: ffi/node-binding/package-lock.json
+      - working-directory: ffi/node-binding
+        run: npm ci
+      - working-directory: ffi/node-binding
+        run: npm run build
+      - working-directory: ffi/node-binding
+        run: npm test
+      - id: platform
+        name: Detect and stage macOS native npm package
+        working-directory: ffi/node-binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARCH="$(uname -m)"
+          case "$ARCH" in
+            arm64) NAPI_ARCH="arm64" ;;
+            x86_64) NAPI_ARCH="x64" ;;
+            *) echo "unsupported macOS architecture: $ARCH" >&2; exit 1 ;;
+          esac
+          NATIVE="finkit.darwin-${NAPI_ARCH}.node"
+          PACKAGE_DIR="npm/darwin-${NAPI_ARCH}"
+          test -f "$NATIVE"
+          cp "$NATIVE" "$PACKAGE_DIR/finkit.node"
+          mkdir -p "$PACKAGE_DIR/dist"
+          (cd "$PACKAGE_DIR" && npm pack --pack-destination dist)
+          echo "napi_arch=$NAPI_ARCH" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-node-darwin-${{ steps.platform.outputs.napi_arch }}
+          path: ffi/node-binding/npm/darwin-*/dist/*.tgz
+          if-no-files-found: error
+
+  dotnet-windows-x64:
+    needs: version-contract
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - run: cargo build -p finkit-dotnet --release --locked
+      - name: Stage Windows native RID asset
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $dir = "ffi/dotnet-binding/native/win-x64/native"
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          $native = "target/release/finkit_dotnet.dll"
+          if (-not (Test-Path $native)) { throw "missing $native" }
+          Copy-Item $native (Join-Path $dir "finkit_dotnet.dll") -Force
+      - name: Test .NET binding
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $env:PATH = "${{ github.workspace }}\target\release;$env:PATH"
+          dotnet test ffi/dotnet-binding/src/Finkit.Tests/Finkit.Tests.csproj -c Release --framework net8.0
+      - name: Pack and inspect Windows NuGet candidate
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = "${{ needs.version-contract.outputs.version }}"
+          dotnet pack ffi/dotnet-binding/src/Finkit/Finkit.csproj -c Release
+          $nupkg = "ffi/dotnet-binding/src/Finkit/bin/Release/Finkit.$version.nupkg"
+          if (-not (Test-Path $nupkg)) { throw "missing $nupkg" }
+          $extract = Join-Path $env:RUNNER_TEMP "finkit-nupkg"
+          Remove-Item $extract -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive -Path $nupkg -DestinationPath $extract
+          $asset = Join-Path $extract "runtimes/win-x64/native/finkit_dotnet.dll"
+          if (-not (Test-Path $asset)) { throw "missing RID asset $asset" }
+          New-Item -ItemType Directory -Force -Path "dist/dotnet" | Out-Null
+          Copy-Item $nupkg "dist/dotnet/finkit-dotnet-$version-win-x64.nupkg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-dotnet-win-x64
+          path: dist/dotnet/*.nupkg
+          if-no-files-found: error
+
+  dotnet-macos:
+    needs: version-contract
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - run: cargo build -p finkit-dotnet --release --locked
+      - id: rid
+        name: Detect and stage macOS RID asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARCH="$(uname -m)"
+          case "$ARCH" in
+            arm64) RID="osx-arm64" ;;
+            x86_64) RID="osx-x64" ;;
+            *) echo "unsupported macOS architecture: $ARCH" >&2; exit 1 ;;
+          esac
+          mkdir -p "ffi/dotnet-binding/native/$RID/native"
+          test -f target/release/libfinkit_dotnet.dylib
+          cp target/release/libfinkit_dotnet.dylib "ffi/dotnet-binding/native/$RID/native/"
+          echo "rid=$RID" >> "$GITHUB_OUTPUT"
+      - name: Test .NET binding
+        env:
+          DYLD_LIBRARY_PATH: ${{ github.workspace }}/target/release
+        run: dotnet test ffi/dotnet-binding/src/Finkit.Tests/Finkit.Tests.csproj -c Release --framework net8.0
+      - name: Pack and inspect macOS NuGet candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.version-contract.outputs.version }}"
+          RID="${{ steps.rid.outputs.rid }}"
+          dotnet pack ffi/dotnet-binding/src/Finkit/Finkit.csproj -c Release
+          NUPKG="ffi/dotnet-binding/src/Finkit/bin/Release/Finkit.${VERSION}.nupkg"
+          test -f "$NUPKG"
+          unzip -l "$NUPKG" | grep -q "runtimes/${RID}/native/libfinkit_dotnet.dylib"
+          mkdir -p dist/dotnet
+          cp "$NUPKG" "dist/dotnet/finkit-dotnet-${VERSION}-${RID}.nupkg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-dotnet-${{ steps.rid.outputs.rid }}
+          path: dist/dotnet/*.nupkg
+          if-no-files-found: error
