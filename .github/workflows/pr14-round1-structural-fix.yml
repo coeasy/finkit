@@ -37,21 +37,28 @@ jobs:
           if old not in s:
               raise SystemExit('FactorPlan execution block not found')
           s = s.replace(old, new, 1)
+
+          test_marker = '''    #[test]\n    fn compute_input_enforces_runtime_nan_policy() {\n'''
+          regression = '''    #[test]\n    fn factor_plan_direct_paths_reject_stale_registry_dependencies() {\n        fn identity(name: &'static str, dependency: &'static str) -> FactorDefinition {\n            FactorDefinition::new(\n                name,\n                [dependency],\n                FactorKind::TimeSeries,\n                FactorDirection::HigherBetter,\n                Arc::new(move |inputs| Ok(inputs.get(dependency)?.to_vec())),\n            )\n        }\n\n        let mut original = FactorRegistry::new();\n        original.register(identity("target", "close")).unwrap();\n        original.register(identity("other", "volume")).unwrap();\n        let plan = FactorPlan::compile(&original, &["target", "other"]).unwrap();\n        assert_eq!(\n            plan.required_raw_inputs()\n                .iter()\n                .map(String::as_str)\n                .collect::<Vec<_>>(),\n            vec!["close", "volume"]\n        );\n\n        let mut changed = FactorRegistry::new();\n        changed.register(identity("target", "volume")).unwrap();\n        changed.register(identity("other", "volume")).unwrap();\n        let engine = FactorEngine::new(changed);\n\n        let owned = FactorContext::new()\n            .with_series("close", vec![1.0, 2.0])\n            .unwrap()\n            .with_series("volume", vec![10.0, 20.0])\n            .unwrap();\n        let owned_error = plan.execute_precompiled(&engine, &owned).unwrap_err();\n        assert!(matches!(\n            owned_error,\n            FactorError::InvalidParameter(message)\n                if message.contains("factor plan is stale") && message.contains("target")\n        ));\n\n        let close = [1.0, 2.0];\n        let volume = [10.0, 20.0];\n        let borrowed = BorrowedFactorContext::new()\n            .with_series("close", &close)\n            .unwrap()\n            .with_series("volume", &volume)\n            .unwrap();\n        let borrowed_error = plan.execute_borrowed(&engine, &borrowed).unwrap_err();\n        assert!(matches!(\n            borrowed_error,\n            FactorError::InvalidParameter(message)\n                if message.contains("factor plan is stale") && message.contains("target")\n        ));\n    }\n\n'''
+          if test_marker not in s:
+              raise SystemExit('compute input test marker not found')
+          s = s.replace(test_marker, regression + test_marker, 1)
           compute.write_text(s, encoding='utf-8')
 
           factors = Path('core/src/factors.rs')
           s = factors.read_text(encoding='utf-8')
+          split_start = s.find('\nimpl crate::compute::FactorPlan {')
+          split_end_marker = '\n}\n\n/// Simple return over `period` bars with NaN warm-up values.'
+          split_end = s.find(split_end_marker, split_start)
+          if split_start < 0 or split_end < 0:
+              raise SystemExit('split FactorPlan impl block not found')
+          s = s[:split_start] + '\n\n/// Simple return over `period` bars with NaN warm-up values.' + s[split_end + len(split_end_marker):]
+
           marker = '''    fn evaluate_precompiled_raw(\n        &self,\n        execution_order: &[String],\n        required_raw_inputs: &[String],\n        context: &dyn RawFactorContext,\n    ) -> FactorResult<BTreeMap<String, Vec<f64>>> {\n'''
-          wrapper = '''    pub(crate) fn evaluate_precompiled(\n        &self,\n        execution_order: &[String],\n        required_raw_inputs: &[String],\n        context: &FactorContext,\n    ) -> FactorResult<BTreeMap<String, Vec<f64>>> {\n        self.evaluate_precompiled_raw(execution_order, required_raw_inputs, context)\n    }\n\n    pub(crate) fn evaluate_precompiled_borrowed(\n        &self,\n        execution_order: &[String],\n        required_raw_inputs: &[String],\n        context: &BorrowedFactorContext<'_>,\n    ) -> FactorResult<BTreeMap<String, Vec<f64>>> {\n        self.evaluate_precompiled_raw(execution_order, required_raw_inputs, context)\n    }\n\n'''
+          wrappers = '''    pub(crate) fn evaluate_precompiled(\n        &self,\n        execution_order: &[String],\n        required_raw_inputs: &[String],\n        context: &FactorContext,\n    ) -> FactorResult<BTreeMap<String, Vec<f64>>> {\n        self.evaluate_precompiled_raw(execution_order, required_raw_inputs, context)\n    }\n\n    pub(crate) fn evaluate_precompiled_borrowed(\n        &self,\n        execution_order: &[String],\n        required_raw_inputs: &[String],\n        context: &BorrowedFactorContext<'_>,\n    ) -> FactorResult<BTreeMap<String, Vec<f64>>> {\n        self.evaluate_precompiled_raw(execution_order, required_raw_inputs, context)\n    }\n\n'''
           if marker not in s:
               raise SystemExit('evaluate_precompiled_raw marker not found')
-          s = s.replace(marker, wrapper + marker, 1)
-          start = s.find('\nimpl crate::compute::FactorPlan {')
-          end_marker = '\n}\n\n/// Simple return over `period` bars with NaN warm-up values.'
-          end = s.find(end_marker, start)
-          if start < 0 or end < 0:
-              raise SystemExit('split FactorPlan impl block not found')
-          s = s[:start] + '\n' + s[end + 3:]
+          s = s.replace(marker, wrappers + marker, 1)
           factors.write_text(s, encoding='utf-8')
           PY
       - name: Apply rustfmt
