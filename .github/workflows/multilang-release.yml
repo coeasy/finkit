@@ -115,20 +115,23 @@ jobs:
       - run: mkdir -p ffi/java-binding/natives/linux-x86_64 && cp target/release/libfinkit_java.so ffi/java-binding/natives/linux-x86_64/
         shell: bash
       - run: mvn -B -f ffi/java-binding/pom.xml -DskipTests package
-      - name: Verify and smoke-test packaged JNI library
+      - name: Verify, smoke-test and stage packaged JNI library
         shell: bash
         run: |
           set -euo pipefail
-          JAR="ffi/java-binding/target/finkit-${{ needs.version-contract.outputs.version }}.jar"
+          VERSION="${{ needs.version-contract.outputs.version }}"
+          JAR="ffi/java-binding/target/finkit-${VERSION}.jar"
           test -f "$JAR"
           jar tf "$JAR" | grep -q 'natives/linux-x86_64/libfinkit_java.so'
           printf '%s\n' 'import com.finkit.Indicators;' 'public final class FinkitSmoke { public static void main(String[] args) { double[] out = Indicators.sma(new double[]{1,2,3,4,5}, 3); if (out.length != 5 || Math.abs(out[4] - 4.0) > 1e-9) throw new RuntimeException("bad SMA"); } }' > "$RUNNER_TEMP/FinkitSmoke.java"
           javac -cp "$JAR" "$RUNNER_TEMP/FinkitSmoke.java"
           java -cp "$JAR:$RUNNER_TEMP" FinkitSmoke
+          mkdir -p dist/java
+          cp "$JAR" "dist/java/finkit-java-${VERSION}-linux-x86_64.jar"
       - uses: actions/upload-artifact@v4
         with:
           name: release-java-linux
-          path: ffi/java-binding/target/finkit-*.jar
+          path: dist/java/*.jar
           if-no-files-found: error
 
   cpp-linux:
@@ -174,7 +177,7 @@ jobs:
           CGO_ENABLED: "1"
           LD_LIBRARY_PATH: ${{ github.workspace }}/target/release
         run: go test ./...
-      - name: Build external Go example
+      - name: Build external Go example from checkout
         working-directory: ffi/go-binding
         env:
           CGO_ENABLED: "1"
@@ -193,18 +196,37 @@ jobs:
           cp examples/example.go "$RUNNER_TEMP/finkit-go-example/main.go"
           cd "$RUNNER_TEMP/finkit-go-example"
           go run .
-      - name: Package Go source and Linux native library
+      - name: Package and smoke-test standalone Go candidate
         shell: bash
         run: |
           set -euo pipefail
           VERSION="${{ needs.version-contract.outputs.version }}"
           ROOT="dist/go/finkit-go-${VERSION}-linux-x86_64"
-          mkdir -p "$ROOT/lib"
+          ARCHIVE="dist/go/finkit-go-${VERSION}-linux-x86_64.tar.gz"
+          mkdir -p "$ROOT"
           cp -R ffi/go-binding/go "$ROOT/go"
+          mkdir -p "$ROOT/go/native/linux-x86_64"
+          cp target/release/libfinkit_go.so "$ROOT/go/native/linux-x86_64/"
           cp ffi/go-binding/README.md "$ROOT/README.md"
-          cp target/release/libfinkit_go.so "$ROOT/lib/"
-          tar -czf "dist/go/finkit-go-${VERSION}-linux-x86_64.tar.gz" -C dist/go "finkit-go-${VERSION}-linux-x86_64"
-          rm -rf "$ROOT"
+          tar -czf "$ARCHIVE" -C dist/go "finkit-go-${VERSION}-linux-x86_64"
+
+          SMOKE_ROOT="$RUNNER_TEMP/finkit-go-package-smoke"
+          rm -rf "$SMOKE_ROOT"
+          mkdir -p "$SMOKE_ROOT"
+          tar -xzf "$ARCHIVE" -C "$SMOKE_ROOT"
+          PACKAGE_ROOT="$SMOKE_ROOT/finkit-go-${VERSION}-linux-x86_64"
+          mkdir -p "$SMOKE_ROOT/app"
+          cat > "$SMOKE_ROOT/app/go.mod" <<EOF
+          module example.com/finkit-go-package-smoke
+
+          go 1.23
+
+          require github.com/coeasy/finkit/ffi/go-binding/go v0.0.0
+          replace github.com/coeasy/finkit/ffi/go-binding/go => ${PACKAGE_ROOT}/go
+          EOF
+          cp ffi/go-binding/examples/example.go "$SMOKE_ROOT/app/main.go"
+          cd "$SMOKE_ROOT/app"
+          CGO_ENABLED=1 LD_LIBRARY_PATH="$PACKAGE_ROOT/go/native/linux-x86_64" go run .
       - uses: actions/upload-artifact@v4
         with:
           name: release-go-linux-x86_64
@@ -228,19 +250,28 @@ jobs:
           set -euo pipefail
           mkdir -p ffi/dotnet-binding/native/linux-x64/native
           cp target/release/libfinkit_dotnet.so ffi/dotnet-binding/native/linux-x64/native/
-      - name: Test managed binding
+      - name: Test managed binding with pinned .NET 8 SDK
+        working-directory: ffi/dotnet-binding
         env:
           LD_LIBRARY_PATH: ${{ github.workspace }}/target/release
-        run: dotnet test ffi/dotnet-binding/src/Finkit.Tests/Finkit.Tests.csproj -c Release --framework net8.0
-      - name: Pack and inspect NuGet candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet --version | grep -E '^8\.'
+          dotnet test src/Finkit.Tests/Finkit.Tests.csproj -c Release --framework net8.0
+      - name: Pack and inspect Linux NuGet candidate
+        working-directory: ffi/dotnet-binding
         shell: bash
         run: |
           set -euo pipefail
           VERSION="${{ needs.version-contract.outputs.version }}"
-          dotnet pack ffi/dotnet-binding/src/Finkit/Finkit.csproj -c Release -o dist/dotnet
-          NUPKG="dist/dotnet/Finkit.${VERSION}.nupkg"
+          dotnet --version | grep -E '^8\.'
+          dotnet pack src/Finkit/Finkit.csproj -c Release
+          NUPKG="src/Finkit/bin/Release/Finkit.${VERSION}.nupkg"
           test -f "$NUPKG"
           unzip -l "$NUPKG" | grep -q 'runtimes/linux-x64/native/libfinkit_dotnet.so'
+          mkdir -p ../../dist/dotnet
+          cp "$NUPKG" "../../dist/dotnet/finkit-dotnet-${VERSION}-linux-x64.nupkg"
       - uses: actions/upload-artifact@v4
         with:
           name: release-dotnet-linux-x86_64
@@ -294,7 +325,7 @@ jobs:
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973" >> "$GITHUB_ENV"
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --locked
-      - name: Build Android native libraries
+      - name: Build and verify Android native libraries
         shell: bash
         run: |
           set -euo pipefail
@@ -307,6 +338,10 @@ jobs:
             build --release --locked -p finkit-android
           find ffi/android-binding/android/src/main/jniLibs -name 'libfinkit_android.so' -print
           test "$(find ffi/android-binding/android/src/main/jniLibs -name 'libfinkit_android.so' | wc -l)" -eq 4
+          X86_LIB="ffi/android-binding/android/src/main/jniLibs/x86_64/libfinkit_android.so"
+          nm -D --defined-only "$X86_LIB" | grep -q 'Java_com_finkit_indicators_Finkit_smaNative'
+          nm -D --defined-only "$X86_LIB" | grep -q 'Java_com_finkit_indicators_Finkit_version'
+          nm -D --defined-only "$X86_LIB" | grep -q 'finkit_android_abi_version'
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.7"
@@ -413,7 +448,7 @@ jobs:
         run: |
           set -euo pipefail
           rm -f release-assets/finkit-*.crate release-assets/finkit-cli-*
-          find release-assets -type f -maxdepth 1 -print | sort
+          find release-assets -maxdepth 1 -type f -print | sort
           test -n "$(find release-assets -maxdepth 1 -type f -print -quit)"
           (cd release-assets && sha256sum * > SHA256SUMS.multilang)
       - name: Create or update GitHub Release and upload supplemental assets
