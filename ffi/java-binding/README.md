@@ -1,285 +1,108 @@
-# Finkit Java Bindings
+# Finkit Java/JNI Binding
 
-High-performance technical analysis indicators for Java, powered by a Rust core via JNI.
+This directory contains the Java binding for Finkit `v0.1.3`, backed by a Rust JNI library.
 
-## Features
+## Status
 
-- **100+ indicators** across all major categories
-- **Zero-copy JNI** for maximum performance
-- **Multi-platform**: Windows, Linux, macOS (x86_64 & aarch64)
-- **Java 8-21** compatible
-- **Complete Javadoc** documentation
-- **Native library auto-loading** (no manual LD_LIBRARY_PATH setup)
+The permanent multi-language CI validates the Java packaging path by:
 
-## Indicators
+1. building the Rust `finkit-java` JNI library;
+2. copying the host native library into the JAR resource layout;
+3. running Maven package/Javadoc;
+4. asserting that the native resource is present in the JAR;
+5. compiling and running a Java smoke program that loads the native library and computes SMA.
 
-### Overlap Studies
-| Indicator | Description |
-|-----------|-------------|
-| SMA | Simple Moving Average |
-| EMA | Exponential Moving Average |
-| WMA | Weighted Moving Average |
-| DEMA | Double Exponential Moving Average |
-| TEMA | Triple Exponential Moving Average |
-| KAMA | Kaufman's Adaptive Moving Average |
-| T3 | Triple EMA with variable smoothing |
-| MAMA | MESA Adaptive Moving Average |
-| BBANDS | Bollinger Bands |
-| MIDPOINT | MidPoint over period |
-| MIDPRICE | MidPrice over period |
-| SAR | Parabolic SAR |
+The GitHub `v0.1.3` Release does not currently contain a Java JAR/native bundle, and this documentation does **not** assume that `com.finkit:finkit:0.1.3` has been published to Maven Central.
 
-### Momentum Indicators
-| Indicator | Description |
-|-----------|-------------|
-| RSI | Relative Strength Index |
-| MACD | Moving Average Convergence Divergence |
-| STOCH | Stochastic Oscillator |
-| ADX | Average Directional Index |
-| AROON | Aroon Up/Down |
-| CCI | Commodity Channel Index |
-| CMO | Chande Momentum Oscillator |
-| DX | Directional Movement Index |
-| MOM | Momentum |
-| ROC | Rate of Change |
-| WILLR | Williams %R |
-| APO | Absolute Price Oscillator |
-| BOP | Balance of Power |
-| MFI | Money Flow Index |
-| PLUS_DI | Plus Directional Indicator |
-| MINUS_DI | Minus Directional Indicator |
-| TRIX | Triple Exponential Average |
+## Requirements
 
-### Volume Indicators
-| Indicator | Description |
-|-----------|-------------|
-| OBV | On Balance Volume |
-| AD | Accumulation/Distribution Line |
-| ADOSC | AD Oscillator |
+- Rust 1.85+;
+- JDK compatible with the project's Java source/target configuration;
+- Maven;
+- platform native compiler/linker.
 
-### Volatility Indicators
-| Indicator | Description |
-|-----------|-------------|
-| ATR | Average True Range |
-| NATR | Normalized ATR |
-| TRANGE | True Range |
+## Build from source
 
-### Price Transforms
-| Indicator | Description |
-|-----------|-------------|
-| AVGPRICE | Average Price |
-| MEDPRICE | Median Price |
-| TYPPRICE | Typical Price |
-| WCLPRICE | Weighted Close Price |
-
-### Cycle Indicators (Hilbert Transform)
-| Indicator | Description |
-|-----------|-------------|
-| HT_DCPERIOD | Dominant Cycle Period |
-| HT_DCPHASE | Dominant Cycle Phase |
-| HT_PHASOR | Phasor Components |
-| HT_SINE | Sine Wave |
-| HT_TRENDMODE | Trend vs Cycle Mode |
-| HT_TRENDLINE | Instantaneous Trendline |
-
-### Statistical Indicators
-| Indicator | Description |
-|-----------|-------------|
-| ZSCORE | Z-Score |
-| PERCENT_RANK | Percent Rank |
-| BETA | Beta |
-| CORRELATION | Pearson Correlation |
-| STDDEV | Standard Deviation |
-| LINEAR_REG | Linear Regression |
-| TSF | Time Series Forecast |
-
-### Candlestick Patterns (60+ patterns)
-- **Single**: Doji, Marubozu, Hammer, Hanging Man, Shooting Star, Spinning Top, etc.
-- **Dual**: Engulfing, Harami, Harami Cross, Piercing, Dark Cloud Cover, Tweezer, etc.
-- **Triple**: Morning Star, Evening Star, Three White Soldiers, Three Black Crows, etc.
-- **Complex**: Abandoned Baby, Kicking, Concealing Baby Swallow, Breakaway, etc.
-
-### Chart Patterns (15+ patterns)
-- **Reversal**: Head & Shoulders (Top/Bottom), Double/Triple Top/Bottom
-- **Triangle**: Ascending, Descending, Symmetrical
-- **Wedge**: Rising, Falling
-- **Continuation**: Pennant, Flag, Rectangle
-
-## Installation
-
-### Maven
-
-```xml
-<dependency>
-    <groupId>com.finkit</groupId>
-    <artifactId>finkit</artifactId>
-    <version>1.0.0</version>
-</dependency>
-```
-
-### Gradle
-
-```groovy
-implementation 'com.finkit:finkit:1.0.0'
-```
-
-## Quick Start
-
-```java
-import com.finkit.*;
-
-public class Example {
-    public static void main(String[] args) {
-        // Simple Moving Average
-        double[] prices = {100.0, 101.0, 102.0, 103.0, 104.0, 105.0};
-        double[] sma = Indicators.sma(prices, 3);
-
-        // MACD
-        MacdResult macd = new MacdResult();
-        Indicators.macd(prices, 12, 26, 9, macd);
-        // macd.macd, macd.signal, macd.hist
-
-        // Bollinger Bands
-        BbandsResult bbands = new BbandsResult();
-        Indicators.bbands(prices, 20, 2.0, 2.0, bbands);
-        // bbands.upper, bbands.middle, bbands.lower
-
-        // RSI
-        double[] rsi = Indicators.rsi(prices, 14);
-
-        // Stochastic
-        StochResult stoch = new StochResult();
-        Indicators.stoch(high, low, close, 14, 3, 3, stoch);
-        // stoch.k, stoch.d
-
-        // Candlestick Pattern
-        int[] hammer = Patterns.cdlHammer(open, high, low, close);
-        for (int i = 0; i < hammer.length; i++) {
-            if (hammer[i] == 100) {
-                System.out.println("Bullish hammer at bar " + i);
-            } else if (hammer[i] == -100) {
-                System.out.println("Bearish hammer at bar " + i);
-            }
-        }
-
-        // Chart Pattern
-        int[] hs = ChartPatterns.detectHeadShouldersTop(high, 10, 1.1);
-        for (int i = 0; i < hs.length; i++) {
-            if (hs[i] == -1) {
-                System.out.println("H&S Top at bar " + i);
-            }
-        }
-    }
-}
-```
-
-## Native Library Loading
-
-The native library is automatically loaded when any indicator class is first used. Supported platforms:
-
-| OS | Architecture | Library File |
-|----|-------------|--------------|
-| Windows | x86_64 | `finkit_java.dll` |
-| Linux | x86_64 | `libfinkit_java.so` |
-| Linux | aarch64 | `libfinkit_java.so` |
-| macOS | x86_64 | `libfinkit_java.dylib` |
-| macOS | aarch64 | `libfinkit_java.dylib` |
-
-If the native library is not bundled with the JAR, set the library path:
+From the repository root on Linux x86_64:
 
 ```bash
-java -Djava.library.path=/path/to/native/lib -jar your-app.jar
+cargo build -p finkit-java --release --locked
+mkdir -p ffi/java-binding/natives/linux-x86_64
+cp target/release/libfinkit_java.so ffi/java-binding/natives/linux-x86_64/
+mvn -B -f ffi/java-binding/pom.xml -DskipTests package
 ```
 
-Or programmatically:
+For macOS or Windows, build the corresponding Rust dynamic library and stage it under the matching `natives/<os>-<arch>/` directory with the platform filename before packaging the JAR.
 
-```java
-System.setProperty("java.library.path", "/path/to/native/lib");
-```
+## Native loading
 
-## Building from Source
+`NativeLoader` uses this order:
 
-### Prerequisites
-- Rust 1.85+ (workspace MSRV)
-- Java 8+ (JDK)
-- Maven 3.6+
+1. an explicit native path supplied through the `finkit.native.path` system property;
+2. a packaged native resource under `/natives/<os>-<arch>/<mapped-library-name>`;
+3. `System.loadLibrary("finkit_java")` as the normal system-library fallback.
 
-### Build native library
+Example with an explicit native library:
 
 ```bash
-cd ffi/java-binding
-cargo build --release
+java -Dfinkit.native.path=/absolute/path/to/libfinkit_java.so -cp your-app.jar Example
 ```
 
-### Build Java JAR
+A Java JAR is not independently portable unless it contains the native library for the target OS/architecture or the process can load that library externally.
 
-```bash
-cd ffi/java-binding
-mvn clean package
-```
-
-### Run tests
-
-```bash
-# Rust tests
-cargo test
-
-# Java tests (if any)
-mvn test
-```
-
-## API Reference
-
-Full Javadoc is available at:
-- [Indicators](https://javadoc.io/doc/com.finkit/finkit/latest/com.finkit/Indicators.html)
-- [Patterns](https://javadoc.io/doc/com.finkit/finkit/latest/com.finkit/Patterns.html)
-- [ChartPatterns](https://javadoc.io/doc/com.finkit/finkit/latest/com.finkit/ChartPatterns.html)
-
-## Memory Management
-
-Several JNI methods return a `jstring` (e.g. `getVersion`, `getLastError`, indicator
-name lists, JSON-serialised results). Each returned `jstring` is a **JNI local reference**
-allocated by the native side via `env.new_string(...).into_raw()`. Local refs are
-scoped to the calling thread's JNI frame and **must be explicitly released** by the
-caller to avoid the JVM's local reference table growing unbounded (which manifests as
-`JNI ERROR (app bug): local reference table overflow` on long-running batches).
-
-### `freeJString` contract
-
-- JNI signature:
-  ```
-  Java_com_finkit_Indicators_freeJString(JNIEnv* env, jclass, jstring ref)
-  ```
-  Implementation: `env->DeleteLocalRef(ref)`. The function is exported from
-  `ffi/java-binding/src/lib.rs` and is safe to call with a `null` `jstring` (no-op).
-- The Java side **must**:
-  1. Receive the `String` (or `jstring` reference) from a `ta_*` call.
-  2. Copy the contents into a managed `String` (e.g. via `new String(jstring.getBytes(UTF_8), UTF_8)`) once.
-  3. Call `Indicators.freeJString(jstringRef)` to release the JNI local reference. The
-     `jstring` reference passed in is the **same reference** returned by the native
-     call, **not** the managed `String` you copied to.
-- The same `jstring` ref must never be freed twice (double-free ⇒ JNI may abort the
-  JVM or silently corrupt the local reference table).
-- The native side no longer holds the string after returning it — the caller's
-  release is the only release.
-
-### Example
+## Basic usage
 
 ```java
 import com.finkit.Indicators;
 
-long jstrRef = Indicators.getVersion();          // raw jstring ref (long)
-String version = Indicators.fromJString(jstrRef); // copy to managed String
-Indicators.freeJString(jstrRef);                  // release JNI local ref
-System.out.println("Finkit " + version);
+public class Example {
+    public static void main(String[] args) {
+        double[] close = {1, 2, 3, 4, 5};
+        double[] sma = Indicators.sma(close, 3);
+        System.out.println(sma[sma.length - 1]);
+    }
+}
 ```
 
-> **Why explicit release?** The previous design relied on the JVM's `PushLocalFrame` /
-> `PopLocalFrame` cleanup at the end of the calling method. While that usually works,
-> it leaks local refs in long-running batch loops (one ref per call) until the
-> per-thread table overflows. The explicit `freeJString` contract eliminates this
-> class of bug.
+The Java API also includes wrappers for momentum, volatility, volume, statistical, price-transform, candlestick, chart-pattern, formula, and other Finkit capabilities implemented by the binding. Use the Java sources and generated core registry as the exact current API source of truth rather than relying on a hard-coded indicator count.
+
+## Packaging for another platform
+
+The resource directory must match the platform expected by `NativeLoader`. The current loader recognizes platform families including:
+
+- `windows-x86_64` and `windows-aarch64`;
+- `macos-x86_64` and `macos-aarch64`;
+- `linux-x86_64` and `linux-aarch64`.
+
+The native library name is platform-mapped, for example:
+
+- Windows: `finkit_java.dll`;
+- Linux: `libfinkit_java.so`;
+- macOS: `libfinkit_java.dylib`.
+
+A platform being recognized by the loader does not by itself mean that a prebuilt v0.1.3 artifact has been published for it.
+
+## Validate the JAR
+
+After Maven packaging, inspect the artifact:
+
+```bash
+jar tf ffi/java-binding/target/*.jar | grep natives
+```
+
+Then compile/run a small Java program using `Indicators.sma(...)` on the target platform. A successful Maven build without a successful native-load smoke test is not sufficient release validation.
+
+## Registry publication
+
+The POM contains publication metadata, but registry publication is a separate release operation. Do not document a Maven/Gradle dependency from Maven Central until the exact `com.finkit:finkit:<version>` artifact is visible and install-tested from that registry.
+
+## Related documentation
+
+- [Installation guide](../../docs/installation.md)
+- [Complete usage guide](../../docs/usage.md)
+- [Indicator catalog](../../docs/generated/indicators.md)
+- [FFI memory contract](../../docs/ffi/memory-contract.md)
 
 ## License
 
-MIT License. See [LICENSE](../../LICENSE) for details.
+MIT OR Apache-2.0

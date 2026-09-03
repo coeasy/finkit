@@ -18,7 +18,7 @@ Finkit Pine 方言是 TradingView Pine Script v5 的**有意裁剪子集**，目
 2. 将 `ta.*` / `math.*` 内置函数映射到 Finkit 公式函数
 3. 支持 bar-by-bar series 求值语义（`core/src/formula/pine/runtime.rs`）
 
-**不支持**完整 Pine 生态（策略、库、UDT、完整绘图对象等）。详见 [兼容矩阵](../PINE_COMPAT_MATRIX.md)。
+**不支持**完整 Pine 生态（策略、库、UDT、完整绘图对象等）。详见 [兼容矩阵](../generated/pine-compatibility.md)。
 
 ---
 
@@ -204,5 +204,5 @@ Pine 源码 → parse_pine() → PineAst
 ## 相关文档
 
 - [Finkit 公式文法（TDX 方言）](./grammar.md)
-- [Pine 兼容矩阵](../PINE_COMPAT_MATRIX.md)
+- [Pine 兼容矩阵](../generated/pine-compatibility.md)
 - [Pine → Finkit 迁移指南](../migration/pine-to-alphata.md)

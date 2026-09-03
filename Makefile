@@ -1,15 +1,15 @@
 # =============================================================================
-# AlphaTA — one-click build for multi-language usage packages + TA-Lib compare
+# Finkit — one-click build for multi-language usage packages + TA-Lib compare
 # =============================================================================
 #
 # Quick start:
 #   make help              # show all targets
-#   make                   # build + verify all 7 languages
-#   make python            # build + verify Python wheel only
-#   make bench-vs-talib    # run AlphaTA vs TA-Lib C head-to-head
-#   make docker-build      # build the true one-click Docker image
+#   make                   # build + verify all discovered language packages
+#   make python            # build + verify Python package only
+#   make bench-vs-talib    # run Finkit vs TA-Lib C head-to-head
+#   make docker-build      # build the one-click Docker image
 #   make docker-run        # run the build inside the image, mount ./dist
-#   make install-and-test  # install all built artifacts locally + run smoke
+#   make install-and-test  # install built artifacts locally + run smoke tests
 #   make clean             # wipe dist/
 #
 # This Makefile is a thin wrapper — the actual logic lives in:
@@ -81,10 +81,9 @@ preflight:
 	@echo "[make] preflight toolchain check"
 	@$(PREFLIGHT)
 
-# ---- lint: local pre-check mirroring the CI clippy gates ----------------
-# First-time setup: `rustup component add clippy` (clippy is NOT bundled with
-# the stable toolchain by default). This target reproduces ci.yml's fmt +
-# clippy gates so contributors can catch -D warnings failures before pushing.
+# ---- lint: convenient local Rust formatting/clippy pre-check --------------
+# First-time setup: `rustup component add clippy`. The permanent CI workflow
+# remains the source of truth for the complete locked/all-feature gate matrix.
 lint:
 	cargo fmt --all -- --check
 	cargo clippy --workspace --all-targets -- -D warnings
@@ -107,23 +106,21 @@ gen-c-header:
 verify-ffi:
 	python3 $(ROOT)/scripts/gen_c_header.py --check $(ROOT)/ffi/c-binding/include/finkit.h
 
-# ---- codegen: regenerate the C *Rust* wrappers from the indicator registry --
+# ---- codegen: regenerate the C Rust wrappers from the indicator registry ---
 # `gen-c-binding` rewrites ffi/c-binding/src/{lib.rs -> include! generated.rs}
 # from docs/indicator_registry.json. `verify-bindings` fails CI if the
-# committed generated.rs has drifted from the registry (keeps the single
-# source of truth honest). Python/Node emitters are generated on demand via
-# `scripts/gen_binding.py --lang python|node --generate <path>` (see plan).
+# committed generated.rs has drifted from the registry. Python/Node emitters
+# can be generated on demand with scripts/gen_binding.py.
 gen-c-binding:
 	python3 $(ROOT)/scripts/gen_binding.py --lang c --rewrite-cbinding
 
 verify-bindings:
 	python3 $(ROOT)/scripts/gen_binding.py --lang c --check
 
-# ---- codegen: registry-driven drift check for ALL 8 FFI bindings ---------
-# `verify-all-bindings` runs scripts/sync_bindings.py --check across every
-# language (c/python/node/go/java/dotnet/ios/android). It fails if any
-# committed generated.rs (or hand-written lib.rs) has drifted from
-# docs/indicator_registry.json, keeping the single source of truth honest.
+# ---- codegen: registry-driven drift check for all tracked FFI bindings -----
+# `verify-all-bindings` runs scripts/sync_bindings.py --check across the
+# registry-backed language bindings and fails if committed wrappers drift from
+# docs/indicator_registry.json.
 verify-all-bindings:
 	python3 $(ROOT)/scripts/sync_bindings.py --check
 
@@ -132,12 +129,12 @@ help:
 	@echo ""
 	@echo "Finkit one-click targets"
 	@echo "========================"
-	@echo "  make                  Build + verify all 7 languages (default)"
+	@echo "  make                  Build + verify all discovered language packages (default)"
 	@echo "  make <lang>           Build + verify a single language"
 	@echo "                          languages: $(LANGS)"
 	@echo "  make bench-vs-talib   Finkit vs TA-Lib C head-to-head"
-	@echo "  make install-and-test Install every built artifact + run smoke"
-	@echo "  make docker-build     Build the true one-click Docker image"
+	@echo "  make install-and-test Install built artifacts + run smoke tests"
+	@echo "  make docker-build     Build the one-click Docker image"
 	@echo "  make docker-run       Run the build inside Docker (mounts ./dist)"
 	@echo "  make docker-bench     Run only --bench-talib inside Docker"
 	@echo "  make preflight        Toolchain pre-check (no build)"
@@ -146,7 +143,7 @@ help:
 	@echo "  make verify-ffi       Fail if the C header has drifted from the registry"
 	@echo "  make gen-c-binding    Regenerate ffi/c-binding/src/{lib.rs,generated.rs} from registry"
 	@echo "  make verify-bindings  Fail if the C wrappers drifted from the registry"
-	@echo "  make verify-all-bindings  Fail if ANY of the 8 bindings drifted from the registry"
+	@echo "  make verify-all-bindings  Fail if tracked bindings drift from the registry"
 	@echo ""
 	@echo "Underlying scripts (read these for full control):"
 	@echo "  build-usage.{sh,ps1}                  Root entry point"

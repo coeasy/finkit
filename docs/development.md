@@ -1,698 +1,342 @@
 # Development Guide
 
-This guide explains how to contribute to Finkit, build from source, and develop new features.
+This guide describes the current development and validation workflow for Finkit `v0.1.3` and the main branch. It is intended for contributors changing the Rust core, formula/runtime logic, generated metadata, native bindings, release packaging, or documentation.
 
-## Getting Started
+## 1. Repository layout
 
-### Prerequisites
+Important top-level areas:
 
-- **Rust**: 1.85+ (workspace MSRV; install via [rustup](https://rustup.rs/))
-- **Git**: For version control
-- **Python**: 3.8+ (for Python binding development)
-- **Node.js**: 16+ (for Node.js binding development)
-- **Java**: JDK 11+ (for Java binding development)
-- **Go**: 1.21+ (for Go binding development)
-- **.NET**: SDK 8.0+ (for .NET binding development)
+| Path | Purpose |
+| --- | --- |
+| `core/` | Rust calculation engine, formula/runtime/factors/streaming/features |
+| `cli/` | `finkit-cli` command-line package and `finkit-schema` tooling |
+| `ffi/python-binding/` | PyO3/maturin Python binding |
+| `ffi/node-binding/` | NAPI-RS Node.js binding |
+| `ffi/java-binding/` | JNI + Maven Java binding |
+| `ffi/c-binding/` | C/C++ SDK wrapper and CMake package |
+| `ffi/go-binding/` | Go/CGO source integration |
+| `ffi/dotnet-binding/` | .NET/P-Invoke source integration |
+| `ffi/android-binding/`, `ffi/ios-binding/`, `ffi/wasm-binding/` | mobile/WASM source integrations |
+| `docs/` | canonical user/API/architecture/generated documentation |
+| `scripts/` | version, SSOT generation, benchmark, release/helper scripts |
+| `.github/workflows/` | CI, docs, wheel, and multi-language validation |
 
-### Clone and Setup
+`docs/README.md` is the canonical documentation index. Completed plans and temporary implementation snapshots should not be reintroduced as current user documentation.
 
-```bash
-git clone https://github.com/coeasy/finkit.git
-cd finkit
-```
-
-## Project Structure
-
-```
-Finkit/
-├── core/                       # Core Rust library
-│   ├── src/
-│   │   ├── lib.rs              # Library entry point
-│   │   ├── error.rs            # Error types
-│   │   ├── factors.rs          # Dependency-aware factor evaluation
-│   │   ├── registry.rs          # Function metadata and aliases
-│   │   ├── runtime.rs           # Aligned MarketFrame and runtime policies
-│   │   ├── utils.rs            # Utility functions
-│   │   ├── indicators/         # Technical indicators
-│   │   │   ├── mod.rs
-│   │   │   ├── overlap.rs      # SMA, EMA, BBANDS, SAR, etc.
-│   │   │   ├── momentum.rs     # RSI, MACD, STOCH, ADX, etc.
-│   │   │   ├── volume.rs       # OBV, AD, ADOSC, CMF
-│   │   │   ├── volatility.rs   # ATR, NATR, TRANGE
-│   │   │   ├── cycle.rs        # HT_DCPERIOD, HT_SINE, etc.
-│   │   │   ├── price_transform.rs  # AVGPRICE, TYPPRICE, etc.
-│   │   │   └── statistics.rs   # STDDEV, VAR, LINEARREG, ZSCORE
-│   │   ├── math/               # Mathematical foundation
-│   │   │   ├── mod.rs
-│   │   │   ├── moving_avg.rs   # SMA, EMA, WMA, DEMA, TEMA, KAMA
-│   │   │   ├── linear.rs       # Linear regression
-│   │   │   └── statistics.rs   # Mean, variance, correlation
-│   │   └── patterns/           # Pattern recognition
-│   │       ├── mod.rs
-│   │       ├── candlestick.rs  # 60+ candlestick patterns
-│   │       └── chart.rs        # 15+ chart patterns
-│   └── Cargo.toml
-├── ffi/                        # FFI bindings
-│   ├── c-binding/              # C FFI (base layer)
-│   ├── python-binding/         # Python (PyO3)
-│   ├── node-binding/           # Node.js (NAPI-RS)
-│   ├── java-binding/           # Java (JNI)
-│   ├── go-binding/             # Go (CGO)
-│   └── dotnet-binding/         # .NET (P/Invoke)
-├── cli/                        # Command-line interface
-├── wasm/                       # WebAssembly module
-├── visualization/              # Visualization module
-├── .github/workflows/          # CI/CD pipelines
-└── docs/                       # Documentation
-```
-
-## Building
-
-### Core Library
-
-```bash
-# Build
-cargo build --release
-
-# Build with all features
-cargo build --release --all-features
-
-# Run tests
-cargo test
-
-# Run tests for specific crate
-cargo test -p finkit
-
-# Run benchmarks
-cargo bench
-```
-
-### Python Binding
-
-```bash
-cd ffi/python-binding
-
-# Development mode (installs in current Python environment)
-maturin develop --release
-
-# Build wheel
-maturin build --release --out dist
-
-# Run tests
-pip install pytest numpy
-pytest
-```
-
-### Node.js Binding
-
-```bash
-cd ffi/node-binding
-
-# Install dependencies
-npm install
-
-# Build native module
-npm run build
-
-# Build debug version
-npm run build:debug
-
-# Run tests
-npm test
-```
-
-### Java Binding
-
-```bash
-cd ffi/java-binding
-
-# Build Rust library
-cargo build --release
-
-# Build Java artifacts
-mvn clean install -DskipTests
-
-# Run tests
-mvn test
-```
-
-### Go Binding
-
-```bash
-cd ffi/go-binding
-
-# Build native library
-make build
-
-# Run tests
-go test -v ./...
-```
-
-### .NET Binding
-
-```bash
-cd ffi/dotnet-binding
-
-# Build Rust library
-cargo build --release
-
-# Build .NET library
-cd src/Finkit
-dotnet build --configuration Release
-
-# Run tests
-cd ../Finkit.Tests
-dotnet test
-```
-
-### WebAssembly
-
-```bash
-cd wasm
-
-# Install wasm-pack
-cargo install wasm-pack
-
-# Build for web
-wasm-pack build --target web --out-dir pkg
-
-# Build for Node.js
-wasm-pack build --target nodejs --out-dir pkg
-```
-
-### CLI
-
-```bash
-cd cli
-
-# Build
-cargo build --release
-
-# Install locally
-cargo install --path .
-```
-
-## Code Style
+## 2. Toolchains
 
 ### Rust
 
-Follow [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/):
+The current workspace MSRV is Rust 1.85+.
 
-- Use `cargo fmt` to format code:
-  ```bash
-  cargo fmt --all
-  ```
-
-- Run clippy for linting:
-  ```bash
-  cargo clippy --workspace --all-targets --all-features -- -D warnings
-  ```
-
-- Write documentation comments for all public items:
-  ```rust
-  /// Calculate the Simple Moving Average.
-  ///
-  /// # Arguments
-  ///
-  /// * `data` - Input data array
-  /// * `period` - Number of periods for the moving average
-  ///
-  /// # Returns
-  ///
-  /// Array of SMA values, same length as input
-  ///
-  /// # Errors
-  ///
-  /// Returns `TaError::InvalidPeriod` if period is 0
-  /// Returns `TaError::InsufficientData` if data length < period
-  pub fn sma(data: &[f64], period: usize) -> Result<Vec<f64>> {
-      // Implementation
-  }
-  ```
+```bash
+rustc --version
+cargo --version
+rustup component add rustfmt clippy
+```
 
 ### Python
 
-Follow [PEP 8](https://peps.python.org/pep-0008/):
-
-- Use type hints
-- Write docstrings in Google style
-- Format with black:
-  ```bash
-  pip install black
-  black ffi/python-binding/
-  ```
-
-### Node.js
-
-Follow [Standard Style](https://standardjs.com/):
-
-- Use TypeScript
-- Format with Prettier
-- Run ESLint
-
-## Adding New Indicators
-
-### 1. Implement in Core
-
-Create a new file or add to existing module in `core/src/indicators/`:
-
-```rust
-// core/src/indicators/my_indicator.rs
-
-use crate::error::{TaError, Result};
-use crate::utils::validate_period;
-
-/// Calculate my custom indicator.
-///
-/// # Arguments
-///
-/// * `data` - Input data array
-/// * `period` - Lookback period
-pub fn my_indicator(data: &[f64], period: usize) -> Result<Vec<f64>> {
-    validate_period(period)?;
-    validate_data_length(data, period)?;
-
-    let mut result = vec![f64::NAN; data.len()];
-
-    for i in period - 1..data.len() {
-        // Calculation logic
-        let sum: f64 = data[i - period + 1..=i].iter().sum();
-        result[i] = sum / period as f64;
-    }
-
-    Ok(result)
-}
-
-fn validate_data_length(data: &[f64], period: usize) -> Result<()> {
-    if data.len() < period {
-        return Err(TaError::InsufficientData {
-            needed: period,
-            actual: data.len(),
-        });
-    }
-    Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use approx::assert_relative_eq;
-
-    #[test]
-    fn test_my_indicator_basic() {
-        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
-        let result = my_indicator(&data, 3).unwrap();
-
-        assert!(result[0].is_nan());
-        assert!(result[1].is_nan());
-        assert_relative_eq!(result[2], 2.0);
-        assert_relative_eq!(result[3], 3.0);
-        assert_relative_eq!(result[4], 4.0);
-    }
-
-    #[test]
-    fn test_my_indicator_insufficient_data() {
-        let data = vec![1.0, 2.0];
-        let result = my_indicator(&data, 5);
-        assert!(result.is_err());
-    }
-}
-```
-
-### 2. Export from Module
-
-Add to `core/src/indicators/mod.rs`:
-
-```rust
-mod my_indicator;
-pub use my_indicator::my_indicator;
-```
-
-### 3. Add to Python Binding
-
-Add to `ffi/python-binding/src/lib.rs`:
-
-```rust
-#[pyfunction]
-#[pyo3(signature = (close, timeperiod=14))]
-fn my_indicator(close: &PyArray1<f64>, timeperiod: usize) -> PyResult<Py<PyArray1<f64>>> {
-    let data = close.readonly().as_slice().map_err(|_| {
-        PyErr::new::<pyo3::exceptions::PyValueError, _>("Failed to read array")
-    })?;
-
-    let result = indicators::my_indicator(data, timeperiod).map_err(|e| {
-        PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string())
-    })?;
-
-    Python::with_gil(|py| {
-        Ok(PyArray1::from_vec(py, result).to_owned())
-    })
-}
-```
-
-Register the function in the module:
-
-```rust
-#[pymodule]
-fn finkit(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(my_indicator, m)?)?;
-    Ok(())
-}
-```
-
-### 4. Add to Node.js Binding
-
-Add to `ffi/node-binding/src/lib.rs`:
-
-```rust
-#[napi]
-pub fn my_indicator(close: Vec<f64>, timeperiod: u32) -> Result<Vec<f64>> {
-    indicators::my_indicator(&close, timeperiod as usize).map_err(|e| {
-        Error::new(Status::InvalidArg, e.to_string())
-    })
-}
-```
-
-### 5. Add Tests
-
-Add integration tests for each binding.
-
-## Adding New Candlestick Patterns
-
-### 1. Implement Pattern
-
-Add to `core/src/patterns/candlestick.rs`:
-
-```rust
-/// Detect custom pattern.
-///
-/// Returns:
-/// - 100 for bullish signal
-/// - -100 for bearish signal
-/// - 0 for no pattern
-pub fn custom_pattern(
-    open: &[f64],
-    high: &[f64],
-    low: &[f64],
-    close: &[f64],
-) -> Result<Vec<i32>> {
-    let len = open.len();
-    let mut result = vec![0; len];
-
-    for i in 1..len {
-        // Pattern detection logic
-        if is_bullish_pattern(open, high, low, close, i) {
-            result[i] = 100;
-        } else if is_bearish_pattern(open, high, low, close, i) {
-            result[i] = -100;
-        }
-    }
-
-    Ok(result)
-}
-```
-
-### 2. Add to All Bindings
-
-Follow the same pattern as indicators above.
-
-## Testing
-
-### Unit Tests
+For Python binding development:
 
 ```bash
-# Run all tests
-cargo test
-
-# Run tests with output
-cargo test -- --nocapture
-
-# Run specific test
-cargo test my_indicator
-
-# Run tests for specific crate
-cargo test -p finkit
+python3 -m venv .venv
+source .venv/bin/activate  # PowerShell: .\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install "maturin>=1.5,<2.0" "numpy>=1.24" pytest
 ```
 
-### Integration Tests
+### Other bindings
+
+Install the language toolchain only when working on that binding:
+
+- Node.js 16+ and npm for NAPI-RS;
+- a JDK and Maven for Java/JNI;
+- CMake plus a C/C++ compiler for the C/C++ SDK;
+- Go 1.21+ with CGO for the Go source binding;
+- a compatible .NET SDK for the .NET source binding.
+
+All native bindings also require a host compiler/linker compatible with the Rust target.
+
+## 3. Baseline validation
+
+Run these commands before opening a PR that changes Rust/core behavior:
 
 ```bash
-# Python
-cd ffi/python-binding
-pytest
-
-# Node.js
-cd ffi/node-binding
-npm test
-
-# Java
-cd ffi/java-binding
-mvn test
-
-# Go
-cd ffi/go-binding
-go test -v ./...
-
-# .NET
-cd ffi/dotnet-binding/src/Finkit.Tests
-dotnet test
-```
-
-### Code Coverage
-
-```bash
-# Install cargo-llvm-cov
-cargo install cargo-llvm-cov
-
-# Generate coverage report
-cargo llvm-cov --package finkit --all-features --html
-
-# Generate LCOV format for CI
-cargo llvm-cov --package finkit --all-features --lcov --output-path lcov.info
-```
-
-### Benchmarks
-
-```bash
-# Run benchmarks
-cargo bench
-
-# Run specific benchmark
-cargo bench -- my_indicator
-
-# Compare with baseline
-cargo bench -- --baseline
-```
-
-## Performance Optimization
-
-### 1. Use SIMD
-
-```rust
-#[cfg(target_arch = "x86_64")]
-pub fn sma_simd(data: &[f64], period: usize) -> Result<Vec<f64>> {
-    // Use x86_64 SIMD instructions
-}
-```
-
-### 2. Use Rayon for Parallel Computation
-
-```rust
-use rayon::prelude::*;
-
-pub fn sma_parallel(data: &[f64], period: usize) -> Result<Vec<f64>> {
-    let mut result = vec![f64::NAN; data.len()];
-
-    (period - 1..data.len())
-        .into_par_iter()
-        .for_each(|i| {
-            let sum: f64 = data[i - period + 1..=i].iter().sum();
-            result[i] = sum / period as f64;
-        });
-
-    Ok(result)
-}
-```
-
-### 3. Pre-allocate Arrays
-
-```rust
-// Good: Pre-allocate
-let mut result = vec![0.0; data.len()];
-
-// Bad: Push in loop
-let mut result = Vec::new();
-for i in 0..data.len() {
-    result.push(calculate(data[i]));
-}
-```
-
-### 4. Avoid Unnecessary Allocations
-
-```rust
-// Good: Reuse buffer
-pub fn calculate_in_place(data: &mut [f64]) {
-    for item in data.iter_mut() {
-        *item = transform(*item);
-    }
-}
-
-// Bad: Create new array
-pub fn calculate(data: &[f64]) -> Vec<f64> {
-    data.iter().map(|&x| transform(x)).collect()
-}
-```
-
-## CI/CD
-
-### GitHub Actions
-
-The project uses GitHub Actions for CI/CD:
-
-- **CI** (`.github/workflows/ci.yml`):
-  - Format check (rustfmt)
-  - Lint check (clippy)
-  - Core tests (Linux, macOS, Windows)
-  - Python binding tests
-  - Node.js binding tests
-  - Go binding tests
-  - .NET binding tests
-  - Java binding tests
-  - WASM tests
-  - CLI tests
-  - Cross-platform compilation
-  - Security audit
-  - Code coverage (Codecov)
-
-- **Release All** (`.github/workflows/release-all.yml`):
-  - Version validation
-  - Changelog generation
-  - Trigger language-specific releases
-  - Create GitHub Release
-
-- **Release Python** (`.github/workflows/release-python.yml`):
-  - Build wheels for all platforms
-  - Test wheels
-  - Publish to PyPI
-
-- **Release Node.js** (`.github/workflows/release-node.yml`):
-  - Build native modules
-  - Publish to npm
-
-### Local CI Testing
-
-```bash
-# Run format check
 cargo fmt --all -- --check
-
-# Run clippy
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-
-# Run tests
-cargo test --workspace
-
-# Run Python tests
-cd ffi/python-binding
-maturin develop
-pytest
+cargo check --workspace --locked
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+cargo test -p finkit --locked
+cargo test --workspace --doc --locked
+python scripts/check_versions.py
+python scripts/gen_ssot_docs.py --check
 ```
 
-## Release Process
+Do not remove `--locked` from CI-equivalent commands. `Cargo.lock` is part of the reproducibility contract.
 
-### 1. Update Versions
+## 4. Version contract
 
-Update version in all `Cargo.toml` files:
+`scripts/check_versions.py` enforces alignment across release-bearing metadata. When bumping a release version, update the canonical version and every package file the checker covers rather than editing one ecosystem in isolation.
+
+Run:
 
 ```bash
-# Update workspace version in root Cargo.toml
-# Update individual package versions in ffi/*/Cargo.toml
-# Update pyproject.toml version
-# Update package.json version
+python scripts/check_versions.py
 ```
 
-### 2. Update CHANGELOG.md
+Use the checker's supported fix mode only when intentionally performing a coordinated version update, then review the diff before committing it.
 
-Follow [Keep a Changelog](https://keepachangelog.com/) format.
+Protocol/schema versions should change only when their contracts change; do not mechanically couple independent schema versions to the package release number.
 
-### 3. Create Release Commit
+## 5. Generated SSOT documentation
+
+Generated metadata is part of the repository contract. Typical generated/checked outputs include:
+
+- `docs/indicator_registry.json`;
+- `docs/generated/indicators.md`;
+- `docs/generated/streaming-indicators.md`;
+- `docs/generated/formula-functions.md`;
+- `docs/generated/features.md`;
+- `docs/generated/error-codes.md`;
+- `docs/generated/pine-compatibility.md`;
+- `docs/generated/version-matrix.md`.
+
+Validate:
 
 ```bash
-git add .
-git commit -m "chore: release v0.x.x"
-git tag -a v0.x.x -m "Release v0.x.x"
-git push origin main --tags
+python scripts/gen_ssot_docs.py --check
 ```
 
-### 4. GitHub Actions
+If a registry or source-of-truth change legitimately changes generated output, run the generator in its write mode as implemented by the script, commit the generated diff, then run `--check` again.
 
-GitHub Actions will automatically:
-- Build and publish to PyPI
-- Build and publish to npm
-- Build and publish to crates.io
-- Create GitHub Release
+Do not hand-edit generated Markdown/JSON to silence CI drift.
 
-## Documentation
+## 6. Rust core development
 
-### Rust Docs
+### Build core
 
 ```bash
-# Generate documentation
-cargo doc --no-deps --open
-
-# Generate for specific crate
-cargo doc --no-deps --package finkit --open
+cargo build -p finkit --release --locked
 ```
 
-### API Documentation
+### Test core
 
-Update `docs/api-reference.md` when adding new functions.
-
-### Indicator Documentation
-
-Update `docs/indicators.md` when adding new indicators.
-
-## Troubleshooting
-
-### Common Issues
-
-**Build fails with linker errors:**
 ```bash
-# Install required build tools
-# Ubuntu/Debian
-sudo apt-get install build-essential pkg-config libssl-dev
-
-# macOS
-xcode-select --install
-
-# Windows
-# Install Visual Studio Build Tools
+cargo test -p finkit --locked
 ```
 
-**Python binding import error:**
+### Compile benchmarks
+
 ```bash
-# Rebuild in development mode
+cargo bench -p finkit --no-run
+```
+
+A change that improves one synthetic benchmark but breaks warm-up semantics, numerical correctness, allocation contracts, or another supported path is not an acceptable performance optimization.
+
+### Warm-up and alignment contract
+
+When adding/changing rolling calculations:
+
+- preserve output alignment unless the API explicitly states otherwise;
+- allow documented leading warm-up `NaN` values;
+- test that finite output begins at the expected lookback;
+- after valid output begins, do not silently introduce unexplained non-finite values;
+- keep equal-length OHLCV validation explicit.
+
+## 7. Formula-engine development
+
+Formula changes can affect parser, optimizer, bytecode, JIT/SIMD execution, reusable plans, compatibility dialects, Python wrappers, and benchmarks.
+
+At minimum, cover affected behavior with tests for:
+
+- parse/validation failures;
+- execution semantics;
+- aliases/terminal compatibility where relevant;
+- common-subexpression safety;
+- repeated compiled-plan execution;
+- `eval_range` / `eval_last` if dependency/lookback behavior changes;
+- append/reset/reserve behavior when retained context changes;
+- warm-up and NaN alignment;
+- side-effecting/mutable variables if optimizer rules are touched.
+
+Python `CompiledFormula` additionally requires validation of contiguous one-dimensional `float64` arrays on its borrowed zero-copy path.
+
+Relevant documentation:
+
+- `docs/formula.md`;
+- `docs/formula-runtime.md`;
+- `docs/formula-runtime-contract.md`;
+- `docs/formula/grammar.md`.
+
+## 8. Factor/runtime development
+
+The Factor/Runtime layer should maintain these invariants:
+
+- identifiers/dependencies are validated;
+- dependency cycles are rejected;
+- `MarketFrame` columns remain aligned;
+- plan execution does not silently reindex mismatched input;
+- warm-up/missing-value semantics remain explicit;
+- aliases/registries do not partially mutate on a failed registration.
+
+Use `docs/core-contracts.md` as the public contract and keep tests close to behavior changes.
+
+## 9. Python binding
+
+Build an editable native package:
+
+```bash
 cd ffi/python-binding
 maturin develop --release
+cd ../..
+python -m pytest ffi/python-binding/tests -q
 ```
 
-**Node.js binding not found:**
+Build a wheel:
+
 ```bash
-# Rebuild native module
+cd ffi/python-binding
+maturin build --release --locked --out dist --compatibility pypi --interpreter python
+```
+
+Release-quality validation must install the wheel in a clean directory/environment so the repository source tree cannot shadow the installed package.
+
+The `v0.1.3` Python workflow validates four ABI3 wheel platforms and Linux CPython 3.8-3.14 compatibility. Adding a new advertised platform requires a real build + clean install + test path, not only metadata in `pyproject.toml`.
+
+## 10. Node.js binding
+
+```bash
 cd ffi/node-binding
+npm install
 npm run build
+npm test
+npm pack
 ```
 
-**Go binding CGO error:**
+The smoke test must load the actual native module. Release packaging also needs to stage the generated native file into the correct platform package as `finkit.node` before packing the root package.
+
+Do not advertise every `optionalDependencies` platform as published merely because it is declared in `package.json`.
+
+## 11. Java/JNI binding
+
+Linux example matching the permanent CI contract:
+
 ```bash
-# Ensure CGO is enabled
-export CGO_ENABLED=1
-
-# Verify C compiler is available
-gcc --version
+cargo build -p finkit-java --release --locked
+mkdir -p ffi/java-binding/natives/linux-x86_64
+cp target/release/libfinkit_java.so ffi/java-binding/natives/linux-x86_64/
+mvn -B -f ffi/java-binding/pom.xml -DskipTests package
+jar tf ffi/java-binding/target/*.jar | grep natives
 ```
 
-### Getting Help
+A release-quality test must then run Java code that loads the packaged/external native library and calls a real method such as `Indicators.sma(...)`.
 
-- [GitHub Issues](https://github.com/coeasy/finkit/issues)
-- [GitHub Discussions](https://github.com/coeasy/finkit/discussions)
-- [Contributing Guidelines](../CONTRIBUTING.md)
+For another OS/architecture, stage the correctly named native library under the matching `natives/<platform>/` directory expected by `NativeLoader`.
+
+## 12. C/C++ binding
+
+Reference validation path:
+
+```bash
+cargo build -p finkit-ffi --release --locked
+cmake -S ffi/c-binding -B build/cpp \
+  -DFINKIT_AUTO_BUILD_RS=OFF \
+  -DFINKIT_BUILD_TESTS=ON \
+  -DFINKIT_BUILD_EXAMPLES=ON \
+  -DCMAKE_BUILD_TYPE=Release
+cmake --build build/cpp --config Release --parallel 2
+ctest --test-dir build/cpp -C Release --output-on-failure
+cmake --install build/cpp --config Release --prefix dist/cpp
+```
+
+After install, validate an external consumer using `find_package(finkit CONFIG REQUIRED)` with the install prefix in `CMAKE_PREFIX_PATH`. This catches package-config/install-layout failures that an in-tree build cannot detect.
+
+Keep the C ABI memory/error contract synchronized with:
+
+- `docs/ffi/memory-contract.md`;
+- `docs/ffi/error-codes.md`.
+
+## 13. Go/.NET/mobile/WASM
+
+These are source integrations in the current v0.1.3 release line. Their existence in `ffi/` is not a guarantee of package-manager publication or prebuilt binary coverage.
+
+When promoting one of these bindings to a public release tier, add:
+
+1. a clean external-consumer install/build test;
+2. the advertised OS/architecture matrix;
+3. native asset packaging/linking rules;
+4. version consistency checks;
+5. a verified registry or GitHub Release distribution path;
+6. user documentation that is updated only after those checks pass.
+
+## 14. Benchmarks and performance gates
+
+Useful repository references:
+
+- `docs/benchmark-results.md`;
+- `docs/BENCHMARK_VS_TALIB.md`;
+- `docs/BENCHMARK_REPORT.md`;
+- benchmark sources under `core/benches/`.
+
+CI includes benchmark compilation plus dedicated allocation/performance gates. Treat benchmark data as measured snapshots tied to CPU/compiler/feature/data conditions.
+
+When modifying a hot path:
+
+- preserve correctness first;
+- add or update a focused benchmark;
+- run the relevant regression test;
+- compare allocations and throughput against the established baseline;
+- document meaningful methodology changes rather than silently replacing a baseline.
+
+## 15. Documentation changes
+
+Current user docs intentionally use one canonical tree under `docs/` instead of the previous duplicate mdBook placeholder tree.
+
+Rules:
+
+- update `README.md`, `docs/README.md`, and the relevant install/usage/binding README together when a public contract changes;
+- do not reintroduce completed internal plans or PRD snapshots as current docs;
+- distinguish source support, CI validation, GitHub Release assets, and registry publication;
+- do not claim a package-manager command until the exact package/version can be installed from that registry;
+- do not hard-code registry counts that are generated from SSOT;
+- verify links after deleting or moving docs.
+
+## 16. Pull-request workflow
+
+Before opening a PR:
+
+1. keep the branch focused;
+2. run the relevant local checks;
+3. commit generated output when source-of-truth changes require it;
+4. explain platform limitations and release impact in the PR body.
+
+After opening the PR, judge only the checks for the **current PR head SHA**. If a new commit supersedes an old run, do not use the old run as release evidence.
+
+Expected workflows vary by changed paths but can include:
+
+- CI;
+- Docs Check;
+- Python Wheels;
+- Multilang release validation.
+
+Read the failing job's current logs before changing code. A runner/preflight failure with zero executed steps is not the same as a code-test failure.
+
+Merge only when required checks for the final head are green.
+
+## 17. Release workflow
+
+A GitHub Release and an ecosystem registry publication are separate events.
+
+For a release:
+
+1. align version metadata;
+2. pass version/generated-doc checks;
+3. pass core CI and binding/package gates;
+4. build and clean-install/smoke-test the intended artifacts;
+5. create/update the GitHub Release from the intended main commit;
+6. verify the tag target;
+7. verify every Release asset and checksum;
+8. publish external registries only through an explicitly configured release/trusted-publishing mechanism;
+9. test a clean install from each registry before adding that installation command to user docs.
+
+For `v0.1.3`, the verified GitHub Release assets are Python ABI3 wheels, the Rust `.crate`, Linux x86_64 CLI, and `SHA256SUMS`. Node/Java/C++ have CI-validated source/package paths but are not part of the current Release asset set.

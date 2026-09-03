@@ -107,7 +107,7 @@ RSI_VAL:RSI(CLOSE,N);
 
 ### 1. 评估兼容性
 
-对照 [PINE_COMPAT_MATRIX.md](../PINE_COMPAT_MATRIX.md)，确认脚本使用的内置函数是否在映射表中。
+对照 [PINE_COMPAT_MATRIX.md](../generated/pine-compatibility.md)，确认脚本使用的内置函数是否在映射表中。
 
 可将脚本放入 `tests/pine_corpus/` 并更新 `manifest.json` 做回归跟踪。
 
@@ -221,7 +221,7 @@ parse_formula_with_dialect(pine_source, FormulaDialect::Pine)?;
 ## 相关资源
 
 - [Pine 文法规范](../formula/pine-grammar.md)
-- [Pine 兼容矩阵](../PINE_COMPAT_MATRIX.md)
+- [Pine 兼容矩阵](../generated/pine-compatibility.md)
 - [Finkit 公式文法](../formula/grammar.md)
 - [公式语料回归集](../../tests/formula_corpus/README.md)
 - [Pine 语料回归集](../../tests/pine_corpus/README.md)

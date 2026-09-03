@@ -1,260 +1,311 @@
-# Python 安装与发布指南
+# Python Guide
 
-Finkit 的 Python 绑定使用 PyO3 和 maturin 构建。v0.1.3 计划发布带原生 Rust 扩展的 ABI3 wheel：同一平台/架构的 wheel 可被多个 CPython 版本复用，安装时不需要本地 Rust 工具链。
+Finkit Python uses PyO3 + maturin and ships `v0.1.3` as platform-specific CPython stable-ABI wheels (`cp38-abi3`). The same wheel for a platform is validated across GIL-enabled CPython 3.8-3.14 on the supported matrix.
 
-> 当前源码版本和构建矩阵已统一到 `0.1.3`，但 GitHub `v0.1.3` Release 尚未完成。发布前请使用成功的 Actions artifact 或源码安装。
+## Release status
 
-## 支持矩阵
+`v0.1.3` is published on GitHub Releases. The verified wheel families are:
 
-### Python 版本
+- Linux x86_64 — manylinux 2.17 / manylinux2014;
+- Windows x86_64 — `win_amd64`;
+- macOS x86_64;
+- macOS arm64.
 
-| Python | wheel | 说明 |
-| --- | --- | --- |
-| CPython 3.8+（GIL-enabled） | ✅ | 发布使用 ABI3 wheel；CI 在 3.8–3.14 验证 |
-| PyPy | 未承诺 | 当前发布流程只构建 CPython wheel |
-| CPython free-threaded（`python3.14t`） | 未承诺 | 不属于 v0.1.3 的发布矩阵 |
+Not in the v0.1.3 wheel matrix: Linux arm64, musllinux, 32-bit Windows, PyPy, and free-threaded CPython.
 
-### 操作系统与架构
+The GitHub Release is the documented installation source for v0.1.3. Registry publication is separate; do not assume PyPI contains this exact package/version unless independently verified.
 
-| 平台 | wheel 标签 |
-| --- | --- |
-| Linux x86_64 | `manylinux_2_17_x86_64` |
-| macOS Intel | `macosx_*_x86_64` |
-| macOS Apple Silicon | `macosx_*_arm64` |
-| Windows x86_64 | `win_amd64` |
+## Install a Release wheel
 
-当前 v0.1.3 构建矩阵设计包含 4 个平台/架构：Linux x86_64、macOS Intel、macOS Apple Silicon 和 Windows x86_64；Release 发布前可通过 Actions artifact 验证这些构建。ABI3 只解决 CPython 版本兼容，不会把原生扩展变成 `py3-none-any`；Linux ARM64、32 位 Windows、musllinux、PyPy 和 free-threaded Python 仍需源码构建或后续单独适配。
+Download the matching `finkit-0.1.3-cp38-abi3-*.whl` from:
 
-## 安装已构建 wheel
+`https://github.com/coeasy/finkit/releases/tag/v0.1.3`
 
-`v0.1.3` Release 发布后，可从 [GitHub Releases](https://github.com/coeasy/finkit/releases) 下载；在此之前请进入成功的 [Python wheels workflow](https://github.com/coeasy/finkit/actions/workflows/python-wheels.yml) 运行记录，从 Artifacts 下载匹配平台的 wheel。
-
-1. 下载与本机操作系统和 CPU 架构匹配的 `finkit-0.1.3-*.whl`。
-2. 在目标虚拟环境中安装。ABI3 wheel 不需要按 CPython 3.8、3.9 等小版本分别挑选；pip 会根据平台标签选择兼容 wheel：
+Then install:
 
 ```bash
 python -m pip install --upgrade pip
-python -m pip install ./finkit-0.1.3-<匹配本机的 wheel>.whl
+python -m pip install ./finkit-0.1.3-<matching-platform>.whl
 ```
 
-如果对应 Release 尚未附带 wheel，可打开仓库的 [Python wheels workflow](https://github.com/coeasy/finkit/actions/workflows/python-wheels.yml)，进入一条成功的运行记录，在 Artifacts 区域下载与本机平台匹配的 artifact。安装本地 wheel 时，pip 会自动安装运行时依赖 NumPy。
-
-验证安装：
+Verify outside the source tree:
 
 ```bash
+cd /tmp  # use another clean directory on Windows
 python - <<'PY'
-import finkit as ta
 import numpy as np
+import finkit as ta
 
-close = np.arange(1.0, 101.0)
+close = np.arange(1.0, 101.0, dtype=np.float64)
 rsi = ta.rsi(close, timeperiod=14)
-assert len(rsi) == len(close)
-print(f"finkit loaded; RSI length={len(rsi)}")
+assert len(rsi) == 100
+assert np.isfinite(rsi[-1])
+print("Finkit OK", rsi[-1])
 PY
 ```
 
-### 如何选择 wheel
-
-wheel 文件名中的标签对应以下信息：
-
-- `cp38-abi3`：以 CPython 3.8 为最低 ABI 的稳定 ABI 标签，可被 CPython 3.8+（GIL-enabled）复用。
-- `manylinux_2_17_x86_64`：Linux x86_64，glibc 2.17 或更高。
-- `macosx_*_arm64`：Apple Silicon；`macosx_*_x86_64`：Intel Mac。
-- `win_amd64`：64 位 Windows。
-
-不要只按文件名中的 Python 版本选择；系统和 CPU 架构标签也必须匹配。通常让 pip 直接安装目录中的 wheel 最安全：
-
-```bash
-python -m pip install ./dist/finkit-0.1.3-*.whl
-```
-
-## 从源码安装
-
-源码安装适合尚未提供 wheel 的平台、开发工作和需要修改 Rust 核心的场景。
-
-### 前置条件
-
-- CPython 3.8+（当前 CI 验证 3.8–3.14；要求 GIL-enabled）
-- Rust stable，且能满足工作区的 MSRV：Rust 1.85+
-- Python、pip 和虚拟环境
-- Linux 需要 C 编译器；macOS 需要 Xcode Command Line Tools；Windows 需要 Visual Studio C++ Build Tools
-- NumPy（绑定函数使用 NumPy 一维数组作为输入）
-
-### Linux / macOS
+## Build from source
 
 ```bash
 git clone https://github.com/coeasy/finkit.git
 cd finkit
+git checkout v0.1.3
 
 python3 -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate  # PowerShell: .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install "maturin>=1.5,<2.0" "numpy>=1.24" pytest
 
 cd ffi/python-binding
 maturin develop --release
-
 cd ../..
 python -m pytest ffi/python-binding/tests -q
 ```
 
-### Windows PowerShell
+Source builds need Rust 1.85+ and the platform's native compiler/linker.
 
-```powershell
-git clone https://github.com/coeasy/finkit.git
-Set-Location finkit
+## Input contract
 
-py -3.11 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install "maturin>=1.5,<2.0" "numpy>=1.24" pytest
-
-Set-Location ffi/python-binding
-maturin develop --release
-
-Set-Location ../..
-python -m pytest ffi/python-binding/tests -q
-```
-
-## 构建单个 wheel
-
-在 `ffi/python-binding` 目录执行。pyproject 已启用 `abi3`，因此同一平台通常只需要构建一个可复用的 CPython wheel：
-
-```bash
-python -m pip install "maturin>=1.5,<2.0"
-maturin build --release --locked --out dist --compatibility pypi --interpreter python
-python -m pip install ./dist/finkit-0.1.3-*.whl
-```
-
-要在本机生成源码包：
-
-```bash
-maturin sdist --out dist
-```
-
-如果目标平台没有预构建 wheel，请使用目标平台上的 CPython 3.8+（GIL-enabled）解释器构建；无需为 3.9、3.10 等每个小版本重复构建。CI 仍会在 Linux 上用 CPython 3.8–3.14 安装同一个 Linux ABI3 wheel，验证其运行时兼容性。
-
-## 可复用公式编译计划
-
-高频执行同一公式时，使用 `CompiledFormula` 只编译一次，再重复传入新的行情数组。输入应为一维、连续的 `float64` NumPy 数组；对象会校验长度一致性，并在 Rust 线程中执行计算，避免每次调用都重新解析公式。
+For best performance and predictable behavior:
 
 ```python
-import finkit as ta
 import numpy as np
 
-size = 1000
-open_ = np.arange(size, dtype=np.float64)
-high = open_ + 1.0
-low = open_ - 1.0
-close = open_ + 0.5
-volume = np.full(size, 1000.0, dtype=np.float64)
+close = np.ascontiguousarray(close, dtype=np.float64)
+```
 
-plan = ta.CompiledFormula("MA(CLOSE, 3)")
+Use one-dimensional arrays. OHLCV arrays passed to one computation must have the same length. Rolling outputs preserve input length and normally start with warm-up `NaN` values.
+
+## Indicator examples
+
+```python
+import numpy as np
+import finkit as ta
+
+close = np.arange(1.0, 101.0, dtype=np.float64)
+high = close + 1.0
+low = close - 1.0
+open_ = close - 0.25
+volume = np.full(close.size, 1_000_000.0)
+
+sma20 = ta.sma(close, timeperiod=20)
+ema20 = ta.ema(close, timeperiod=20)
+rsi14 = ta.rsi(close, timeperiod=14)
+macd, signal, hist = ta.macd(close, 12, 26, 9)
+atr14 = ta.atr(high, low, close, timeperiod=14)
+obv = ta.obv(close, volume)
+```
+
+The package wrapper converts public numeric native list/tuple results to NumPy arrays recursively.
+
+## Handling warm-up values
+
+```python
+ready = np.isfinite(sma20) & np.isfinite(rsi14)
+strategy_signal = np.zeros(close.size, dtype=bool)
+strategy_signal[ready] = (close[ready] > sma20[ready]) & (rsi14[ready] > 50)
+```
+
+Do not treat leading `NaN` values as a calculation failure; they represent insufficient lookback history for many rolling indicators.
+
+## `CompiledFormula`
+
+Use `CompiledFormula` when the same formula is executed repeatedly. The object keeps the parsed/optimized plan and formula-engine caches alive across calls.
+
+```python
+plan = ta.CompiledFormula("MA(CLOSE, 20)")
 result = plan.eval(open_, high, low, close, volume)
-
-assert isinstance(result["__result__"], np.ndarray)
+ma20 = result["__result__"]
 ```
 
-`result` 是字典：最终表达式放在 `__result__`，公式中的命名赋值也会以 NumPy 数组形式返回。与旧的 `formula_eval*` 函数相比，这个对象适合循环或批量场景；旧接口仍保留用于兼容。当前 Python 边界会把输入复制到 Rust 计算上下文，收益主要来自复用编译计划和 NumPy 数组边界，尚不是完全零拷贝执行。
+### `eval()`
 
-## NumPy 和 Pandas 用法
-
-指标函数接收一维、`float64` NumPy 数组。Pandas 不是运行时必需依赖；使用 DataFrame 时显式转换列：
+`eval()` copies the input arrays into an owned formula context. This is the correct starting point when you plan to call `append_bar()` later.
 
 ```python
-import finkit as ta
-import numpy as np
-import pandas as pd
-
-df = pd.DataFrame({"close": np.arange(1.0, 101.0)})
-close = df["close"].to_numpy(dtype=np.float64, copy=False)
-
-df["rsi"] = ta.rsi(close, timeperiod=14)
-macd, signal, hist = ta.macd(close, fastperiod=12, slowperiod=26, signalperiod=9)
-df["macd"] = macd
-df["signal"] = signal
-df["hist"] = hist
+plan.eval(open_, high, low, close, volume)
+plan.reserve_bars(10000)
+plan.append_bar(101.0, 103.0, 100.0, 102.5, 1_200_000.0)
+latest = plan.eval_last()
 ```
 
-带有 `df.ta` accessor 的 pandas 集成属于可选能力。要运行对应测试：
+### `eval_zero_copy()`
+
+`eval_zero_copy()` borrows contiguous `float64` NumPy OHLCV buffers for the synchronous evaluation:
+
+```python
+out = plan.eval_zero_copy(open_, high, low, close, volume)
+value = out["__result__"]
+```
+
+Rules:
+
+- every required input must be a contiguous, one-dimensional `float64` NumPy array;
+- all arrays must have equal length and be non-empty;
+- keep the arrays alive and do not concurrently resize/mutate them while the call is executing;
+- direct fast-path formulas can avoid input materialization, while complex formulas may allocate intermediate arrays;
+- `eval_zero_copy()` does not establish the retained streaming context used by `append_bar()`.
+
+### `eval_range()`
+
+Evaluate `[start, end)`:
+
+```python
+out = plan.eval_range(
+    open_, high, low, close, volume,
+    900, 1000,
+)
+```
+
+The runtime uses dependency/lookback information to include the required prefix conservatively.
+
+### `eval_last()`
+
+With arrays:
+
+```python
+latest = plan.eval_last(open_, high, low, close, volume)
+```
+
+Or reuse a context created by `eval()` / `eval_range()`:
+
+```python
+plan.eval(open_, high, low, close, volume)
+latest = plan.eval_last()
+```
+
+### `append_bar()`, `reserve_bars()`, `reset()`
+
+```python
+plan.eval(open_, high, low, close, volume)
+plan.reserve_bars(5000)
+plan.append_bar(102.0, 104.0, 101.0, 103.5, 900_000.0)
+latest = plan.eval_last()
+plan.reset()
+```
+
+`reset()` removes the retained market context but does not discard the compiled formula itself.
+
+## Formula result dictionaries
+
+`eval()` can return named formula variables plus `__result__`. Internal common-subexpression variables are filtered from the Python-facing dictionary.
+
+```python
+out = plan.eval(open_, high, low, close, volume)
+print(out.keys())
+print(out["__result__"][-1])
+```
+
+See [formula-runtime.md](formula-runtime.md) and [formula-runtime-contract.md](formula-runtime-contract.md) for the detailed contract.
+
+## Pandas
+
+Pandas is optional. Explicit NumPy conversion is the simplest integration:
+
+```python
+import pandas as pd
+import numpy as np
+import finkit as ta
+
+frame = pd.DataFrame({"close": np.arange(1.0, 101.0)})
+close = frame["close"].to_numpy(dtype=np.float64, copy=False)
+frame["rsi14"] = ta.rsi(close, timeperiod=14)
+```
+
+The Python package also contains an optional `TaAccessor`. Install pandas when using/testing it:
 
 ```bash
 python -m pip install pandas
 python -m pytest ffi/python-binding/tests/test_accessor.py -q
 ```
 
-## 开发与发布检查
+## Stable exceptions
+
+The Python wrapper exposes:
+
+- `FinkitError`;
+- `InsufficientDataError`;
+- `InvalidParameterError`;
+- `IndicatorNotFoundError`.
+
+Common native validation failures are translated at the package boundary. Invalid MACD periods, invalid period arguments, insufficient data, and empty inputs should be handled explicitly in application code.
+
+## Patterns
+
+```python
+doji = ta.cdl_doji(open_, high, low, close)
+hammer = ta.cdl_hammer(open_, high, low, close)
+engulfing = ta.cdl_engulfing(open_, high, low, close)
+
+heads = ta.detect_head_shoulders(high)
+double_tops = ta.detect_double_top(high)
+```
+
+Pattern algorithms have lookbacks; an initial region with no pattern signal is expected.
+
+## Build a wheel locally
 
 ```bash
 cd ffi/python-binding
-
-# 构建源码包
-maturin sdist --out dist
-
-# 构建当前平台 ABI3 wheel
 maturin build --release --locked --out dist --compatibility pypi --interpreter python
-
-# 安装 wheel 后运行完整 Python 测试
-python -m pip install ./dist/finkit-0.1.3-*.whl
-cd ../..
-python -m pytest ffi/python-binding/tests -q
 ```
 
-每次推送到 `main`、创建 pull request 或推送 `v*` tag 时，GitHub Actions 的 Python wheels workflow 会为 4 个平台/架构构建 ABI3 wheel，并在 Linux 上用 CPython 3.8–3.14 做兼容性验证。推送版本 tag 且完整构建与汇总校验通过后，workflow 会自动把 4 个 wheel 附加到对应的 GitHub Release；对于已有 Release，也可以通过 workflow_dispatch 的 `release_tag` 参数补发。
+Install the generated wheel from a clean directory and run tests against the installed package. Avoid verifying from a working directory that can shadow the installed `finkit` package.
 
-## 常见问题
+## CI release behavior
 
-### `No matching distribution found` 或 `is not a supported wheel`
+The Python Wheels workflow:
 
-当前解释器、系统或架构与 wheel 标签不匹配。先查看：
+1. builds the four v0.1.3 platform wheels;
+2. installs/tests each platform wheel outside the source tree;
+3. reuses the Linux ABI3 wheel across CPython 3.8-3.14 compatibility jobs;
+4. validates package version, wheel metadata, and platform coverage;
+5. on the explicit release path, builds the `.crate`, Linux CLI, checksum file, and creates/updates the GitHub Release.
+
+A normal pull request does not publish Release assets.
+
+## Troubleshooting
+
+### `is not a supported wheel on this platform`
 
 ```bash
 python -VV
 python -c "import platform; print(platform.system(), platform.machine())"
 ```
 
-然后选择对应的 `cp38-abi3`、系统和架构 wheel。ABI3 仍然不能跨操作系统或 CPU 架构安装；32 位 Python 不能安装 `win_amd64`。
+Match OS and CPU architecture. ABI3 spans supported CPython minor versions; it does not span OS/architecture boundaries.
 
 ### `ModuleNotFoundError: No module named 'finkit'`
-
-确认 pip 和 python 属于同一个虚拟环境：
 
 ```bash
 python -m pip show finkit
 python -c "import sys; print(sys.executable)"
 ```
 
-不要在源码目录中直接验证已安装 wheel；当前目录下的 `finkit/` 可能遮蔽 site-packages。切换到临时目录后再执行 import。
+Confirm that pip and Python use the same environment, and test outside the repository/source package directory.
 
-### `ImportError: numpy.core.multiarray failed to import`
-
-先升级 pip 和 NumPy，再重新安装 wheel：
+### NumPy import/ABI failure
 
 ```bash
 python -m pip install --upgrade pip numpy
-python -m pip install --force-reinstall ./finkit-0.1.3-*.whl
+python -m pip install --force-reinstall ./finkit-0.1.3-<matching-platform>.whl
 ```
 
-### 源码构建找不到 Rust 或链接器
+### `eval_zero_copy()` rejects an array
 
-确认 `rustc --version` 满足 MSRV 1.85+，并安装对应平台的 C/C++ 编译工具链。Windows 还要使用 64 位 Python 与 MSVC 工具链。
+Normalize it:
 
-## 相关文档
+```python
+arr = np.ascontiguousarray(arr, dtype=np.float64)
+```
 
-- [Python binding README](../ffi/python-binding/README.md)
-- [总安装指南](installation.md)
-- [开发指南](development.md)
-- [发布页](https://github.com/coeasy/finkit/releases)
+Also ensure every OHLCV array is one-dimensional and the lengths match.
 
-## 自动发布 Release wheel
+## Related documentation
 
-当向仓库推送符合 `vX.Y.Z` 格式的版本 tag 时，`Python wheels` workflow 会：
-
-1. 为 4 个支持的平台/架构构建 ABI3 wheel；
-2. 在构建平台安装 wheel，并在 CPython 3.8–3.14 上验证 Linux ABI3 wheel；
-3. 使用 `twine check` 校验元数据、版本和兼容性标签；
-4. 将 4 个 wheel 自动上传到对应的 GitHub Release。
-
-Release 创建后，如需补发 wheel，可在 Actions 页面手动运行该 workflow，并填写 `release_tag`，例如 `v0.1.3`。手动补发使用当前 `main` 的源码，因此应先确认源码版本与目标 tag 一致。
-
-构建失败时不会执行 Release 上传步骤；只有全部平台构建、安装测试和汇总校验通过后才会发布。
+- [Complete usage guide](usage.md)
+- [Installation](installation.md)
+- [Formula engine](formula.md)
+- [Formula runtime](formula-runtime.md)
+- [Indicators](indicators.md)
+- [Python binding source README](../ffi/python-binding/README.md)
