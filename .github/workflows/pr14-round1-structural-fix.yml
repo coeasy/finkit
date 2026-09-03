@@ -39,7 +39,7 @@ jobs:
           python .ci/pr14_round2_fix.py
           python .ci/pr14_round2_tests_fix.py
           cargo fmt --all
-          python scripts/gen_ssot_docs.py
+          python scripts/gen_ssot_docs.py --generate
           cargo test -p finkit --lib registry::tests --locked
           cargo test -p finkit --lib formula::compute_ir --locked
           cargo test -p finkit --lib formula::pine --locked
