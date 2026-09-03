@@ -40,6 +40,7 @@ jobs:
           python .ci/pr14_round2_tests_fix.py
           python .ci/pr14_round2_golden_fix.py
           python .ci/pr14_semantic_contract_fix.py
+          python .ci/pr14_semantic_contract_fix2.py
           cargo fmt --all
           python scripts/gen_ssot_docs.py --generate
           cargo test -p finkit --lib registry::tests --locked
@@ -75,6 +76,7 @@ jobs:
           rm .ci/pr14_round2_tests_fix.py
           rm .ci/pr14_round2_golden_fix.py
           rm .ci/pr14_semantic_contract_fix.py
+          rm .ci/pr14_semantic_contract_fix2.py
           git add -A
           git commit -m "fix: complete three-round compute runtime hardening"
           git push origin HEAD:feat/compute-runtime-factorplan-v012
