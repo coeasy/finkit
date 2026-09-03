@@ -37,8 +37,8 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: python scripts/check_versions.py
@@ -61,9 +61,9 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm
@@ -85,7 +85,7 @@ jobs:
       - working-directory: ffi/node-binding/npm/linux-x64-gnu
         run: mkdir -p dist && npm pack --pack-destination dist
         shell: bash
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-node-linux-x86_64
           path: ffi/node-binding/npm/linux-x64-gnu/dist/*.tgz
@@ -93,7 +93,7 @@ jobs:
       - working-directory: ffi/node-binding
         run: mkdir -p dist && npm pack --pack-destination dist
         shell: bash
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-node-root
           path: ffi/node-binding/dist/*.tgz
@@ -104,9 +104,9 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
@@ -128,7 +128,7 @@ jobs:
           java -cp "$JAR:$RUNNER_TEMP" FinkitSmoke
           mkdir -p dist/java
           cp "$JAR" "dist/java/finkit-java-${VERSION}-linux-x86_64.jar"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-java-linux
           path: dist/java/*.jar
@@ -139,7 +139,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo build -p finkit-ffi --release --locked
       - run: cmake -S ffi/c-binding -B build/cpp -DFINKIT_AUTO_BUILD_RS=OFF -DFINKIT_BUILD_TESTS=ON -DFINKIT_BUILD_EXAMPLES=ON -DCMAKE_BUILD_TYPE=Release
@@ -153,7 +153,7 @@ jobs:
           VERSION="${{ needs.version-contract.outputs.version }}"
           grep -R "$VERSION" dist/cpp/linux-x86_64/lib*/cmake/finkit/finkit-config-version.cmake
           tar -czf "finkit-cpp-${VERSION}-linux-x86_64.tar.gz" -C dist/cpp/linux-x86_64 .
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-cpp-linux-x86_64
           path: finkit-cpp-*.tar.gz
@@ -164,9 +164,9 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: "1.23.x"
           cache-dependency-path: ffi/go-binding/go/go.mod
@@ -227,7 +227,7 @@ jobs:
           cp ffi/go-binding/examples/example.go "$SMOKE_ROOT/app/main.go"
           cd "$SMOKE_ROOT/app"
           CGO_ENABLED=1 LD_LIBRARY_PATH="$PACKAGE_ROOT/go/native/linux-x86_64" go run .
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-go-linux-x86_64
           path: dist/go/*.tar.gz
@@ -238,9 +238,9 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "8.0.x"
       - run: cargo build -p finkit-dotnet --release --locked
@@ -272,7 +272,7 @@ jobs:
           unzip -l "$NUPKG" | grep -q 'runtimes/linux-x64/native/libfinkit_dotnet.so'
           mkdir -p ../../dist/dotnet
           cp "$NUPKG" "../../dist/dotnet/finkit-dotnet-${VERSION}-linux-x64.nupkg"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-dotnet-linux-x86_64
           path: dist/dotnet/*.nupkg
@@ -283,7 +283,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
@@ -296,7 +296,7 @@ jobs:
           mkdir -p dist/wasm
           cp target/wasm32-unknown-unknown/release/finkit_wasm.wasm "dist/wasm/finkit-wasm-${VERSION}.wasm"
           test -s "dist/wasm/finkit-wasm-${VERSION}.wasm"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-wasm32
           path: dist/wasm/finkit-wasm-*.wasm
@@ -307,11 +307,11 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
@@ -361,7 +361,7 @@ jobs:
           unzip -l "$AAR" | grep -q 'jni/x86/libfinkit_android.so'
           mkdir -p dist/android
           cp "$AAR" "dist/android/finkit-android-${VERSION}.aar"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-android-aar
           path: dist/android/*.aar
@@ -372,7 +372,7 @@ jobs:
     runs-on: macos-14
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
@@ -394,7 +394,7 @@ jobs:
           VERSION="${{ needs.version-contract.outputs.version }}"
           test -d dist/ios/Finkit.xcframework
           ditto -c -k --sequesterRsrc --keepParent dist/ios/Finkit.xcframework "dist/ios/finkit-ios-${VERSION}.xcframework.zip"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-ios-xcframework
           path: dist/ios/finkit-ios-*.xcframework.zip
@@ -405,13 +405,13 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo package -p finkit --locked --no-verify
       - run: cargo build -p finkit-cli --release --locked
       - run: mkdir -p dist/rust && cp target/package/finkit-*.crate dist/rust/ && cp target/release/finkit-cli dist/rust/finkit-cli-linux-x86_64
         shell: bash
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-rust
           path: dist/rust/*
@@ -436,9 +436,9 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Download all validated artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: release-*
           path: release-assets
