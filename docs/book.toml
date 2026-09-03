@@ -1,9 +1,0 @@
-[book]
-title = "Finkit Documentation"
-authors = ["Finkit Contributors"]
-language = "en"
-multilingual = false
-src = "src"
-
-[build]
-build-dir = "book"
