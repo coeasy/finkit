@@ -50,7 +50,7 @@ public final class ChartPatterns {
     public static native int[] detectHeadShouldersTop(double[] high, int minBars, double headRatio);
 
     /**
-     * Head and Shoulders Bottom (Inverse Head and Shoulders) detection.
+     * Head and Shoulders Bottom (inverse head-and-shoulders) detection.
      *
      * <p>A bullish reversal pattern consisting of three troughs: a lower middle trough
      * (head) flanked by two higher troughs (shoulders). The pattern completes when price
