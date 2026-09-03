@@ -1,6 +1,6 @@
 # Finkit Troubleshooting Guide
 
-This guide covers failures that users can diagnose against the current **v0.1.3** release and `main` branch. It intentionally documents only interfaces and distribution paths that exist today.
+This guide separates the published **v0.1.3** distribution contract from the multi-language source/build paths being validated for the next release. Do not infer that a CI artifact is already available from a public package registry.
 
 If you are new to Finkit, start with [Getting started](getting-started.md), then use this guide when installation, data alignment, formulas, CLI input, native bindings, or builds behave unexpectedly.
 
@@ -17,7 +17,7 @@ Before changing code, determine which layer is actually broken:
 | Runtime/incremental | latest/range result differs | retained context, append order, reset/reuse contract |
 | CLI | input rejected or wrong columns | command help, delimiter/header/column requirements |
 | Native binding | loader/linker error | target OS/arch/runtime ABI and native library location |
-| Source build | Cargo/CMake/Maven/npm failure | required toolchain and the documented build directory |
+| Source build | Cargo/CMake/Maven/npm/Go/.NET/Gradle failure | required toolchain and documented build directory |
 | Docs/metadata | version/catalog mismatch | version, generated SSOT, local-link checks |
 
 Do not treat a packaging or loader failure as an indicator-algorithm failure. Narrowing the layer first usually saves the most time.
@@ -123,7 +123,7 @@ Bars must be ordered **oldest -> newest**. Do not reverse only one series, and d
 
 If source data contains gaps, align the market frame in the host application first and apply one consistent missing-data policy before calculation.
 
-## 6. Formula parse, compile, or evaluation failures
+## 6. Formula parse, compile, evaluation, and debug failures
 
 Use this sequence:
 
@@ -152,11 +152,23 @@ out = plan.eval(open_, high, low, close, volume)
 print(out["__result__"][-5:])
 ```
 
-### Important: there is no public formula debugger API in v0.1.3
+### Debugger coverage is binding-specific
 
-The current public documentation does **not** expose `formula_eval_debug`, `FormulaEvalDebug`, or `ta_formula_eval_debug`. Do not build integrations around those names unless a future release explicitly adds and tests them.
+Do **not** assume one debugger method name exists identically across every language binding. The current Go/CGO source explicitly exposes `FormulaEvalDebugJSON`, backed by the native Go-binding symbol `ta_formula_eval_debug` and the core formula engine's debug event stream.
 
-For current debugging, use parser/compiler error messages, minimal formulas, generated function catalogs, golden datasets, and the runtime contract.
+Example Go shape:
+
+```go
+debugJSON, err := ta.FormulaEvalDebugJSON(source, open, high, low, close, volume)
+if err != nil {
+    panic(err)
+}
+fmt.Println(debugJSON)
+```
+
+Other bindings must be checked against their own public wrapper/API before documenting a matching debug call. The deleted legacy debugger document incorrectly generalized a single conceptual API across Python, Node, Java, Go, .NET, and C/C++.
+
+For portable diagnosis, parser/compiler errors, minimal formulas, generated function catalogs, fixed golden datasets, and the runtime contract remain the common workflow.
 
 ## 7. Pine compatibility problems
 
@@ -293,13 +305,111 @@ find_package(finkit CONFIG REQUIRED)
 
 For ownership, lifetime, buffer, and error-code rules, use the FFI documentation under `docs/ffi/` rather than inferring them from one example program.
 
-## 14. Registry commands fail
+## 14. Go/CGO problems
 
-For v0.1.3, GitHub Release assets are authoritative. Source-build paths for Node.js, Java/JNI, and C/C++ are CI verified, but the project does not claim that PyPI, crates.io, npm, Maven Central, NuGet, or a public Go module has been published and smoke-tested.
+The Go module lives at `ffi/go-binding/go` and its package import path is:
 
-Therefore a registry command failing to find Finkit is not automatically a local environment problem. Check [Installation](installation.md) and the actual release contract first.
+```text
+github.com/coeasy/finkit/ffi/go-binding/go/ta
+```
 
-## 15. Performance is slower than expected
+Build the Rust native library before running Go tests:
+
+```bash
+cargo build -p finkit-go --release --locked
+cd ffi/go-binding/go
+LD_LIBRARY_PATH="../../../target/release:${LD_LIBRARY_PATH:-}" go test ./...
+```
+
+On macOS use `DYLD_LIBRARY_PATH`; on Windows make the matching DLL discoverable through `PATH` or the executable directory.
+
+If compilation fails before runtime loading, check:
+
+```bash
+go env CGO_ENABLED
+go env GOOS GOARCH
+```
+
+CGO must be enabled and the C/Rust native library architecture must match the Go process. A successful `go build` does not prove the dynamic loader can find `libfinkit_go` at runtime.
+
+## 15. .NET P/Invoke/package problems
+
+The .NET binding targets .NET 6 and .NET 8 and calls the Rust `finkit_dotnet` library through P/Invoke.
+
+For Linux source validation:
+
+```bash
+cargo build -p finkit-dotnet --release --locked
+LD_LIBRARY_PATH="$PWD/target/release:${LD_LIBRARY_PATH:-}" \
+  dotnet test ffi/dotnet-binding/src/Finkit.Tests/Finkit.Tests.csproj -c Release --framework net8.0
+```
+
+When creating a NuGet candidate, native libraries must be staged into standard RID paths such as:
+
+```text
+runtimes/linux-x64/native/libfinkit_dotnet.so
+runtimes/win-x64/native/finkit_dotnet.dll
+runtimes/osx-x64/native/libfinkit_dotnet.dylib
+runtimes/osx-arm64/native/libfinkit_dotnet.dylib
+```
+
+A local `dotnet pack` succeeding is not proof that all RIDs are present. Inspect the `.nupkg` contents and test restore/run from a clean external project before public NuGet publication.
+
+## 16. Android AAR problems
+
+Android uses a Rust JNI library plus a standard Gradle Android Library project.
+
+The expected build order is:
+
+1. build ABI-specific `libfinkit_android.so` files with `cargo-ndk`;
+2. stage them below `ffi/android-binding/android/src/main/jniLibs/<abi>/`;
+3. run `gradle assembleRelease` from `ffi/android-binding/android`;
+4. inspect the AAR for every advertised ABI.
+
+If `System.loadLibrary("finkit_android")` fails, first inspect the AAR/APK rather than changing JNI code. Confirm the device ABI has a matching `jni/<abi>/libfinkit_android.so` entry.
+
+The Java `Finkit` class loads the library automatically; there is no separate `init()` method.
+
+## 17. iOS XCFramework problems
+
+The iOS build uses three Rust targets:
+
+```text
+aarch64-apple-ios
+aarch64-apple-ios-sim
+x86_64-apple-ios
+```
+
+The latter two form one universal simulator slice. There is no separate `x86_64-apple-ios-sim` Rust target in the supported build flow.
+
+Build with:
+
+```bash
+bash ffi/ios-binding/build-xcframework.sh
+```
+
+If `lipo` or `xcodebuild -create-xcframework` fails, verify all three target libraries exist under `target/<rust-target>/release/` and that Xcode command-line tools point at a complete Xcode installation.
+
+The underlying C symbols retain a historical `alpha_ta_*` prefix for ABI compatibility, while the Swift-facing API is `Finkit`.
+
+## 18. WebAssembly problems
+
+A host workspace build does not prove the WASM target works. Validate the real target:
+
+```bash
+rustup target add wasm32-unknown-unknown
+cargo build -p finkit-wasm --target wasm32-unknown-unknown --release --locked
+```
+
+The raw module is `target/wasm32-unknown-unknown/release/finkit_wasm.wasm`. JavaScript glue/package generation is a separate step and must match the intended `web`, `bundler`, or Node environment.
+
+## 19. Registry commands fail
+
+For v0.1.3, GitHub Release assets are authoritative. Source-build or CI packaging paths do **not** imply publication to PyPI, crates.io, npm, Maven Central, NuGet, a public Go module, CocoaPods/SPM, or an Android registry.
+
+Therefore a registry command failing to find Finkit is not automatically a local environment problem. Check [Installation](installation.md), [Language bindings](language-bindings.md), and the actual release assets first.
+
+## 20. Performance is slower than expected
 
 First ensure the comparison measures the same work:
 
@@ -307,7 +417,7 @@ First ensure the comparison measures the same work:
 - same warm-up and output semantics;
 - same number of formula parses/compiles;
 - same compiler/profile/CPU;
-- no accidental Python list conversion inside the timed loop.
+- no accidental language-level list/array conversion inside the timed loop.
 
 For repeated Python formula workloads:
 
@@ -319,7 +429,7 @@ For repeated Python formula workloads:
 
 Repository benchmark reports are measured snapshots, not universal latency guarantees. See [formula-performance.md](formula-performance.md) and [benchmark-results.md](benchmark-results.md).
 
-## 16. Documentation or generated metadata is inconsistent
+## 21. Documentation or generated metadata is inconsistent
 
 Run the same contract checks used by the repository:
 
@@ -331,16 +441,16 @@ python scripts/check_docs_links.py
 
 Generated documents and registries should be regenerated from their source of truth rather than hand-edited.
 
-## 17. What to include in a useful bug report
+## 22. What to include in a useful bug report
 
 Provide enough information to reproduce the failing layer:
 
 - Finkit version/tag/commit;
 - operating system and CPU architecture;
-- Python/Rust/Node/JDK/CMake version as relevant;
+- Python/Rust/Node/Go/.NET/JDK/Gradle/Xcode/CMake version as relevant;
 - installation method or exact source-build command;
 - smallest input that reproduces the issue;
-- exact indicator/formula/CLI command;
+- exact indicator/formula/CLI call;
 - expected result and actual result;
 - complete error message/backtrace;
 - whether the problem also occurs on a clean checkout/build directory.
