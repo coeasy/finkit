@@ -30,6 +30,26 @@ job = '''  regression-gates:
 
 '''
 ci = replace_once(ci, anchor, job + anchor, "CI regression gate insertion")
+ci = replace_once(
+    ci,
+    '''      - name: Clippy (workspace, advisory)
+        continue-on-error: true
+        run: cargo clippy --workspace --all-targets --locked
+''',
+    '''      - name: Clippy (workspace)
+        run: cargo clippy --workspace --all-targets --locked
+''',
+    "workspace Clippy blocking gate",
+)
+ci = replace_once(
+    ci,
+    '''    continue-on-error: true # advisory until the dependency baseline is reviewed
+    steps:
+''',
+    '''    steps:
+''',
+    "dependency audit blocking gate",
+)
 ci_path.write_text(ci, encoding="utf-8")
 
 cargo_path = Path("core/Cargo.toml")
@@ -45,4 +65,4 @@ new = '''# B1: Optional dhat-rs profiling entry point. The blocking allocation
 cargo = replace_once(cargo, old, new, "memory gate documentation")
 cargo_path.write_text(cargo, encoding="utf-8")
 
-print("persistent memory/performance CI gates staged")
+print("persistent memory/performance and blocking quality CI gates staged")
