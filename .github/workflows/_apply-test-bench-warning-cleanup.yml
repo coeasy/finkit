@@ -1,0 +1,55 @@
+name: Apply test bench warning cleanup
+
+on:
+  push:
+    branches:
+      - "fix/test-bench-warnings-actions"
+    paths:
+      - "scripts/_apply_test_bench_warning_cleanup.py"
+      - ".github/workflows/_apply-test-bench-warning-cleanup.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-test-bench-warning-cleanup
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    env:
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix/test-bench-warnings-actions
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Apply asserted warning cleanup
+        run: python scripts/_apply_test_bench_warning_cleanup.py
+      - name: Format Rust sources
+        run: cargo fmt --all
+      - name: Verify diff hygiene
+        run: git diff --check
+      - name: Compile tests with warnings denied
+        run: cargo test -p finkit --no-run --locked
+      - name: Compile benchmark suite with warnings denied
+        run: cargo bench -p finkit --no-run --locked
+      - name: Commit warning cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- core; then
+            echo "cleanup produced no source changes" >&2
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add core
+          git commit -m "fix: eliminate test and benchmark warnings"
+          git push origin HEAD:fix/test-bench-warnings-actions
