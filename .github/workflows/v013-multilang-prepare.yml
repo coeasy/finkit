@@ -41,6 +41,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add ffi/c-binding/CMakeLists.txt \
+                  ffi/c-binding/include/finkit.hpp \
                   ffi/c-binding/tests/CMakeLists.txt \
                   ffi/c-binding/examples/CMakeLists.txt \
                   ffi/java-binding/java/src/main/java/com/finkit/Indicators.java \
