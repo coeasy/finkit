@@ -28,11 +28,14 @@ jobs:
           cargo test -p finkit factor_plan_direct_paths_reject_stale_registry_dependencies --locked
           RUSTFLAGS="-Dwarnings" cargo check -p finkit-python --locked
 
-      - name: Round 2 canonical IR repair
+      - name: Round 2 registry and canonical IR repair
         run: |
-          python .ci/pr14_harden.py round2
+          python .ci/pr14_round2_fix.py
           cargo fmt --all
+          python scripts/gen_ssot_docs.py
+          cargo test -p finkit --lib registry::tests --locked
           cargo test -p finkit --lib formula::compute_ir --locked
+          cargo test -p finkit --lib formula::pine --locked
 
       - name: Round 3 control flow repair
         run: |
@@ -43,6 +46,7 @@ jobs:
       - name: Final validation
         run: |
           cargo fmt --all -- --check
+          python scripts/gen_ssot_docs.py --check
           cargo check --workspace --all-targets --locked
           cargo clippy -p finkit --all-targets --locked -- -D warnings
           RUSTFLAGS="-Dwarnings" cargo check -p finkit-python --locked
@@ -54,6 +58,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           rm .github/workflows/pr14-round1-structural-fix.yml
           rm .ci/pr14_harden.py
+          rm .ci/pr14_round2_fix.py
           git add -A
           git commit -m "fix: complete three-round compute runtime hardening"
           git push origin HEAD:feat/compute-runtime-factorplan-v012
