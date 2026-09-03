@@ -50,10 +50,11 @@ jobs:
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          # GITHUB_TOKEN has contents:write but not GitHub App workflows permission.
-          # Keep ci.yml out of this bot commit; the connected GitHub integration
-          # updates that workflow separately after source materialization.
-          git restore --source=HEAD -- .github/workflows/ci.yml
+          # GITHUB_TOKEN has contents:write but does not carry GitHub App
+          # workflow permission. Materialize all production changes first;
+          # workflow files are applied separately through the connected GitHub
+          # integration after this commit lands.
+          git restore --source=HEAD -- .github/workflows
           git add -A
           if git diff --cached --quiet; then
             echo 'No materialized changes to commit.'
