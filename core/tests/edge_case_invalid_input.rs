@@ -1,28 +1,28 @@
 //! Edge case: NaN / ±Inf input rejection (R-1).
 //!
-//! Verifies that the public batch indicator entry points return
-//! `Err(TaError::Indicator(IndicatorError::InvalidParameter { .. }))` (and never panic) when the
-//! input slice contains non-finite floating-point values. Also covers
-//! the `metrics` + `tracing` warning paths by simply ensuring the error
-//! surfaces.
+//! Verifies that public batch indicator entry points reject non-finite input
+//! with the stable invalid-parameter semantics and never panic. During the
+//! v0.x error-model migration both the legacy `TaError::InvalidParameter`
+//! compatibility shim and the canonical nested `IndicatorError` may surface;
+//! callers should rely on `TaError::is_invalid_parameter()` rather than a
+//! concrete compatibility variant.
 
-use finkit::error::{IndicatorError, TaError};
 use finkit::indicators::{bbands, macd, rsi};
 use finkit::math::moving_avg::{dema, ema, kama, sma, wma};
 
 fn assert_invalid_param(err: finkit::error::Result<ndarray::Array1<f64>>, needle: &str) {
     match err {
-        Err(TaError::Indicator(IndicatorError::InvalidParameter { param, reason })) => {
+        Err(err) => {
             assert!(
-                param == "input" || param == "period" || param == "output" || param == "close",
-                "unexpected param name: {param}"
+                err.is_invalid_parameter(),
+                "expected InvalidParameter semantics, got {err:?}"
             );
+            let message = err.to_string();
             assert!(
-                reason.contains(needle),
-                "reason {reason:?} should contain {needle:?}"
+                message.contains(needle),
+                "message {message:?} should contain {needle:?}"
             );
         }
-        Err(other) => panic!("expected InvalidParameter, got {other:?}"),
         Ok(v) => panic!("expected error, got Ok({v:?})"),
     }
 }
@@ -72,8 +72,6 @@ fn kama_rejects_nan() {
 #[test]
 fn rsi_rejects_nan() {
     let input = vec![1.0, 2.0, 3.0, 4.0, f64::NAN, 6.0];
-    // RSI may have its own pre-checks; the point is that we never panic
-    // and the result is an Err, not an Ok with poisoned NaN values.
     let r = rsi(&input, 2);
     assert!(r.is_err(), "rsi should error on NaN input");
 }
@@ -94,7 +92,6 @@ fn bbands_rejects_nan() {
 
 #[test]
 fn sma_still_works_on_clean_input() {
-    // Regression guard: the new guard must not affect the happy path.
     let input = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
     let r = sma(&input, 3).expect("clean input should succeed");
     assert_eq!(r.len(), 10);
@@ -104,10 +101,18 @@ fn sma_still_works_on_clean_input() {
 fn sma_zero_period_returns_error() {
     let input = vec![1.0, 2.0, 3.0];
     match sma(&input, 0) {
-        Err(TaError::Indicator(IndicatorError::InvalidParameter { param, reason })) => {
-            assert_eq!(param, "period");
-            assert!(reason.contains("greater than 0"));
+        Err(err) => {
+            assert!(
+                err.is_invalid_parameter(),
+                "expected InvalidParameter semantics, got {err:?}"
+            );
+            let message = err.to_string();
+            assert!(message.contains("period"), "unexpected message: {message}");
+            assert!(
+                message.contains("greater than 0"),
+                "unexpected message: {message}"
+            );
         }
-        other => panic!("expected InvalidParameter, got {other:?}"),
+        Ok(value) => panic!("expected InvalidParameter, got Ok({value:?})"),
     }
 }
