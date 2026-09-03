@@ -88,7 +88,7 @@ The following files are generated or machine-readable contracts and should be ke
 - `generated/version-matrix.md` — generated release/version matrix;
 - `benchmark-baseline.json` — performance-gate baseline where used by CI/scripts.
 
-`scripts/gen_ssot_docs.py --check` and `scripts/check_versions.py` are CI gates for these contracts.
+`scripts/gen_ssot_docs.py --check` and `scripts/check_versions.py` are CI gates for these contracts. `scripts/check_docs_links.py` is also run by Docs Check so repository-local Markdown links fail CI when a referenced file is removed or moved.
 
 ## Documentation policy
 
