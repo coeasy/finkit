@@ -21,6 +21,13 @@ def replace_once(path: str, old: str, new: str, label: str) -> None:
 
 
 def main() -> int:
+    replace_once(
+        "core/tests/formula_cache_tests.rs",
+        '''    fn test_cache_miss_new_formula() {\n        let mut engine = FormulaEngine::new();\n\n        assert!(!engine.cache_hit("CLOSE + OPEN"));\n''',
+        '''    fn test_cache_miss_new_formula() {\n        let engine = FormulaEngine::new();\n\n        assert!(!engine.cache_hit("CLOSE + OPEN"));\n''',
+        "unnecessary mutable cache-miss engine",
+    )
+
     path = ROOT / "core/benches/simd_statistics_bench.rs"
     text = path.read_text(encoding="utf-8")
     start = text.index("fn bench_linear_reg(c: &mut Criterion)")
