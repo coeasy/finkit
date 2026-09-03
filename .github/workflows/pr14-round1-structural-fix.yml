@@ -49,30 +49,33 @@ jobs:
       - name: Round 2E semantic contract repair 4
         run: python .ci/pr14_semantic_contract_fix4.py
 
-      - name: Round 2F format and generated docs
+      - name: Round 2F Pine mapping integrity repair
+        run: python .ci/pr14_semantic_contract_fix5.py
+
+      - name: Round 2G format and generated docs
         run: |
           cargo fmt --all
           python scripts/gen_ssot_docs.py --generate
 
-      - name: Round 2G registry tests
+      - name: Round 2H registry tests
         run: cargo test -p finkit --lib registry::tests --locked
 
-      - name: Round 2H compute IR tests
+      - name: Round 2I compute IR tests
         run: cargo test -p finkit --lib formula::compute_ir --locked
 
-      - name: Round 2I semantic contract tests
+      - name: Round 2J semantic contract tests
         run: cargo test -p finkit --lib formula::functions::pr14_semantic_contract_tests --locked
 
-      - name: Round 2J Pine tests
+      - name: Round 2K Pine tests
         run: cargo test -p finkit --lib formula::pine --locked
 
-      - name: Round 2K terminal golden tests
+      - name: Round 2L terminal golden tests
         run: cargo test -p finkit --test formula_terminal_golden --locked
 
-      - name: Round 2L Polars integration tests
+      - name: Round 2M Polars integration tests
         run: cargo test -p finkit --test polars_integration_tests --features finkit-polars --locked
 
-      - name: Round 2M schema CLI tests
+      - name: Round 2N schema CLI tests
         run: cargo test -p finkit-cli --test schema_cli --locked
 
       - name: Round 3 control flow repair
@@ -89,9 +92,9 @@ jobs:
           cargo test -p finkit factor_plan_direct_paths_reject_stale_registry_dependencies --locked
           cargo test -p finkit precompiled_plan_rejects_changed_dependency_graph --locked
           cargo check --workspace --all-targets --locked
-          cargo clippy -p finkit --lib --locked -- -D warnings
+          cargo clippy -p finkit --all-targets --locked -- -D warnings
           RUSTFLAGS="-Dwarnings" cargo check -p finkit-python --locked
-          cargo clippy --workspace --all-targets --locked
+          cargo clippy --workspace --all-targets --locked -- -D warnings
 
       - name: Commit repairs and clean temporary files
         run: |
@@ -107,6 +110,7 @@ jobs:
           rm .ci/pr14_semantic_contract_fix2.py
           rm .ci/pr14_semantic_contract_fix3.py
           rm .ci/pr14_semantic_contract_fix4.py
+          rm .ci/pr14_semantic_contract_fix5.py
           git add -A
           git commit -m "fix: complete three-round compute runtime hardening"
           git push origin HEAD:feat/compute-runtime-factorplan-v012
