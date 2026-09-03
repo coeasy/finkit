@@ -28,8 +28,10 @@ jobs:
       - name: Round 1 structural and binding repair
         run: |
           python .ci/pr14_harden.py round1
+          python .ci/pr14_round1_compat_fix.py
           cargo fmt --all
           cargo test -p finkit factor_plan_direct_paths_reject_stale_registry_dependencies --locked
+          cargo test -p finkit precompiled_plan_rejects_changed_dependency_graph --locked
           RUSTFLAGS="-Dwarnings" cargo check -p finkit-python --locked
 
       - name: Round 2 registry and canonical IR repair
@@ -63,6 +65,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           rm .github/workflows/pr14-round1-structural-fix.yml
           rm .ci/pr14_harden.py
+          rm .ci/pr14_round1_compat_fix.py
           rm .ci/pr14_round2_fix.py
           rm .ci/pr14_round2_tests_fix.py
           git add -A
