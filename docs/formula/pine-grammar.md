@@ -205,4 +205,4 @@ Pine 源码 → parse_pine() → PineAst
 
 - [Finkit 公式文法（TDX 方言）](./grammar.md)
 - [Pine 兼容矩阵](../generated/pine-compatibility.md)
-- [Pine → Finkit 迁移指南](../migration/pine-to-alphata.md)
+- [Pine → Finkit 迁移指南](../migration/pine-to-finkit.md)
