@@ -60,7 +60,7 @@ def main() -> int:
         fail("generated bindings still call linear_reg: " + ", ".join(offenders))
 
     # GitHub-hosted runners now execute modern JavaScript actions with Node 24.
-    # These exact legacy action majors were observed in Finkit's real workflow
+    # These exact legacy action majors/pins were observed in Finkit's real workflow
     # logs being forced from deprecated Node 20. Keep this list narrow: a generic
     # ban on every `@v4` would incorrectly reject unrelated actions whose major
     # version does not imply the JavaScript runtime.
@@ -74,6 +74,9 @@ def main() -> int:
         "actions/download-artifact@v4": "actions/download-artifact@v8",
         "android-actions/setup-android@v3": "android-actions/setup-android@v4",
         "gradle/actions/setup-gradle@v4": "gradle/actions/setup-gradle@v6",
+        "PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380": (
+            "PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b"
+        ),
     }
     workflow_dir = ROOT / ".github/workflows"
     runtime_offenders: list[str] = []

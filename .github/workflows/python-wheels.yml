@@ -4,6 +4,14 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "core/**"
+      - "ffi/ffi-common/**"
+      - "ffi/python-binding/**"
+      - "visualization/**"
+      - ".github/workflows/python-wheels.yml"
   pull_request:
     paths:
       - "Cargo.toml"
@@ -76,6 +84,7 @@ jobs:
           working-directory: ffi/python-binding
           target: ${{ matrix.platform.target }}
           manylinux: ${{ matrix.platform.manylinux }}
+          docker-options: ${{ runner.os == 'Linux' && '-e PIP_ROOT_USER_ACTION=ignore' || '' }}
           sccache: true
           args: >-
             --release --locked --out dist --compatibility pypi
