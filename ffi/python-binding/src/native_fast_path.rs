@@ -10,6 +10,7 @@ use ::finkit::math::{
 };
 use numpy::{PyArray1, PyReadonlyArray1, PyReadwriteArray1};
 use pyo3::prelude::*;
+use std::mem::{forget, MaybeUninit};
 
 #[inline]
 fn value_error(error: impl std::fmt::Display) -> PyErr {
@@ -41,6 +42,13 @@ fn validate_same_len(a: usize, b: usize) -> PyResult<()> {
     Ok(())
 }
 
+/// Sliding extrema with TA-Lib-style cached extreme indexes.
+///
+/// Typical technical-analysis windows are small (5-30). Keeping two full
+/// monotonic queues costs O(n) memory and branch-heavy maintenance. Instead,
+/// remember the current max/min indexes and only rescan the short window when
+/// an extreme expires. Equal values choose the newest index (`>=` / `<=`),
+/// matching the previous deque semantics.
 fn rolling_extrema_map<F>(
     max_source: &[f64],
     min_source: &[f64],
@@ -52,39 +60,69 @@ where
 {
     let len = max_source.len();
     let mut output = vec![f64::NAN; len];
-    let mut max_queue = Vec::<usize>::with_capacity(len);
-    let mut min_queue = Vec::<usize>::with_capacity(len);
-    let mut max_head = 0usize;
-    let mut min_head = 0usize;
+    if period == 0 || period > len {
+        return output;
+    }
 
-    for index in 0..len {
-        while max_queue.len() > max_head
-            && max_source[*max_queue.last().expect("active max queue")] <= max_source[index]
-        {
-            max_queue.pop();
-        }
-        max_queue.push(index);
-        while min_queue.len() > min_head
-            && min_source[*min_queue.last().expect("active min queue")] >= min_source[index]
-        {
-            min_queue.pop();
-        }
-        min_queue.push(index);
+    unsafe {
+        let max_ptr = max_source.as_ptr();
+        let min_ptr = min_source.as_ptr();
+        let output_ptr = output.as_mut_ptr();
 
-        let expired_before = index.saturating_add(1).saturating_sub(period);
-        while max_head < max_queue.len() && max_queue[max_head] < expired_before {
-            max_head += 1;
+        let mut highest_idx = 0usize;
+        let mut lowest_idx = 0usize;
+        let mut highest = *max_ptr;
+        let mut lowest = *min_ptr;
+        for index in 1..period {
+            let high = *max_ptr.add(index);
+            let low = *min_ptr.add(index);
+            if high >= highest {
+                highest = high;
+                highest_idx = index;
+            }
+            if low <= lowest {
+                lowest = low;
+                lowest_idx = index;
+            }
         }
-        while min_head < min_queue.len() && min_queue[min_head] < expired_before {
-            min_head += 1;
-        }
+        *output_ptr.add(period - 1) = map(period - 1, highest, lowest);
 
-        if index + 1 >= period {
-            output[index] = map(
-                index,
-                max_source[max_queue[max_head]],
-                min_source[min_queue[min_head]],
-            );
+        for index in period..len {
+            let window_start = index + 1 - period;
+            let new_high = *max_ptr.add(index);
+            let new_low = *min_ptr.add(index);
+
+            if highest_idx < window_start {
+                highest = *max_ptr.add(window_start);
+                highest_idx = window_start;
+                for candidate in window_start + 1..=index {
+                    let value = *max_ptr.add(candidate);
+                    if value >= highest {
+                        highest = value;
+                        highest_idx = candidate;
+                    }
+                }
+            } else if new_high >= highest {
+                highest = new_high;
+                highest_idx = index;
+            }
+
+            if lowest_idx < window_start {
+                lowest = *min_ptr.add(window_start);
+                lowest_idx = window_start;
+                for candidate in window_start + 1..=index {
+                    let value = *min_ptr.add(candidate);
+                    if value <= lowest {
+                        lowest = value;
+                        lowest_idx = candidate;
+                    }
+                }
+            } else if new_low <= lowest {
+                lowest = new_low;
+                lowest_idx = index;
+            }
+
+            *output_ptr.add(index) = map(index, highest, lowest);
         }
     }
     output
@@ -111,11 +149,26 @@ fn willr_vec(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Vec<f64
 
 #[inline]
 fn mom_vec(input: &[f64], period: usize) -> Vec<f64> {
-    let mut output = vec![f64::NAN; input.len()];
-    for index in period..input.len() {
-        output[index] = input[index] - input[index - period];
+    let len = input.len();
+    let mut raw = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    unsafe {
+        raw.set_len(len);
+        let input_ptr = input.as_ptr();
+        let output_ptr = raw.as_mut_ptr();
+        for index in 0..period.min(len) {
+            output_ptr.add(index).write(MaybeUninit::new(f64::NAN));
+        }
+        for index in period..len {
+            output_ptr.add(index).write(MaybeUninit::new(
+                *input_ptr.add(index) - *input_ptr.add(index - period),
+            ));
+        }
+        let ptr = raw.as_mut_ptr().cast::<f64>();
+        let capacity = raw.capacity();
+        let length = raw.len();
+        forget(raw);
+        Vec::from_raw_parts(ptr, length, capacity)
     }
-    output
 }
 
 #[pyfunction(name = "_fast_sma")]
@@ -320,6 +373,18 @@ fn fast_vwap_into(
     let output = output.as_slice_mut().map_err(value_error)?;
     py.detach(|| volume_kernels::vwap_into(high, low, close, volume, output))
         .map_err(value_error)
+}
+
+#[pyfunction(name = "_fast_mom")]
+#[pyo3(signature = (close, timeperiod=10))]
+fn fast_mom<'py>(
+    py: Python<'py>,
+    close: PyReadonlyArray1<'py, f64>,
+    timeperiod: usize,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let close = close.as_slice().map_err(value_error)?;
+    validate_period(close.len(), timeperiod)?;
+    Ok(PyArray1::from_vec(py, py.detach(|| mom_vec(close, timeperiod))))
 }
 
 #[pyfunction(name = "_fast_unary_period")]
@@ -729,6 +794,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(fast_obv_into, m)?)?;
     m.add_function(wrap_pyfunction!(fast_vwap, m)?)?;
     m.add_function(wrap_pyfunction!(fast_vwap_into, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_mom, m)?)?;
     m.add_function(wrap_pyfunction!(fast_unary_period, m)?)?;
     m.add_function(wrap_pyfunction!(fast_unary_period_scale, m)?)?;
     m.add_function(wrap_pyfunction!(fast_kama, m)?)?;
