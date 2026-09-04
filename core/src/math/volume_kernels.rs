@@ -18,6 +18,11 @@ fn validate_same_len(name: &'static str, expected: usize, actual: usize) -> Resu
 }
 
 /// Compute On-Balance Volume directly into `output`.
+///
+/// OBV is a serial recurrence.  A temporary delta vector plus a second prefix
+/// pass looks SIMD-friendly, but is materially slower for large arrays because
+/// it doubles memory traffic and allocates another full-length buffer.  Keep the
+/// reference single-pass recurrence and let LLVM optimise the pointer loop.
 #[inline]
 pub fn obv_into(close: &[f64], volume: &[f64], output: &mut [f64]) -> Result<()> {
     validate_same_len("volume", close.len(), volume.len())?;
@@ -25,7 +30,147 @@ pub fn obv_into(close: &[f64], volume: &[f64], output: &mut [f64]) -> Result<()>
     if close.is_empty() {
         return Err(TaError::EmptyInput);
     }
-    crate::math::simd_ops::simd_obv(close, volume, output);
+
+    unsafe {
+        let close_ptr = close.as_ptr();
+        let volume_ptr = volume.as_ptr();
+        let output_ptr = output.as_mut_ptr();
+        let mut acc = *volume_ptr;
+        *output_ptr = acc;
+
+        for i in 1..close.len() {
+            let current = *close_ptr.add(i);
+            let previous = *close_ptr.add(i - 1);
+            let volume_value = *volume_ptr.add(i);
+            if current > previous {
+                acc += volume_value;
+            } else if current < previous {
+                acc -= volume_value;
+            }
+            *output_ptr.add(i) = acc;
+        }
+    }
+    Ok(())
+}
+
+/// Compute the Accumulation/Distribution line directly into `output`.
+///
+/// The cumulative dependency makes a second prefix-sum pass unnecessary.  This
+/// single loop has the same arithmetic order as the existing scalar reference
+/// path while avoiding both scratch storage and an additional read/write pass.
+#[inline]
+pub fn ad_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    volume: &[f64],
+    output: &mut [f64],
+) -> Result<()> {
+    let len = high.len();
+    validate_same_len("low", len, low.len())?;
+    validate_same_len("close", len, close.len())?;
+    validate_same_len("volume", len, volume.len())?;
+    validate_same_len("output", len, output.len())?;
+    if len == 0 {
+        return Err(TaError::EmptyInput);
+    }
+
+    unsafe {
+        let high_ptr = high.as_ptr();
+        let low_ptr = low.as_ptr();
+        let close_ptr = close.as_ptr();
+        let volume_ptr = volume.as_ptr();
+        let output_ptr = output.as_mut_ptr();
+        let mut acc = 0.0;
+
+        for i in 0..len {
+            let h = *high_ptr.add(i);
+            let l = *low_ptr.add(i);
+            let range = h - l;
+            if range.abs() >= 1e-15 {
+                let c = *close_ptr.add(i);
+                let multiplier = ((c - l) - (h - c)) / range;
+                acc += multiplier * *volume_ptr.add(i);
+            }
+            *output_ptr.add(i) = acc;
+        }
+    }
+    Ok(())
+}
+
+/// Compute Chaikin A/D Oscillator in a single pass.
+///
+/// This fuses AD accumulation and both EMA recurrences.  The previous hot path
+/// materialised the entire AD line, then scanned it again for EMA smoothing;
+/// the fused recurrence preserves the exact operation order but removes that
+/// full-length scratch allocation and second memory pass.
+#[inline]
+pub fn adosc_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    volume: &[f64],
+    fast_period: usize,
+    slow_period: usize,
+    output: &mut [f64],
+) -> Result<()> {
+    let len = high.len();
+    validate_same_len("low", len, low.len())?;
+    validate_same_len("close", len, close.len())?;
+    validate_same_len("volume", len, volume.len())?;
+    validate_same_len("output", len, output.len())?;
+    if fast_period == 0 || slow_period == 0 {
+        return Err(TaError::InvalidParameter {
+            name: "fast_period and slow_period".to_string(),
+            constraint: "must be greater than 0".to_string(),
+        });
+    }
+    if len < slow_period {
+        return Err(TaError::InsufficientData {
+            length: len,
+            required: slow_period,
+        });
+    }
+
+    let fast_k = 2.0 / (fast_period as f64 + 1.0);
+    let fast_one_k = 1.0 - fast_k;
+    let slow_k = 2.0 / (slow_period as f64 + 1.0);
+    let slow_one_k = 1.0 - slow_k;
+
+    unsafe {
+        let high_ptr = high.as_ptr();
+        let low_ptr = low.as_ptr();
+        let close_ptr = close.as_ptr();
+        let volume_ptr = volume.as_ptr();
+        let output_ptr = output.as_mut_ptr();
+        let mut cumulative = 0.0;
+        let mut fast_ema = 0.0;
+        let mut slow_ema = 0.0;
+
+        for i in 0..len {
+            let h = *high_ptr.add(i);
+            let l = *low_ptr.add(i);
+            let range = h - l;
+            if range.abs() >= 1e-15 {
+                let c = *close_ptr.add(i);
+                let multiplier = ((c - l) - (h - c)) / range;
+                cumulative += multiplier * *volume_ptr.add(i);
+            }
+
+            if i == 0 {
+                fast_ema = cumulative;
+                slow_ema = cumulative;
+            } else {
+                fast_ema = cumulative * fast_k + fast_ema * fast_one_k;
+                slow_ema = cumulative * slow_k + slow_ema * slow_one_k;
+            }
+            *output_ptr.add(i) = if i >= slow_period - 1 {
+                fast_ema - slow_ema
+            } else {
+                0.0
+            };
+        }
+    }
     Ok(())
 }
 
@@ -78,6 +223,31 @@ mod tests {
         obv_into(&close, &volume, &mut out).unwrap();
         let expected = [100.0, 150.0, 130.0, 130.0, 140.0];
         assert_eq!(out, expected);
+    }
+
+    #[test]
+    fn ad_into_matches_scalar_reference() {
+        let high = [10.0, 12.0, 14.0];
+        let low = [8.0, 10.0, 12.0];
+        let close = [9.0, 11.5, 12.5];
+        let volume = [100.0, 120.0, 80.0];
+        let mut out = [0.0; 3];
+        ad_into(&high, &low, &close, &volume, &mut out).unwrap();
+        assert_eq!(out[0], 0.0);
+        assert!(out[1] > out[0]);
+        assert!(out[2] < out[1]);
+    }
+
+    #[test]
+    fn adosc_into_warms_up_at_slow_period_minus_one() {
+        let high = [10.0, 11.0, 12.0, 13.0, 14.0, 15.0];
+        let low = [8.0, 9.0, 10.0, 11.0, 12.0, 13.0];
+        let close = [9.0, 10.5, 11.0, 12.5, 13.0, 14.5];
+        let volume = [100.0, 110.0, 120.0, 130.0, 140.0, 150.0];
+        let mut out = [0.0; 6];
+        adosc_into(&high, &low, &close, &volume, 3, 5, &mut out).unwrap();
+        assert_eq!(&out[..4], &[0.0; 4]);
+        assert!(out[4].is_finite());
     }
 
     #[test]
