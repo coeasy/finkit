@@ -185,8 +185,6 @@ def patch_package_init() -> None:
     text = path.read_text(encoding="utf-8")
     text = text.replace("\nimport numpy as np\n", "\n")
 
-    # The native extension now returns ndarrays directly. Remove the recursive
-    # list conversion wrapper from every hot-path API call.
     start = text.find("\ndef _as_numpy_result(")
     end = text.find("\n\nfor _name in _native_all:", start)
     if start >= 0 and end >= 0:
@@ -218,9 +216,33 @@ def patch_package_init() -> None:
     _write(path, text)
 
 
+def prune_orphan_python_registrations(text: str) -> str:
+    """Remove module registrations that have no implementation or public contract.
+
+    `chande_forecast_oscillator` and `twiggs_money_flow` were historical
+    registration-only names: they are absent from the core indicator modules,
+    the registry, and the shipped Python type stubs.  Keeping those two
+    `wrap_pyfunction!` calls makes the extension uncompilable after a correct
+    registry regeneration.  Removing the orphan registrations restores the
+    invariant that every registered Python symbol has a real implementation.
+    """
+    orphan_lines = (
+        "    m.add_function(wrap_pyfunction!(chande_forecast_oscillator, m)?)?;\n",
+        "    m.add_function(wrap_pyfunction!(twiggs_money_flow, m)?)?;\n",
+    )
+    removed = 0
+    for line in orphan_lines:
+        if line in text:
+            text = text.replace(line, "", 1)
+            removed += 1
+    print(f"pruned orphan Python registrations: {removed}")
+    return text
+
+
 def patch_batch_compute() -> None:
     path = ROOT / "ffi" / "python-binding" / "src" / "lib.rs"
     text = path.read_text(encoding="utf-8")
+    text = prune_orphan_python_registrations(text)
 
     old = (
         "    let open_vec: Option<Vec<f64>> = open.as_ref().map(|arr| arr.as_array().to_vec());\n"
@@ -283,9 +305,6 @@ def main() -> int:
     patch_batch_compute()
     optimize_all_numeric_pyfunctions()
 
-    # Verify generator/check stability after optimization.  This catches a
-    # future regression where a registry regeneration would restore Vec-returning
-    # public functions.
     subprocess.run(
         [sys.executable, str(ROOT / "scripts" / "sync_bindings.py"), "--lang", "python", "--check"],
         cwd=ROOT,
