@@ -1,7 +1,7 @@
 //! Fused Money Flow Index kernel for the Architecture v3 hot path.
 //!
 //! The legacy implementation materialised a full typical-price array before
-//! running the MFI recurrence.  MFI only needs the previous typical price and a
+//! running the MFI recurrence. MFI only needs the previous typical price and a
 //! `period`-sized positive/negative money-flow ring, so computing TP inline
 //! removes one full-length allocation and memory pass without changing the
 //! floating-point operation order used by the public implementation.
@@ -41,7 +41,10 @@ pub fn mfi(
     }
 
     let len = close.len();
-    let mut output = vec![f64::NAN; len];
+    // Write every output slot once: only the warm-up prefix is NaN, and the
+    // remaining values are appended as they are computed.
+    let mut output = Vec::with_capacity(len);
+    output.resize(period, f64::NAN);
     let mut pos_ring = vec![0.0_f64; period];
     let mut neg_ring = vec![0.0_f64; period];
     let mut pos_sum = 0.0;
@@ -54,7 +57,6 @@ pub fn mfi(
         let low_ptr = low.as_ptr();
         let close_ptr = close.as_ptr();
         let volume_ptr = volume.as_ptr();
-        let output_ptr = output.as_mut_ptr();
         let pos_ptr = pos_ring.as_mut_ptr();
         let neg_ptr = neg_ring.as_mut_ptr();
 
@@ -80,15 +82,16 @@ pub fn mfi(
             }
 
             if i >= period {
-                *output_ptr.add(i) = if neg_sum.abs() > 1e-15 {
+                output.push(if neg_sum.abs() > 1e-15 {
                     100.0 - 100.0 / (1.0 + pos_sum / neg_sum)
                 } else {
                     100.0
-                };
+                });
             }
         }
     }
 
+    debug_assert_eq!(output.len(), len);
     Ok(Array1::from_vec(output))
 }
 
@@ -105,5 +108,6 @@ mod tests {
         let output = mfi(&high, &low, &close, &volume, 3).unwrap();
         assert!(output[..3].iter().all(|value| value.is_nan()));
         assert!(output[3].is_finite());
+        assert_eq!(output.len(), close.len());
     }
 }
