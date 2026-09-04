@@ -3,9 +3,11 @@
 //! Inputs are borrowed NumPy buffers. Vector outputs are built from a Rust Vec with
 //! `PyArray1::from_vec`, which transfers ownership of that allocation to NumPy instead
 //! of materialising an intermediate Python list and then copying through `np.asarray`.
+//! Caller-owned `out=` paths borrow the destination ndarray and execute the same
+//! canonical `*_into` kernels without allocating an intermediate output.
 
 use ::finkit::math::{moving_avg, reduction, typed_moving_avg, volume_kernels};
-use numpy::{PyArray1, PyReadonlyArray1};
+use numpy::{PyArray1, PyReadonlyArray1, PyReadwriteArray1};
 use pyo3::prelude::*;
 
 #[inline]
@@ -27,6 +29,20 @@ fn fast_sma<'py>(
     Ok(PyArray1::from_vec(py, output))
 }
 
+#[pyfunction(name = "_fast_sma_into")]
+#[pyo3(signature = (close, output, timeperiod=14))]
+fn fast_sma_into(
+    py: Python<'_>,
+    close: PyReadonlyArray1<'_, f64>,
+    mut output: PyReadwriteArray1<'_, f64>,
+    timeperiod: usize,
+) -> PyResult<()> {
+    let close = close.as_slice().map_err(value_error)?;
+    let output = output.as_slice_mut().map_err(value_error)?;
+    py.detach(|| moving_avg::sma_into(close, timeperiod, output))
+        .map_err(value_error)
+}
+
 #[pyfunction(name = "_fast_sma_f32")]
 #[pyo3(signature = (close, timeperiod=14))]
 fn fast_sma_f32<'py>(
@@ -39,6 +55,20 @@ fn fast_sma_f32<'py>(
     py.detach(|| typed_moving_avg::sma_f32_into(close, timeperiod, &mut output))
         .map_err(value_error)?;
     Ok(PyArray1::from_vec(py, output))
+}
+
+#[pyfunction(name = "_fast_sma_f32_into")]
+#[pyo3(signature = (close, output, timeperiod=14))]
+fn fast_sma_f32_into(
+    py: Python<'_>,
+    close: PyReadonlyArray1<'_, f32>,
+    mut output: PyReadwriteArray1<'_, f32>,
+    timeperiod: usize,
+) -> PyResult<()> {
+    let close = close.as_slice().map_err(value_error)?;
+    let output = output.as_slice_mut().map_err(value_error)?;
+    py.detach(|| typed_moving_avg::sma_f32_into(close, timeperiod, output))
+        .map_err(value_error)
 }
 
 #[pyfunction(name = "_fast_ema")]
@@ -55,6 +85,20 @@ fn fast_ema<'py>(
     Ok(PyArray1::from_vec(py, output))
 }
 
+#[pyfunction(name = "_fast_ema_into")]
+#[pyo3(signature = (close, output, timeperiod=14))]
+fn fast_ema_into(
+    py: Python<'_>,
+    close: PyReadonlyArray1<'_, f64>,
+    mut output: PyReadwriteArray1<'_, f64>,
+    timeperiod: usize,
+) -> PyResult<()> {
+    let close = close.as_slice().map_err(value_error)?;
+    let output = output.as_slice_mut().map_err(value_error)?;
+    py.detach(|| moving_avg::ema_into(close, timeperiod, output))
+        .map_err(value_error)
+}
+
 #[pyfunction(name = "_fast_ema_f32")]
 #[pyo3(signature = (close, timeperiod=14))]
 fn fast_ema_f32<'py>(
@@ -67,6 +111,20 @@ fn fast_ema_f32<'py>(
     py.detach(|| typed_moving_avg::ema_f32_into(close, timeperiod, &mut output))
         .map_err(value_error)?;
     Ok(PyArray1::from_vec(py, output))
+}
+
+#[pyfunction(name = "_fast_ema_f32_into")]
+#[pyo3(signature = (close, output, timeperiod=14))]
+fn fast_ema_f32_into(
+    py: Python<'_>,
+    close: PyReadonlyArray1<'_, f32>,
+    mut output: PyReadwriteArray1<'_, f32>,
+    timeperiod: usize,
+) -> PyResult<()> {
+    let close = close.as_slice().map_err(value_error)?;
+    let output = output.as_slice_mut().map_err(value_error)?;
+    py.detach(|| typed_moving_avg::ema_f32_into(close, timeperiod, output))
+        .map_err(value_error)
 }
 
 #[pyfunction(name = "_fast_obv")]
@@ -193,9 +251,13 @@ fn reduce_stddev_f32(data: PyReadonlyArray1<'_, f32>) -> PyResult<f32> {
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(fast_sma, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_sma_into, m)?)?;
     m.add_function(wrap_pyfunction!(fast_sma_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_sma_f32_into, m)?)?;
     m.add_function(wrap_pyfunction!(fast_ema, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_ema_into, m)?)?;
     m.add_function(wrap_pyfunction!(fast_ema_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_ema_f32_into, m)?)?;
     m.add_function(wrap_pyfunction!(fast_obv, m)?)?;
     m.add_function(wrap_pyfunction!(fast_vwap, m)?)?;
     m.add_function(wrap_pyfunction!(reduce_sum_f64, m)?)?;
