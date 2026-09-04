@@ -13,7 +13,7 @@ jobs:
   apply:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-22.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
         with:
@@ -24,8 +24,10 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - name: Apply source migrations
+      - name: Apply binding and API migrations
         run: python scripts/apply_talib_performance_plan.py
+      - name: Apply TA-Lib semantic fixes
+        run: python scripts/apply_talib_semantic_fixes.py
       - name: Format Rust
         run: cargo fmt --all
       - name: Validate generated binding stability
@@ -34,6 +36,8 @@ jobs:
           python scripts/optimize_python_bindings.py --check ffi/python-binding/src/generated.rs ffi/python-binding/src/lib.rs
       - name: Compile Python binding
         run: cargo check -p finkit-python --features abi3 --locked
+      - name: Core semantic regression tests
+        run: cargo test -p finkit --lib --locked
       - name: Validate diff
         run: git diff --check
       - name: Commit applied plan
@@ -44,6 +48,18 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add docs/indicator_registry.json scripts/sync_bindings.py ffi/python-binding/src/generated.rs ffi/python-binding/src/lib.rs ffi/python-binding/finkit/__init__.py
-          git commit -m 'perf(python): remove list materialization from indicator API'
+          git add \
+            docs/indicator_registry.json \
+            scripts/sync_bindings.py \
+            ffi/python-binding/src/generated.rs \
+            ffi/python-binding/src/lib.rs \
+            ffi/python-binding/finkit/__init__.py \
+            core/src/indicators/volatility.rs \
+            core/src/indicators/volume.rs \
+            core/src/indicators/momentum.rs \
+            core/src/indicators/overlap.rs \
+            core/src/math/moving_avg.rs \
+            core/src/formula/functions.rs
+          git commit -m 'perf: implement TA-Lib parity and NumPy-direct bindings'
+          git pull --rebase origin fix/talib-performance-plan-20260904
           git push origin HEAD:fix/talib-performance-plan-20260904
