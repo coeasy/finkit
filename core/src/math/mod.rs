@@ -31,6 +31,7 @@ pub mod linear;
 pub mod mfi;
 #[cfg(feature = "std")]
 #[path = "moving_avg.rs"]
+#[allow(dead_code)]
 mod moving_avg_legacy;
 /// Canonical moving-average API.
 ///
