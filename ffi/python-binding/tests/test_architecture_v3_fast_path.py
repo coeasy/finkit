@@ -30,6 +30,55 @@ def test_hot_indicators_return_ndarray_directly():
     assert len(vwap) == len(close)
 
 
+def test_architecture_v3_benchmark_surface_uses_direct_ndarrays():
+    n = 256
+    close = np.linspace(10.0, 30.0, n, dtype=np.float64)
+    open_ = close - 0.1
+    high = close + 1.0
+    low = close - 1.0
+    volume = np.linspace(100.0, 500.0, n, dtype=np.float64)
+
+    single_outputs = [
+        finkit.dema(close, 20),
+        finkit.tema(close, 20),
+        finkit.kama(close, 20),
+        finkit.midpoint(close, 14),
+        finkit.midprice(high, low, 14),
+        finkit.rsi(close, 14),
+        finkit.mom(close, 10),
+        finkit.roc(close, 10),
+        finkit.adx(high, low, close, 14),
+        finkit.cci(high, low, close, 14),
+        finkit.willr(high, low, close, 14),
+        finkit.cmo(close, 14),
+        finkit.mfi(high, low, close, volume, 14),
+        finkit.plus_di(high, low, close, 14),
+        finkit.minus_di(high, low, close, 14),
+        finkit.ad(high, low, close, volume),
+        finkit.adosc(high, low, close, volume, 3, 10),
+        finkit.atr(high, low, close, 14),
+        finkit.natr(high, low, close, 14),
+        finkit.trange(high, low, close),
+        finkit.stddev(close, 20, 1.0),
+        finkit.var(close, 20, 1.0),
+        finkit.correl(high, low, 30),
+        finkit.bop(open_, high, low, close),
+        finkit.sar(high, low, 0.02, 0.2),
+    ]
+    for result in single_outputs:
+        assert isinstance(result, np.ndarray)
+        assert result.dtype == np.float64
+        assert result.shape == close.shape
+
+    bbands = finkit.bollinger_bands(close, 20, 2.0, 2.0, 0)
+    macd = finkit.macd(close, 12, 26, 9)
+    stoch = finkit.stoch(high, low, close, 5, 3, 0, 3, 0)
+    for result in (*bbands, *macd, *stoch):
+        assert isinstance(result, np.ndarray)
+        assert result.dtype == np.float64
+        assert result.shape == close.shape
+
+
 def test_fast_moving_averages_preserve_existing_numerical_contract():
     close = np.arange(1.0, 65.0, dtype=np.float64)
     sma = finkit.sma(close, 5)
