@@ -5,13 +5,14 @@
 //! preserves TA-Lib's floating-point operation order.
 
 use crate::error::{Result, TaError};
+use ndarray::Array1;
 
 #[inline]
 fn typical_price(high: f64, low: f64, close: f64) -> f64 {
     (high + low + close) / 3.0
 }
 
-pub fn cci(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Vec<f64>> {
+pub fn cci(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Array1<f64>> {
     if high.len() != low.len() || high.len() != close.len() {
         return Err(TaError::InvalidParameter {
             name: "high, low, close".to_string(),
@@ -77,7 +78,7 @@ pub fn cci(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Ve
         i += 1;
     }
 
-    Ok(output)
+    Ok(Array1::from_vec(output))
 }
 
 #[cfg(test)]
@@ -101,7 +102,7 @@ mod tests {
         let low = vec![10.0; 32];
         let close = vec![10.0; 32];
         let result = cci(&high, &low, &close, 14).unwrap();
-        assert!(result[..13].iter().all(|value| value.is_nan()));
-        assert!(result[13..].iter().all(|value| *value == 0.0));
+        assert!(result.iter().take(13).all(|value| value.is_nan()));
+        assert!(result.iter().skip(13).all(|value| *value == 0.0));
     }
 }
