@@ -11,6 +11,7 @@
 //! ## std-only submodules
 //!
 //! - [`cci`] — TA-Lib 0.7.1-compatible Commodity Channel Index kernel (requires `std` feature)
+//! - [`mfi`] — fused Money Flow Index kernel without a full typical-price scratch array (requires `std` feature)
 //! - [`moving_avg`] — SMA, EMA, WMA, DEMA, TEMA, KAMA, T3, TRIMA, HMA, ALMA, MAVP (requires `std` feature)
 //! - [`statistics`] — Rolling variance, standard deviation, min, max, correlation (requires `std` feature)
 //! - [`rolling_stats`] — TA-Lib 0.7.1-compatible rolling statistics (requires `std` feature)
@@ -24,6 +25,8 @@
 pub mod cci;
 #[cfg(feature = "std")]
 pub mod linear;
+#[cfg(feature = "std")]
+pub mod mfi;
 #[cfg(feature = "std")]
 pub mod moving_avg;
 // B1: `libm_shim` is the `no_std`-portable home for the float primitives used
