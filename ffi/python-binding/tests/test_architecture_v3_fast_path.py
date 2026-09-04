@@ -67,6 +67,28 @@ def test_sma_and_ema_reuse_caller_owned_output_buffers():
     np.testing.assert_allclose(ema_out, expected_ema, equal_nan=True)
 
 
+def test_volume_hot_paths_reuse_caller_owned_output_buffers():
+    close = np.linspace(10.0, 30.0, 128, dtype=np.float64)
+    volume = np.linspace(100.0, 500.0, 128, dtype=np.float64)
+    high = close + 1.0
+    low = close - 1.0
+
+    expected_obv = finkit.obv(close, volume)
+    expected_vwap = finkit.vwap(high, low, close, volume)
+    obv_out = np.empty_like(close)
+    vwap_out = np.empty_like(close)
+
+    assert finkit.obv(close, volume, out=obv_out) is obv_out
+    assert finkit.vwap(high, low, close, volume, out=vwap_out) is vwap_out
+    np.testing.assert_allclose(obv_out, expected_obv, equal_nan=True)
+    np.testing.assert_allclose(vwap_out, expected_vwap, equal_nan=True)
+
+    with pytest.raises(finkit.InvalidParameterError, match="overlap"):
+        finkit.obv(close, volume, out=volume)
+    with pytest.raises(finkit.InvalidParameterError, match="overlap"):
+        finkit.vwap(high, low, close, volume, out=low)
+
+
 def test_reusable_output_preserves_float32_and_rejects_unsafe_buffers():
     close = np.linspace(10.0, 30.0, 128, dtype=np.float32)
     out = np.empty_like(close)
