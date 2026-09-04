@@ -30,8 +30,15 @@ jobs:
         run: |
           grep -q "PY_NUMPY_DIRECT_RETURN_V1" ffi/python-binding/src/generated.rs
           grep -q "PyArray1::from_vec" ffi/python-binding/src/generated.rs
-          ! grep -R "PyResult<Vec<f64>>" ffi/python-binding/src/generated.rs
-          ! grep -R "PyResult<(Vec<f64>" ffi/python-binding/src/generated.rs
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          for path in [Path('ffi/python-binding/src/generated.rs'), Path('ffi/python-binding/src/lib.rs')]:
+              text = path.read_text()
+              bad = re.findall(r'#\[pyfunction\](?:.|\n){0,700}?fn\s+(?![A-Za-z0-9_]*_vec\b)[A-Za-z0-9_]+(?:.|\n){0,900}?->\s*PyResult\s*<\s*(?:Vec\s*<|\(\s*Vec\s*<)', text)
+              if bad:
+                  raise SystemExit(f'public Vec-return pyfunction remains in {path}: {len(bad)}')
+          PY
       - name: Format and compile Python binding
         run: |
           cargo fmt --all
