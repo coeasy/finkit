@@ -12,30 +12,36 @@ def test_hot_indicators_return_ndarray_directly():
 
     sma = finkit.sma(close, 14)
     ema = finkit.ema(close, 14)
+    wma = finkit.wma(close, 14)
     obv = finkit.obv(close, volume)
     vwap = finkit.vwap(high, low, close, volume)
 
     assert isinstance(sma, np.ndarray)
     assert isinstance(ema, np.ndarray)
+    assert isinstance(wma, np.ndarray)
     assert isinstance(obv, np.ndarray)
     assert isinstance(vwap, np.ndarray)
     assert sma.dtype == np.float64
     assert ema.dtype == np.float64
+    assert wma.dtype == np.float64
     assert obv.dtype == np.float64
     assert vwap.dtype == np.float64
     assert len(sma) == len(close)
     assert len(vwap) == len(close)
 
 
-def test_fast_sma_and_ema_preserve_existing_numerical_contract():
+def test_fast_moving_averages_preserve_existing_numerical_contract():
     close = np.arange(1.0, 65.0, dtype=np.float64)
     sma = finkit.sma(close, 5)
     ema = finkit.ema(close, 5)
+    wma = finkit.wma(close, 5)
 
     assert np.isnan(sma[:4]).all()
     assert np.isnan(ema[:4]).all()
+    assert np.isnan(wma[:4]).all()
     assert np.isclose(sma[4], 3.0)
     assert np.isclose(ema[4], 3.0)
+    assert np.isclose(wma[4], 55.0 / 15.0)
 
 
 def test_float32_sma_and_ema_stay_float32():
@@ -51,20 +57,22 @@ def test_float32_sma_and_ema_stay_float32():
     assert np.isfinite(ema[13:]).all()
 
 
-def test_sma_and_ema_reuse_caller_owned_output_buffers():
+def test_moving_averages_reuse_caller_owned_output_buffers():
     close = np.arange(1.0, 65.0, dtype=np.float64)
     expected_sma = finkit.sma(close, 5)
     expected_ema = finkit.ema(close, 5)
+    expected_wma = finkit.wma(close, 5)
     sma_out = np.empty_like(close)
     ema_out = np.empty_like(close)
+    wma_out = np.empty_like(close)
 
-    sma_result = finkit.sma(close, 5, out=sma_out)
-    ema_result = finkit.ema(close, 5, out=ema_out)
+    assert finkit.sma(close, 5, out=sma_out) is sma_out
+    assert finkit.ema(close, 5, out=ema_out) is ema_out
+    assert finkit.wma(close, 5, out=wma_out) is wma_out
 
-    assert sma_result is sma_out
-    assert ema_result is ema_out
     np.testing.assert_allclose(sma_out, expected_sma, equal_nan=True)
     np.testing.assert_allclose(ema_out, expected_ema, equal_nan=True)
+    np.testing.assert_allclose(wma_out, expected_wma, equal_nan=True)
 
 
 def test_volume_hot_paths_reuse_caller_owned_output_buffers():
