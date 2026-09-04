@@ -246,9 +246,7 @@ include!("generated.rs");
 #[cfg(test)]
 #[no_mangle]
 pub unsafe extern "C" fn ta_ffi_panic_test() -> i32 {
-    ffi_catch_i32(|| unsafe {
-        panic!("ta_ffi_panic_test: injected panic");
-    })
+    ffi_catch_i32(|| panic!("ta_ffi_panic_test: injected panic"))
 }
 
 #[cfg(test)]
@@ -280,7 +278,7 @@ mod tests {
     #[test]
     fn code_ok_after_init() {
         // The thread-local starts at 0. Just confirm the getter works.
-        assert_eq!(unsafe { ta_last_error_code() }, 0);
+        assert_eq!(ta_last_error_code(), 0);
     }
 
     #[test]
