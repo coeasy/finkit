@@ -1,12 +1,13 @@
 //! Architecture v3 Python hot paths.
 //!
-//! This module keeps the registry-generated API as the public SSOT while routing
-//! performance-critical NumPy calls through borrowed input slices and direct
-//! ndarray outputs. Rolling extrema families share a monotonic-queue kernel so
-//! MIDPOINT, MIDPRICE and WILLR no longer rescan every window independently.
+//! Public functions remain registry-defined, while hot NumPy calls borrow input
+//! slices and return NumPy-owned Rust vectors directly. Stateful rolling
+//! statistics use the shared cancellation-resistant core in `rolling_stats`.
 
 use ::finkit::indicators;
-use ::finkit::math::{moving_avg, reduction, typed_moving_avg, volume_kernels};
+use ::finkit::math::{
+    moving_avg, reduction, rolling_stats, typed_moving_avg, volume_kernels,
+};
 use numpy::{PyArray1, PyReadonlyArray1, PyReadwriteArray1};
 use pyo3::prelude::*;
 
@@ -38,10 +39,6 @@ fn validate_same_len(a: usize, b: usize) -> PyResult<()> {
     Ok(())
 }
 
-/// Map one rolling max/min family in O(n) using monotonic index queues.
-///
-/// The backing vectors grow at most to input length, but every index is pushed
-/// and popped once. There are no per-window allocations and no O(period) scans.
 fn rolling_extrema_map<F>(
     max_source: &[f64],
     min_source: &[f64],
@@ -65,7 +62,6 @@ where
             max_queue.pop();
         }
         max_queue.push(index);
-
         while min_queue.len() > min_head
             && min_source[*min_queue.last().expect("active min queue")] >= min_source[index]
         {
@@ -379,17 +375,22 @@ fn fast_unary_period_scale<'py>(
     scale: f64,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let close = close.as_slice().map_err(value_error)?;
-    let output = py
-        .detach(|| match operation {
-            "stddev" => indicators::std_dev(close, timeperiod, scale),
-            "var" => indicators::var(close, timeperiod, scale),
-            _ => Err(::finkit::error::TaError::InvalidParameter {
-                name: "operation".to_string(),
-                constraint: format!("unsupported fast operation: {operation}"),
-            }),
-        })
-        .map_err(value_error)?;
-    Ok(PyArray1::from_vec(py, output.into_raw_vec()))
+    let output = match operation {
+        "stddev" => py
+            .detach(|| rolling_stats::stddev(close, timeperiod, scale))
+            .map_err(value_error)?,
+        // TA-Lib keeps nbdev on VAR for API compatibility but the batch VAR
+        // recurrence itself returns population variance unchanged.
+        "var" => py
+            .detach(|| rolling_stats::variance(close, timeperiod))
+            .map_err(value_error)?,
+        _ => {
+            return Err(value_error(format!(
+                "invalid parameter: unsupported fast operation {operation}"
+            )))
+        }
+    };
+    Ok(PyArray1::from_vec(py, output))
 }
 
 #[pyfunction(name = "_fast_kama")]
@@ -425,9 +426,8 @@ fn fast_binary_period<'py>(
             py.detach(|| midpoint_vec(input_a, input_b, timeperiod))
         }
         "correl" => py
-            .detach(|| indicators::correlation(input_a, input_b, timeperiod))
-            .map_err(value_error)?
-            .into_raw_vec(),
+            .detach(|| rolling_stats::correlation(input_a, input_b, timeperiod))
+            .map_err(value_error)?,
         _ => {
             return Err(value_error(format!(
                 "invalid parameter: unsupported fast operation {operation}"
@@ -596,13 +596,13 @@ fn fast_bbands<'py>(
     Bound<'py, PyArray1<f64>>,
 )> {
     let close = close.as_slice().map_err(value_error)?;
-    let result = py
-        .detach(|| indicators::bbands(close, timeperiod, nbdevup, nbdevdn))
+    let (upper, middle, lower) = py
+        .detach(|| rolling_stats::bbands_sma(close, timeperiod, nbdevup, nbdevdn))
         .map_err(value_error)?;
     Ok((
-        PyArray1::from_vec(py, result.upper.into_raw_vec()),
-        PyArray1::from_vec(py, result.middle.into_raw_vec()),
-        PyArray1::from_vec(py, result.lower.into_raw_vec()),
+        PyArray1::from_vec(py, upper),
+        PyArray1::from_vec(py, middle),
+        PyArray1::from_vec(py, lower),
     ))
 }
 
@@ -670,95 +670,28 @@ fn fast_stoch<'py>(
     ))
 }
 
-#[pyfunction(name = "_reduce_sum_f64")]
-fn reduce_sum_f64(data: PyReadonlyArray1<'_, f64>) -> PyResult<f64> {
-    let data = data.as_slice().map_err(value_error)?;
-    if data.is_empty() {
-        return Err(value_error("input data is empty"));
-    }
-    Ok(reduction::sum_f64(data))
+macro_rules! reduction_fn {
+    ($name:ident, $ty:ty, $kernel:path) => {
+        fn $name(data: PyReadonlyArray1<'_, $ty>) -> PyResult<$ty> {
+            let data = data.as_slice().map_err(value_error)?;
+            if data.is_empty() {
+                return Err(value_error("input data is empty"));
+            }
+            Ok($kernel(data))
+        }
+    };
 }
 
-#[pyfunction(name = "_reduce_mean_f64")]
-fn reduce_mean_f64(data: PyReadonlyArray1<'_, f64>) -> PyResult<f64> {
-    let data = data.as_slice().map_err(value_error)?;
-    if data.is_empty() {
-        return Err(value_error("input data is empty"));
-    }
-    Ok(reduction::mean_f64(data))
-}
-
-#[pyfunction(name = "_reduce_min_f64")]
-fn reduce_min_f64(data: PyReadonlyArray1<'_, f64>) -> PyResult<f64> {
-    let data = data.as_slice().map_err(value_error)?;
-    if data.is_empty() {
-        return Err(value_error("input data is empty"));
-    }
-    Ok(reduction::min_f64(data))
-}
-
-#[pyfunction(name = "_reduce_max_f64")]
-fn reduce_max_f64(data: PyReadonlyArray1<'_, f64>) -> PyResult<f64> {
-    let data = data.as_slice().map_err(value_error)?;
-    if data.is_empty() {
-        return Err(value_error("input data is empty"));
-    }
-    Ok(reduction::max_f64(data))
-}
-
-#[pyfunction(name = "_reduce_stddev_f64")]
-fn reduce_stddev_f64(data: PyReadonlyArray1<'_, f64>) -> PyResult<f64> {
-    let data = data.as_slice().map_err(value_error)?;
-    if data.is_empty() {
-        return Err(value_error("input data is empty"));
-    }
-    Ok(reduction::stddev_f64(data))
-}
-
-#[pyfunction(name = "_reduce_sum_f32")]
-fn reduce_sum_f32(data: PyReadonlyArray1<'_, f32>) -> PyResult<f32> {
-    let data = data.as_slice().map_err(value_error)?;
-    if data.is_empty() {
-        return Err(value_error("input data is empty"));
-    }
-    Ok(reduction::sum_f32(data))
-}
-
-#[pyfunction(name = "_reduce_mean_f32")]
-fn reduce_mean_f32(data: PyReadonlyArray1<'_, f32>) -> PyResult<f32> {
-    let data = data.as_slice().map_err(value_error)?;
-    if data.is_empty() {
-        return Err(value_error("input data is empty"));
-    }
-    Ok(reduction::mean_f32(data))
-}
-
-#[pyfunction(name = "_reduce_min_f32")]
-fn reduce_min_f32(data: PyReadonlyArray1<'_, f32>) -> PyResult<f32> {
-    let data = data.as_slice().map_err(value_error)?;
-    if data.is_empty() {
-        return Err(value_error("input data is empty"));
-    }
-    Ok(reduction::min_f32(data))
-}
-
-#[pyfunction(name = "_reduce_max_f32")]
-fn reduce_max_f32(data: PyReadonlyArray1<'_, f32>) -> PyResult<f32> {
-    let data = data.as_slice().map_err(value_error)?;
-    if data.is_empty() {
-        return Err(value_error("input data is empty"));
-    }
-    Ok(reduction::max_f32(data))
-}
-
-#[pyfunction(name = "_reduce_stddev_f32")]
-fn reduce_stddev_f32(data: PyReadonlyArray1<'_, f32>) -> PyResult<f32> {
-    let data = data.as_slice().map_err(value_error)?;
-    if data.is_empty() {
-        return Err(value_error("input data is empty"));
-    }
-    Ok(reduction::stddev_f32(data))
-}
+reduction_fn!(reduce_sum_f64, f64, reduction::sum_f64);
+reduction_fn!(reduce_mean_f64, f64, reduction::mean_f64);
+reduction_fn!(reduce_min_f64, f64, reduction::min_f64);
+reduction_fn!(reduce_max_f64, f64, reduction::max_f64);
+reduction_fn!(reduce_stddev_f64, f64, reduction::stddev_f64);
+reduction_fn!(reduce_sum_f32, f32, reduction::sum_f32);
+reduction_fn!(reduce_mean_f32, f32, reduction::mean_f32);
+reduction_fn!(reduce_min_f32, f32, reduction::min_f32);
+reduction_fn!(reduce_max_f32, f32, reduction::max_f32);
+reduction_fn!(reduce_stddev_f32, f32, reduction::stddev_f32);
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(fast_sma, m)?)?;
