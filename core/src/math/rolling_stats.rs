@@ -139,8 +139,8 @@ pub fn correlation(input_a: &[f64], input_b: &[f64], period: usize) -> Result<Ve
     let mut trailing_y = input_b[trailing_idx];
     trailing_idx += 1;
 
-    let mut temp_real = (sum_x2 - sum_x * sum_x / period as f64)
-        * (sum_y2 - sum_y * sum_y / period as f64);
+    let mut temp_real =
+        (sum_x2 - sum_x * sum_x / period as f64) * (sum_y2 - sum_y * sum_y / period as f64);
     output[lookback] = if !is_zero_or_negative(temp_real) {
         (sum_xy - sum_x * sum_y / period as f64) / temp_real.sqrt()
     } else {
@@ -167,8 +167,8 @@ pub fn correlation(input_a: &[f64], input_b: &[f64], period: usize) -> Result<Ve
         trailing_y = input_b[trailing_idx];
         trailing_idx += 1;
 
-        temp_real = (sum_x2 - sum_x * sum_x / period as f64)
-            * (sum_y2 - sum_y * sum_y / period as f64);
+        temp_real =
+            (sum_x2 - sum_x * sum_x / period as f64) * (sum_y2 - sum_y * sum_y / period as f64);
         output[today - 1] = if !is_zero_or_negative(temp_real) {
             (sum_xy - sum_x * sum_y / period as f64) / temp_real.sqrt()
         } else {
