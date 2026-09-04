@@ -86,7 +86,7 @@ def fix_macd_into_and_test() -> None:
 
     old_test = '''        let result = macd(&input, 12, 26, 9).unwrap();
         assert!(!result.macd[25].is_nan());'''
-    new_test = '''        let result = macd(&input, 12, 26, 9).unwrap();
+    old_generated_test = '''        let result = macd(&input, 12, 26, 9).unwrap();
         let lookback = 26 + 9 - 2;
         assert!(result.macd[..lookback].iter().all(|value| value.is_nan()));
         assert!(result.signal[..lookback].iter().all(|value| value.is_nan()));
@@ -94,8 +94,18 @@ def fix_macd_into_and_test() -> None:
         assert!(result.macd[lookback].is_finite());
         assert!(result.signal[lookback].is_finite());
         assert!(result.hist[lookback].is_finite());'''
+    new_test = '''        let result = macd(&input, 12, 26, 9).unwrap();
+        let lookback = 26 + 9 - 2;
+        assert!(result.macd.iter().take(lookback).all(|value| value.is_nan()));
+        assert!(result.signal.iter().take(lookback).all(|value| value.is_nan()));
+        assert!(result.hist.iter().take(lookback).all(|value| value.is_nan()));
+        assert!(result.macd[lookback].is_finite());
+        assert!(result.signal[lookback].is_finite());
+        assert!(result.hist[lookback].is_finite());'''
     if old_test in text:
         text = text.replace(old_test, new_test, 1)
+    elif old_generated_test in text:
+        text = text.replace(old_generated_test, new_test, 1)
     elif new_test not in text:
         raise RuntimeError("MACD legacy test fragment not found")
 
