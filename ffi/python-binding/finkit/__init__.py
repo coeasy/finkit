@@ -279,6 +279,14 @@ if "std_dev" in globals():
         return _std_dev_impl(close, timeperiod=timeperiod, nbdev=nbdev)
 
 
+if "correlation" in globals():
+    _correlation_impl = correlation
+
+    def correl(input_a, input_b, timeperiod=30):
+        """TA-Lib spelling alias for Finkit's rolling Pearson correlation."""
+        return _correlation_impl(input_a, input_b, timeperiod=timeperiod)
+
+
 def register_accessor():
     """Explicitly register the df.ta accessor (idempotent)."""
     TaAccessor._register()
@@ -301,3 +309,5 @@ __all__ = list(_native_all) + [
 ]
 if "stddev" in globals() and "stddev" not in __all__:
     __all__.append("stddev")
+if "correl" in globals() and "correl" not in __all__:
+    __all__.append("correl")
