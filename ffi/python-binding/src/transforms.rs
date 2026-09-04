@@ -1,3 +1,6 @@
+#[path = "native_fast_path.rs"]
+mod native_fast_path;
+
 use finkit::transforms::{
     Diff, DiffN, LogReturn, MinMaxScaler, PctChange, PercentileRank, Pipeline, Rank, RollingMean,
     RollingStd, RollingSum, StandardScaler, Transform, ZScore,
@@ -151,5 +154,6 @@ pub fn register_transform_classes(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(pyo3::wrap_pyfunction!(transform_rank, m)?)?;
     m.add_function(pyo3::wrap_pyfunction!(transform_diff, m)?)?;
     m.add_function(pyo3::wrap_pyfunction!(transform_rolling_mean, m)?)?;
+    native_fast_path::register(m)?;
     Ok(())
 }
