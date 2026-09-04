@@ -66,12 +66,7 @@ def _translate_native_errors(name, function):
 
 
 def _as_numpy_result(name, function):
-    """Expose native numeric results as NumPy arrays consistently.
-
-    The low-level Rust ABI may return Vec values, dictionaries, or tuples.
-    Convert nested numeric containers at the package boundary so every public
-    numeric API follows the NumPy-facing type contract.
-    """
+    """Expose native numeric results as NumPy arrays consistently."""
 
     def convert(value):
         if isinstance(value, dict):
@@ -101,7 +96,6 @@ for _name in _native_all:
 
 
 def _as_contiguous_float64(values):
-    """Borrow an existing C-contiguous float64 array, copying only when required."""
     array = np.asarray(values)
     if array.ndim != 1:
         raise InvalidParameterError("expected a one-dimensional numeric array")
@@ -111,7 +105,6 @@ def _as_contiguous_float64(values):
 
 
 def _as_contiguous_float_array(values):
-    """Preserve native float32/float64 arrays for typed vector hot paths."""
     array = np.asarray(values)
     if array.ndim != 1:
         raise InvalidParameterError("expected a one-dimensional numeric array")
@@ -122,22 +115,36 @@ def _as_contiguous_float_array(values):
     return np.ascontiguousarray(array, dtype=np.float64)
 
 
+def _validate_out(out, source):
+    if not isinstance(out, np.ndarray):
+        raise InvalidParameterError("out must be a NumPy ndarray")
+    if out.ndim != 1 or out.shape != source.shape:
+        raise InvalidParameterError("out must be one-dimensional and match input shape")
+    if out.dtype != source.dtype:
+        raise InvalidParameterError("out dtype must match the normalized input dtype")
+    if not out.flags.c_contiguous or not out.flags.writeable:
+        raise InvalidParameterError("out must be writable and C-contiguous")
+    return out
+
+
 def _as_contiguous_reduction_input(values):
-    """Keep float32/float64 reductions on their native typed kernels."""
     array = _as_contiguous_float_array(values)
     if array.dtype == np.float32:
         return array, np.float32
     return array, float
 
 
-# Architecture 3.0 P0: keep the established package API but route the hottest
-# single-output indicators through native functions that return NumPy arrays
-# directly. For already-contiguous float32/float64 inputs the Rust binding borrows
-# the NumPy memory and there is no input conversion/copy.
 if hasattr(_native, "_fast_sma"):
 
-    def sma(close, timeperiod=14):
+    def sma(close, timeperiod=14, out=None):
         close = _as_contiguous_float_array(close)
+        if out is not None:
+            out = _validate_out(out, close)
+            if close.dtype == np.float32 and hasattr(_native, "_fast_sma_f32_into"):
+                _native._fast_sma_f32_into(close, out, timeperiod)
+            else:
+                _native._fast_sma_into(close, out, timeperiod)
+            return out
         if close.dtype == np.float32 and hasattr(_native, "_fast_sma_f32"):
             return _native._fast_sma_f32(close, timeperiod)
         return _native._fast_sma(close, timeperiod)
@@ -146,8 +153,15 @@ if hasattr(_native, "_fast_sma"):
 
 if hasattr(_native, "_fast_ema"):
 
-    def ema(close, timeperiod=14):
+    def ema(close, timeperiod=14, out=None):
         close = _as_contiguous_float_array(close)
+        if out is not None:
+            out = _validate_out(out, close)
+            if close.dtype == np.float32 and hasattr(_native, "_fast_ema_f32_into"):
+                _native._fast_ema_f32_into(close, out, timeperiod)
+            else:
+                _native._fast_ema_into(close, out, timeperiod)
+            return out
         if close.dtype == np.float32 and hasattr(_native, "_fast_ema_f32"):
             return _native._fast_ema_f32(close, timeperiod)
         return _native._fast_ema(close, timeperiod)
@@ -185,37 +199,29 @@ def _typed_reduce(values, f32_name, f64_name):
 
 
 def reduce_sum(values):
-    """Allocation-free scalar sum preserving float32 vs float64 input type."""
     return _typed_reduce(values, "_reduce_sum_f32", "_reduce_sum_f64")
 
 
 def reduce_mean(values):
-    """Allocation-free scalar arithmetic mean preserving input floating type."""
     return _typed_reduce(values, "_reduce_mean_f32", "_reduce_mean_f64")
 
 
 def reduce_min(values):
-    """Allocation-free scalar minimum preserving input floating type."""
     return _typed_reduce(values, "_reduce_min_f32", "_reduce_min_f64")
 
 
 def reduce_max(values):
-    """Allocation-free scalar maximum preserving input floating type."""
     return _typed_reduce(values, "_reduce_max_f32", "_reduce_max_f64")
 
 
 def reduce_stddev(values):
-    """Allocation-free population standard deviation preserving floating type."""
     return _typed_reduce(values, "_reduce_stddev_f32", "_reduce_stddev_f64")
 
 
-# TA-Lib-compatible public boundary. Keep compatibility handling in Python so the
-# native hot kernels do not carry keyword/shape policy branches on every call.
 if "sar" in globals():
     _sar_impl = sar
 
     def sar(high, low, acceleration=0.02, maximum=0.2):
-        """Parabolic SAR with the single-array TA-Lib public result shape."""
         result = _sar_impl(high, low, acceleration=acceleration, maximum=maximum)
         if isinstance(result, tuple):
             return result[0]
@@ -225,21 +231,11 @@ if "sar" in globals():
 if "bollinger_bands" in globals():
     _bollinger_bands_impl = bollinger_bands
 
-    def bollinger_bands(
-        close,
-        timeperiod=20,
-        nbdevup=2.0,
-        nbdevdn=2.0,
-        matype=0,
-    ):
-        """TA-Lib-compatible BBANDS keyword surface for the supported SMA mode."""
+    def bollinger_bands(close, timeperiod=20, nbdevup=2.0, nbdevdn=2.0, matype=0):
         if matype != 0:
             raise ValueError("bollinger_bands currently supports matype=0 only")
         return _bollinger_bands_impl(
-            close,
-            timeperiod=timeperiod,
-            nbdevup=nbdevup,
-            nbdevdn=nbdevdn,
+            close, timeperiod=timeperiod, nbdevup=nbdevup, nbdevdn=nbdevdn
         )
 
 
@@ -256,7 +252,6 @@ if "stoch" in globals():
         slowd_period=3,
         slowd_matype=0,
     ):
-        """TA-Lib-compatible STOCH keyword surface for SMA smoothing."""
         if slowk_matype != 0:
             raise ValueError("stoch currently supports slowk_matype=0 only")
         if slowd_matype != 0:
@@ -275,7 +270,6 @@ if "std_dev" in globals():
     _std_dev_impl = std_dev
 
     def stddev(close, timeperiod=20, nbdev=1.0):
-        """TA-Lib spelling alias for Finkit's standard-deviation indicator."""
         return _std_dev_impl(close, timeperiod=timeperiod, nbdev=nbdev)
 
 
@@ -283,12 +277,10 @@ if "correlation" in globals():
     _correlation_impl = correlation
 
     def correl(input_a, input_b, timeperiod=30):
-        """TA-Lib spelling alias for Finkit's rolling Pearson correlation."""
         return _correlation_impl(input_a, input_b, timeperiod=timeperiod)
 
 
 def register_accessor():
-    """Explicitly register the df.ta accessor (idempotent)."""
     TaAccessor._register()
 
 
