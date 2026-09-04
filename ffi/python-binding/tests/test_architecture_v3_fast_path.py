@@ -37,6 +37,19 @@ def test_fast_sma_and_ema_preserve_existing_numerical_contract():
     assert np.isclose(ema[4], 3.0)
 
 
+def test_float32_sma_and_ema_stay_float32():
+    close = np.linspace(10.0, 30.0, 128, dtype=np.float32)
+    sma = finkit.sma(close, 14)
+    ema = finkit.ema(close, 14)
+
+    assert sma.dtype == np.float32
+    assert ema.dtype == np.float32
+    assert np.isnan(sma[:13]).all()
+    assert np.isnan(ema[:13]).all()
+    assert np.isfinite(sma[13:]).all()
+    assert np.isfinite(ema[13:]).all()
+
+
 def test_scalar_reductions_preserve_float32_type():
     data = np.array([1.0, 2.0, 3.0, 4.0], dtype=np.float32)
 
