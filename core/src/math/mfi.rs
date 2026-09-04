@@ -89,11 +89,13 @@ pub fn mfi(
             }
 
             if i >= period {
-                output_ptr.add(i).write(MaybeUninit::new(if neg_sum.abs() > 1e-15 {
-                    100.0 - 100.0 / (1.0 + pos_sum / neg_sum)
-                } else {
-                    100.0
-                }));
+                output_ptr
+                    .add(i)
+                    .write(MaybeUninit::new(if neg_sum.abs() > 1e-15 {
+                        100.0 - 100.0 / (1.0 + pos_sum / neg_sum)
+                    } else {
+                        100.0
+                    }));
             }
         }
 
@@ -118,7 +120,7 @@ mod tests {
         let close = [9.5, 10.5, 11.5, 10.5, 12.5, 13.5];
         let volume = [100.0, 110.0, 120.0, 130.0, 140.0, 150.0];
         let output = mfi(&high, &low, &close, &volume, 3).unwrap();
-        assert!(output[..3].iter().all(|value| value.is_nan()));
+        assert!(output.iter().take(3).all(|value| value.is_nan()));
         assert!(output[3].is_finite());
         assert_eq!(output.len(), close.len());
     }
