@@ -29,22 +29,20 @@ jobs:
           VERSION="$(python -c 'import pathlib,re; text=pathlib.Path("Cargo.toml").read_text(); print(re.search(r"(?ms)^\[workspace\.package\].*?^version\s*=\s*\"([^\"]+)\"", text).group(1))')"
           test "$VERSION" = "0.1.4"
           test "$(git rev-parse HEAD)" = "6887c90552b58b2cb33c57ba3e433aab50a99355"
-      - name: Wait for validated source runs
+      - name: Wait for validated multi-language build
         env:
           GH_TOKEN: ${{ github.token }}
-          PYTHON_RUN: "33852340231"
           MULTILANG_RUN: "33851456214"
         shell: bash
         run: |
           set -euo pipefail
-          echo "Waiting for merged-main Python wheels run $PYTHON_RUN"
-          gh run watch "$PYTHON_RUN" --repo "$GITHUB_REPOSITORY" --exit-status
+          echo "Reusing four already-successful ABI3 wheel artifacts from Python wheels run 33851456190"
           echo "Waiting for v0.1.4 Multilang release run $MULTILANG_RUN"
           gh run watch "$MULTILANG_RUN" --repo "$GITHUB_REPOSITORY" --exit-status
       - name: Download validated release artifacts
         env:
           GH_TOKEN: ${{ github.token }}
-          PYTHON_RUN: "33852340231"
+          PYTHON_RUN: "33851456190"
           MULTILANG_RUN: "33851456214"
         shell: bash
         run: |
