@@ -41,8 +41,8 @@ pub fn ema_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> 
     }
 
     crate::utils::simd_fill_nan(&mut output[..period - 1]);
-    let initial_sma = super::moving_avg_legacy::simd_horizontal_sum(&input[..period])
-        / period as f64;
+    let initial_sma =
+        super::moving_avg_legacy::simd_horizontal_sum(&input[..period]) / period as f64;
     output[period - 1] = initial_sma;
 
     let len = input.len();
@@ -171,8 +171,7 @@ pub fn kama(
             let previous = *input_ptr.add(index - 1);
             let outgoing_current = *input_ptr.add(index - period);
             let outgoing_previous = *input_ptr.add(index - period - 1);
-            volatility +=
-                (current - previous).abs() - (outgoing_current - outgoing_previous).abs();
+            volatility += (current - previous).abs() - (outgoing_current - outgoing_previous).abs();
 
             let direction = (current - outgoing_current).abs();
             let efficiency = if volatility != 0.0 {
@@ -183,9 +182,7 @@ pub fn kama(
             let smoothing = efficiency * sc_diff + slow_sc;
             let smoothing = smoothing * smoothing;
             previous_kama += smoothing * (current - previous_kama);
-            output_ptr
-                .add(index)
-                .write(MaybeUninit::new(previous_kama));
+            output_ptr.add(index).write(MaybeUninit::new(previous_kama));
         }
 
         let ptr = raw_output.as_mut_ptr().cast::<f64>();
