@@ -5,12 +5,58 @@
 //! address states through compact [`StateSlot`] ids so hot execution does not
 //! require string-keyed lookups.
 
+use crate::compute::{ComputeNodeId, ComputePlan};
 use std::any::{Any, TypeId};
+use std::collections::BTreeMap;
 use std::fmt;
 
 /// Compact identifier for one persistent state entry in a [`StateArena`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct StateSlot(pub usize);
+
+/// Precompiled mapping from stateful compute nodes to compact state slots.
+///
+/// The layout is compiled once from a [`ComputePlan`]. Executors can then keep
+/// the layout beside the plan and access long-lived state by integer slot instead
+/// of performing operation-name or variable-name lookup on every bar.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PlanStateLayout {
+    slots: BTreeMap<ComputeNodeId, StateSlot>,
+    slot_count: usize,
+}
+
+impl PlanStateLayout {
+    /// Assign one stable slot to every stateful node in execution order.
+    pub fn compile(plan: &ComputePlan) -> Self {
+        let mut slots = BTreeMap::new();
+        for &node_id in plan.execution_order() {
+            let node = plan
+                .node(node_id)
+                .expect("execution order only contains compiled nodes");
+            if node.capabilities.stateful {
+                let slot = StateSlot(slots.len());
+                slots.insert(node_id, slot);
+            }
+        }
+        let slot_count = slots.len();
+        Self { slots, slot_count }
+    }
+
+    /// Return the state slot assigned to a compute node, if it is stateful.
+    pub fn slot(&self, node: ComputeNodeId) -> Option<StateSlot> {
+        self.slots.get(&node).copied()
+    }
+
+    /// Number of persistent slots required by the plan.
+    pub const fn slot_count(&self) -> usize {
+        self.slot_count
+    }
+
+    /// Provision an arena for this layout without constructing any state.
+    pub fn prepare(&self, arena: &mut StateArena) {
+        arena.reserve_slots(self.slot_count);
+    }
+}
 
 struct StateEntry {
     type_id: TypeId,
@@ -136,16 +182,14 @@ impl StateArena {
     /// Remove a state value and return ownership when its type matches.
     pub fn remove<T: Any + Send>(&mut self, slot: StateSlot) -> Option<T> {
         let entry = self.entries.get_mut(slot.0)?.take()?;
+        let type_id = entry.type_id;
         match entry.value.downcast::<T>() {
             Ok(value) => {
                 self.live -= 1;
                 Some(*value)
             }
             Err(value) => {
-                self.entries[slot.0] = Some(StateEntry {
-                    type_id: entry.type_id,
-                    value,
-                });
+                self.entries[slot.0] = Some(StateEntry { type_id, value });
                 None
             }
         }
@@ -178,10 +222,27 @@ impl StateArena {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::compute::{
+        ComputeCapabilities, ComputeEffect, ComputeNode, LookbackRequirement,
+    };
 
     #[derive(Debug, PartialEq)]
     struct RollingSum {
         sum: f64,
+    }
+
+    fn capabilities(stateful: bool) -> ComputeCapabilities {
+        ComputeCapabilities {
+            deterministic: true,
+            streaming: true,
+            stateful,
+            lookback: LookbackRequirement::None,
+            effect: if stateful {
+                ComputeEffect::Stateful
+            } else {
+                ComputeEffect::Pure
+            },
+        }
     }
 
     #[test]
@@ -196,6 +257,37 @@ mod tests {
         assert_eq!(arena.get::<RollingSum>(slot).unwrap().sum, 3.0);
         assert_eq!(arena.len(), 1);
         assert_eq!(arena.slot_capacity(), 4);
+    }
+
+    #[test]
+    fn plan_layout_assigns_slots_only_to_stateful_nodes() {
+        let plan = ComputePlan::compile([
+            ComputeNode::new(ComputeNodeId(1), "CLOSE", vec![], capabilities(false)),
+            ComputeNode::new(
+                ComputeNodeId(2),
+                "ROLLING_SUM",
+                vec![ComputeNodeId(1)],
+                capabilities(true),
+            ),
+            ComputeNode::new(
+                ComputeNodeId(3),
+                "EMA",
+                vec![ComputeNodeId(1)],
+                capabilities(true),
+            ),
+        ])
+        .unwrap();
+        let layout = PlanStateLayout::compile(&plan);
+
+        assert_eq!(layout.slot(ComputeNodeId(1)), None);
+        assert_eq!(layout.slot(ComputeNodeId(2)), Some(StateSlot(0)));
+        assert_eq!(layout.slot(ComputeNodeId(3)), Some(StateSlot(1)));
+        assert_eq!(layout.slot_count(), 2);
+
+        let mut arena = StateArena::new();
+        layout.prepare(&mut arena);
+        assert_eq!(arena.slot_capacity(), 2);
+        assert!(arena.is_empty());
     }
 
     #[test]
