@@ -135,6 +135,7 @@ def _as_contiguous_reduction_input(values):
 # directly. For already-contiguous float32/float64 inputs the Rust binding borrows
 # the NumPy memory and there is no input conversion/copy.
 if hasattr(_native, "_fast_sma"):
+
     def sma(close, timeperiod=14):
         close = _as_contiguous_float_array(close)
         if close.dtype == np.float32 and hasattr(_native, "_fast_sma_f32"):
@@ -144,6 +145,7 @@ if hasattr(_native, "_fast_sma"):
     sma = _translate_native_errors("sma", sma)
 
 if hasattr(_native, "_fast_ema"):
+
     def ema(close, timeperiod=14):
         close = _as_contiguous_float_array(close)
         if close.dtype == np.float32 and hasattr(_native, "_fast_ema_f32"):
@@ -153,6 +155,7 @@ if hasattr(_native, "_fast_ema"):
     ema = _translate_native_errors("ema", ema)
 
 if hasattr(_native, "_fast_obv"):
+
     def obv(close, volume):
         return _native._fast_obv(
             _as_contiguous_float64(close),
@@ -162,6 +165,7 @@ if hasattr(_native, "_fast_obv"):
     obv = _translate_native_errors("obv", obv)
 
 if hasattr(_native, "_fast_vwap"):
+
     def vwap(high, low, close, volume):
         return _native._fast_vwap(
             _as_contiguous_float64(high),
@@ -205,6 +209,76 @@ def reduce_stddev(values):
     return _typed_reduce(values, "_reduce_stddev_f32", "_reduce_stddev_f64")
 
 
+# TA-Lib-compatible public boundary. Keep compatibility handling in Python so the
+# native hot kernels do not carry keyword/shape policy branches on every call.
+if "sar" in globals():
+    _sar_impl = sar
+
+    def sar(high, low, acceleration=0.02, maximum=0.2):
+        """Parabolic SAR with the single-array TA-Lib public result shape."""
+        result = _sar_impl(high, low, acceleration=acceleration, maximum=maximum)
+        if isinstance(result, tuple):
+            return result[0]
+        return result
+
+
+if "bollinger_bands" in globals():
+    _bollinger_bands_impl = bollinger_bands
+
+    def bollinger_bands(
+        close,
+        timeperiod=20,
+        nbdevup=2.0,
+        nbdevdn=2.0,
+        matype=0,
+    ):
+        """TA-Lib-compatible BBANDS keyword surface for the supported SMA mode."""
+        if matype != 0:
+            raise ValueError("bollinger_bands currently supports matype=0 only")
+        return _bollinger_bands_impl(
+            close,
+            timeperiod=timeperiod,
+            nbdevup=nbdevup,
+            nbdevdn=nbdevdn,
+        )
+
+
+if "stoch" in globals():
+    _stoch_impl = stoch
+
+    def stoch(
+        high,
+        low,
+        close,
+        fastk_period=5,
+        slowk_period=3,
+        slowk_matype=0,
+        slowd_period=3,
+        slowd_matype=0,
+    ):
+        """TA-Lib-compatible STOCH keyword surface for SMA smoothing."""
+        if slowk_matype != 0:
+            raise ValueError("stoch currently supports slowk_matype=0 only")
+        if slowd_matype != 0:
+            raise ValueError("stoch currently supports slowd_matype=0 only")
+        return _stoch_impl(
+            high,
+            low,
+            close,
+            fastk_period=fastk_period,
+            slowk_period=slowk_period,
+            slowd_period=slowd_period,
+        )
+
+
+if "std_dev" in globals():
+    _std_dev_impl = std_dev
+
+    def stddev(close, timeperiod=20, nbdev=1.0):
+        """TA-Lib spelling alias for Finkit's standard-deviation indicator."""
+        return _std_dev_impl(close, timeperiod=timeperiod, nbdev=nbdev)
+
+
 def register_accessor():
     """Explicitly register the df.ta accessor (idempotent)."""
     TaAccessor._register()
@@ -225,3 +299,5 @@ __all__ = list(_native_all) + [
     "reduce_max",
     "reduce_stddev",
 ]
+if "stddev" in globals() and "stddev" not in __all__:
+    __all__.append("stddev")
