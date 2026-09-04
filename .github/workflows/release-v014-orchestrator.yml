@@ -8,7 +8,7 @@ on:
       - .github/workflows/release-v014-orchestrator.yml
 
 permissions:
-  actions: write
+  actions: read
   contents: write
 
 jobs:
@@ -28,75 +28,78 @@ jobs:
           python scripts/check_versions.py
           VERSION="$(python -c 'import pathlib,re; text=pathlib.Path("Cargo.toml").read_text(); print(re.search(r"(?ms)^\[workspace\.package\].*?^version\s*=\s*\"([^\"]+)\"", text).group(1))')"
           test "$VERSION" = "0.1.4"
-      - name: Dispatch canonical Python release workflow
+          test "$(git rev-parse HEAD)" = "6887c90552b58b2cb33c57ba3e433aab50a99355"
+      - name: Wait for validated source runs
         env:
           GH_TOKEN: ${{ github.token }}
+          PYTHON_RUN: "33852340231"
+          MULTILANG_RUN: "33851456214"
         shell: bash
         run: |
           set -euo pipefail
-          gh workflow run python-wheels.yml \
+          echo "Waiting for merged-main Python wheels run $PYTHON_RUN"
+          gh run watch "$PYTHON_RUN" --repo "$GITHUB_REPOSITORY" --exit-status
+          echo "Waiting for v0.1.4 Multilang release run $MULTILANG_RUN"
+          gh run watch "$MULTILANG_RUN" --repo "$GITHUB_REPOSITORY" --exit-status
+      - name: Download validated release artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHON_RUN: "33852340231"
+          MULTILANG_RUN: "33851456214"
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf python-artifacts multi-artifacts primary-assets supplemental-assets
+          mkdir -p python-artifacts multi-artifacts primary-assets supplemental-assets
+          gh run download "$PYTHON_RUN" \
             --repo "$GITHUB_REPOSITORY" \
-            --ref main \
-            -f release_tag=v0.1.4
-      - name: Resolve and wait for release workflows
-        id: runs
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          MAIN_SHA="$(git rev-parse HEAD)"
-          PY_RUN=""
-          MULTI_RUN=""
-          for _ in $(seq 1 60); do
-            if [[ -z "$PY_RUN" ]]; then
-              PY_RUN="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow python-wheels.yml --event workflow_dispatch --branch main --limit 10 --json databaseId,headSha --jq ".[] | select(.headSha == \"$MAIN_SHA\") | .databaseId" | head -1 || true)"
-            fi
-            if [[ -z "$MULTI_RUN" ]]; then
-              MULTI_RUN="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow multilang-release.yml --event push --branch release/v0.1.4 --limit 10 --json databaseId,headSha --jq ".[] | select(.headSha == \"$GITHUB_SHA\") | .databaseId" | head -1 || true)"
-            fi
-            if [[ -n "$PY_RUN" && -n "$MULTI_RUN" ]]; then
-              break
-            fi
-            sleep 5
-          done
-          test -n "$PY_RUN"
-          test -n "$MULTI_RUN"
-          echo "python_run=$PY_RUN" >> "$GITHUB_OUTPUT"
-          echo "multilang_run=$MULTI_RUN" >> "$GITHUB_OUTPUT"
-          echo "Waiting for Python wheels run $PY_RUN"
-          gh run watch "$PY_RUN" --repo "$GITHUB_REPOSITORY" --exit-status
-          echo "Waiting for Multilang release run $MULTI_RUN"
-          gh run watch "$MULTI_RUN" --repo "$GITHUB_REPOSITORY" --exit-status
-      - name: Download validated multi-language artifacts
-        env:
-          GH_TOKEN: ${{ github.token }}
-          MULTI_RUN: ${{ steps.runs.outputs.multilang_run }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          rm -rf multi-artifacts supplemental-assets
-          mkdir -p multi-artifacts supplemental-assets
-          gh run download "$MULTI_RUN" \
+            --pattern 'wheel-*' \
+            --dir python-artifacts
+          gh run download "$MULTILANG_RUN" \
             --repo "$GITHUB_REPOSITORY" \
             --pattern 'release-*' \
             --dir multi-artifacts
-          find multi-artifacts -type f -print
           while IFS= read -r -d '' file; do
-            cp "$file" supplemental-assets/
+            cp "$file" primary-assets/
+          done < <(find python-artifacts -type f -name '*.whl' -print0)
+          while IFS= read -r -d '' file; do
+            cp "$file" primary-assets/
+          done < <(find multi-artifacts -type f \( -name 'finkit-*.crate' -o -name 'finkit-cli-linux-x86_64' \) -print0)
+          test "$(find primary-assets -maxdepth 1 -type f -name '*.whl' | wc -l)" -eq 4
+          test "$(find primary-assets -maxdepth 1 -type f -name 'finkit-*.crate' | wc -l)" -eq 1
+          test -f primary-assets/finkit-cli-linux-x86_64
+          (cd primary-assets && sha256sum * | sort -k2 > SHA256SUMS)
+          while IFS= read -r -d '' file; do
+            base="$(basename "$file")"
+            case "$base" in
+              finkit-*.crate|finkit-cli-linux-x86_64) ;;
+              *) cp "$file" supplemental-assets/ ;;
+            esac
           done < <(find multi-artifacts -type f -print0)
-          rm -f supplemental-assets/finkit-*.crate supplemental-assets/finkit-cli-*
           test -n "$(find supplemental-assets -maxdepth 1 -type f -print -quit)"
           (cd supplemental-assets && sha256sum * | sort -k2 > SHA256SUMS.multilang)
-      - name: Verify and complete GitHub Release
+          echo "Primary assets:"
+          find primary-assets -maxdepth 1 -type f -printf '%f\n' | sort
+          echo "Supplemental assets:"
+          find supplemental-assets -maxdepth 1 -type f -printf '%f\n' | sort
+      - name: Create and complete GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          gh release view v0.1.4 --repo "$GITHUB_REPOSITORY" >/dev/null
+          if ! gh release view v0.1.4 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create v0.1.4 \
+              --repo "$GITHUB_REPOSITORY" \
+              --target 6887c90552b58b2cb33c57ba3e433aab50a99355 \
+              --title "v0.1.4" \
+              --generate-notes
+          fi
           gh release upload v0.1.4 \
             --repo "$GITHUB_REPOSITORY" \
             --clobber \
+            primary-assets/* \
             supplemental-assets/*
-          gh release view v0.1.4 --repo "$GITHUB_REPOSITORY" --json tagName,isDraft,isPrerelease,targetCommitish,url
+          gh release view v0.1.4 \
+            --repo "$GITHUB_REPOSITORY" \
+            --json tagName,isDraft,isPrerelease,targetCommitish,url
