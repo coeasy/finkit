@@ -1,0 +1,39 @@
+name: Benchmark Finkit vs TA-Lib latest
+
+on:
+  push:
+    branches:
+      - bench/v0.1.4-vs-talib-0.7.1-20260904
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install exact released packages
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'numpy==2.3.3'
+          python -m pip install 'TA-Lib==0.7.1'
+          python -m pip install 'https://github.com/coeasy/finkit/releases/download/v0.1.4/finkit-0.1.4-cp38-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl'
+          python - <<'PY'
+          import importlib.metadata, talib
+          print('Finkit', importlib.metadata.version('finkit'))
+          print('TA-Lib Python', importlib.metadata.version('TA-Lib'))
+          print('TA-Lib core', getattr(talib, '__ta_version__', 'unknown'))
+          PY
+      - name: Run installed-package benchmark
+        run: python scripts/benchmark_python_vs_talib_latest.py
+      - uses: actions/upload-artifact@v7
+        with:
+          name: finkit-v0.1.4-vs-talib-0.7.1
+          path: dist/bench/python-vs-talib-0.7.1.*
+          if-no-files-found: error
