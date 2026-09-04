@@ -141,6 +141,20 @@ fn fast_obv<'py>(
     Ok(PyArray1::from_vec(py, output))
 }
 
+#[pyfunction(name = "_fast_obv_into")]
+fn fast_obv_into(
+    py: Python<'_>,
+    close: PyReadonlyArray1<'_, f64>,
+    volume: PyReadonlyArray1<'_, f64>,
+    mut output: PyReadwriteArray1<'_, f64>,
+) -> PyResult<()> {
+    let close = close.as_slice().map_err(value_error)?;
+    let volume = volume.as_slice().map_err(value_error)?;
+    let output = output.as_slice_mut().map_err(value_error)?;
+    py.detach(|| volume_kernels::obv_into(close, volume, output))
+        .map_err(value_error)
+}
+
 #[pyfunction(name = "_fast_vwap")]
 fn fast_vwap<'py>(
     py: Python<'py>,
@@ -157,6 +171,24 @@ fn fast_vwap<'py>(
     py.detach(|| volume_kernels::vwap_into(high, low, close, volume, &mut output))
         .map_err(value_error)?;
     Ok(PyArray1::from_vec(py, output))
+}
+
+#[pyfunction(name = "_fast_vwap_into")]
+fn fast_vwap_into(
+    py: Python<'_>,
+    high: PyReadonlyArray1<'_, f64>,
+    low: PyReadonlyArray1<'_, f64>,
+    close: PyReadonlyArray1<'_, f64>,
+    volume: PyReadonlyArray1<'_, f64>,
+    mut output: PyReadwriteArray1<'_, f64>,
+) -> PyResult<()> {
+    let high = high.as_slice().map_err(value_error)?;
+    let low = low.as_slice().map_err(value_error)?;
+    let close = close.as_slice().map_err(value_error)?;
+    let volume = volume.as_slice().map_err(value_error)?;
+    let output = output.as_slice_mut().map_err(value_error)?;
+    py.detach(|| volume_kernels::vwap_into(high, low, close, volume, output))
+        .map_err(value_error)
 }
 
 #[pyfunction(name = "_reduce_sum_f64")]
@@ -259,7 +291,9 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(fast_ema_f32, m)?)?;
     m.add_function(wrap_pyfunction!(fast_ema_f32_into, m)?)?;
     m.add_function(wrap_pyfunction!(fast_obv, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_obv_into, m)?)?;
     m.add_function(wrap_pyfunction!(fast_vwap, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_vwap_into, m)?)?;
     m.add_function(wrap_pyfunction!(reduce_sum_f64, m)?)?;
     m.add_function(wrap_pyfunction!(reduce_mean_f64, m)?)?;
     m.add_function(wrap_pyfunction!(reduce_min_f64, m)?)?;
