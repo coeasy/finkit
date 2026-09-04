@@ -115,7 +115,7 @@ def _as_contiguous_float_array(values):
     return np.ascontiguousarray(array, dtype=np.float64)
 
 
-def _validate_out(out, source):
+def _validate_out(out, source, *other_inputs):
     if not isinstance(out, np.ndarray):
         raise InvalidParameterError("out must be a NumPy ndarray")
     if out.ndim != 1 or out.shape != source.shape:
@@ -124,7 +124,7 @@ def _validate_out(out, source):
         raise InvalidParameterError("out dtype must match the normalized input dtype")
     if not out.flags.c_contiguous or not out.flags.writeable:
         raise InvalidParameterError("out must be writable and C-contiguous")
-    if np.shares_memory(out, source):
+    if any(np.shares_memory(out, values) for values in (source, *other_inputs)):
         raise InvalidParameterError("out must not overlap input for this kernel")
     return out
 
@@ -172,23 +172,29 @@ if hasattr(_native, "_fast_ema"):
 
 if hasattr(_native, "_fast_obv"):
 
-    def obv(close, volume):
-        return _native._fast_obv(
-            _as_contiguous_float64(close),
-            _as_contiguous_float64(volume),
-        )
+    def obv(close, volume, out=None):
+        close = _as_contiguous_float64(close)
+        volume = _as_contiguous_float64(volume)
+        if out is not None:
+            out = _validate_out(out, close, volume)
+            _native._fast_obv_into(close, volume, out)
+            return out
+        return _native._fast_obv(close, volume)
 
     obv = _translate_native_errors("obv", obv)
 
 if hasattr(_native, "_fast_vwap"):
 
-    def vwap(high, low, close, volume):
-        return _native._fast_vwap(
-            _as_contiguous_float64(high),
-            _as_contiguous_float64(low),
-            _as_contiguous_float64(close),
-            _as_contiguous_float64(volume),
-        )
+    def vwap(high, low, close, volume, out=None):
+        high = _as_contiguous_float64(high)
+        low = _as_contiguous_float64(low)
+        close = _as_contiguous_float64(close)
+        volume = _as_contiguous_float64(volume)
+        if out is not None:
+            out = _validate_out(out, high, low, close, volume)
+            _native._fast_vwap_into(high, low, close, volume, out)
+            return out
+        return _native._fast_vwap(high, low, close, volume)
 
     vwap = _translate_native_errors("vwap", vwap)
 
