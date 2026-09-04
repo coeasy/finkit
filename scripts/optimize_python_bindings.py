@@ -105,13 +105,48 @@ def _numeric_vec_components(return_type: str) -> list[str] | None:
     return None
 
 
+def _strip_rust_doc_prose(params: str) -> str:
+    """Remove doc/comment fragments that cannot be Rust parameters.
+
+    Some registry bodies preserve documentation between attributes and the
+    function item.  A previous migration scanner could accidentally widen the
+    captured parameter span into those comments (TRANGE's documentation
+    contains ``|High - Previous Close|``).  Keep this parser defensive: real
+    free-function parameters contain a colon, while prose fragments do not.
+    Rust compilation remains the final authority for malformed signatures.
+    """
+    cleaned: list[str] = []
+    in_block_comment = False
+    for raw_line in params.splitlines():
+        line = raw_line.strip()
+        if in_block_comment:
+            if "*/" in line:
+                in_block_comment = False
+            continue
+        if line.startswith("/*"):
+            if "*/" not in line:
+                in_block_comment = True
+            continue
+        if line.startswith("//") or line.startswith("///") or line.startswith("#"):
+            continue
+        cleaned.append(raw_line)
+    return "\n".join(cleaned)
+
+
 def _call_arg_names(params: str) -> list[str]:
     names: list[str] = []
+    params = _strip_rust_doc_prose(params)
     for part in _split_top_level(params):
         if not part:
             continue
         m = re.search(r"(?:^|\s)(?:mut\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:", part)
         if not m:
+            # A top-level free #[pyfunction] argument must be `name: Type`.
+            # If a registry/doc fragment leaked into the scan, ignore it rather
+            # than turning documentation punctuation into a migration failure.
+            # Any genuinely malformed Rust signature will fail cargo check.
+            if ":" not in part:
+                continue
             raise ValueError(f"unsupported pyfunction parameter pattern: {part!r}")
         names.append(m.group(1))
     return names
@@ -161,7 +196,6 @@ def optimize_source(source: str) -> tuple[str, int]:
             out.append(source[cursor:])
             break
 
-        # Copy everything before this attribute, then inspect the function item.
         out.append(source[cursor:attr_start])
         fn_match = re.search(r"\bfn\s+([a-z][a-z0-9_]*)\s*", source[attr_start:])
         if not fn_match:
@@ -171,7 +205,6 @@ def optimize_source(source: str) -> tuple[str, int]:
         fn_pos = attr_start + fn_match.start()
         fn_name_pos = attr_start + fn_match.start(1)
 
-        # Already optimized implementation: copy through its body unchanged.
         if fn_name.startswith("vec_") and fn_name.endswith("_impl"):
             brace = source.find("{", fn_pos)
             if brace < 0:
@@ -182,6 +215,9 @@ def optimize_source(source: str) -> tuple[str, int]:
             cursor = end
             continue
 
+        # Anchor the opening parenthesis strictly after the matched function
+        # identifier. This prevents parentheses in doc comments or attributes
+        # from becoming the parameter span.
         paren = source.find("(", fn_name_pos + len(fn_name))
         if paren < 0:
             out.append(source[attr_start:])
@@ -209,7 +245,6 @@ def optimize_source(source: str) -> tuple[str, int]:
         params = source[paren + 1 : paren_end]
         args = _call_arg_names(params)
         if "py" not in args:
-            # Direct NumPy creation requires a Python token; don't guess.
             out.append(source[attr_start:fn_end])
             cursor = fn_end
             continue
@@ -223,7 +258,6 @@ def optimize_source(source: str) -> tuple[str, int]:
             + original_item[local_name_offset + len(fn_name) :]
         )
 
-        # Preserve the public pyo3 call signature on the direct-NumPy wrapper.
         attrs = source[attr_start:fn_pos]
         pyo3_attrs = "\n".join(
             line.strip()
@@ -281,7 +315,7 @@ def main() -> int:
     for path in args.paths:
         total += optimize_file(path, check=args.check)
     if not args.check:
-        print(f"optimized total numeric pyfunctions: {total}")
+        print(f"optimized numeric pyfunctions: {total}")
     return 0
 
 
