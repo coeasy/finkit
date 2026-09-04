@@ -110,31 +110,45 @@ def _as_contiguous_float64(values):
     return array
 
 
-def _as_contiguous_reduction_input(values):
-    """Keep float32/float64 reductions on their native typed kernels."""
+def _as_contiguous_float_array(values):
+    """Preserve native float32/float64 arrays for typed vector hot paths."""
     array = np.asarray(values)
     if array.ndim != 1:
         raise InvalidParameterError("expected a one-dimensional numeric array")
     if array.dtype == np.float32:
-        return np.ascontiguousarray(array, dtype=np.float32), np.float32
+        return np.ascontiguousarray(array, dtype=np.float32)
     if array.dtype == np.float64:
-        return np.ascontiguousarray(array, dtype=np.float64), float
-    return np.ascontiguousarray(array, dtype=np.float64), float
+        return np.ascontiguousarray(array, dtype=np.float64)
+    return np.ascontiguousarray(array, dtype=np.float64)
+
+
+def _as_contiguous_reduction_input(values):
+    """Keep float32/float64 reductions on their native typed kernels."""
+    array = _as_contiguous_float_array(values)
+    if array.dtype == np.float32:
+        return array, np.float32
+    return array, float
 
 
 # Architecture 3.0 P0: keep the established package API but route the hottest
 # single-output indicators through native functions that return NumPy arrays
-# directly.  For already-contiguous float64 inputs the Rust binding borrows the
-# NumPy memory and there is no input conversion/copy.
+# directly. For already-contiguous float32/float64 inputs the Rust binding borrows
+# the NumPy memory and there is no input conversion/copy.
 if hasattr(_native, "_fast_sma"):
     def sma(close, timeperiod=14):
-        return _native._fast_sma(_as_contiguous_float64(close), timeperiod)
+        close = _as_contiguous_float_array(close)
+        if close.dtype == np.float32 and hasattr(_native, "_fast_sma_f32"):
+            return _native._fast_sma_f32(close, timeperiod)
+        return _native._fast_sma(close, timeperiod)
 
     sma = _translate_native_errors("sma", sma)
 
 if hasattr(_native, "_fast_ema"):
     def ema(close, timeperiod=14):
-        return _native._fast_ema(_as_contiguous_float64(close), timeperiod)
+        close = _as_contiguous_float_array(close)
+        if close.dtype == np.float32 and hasattr(_native, "_fast_ema_f32"):
+            return _native._fast_ema_f32(close, timeperiod)
+        return _native._fast_ema(close, timeperiod)
 
     ema = _translate_native_errors("ema", ema)
 
