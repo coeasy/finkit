@@ -149,11 +149,11 @@ pub use math_operators::*;
 pub use math_transform::*;
 #[cfg(feature = "indicators-momentum")]
 pub use momentum::*;
-// Under std builds, expose the TA-Lib 0.7.1-compatible CCI kernel at the
-// canonical indicators::cci path. The explicit re-export overrides the glob
-// name while preserving the same Result<Array1<f64>> public contract.
+// Under std builds, expose compatibility/performance-sensitive canonical
+// momentum kernels at the root indicators namespace without changing public
+// signatures used by Rust, Python, Node, or generated bindings.
 #[cfg(all(feature = "indicators-momentum", feature = "std"))]
-pub use crate::math::cci::cci;
+pub use crate::math::{cci::cci, mfi::mfi};
 #[cfg(feature = "indicators-momentum")]
 pub use momentum_ext::*;
 #[cfg(feature = "indicators-overlap")]
