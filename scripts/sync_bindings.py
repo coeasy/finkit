@@ -95,8 +95,6 @@ LANG_CFG = {
         "sig": r'pub\s+extern\s+"system"\s+fn\s+(Java_[A-Za-z0-9_]+)',
         "kind": "jni",
     },
-    # Android re-uses the JVM binding's plain-Rust shim functions via a macro;
-    # we extract the macro invocations verbatim.
     "android": {
         "lib": "ffi/android-binding/src/lib.rs",
         "gen": "ffi/android-binding/src/generated.rs",
@@ -105,9 +103,6 @@ LANG_CFG = {
     },
 }
 
-# Known public-name mismatches between the core function name (used by C/Go/
-# .NET/iOS and as the registry key) and the Python/Node public name.
-# key = core name, value = public name used by python & node.
 NAME_ALIASES = {
     "bbands": "bollinger_bands",
     "inertia": "inertia_indicator",
@@ -141,11 +136,7 @@ def indicators_with_ffi(reg: dict) -> list[dict]:
     return out
 
 
-# ──────────────────────────────────────────────────────────────────────────
-# Verbatim body extraction
-# ──────────────────────────────────────────────────────────────────────────
 def _brace_span(src: str, open_idx: int) -> int:
-    """Given index of an opening `{`, return index just past the matching `}`."""
     depth = 0
     i = open_idx
     while i < len(src):
@@ -161,15 +152,12 @@ def _brace_span(src: str, open_idx: int) -> int:
 
 
 def extract_functions(src: str, lang: str) -> dict[str, dict]:
-    """Return {fn_name: {"body": str, "start": int, "end": int}} for every
-    indicator-like function in ``src`` for the given language."""
     cfg = LANG_CFG[lang]
     sig = cfg["sig"]
     name_group = cfg.get("sig_name_group", 1)
     out: dict[str, dict] = {}
     for m in re.finditer(sig, src):
         if lang == "android":
-            # capture the whole `shim_indicator!(...)` invocation (balanced parens)
             j = m.end() - 1
             depth = 0
             while j < len(src):
@@ -180,21 +168,16 @@ def extract_functions(src: str, lang: str) -> dict[str, dict]:
                     if depth == 0:
                         break
                 j += 1
-            # The macro expands to items, so the original source terminates it
-            # with `;` (or braces).  Keep the trailing `;` so the relocated copy
-            # in generated.rs still compiles.
             end = j + 1
             if end < len(src) and src[end] == ";":
                 end += 1
             body = src[m.start():end]
-            # the JNI symbol is the first macro arg
             first_arg = body.split("(", 1)[1].split(",", 1)[0].strip()
             name = first_arg
             out[name] = {"body": body, "start": m.start(), "end": end}
             continue
 
         name = m.group(name_group)
-        # walk backward to include preceding `///` doc lines and `#[...]` attrs
         line_start = src.rfind("\n", 0, m.start()) + 1
         cur = line_start
         while cur > 0:
@@ -205,7 +188,6 @@ def extract_functions(src: str, lang: str) -> dict[str, dict]:
             else:
                 break
         start = cur
-        # find signature close `)` then opening `{`
         depth = 0
         i = m.end() - 1
         while i < len(src):
@@ -216,7 +198,6 @@ def extract_functions(src: str, lang: str) -> dict[str, dict]:
                 if depth == 0:
                     break
             i += 1
-        # skip whitespace to `{`
         k = src.find("{", i)
         end = _brace_span(src, k)
         body = src[start:end]
@@ -224,20 +205,16 @@ def extract_functions(src: str, lang: str) -> dict[str, dict]:
     return out
 
 
-# ──────────────────────────────────────────────────────────────────────────
-# Registry <-> binding name resolution
-# ──────────────────────────────────────────────────────────────────────────
 def candidate_names(ind: dict, lang: str) -> list[str]:
     ff = ind["ffi"]
     c_name = ff["c_name"]
-    # Canonical public name: strip the C `ta_` prefix (ta_cdl_doji -> cdl_doji,
-    # ta_sma -> sma).  The registry's `core_call` basename is NOT reliable for
-    # candlestick patterns (e.g. ta_cdl_doji calls indicators::cdl::doji).
     pub = c_name[3:] if c_name.startswith("ta_") else c_name
-    core = ff["core_call"].split("::")[-1]
+    # `enrich_registry_ffi.py` can reconstruct FFI metadata from the C header
+    # without knowing a Rust core-call path.  Treat `core_call` as an optional
+    # legacy hint, never as a required registry field.  The public C-derived
+    # name is the stable fallback shared by the binding surfaces.
+    core = ff.get("core_call", pub).split("::")[-1]
     if lang in ("c", "go", "dotnet"):
-        # go/dotnet expose chart/pattern indicators as `<c_name>_json`
-        # (JSON-serialised) variants rather than the plain C ABI; accept both.
         return [c_name, c_name + "_json"]
     if lang == "ios":
         return ["alpha_" + c_name]
@@ -248,32 +225,32 @@ def candidate_names(ind: dict, lang: str) -> list[str]:
         if pub in NAME_ALIASES:
             names.append(NAME_ALIASES[pub])
         names.append(pub)
-        names.append(core)  # last-resort fallback
+        if core not in names:
+            names.append(core)
         return names
     if lang == "java":
         names = []
         if pub in NAME_ALIASES:
             names.append("Java_com_finkit_Indicators_" + NAME_ALIASES[pub])
         names.append("Java_com_finkit_Indicators_" + pub)
-        names.append("Java_com_finkit_Indicators_" + core)
+        core_name = "Java_com_finkit_Indicators_" + core
+        if core_name not in names:
+            names.append(core_name)
         return names
     if lang == "android":
-        # The `shim_indicator!` macro's 1st argument IS the C FFI name
-        # (e.g. `shim_indicator!(ta_sma, jdoubleArray, jdoubleArray)`); the
-        # 2nd/3rd args are JNI array types, not the core name.  Match on the
-        # registry `c_name` directly.
         return [c_name]
     return [pub]
 
 
 def match_indicator(ind: dict, lang: str, extracted: dict[str, dict]) -> str | None:
-    """Return the extracted binding fn name that corresponds to ``ind``."""
     for cand in candidate_names(ind, lang):
         if cand in extracted:
             return cand
-    # android: match by core name appearing as the 2nd macro arg
     if lang == "android":
-        core = ind["ffi"]["core_call"].split("::")[-1]
+        ff = ind["ffi"]
+        c_name = ff["c_name"]
+        pub = c_name[3:] if c_name.startswith("ta_") else c_name
+        core = ff.get("core_call", pub).split("::")[-1]
         alias = NAME_ALIASES.get(core, core)
         for nm, info in extracted.items():
             if (f", {core}," in info["body"]) or (f", {alias}," in info["body"]):
@@ -281,9 +258,6 @@ def match_indicator(ind: dict, lang: str, extracted: dict[str, dict]) -> str | N
     return None
 
 
-# ──────────────────────────────────────────────────────────────────────────
-# Modes
-# ──────────────────────────────────────────────────────────────────────────
 def do_discover(langs: list[str]) -> int:
     reg = load_registry()
     inds = indicators_with_ffi(reg)
@@ -322,13 +296,8 @@ def do_discover(langs: list[str]) -> int:
 
 
 def guard_for(lang: str, ret: str) -> str | None:
-    """Return the `ffi_catch_*` call expression for a given language + return
-    type, or ``None`` if the function should not be panic-wrapped."""
     ret = ret.strip()
     if lang == "go":
-        # `T` is inferred from the closure's return type (*mut TaResult /
-        # *mut c_char); an explicit turbofish would fill `F` positionally
-        # and break. `ffi_catch_ptr` is <F, T> where F: FnOnce()->*mut T.
         if ret in ("*mut TaResult", "*mut c_char"):
             return "ffi_catch_ptr"
     elif lang == "dotnet":
@@ -338,8 +307,6 @@ def guard_for(lang: str, ret: str) -> str | None:
         if ret == "i32":
             return "ffi_catch_i32_neg"
     elif lang == "java":
-        # jdoubleArray / jobject are both `*mut _jobject`; `ffi_catch_ptr`
-        # infers `T` from the closure's return type, so no turbofish.
         if ret in ("jdoubleArray", "jobject", "jintArray", "jstring", "jni::sys::jdoubleArray", "jni::sys::jobject", "jni::sys::jintArray", "jni::sys::jstring"):
             return "ffi_catch_ptr"
         if ret == "()":
@@ -352,13 +319,6 @@ def guard_for(lang: str, ret: str) -> str | None:
 
 
 def wrap_body(lang: str, body: str) -> str:
-    """Wrap a registry-stored FFI function body in ``catch_unwind`` so a panic
-    inside the core call cannot unwind across the FFI boundary (which would be
-    UB and abort the host).
-
-    Idempotent: if the body is already wrapped it is returned unchanged, so
-    re-running the generator or ``--discover`` is stable.
-    """
     body = body.strip()
     if lang not in ("go", "dotnet", "ios", "java"):
         return body
@@ -374,7 +334,7 @@ def wrap_body(lang: str, body: str) -> str:
         return body
     inner = body[ob + 1 : cb]
     if inner.strip().startswith("ffi_catch"):
-        return body  # already wrapped
+        return body
     ret = body[ri + 2 : ob].strip()
     guard = guard_for(lang, ret)
     if guard is None:
@@ -396,8 +356,6 @@ def emit_generated(lang: str, inds: list[dict]) -> str:
     for ind in inds:
         body = ind.get("ffi", {}).get("bodies", {}).get(lang)
         if body:
-            # Wrap each generated function in catch_unwind so a panic inside
-            # the core call cannot unwind across the FFI boundary.
             bodies.append(wrap_body(lang, body).rstrip("\n") + "\n")
     return header + "\n".join(bodies) + "\n"
 
@@ -405,7 +363,6 @@ def emit_generated(lang: str, inds: list[dict]) -> str:
 def do_generate(langs: list[str], rewrite: bool) -> int:
     reg = load_registry()
     inds = indicators_with_ffi(reg)
-    by_c = {i["ffi"]["c_name"]: i for i in inds}
     for lang in langs:
         cfg = LANG_CFG[lang]
         gen_path = ROOT / cfg["gen"]
@@ -413,14 +370,7 @@ def do_generate(langs: list[str], rewrite: bool) -> int:
         if rewrite:
             lib_path = ROOT / cfg["lib"]
             src = lib_path.read_text(encoding="utf-8")
-            # drop hand-written indicator spans
             extracted = extract_functions(src, lang)
-            # Only drop a function if it is registry-matched *and* we actually
-            # have a verbatim body for it in the registry.  Functions without a
-            # stored body (e.g. non-registry `cdl_*`/`detect_*`/`dx` in Python,
-            # `*_json` graph variants in Go/.NET) stay in lib.rs untouched so
-            # their registrations keep resolving.  This is what previously
-            # corrupted the Python/Node bindings.
             drop_names = set()
             for ind in inds:
                 nm = match_indicator(ind, lang, extracted)
@@ -433,21 +383,16 @@ def do_generate(langs: list[str], rewrite: bool) -> int:
             if not spans:
                 print(f"[gen/{lang}] nothing to rewrite (no registry-matched fns found)")
                 continue
-            # Rebuild lib.rs keeping EVERY gap between dropped spans (those gaps
-            # hold the non-registry functions we must preserve, e.g. `cdl_*`,
-            # `detect_*`, `dx`, `var` in Python).  Only the dropped spans
-            # themselves are removed; `include!("generated.rs")` is inserted once
-            # just before the first dropped span (after the module preamble).
             result = []
             cursor = 0
             inserted = False
             for s, e in spans:
-                result.append(src[cursor:s])  # keep gap (non-dropped fns) before span
+                result.append(src[cursor:s])
                 if not inserted:
                     result.append('\ninclude!("generated.rs");\n')
                     inserted = True
-                cursor = e  # skip the dropped span itself
-            result.append(src[cursor:])  # keep tail after last span
+                cursor = e
+            result.append(src[cursor:])
             new_lib = "".join(result)
             lib_path.write_text(new_lib, encoding="utf-8")
             print(f"[gen/{lang}] rewrote {cfg['lib']} (dropped {len(spans)} indicator fns)")
@@ -464,8 +409,6 @@ def do_check(langs: list[str]) -> int:
         cfg = LANG_CFG[lang]
         src = (ROOT / cfg["lib"]).read_text(encoding="utf-8")
         extracted = extract_functions(src, lang)
-        # After a --rewrite, registry-matched bodies live in generated.rs; read
-        # it too so we don't false-positive "missing" on relocated functions.
         gen_path = ROOT / cfg["gen"]
         if gen_path.exists():
             extracted.update(extract_functions(gen_path.read_text(encoding="utf-8"), lang))
@@ -473,11 +416,6 @@ def do_check(langs: list[str]) -> int:
         drift = []
         for c_name, ind in stored.items():
             body_stored = ind.get("ffi", {}).get("bodies", {}).get(lang)
-            # Only indicators the registry says are exposed in this language
-            # (i.e. have a stored body) are drift-checked.  Indicators a binding
-            # intentionally does NOT expose as a standalone function (e.g.
-            # `cdl_*` via a dispatcher, `darvas_box`/`renko` via `match`,
-            # `midpoint`/`ht_*`) have no stored body and are not drift.
             if body_stored is None:
                 continue
             nm = match_indicator(ind, lang, extracted)
@@ -485,12 +423,8 @@ def do_check(langs: list[str]) -> int:
                 drift.append(f"missing:{c_name}")
                 continue
             body_now = extracted[nm]["body"]
-            # Compare through the same panic-wrapper normalisation so a
-            # regenerated (wrapped) function is not flagged as drift against
-            # the unwrapped source-of-truth body.
             if wrap_body(lang, body_now).strip() != wrap_body(lang, body_stored).strip():
                 drift.append(f"changed:{c_name}")
-        # also: hand-written fns present that the registry dropped?
         print(f"[check/{lang}] registry={len(inds)} extracted={len(extracted)} "
               f"drift={drift if drift else 'none'}")
         if drift:
