@@ -3,7 +3,7 @@ name: TA-Lib installed-wheel release gate
 on:
   push:
     branches:
-      - fix/talib-performance-plan-20260904
+      - perf/outperform-talib-v3-20260904
   pull_request:
     branches:
       - main
@@ -11,6 +11,7 @@ on:
       - 'core/**'
       - 'ffi/python-binding/**'
       - 'scripts/benchmark_talib_release_gate.py'
+      - 'scripts/benchmark_talib_arch_v3_gate.py'
       - '.github/workflows/talib-release-gate.yml'
   workflow_dispatch:
 
@@ -19,9 +20,6 @@ permissions:
 
 jobs:
   installed-wheel-gate:
-    # Branch pushes run the expensive benchmark only after the migration job
-    # commits the implemented plan. Pull requests and manual runs always run.
-    if: github.event_name != 'push' || contains(github.event.head_commit.message, 'implement TA-Lib parity and zero-copy runtime plan')
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
@@ -46,8 +44,8 @@ jobs:
           pytest -q \
             ffi/python-binding/tests/test_talib_public_contract.py \
             ffi/python-binding/tests/test_architecture_v3_fast_path.py
-      - name: Installed-wheel TA-Lib parity and performance gate
-        run: python scripts/benchmark_talib_release_gate.py --gate
+      - name: Installed-wheel Architecture v3 parity and speedup gate
+        run: python scripts/benchmark_talib_arch_v3_gate.py
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -55,4 +53,5 @@ jobs:
           path: |
             dist/bench/talib-release-gate.json
             dist/bench/talib-release-gate.md
+            dist/bench/talib-architecture-v3-gate.json
           if-no-files-found: warn
