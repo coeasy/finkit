@@ -5,6 +5,7 @@
 //! forcing a temporary `Vec`/`Array1` conversion.
 
 use crate::error::{Result, TaError};
+use ndarray::Array1;
 
 #[inline]
 fn validate_same_len(name: &'static str, expected: usize, actual: usize) -> Result<()> {
@@ -53,6 +54,13 @@ pub fn obv_into(close: &[f64], volume: &[f64], output: &mut [f64]) -> Result<()>
     Ok(())
 }
 
+/// Allocating OBV wrapper sharing the same canonical single-pass kernel.
+pub fn obv(close: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
+    let mut output = vec![0.0; close.len()];
+    obv_into(close, volume, &mut output)?;
+    Ok(Array1::from_vec(output))
+}
+
 /// Compute the Accumulation/Distribution line directly into `output`.
 ///
 /// The cumulative dependency makes a second prefix-sum pass unnecessary.  This
@@ -96,6 +104,13 @@ pub fn ad_into(
         }
     }
     Ok(())
+}
+
+/// Allocating A/D wrapper sharing the canonical single-pass kernel.
+pub fn ad(high: &[f64], low: &[f64], close: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
+    let mut output = vec![0.0; high.len()];
+    ad_into(high, low, close, volume, &mut output)?;
+    Ok(Array1::from_vec(output))
 }
 
 /// Compute Chaikin A/D Oscillator in a single pass.
@@ -174,6 +189,28 @@ pub fn adosc_into(
     Ok(())
 }
 
+/// Allocating ADOSC wrapper sharing the canonical fused recurrence.
+pub fn adosc(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    volume: &[f64],
+    fast_period: usize,
+    slow_period: usize,
+) -> Result<Array1<f64>> {
+    let mut output = vec![0.0; high.len()];
+    adosc_into(
+        high,
+        low,
+        close,
+        volume,
+        fast_period,
+        slow_period,
+        &mut output,
+    )?;
+    Ok(Array1::from_vec(output))
+}
+
 /// Compute cumulative VWAP directly into `output`.
 ///
 /// This is a single-pass recurrence with no scratch allocation.  A zero cumulative
@@ -223,6 +260,15 @@ mod tests {
         obv_into(&close, &volume, &mut out).unwrap();
         let expected = [100.0, 150.0, 130.0, 130.0, 140.0];
         assert_eq!(out, expected);
+    }
+
+    #[test]
+    fn allocating_obv_wrapper_matches_into() {
+        let close = [10.0, 11.0, 10.0, 12.0];
+        let volume = [100.0, 50.0, 20.0, 10.0];
+        let mut out = [0.0; 4];
+        obv_into(&close, &volume, &mut out).unwrap();
+        assert_eq!(obv(&close, &volume).unwrap().as_slice().unwrap(), &out);
     }
 
     #[test]
