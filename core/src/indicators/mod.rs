@@ -188,6 +188,8 @@ pub use sweepable::*;
 pub use top_bottom::*;
 #[cfg(feature = "indicators-volatility")]
 pub use volatility::*;
+#[cfg(all(feature = "indicators-volatility", feature = "std"))]
+pub use crate::math::trange::trange;
 #[cfg(all(feature = "indicators-volatility", feature = "indicators-all"))]
 pub use volatility_ext::*;
 #[cfg(feature = "indicators-volume")]
