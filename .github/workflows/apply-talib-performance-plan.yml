@@ -1,0 +1,49 @@
+name: Apply TA-Lib performance plan
+
+on:
+  push:
+    branches:
+      - fix/talib-performance-plan-20260904
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Apply source migrations
+        run: python scripts/apply_talib_performance_plan.py
+      - name: Format Rust
+        run: cargo fmt --all
+      - name: Validate generated binding stability
+        run: |
+          python scripts/sync_bindings.py --lang python --check
+          python scripts/optimize_python_bindings.py --check ffi/python-binding/src/generated.rs ffi/python-binding/src/lib.rs
+      - name: Compile Python binding
+        run: cargo check -p finkit-python --features abi3 --locked
+      - name: Validate diff
+        run: git diff --check
+      - name: Commit applied plan
+        run: |
+          if git diff --quiet; then
+            echo 'No generated changes to commit.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/indicator_registry.json scripts/sync_bindings.py ffi/python-binding/src/generated.rs ffi/python-binding/src/lib.rs ffi/python-binding/finkit/__init__.py
+          git commit -m 'perf(python): remove list materialization from indicator API'
+          git push origin HEAD:fix/talib-performance-plan-20260904
