@@ -1,10 +1,10 @@
 //! Python-facing fast paths for Architecture 3.0.
 //!
-//! Inputs are borrowed NumPy buffers.  Vector outputs are built from a Rust Vec with
+//! Inputs are borrowed NumPy buffers. Vector outputs are built from a Rust Vec with
 //! `PyArray1::from_vec`, which transfers ownership of that allocation to NumPy instead
 //! of materialising an intermediate Python list and then copying through `np.asarray`.
 
-use ::finkit::math::{moving_avg, reduction, volume_kernels};
+use ::finkit::math::{moving_avg, reduction, typed_moving_avg, volume_kernels};
 use numpy::{PyArray1, PyReadonlyArray1};
 use pyo3::prelude::*;
 
@@ -27,6 +27,20 @@ fn fast_sma<'py>(
     Ok(PyArray1::from_vec(py, output))
 }
 
+#[pyfunction(name = "_fast_sma_f32")]
+#[pyo3(signature = (close, timeperiod=14))]
+fn fast_sma_f32<'py>(
+    py: Python<'py>,
+    close: PyReadonlyArray1<'py, f32>,
+    timeperiod: usize,
+) -> PyResult<Bound<'py, PyArray1<f32>>> {
+    let close = close.as_slice().map_err(value_error)?;
+    let mut output = vec![0.0f32; close.len()];
+    py.detach(|| typed_moving_avg::sma_f32_into(close, timeperiod, &mut output))
+        .map_err(value_error)?;
+    Ok(PyArray1::from_vec(py, output))
+}
+
 #[pyfunction(name = "_fast_ema")]
 #[pyo3(signature = (close, timeperiod=14))]
 fn fast_ema<'py>(
@@ -37,6 +51,20 @@ fn fast_ema<'py>(
     let close = close.as_slice().map_err(value_error)?;
     let mut output = vec![0.0; close.len()];
     py.detach(|| moving_avg::ema_into(close, timeperiod, &mut output))
+        .map_err(value_error)?;
+    Ok(PyArray1::from_vec(py, output))
+}
+
+#[pyfunction(name = "_fast_ema_f32")]
+#[pyo3(signature = (close, timeperiod=14))]
+fn fast_ema_f32<'py>(
+    py: Python<'py>,
+    close: PyReadonlyArray1<'py, f32>,
+    timeperiod: usize,
+) -> PyResult<Bound<'py, PyArray1<f32>>> {
+    let close = close.as_slice().map_err(value_error)?;
+    let mut output = vec![0.0f32; close.len()];
+    py.detach(|| typed_moving_avg::ema_f32_into(close, timeperiod, &mut output))
         .map_err(value_error)?;
     Ok(PyArray1::from_vec(py, output))
 }
@@ -165,7 +193,9 @@ fn reduce_stddev_f32(data: PyReadonlyArray1<'_, f32>) -> PyResult<f32> {
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(fast_sma, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_sma_f32, m)?)?;
     m.add_function(wrap_pyfunction!(fast_ema, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_ema_f32, m)?)?;
     m.add_function(wrap_pyfunction!(fast_obv, m)?)?;
     m.add_function(wrap_pyfunction!(fast_vwap, m)?)?;
     m.add_function(wrap_pyfunction!(reduce_sum_f64, m)?)?;
