@@ -7,6 +7,7 @@
 use crate::error::{Result, TaError};
 use crate::utils::{smoothing_factor, validate_input};
 use ndarray::Array1;
+use std::mem::{forget, MaybeUninit};
 
 #[inline]
 fn invalid_period() -> TaError {
@@ -117,17 +118,22 @@ pub fn kama(
     validate_input(input.len(), period + 1)?;
 
     let len = input.len();
-    let mut output = vec![f64::NAN; len];
+    let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);
     let fast_sc = 2.0 / (fast_period as f64 + 1.0);
     let slow_sc = 2.0 / (slow_period as f64 + 1.0);
     let sc_diff = fast_sc - slow_sc;
 
-    unsafe {
+    let output = unsafe {
+        raw_output.set_len(len);
         let input_ptr = input.as_ptr();
-        let output_ptr = output.as_mut_ptr();
+        let output_ptr = raw_output.as_mut_ptr();
         let first_value = *input_ptr;
         if !first_value.is_finite() {
             return Err(non_finite(0));
+        }
+
+        for index in 0..period - 1 {
+            output_ptr.add(index).write(MaybeUninit::new(f64::NAN));
         }
 
         let mut volatility = 0.0;
@@ -142,7 +148,7 @@ pub fn kama(
         }
 
         let seed = *input_ptr.add(period - 1);
-        *output_ptr.add(period - 1) = seed;
+        output_ptr.add(period - 1).write(MaybeUninit::new(seed));
         let direction = (*input_ptr.add(period) - *input_ptr).abs();
         let efficiency = if volatility != 0.0 {
             direction / volatility
@@ -153,7 +159,9 @@ pub fn kama(
         let smoothing = smoothing * smoothing;
         let period_value = *input_ptr.add(period);
         let mut previous_kama = seed + smoothing * (period_value - seed);
-        *output_ptr.add(period) = previous_kama;
+        output_ptr
+            .add(period)
+            .write(MaybeUninit::new(previous_kama));
 
         for index in period + 1..len {
             let current = *input_ptr.add(index);
@@ -175,9 +183,17 @@ pub fn kama(
             let smoothing = efficiency * sc_diff + slow_sc;
             let smoothing = smoothing * smoothing;
             previous_kama += smoothing * (current - previous_kama);
-            *output_ptr.add(index) = previous_kama;
+            output_ptr
+                .add(index)
+                .write(MaybeUninit::new(previous_kama));
         }
-    }
+
+        let ptr = raw_output.as_mut_ptr().cast::<f64>();
+        let capacity = raw_output.capacity();
+        let length = raw_output.len();
+        forget(raw_output);
+        Vec::from_raw_parts(ptr, length, capacity)
+    };
 
     Ok(Array1::from_vec(output))
 }
