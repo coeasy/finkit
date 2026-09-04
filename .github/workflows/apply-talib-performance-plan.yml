@@ -6,6 +6,10 @@ on:
       - fix/talib-performance-plan-20260904
   workflow_dispatch:
 
+concurrency:
+  group: talib-performance-plan-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
