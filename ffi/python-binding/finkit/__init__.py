@@ -170,6 +170,18 @@ if hasattr(_native, "_fast_ema"):
 
     ema = _translate_native_errors("ema", ema)
 
+if hasattr(_native, "_fast_wma"):
+
+    def wma(close, timeperiod=14, out=None):
+        close = _as_contiguous_float64(close)
+        if out is not None:
+            out = _validate_out(out, close)
+            _native._fast_wma_into(close, out, timeperiod)
+            return out
+        return _native._fast_wma(close, timeperiod)
+
+    wma = _translate_native_errors("wma", wma)
+
 if hasattr(_native, "_fast_obv"):
 
     def obv(close, volume, out=None):
