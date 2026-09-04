@@ -17,6 +17,7 @@
 //! - [`statistics`] — Rolling variance, standard deviation, min, max, correlation (requires `std` feature)
 //! - [`rolling_stats`] — TA-Lib 0.7.1-compatible rolling statistics (requires `std` feature)
 //! - [`sar`] — TA-Lib 0.7.1-compatible Parabolic SAR kernel (requires `std` feature)
+//! - [`trange`] — single-write TA-Lib-compatible True Range kernel (requires `std` feature)
 //! - [`linear`] — Linear regression and related functions (requires `std` feature)
 //! - [`reduction`] — allocation-free typed scalar reductions for f32/f64 (requires `std` feature)
 //! - [`typed_moving_avg`] — native f32 SMA/EMA caller-owned kernels (requires `std` feature)
@@ -63,6 +64,8 @@ pub mod simd_ops_avx512;
 pub mod simd_ops_wasm;
 #[cfg(feature = "std")]
 pub mod statistics;
+#[cfg(feature = "std")]
+pub mod trange;
 #[cfg(feature = "std")]
 pub mod typed_moving_avg;
 #[cfg(feature = "std")]
