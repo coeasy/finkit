@@ -100,6 +100,97 @@ for _name in _native_all:
         globals()[_name] = _as_numpy_result(_name, wrapped)
 
 
+def _as_contiguous_float64(values):
+    """Borrow an existing C-contiguous float64 array, copying only when required."""
+    array = np.asarray(values)
+    if array.ndim != 1:
+        raise InvalidParameterError("expected a one-dimensional numeric array")
+    if array.dtype != np.float64 or not array.flags.c_contiguous:
+        array = np.ascontiguousarray(array, dtype=np.float64)
+    return array
+
+
+def _as_contiguous_reduction_input(values):
+    """Keep float32/float64 reductions on their native typed kernels."""
+    array = np.asarray(values)
+    if array.ndim != 1:
+        raise InvalidParameterError("expected a one-dimensional numeric array")
+    if array.dtype == np.float32:
+        return np.ascontiguousarray(array, dtype=np.float32), np.float32
+    if array.dtype == np.float64:
+        return np.ascontiguousarray(array, dtype=np.float64), float
+    return np.ascontiguousarray(array, dtype=np.float64), float
+
+
+# Architecture 3.0 P0: keep the established package API but route the hottest
+# single-output indicators through native functions that return NumPy arrays
+# directly.  For already-contiguous float64 inputs the Rust binding borrows the
+# NumPy memory and there is no input conversion/copy.
+if hasattr(_native, "_fast_sma"):
+    def sma(close, timeperiod=14):
+        return _native._fast_sma(_as_contiguous_float64(close), timeperiod)
+
+    sma = _translate_native_errors("sma", sma)
+
+if hasattr(_native, "_fast_ema"):
+    def ema(close, timeperiod=14):
+        return _native._fast_ema(_as_contiguous_float64(close), timeperiod)
+
+    ema = _translate_native_errors("ema", ema)
+
+if hasattr(_native, "_fast_obv"):
+    def obv(close, volume):
+        return _native._fast_obv(
+            _as_contiguous_float64(close),
+            _as_contiguous_float64(volume),
+        )
+
+    obv = _translate_native_errors("obv", obv)
+
+if hasattr(_native, "_fast_vwap"):
+    def vwap(high, low, close, volume):
+        return _native._fast_vwap(
+            _as_contiguous_float64(high),
+            _as_contiguous_float64(low),
+            _as_contiguous_float64(close),
+            _as_contiguous_float64(volume),
+        )
+
+    vwap = _translate_native_errors("vwap", vwap)
+
+
+def _typed_reduce(values, f32_name, f64_name):
+    array, scalar_type = _as_contiguous_reduction_input(values)
+    native = getattr(_native, f32_name if array.dtype == np.float32 else f64_name)
+    result = native(array)
+    return scalar_type(result)
+
+
+def reduce_sum(values):
+    """Allocation-free scalar sum preserving float32 vs float64 input type."""
+    return _typed_reduce(values, "_reduce_sum_f32", "_reduce_sum_f64")
+
+
+def reduce_mean(values):
+    """Allocation-free scalar arithmetic mean preserving input floating type."""
+    return _typed_reduce(values, "_reduce_mean_f32", "_reduce_mean_f64")
+
+
+def reduce_min(values):
+    """Allocation-free scalar minimum preserving input floating type."""
+    return _typed_reduce(values, "_reduce_min_f32", "_reduce_min_f64")
+
+
+def reduce_max(values):
+    """Allocation-free scalar maximum preserving input floating type."""
+    return _typed_reduce(values, "_reduce_max_f32", "_reduce_max_f64")
+
+
+def reduce_stddev(values):
+    """Allocation-free population standard deviation preserving floating type."""
+    return _typed_reduce(values, "_reduce_stddev_f32", "_reduce_stddev_f64")
+
+
 def register_accessor():
     """Explicitly register the df.ta accessor (idempotent)."""
     TaAccessor._register()
@@ -114,4 +205,9 @@ __all__ = list(_native_all) + [
     "IndicatorNotFoundError",
     "TaAccessor",
     "register_accessor",
+    "reduce_sum",
+    "reduce_mean",
+    "reduce_min",
+    "reduce_max",
+    "reduce_stddev",
 ]
