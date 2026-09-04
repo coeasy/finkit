@@ -250,10 +250,10 @@ impl SliceOutput for SmaSlice {
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
 /// let mut out = vec![0.0; 5];
-/// EmaSlice(3).compute_into(&data, 3, &mut out).unwrap_or(());
+/// EmaSlice(3).compute_into(&data, &mut out).unwrap();
+/// assert!(out[0].is_nan());
+/// assert!((out[2] - 2.0).abs() < 1e-10);
 /// ```
-///
-/// Prefer the direct `EmaSlice(period)` adapter shown by the trait API.
 pub struct EmaSlice(pub usize);
 
 impl SliceOutput for EmaSlice {
