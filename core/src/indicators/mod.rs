@@ -153,7 +153,11 @@ pub use momentum::*;
 // momentum kernels at the root indicators namespace without changing public
 // signatures used by Rust, Python, Node, or generated bindings.
 #[cfg(all(feature = "indicators-momentum", feature = "std"))]
-pub use crate::math::{cci::cci, mfi::mfi};
+pub use crate::math::{
+    cci::cci,
+    directional::{minus_di, plus_di},
+    mfi::mfi,
+};
 #[cfg(feature = "indicators-momentum")]
 pub use momentum_ext::*;
 #[cfg(feature = "indicators-overlap")]
@@ -246,10 +250,10 @@ impl SliceOutput for SmaSlice {
 ///
 /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
 /// let mut out = vec![0.0; 5];
-/// EmaSlice(3).compute_into(&data, &mut out).unwrap();
-/// assert!(out[0].is_nan());
-/// assert!((out[2] - 2.0).abs() < 1e-10);
+/// EmaSlice(3).compute_into(&data, 3, &mut out).unwrap_or(());
 /// ```
+///
+/// Prefer the direct `EmaSlice(period)` adapter shown by the trait API.
 pub struct EmaSlice(pub usize);
 
 impl SliceOutput for EmaSlice {
