@@ -1,12 +1,12 @@
 //! Architecture v3 Python hot paths.
 //!
 //! Public functions remain registry-defined, while hot NumPy calls borrow input
-//! slices and return NumPy-owned Rust vectors directly. Stateful rolling
-//! statistics use the shared cancellation-resistant core in `rolling_stats`.
+//! slices and return NumPy-owned Rust vectors directly. Compatibility-sensitive
+//! statistics and SAR use kernels that mirror TA-Lib core 0.7.1 semantics.
 
 use ::finkit::indicators;
 use ::finkit::math::{
-    moving_avg, reduction, rolling_stats, typed_moving_avg, volume_kernels,
+    moving_avg, reduction, rolling_stats, sar as sar_kernel, typed_moving_avg, volume_kernels,
 };
 use numpy::{PyArray1, PyReadonlyArray1, PyReadwriteArray1};
 use pyo3::prelude::*;
@@ -19,7 +19,9 @@ fn value_error(error: impl std::fmt::Display) -> PyErr {
 #[inline]
 fn validate_period(len: usize, period: usize) -> PyResult<()> {
     if period == 0 {
-        return Err(value_error("invalid parameter: period must be greater than 0"));
+        return Err(value_error(
+            "invalid parameter: period must be greater than 0",
+        ));
     }
     if len < period {
         return Err(value_error(
@@ -337,12 +339,31 @@ fn fast_unary_period<'py>(
             validate_period(close.len(), timeperiod)?;
             py.detach(|| mom_vec(close, timeperiod))
         }
-        "dema" => py.detach(|| moving_avg::dema(close, timeperiod)).map_err(value_error)?.into_raw_vec(),
-        "tema" => py.detach(|| moving_avg::tema(close, timeperiod)).map_err(value_error)?.into_raw_vec(),
-        "rsi" => py.detach(|| indicators::rsi(close, timeperiod)).map_err(value_error)?.into_raw_vec(),
-        "roc" => py.detach(|| indicators::roc(close, timeperiod)).map_err(value_error)?.into_raw_vec(),
-        "cmo" => py.detach(|| indicators::cmo(close, timeperiod)).map_err(value_error)?.into_raw_vec(),
-        _ => return Err(value_error(format!("invalid parameter: unsupported fast operation {operation}"))),
+        "dema" => py
+            .detach(|| moving_avg::dema(close, timeperiod))
+            .map_err(value_error)?
+            .into_raw_vec(),
+        "tema" => py
+            .detach(|| moving_avg::tema(close, timeperiod))
+            .map_err(value_error)?
+            .into_raw_vec(),
+        "rsi" => py
+            .detach(|| indicators::rsi(close, timeperiod))
+            .map_err(value_error)?
+            .into_raw_vec(),
+        "roc" => py
+            .detach(|| indicators::roc(close, timeperiod))
+            .map_err(value_error)?
+            .into_raw_vec(),
+        "cmo" => py
+            .detach(|| indicators::cmo(close, timeperiod))
+            .map_err(value_error)?
+            .into_raw_vec(),
+        _ => {
+            return Err(value_error(format!(
+                "invalid parameter: unsupported fast operation {operation}"
+            )))
+        }
     };
     Ok(PyArray1::from_vec(py, output))
 }
@@ -357,9 +378,17 @@ fn fast_unary_period_scale<'py>(
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let close = close.as_slice().map_err(value_error)?;
     let output = match operation {
-        "stddev" => py.detach(|| rolling_stats::stddev(close, timeperiod, scale)).map_err(value_error)?,
-        "var" => py.detach(|| rolling_stats::variance(close, timeperiod)).map_err(value_error)?,
-        _ => return Err(value_error(format!("invalid parameter: unsupported fast operation {operation}"))),
+        "stddev" => py
+            .detach(|| rolling_stats::stddev(close, timeperiod, scale))
+            .map_err(value_error)?,
+        "var" => py
+            .detach(|| rolling_stats::variance(close, timeperiod))
+            .map_err(value_error)?,
+        _ => {
+            return Err(value_error(format!(
+                "invalid parameter: unsupported fast operation {operation}"
+            )))
+        }
     };
     Ok(PyArray1::from_vec(py, output))
 }
@@ -374,7 +403,9 @@ fn fast_kama<'py>(
     slowperiod: usize,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let close = close.as_slice().map_err(value_error)?;
-    let output = py.detach(|| moving_avg::kama(close, timeperiod, fastperiod, slowperiod)).map_err(value_error)?;
+    let output = py
+        .detach(|| moving_avg::kama(close, timeperiod, fastperiod, slowperiod))
+        .map_err(value_error)?;
     Ok(PyArray1::from_vec(py, output.into_raw_vec()))
 }
 
@@ -394,8 +425,14 @@ fn fast_binary_period<'py>(
             validate_period(input_a.len(), timeperiod)?;
             py.detach(|| midpoint_vec(input_a, input_b, timeperiod))
         }
-        "correl" => py.detach(|| rolling_stats::correlation(input_a, input_b, timeperiod)).map_err(value_error)?,
-        _ => return Err(value_error(format!("invalid parameter: unsupported fast operation {operation}"))),
+        "correl" => py
+            .detach(|| rolling_stats::correlation(input_a, input_b, timeperiod))
+            .map_err(value_error)?,
+        _ => {
+            return Err(value_error(format!(
+                "invalid parameter: unsupported fast operation {operation}"
+            )))
+        }
     };
     Ok(PyArray1::from_vec(py, output))
 }
@@ -419,101 +456,227 @@ fn fast_hlc_period<'py>(
             validate_period(high.len(), timeperiod)?;
             py.detach(|| willr_vec(high, low, close, timeperiod))
         }
-        "adx" => py.detach(|| indicators::adx(high, low, close, timeperiod)).map_err(value_error)?.into_raw_vec(),
-        "cci" => py.detach(|| indicators::cci(high, low, close, timeperiod)).map_err(value_error)?.into_raw_vec(),
-        "plus_di" => py.detach(|| indicators::plus_di(high, low, close, timeperiod)).map_err(value_error)?.into_raw_vec(),
-        "minus_di" => py.detach(|| indicators::minus_di(high, low, close, timeperiod)).map_err(value_error)?.into_raw_vec(),
-        "atr" => py.detach(|| indicators::atr(high, low, close, timeperiod)).map_err(value_error)?.into_raw_vec(),
-        "natr" => py.detach(|| indicators::natr(high, low, close, timeperiod)).map_err(value_error)?.into_raw_vec(),
-        _ => return Err(value_error(format!("invalid parameter: unsupported fast operation {operation}"))),
+        "adx" => py
+            .detach(|| indicators::adx(high, low, close, timeperiod))
+            .map_err(value_error)?
+            .into_raw_vec(),
+        "cci" => py
+            .detach(|| indicators::cci(high, low, close, timeperiod))
+            .map_err(value_error)?
+            .into_raw_vec(),
+        "plus_di" => py
+            .detach(|| indicators::plus_di(high, low, close, timeperiod))
+            .map_err(value_error)?
+            .into_raw_vec(),
+        "minus_di" => py
+            .detach(|| indicators::minus_di(high, low, close, timeperiod))
+            .map_err(value_error)?
+            .into_raw_vec(),
+        "atr" => py
+            .detach(|| indicators::atr(high, low, close, timeperiod))
+            .map_err(value_error)?
+            .into_raw_vec(),
+        "natr" => py
+            .detach(|| indicators::natr(high, low, close, timeperiod))
+            .map_err(value_error)?
+            .into_raw_vec(),
+        _ => {
+            return Err(value_error(format!(
+                "invalid parameter: unsupported fast operation {operation}"
+            )))
+        }
     };
     Ok(PyArray1::from_vec(py, output))
 }
 
 #[pyfunction(name = "_fast_trange")]
-fn fast_trange<'py>(py: Python<'py>, high: PyReadonlyArray1<'py, f64>, low: PyReadonlyArray1<'py, f64>, close: PyReadonlyArray1<'py, f64>) -> PyResult<Bound<'py, PyArray1<f64>>> {
+fn fast_trange<'py>(
+    py: Python<'py>,
+    high: PyReadonlyArray1<'py, f64>,
+    low: PyReadonlyArray1<'py, f64>,
+    close: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let high = high.as_slice().map_err(value_error)?;
     let low = low.as_slice().map_err(value_error)?;
     let close = close.as_slice().map_err(value_error)?;
-    let output = py.detach(|| indicators::trange(high, low, close)).map_err(value_error)?;
+    let output = py
+        .detach(|| indicators::trange(high, low, close))
+        .map_err(value_error)?;
     Ok(PyArray1::from_vec(py, output.into_raw_vec()))
 }
 
 #[pyfunction(name = "_fast_mfi")]
 #[pyo3(signature = (high, low, close, volume, timeperiod=14))]
-fn fast_mfi<'py>(py: Python<'py>, high: PyReadonlyArray1<'py, f64>, low: PyReadonlyArray1<'py, f64>, close: PyReadonlyArray1<'py, f64>, volume: PyReadonlyArray1<'py, f64>, timeperiod: usize) -> PyResult<Bound<'py, PyArray1<f64>>> {
+fn fast_mfi<'py>(
+    py: Python<'py>,
+    high: PyReadonlyArray1<'py, f64>,
+    low: PyReadonlyArray1<'py, f64>,
+    close: PyReadonlyArray1<'py, f64>,
+    volume: PyReadonlyArray1<'py, f64>,
+    timeperiod: usize,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let high = high.as_slice().map_err(value_error)?;
     let low = low.as_slice().map_err(value_error)?;
     let close = close.as_slice().map_err(value_error)?;
     let volume = volume.as_slice().map_err(value_error)?;
-    let output = py.detach(|| indicators::mfi(high, low, close, volume, timeperiod)).map_err(value_error)?;
+    let output = py
+        .detach(|| indicators::mfi(high, low, close, volume, timeperiod))
+        .map_err(value_error)?;
     Ok(PyArray1::from_vec(py, output.into_raw_vec()))
 }
 
 #[pyfunction(name = "_fast_ad")]
-fn fast_ad<'py>(py: Python<'py>, high: PyReadonlyArray1<'py, f64>, low: PyReadonlyArray1<'py, f64>, close: PyReadonlyArray1<'py, f64>, volume: PyReadonlyArray1<'py, f64>) -> PyResult<Bound<'py, PyArray1<f64>>> {
+fn fast_ad<'py>(
+    py: Python<'py>,
+    high: PyReadonlyArray1<'py, f64>,
+    low: PyReadonlyArray1<'py, f64>,
+    close: PyReadonlyArray1<'py, f64>,
+    volume: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let high = high.as_slice().map_err(value_error)?;
     let low = low.as_slice().map_err(value_error)?;
     let close = close.as_slice().map_err(value_error)?;
     let volume = volume.as_slice().map_err(value_error)?;
-    let output = py.detach(|| indicators::ad(high, low, close, volume)).map_err(value_error)?;
+    let output = py
+        .detach(|| indicators::ad(high, low, close, volume))
+        .map_err(value_error)?;
     Ok(PyArray1::from_vec(py, output.into_raw_vec()))
 }
 
 #[pyfunction(name = "_fast_adosc")]
 #[pyo3(signature = (high, low, close, volume, fastperiod=3, slowperiod=10))]
-fn fast_adosc<'py>(py: Python<'py>, high: PyReadonlyArray1<'py, f64>, low: PyReadonlyArray1<'py, f64>, close: PyReadonlyArray1<'py, f64>, volume: PyReadonlyArray1<'py, f64>, fastperiod: usize, slowperiod: usize) -> PyResult<Bound<'py, PyArray1<f64>>> {
+fn fast_adosc<'py>(
+    py: Python<'py>,
+    high: PyReadonlyArray1<'py, f64>,
+    low: PyReadonlyArray1<'py, f64>,
+    close: PyReadonlyArray1<'py, f64>,
+    volume: PyReadonlyArray1<'py, f64>,
+    fastperiod: usize,
+    slowperiod: usize,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let high = high.as_slice().map_err(value_error)?;
     let low = low.as_slice().map_err(value_error)?;
     let close = close.as_slice().map_err(value_error)?;
     let volume = volume.as_slice().map_err(value_error)?;
-    let output = py.detach(|| indicators::adosc(high, low, close, volume, fastperiod, slowperiod)).map_err(value_error)?;
+    let output = py
+        .detach(|| indicators::adosc(high, low, close, volume, fastperiod, slowperiod))
+        .map_err(value_error)?;
     Ok(PyArray1::from_vec(py, output.into_raw_vec()))
 }
 
 #[pyfunction(name = "_fast_bop")]
-fn fast_bop<'py>(py: Python<'py>, open: PyReadonlyArray1<'py, f64>, high: PyReadonlyArray1<'py, f64>, low: PyReadonlyArray1<'py, f64>, close: PyReadonlyArray1<'py, f64>) -> PyResult<Bound<'py, PyArray1<f64>>> {
+fn fast_bop<'py>(
+    py: Python<'py>,
+    open: PyReadonlyArray1<'py, f64>,
+    high: PyReadonlyArray1<'py, f64>,
+    low: PyReadonlyArray1<'py, f64>,
+    close: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let open = open.as_slice().map_err(value_error)?;
     let high = high.as_slice().map_err(value_error)?;
     let low = low.as_slice().map_err(value_error)?;
     let close = close.as_slice().map_err(value_error)?;
-    let output = py.detach(|| indicators::bop(open, high, low, close)).map_err(value_error)?;
+    let output = py
+        .detach(|| indicators::bop(open, high, low, close))
+        .map_err(value_error)?;
     Ok(PyArray1::from_vec(py, output.into_raw_vec()))
 }
 
 #[pyfunction(name = "_fast_bbands")]
 #[pyo3(signature = (close, timeperiod=20, nbdevup=2.0, nbdevdn=2.0))]
-fn fast_bbands<'py>(py: Python<'py>, close: PyReadonlyArray1<'py, f64>, timeperiod: usize, nbdevup: f64, nbdevdn: f64) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
+fn fast_bbands<'py>(
+    py: Python<'py>,
+    close: PyReadonlyArray1<'py, f64>,
+    timeperiod: usize,
+    nbdevup: f64,
+    nbdevdn: f64,
+) -> PyResult<(
+    Bound<'py, PyArray1<f64>>,
+    Bound<'py, PyArray1<f64>>,
+    Bound<'py, PyArray1<f64>>,
+)> {
     let close = close.as_slice().map_err(value_error)?;
-    let (upper, middle, lower) = py.detach(|| rolling_stats::bbands_sma(close, timeperiod, nbdevup, nbdevdn)).map_err(value_error)?;
-    Ok((PyArray1::from_vec(py, upper), PyArray1::from_vec(py, middle), PyArray1::from_vec(py, lower)))
+    let (upper, middle, lower) = py
+        .detach(|| rolling_stats::bbands_sma(close, timeperiod, nbdevup, nbdevdn))
+        .map_err(value_error)?;
+    Ok((
+        PyArray1::from_vec(py, upper),
+        PyArray1::from_vec(py, middle),
+        PyArray1::from_vec(py, lower),
+    ))
 }
 
 #[pyfunction(name = "_fast_sar")]
 #[pyo3(signature = (high, low, acceleration=0.02, maximum=0.2))]
-fn fast_sar<'py>(py: Python<'py>, high: PyReadonlyArray1<'py, f64>, low: PyReadonlyArray1<'py, f64>, acceleration: f64, maximum: f64) -> PyResult<Bound<'py, PyArray1<f64>>> {
+fn fast_sar<'py>(
+    py: Python<'py>,
+    high: PyReadonlyArray1<'py, f64>,
+    low: PyReadonlyArray1<'py, f64>,
+    acceleration: f64,
+    maximum: f64,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let high = high.as_slice().map_err(value_error)?;
     let low = low.as_slice().map_err(value_error)?;
-    let result = py.detach(|| indicators::sar(high, low, acceleration, maximum)).map_err(value_error)?;
-    Ok(PyArray1::from_vec(py, result.sar.into_raw_vec()))
+    let output = py
+        .detach(|| sar_kernel::sar(high, low, acceleration, maximum))
+        .map_err(value_error)?;
+    Ok(PyArray1::from_vec(py, output))
 }
 
 #[pyfunction(name = "_fast_macd")]
 #[pyo3(signature = (close, fastperiod=12, slowperiod=26, signalperiod=9))]
-fn fast_macd<'py>(py: Python<'py>, close: PyReadonlyArray1<'py, f64>, fastperiod: usize, slowperiod: usize, signalperiod: usize) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
+fn fast_macd<'py>(
+    py: Python<'py>,
+    close: PyReadonlyArray1<'py, f64>,
+    fastperiod: usize,
+    slowperiod: usize,
+    signalperiod: usize,
+) -> PyResult<(
+    Bound<'py, PyArray1<f64>>,
+    Bound<'py, PyArray1<f64>>,
+    Bound<'py, PyArray1<f64>>,
+)> {
     let close = close.as_slice().map_err(value_error)?;
-    let result = py.detach(|| indicators::macd(close, fastperiod, slowperiod, signalperiod)).map_err(value_error)?;
-    Ok((PyArray1::from_vec(py, result.macd.into_raw_vec()), PyArray1::from_vec(py, result.signal.into_raw_vec()), PyArray1::from_vec(py, result.hist.into_raw_vec())))
+    let result = py
+        .detach(|| indicators::macd(close, fastperiod, slowperiod, signalperiod))
+        .map_err(value_error)?;
+    Ok((
+        PyArray1::from_vec(py, result.macd.into_raw_vec()),
+        PyArray1::from_vec(py, result.signal.into_raw_vec()),
+        PyArray1::from_vec(py, result.hist.into_raw_vec()),
+    ))
 }
 
 #[pyfunction(name = "_fast_stoch")]
 #[pyo3(signature = (high, low, close, fastk_period=5, slowk_period=3, slowd_period=3))]
-fn fast_stoch<'py>(py: Python<'py>, high: PyReadonlyArray1<'py, f64>, low: PyReadonlyArray1<'py, f64>, close: PyReadonlyArray1<'py, f64>, fastk_period: usize, slowk_period: usize, slowd_period: usize) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
+fn fast_stoch<'py>(
+    py: Python<'py>,
+    high: PyReadonlyArray1<'py, f64>,
+    low: PyReadonlyArray1<'py, f64>,
+    close: PyReadonlyArray1<'py, f64>,
+    fastk_period: usize,
+    slowk_period: usize,
+    slowd_period: usize,
+) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
     let high = high.as_slice().map_err(value_error)?;
     let low = low.as_slice().map_err(value_error)?;
     let close = close.as_slice().map_err(value_error)?;
-    let result = py.detach(|| indicators::stoch(high, low, close, fastk_period, slowk_period, slowd_period)).map_err(value_error)?;
-    Ok((PyArray1::from_vec(py, result.k.into_raw_vec()), PyArray1::from_vec(py, result.d.into_raw_vec())))
+    let result = py
+        .detach(|| {
+            indicators::stoch(
+                high,
+                low,
+                close,
+                fastk_period,
+                slowk_period,
+                slowd_period,
+            )
+        })
+        .map_err(value_error)?;
+    Ok((
+        PyArray1::from_vec(py, result.k.into_raw_vec()),
+        PyArray1::from_vec(py, result.d.into_raw_vec()),
+    ))
 }
 
 macro_rules! reduction_fn {
@@ -529,16 +692,66 @@ macro_rules! reduction_fn {
     };
 }
 
-reduction_fn!(reduce_sum_f64, "_reduce_sum_f64", f64, reduction::sum_f64);
-reduction_fn!(reduce_mean_f64, "_reduce_mean_f64", f64, reduction::mean_f64);
-reduction_fn!(reduce_min_f64, "_reduce_min_f64", f64, reduction::min_f64);
-reduction_fn!(reduce_max_f64, "_reduce_max_f64", f64, reduction::max_f64);
-reduction_fn!(reduce_stddev_f64, "_reduce_stddev_f64", f64, reduction::stddev_f64);
-reduction_fn!(reduce_sum_f32, "_reduce_sum_f32", f32, reduction::sum_f32);
-reduction_fn!(reduce_mean_f32, "_reduce_mean_f32", f32, reduction::mean_f32);
-reduction_fn!(reduce_min_f32, "_reduce_min_f32", f32, reduction::min_f32);
-reduction_fn!(reduce_max_f32, "_reduce_max_f32", f32, reduction::max_f32);
-reduction_fn!(reduce_stddev_f32, "_reduce_stddev_f32", f32, reduction::stddev_f32);
+reduction_fn!(
+    reduce_sum_f64,
+    "_reduce_sum_f64",
+    f64,
+    reduction::sum_f64
+);
+reduction_fn!(
+    reduce_mean_f64,
+    "_reduce_mean_f64",
+    f64,
+    reduction::mean_f64
+);
+reduction_fn!(
+    reduce_min_f64,
+    "_reduce_min_f64",
+    f64,
+    reduction::min_f64
+);
+reduction_fn!(
+    reduce_max_f64,
+    "_reduce_max_f64",
+    f64,
+    reduction::max_f64
+);
+reduction_fn!(
+    reduce_stddev_f64,
+    "_reduce_stddev_f64",
+    f64,
+    reduction::stddev_f64
+);
+reduction_fn!(
+    reduce_sum_f32,
+    "_reduce_sum_f32",
+    f32,
+    reduction::sum_f32
+);
+reduction_fn!(
+    reduce_mean_f32,
+    "_reduce_mean_f32",
+    f32,
+    reduction::mean_f32
+);
+reduction_fn!(
+    reduce_min_f32,
+    "_reduce_min_f32",
+    f32,
+    reduction::min_f32
+);
+reduction_fn!(
+    reduce_max_f32,
+    "_reduce_max_f32",
+    f32,
+    reduction::max_f32
+);
+reduction_fn!(
+    reduce_stddev_f32,
+    "_reduce_stddev_f32",
+    f32,
+    reduction::stddev_f32
+);
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(fast_sma, m)?)?;
