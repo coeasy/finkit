@@ -662,16 +662,7 @@ fn fast_stoch<'py>(
     let low = low.as_slice().map_err(value_error)?;
     let close = close.as_slice().map_err(value_error)?;
     let result = py
-        .detach(|| {
-            indicators::stoch(
-                high,
-                low,
-                close,
-                fastk_period,
-                slowk_period,
-                slowd_period,
-            )
-        })
+        .detach(|| indicators::stoch(high, low, close, fastk_period, slowk_period, slowd_period))
         .map_err(value_error)?;
     Ok((
         PyArray1::from_vec(py, result.k.into_raw_vec()),
@@ -692,60 +683,30 @@ macro_rules! reduction_fn {
     };
 }
 
-reduction_fn!(
-    reduce_sum_f64,
-    "_reduce_sum_f64",
-    f64,
-    reduction::sum_f64
-);
+reduction_fn!(reduce_sum_f64, "_reduce_sum_f64", f64, reduction::sum_f64);
 reduction_fn!(
     reduce_mean_f64,
     "_reduce_mean_f64",
     f64,
     reduction::mean_f64
 );
-reduction_fn!(
-    reduce_min_f64,
-    "_reduce_min_f64",
-    f64,
-    reduction::min_f64
-);
-reduction_fn!(
-    reduce_max_f64,
-    "_reduce_max_f64",
-    f64,
-    reduction::max_f64
-);
+reduction_fn!(reduce_min_f64, "_reduce_min_f64", f64, reduction::min_f64);
+reduction_fn!(reduce_max_f64, "_reduce_max_f64", f64, reduction::max_f64);
 reduction_fn!(
     reduce_stddev_f64,
     "_reduce_stddev_f64",
     f64,
     reduction::stddev_f64
 );
-reduction_fn!(
-    reduce_sum_f32,
-    "_reduce_sum_f32",
-    f32,
-    reduction::sum_f32
-);
+reduction_fn!(reduce_sum_f32, "_reduce_sum_f32", f32, reduction::sum_f32);
 reduction_fn!(
     reduce_mean_f32,
     "_reduce_mean_f32",
     f32,
     reduction::mean_f32
 );
-reduction_fn!(
-    reduce_min_f32,
-    "_reduce_min_f32",
-    f32,
-    reduction::min_f32
-);
-reduction_fn!(
-    reduce_max_f32,
-    "_reduce_max_f32",
-    f32,
-    reduction::max_f32
-);
+reduction_fn!(reduce_min_f32, "_reduce_min_f32", f32, reduction::min_f32);
+reduction_fn!(reduce_max_f32, "_reduce_max_f32", f32, reduction::max_f32);
 reduction_fn!(
     reduce_stddev_f32,
     "_reduce_stddev_f32",
