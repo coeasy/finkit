@@ -14,6 +14,7 @@
 //! - [`statistics`] — Rolling variance, standard deviation, min, max, correlation (requires `std` feature)
 //! - [`linear`] — Linear regression and related functions (requires `std` feature)
 //! - [`reduction`] — allocation-free typed scalar reductions for f32/f64 (requires `std` feature)
+//! - [`typed_moving_avg`] — native f32 SMA/EMA caller-owned kernels (requires `std` feature)
 //! - [`volume_kernels`] — caller-owned OBV/VWAP output kernels (requires `std` feature)
 
 #[cfg(feature = "std")]
@@ -33,5 +34,7 @@ pub mod simd_ops_avx512;
 pub mod simd_ops_wasm;
 #[cfg(feature = "std")]
 pub mod statistics;
+#[cfg(feature = "std")]
+pub mod typed_moving_avg;
 #[cfg(feature = "std")]
 pub mod volume_kernels;
