@@ -10,6 +10,7 @@
 //!
 //! ## std-only submodules
 //!
+//! - [`cci`] — TA-Lib 0.7.1-compatible Commodity Channel Index kernel (requires `std` feature)
 //! - [`moving_avg`] — SMA, EMA, WMA, DEMA, TEMA, KAMA, T3, TRIMA, HMA, ALMA, MAVP (requires `std` feature)
 //! - [`statistics`] — Rolling variance, standard deviation, min, max, correlation (requires `std` feature)
 //! - [`rolling_stats`] — TA-Lib 0.7.1-compatible rolling statistics (requires `std` feature)
@@ -19,6 +20,8 @@
 //! - [`typed_moving_avg`] — native f32 SMA/EMA caller-owned kernels (requires `std` feature)
 //! - [`volume_kernels`] — caller-owned OBV/VWAP output kernels (requires `std` feature)
 
+#[cfg(feature = "std")]
+pub mod cci;
 #[cfg(feature = "std")]
 pub mod linear;
 #[cfg(feature = "std")]
