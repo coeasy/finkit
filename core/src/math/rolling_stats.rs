@@ -1,8 +1,8 @@
 //! TA-Lib 0.7.1-compatible rolling statistics for the public compatibility path.
 //!
 //! The installed-wheel release gate currently benchmarks against TA-Lib core
-//! 0.7.1.  That release uses raw rolling sums for VAR/STDDEV/CORREL and a
-//! precomputed-SMA specialization for BBANDS.  The operation order below mirrors
+//! 0.7.1. That release uses raw rolling sums for VAR/STDDEV/CORREL and a
+//! precomputed-SMA specialization for BBANDS. The operation order below mirrors
 //! those C loops deliberately: changing add/remove order or replacing division
 //! with multiplication by a reciprocal is enough to create long-series parity
 //! drift.
@@ -180,6 +180,11 @@ pub fn correlation(input_a: &[f64], input_b: &[f64], period: usize) -> Result<Ve
 }
 
 /// SMA Bollinger Bands matching the TA_BBANDS 0.7.1 SMA specialization.
+///
+/// TA-Lib computes SMA and the rolling square sum in two helper passes. The
+/// two accumulators are independent, so interleaving those updates preserves
+/// each helper's exact add/remove order while halving the input traversal and
+/// eliminating the hot-loop branch tree for deviation multipliers.
 pub fn bbands_sma(
     input: &[f64],
     period: usize,
@@ -190,87 +195,57 @@ pub fn bbands_sma(
 
     let len = input.len();
     let lookback = period - 1;
-    // Avoid writing NaN across three full-length arrays and then overwriting
-    // nearly every element.  Each output slot is appended exactly once while
-    // preserving the TA-Lib arithmetic sequence below.
-    let mut middle = Vec::with_capacity(len);
-    middle.resize(lookback, f64::NAN);
-
-    // TA_INT_SMA-compatible operation order.
-    let mut period_total = 0.0;
-    let mut trailing_idx = 0usize;
-    let mut i = trailing_idx;
-    while i < lookback {
-        period_total += input[i];
-        i += 1;
-    }
-    while i < len {
-        period_total += input[i];
-        middle.push(period_total / period as f64);
-        period_total -= input[trailing_idx];
-        trailing_idx += 1;
-        i += 1;
-    }
-
     let mut upper = Vec::with_capacity(len);
+    let mut middle = Vec::with_capacity(len);
     let mut lower = Vec::with_capacity(len);
     upper.resize(lookback, f64::NAN);
+    middle.resize(lookback, f64::NAN);
     lower.resize(lookback, f64::NAN);
 
-    // Inline TA_INT_stddev_using_precalc_ma from TA_BBANDS 0.7.1.
-    let mut start_sum = 1 + lookback - period;
-    let mut end_sum = lookback;
+    let mut period_total = 0.0;
     let mut period_total2 = 0.0;
-    for value in &input[start_sum..end_sum] {
-        let mut temp_real = *value;
-        temp_real *= temp_real;
-        period_total2 += temp_real;
+    for &value in &input[..lookback] {
+        period_total += value;
+        let mut squared = value;
+        squared *= squared;
+        period_total2 += squared;
     }
 
-    let output_count = len - lookback;
-    for out_idx in 0..output_count {
-        let mut temp_real = input[end_sum];
-        temp_real *= temp_real;
-        period_total2 += temp_real;
-        let mut mean_value2 = period_total2 / period as f64;
+    let period_f = period as f64;
+    let mut trailing_idx = 0usize;
+    for index in lookback..len {
+        let current = input[index];
 
-        temp_real = input[start_sum];
-        temp_real *= temp_real;
-        period_total2 -= temp_real;
+        // TA_INT_SMA update order.
+        period_total += current;
+        let middle_value = period_total / period_f;
+        period_total -= input[trailing_idx];
 
-        let absolute_idx = lookback + out_idx;
-        temp_real = middle[absolute_idx];
-        temp_real *= temp_real;
-        mean_value2 -= temp_real;
-        let stddev = if !is_zero_or_negative(mean_value2) {
-            mean_value2.sqrt()
+        // TA_INT_stddev_using_precalc_ma update order.
+        let mut squared = current;
+        squared *= squared;
+        period_total2 += squared;
+        let mut variance = period_total2 / period_f;
+        let mut outgoing_squared = input[trailing_idx];
+        outgoing_squared *= outgoing_squared;
+        period_total2 -= outgoing_squared;
+        let mut middle_squared = middle_value;
+        middle_squared *= middle_squared;
+        variance -= middle_squared;
+
+        let stddev = if !is_zero_or_negative(variance) {
+            variance.sqrt()
         } else {
             0.0
         };
 
-        let middle_value = middle[absolute_idx];
-        let (upper_value, lower_value) = if nb_dev_up == nb_dev_down {
-            if nb_dev_up == 1.0 {
-                (middle_value + stddev, middle_value - stddev)
-            } else {
-                let scaled = stddev * nb_dev_up;
-                (middle_value + scaled, middle_value - scaled)
-            }
-        } else if nb_dev_up == 1.0 {
-            (middle_value + stddev, middle_value - stddev * nb_dev_down)
-        } else if nb_dev_down == 1.0 {
-            (middle_value + stddev * nb_dev_up, middle_value - stddev)
-        } else {
-            (
-                middle_value + stddev * nb_dev_up,
-                middle_value - stddev * nb_dev_down,
-            )
-        };
-        upper.push(upper_value);
-        lower.push(lower_value);
-
-        start_sum += 1;
-        end_sum += 1;
+        // Multiplication by 1.0 is exact for finite IEEE-754 values, so this
+        // branch-free form is numerically identical to TA-Lib's 1.0 special
+        // cases while removing per-row parameter branches.
+        upper.push(middle_value + stddev * nb_dev_up);
+        middle.push(middle_value);
+        lower.push(middle_value - stddev * nb_dev_down);
+        trailing_idx += 1;
     }
 
     Ok((upper, middle, lower))
