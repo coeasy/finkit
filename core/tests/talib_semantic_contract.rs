@@ -24,7 +24,11 @@ fn sample(n: usize) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
 fn assert_series_eq(left: &[f64], right: &[f64], tolerance: f64) {
     assert_eq!(left.len(), right.len());
     for (i, (&a, &b)) in left.iter().zip(right).enumerate() {
-        assert_eq!(a.is_finite(), b.is_finite(), "finite mask differs at {i}: {a} vs {b}");
+        assert_eq!(
+            a.is_finite(),
+            b.is_finite(),
+            "finite mask differs at {i}: {a} vs {b}"
+        );
         if a.is_finite() {
             let scale = a.abs().max(b.abs()).max(1.0);
             assert!(
@@ -72,9 +76,7 @@ fn formula_atr_std_and_boll_reuse_core_semantics() {
     );
     let mut engine = FormulaEngine::new();
 
-    let formula_atr = engine
-        .eval("ATR(HIGH,LOW,CLOSE,14)", &mut context)
-        .unwrap();
+    let formula_atr = engine.eval("ATR(HIGH,LOW,CLOSE,14)", &mut context).unwrap();
     let direct_atr = indicators::atr(&high, &low, &close, 14).unwrap();
     assert_series_eq(
         formula_atr.as_slice().unwrap(),
@@ -106,15 +108,7 @@ fn zero_copy_range_matches_full_formula_result() {
     let compiled = engine.compile("EMA(CLOSE,20)").unwrap();
     let range = engine
         .eval_range_zero_copy_inputs(
-            &compiled,
-            &open,
-            &high,
-            &low,
-            &close,
-            &volume,
-            450,
-            512,
-            None,
+            &compiled, &open, &high, &low, &close, &volume, 450, 512, None,
         )
         .unwrap();
 
