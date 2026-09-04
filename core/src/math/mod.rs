@@ -11,6 +11,7 @@
 //! ## std-only submodules
 //!
 //! - [`cci`] — TA-Lib 0.7.1-compatible Commodity Channel Index kernel (requires `std` feature)
+//! - [`directional`] — single-output +DI/-DI Wilder kernels (requires `std` feature)
 //! - [`mfi`] — fused Money Flow Index kernel without a full typical-price scratch array (requires `std` feature)
 //! - [`moving_avg`] — canonical moving-average namespace with Architecture v3 hot-kernel overrides (requires `std` feature)
 //! - [`statistics`] — Rolling variance, standard deviation, min, max, correlation (requires `std` feature)
@@ -23,6 +24,8 @@
 
 #[cfg(feature = "std")]
 pub mod cci;
+#[cfg(feature = "std")]
+pub mod directional;
 #[cfg(feature = "std")]
 pub mod fast_moving_avg;
 #[cfg(feature = "std")]
