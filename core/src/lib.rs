@@ -93,6 +93,9 @@ pub mod sector;
 #[cfg(feature = "std")]
 /// 选股因子合成 + 横截面排序.
 pub mod selectors;
+#[cfg(feature = "std")]
+/// Slot-addressed persistent rolling/streaming state storage for compute plans.
+pub mod state_arena;
 #[cfg(all(feature = "std", feature = "indicators-all"))]
 /// Streaming (incremental) O(1) per-bar indicator updates.
 pub mod streaming;
