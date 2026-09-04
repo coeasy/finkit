@@ -124,6 +124,8 @@ def _validate_out(out, source):
         raise InvalidParameterError("out dtype must match the normalized input dtype")
     if not out.flags.c_contiguous or not out.flags.writeable:
         raise InvalidParameterError("out must be writable and C-contiguous")
+    if np.shares_memory(out, source):
+        raise InvalidParameterError("out must not overlap input for this kernel")
     return out
 
 
