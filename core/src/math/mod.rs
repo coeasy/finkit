@@ -12,7 +12,7 @@
 //!
 //! - [`cci`] — TA-Lib 0.7.1-compatible Commodity Channel Index kernel (requires `std` feature)
 //! - [`mfi`] — fused Money Flow Index kernel without a full typical-price scratch array (requires `std` feature)
-//! - [`moving_avg`] — SMA, EMA, WMA, DEMA, TEMA, KAMA, T3, TRIMA, HMA, ALMA, MAVP (requires `std` feature)
+//! - [`moving_avg`] — canonical moving-average namespace with Architecture v3 hot-kernel overrides (requires `std` feature)
 //! - [`statistics`] — Rolling variance, standard deviation, min, max, correlation (requires `std` feature)
 //! - [`rolling_stats`] — TA-Lib 0.7.1-compatible rolling statistics (requires `std` feature)
 //! - [`sar`] — TA-Lib 0.7.1-compatible Parabolic SAR kernel (requires `std` feature)
@@ -24,11 +24,24 @@
 #[cfg(feature = "std")]
 pub mod cci;
 #[cfg(feature = "std")]
+pub mod fast_moving_avg;
+#[cfg(feature = "std")]
 pub mod linear;
 #[cfg(feature = "std")]
 pub mod mfi;
 #[cfg(feature = "std")]
-pub mod moving_avg;
+#[path = "moving_avg.rs"]
+mod moving_avg_legacy;
+/// Canonical moving-average API.
+///
+/// The complete established implementation remains the source for the broad
+/// moving-average surface. Architecture v3 overrides only the proven hot
+/// entry points, so callers keep the same module path and signatures.
+#[cfg(feature = "std")]
+pub mod moving_avg {
+    pub use super::moving_avg_legacy::*;
+    pub use super::fast_moving_avg::{ema_into, kama, wma_into};
+}
 // B1: `libm_shim` is the `no_std`-portable home for the float primitives used
 // by the isolated numeric helpers. It is compiled in both `std` and `no_std`
 // builds (its `FloatExt`/`f64_*` helpers route to `core`/`libm` accordingly).
