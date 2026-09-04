@@ -1,16 +1,15 @@
-//! Cancellation-resistant rolling statistics shared by indicator and Python hot paths.
+//! TA-Lib 0.7.1-compatible rolling statistics for the public compatibility path.
 //!
-//! TA-Lib 0.7.x moved VAR/STDDEV/CORREL to shifted accumulators with periodic
-//! re-anchoring. Keeping the same state evolution here prevents long-series
-//! cancellation drift while retaining O(n) steady-state execution.
+//! The installed-wheel release gate currently benchmarks against TA-Lib core
+//! 0.7.1.  That release uses raw rolling sums for VAR/STDDEV/CORREL and a
+//! precomputed-SMA specialization for BBANDS.  The operation order below mirrors
+//! those C loops deliberately: changing add/remove order or replacing division
+//! with multiplication by a reciprocal is enough to create long-series parity
+//! drift.
 
 use crate::error::{Result, TaError};
 
-const RESEED_WINDOWS: usize = 32;
-const RESEED_RATIO: f64 = 1.0e-6;
-const RESEED_OUTLIER_RATIO: f64 = 1.0e6;
-const RESEED_FLOOR_RATIO: f64 = 1.0e-12;
-const CORREL_FACTOR_EPSILON: f64 = 1.0e-14;
+const TA_EPSILON: f64 = 0.00000000000001;
 
 #[inline]
 fn validate_period(len: usize, period: usize, minimum: usize) -> Result<()> {
@@ -29,92 +28,83 @@ fn validate_period(len: usize, period: usize, minimum: usize) -> Result<()> {
     Ok(())
 }
 
-/// TA-Lib-compatible rolling population variance.
-///
-/// The running sums contain deviations from a nearby shift, not raw prices.
-/// State is rebuilt when cancellation risk grows or every 32 windows, matching
-/// the 2026 TA_VAR stability strategy.
+#[inline]
+fn is_zero_or_negative(value: f64) -> bool {
+    value < TA_EPSILON
+}
+
+/// Population variance with the exact rolling update order used by TA_VAR 0.7.1.
 pub fn variance(input: &[f64], period: usize) -> Result<Vec<f64>> {
     validate_period(input.len(), period, 1)?;
 
-    let len = input.len();
-    let mut output = vec![f64::NAN; len];
     let lookback = period - 1;
-    let inv_period = 1.0 / period as f64;
+    let mut output = vec![f64::NAN; input.len()];
+    let mut period_total1 = 0.0;
+    let mut period_total2 = 0.0;
     let mut trailing_idx = 0usize;
-    let mut shift = input[trailing_idx];
-    let mut total1 = 0.0;
-    let mut total2 = 0.0;
+    let mut i = trailing_idx;
 
-    for &value in &input[trailing_idx..lookback] {
-        let delta = value - shift;
-        total1 += delta;
-        total2 += delta * delta;
+    if period > 1 {
+        while i < lookback {
+            let mut temp_real = input[i];
+            i += 1;
+            period_total1 += temp_real;
+            temp_real *= temp_real;
+            period_total2 += temp_real;
+        }
     }
 
-    let mut bars_since_reseed = RESEED_WINDOWS.saturating_mul(period);
-    for i in lookback..len {
-        let mut temp = input[i] - shift;
-        total1 += temp;
-        total2 += temp * temp;
-        let mean1 = total1 * inv_period;
-        let mut current_variance = total2 * inv_period - mean1 * mean1;
+    while i < input.len() {
+        let mut temp_real = input[i];
+        i += 1;
+        period_total1 += temp_real;
+        temp_real *= temp_real;
+        period_total2 += temp_real;
 
-        temp = input[trailing_idx] - shift;
-        total1 -= temp;
-        temp *= temp;
-        total2 -= temp;
+        let mean_value1 = period_total1 / period as f64;
+        let mean_value2 = period_total2 / period as f64;
+
+        temp_real = input[trailing_idx];
         trailing_idx += 1;
+        period_total1 -= temp_real;
+        temp_real *= temp_real;
+        period_total2 -= temp_real;
 
-        bars_since_reseed = bars_since_reseed.saturating_sub(1);
-        if current_variance < RESEED_RATIO * (total2 * inv_period)
-            || temp > RESEED_OUTLIER_RATIO * total2
-            || bars_since_reseed == 0
-        {
-            bars_since_reseed = RESEED_WINDOWS.saturating_mul(period);
-            let window_start = i - lookback;
-
-            let mut sum = 0.0;
-            for &value in &input[window_start..=i] {
-                sum += value;
-            }
-            shift = sum * inv_period;
-
-            total1 = 0.0;
-            total2 = 0.0;
-            for &value in &input[window_start..=i] {
-                let delta = value - shift;
-                total1 += delta;
-                total2 += delta * delta;
-            }
-            let mean1 = total1 * inv_period;
-            current_variance = total2 * inv_period - mean1 * mean1;
-            if current_variance < RESEED_FLOOR_RATIO * (total2 * inv_period) {
-                current_variance = 0.0;
-            }
-
-            let trailing = input[window_start] - shift;
-            total1 -= trailing;
-            total2 -= trailing * trailing;
-        }
-
-        output[i] = current_variance;
+        output[i - 1] = mean_value2 - mean_value1 * mean_value1;
     }
 
     Ok(output)
 }
 
-/// Rolling population standard deviation using the stable variance core.
+/// Standard deviation as TA_STDDEV 0.7.1: VAR followed by guarded sqrt/scale.
 pub fn stddev(input: &[f64], period: usize, nb_dev: f64) -> Result<Vec<f64>> {
     validate_period(input.len(), period, 2)?;
     let mut output = variance(input, period)?;
-    for value in output.iter_mut().skip(period - 1) {
-        *value = value.sqrt() * nb_dev;
+
+    if nb_dev != 1.0 {
+        for value in output.iter_mut().skip(period - 1) {
+            let temp_real = *value;
+            *value = if !is_zero_or_negative(temp_real) {
+                temp_real.sqrt() * nb_dev
+            } else {
+                0.0
+            };
+        }
+    } else {
+        for value in output.iter_mut().skip(period - 1) {
+            let temp_real = *value;
+            *value = if !is_zero_or_negative(temp_real) {
+                temp_real.sqrt()
+            } else {
+                0.0
+            };
+        }
     }
+
     Ok(output)
 }
 
-/// Cancellation-resistant rolling Pearson correlation matching TA-Lib 0.7.x.
+/// Pearson correlation with the exact add/remove sequencing of TA_CORREL 0.7.1.
 pub fn correlation(input_a: &[f64], input_b: &[f64], period: usize) -> Result<Vec<f64>> {
     if input_a.len() != input_b.len() {
         return Err(TaError::InvalidParameter {
@@ -122,117 +112,74 @@ pub fn correlation(input_a: &[f64], input_b: &[f64], period: usize) -> Result<Ve
             constraint: "must have the same length".to_string(),
         });
     }
-    validate_period(input_a.len(), period, 2)?;
+    validate_period(input_a.len(), period, 1)?;
 
-    let len = input_a.len();
     let lookback = period - 1;
-    let inv_period = 1.0 / period as f64;
-    let mut output = vec![f64::NAN; len];
+    let mut output = vec![f64::NAN; input_a.len()];
     let mut trailing_idx = 0usize;
-    let mut shift_x = input_a[trailing_idx];
-    let mut shift_y = input_b[trailing_idx];
-    let mut sum_x = 0.0;
-    let mut sum_y = 0.0;
-    let mut sum_xy = 0.0;
-    let mut sum_x2 = 0.0;
     let mut sum_y2 = 0.0;
+    let mut sum_x2 = sum_y2;
+    let mut sum_y = sum_x2;
+    let mut sum_x = sum_y;
+    let mut sum_xy = sum_x;
 
-    for j in trailing_idx..lookback {
-        let x = input_a[j] - shift_x;
-        let y = input_b[j] - shift_y;
+    let mut today = trailing_idx;
+    while today <= lookback {
+        let x = input_a[today];
         sum_x += x;
-        sum_y += y;
-        sum_xy += x * y;
         sum_x2 += x * x;
+        let y = input_b[today];
+        sum_xy += x * y;
+        sum_y += y;
         sum_y2 += y * y;
+        today += 1;
     }
 
-    let mut bars_since_reseed = RESEED_WINDOWS.saturating_mul(period);
-    let mut leaving_x = 0.0;
-    let mut leaving_y = 0.0;
+    let mut trailing_x = input_a[trailing_idx];
+    let mut trailing_y = input_b[trailing_idx];
+    trailing_idx += 1;
 
-    for today in lookback..len {
-        let x = input_a[today] - shift_x;
-        let y = input_b[today] - shift_y;
+    let mut temp_real = (sum_x2 - sum_x * sum_x / period as f64)
+        * (sum_y2 - sum_y * sum_y / period as f64);
+    output[lookback] = if !is_zero_or_negative(temp_real) {
+        (sum_xy - sum_x * sum_y / period as f64) / temp_real.sqrt()
+    } else {
+        0.0
+    };
+
+    while today < input_a.len() {
+        sum_x -= trailing_x;
+        sum_x2 -= trailing_x * trailing_x;
+        sum_xy -= trailing_x * trailing_y;
+        sum_y -= trailing_y;
+        sum_y2 -= trailing_y * trailing_y;
+
+        let x = input_a[today];
         sum_x += x;
-        sum_y += y;
-        sum_xy += x * y;
         sum_x2 += x * x;
+        let y = input_b[today];
+        today += 1;
+        sum_xy += x * y;
+        sum_y += y;
         sum_y2 += y * y;
 
-        let mut ss_x = sum_x2 - sum_x * sum_x * inv_period;
-        let mut ss_y = sum_y2 - sum_y * sum_y * inv_period;
-        let mut sp_xy = sum_xy - sum_x * sum_y * inv_period;
-
-        bars_since_reseed = bars_since_reseed.saturating_sub(1);
-        if ss_x < RESEED_RATIO * sum_x2
-            || ss_y < RESEED_RATIO * sum_y2
-            || leaving_x > RESEED_OUTLIER_RATIO * sum_x2
-            || leaving_y > RESEED_OUTLIER_RATIO * sum_y2
-            || bars_since_reseed == 0
-        {
-            bars_since_reseed = RESEED_WINDOWS.saturating_mul(period);
-            let window_start = today - lookback;
-
-            let mut raw_x = 0.0;
-            let mut raw_y = 0.0;
-            for j in window_start..=today {
-                raw_x += input_a[j];
-                raw_y += input_b[j];
-            }
-            shift_x = raw_x * inv_period;
-            shift_y = raw_y * inv_period;
-
-            sum_x = 0.0;
-            sum_y = 0.0;
-            sum_xy = 0.0;
-            sum_x2 = 0.0;
-            sum_y2 = 0.0;
-            for j in window_start..=today {
-                let dx = input_a[j] - shift_x;
-                let dy = input_b[j] - shift_y;
-                sum_x += dx;
-                sum_y += dy;
-                sum_xy += dx * dy;
-                sum_x2 += dx * dx;
-                sum_y2 += dy * dy;
-            }
-            ss_x = sum_x2 - sum_x * sum_x * inv_period;
-            ss_y = sum_y2 - sum_y * sum_y * inv_period;
-            sp_xy = sum_xy - sum_x * sum_y * inv_period;
-            if ss_x < 0.0 {
-                ss_x = 0.0;
-            }
-            if ss_y < 0.0 {
-                ss_y = 0.0;
-            }
-        }
-
-        let trailing_x = input_a[trailing_idx] - shift_x;
-        let trailing_y = input_b[trailing_idx] - shift_y;
+        trailing_x = input_a[trailing_idx];
+        trailing_y = input_b[trailing_idx];
         trailing_idx += 1;
 
-        output[today] = if ss_x > CORREL_FACTOR_EPSILON * sum_x2
-            && ss_y > CORREL_FACTOR_EPSILON * sum_y2
-        {
-            (sp_xy / (ss_x * ss_y).sqrt()).clamp(-1.0, 1.0)
+        temp_real = (sum_x2 - sum_x * sum_x / period as f64)
+            * (sum_y2 - sum_y * sum_y / period as f64);
+        output[today - 1] = if !is_zero_or_negative(temp_real) {
+            (sum_xy - sum_x * sum_y / period as f64) / temp_real.sqrt()
         } else {
             0.0
         };
-
-        leaving_x = trailing_x * trailing_x;
-        leaving_y = trailing_y * trailing_y;
-        sum_x -= trailing_x;
-        sum_x2 -= leaving_x;
-        sum_xy -= trailing_x * trailing_y;
-        sum_y -= trailing_y;
-        sum_y2 -= leaving_y;
     }
 
     Ok(output)
 }
 
-/// Fused SMA Bollinger Bands using the same stable variance recurrence as VAR.
+/// SMA Bollinger Bands matching the TA_BBANDS 0.7.1 SMA specialization.
 pub fn bbands_sma(
     input: &[f64],
     period: usize,
@@ -241,79 +188,81 @@ pub fn bbands_sma(
 ) -> Result<(Vec<f64>, Vec<f64>, Vec<f64>)> {
     validate_period(input.len(), period, 2)?;
 
-    let len = input.len();
     let lookback = period - 1;
-    let inv_period = 1.0 / period as f64;
-    let mut upper = vec![f64::NAN; len];
-    let mut middle = vec![f64::NAN; len];
-    let mut lower = vec![f64::NAN; len];
+    let mut upper = vec![f64::NAN; input.len()];
+    let mut middle = vec![f64::NAN; input.len()];
+    let mut lower = vec![f64::NAN; input.len()];
 
+    // TA_INT_SMA-compatible operation order.
+    let mut period_total = 0.0;
     let mut trailing_idx = 0usize;
-    let mut shift = input[trailing_idx];
-    let mut ma_total = 0.0;
-    let mut var_total1 = 0.0;
-    let mut var_total2 = 0.0;
-    for &value in &input[trailing_idx..lookback] {
-        ma_total += value;
-        let delta = value - shift;
-        var_total1 += delta;
-        var_total2 += delta * delta;
+    let mut i = trailing_idx;
+    while i < lookback {
+        period_total += input[i];
+        i += 1;
+    }
+    while i < input.len() {
+        period_total += input[i];
+        middle[i] = period_total / period as f64;
+        period_total -= input[trailing_idx];
+        trailing_idx += 1;
+        i += 1;
     }
 
-    let mut bars_since_reseed = RESEED_WINDOWS.saturating_mul(period);
-    for i in lookback..len {
-        ma_total += input[i];
-        let mut temp = input[i] - shift;
-        var_total1 += temp;
-        var_total2 += temp * temp;
-        let mean1 = var_total1 * inv_period;
-        let mut current_variance = var_total2 * inv_period - mean1 * mean1;
-        let current_middle = ma_total * inv_period;
+    // Inline TA_INT_stddev_using_precalc_ma from TA_BBANDS 0.7.1.
+    let mut start_sum = 1 + lookback - period;
+    let mut end_sum = lookback;
+    let mut period_total2 = 0.0;
+    for value in &input[start_sum..end_sum] {
+        let mut temp_real = *value;
+        temp_real *= temp_real;
+        period_total2 += temp_real;
+    }
 
-        ma_total -= input[trailing_idx];
-        temp = input[trailing_idx] - shift;
-        var_total1 -= temp;
-        temp *= temp;
-        var_total2 -= temp;
-        trailing_idx += 1;
+    let output_count = input.len() - lookback;
+    for out_idx in 0..output_count {
+        let mut temp_real = input[end_sum];
+        temp_real *= temp_real;
+        period_total2 += temp_real;
+        let mut mean_value2 = period_total2 / period as f64;
 
-        bars_since_reseed = bars_since_reseed.saturating_sub(1);
-        if current_variance < RESEED_RATIO * (var_total2 * inv_period)
-            || temp > RESEED_OUTLIER_RATIO * var_total2
-            || bars_since_reseed == 0
-        {
-            bars_since_reseed = RESEED_WINDOWS.saturating_mul(period);
-            let window_start = i - lookback;
-            let mut raw_sum = 0.0;
-            for &value in &input[window_start..=i] {
-                raw_sum += value;
-            }
-            shift = raw_sum * inv_period;
-            var_total1 = 0.0;
-            var_total2 = 0.0;
-            for &value in &input[window_start..=i] {
-                let delta = value - shift;
-                var_total1 += delta;
-                var_total2 += delta * delta;
-            }
-            let mean1 = var_total1 * inv_period;
-            current_variance = var_total2 * inv_period - mean1 * mean1;
-            if current_variance < RESEED_FLOOR_RATIO * (var_total2 * inv_period) {
-                current_variance = 0.0;
-            }
-            let trailing = input[window_start] - shift;
-            var_total1 -= trailing;
-            var_total2 -= trailing * trailing;
-        }
+        temp_real = input[start_sum];
+        temp_real *= temp_real;
+        period_total2 -= temp_real;
 
-        let deviation = if current_variance != 0.0 {
-            current_variance.sqrt()
+        let absolute_idx = lookback + out_idx;
+        temp_real = middle[absolute_idx];
+        temp_real *= temp_real;
+        mean_value2 -= temp_real;
+        let stddev = if !is_zero_or_negative(mean_value2) {
+            mean_value2.sqrt()
         } else {
             0.0
         };
-        middle[i] = current_middle;
-        upper[i] = current_middle + nb_dev_up * deviation;
-        lower[i] = current_middle - nb_dev_down * deviation;
+
+        let middle_value = middle[absolute_idx];
+        if nb_dev_up == nb_dev_down {
+            if nb_dev_up == 1.0 {
+                upper[absolute_idx] = middle_value + stddev;
+                lower[absolute_idx] = middle_value - stddev;
+            } else {
+                let scaled = stddev * nb_dev_up;
+                upper[absolute_idx] = middle_value + scaled;
+                lower[absolute_idx] = middle_value - scaled;
+            }
+        } else if nb_dev_up == 1.0 {
+            upper[absolute_idx] = middle_value + stddev;
+            lower[absolute_idx] = middle_value - stddev * nb_dev_down;
+        } else if nb_dev_down == 1.0 {
+            lower[absolute_idx] = middle_value - stddev;
+            upper[absolute_idx] = middle_value + stddev * nb_dev_up;
+        } else {
+            upper[absolute_idx] = middle_value + stddev * nb_dev_up;
+            lower[absolute_idx] = middle_value - stddev * nb_dev_down;
+        }
+
+        start_sum += 1;
+        end_sum += 1;
     }
 
     Ok((upper, middle, lower))
@@ -324,29 +273,37 @@ mod tests {
     use super::*;
 
     #[test]
-    fn constant_variance_is_zero_after_warmup() {
-        let values = vec![42.0; 256];
-        let result = variance(&values, 20).unwrap();
+    fn variance_matches_population_variance_for_first_window() {
+        let input = [1.0, 2.0, 3.0, 4.0, 5.0];
+        let result = variance(&input, 5).unwrap();
+        assert!(result[..4].iter().all(|value| value.is_nan()));
+        assert_eq!(result[4], 2.0);
+    }
+
+    #[test]
+    fn stddev_guards_talib_negative_zero_band() {
+        let input = vec![42.0; 64];
+        let result = stddev(&input, 20, 1.0).unwrap();
         assert!(result[..19].iter().all(|value| value.is_nan()));
         assert!(result[19..].iter().all(|value| *value == 0.0));
     }
 
     #[test]
-    fn perfect_correlation_remains_stable_over_long_series() {
-        let x: Vec<f64> = (0..200_000).map(|i| 100.0 + i as f64 * 1.0e-5).collect();
-        let y: Vec<f64> = x.iter().map(|value| value * 1.5 + 7.0).collect();
-        let result = correlation(&x, &y, 30).unwrap();
-        assert!(result[..29].iter().all(|value| value.is_nan()));
-        assert!(result[29..]
-            .iter()
-            .all(|value| (*value - 1.0).abs() < 1.0e-8));
+    fn correlation_first_window_is_one_for_affine_series() {
+        let x = [1.0, 2.0, 3.0, 4.0, 5.0];
+        let y = [9.0, 11.0, 13.0, 15.0, 17.0];
+        let result = correlation(&x, &y, 5).unwrap();
+        assert!(result[..4].iter().all(|value| value.is_nan()));
+        assert!((result[4] - 1.0).abs() < 1.0e-15);
     }
 
     #[test]
-    fn bbands_middle_matches_rolling_sma() {
+    fn bbands_middle_matches_talib_sma_sequence() {
         let input: Vec<f64> = (1..=128).map(|value| value as f64).collect();
-        let (_, middle, _) = bbands_sma(&input, 20, 2.0, 2.0).unwrap();
+        let (upper, middle, lower) = bbands_sma(&input, 20, 2.0, 2.0).unwrap();
         assert!((middle[19] - 10.5).abs() < 1.0e-12);
         assert!((middle[127] - 118.5).abs() < 1.0e-12);
+        assert!(upper[19] > middle[19]);
+        assert!(lower[19] < middle[19]);
     }
 }
