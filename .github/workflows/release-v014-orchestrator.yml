@@ -1,0 +1,102 @@
+name: Publish v0.1.4
+
+on:
+  push:
+    branches:
+      - release/v0.1.4
+    paths:
+      - .github/workflows/release-v014-orchestrator.yml
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    steps:
+      - name: Check out merged main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 1
+      - name: Validate merged release version
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/check_versions.py
+          VERSION="$(python -c 'import pathlib,re; text=pathlib.Path("Cargo.toml").read_text(); print(re.search(r"(?ms)^\[workspace\.package\].*?^version\s*=\s*\"([^\"]+)\"", text).group(1))')"
+          test "$VERSION" = "0.1.4"
+      - name: Dispatch canonical Python release workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run python-wheels.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main \
+            -f release_tag=v0.1.4
+      - name: Resolve and wait for release workflows
+        id: runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          MAIN_SHA="$(git rev-parse HEAD)"
+          PY_RUN=""
+          MULTI_RUN=""
+          for _ in $(seq 1 60); do
+            if [[ -z "$PY_RUN" ]]; then
+              PY_RUN="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow python-wheels.yml --event workflow_dispatch --branch main --limit 10 --json databaseId,headSha --jq ".[] | select(.headSha == \"$MAIN_SHA\") | .databaseId" | head -1 || true)"
+            fi
+            if [[ -z "$MULTI_RUN" ]]; then
+              MULTI_RUN="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow multilang-release.yml --event push --branch release/v0.1.4 --limit 10 --json databaseId,headSha --jq ".[] | select(.headSha == \"$GITHUB_SHA\") | .databaseId" | head -1 || true)"
+            fi
+            if [[ -n "$PY_RUN" && -n "$MULTI_RUN" ]]; then
+              break
+            fi
+            sleep 5
+          done
+          test -n "$PY_RUN"
+          test -n "$MULTI_RUN"
+          echo "python_run=$PY_RUN" >> "$GITHUB_OUTPUT"
+          echo "multilang_run=$MULTI_RUN" >> "$GITHUB_OUTPUT"
+          echo "Waiting for Python wheels run $PY_RUN"
+          gh run watch "$PY_RUN" --repo "$GITHUB_REPOSITORY" --exit-status
+          echo "Waiting for Multilang release run $MULTI_RUN"
+          gh run watch "$MULTI_RUN" --repo "$GITHUB_REPOSITORY" --exit-status
+      - name: Download validated multi-language artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MULTI_RUN: ${{ steps.runs.outputs.multilang_run }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf multi-artifacts supplemental-assets
+          mkdir -p multi-artifacts supplemental-assets
+          gh run download "$MULTI_RUN" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'release-*' \
+            --dir multi-artifacts
+          find multi-artifacts -type f -print
+          while IFS= read -r -d '' file; do
+            cp "$file" supplemental-assets/
+          done < <(find multi-artifacts -type f -print0)
+          rm -f supplemental-assets/finkit-*.crate supplemental-assets/finkit-cli-*
+          test -n "$(find supplemental-assets -maxdepth 1 -type f -print -quit)"
+          (cd supplemental-assets && sha256sum * | sort -k2 > SHA256SUMS.multilang)
+      - name: Verify and complete GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view v0.1.4 --repo "$GITHUB_REPOSITORY" >/dev/null
+          gh release upload v0.1.4 \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber \
+            supplemental-assets/*
+          gh release view v0.1.4 --repo "$GITHUB_REPOSITORY" --json tagName,isDraft,isPrerelease,targetCommitish,url
