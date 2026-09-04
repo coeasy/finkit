@@ -76,14 +76,10 @@ fn eval_canonical_formula(
 ) -> PyResult<Array1<f64>> {
     match formula {
         CanonicalFormula::Atr { period } => ::finkit::indicators::atr(high, low, close, period)
-            .map_err(|error| {
-                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())
-            }),
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
         CanonicalFormula::Std { period } => rolling_stats::stddev(close, period, 1.0)
             .map(Array1::from_vec)
-            .map_err(|error| {
-                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())
-            }),
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
         CanonicalFormula::Boll { period, nbdev } => {
             rolling_stats::bbands_sma(close, period, nbdev, nbdev)
                 .map(|(upper, _, _)| Array1::from_vec(upper))
