@@ -123,8 +123,8 @@ mod tests {
         let close: Vec<f64> = high.iter().map(|v| v - 0.7).collect();
         let plus = plus_di(&high, &low, &close, 14).unwrap();
         let minus = minus_di(&high, &low, &close, 14).unwrap();
-        assert!(plus[..14].iter().all(|value| value.is_nan()));
-        assert!(minus[..14].iter().all(|value| value.is_nan()));
+        assert!(plus.iter().take(14).all(|value| value.is_nan()));
+        assert!(minus.iter().take(14).all(|value| value.is_nan()));
         assert!(plus[14].is_finite());
         assert!(minus[14].is_finite());
     }
