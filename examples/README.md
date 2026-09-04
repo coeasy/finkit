@@ -41,10 +41,10 @@ node examples/nodejs_example.js
 
 ```bash
 # 编译示例 (需要先构建 Java binding)
-javac -cp dist/java/windows-x64/finkit-0.1.3.jar examples/java_example/FinkitExample.java
+javac -cp dist/java/windows-x64/finkit-0.1.4.jar examples/java_example/FinkitExample.java
 
 # 运行示例
-java -cp dist/java/windows-x64/finkit-0.1.3.jar;examples/java_example FinkitExample
+java -cp dist/java/windows-x64/finkit-0.1.4.jar;examples/java_example FinkitExample
 ```
 
 ### Go

@@ -12,7 +12,7 @@
 
     <PackageId>Finkit</PackageId>
     <Title>Finkit - .NET Bindings</Title>
-    <Version>0.1.3</Version>
+    <Version>0.1.4</Version>
     <Authors>Finkit Contributors</Authors>
     <Company>Finkit</Company>
     <Description>High-performance financial technical analysis indicators library for .NET, powered by Rust.</Description>

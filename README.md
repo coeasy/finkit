@@ -6,14 +6,14 @@
 
 Finkit is a high-performance financial technical-analysis, formula, factor, and streaming-computation library written in Rust. It focuses on reusable calculation infrastructure and native-language bindings rather than trading execution, brokerage, or a full research platform.
 
-Current published release: **v0.1.3**.
+Current published release: **v0.1.4**.
 
-## What is ready in v0.1.3
+## What is ready in v0.1.4
 
 - Rust core: batch indicators, streaming indicators, formula engine, factor/runtime infrastructure, transforms, patterns, risk helpers, and optional Polars integration.
 - Python: verified ABI3 wheels for CPython 3.8-3.14 on Linux x86_64, Windows x86_64, macOS x86_64, and macOS arm64.
 - CLI: verified Linux x86_64 binary in the GitHub Release; source build supported on Rust hosts.
-- Rust package: `finkit-0.1.3.crate` Release asset.
+- Rust package: `finkit-0.1.4.crate` Release asset.
 - Node.js: native build/test/`npm pack` path verified by CI from source.
 - Java/JNI: Maven package/Javadoc, embedded native loader, and runtime smoke test verified by CI from source.
 - C/C++: CMake build/test/install SDK path verified by CI from source.
@@ -21,10 +21,10 @@ Current published release: **v0.1.3**.
 
 ## Distribution status
 
-The GitHub `v0.1.3` Release is the authoritative distribution for that version. It contains:
+The GitHub `v0.1.4` Release is the authoritative distribution for that version. It contains:
 
 - four Python `cp38-abi3` wheels;
-- `finkit-0.1.3.crate`;
+- `finkit-0.1.4.crate`;
 - `finkit-cli-linux-x86_64`;
 - `SHA256SUMS`.
 
@@ -46,7 +46,7 @@ The next-release branch expands the permanent multi-language gate beyond Node/Ja
 | C/C++ | CMake build/test/install SDK candidate |
 | Rust/CLI | crate + Linux CLI packaging |
 
-These are **validation targets**, not retroactive v0.1.3 Release assets. A language moves from “source exists” to “CI validated” only when its final-head job is green, and it becomes a published distribution only after the resulting artifact is released and a clean consumer install succeeds.
+These are **validation targets**, not retroactive v0.1.4 Release assets. A language moves from “source exists” to “CI validated” only when its final-head job is green, and it becomes a published distribution only after the resulting artifact is released and a clean consumer install succeeds.
 
 ## Documentation
 
@@ -72,11 +72,11 @@ Generated files under `docs/generated/`, `docs/indicator_registry.json`, and ben
 
 ## Quick start: Python
 
-Download the wheel matching your platform from the `v0.1.3` GitHub Release, then install it locally:
+Download the wheel matching your platform from the `v0.1.4` GitHub Release, then install it locally:
 
 ```bash
 python -m pip install --upgrade pip
-python -m pip install ./finkit-0.1.3-<platform>.whl
+python -m pip install ./finkit-0.1.4-<platform>.whl
 ```
 
 Example:
@@ -129,7 +129,7 @@ Until a public registry package is independently verified, use the release tag o
 
 ```toml
 [dependencies]
-finkit = { git = "https://github.com/coeasy/finkit", tag = "v0.1.3" }
+finkit = { git = "https://github.com/coeasy/finkit", tag = "v0.1.4" }
 ```
 
 ```rust
