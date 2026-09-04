@@ -222,9 +222,7 @@ impl StateArena {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::compute::{
-        ComputeCapabilities, ComputeEffect, ComputeNode, LookbackRequirement,
-    };
+    use crate::compute::{ComputeCapabilities, ComputeEffect, ComputeNode, LookbackRequirement};
 
     #[derive(Debug, PartialEq)]
     struct RollingSum {
@@ -310,7 +308,10 @@ mod tests {
         assert_eq!(arena.remove::<usize>(slot), None);
         assert_eq!(arena.get::<RollingSum>(slot).unwrap().sum, 7.0);
         assert_eq!(arena.len(), 1);
-        assert_eq!(arena.remove::<RollingSum>(slot), Some(RollingSum { sum: 7.0 }));
+        assert_eq!(
+            arena.remove::<RollingSum>(slot),
+            Some(RollingSum { sum: 7.0 })
+        );
         assert!(arena.is_empty());
     }
 }
