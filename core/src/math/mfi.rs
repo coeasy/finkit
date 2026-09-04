@@ -41,10 +41,7 @@ pub fn mfi(
     }
 
     let len = close.len();
-    // Write every output slot once: only the warm-up prefix is NaN, and the
-    // remaining values are appended as they are computed.
-    let mut output = Vec::with_capacity(len);
-    output.resize(period, f64::NAN);
+    let mut output = Vec::<f64>::with_capacity(len);
     let mut pos_ring = vec![0.0_f64; period];
     let mut neg_ring = vec![0.0_f64; period];
     let mut pos_sum = 0.0;
@@ -52,13 +49,22 @@ pub fn mfi(
     let mut ring_idx = 0usize;
     let mut prev_tp = typical_price(high[0], low[0], close[0]);
 
+    // Every slot is written before the vector is observed.  Reserving once and
+    // writing by pointer avoids both a full-length NaN initialisation pass and
+    // the per-element capacity branch of `Vec::push` in the 1M hot loop.
     unsafe {
+        output.set_len(len);
         let high_ptr = high.as_ptr();
         let low_ptr = low.as_ptr();
         let close_ptr = close.as_ptr();
         let volume_ptr = volume.as_ptr();
+        let output_ptr = output.as_mut_ptr();
         let pos_ptr = pos_ring.as_mut_ptr();
         let neg_ptr = neg_ring.as_mut_ptr();
+
+        for index in 0..period {
+            *output_ptr.add(index) = f64::NAN;
+        }
 
         for i in 1..len {
             let tp = typical_price(*high_ptr.add(i), *low_ptr.add(i), *close_ptr.add(i));
@@ -82,16 +88,15 @@ pub fn mfi(
             }
 
             if i >= period {
-                output.push(if neg_sum.abs() > 1e-15 {
+                *output_ptr.add(i) = if neg_sum.abs() > 1e-15 {
                     100.0 - 100.0 / (1.0 + pos_sum / neg_sum)
                 } else {
                     100.0
-                });
+                };
             }
         }
     }
 
-    debug_assert_eq!(output.len(), len);
     Ok(Array1::from_vec(output))
 }
 
