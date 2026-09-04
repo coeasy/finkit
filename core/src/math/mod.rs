@@ -12,7 +12,8 @@
 //!
 //! - [`moving_avg`] — SMA, EMA, WMA, DEMA, TEMA, KAMA, T3, TRIMA, HMA, ALMA, MAVP (requires `std` feature)
 //! - [`statistics`] — Rolling variance, standard deviation, min, max, correlation (requires `std` feature)
-//! - [`rolling_stats`] — cancellation-resistant TA-Lib-compatible rolling statistics (requires `std` feature)
+//! - [`rolling_stats`] — TA-Lib 0.7.1-compatible rolling statistics (requires `std` feature)
+//! - [`sar`] — TA-Lib 0.7.1-compatible Parabolic SAR kernel (requires `std` feature)
 //! - [`linear`] — Linear regression and related functions (requires `std` feature)
 //! - [`reduction`] — allocation-free typed scalar reductions for f32/f64 (requires `std` feature)
 //! - [`typed_moving_avg`] — native f32 SMA/EMA caller-owned kernels (requires `std` feature)
@@ -30,6 +31,8 @@ pub mod libm_shim;
 pub mod reduction;
 #[cfg(feature = "std")]
 pub mod rolling_stats;
+#[cfg(feature = "std")]
+pub mod sar;
 pub mod simd_kernels;
 pub mod simd_ops;
 #[cfg(feature = "std")]
