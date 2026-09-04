@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 import finkit
 
@@ -48,6 +49,45 @@ def test_float32_sma_and_ema_stay_float32():
     assert np.isnan(ema[:13]).all()
     assert np.isfinite(sma[13:]).all()
     assert np.isfinite(ema[13:]).all()
+
+
+def test_sma_and_ema_reuse_caller_owned_output_buffers():
+    close = np.arange(1.0, 65.0, dtype=np.float64)
+    expected_sma = finkit.sma(close, 5)
+    expected_ema = finkit.ema(close, 5)
+    sma_out = np.empty_like(close)
+    ema_out = np.empty_like(close)
+
+    sma_result = finkit.sma(close, 5, out=sma_out)
+    ema_result = finkit.ema(close, 5, out=ema_out)
+
+    assert sma_result is sma_out
+    assert ema_result is ema_out
+    np.testing.assert_allclose(sma_out, expected_sma, equal_nan=True)
+    np.testing.assert_allclose(ema_out, expected_ema, equal_nan=True)
+
+
+def test_reusable_output_preserves_float32_and_rejects_unsafe_buffers():
+    close = np.linspace(10.0, 30.0, 128, dtype=np.float32)
+    out = np.empty_like(close)
+    result = finkit.ema(close, 14, out=out)
+    assert result is out
+    assert out.dtype == np.float32
+
+    with pytest.raises(finkit.InvalidParameterError, match="dtype"):
+        finkit.sma(close, 14, out=np.empty(close.shape, dtype=np.float64))
+
+    with pytest.raises(finkit.InvalidParameterError, match="shape"):
+        finkit.sma(close, 14, out=np.empty(close.size - 1, dtype=np.float32))
+
+    backing = np.empty(close.size * 2, dtype=np.float32)
+    non_contiguous = backing[::2]
+    assert not non_contiguous.flags.c_contiguous
+    with pytest.raises(finkit.InvalidParameterError, match="C-contiguous"):
+        finkit.sma(close, 14, out=non_contiguous)
+
+    with pytest.raises(finkit.InvalidParameterError, match="overlap"):
+        finkit.sma(close, 14, out=close)
 
 
 def test_scalar_reductions_preserve_float32_type():
