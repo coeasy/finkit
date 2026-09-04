@@ -1482,24 +1482,6 @@ mod tests {
     #[allow(unused_imports)]
     use approx::assert_relative_eq;
 
-    /// Build a synthetic series of `n` bars with the given opens/closes/...
-    fn synth_uptrend(n: usize) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
-        let mut opens = vec![10.0; n];
-        let mut highs = vec![10.0; n];
-        let mut lows = vec![10.0; n];
-        let mut closes = vec![10.0; n];
-        let mut volumes = vec![100.0; n];
-        for i in 0..n {
-            let p = 10.0 + (i as f64) * 0.1;
-            opens[i] = p - 0.2;
-            closes[i] = p + 0.2;
-            highs[i] = p + 0.5;
-            lows[i] = p - 0.5;
-            volumes[i] = 100.0 + (i as f64) * 5.0;
-        }
-        (opens, highs, lows, closes, volumes)
-    }
-
     #[test]
     fn test_hermit_pointing_way_basic() {
         let n = 20;
@@ -1658,7 +1640,7 @@ mod tests {
         let n = 10;
         let mut o = vec![10.0; n];
         let mut c = vec![9.8; n]; // bearish
-        let mut h = vec![10.2; n];
+        let h = vec![10.2; n];
         let mut l = vec![9.5; n];
         // Three bars with progressive gap-downs
         o[3] = 9.5;

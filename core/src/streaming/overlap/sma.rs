@@ -222,7 +222,7 @@ impl_indicator_meta!(StreamingSma, "SMA", "overlap", "Simple Moving Average");
 mod tests {
     use super::*;
     use crate::streaming::traits::IndicatorMeta;
-    use crate::{test_streaming_meta, test_streaming_reset, test_streaming_vs_batch};
+    use crate::{test_streaming_meta, test_streaming_vs_batch};
 
     #[test]
     fn test_streaming_sma_basic() {

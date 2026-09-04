@@ -55,7 +55,6 @@ struct DatasetResult {
 
 #[derive(Debug, Clone)]
 struct Ohlcv {
-    open: Vec<f64>,
     high: Vec<f64>,
     low: Vec<f64>,
     close: Vec<f64>,
@@ -145,7 +144,6 @@ fn read_fixture_csv(path: &Path) -> Ohlcv {
         );
     }
 
-    let mut open = Vec::new();
     let mut high = Vec::new();
     let mut low = Vec::new();
     let mut close = Vec::new();
@@ -153,7 +151,7 @@ fn read_fixture_csv(path: &Path) -> Ohlcv {
 
     for line in lines {
         let parts: Vec<&str> = line.split(',').collect();
-        open.push(parts[col_index["open"]].trim().parse().expect("open"));
+        let _: f64 = parts[col_index["open"]].trim().parse().expect("open");
         high.push(parts[col_index["high"]].trim().parse().expect("high"));
         low.push(parts[col_index["low"]].trim().parse().expect("low"));
         close.push(parts[col_index["close"]].trim().parse().expect("close"));
@@ -161,7 +159,6 @@ fn read_fixture_csv(path: &Path) -> Ohlcv {
     }
 
     Ohlcv {
-        open,
         high,
         low,
         close,

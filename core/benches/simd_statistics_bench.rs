@@ -16,15 +16,6 @@ fn generate_close_data(len: usize) -> Vec<f64> {
         .collect()
 }
 
-fn generate_benchmark_data(len: usize) -> Vec<f64> {
-    (0..len)
-        .map(|i| {
-            let t = i as f64;
-            1000.0 + t * 0.05 + (t * 0.23).sin() * 50.0 + (t * 0.87).cos() * 30.0
-        })
-        .collect()
-}
-
 fn generate_correlated_data(len: usize, correlation: f64) -> (Vec<f64>, Vec<f64>) {
     let x = generate_close_data(len);
     let y: Vec<f64> = x
@@ -322,7 +313,6 @@ fn bench_linear_reg(c: &mut Criterion) {
 
     for period in [5, 14, 20, 50] {
         let mut result_simd = vec![0.0; DATA_LEN];
-        let mut result_scalar = vec![0.0; DATA_LEN];
 
         group.bench_with_input(BenchmarkId::new("simd", period), &period, |b, p| {
             b.iter(|| {

@@ -21,6 +21,8 @@ jobs:
     name: Workspace compile check
     runs-on: ubuntu-22.04
     timeout-minutes: 45
+    env:
+      RUSTFLAGS: "-D warnings"
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -76,21 +78,57 @@ jobs:
     needs: version-consistency
     runs-on: ubuntu-22.04
     timeout-minutes: 45
+    env:
+      RUSTFLAGS: "-D warnings"
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Verify generated registry snapshot
         run: git diff --exit-code -- docs/indicator_registry.json
-      - name: Run core tests
+      - name: Run core tests with compiler warnings denied
         run: cargo test -p finkit --locked
       - name: Run core docs tests
         run: cargo test -p finkit --doc --locked
+
+  runtime-integration-tests:
+    name: Runtime integration tests
+    needs: version-consistency
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Test CLI runtime and schema flow
+        run: cargo test -p finkit-cli --locked
+      - name: Test visualization integration flow
+        run: cargo test -p finkit-visualization --locked
+
+  package-contract:
+    name: Rust package contract
+    needs: version-consistency
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Verify packaged core crate compiles from packaged contents
+        run: cargo package -p finkit --locked
+      - name: Build release CLI against the release core
+        run: cargo build -p finkit-cli --release --locked
 
   regression-gates:
     name: Memory and performance regression
     runs-on: ubuntu-22.04
     timeout-minutes: 30
+    env:
+      RUSTFLAGS: "-D warnings"
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -99,13 +137,15 @@ jobs:
         run: cargo test -p finkit --test memory_regression --release --locked -- --test-threads=1
       - name: Relative performance contract
         run: cargo test -p finkit --test performance_regression --release --locked -- --test-threads=1
-      - name: Compile benchmark suite
+      - name: Compile benchmark suite with compiler warnings denied
         run: cargo bench -p finkit --no-run --locked
 
   doc:
     name: Docs
     runs-on: ubuntu-22.04
     timeout-minutes: 30
+    env:
+      RUSTFLAGS: "-D warnings"
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -127,5 +167,6 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-  # Other FFI bindings require their own language toolchains. Python wheel
-  # builds and runtime tests run in python-wheels.yml across the matrix.
+  # Language-specific FFI runtime/package tests remain in python-wheels.yml,
+  # multilang-release.yml, and multilang-cross-platform.yml where the required
+  # native toolchains and platform runners are available.

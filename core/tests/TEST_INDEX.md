@@ -34,7 +34,6 @@
 基于 proptest 的不变量测试。
 
 - `property_tests.rs` - 流式指标属性测试
-- `common/property_templates.rs` - 属性测试模板
 
 ### 重绘/快照测试 (Repaint & Snapshot)
 测试 forming-bar 重绘和状态快照功能。
@@ -74,8 +73,6 @@
 
 - `mod.rs` - 模块导出
 - `golden_loader.rs` - 黄金测试数据加载
-- `property_templates.rs` - 属性测试模板
-- `streaming_test_templates.rs` - 流式指标测试模板宏
 
 ## 运行测试
 
@@ -96,27 +93,6 @@ cargo test -p finkit --test dzh_compat_tests
 cargo test -p finkit --test ths_compat_tests
 ```
 
-## 测试模板使用
-
-使用 `streaming_test_templates.rs` 中的宏简化测试编写：
-
-```rust
-use alphata_core::streaming::indicators::StreamingSma;
-
-// Checkpoint/Restore 测试
-test_checkpoint_f64!(test_sma_checkpoint, StreamingSma::new(14), 20);
-
-// Clone/Snapshot 测试
-test_clone_snapshot_f64!(test_sma_clone, StreamingSma::new(3), 2);
-
-// Repaint 测试
-test_repaint_f64!(test_sma_repaint, StreamingSma::new(3));
-
-// Builder 测试
-test_builder_ok!(test_sma_builder, StreamingSma, |b| b.period(20).build());
-test_builder_err!(test_sma_builder_err, StreamingSma, |b| b.period(0).build());
-```
-
 ## 测试覆盖统计
 
 - **Builder 测试**: 22+ 测试用例（覆盖所有 Builder 类型）
@@ -127,7 +103,7 @@ test_builder_err!(test_sma_builder_err, StreamingSma, |b| b.period(0).build());
 
 ## 测试最佳实践
 
-1. **使用模板宏**: 优先使用 `streaming_test_templates.rs` 中的宏
+1. **共享工具最小化**: `tests/common/` 只保留被现有多个测试实际使用的 helper
 2. **命名规范**: 测试函数名应清晰表达测试意图
 3. **边界测试**: 每个指标至少测试：空输入、单值、warmup 期、正常期
 4. **精度测试**: 浮点比较使用 `assert!((a - b).abs() < 1e-10)`

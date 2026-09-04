@@ -673,7 +673,7 @@ fn benchmark_simd_vs_scalar(c: &mut Criterion) {
         })
     });
 
-    let arr_pow_b: Vec<f64> = (0..data_len).map(|i| ((i % 5 + 1) as f64 * 0.5)).collect();
+    let arr_pow_b: Vec<f64> = (0..data_len).map(|i| (i % 5 + 1) as f64 * 0.5).collect();
 
     group.bench_function("SimdOps_pow", |bencher| {
         let mut result = vec![0.0; data_len];
