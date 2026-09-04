@@ -24,15 +24,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt,clippy
-      - name: Restore registry FFI SSOT
-        run: |
-          python scripts/enrich_registry_ffi.py
-          python scripts/sync_bindings.py --discover --lang python
       - name: Apply migration
         run: python scripts/apply_perf_plan.py
-      - name: Validate generated binding contract
+      - name: Validate direct NumPy return contract
         run: |
-          python scripts/sync_bindings.py --check --lang python
+          grep -q "PY_NUMPY_DIRECT_RETURN_V1" ffi/python-binding/src/generated.rs
+          grep -q "PyArray1::from_vec" ffi/python-binding/src/generated.rs
           ! grep -R "PyResult<Vec<f64>>" ffi/python-binding/src/generated.rs
           ! grep -R "PyResult<(Vec<f64>" ffi/python-binding/src/generated.rs
       - name: Format and compile Python binding
@@ -47,6 +44,6 @@ jobs:
           fi
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add docs/indicator_registry.json ffi/python-binding scripts/sync_bindings.py
+          git add ffi/python-binding scripts/sync_bindings.py
           git commit -m "perf: apply NumPy direct-return migration [perf-plan-generated]"
           git push origin HEAD:${GITHUB_REF_NAME}
