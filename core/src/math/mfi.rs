@@ -8,6 +8,7 @@
 
 use crate::error::{Result, TaError};
 use ndarray::Array1;
+use std::mem::{forget, MaybeUninit};
 
 #[inline]
 fn typical_price(high: f64, low: f64, close: f64) -> f64 {
@@ -41,7 +42,7 @@ pub fn mfi(
     }
 
     let len = close.len();
-    let mut output = Vec::<f64>::with_capacity(len);
+    let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);
     let mut pos_ring = vec![0.0_f64; period];
     let mut neg_ring = vec![0.0_f64; period];
     let mut pos_sum = 0.0;
@@ -49,21 +50,21 @@ pub fn mfi(
     let mut ring_idx = 0usize;
     let mut prev_tp = typical_price(high[0], low[0], close[0]);
 
-    // Every slot is written before the vector is observed.  Reserving once and
-    // writing by pointer avoids both a full-length NaN initialisation pass and
-    // the per-element capacity branch of `Vec::push` in the 1M hot loop.
-    unsafe {
-        output.set_len(len);
+    // MaybeUninit makes the no-prefill output strategy explicit and sound:
+    // every slot is written exactly once before ownership is reinterpreted as
+    // Vec<f64>, avoiding both a full-length NaN pass and per-element push checks.
+    let output = unsafe {
+        raw_output.set_len(len);
         let high_ptr = high.as_ptr();
         let low_ptr = low.as_ptr();
         let close_ptr = close.as_ptr();
         let volume_ptr = volume.as_ptr();
-        let output_ptr = output.as_mut_ptr();
+        let output_ptr = raw_output.as_mut_ptr();
         let pos_ptr = pos_ring.as_mut_ptr();
         let neg_ptr = neg_ring.as_mut_ptr();
 
         for index in 0..period {
-            *output_ptr.add(index) = f64::NAN;
+            output_ptr.add(index).write(MaybeUninit::new(f64::NAN));
         }
 
         for i in 1..len {
@@ -88,14 +89,20 @@ pub fn mfi(
             }
 
             if i >= period {
-                *output_ptr.add(i) = if neg_sum.abs() > 1e-15 {
+                output_ptr.add(i).write(MaybeUninit::new(if neg_sum.abs() > 1e-15 {
                     100.0 - 100.0 / (1.0 + pos_sum / neg_sum)
                 } else {
                     100.0
-                };
+                }));
             }
         }
-    }
+
+        let ptr = raw_output.as_mut_ptr().cast::<f64>();
+        let capacity = raw_output.capacity();
+        let length = raw_output.len();
+        forget(raw_output);
+        Vec::from_raw_parts(ptr, length, capacity)
+    };
 
     Ok(Array1::from_vec(output))
 }
