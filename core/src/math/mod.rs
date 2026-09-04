@@ -7,6 +7,7 @@
 //!
 //! - [`simd_kernels`] — SIMD-accelerated batch indicator kernels (SMA, EMA, RSI, MACD)
 //! - [`simd_ops`] — SIMD primitives (prefix sum, diff, scale, etc.)
+//! - [`reduction`] — allocation-free typed scalar reductions for f32/f64
 //!
 //! ## std-only submodules
 //!
@@ -22,6 +23,7 @@ pub mod moving_avg;
 // by the isolated numeric helpers. It is compiled in both `std` and `no_std`
 // builds (its `FloatExt`/`f64_*` helpers route to `core`/`libm` accordingly).
 pub mod libm_shim;
+pub mod reduction;
 pub mod simd_kernels;
 pub mod simd_ops;
 #[cfg(feature = "std")]
