@@ -1,0 +1,54 @@
+name: Prepare v0.1.4
+
+on:
+  push:
+    branches: ["release/v0.1.4"]
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    if: ${{ !contains(github.event.head_commit.message, 'chore(release): bump version to 0.1.4') }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out release branch
+        uses: actions/checkout@v7
+        with:
+          ref: release/v0.1.4
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Set canonical workspace version
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          path = Path("Cargo.toml")
+          text = path.read_text(encoding="utf-8")
+          block_start = text.index("[workspace.package]")
+          head, tail = text[:block_start], text[block_start:]
+          tail, count = re.subn(r'(?m)^version\s*=\s*"[^"]+"', 'version = "0.1.4"', tail, count=1)
+          if count != 1:
+              raise SystemExit("workspace version not found")
+          path.write_text(head + tail, encoding="utf-8")
+      - name: Synchronize all release-facing versions
+        run: python scripts/check_versions.py --fix
+      - name: Verify version consistency
+        run: python scripts/check_versions.py
+      - name: Commit synchronized version bump
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock README.md docs ffi examples
+          if git diff --cached --quiet; then
+            echo "No version changes to commit"
+            exit 0
+          fi
+          git commit -m "chore(release): bump version to 0.1.4"
+          git push origin HEAD:release/v0.1.4
