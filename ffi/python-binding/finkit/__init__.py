@@ -66,7 +66,7 @@ def _translate_native_errors(name, function):
 
 
 def _as_numpy_result(name, function):
-    """Expose native numeric results as NumPy arrays consistently."""
+    """Expose legacy native numeric results as NumPy arrays consistently."""
 
     def convert(value):
         if isinstance(value, dict):
@@ -211,44 +211,180 @@ if hasattr(_native, "_fast_vwap"):
     vwap = _translate_native_errors("vwap", vwap)
 
 
-def _typed_reduce(values, f32_name, f64_name):
-    array, scalar_type = _as_contiguous_reduction_input(values)
-    native = getattr(_native, f32_name if array.dtype == np.float32 else f64_name)
-    result = native(array)
-    return scalar_type(result)
+# Architecture v3 direct-ndarray facade.  The registry-generated functions stay
+# available in the native module as the compatibility surface; these public
+# wrappers avoid their Vec -> Python list -> np.asarray materialisation cost.
+if hasattr(_native, "_fast_unary_period"):
 
+    def _unary_period(operation, values, timeperiod):
+        values = _as_contiguous_float64(values)
+        return _native._fast_unary_period(operation, values, timeperiod)
 
-def reduce_sum(values):
-    return _typed_reduce(values, "_reduce_sum_f32", "_reduce_sum_f64")
+    def dema(close, timeperiod=14):
+        return _unary_period("dema", close, timeperiod)
 
+    def tema(close, timeperiod=14):
+        return _unary_period("tema", close, timeperiod)
 
-def reduce_mean(values):
-    return _typed_reduce(values, "_reduce_mean_f32", "_reduce_mean_f64")
+    def midpoint(close, timeperiod=14):
+        return _unary_period("midpoint", close, timeperiod)
 
+    def rsi(close, timeperiod=14):
+        return _unary_period("rsi", close, timeperiod)
 
-def reduce_min(values):
-    return _typed_reduce(values, "_reduce_min_f32", "_reduce_min_f64")
+    def mom(close, timeperiod=10):
+        return _unary_period("mom", close, timeperiod)
 
+    def roc(close, timeperiod=10):
+        return _unary_period("roc", close, timeperiod)
 
-def reduce_max(values):
-    return _typed_reduce(values, "_reduce_max_f32", "_reduce_max_f64")
+    def cmo(close, timeperiod=14):
+        return _unary_period("cmo", close, timeperiod)
 
+    for _fast_name in ("dema", "tema", "midpoint", "rsi", "mom", "roc", "cmo"):
+        globals()[_fast_name] = _translate_native_errors(
+            _fast_name, globals()[_fast_name]
+        )
 
-def reduce_stddev(values):
-    return _typed_reduce(values, "_reduce_stddev_f32", "_reduce_stddev_f64")
+if hasattr(_native, "_fast_unary_period_scale"):
 
+    def stddev(close, timeperiod=20, nbdev=1.0):
+        close = _as_contiguous_float64(close)
+        return _native._fast_unary_period_scale("stddev", close, timeperiod, nbdev)
 
-if "sar" in globals():
-    _sar_impl = sar
+    def var(close, timeperiod=5, nbdev=1.0):
+        close = _as_contiguous_float64(close)
+        return _native._fast_unary_period_scale("var", close, timeperiod, nbdev)
 
-    def sar(high, low, acceleration=0.02, maximum=0.2):
-        result = _sar_impl(high, low, acceleration=acceleration, maximum=maximum)
-        if isinstance(result, tuple):
-            return result[0]
-        return result
+    stddev = _translate_native_errors("stddev", stddev)
+    var = _translate_native_errors("var", var)
 
+if hasattr(_native, "_fast_kama"):
 
-if "bollinger_bands" in globals():
+    def kama(close, timeperiod=10, fastperiod=2, slowperiod=30):
+        close = _as_contiguous_float64(close)
+        return _native._fast_kama(close, timeperiod, fastperiod, slowperiod)
+
+    kama = _translate_native_errors("kama", kama)
+
+if hasattr(_native, "_fast_binary_period"):
+
+    def midprice(high, low, timeperiod=14):
+        high = _as_contiguous_float64(high)
+        low = _as_contiguous_float64(low)
+        return _native._fast_binary_period("midprice", high, low, timeperiod)
+
+    def correlation(input_a, input_b, timeperiod=14):
+        input_a = _as_contiguous_float64(input_a)
+        input_b = _as_contiguous_float64(input_b)
+        return _native._fast_binary_period("correl", input_a, input_b, timeperiod)
+
+    def correl(input_a, input_b, timeperiod=30):
+        return correlation(input_a, input_b, timeperiod=timeperiod)
+
+    midprice = _translate_native_errors("midprice", midprice)
+    correlation = _translate_native_errors("correlation", correlation)
+    correl = _translate_native_errors("correl", correl)
+
+if hasattr(_native, "_fast_hlc_period"):
+
+    def _hlc_period(operation, high, low, close, timeperiod):
+        high = _as_contiguous_float64(high)
+        low = _as_contiguous_float64(low)
+        close = _as_contiguous_float64(close)
+        return _native._fast_hlc_period(operation, high, low, close, timeperiod)
+
+    def adx(high, low, close, timeperiod=14):
+        return _hlc_period("adx", high, low, close, timeperiod)
+
+    def cci(high, low, close, timeperiod=14):
+        return _hlc_period("cci", high, low, close, timeperiod)
+
+    def willr(high, low, close, timeperiod=14):
+        return _hlc_period("willr", high, low, close, timeperiod)
+
+    def plus_di(high, low, close, timeperiod=14):
+        return _hlc_period("plus_di", high, low, close, timeperiod)
+
+    def minus_di(high, low, close, timeperiod=14):
+        return _hlc_period("minus_di", high, low, close, timeperiod)
+
+    def atr(high, low, close, timeperiod=14):
+        return _hlc_period("atr", high, low, close, timeperiod)
+
+    def natr(high, low, close, timeperiod=14):
+        return _hlc_period("natr", high, low, close, timeperiod)
+
+    for _fast_name in ("adx", "cci", "willr", "plus_di", "minus_di", "atr", "natr"):
+        globals()[_fast_name] = _translate_native_errors(
+            _fast_name, globals()[_fast_name]
+        )
+
+if hasattr(_native, "_fast_trange"):
+
+    def trange(high, low, close):
+        high = _as_contiguous_float64(high)
+        low = _as_contiguous_float64(low)
+        close = _as_contiguous_float64(close)
+        return _native._fast_trange(high, low, close)
+
+    trange = _translate_native_errors("trange", trange)
+
+if hasattr(_native, "_fast_mfi"):
+
+    def mfi(high, low, close, volume, timeperiod=14):
+        high = _as_contiguous_float64(high)
+        low = _as_contiguous_float64(low)
+        close = _as_contiguous_float64(close)
+        volume = _as_contiguous_float64(volume)
+        return _native._fast_mfi(high, low, close, volume, timeperiod)
+
+    mfi = _translate_native_errors("mfi", mfi)
+
+if hasattr(_native, "_fast_ad"):
+
+    def ad(high, low, close, volume):
+        high = _as_contiguous_float64(high)
+        low = _as_contiguous_float64(low)
+        close = _as_contiguous_float64(close)
+        volume = _as_contiguous_float64(volume)
+        return _native._fast_ad(high, low, close, volume)
+
+    ad = _translate_native_errors("ad", ad)
+
+if hasattr(_native, "_fast_adosc"):
+
+    def adosc(high, low, close, volume, fastperiod=3, slowperiod=10):
+        high = _as_contiguous_float64(high)
+        low = _as_contiguous_float64(low)
+        close = _as_contiguous_float64(close)
+        volume = _as_contiguous_float64(volume)
+        return _native._fast_adosc(high, low, close, volume, fastperiod, slowperiod)
+
+    adosc = _translate_native_errors("adosc", adosc)
+
+if hasattr(_native, "_fast_bop"):
+
+    def bop(open, high, low, close):
+        open = _as_contiguous_float64(open)
+        high = _as_contiguous_float64(high)
+        low = _as_contiguous_float64(low)
+        close = _as_contiguous_float64(close)
+        return _native._fast_bop(open, high, low, close)
+
+    bop = _translate_native_errors("bop", bop)
+
+if hasattr(_native, "_fast_bbands"):
+
+    def bollinger_bands(close, timeperiod=20, nbdevup=2.0, nbdevdn=2.0, matype=0):
+        if matype != 0:
+            raise ValueError("bollinger_bands currently supports matype=0 only")
+        close = _as_contiguous_float64(close)
+        return _native._fast_bbands(close, timeperiod, nbdevup, nbdevdn)
+
+    bollinger_bands = _translate_native_errors("bollinger_bands", bollinger_bands)
+
+elif "bollinger_bands" in globals():
     _bollinger_bands_impl = bollinger_bands
 
     def bollinger_bands(close, timeperiod=20, nbdevup=2.0, nbdevdn=2.0, matype=0):
@@ -258,8 +394,58 @@ if "bollinger_bands" in globals():
             close, timeperiod=timeperiod, nbdevup=nbdevup, nbdevdn=nbdevdn
         )
 
+if hasattr(_native, "_fast_sar"):
 
-if "stoch" in globals():
+    def sar(high, low, acceleration=0.02, maximum=0.2):
+        high = _as_contiguous_float64(high)
+        low = _as_contiguous_float64(low)
+        return _native._fast_sar(high, low, acceleration, maximum)
+
+    sar = _translate_native_errors("sar", sar)
+
+elif "sar" in globals():
+    _sar_impl = sar
+
+    def sar(high, low, acceleration=0.02, maximum=0.2):
+        result = _sar_impl(high, low, acceleration=acceleration, maximum=maximum)
+        if isinstance(result, tuple):
+            return result[0]
+        return result
+
+if hasattr(_native, "_fast_macd"):
+
+    def macd(close, fastperiod=12, slowperiod=26, signalperiod=9):
+        close = _as_contiguous_float64(close)
+        return _native._fast_macd(close, fastperiod, slowperiod, signalperiod)
+
+    macd = _translate_native_errors("macd", macd)
+
+if hasattr(_native, "_fast_stoch"):
+
+    def stoch(
+        high,
+        low,
+        close,
+        fastk_period=5,
+        slowk_period=3,
+        slowk_matype=0,
+        slowd_period=3,
+        slowd_matype=0,
+    ):
+        if slowk_matype != 0:
+            raise ValueError("stoch currently supports slowk_matype=0 only")
+        if slowd_matype != 0:
+            raise ValueError("stoch currently supports slowd_matype=0 only")
+        high = _as_contiguous_float64(high)
+        low = _as_contiguous_float64(low)
+        close = _as_contiguous_float64(close)
+        return _native._fast_stoch(
+            high, low, close, fastk_period, slowk_period, slowd_period
+        )
+
+    stoch = _translate_native_errors("stoch", stoch)
+
+elif "stoch" in globals():
     _stoch_impl = stoch
 
     def stoch(
@@ -286,18 +472,31 @@ if "stoch" in globals():
         )
 
 
-if "std_dev" in globals():
-    _std_dev_impl = std_dev
+def _typed_reduce(values, f32_name, f64_name):
+    array, scalar_type = _as_contiguous_reduction_input(values)
+    native = getattr(_native, f32_name if array.dtype == np.float32 else f64_name)
+    result = native(array)
+    return scalar_type(result)
 
-    def stddev(close, timeperiod=20, nbdev=1.0):
-        return _std_dev_impl(close, timeperiod=timeperiod, nbdev=nbdev)
+
+def reduce_sum(values):
+    return _typed_reduce(values, "_reduce_sum_f32", "_reduce_sum_f64")
 
 
-if "correlation" in globals():
-    _correlation_impl = correlation
+def reduce_mean(values):
+    return _typed_reduce(values, "_reduce_mean_f32", "_reduce_mean_f64")
 
-    def correl(input_a, input_b, timeperiod=30):
-        return _correlation_impl(input_a, input_b, timeperiod=timeperiod)
+
+def reduce_min(values):
+    return _typed_reduce(values, "_reduce_min_f32", "_reduce_min_f64")
+
+
+def reduce_max(values):
+    return _typed_reduce(values, "_reduce_max_f32", "_reduce_max_f64")
+
+
+def reduce_stddev(values):
+    return _typed_reduce(values, "_reduce_stddev_f32", "_reduce_stddev_f64")
 
 
 def register_accessor():
