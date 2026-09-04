@@ -184,6 +184,7 @@ mod tests {
         let low = [9.0, 10.0, 11.0, 12.0];
         let capped = sar(&high, &low, 0.5, 0.2).unwrap();
         let explicit = sar(&high, &low, 0.2, 0.2).unwrap();
-        assert_eq!(capped, explicit);
+        assert!(capped[0].is_nan() && explicit[0].is_nan());
+        assert_eq!(&capped[1..], &explicit[1..]);
     }
 }
