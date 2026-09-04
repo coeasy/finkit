@@ -188,6 +188,11 @@ pub use volatility::*;
 pub use volatility_ext::*;
 #[cfg(feature = "indicators-volume")]
 pub use volume::*;
+// Serial cumulative volume indicators use the fused canonical kernels under
+// std builds. These explicit re-exports replace the legacy scratch-buffer SIMD
+// implementations without changing public signatures.
+#[cfg(all(feature = "indicators-volume", feature = "std"))]
+pub use crate::math::volume_kernels::{ad, adosc, obv};
 #[cfg(feature = "indicators-volume")]
 pub use volume_ext::*;
 #[cfg(feature = "indicators-volume")]
