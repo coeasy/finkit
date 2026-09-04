@@ -263,7 +263,12 @@ if hasattr(_native, "_fast_kama"):
 
     def kama(close, timeperiod=10, fastperiod=2, slowperiod=30):
         close = _as_contiguous_float64(close)
-        return _native._fast_kama(close, timeperiod, fastperiod, slowperiod)
+        result = _native._fast_kama(close, timeperiod, fastperiod, slowperiod)
+        # TA-Lib KAMA lookback is `timeperiod`: index timeperiod-1 is the
+        # private recursion seed, not a public output value.
+        if timeperiod > 0 and result.size >= timeperiod:
+            result[timeperiod - 1] = np.nan
+        return result
 
     kama = _translate_native_errors("kama", kama)
 
@@ -359,7 +364,15 @@ if hasattr(_native, "_fast_adosc"):
         low = _as_contiguous_float64(low)
         close = _as_contiguous_float64(close)
         volume = _as_contiguous_float64(volume)
-        return _native._fast_adosc(high, low, close, volume, fastperiod, slowperiod)
+        result = _native._fast_adosc(
+            high, low, close, volume, fastperiod, slowperiod
+        )
+        # TA-Lib ADOSC becomes public when the slower EMA has completed its
+        # lookback; the core recursion may keep earlier internal seed values.
+        lookback = max(fastperiod, slowperiod) - 1
+        if lookback > 0:
+            result[:lookback] = np.nan
+        return result
 
     adosc = _translate_native_errors("adosc", adosc)
 
@@ -416,7 +429,14 @@ if hasattr(_native, "_fast_macd"):
 
     def macd(close, fastperiod=12, slowperiod=26, signalperiod=9):
         close = _as_contiguous_float64(close)
-        return _native._fast_macd(close, fastperiod, slowperiod, signalperiod)
+        result = _native._fast_macd(close, fastperiod, slowperiod, signalperiod)
+        # TA-Lib exposes MACD only after the slow EMA and signal EMA lookbacks
+        # are both complete. Keep earlier recursion state private.
+        lookback = max(fastperiod, slowperiod) + signalperiod - 2
+        if lookback > 0:
+            for output in result:
+                output[:lookback] = np.nan
+        return result
 
     macd = _translate_native_errors("macd", macd)
 
