@@ -33,7 +33,10 @@ jobs:
             scripts/apply_talib_performance_plan.py \
             scripts/apply_talib_semantic_fixes.py \
             scripts/apply_formula_runtime_performance_fixes.py \
+            scripts/prepare_python_registry_ssot.py \
             scripts/normalize_migration_parsers.py
+      - name: Prepare Python binding SSOT
+        run: python scripts/prepare_python_registry_ssot.py
       - name: Apply binding and API migrations
         run: python scripts/apply_talib_performance_plan.py
       - name: Apply TA-Lib semantic fixes
