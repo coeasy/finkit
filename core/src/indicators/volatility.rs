@@ -156,12 +156,7 @@ pub fn trange(high: &[f64], low: &[f64], close: &[f64]) -> Result<Array1<f64>> {
 ///
 /// TA-Lib has no previous close for row zero, so `output[0]` is NaN. Remaining
 /// values are written by the SIMD true-range primitive in one pass.
-pub fn trange_into(
-    high: &[f64],
-    low: &[f64],
-    close: &[f64],
-    output: &mut [f64],
-) -> Result<()> {
+pub fn trange_into(high: &[f64], low: &[f64], close: &[f64], output: &mut [f64]) -> Result<()> {
     validate_ohlc(high, low, close)?;
     validate_input(high.len(), 1)?;
     validate_output(high.len(), output.len())?;
