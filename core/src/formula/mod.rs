@@ -31,6 +31,7 @@ pub mod optimizer;
 pub mod params;
 pub mod parser;
 pub mod pine;
+mod range_zero_copy;
 pub mod sandbox;
 // AArch64 guarantees NEON in the Finkit dispatch model, so the scalar fallback
 // statements that follow unconditional NEON returns are intentionally
