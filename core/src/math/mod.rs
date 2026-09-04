@@ -7,13 +7,13 @@
 //!
 //! - [`simd_kernels`] — SIMD-accelerated batch indicator kernels (SMA, EMA, RSI, MACD)
 //! - [`simd_ops`] — SIMD primitives (prefix sum, diff, scale, etc.)
-//! - [`reduction`] — allocation-free typed scalar reductions for f32/f64
 //!
 //! ## std-only submodules
 //!
 //! - [`moving_avg`] — SMA, EMA, WMA, DEMA, TEMA, KAMA, T3, TRIMA, HMA, ALMA, MAVP (requires `std` feature)
 //! - [`statistics`] — Rolling variance, standard deviation, min, max, correlation (requires `std` feature)
 //! - [`linear`] — Linear regression and related functions (requires `std` feature)
+//! - [`reduction`] — allocation-free typed scalar reductions for f32/f64 (requires `std` feature)
 //! - [`volume_kernels`] — caller-owned OBV/VWAP output kernels (requires `std` feature)
 
 #[cfg(feature = "std")]
@@ -24,6 +24,7 @@ pub mod moving_avg;
 // by the isolated numeric helpers. It is compiled in both `std` and `no_std`
 // builds (its `FloatExt`/`f64_*` helpers route to `core`/`libm` accordingly).
 pub mod libm_shim;
+#[cfg(feature = "std")]
 pub mod reduction;
 pub mod simd_kernels;
 pub mod simd_ops;
