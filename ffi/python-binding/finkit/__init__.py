@@ -96,6 +96,12 @@ for _name in _native_all:
 
 
 def _as_contiguous_float64(values):
+    if isinstance(values, np.ndarray):
+        if values.ndim != 1:
+            raise InvalidParameterError("expected a one-dimensional numeric array")
+        if values.dtype == np.float64 and values.flags.c_contiguous:
+            return values
+        return np.ascontiguousarray(values, dtype=np.float64)
     array = np.asarray(values)
     if array.ndim != 1:
         raise InvalidParameterError("expected a one-dimensional numeric array")
@@ -105,6 +111,14 @@ def _as_contiguous_float64(values):
 
 
 def _as_contiguous_float_array(values):
+    if isinstance(values, np.ndarray):
+        if values.ndim != 1:
+            raise InvalidParameterError("expected a one-dimensional numeric array")
+        if values.dtype in (np.float32, np.float64) and values.flags.c_contiguous:
+            return values
+        if values.dtype == np.float32:
+            return np.ascontiguousarray(values, dtype=np.float32)
+        return np.ascontiguousarray(values, dtype=np.float64)
     array = np.asarray(values)
     if array.ndim != 1:
         raise InvalidParameterError("expected a one-dimensional numeric array")
@@ -245,6 +259,14 @@ if hasattr(_native, "_fast_unary_period"):
         globals()[_fast_name] = _translate_native_errors(
             _fast_name, globals()[_fast_name]
         )
+
+if hasattr(_native, "_fast_mom"):
+
+    def mom(close, timeperiod=10):
+        close = _as_contiguous_float64(close)
+        return _native._fast_mom(close, timeperiod)
+
+    mom = _translate_native_errors("mom", mom)
 
 if hasattr(_native, "_fast_unary_period_scale"):
 
