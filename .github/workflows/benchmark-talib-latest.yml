@@ -32,8 +32,12 @@ jobs:
           PY
       - name: Run installed-package benchmark
         run: python scripts/benchmark_python_vs_talib_latest.py
+      - name: Run extended indicator and formula benchmark
+        run: python scripts/benchmark_python_vs_talib_extended.py
       - uses: actions/upload-artifact@v7
         with:
           name: finkit-v0.1.4-vs-talib-0.7.1
-          path: dist/bench/python-vs-talib-0.7.1.*
+          path: |
+            dist/bench/python-vs-talib-0.7.1.*
+            dist/bench/python-vs-talib-extended.*
           if-no-files-found: error
