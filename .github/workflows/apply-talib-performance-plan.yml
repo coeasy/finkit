@@ -24,6 +24,13 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+      - name: Validate migration scripts
+        run: |
+          python -m py_compile \
+            scripts/optimize_python_bindings.py \
+            scripts/apply_talib_performance_plan.py \
+            scripts/apply_talib_semantic_fixes.py \
+            scripts/apply_formula_runtime_performance_fixes.py
       - name: Apply binding and API migrations
         run: python scripts/apply_talib_performance_plan.py
       - name: Apply TA-Lib semantic fixes
@@ -38,8 +45,10 @@ jobs:
           python scripts/optimize_python_bindings.py --check ffi/python-binding/src/generated.rs ffi/python-binding/src/lib.rs
       - name: Compile Python binding
         run: cargo check -p finkit-python --features abi3 --locked
-      - name: Core semantic regression tests
-        run: cargo test -p finkit --lib --locked
+      - name: Core regression suite
+        run: |
+          cargo test -p finkit --lib --locked
+          cargo test -p finkit --test talib_semantic_contract --locked
       - name: Validate diff
         run: git diff --check
       - name: Commit applied plan
