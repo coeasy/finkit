@@ -1,15 +1,9 @@
-//! Python-facing fast paths for Architecture 3.0.
+//! Architecture v3 Python hot paths.
 //!
-//! Inputs are borrowed NumPy buffers. Vector outputs are built from Rust-owned
-//! vectors with `PyArray1::from_vec`, transferring the allocation to NumPy
-//! instead of materialising a Python list and copying it again in `np.asarray`.
-//! Caller-owned `out=` paths borrow the destination ndarray and execute the same
-//! canonical `*_into` kernels without allocating an intermediate output.
-//!
-//! The generic dispatch entry points below intentionally live outside the
-//! registry-generated binding. The registry remains the public API SSOT while
-//! the package facade can route performance-critical calls through this direct
-//! ndarray transport until the generator itself emits native ndarray results.
+//! This module keeps the registry-generated API as the public SSOT while routing
+//! performance-critical NumPy calls through borrowed input slices and direct
+//! ndarray outputs. Rolling extrema families share a monotonic-queue kernel so
+//! MIDPOINT, MIDPRICE and WILLR no longer rescan every window independently.
 
 use ::finkit::indicators;
 use ::finkit::math::{moving_avg, reduction, typed_moving_avg, volume_kernels};
@@ -22,8 +16,108 @@ fn value_error(error: impl std::fmt::Display) -> PyErr {
 }
 
 #[inline]
-fn unsupported(operation: &str) -> PyErr {
-    value_error(format!("unsupported Architecture v3 fast operation: {operation}"))
+fn validate_period(len: usize, period: usize) -> PyResult<()> {
+    if period == 0 {
+        return Err(value_error("invalid parameter: period must be greater than 0"));
+    }
+    if len < period {
+        return Err(value_error(
+            "input data length is less than required minimum",
+        ));
+    }
+    Ok(())
+}
+
+#[inline]
+fn validate_same_len(a: usize, b: usize) -> PyResult<()> {
+    if a != b {
+        return Err(value_error(
+            "invalid parameter: input arrays must have the same length",
+        ));
+    }
+    Ok(())
+}
+
+/// Map one rolling max/min family in O(n) using monotonic index queues.
+///
+/// The backing vectors grow at most to input length, but every index is pushed
+/// and popped once. There are no per-window allocations and no O(period) scans.
+fn rolling_extrema_map<F>(
+    max_source: &[f64],
+    min_source: &[f64],
+    period: usize,
+    mut map: F,
+) -> Vec<f64>
+where
+    F: FnMut(usize, f64, f64) -> f64,
+{
+    let len = max_source.len();
+    let mut output = vec![f64::NAN; len];
+    let mut max_queue = Vec::<usize>::with_capacity(len);
+    let mut min_queue = Vec::<usize>::with_capacity(len);
+    let mut max_head = 0usize;
+    let mut min_head = 0usize;
+
+    for index in 0..len {
+        while max_queue.len() > max_head
+            && max_source[*max_queue.last().expect("active max queue")] <= max_source[index]
+        {
+            max_queue.pop();
+        }
+        max_queue.push(index);
+
+        while min_queue.len() > min_head
+            && min_source[*min_queue.last().expect("active min queue")] >= min_source[index]
+        {
+            min_queue.pop();
+        }
+        min_queue.push(index);
+
+        let expired_before = index.saturating_add(1).saturating_sub(period);
+        while max_head < max_queue.len() && max_queue[max_head] < expired_before {
+            max_head += 1;
+        }
+        while min_head < min_queue.len() && min_queue[min_head] < expired_before {
+            min_head += 1;
+        }
+
+        if index + 1 >= period {
+            output[index] = map(
+                index,
+                max_source[max_queue[max_head]],
+                min_source[min_queue[min_head]],
+            );
+        }
+    }
+    output
+}
+
+#[inline]
+fn midpoint_vec(max_source: &[f64], min_source: &[f64], period: usize) -> Vec<f64> {
+    rolling_extrema_map(max_source, min_source, period, |_, high, low| {
+        (high + low) * 0.5
+    })
+}
+
+#[inline]
+fn willr_vec(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Vec<f64> {
+    rolling_extrema_map(high, low, period, |index, highest, lowest| {
+        let range = highest - lowest;
+        if range.abs() > 1e-15 {
+            -100.0 * (highest - close[index]) / range
+        } else {
+            0.0
+        }
+    })
+}
+
+#[inline]
+fn mom_vec(input: &[f64], period: usize) -> Vec<f64> {
+    let mut output = vec![f64::NAN; input.len()];
+    for index in period..input.len() {
+        output[index] = input[index] - input[index - period];
+    }
+    output
 }
 
 #[pyfunction(name = "_fast_sma")]
@@ -230,7 +324,6 @@ fn fast_vwap_into(
         .map_err(value_error)
 }
 
-/// Direct-ndarray transport for one-input period indicators.
 #[pyfunction(name = "_fast_unary_period")]
 fn fast_unary_period<'py>(
     py: Python<'py>,
@@ -239,25 +332,44 @@ fn fast_unary_period<'py>(
     timeperiod: usize,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let close = close.as_slice().map_err(value_error)?;
-    let output = py
-        .detach(|| match operation {
-            "dema" => moving_avg::dema(close, timeperiod),
-            "tema" => moving_avg::tema(close, timeperiod),
-            "midpoint" => indicators::midpoint(close, timeperiod),
-            "rsi" => indicators::rsi(close, timeperiod),
-            "mom" => indicators::mom(close, timeperiod),
-            "roc" => indicators::roc(close, timeperiod),
-            "cmo" => indicators::cmo(close, timeperiod),
-            _ => return Err(::finkit::error::TaError::InvalidParameter {
-                name: "operation".to_string(),
-                constraint: format!("unsupported fast operation: {operation}"),
-            }),
-        })
-        .map_err(value_error)?;
-    Ok(PyArray1::from_vec(py, output.into_raw_vec()))
+    let output = match operation {
+        "midpoint" => {
+            validate_period(close.len(), timeperiod)?;
+            py.detach(|| midpoint_vec(close, close, timeperiod))
+        }
+        "mom" => {
+            validate_period(close.len(), timeperiod)?;
+            py.detach(|| mom_vec(close, timeperiod))
+        }
+        "dema" => py
+            .detach(|| moving_avg::dema(close, timeperiod))
+            .map_err(value_error)?
+            .into_raw_vec(),
+        "tema" => py
+            .detach(|| moving_avg::tema(close, timeperiod))
+            .map_err(value_error)?
+            .into_raw_vec(),
+        "rsi" => py
+            .detach(|| indicators::rsi(close, timeperiod))
+            .map_err(value_error)?
+            .into_raw_vec(),
+        "roc" => py
+            .detach(|| indicators::roc(close, timeperiod))
+            .map_err(value_error)?
+            .into_raw_vec(),
+        "cmo" => py
+            .detach(|| indicators::cmo(close, timeperiod))
+            .map_err(value_error)?
+            .into_raw_vec(),
+        _ => {
+            return Err(value_error(format!(
+                "invalid parameter: unsupported fast operation {operation}"
+            )))
+        }
+    };
+    Ok(PyArray1::from_vec(py, output))
 }
 
-/// Direct-ndarray transport for one-input period indicators with a scale parameter.
 #[pyfunction(name = "_fast_unary_period_scale")]
 fn fast_unary_period_scale<'py>(
     py: Python<'py>,
@@ -271,7 +383,7 @@ fn fast_unary_period_scale<'py>(
         .detach(|| match operation {
             "stddev" => indicators::std_dev(close, timeperiod, scale),
             "var" => indicators::var(close, timeperiod, scale),
-            _ => return Err(::finkit::error::TaError::InvalidParameter {
+            _ => Err(::finkit::error::TaError::InvalidParameter {
                 name: "operation".to_string(),
                 constraint: format!("unsupported fast operation: {operation}"),
             }),
@@ -296,7 +408,6 @@ fn fast_kama<'py>(
     Ok(PyArray1::from_vec(py, output.into_raw_vec()))
 }
 
-/// Direct-ndarray transport for two-input rolling indicators.
 #[pyfunction(name = "_fast_binary_period")]
 fn fast_binary_period<'py>(
     py: Python<'py>,
@@ -307,20 +418,25 @@ fn fast_binary_period<'py>(
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let input_a = input_a.as_slice().map_err(value_error)?;
     let input_b = input_b.as_slice().map_err(value_error)?;
-    let output = py
-        .detach(|| match operation {
-            "midprice" => indicators::midprice(input_a, input_b, timeperiod),
-            "correl" => indicators::correlation(input_a, input_b, timeperiod),
-            _ => return Err(::finkit::error::TaError::InvalidParameter {
-                name: "operation".to_string(),
-                constraint: format!("unsupported fast operation: {operation}"),
-            }),
-        })
-        .map_err(value_error)?;
-    Ok(PyArray1::from_vec(py, output.into_raw_vec()))
+    validate_same_len(input_a.len(), input_b.len())?;
+    let output = match operation {
+        "midprice" => {
+            validate_period(input_a.len(), timeperiod)?;
+            py.detach(|| midpoint_vec(input_a, input_b, timeperiod))
+        }
+        "correl" => py
+            .detach(|| indicators::correlation(input_a, input_b, timeperiod))
+            .map_err(value_error)?
+            .into_raw_vec(),
+        _ => {
+            return Err(value_error(format!(
+                "invalid parameter: unsupported fast operation {operation}"
+            )))
+        }
+    };
+    Ok(PyArray1::from_vec(py, output))
 }
 
-/// Direct-ndarray transport for HLC period indicators.
 #[pyfunction(name = "_fast_hlc_period")]
 fn fast_hlc_period<'py>(
     py: Python<'py>,
@@ -333,22 +449,44 @@ fn fast_hlc_period<'py>(
     let high = high.as_slice().map_err(value_error)?;
     let low = low.as_slice().map_err(value_error)?;
     let close = close.as_slice().map_err(value_error)?;
-    let output = py
-        .detach(|| match operation {
-            "adx" => indicators::adx(high, low, close, timeperiod),
-            "cci" => indicators::cci(high, low, close, timeperiod),
-            "willr" => indicators::willr(high, low, close, timeperiod),
-            "plus_di" => indicators::plus_di(high, low, close, timeperiod),
-            "minus_di" => indicators::minus_di(high, low, close, timeperiod),
-            "atr" => indicators::atr(high, low, close, timeperiod),
-            "natr" => indicators::natr(high, low, close, timeperiod),
-            _ => return Err(::finkit::error::TaError::InvalidParameter {
-                name: "operation".to_string(),
-                constraint: format!("unsupported fast operation: {operation}"),
-            }),
-        })
-        .map_err(value_error)?;
-    Ok(PyArray1::from_vec(py, output.into_raw_vec()))
+    validate_same_len(high.len(), low.len())?;
+    validate_same_len(high.len(), close.len())?;
+    let output = match operation {
+        "willr" => {
+            validate_period(high.len(), timeperiod)?;
+            py.detach(|| willr_vec(high, low, close, timeperiod))
+        }
+        "adx" => py
+            .detach(|| indicators::adx(high, low, close, timeperiod))
+            .map_err(value_error)?
+            .into_raw_vec(),
+        "cci" => py
+            .detach(|| indicators::cci(high, low, close, timeperiod))
+            .map_err(value_error)?
+            .into_raw_vec(),
+        "plus_di" => py
+            .detach(|| indicators::plus_di(high, low, close, timeperiod))
+            .map_err(value_error)?
+            .into_raw_vec(),
+        "minus_di" => py
+            .detach(|| indicators::minus_di(high, low, close, timeperiod))
+            .map_err(value_error)?
+            .into_raw_vec(),
+        "atr" => py
+            .detach(|| indicators::atr(high, low, close, timeperiod))
+            .map_err(value_error)?
+            .into_raw_vec(),
+        "natr" => py
+            .detach(|| indicators::natr(high, low, close, timeperiod))
+            .map_err(value_error)?
+            .into_raw_vec(),
+        _ => {
+            return Err(value_error(format!(
+                "invalid parameter: unsupported fast operation {operation}"
+            )))
+        }
+    };
+    Ok(PyArray1::from_vec(py, output))
 }
 
 #[pyfunction(name = "_fast_trange")]
