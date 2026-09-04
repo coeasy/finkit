@@ -38,6 +38,7 @@ jobs:
             scripts/apply_talib_semantic_fixes.py \
             scripts/apply_formula_runtime_performance_fixes.py \
             scripts/apply_talib_existing_contract_fixes.py \
+            scripts/apply_core_hotpath_fixes.py \
             scripts/prepare_python_registry_ssot.py \
             scripts/normalize_migration_parsers.py
       - name: Prepare Python binding SSOT
@@ -48,6 +49,8 @@ jobs:
         run: python scripts/apply_talib_semantic_fixes.py
       - name: Migrate legacy TA-Lib contract tests
         run: python scripts/apply_talib_existing_contract_fixes.py
+      - name: Apply core hot-path fixes
+        run: python scripts/apply_core_hotpath_fixes.py
       - name: Apply formula runtime performance fixes
         run: python scripts/apply_formula_runtime_performance_fixes.py
       - name: Format Rust
@@ -88,6 +91,7 @@ jobs:
             core/src/indicators/momentum.rs \
             core/src/indicators/overlap.rs \
             core/src/math/moving_avg.rs \
+            core/src/math/simd_kernels.rs \
             core/src/formula/functions.rs \
             core/src/formula/engine.rs
           git commit -m 'perf: implement TA-Lib parity and zero-copy runtime plan'
