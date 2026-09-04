@@ -31,21 +31,26 @@ _NUMERIC = {"f64", "f32", "i64", "i32", "u64", "u32", "i16", "u16", "i8", "u8"}
 
 
 def _match_pair(text: str, start: int, opening: str, closing: str) -> int:
+    """Find a balanced Rust delimiter pair without mistaking lifetimes for strings."""
     depth = 0
-    quote: str | None = None
+    in_string = False
     escaped = False
     for i in range(start, len(text)):
         ch = text[i]
-        if quote is not None:
+        if in_string:
             if escaped:
                 escaped = False
             elif ch == "\\":
                 escaped = True
-            elif ch == quote:
-                quote = None
+            elif ch == '"':
+                in_string = False
             continue
-        if ch in ('"', "'"):
-            quote = ch
+        # Rust lifetimes such as Python<'_> use apostrophes.  Only a double
+        # quote starts the string literals that matter while scanning function
+        # signatures/bodies here; treating `'` as a quote makes the scanner
+        # skip closing parentheses after a lifetime.
+        if ch == '"':
+            in_string = True
             continue
         if ch == opening:
             depth += 1
@@ -106,15 +111,7 @@ def _numeric_vec_components(return_type: str) -> list[str] | None:
 
 
 def _strip_rust_doc_prose(params: str) -> str:
-    """Remove doc/comment fragments that cannot be Rust parameters.
-
-    Some registry bodies preserve documentation between attributes and the
-    function item.  A previous migration scanner could accidentally widen the
-    captured parameter span into those comments (TRANGE's documentation
-    contains ``|High - Previous Close|``).  Keep this parser defensive: real
-    free-function parameters contain a colon, while prose fragments do not.
-    Rust compilation remains the final authority for malformed signatures.
-    """
+    """Remove doc/comment fragments that cannot be Rust parameters."""
     cleaned: list[str] = []
     in_block_comment = False
     for raw_line in params.splitlines():
@@ -141,10 +138,6 @@ def _call_arg_names(params: str) -> list[str]:
             continue
         m = re.search(r"(?:^|\s)(?:mut\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:", part)
         if not m:
-            # A top-level free #[pyfunction] argument must be `name: Type`.
-            # If a registry/doc fragment leaked into the scan, ignore it rather
-            # than turning documentation punctuation into a migration failure.
-            # Any genuinely malformed Rust signature will fail cargo check.
             if ":" not in part:
                 continue
             raise ValueError(f"unsupported pyfunction parameter pattern: {part!r}")
@@ -215,9 +208,6 @@ def optimize_source(source: str) -> tuple[str, int]:
             cursor = end
             continue
 
-        # Anchor the opening parenthesis strictly after the matched function
-        # identifier. This prevents parentheses in doc comments or attributes
-        # from becoming the parameter span.
         paren = source.find("(", fn_name_pos + len(fn_name))
         if paren < 0:
             out.append(source[attr_start:])
