@@ -188,10 +188,13 @@ pub fn bbands_sma(
 ) -> Result<(Vec<f64>, Vec<f64>, Vec<f64>)> {
     validate_period(input.len(), period, 2)?;
 
+    let len = input.len();
     let lookback = period - 1;
-    let mut upper = vec![f64::NAN; input.len()];
-    let mut middle = vec![f64::NAN; input.len()];
-    let mut lower = vec![f64::NAN; input.len()];
+    // Avoid writing NaN across three full-length arrays and then overwriting
+    // nearly every element.  Each output slot is appended exactly once while
+    // preserving the TA-Lib arithmetic sequence below.
+    let mut middle = Vec::with_capacity(len);
+    middle.resize(lookback, f64::NAN);
 
     // TA_INT_SMA-compatible operation order.
     let mut period_total = 0.0;
@@ -201,13 +204,18 @@ pub fn bbands_sma(
         period_total += input[i];
         i += 1;
     }
-    while i < input.len() {
+    while i < len {
         period_total += input[i];
-        middle[i] = period_total / period as f64;
+        middle.push(period_total / period as f64);
         period_total -= input[trailing_idx];
         trailing_idx += 1;
         i += 1;
     }
+
+    let mut upper = Vec::with_capacity(len);
+    let mut lower = Vec::with_capacity(len);
+    upper.resize(lookback, f64::NAN);
+    lower.resize(lookback, f64::NAN);
 
     // Inline TA_INT_stddev_using_precalc_ma from TA_BBANDS 0.7.1.
     let mut start_sum = 1 + lookback - period;
@@ -219,7 +227,7 @@ pub fn bbands_sma(
         period_total2 += temp_real;
     }
 
-    let output_count = input.len() - lookback;
+    let output_count = len - lookback;
     for out_idx in 0..output_count {
         let mut temp_real = input[end_sum];
         temp_real *= temp_real;
@@ -241,25 +249,25 @@ pub fn bbands_sma(
         };
 
         let middle_value = middle[absolute_idx];
-        if nb_dev_up == nb_dev_down {
+        let (upper_value, lower_value) = if nb_dev_up == nb_dev_down {
             if nb_dev_up == 1.0 {
-                upper[absolute_idx] = middle_value + stddev;
-                lower[absolute_idx] = middle_value - stddev;
+                (middle_value + stddev, middle_value - stddev)
             } else {
                 let scaled = stddev * nb_dev_up;
-                upper[absolute_idx] = middle_value + scaled;
-                lower[absolute_idx] = middle_value - scaled;
+                (middle_value + scaled, middle_value - scaled)
             }
         } else if nb_dev_up == 1.0 {
-            upper[absolute_idx] = middle_value + stddev;
-            lower[absolute_idx] = middle_value - stddev * nb_dev_down;
+            (middle_value + stddev, middle_value - stddev * nb_dev_down)
         } else if nb_dev_down == 1.0 {
-            lower[absolute_idx] = middle_value - stddev;
-            upper[absolute_idx] = middle_value + stddev * nb_dev_up;
+            (middle_value + stddev * nb_dev_up, middle_value - stddev)
         } else {
-            upper[absolute_idx] = middle_value + stddev * nb_dev_up;
-            lower[absolute_idx] = middle_value - stddev * nb_dev_down;
-        }
+            (
+                middle_value + stddev * nb_dev_up,
+                middle_value - stddev * nb_dev_down,
+            )
+        };
+        upper.push(upper_value);
+        lower.push(lower_value);
 
         start_sum += 1;
         end_sum += 1;
@@ -301,6 +309,9 @@ mod tests {
     fn bbands_middle_matches_talib_sma_sequence() {
         let input: Vec<f64> = (1..=128).map(|value| value as f64).collect();
         let (upper, middle, lower) = bbands_sma(&input, 20, 2.0, 2.0).unwrap();
+        assert_eq!(upper.len(), input.len());
+        assert_eq!(middle.len(), input.len());
+        assert_eq!(lower.len(), input.len());
         assert!((middle[19] - 10.5).abs() < 1.0e-12);
         assert!((middle[127] - 118.5).abs() < 1.0e-12);
         assert!(upper[19] > middle[19]);
