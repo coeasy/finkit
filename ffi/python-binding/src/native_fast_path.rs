@@ -127,6 +127,34 @@ fn fast_ema_f32_into(
         .map_err(value_error)
 }
 
+#[pyfunction(name = "_fast_wma")]
+#[pyo3(signature = (close, timeperiod=14))]
+fn fast_wma<'py>(
+    py: Python<'py>,
+    close: PyReadonlyArray1<'py, f64>,
+    timeperiod: usize,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let close = close.as_slice().map_err(value_error)?;
+    let mut output = vec![0.0; close.len()];
+    py.detach(|| moving_avg::wma_into(close, timeperiod, &mut output))
+        .map_err(value_error)?;
+    Ok(PyArray1::from_vec(py, output))
+}
+
+#[pyfunction(name = "_fast_wma_into")]
+#[pyo3(signature = (close, output, timeperiod=14))]
+fn fast_wma_into(
+    py: Python<'_>,
+    close: PyReadonlyArray1<'_, f64>,
+    mut output: PyReadwriteArray1<'_, f64>,
+    timeperiod: usize,
+) -> PyResult<()> {
+    let close = close.as_slice().map_err(value_error)?;
+    let output = output.as_slice_mut().map_err(value_error)?;
+    py.detach(|| moving_avg::wma_into(close, timeperiod, output))
+        .map_err(value_error)
+}
+
 #[pyfunction(name = "_fast_obv")]
 fn fast_obv<'py>(
     py: Python<'py>,
@@ -290,6 +318,8 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(fast_ema_into, m)?)?;
     m.add_function(wrap_pyfunction!(fast_ema_f32, m)?)?;
     m.add_function(wrap_pyfunction!(fast_ema_f32_into, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_wma, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_wma_into, m)?)?;
     m.add_function(wrap_pyfunction!(fast_obv, m)?)?;
     m.add_function(wrap_pyfunction!(fast_obv_into, m)?)?;
     m.add_function(wrap_pyfunction!(fast_vwap, m)?)?;
