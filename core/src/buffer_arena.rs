@@ -108,6 +108,27 @@ impl BufferArena {
         buffer
     }
 
+    /// Prepare an existing caller-owned buffer for overwrite without round-tripping
+    /// it through the free-list.
+    ///
+    /// When `buffer.capacity() >= len`, the same allocation is retained and only its
+    /// logical length/content are reset. If the allocation is too small, the old
+    /// buffer is recycled and a right-sized arena buffer is checked out. This is the
+    /// fast path used by iterative executors that repeatedly overwrite the same value
+    /// slot across bars or compute-plan nodes.
+    pub fn overwrite(&mut self, buffer: &mut Vec<f64>, len: usize, fill: f64) {
+        if buffer.capacity() >= len {
+            buffer.resize(len, fill);
+            buffer.fill(fill);
+            self.cache_hits = self.cache_hits.saturating_add(1);
+            return;
+        }
+
+        let old = std::mem::take(buffer);
+        self.recycle(old);
+        *buffer = self.take_filled(len, fill);
+    }
+
     /// Return a buffer to the arena when retention limits permit it.
     ///
     /// Buffers with zero logical length, oversized allocations, or full size
@@ -186,6 +207,33 @@ mod tests {
         assert_eq!(second.as_ptr(), pointer);
         assert!(second.iter().all(|value| *value == 0.0));
         assert_eq!(arena.stats().cache_hits, 1);
+        assert_eq!(arena.stats().cache_misses, 1);
+    }
+
+    #[test]
+    fn overwrite_keeps_existing_allocation_when_capacity_is_sufficient() {
+        let mut arena = BufferArena::default();
+        let mut buffer = Vec::with_capacity(32);
+        buffer.extend([1.0, 2.0, 3.0, 4.0]);
+        let pointer = buffer.as_ptr();
+
+        arena.overwrite(&mut buffer, 24, f64::NAN);
+
+        assert_eq!(buffer.as_ptr(), pointer);
+        assert_eq!(buffer.len(), 24);
+        assert!(buffer.iter().all(|value| value.is_nan()));
+        assert_eq!(arena.stats().cache_hits, 1);
+        assert_eq!(arena.stats().cache_misses, 0);
+    }
+
+    #[test]
+    fn overwrite_replaces_too_small_buffer_through_arena() {
+        let mut arena = BufferArena::default();
+        let mut buffer = vec![1.0; 4];
+        arena.overwrite(&mut buffer, 32, 7.0);
+
+        assert_eq!(buffer.len(), 32);
+        assert!(buffer.iter().all(|value| *value == 7.0));
         assert_eq!(arena.stats().cache_misses, 1);
     }
 
