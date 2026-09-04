@@ -42,6 +42,51 @@ def fix_kama_test() -> None:
     )
 
 
+def fix_momentum_kama_test() -> None:
+    """Update the second legacy KAMA test introduced by the momentum test module.
+
+    After TA-Lib alignment the seed at period-1 is internal only and the first
+    public value is emitted at index `period`.  The old unit contract expected
+    that index to remain NaN.  Patch only the named KAMA test block so unrelated
+    NaN assertions in momentum.rs are untouched.
+    """
+    path = ROOT / "core/src/indicators/momentum.rs"
+    text = path.read_text(encoding="utf-8")
+    marker = "fn test_kama_basic()"
+    start = text.find(marker)
+    if start < 0:
+        # Some source revisions do not contain this generated/legacy test until
+        # the earlier migration steps run; absence is therefore not an error.
+        print("momentum KAMA legacy test: not present")
+        return
+    brace = text.find("{", start)
+    if brace < 0:
+        raise RuntimeError("momentum KAMA legacy test opening brace not found")
+    depth = 0
+    end = -1
+    for i in range(brace, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                break
+    if end < 0:
+        raise RuntimeError("momentum KAMA legacy test closing brace not found")
+    block = text[start:end]
+    old = "        assert!(result[3].is_nan());"
+    new = "        assert!(result[3].is_finite());"
+    if old in block:
+        block = block.replace(old, new, 1)
+        path.write_text(text[:start] + block + text[end:], encoding="utf-8")
+        print("momentum KAMA legacy test: updated")
+    elif new in block:
+        print("momentum KAMA legacy test: already updated")
+    else:
+        raise RuntimeError("momentum KAMA legacy assertion not found")
+
+
 def fix_macd_into_and_test() -> None:
     path = ROOT / "core/src/indicators/momentum.rs"
     text = path.read_text(encoding="utf-8")
@@ -116,6 +161,7 @@ def fix_macd_into_and_test() -> None:
 def main() -> int:
     fix_trange_test()
     fix_kama_test()
+    fix_momentum_kama_test()
     fix_macd_into_and_test()
     print("legacy TA-Lib contract migration complete")
     return 0
