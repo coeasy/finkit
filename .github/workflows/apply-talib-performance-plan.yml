@@ -24,13 +24,16 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+      - name: Normalize Rust migration scanners
+        run: python scripts/normalize_migration_parsers.py
       - name: Validate migration scripts
         run: |
           python -m py_compile \
             scripts/optimize_python_bindings.py \
             scripts/apply_talib_performance_plan.py \
             scripts/apply_talib_semantic_fixes.py \
-            scripts/apply_formula_runtime_performance_fixes.py
+            scripts/apply_formula_runtime_performance_fixes.py \
+            scripts/normalize_migration_parsers.py
       - name: Apply binding and API migrations
         run: python scripts/apply_talib_performance_plan.py
       - name: Apply TA-Lib semantic fixes
@@ -62,6 +65,9 @@ jobs:
           git add \
             docs/indicator_registry.json \
             scripts/sync_bindings.py \
+            scripts/optimize_python_bindings.py \
+            scripts/apply_talib_semantic_fixes.py \
+            scripts/apply_formula_runtime_performance_fixes.py \
             ffi/python-binding/src/generated.rs \
             ffi/python-binding/src/lib.rs \
             ffi/python-binding/src/formula_plan.rs \
