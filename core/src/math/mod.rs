@@ -14,6 +14,7 @@
 //! - [`moving_avg`] — SMA, EMA, WMA, DEMA, TEMA, KAMA, T3, TRIMA, HMA, ALMA, MAVP (requires `std` feature)
 //! - [`statistics`] — Rolling variance, standard deviation, min, max, correlation (requires `std` feature)
 //! - [`linear`] — Linear regression and related functions (requires `std` feature)
+//! - [`volume_kernels`] — caller-owned OBV/VWAP output kernels (requires `std` feature)
 
 #[cfg(feature = "std")]
 pub mod linear;
@@ -31,3 +32,5 @@ pub mod simd_ops_avx512;
 pub mod simd_ops_wasm;
 #[cfg(feature = "std")]
 pub mod statistics;
+#[cfg(feature = "std")]
+pub mod volume_kernels;
