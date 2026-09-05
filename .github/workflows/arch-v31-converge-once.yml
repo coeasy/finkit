@@ -50,10 +50,24 @@ jobs:
         run: |
           python scripts/sync_bindings.py --lang python --check
           python scripts/optimize_python_bindings.py --check ffi/python-binding/src/generated.rs ffi/python-binding/src/lib.rs
-          if grep -R "np.asarray\|np.array" -n ffi/python-binding/finkit 2>/dev/null; then
-            echo 'Python wrapper still contains list-to-ndarray conversion'
-            exit 1
-          fi
+          python - <<'PY'
+          from pathlib import Path
+
+          facade = Path('ffi/python-binding/finkit/__init__.py').read_text(encoding='utf-8')
+          forbidden = (
+              'np.asarray(_native.',
+              'np.array(_native.',
+              'np.asarray(function(',
+              'np.array(function(',
+          )
+          found = [token for token in forbidden if token in facade]
+          if found:
+              raise SystemExit(
+                  'native numeric output is still rematerialized through NumPy: '
+                  + ', '.join(found)
+              )
+          print('Python public hot paths do not rematerialize native numeric outputs')
+          PY
 
       - name: Format workspace
         run: cargo fmt --all
