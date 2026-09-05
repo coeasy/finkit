@@ -14,6 +14,7 @@
 //! - [`directional`] — single-output +DI/-DI Wilder kernels (requires `std` feature)
 //! - [`mfi`] — fused Money Flow Index kernel without a full typical-price scratch array (requires `std` feature)
 //! - [`moving_avg`] — canonical moving-average namespace with Architecture v3 hot-kernel overrides (requires `std` feature)
+//! - [`ohlc_family_state`] — shared TR/ATR/DM/DI/DX/ADX Wilder state (requires `std` feature)
 //! - [`statistics`] — Rolling variance, standard deviation, min, max, correlation (requires `std` feature)
 //! - [`rolling_stats`] — TA-Lib 0.7.1-compatible rolling statistics (requires `std` feature)
 //! - [`sar`] — TA-Lib 0.7.1-compatible Parabolic SAR kernel (requires `std` feature)
@@ -51,6 +52,8 @@ pub mod moving_avg {
 // by the isolated numeric helpers. It is compiled in both `std` and `no_std`
 // builds (its `FloatExt`/`f64_*` helpers route to `core`/`libm` accordingly).
 pub mod libm_shim;
+#[cfg(feature = "std")]
+pub mod ohlc_family_state;
 #[cfg(feature = "std")]
 pub mod reduction;
 #[cfg(feature = "std")]
