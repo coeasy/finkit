@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
-"""Repair the two registered TASK-166~180 Python indicators missing wrappers.
+"""Repair two registered Python APIs that are not part of the C-ABI registry.
 
-The Rust core implementations and module registrations already exist, but the
-historical generated Python file omitted these wrappers. Patch that generated
-source *before* SSOT preparation so prepare_python_registry_ssot.py captures the
-bodies into docs/indicator_registry.json. The following sync generation then
-re-emits them from the registry, making the repair persistent at the SSOT layer.
+CFO and Twiggs Money Flow have Rust core implementations and Python module
+registrations, but they are not members of the 78-entry C ABI SSOT consumed by
+sync_bindings.py. Therefore generated.rs is the wrong ownership boundary: every
+SSOT regeneration correctly replaces that file and drops these extra wrappers.
+Keep these two ndarray-direct wrappers in lib.rs, while generated.rs remains
+owned exclusively by the registry generator.
 """
 
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-GENERATED = ROOT / "ffi" / "python-binding" / "src" / "generated.rs"
+LIB = ROOT / "ffi" / "python-binding" / "src" / "lib.rs"
+MARKER = "// ============================================================================\n// Formula System\n// ============================================================================"
 
 WRAPPERS = r'''
 /// Chande Forecast Oscillator (CFO).
@@ -68,19 +70,18 @@ fn twiggs_money_flow(
 
 
 def main() -> int:
-    text = GENERATED.read_text(encoding="utf-8")
-    missing = []
-    if "fn chande_forecast_oscillator(" not in text:
-        missing.append("chande_forecast_oscillator")
-    if "fn twiggs_money_flow(" not in text:
-        missing.append("twiggs_money_flow")
-    if not missing:
-        print("Python CFO/TMF wrappers already present")
+    text = LIB.read_text(encoding="utf-8")
+    have_cfo = "fn chande_forecast_oscillator(" in text
+    have_tmf = "fn twiggs_money_flow(" in text
+    if have_cfo and have_tmf:
+        print("Python CFO/TMF lib.rs wrappers already present")
         return 0
-    if set(missing) != {"chande_forecast_oscillator", "twiggs_money_flow"}:
-        raise RuntimeError(f"partial CFO/TMF binding state requires review: {missing}")
-    GENERATED.write_text(text.rstrip() + "\n\n" + WRAPPERS, encoding="utf-8")
-    print("restored ndarray-direct CFO/TMF generated Python wrappers")
+    if have_cfo != have_tmf:
+        raise RuntimeError("partial CFO/TMF lib.rs binding state requires review")
+    if MARKER not in text:
+        raise RuntimeError("Formula System marker not found")
+    LIB.write_text(text.replace(MARKER, WRAPPERS + MARKER, 1), encoding="utf-8")
+    print("restored ndarray-direct CFO/TMF wrappers outside generated.rs")
     return 0
 
 
