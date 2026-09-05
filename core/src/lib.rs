@@ -37,6 +37,9 @@ pub mod buffer_arena;
 #[cfg(feature = "std")]
 /// Unified semantic compute plans, factor plans, and runtime execution policies.
 pub mod compute;
+#[cfg(feature = "std")]
+/// Numeric Architecture v3 execution plans compiled from semantic DAGs.
+pub mod execution_plan;
 #[cfg(all(feature = "std", not(feature = "no_std")))]
 /// Domain error types for indicator computations and the formula engine.
 pub mod error;
