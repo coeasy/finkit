@@ -384,7 +384,10 @@ fn fast_mom<'py>(
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let close = close.as_slice().map_err(value_error)?;
     validate_period(close.len(), timeperiod)?;
-    Ok(PyArray1::from_vec(py, py.detach(|| mom_vec(close, timeperiod))))
+    Ok(PyArray1::from_vec(
+        py,
+        py.detach(|| mom_vec(close, timeperiod)),
+    ))
 }
 
 #[pyfunction(name = "_fast_unary_period")]

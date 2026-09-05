@@ -152,6 +152,8 @@ pub use momentum::*;
 // Under std builds, expose compatibility/performance-sensitive canonical
 // momentum kernels at the root indicators namespace without changing public
 // signatures used by Rust, Python, Node, or generated bindings.
+#[cfg(all(feature = "indicators-volatility", feature = "std"))]
+pub use crate::math::trange::trange;
 #[cfg(all(feature = "indicators-momentum", feature = "std"))]
 pub use crate::math::{
     cci::cci,
@@ -188,8 +190,6 @@ pub use sweepable::*;
 pub use top_bottom::*;
 #[cfg(feature = "indicators-volatility")]
 pub use volatility::*;
-#[cfg(all(feature = "indicators-volatility", feature = "std"))]
-pub use crate::math::trange::trange;
 #[cfg(all(feature = "indicators-volatility", feature = "indicators-all"))]
 pub use volatility_ext::*;
 #[cfg(feature = "indicators-volume")]

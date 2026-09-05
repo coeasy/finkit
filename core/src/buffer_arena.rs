@@ -38,10 +38,7 @@ impl PlanBufferLayout {
     /// after plan execution. Retained values are never recycled inside the
     /// current execution, while intermediate values are released immediately
     /// after their final dependent.
-    pub fn compile(
-        plan: &ComputePlan,
-        retained: impl IntoIterator<Item = ComputeNodeId>,
-    ) -> Self {
+    pub fn compile(plan: &ComputePlan, retained: impl IntoIterator<Item = ComputeNodeId>) -> Self {
         let order = plan.execution_order();
         let end = order.len();
         let positions: BTreeMap<ComputeNodeId, usize> = order

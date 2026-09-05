@@ -78,13 +78,15 @@ pub enum HotPlanError {
 impl fmt::Display for HotPlanError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::KernelCollision { id, first, second } => write!(
-                f,
-                "kernel id collision {:#x}: {first} vs {second}",
-                id.0
-            ),
+            Self::KernelCollision { id, first, second } => {
+                write!(f, "kernel id collision {:#x}: {first} vs {second}", id.0)
+            }
             Self::MissingBufferSlot(node) => {
-                write!(f, "missing physical buffer slot for compute node {}", node.0)
+                write!(
+                    f,
+                    "missing physical buffer slot for compute node {}",
+                    node.0
+                )
             }
         }
     }
@@ -200,7 +202,12 @@ mod tests {
     #[test]
     fn hot_plan_contains_only_numeric_runtime_addresses() {
         let plan = ComputePlan::compile([
-            ComputeNode::new(ComputeNodeId(0), "VARIABLE:CLOSE", vec![], capabilities(false)),
+            ComputeNode::new(
+                ComputeNodeId(0),
+                "VARIABLE:CLOSE",
+                vec![],
+                capabilities(false),
+            ),
             ComputeNode::new(
                 ComputeNodeId(1),
                 "CALL:EMA",
@@ -228,7 +235,12 @@ mod tests {
     #[test]
     fn same_operation_reuses_kernel_id_without_retaining_string_dispatch() {
         let plan = ComputePlan::compile([
-            ComputeNode::new(ComputeNodeId(0), "VARIABLE:CLOSE", vec![], capabilities(false)),
+            ComputeNode::new(
+                ComputeNodeId(0),
+                "VARIABLE:CLOSE",
+                vec![],
+                capabilities(false),
+            ),
             ComputeNode::new(
                 ComputeNodeId(1),
                 "CALL:EMA",
