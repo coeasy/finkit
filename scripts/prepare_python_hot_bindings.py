@@ -165,6 +165,11 @@ def main() -> int:
         "--generate",
     )
 
+    # Formula ROC/MOM are classified once when the compiled formula is created
+    # and then execute the same canonical indicator kernels as the public API.
+    # This removes the generic Formula executor from these common hot paths.
+    run(str(ROOT / "scripts" / "apply_formula_v3_fast_path.py"))
+
     # Batch input arrays remain borrowed while Rust owns the GIL-free compute
     # interval; results cross back into Python as ndarrays, never Python lists.
     patch_batch_numpy_contract()
@@ -179,7 +184,7 @@ def main() -> int:
 
     print(
         "[prepare/python-hot] NumPy-direct binding surface ready: "
-        f"generated={generated_count}, lib={lib_count}, batch=zero-copy"
+        f"generated={generated_count}, lib={lib_count}, batch=zero-copy, formula=canonical"
     )
     return 0
 
