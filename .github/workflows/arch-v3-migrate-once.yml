@@ -1,0 +1,57 @@
+name: Architecture v3 migrate once
+
+on:
+  push:
+    branches:
+      - perf/outperform-talib-v3-20260904
+
+permissions:
+  contents: write
+
+concurrency:
+  group: architecture-v3-migrate-once
+  cancel-in-progress: true
+
+jobs:
+  migrate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: perf/outperform-talib-v3-20260904
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Apply unified-kernel migration
+        run: python scripts/apply_architecture_v3_unified_kernel.py
+      - name: Regenerate Python binding from SSOT
+        run: python scripts/sync_bindings.py --lang python --generate
+      - name: Validate NumPy-direct SSOT generation
+        run: |
+          python scripts/sync_bindings.py --lang python --check
+          python scripts/optimize_python_bindings.py --check ffi/python-binding/src/generated.rs ffi/python-binding/src/lib.rs
+      - name: Format workspace
+        run: cargo fmt --all
+      - name: Compile Python binding
+        run: cargo check -p finkit-python --features abi3 --locked
+      - name: Core regression suite
+        run: cargo test -p finkit --lib --locked
+      - name: Validate diff
+        run: git diff --check
+      - name: Commit migration
+        run: |
+          if git diff --quiet; then
+            echo 'Migration already applied.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -u
+          git commit -m 'refactor(v3): use numeric Python kernel dispatch and SSOT ndarray output'
+          git push origin HEAD:perf/outperform-talib-v3-20260904
