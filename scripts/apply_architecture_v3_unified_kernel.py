@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Apply the next Architecture v3 unified-kernel migration.
+"""Apply the Architecture v3 unified-kernel build transformation.
 
-The migration is intentionally idempotent and keeps public Python signatures
-unchanged while removing runtime string operation dispatch from the private
-native hot-path ABI. It also makes the registry SSOT generator emit NumPy-direct
-numeric bindings itself, improves rolling-extrema allocation behavior, and
-routes TRANGE directly into a caller-owned Rust buffer.
+The transformation is intentionally idempotent and keeps public Python
+signatures unchanged while removing runtime string operation dispatch from the
+private native hot-path ABI. It also makes the registry SSOT generator emit
+NumPy-direct numeric bindings, improves rolling-extrema allocation behavior,
+routes TRANGE directly into caller-owned output, and collapses public MFI onto
+the single fused canonical math kernel.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from apply_talib_performance_plan import patch_sync_bindings
 ROOT = Path(__file__).resolve().parents[1]
 NATIVE = ROOT / "ffi" / "python-binding" / "src" / "native_fast_path.rs"
 INIT = ROOT / "ffi" / "python-binding" / "finkit" / "__init__.py"
+MOMENTUM = ROOT / "core" / "src" / "indicators" / "momentum.rs"
 
 
 def _replace_once(text: str, old: str, new: str, label: str) -> str:
@@ -317,6 +319,43 @@ where
     NATIVE.write_text(text, encoding="utf-8")
 
 
+def patch_public_mfi() -> None:
+    """Collapse the public indicator implementation onto the canonical MFI kernel."""
+
+    text = MOMENTUM.read_text(encoding="utf-8")
+    start_token = "pub fn mfi(\n"
+    end_token = "\n}\n\n/// Minus Directional Indicator"
+    start = text.find(start_token)
+    if start < 0:
+        raise RuntimeError("momentum.rs: public MFI function not found")
+    if text.find(start_token, start + len(start_token)) >= 0:
+        raise RuntimeError("momentum.rs: multiple public MFI functions found")
+    end = text.find(end_token, start)
+    if end < 0:
+        raise RuntimeError("momentum.rs: public MFI boundary not found")
+
+    canonical = '''pub fn mfi(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    volume: &[f64],
+    period: usize,
+) -> Result<Array1<f64>> {
+    crate::math::mfi::mfi(high, low, close, volume, period)
+}'''
+    current = text[start : end + 2]
+    if current != canonical:
+        text = text[:start] + canonical + text[end + 2 :]
+
+    section_end = text.find("/// Minus Directional Indicator", start)
+    section = text[start:section_end]
+    if "simd_typical_price" in section or "pos_ring" in section or "neg_ring" in section:
+        raise RuntimeError("momentum.rs: duplicate public MFI implementation remains")
+    if "crate::math::mfi::mfi(high, low, close, volume, period)" not in section:
+        raise RuntimeError("momentum.rs: public MFI is not routed to canonical kernel")
+    MOMENTUM.write_text(text, encoding="utf-8")
+
+
 def patch_python_facade() -> None:
     text = INIT.read_text(encoding="utf-8")
     replacements = {
@@ -351,6 +390,7 @@ def patch_python_facade() -> None:
 
 def main() -> int:
     patch_native_fast_path()
+    patch_public_mfi()
     patch_python_facade()
     # Move NumPy-direct conversion into the live SSOT generator. This is the
     # canonical generator-level fix; optimize_python_bindings.py remains as the
