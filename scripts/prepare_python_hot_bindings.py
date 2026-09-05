@@ -9,6 +9,7 @@ arrays directly instead of materializing Python lists first.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -21,7 +22,13 @@ LIB = ROOT / "ffi" / "python-binding" / "src" / "lib.rs"
 
 
 def run(*args: str) -> None:
-    subprocess.run([sys.executable, *args], cwd=ROOT, check=True)
+    env = os.environ.copy()
+    # Windows hosted runners default redirected stdout to a legacy code page.
+    # Force one UTF-8 process contract so SSOT/generator diagnostics are
+    # identical on Linux, macOS, and Windows and cannot abort on Unicode text.
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
+    subprocess.run([sys.executable, *args], cwd=ROOT, env=env, check=True)
 
 
 def main() -> int:
