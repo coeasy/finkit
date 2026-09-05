@@ -5,8 +5,8 @@ The transformation is intentionally idempotent and keeps public Python
 signatures unchanged while removing runtime string operation dispatch from the
 private native hot-path ABI. It also makes the registry SSOT generator emit
 NumPy-direct numeric bindings, improves rolling-extrema allocation behavior,
-routes TRANGE directly into caller-owned output, and collapses public MFI onto
-the single fused canonical math kernel.
+routes TRANGE directly into caller-owned output, and collapses MFI/volume
+indicators onto their single canonical math kernels.
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 NATIVE = ROOT / "ffi" / "python-binding" / "src" / "native_fast_path.rs"
 INIT = ROOT / "ffi" / "python-binding" / "finkit" / "__init__.py"
 MOMENTUM = ROOT / "core" / "src" / "indicators" / "momentum.rs"
+VOLUME = ROOT / "core" / "src" / "indicators" / "volume.rs"
 
 
 def _replace_once(text: str, old: str, new: str, label: str) -> str:
@@ -48,6 +49,28 @@ def _replace_function(text: str, name: str, replacements: list[tuple[str, str]])
             )
         segment = segment.replace(old, new, 1)
     return text[:start] + segment + text[end:]
+
+
+def _replace_rust_public_function(
+    text: str,
+    start_token: str,
+    next_doc: str,
+    canonical: str,
+    label: str,
+) -> str:
+    start = text.find(start_token)
+    if start < 0:
+        raise RuntimeError(f"{label}: function not found")
+    if text.find(start_token, start + len(start_token)) >= 0:
+        raise RuntimeError(f"{label}: multiple functions found")
+    end_token = f"\n}}\n\n{next_doc}"
+    end = text.find(end_token, start)
+    if end < 0:
+        raise RuntimeError(f"{label}: function boundary not found")
+    current = text[start : end + 2]
+    if current == canonical:
+        return text
+    return text[:start] + canonical + text[end + 2 :]
 
 
 def patch_native_fast_path() -> None:
@@ -323,17 +346,6 @@ def patch_public_mfi() -> None:
     """Collapse the public indicator implementation onto the canonical MFI kernel."""
 
     text = MOMENTUM.read_text(encoding="utf-8")
-    start_token = "pub fn mfi(\n"
-    end_token = "\n}\n\n/// Minus Directional Indicator"
-    start = text.find(start_token)
-    if start < 0:
-        raise RuntimeError("momentum.rs: public MFI function not found")
-    if text.find(start_token, start + len(start_token)) >= 0:
-        raise RuntimeError("momentum.rs: multiple public MFI functions found")
-    end = text.find(end_token, start)
-    if end < 0:
-        raise RuntimeError("momentum.rs: public MFI boundary not found")
-
     canonical = '''pub fn mfi(
     high: &[f64],
     low: &[f64],
@@ -343,10 +355,15 @@ def patch_public_mfi() -> None:
 ) -> Result<Array1<f64>> {
     crate::math::mfi::mfi(high, low, close, volume, period)
 }'''
-    current = text[start : end + 2]
-    if current != canonical:
-        text = text[:start] + canonical + text[end + 2 :]
+    text = _replace_rust_public_function(
+        text,
+        "pub fn mfi(\n",
+        "/// Minus Directional Indicator",
+        canonical,
+        "momentum.rs public MFI",
+    )
 
+    start = text.find("pub fn mfi(\n")
     section_end = text.find("/// Minus Directional Indicator", start)
     section = text[start:section_end]
     if "simd_typical_price" in section or "pos_ring" in section or "neg_ring" in section:
@@ -354,6 +371,137 @@ def patch_public_mfi() -> None:
     if "crate::math::mfi::mfi(high, low, close, volume, period)" not in section:
         raise RuntimeError("momentum.rs: public MFI is not routed to canonical kernel")
     MOMENTUM.write_text(text, encoding="utf-8")
+
+
+def patch_public_volume_kernels() -> None:
+    """Route AD/ADOSC/OBV wrappers through the canonical one-pass kernels."""
+
+    text = VOLUME.read_text(encoding="utf-8")
+
+    ad = '''pub fn ad(high: &[f64], low: &[f64], close: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
+    if high.len() != low.len() || high.len() != close.len() || high.len() != volume.len() {
+        return Err(crate::error::TaError::InvalidParameter {
+            name: "high, low, close, volume".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    validate_input(high.len(), 1)?;
+
+    let mut output = Array1::<f64>::zeros(high.len());
+    crate::math::volume_kernels::ad_into(
+        high,
+        low,
+        close,
+        volume,
+        output.as_slice_mut().expect("owned Array1 is contiguous"),
+    )?;
+    Ok(output)
+}'''
+    text = _replace_rust_public_function(
+        text,
+        "pub fn ad(high:",
+        "/// AD zero-copy variant",
+        ad,
+        "volume.rs public AD",
+    )
+
+    ad_into = '''pub fn ad_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    volume: &[f64],
+    output: &mut [f64],
+) -> Result<()> {
+    if high.len() != low.len() || high.len() != close.len() || high.len() != volume.len() {
+        return Err(crate::error::TaError::InvalidParameter {
+            name: "high, low, close, volume".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    validate_input(high.len(), 1)?;
+    if output.len() != high.len() {
+        return Err(crate::error::TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as high".to_string(),
+        });
+    }
+    crate::math::volume_kernels::ad_into(high, low, close, volume, output)
+}'''
+    text = _replace_rust_public_function(
+        text,
+        "pub fn ad_into(\n",
+        "/// Chaikin A/D Oscillator",
+        ad_into,
+        "volume.rs public AD into",
+    )
+
+    adosc = '''pub fn adosc(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    volume: &[f64],
+    fast_period: usize,
+    slow_period: usize,
+) -> Result<Array1<f64>> {
+    if high.len() != low.len() || high.len() != close.len() || high.len() != volume.len() {
+        return Err(crate::error::TaError::InvalidParameter {
+            name: "high, low, close, volume".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    validate_input(high.len(), slow_period)?;
+
+    let mut output = Array1::<f64>::zeros(high.len());
+    crate::math::volume_kernels::adosc_into(
+        high,
+        low,
+        close,
+        volume,
+        fast_period,
+        slow_period,
+        output.as_slice_mut().expect("owned Array1 is contiguous"),
+    )?;
+    Ok(output)
+}'''
+    text = _replace_rust_public_function(
+        text,
+        "pub fn adosc(\n",
+        "/// On Balance Volume (OBV)",
+        adosc,
+        "volume.rs public ADOSC",
+    )
+
+    obv = '''pub fn obv(close: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
+    if close.len() != volume.len() {
+        return Err(crate::error::TaError::InvalidParameter {
+            name: "close and volume".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    validate_input(close.len(), 1)?;
+
+    let mut output = vec![0.0_f64; close.len()];
+    crate::math::volume_kernels::obv_into(close, volume, &mut output)?;
+    Ok(Array1::from_vec(output))
+}'''
+    text = _replace_rust_public_function(
+        text,
+        "pub fn obv(close:",
+        "/// Volume Profile 结果结构体",
+        obv,
+        "volume.rs public OBV",
+    )
+
+    ad_section = text[text.find("pub fn ad(high:"):text.find("/// AD zero-copy variant")]
+    adosc_section = text[text.find("pub fn adosc(\n"):text.find("/// On Balance Volume (OBV)")]
+    obv_section = text[text.find("pub fn obv(close:"):text.find("/// Volume Profile 结果结构体")]
+    if "simd_ad_line" in ad_section or "simd_ad_line" in adosc_section:
+        raise RuntimeError("volume.rs: legacy SIMD AD scratch path remains public")
+    if "cumulative = vec!" in adosc_section:
+        raise RuntimeError("volume.rs: ADOSC cumulative scratch allocation remains")
+    if "simd_obv" in obv_section:
+        raise RuntimeError("volume.rs: OBV delta-vector path remains public")
+    VOLUME.write_text(text, encoding="utf-8")
 
 
 def patch_python_facade() -> None:
@@ -391,6 +539,7 @@ def patch_python_facade() -> None:
 def main() -> int:
     patch_native_fast_path()
     patch_public_mfi()
+    patch_public_volume_kernels()
     patch_python_facade()
     # Move NumPy-direct conversion into the live SSOT generator. This is the
     # canonical generator-level fix; optimize_python_bindings.py remains as the
