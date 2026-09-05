@@ -157,8 +157,6 @@ def patch_overlap() -> None:
     if current != canonical:
         text = text[:start] + canonical + text[end + 2 :]
 
-    # The canonical SAR state follows TA-Lib's one-bar lookback. The old overlap
-    # test asserted a synthetic row-zero SAR produced by the legacy implementation.
     test_start = text.find("    fn test_sar() {")
     test_end = text.find("    fn test_sarext() {", test_start)
     if test_start < 0 or test_end < 0:
@@ -191,7 +189,6 @@ def patch_momentum() -> None:
             1,
         )
 
-    # TA-Lib MACD publishes all three outputs only after signal warm-up.
     mask = '''
     // Public TA-Lib contract: MACD, signal and histogram share one lookback.
     // Earlier MACD values are internal signal-seed intermediates, not outputs.
@@ -214,12 +211,10 @@ def patch_momentum() -> None:
             raise SystemExit("momentum.rs: MACD warm-up anchor missing")
         text = text.replace(anchor, replacement, 1)
 
-    # Keep the caller-owned MACD path on the exact same public lookback as the
-    # allocating API. This preserves one semantic contract across frontends.
     into_start = text.find("pub fn macd_into(")
-    into_end = text.find("pub fn macdext(", into_start)
+    into_end = text.find("\npub fn ", into_start + len("pub fn macd_into("))
     if into_start < 0 or into_end < 0:
-        raise SystemExit("momentum.rs: macd_into boundary missing")
+        raise SystemExit("momentum.rs: macd_into structural boundary missing")
     into = text[into_start:into_end]
     into_mask = '''
     // Same TA-Lib public lookback as macd(): pre-signal values are seed state.
@@ -318,8 +313,6 @@ def patch_buffer_arena() -> None:
 '''
     new = '''    pub fn take_overwrite(&mut self, len: usize) -> Vec<f64> {
         if let Some(mut buffer) = self.pop_cached(len) {
-            // pop_cached only returns exact or larger logical buckets, so this
-            // is a zero-fill-free shrink on the hot range/last path.
             buffer.truncate(len);
             return buffer;
         }
