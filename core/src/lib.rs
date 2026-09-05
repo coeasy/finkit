@@ -43,6 +43,9 @@ pub mod error;
 #[cfg(feature = "std")]
 /// Numeric Architecture v3 execution plans compiled from semantic DAGs.
 pub mod execution_plan;
+#[cfg(feature = "std")]
+/// Numeric Architecture v3 executor shared by batch, formula, factor and streaming frontends.
+pub mod unified_executor;
 #[cfg(feature = "formula")]
 /// Formula engine with AST parsing, bytecode compilation, JIT optimization, and SIMD acceleration.
 pub mod formula;
