@@ -79,73 +79,62 @@ jobs:
 
           plan_path = Path('core/src/execution_plan.rs')
           plan_text = plan_path.read_text(encoding='utf-8')
-          old_compile = '''    fn compile(plan: &ComputePlan) -> Self {
-              let mut slots = BTreeMap::new();
-              for &node_id in plan.execution_order() {
-                  let node = plan
-                      .node(node_id)
-                      .expect("execution order only contains compiled nodes");
-                  // Variable-name parsing is deliberately compile-time only. The hot
-                  // plan retains only the numeric node->input-slot relation.
-                  if node.operation.starts_with("VARIABLE:") {
-                      let slot = InputSlot(slots.len());
-                      slots.insert(node_id, slot);
-                  }
-              }
-              Self { slots }
-          }
-          '''
-          new_compile = '''    fn compile(plan: &ComputePlan) -> Self {
-              let mut slots = BTreeMap::new();
-              let mut slots_by_operation = BTreeMap::<&str, InputSlot>::new();
-              for &node_id in plan.execution_order() {
-                  let node = plan
-                      .node(node_id)
-                      .expect("execution order only contains compiled nodes");
-                  // Variable-name parsing and interning are deliberately compile-time
-                  // only. Repeated reads such as CLOSE * CLOSE share one numeric input
-                  // slot while hot execution retains no variable-name lookup.
-                  if node.operation.starts_with("VARIABLE:") {
-                      let operation = node.operation.as_str();
-                      let slot = if let Some(slot) = slots_by_operation.get(operation) {
-                          *slot
-                      } else {
-                          let slot = InputSlot(slots_by_operation.len());
-                          slots_by_operation.insert(operation, slot);
-                          slot
-                      };
-                      slots.insert(node_id, slot);
-                  }
-              }
-              Self { slots }
-          }
-          '''
-          if old_compile in plan_text:
-              plan_text = plan_text.replace(old_compile, new_compile, 1)
-          elif 'slots_by_operation' not in plan_text:
-              raise SystemExit('InputLayout compile anchor missing')
+          section_start = plan_text.index('impl InputLayout {')
+          section_end = plan_text.index('/// Numeric layout of retained public outputs.', section_start)
+          section = plan_text[section_start:section_end]
 
-          old_len = '''    pub fn len(&self) -> usize {
-              self.slots.len()
-          }
-          '''
-          new_len = '''    pub fn len(&self) -> usize {
-              self.slots
-                  .values()
-                  .map(|slot| slot.0 + 1)
-                  .max()
-                  .unwrap_or(0)
-          }
-          '''
-          if old_len in plan_text:
-              plan_text = plan_text.replace(old_len, new_len, 1)
-          elif '.map(|slot| slot.0 + 1)' not in plan_text:
-              raise SystemExit('InputLayout len anchor missing')
+          if 'slots_by_operation' not in section:
+              init_anchor = '        let mut slots = BTreeMap::new();\n'
+              if init_anchor not in section:
+                  raise SystemExit('InputLayout slots initialization anchor missing')
+              section = section.replace(
+                  init_anchor,
+                  init_anchor + '        let mut slots_by_operation = BTreeMap::<&str, InputSlot>::new();\n',
+                  1,
+              )
 
-          test_anchor = '''    #[test]
-              fn exact_parameters_are_numeric_and_prebound() {
+              old_slot = '''            if node.operation.starts_with("VARIABLE:") {
+                          let slot = InputSlot(slots.len());
+                          slots.insert(node_id, slot);
+                      }
           '''
-          regression = '''    #[test]
+              new_slot = '''            if node.operation.starts_with("VARIABLE:") {
+                          let operation = node.operation.as_str();
+                          let slot = if let Some(slot) = slots_by_operation.get(operation) {
+                              *slot
+                          } else {
+                              let slot = InputSlot(slots_by_operation.len());
+                              slots_by_operation.insert(operation, slot);
+                              slot
+                          };
+                          slots.insert(node_id, slot);
+                      }
+          '''
+              if old_slot not in section:
+                  raise SystemExit('InputLayout slot allocation anchor missing')
+              section = section.replace(old_slot, new_slot, 1)
+
+          if '.map(|slot| slot.0 + 1)' not in section:
+              old_len = '''    pub fn len(&self) -> usize {
+                      self.slots.len()
+                  }
+          '''
+              new_len = '''    pub fn len(&self) -> usize {
+                      self.slots
+                          .values()
+                          .map(|slot| slot.0 + 1)
+                          .max()
+                          .unwrap_or(0)
+                  }
+          '''
+              if old_len not in section:
+                  raise SystemExit('InputLayout len anchor missing')
+              section = section.replace(old_len, new_len, 1)
+
+          plan_text = plan_text[:section_start] + section + plan_text[section_end:]
+          if 'duplicate_external_variable_reads_share_one_numeric_input_slot' not in plan_text:
+              test_anchor = '    #[test]\n    fn exact_parameters_are_numeric_and_prebound() {\n'
+              regression = '''    #[test]
               fn duplicate_external_variable_reads_share_one_numeric_input_slot() {
                   let plan = ComputePlan::compile([
                       ComputeNode::new(
@@ -177,7 +166,6 @@ jobs:
               }
 
           '''
-          if 'duplicate_external_variable_reads_share_one_numeric_input_slot' not in plan_text:
               if test_anchor not in plan_text:
                   raise SystemExit('InputLayout regression-test anchor missing')
               plan_text = plan_text.replace(test_anchor, regression + test_anchor, 1)
