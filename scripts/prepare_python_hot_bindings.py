@@ -32,6 +32,11 @@ def run(*args: str) -> None:
 
 
 def main() -> int:
+    # CFO and Twiggs Money Flow are public Python APIs backed by core kernels,
+    # but they are intentionally outside the 78-entry C-ABI registry. Keep
+    # their wrappers in lib.rs before regenerating the registry-owned file.
+    run(str(ROOT / "scripts" / "repair_python_new_indicator_bindings.py"))
+
     # Build an ephemeral Python-only registry overlay. The helper restores the
     # canonical docs registry before it exits and teaches sync_bindings to read
     # the overlay for this build workspace.
