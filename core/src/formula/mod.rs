@@ -42,6 +42,7 @@ pub mod sandbox;
 pub mod simd;
 pub mod templates;
 pub mod types;
+pub mod unified_dispatch;
 
 pub use ast::*;
 pub use bytecode::{compile_to_bytecode, Bytecode, BytecodeVM, ExecResult, OpCode};
@@ -69,6 +70,7 @@ pub use simd::SimdOps;
 pub use templates::{FormulaTemplate, FormulaTemplates, TemplateCategory};
 pub use types::FormulaValue;
 pub use types::*;
+pub use unified_dispatch::{unified_formula_executor, FormulaKernelDispatcher};
 
 /// Formula language dialect selector.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
