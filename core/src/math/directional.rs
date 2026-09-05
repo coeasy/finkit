@@ -1,11 +1,12 @@
-//! Single-output directional indicator kernels.
+//! Single-output directional indicator kernels backed by the shared OHLC family state.
 //!
-//! The legacy `compute_di_only` path computes and allocates both +DI and -DI
-//! even when the caller requests only one side.  Installed-wheel calls are
-//! independent, so maintain only the requested Wilder DM state plus the shared
-//! true-range state and write one output buffer exactly once.
+//! Architecture v3.1 requires +DI/-DI/DX/ADX/ATR/NATR to consume one canonical
+//! Wilder transition model instead of maintaining near-duplicate state machines.
+//! Standalone +DI/-DI keep their public API while projecting only the requested
+//! output from [`OhlcFamilyState`].
 
 use crate::error::{Result, TaError};
+use crate::math::ohlc_family_state::OhlcFamilyState;
 use crate::utils::validate_input;
 use ndarray::Array1;
 
@@ -35,71 +36,19 @@ fn directional_di(
             constraint: "greater than 0".to_string(),
         });
     }
-    // Keep the established public contract used by compute_di_only.
+    // Preserve the established public minimum-input contract.
     validate_input(high.len(), period * 2)?;
 
-    let len = high.len();
-    let p = period as f64;
-    let mut smooth_dm = 0.0;
-    let mut smooth_tr = 0.0;
-
-    // TA-Lib warm-up: accumulate period-1 DM/TR values, then process bar
-    // `period` with the Wilder recurrence before emitting the first DI value.
-    unsafe {
-        let high_ptr = high.as_ptr();
-        let low_ptr = low.as_ptr();
-        let close_ptr = close.as_ptr();
-
-        for i in 1..period {
-            let current_high = *high_ptr.add(i);
-            let previous_high = *high_ptr.add(i - 1);
-            let current_low = *low_ptr.add(i);
-            let previous_low = *low_ptr.add(i - 1);
-            let previous_close = *close_ptr.add(i - 1);
-
-            let up_move = current_high - previous_high;
-            let down_move = previous_low - current_low;
-            smooth_tr += crate::utils::true_range(current_high, current_low, previous_close);
-            smooth_dm += match direction {
-                Direction::Plus if up_move > down_move && up_move > 0.0 => up_move,
-                Direction::Minus if down_move > up_move && down_move > 0.0 => down_move,
-                _ => 0.0,
-            };
-        }
-
-        let mut output = Vec::with_capacity(len);
-        output.resize(period, f64::NAN);
-
-        for i in period..len {
-            let current_high = *high_ptr.add(i);
-            let previous_high = *high_ptr.add(i - 1);
-            let current_low = *low_ptr.add(i);
-            let previous_low = *low_ptr.add(i - 1);
-            let previous_close = *close_ptr.add(i - 1);
-
-            let up_move = current_high - previous_high;
-            let down_move = previous_low - current_low;
-            let tr = crate::utils::true_range(current_high, current_low, previous_close);
-            let dm = match direction {
-                Direction::Plus if up_move > down_move && up_move > 0.0 => up_move,
-                Direction::Minus if down_move > up_move && down_move > 0.0 => down_move,
-                _ => 0.0,
-            };
-
-            // Keep division form and update order bit-compatible with the
-            // established TA-Lib-compatible implementation.
-            smooth_dm = smooth_dm - smooth_dm / p + dm;
-            smooth_tr = smooth_tr - smooth_tr / p + tr;
-            output.push(if smooth_tr.abs() > 1e-15 {
-                smooth_dm / smooth_tr * 100.0
-            } else {
-                0.0
-            });
-        }
-
-        debug_assert_eq!(output.len(), len);
-        Ok(Array1::from_vec(output))
+    let mut state = OhlcFamilyState::new(period).expect("period validated above");
+    let mut output = Vec::with_capacity(high.len());
+    for index in 0..high.len() {
+        let sample = state.update(high[index], low[index], close[index]);
+        output.push(match direction {
+            Direction::Plus => sample.plus_di,
+            Direction::Minus => sample.minus_di,
+        });
     }
+    Ok(Array1::from_vec(output))
 }
 
 /// Plus Directional Indicator (+DI).
@@ -127,5 +76,37 @@ mod tests {
         assert!(minus.iter().take(14).all(|value| value.is_nan()));
         assert!(plus[14].is_finite());
         assert!(minus[14].is_finite());
+    }
+
+    #[test]
+    fn standalone_projections_use_one_family_transition() {
+        let high: Vec<f64> = (0..64)
+            .map(|i| 100.0 + i as f64 * 0.17 + ((i % 5) as f64 - 2.0) * 0.13)
+            .collect();
+        let low: Vec<f64> = high
+            .iter()
+            .enumerate()
+            .map(|(i, value)| value - 1.4 - (i % 3) as f64 * 0.03)
+            .collect();
+        let close: Vec<f64> = high
+            .iter()
+            .zip(low.iter())
+            .map(|(h, l)| (h + l) * 0.5)
+            .collect();
+        let period = 14;
+        let plus = plus_di(&high, &low, &close, period).unwrap();
+        let minus = minus_di(&high, &low, &close, period).unwrap();
+        let mut state = OhlcFamilyState::new(period).unwrap();
+
+        for index in 0..high.len() {
+            let sample = state.update(high[index], low[index], close[index]);
+            if sample.plus_di.is_nan() {
+                assert!(plus[index].is_nan());
+                assert!(minus[index].is_nan());
+            } else {
+                assert_eq!(plus[index], sample.plus_di);
+                assert_eq!(minus[index], sample.minus_di);
+            }
+        }
     }
 }
