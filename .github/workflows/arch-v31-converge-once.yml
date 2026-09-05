@@ -45,6 +45,7 @@ jobs:
           python scripts/apply_architecture_v31_convergence.py
           python - <<'PY'
           from pathlib import Path
+
           path = Path('core/src/indicators/momentum.rs')
           text = path.read_text(encoding='utf-8')
           bad = '    macd_line[macd_start..signal_start].fill(f64::NAN);\n'
@@ -75,6 +76,112 @@ jobs:
           elif 'assert!(result.macd[32].is_nan());' not in text:
               raise SystemExit('MACD core test contract anchor missing')
           path.write_text(text, encoding='utf-8')
+
+          plan_path = Path('core/src/execution_plan.rs')
+          plan_text = plan_path.read_text(encoding='utf-8')
+          old_compile = '''    fn compile(plan: &ComputePlan) -> Self {
+              let mut slots = BTreeMap::new();
+              for &node_id in plan.execution_order() {
+                  let node = plan
+                      .node(node_id)
+                      .expect("execution order only contains compiled nodes");
+                  // Variable-name parsing is deliberately compile-time only. The hot
+                  // plan retains only the numeric node->input-slot relation.
+                  if node.operation.starts_with("VARIABLE:") {
+                      let slot = InputSlot(slots.len());
+                      slots.insert(node_id, slot);
+                  }
+              }
+              Self { slots }
+          }
+          '''
+          new_compile = '''    fn compile(plan: &ComputePlan) -> Self {
+              let mut slots = BTreeMap::new();
+              let mut slots_by_operation = BTreeMap::<&str, InputSlot>::new();
+              for &node_id in plan.execution_order() {
+                  let node = plan
+                      .node(node_id)
+                      .expect("execution order only contains compiled nodes");
+                  // Variable-name parsing and interning are deliberately compile-time
+                  // only. Repeated reads such as CLOSE * CLOSE share one numeric input
+                  // slot while hot execution retains no variable-name lookup.
+                  if node.operation.starts_with("VARIABLE:") {
+                      let operation = node.operation.as_str();
+                      let slot = if let Some(slot) = slots_by_operation.get(operation) {
+                          *slot
+                      } else {
+                          let slot = InputSlot(slots_by_operation.len());
+                          slots_by_operation.insert(operation, slot);
+                          slot
+                      };
+                      slots.insert(node_id, slot);
+                  }
+              }
+              Self { slots }
+          }
+          '''
+          if old_compile in plan_text:
+              plan_text = plan_text.replace(old_compile, new_compile, 1)
+          elif 'slots_by_operation' not in plan_text:
+              raise SystemExit('InputLayout compile anchor missing')
+
+          old_len = '''    pub fn len(&self) -> usize {
+              self.slots.len()
+          }
+          '''
+          new_len = '''    pub fn len(&self) -> usize {
+              self.slots
+                  .values()
+                  .map(|slot| slot.0 + 1)
+                  .max()
+                  .unwrap_or(0)
+          }
+          '''
+          if old_len in plan_text:
+              plan_text = plan_text.replace(old_len, new_len, 1)
+          elif '.map(|slot| slot.0 + 1)' not in plan_text:
+              raise SystemExit('InputLayout len anchor missing')
+
+          test_anchor = '''    #[test]
+              fn exact_parameters_are_numeric_and_prebound() {
+          '''
+          regression = '''    #[test]
+              fn duplicate_external_variable_reads_share_one_numeric_input_slot() {
+                  let plan = ComputePlan::compile([
+                      ComputeNode::new(
+                          ComputeNodeId(0),
+                          "VARIABLE:CLOSE",
+                          vec![],
+                          capabilities(false),
+                      ),
+                      ComputeNode::new(
+                          ComputeNodeId(1),
+                          "VARIABLE:CLOSE",
+                          vec![],
+                          capabilities(false),
+                      ),
+                      ComputeNode::new(
+                          ComputeNodeId(2),
+                          "BINARY:Add",
+                          vec![ComputeNodeId(0), ComputeNodeId(1)],
+                          capabilities(false),
+                      ),
+                  ])
+                  .unwrap();
+
+                  let hot = HotExecutionPlan::compile(&plan, [ComputeNodeId(2)]).unwrap();
+                  assert_eq!(hot.input_layout().slot(ComputeNodeId(0)), Some(InputSlot(0)));
+                  assert_eq!(hot.input_layout().slot(ComputeNodeId(1)), Some(InputSlot(0)));
+                  assert_eq!(hot.input_layout().len(), 1);
+                  assert_eq!(hot.metadata().inputs, 1);
+              }
+
+          '''
+          if 'duplicate_external_variable_reads_share_one_numeric_input_slot' not in plan_text:
+              if test_anchor not in plan_text:
+                  raise SystemExit('InputLayout regression-test anchor missing')
+              plan_text = plan_text.replace(test_anchor, regression + test_anchor, 1)
+          plan_path.write_text(plan_text, encoding='utf-8')
           PY
           python scripts/sync_bindings.py --lang python --generate
           python scripts/optimize_python_bindings.py ffi/python-binding/src/lib.rs
@@ -106,7 +213,25 @@ jobs:
         run: cargo fmt --all
 
       - name: Core correctness
-        run: cargo test -p finkit --lib --locked
+        id: core_correctness
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p finkit --lib --locked 2>&1 | tee core-test.log
+
+      - name: Upload core correctness failure log
+        if: steps.core_correctness.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: architecture-v31-core-test-log
+          path: core-test.log
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Enforce core correctness
+        if: steps.core_correctness.outcome == 'failure'
+        run: exit 1
 
       - name: Compile Python ABI3 binding
         run: cargo check -p finkit-python --features abi3 --locked
