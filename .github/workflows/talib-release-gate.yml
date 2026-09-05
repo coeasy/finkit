@@ -10,6 +10,10 @@ on:
     paths:
       - 'core/**'
       - 'ffi/python-binding/**'
+      - 'scripts/prepare_python_hot_bindings.py'
+      - 'scripts/prepare_python_registry_ssot.py'
+      - 'scripts/optimize_python_bindings.py'
+      - 'scripts/sync_bindings.py'
       - 'scripts/benchmark_talib_release_gate.py'
       - 'scripts/benchmark_talib_arch_v3_gate.py'
       - '.github/workflows/talib-release-gate.yml'
@@ -32,6 +36,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install 'maturin>=1.7,<2' 'numpy==2.3.3' 'TA-Lib==0.7.1' pytest
+      - name: Prepare canonical NumPy-direct Python bindings
+        run: |
+          python scripts/prepare_python_hot_bindings.py
+          git diff --check
       - name: Build current Finkit wheel
         run: |
           mkdir -p dist/wheel
