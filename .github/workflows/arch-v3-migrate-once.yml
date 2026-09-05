@@ -28,6 +28,8 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+      - name: Prepare registry FFI SSOT
+        run: python scripts/prepare_python_registry_ssot.py
       - name: Apply unified-kernel migration
         run: python scripts/apply_architecture_v3_unified_kernel.py
       - name: Regenerate Python binding from SSOT
