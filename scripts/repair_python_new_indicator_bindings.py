@@ -2,16 +2,16 @@
 """Repair the two registered TASK-166~180 Python indicators missing wrappers.
 
 The Rust core implementations and module registrations already exist, but the
-Python wrappers were never added. Architecture v3 SSOT regeneration correctly
-exposes the latent compile error. Keep the repair ndarray-direct so these APIs
-never introduce the historical Vec -> Python list -> ndarray path.
+historical generated Python file omitted these wrappers. Patch that generated
+source *before* SSOT preparation so prepare_python_registry_ssot.py captures the
+bodies into docs/indicator_registry.json. The following sync generation then
+re-emits them from the registry, making the repair persistent at the SSOT layer.
 """
 
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-LIB = ROOT / "ffi" / "python-binding" / "src" / "lib.rs"
-MARKER = "// ============================================================================\n// Formula System\n// ============================================================================"
+GENERATED = ROOT / "ffi" / "python-binding" / "src" / "generated.rs"
 
 WRAPPERS = r'''
 /// Chande Forecast Oscillator (CFO).
@@ -68,7 +68,7 @@ fn twiggs_money_flow(
 
 
 def main() -> int:
-    text = LIB.read_text(encoding="utf-8")
+    text = GENERATED.read_text(encoding="utf-8")
     missing = []
     if "fn chande_forecast_oscillator(" not in text:
         missing.append("chande_forecast_oscillator")
@@ -79,11 +79,8 @@ def main() -> int:
         return 0
     if set(missing) != {"chande_forecast_oscillator", "twiggs_money_flow"}:
         raise RuntimeError(f"partial CFO/TMF binding state requires review: {missing}")
-    if MARKER not in text:
-        raise RuntimeError("Formula System marker not found")
-    text = text.replace(MARKER, WRAPPERS + MARKER, 1)
-    LIB.write_text(text, encoding="utf-8")
-    print("restored ndarray-direct CFO/TMF Python wrappers")
+    GENERATED.write_text(text.rstrip() + "\n\n" + WRAPPERS, encoding="utf-8")
+    print("restored ndarray-direct CFO/TMF generated Python wrappers")
     return 0
 
 
