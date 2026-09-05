@@ -182,7 +182,9 @@ mod tests {
         let high = [10.0, 12.0, 11.0, 13.0, 13.0, 12.5, 14.0, 13.5, 15.0];
         let low = [9.0, 10.0, 9.5, 11.0, 11.0, 10.5, 12.0, 11.5, 13.0];
         let close = [9.5, 11.0, 10.0, 12.0, 12.0, 11.0, 13.0, 12.0, 14.0];
-        let volume = [100.0, 120.0, 130.0, 125.0, 140.0, 135.0, 150.0, 145.0, 160.0];
+        let volume = [
+            100.0, 120.0, 130.0, 125.0, 140.0, 135.0, 150.0, 145.0, 160.0,
+        ];
         let period = 3;
         let expected = legacy_reference(&high, &low, &close, &volume, period);
         let actual = mfi(&high, &low, &close, &volume, period).unwrap();

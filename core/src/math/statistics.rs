@@ -398,8 +398,11 @@ pub fn kurtosis(data: &[f64]) -> Result<f64> {
 
 /// Visit fused rolling maximum/minimum values without materializing extrema arrays.
 ///
-/// Architecture v3.1 consumers use this kernel to share one O(n) rolling-window
-/// traversal across MIDPOINT, MIDPRICE, WILLR and other extrema-family consumers.
+/// Architecture v3.1 consumers share this kernel across MIDPOINT, MIDPRICE,
+/// WILLR and other extrema-family consumers. For the small windows used by the
+/// TA-Lib-compatible APIs, retaining the current extrema indices and rescanning
+/// only when an extrema leaves the window avoids the branch and container cost
+/// of maintaining two `VecDeque`s on every bar.
 #[inline]
 pub(crate) fn rolling_minmax_visit(
     high: &[f64],
@@ -410,39 +413,72 @@ pub(crate) fn rolling_minmax_visit(
     debug_assert_eq!(high.len(), low.len());
     debug_assert!(window > 0);
 
-    let mut max_deque = std::collections::VecDeque::with_capacity(window + 1);
-    let mut min_deque = std::collections::VecDeque::with_capacity(window + 1);
+    if high.is_empty() || high.len() != low.len() || window == 0 {
+        return;
+    }
+
+    let high_ptr = high.as_ptr();
+    let low_ptr = low.as_ptr();
+    let mut highest_idx = 0usize;
+    let mut lowest_idx = 0usize;
+    let mut highest = f64::NEG_INFINITY;
+    let mut lowest = f64::INFINITY;
 
     for i in 0..high.len() {
-        while let Some(&back) = max_deque.back() {
-            if high[back] <= high[i] {
-                max_deque.pop_back();
+        unsafe {
+            let new_high = *high_ptr.add(i);
+            let new_low = *low_ptr.add(i);
+
+            if i < window {
+                if new_high >= highest {
+                    highest = new_high;
+                    highest_idx = i;
+                }
+                if new_low <= lowest {
+                    lowest = new_low;
+                    lowest_idx = i;
+                }
             } else {
-                break;
+                let window_start = i + 1 - window;
+
+                if highest_idx < window_start {
+                    highest = *high_ptr.add(window_start);
+                    highest_idx = window_start;
+                    let mut scan = window_start + 1;
+                    while scan <= i {
+                        let candidate = *high_ptr.add(scan);
+                        if candidate >= highest {
+                            highest = candidate;
+                            highest_idx = scan;
+                        }
+                        scan += 1;
+                    }
+                } else if new_high >= highest {
+                    highest = new_high;
+                    highest_idx = i;
+                }
+
+                if lowest_idx < window_start {
+                    lowest = *low_ptr.add(window_start);
+                    lowest_idx = window_start;
+                    let mut scan = window_start + 1;
+                    while scan <= i {
+                        let candidate = *low_ptr.add(scan);
+                        if candidate <= lowest {
+                            lowest = candidate;
+                            lowest_idx = scan;
+                        }
+                        scan += 1;
+                    }
+                } else if new_low <= lowest {
+                    lowest = new_low;
+                    lowest_idx = i;
+                }
             }
-        }
-        max_deque.push_back(i);
 
-        while let Some(&back) = min_deque.back() {
-            if low[back] >= low[i] {
-                min_deque.pop_back();
-            } else {
-                break;
+            if i + 1 >= window {
+                emit(i, highest, lowest);
             }
-        }
-        min_deque.push_back(i);
-
-        while max_deque.front().is_some_and(|front| *front + window <= i) {
-            max_deque.pop_front();
-        }
-        while min_deque.front().is_some_and(|front| *front + window <= i) {
-            min_deque.pop_front();
-        }
-
-        if i + 1 >= window {
-            let highest = high[*max_deque.front().expect("rolling max is non-empty")];
-            let lowest = low[*min_deque.front().expect("rolling min is non-empty")];
-            emit(i, highest, lowest);
         }
     }
 }
@@ -761,6 +797,47 @@ mod tests {
         let kurt = kurtosis(&data).unwrap();
         // For uniform distribution, excess kurtosis should be negative
         assert!(kurt < 0.0);
+    }
+
+    #[test]
+    fn test_rolling_minmax_visit_matches_naive_windows() {
+        let high = [3.0, 5.0, 5.0, 2.0, 7.0, 6.0, 7.0, 1.0, 4.0];
+        let low = [1.0, 2.0, 2.0, 0.0, 3.0, -1.0, 1.0, -1.0, 2.0];
+        let window = 3;
+        let mut visited = Vec::new();
+
+        rolling_minmax_visit(&high, &low, window, |index, highest, lowest| {
+            visited.push((index, highest, lowest));
+        });
+
+        assert_eq!(visited.len(), high.len() + 1 - window);
+        for (offset, (index, highest, lowest)) in visited.into_iter().enumerate() {
+            let expected_index = offset + window - 1;
+            let start = expected_index + 1 - window;
+            let expected_high = high[start..=expected_index]
+                .iter()
+                .copied()
+                .fold(f64::NEG_INFINITY, f64::max);
+            let expected_low = low[start..=expected_index]
+                .iter()
+                .copied()
+                .fold(f64::INFINITY, f64::min);
+
+            assert_eq!(index, expected_index);
+            assert_eq!(highest, expected_high);
+            assert_eq!(lowest, expected_low);
+        }
+    }
+
+    #[test]
+    fn test_rolling_minmax_visit_window_one() {
+        let high = [2.0, 4.0, 3.0];
+        let low = [1.0, 2.0, 0.5];
+        let mut visited = Vec::new();
+        rolling_minmax_visit(&high, &low, 1, |index, highest, lowest| {
+            visited.push((index, highest, lowest));
+        });
+        assert_eq!(visited, vec![(0, 2.0, 1.0), (1, 4.0, 2.0), (2, 3.0, 0.5)]);
     }
 
     #[test]
