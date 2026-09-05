@@ -6,11 +6,89 @@
 //! the evaluation under the GIL while borrowing their memory.
 
 use ::finkit::formula::{CompiledFormula, FormulaContext, FormulaEngine};
+use ::finkit::math::rolling_stats;
 use ndarray::Array1;
 use numpy::{PyArray1, PyReadonlyArray1};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use std::sync::Arc;
+
+#[derive(Debug, Clone, Copy)]
+enum CanonicalFormula {
+    Atr { period: usize },
+    Std { period: usize },
+    Boll { period: usize, nbdev: f64 },
+}
+
+fn normalize_formula(source: &str) -> String {
+    source
+        .chars()
+        .filter(|ch| !ch.is_whitespace())
+        .flat_map(char::to_uppercase)
+        .collect()
+}
+
+fn is_high(name: &str) -> bool {
+    matches!(name, "H" | "HIGH")
+}
+
+fn is_low(name: &str) -> bool {
+    matches!(name, "L" | "LOW")
+}
+
+fn is_close(name: &str) -> bool {
+    matches!(name, "C" | "CLOSE")
+}
+
+fn canonical_formula(source: &str) -> Option<CanonicalFormula> {
+    let normalized = normalize_formula(source);
+    let open = normalized.find('(')?;
+    let name = &normalized[..open];
+    let body = normalized.get(open + 1..normalized.len().checked_sub(1)?)?;
+    if !normalized.ends_with(')') {
+        return None;
+    }
+    let args: Vec<&str> = body.split(',').collect();
+
+    match name {
+        "ATR" if args.len() == 4 && is_high(args[0]) && is_low(args[1]) && is_close(args[2]) => {
+            let period = args[3].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Atr { period })
+        }
+        "STD" if args.len() == 2 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Std { period })
+        }
+        "BOLL" if args.len() == 3 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            let nbdev = args[2].parse::<f64>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Boll { period, nbdev })
+        }
+        _ => None,
+    }
+}
+
+fn eval_canonical_formula(
+    formula: CanonicalFormula,
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+) -> PyResult<Array1<f64>> {
+    match formula {
+        CanonicalFormula::Atr { period } => ::finkit::indicators::atr(high, low, close, period)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Std { period } => rolling_stats::stddev(close, period, 1.0)
+            .map(Array1::from_vec)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Boll { period, nbdev } => {
+            rolling_stats::bbands_sma(close, period, nbdev, nbdev)
+                .map(|(upper, _, _)| Array1::from_vec(upper))
+                .map_err(|error| {
+                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())
+                })
+        }
+    }
+}
 
 fn read_array<'py>(name: &str, array: PyReadonlyArray1<'py, f64>) -> PyResult<Vec<f64>> {
     array
@@ -115,6 +193,7 @@ pub struct PyCompiledFormula {
     engine: Option<FormulaEngine>,
     compiled: Arc<CompiledFormula>,
     stream_context: Option<FormulaContext>,
+    canonical: Option<CanonicalFormula>,
 }
 
 #[pymethods]
@@ -125,11 +204,13 @@ impl PyCompiledFormula {
         let compiled = engine
             .compile(&source)
             .map_err(|error| PyErr::new::<pyo3::exceptions::PySyntaxError, _>(error.to_string()))?;
+        let canonical = canonical_formula(&source);
         Ok(Self {
             source,
             engine: Some(engine),
             compiled: Arc::new(compiled),
             stream_context: None,
+            canonical,
         })
     }
 
@@ -162,6 +243,13 @@ impl PyCompiledFormula {
             .transpose()?;
         validate_lengths(&open, &high, &low, &close, &volume, amount.as_deref())?;
 
+        if let Some(formula) = self.canonical {
+            let result = eval_canonical_formula(formula, &high, &low, &close)?;
+            let context = make_context(open, high, low, close, volume, amount);
+            self.stream_context = Some(context);
+            return result_dict(py, self.stream_context.as_ref().unwrap(), result);
+        }
+
         let engine = self.engine.take().ok_or_else(|| {
             PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
                 "compiled formula is already being evaluated",
@@ -183,10 +271,9 @@ impl PyCompiledFormula {
 
     /// Evaluate without copying the contiguous NumPy OHLCV inputs.
     ///
-    /// The complete synchronous evaluation borrows the contiguous NumPy OHLCV
-    /// buffers. Direct MA/EMA/RSI/BOLLMID formulas additionally avoid input
-    /// argument materialisation; complex formulas may allocate intermediates
-    /// required by the existing array-based built-in ABI.
+    /// Simple ATR/STD/BOLL formulas reuse the exact same canonical kernels as
+    /// the public indicator API. Other formulas continue through the compiled
+    /// zero-copy engine.
     #[pyo3(signature = (open, high, low, close, volume, amount=None))]
     #[allow(clippy::too_many_arguments)]
     fn eval_zero_copy<'py>(
@@ -235,6 +322,13 @@ impl PyCompiledFormula {
             })
             .transpose()?;
         validate_lengths(open, high, low, close, volume, amount)?;
+
+        if let Some(formula) = self.canonical {
+            let result = eval_canonical_formula(formula, high, low, close)?;
+            let output = PyDict::new(py);
+            output.set_item("__result__", PyArray1::from_vec(py, result.into_raw_vec()))?;
+            return Ok(output);
+        }
 
         let engine = self.engine.take().ok_or_else(|| {
             PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(

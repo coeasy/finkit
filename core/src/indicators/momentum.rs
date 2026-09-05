@@ -2,6 +2,7 @@ use crate::error::{Result, TaError};
 use crate::indicators::overlap::MaType;
 use crate::math::moving_avg::{ema, simd_horizontal_sum};
 use crate::math::simd_ops;
+use crate::math::statistics::rolling_minmax_visit;
 use crate::utils::{init_output, smoothing_factor, validate_input};
 use ndarray::Array1;
 use std::collections::VecDeque;
@@ -628,6 +629,12 @@ fn macd_inner(
         for i in signal_start..len {
             hist[i] = macd_line[i] - signal[i];
         }
+    }
+
+    // Public TA-Lib contract: MACD, signal and histogram share one lookback.
+    // Earlier MACD values are internal signal-seed intermediates, not outputs.
+    for index in macd_start..signal_start {
+        macd_line[index] = f64::NAN;
     }
 
     Ok(MacdResult {
@@ -1302,98 +1309,16 @@ pub fn willr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<
     }
     validate_input(high.len(), period)?;
 
-    let len = close.len();
-    let mut out = vec![f64::NAN; len];
-    let high_ptr = high.as_ptr();
-    let low_ptr = low.as_ptr();
-    let close_ptr = close.as_ptr();
-    let out_ptr = out.as_mut_ptr();
-    let start = period - 1;
-
-    // Optimized sliding window: track max/min indices directly
-    // For all periods, use the same efficient algorithm with direct index tracking
-    unsafe {
-        // Initialize first window [0..period-1]
-        let mut highest_idx = 0usize;
-        let mut lowest_idx = 0usize;
-        let mut highest = *high_ptr.add(0);
-        let mut lowest = *low_ptr.add(0);
-
-        for k in 1..period {
-            let h = *high_ptr.add(k);
-            let l = *low_ptr.add(k);
-            if h >= highest {
-                highest = h;
-                highest_idx = k;
-            }
-            if l <= lowest {
-                lowest = l;
-                lowest_idx = k;
-            }
-        }
-
-        // First output at index period-1
-        let denom = highest - lowest;
-        *out_ptr.add(start) = if denom > 1e-15 {
-            (highest - *close_ptr.add(start)) / denom * -100.0
+    let mut output = init_output(close.len());
+    rolling_minmax_visit(high, low, period, |i, highest, lowest| {
+        let range = highest - lowest;
+        output[i] = if range > 1e-15 {
+            (highest - close[i]) / range * -100.0
         } else {
             0.0
         };
-
-        // Slide window: [i-period+1..=i]
-        for i in period..len {
-            let ws = i + 1 - period; // window start
-            let new_h = *high_ptr.add(i);
-            let new_l = *low_ptr.add(i);
-
-            // Update highest
-            if highest_idx < ws {
-                // Max fell out of window, rescan
-                highest = *high_ptr.add(ws);
-                highest_idx = ws;
-                let mut k = ws + 1;
-                while k <= i {
-                    let h = *high_ptr.add(k);
-                    if h >= highest {
-                        highest = h;
-                        highest_idx = k;
-                    }
-                    k += 1;
-                }
-            } else if new_h >= highest {
-                highest = new_h;
-                highest_idx = i;
-            }
-
-            // Update lowest
-            if lowest_idx < ws {
-                // Min fell out of window, rescan
-                lowest = *low_ptr.add(ws);
-                lowest_idx = ws;
-                let mut k = ws + 1;
-                while k <= i {
-                    let l = *low_ptr.add(k);
-                    if l <= lowest {
-                        lowest = l;
-                        lowest_idx = k;
-                    }
-                    k += 1;
-                }
-            } else if new_l <= lowest {
-                lowest = new_l;
-                lowest_idx = i;
-            }
-
-            let denom = highest - lowest;
-            *out_ptr.add(i) = if denom > 1e-15 {
-                (highest - *close_ptr.add(i)) / denom * -100.0
-            } else {
-                0.0
-            };
-        }
-    }
-
-    Ok(Array1::from_vec(out))
+    });
+    Ok(output)
 }
 
 /// Elder-Ray Indicator Result
@@ -2867,6 +2792,9 @@ pub fn macd_into(
         histogram[i] = f64::NAN;
     }
 
+    // Same TA-Lib public lookback as macd(): pre-signal values are seed state.
+    macd_line[macd_start..signal_start].fill(f64::NAN);
+
     Ok(())
 }
 
@@ -3117,7 +3045,14 @@ mod tests {
     fn test_macd() {
         let input: Vec<f64> = (1..=35).map(|x| x as f64).collect();
         let result = macd(&input, 12, 26, 9).unwrap();
-        assert!(!result.macd[25].is_nan());
+        // TA-Lib lookback is (slow - 1) + (signal - 1) = 33.
+        // All public MACD outputs share that warm-up boundary.
+        assert!(result.macd[32].is_nan());
+        assert!(result.signal[32].is_nan());
+        assert!(result.hist[32].is_nan());
+        assert!(!result.macd[33].is_nan());
+        assert!(!result.signal[33].is_nan());
+        assert!(!result.hist[33].is_nan());
     }
 
     #[test]

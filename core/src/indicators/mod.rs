@@ -149,6 +149,17 @@ pub use math_operators::*;
 pub use math_transform::*;
 #[cfg(feature = "indicators-momentum")]
 pub use momentum::*;
+// Under std builds, expose compatibility/performance-sensitive canonical
+// momentum kernels at the root indicators namespace without changing public
+// signatures used by Rust, Python, Node, or generated bindings.
+#[cfg(all(feature = "indicators-volatility", feature = "std"))]
+pub use crate::math::trange::trange;
+#[cfg(all(feature = "indicators-momentum", feature = "std"))]
+pub use crate::math::{
+    cci::cci,
+    directional::{minus_di, plus_di},
+    mfi::mfi,
+};
 #[cfg(feature = "indicators-momentum")]
 pub use momentum_ext::*;
 #[cfg(feature = "indicators-overlap")]
@@ -183,6 +194,11 @@ pub use volatility::*;
 pub use volatility_ext::*;
 #[cfg(feature = "indicators-volume")]
 pub use volume::*;
+// Serial cumulative volume indicators use the fused canonical kernels under
+// std builds. These explicit re-exports replace the legacy scratch-buffer SIMD
+// implementations without changing public signatures.
+#[cfg(all(feature = "indicators-volume", feature = "std"))]
+pub use crate::math::volume_kernels::{ad, adosc, obv};
 #[cfg(feature = "indicators-volume")]
 pub use volume_ext::*;
 #[cfg(feature = "indicators-volume")]
