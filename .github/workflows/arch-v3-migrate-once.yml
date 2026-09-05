@@ -38,6 +38,8 @@ jobs:
         run: python scripts/sync_bindings.py --lang python --generate
       - name: Migrate legacy numeric pyfunctions
         run: python scripts/optimize_python_bindings.py ffi/python-binding/src/lib.rs
+      - name: Apply Formula v3 canonical fast paths
+        run: python scripts/apply_formula_v3_fast_path.py
       - name: Validate NumPy-direct SSOT generation
         run: |
           python scripts/sync_bindings.py --lang python --check
@@ -59,5 +61,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -u
-          git commit -m 'refactor(v3): use numeric Python kernel dispatch and SSOT ndarray output'
+          git commit -m 'refactor(v3): use numeric kernels and ndarray-direct bindings'
           git push origin HEAD:perf/outperform-talib-v3-20260904
