@@ -206,14 +206,23 @@ impl BufferArena {
     }
 
     fn pop_cached(&mut self, len: usize) -> Option<Vec<f64>> {
+        // Prefer an exact logical-length bucket, otherwise reuse the smallest
+        // larger allocation. execute_range/eval_last frequently shrink the
+        // logical extent while the physical allocation is still reusable.
+        let key = if self.free.contains_key(&len) {
+            len
+        } else {
+            self.free.range(len..).next().map(|(&key, _)| key)?
+        };
+
         let mut remove_bucket = false;
-        let cached = self.free.get_mut(&len).and_then(|bucket| {
+        let cached = self.free.get_mut(&key).and_then(|bucket| {
             let buffer = bucket.pop();
             remove_bucket = bucket.is_empty();
             buffer
         });
         if remove_bucket {
-            self.free.remove(&len);
+            self.free.remove(&key);
         }
         if let Some(buffer) = &cached {
             self.cached_bytes = self
@@ -253,7 +262,8 @@ impl BufferArena {
     /// initialized `f64` storage; the unavoidable first allocation is zero-filled.
     /// Callers must only use this API for kernels with a proven full-write contract.
     pub fn take_overwrite(&mut self, len: usize) -> Vec<f64> {
-        if let Some(buffer) = self.pop_cached(len) {
+        if let Some(mut buffer) = self.pop_cached(len) {
+            buffer.truncate(len);
             return buffer;
         }
         self.cache_misses = self.cache_misses.saturating_add(1);

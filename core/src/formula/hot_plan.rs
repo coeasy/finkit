@@ -256,11 +256,21 @@ mod tests {
 
         assert_eq!(arena.len(), 2);
         assert_eq!(
-            arena.get(ParameterSlot(0)).unwrap().as_f64().unwrap().to_bits(),
+            arena
+                .get(ParameterSlot(0))
+                .unwrap()
+                .as_f64()
+                .unwrap()
+                .to_bits(),
             0.125f64.to_bits()
         );
         assert_eq!(
-            arena.get(ParameterSlot(1)).unwrap().as_f64().unwrap().to_bits(),
+            arena
+                .get(ParameterSlot(1))
+                .unwrap()
+                .as_f64()
+                .unwrap()
+                .to_bits(),
             10.0f64.to_bits()
         );
 

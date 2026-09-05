@@ -396,6 +396,57 @@ pub fn kurtosis(data: &[f64]) -> Result<f64> {
     Ok(k - correction)
 }
 
+/// Visit fused rolling maximum/minimum values without materializing extrema arrays.
+///
+/// Architecture v3.1 consumers use this kernel to share one O(n) rolling-window
+/// traversal across MIDPOINT, MIDPRICE, WILLR and other extrema-family consumers.
+#[inline]
+pub(crate) fn rolling_minmax_visit(
+    high: &[f64],
+    low: &[f64],
+    window: usize,
+    mut emit: impl FnMut(usize, f64, f64),
+) {
+    debug_assert_eq!(high.len(), low.len());
+    debug_assert!(window > 0);
+
+    let mut max_deque = std::collections::VecDeque::with_capacity(window + 1);
+    let mut min_deque = std::collections::VecDeque::with_capacity(window + 1);
+
+    for i in 0..high.len() {
+        while let Some(&back) = max_deque.back() {
+            if high[back] <= high[i] {
+                max_deque.pop_back();
+            } else {
+                break;
+            }
+        }
+        max_deque.push_back(i);
+
+        while let Some(&back) = min_deque.back() {
+            if low[back] >= low[i] {
+                min_deque.pop_back();
+            } else {
+                break;
+            }
+        }
+        min_deque.push_back(i);
+
+        while max_deque.front().is_some_and(|front| *front + window <= i) {
+            max_deque.pop_front();
+        }
+        while min_deque.front().is_some_and(|front| *front + window <= i) {
+            min_deque.pop_front();
+        }
+
+        if i + 1 >= window {
+            let highest = high[*max_deque.front().expect("rolling max is non-empty")];
+            let lowest = low[*min_deque.front().expect("rolling min is non-empty")];
+            emit(i, highest, lowest);
+        }
+    }
+}
+
 /// Find maximum value in a rolling window
 ///
 /// # Arguments

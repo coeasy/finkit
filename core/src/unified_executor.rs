@@ -123,7 +123,10 @@ impl fmt::Display for ExecuteError {
                 "input slot {slot} has length {actual}, expected {expected}"
             ),
             Self::InvalidRange { start, end, len } => {
-                write!(f, "execution range {start}..{end} exceeds input length {len}")
+                write!(
+                    f,
+                    "execution range {start}..{end} exceeds input length {len}"
+                )
             }
             Self::MissingParameters => write!(f, "hot node referenced missing parameters"),
             Self::AliasedOutput(slot) => {
@@ -197,7 +200,10 @@ impl<D: KernelDispatcher> UnifiedExecutor<D> {
     /// Persistent state is preserved across calls; call [`Self::reset`] before
     /// beginning an independent batch series.
     pub fn execute(&mut self, inputs: &[&[f64]]) -> Result<ExecutionOutput, ExecuteError> {
-        let len = inputs.first().map(|input| input.len()).ok_or(ExecuteError::NoInputs)?;
+        let len = inputs
+            .first()
+            .map(|input| input.len())
+            .ok_or(ExecuteError::NoInputs)?;
         self.execute_range(inputs, 0..len)
     }
 
@@ -222,10 +228,7 @@ impl<D: KernelDispatcher> UnifiedExecutor<D> {
     ///
     /// This is the streaming/`eval_last` path. Stateful dispatchers update the
     /// same [`StateArena`] slots on every call.
-    pub fn execute_last(
-        &mut self,
-        inputs: &[&[f64]],
-    ) -> Result<ExecutionOutput, ExecuteError> {
+    pub fn execute_last(&mut self, inputs: &[&[f64]]) -> Result<ExecutionOutput, ExecuteError> {
         let common_len = validate_inputs(&self.plan, inputs)?;
         if common_len == 0 {
             return Err(ExecuteError::InvalidRange {
@@ -401,12 +404,7 @@ mod tests {
 
     fn plan() -> HotExecutionPlan {
         let semantic = ComputePlan::compile([
-            ComputeNode::new(
-                ComputeNodeId(0),
-                "VARIABLE:CLOSE",
-                vec![],
-                pure(),
-            ),
+            ComputeNode::new(ComputeNodeId(0), "VARIABLE:CLOSE", vec![], pure()),
             ComputeNode::new(
                 ComputeNodeId(1),
                 "COPY_PLUS_ONE",

@@ -1,6 +1,6 @@
 use crate::error::{Result, TaError};
 use crate::math::moving_avg;
-use crate::math::statistics::{rolling_max, rolling_min};
+use crate::math::statistics::rolling_minmax_visit;
 use crate::utils::{init_output, validate_input};
 use ndarray::Array1;
 
@@ -238,18 +238,10 @@ pub fn midpoint(input: &[f64], period: usize) -> Result<Array1<f64>> {
     }
     validate_input(input.len(), period)?;
 
-    let max = rolling_max(input, period)?;
-    let min = rolling_min(input, period)?;
-
-    let len = input.len();
-    let mut output = init_output(len);
-
-    for i in 0..len {
-        if !max[i].is_nan() && !min[i].is_nan() {
-            output[i] = (max[i] + min[i]) / 2.0;
-        }
-    }
-
+    let mut output = init_output(input.len());
+    rolling_minmax_visit(input, input, period, |i, highest, lowest| {
+        output[i] = (highest + lowest) * 0.5;
+    });
     Ok(output)
 }
 
@@ -285,18 +277,10 @@ pub fn midprice(high: &[f64], low: &[f64], period: usize) -> Result<Array1<f64>>
     }
     validate_input(high.len(), period)?;
 
-    let max = rolling_max(high, period)?;
-    let min = rolling_min(low, period)?;
-
-    let len = high.len();
-    let mut output = init_output(len);
-
-    for i in 0..len {
-        if !max[i].is_nan() && !min[i].is_nan() {
-            output[i] = (max[i] + min[i]) / 2.0;
-        }
-    }
-
+    let mut output = init_output(high.len());
+    rolling_minmax_visit(high, low, period, |i, highest, lowest| {
+        output[i] = (highest + lowest) * 0.5;
+    });
     Ok(output)
 }
 
@@ -331,97 +315,10 @@ pub struct SarResult {
 /// assert_eq!(result.sar.len(), 10);
 /// ```
 pub fn sar(high: &[f64], low: &[f64], acceleration: f64, maximum: f64) -> Result<SarResult> {
-    if high.len() != low.len() {
-        return Err(TaError::InvalidParameter {
-            name: "high and low".to_string(),
-            constraint: "must have the same length".to_string(),
-        });
-    }
-    if high.len() < 2 {
-        return Err(TaError::InsufficientData {
-            length: high.len(),
-            required: 2,
-        });
-    }
-    if acceleration <= 0.0 || maximum <= 0.0 || acceleration >= maximum {
-        return Err(TaError::InvalidParameter {
-            name: "acceleration/maximum".to_string(),
-            constraint: "0 < acceleration < maximum".to_string(),
-        });
-    }
-
-    let len = high.len();
-    let mut sar_values = init_output(len);
-    let mut af_values = init_output(len);
-
-    // Assume initial trend is up (first bar)
-    let mut is_long = true;
-    let mut ep = high[0]; // Extreme point
-    let mut af = acceleration;
-    let mut prev_sar = low[0];
-
-    sar_values[0] = prev_sar;
-    af_values[0] = af;
-
-    for i in 1..len {
-        let mut current_sar = prev_sar + af * (ep - prev_sar);
-
-        // SAR limits
-        if is_long {
-            if i >= 2 {
-                current_sar = current_sar.min(low[i - 1]);
-                if i >= 3 {
-                    current_sar = current_sar.min(low[i - 2]);
-                }
-            }
-        } else {
-            if i >= 2 {
-                current_sar = current_sar.max(high[i - 1]);
-                if i >= 3 {
-                    current_sar = current_sar.max(high[i - 2]);
-                }
-            }
-        }
-
-        // Check for SAR crossover
-        let mut switched = false;
-        if is_long {
-            if low[i] < current_sar {
-                is_long = false;
-                current_sar = ep;
-                ep = low[i];
-                af = acceleration;
-                switched = true;
-            }
-        } else {
-            if high[i] > current_sar {
-                is_long = true;
-                current_sar = ep;
-                ep = high[i];
-                af = acceleration;
-                switched = true;
-            }
-        }
-
-        // Update EP and AF
-        if !switched {
-            if is_long && high[i] > ep {
-                ep = high[i];
-                af = (af + acceleration).min(maximum);
-            } else if !is_long && low[i] < ep {
-                ep = low[i];
-                af = (af + acceleration).min(maximum);
-            }
-        }
-
-        sar_values[i] = current_sar;
-        af_values[i] = af;
-        prev_sar = current_sar;
-    }
-
+    let (sar, af) = crate::math::sar::sar_with_af(high, low, acceleration, maximum)?;
     Ok(SarResult {
-        sar: sar_values,
-        af: af_values,
+        sar: Array1::from_vec(sar),
+        af: Array1::from_vec(af),
     })
 }
 
@@ -1742,7 +1639,8 @@ mod tests {
         let low = vec![9.0, 10.0, 11.0, 12.0, 13.0];
         let result = sar(&high, &low, 0.02, 0.2).unwrap();
 
-        assert!(!result.sar[0].is_nan());
+        assert!(result.sar[0].is_nan());
+        assert!(!result.sar[1].is_nan());
         assert!(!result.sar[4].is_nan());
     }
 

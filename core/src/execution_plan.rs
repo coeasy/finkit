@@ -129,10 +129,7 @@ impl ParameterArena {
     }
 
     /// Append one contiguous parameter group and return its range.
-    pub fn extend(
-        &mut self,
-        values: impl IntoIterator<Item = ParameterValue>,
-    ) -> ParameterRange {
+    pub fn extend(&mut self, values: impl IntoIterator<Item = ParameterValue>) -> ParameterRange {
         let start = ParameterSlot(self.values.len());
         self.values.extend(values);
         ParameterRange {
@@ -172,6 +169,7 @@ pub struct InputLayout {
 impl InputLayout {
     fn compile(plan: &ComputePlan) -> Self {
         let mut slots = BTreeMap::new();
+        let mut slots_by_operation = BTreeMap::<&str, InputSlot>::new();
         for &node_id in plan.execution_order() {
             let node = plan
                 .node(node_id)
@@ -179,7 +177,14 @@ impl InputLayout {
             // Variable-name parsing is deliberately compile-time only. The hot
             // plan retains only the numeric node->input-slot relation.
             if node.operation.starts_with("VARIABLE:") {
-                let slot = InputSlot(slots.len());
+                let operation = node.operation.as_str();
+                let slot = if let Some(slot) = slots_by_operation.get(operation) {
+                    *slot
+                } else {
+                    let slot = InputSlot(slots_by_operation.len());
+                    slots_by_operation.insert(operation, slot);
+                    slot
+                };
                 slots.insert(node_id, slot);
             }
         }
@@ -193,7 +198,11 @@ impl InputLayout {
 
     /// Number of external input slots required by the plan.
     pub fn len(&self) -> usize {
-        self.slots.len()
+        self.slots
+            .values()
+            .map(|slot| slot.0 + 1)
+            .max()
+            .unwrap_or(0)
     }
 
     /// Whether this plan has no external inputs.
@@ -209,7 +218,10 @@ pub struct OutputLayout {
 }
 
 impl OutputLayout {
-    fn compile(retained: &[ComputeNodeId], buffers: &PlanBufferLayout) -> Result<Self, HotPlanError> {
+    fn compile(
+        retained: &[ComputeNodeId],
+        buffers: &PlanBufferLayout,
+    ) -> Result<Self, HotPlanError> {
         let outputs = retained
             .iter()
             .copied()
@@ -573,11 +585,20 @@ mod tests {
         assert_eq!(hot.nodes()[1].state, Some(StateSlot(0)));
         assert_eq!(hot.nodes()[1].parameters, ParameterRange::EMPTY);
         assert_eq!(hot.nodes()[2].inputs, vec![hot.nodes()[1].output]);
-        assert_eq!(hot.input_layout().slot(ComputeNodeId(0)), Some(InputSlot(0)));
-        assert_eq!(hot.output_layout().outputs(), &[(ComputeNodeId(2), hot.nodes()[2].output)]);
+        assert_eq!(
+            hot.input_layout().slot(ComputeNodeId(0)),
+            Some(InputSlot(0))
+        );
+        assert_eq!(
+            hot.output_layout().outputs(),
+            &[(ComputeNodeId(2), hot.nodes()[2].output)]
+        );
         assert_eq!(hot.buffer_layout().slot_count(), 2);
         assert_eq!(hot.state_layout().slot_count(), 1);
-        assert_eq!(hot.dependency_lifetime().last_use(ComputeNodeId(2)), Some(3));
+        assert_eq!(
+            hot.dependency_lifetime().last_use(ComputeNodeId(2)),
+            Some(3)
+        );
         assert_eq!(
             hot.metadata(),
             ExecutionMetadata {
@@ -620,6 +641,43 @@ mod tests {
     }
 
     #[test]
+    fn duplicate_external_variable_reads_share_one_numeric_input_slot() {
+        let plan = ComputePlan::compile([
+            ComputeNode::new(
+                ComputeNodeId(0),
+                "VARIABLE:CLOSE",
+                vec![],
+                capabilities(false),
+            ),
+            ComputeNode::new(
+                ComputeNodeId(1),
+                "VARIABLE:CLOSE",
+                vec![],
+                capabilities(false),
+            ),
+            ComputeNode::new(
+                ComputeNodeId(2),
+                "BINARY:Add",
+                vec![ComputeNodeId(0), ComputeNodeId(1)],
+                capabilities(false),
+            ),
+        ])
+        .unwrap();
+
+        let hot = HotExecutionPlan::compile(&plan, [ComputeNodeId(2)]).unwrap();
+        assert_eq!(
+            hot.input_layout().slot(ComputeNodeId(0)),
+            Some(InputSlot(0))
+        );
+        assert_eq!(
+            hot.input_layout().slot(ComputeNodeId(1)),
+            Some(InputSlot(0))
+        );
+        assert_eq!(hot.input_layout().len(), 1);
+        assert_eq!(hot.metadata().inputs, 1);
+    }
+
+    #[test]
     fn exact_parameters_are_numeric_and_prebound() {
         let plan = ComputePlan::compile([
             ComputeNode::new(
@@ -638,10 +696,7 @@ mod tests {
         .unwrap();
 
         let mut arena = ParameterArena::new();
-        let range = arena.extend([
-            ParameterValue::Usize(14),
-            ParameterValue::from_f64(-0.0),
-        ]);
+        let range = arena.extend([ParameterValue::Usize(14), ParameterValue::from_f64(-0.0)]);
         let hot = HotExecutionPlan::compile_with_parameters(
             &plan,
             [ComputeNodeId(1)],

@@ -7,9 +7,7 @@
 
 use crate::execution_plan::KernelId;
 use crate::state_arena::StateArena;
-use crate::unified_executor::{
-    KernelCall, KernelDispatchError, KernelDispatcher, UnifiedExecutor,
-};
+use crate::unified_executor::{KernelCall, KernelDispatchError, KernelDispatcher, UnifiedExecutor};
 
 /// Numeric dispatcher for formula constants and core arithmetic/logical operators.
 #[derive(Debug, Default, Clone, Copy)]
@@ -182,7 +180,11 @@ fn apply_binary(op: BinaryKernel, lhs: f64, rhs: f64) -> f64 {
 
 #[inline]
 const fn bool_value(value: bool) -> f64 {
-    if value { 1.0 } else { 0.0 }
+    if value {
+        1.0
+    } else {
+        0.0
+    }
 }
 
 /// Construct a reusable unified executor for one compiled formula hot plan.

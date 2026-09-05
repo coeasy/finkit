@@ -43,9 +43,6 @@ pub mod error;
 #[cfg(feature = "std")]
 /// Numeric Architecture v3 execution plans compiled from semantic DAGs.
 pub mod execution_plan;
-#[cfg(feature = "std")]
-/// Numeric Architecture v3 executor shared by batch, formula, factor and streaming frontends.
-pub mod unified_executor;
 #[cfg(feature = "formula")]
 /// Formula engine with AST parsing, bytecode compilation, JIT optimization, and SIMD acceleration.
 pub mod formula;
@@ -57,6 +54,9 @@ pub mod math;
 #[cfg(feature = "std")]
 /// Candlestick and chart pattern recognition (60+ patterns).
 pub mod patterns;
+#[cfg(feature = "std")]
+/// Numeric Architecture v3 executor shared by batch, formula, factor and streaming frontends.
+pub mod unified_executor;
 // `streaming` and `features` consume the *full* indicator surface (they
 // reference `crate::indicators::{overlap,volatility_ext,atr,sma,…}` and the
 // `formula` engine). They are therefore gated behind `indicators-all` so that
