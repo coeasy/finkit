@@ -1,0 +1,89 @@
+name: Architecture v3.1 converge once
+
+on:
+  push:
+    branches:
+      - perf/outperform-talib-v3-20260904
+
+permissions:
+  contents: write
+
+concurrency:
+  group: architecture-v31-converge-once
+  cancel-in-progress: true
+
+jobs:
+  converge:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: perf/outperform-talib-v3-20260904
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Prepare Python FFI SSOT
+        run: |
+          python scripts/repair_python_new_indicator_bindings.py
+          python scripts/prepare_python_registry_ssot.py
+          python scripts/apply_architecture_v3_unified_kernel.py
+          python scripts/sync_bindings.py --lang python --generate
+          python scripts/optimize_python_bindings.py ffi/python-binding/src/lib.rs
+          python scripts/apply_formula_v3_fast_path.py
+
+      - name: Apply Architecture v3.1 convergence
+        run: |
+          python scripts/apply_architecture_v31_convergence.py
+          python scripts/sync_bindings.py --lang python --generate
+          python scripts/optimize_python_bindings.py ffi/python-binding/src/lib.rs
+
+      - name: Validate generated binding contract
+        run: |
+          python scripts/sync_bindings.py --lang python --check
+          python scripts/optimize_python_bindings.py --check ffi/python-binding/src/generated.rs ffi/python-binding/src/lib.rs
+          if grep -R "np.asarray\|np.array" -n ffi/python-binding/finkit 2>/dev/null; then
+            echo 'Python wrapper still contains list-to-ndarray conversion'
+            exit 1
+          fi
+
+      - name: Format workspace
+        run: cargo fmt --all
+
+      - name: Core correctness
+        run: cargo test -p finkit --lib --locked
+
+      - name: Compile Python ABI3 binding
+        run: cargo check -p finkit-python --features abi3 --locked
+
+      - name: Validate diff
+        run: git diff --check
+
+      - name: Commit validated Architecture v3.1 convergence
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          if ! git diff --quiet -- core; then
+            git add core
+            git commit -m 'refactor(v3): converge canonical kernel semantics'
+          fi
+
+          git add -A ffi scripts registry 2>/dev/null || true
+          git reset -- scripts/apply_architecture_v31_convergence.py
+          if ! git diff --cached --quiet; then
+            git commit -m 'perf(v3): generate ndarray-direct Python bindings'
+          fi
+
+          git rm .github/workflows/arch-v31-converge-once.yml scripts/apply_architecture_v31_convergence.py
+          git commit -m 'chore(v3): remove convergence scaffolding'
+          git push origin HEAD:perf/outperform-talib-v3-20260904
