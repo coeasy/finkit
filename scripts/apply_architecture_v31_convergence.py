@@ -157,6 +157,24 @@ def patch_overlap() -> None:
     if current != canonical:
         text = text[:start] + canonical + text[end + 2 :]
 
+    # The canonical SAR state follows TA-Lib's one-bar lookback. The old overlap
+    # test asserted a synthetic row-zero SAR produced by the legacy implementation.
+    test_start = text.find("    fn test_sar() {")
+    test_end = text.find("    fn test_sarext() {", test_start)
+    if test_start < 0 or test_end < 0:
+        raise SystemExit("overlap.rs: SAR test boundary missing")
+    test_body = text[test_start:test_end]
+    old_assert = "        assert!(!result.sar[0].is_nan());\n"
+    new_assert = (
+        "        assert!(result.sar[0].is_nan());\n"
+        "        assert!(!result.sar[1].is_nan());\n"
+    )
+    if old_assert in test_body:
+        test_body = test_body.replace(old_assert, new_assert, 1)
+        text = text[:test_start] + test_body + text[test_end:]
+    elif new_assert not in test_body:
+        raise SystemExit("overlap.rs: SAR warm-up assertion anchor missing")
+
     p.write_text(text, encoding="utf-8")
 
 
@@ -196,6 +214,24 @@ def patch_momentum() -> None:
             raise SystemExit("momentum.rs: MACD warm-up anchor missing")
         text = text.replace(anchor, replacement, 1)
 
+    # Keep the caller-owned MACD path on the exact same public lookback as the
+    # allocating API. This preserves one semantic contract across frontends.
+    into_start = text.find("pub fn macd_into(")
+    into_end = text.find("pub fn macdext(", into_start)
+    if into_start < 0 or into_end < 0:
+        raise SystemExit("momentum.rs: macd_into boundary missing")
+    into = text[into_start:into_end]
+    into_mask = '''
+    // Same TA-Lib public lookback as macd(): pre-signal values are seed state.
+    macd_line[macd_start..signal_start].fill(f64::NAN);
+'''
+    if into_mask.strip() not in into:
+        return_anchor = "\n    Ok(())\n"
+        if into.count(return_anchor) != 1:
+            raise SystemExit("momentum.rs: macd_into return anchor changed")
+        into = into.replace(return_anchor, into_mask + return_anchor, 1)
+        text = text[:into_start] + into + text[into_end:]
+
     start_token = "pub fn willr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Array1<f64>> {"
     end_token = "\n}\n\n/// Elder-Ray Indicator Result"
     start = text.find(start_token)
@@ -227,6 +263,74 @@ def patch_momentum() -> None:
 }'''
     if "rolling_minmax_visit(high, low, period, |i, highest, lowest|" not in current:
         text = text[:start] + canonical + text[end + 2 :]
+
+    p.write_text(text, encoding="utf-8")
+
+
+def patch_buffer_arena() -> None:
+    p = Path("core/src/buffer_arena.rs")
+    text = p.read_text(encoding="utf-8")
+
+    start = text.find("    fn pop_cached(&mut self, len: usize) -> Option<Vec<f64>> {")
+    end = text.find("    /// Checkout a zero-filled buffer", start)
+    if start < 0 or end < 0:
+        raise SystemExit("buffer_arena.rs: pop_cached boundary missing")
+    current = text[start:end]
+    replacement = '''    fn pop_cached(&mut self, len: usize) -> Option<Vec<f64>> {
+        // Prefer an exact logical-length bucket, otherwise reuse the smallest
+        // larger allocation. execute_range/eval_last frequently shrink the
+        // logical extent while the physical allocation is still reusable.
+        let key = if self.free.contains_key(&len) {
+            len
+        } else {
+            self.free.range(len..).next().map(|(&key, _)| key)?
+        };
+
+        let mut remove_bucket = false;
+        let cached = self.free.get_mut(&key).and_then(|bucket| {
+            let buffer = bucket.pop();
+            remove_bucket = bucket.is_empty();
+            buffer
+        });
+        if remove_bucket {
+            self.free.remove(&key);
+        }
+        if let Some(buffer) = &cached {
+            self.cached_bytes = self
+                .cached_bytes
+                .saturating_sub(allocation_bytes(buffer.capacity()));
+            self.cache_hits = self.cache_hits.saturating_add(1);
+        }
+        cached
+    }
+
+'''
+    if "self.free.range(len..).next()" not in current:
+        text = text[:start] + replacement + text[end:]
+
+    old = '''    pub fn take_overwrite(&mut self, len: usize) -> Vec<f64> {
+        if let Some(buffer) = self.pop_cached(len) {
+            return buffer;
+        }
+        self.cache_misses = self.cache_misses.saturating_add(1);
+        vec![0.0; len]
+    }
+'''
+    new = '''    pub fn take_overwrite(&mut self, len: usize) -> Vec<f64> {
+        if let Some(mut buffer) = self.pop_cached(len) {
+            // pop_cached only returns exact or larger logical buckets, so this
+            // is a zero-fill-free shrink on the hot range/last path.
+            buffer.truncate(len);
+            return buffer;
+        }
+        self.cache_misses = self.cache_misses.saturating_add(1);
+        vec![0.0; len]
+    }
+'''
+    if old in text:
+        text = text.replace(old, new, 1)
+    elif "buffer.truncate(len);" not in text:
+        raise SystemExit("buffer_arena.rs: take_overwrite anchor missing")
 
     p.write_text(text, encoding="utf-8")
 
@@ -332,8 +436,6 @@ def patch_formula_canonical() -> None:
     if old_enum in text:
         text = text.replace(old_enum, new_enum, 1)
     if "CanonicalFormula::Sma" not in text and "enum CanonicalFormula" in text:
-        # The exact formula migration is version-sensitive; fail rather than
-        # silently reintroducing runtime string dispatch.
         raise SystemExit("formula_plan.rs: canonical SMA/EMA/RSI lowering anchor changed")
     p.write_text(text, encoding="utf-8")
 
@@ -342,11 +444,9 @@ def main() -> None:
     patch_statistics()
     patch_overlap()
     patch_momentum()
+    patch_buffer_arena()
     patch_python_batch_zero_copy()
     patch_sync_bindings()
-    # Formula canonical MA/EMA/RSI is applied by the dedicated migration helper;
-    # this call only validates already-lowered variants when present.
-    # patch_formula_canonical intentionally remains conservative.
     print("Architecture v3.1 convergence patches applied")
 
 
