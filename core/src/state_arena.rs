@@ -5,7 +5,7 @@
 //! address states through compact [`StateSlot`] ids so hot execution does not
 //! require string-keyed lookups.
 
-use crate::compute::{ComputeNodeId, ComputePlan};
+use crate::compute::{ComputeNode, ComputeNodeId, ComputePlan};
 use std::any::{Any, TypeId};
 use std::collections::BTreeMap;
 use std::fmt;
@@ -13,6 +13,48 @@ use std::fmt;
 /// Compact identifier for one persistent state entry in a [`StateArena`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct StateSlot(pub usize);
+
+/// Compile-time identity used to intern semantically identical persistent state.
+///
+/// `Node` preserves the historical one-state-per-compute-node behavior. Shared
+/// state must be requested explicitly with a family id, ordered input nodes and
+/// exact parameter fingerprints. This prevents accidental state aliasing between
+/// kernels such as EMA(12) and EMA(26) while allowing canonical families such as
+/// DMI/OHLC or MACD/EMA to project several outputs from one state machine.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum StateKey {
+    /// Unique state owned by exactly one semantic node.
+    Node(ComputeNodeId),
+    /// State intentionally shared by nodes with identical family/input/parameter identity.
+    Shared {
+        /// Stable family identifier resolved by the compile-time planner.
+        family: u64,
+        /// Ordered semantic input nodes feeding the shared state.
+        inputs: Vec<ComputeNodeId>,
+        /// Exact parameter fingerprints; floats should be supplied as `to_bits()`.
+        parameters: Vec<u64>,
+    },
+}
+
+impl StateKey {
+    /// Preserve one unique state slot for `node`.
+    pub const fn unique(node: ComputeNodeId) -> Self {
+        Self::Node(node)
+    }
+
+    /// Construct an explicit shared-state identity.
+    pub fn shared(
+        family: u64,
+        inputs: impl IntoIterator<Item = ComputeNodeId>,
+        parameters: impl IntoIterator<Item = u64>,
+    ) -> Self {
+        Self::Shared {
+            family,
+            inputs: inputs.into_iter().collect(),
+            parameters: parameters.into_iter().collect(),
+        }
+    }
+}
 
 /// Precompiled mapping from stateful compute nodes to compact state slots.
 ///
@@ -27,18 +69,43 @@ pub struct PlanStateLayout {
 
 impl PlanStateLayout {
     /// Assign one stable slot to every stateful node in execution order.
+    ///
+    /// This compatibility path deliberately does not infer sharing from string
+    /// operation names. Frontend planners must use [`Self::compile_with_keys`]
+    /// once they have exact family and parameter identity available.
     pub fn compile(plan: &ComputePlan) -> Self {
+        Self::compile_with_keys(plan, |node_id, _| StateKey::unique(node_id))
+    }
+
+    /// Compile a layout with explicit semantic state interning.
+    ///
+    /// The callback runs once at plan compilation and may inspect semantic node
+    /// metadata. Hot execution receives only the resulting [`StateSlot`] values.
+    /// Nodes that return equal [`StateKey`] values share one persistent state slot.
+    pub fn compile_with_keys(
+        plan: &ComputePlan,
+        mut key_for: impl FnMut(ComputeNodeId, &ComputeNode) -> StateKey,
+    ) -> Self {
         let mut slots = BTreeMap::new();
+        let mut interned = BTreeMap::<StateKey, StateSlot>::new();
         for &node_id in plan.execution_order() {
             let node = plan
                 .node(node_id)
                 .expect("execution order only contains compiled nodes");
             if node.capabilities.stateful {
-                let slot = StateSlot(slots.len());
+                let key = key_for(node_id, node);
+                let slot = match interned.get(&key).copied() {
+                    Some(slot) => slot,
+                    None => {
+                        let slot = StateSlot(interned.len());
+                        interned.insert(key, slot);
+                        slot
+                    }
+                };
                 slots.insert(node_id, slot);
             }
         }
-        let slot_count = slots.len();
+        let slot_count = interned.len();
         Self { slots, slot_count }
     }
 
@@ -47,7 +114,7 @@ impl PlanStateLayout {
         self.slots.get(&node).copied()
     }
 
-    /// Number of persistent slots required by the plan.
+    /// Number of persistent slots required by the plan after interning.
     pub const fn slot_count(&self) -> usize {
         self.slot_count
     }
@@ -286,6 +353,68 @@ mod tests {
         layout.prepare(&mut arena);
         assert_eq!(arena.slot_capacity(), 2);
         assert!(arena.is_empty());
+    }
+
+    #[test]
+    fn explicit_state_keys_intern_identical_family_state() {
+        let plan = ComputePlan::compile([
+            ComputeNode::new(ComputeNodeId(0), "CLOSE", vec![], capabilities(false)),
+            ComputeNode::new(
+                ComputeNodeId(1),
+                "PLUS_DI",
+                vec![ComputeNodeId(0)],
+                capabilities(true),
+            ),
+            ComputeNode::new(
+                ComputeNodeId(2),
+                "MINUS_DI",
+                vec![ComputeNodeId(0)],
+                capabilities(true),
+            ),
+        ])
+        .unwrap();
+
+        let layout = PlanStateLayout::compile_with_keys(&plan, |node_id, node| {
+            if node_id == ComputeNodeId(1) || node_id == ComputeNodeId(2) {
+                StateKey::shared(0x444d49, node.dependencies.iter().copied(), [14])
+            } else {
+                StateKey::unique(node_id)
+            }
+        });
+
+        assert_eq!(layout.slot(ComputeNodeId(1)), Some(StateSlot(0)));
+        assert_eq!(layout.slot(ComputeNodeId(2)), Some(StateSlot(0)));
+        assert_eq!(layout.slot_count(), 1);
+    }
+
+    #[test]
+    fn state_key_parameters_prevent_incorrect_aliasing() {
+        let plan = ComputePlan::compile([
+            ComputeNode::new(ComputeNodeId(0), "CLOSE", vec![], capabilities(false)),
+            ComputeNode::new(
+                ComputeNodeId(1),
+                "EMA12",
+                vec![ComputeNodeId(0)],
+                capabilities(true),
+            ),
+            ComputeNode::new(
+                ComputeNodeId(2),
+                "EMA26",
+                vec![ComputeNodeId(0)],
+                capabilities(true),
+            ),
+        ])
+        .unwrap();
+
+        let layout = PlanStateLayout::compile_with_keys(&plan, |node_id, node| match node_id.0 {
+            1 => StateKey::shared(0x454d41, node.dependencies.iter().copied(), [12]),
+            2 => StateKey::shared(0x454d41, node.dependencies.iter().copied(), [26]),
+            _ => StateKey::unique(node_id),
+        });
+
+        assert_eq!(layout.slot(ComputeNodeId(1)), Some(StateSlot(0)));
+        assert_eq!(layout.slot(ComputeNodeId(2)), Some(StateSlot(1)));
+        assert_eq!(layout.slot_count(), 2);
     }
 
     #[test]
