@@ -43,6 +43,21 @@ jobs:
       - name: Apply Architecture v3.1 convergence
         run: |
           python scripts/apply_architecture_v31_convergence.py
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('core/src/indicators/momentum.rs')
+          text = path.read_text(encoding='utf-8')
+          bad = '    macd_line[macd_start..signal_start].fill(f64::NAN);\n'
+          good = '''    for index in macd_start..signal_start {
+              macd_line[index] = f64::NAN;
+          }
+          '''
+          if bad in text:
+              text = text.replace(bad, good, 1)
+          elif good.strip() not in text:
+              raise SystemExit('MACD warm-up mask anchor missing')
+          path.write_text(text, encoding='utf-8')
+          PY
           python scripts/sync_bindings.py --lang python --generate
           python scripts/optimize_python_bindings.py ffi/python-binding/src/lib.rs
 
