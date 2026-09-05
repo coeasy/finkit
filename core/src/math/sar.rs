@@ -267,8 +267,32 @@ pub fn sar_with_af(
 }
 
 /// Calculate Parabolic SAR with the exact TA_SAR 0.7.1 bootstrap/update order.
+///
+/// The single-output path deliberately does not call [`sar_with_af`]. Consumers
+/// such as the installed Python wheel only request SAR, so allocating and
+/// writing a second full-length AF vector was pure hot-path overhead. Both
+/// paths still share the same canonical [`SarState`] transition logic.
 pub fn sar(high: &[f64], low: &[f64], acceleration: f64, maximum: f64) -> Result<Vec<f64>> {
-    sar_with_af(high, low, acceleration, maximum).map(|(sar, _)| sar)
+    validate_inputs(high, low, acceleration, maximum)?;
+    let mut state = SarState::try_new(acceleration, maximum)?;
+    let len = high.len();
+    let mut output = Vec::<f64>::with_capacity(len);
+
+    // Every slot is written exactly once before the Vec length is published.
+    // This removes both the unused AF allocation and the per-row Vec::push
+    // capacity branch from the benchmark-critical single-output path.
+    unsafe {
+        let high_ptr = high.as_ptr();
+        let low_ptr = low.as_ptr();
+        let output_ptr = output.as_mut_ptr();
+        for index in 0..len {
+            let point = state.next(*high_ptr.add(index), *low_ptr.add(index));
+            output_ptr.add(index).write(point.sar);
+        }
+        output.set_len(len);
+    }
+
+    Ok(output)
 }
 
 #[cfg(test)]
@@ -321,6 +345,29 @@ mod tests {
                 assert!(point.sar.is_nan());
             } else {
                 assert_eq!(point.sar, batch[index]);
+            }
+        }
+    }
+
+    #[test]
+    fn single_output_matches_with_af_projection() {
+        let high: Vec<f64> = (0..128)
+            .map(|i| 25.0 + (i as f64 * 0.19).sin() * 2.5 + i as f64 * 0.015)
+            .collect();
+        let low: Vec<f64> = high
+            .iter()
+            .enumerate()
+            .map(|(i, h)| h - 1.0 - (i % 5) as f64 * 0.04)
+            .collect();
+
+        let single = sar(&high, &low, 0.02, 0.2).unwrap();
+        let (projected, _) = sar_with_af(&high, &low, 0.02, 0.2).unwrap();
+        assert_eq!(single.len(), projected.len());
+        for (left, right) in single.iter().zip(projected.iter()) {
+            if left.is_nan() || right.is_nan() {
+                assert!(left.is_nan() && right.is_nan());
+            } else {
+                assert_eq!(left, right);
             }
         }
     }
