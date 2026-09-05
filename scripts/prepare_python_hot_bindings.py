@@ -2,9 +2,9 @@
 """Prepare the canonical NumPy-direct Python binding surface for wheel builds.
 
 This is a permanent build step, not a migration helper. It keeps the canonical
-indicator registry unchanged, builds the transient Python SSOT overlay, regenerates
-the generated PyO3 surface, and rewrites numeric PyO3 functions to return NumPy
-arrays directly instead of materializing Python lists first.
+indicator registry unchanged, builds the transient Python SSOT overlay, activates
+the unified numeric native hot paths, regenerates the PyO3 surface, and rewrites
+numeric PyO3 functions to return NumPy arrays directly instead of Python lists.
 """
 
 from __future__ import annotations
@@ -137,7 +137,10 @@ def patch_batch_numpy_contract() -> None:
 '''
     text = replace_once_or_verify(text, old_outputs, new_outputs, "batch ndarray outputs")
 
-    if ".as_array().to_vec()" in text[text.index("fn compute_indicators"):text.index("/// Result type for indicator computation.")]:
+    batch_section = text[
+        text.index("fn compute_indicators"):text.index("/// Result type for indicator computation.")
+    ]
+    if ".as_array().to_vec()" in batch_section:
         raise RuntimeError("batch contract still copies a NumPy input column")
     if "dict.set_item(key, PyArray1::from_vec(py, arr))?;" not in text:
         raise RuntimeError("batch contract is missing ndarray-direct outputs")
@@ -156,8 +159,14 @@ def main() -> int:
     # the overlay for this build workspace.
     run(str(ROOT / "scripts" / "prepare_python_registry_ssot.py"))
 
-    # Regenerate from SSOT first; optimization is deliberately post-generation
-    # so generated bindings can never silently fall back to Vec -> Python list.
+    # Activate the Architecture v3 native ABI before generation. This replaces
+    # runtime operation strings with numeric ids, enables the allocation-reduced
+    # extrema family path, and routes TRANGE into caller-owned output. The helper
+    # is idempotent and also upgrades the live SSOT generator to NumPy-direct.
+    run(str(ROOT / "scripts" / "apply_architecture_v3_unified_kernel.py"))
+
+    # Regenerate after the unified-kernel transformation so the wheel contains
+    # the same canonical binding contract on every platform.
     run(
         str(ROOT / "scripts" / "sync_bindings.py"),
         "--lang",
@@ -184,7 +193,8 @@ def main() -> int:
 
     print(
         "[prepare/python-hot] NumPy-direct binding surface ready: "
-        f"generated={generated_count}, lib={lib_count}, batch=zero-copy, formula=canonical"
+        f"generated={generated_count}, lib={lib_count}, batch=zero-copy, "
+        "formula=canonical, native=v3"
     )
     return 0
 
