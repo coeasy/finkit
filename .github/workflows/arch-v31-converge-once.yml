@@ -56,6 +56,24 @@ jobs:
               text = text.replace(bad, good, 1)
           elif good.strip() not in text:
               raise SystemExit('MACD warm-up mask anchor missing')
+
+          old_test = '''        let result = macd(&input, 12, 26, 9).unwrap();
+                  assert!(!result.macd[25].is_nan());
+          '''
+          new_test = '''        let result = macd(&input, 12, 26, 9).unwrap();
+                  // TA-Lib lookback is (slow - 1) + (signal - 1) = 33.
+                  // All public MACD outputs share that warm-up boundary.
+                  assert!(result.macd[32].is_nan());
+                  assert!(result.signal[32].is_nan());
+                  assert!(result.hist[32].is_nan());
+                  assert!(!result.macd[33].is_nan());
+                  assert!(!result.signal[33].is_nan());
+                  assert!(!result.hist[33].is_nan());
+          '''
+          if old_test in text:
+              text = text.replace(old_test, new_test, 1)
+          elif 'assert!(result.macd[32].is_nan());' not in text:
+              raise SystemExit('MACD core test contract anchor missing')
           path.write_text(text, encoding='utf-8')
           PY
           python scripts/sync_bindings.py --lang python --generate
