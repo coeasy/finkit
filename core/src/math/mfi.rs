@@ -1,10 +1,9 @@
 //! Fused Money Flow Index kernel for the Architecture v3 hot path.
 //!
-//! The legacy implementation materialised a full typical-price array before
-//! running the MFI recurrence. MFI only needs the previous typical price and a
-//! `period`-sized positive/negative money-flow ring, so computing TP inline
-//! removes one full-length allocation and memory pass without changing the
-//! floating-point operation order used by the public implementation.
+//! MFI only needs the previous typical price and a `period`-sized signed
+//! money-flow ring. Computing TP inline removes the legacy full-length typical
+//! price allocation, while one signed ring replaces separate positive/negative
+//! rings without changing the public up/non-up classification semantics.
 
 use crate::error::{Result, TaError};
 use ndarray::Array1;
@@ -43,8 +42,10 @@ pub fn mfi(
 
     let len = close.len();
     let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);
-    let mut pos_ring = vec![0.0_f64; period];
-    let mut neg_ring = vec![0.0_f64; period];
+    // Positive money flow is stored as +x, non-positive-direction flow as -x.
+    // This halves ring storage and lets one outgoing value update the correct
+    // accumulator without a second ring lookup.
+    let mut flow_ring = vec![0.0_f64; period];
     let mut pos_sum = 0.0;
     let mut neg_sum = 0.0;
     let mut ring_idx = 0usize;
@@ -60,8 +61,7 @@ pub fn mfi(
         let close_ptr = close.as_ptr();
         let volume_ptr = volume.as_ptr();
         let output_ptr = raw_output.as_mut_ptr();
-        let pos_ptr = pos_ring.as_mut_ptr();
-        let neg_ptr = neg_ring.as_mut_ptr();
+        let flow_ptr = flow_ring.as_mut_ptr();
 
         for index in 0..period {
             output_ptr.add(index).write(MaybeUninit::new(f64::NAN));
@@ -70,32 +70,41 @@ pub fn mfi(
         for i in 1..len {
             let tp = typical_price(*high_ptr.add(i), *low_ptr.add(i), *close_ptr.add(i));
             let money_flow = tp * *volume_ptr.add(i);
-            let (positive, negative) = if tp > prev_tp {
-                (money_flow, 0.0)
+            let signed_flow = if tp > prev_tp {
+                money_flow
             } else {
-                (0.0, money_flow)
+                -money_flow
             };
             prev_tp = tp;
 
-            let old_positive = *pos_ptr.add(ring_idx);
-            let old_negative = *neg_ptr.add(ring_idx);
-            pos_sum += positive - old_positive;
-            neg_sum += negative - old_negative;
-            *pos_ptr.add(ring_idx) = positive;
-            *neg_ptr.add(ring_idx) = negative;
+            let old_flow = *flow_ptr.add(ring_idx);
+            if old_flow > 0.0 {
+                pos_sum -= old_flow;
+            } else if old_flow < 0.0 {
+                neg_sum += old_flow;
+            }
+
+            if signed_flow > 0.0 {
+                pos_sum += signed_flow;
+            } else if signed_flow < 0.0 {
+                neg_sum -= signed_flow;
+            }
+            *flow_ptr.add(ring_idx) = signed_flow;
+
             ring_idx += 1;
             if ring_idx == period {
                 ring_idx = 0;
             }
 
             if i >= period {
-                output_ptr
-                    .add(i)
-                    .write(MaybeUninit::new(if neg_sum.abs() > 1e-15 {
-                        100.0 - 100.0 / (1.0 + pos_sum / neg_sum)
-                    } else {
-                        100.0
-                    }));
+                // Algebraically identical to 100 - 100/(1 + pos/neg), but
+                // requires one floating-point division instead of two.
+                let value = if neg_sum.abs() > 1e-15 {
+                    100.0 * pos_sum / (pos_sum + neg_sum)
+                } else {
+                    100.0
+                };
+                output_ptr.add(i).write(MaybeUninit::new(value));
             }
         }
 
@@ -113,6 +122,49 @@ pub fn mfi(
 mod tests {
     use super::*;
 
+    fn legacy_reference(
+        high: &[f64],
+        low: &[f64],
+        close: &[f64],
+        volume: &[f64],
+        period: usize,
+    ) -> Vec<f64> {
+        let len = close.len();
+        let mut output = vec![f64::NAN; len];
+        let mut pos_ring = vec![0.0_f64; period];
+        let mut neg_ring = vec![0.0_f64; period];
+        let mut pos_sum = 0.0;
+        let mut neg_sum = 0.0;
+        let mut ring_idx = 0usize;
+        let mut prev_tp = typical_price(high[0], low[0], close[0]);
+
+        for i in 1..len {
+            let tp = typical_price(high[i], low[i], close[i]);
+            let money_flow = tp * volume[i];
+            let (positive, negative) = if tp > prev_tp {
+                (money_flow, 0.0)
+            } else {
+                (0.0, money_flow)
+            };
+            prev_tp = tp;
+
+            pos_sum += positive - pos_ring[ring_idx];
+            neg_sum += negative - neg_ring[ring_idx];
+            pos_ring[ring_idx] = positive;
+            neg_ring[ring_idx] = negative;
+            ring_idx = (ring_idx + 1) % period;
+
+            if i >= period {
+                output[i] = if neg_sum.abs() > 1e-15 {
+                    100.0 - 100.0 / (1.0 + pos_sum / neg_sum)
+                } else {
+                    100.0
+                };
+            }
+        }
+        output
+    }
+
     #[test]
     fn warmup_ends_at_period() {
         let high = [10.0, 11.0, 12.0, 11.0, 13.0, 14.0];
@@ -123,5 +175,24 @@ mod tests {
         assert!(output.iter().take(3).all(|value| value.is_nan()));
         assert!(output[3].is_finite());
         assert_eq!(output.len(), close.len());
+    }
+
+    #[test]
+    fn signed_ring_matches_legacy_positive_negative_accounting() {
+        let high = [10.0, 12.0, 11.0, 13.0, 13.0, 12.5, 14.0, 13.5, 15.0];
+        let low = [9.0, 10.0, 9.5, 11.0, 11.0, 10.5, 12.0, 11.5, 13.0];
+        let close = [9.5, 11.0, 10.0, 12.0, 12.0, 11.0, 13.0, 12.0, 14.0];
+        let volume = [100.0, 120.0, 130.0, 125.0, 140.0, 135.0, 150.0, 145.0, 160.0];
+        let period = 3;
+        let expected = legacy_reference(&high, &low, &close, &volume, period);
+        let actual = mfi(&high, &low, &close, &volume, period).unwrap();
+
+        for (lhs, rhs) in actual.iter().zip(expected.iter()) {
+            if rhs.is_nan() {
+                assert!(lhs.is_nan());
+            } else {
+                assert!((lhs - rhs).abs() <= 1e-12, "{lhs} != {rhs}");
+            }
+        }
     }
 }
