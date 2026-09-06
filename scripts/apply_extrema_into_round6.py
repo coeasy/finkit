@@ -301,6 +301,17 @@ replace_once(
     flags=re.S,
 )
 
+# The pre-round6 file also exposes a later legacy `willr_into` in the generic
+# zero-copy section. Remove that exact block after installing the canonical
+# implementation above so the migration is truly idempotent and cannot
+# reintroduce E0428 duplicate-symbol failures on subsequent runs.
+replace_once(
+    "core/src/indicators/momentum.rs",
+    r"\n/// Williams %R zero-copy variant: writes result into pre-allocated slice\.\npub fn willr_into\(.*?\n\}\n(?=\n/// Momentum zero-copy variant:)",
+    "\n",
+    flags=re.S,
+)
+
 # Remove the binding-local extrema implementation. The language boundary now
 # allocates exactly one output Vec and delegates to the core caller-owned API.
 replace_once(
