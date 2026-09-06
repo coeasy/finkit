@@ -1,5 +1,6 @@
 name: Apply extrema round 6
 
+# Re-run marker: canonical WILLR convergence after idempotence hardening.
 on:
   push:
     branches:
