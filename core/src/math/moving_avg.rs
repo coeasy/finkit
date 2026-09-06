@@ -1,5 +1,4 @@
 use crate::error::{Result, TaError};
-use crate::math::simd_ops::simd_prefix_sum;
 use crate::utils::{init_output, smoothing_factor, validate_input};
 use ndarray::Array1;
 
@@ -26,7 +25,7 @@ use ndarray::Array1;
 pub enum EmaSeed {
     /// Seed the EMA with the SMA of the first `period` inputs (warm-up `NaN`).
     Sma,
-    /// Seed the EMA with `input[0]`, valid from index 0 (no warm-up `NaN`).
+    /// Seed the EMA with `input[0]`, valid from index 0 (no `NaN` warm-up).
     FirstValue,
 }
 
@@ -523,7 +522,6 @@ pub fn wma(input: &[f64], period: usize) -> Result<Array1<f64>> {
         });
     }
     validate_input(input.len(), period)?;
-    // Check for non-finite values
     if let Some(pos) = input.iter().position(|v| !v.is_finite()) {
         return Err(TaError::InvalidParameter {
             name: "input".to_string(),
@@ -544,44 +542,44 @@ pub fn wma(input: &[f64], period: usize) -> Result<Array1<f64>> {
 
 #[inline]
 fn wma_inner(input: &[f64], period: usize) -> Result<Array1<f64>> {
+    let mut output = Array1::<f64>::zeros(input.len());
+    wma_kernel_into(input, period, output.as_slice_mut().unwrap());
+    Ok(output)
+}
+
+/// Canonical Architecture v3 WMA kernel.
+///
+/// All WMA entry points delegate here so the hot path has one numerical
+/// implementation and never materializes the three prefix-sum scratch arrays
+/// used by the retired SIMD compatibility path.
+#[inline]
+fn wma_kernel_into(input: &[f64], period: usize, output: &mut [f64]) {
+    crate::utils::simd_fill_nan(&mut output[..period - 1]);
+
     let len = input.len();
-    let mut output = Array1::<f64>::zeros(len);
-
-    // Only fill warm-up region with NaN (not the entire array)
-    for i in 0..period - 1 {
-        output[i] = f64::NAN;
-    }
-
     let inv_weight_sum = 1.0 / (period * (period + 1) / 2) as f64;
     let p = period as f64;
+    let first = period - 1;
 
-    // Calculate initial window
-    let mut window_sum: f64 = 0.0;
-    let mut wsum: f64 = 0.0;
-
-    for j in 0..period {
-        let v = input[j];
+    let mut window_sum = 0.0;
+    let mut wsum = 0.0;
+    for (j, &v) in input.iter().enumerate().take(period) {
         window_sum += v;
         wsum += (j + 1) as f64 * v;
     }
-    output[period - 1] = wsum * inv_weight_sum;
+    output[first] = wsum * inv_weight_sum;
 
-    // Main loop with pointer operations and FMA optimization
     let input_ptr = input.as_ptr();
     let output_ptr = output.as_mut_ptr();
-
     unsafe {
         for i in period..len {
             let old = *input_ptr.add(i - period);
             let new = *input_ptr.add(i);
-            // Use FMA: wsum = wsum + p * new - window_sum
             wsum = (p * new).mul_add(1.0, wsum - window_sum);
             window_sum += new - old;
             *output_ptr.add(i) = wsum * inv_weight_sum;
         }
     }
-
-    Ok(output)
 }
 
 /// Compute WMA writing results into a pre-allocated buffer.
@@ -613,50 +611,14 @@ pub fn wma_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> 
         });
     }
 
-    for o in output.iter_mut().take(period - 1) {
-        *o = f64::NAN;
-    }
-
-    let len = input.len();
-    let inv_weight_sum = 1.0 / (period * (period + 1) / 2) as f64;
-    let p = period as f64;
-
-    let first = period - 1;
-    let mut window_sum: f64 = 0.0;
-    let mut wsum: f64 = 0.0;
-    for (j, &v) in input.iter().enumerate().take(period) {
-        window_sum += v;
-        wsum += (j + 1) as f64 * v;
-    }
-    output[first] = wsum * inv_weight_sum;
-
-    for i in period..len {
-        let old = input[i - period];
-        let new = input[i];
-        wsum += p * new - window_sum;
-        window_sum += new - old;
-        output[i] = wsum * inv_weight_sum;
-    }
-
+    wma_kernel_into(input, period, output);
     Ok(())
 }
 
-/// SIMD-optimized WMA using prefix sums.
-///
-/// The O(n) recursive formula `wsum' = wsum + period*new - window_sum` is
-/// inherently serial, so it cannot be vectorized directly. Instead, this
-/// implementation exploits the algebraic identity
-///
-///   WMA[i] = ((period - i) * (Px[i] - Px[i-period])
-///           + (Pzx[i] - Pzx[i-period])) / (period*(period+1)/2)
-///
-/// where `Px` is the inclusive prefix sum of `input` and `Pzx` is the inclusive
-/// prefix sum of `j * input[j]`. The two prefix sums and the `j * input[j]`
-/// pointwise product are computed via SIMD (AVX2) kernels, then the final
-/// O(n) sweep is just a few fadd/fmul per element.
-///
-/// Warm-up region (first `period - 1` outputs) is left as NaN, matching the
-/// scalar `wma` / `wma_into` contract.
+/// Compatibility entry point retained for callers that selected the historical
+/// SIMD WMA path explicitly. Architecture v3 routes it to the canonical WMA
+/// kernel because the prefix-sum implementation required three full-length
+/// scratch allocations and was slower on the installed-wheel hot path.
 pub fn wma_simd(input: &[f64], period: usize) -> Result<Array1<f64>> {
     if period == 0 {
         return Err(TaError::InvalidParameter {
@@ -665,109 +627,15 @@ pub fn wma_simd(input: &[f64], period: usize) -> Result<Array1<f64>> {
         });
     }
     validate_input(input.len(), period)?;
-
-    let len = input.len();
-    let mut output = init_output(len);
-    if len >= period {
-        wma_simd_core(input, period, output.as_slice_mut().unwrap());
-    }
+    let mut output = Array1::<f64>::zeros(input.len());
+    wma_kernel_into(input, period, output.as_slice_mut().unwrap());
     Ok(output)
 }
 
-/// In-place SIMD-optimized WMA writing into a pre-allocated buffer of the
-/// same length as `input`. Warm-up values are written as NaN.
+/// Compatibility alias for the historical SIMD WMA API. Uses the same
+/// caller-owned canonical kernel as [`wma_into`].
 pub fn wma_into_simd(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> {
-    if period == 0 {
-        return Err(TaError::InvalidParameter {
-            name: "period".to_string(),
-            constraint: "greater than 0".to_string(),
-        });
-    }
-    validate_input(input.len(), period)?;
-    if output.len() != input.len() {
-        return Err(TaError::InvalidParameter {
-            name: "output".to_string(),
-            constraint: "must have the same length as input".to_string(),
-        });
-    }
-    for o in output.iter_mut().take(period - 1) {
-        *o = f64::NAN;
-    }
-    if input.len() >= period {
-        wma_simd_core(input, period, output);
-    }
-    Ok(())
-}
-
-#[inline]
-fn wma_simd_core(input: &[f64], period: usize, output: &mut [f64]) {
-    let len = input.len();
-    let p = period as f64;
-    let inv_wsum = 1.0 / (p * (p + 1.0) * 0.5);
-
-    // Stage 1: j * input[j] for j = 0..len
-    let mut zx = vec![0.0f64; len];
-    simd_weighted_by_index_avx2(input, &mut zx);
-
-    // Stage 2: prefix sums of input and zx (length len)
-    let mut px = vec![0.0f64; len];
-    let mut pzx = vec![0.0f64; len];
-    simd_prefix_sum(input, &mut px);
-    simd_prefix_sum(&zx, &mut pzx);
-    drop(zx);
-
-    // Stage 3: combine to form WMA values for i = period-1..len
-    let first = period - 1;
-    // initial value at i = first
-    let win_sum_init = px[first];
-    let wsum_init = pzx[first];
-    output[first] = (p * win_sum_init - (first as f64) * win_sum_init + wsum_init) * inv_wsum;
-    for i in period..len {
-        let win_sum = px[i] - px[i - period];
-        let wsum = pzx[i] - pzx[i - period];
-        output[i] = ((p - i as f64) * win_sum + wsum) * inv_wsum;
-    }
-}
-
-/// SIMD vectorized pointwise `out[i] = i * input[i]`. AVX2 path processes
-/// 4 f64 per iteration; scalar tail handles the remainder.
-#[inline]
-fn simd_weighted_by_index_avx2(input: &[f64], out: &mut [f64]) {
-    let len = input.len().min(out.len());
-    #[cfg(all(feature = "std", target_arch = "x86_64"))]
-    {
-        if is_x86_feature_detected!("avx2") {
-            unsafe { weighted_by_index_avx2_kernel(input, out, len) };
-            return;
-        }
-    }
-    for i in 0..len {
-        out[i] = (i as f64) * input[i];
-    }
-}
-
-#[cfg(all(feature = "std", target_arch = "x86_64"))]
-#[target_feature(enable = "avx2")]
-unsafe fn weighted_by_index_avx2_kernel(input: &[f64], out: &mut [f64], len: usize) {
-    unsafe {
-        use core::arch::x86_64::*;
-        let chunks = len / 4;
-        for c in 0..chunks {
-            let off = c * 4;
-            let v = _mm256_loadu_pd(input.as_ptr().add(off));
-            let idx = _mm256_set_pd(
-                (off + 3) as f64,
-                (off + 2) as f64,
-                (off + 1) as f64,
-                off as f64,
-            );
-            _mm256_storeu_pd(out.as_mut_ptr().add(off), _mm256_mul_pd(v, idx));
-        }
-        let tail_start = chunks * 4;
-        for i in tail_start..len {
-            out[i] = (i as f64) * input[i];
-        }
-    }
+    wma_into(input, period, output)
 }
 
 /// Double Exponential Moving Average (DEMA)
@@ -1689,8 +1557,6 @@ pub fn ema_multi_periods(
     reject_if_non_finite("ema_multi_periods", input)?;
     let len = input.len();
     if len == 0 {
-        // Empty input with non-empty period set: only valid if all periods are 0
-        // (which we forbid above). Surface as InvalidParameter.
         return Err(TaError::InvalidParameter {
             name: "input".to_string(),
             constraint: "non-empty".to_string(),
@@ -1719,9 +1585,6 @@ pub fn ema_multi_periods(
         }
     }
 
-    // Pre-compute smoothing factors and initial SMA seeds for every period.
-    // `seeds` holds the SMA of the first `period` bars (or the first bar for
-    // period == 1, which is just `input[0]`).
     let n = periods.len();
     let mut alphas: Vec<f64> = Vec::with_capacity(n);
     let mut seeds: Vec<f64> = Vec::with_capacity(n);
@@ -1735,12 +1598,9 @@ pub fn ema_multi_periods(
         seeds.push(seed);
     }
 
-    // Per-period state vector `prev[j]`. `start_idx[j]` is the first index at
-    // which EMA[j] is defined (== `periods[j] - 1`).
     let mut prev: Vec<f64> = seeds.clone();
     let start_idx: Vec<usize> = periods.iter().map(|&p| p - 1).collect();
 
-    // Warm-up: fill NaN for every index < start_idx, then place the seed.
     for (j, out) in outputs.iter_mut().enumerate() {
         let s = start_idx[j];
         if s > 0 {
@@ -1749,11 +1609,6 @@ pub fn ema_multi_periods(
         out[s] = seeds[j];
     }
 
-    // Single forward pass: for each new bar `i`, advance every EMA whose
-    // start index is < i. Emitting one branch per period per bar is cheap
-    // (typically ≤8 periods in multi-period resonance) and keeps the inner
-    // loop branch-free inside a per-j body. Compiler auto-vectorises the
-    // FMA recurrence when periods share a common length.
     for i in 0..len {
         let x = input[i];
         for j in 0..n {
@@ -1761,11 +1616,9 @@ pub fn ema_multi_periods(
                 continue;
             }
             if i == start_idx[j] {
-                // Seed already written above.
                 continue;
             }
             let a = alphas[j];
-            // FMA form — see `ema_inner` for rationale.
             prev[j] = (x - prev[j]).mul_add(a, prev[j]);
             outputs[j][i] = prev[j];
         }
@@ -1838,7 +1691,6 @@ mod tests {
 
     #[test]
     fn test_ema_first_value_seed() {
-        // FirstValue seed: valid from index 0, starts at input[0], no warm-up NaN.
         let input = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         let result = ema_with_seed(&input, 3, EmaSeed::FirstValue).unwrap();
         assert_eq!(result[0], 1.0);
@@ -1847,18 +1699,15 @@ mod tests {
         assert_relative_eq!(result[1], expected1, epsilon = 1e-10);
         let expected2 = 3.0 * k + expected1 * (1.0 - k);
         assert_relative_eq!(result[2], expected2, epsilon = 1e-10);
-        // No NaN anywhere — the seed makes the EMA valid immediately.
         assert!(result.iter().all(|v| !v.is_nan()));
     }
 
     #[test]
     fn test_ema_default_is_sma_seed() {
-        // `ema` must remain the SMA-seed variant (golden-locked semantics).
         let input = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         let default = ema(&input, 3).unwrap();
         let explicit = ema_with_seed(&input, 3, EmaSeed::Sma).unwrap();
         assert_slices_match(&default, explicit.as_slice().unwrap());
-        // SMA seed has NaN warm-up.
         assert!(default[0].is_nan() && default[1].is_nan());
     }
 
@@ -1890,8 +1739,6 @@ mod tests {
 
     #[test]
     fn test_wma_simd_matches_wma() {
-        // Compare prefix-sum SIMD WMA against the scalar recursive reference
-        // for a range of sizes and periods to guarantee numerical agreement.
         for &n in &[1usize, 5, 16, 20, 64, 100, 257, 1000] {
             for &period in &[1usize, 2, 3, 5, 7, 20, 50] {
                 if period > n {
@@ -2096,11 +1943,8 @@ mod tests {
         assert!(result[1].is_nan());
     }
 
-    // ───────────────── ema_multi_periods ─────────────────
-
     #[test]
     fn test_ema_multi_periods_matches_single() {
-        // Reference: re-derive via repeated calls to single `ema`.
         let data: Vec<f64> = (1..=200)
             .map(|i| 100.0 + (i as f64 * 0.37).sin() * 5.0)
             .collect();
@@ -2124,7 +1968,6 @@ mod tests {
 
     #[test]
     fn test_ema_multi_periods_empty_periods() {
-        // Empty period list → no-op, no allocations, no panic.
         let data = vec![1.0, 2.0, 3.0];
         let r = ema_multi_periods(&data, &[], &mut []);
         assert!(r.is_ok());
@@ -2134,7 +1977,6 @@ mod tests {
     fn test_ema_multi_periods_period_too_large() {
         let data = vec![1.0, 2.0, 3.0];
         let mut a = vec![0.0; data.len()];
-        // period 5 > len 3 → must error
         let r = ema_multi_periods(&data, &[5], &mut [&mut a]);
         assert!(r.is_err());
     }
@@ -2143,7 +1985,7 @@ mod tests {
     fn test_ema_multi_periods_output_len_mismatch() {
         let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         let mut a = vec![0.0; data.len()];
-        let mut b = vec![0.0; 2]; // wrong length
+        let mut b = vec![0.0; 2];
         let r = ema_multi_periods(&data, &[3, 5], &mut [&mut a, &mut b]);
         assert!(r.is_err());
     }
