@@ -431,6 +431,18 @@ pub(crate) fn rolling_minmax_visit(
         let mut low_tail = 0usize;
 
         for i in 0..high.len() {
+            // Expire stale fronts before insertion so a full 256-slot ring is
+            // never overwritten before its oldest element has been removed.
+            while high_head < high_tail
+                && high_queue[high_head & RING_MASK].saturating_add(window) <= i
+            {
+                high_head += 1;
+            }
+            while low_head < low_tail && low_queue[low_head & RING_MASK].saturating_add(window) <= i
+            {
+                low_head += 1;
+            }
+
             let new_high = high[i];
             while high_head < high_tail {
                 let back = high_queue[(high_tail - 1) & RING_MASK];
@@ -442,11 +454,6 @@ pub(crate) fn rolling_minmax_visit(
             }
             high_queue[high_tail & RING_MASK] = i;
             high_tail += 1;
-            while high_head < high_tail
-                && high_queue[high_head & RING_MASK].saturating_add(window) <= i
-            {
-                high_head += 1;
-            }
 
             let new_low = low[i];
             while low_head < low_tail {
@@ -459,10 +466,6 @@ pub(crate) fn rolling_minmax_visit(
             }
             low_queue[low_tail & RING_MASK] = i;
             low_tail += 1;
-            while low_head < low_tail && low_queue[low_head & RING_MASK].saturating_add(window) <= i
-            {
-                low_head += 1;
-            }
 
             if i + 1 >= window {
                 emit(
@@ -475,8 +478,8 @@ pub(crate) fn rolling_minmax_visit(
         return;
     }
 
-    // Large-window compatibility fallback: keep the previous cached-index
-    // algorithm to avoid a window-sized heap allocation in the generic path.
+    // Large-window compatibility fallback: retain the cached-index algorithm
+    // without a window-sized heap allocation in the generic path.
     let high_ptr = high.as_ptr();
     let low_ptr = low.as_ptr();
     let mut highest_idx = 0usize;

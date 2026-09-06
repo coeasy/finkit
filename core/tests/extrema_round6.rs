@@ -1,6 +1,4 @@
-use finkit::indicators::{
-    midpoint, midpoint_into, midprice, midprice_into, willr, willr_into,
-};
+use finkit::indicators::{midpoint, midpoint_into, midprice, midprice_into, willr, willr_into};
 
 fn assert_same(actual: &[f64], expected: &[f64]) {
     assert_eq!(actual.len(), expected.len());

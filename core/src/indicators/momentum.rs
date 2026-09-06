@@ -1301,15 +1301,40 @@ pub fn roc(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// assert_eq!(result.len(), 10);
 /// ```
 pub fn willr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Array1<f64>> {
+    let mut output = Array1::<f64>::zeros(close.len());
+    willr_into(high, low, close, period, output.as_slice_mut().unwrap())?;
+    Ok(output)
+}
+
+/// Caller-owned Williams %R kernel sharing the canonical extrema lifecycle.
+pub fn willr_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    period: usize,
+    output: &mut [f64],
+) -> Result<()> {
     if high.len() != low.len() || high.len() != close.len() {
         return Err(TaError::InvalidParameter {
             name: "high, low, close".to_string(),
             constraint: "must have the same length".to_string(),
         });
     }
+    if period == 0 {
+        return Err(TaError::InvalidParameter {
+            name: "period".to_string(),
+            constraint: "greater than 0".to_string(),
+        });
+    }
     validate_input(high.len(), period)?;
+    if output.len() != close.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
 
-    let mut output = init_output(close.len());
+    crate::utils::simd_fill_nan(&mut output[..period - 1]);
     rolling_minmax_visit(high, low, period, |i, highest, lowest| {
         let range = highest - lowest;
         output[i] = if range > 1e-15 {
@@ -1318,7 +1343,7 @@ pub fn willr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<
             0.0
         };
     });
-    Ok(output)
+    Ok(())
 }
 
 /// Elder-Ray Indicator Result
@@ -2833,123 +2858,6 @@ pub fn cci_into(
         });
     }
     output.copy_from_slice(result.as_slice().unwrap());
-    Ok(())
-}
-
-/// Williams %R zero-copy variant: writes result into pre-allocated slice.
-pub fn willr_into(
-    high: &[f64],
-    low: &[f64],
-    close: &[f64],
-    period: usize,
-    output: &mut [f64],
-) -> Result<()> {
-    if high.len() != low.len() || high.len() != close.len() {
-        return Err(TaError::InvalidParameter {
-            name: "high, low, close".to_string(),
-            constraint: "must have the same length".to_string(),
-        });
-    }
-    validate_input(high.len(), period)?;
-    if output.len() != high.len() {
-        return Err(TaError::InvalidParameter {
-            name: "output".to_string(),
-            constraint: "must have the same length as input".to_string(),
-        });
-    }
-
-    let len = close.len();
-    let high_ptr = high.as_ptr();
-    let low_ptr = low.as_ptr();
-    let close_ptr = close.as_ptr();
-    let out_ptr = output.as_mut_ptr();
-    let start = period - 1;
-
-    // Initialize output with NaN
-    for i in 0..start {
-        unsafe {
-            *out_ptr.add(i) = f64::NAN;
-        }
-    }
-
-    // Optimized sliding window with direct index tracking
-    unsafe {
-        // Initialize first window [0..period-1]
-        let mut highest_idx = 0usize;
-        let mut lowest_idx = 0usize;
-        let mut highest = *high_ptr.add(0);
-        let mut lowest = *low_ptr.add(0);
-
-        for k in 1..period {
-            let h = *high_ptr.add(k);
-            let l = *low_ptr.add(k);
-            if h >= highest {
-                highest = h;
-                highest_idx = k;
-            }
-            if l <= lowest {
-                lowest = l;
-                lowest_idx = k;
-            }
-        }
-
-        // First output at index period-1
-        let denom = highest - lowest;
-        *out_ptr.add(start) = if denom > 1e-15 {
-            (highest - *close_ptr.add(start)) / denom * -100.0
-        } else {
-            0.0
-        };
-
-        // Slide window: [i-period+1..=i]
-        for i in period..len {
-            let ws = i + 1 - period;
-            let new_h = *high_ptr.add(i);
-            let new_l = *low_ptr.add(i);
-
-            if highest_idx < ws {
-                highest = *high_ptr.add(ws);
-                highest_idx = ws;
-                let mut k = ws + 1;
-                while k <= i {
-                    let h = *high_ptr.add(k);
-                    if h >= highest {
-                        highest = h;
-                        highest_idx = k;
-                    }
-                    k += 1;
-                }
-            } else if new_h >= highest {
-                highest = new_h;
-                highest_idx = i;
-            }
-
-            if lowest_idx < ws {
-                lowest = *low_ptr.add(ws);
-                lowest_idx = ws;
-                let mut k = ws + 1;
-                while k <= i {
-                    let l = *low_ptr.add(k);
-                    if l <= lowest {
-                        lowest = l;
-                        lowest_idx = k;
-                    }
-                    k += 1;
-                }
-            } else if new_l <= lowest {
-                lowest = new_l;
-                lowest_idx = i;
-            }
-
-            let denom = highest - lowest;
-            *out_ptr.add(i) = if denom > 1e-15 {
-                (highest - *close_ptr.add(i)) / denom * -100.0
-            } else {
-                0.0
-            };
-        }
-    }
-
     Ok(())
 }
 
