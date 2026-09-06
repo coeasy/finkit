@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Apply Architecture v3 round 6 extrema-kernel convergence.
 
-This migration is intentionally idempotent. It moves MIDPOINT, MIDPRICE and
-WILLR onto caller-owned `*_into` kernels, replaces the cached-extrema rescan
-hot loop with a stack-backed monotonic ring for technical-analysis windows,
-and removes the duplicate Python-binding extrema implementation.
+The migration is deliberately idempotent. MIDPOINT, MIDPRICE and WILLR share
+caller-owned ``*_into`` paths and the fused rolling extrema visitor. Existing
+canonical stages are detected by stable semantic markers rather than exact
+rustfmt output so re-running the migration cannot duplicate functions.
 """
 
 from __future__ import annotations
@@ -15,15 +15,30 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def replace_once(path: str, pattern: str, replacement: str, *, flags: int = 0) -> None:
+def replace_if_missing(
+    path: str,
+    pattern: str,
+    replacement: str,
+    *,
+    marker: str,
+    flags: int = 0,
+) -> None:
     target = ROOT / path
     text = target.read_text()
+    if marker in text:
+        return
     updated, count = re.subn(pattern, replacement, text, count=1, flags=flags)
-    if count == 0:
-        if replacement.strip() in text:
-            return
+    if count != 1:
         raise RuntimeError(f"pattern not found in {path}: {pattern[:80]!r}")
     target.write_text(updated)
+
+
+def remove_if_present(path: str, pattern: str, *, flags: int = 0) -> None:
+    target = ROOT / path
+    text = target.read_text()
+    updated, count = re.subn(pattern, "", text, count=1, flags=flags)
+    if count:
+        target.write_text(updated)
 
 
 STATISTICS_KERNEL = r'''#[inline]
@@ -54,6 +69,19 @@ pub(crate) fn rolling_minmax_visit(
         let mut low_tail = 0usize;
 
         for i in 0..high.len() {
+            // Expire stale fronts before insertion so a full 256-slot ring is
+            // never overwritten before its oldest element has been removed.
+            while high_head < high_tail
+                && high_queue[high_head & RING_MASK].saturating_add(window) <= i
+            {
+                high_head += 1;
+            }
+            while low_head < low_tail
+                && low_queue[low_head & RING_MASK].saturating_add(window) <= i
+            {
+                low_head += 1;
+            }
+
             let new_high = high[i];
             while high_head < high_tail {
                 let back = high_queue[(high_tail - 1) & RING_MASK];
@@ -65,11 +93,6 @@ pub(crate) fn rolling_minmax_visit(
             }
             high_queue[high_tail & RING_MASK] = i;
             high_tail += 1;
-            while high_head < high_tail
-                && high_queue[high_head & RING_MASK].saturating_add(window) <= i
-            {
-                high_head += 1;
-            }
 
             let new_low = low[i];
             while low_head < low_tail {
@@ -82,11 +105,6 @@ pub(crate) fn rolling_minmax_visit(
             }
             low_queue[low_tail & RING_MASK] = i;
             low_tail += 1;
-            while low_head < low_tail
-                && low_queue[low_head & RING_MASK].saturating_add(window) <= i
-            {
-                low_head += 1;
-            }
 
             if i + 1 >= window {
                 emit(
@@ -99,8 +117,8 @@ pub(crate) fn rolling_minmax_visit(
         return;
     }
 
-    // Large-window compatibility fallback: keep the previous cached-index
-    // algorithm to avoid a window-sized heap allocation in the generic path.
+    // Large-window compatibility fallback: retain the cached-index algorithm
+    // without a window-sized heap allocation in the generic path.
     let high_ptr = high.as_ptr();
     let low_ptr = low.as_ptr();
     let mut highest_idx = 0usize;
@@ -166,10 +184,11 @@ pub(crate) fn rolling_minmax_visit(
     }
 }'''
 
-replace_once(
+replace_if_missing(
     "core/src/math/statistics.rs",
-    r"#\[inline\]\npub\(crate\) fn rolling_minmax_visit\(.*?\n\}\n(?=\n/// Find maximum value in a rolling window)",
+    r"#\[inline\]\npub\(crate\) fn rolling_minmax_visit\(.*?\n\}\n(?=\s*/// Find maximum value in a rolling window)",
     STATISTICS_KERNEL,
+    marker="Expire stale fronts before insertion",
     flags=re.S,
 )
 
@@ -201,10 +220,11 @@ pub fn midpoint_into(input: &[f64], period: usize, output: &mut [f64]) -> Result
     });
     Ok(())
 }'''
-replace_once(
+replace_if_missing(
     "core/src/indicators/overlap.rs",
     r"pub fn midpoint\(input: &\[f64\], period: usize\) -> Result<Array1<f64>> \{.*?\n\}",
     MIDPOINT,
+    marker="pub fn midpoint_into(",
     flags=re.S,
 )
 
@@ -242,10 +262,11 @@ pub fn midprice_into(high: &[f64], low: &[f64], period: usize, output: &mut [f64
     });
     Ok(())
 }'''
-replace_once(
+replace_if_missing(
     "core/src/indicators/overlap.rs",
     r"pub fn midprice\(high: &\[f64\], low: &\[f64\], period: usize\) -> Result<Array1<f64>> \{.*?\n\}",
     MIDPRICE,
+    marker="pub fn midprice_into(",
     flags=re.S,
 )
 
@@ -294,34 +315,30 @@ pub fn willr_into(
     });
     Ok(())
 }'''
-replace_once(
+replace_if_missing(
     "core/src/indicators/momentum.rs",
     r"pub fn willr\(high: &\[f64\], low: &\[f64\], close: &\[f64\], period: usize\) -> Result<Array1<f64>> \{.*?\n\}",
     WILLR,
+    marker="Caller-owned Williams %R kernel sharing the canonical extrema lifecycle.",
     flags=re.S,
 )
 
-# The pre-round6 file also exposes a later legacy `willr_into` in the generic
-# zero-copy section. Remove that exact block after installing the canonical
-# implementation above so the migration is truly idempotent and cannot
-# reintroduce E0428 duplicate-symbol failures on subsequent runs.
-replace_once(
+# Remove the pre-round6 duplicate after installing the canonical function.
+remove_if_present(
     "core/src/indicators/momentum.rs",
     r"\n/// Williams %R zero-copy variant: writes result into pre-allocated slice\.\npub fn willr_into\(.*?\n\}\n(?=\n/// Momentum zero-copy variant:)",
-    "\n",
     flags=re.S,
 )
 
-# Remove the binding-local extrema implementation. The language boundary now
-# allocates exactly one output Vec and delegates to the core caller-owned API.
-replace_once(
+# Remove binding-local extrema kernels when present; dispatches below delegate
+# to the same core caller-owned APIs used by Rust/runtime execution.
+remove_if_present(
     "ffi/python-binding/src/native_fast_path.rs",
     r"/// Sliding extrema with TA-Lib-style cached extreme indexes\..*?(?=#\[inline\]\nfn mom_vec)",
-    "",
     flags=re.S,
 )
 
-replace_once(
+replace_if_missing(
     "ffi/python-binding/src/native_fast_path.rs",
     r'''"midpoint" => \{\n\s*validate_period\(close\.len\(\), timeperiod\)\?;\n\s*py\.detach\(\|\| midpoint_vec\(close, close, timeperiod\)\)\n\s*\}''',
     '''"midpoint" => {
@@ -330,18 +347,20 @@ replace_once(
                 .map_err(value_error)?;
             output
         }''',
+    marker="indicators::midpoint_into(close, timeperiod, &mut output)",
 )
-replace_once(
+replace_if_missing(
     "ffi/python-binding/src/native_fast_path.rs",
-    r'''"midprice" => \{\n\s*validate_period\(input_a\.len\(\), timeperiod\)\?;\n\s*py\.detach\(\|\| midpoint_vec\(input_a, input_b, timeperiod\)\)\n\s*\}''',
+    r'''"midprice" => \{\n\s*validate_period\(input_a\.len\(\), timeperiod\)\?;\n\s*py\.detach\(\|\| midpoint_vec\(input_a, input_b, timeperiod\)\n\s*\}''',
     '''"midprice" => {
             let mut output = vec![0.0; input_a.len()];
             py.detach(|| indicators::midprice_into(input_a, input_b, timeperiod, &mut output))
                 .map_err(value_error)?;
             output
         }''',
+    marker="indicators::midprice_into(input_a, input_b, timeperiod, &mut output)",
 )
-replace_once(
+replace_if_missing(
     "ffi/python-binding/src/native_fast_path.rs",
     r'''"willr" => \{\n\s*validate_period\(high\.len\(\), timeperiod\)\?;\n\s*py\.detach\(\|\| willr_vec\(high, low, close, timeperiod\)\)\n\s*\}''',
     '''"willr" => {
@@ -350,6 +369,7 @@ replace_once(
                 .map_err(value_error)?;
             output
         }''',
+    marker="indicators::willr_into(high, low, close, timeperiod, &mut output)",
 )
 
 print("Architecture v3 round 6 extrema convergence applied")
