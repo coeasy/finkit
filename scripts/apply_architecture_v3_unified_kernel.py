@@ -3,10 +3,9 @@
 
 The transformation is intentionally idempotent and keeps public Python
 signatures unchanged while removing runtime string operation dispatch from the
-private native hot-path ABI. It also makes the registry SSOT generator emit
-NumPy-direct numeric bindings, improves rolling-extrema allocation behavior,
-routes TRANGE directly into caller-owned output, and collapses MFI/volume
-indicators onto their single canonical math kernels.
+private native hot-path ABI. Rolling extrema are owned by the round-6
+canonicalizer; this migration only verifies that the round-6 direct *_into
+surface is present instead of trying to rewrite the retired private helper.
 """
 
 from __future__ import annotations
@@ -44,9 +43,7 @@ def _replace_function(text: str, name: str, replacements: list[tuple[str, str]])
             continue
         count = segment.count(old)
         if count != 1:
-            raise RuntimeError(
-                f"{name}: expected one {old!r} fragment, found {count}"
-            )
+            raise RuntimeError(f"{name}: expected one {old!r} fragment, found {count}")
         segment = segment.replace(old, new, 1)
     return text[:start] + segment + text[end:]
 
@@ -73,184 +70,32 @@ def _replace_rust_public_function(
     return text[:start] + canonical + text[end + 2 :]
 
 
+def _verify_extrema_round6(text: str) -> None:
+    """Accept the round-6 source shape without reviving its retired helper."""
+
+    if "fn rolling_extrema_map" in text:
+        # Older source layouts are still legal inputs to this migration. Extrema
+        # convergence is deliberately owned by apply_extrema_into_round6.py so
+        # two independent migrations do not exact-match and rewrite the same
+        # private helper anymore.
+        return
+
+    required = (
+        "indicators::midpoint_into(",
+        "indicators::midprice_into(",
+        "indicators::willr_into(",
+    )
+    missing = [needle for needle in required if needle not in text]
+    if missing:
+        raise RuntimeError(
+            "round6 extrema helper is absent but canonical direct paths are missing: "
+            + ", ".join(missing)
+        )
+
+
 def patch_native_fast_path() -> None:
     text = NATIVE.read_text(encoding="utf-8")
-
-    old_extrema = '''fn rolling_extrema_map<F>(
-    max_source: &[f64],
-    min_source: &[f64],
-    period: usize,
-    mut map: F,
-) -> Vec<f64>
-where
-    F: FnMut(usize, f64, f64) -> f64,
-{
-    let len = max_source.len();
-    let mut output = vec![f64::NAN; len];
-    if period == 0 || period > len {
-        return output;
-    }
-
-    unsafe {
-        let max_ptr = max_source.as_ptr();
-        let min_ptr = min_source.as_ptr();
-        let output_ptr = output.as_mut_ptr();
-
-        let mut highest_idx = 0usize;
-        let mut lowest_idx = 0usize;
-        let mut highest = *max_ptr;
-        let mut lowest = *min_ptr;
-        for index in 1..period {
-            let high = *max_ptr.add(index);
-            let low = *min_ptr.add(index);
-            if high >= highest {
-                highest = high;
-                highest_idx = index;
-            }
-            if low <= lowest {
-                lowest = low;
-                lowest_idx = index;
-            }
-        }
-        *output_ptr.add(period - 1) = map(period - 1, highest, lowest);
-
-        for index in period..len {
-            let window_start = index + 1 - period;
-            let new_high = *max_ptr.add(index);
-            let new_low = *min_ptr.add(index);
-
-            if highest_idx < window_start {
-                highest = *max_ptr.add(window_start);
-                highest_idx = window_start;
-                for candidate in window_start + 1..=index {
-                    let value = *max_ptr.add(candidate);
-                    if value >= highest {
-                        highest = value;
-                        highest_idx = candidate;
-                    }
-                }
-            } else if new_high >= highest {
-                highest = new_high;
-                highest_idx = index;
-            }
-
-            if lowest_idx < window_start {
-                lowest = *min_ptr.add(window_start);
-                lowest_idx = window_start;
-                for candidate in window_start + 1..=index {
-                    let value = *min_ptr.add(candidate);
-                    if value <= lowest {
-                        lowest = value;
-                        lowest_idx = candidate;
-                    }
-                }
-            } else if new_low <= lowest {
-                lowest = new_low;
-                lowest_idx = index;
-            }
-
-            *output_ptr.add(index) = map(index, highest, lowest);
-        }
-    }
-    output
-}
-'''
-    new_extrema = '''fn rolling_extrema_map<F>(
-    max_source: &[f64],
-    min_source: &[f64],
-    period: usize,
-    mut map: F,
-) -> Vec<f64>
-where
-    F: FnMut(usize, f64, f64) -> f64,
-{
-    let len = max_source.len();
-    if period == 0 || period > len {
-        return vec![f64::NAN; len];
-    }
-
-    // Every element is written exactly once: only the short warm-up prefix is
-    // initialized to NaN and the valid range is written directly. Avoiding a
-    // full vec![NaN; len] pass matters for 1M-row MIDPOINT/MIDPRICE/WILLR.
-    let mut raw = Vec::<MaybeUninit<f64>>::with_capacity(len);
-    unsafe {
-        raw.set_len(len);
-        let max_ptr = max_source.as_ptr();
-        let min_ptr = min_source.as_ptr();
-        let output_ptr = raw.as_mut_ptr();
-        for index in 0..period - 1 {
-            output_ptr.add(index).write(MaybeUninit::new(f64::NAN));
-        }
-
-        let mut highest_idx = 0usize;
-        let mut lowest_idx = 0usize;
-        let mut highest = *max_ptr;
-        let mut lowest = *min_ptr;
-        for index in 1..period {
-            let high = *max_ptr.add(index);
-            let low = *min_ptr.add(index);
-            if high >= highest {
-                highest = high;
-                highest_idx = index;
-            }
-            if low <= lowest {
-                lowest = low;
-                lowest_idx = index;
-            }
-        }
-        output_ptr
-            .add(period - 1)
-            .write(MaybeUninit::new(map(period - 1, highest, lowest)));
-
-        for index in period..len {
-            let window_start = index + 1 - period;
-            let new_high = *max_ptr.add(index);
-            let new_low = *min_ptr.add(index);
-
-            if highest_idx < window_start {
-                highest = *max_ptr.add(window_start);
-                highest_idx = window_start;
-                for candidate in window_start + 1..=index {
-                    let value = *max_ptr.add(candidate);
-                    if value >= highest {
-                        highest = value;
-                        highest_idx = candidate;
-                    }
-                }
-            } else if new_high >= highest {
-                highest = new_high;
-                highest_idx = index;
-            }
-
-            if lowest_idx < window_start {
-                lowest = *min_ptr.add(window_start);
-                lowest_idx = window_start;
-                for candidate in window_start + 1..=index {
-                    let value = *min_ptr.add(candidate);
-                    if value <= lowest {
-                        lowest = value;
-                        lowest_idx = candidate;
-                    }
-                }
-            } else if new_low <= lowest {
-                lowest = new_low;
-                lowest_idx = index;
-            }
-
-            output_ptr
-                .add(index)
-                .write(MaybeUninit::new(map(index, highest, lowest)));
-        }
-
-        let ptr = raw.as_mut_ptr().cast::<f64>();
-        let capacity = raw.capacity();
-        let length = raw.len();
-        forget(raw);
-        Vec::from_raw_parts(ptr, length, capacity)
-    }
-}
-'''
-    text = _replace_once(text, old_extrema, new_extrema, "rolling extrema full-write")
+    _verify_extrema_round6(text)
 
     # Private hot-path ABI: operation strings never cross the Python/Rust
     # runtime boundary. Stable numeric ids are resolved by the public Python
@@ -267,7 +112,10 @@ where
             ('"rsi" =>', "5 =>"),
             ('"roc" =>', "6 =>"),
             ('"cmo" =>', "7 =>"),
-            ("unsupported fast operation {operation}", "unsupported fast operation id {operation}"),
+            (
+                "unsupported fast operation {operation}",
+                "unsupported fast operation id {operation}",
+            ),
         ],
     )
     text = _replace_function(
@@ -277,7 +125,10 @@ where
             ("operation: &str,", "operation: u16,"),
             ('"stddev" =>', "1 =>"),
             ('"var" =>', "2 =>"),
-            ("unsupported fast operation {operation}", "unsupported fast operation id {operation}"),
+            (
+                "unsupported fast operation {operation}",
+                "unsupported fast operation id {operation}",
+            ),
         ],
     )
     text = _replace_function(
@@ -287,7 +138,10 @@ where
             ("operation: &str,", "operation: u16,"),
             ('"midprice" =>', "1 =>"),
             ('"correl" =>', "2 =>"),
-            ("unsupported fast operation {operation}", "unsupported fast operation id {operation}"),
+            (
+                "unsupported fast operation {operation}",
+                "unsupported fast operation id {operation}",
+            ),
         ],
     )
     text = _replace_function(
@@ -302,7 +156,10 @@ where
             ('"minus_di" =>', "5 =>"),
             ('"atr" =>', "6 =>"),
             ('"natr" =>', "7 =>"),
-            ("unsupported fast operation {operation}", "unsupported fast operation id {operation}"),
+            (
+                "unsupported fast operation {operation}",
+                "unsupported fast operation id {operation}",
+            ),
         ],
     )
 
