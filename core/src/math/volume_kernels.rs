@@ -2,9 +2,9 @@
 //!
 //! This module is deliberately below the public indicator layer. It gives the
 //! Python/FFI bindings and the canonical allocating APIs a common hot path without
-//! forcing a temporary `Vec`/`Array1` conversion. Elementwise/prefix-scan work is
-//! delegated to the same runtime SIMD dispatchers used by the public indicators,
-//! so there is one numerical implementation per volume kernel.
+//! forcing a temporary `Vec`/`Array1` conversion. AD uses the runtime SIMD dispatcher;
+//! stateful recurrences that cannot be vectorized without scratch storage stay fused
+//! and allocation-free here.
 
 use crate::error::{Result, TaError};
 use ndarray::Array1;
@@ -22,9 +22,11 @@ fn validate_same_len(name: &'static str, expected: usize, actual: usize) -> Resu
 
 /// Compute On-Balance Volume directly into `output`.
 ///
-/// This is the canonical caller-owned OBV entry point. The runtime SIMD
-/// dispatcher owns the numerical implementation (AVX2 when available, scalar
-/// otherwise), avoiding the previous duplicate scalar recurrence in this layer.
+/// OBV is a serial prefix recurrence. The AVX2 compatibility dispatcher currently
+/// materializes a full-length delta scratch vector before its prefix scan, which is
+/// slower for the installed-wheel path and violates this caller-owned API's
+/// allocation-free contract. Keep the canonical hot recurrence fused until that
+/// dispatcher can perform an in-register prefix scan without heap scratch.
 #[inline]
 pub fn obv_into(close: &[f64], volume: &[f64], output: &mut [f64]) -> Result<()> {
     validate_same_len("volume", close.len(), volume.len())?;
@@ -33,11 +35,27 @@ pub fn obv_into(close: &[f64], volume: &[f64], output: &mut [f64]) -> Result<()>
         return Err(TaError::EmptyInput);
     }
 
-    crate::math::simd_ops::simd_obv(close, volume, output);
+    unsafe {
+        let close_ptr = close.as_ptr();
+        let volume_ptr = volume.as_ptr();
+        let output_ptr = output.as_mut_ptr();
+        let mut acc = *volume_ptr;
+        *output_ptr = acc;
+        for i in 1..close.len() {
+            let current = *close_ptr.add(i);
+            let previous = *close_ptr.add(i - 1);
+            if current > previous {
+                acc += *volume_ptr.add(i);
+            } else if current < previous {
+                acc -= *volume_ptr.add(i);
+            }
+            *output_ptr.add(i) = acc;
+        }
+    }
     Ok(())
 }
 
-/// Allocating OBV wrapper sharing the same canonical dispatcher.
+/// Allocating OBV wrapper sharing the allocation-free canonical recurrence.
 pub fn obv(close: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
     let mut output = vec![0.0; close.len()];
     obv_into(close, volume, &mut output)?;
@@ -46,10 +64,9 @@ pub fn obv(close: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
 
 /// Compute the Accumulation/Distribution line directly into `output`.
 ///
-/// The runtime SIMD dispatcher performs money-flow calculation and the
-/// cumulative scan directly in the caller-owned output. Keeping this as the
-/// only AD implementation avoids a second scalar recurrence in Python/FFI hot
-/// paths and preserves the public indicator's fallback semantics.
+/// The runtime SIMD dispatcher performs money-flow calculation and the cumulative
+/// scan directly in the caller-owned output without an additional full-length
+/// scratch allocation.
 #[inline]
 pub fn ad_into(
     high: &[f64],
