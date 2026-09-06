@@ -1,11 +1,11 @@
 //! TA-Lib 0.7.1-compatible rolling statistics for the public compatibility path.
 //!
-//! The installed-wheel release gate currently benchmarks against TA-Lib core
-//! 0.7.1. That release uses raw rolling sums for VAR/STDDEV/CORREL and a
-//! precomputed-SMA specialization for BBANDS. The operation order below mirrors
-//! those C loops deliberately: changing add/remove order or replacing division
-//! with multiplication by a reciprocal is enough to create long-series parity
-//! drift.
+//! The installed-wheel release gate benchmarks against TA-Lib core 0.7.1. That
+//! release emits VAR/STDDEV/BBANDS from raw rolling first/second moments. A classic
+//! remove/add Welford recurrence is numerically more stable, but it does not retain
+//! TA-Lib's long-series rounding sequence closely enough for the public parity gate.
+//! The canonical state below therefore keeps the exact TA-compatible update order
+//! while giving VAR, STDDEV and SMA-BBANDS one shared rolling-moments kernel.
 
 use crate::error::{Result, TaError};
 
@@ -33,71 +33,113 @@ fn is_zero_or_negative(value: f64) -> bool {
     value < TA_EPSILON
 }
 
+/// Canonical rolling first/second-moment state for TA-Lib-compatible outputs.
+///
+/// `next` preserves the C implementation's per-accumulator sequencing:
+/// add current -> observe moment -> remove trailing. BBANDS, VAR and STDDEV all
+/// consume this state, so the hot loop no longer has three independent versions
+/// of the same window lifecycle.
+struct RollingMoments<'a> {
+    input: &'a [f64],
+    trailing_idx: usize,
+    total: f64,
+    total2: f64,
+    period_f: f64,
+}
+
+impl<'a> RollingMoments<'a> {
+    #[inline]
+    fn new(input: &'a [f64], period: usize) -> Self {
+        let lookback = period - 1;
+        let mut total = 0.0;
+        let mut total2 = 0.0;
+        for &value in &input[..lookback] {
+            total += value;
+            let mut squared = value;
+            squared *= squared;
+            total2 += squared;
+        }
+        Self {
+            input,
+            trailing_idx: 0,
+            total,
+            total2,
+            period_f: period as f64,
+        }
+    }
+
+    /// Consume one window ending at `index`, returning `(mean, population variance)`.
+    #[inline(always)]
+    fn next(&mut self, index: usize) -> (f64, f64) {
+        unsafe {
+            let mut current = *self.input.get_unchecked(index);
+            self.total += current;
+            current *= current;
+            self.total2 += current;
+
+            // Keep division (rather than reciprocal multiplication) to match
+            // TA-Lib's long-series rounding behaviour.
+            let mean = self.total / self.period_f;
+            let mean2 = self.total2 / self.period_f;
+
+            let mut trailing = *self.input.get_unchecked(self.trailing_idx);
+            self.trailing_idx += 1;
+            self.total -= trailing;
+            trailing *= trailing;
+            self.total2 -= trailing;
+
+            (mean, mean2 - mean * mean)
+        }
+    }
+}
+
 /// Population variance with the exact rolling update order used by TA_VAR 0.7.1.
 pub fn variance(input: &[f64], period: usize) -> Result<Vec<f64>> {
     validate_period(input.len(), period, 1)?;
 
     let lookback = period - 1;
     let mut output = vec![f64::NAN; input.len()];
-    let mut period_total1 = 0.0;
-    let mut period_total2 = 0.0;
-    let mut trailing_idx = 0usize;
-    let mut i = trailing_idx;
-
-    if period > 1 {
-        while i < lookback {
-            let mut temp_real = input[i];
-            i += 1;
-            period_total1 += temp_real;
-            temp_real *= temp_real;
-            period_total2 += temp_real;
-        }
+    let mut moments = RollingMoments::new(input, period);
+    let output_ptr = output.as_mut_ptr();
+    for index in lookback..input.len() {
+        let (_, variance) = moments.next(index);
+        unsafe { *output_ptr.add(index) = variance };
     }
-
-    while i < input.len() {
-        let mut temp_real = input[i];
-        i += 1;
-        period_total1 += temp_real;
-        temp_real *= temp_real;
-        period_total2 += temp_real;
-
-        let mean_value1 = period_total1 / period as f64;
-        let mean_value2 = period_total2 / period as f64;
-
-        temp_real = input[trailing_idx];
-        trailing_idx += 1;
-        period_total1 -= temp_real;
-        temp_real *= temp_real;
-        period_total2 -= temp_real;
-
-        output[i - 1] = mean_value2 - mean_value1 * mean_value1;
-    }
-
     Ok(output)
 }
 
-/// Standard deviation as TA_STDDEV 0.7.1: VAR followed by guarded sqrt/scale.
+/// Standard deviation as TA_STDDEV 0.7.1, fused with the canonical moment scan.
+///
+/// The previous implementation materialized a complete variance vector and then
+/// traversed it again to apply sqrt/scale. Fusing the transform removes one full
+/// read/write pass while preserving the exact variance arithmetic.
 pub fn stddev(input: &[f64], period: usize, nb_dev: f64) -> Result<Vec<f64>> {
     validate_period(input.len(), period, 2)?;
-    let mut output = variance(input, period)?;
 
-    if nb_dev != 1.0 {
-        for value in output.iter_mut().skip(period - 1) {
-            let temp_real = *value;
-            *value = if !is_zero_or_negative(temp_real) {
-                temp_real.sqrt() * nb_dev
+    let lookback = period - 1;
+    let mut output = vec![f64::NAN; input.len()];
+    let mut moments = RollingMoments::new(input, period);
+    let output_ptr = output.as_mut_ptr();
+
+    if nb_dev == 1.0 {
+        for index in lookback..input.len() {
+            let (_, variance) = moments.next(index);
+            let value = if !is_zero_or_negative(variance) {
+                variance.sqrt()
             } else {
                 0.0
             };
+            unsafe { *output_ptr.add(index) = value };
         }
     } else {
-        for value in output.iter_mut().skip(period - 1) {
-            let temp_real = *value;
-            *value = if !is_zero_or_negative(temp_real) {
-                temp_real.sqrt()
+        for index in lookback..input.len() {
+            let (_, variance) = moments.next(index);
+            let value = if !is_zero_or_negative(variance) {
+                variance.sqrt() * nb_dev
             } else {
                 0.0
             };
+            unsafe { *output_ptr.add(index) = value };
         }
     }
 
@@ -181,10 +223,9 @@ pub fn correlation(input_a: &[f64], input_b: &[f64], period: usize) -> Result<Ve
 
 /// SMA Bollinger Bands matching the TA_BBANDS 0.7.1 SMA specialization.
 ///
-/// TA-Lib computes SMA and the rolling square sum in two helper passes. The
-/// two accumulators are independent, so interleaving those updates preserves
-/// each helper's exact add/remove order while halving the input traversal and
-/// eliminating the hot-loop branch tree for deviation multipliers.
+/// All three bands are emitted during the same canonical moment scan. Outputs are
+/// pre-sized and written through raw pointers to remove `Vec::push` capacity checks
+/// from the million-row hot loop while preserving TA-Lib arithmetic order.
 pub fn bbands_sma(
     input: &[f64],
     period: usize,
@@ -195,57 +236,27 @@ pub fn bbands_sma(
 
     let len = input.len();
     let lookback = period - 1;
-    let mut upper = Vec::with_capacity(len);
-    let mut middle = Vec::with_capacity(len);
-    let mut lower = Vec::with_capacity(len);
-    upper.resize(lookback, f64::NAN);
-    middle.resize(lookback, f64::NAN);
-    lower.resize(lookback, f64::NAN);
+    let mut upper = vec![f64::NAN; len];
+    let mut middle = vec![f64::NAN; len];
+    let mut lower = vec![f64::NAN; len];
+    let upper_ptr = upper.as_mut_ptr();
+    let middle_ptr = middle.as_mut_ptr();
+    let lower_ptr = lower.as_mut_ptr();
+    let mut moments = RollingMoments::new(input, period);
 
-    let mut period_total = 0.0;
-    let mut period_total2 = 0.0;
-    for &value in &input[..lookback] {
-        period_total += value;
-        let mut squared = value;
-        squared *= squared;
-        period_total2 += squared;
-    }
-
-    let period_f = period as f64;
-    let mut trailing_idx = 0usize;
     for index in lookback..len {
-        let current = input[index];
-
-        // TA_INT_SMA update order.
-        period_total += current;
-        let middle_value = period_total / period_f;
-        period_total -= input[trailing_idx];
-
-        // TA_INT_stddev_using_precalc_ma update order.
-        let mut squared = current;
-        squared *= squared;
-        period_total2 += squared;
-        let mut variance = period_total2 / period_f;
-        let mut outgoing_squared = input[trailing_idx];
-        outgoing_squared *= outgoing_squared;
-        period_total2 -= outgoing_squared;
-        let mut middle_squared = middle_value;
-        middle_squared *= middle_squared;
-        variance -= middle_squared;
-
+        let (middle_value, variance) = moments.next(index);
         let stddev = if !is_zero_or_negative(variance) {
             variance.sqrt()
         } else {
             0.0
         };
 
-        // Multiplication by 1.0 is exact for finite IEEE-754 values, so this
-        // branch-free form is numerically identical to TA-Lib's 1.0 special
-        // cases while removing per-row parameter branches.
-        upper.push(middle_value + stddev * nb_dev_up);
-        middle.push(middle_value);
-        lower.push(middle_value - stddev * nb_dev_down);
-        trailing_idx += 1;
+        unsafe {
+            *upper_ptr.add(index) = middle_value + stddev * nb_dev_up;
+            *middle_ptr.add(index) = middle_value;
+            *lower_ptr.add(index) = middle_value - stddev * nb_dev_down;
+        }
     }
 
     Ok((upper, middle, lower))
@@ -272,6 +283,23 @@ mod tests {
     }
 
     #[test]
+    fn stddev_is_exact_sqrt_of_canonical_variance() {
+        let input: Vec<f64> = (0..512)
+            .map(|index| 100.0 + index as f64 * 0.01 + (index as f64 * 0.17).sin())
+            .collect();
+        let variance = variance(&input, 20).unwrap();
+        let stddev = stddev(&input, 20, 1.0).unwrap();
+        for index in 19..input.len() {
+            let expected = if !is_zero_or_negative(variance[index]) {
+                variance[index].sqrt()
+            } else {
+                0.0
+            };
+            assert_eq!(stddev[index], expected);
+        }
+    }
+
+    #[test]
     fn correlation_first_window_is_one_for_affine_series() {
         let x = [1.0, 2.0, 3.0, 4.0, 5.0];
         let y = [9.0, 11.0, 13.0, 15.0, 17.0];
@@ -291,5 +319,23 @@ mod tests {
         assert!((middle[127] - 118.5).abs() < 1.0e-12);
         assert!(upper[19] > middle[19]);
         assert!(lower[19] < middle[19]);
+    }
+
+    #[test]
+    fn bands_and_variance_share_the_same_canonical_moments() {
+        let input: Vec<f64> = (0..256)
+            .map(|index| 50.0 + index as f64 * 0.02 + (index as f64 * 0.11).cos())
+            .collect();
+        let variance = variance(&input, 20).unwrap();
+        let (upper, middle, lower) = bbands_sma(&input, 20, 2.0, 2.0).unwrap();
+        for index in 19..input.len() {
+            let sigma = if !is_zero_or_negative(variance[index]) {
+                variance[index].sqrt()
+            } else {
+                0.0
+            };
+            assert_eq!(upper[index], middle[index] + 2.0 * sigma);
+            assert_eq!(lower[index], middle[index] - 2.0 * sigma);
+        }
     }
 }
