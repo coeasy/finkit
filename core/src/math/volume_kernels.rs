@@ -1,8 +1,10 @@
 //! Allocation-free volume indicator kernels for caller-owned output buffers.
 //!
-//! This module is deliberately below the public indicator layer.  It gives the
+//! This module is deliberately below the public indicator layer. It gives the
 //! Python/FFI bindings and the canonical allocating APIs a common hot path without
-//! forcing a temporary `Vec`/`Array1` conversion.
+//! forcing a temporary `Vec`/`Array1` conversion. Elementwise/prefix-scan work is
+//! delegated to the same runtime SIMD dispatchers used by the public indicators,
+//! so there is one numerical implementation per volume kernel.
 
 use crate::error::{Result, TaError};
 use ndarray::Array1;
@@ -20,10 +22,9 @@ fn validate_same_len(name: &'static str, expected: usize, actual: usize) -> Resu
 
 /// Compute On-Balance Volume directly into `output`.
 ///
-/// OBV is a serial recurrence.  A temporary delta vector plus a second prefix
-/// pass looks SIMD-friendly, but is materially slower for large arrays because
-/// it doubles memory traffic and allocates another full-length buffer.  Keep the
-/// reference single-pass recurrence and let LLVM optimise the pointer loop.
+/// This is the canonical caller-owned OBV entry point. The runtime SIMD
+/// dispatcher owns the numerical implementation (AVX2 when available, scalar
+/// otherwise), avoiding the previous duplicate scalar recurrence in this layer.
 #[inline]
 pub fn obv_into(close: &[f64], volume: &[f64], output: &mut [f64]) -> Result<()> {
     validate_same_len("volume", close.len(), volume.len())?;
@@ -32,29 +33,11 @@ pub fn obv_into(close: &[f64], volume: &[f64], output: &mut [f64]) -> Result<()>
         return Err(TaError::EmptyInput);
     }
 
-    unsafe {
-        let close_ptr = close.as_ptr();
-        let volume_ptr = volume.as_ptr();
-        let output_ptr = output.as_mut_ptr();
-        let mut acc = *volume_ptr;
-        *output_ptr = acc;
-
-        for i in 1..close.len() {
-            let current = *close_ptr.add(i);
-            let previous = *close_ptr.add(i - 1);
-            let volume_value = *volume_ptr.add(i);
-            if current > previous {
-                acc += volume_value;
-            } else if current < previous {
-                acc -= volume_value;
-            }
-            *output_ptr.add(i) = acc;
-        }
-    }
+    crate::math::simd_ops::simd_obv(close, volume, output);
     Ok(())
 }
 
-/// Allocating OBV wrapper sharing the same canonical single-pass kernel.
+/// Allocating OBV wrapper sharing the same canonical dispatcher.
 pub fn obv(close: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
     let mut output = vec![0.0; close.len()];
     obv_into(close, volume, &mut output)?;
@@ -63,9 +46,10 @@ pub fn obv(close: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
 
 /// Compute the Accumulation/Distribution line directly into `output`.
 ///
-/// The cumulative dependency makes a second prefix-sum pass unnecessary.  This
-/// single loop has the same arithmetic order as the existing scalar reference
-/// path while avoiding both scratch storage and an additional read/write pass.
+/// The runtime SIMD dispatcher performs money-flow calculation and the
+/// cumulative scan directly in the caller-owned output. Keeping this as the
+/// only AD implementation avoids a second scalar recurrence in Python/FFI hot
+/// paths and preserves the public indicator's fallback semantics.
 #[inline]
 pub fn ad_into(
     high: &[f64],
@@ -83,30 +67,11 @@ pub fn ad_into(
         return Err(TaError::EmptyInput);
     }
 
-    unsafe {
-        let high_ptr = high.as_ptr();
-        let low_ptr = low.as_ptr();
-        let close_ptr = close.as_ptr();
-        let volume_ptr = volume.as_ptr();
-        let output_ptr = output.as_mut_ptr();
-        let mut acc = 0.0;
-
-        for i in 0..len {
-            let h = *high_ptr.add(i);
-            let l = *low_ptr.add(i);
-            let range = h - l;
-            if range.abs() >= 1e-15 {
-                let c = *close_ptr.add(i);
-                let multiplier = ((c - l) - (h - c)) / range;
-                acc += multiplier * *volume_ptr.add(i);
-            }
-            *output_ptr.add(i) = acc;
-        }
-    }
+    crate::math::simd_ops::simd_ad_line(high, low, close, volume, output);
     Ok(())
 }
 
-/// Allocating A/D wrapper sharing the canonical single-pass kernel.
+/// Allocating A/D wrapper sharing the canonical runtime dispatcher.
 pub fn ad(high: &[f64], low: &[f64], close: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
     let mut output = vec![0.0; high.len()];
     ad_into(high, low, close, volume, &mut output)?;
@@ -115,10 +80,9 @@ pub fn ad(high: &[f64], low: &[f64], close: &[f64], volume: &[f64]) -> Result<Ar
 
 /// Compute Chaikin A/D Oscillator in a single pass.
 ///
-/// This fuses AD accumulation and both EMA recurrences.  The previous hot path
-/// materialised the entire AD line, then scanned it again for EMA smoothing;
-/// the fused recurrence preserves the exact operation order but removes that
-/// full-length scratch allocation and second memory pass.
+/// ADOSC is intentionally fused because both EMA recurrences are stateful. A
+/// materialized AD scratch vector would add a second full memory pass. This
+/// caller-owned implementation remains the canonical stateful kernel.
 #[inline]
 pub fn adosc_into(
     high: &[f64],
@@ -213,7 +177,7 @@ pub fn adosc(
 
 /// Compute cumulative VWAP directly into `output`.
 ///
-/// This is a single-pass recurrence with no scratch allocation.  A zero cumulative
+/// This is a single-pass recurrence with no scratch allocation. A zero cumulative
 /// volume leaves the corresponding output at `0.0`, matching the current public VWAP
 /// implementation.
 #[inline]
