@@ -230,6 +230,13 @@ pub fn accbands(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Resu
 /// assert_eq!(result.len(), 10);
 /// ```
 pub fn midpoint(input: &[f64], period: usize) -> Result<Array1<f64>> {
+    let mut output = Array1::<f64>::zeros(input.len());
+    midpoint_into(input, period, output.as_slice_mut().unwrap())?;
+    Ok(output)
+}
+
+/// Caller-owned MIDPOINT kernel used by runtime and language bindings.
+pub fn midpoint_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> {
     if period == 0 {
         return Err(TaError::InvalidParameter {
             name: "period".to_string(),
@@ -237,12 +244,18 @@ pub fn midpoint(input: &[f64], period: usize) -> Result<Array1<f64>> {
         });
     }
     validate_input(input.len(), period)?;
+    if output.len() != input.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
 
-    let mut output = init_output(input.len());
+    crate::utils::simd_fill_nan(&mut output[..period - 1]);
     rolling_minmax_visit(input, input, period, |i, highest, lowest| {
         output[i] = (highest + lowest) * 0.5;
     });
-    Ok(output)
+    Ok(())
 }
 
 /// Midprice (MIDPRICE)
@@ -269,19 +282,38 @@ pub fn midpoint(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// assert_eq!(result.len(), 10);
 /// ```
 pub fn midprice(high: &[f64], low: &[f64], period: usize) -> Result<Array1<f64>> {
+    let mut output = Array1::<f64>::zeros(high.len());
+    midprice_into(high, low, period, output.as_slice_mut().unwrap())?;
+    Ok(output)
+}
+
+/// Caller-owned MIDPRICE kernel used by runtime and language bindings.
+pub fn midprice_into(high: &[f64], low: &[f64], period: usize, output: &mut [f64]) -> Result<()> {
     if high.len() != low.len() {
         return Err(TaError::InvalidParameter {
             name: "high and low".to_string(),
             constraint: "must have the same length".to_string(),
         });
     }
+    if period == 0 {
+        return Err(TaError::InvalidParameter {
+            name: "period".to_string(),
+            constraint: "greater than 0".to_string(),
+        });
+    }
     validate_input(high.len(), period)?;
+    if output.len() != high.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
 
-    let mut output = init_output(high.len());
+    crate::utils::simd_fill_nan(&mut output[..period - 1]);
     rolling_minmax_visit(high, low, period, |i, highest, lowest| {
         output[i] = (highest + lowest) * 0.5;
     });
-    Ok(output)
+    Ok(())
 }
 
 /// Parabolic SAR (SAR) Result

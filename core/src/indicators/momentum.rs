@@ -1301,15 +1301,40 @@ pub fn roc(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// assert_eq!(result.len(), 10);
 /// ```
 pub fn willr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Array1<f64>> {
+    let mut output = Array1::<f64>::zeros(close.len());
+    willr_into(high, low, close, period, output.as_slice_mut().unwrap())?;
+    Ok(output)
+}
+
+/// Caller-owned Williams %R kernel sharing the canonical extrema lifecycle.
+pub fn willr_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    period: usize,
+    output: &mut [f64],
+) -> Result<()> {
     if high.len() != low.len() || high.len() != close.len() {
         return Err(TaError::InvalidParameter {
             name: "high, low, close".to_string(),
             constraint: "must have the same length".to_string(),
         });
     }
+    if period == 0 {
+        return Err(TaError::InvalidParameter {
+            name: "period".to_string(),
+            constraint: "greater than 0".to_string(),
+        });
+    }
     validate_input(high.len(), period)?;
+    if output.len() != close.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
 
-    let mut output = init_output(close.len());
+    crate::utils::simd_fill_nan(&mut output[..period - 1]);
     rolling_minmax_visit(high, low, period, |i, highest, lowest| {
         let range = highest - lowest;
         output[i] = if range > 1e-15 {
@@ -1318,7 +1343,7 @@ pub fn willr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<
             0.0
         };
     });
-    Ok(output)
+    Ok(())
 }
 
 /// Elder-Ray Indicator Result

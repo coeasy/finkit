@@ -42,111 +42,6 @@ fn validate_same_len(a: usize, b: usize) -> PyResult<()> {
     Ok(())
 }
 
-/// Sliding extrema with TA-Lib-style cached extreme indexes.
-///
-/// Typical technical-analysis windows are small (5-30). Keeping two full
-/// monotonic queues costs O(n) memory and branch-heavy maintenance. Instead,
-/// remember the current max/min indexes and only rescan the short window when
-/// an extreme expires. Equal values choose the newest index (`>=` / `<=`),
-/// matching the previous deque semantics.
-fn rolling_extrema_map<F>(
-    max_source: &[f64],
-    min_source: &[f64],
-    period: usize,
-    mut map: F,
-) -> Vec<f64>
-where
-    F: FnMut(usize, f64, f64) -> f64,
-{
-    let len = max_source.len();
-    let mut output = vec![f64::NAN; len];
-    if period == 0 || period > len {
-        return output;
-    }
-
-    unsafe {
-        let max_ptr = max_source.as_ptr();
-        let min_ptr = min_source.as_ptr();
-        let output_ptr = output.as_mut_ptr();
-
-        let mut highest_idx = 0usize;
-        let mut lowest_idx = 0usize;
-        let mut highest = *max_ptr;
-        let mut lowest = *min_ptr;
-        for index in 1..period {
-            let high = *max_ptr.add(index);
-            let low = *min_ptr.add(index);
-            if high >= highest {
-                highest = high;
-                highest_idx = index;
-            }
-            if low <= lowest {
-                lowest = low;
-                lowest_idx = index;
-            }
-        }
-        *output_ptr.add(period - 1) = map(period - 1, highest, lowest);
-
-        for index in period..len {
-            let window_start = index + 1 - period;
-            let new_high = *max_ptr.add(index);
-            let new_low = *min_ptr.add(index);
-
-            if highest_idx < window_start {
-                highest = *max_ptr.add(window_start);
-                highest_idx = window_start;
-                for candidate in window_start + 1..=index {
-                    let value = *max_ptr.add(candidate);
-                    if value >= highest {
-                        highest = value;
-                        highest_idx = candidate;
-                    }
-                }
-            } else if new_high >= highest {
-                highest = new_high;
-                highest_idx = index;
-            }
-
-            if lowest_idx < window_start {
-                lowest = *min_ptr.add(window_start);
-                lowest_idx = window_start;
-                for candidate in window_start + 1..=index {
-                    let value = *min_ptr.add(candidate);
-                    if value <= lowest {
-                        lowest = value;
-                        lowest_idx = candidate;
-                    }
-                }
-            } else if new_low <= lowest {
-                lowest = new_low;
-                lowest_idx = index;
-            }
-
-            *output_ptr.add(index) = map(index, highest, lowest);
-        }
-    }
-    output
-}
-
-#[inline]
-fn midpoint_vec(max_source: &[f64], min_source: &[f64], period: usize) -> Vec<f64> {
-    rolling_extrema_map(max_source, min_source, period, |_, high, low| {
-        (high + low) * 0.5
-    })
-}
-
-#[inline]
-fn willr_vec(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Vec<f64> {
-    rolling_extrema_map(high, low, period, |index, highest, lowest| {
-        let range = highest - lowest;
-        if range.abs() > 1e-15 {
-            -100.0 * (highest - close[index]) / range
-        } else {
-            0.0
-        }
-    })
-}
-
 #[inline]
 fn mom_vec(input: &[f64], period: usize) -> Vec<f64> {
     let len = input.len();
@@ -400,8 +295,10 @@ fn fast_unary_period<'py>(
     let close = close.as_slice().map_err(value_error)?;
     let output = match operation {
         "midpoint" => {
-            validate_period(close.len(), timeperiod)?;
-            py.detach(|| midpoint_vec(close, close, timeperiod))
+            let mut output = vec![0.0; close.len()];
+            py.detach(|| indicators::midpoint_into(close, timeperiod, &mut output))
+                .map_err(value_error)?;
+            output
         }
         "mom" => {
             validate_period(close.len(), timeperiod)?;
@@ -490,8 +387,10 @@ fn fast_binary_period<'py>(
     validate_same_len(input_a.len(), input_b.len())?;
     let output = match operation {
         "midprice" => {
-            validate_period(input_a.len(), timeperiod)?;
-            py.detach(|| midpoint_vec(input_a, input_b, timeperiod))
+            let mut output = vec![0.0; input_a.len()];
+            py.detach(|| indicators::midprice_into(input_a, input_b, timeperiod, &mut output))
+                .map_err(value_error)?;
+            output
         }
         "correl" => py
             .detach(|| rolling_stats::correlation(input_a, input_b, timeperiod))
@@ -521,8 +420,10 @@ fn fast_hlc_period<'py>(
     validate_same_len(high.len(), close.len())?;
     let output = match operation {
         "willr" => {
-            validate_period(high.len(), timeperiod)?;
-            py.detach(|| willr_vec(high, low, close, timeperiod))
+            let mut output = vec![0.0; high.len()];
+            py.detach(|| indicators::willr_into(high, low, close, timeperiod, &mut output))
+                .map_err(value_error)?;
+            output
         }
         "adx" => py
             .detach(|| indicators::adx(high, low, close, timeperiod))

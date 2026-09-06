@@ -417,6 +417,66 @@ pub(crate) fn rolling_minmax_visit(
         return;
     }
 
+    // Most TA windows are small. Keep monotonic queues on the stack so every
+    // bar is inserted/removed at most once without heap allocation or expiry
+    // rescans. The power-of-two ring makes wrapping a single mask operation.
+    const RING_CAPACITY: usize = 256;
+    const RING_MASK: usize = RING_CAPACITY - 1;
+    if window <= RING_CAPACITY {
+        let mut high_queue = [0usize; RING_CAPACITY];
+        let mut low_queue = [0usize; RING_CAPACITY];
+        let mut high_head = 0usize;
+        let mut high_tail = 0usize;
+        let mut low_head = 0usize;
+        let mut low_tail = 0usize;
+
+        for i in 0..high.len() {
+            let new_high = high[i];
+            while high_head < high_tail {
+                let back = high_queue[(high_tail - 1) & RING_MASK];
+                if high[back] <= new_high {
+                    high_tail -= 1;
+                } else {
+                    break;
+                }
+            }
+            high_queue[high_tail & RING_MASK] = i;
+            high_tail += 1;
+            while high_head < high_tail
+                && high_queue[high_head & RING_MASK].saturating_add(window) <= i
+            {
+                high_head += 1;
+            }
+
+            let new_low = low[i];
+            while low_head < low_tail {
+                let back = low_queue[(low_tail - 1) & RING_MASK];
+                if low[back] >= new_low {
+                    low_tail -= 1;
+                } else {
+                    break;
+                }
+            }
+            low_queue[low_tail & RING_MASK] = i;
+            low_tail += 1;
+            while low_head < low_tail && low_queue[low_head & RING_MASK].saturating_add(window) <= i
+            {
+                low_head += 1;
+            }
+
+            if i + 1 >= window {
+                emit(
+                    i,
+                    high[high_queue[high_head & RING_MASK]],
+                    low[low_queue[low_head & RING_MASK]],
+                );
+            }
+        }
+        return;
+    }
+
+    // Large-window compatibility fallback: keep the previous cached-index
+    // algorithm to avoid a window-sized heap allocation in the generic path.
     let high_ptr = high.as_ptr();
     let low_ptr = low.as_ptr();
     let mut highest_idx = 0usize;
@@ -440,7 +500,6 @@ pub(crate) fn rolling_minmax_visit(
                 }
             } else {
                 let window_start = i + 1 - window;
-
                 if highest_idx < window_start {
                     highest = *high_ptr.add(window_start);
                     highest_idx = window_start;
@@ -482,7 +541,6 @@ pub(crate) fn rolling_minmax_visit(
         }
     }
 }
-
 /// Find maximum value in a rolling window
 ///
 /// # Arguments
