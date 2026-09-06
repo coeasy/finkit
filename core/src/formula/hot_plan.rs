@@ -2,11 +2,12 @@
 //!
 //! Parsing/lowering remains in [`super::compute_ir`]. This adapter makes the
 //! semantic/hot split explicit: a formula is first lowered to a logical DAG,
-//! then that DAG is compiled once into numeric kernel/input/parameter/buffer/state slots.
+//! pure deterministic common subexpressions are interned once, then that DAG is
+//! compiled into numeric kernel/input/parameter/buffer/state slots.
 
 use super::ast::AstNode;
 use super::compute_ir::FormulaComputePlan;
-use crate::compute::{ComputeNodeId, ComputePlanError};
+use crate::compute::{ComputeNode, ComputeNodeId, ComputePlan, ComputePlanError};
 use crate::execution_plan::{
     HotExecutionPlan, HotPlanError, ParameterArena, ParameterRange, ParameterValue,
 };
@@ -26,8 +27,9 @@ impl FormulaHotPlan {
     pub fn compile(ast: &AstNode) -> Result<Self, FormulaHotPlanError> {
         let semantic = FormulaComputePlan::compile(ast)?;
         let (parameters, ranges) = bind_numeric_literals(ast, &semantic)?;
+        let optimized = cse_plan(&semantic, &parameters, &ranges)?;
         let hot = HotExecutionPlan::compile_with_parameters(
-            semantic.plan(),
+            &optimized,
             [semantic.root()],
             parameters,
             ranges,
@@ -42,8 +44,9 @@ impl FormulaHotPlan {
     ) -> Result<Self, FormulaHotPlanError> {
         let semantic = FormulaComputePlan::compile_with_registry(ast, registry)?;
         let (parameters, ranges) = bind_numeric_literals(ast, &semantic)?;
+        let optimized = cse_plan(&semantic, &parameters, &ranges)?;
         let hot = HotExecutionPlan::compile_with_parameters(
-            semantic.plan(),
+            &optimized,
             [semantic.root()],
             parameters,
             ranges,
@@ -60,6 +63,72 @@ impl FormulaHotPlan {
     pub const fn hot(&self) -> &HotExecutionPlan {
         &self.hot
     }
+}
+
+/// Compile-time common-subexpression elimination for the numeric hot plan.
+///
+/// The semantic plan deliberately keeps every syntax occurrence for diagnostics.
+/// At the hot boundary we can safely intern only deterministic, pure, stateless
+/// nodes. Keys include canonicalized dependency ids and exact scalar parameter
+/// bits, so e.g. EMA(CLOSE, 12) can never alias EMA(CLOSE, 26). Observable/stateful
+/// nodes are never interned. The semantic root is retained under its original id
+/// so public output layout and diagnostics keep a stable anchor.
+fn cse_plan(
+    semantic: &FormulaComputePlan,
+    parameters: &ParameterArena,
+    ranges: &BTreeMap<ComputeNodeId, ParameterRange>,
+) -> Result<ComputePlan, ComputePlanError> {
+    type CseKey = (String, Vec<ComputeNodeId>, Vec<ParameterValue>);
+
+    let root = semantic.root();
+    let mut aliases = BTreeMap::<ComputeNodeId, ComputeNodeId>::new();
+    let mut interned = BTreeMap::<CseKey, ComputeNodeId>::new();
+    let mut nodes = Vec::with_capacity(semantic.plan().len());
+
+    for &node_id in semantic.plan().execution_order() {
+        let source = semantic
+            .plan()
+            .node(node_id)
+            .expect("semantic execution order only contains compiled nodes");
+        let dependencies: Vec<_> = source
+            .dependencies
+            .iter()
+            .map(|dependency| aliases.get(dependency).copied().unwrap_or(*dependency))
+            .collect();
+
+        let parameter_values = ranges
+            .get(&node_id)
+            .and_then(|range| parameters.range(*range))
+            .unwrap_or(&[])
+            .to_vec();
+        let eligible = node_id != root
+            && source.capabilities.deterministic
+            && !source.capabilities.stateful
+            && source.capabilities.effect.is_pure();
+
+        if eligible {
+            let key = (
+                source.operation.clone(),
+                dependencies.clone(),
+                parameter_values,
+            );
+            if let Some(&canonical) = interned.get(&key) {
+                aliases.insert(node_id, canonical);
+                continue;
+            }
+            interned.insert(key, node_id);
+        }
+
+        aliases.insert(node_id, node_id);
+        nodes.push(ComputeNode::new(
+            node_id,
+            source.operation.clone(),
+            dependencies,
+            source.capabilities.clone(),
+        ));
+    }
+
+    ComputePlan::compile(nodes)
 }
 
 /// Bind exact numeric literals to NUMBER nodes without carrying literal strings
@@ -228,12 +297,51 @@ mod tests {
         let compiled = FormulaHotPlan::compile(&ast).unwrap();
 
         assert!(!compiled.semantic().plan().is_empty());
-        assert_eq!(
-            compiled.hot().nodes().len(),
-            compiled.semantic().plan().len()
-        );
+        assert!(compiled.hot().nodes().len() <= compiled.semantic().plan().len());
         assert!(compiled.hot().buffer_layout().slot_count() > 0);
         assert_eq!(compiled.hot().parameter_arena().len(), 2);
+    }
+
+    #[test]
+    fn duplicate_pure_subexpressions_are_interned_before_hot_lowering() {
+        let ast = parse_formula("EMA(CLOSE,12) + EMA(CLOSE,12)").unwrap();
+        let compiled = FormulaHotPlan::compile(&ast).unwrap();
+        let semantic_ema = compiled
+            .semantic()
+            .plan()
+            .execution_order()
+            .iter()
+            .filter(|&&id| {
+                compiled
+                    .semantic()
+                    .plan()
+                    .node(id)
+                    .is_some_and(|node| node.operation == "CALL:EMA")
+            })
+            .count();
+        let hot_ema = compiled
+            .hot()
+            .nodes()
+            .iter()
+            .filter(|node| node.kernel == crate::execution_plan::KernelId::from_static("CALL:EMA"))
+            .count();
+
+        assert_eq!(semantic_ema, 2);
+        assert_eq!(hot_ema, 1);
+        assert!(compiled.hot().nodes().len() < compiled.semantic().plan().len());
+    }
+
+    #[test]
+    fn cse_key_keeps_different_literal_parameters_distinct() {
+        let ast = parse_formula("EMA(CLOSE,12) + EMA(CLOSE,26)").unwrap();
+        let compiled = FormulaHotPlan::compile(&ast).unwrap();
+        let hot_ema = compiled
+            .hot()
+            .nodes()
+            .iter()
+            .filter(|node| node.kernel == crate::execution_plan::KernelId::from_static("CALL:EMA"))
+            .count();
+        assert_eq!(hot_ema, 2);
     }
 
     #[test]
@@ -244,7 +352,7 @@ mod tests {
 
         assert_eq!(
             compiled.hot().buffer_layout().last_use(root),
-            Some(compiled.semantic().plan().len())
+            Some(compiled.hot().nodes().len())
         );
     }
 
