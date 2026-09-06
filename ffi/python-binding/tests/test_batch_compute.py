@@ -148,12 +148,12 @@ def test_compute_indicators_gil_release():
     t1 = threading.Thread(target=worker, args=(0,))
     t2 = threading.Thread(target=worker, args=(1,))
 
-    start = time.time()
+    start = time.perf_counter()
     t1.start()
     t2.start()
     t1.join(timeout=30)
     t2.join(timeout=30)
-    elapsed = time.time() - start
+    elapsed = time.perf_counter() - start
 
     assert errors[0] is None, f"Thread 0 error: {errors[0]}"
     assert errors[1] is None, f"Thread 1 error: {errors[1]}"
@@ -192,14 +192,14 @@ def test_compute_indicators_performance_comparison():
 
     batch_times = []
     for _ in range(n_runs):
-        start = time.time()
+        start = time.perf_counter_ns()
         batch_results = ta.compute_indicators(close=close, requests=requests)
-        batch_times.append(time.time() - start)
-    avg_batch = sum(batch_times) / n_runs
+        batch_times.append(time.perf_counter_ns() - start)
+    avg_batch_ns = sum(batch_times) / n_runs
 
     individual_times = []
     for _ in range(n_runs):
-        start = time.time()
+        start = time.perf_counter_ns()
         sma = ta.sma(close, 14)
         ema = ta.ema(close, 14)
         rsi = ta.rsi(close, 14)
@@ -210,17 +210,17 @@ def test_compute_indicators_performance_comparison():
         apo = ta.apo(close, 12, 26)
         macd = ta.macd(close, 12, 26, 9)
         bbands = ta.bollinger_bands(close, 20, 2.0, 2.0)
-        individual_times.append(time.time() - start)
-    avg_individual = sum(individual_times) / n_runs
+        individual_times.append(time.perf_counter_ns() - start)
+    avg_individual_ns = sum(individual_times) / n_runs
 
     np.testing.assert_allclose(batch_results["sma_14"], sma, rtol=1e-10)
     np.testing.assert_allclose(batch_results["ema_14"], ema, rtol=1e-10)
     np.testing.assert_allclose(batch_results["rsi_14"], rsi, rtol=1e-10)
 
-    speedup = avg_individual / avg_batch
-    print(f"Performance comparison:")
-    print(f"  Batch average: {avg_batch*1000:.2f} ms")
-    print(f"  Individual average: {avg_individual*1000:.2f} ms")
+    speedup = avg_individual_ns / avg_batch_ns
+    print("Performance comparison:")
+    print(f"  Batch average: {avg_batch_ns / 1_000_000:.2f} ms")
+    print(f"  Individual average: {avg_individual_ns / 1_000_000:.2f} ms")
     print(f"  Speedup: {speedup:.2f}x")
 
     # Keep this benchmark informational: shared CI runners can make a small
@@ -331,7 +331,7 @@ def test_compute_indicators_large_batch():
         ("percent_rank", [10]),
     ]
 
-    start = time.time()
+    start = time.perf_counter()
     results = ta.compute_indicators(
         close=close,
         requests=requests,
@@ -339,7 +339,7 @@ def test_compute_indicators_large_batch():
         low=low,
         volume=volume,
     )
-    elapsed = time.time() - start
+    elapsed = time.perf_counter() - start
 
     expected_keys = len(requests)
     actual_keys = len([k for k in results if not k.endswith("_error")])
