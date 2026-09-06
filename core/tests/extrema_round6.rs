@@ -104,3 +104,34 @@ fn extrema_round6_owned_and_into_match_reference_across_ring_boundary() {
         assert_same(&into_willr, &expected_willr);
     }
 }
+
+#[test]
+fn extrema_round6_full_ring_fifo_boundary_regression() {
+    // These monotonic inputs deliberately prevent back-pop compaction: the
+    // maximum queue receives strictly decreasing highs and the minimum queue
+    // receives strictly increasing lows. At period 256 both queues therefore
+    // occupy every ring slot, exercising expiry-before-insertion exactly.
+    let len = 640usize;
+    let high: Vec<f64> = (0..len).map(|i| 10_000.0 - i as f64).collect();
+    let low: Vec<f64> = (0..len).map(|i| 1_000.0 + i as f64).collect();
+    let close: Vec<f64> = high
+        .iter()
+        .zip(low.iter())
+        .map(|(&h, &l)| (h + l) * 0.5)
+        .collect();
+    let period = 256usize;
+
+    let expected_midprice = reference_midprice(&high, &low, period);
+    let owned_midprice = midprice(&high, &low, period).unwrap();
+    let mut into_midprice = vec![0.0; len];
+    midprice_into(&high, &low, period, &mut into_midprice).unwrap();
+    assert_same(owned_midprice.as_slice().unwrap(), &expected_midprice);
+    assert_same(&into_midprice, &expected_midprice);
+
+    let expected_willr = reference_willr(&high, &low, &close, period);
+    let owned_willr = willr(&high, &low, &close, period).unwrap();
+    let mut into_willr = vec![0.0; len];
+    willr_into(&high, &low, &close, period, &mut into_willr).unwrap();
+    assert_same(owned_willr.as_slice().unwrap(), &expected_willr);
+    assert_same(&into_willr, &expected_willr);
+}
