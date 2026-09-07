@@ -726,9 +726,11 @@ unsafe fn obv_core_avx2(close: &[f64], volume: &[f64], result: &mut [f64]) {
         return;
     }
 
-    let mut delta = vec![0.0f64; len];
-    delta[0] = volume[0];
-    let delta_ptr = delta.as_mut_ptr();
+    // Reuse the caller-owned result as the delta scratch buffer. The prefix
+    // scan below is alias-safe because it loads one complete SIMD block before
+    // storing that same block, then advances monotonically.
+    result[0] = volume[0];
+    let result_ptr = result.as_mut_ptr();
     let zero = _mm256_setzero_pd();
 
     // Process 4 close deltas per iteration. Each lane compares close[i] vs
@@ -752,13 +754,13 @@ unsafe fn obv_core_avx2(close: &[f64], volume: &[f64], result: &mut [f64]) {
             let plus = _mm256_and_pd(vol, pos);
             let minus = _mm256_and_pd(vol, neg);
             let signed = _mm256_sub_pd(plus, minus);
-            _mm256_storeu_pd(delta_ptr.add(off + 1), signed);
+            _mm256_storeu_pd(result_ptr.add(off + 1), signed);
         }
     }
     // Scalar tail for the very last partial chunk.
     for i in ((((len.saturating_sub(1)) / 4) * 4 + 1).max(1))..len {
         let diff = close[i] - close[i - 1];
-        delta[i] = if diff > 0.0 {
+        result[i] = if diff > 0.0 {
             volume[i]
         } else if diff < 0.0 {
             -volume[i]
@@ -767,7 +769,8 @@ unsafe fn obv_core_avx2(close: &[f64], volume: &[f64], result: &mut [f64]) {
         };
     }
 
-    prefix_sum_avx2_kernel(&delta, result);
+    let deltas = core::slice::from_raw_parts(result.as_ptr(), len);
+    prefix_sum_avx2_kernel(deltas, result);
 }
 
 // Scalar fallback (no SIMD intrinsics)
@@ -3388,14 +3391,24 @@ unsafe fn mom_avx2(input: &[f64], period: usize, result: &mut [f64]) {
     let ptr = input.as_ptr();
     let out_ptr = result.as_mut_ptr();
 
-    // Process 4 elements at a time using AVX2
+    // Process four AVX2 vectors per iteration. The unroll reduces loop and
+    // dispatch overhead on the small, bandwidth-bound MOM kernel.
     let chunks = (len - period) / 4;
-    for c in 0..chunks {
+    let unrolled = chunks / 4;
+    for c in 0..unrolled {
+        let i = period + c * 16;
+        for offset in [0usize, 4, 8, 12] {
+            let j = i + offset;
+            let v_curr = _mm256_loadu_pd(ptr.add(j));
+            let v_prev = _mm256_loadu_pd(ptr.add(j - period));
+            _mm256_storeu_pd(out_ptr.add(j), _mm256_sub_pd(v_curr, v_prev));
+        }
+    }
+    for c in (unrolled * 4)..chunks {
         let i = period + c * 4;
         let v_curr = _mm256_loadu_pd(ptr.add(i));
         let v_prev = _mm256_loadu_pd(ptr.add(i - period));
-        let v_diff = _mm256_sub_pd(v_curr, v_prev);
-        _mm256_storeu_pd(out_ptr.add(i), v_diff);
+        _mm256_storeu_pd(out_ptr.add(i), _mm256_sub_pd(v_curr, v_prev));
     }
 
     // Handle remaining elements

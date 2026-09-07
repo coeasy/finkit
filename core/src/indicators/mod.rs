@@ -154,11 +154,13 @@ pub use momentum::*;
 // signatures used by Rust, Python, Node, or generated bindings.
 #[cfg(all(feature = "indicators-volatility", feature = "std"))]
 pub use crate::math::trange::trange;
+#[cfg(all(feature = "indicators-volatility", feature = "std"))]
+pub use crate::math::trange::trange_into;
 #[cfg(all(feature = "indicators-momentum", feature = "std"))]
 pub use crate::math::{
     cci::cci,
     directional::{minus_di, plus_di},
-    mfi::mfi,
+    mfi::{mfi, mfi_into},
 };
 #[cfg(feature = "indicators-momentum")]
 pub use momentum_ext::*;

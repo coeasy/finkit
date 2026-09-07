@@ -8,6 +8,7 @@
 
 use crate::error::{Result, TaError};
 use ndarray::Array1;
+use std::mem::MaybeUninit;
 
 #[inline]
 fn validate_same_len(name: &'static str, expected: usize, actual: usize) -> Result<()> {
@@ -22,11 +23,9 @@ fn validate_same_len(name: &'static str, expected: usize, actual: usize) -> Resu
 
 /// Compute On-Balance Volume directly into `output`.
 ///
-/// OBV is a serial prefix recurrence. The AVX2 compatibility dispatcher currently
-/// materializes a full-length delta scratch vector before its prefix scan, which is
-/// slower for the installed-wheel path and violates this caller-owned API's
-/// allocation-free contract. Keep the canonical hot recurrence fused until that
-/// dispatcher can perform an in-register prefix scan without heap scratch.
+/// OBV is a serial prefix recurrence. Keep the canonical fused scalar loop for
+/// the installed-wheel path; the AVX2 dispatcher materializes/rewrites the
+/// prefix scan in a way that is slower on the target benchmark sizes.
 #[inline]
 pub fn obv_into(close: &[f64], volume: &[f64], output: &mut [f64]) -> Result<()> {
     validate_same_len("volume", close.len(), volume.len())?;
@@ -40,26 +39,43 @@ pub fn obv_into(close: &[f64], volume: &[f64], output: &mut [f64]) -> Result<()>
         let volume_ptr = volume.as_ptr();
         let output_ptr = output.as_mut_ptr();
         let mut acc = *volume_ptr;
+        let mut previous_close = *close_ptr;
         *output_ptr = acc;
         for i in 1..close.len() {
             let current = *close_ptr.add(i);
-            let previous = *close_ptr.add(i - 1);
-            if current > previous {
+            if current > previous_close {
                 acc += *volume_ptr.add(i);
-            } else if current < previous {
+            } else if current < previous_close {
                 acc -= *volume_ptr.add(i);
             }
+            previous_close = current;
             *output_ptr.add(i) = acc;
         }
     }
     Ok(())
 }
 
+/// Allocate an OBV result without first clearing a buffer that the recurrence
+/// overwrites completely. Errors remain recoverable because `MaybeUninit` is
+/// dropped before it is converted to an initialized `Vec<f64>`.
+pub fn obv_vec(close: &[f64], volume: &[f64]) -> Result<Vec<f64>> {
+    let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(close.len());
+    unsafe { raw_output.set_len(close.len()) };
+    let output = unsafe {
+        std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<f64>(), close.len())
+    };
+    obv_into(close, volume, output)?;
+
+    let ptr = raw_output.as_mut_ptr().cast::<f64>();
+    let len = raw_output.len();
+    let capacity = raw_output.capacity();
+    std::mem::forget(raw_output);
+    Ok(unsafe { Vec::from_raw_parts(ptr, len, capacity) })
+}
+
 /// Allocating OBV wrapper sharing the allocation-free canonical recurrence.
 pub fn obv(close: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
-    let mut output = vec![0.0; close.len()];
-    obv_into(close, volume, &mut output)?;
-    Ok(Array1::from_vec(output))
+    Ok(Array1::from_vec(obv_vec(close, volume)?))
 }
 
 /// Compute the Accumulation/Distribution line directly into `output`.
@@ -84,7 +100,24 @@ pub fn ad_into(
         return Err(TaError::EmptyInput);
     }
 
-    crate::math::simd_ops::simd_ad_line(high, low, close, volume, output);
+    unsafe {
+        let high_ptr = high.as_ptr();
+        let low_ptr = low.as_ptr();
+        let close_ptr = close.as_ptr();
+        let volume_ptr = volume.as_ptr();
+        let output_ptr = output.as_mut_ptr();
+        let mut cumulative = 0.0;
+        for index in 0..len {
+            let h = *high_ptr.add(index);
+            let l = *low_ptr.add(index);
+            let c = *close_ptr.add(index);
+            let range = h - l;
+            if range.abs() >= 1e-15 {
+                cumulative += (((c - l) - (h - c)) / range) * *volume_ptr.add(index);
+            }
+            *output_ptr.add(index) = cumulative;
+        }
+    }
     Ok(())
 }
 
@@ -142,17 +175,15 @@ pub fn adosc_into(
         let mut cumulative = 0.0;
         let mut fast_ema = 0.0;
         let mut slow_ema = 0.0;
-
         for i in 0..len {
             let h = *high_ptr.add(i);
             let l = *low_ptr.add(i);
             let range = h - l;
-            if range.abs() >= 1e-15 {
+            if range > 0.0 {
                 let c = *close_ptr.add(i);
                 let multiplier = ((c - l) - (h - c)) / range;
                 cumulative += multiplier * *volume_ptr.add(i);
             }
-
             if i == 0 {
                 fast_ema = cumulative;
                 slow_ema = cumulative;

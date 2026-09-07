@@ -153,6 +153,7 @@ def formula_cases(o, h, l, c, v):
     specs = [
         ("MA20", "MA(CLOSE,20)", lambda: talib.SMA(c, timeperiod=20)),
         ("EMA20", "EMA(CLOSE,20)", lambda: talib.EMA(c, timeperiod=20)),
+        ("KAMA20", "KAMA(CLOSE,20)", lambda: talib.KAMA(c, timeperiod=20)),
         ("RSI14", "RSI(CLOSE,14)", lambda: talib.RSI(c, timeperiod=14)),
         ("ATR14", "ATR(HIGH,LOW,CLOSE,14)", lambda: talib.ATR(h, l, c, timeperiod=14)),
         ("ROC10", "ROC(CLOSE,10)", lambda: talib.ROC(c, timeperiod=10)),

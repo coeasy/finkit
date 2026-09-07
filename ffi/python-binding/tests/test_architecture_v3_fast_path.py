@@ -200,3 +200,17 @@ def test_non_contiguous_input_is_normalized_at_package_boundary():
     assert isinstance(result, np.ndarray)
     assert len(result) == len(view)
     assert np.isnan(result[:2]).all()
+
+
+def test_compiled_formula_chain_uses_numeric_hot_plan_with_literal_periods():
+    close = np.linspace(10.0, 30.0, 128, dtype=np.float64)
+    open_ = close - 0.1
+    high = close + 1.0
+    low = close - 1.0
+    volume = np.linspace(100.0, 500.0, 128, dtype=np.float64)
+
+    compiled = finkit.CompiledFormula("EMA(CLOSE, 5) + ROC(CLOSE, 2)")
+    result = compiled.eval_zero_copy(open_, high, low, close, volume)["__result__"]
+    expected = finkit.ema(close, 5) + finkit.roc(close, 2)
+
+    np.testing.assert_allclose(result, expected, equal_nan=True)

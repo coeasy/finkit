@@ -44,26 +44,17 @@ fn validate_same_len(a: usize, b: usize) -> PyResult<()> {
 
 #[inline]
 fn mom_vec(input: &[f64], period: usize) -> Vec<f64> {
+    // Use the canonical SIMD kernel while avoiding a redundant zero-fill:
+    // the kernel overwrites both the warm-up prefix and every valid sample.
     let len = input.len();
-    let mut raw = Vec::<MaybeUninit<f64>>::with_capacity(len);
-    unsafe {
-        raw.set_len(len);
-        let input_ptr = input.as_ptr();
-        let output_ptr = raw.as_mut_ptr();
-        for index in 0..period.min(len) {
-            output_ptr.add(index).write(MaybeUninit::new(f64::NAN));
-        }
-        for index in period..len {
-            output_ptr.add(index).write(MaybeUninit::new(
-                *input_ptr.add(index) - *input_ptr.add(index - period),
-            ));
-        }
-        let ptr = raw.as_mut_ptr().cast::<f64>();
-        let capacity = raw.capacity();
-        let length = raw.len();
-        forget(raw);
-        Vec::from_raw_parts(ptr, length, capacity)
-    }
+    let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    unsafe { raw_output.set_len(len) };
+    let output = unsafe { std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast(), len) };
+    ::finkit::math::simd_ops::simd_mom(input, period, output);
+    let ptr = raw_output.as_mut_ptr().cast::<f64>();
+    let capacity = raw_output.capacity();
+    std::mem::forget(raw_output);
+    unsafe { Vec::from_raw_parts(ptr, len, capacity) }
 }
 
 #[pyfunction(name = "_fast_sma")]
@@ -131,7 +122,7 @@ fn fast_ema<'py>(
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let close = close.as_slice().map_err(value_error)?;
     let mut output = vec![0.0; close.len()];
-    py.detach(|| moving_avg::ema_into(close, timeperiod, &mut output))
+    py.detach(|| moving_avg::ema_fast_into(close, timeperiod, &mut output))
         .map_err(value_error)?;
     Ok(PyArray1::from_vec(py, output))
 }
@@ -146,7 +137,7 @@ fn fast_ema_into(
 ) -> PyResult<()> {
     let close = close.as_slice().map_err(value_error)?;
     let output = output.as_slice_mut().map_err(value_error)?;
-    py.detach(|| moving_avg::ema_into(close, timeperiod, output))
+    py.detach(|| moving_avg::ema_fast_into(close, timeperiod, output))
         .map_err(value_error)
 }
 
@@ -214,8 +205,8 @@ fn fast_obv<'py>(
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let close = close.as_slice().map_err(value_error)?;
     let volume = volume.as_slice().map_err(value_error)?;
-    let mut output = vec![0.0; close.len()];
-    py.detach(|| volume_kernels::obv_into(close, volume, &mut output))
+    let output = py
+        .detach(|| volume_kernels::obv_vec(close, volume))
         .map_err(value_error)?;
     Ok(PyArray1::from_vec(py, output))
 }
@@ -320,10 +311,12 @@ fn fast_unary_period<'py>(
             .detach(|| indicators::roc(close, timeperiod))
             .map_err(value_error)?
             .into_raw_vec(),
-        "cmo" => py
-            .detach(|| indicators::cmo(close, timeperiod))
-            .map_err(value_error)?
-            .into_raw_vec(),
+        "cmo" => {
+            let mut output = vec![0.0; close.len()];
+            py.detach(|| indicators::cmo_fast_into(close, timeperiod, &mut output))
+                .map_err(value_error)?;
+            output
+        }
         _ => {
             return Err(value_error(format!(
                 "invalid parameter: unsupported fast operation {operation}"
@@ -426,21 +419,66 @@ fn fast_hlc_period<'py>(
             output
         }
         "adx" => py
-            .detach(|| indicators::adx(high, low, close, timeperiod))
-            .map_err(value_error)?
-            .into_raw_vec(),
-        "cci" => py
-            .detach(|| indicators::cci(high, low, close, timeperiod))
-            .map_err(value_error)?
-            .into_raw_vec(),
+            .detach(|| {
+                let len = high.len();
+                let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);
+                unsafe { raw_output.set_len(len) };
+                let output = unsafe {
+                    std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<f64>(), len)
+                };
+                indicators::adx_into(high, low, close, timeperiod, output).map_err(value_error)?;
+                let ptr = raw_output.as_mut_ptr().cast::<f64>();
+                let capacity = raw_output.capacity();
+                std::mem::forget(raw_output);
+                Ok::<Vec<f64>, crate::PyErr>(unsafe { Vec::from_raw_parts(ptr, len, capacity) })
+            })
+            .map_err(value_error)?,
+        "cci" => {
+            let mut output = vec![0.0; high.len()];
+            py.detach(|| indicators::cci_into(high, low, close, timeperiod, &mut output))
+                .map_err(value_error)?;
+            output
+        }
         "plus_di" => py
-            .detach(|| indicators::plus_di(high, low, close, timeperiod))
-            .map_err(value_error)?
-            .into_raw_vec(),
+            .detach(|| {
+                let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(high.len());
+                unsafe { raw_output.set_len(high.len()) };
+                let output = unsafe {
+                    std::slice::from_raw_parts_mut(
+                        raw_output.as_mut_ptr().cast::<f64>(),
+                        high.len(),
+                    )
+                };
+                indicators::plus_di_fast_into(high, low, close, timeperiod, output)
+                    .map_err(value_error)?;
+                let ptr = raw_output.as_mut_ptr().cast::<f64>();
+                let capacity = raw_output.capacity();
+                std::mem::forget(raw_output);
+                Ok::<Vec<f64>, crate::PyErr>(unsafe {
+                    Vec::from_raw_parts(ptr, high.len(), capacity)
+                })
+            })
+            .map_err(value_error)?,
         "minus_di" => py
-            .detach(|| indicators::minus_di(high, low, close, timeperiod))
-            .map_err(value_error)?
-            .into_raw_vec(),
+            .detach(|| {
+                let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(high.len());
+                unsafe { raw_output.set_len(high.len()) };
+                let output = unsafe {
+                    std::slice::from_raw_parts_mut(
+                        raw_output.as_mut_ptr().cast::<f64>(),
+                        high.len(),
+                    )
+                };
+                indicators::minus_di_fast_into(high, low, close, timeperiod, output)
+                    .map_err(value_error)?;
+                let ptr = raw_output.as_mut_ptr().cast::<f64>();
+                let capacity = raw_output.capacity();
+                std::mem::forget(raw_output);
+                Ok::<Vec<f64>, crate::PyErr>(unsafe {
+                    Vec::from_raw_parts(ptr, high.len(), capacity)
+                })
+            })
+            .map_err(value_error)?,
         "atr" => py
             .detach(|| indicators::atr(high, low, close, timeperiod))
             .map_err(value_error)?
@@ -468,10 +506,19 @@ fn fast_trange<'py>(
     let high = high.as_slice().map_err(value_error)?;
     let low = low.as_slice().map_err(value_error)?;
     let close = close.as_slice().map_err(value_error)?;
-    let output = py
-        .detach(|| indicators::trange(high, low, close))
+    let len = high.len();
+    let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    unsafe { raw_output.set_len(len) };
+    let output =
+        unsafe { std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<f64>(), len) };
+    py.detach(|| indicators::trange_into(high, low, close, output))
         .map_err(value_error)?;
-    Ok(PyArray1::from_vec(py, output.into_raw_vec()))
+    let ptr = raw_output.as_mut_ptr().cast::<f64>();
+    let capacity = raw_output.capacity();
+    std::mem::forget(raw_output);
+    Ok(PyArray1::from_vec(py, unsafe {
+        Vec::from_raw_parts(ptr, len, capacity)
+    }))
 }
 
 #[pyfunction(name = "_fast_mfi")]
@@ -488,10 +535,19 @@ fn fast_mfi<'py>(
     let low = low.as_slice().map_err(value_error)?;
     let close = close.as_slice().map_err(value_error)?;
     let volume = volume.as_slice().map_err(value_error)?;
-    let output = py
-        .detach(|| indicators::mfi(high, low, close, volume, timeperiod))
+    let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(close.len());
+    unsafe { raw_output.set_len(close.len()) };
+    let output = unsafe {
+        std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<f64>(), close.len())
+    };
+    py.detach(|| indicators::mfi_into(high, low, close, volume, timeperiod, output))
         .map_err(value_error)?;
-    Ok(PyArray1::from_vec(py, output.into_raw_vec()))
+    let ptr = raw_output.as_mut_ptr().cast::<f64>();
+    let len = raw_output.len();
+    let capacity = raw_output.capacity();
+    forget(raw_output);
+    let output = unsafe { Vec::from_raw_parts(ptr, len, capacity) };
+    Ok(PyArray1::from_vec(py, output))
 }
 
 #[pyfunction(name = "_fast_ad")]
@@ -506,10 +562,19 @@ fn fast_ad<'py>(
     let low = low.as_slice().map_err(value_error)?;
     let close = close.as_slice().map_err(value_error)?;
     let volume = volume.as_slice().map_err(value_error)?;
-    let output = py
-        .detach(|| indicators::ad(high, low, close, volume))
+    let len = high.len();
+    let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    unsafe { raw_output.set_len(len) };
+    let output =
+        unsafe { std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<f64>(), len) };
+    py.detach(|| volume_kernels::ad_into(high, low, close, volume, output))
         .map_err(value_error)?;
-    Ok(PyArray1::from_vec(py, output.into_raw_vec()))
+    let ptr = raw_output.as_mut_ptr().cast::<f64>();
+    let capacity = raw_output.capacity();
+    std::mem::forget(raw_output);
+    Ok(PyArray1::from_vec(py, unsafe {
+        Vec::from_raw_parts(ptr, len, capacity)
+    }))
 }
 
 #[pyfunction(name = "_fast_adosc")]
@@ -527,10 +592,21 @@ fn fast_adosc<'py>(
     let low = low.as_slice().map_err(value_error)?;
     let close = close.as_slice().map_err(value_error)?;
     let volume = volume.as_slice().map_err(value_error)?;
-    let output = py
-        .detach(|| indicators::adosc(high, low, close, volume, fastperiod, slowperiod))
-        .map_err(value_error)?;
-    Ok(PyArray1::from_vec(py, output.into_raw_vec()))
+    let len = high.len();
+    let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    unsafe { raw_output.set_len(len) };
+    let output =
+        unsafe { std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<f64>(), len) };
+    py.detach(|| {
+        volume_kernels::adosc_into(high, low, close, volume, fastperiod, slowperiod, output)
+    })
+    .map_err(value_error)?;
+    let ptr = raw_output.as_mut_ptr().cast::<f64>();
+    let capacity = raw_output.capacity();
+    std::mem::forget(raw_output);
+    Ok(PyArray1::from_vec(py, unsafe {
+        Vec::from_raw_parts(ptr, len, capacity)
+    }))
 }
 
 #[pyfunction(name = "_fast_bop")]
@@ -606,13 +682,25 @@ fn fast_macd<'py>(
     Bound<'py, PyArray1<f64>>,
 )> {
     let close = close.as_slice().map_err(value_error)?;
-    let result = py
-        .detach(|| indicators::macd(close, fastperiod, slowperiod, signalperiod))
-        .map_err(value_error)?;
+    let mut macd = vec![0.0; close.len()];
+    let mut signal = vec![0.0; close.len()];
+    let mut hist = vec![0.0; close.len()];
+    py.detach(|| {
+        indicators::macd_fast_into(
+            close,
+            fastperiod,
+            slowperiod,
+            signalperiod,
+            &mut macd,
+            &mut signal,
+            &mut hist,
+        )
+    })
+    .map_err(value_error)?;
     Ok((
-        PyArray1::from_vec(py, result.macd.into_raw_vec()),
-        PyArray1::from_vec(py, result.signal.into_raw_vec()),
-        PyArray1::from_vec(py, result.hist.into_raw_vec()),
+        PyArray1::from_vec(py, macd),
+        PyArray1::from_vec(py, signal),
+        PyArray1::from_vec(py, hist),
     ))
 }
 
@@ -630,13 +718,39 @@ fn fast_stoch<'py>(
     let high = high.as_slice().map_err(value_error)?;
     let low = low.as_slice().map_err(value_error)?;
     let close = close.as_slice().map_err(value_error)?;
-    let result = py
-        .detach(|| indicators::stoch(high, low, close, fastk_period, slowk_period, slowd_period))
-        .map_err(value_error)?;
-    Ok((
-        PyArray1::from_vec(py, result.k.into_raw_vec()),
-        PyArray1::from_vec(py, result.d.into_raw_vec()),
-    ))
+    let len = close.len();
+    // The STOCH kernels write both output slices completely (including the
+    // warm-up prefix), so avoid clearing two full buffers before dispatch.
+    let mut k_raw = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    let mut d_raw = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    unsafe {
+        k_raw.set_len(len);
+        d_raw.set_len(len);
+    }
+    let k_out = unsafe { std::slice::from_raw_parts_mut(k_raw.as_mut_ptr().cast::<f64>(), len) };
+    let d_out = unsafe { std::slice::from_raw_parts_mut(d_raw.as_mut_ptr().cast::<f64>(), len) };
+    py.detach(|| {
+        indicators::stoch_into(
+            high,
+            low,
+            close,
+            fastk_period,
+            slowk_period,
+            slowd_period,
+            k_out,
+            d_out,
+        )
+    })
+    .map_err(value_error)?;
+    let k_ptr = k_raw.as_mut_ptr().cast::<f64>();
+    let d_ptr = d_raw.as_mut_ptr().cast::<f64>();
+    let k_capacity = k_raw.capacity();
+    let d_capacity = d_raw.capacity();
+    std::mem::forget(k_raw);
+    std::mem::forget(d_raw);
+    let k_vec = unsafe { Vec::from_raw_parts(k_ptr, len, k_capacity) };
+    let d_vec = unsafe { Vec::from_raw_parts(d_ptr, len, d_capacity) };
+    Ok((PyArray1::from_vec(py, k_vec), PyArray1::from_vec(py, d_vec)))
 }
 
 macro_rules! reduction_fn {

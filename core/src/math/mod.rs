@@ -45,7 +45,7 @@ mod moving_avg_legacy;
 /// entry points, so callers keep the same module path and signatures.
 #[cfg(feature = "std")]
 pub mod moving_avg {
-    pub use super::fast_moving_avg::{ema_into, kama, wma_into};
+    pub use super::fast_moving_avg::{ema_into, kama, kama_into, wma_into};
     pub use super::moving_avg_legacy::*;
 }
 // B1: `libm_shim` is the `no_std`-portable home for the float primitives used

@@ -189,6 +189,11 @@ Rust / Python / Node / WASM / C ABI
 
 ### R3 - Formula 统一执行（P1）
 
+- [x] `FormulaEngine` 编译阶段缓存 `FormulaHotPlan`，纯公式执行复用统一的 `InputSlot` / `BufferSlot` / `KernelId` 计划。
+- [x] 公式运行时接入 `UnifiedExecutor`，支持 MA/EMA/WMA/RSI/MOM/ROC/OBV/ATR/STD/BBANDS/MACD 的 caller-owned canonical `*_into` 内核。
+- [x] CSE 合并重复变量后，`InputLayout` 同时按 node id 与 canonical operation 绑定外部输入，避免复合公式误回退。
+- [x] `UnifiedExecutor` 实例按公式缓存并复用 buffer arena，重复执行不再重建 numeric executor。
+- [x] 为不支持的函数、动态参数和副作用保留兼容解释器回退，避免热路径迁移改变语义。
 - 将纯表达式/纯函数子图 lower 到 `ComputePlan`；
 - 编译期把 function name + literal params 解析为 `KernelId + ParameterArena`；
 - 简单公式不再每次执行重复解析字符串函数名；

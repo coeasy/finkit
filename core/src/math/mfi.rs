@@ -45,7 +45,17 @@ pub fn mfi(
     // Positive money flow is stored as +x, non-positive-direction flow as -x.
     // This halves ring storage and lets one outgoing value update the correct
     // accumulator without a second ring lookup.
-    let mut flow_ring = vec![0.0_f64; period];
+    let mut small_flow_ring = [0.0_f64; 64];
+    let mut heap_flow_ring = if period > small_flow_ring.len() {
+        Some(vec![0.0_f64; period])
+    } else {
+        None
+    };
+    let flow_ptr = if period <= small_flow_ring.len() {
+        small_flow_ring.as_mut_ptr()
+    } else {
+        heap_flow_ring.as_mut().unwrap().as_mut_ptr()
+    };
     let mut pos_sum = 0.0;
     let mut neg_sum = 0.0;
     let mut ring_idx = 0usize;
@@ -61,8 +71,6 @@ pub fn mfi(
         let close_ptr = close.as_ptr();
         let volume_ptr = volume.as_ptr();
         let output_ptr = raw_output.as_mut_ptr();
-        let flow_ptr = flow_ring.as_mut_ptr();
-
         for index in 0..period {
             output_ptr.add(index).write(MaybeUninit::new(f64::NAN));
         }
@@ -116,6 +124,243 @@ pub fn mfi(
     };
 
     Ok(Array1::from_vec(output))
+}
+
+/// Compute MFI directly into a caller-owned output buffer.
+///
+/// This is the binding hot path: it preserves the fused signed-flow ring and
+/// the established arithmetic while avoiding the temporary `Array1` and raw
+/// vector conversion at the FFI boundary.
+pub fn mfi_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    volume: &[f64],
+    period: usize,
+    output: &mut [f64],
+) -> Result<()> {
+    if high.len() != low.len() || high.len() != close.len() || high.len() != volume.len() {
+        return Err(TaError::InvalidParameter {
+            name: "high, low, close, volume".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    if period == 0 {
+        return Err(TaError::InvalidParameter {
+            name: "period".to_string(),
+            constraint: "greater than 0".to_string(),
+        });
+    }
+    if high.len() < period + 1 {
+        return Err(TaError::InsufficientData {
+            length: high.len(),
+            required: period + 1,
+        });
+    }
+    if output.len() != close.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as close".to_string(),
+        });
+    }
+
+    let len = close.len();
+    output[..period].fill(f64::NAN);
+
+    #[cfg(all(feature = "std", target_arch = "x86_64"))]
+    if is_x86_feature_detected!("avx2") && len >= period.saturating_add(32) {
+        // SAFETY: the runtime check enables AVX2 and all slices were validated
+        // above with equal lengths and sufficient warmup data.
+        unsafe { mfi_into_avx2(high, low, close, volume, period, output) };
+        return Ok(());
+    }
+
+    let mut small_flow_ring = [0.0_f64; 64];
+    let mut heap_flow_ring = if period > small_flow_ring.len() {
+        Some(vec![0.0_f64; period])
+    } else {
+        None
+    };
+    let flow_ptr = if period <= small_flow_ring.len() {
+        small_flow_ring.as_mut_ptr()
+    } else {
+        heap_flow_ring.as_mut().unwrap().as_mut_ptr()
+    };
+    let mut pos_sum = 0.0;
+    let mut neg_sum = 0.0;
+    let mut ring_idx = 0usize;
+    let mut prev_tp = typical_price(high[0], low[0], close[0]);
+
+    unsafe {
+        let high_ptr = high.as_ptr();
+        let low_ptr = low.as_ptr();
+        let close_ptr = close.as_ptr();
+        let volume_ptr = volume.as_ptr();
+        let output_ptr = output.as_mut_ptr();
+        for i in 1..len {
+            let tp = typical_price(*high_ptr.add(i), *low_ptr.add(i), *close_ptr.add(i));
+            let money_flow = tp * *volume_ptr.add(i);
+            let signed_flow = if tp > prev_tp {
+                money_flow
+            } else {
+                -money_flow
+            };
+            prev_tp = tp;
+
+            let old_flow = *flow_ptr.add(ring_idx);
+            if old_flow > 0.0 {
+                pos_sum -= old_flow;
+            } else if old_flow < 0.0 {
+                neg_sum += old_flow;
+            }
+
+            if signed_flow > 0.0 {
+                pos_sum += signed_flow;
+            } else if signed_flow < 0.0 {
+                neg_sum -= signed_flow;
+            }
+            *flow_ptr.add(ring_idx) = signed_flow;
+
+            ring_idx += 1;
+            if ring_idx == period {
+                ring_idx = 0;
+            }
+
+            if i >= period {
+                let value = if neg_sum.abs() > 1e-15 {
+                    100.0 * pos_sum / (pos_sum + neg_sum)
+                } else {
+                    100.0
+                };
+                *output_ptr.add(i) = value;
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2")]
+unsafe fn mfi_into_avx2(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    volume: &[f64],
+    period: usize,
+    output: &mut [f64],
+) {
+    use core::arch::x86_64::*;
+
+    let len = close.len();
+    let mut small_flow_ring = [0.0_f64; 64];
+    let mut heap_flow_ring = if period > small_flow_ring.len() {
+        Some(vec![0.0_f64; period])
+    } else {
+        None
+    };
+    let flow_ptr = if period <= small_flow_ring.len() {
+        small_flow_ring.as_mut_ptr()
+    } else {
+        heap_flow_ring.as_mut().unwrap().as_mut_ptr()
+    };
+    let mut pos_sum = 0.0;
+    let mut neg_sum = 0.0;
+    let mut ring_idx = 0usize;
+    let mut prev_tp = (high[0] + low[0] + close[0]) / 3.0;
+    let three = _mm256_set1_pd(3.0);
+    let mut i = 1usize;
+
+    unsafe {
+        let high_ptr = high.as_ptr();
+        let low_ptr = low.as_ptr();
+        let close_ptr = close.as_ptr();
+        let volume_ptr = volume.as_ptr();
+        let output_ptr = output.as_mut_ptr();
+        while i + 4 <= len {
+            let vh = _mm256_loadu_pd(high_ptr.add(i));
+            let vl = _mm256_loadu_pd(low_ptr.add(i));
+            let vc = _mm256_loadu_pd(close_ptr.add(i));
+            let tp_vec = _mm256_div_pd(_mm256_add_pd(_mm256_add_pd(vh, vl), vc), three);
+            let mut tp_values = [0.0_f64; 4];
+            _mm256_storeu_pd(tp_values.as_mut_ptr(), tp_vec);
+
+            for lane in 0..4 {
+                let index = i + lane;
+                let tp = tp_values[lane];
+                let money_flow = tp * *volume_ptr.add(index);
+                let signed_flow = if tp > prev_tp {
+                    money_flow
+                } else {
+                    -money_flow
+                };
+                prev_tp = tp;
+
+                let old_flow = *flow_ptr.add(ring_idx);
+                if old_flow > 0.0 {
+                    pos_sum -= old_flow;
+                } else if old_flow < 0.0 {
+                    neg_sum += old_flow;
+                }
+                if signed_flow > 0.0 {
+                    pos_sum += signed_flow;
+                } else if signed_flow < 0.0 {
+                    neg_sum -= signed_flow;
+                }
+                *flow_ptr.add(ring_idx) = signed_flow;
+
+                ring_idx += 1;
+                if ring_idx == period {
+                    ring_idx = 0;
+                }
+                if index >= period {
+                    *output_ptr.add(index) = if neg_sum.abs() > 1e-15 {
+                        100.0 * pos_sum / (pos_sum + neg_sum)
+                    } else {
+                        100.0
+                    };
+                }
+            }
+            i += 4;
+        }
+
+        while i < len {
+            let tp = (*high_ptr.add(i) + *low_ptr.add(i) + *close_ptr.add(i)) / 3.0;
+            let money_flow = tp * *volume_ptr.add(i);
+            let signed_flow = if tp > prev_tp {
+                money_flow
+            } else {
+                -money_flow
+            };
+            prev_tp = tp;
+
+            let old_flow = *flow_ptr.add(ring_idx);
+            if old_flow > 0.0 {
+                pos_sum -= old_flow;
+            } else if old_flow < 0.0 {
+                neg_sum += old_flow;
+            }
+            if signed_flow > 0.0 {
+                pos_sum += signed_flow;
+            } else if signed_flow < 0.0 {
+                neg_sum -= signed_flow;
+            }
+            *flow_ptr.add(ring_idx) = signed_flow;
+
+            ring_idx += 1;
+            if ring_idx == period {
+                ring_idx = 0;
+            }
+            if i >= period {
+                *output_ptr.add(i) = if neg_sum.abs() > 1e-15 {
+                    100.0 * pos_sum / (pos_sum + neg_sum)
+                } else {
+                    100.0
+                };
+            }
+            i += 1;
+        }
+    }
+    output[..period].fill(f64::NAN);
 }
 
 #[cfg(test)]
@@ -188,6 +433,28 @@ mod tests {
         let period = 3;
         let expected = legacy_reference(&high, &low, &close, &volume, period);
         let actual = mfi(&high, &low, &close, &volume, period).unwrap();
+
+        for (lhs, rhs) in actual.iter().zip(expected.iter()) {
+            if rhs.is_nan() {
+                assert!(lhs.is_nan());
+            } else {
+                assert!((lhs - rhs).abs() <= 1e-12, "{lhs} != {rhs}");
+            }
+        }
+    }
+
+    #[test]
+    fn into_matches_allocating_kernel() {
+        let high = [10.0, 12.0, 11.0, 13.0, 13.0, 12.5, 14.0, 13.5, 15.0];
+        let low = [9.0, 10.0, 9.5, 11.0, 11.0, 10.5, 12.0, 11.5, 13.0];
+        let close = [9.5, 11.0, 10.0, 12.0, 12.0, 11.0, 13.0, 12.0, 14.0];
+        let volume = [
+            100.0, 120.0, 130.0, 125.0, 140.0, 135.0, 150.0, 145.0, 160.0,
+        ];
+        let period = 3;
+        let expected = mfi(&high, &low, &close, &volume, period).unwrap();
+        let mut actual = vec![0.0; close.len()];
+        mfi_into(&high, &low, &close, &volume, period, &mut actual).unwrap();
 
         for (lhs, rhs) in actual.iter().zip(expected.iter()) {
             if rhs.is_nan() {

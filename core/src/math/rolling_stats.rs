@@ -116,8 +116,8 @@ pub fn variance(input: &[f64], period: usize) -> Result<Vec<f64>> {
 pub fn stddev(input: &[f64], period: usize, nb_dev: f64) -> Result<Vec<f64>> {
     validate_period(input.len(), period, 2)?;
 
-    let lookback = period - 1;
     let mut output = vec![f64::NAN; input.len()];
+    let lookback = period - 1;
     let mut moments = RollingMoments::new(input, period);
     let output_ptr = output.as_mut_ptr();
 
@@ -142,8 +142,106 @@ pub fn stddev(input: &[f64], period: usize, nb_dev: f64) -> Result<Vec<f64>> {
             unsafe { *output_ptr.add(index) = value };
         }
     }
-
     Ok(output)
+}
+
+/// Standard deviation written directly into a caller-owned output slice.
+///
+/// This is the formula/FFI hot-path counterpart of [`crate::indicators::std_dev`].
+/// It preserves that public API's first/second-moment update order while
+/// avoiding a temporary result vector and the follow-up copy at the dispatcher
+/// boundary.
+pub fn stddev_into(input: &[f64], period: usize, nb_dev: f64, output: &mut [f64]) -> Result<()> {
+    validate_period(input.len(), period, 2)?;
+    if output.len() != input.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
+
+    let lookback = period - 1;
+    output[..lookback].fill(f64::NAN);
+    let inverse_period = 1.0 / period as f64;
+    let mut sum = 0.0;
+    let mut sum_sq = 0.0;
+    for &value in &input[..period] {
+        sum += value;
+        sum_sq += value * value;
+    }
+    let output_ptr = output.as_mut_ptr();
+    unsafe {
+        let mean = sum * inverse_period;
+        let variance = (sum_sq - sum * mean) * inverse_period;
+        *output_ptr.add(lookback) = variance.max(0.0).sqrt() * nb_dev;
+    }
+    for index in period..input.len() {
+        let old = unsafe { *input.as_ptr().add(index - period) };
+        let new = unsafe { *input.as_ptr().add(index) };
+        sum += new - old;
+        sum_sq += new * new - old * old;
+        let mean = sum * inverse_period;
+        let variance = (sum_sq - sum * mean) * inverse_period;
+        unsafe {
+            *output_ptr.add(index) = variance.max(0.0).sqrt() * nb_dev;
+        }
+    }
+
+    Ok(())
+}
+
+/// Upper Bollinger band written directly into a caller-owned output slice.
+///
+/// Formula `BOLL` historically returns the upper band only. Keeping that
+/// projection in the rolling-moment kernel avoids allocating the unused middle
+/// and lower bands for the common formula path.
+pub fn bbands_upper_into(
+    input: &[f64],
+    period: usize,
+    nb_dev: f64,
+    output: &mut [f64],
+) -> Result<()> {
+    validate_period(input.len(), period, 2)?;
+    if output.len() != input.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
+
+    let lookback = period - 1;
+    output[..lookback].fill(f64::NAN);
+
+    // Keep the formula projection bit-for-bit aligned with the public BBANDS
+    // implementation. Its Welford seed and rolling update order are part of
+    // the TA-Lib compatibility contract; using a different rolling-moment
+    // recurrence here creates avoidable ulp drift between `BOLL` and BBANDS.
+    let inv_period = 1.0 / period as f64;
+    let period_f = period as f64;
+    let mut mean = 0.0;
+    let mut m2 = 0.0;
+    for (index, &value) in input.iter().enumerate().take(period) {
+        let count = (index + 1) as f64;
+        let delta = value - mean;
+        mean += delta / count;
+        m2 += delta * (value - mean);
+    }
+
+    let output_ptr = output.as_mut_ptr();
+    unsafe {
+        *output_ptr.add(lookback) = mean + (m2 * inv_period).max(0.0).sqrt() * nb_dev;
+    }
+    for index in period..input.len() {
+        let old = unsafe { *input.as_ptr().add(index - period) };
+        let new = unsafe { *input.as_ptr().add(index) };
+        let old_mean = mean;
+        mean += (new - old) / period_f;
+        m2 += (new - mean) * (new - old_mean) - (old - mean) * (old - old_mean);
+        unsafe {
+            *output_ptr.add(index) = mean + (m2 * inv_period).sqrt() * nb_dev;
+        }
+    }
+    Ok(())
 }
 
 /// Pearson correlation with the exact add/remove sequencing of TA_CORREL 0.7.1.
@@ -236,9 +334,20 @@ pub fn bbands_sma(
 
     let len = input.len();
     let lookback = period - 1;
-    let mut upper = vec![f64::NAN; len];
-    let mut middle = vec![f64::NAN; len];
-    let mut lower = vec![f64::NAN; len];
+    // Every slot after the lookback is written by the fused scan. Keep the
+    // three result vectors uninitialized until then so BBANDS does not pay
+    // three full zero-fill passes before overwriting them.
+    let mut upper = Vec::with_capacity(len);
+    let mut middle = Vec::with_capacity(len);
+    let mut lower = Vec::with_capacity(len);
+    unsafe {
+        upper.set_len(len);
+        middle.set_len(len);
+        lower.set_len(len);
+    }
+    upper[..lookback].fill(f64::NAN);
+    middle[..lookback].fill(f64::NAN);
+    lower[..lookback].fill(f64::NAN);
     let upper_ptr = upper.as_mut_ptr();
     let middle_ptr = middle.as_mut_ptr();
     let lower_ptr = lower.as_mut_ptr();

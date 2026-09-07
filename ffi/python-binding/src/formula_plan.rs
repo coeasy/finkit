@@ -15,6 +15,13 @@ use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy)]
 enum CanonicalFormula {
+    Sma { period: usize },
+    Ema { period: usize },
+    Wma { period: usize },
+    Kama { period: usize },
+    Rsi { period: usize },
+    Mom { period: usize },
+    Roc { period: usize },
     Atr { period: usize },
     Std { period: usize },
     Boll { period: usize, nbdev: f64 },
@@ -51,6 +58,34 @@ fn canonical_formula(source: &str) -> Option<CanonicalFormula> {
     let args: Vec<&str> = body.split(',').collect();
 
     match name {
+        "MA" | "SMA" | "BOLLMID" if args.len() == 2 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Sma { period })
+        }
+        "EMA" if args.len() == 2 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Ema { period })
+        }
+        "WMA" if args.len() == 2 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Wma { period })
+        }
+        "KAMA" if args.len() == 2 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Kama { period })
+        }
+        "RSI" if args.len() == 2 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Rsi { period })
+        }
+        "MOM" if args.len() == 2 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Mom { period })
+        }
+        "ROC" if args.len() == 2 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Roc { period })
+        }
         "ATR" if args.len() == 4 && is_high(args[0]) && is_low(args[1]) && is_close(args[2]) => {
             let period = args[3].parse::<usize>().ok()?;
             (period > 0).then_some(CanonicalFormula::Atr { period })
@@ -75,6 +110,33 @@ fn eval_canonical_formula(
     close: &[f64],
 ) -> PyResult<Array1<f64>> {
     match formula {
+        CanonicalFormula::Sma { period } => {
+            let mut output = vec![0.0; close.len()];
+            ::finkit::math::simd_kernels::sma_simd_into(close, period, &mut output);
+            Ok(Array1::from_vec(output))
+        }
+        CanonicalFormula::Ema { period } => {
+            let mut output = vec![0.0; close.len()];
+            ::finkit::math::moving_avg::ema_fast_into(close, period, &mut output).map_err(
+                |error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string()),
+            )?;
+            Ok(Array1::from_vec(output))
+        }
+        CanonicalFormula::Wma { period } => {
+            let mut output = vec![0.0; close.len()];
+            ::finkit::math::moving_avg::wma_into(close, period, &mut output).map_err(|error| {
+                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())
+            })?;
+            Ok(Array1::from_vec(output))
+        }
+        CanonicalFormula::Kama { period } => ::finkit::math::moving_avg::kama(close, period, 2, 30)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Rsi { period } => ::finkit::indicators::rsi(close, period)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Mom { period } => ::finkit::indicators::mom(close, period)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Roc { period } => ::finkit::indicators::roc(close, period)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
         CanonicalFormula::Atr { period } => ::finkit::indicators::atr(high, low, close, period)
             .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
         CanonicalFormula::Std { period } => rolling_stats::stddev(close, period, 1.0)
@@ -271,9 +333,9 @@ impl PyCompiledFormula {
 
     /// Evaluate without copying the contiguous NumPy OHLCV inputs.
     ///
-    /// Simple ATR/STD/BOLL formulas reuse the exact same canonical kernels as
-    /// the public indicator API. Other formulas continue through the compiled
-    /// zero-copy engine.
+    /// Common pure indicator formulas reuse the exact same canonical kernels
+    /// as the public indicator API. Other formulas continue through the
+    /// compiled zero-copy engine.
     #[pyo3(signature = (open, high, low, close, volume, amount=None))]
     #[allow(clippy::too_many_arguments)]
     fn eval_zero_copy<'py>(
@@ -324,7 +386,7 @@ impl PyCompiledFormula {
         validate_lengths(open, high, low, close, volume, amount)?;
 
         if let Some(formula) = self.canonical {
-            let result = eval_canonical_formula(formula, high, low, close)?;
+            let result = py.detach(|| eval_canonical_formula(formula, high, low, close))?;
             let output = PyDict::new(py);
             output.set_item("__result__", PyArray1::from_vec(py, result.into_raw_vec()))?;
             return Ok(output);

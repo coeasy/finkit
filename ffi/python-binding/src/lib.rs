@@ -3330,15 +3330,20 @@ fn compute_single_indicator(
             let fast = params.first().copied().unwrap_or(12.0) as usize;
             let slow = params.get(1).copied().unwrap_or(26.0) as usize;
             let signal = params.get(2).copied().unwrap_or(9.0) as usize;
-            indicators::macd(close, fast, slow, signal)
-                .map(|res| {
-                    IndicatorResult::Triple(
-                        res.macd.into_raw_vec(),
-                        res.signal.into_raw_vec(),
-                        res.hist.into_raw_vec(),
-                    )
-                })
-                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
+            let mut macd_line = vec![0.0; close.len()];
+            let mut signal_line = vec![0.0; close.len()];
+            let mut histogram = vec![0.0; close.len()];
+            indicators::macd_fast_into(
+                close,
+                fast,
+                slow,
+                signal,
+                &mut macd_line,
+                &mut signal_line,
+                &mut histogram,
+            )
+            .map(|()| IndicatorResult::Triple(macd_line, signal_line, histogram))
+            .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
         }
         "bollinger_bands" | "bbands" => {
             let period = params.first().copied().unwrap_or(5.0) as usize;

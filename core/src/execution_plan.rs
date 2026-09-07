@@ -164,6 +164,7 @@ impl ParameterArena {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct InputLayout {
     slots: BTreeMap<ComputeNodeId, InputSlot>,
+    slots_by_operation: BTreeMap<String, InputSlot>,
 }
 
 impl InputLayout {
@@ -188,12 +189,28 @@ impl InputLayout {
                 slots.insert(node_id, slot);
             }
         }
-        Self { slots }
+        let slots_by_operation = slots_by_operation
+            .into_iter()
+            .map(|(operation, slot)| (operation.to_string(), slot))
+            .collect();
+        Self {
+            slots,
+            slots_by_operation,
+        }
     }
 
     /// Resolve one semantic source node to its external input slot.
     pub fn slot(&self, node: ComputeNodeId) -> Option<InputSlot> {
         self.slots.get(&node).copied()
+    }
+
+    /// Resolve an external input slot by its canonical VARIABLE operation.
+    ///
+    /// CSE may remove duplicate semantic variable nodes before the hot plan is
+    /// compiled, so a frontend binding pass must be able to resolve a retained
+    /// input by operation as well as by its original node id.
+    pub fn slot_for_operation(&self, operation: &str) -> Option<InputSlot> {
+        self.slots_by_operation.get(operation).copied()
     }
 
     /// Number of external input slots required by the plan.
@@ -671,6 +688,10 @@ mod tests {
         );
         assert_eq!(
             hot.input_layout().slot(ComputeNodeId(1)),
+            Some(InputSlot(0))
+        );
+        assert_eq!(
+            hot.input_layout().slot_for_operation("VARIABLE:CLOSE"),
             Some(InputSlot(0))
         );
         assert_eq!(hot.input_layout().len(), 1);

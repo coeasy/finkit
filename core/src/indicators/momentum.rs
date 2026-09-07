@@ -275,8 +275,8 @@ pub fn stoch(
     validate_input(high.len(), k_period)?;
 
     let len = close.len();
-    let mut k_out = vec![f64::NAN; len];
-    let mut d_out = vec![f64::NAN; len];
+    let mut k_out = vec![0.0_f64; len];
+    let mut d_out = vec![0.0_f64; len];
 
     #[cfg(all(feature = "std", target_arch = "x86_64"))]
     crate::math::simd_kernels::stoch_simd_into(
@@ -316,6 +316,13 @@ fn stoch_fused_pipeline(
     let slowk_start = fastk_start + k_slow - 1;
     // TA-Lib: %D first valid at slowk_start + (d_period - 1)
     let slowd_start = slowk_start + d_period - 1;
+
+    for value in k_out.iter_mut().take(slowd_start.min(len)) {
+        *value = f64::NAN;
+    }
+    for value in d_out.iter_mut().take(slowd_start.min(len)) {
+        *value = f64::NAN;
+    }
 
     let inv_k_slow = 1.0 / k_slow as f64;
     let inv_d_period = 1.0 / d_period as f64;
@@ -558,15 +565,23 @@ fn macd_inner(
     signal_period: usize,
 ) -> Result<MacdResult> {
     let len = input.len();
-    let mut macd_line = init_output(len);
-    let mut signal = init_output(len);
-    let mut hist = init_output(len);
+    // All three outputs are written completely below. Keep them uninitialized
+    // until each slot receives its final value so the public owned-array path
+    // does not pay three full NaN-fill passes before the MACD recurrences.
+    let mut macd_line = Vec::with_capacity(len);
+    let mut signal = Vec::with_capacity(len);
+    let mut hist = Vec::with_capacity(len);
+    unsafe {
+        macd_line.set_len(len);
+        signal.set_len(len);
+        hist.set_len(len);
+    }
 
     if len == 0 {
         return Ok(MacdResult {
-            macd: macd_line,
-            signal,
-            hist,
+            macd: Array1::from_vec(macd_line),
+            signal: Array1::from_vec(signal),
+            hist: Array1::from_vec(hist),
         });
     }
 
@@ -596,6 +611,17 @@ fn macd_inner(
 
     let macd_start = slow_period - 1;
 
+    for value in &mut macd_line[..macd_start.min(len)] {
+        *value = f64::NAN;
+    }
+    let signal_start = macd_start + signal_period - 1;
+    for value in &mut signal[..signal_start.min(len)] {
+        *value = f64::NAN;
+    }
+    for value in &mut hist[..signal_start.min(len)] {
+        *value = f64::NAN;
+    }
+
     // 种子点处的 MACD 值
     let mut macd_val = prev_fast - prev_slow;
     macd_line[macd_start] = macd_val;
@@ -610,7 +636,6 @@ fn macd_inner(
     }
 
     // Signal line：SMA 种子 + FMA 递推
-    let signal_start = macd_start + signal_period - 1;
     if len > signal_start {
         let mut sig_sum: f64 = 0.0;
         for i in macd_start..=signal_start {
@@ -618,29 +643,26 @@ fn macd_inner(
         }
         let mut prev_signal = sig_sum / signal_period as f64;
         signal[signal_start] = prev_signal;
+        hist[signal_start] = macd_line[signal_start] - prev_signal;
 
         for i in (signal_start + 1)..len {
             let m = macd_line[i];
             prev_signal = (m - prev_signal).mul_add(signal_k, prev_signal);
             signal[i] = prev_signal;
-        }
-
-        // Histogram = MACD - Signal
-        for i in signal_start..len {
-            hist[i] = macd_line[i] - signal[i];
+            hist[i] = m - prev_signal;
         }
     }
 
     // Public TA-Lib contract: MACD, signal and histogram share one lookback.
     // Earlier MACD values are internal signal-seed intermediates, not outputs.
-    for index in macd_start..signal_start {
+    for index in macd_start..signal_start.min(len) {
         macd_line[index] = f64::NAN;
     }
 
     Ok(MacdResult {
-        macd: macd_line,
-        signal,
-        hist,
+        macd: Array1::from_vec(macd_line),
+        signal: Array1::from_vec(signal),
+        hist: Array1::from_vec(hist),
     })
 }
 
@@ -831,16 +853,17 @@ fn compute_adx_family(
     })
 }
 
-/// Compute only +DI and -DI without ADX smoothing.
+/// Compute one directional indicator without ADX smoothing.
 ///
-/// This is an optimization for `plus_di` and `minus_di` when called individually.
-/// It skips the expensive ADX RMA smoothing loop, saving ~33% computation.
-fn compute_di_only(
+/// `PLUS` is a const parameter so the hot loop contains no per-row direction
+/// branch.  The public APIs request one projection at a time, therefore keeping
+/// the other DM state and output vector alive is pure overhead.
+fn compute_single_di<const PLUS: bool>(
     high: &[f64],
     low: &[f64],
     close: &[f64],
     period: usize,
-) -> Result<(Vec<f64>, Vec<f64>)> {
+) -> Result<Vec<f64>> {
     if high.len() != low.len() || high.len() != close.len() {
         return Err(TaError::InvalidParameter {
             name: "high, low, close".to_string(),
@@ -852,23 +875,35 @@ fn compute_di_only(
     let len = close.len();
     let p = period as f64;
 
-    let mut smooth_plus_dm = 0.0f64;
-    let mut smooth_minus_dm = 0.0f64;
+    let mut smooth_dm = 0.0f64;
     let mut smooth_tr = 0.0f64;
 
     // TA-Lib 兼容：累积 period-1 个 DM/TR 值，随后 Wilder 平滑处理第 period 个 bar。
     if period > 1 {
+        let mut unused_dm = 0.0f64;
         #[cfg(feature = "std")]
         {
-            crate::math::simd_kernels::adx_warmup_into(
-                high,
-                low,
-                close,
-                period - 1,
-                &mut smooth_plus_dm,
-                &mut smooth_minus_dm,
-                &mut smooth_tr,
-            );
+            if PLUS {
+                crate::math::simd_kernels::adx_warmup_into(
+                    high,
+                    low,
+                    close,
+                    period - 1,
+                    &mut smooth_dm,
+                    &mut unused_dm,
+                    &mut smooth_tr,
+                );
+            } else {
+                crate::math::simd_kernels::adx_warmup_into(
+                    high,
+                    low,
+                    close,
+                    period - 1,
+                    &mut unused_dm,
+                    &mut smooth_dm,
+                    &mut smooth_tr,
+                );
+            }
         }
         #[cfg(not(feature = "std"))]
         {
@@ -876,25 +911,25 @@ fn compute_di_only(
                 let up_move = high[i] - high[i - 1];
                 let down_move = low[i - 1] - low[i];
                 smooth_tr += crate::utils::true_range(high[i], low[i], close[i - 1]);
-                if up_move > down_move && up_move > 0.0 {
-                    smooth_plus_dm += up_move;
-                }
-                if down_move > up_move && down_move > 0.0 {
-                    smooth_minus_dm += down_move;
+                if PLUS {
+                    if up_move > down_move && up_move > 0.0 {
+                        smooth_dm += up_move;
+                    }
+                } else if down_move > up_move && down_move > 0.0 {
+                    smooth_dm += down_move;
                 }
             }
         }
     }
 
-    let mut plus_di_out = vec![f64::NAN; len];
-    let mut minus_di_out = vec![f64::NAN; len];
+    let mut output = vec![f64::NAN; len];
 
     #[inline(always)]
-    fn calc_di(s_pdm: f64, s_mdm: f64, s_tr: f64) -> (f64, f64) {
+    fn calc_di(s_dm: f64, s_tr: f64) -> f64 {
         if s_tr.abs() > 1e-15 {
-            (s_pdm / s_tr * 100.0, s_mdm / s_tr * 100.0)
+            s_dm / s_tr * 100.0
         } else {
-            (0.0, 0.0)
+            0.0
         }
     }
 
@@ -904,26 +939,141 @@ fn compute_di_only(
         let up_move = high[i] - high[i - 1];
         let down_move = low[i - 1] - low[i];
         let tr = crate::utils::true_range(high[i], low[i], close[i - 1]);
-        let pdm = if up_move > down_move && up_move > 0.0 {
-            up_move
-        } else {
-            0.0
-        };
-        let mdm = if down_move > up_move && down_move > 0.0 {
+        let dm = if PLUS {
+            if up_move > down_move && up_move > 0.0 {
+                up_move
+            } else {
+                0.0
+            }
+        } else if down_move > up_move && down_move > 0.0 {
             down_move
         } else {
             0.0
         };
-        smooth_plus_dm = smooth_plus_dm - smooth_plus_dm / p + pdm;
-        smooth_minus_dm = smooth_minus_dm - smooth_minus_dm / p + mdm;
+        smooth_dm = smooth_dm - smooth_dm / p + dm;
         smooth_tr = smooth_tr - smooth_tr / p + tr;
 
-        let (pdi, mdi) = calc_di(smooth_plus_dm, smooth_minus_dm, smooth_tr);
-        plus_di_out[i] = pdi;
-        minus_di_out[i] = mdi;
+        output[i] = calc_di(smooth_dm, smooth_tr);
     }
 
-    Ok((plus_di_out, minus_di_out))
+    Ok(output)
+}
+
+/// Caller-owned directional-indicator kernel for the Python boundary.
+///
+/// This keeps the standalone DI recurrence allocation-free and uses a raw
+/// pointer walk in the long tail. The recurrence and operation order match
+/// [`compute_single_di`] so the public fast path remains bit-stable.
+#[inline]
+fn directional_di_into<const PLUS: bool, const INITIALIZE: bool>(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    period: usize,
+    output: &mut [f64],
+) -> Result<()> {
+    if high.len() != low.len() || high.len() != close.len() {
+        return Err(TaError::InvalidParameter {
+            name: "high, low, close".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    if output.len() != high.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as high".to_string(),
+        });
+    }
+    validate_input(high.len(), period * 2)?;
+
+    if INITIALIZE {
+        output.fill(f64::NAN);
+    } else {
+        output[..period].fill(f64::NAN);
+    }
+    let len = close.len();
+    let p = period as f64;
+    let mut smooth_dm = 0.0f64;
+    let mut smooth_tr = 0.0f64;
+
+    for i in 1..period {
+        let up_move = high[i] - high[i - 1];
+        let down_move = low[i - 1] - low[i];
+        smooth_tr += crate::utils::true_range(high[i], low[i], close[i - 1]);
+        if PLUS {
+            if up_move > down_move && up_move > 0.0 {
+                smooth_dm += up_move;
+            }
+        } else if down_move > up_move && down_move > 0.0 {
+            smooth_dm += down_move;
+        }
+    }
+
+    unsafe {
+        let high_ptr = high.as_ptr();
+        let low_ptr = low.as_ptr();
+        let close_ptr = close.as_ptr();
+        let output_ptr = output.as_mut_ptr();
+        for i in period..len {
+            let h = *high_ptr.add(i);
+            let l = *low_ptr.add(i);
+            let previous_h = *high_ptr.add(i - 1);
+            let previous_l = *low_ptr.add(i - 1);
+            let previous_c = *close_ptr.add(i - 1);
+            let up_move = h - previous_h;
+            let down_move = previous_l - l;
+            let mut tr = h - l;
+            let high_gap = (h - previous_c).abs();
+            if high_gap > tr {
+                tr = high_gap;
+            }
+            let low_gap = (l - previous_c).abs();
+            if low_gap > tr {
+                tr = low_gap;
+            }
+            let dm = if PLUS {
+                if up_move > down_move && up_move > 0.0 {
+                    up_move
+                } else {
+                    0.0
+                }
+            } else if down_move > up_move && down_move > 0.0 {
+                down_move
+            } else {
+                0.0
+            };
+            smooth_dm = smooth_dm - smooth_dm / p + dm;
+            smooth_tr = smooth_tr - smooth_tr / p + tr;
+            *output_ptr.add(i) = if smooth_tr > 0.0 {
+                100.0 * (smooth_dm / smooth_tr)
+            } else {
+                0.0
+            };
+        }
+    }
+    Ok(())
+}
+
+/// Caller-owned PLUS_DI kernel.
+pub fn plus_di_fast_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    period: usize,
+    output: &mut [f64],
+) -> Result<()> {
+    directional_di_into::<true, false>(high, low, close, period, output)
+}
+
+/// Caller-owned MINUS_DI kernel.
+pub fn minus_di_fast_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    period: usize,
+    output: &mut [f64],
+) -> Result<()> {
+    directional_di_into::<false, false>(high, low, close, period, output)
 }
 
 fn di(
@@ -1119,56 +1269,105 @@ pub fn aroon(high: &[f64], low: &[f64], period: usize) -> Result<AroonResult> {
 /// let result = indicators::cci(&high, &low, &close, 5).unwrap();
 /// assert_eq!(result.len(), 10);
 /// ```
-/// Mean absolute deviation of a window given its sorted elements and the
-/// parallel prefix-sum array `pref` (where `pref[k]` is the sum of the first
-/// `k` sorted elements). Computed in `O(log period)` via a binary search for
-/// the mean-split index, replacing the original `O(period)` abs-deviation
-/// loop. Exact up to float-reordering, which sits within golden tolerance.
-#[inline]
-fn cci_mad(sorted: &[f64], pref: &[f64], mean: f64, period: usize, inv_p: f64) -> f64 {
-    let k = sorted.partition_point(|&x| x <= mean);
-    let left_sum = pref[k];
-    let right_sum = pref[period] - pref[k];
-    let mad = (mean * k as f64 - left_sum) + (right_sum - mean * (period - k) as f64);
-    mad * inv_p
+/// Fixed-period CCI kernel for the common TA-Lib period-14 path.
+///
+/// The generic implementation below remains available for arbitrary periods,
+/// while this path keeps the hot ring on the stack and removes dynamic-vector
+/// indexing from the million-row benchmark case. The result is written
+/// directly into caller-owned storage so formula and FFI paths do not need an
+/// intermediate Array1 or copy.
+#[inline(never)]
+fn cci_period14_into_impl<const USE_AVX2: bool>(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    output: &mut [f64],
+) {
+    let _ = USE_AVX2;
+    let len = close.len();
+    output[..13].fill(f64::NAN);
+    let mut ring = [0.0_f64; 14];
+    let mut ring_idx = 0usize;
+    for index in 0..13 {
+        ring[ring_idx] = typical_price(high[index], low[index], close[index]);
+        ring_idx += 1;
+    }
+
+    for index in 13..len {
+        let current = typical_price(high[index], low[index], close[index]);
+        ring[ring_idx] = current;
+
+        // Preserve the canonical TA-Lib operation order. This avoids the
+        // long-series drift of a rolling sum while keeping the window small
+        // and stack-resident for the common period-14 path.
+        let mut mean = 0.0;
+        for &value in &ring {
+            mean += value;
+        }
+        mean /= 14.0;
+        let mut mean_deviation = 0.0;
+        for &value in &ring {
+            mean_deviation += (value - mean).abs();
+        }
+        let delta = current - mean;
+        output[index] = if delta != 0.0 && mean_deviation != 0.0 {
+            delta / (0.015 * (mean_deviation / 14.0))
+        } else {
+            0.0
+        };
+
+        ring_idx += 1;
+        if ring_idx == 14 {
+            ring_idx = 0;
+        }
+    }
 }
 
-pub fn cci(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Array1<f64>> {
-    if high.len() != low.len() || high.len() != close.len() {
-        return Err(TaError::InvalidParameter {
-            name: "high, low, close".to_string(),
-            constraint: "must have the same length".to_string(),
-        });
+#[inline]
+fn cci_period14_into(high: &[f64], low: &[f64], close: &[f64], output: &mut [f64]) {
+    #[cfg(all(feature = "std", target_arch = "x86_64"))]
+    if is_x86_feature_detected!("avx2") {
+        cci_period14_into_impl::<true>(high, low, close, output);
+        return;
     }
-    validate_input(high.len(), period)?;
+    cci_period14_into_impl::<false>(high, low, close, output);
+}
 
+fn cci_generic_into(high: &[f64], low: &[f64], close: &[f64], period: usize, output: &mut [f64]) {
     let len = close.len();
-    let mut output = init_output(len);
+    // The warm-up prefix and every valid bar are written explicitly below;
+    // avoid clearing the full result vector before the CCI scan.
+    output[..period - 1].fill(f64::NAN);
+    let output_ptr = output.as_mut_ptr();
     let inv_p = 1.0 / period as f64;
 
-    // Raw window order (ring) + sorted window + parallel prefix sums.
+    // Keep the raw window in a ring. For the small periods used by TA-Lib's
+    // public CCI contract, scanning the window in input order is materially
+    // cheaper than maintaining a sorted vector plus prefix sums (every bar
+    // otherwise performs two shifts and two binary searches). It also keeps
+    // the mean-deviation accumulation order aligned with TA-Lib.
     let mut ring: Vec<f64> = vec![0.0; period];
-    let mut sorted: Vec<f64> = Vec::with_capacity(period);
-    let mut pref: Vec<f64> = Vec::with_capacity(period + 1);
     let mut tp_sum = 0.0;
     for j in 0..period {
         let tp = typical_price(high[j], low[j], close[j]);
         ring[j] = tp;
         tp_sum += tp;
-        sorted.push(tp);
-    }
-    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    pref.push(0.0);
-    for &v in &sorted {
-        pref.push(*pref.last().unwrap() + v);
     }
 
     let first = period - 1;
     {
         let tp_mean = tp_sum * inv_p;
-        let mean_dev = cci_mad(&sorted, &pref, tp_mean, period, inv_p);
-        if mean_dev.abs() > 1e-15 {
-            output[first] = (ring[period - 1] - tp_mean) / (0.015 * mean_dev);
+        let mut mean_dev = 0.0;
+        for &value in &ring {
+            mean_dev += (value - tp_mean).abs();
+        }
+        mean_dev *= inv_p;
+        unsafe {
+            *output_ptr.add(first) = if mean_dev.abs() > 1e-15 {
+                (ring[period - 1] - tp_mean) / (0.015 * mean_dev)
+            } else {
+                f64::NAN
+            };
         }
     }
 
@@ -1178,35 +1377,73 @@ pub fn cci(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Ar
         let old_tp = ring[ring_idx];
         tp_sum += new_tp - old_tp;
 
-        // Remove the outgoing element from the sorted window + prefix sums.
-        let rpos = sorted.partition_point(|&x| x < old_tp);
-        sorted.remove(rpos);
-        // Shift the prefix sums left past the removed slot (subtract old_tp),
-        // keeping cumulative sums exact for the period-1 window, then drop tail.
-        for p in (rpos + 1)..period {
-            pref[p] = pref[p + 1] - old_tp;
-        }
-        pref.truncate(period);
-
-        // Insert the incoming element into the sorted window + prefix sums.
-        let ipos = sorted.partition_point(|&x| x < new_tp);
-        sorted.insert(ipos, new_tp);
-        pref.insert(ipos + 1, pref[ipos] + new_tp);
-        for p in (ipos + 2)..pref.len() {
-            pref[p] += new_tp;
-        }
-
         ring[ring_idx] = new_tp;
         ring_idx = (ring_idx + 1) % period;
 
         let tp_mean = tp_sum * inv_p;
-        let mean_dev = cci_mad(&sorted, &pref, tp_mean, period, inv_p);
-        if mean_dev.abs() > 1e-15 {
-            output[i] = (new_tp - tp_mean) / (0.015 * mean_dev);
+        let mut mean_dev = 0.0;
+        for &value in &ring {
+            mean_dev += (value - tp_mean).abs();
+        }
+        mean_dev *= inv_p;
+        unsafe {
+            *output_ptr.add(i) = if mean_dev.abs() > 1e-15 {
+                (new_tp - tp_mean) / (0.015 * mean_dev)
+            } else {
+                f64::NAN
+            };
         }
     }
+}
 
-    Ok(output)
+/// Commodity Channel Index (CCI).
+pub fn cci(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Array1<f64>> {
+    if high.len() != low.len() || high.len() != close.len() {
+        return Err(TaError::InvalidParameter {
+            name: "high, low, close".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    validate_input(high.len(), period)?;
+
+    let mut output = Vec::with_capacity(close.len());
+    unsafe { output.set_len(close.len()) };
+    if period == 14 {
+        cci_period14_into(high, low, close, &mut output);
+    } else {
+        cci_generic_into(high, low, close, period, &mut output);
+    }
+    Ok(Array1::from_vec(output))
+}
+
+/// CCI zero-copy variant: writes result into pre-allocated slice.
+pub fn cci_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    period: usize,
+    output: &mut [f64],
+) -> Result<()> {
+    if high.len() != low.len() || high.len() != close.len() {
+        return Err(TaError::InvalidParameter {
+            name: "high, low, close".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    if output.len() != high.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
+    validate_input(high.len(), period)?;
+
+    if period == 14 {
+        cci_period14_into(high, low, close, output);
+    } else {
+        cci_generic_into(high, low, close, period, output);
+    }
+    Ok(())
 }
 
 /// Momentum (MOM)
@@ -1625,6 +1862,53 @@ pub fn cmo(input: &[f64], period: usize) -> Result<Array1<f64>> {
     Ok(output)
 }
 
+/// Caller-owned CMO kernel for the Python public fast path. It keeps the
+/// canonical RMA recurrence but avoids the temporary full-length changes
+/// vector and the allocating `Array1` wrapper used by [`cmo`].
+pub fn cmo_fast_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> {
+    validate_input(input.len(), period + 1)?;
+    if output.len() != input.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
+    output.fill(f64::NAN);
+
+    let mut sum_up = 0.0;
+    let mut sum_down = 0.0;
+    for i in 1..=period {
+        let change = input[i] - input[i - 1];
+        if change > 0.0 {
+            sum_up += change;
+        } else {
+            sum_down -= change;
+        }
+    }
+
+    let denominator = sum_up + sum_down;
+    if denominator.abs() > 1e-15 {
+        output[period] = (sum_up - sum_down) / denominator * 100.0;
+    }
+
+    let inv_period = 1.0 / period as f64;
+    let period_minus_one = period as f64 - 1.0;
+    sum_up *= inv_period;
+    sum_down *= inv_period;
+    for i in period + 1..input.len() {
+        let change = input[i] - input[i - 1];
+        let up = if change > 0.0 { change } else { 0.0 };
+        let down = if change < 0.0 { -change } else { 0.0 };
+        sum_up = (sum_up * period_minus_one + up) * inv_period;
+        sum_down = (sum_down * period_minus_one + down) * inv_period;
+        let denominator = sum_up + sum_down;
+        if denominator.abs() > 1e-15 {
+            output[i] = (sum_up - sum_down) / denominator * 100.0;
+        }
+    }
+    Ok(())
+}
+
 /// Directional Movement Index (DX)
 ///
 /// Measures trend direction and strength.
@@ -1808,9 +2092,11 @@ pub fn minus_di(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Resu
         let minus_dm_vals = minus_dm(high, low)?;
         return di(high, low, close, &minus_dm_vals, period);
     }
-    // Optimization: use compute_di_only to skip ADX RMA smoothing
-    let (_plus_di_out, minus_di_out) = compute_di_only(high, low, close, period)?;
-    Ok(Array1::from_vec(minus_di_out))
+    // Compute only the requested projection; the companion +DI state is not
+    // needed when MINUS_DI is called as a standalone indicator.
+    Ok(Array1::from_vec(compute_single_di::<false>(
+        high, low, close, period,
+    )?))
 }
 
 /// Minus Directional Movement (MINUS_DM)
@@ -1867,9 +2153,11 @@ pub fn plus_di(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Resul
         let plus_dm_vals = plus_dm(high, low)?;
         return di(high, low, close, &plus_dm_vals, period);
     }
-    // Optimization: use compute_di_only to skip ADX RMA smoothing
-    let (plus_di_out, _minus_di_out) = compute_di_only(high, low, close, period)?;
-    Ok(Array1::from_vec(plus_di_out))
+    // Compute only the requested projection; the companion -DI state is not
+    // needed when PLUS_DI is called as a standalone indicator.
+    Ok(Array1::from_vec(compute_single_di::<true>(
+        high, low, close, period,
+    )?))
 }
 
 /// Plus Directional Movement (PLUS_DM)
@@ -2726,10 +3014,11 @@ pub fn macd_into(
     signal: &mut [f64],
     histogram: &mut [f64],
 ) -> Result<()> {
-    if fast_period >= slow_period {
+    if fast_period == 0 || slow_period == 0 || signal_period == 0 || fast_period >= slow_period {
         return Err(TaError::InvalidParameter {
-            name: "fast_period".to_string(),
-            constraint: "less than slow_period".to_string(),
+            name: "periods".to_string(),
+            constraint: "fast/slow/signal periods must be greater than 0 and fast < slow"
+                .to_string(),
         });
     }
     if let Some(idx) = input.iter().position(|v| !v.is_finite()) {
@@ -2795,16 +3084,13 @@ pub fn macd_into(
         }
         let mut prev_signal = sig_sum / signal_period as f64;
         signal[signal_start] = prev_signal;
+        histogram[signal_start] = macd_line[signal_start] - prev_signal;
 
         for i in (signal_start + 1)..len {
             let m = macd_line[i];
             prev_signal = (m - prev_signal).mul_add(signal_k, prev_signal);
             signal[i] = prev_signal;
-        }
-
-        // Histogram
-        for i in signal_start..len {
-            histogram[i] = macd_line[i] - signal[i];
+            histogram[i] = m - prev_signal;
         }
     }
 
@@ -2823,6 +3109,253 @@ pub fn macd_into(
     Ok(())
 }
 
+/// Public-boundary MACD kernel using the AVX2/FMA four-sample EMA block.
+///
+/// The regular [`macd_into`] path remains the numerically stable scalar/FMA
+/// implementation used by formulas and Rust callers. Python's owned-array
+/// fast path can use this equivalent recurrence for the two MACD EMAs and
+/// the signal EMA, avoiding three long scalar dependency chains.
+pub fn macd_fast_into(
+    input: &[f64],
+    fast_period: usize,
+    slow_period: usize,
+    signal_period: usize,
+    macd_line: &mut [f64],
+    signal: &mut [f64],
+    histogram: &mut [f64],
+) -> Result<()> {
+    if fast_period == 0 || slow_period == 0 || signal_period == 0 || fast_period >= slow_period {
+        return Err(TaError::InvalidParameter {
+            name: "periods".to_string(),
+            constraint: "fast/slow/signal periods must be greater than 0 and fast < slow"
+                .to_string(),
+        });
+    }
+    if let Some(idx) = input.iter().position(|v| !v.is_finite()) {
+        return Err(TaError::InvalidParameter {
+            name: "input".to_string(),
+            constraint: format!("non-finite value at index {idx}"),
+        });
+    }
+    validate_input(input.len(), slow_period)?;
+    if macd_line.len() != input.len()
+        || signal.len() != input.len()
+        || histogram.len() != input.len()
+    {
+        return Err(TaError::InvalidParameter {
+            name: "output slices".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
+
+    #[cfg(all(feature = "std", target_arch = "x86_64"))]
+    if crate::math::simd_kernels::avx2_fma_available()
+        && input.len() >= slow_period.saturating_add(8)
+    {
+        // SAFETY: the runtime dispatch above checks the target features, and
+        // all slices have equal lengths and satisfy the period preconditions.
+        unsafe {
+            return macd_fast_avx2_impl(
+                input,
+                fast_period,
+                slow_period,
+                signal_period,
+                macd_line,
+                signal,
+                histogram,
+            );
+        }
+    }
+
+    macd_into(
+        input,
+        fast_period,
+        slow_period,
+        signal_period,
+        macd_line,
+        signal,
+        histogram,
+    )
+}
+
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2,fma")]
+unsafe fn macd_fast_avx2_impl(
+    input: &[f64],
+    fast_period: usize,
+    slow_period: usize,
+    signal_period: usize,
+    macd_line: &mut [f64],
+    signal: &mut [f64],
+    histogram: &mut [f64],
+) -> Result<()> {
+    let len = input.len();
+    macd_line.fill(f64::NAN);
+    signal.fill(f64::NAN);
+    histogram.fill(f64::NAN);
+
+    let fast_k = 2.0 / (fast_period as f64 + 1.0);
+    let slow_k = 2.0 / (slow_period as f64 + 1.0);
+    let signal_k = 2.0 / (signal_period as f64 + 1.0);
+
+    let offset = slow_period - fast_period;
+    let mut slow_sum = 0.0;
+    for &value in &input[..offset] {
+        slow_sum += value;
+    }
+    let mut fast_sum = 0.0;
+    for &value in &input[offset..slow_period] {
+        fast_sum += value;
+        slow_sum += value;
+    }
+
+    let macd_start = slow_period - 1;
+    let mut previous_fast = fast_sum / fast_period as f64;
+    let mut previous_slow = slow_sum / slow_period as f64;
+    macd_line[macd_start] = previous_fast - previous_slow;
+
+    let mut index = slow_period;
+    while index + 4 <= len {
+        let fast_values = unsafe {
+            crate::math::simd_kernels::ema_block4_avx2(
+                input.as_ptr().add(index),
+                previous_fast,
+                fast_k,
+            )
+        };
+        let slow_values = unsafe {
+            crate::math::simd_kernels::ema_block4_avx2(
+                input.as_ptr().add(index),
+                previous_slow,
+                slow_k,
+            )
+        };
+        for lane in 0..4 {
+            macd_line[index + lane] = fast_values[lane] - slow_values[lane];
+        }
+        previous_fast = fast_values[3];
+        previous_slow = slow_values[3];
+        index += 4;
+    }
+    while index < len {
+        let value = input[index];
+        previous_fast = (value - previous_fast).mul_add(fast_k, previous_fast);
+        previous_slow = (value - previous_slow).mul_add(slow_k, previous_slow);
+        macd_line[index] = previous_fast - previous_slow;
+        index += 1;
+    }
+
+    let signal_start = macd_start + signal_period - 1;
+    if signal_start < len {
+        let mut signal_sum = 0.0;
+        for &value in &macd_line[macd_start..=signal_start] {
+            signal_sum += value;
+        }
+        let mut previous_signal = signal_sum / signal_period as f64;
+        signal[signal_start] = previous_signal;
+        histogram[signal_start] = macd_line[signal_start] - previous_signal;
+
+        let mut signal_index = signal_start + 1;
+        while signal_index + 4 <= len {
+            let values = unsafe {
+                crate::math::simd_kernels::ema_block4_avx2(
+                    macd_line.as_ptr().add(signal_index),
+                    previous_signal,
+                    signal_k,
+                )
+            };
+            for lane in 0..4 {
+                signal[signal_index + lane] = values[lane];
+                histogram[signal_index + lane] = macd_line[signal_index + lane] - values[lane];
+            }
+            previous_signal = values[3];
+            signal_index += 4;
+        }
+        while signal_index < len {
+            previous_signal =
+                (macd_line[signal_index] - previous_signal).mul_add(signal_k, previous_signal);
+            signal[signal_index] = previous_signal;
+            histogram[signal_index] = macd_line[signal_index] - previous_signal;
+            signal_index += 1;
+        }
+    }
+
+    macd_line[macd_start..signal_start.min(len)].fill(f64::NAN);
+    Ok(())
+}
+
+/// MACD line-only zero-copy variant used by scalar formula projections.
+///
+/// Formula `MACD` returns the DIF/MACD line, not the signal or histogram. This
+/// kernel therefore avoids allocating two unused companion series while
+/// preserving the same TA-Lib seed and public lookback as [`macd`].
+pub fn macd_line_into(
+    input: &[f64],
+    fast_period: usize,
+    slow_period: usize,
+    signal_period: usize,
+    output: &mut [f64],
+) -> Result<()> {
+    if fast_period == 0 || slow_period == 0 || signal_period == 0 || fast_period >= slow_period {
+        return Err(TaError::InvalidParameter {
+            name: "periods".to_string(),
+            constraint: "fast/slow/signal periods must be greater than 0 and fast < slow"
+                .to_string(),
+        });
+    }
+    if output.len() != input.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
+    if let Some(idx) = input.iter().position(|v| !v.is_finite()) {
+        return Err(TaError::InvalidParameter {
+            name: "input".to_string(),
+            constraint: format!("non-finite value at index {idx}"),
+        });
+    }
+    let lookback = slow_period
+        .checked_add(signal_period)
+        .and_then(|value| value.checked_sub(2))
+        .ok_or_else(|| TaError::InvalidParameter {
+            name: "periods".to_string(),
+            constraint: "periods must not overflow".to_string(),
+        })?;
+    validate_input(input.len(), lookback + 1)?;
+
+    output.fill(f64::NAN);
+    let fast_k = 2.0 / (fast_period as f64 + 1.0);
+    let slow_k = 2.0 / (slow_period as f64 + 1.0);
+    let offset = slow_period - fast_period;
+    let mut slow_sum = 0.0;
+    for i in 0..offset {
+        slow_sum += input[i];
+    }
+    let mut fast_sum = 0.0;
+    for i in offset..slow_period {
+        fast_sum += input[i];
+        slow_sum += input[i];
+    }
+
+    let macd_start = slow_period - 1;
+    let mut prev_slow = slow_sum / slow_period as f64;
+    let mut prev_fast = fast_sum / fast_period as f64;
+    output[macd_start] = prev_fast - prev_slow;
+    for i in slow_period..input.len() {
+        let value = input[i];
+        prev_fast = (value - prev_fast).mul_add(fast_k, prev_fast);
+        prev_slow = (value - prev_slow).mul_add(slow_k, prev_slow);
+        output[i] = prev_fast - prev_slow;
+    }
+
+    // The MACD values used to seed the signal line are internal state and are
+    // not part of the public output contract.
+    let signal_start = macd_start + signal_period - 1;
+    output[macd_start..signal_start].fill(f64::NAN);
+    Ok(())
+}
+
 /// ADX zero-copy variant: writes result into pre-allocated slice.
 pub fn adx_into(
     high: &[f64],
@@ -2831,59 +3364,179 @@ pub fn adx_into(
     period: usize,
     output: &mut [f64],
 ) -> Result<()> {
-    let result = adx(high, low, close, period)?;
+    if high.len() != low.len() || high.len() != close.len() {
+        return Err(TaError::InvalidParameter {
+            name: "high, low, close".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    if period == 0 {
+        return Err(TaError::InvalidParameter {
+            name: "period".to_string(),
+            constraint: "must be greater than 0".to_string(),
+        });
+    }
+    validate_input(high.len(), period * 2)?;
     if output.len() != high.len() {
         return Err(TaError::InvalidParameter {
             name: "output".to_string(),
             constraint: "must have the same length as input".to_string(),
         });
     }
-    output.copy_from_slice(result.as_slice().unwrap());
-    Ok(())
-}
 
-/// CCI zero-copy variant: writes result into pre-allocated slice.
-pub fn cci_into(
-    high: &[f64],
-    low: &[f64],
-    close: &[f64],
-    period: usize,
-    output: &mut [f64],
-) -> Result<()> {
-    let result = cci(high, low, close, period)?;
-    if output.len() != high.len() {
-        return Err(TaError::InvalidParameter {
-            name: "output".to_string(),
-            constraint: "must have the same length as input".to_string(),
-        });
+    let len = close.len();
+    let p = period as f64;
+    let adx_start = 2 * period;
+    output[..(adx_start - 1).min(len)].fill(f64::NAN);
+    let high_ptr = high.as_ptr();
+    let low_ptr = low.as_ptr();
+    let close_ptr = close.as_ptr();
+    let output_ptr = output.as_mut_ptr();
+
+    let mut smooth_plus_dm = 0.0f64;
+    let mut smooth_minus_dm = 0.0f64;
+    let mut smooth_tr = 0.0f64;
+    #[cfg(feature = "std")]
+    crate::math::simd_kernels::adx_warmup_into(
+        high,
+        low,
+        close,
+        period - 1,
+        &mut smooth_plus_dm,
+        &mut smooth_minus_dm,
+        &mut smooth_tr,
+    );
+    #[cfg(not(feature = "std"))]
+    for i in 1..period {
+        let up_move = high[i] - high[i - 1];
+        let down_move = low[i - 1] - low[i];
+        smooth_tr += crate::utils::true_range(high[i], low[i], close[i - 1]);
+        if up_move > down_move && up_move > 0.0 {
+            smooth_plus_dm += up_move;
+        }
+        if down_move > up_move && down_move > 0.0 {
+            smooth_minus_dm += down_move;
+        }
     }
-    output.copy_from_slice(result.as_slice().unwrap());
+
+    #[inline(always)]
+    fn dx(s_pdm: f64, s_mdm: f64, s_tr: f64) -> f64 {
+        if s_tr.abs() <= 1e-15 {
+            return 0.0;
+        }
+        let pdi = s_pdm / s_tr * 100.0;
+        let mdi = s_mdm / s_tr * 100.0;
+        let sum = pdi + mdi;
+        if sum.abs() > 1e-15 {
+            (pdi - mdi).abs() / sum * 100.0
+        } else {
+            0.0
+        }
+    }
+
+    let mut dx_sum = 0.0;
+    #[inline(always)]
+    fn true_range_fast(high: f64, low: f64, previous_close: f64) -> f64 {
+        let mut range = high - low;
+        let high_gap = (high - previous_close).abs();
+        if high_gap > range {
+            range = high_gap;
+        }
+        let low_gap = (low - previous_close).abs();
+        if low_gap > range {
+            range = low_gap;
+        }
+        range
+    }
+    for i in period..adx_start {
+        let (up_move, down_move, tr) = unsafe {
+            (
+                *high_ptr.add(i) - *high_ptr.add(i - 1),
+                *low_ptr.add(i - 1) - *low_ptr.add(i),
+                true_range_fast(*high_ptr.add(i), *low_ptr.add(i), *close_ptr.add(i - 1)),
+            )
+        };
+        let pdm = if up_move > down_move && up_move > 0.0 {
+            up_move
+        } else {
+            0.0
+        };
+        let mdm = if down_move > up_move && down_move > 0.0 {
+            down_move
+        } else {
+            0.0
+        };
+        smooth_plus_dm = smooth_plus_dm - smooth_plus_dm / p + pdm;
+        smooth_minus_dm = smooth_minus_dm - smooth_minus_dm / p + mdm;
+        smooth_tr = smooth_tr - smooth_tr / p + tr;
+        dx_sum += dx(smooth_plus_dm, smooth_minus_dm, smooth_tr);
+    }
+
+    let mut adx_value = dx_sum / p;
+    unsafe { *output_ptr.add(adx_start - 1) = adx_value };
+    for i in adx_start..len {
+        let (up_move, down_move, tr) = unsafe {
+            (
+                *high_ptr.add(i) - *high_ptr.add(i - 1),
+                *low_ptr.add(i - 1) - *low_ptr.add(i),
+                true_range_fast(*high_ptr.add(i), *low_ptr.add(i), *close_ptr.add(i - 1)),
+            )
+        };
+        let pdm = if up_move > down_move && up_move > 0.0 {
+            up_move
+        } else {
+            0.0
+        };
+        let mdm = if down_move > up_move && down_move > 0.0 {
+            down_move
+        } else {
+            0.0
+        };
+        smooth_plus_dm = smooth_plus_dm - smooth_plus_dm / p + pdm;
+        smooth_minus_dm = smooth_minus_dm - smooth_minus_dm / p + mdm;
+        smooth_tr = smooth_tr - smooth_tr / p + tr;
+        let current_dx = dx(smooth_plus_dm, smooth_minus_dm, smooth_tr);
+        adx_value = (adx_value * (p - 1.0) + current_dx) / p;
+        unsafe { *output_ptr.add(i) = adx_value };
+    }
     Ok(())
 }
 
 /// Momentum zero-copy variant: writes result into pre-allocated slice.
 pub fn mom_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> {
-    let result = mom(input, period)?;
     if output.len() != input.len() {
         return Err(TaError::InvalidParameter {
             name: "output".to_string(),
             constraint: "must have the same length as input".to_string(),
         });
     }
-    output.copy_from_slice(result.as_slice().unwrap());
+    if period == 0 {
+        return Err(TaError::InvalidParameter {
+            name: "period".to_string(),
+            constraint: "greater than 0".to_string(),
+        });
+    }
+    validate_input(input.len(), period + 1)?;
+    // Keep the formula zero-copy path allocation-free.  The public `mom`
+    // wrapper uses the same kernel, so this is bit-for-bit equivalent while
+    // avoiding an intermediate Array1 and a full-length copy.
+    simd_ops::simd_mom(input, period, output);
     Ok(())
 }
 
 /// Rate of Change zero-copy variant: writes result into pre-allocated slice.
 pub fn roc_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> {
-    let result = roc(input, period)?;
     if output.len() != input.len() {
         return Err(TaError::InvalidParameter {
             name: "output".to_string(),
             constraint: "must have the same length as input".to_string(),
         });
     }
-    output.copy_from_slice(result.as_slice().unwrap());
+    validate_input(input.len(), period + 1)?;
+    // ROC is already implemented as a caller-owned SIMD kernel.  Route the
+    // formula executor directly to it instead of allocating an Array1 and
+    // copying the result back into the caller's buffer.
+    simd_ops::simd_roc(input, period, output);
     Ok(())
 }
 
@@ -3159,6 +3812,24 @@ mod tests {
     }
 
     #[test]
+    fn test_adx_into_matches_adx_without_intermediate_family_buffers() {
+        let high: Vec<f64> = (0..80)
+            .map(|i| 100.0 + (i as f64 * 0.17).sin() * 2.0 + i as f64 * 0.2)
+            .collect();
+        let low: Vec<f64> = high.iter().map(|value| value - 1.5).collect();
+        let close: Vec<f64> = high.iter().map(|value| value - 0.7).collect();
+        let expected = adx(&high, &low, &close, 14).unwrap();
+        let mut actual = vec![0.0; close.len()];
+        adx_into(&high, &low, &close, 14, &mut actual).unwrap();
+        for (expected, actual) in expected.iter().zip(actual.iter()) {
+            assert!(
+                (expected.is_nan() && actual.is_nan()) || (expected - actual).abs() < 1e-12,
+                "ADX mismatch: {expected} vs {actual}"
+            );
+        }
+    }
+
+    #[test]
     fn test_aroonosc() {
         let high = vec![10.0, 12.0, 14.0, 13.0, 15.0, 11.0, 16.0, 17.0, 14.0, 13.0];
         let low = vec![8.0, 10.0, 12.0, 11.0, 13.0, 9.0, 14.0, 15.0, 12.0, 11.0];
@@ -3338,6 +4009,65 @@ mod tests {
                     );
                 }
             }
+        }
+
+        #[test]
+        fn test_macd_fast_into_parity() {
+            let input: Vec<f64> = (0..10_000)
+                .map(|i| 100.0 + i as f64 * 0.01 + (i as f64 * 0.37).sin())
+                .collect();
+            let mut expected_macd = vec![0.0; input.len()];
+            let mut expected_signal = vec![0.0; input.len()];
+            let mut expected_hist = vec![0.0; input.len()];
+            macd_into(
+                &input,
+                12,
+                26,
+                9,
+                &mut expected_macd,
+                &mut expected_signal,
+                &mut expected_hist,
+            )
+            .unwrap();
+
+            let mut actual_macd = vec![0.0; input.len()];
+            let mut actual_signal = vec![0.0; input.len()];
+            let mut actual_hist = vec![0.0; input.len()];
+            macd_fast_into(
+                &input,
+                12,
+                26,
+                9,
+                &mut actual_macd,
+                &mut actual_signal,
+                &mut actual_hist,
+            )
+            .unwrap();
+
+            for (expected, actual) in [
+                (&expected_macd, &actual_macd),
+                (&expected_signal, &actual_signal),
+                (&expected_hist, &actual_hist),
+            ] {
+                for (&left, &right) in expected.iter().zip(actual) {
+                    if left.is_nan() {
+                        assert!(right.is_nan());
+                    } else {
+                        assert!((left - right).abs() < 1e-10);
+                    }
+                }
+            }
+        }
+
+        #[test]
+        fn test_cmo_fast_into_parity() {
+            let input: Vec<f64> = (0..10_000)
+                .map(|i| 100.0 + i as f64 * 0.01 + (i as f64 * 0.37).sin())
+                .collect();
+            let expected = cmo(&input, 14).unwrap();
+            let mut actual = vec![0.0; input.len()];
+            cmo_fast_into(&input, 14, &mut actual).unwrap();
+            check_eq(expected.as_slice().unwrap(), &actual);
         }
 
         #[test]

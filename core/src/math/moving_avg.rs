@@ -208,13 +208,6 @@ pub fn ema_with_seed(input: &[f64], period: usize, seed: EmaSeed) -> Result<Arra
         });
     }
     validate_input(input.len(), period)?;
-    // Check for non-finite values
-    if let Some(pos) = input.iter().position(|v| !v.is_finite()) {
-        return Err(TaError::InvalidParameter {
-            name: "input".to_string(),
-            constraint: format!("non-finite value at index {}", pos),
-        });
-    }
     #[cfg(feature = "metrics")]
     {
         crate::metrics::indicator_called("ema");
@@ -229,7 +222,7 @@ pub fn ema_with_seed(input: &[f64], period: usize, seed: EmaSeed) -> Result<Arra
 
 #[cfg(all(feature = "std", target_arch = "x86_64"))]
 #[target_feature(enable = "avx2,fma")]
-unsafe fn ema_inner_avx2(input: &[f64], period: usize, output: &mut [f64]) {
+unsafe fn ema_inner_avx2(input: &[f64], period: usize, output: &mut [f64]) -> Option<usize> {
     unsafe {
         let len = input.len();
         let k = smoothing_factor(period);
@@ -238,17 +231,20 @@ unsafe fn ema_inner_avx2(input: &[f64], period: usize, output: &mut [f64]) {
         let initial_sma: f64 = simd_horizontal_sum(&input[..period]) / period as f64;
         output[period - 1] = initial_sma;
 
-        // Use pointer operations for better compiler optimization
         let input_ptr = input.as_ptr();
         let output_ptr = output.as_mut_ptr();
 
         let mut prev = initial_sma;
         for i in period..len {
             let val = *input_ptr.add(i);
+            if !val.is_finite() {
+                return Some(i);
+            }
             prev = (val - prev).mul_add(k, prev);
             *output_ptr.add(i) = prev;
         }
     }
+    None
 }
 
 /// AVX-512 EMA inner: identical recurrence to AVX2, but the initial SMA
@@ -258,7 +254,7 @@ unsafe fn ema_inner_avx2(input: &[f64], period: usize, output: &mut [f64]) {
 /// initial reduction, so AVX-512 would not help).
 #[cfg(all(feature = "std", target_arch = "x86_64"))]
 #[target_feature(enable = "avx512f")]
-unsafe fn ema_inner_avx512(input: &[f64], period: usize, output: &mut [f64]) {
+unsafe fn ema_inner_avx512(input: &[f64], period: usize, output: &mut [f64]) -> Option<usize> {
     let len = input.len();
     let k = smoothing_factor(period);
 
@@ -275,35 +271,68 @@ unsafe fn ema_inner_avx512(input: &[f64], period: usize, output: &mut [f64]) {
     for i in period..len {
         unsafe {
             let val = *input_ptr.add(i);
+            if !val.is_finite() {
+                return Some(i);
+            }
             prev = (val - prev).mul_add(k, prev);
             *output_ptr.add(i) = prev;
         }
     }
+    None
 }
 
 #[inline]
 fn ema_inner(input: &[f64], period: usize, seed: EmaSeed) -> Result<Array1<f64>> {
     let len = input.len();
-    let mut output = init_output(len);
+    // Every branch below writes every output element. Avoid eagerly filling a
+    // million-element result with NaN and then overwriting almost all of it;
+    // this is material on the public Python binding, which returns an owned
+    // array for EMA.
+    let mut output = Vec::with_capacity(len);
+    unsafe { output.set_len(len) };
 
     match seed {
         EmaSeed::Sma => {
+            for value in &mut output[..period.saturating_sub(1)] {
+                *value = f64::NAN;
+            }
+            // Validate only the short seed window here. The long recurrence
+            // below checks each value as it is consumed, avoiding a second
+            // full-input pass on the normal finite-input path.
+            for (index, &value) in input[..period].iter().enumerate() {
+                if !value.is_finite() {
+                    unsafe { output.set_len(0) };
+                    return Err(TaError::InvalidParameter {
+                        name: "input".to_string(),
+                        constraint: format!("non-finite value at index {index}"),
+                    });
+                }
+            }
             #[cfg(all(feature = "std", target_arch = "x86_64"))]
             {
-                // AVX-512 takes precedence when available — the 8-wide initial
-                // sum is the dominant cost for short EMA periods, so this
-                // tightens the gap to TA-Lib C for the common 9/12/26 cases.
                 if is_x86_feature_detected!("avx512f") {
                     unsafe {
-                        ema_inner_avx512(input, period, output.as_slice_mut().unwrap());
+                        if let Some(index) = ema_inner_avx512(input, period, &mut output) {
+                            output.set_len(0);
+                            return Err(TaError::InvalidParameter {
+                                name: "input".to_string(),
+                                constraint: format!("non-finite value at index {index}"),
+                            });
+                        }
                     }
-                    return Ok(output);
+                    return Ok(Array1::from_vec(output));
                 }
                 if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
                     unsafe {
-                        ema_inner_avx2(input, period, output.as_slice_mut().unwrap());
+                        if let Some(index) = ema_inner_avx2(input, period, &mut output) {
+                            output.set_len(0);
+                            return Err(TaError::InvalidParameter {
+                                name: "input".to_string(),
+                                constraint: format!("non-finite value at index {index}"),
+                            });
+                        }
                     }
-                    return Ok(output);
+                    return Ok(Array1::from_vec(output));
                 }
             }
 
@@ -314,12 +343,18 @@ fn ema_inner(input: &[f64], period: usize, seed: EmaSeed) -> Result<Array1<f64>>
 
             let mut prev = initial_sma;
             let input_slice = input;
-            let output_slice = output.as_slice_mut().unwrap();
             for i in period..len {
                 let val = unsafe { *input_slice.get_unchecked(i) };
+                if !val.is_finite() {
+                    unsafe { output.set_len(0) };
+                    return Err(TaError::InvalidParameter {
+                        name: "input".to_string(),
+                        constraint: format!("non-finite value at index {i}"),
+                    });
+                }
                 prev = (val - prev).mul_add(k, prev);
                 unsafe {
-                    *output_slice.get_unchecked_mut(i) = prev;
+                    *output.get_unchecked_mut(i) = prev;
                 }
             }
         }
@@ -329,21 +364,34 @@ fn ema_inner(input: &[f64], period: usize, seed: EmaSeed) -> Result<Array1<f64>>
             // SMA seed, so reusing it here would silently corrupt the output.
             let k = smoothing_factor(period);
             let mut prev = input[0];
+            if !prev.is_finite() {
+                unsafe { output.set_len(0) };
+                return Err(TaError::InvalidParameter {
+                    name: "input".to_string(),
+                    constraint: "non-finite value at index 0".to_string(),
+                });
+            }
             output[0] = prev;
 
             let input_slice = input;
-            let output_slice = output.as_slice_mut().unwrap();
             for i in 1..len {
                 let val = unsafe { *input_slice.get_unchecked(i) };
+                if !val.is_finite() {
+                    unsafe { output.set_len(0) };
+                    return Err(TaError::InvalidParameter {
+                        name: "input".to_string(),
+                        constraint: format!("non-finite value at index {i}"),
+                    });
+                }
                 prev = (val - prev).mul_add(k, prev);
                 unsafe {
-                    *output_slice.get_unchecked_mut(i) = prev;
+                    *output.get_unchecked_mut(i) = prev;
                 }
             }
         }
     }
 
-    Ok(output)
+    Ok(Array1::from_vec(output))
 }
 
 /// Horizontal (reduction) sum of a `&[f64]` slice using AVX-512 → AVX2 → scalar.
@@ -472,23 +520,35 @@ pub fn ema_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> 
         });
     }
 
-    // SIMD NaN-fill the warm-up region (faster than per-element loop)
-    crate::utils::simd_fill_nan(&mut output[..period - 1]);
+    // Keep validation and the caller-owned output contract here, then route
+    // the actual calculation through the architecture-aware canonical kernel.
+    // This keeps the Rust, formula, and Python entry points on one hot path.
+    crate::math::simd_kernels::ema_simd_into(input, period, output);
 
-    let len = input.len();
-    let k = smoothing_factor(period);
+    Ok(())
+}
 
-    // SIMD-accelerated initial SMA seed
-    let initial_sma: f64 = simd_horizontal_sum(&input[..period]) / period as f64;
-    output[period - 1] = initial_sma;
-
-    let mut prev = initial_sma;
-    for i in period..len {
-        // FMA form (see `ema_inner` for rationale).
-        prev = (input[i] - prev).mul_add(k, prev);
-        output[i] = prev;
+/// Compute EMA into a caller-owned buffer using the public-boundary AVX2/FMA
+/// kernel when available. This is intentionally separate from [`ema_into`]:
+/// formula execution and the Rust API keep the scalar/FMA recurrence for
+/// stable internal rounding, while the Python-owned-array path benefits from
+/// four-sample block prefixing.
+pub fn ema_fast_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> {
+    if period == 0 {
+        return Err(TaError::InvalidParameter {
+            name: "period".to_string(),
+            constraint: "greater than 0".to_string(),
+        });
     }
-
+    validate_input(input.len(), period)?;
+    reject_if_non_finite("ema", input)?;
+    if output.len() != input.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
+    crate::math::simd_kernels::ema_fast_into(input, period, output);
     Ok(())
 }
 
@@ -542,9 +602,10 @@ pub fn wma(input: &[f64], period: usize) -> Result<Array1<f64>> {
 
 #[inline]
 fn wma_inner(input: &[f64], period: usize) -> Result<Array1<f64>> {
-    let mut output = Array1::<f64>::zeros(input.len());
-    wma_kernel_into(input, period, output.as_slice_mut().unwrap());
-    Ok(output)
+    let mut output = Vec::with_capacity(input.len());
+    unsafe { output.set_len(input.len()) };
+    wma_kernel_into(input, period, &mut output);
+    Ok(Array1::from_vec(output))
 }
 
 /// Canonical Architecture v3 WMA kernel.
@@ -575,7 +636,7 @@ fn wma_kernel_into(input: &[f64], period: usize, output: &mut [f64]) {
         for i in period..len {
             let old = *input_ptr.add(i - period);
             let new = *input_ptr.add(i);
-            wsum = (p * new).mul_add(1.0, wsum - window_sum);
+            wsum = p.mul_add(new, wsum - window_sum);
             window_sum += new - old;
             *output_ptr.add(i) = wsum * inv_weight_sum;
         }
@@ -842,7 +903,6 @@ pub fn tema(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// let result = moving_avg::kama(&data, 5, 2, 30).unwrap();
 /// assert_eq!(result.len(), 10);
 /// ```
-#[cfg_attr(feature = "tracing", tracing::instrument(skip_all, fields(period, len = input.len())))]
 #[inline]
 pub fn kama(
     input: &[f64],
@@ -856,28 +916,62 @@ pub fn kama(
             constraint: "greater than 0".to_string(),
         });
     }
-    reject_if_non_finite("kama", input)?;
-    validate_input(input.len(), period)?;
+    // KAMA reads the bar at `period` to seed the first recursive value.
+    validate_input(input.len(), period.saturating_add(1))?;
     #[cfg(feature = "metrics")]
     crate::metrics::indicator_called("kama");
     #[cfg(feature = "metrics")]
     let _kama_start = std::time::Instant::now();
 
+    // Keep non-finite rejection and the arithmetic loop separate. On the
+    // normal finite-input path this lets LLVM optimize the recurrence without
+    // carrying a predictable error branch through every output row.
+    if let Some(index) = input.iter().position(|value| !value.is_finite()) {
+        return Err(TaError::InvalidParameter {
+            name: "input".to_string(),
+            constraint: format!("non-finite value at index {index}"),
+        });
+    }
+
     let len = input.len();
-    let mut output = vec![f64::NAN; len];
+    // KAMA writes every slot after the warm-up window. Avoid a full-length
+    // NaN initialization on the public Python path; only the unwritten
+    // warm-up prefix needs an explicit value.
+    let mut output = Vec::with_capacity(len);
+    unsafe { output.set_len(len) };
+    output[..period.saturating_sub(1)].fill(f64::NAN);
 
     let fast_sc = 2.0 / (fast_period as f64 + 1.0);
     let slow_sc = 2.0 / (slow_period as f64 + 1.0);
     let sc_diff = fast_sc - slow_sc;
 
-    output[period - 1] = input[period - 1];
+    let input_ptr = input.as_ptr();
+    let output_ptr = output.as_mut_ptr();
+    unsafe { *output_ptr.add(period - 1) = *input_ptr.add(period - 1) };
 
     let mut volatility: f64 = 0.0;
+    // The rolling volatility window contains absolute one-bar changes. Keep
+    // those values in a small ring so the steady-state loop does not reload
+    // and recompute the outgoing difference on every bar.
+    let mut small_diff_ring = [0.0_f64; 64];
+    let mut heap_diff_ring = if period > small_diff_ring.len() {
+        Some(vec![0.0_f64; period])
+    } else {
+        None
+    };
+    let diff_ptr = if period <= small_diff_ring.len() {
+        small_diff_ring.as_mut_ptr()
+    } else {
+        heap_diff_ring.as_mut().unwrap().as_mut_ptr()
+    };
     for i in 1..=period {
-        volatility += (input[i] - input[i - 1]).abs();
+        let (current, previous) = unsafe { (*input_ptr.add(i), *input_ptr.add(i - 1)) };
+        let difference = (current - previous).abs();
+        volatility += difference;
+        unsafe { *diff_ptr.add(i - 1) = difference };
     }
     {
-        let direction = (input[period] - input[0]).abs();
+        let direction = unsafe { (*input_ptr.add(period) - *input_ptr).abs() };
         let er = if volatility != 0.0 {
             direction / volatility
         } else {
@@ -885,14 +979,28 @@ pub fn kama(
         };
         let sc = er * sc_diff + slow_sc;
         let sc = sc * sc;
-        output[period] = output[period - 1] + sc * (input[period] - output[period - 1]);
+        unsafe {
+            let previous = *output_ptr.add(period - 1);
+            *output_ptr.add(period) = previous + sc * (*input_ptr.add(period) - previous);
+        }
     }
 
+    let mut diff_idx = 0usize;
+    let mut previous_input = unsafe { *input_ptr.add(period) };
     for i in period + 1..len {
-        volatility +=
-            (input[i] - input[i - 1]).abs() - (input[i - period] - input[i - period - 1]).abs();
+        let current = unsafe { *input_ptr.add(i) };
+        let trailing = unsafe { *input_ptr.add(i - period) };
+        let difference = (current - previous_input).abs();
+        let outgoing_difference = unsafe { *diff_ptr.add(diff_idx) };
+        volatility += difference - outgoing_difference;
+        unsafe { *diff_ptr.add(diff_idx) = difference };
+        previous_input = current;
+        diff_idx += 1;
+        if diff_idx == period {
+            diff_idx = 0;
+        }
 
-        let direction = (input[i] - input[i - period]).abs();
+        let direction = (current - trailing).abs();
         let er = if volatility != 0.0 {
             direction / volatility
         } else {
@@ -900,7 +1008,10 @@ pub fn kama(
         };
         let sc = er * sc_diff + slow_sc;
         let sc = sc * sc;
-        output[i] = output[i - 1] + sc * (input[i] - output[i - 1]);
+        unsafe {
+            let previous = *output_ptr.add(i - 1);
+            *output_ptr.add(i) = previous + sc * (current - previous);
+        }
     }
 
     #[cfg(feature = "metrics")]

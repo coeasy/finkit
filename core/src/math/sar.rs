@@ -125,7 +125,7 @@ impl SarState {
     }
 
     /// Consume one high/low bar using TA_SAR 0.7.1 transition ordering.
-    #[inline]
+    #[inline(always)]
     pub fn next(&mut self, high: f64, low: f64) -> SarPoint {
         if self.count == 0 {
             self.first_high = high;
@@ -285,9 +285,104 @@ pub fn sar(high: &[f64], low: &[f64], acceleration: f64, maximum: f64) -> Result
         let high_ptr = high.as_ptr();
         let low_ptr = low.as_ptr();
         let output_ptr = output.as_mut_ptr();
-        for index in 0..len {
-            let point = state.next(*high_ptr.add(index), *low_ptr.add(index));
-            output_ptr.add(index).write(point.sar);
+        output_ptr.write(state.next(*high_ptr, *low_ptr).sar);
+        output_ptr
+            .add(1)
+            .write(state.next(*high_ptr.add(1), *low_ptr.add(1)).sar);
+
+        // The two-bar bootstrap above establishes every invariant needed by
+        // the batch loop. Keep the transition state in local scalars so the
+        // million-row path does not repeatedly unwrap `Option<bool>` or touch
+        // the streaming-only bar counter.
+        let mut is_long = state.is_long.expect("SAR direction bootstrapped");
+        let mut sar = state.sar;
+        let mut ep = state.ep;
+        let mut af = state.af;
+        let effective_acceleration = state.effective_acceleration;
+        // The batch loop no longer needs the streaming state object after the
+        // two-bar bootstrap. Keep the previous bar in local scalars so the
+        // million-row path avoids a mutable field reference on every clamp.
+        let mut previous_high = state.prev_high;
+        let mut previous_low = state.prev_low;
+
+        for index in 2..len {
+            let current_high = *high_ptr.add(index);
+            let current_low = *low_ptr.add(index);
+            let output_sar;
+
+            if is_long {
+                if current_low <= sar {
+                    is_long = false;
+                    sar = ep;
+                    if sar < previous_high {
+                        sar = previous_high;
+                    }
+                    if sar < current_high {
+                        sar = current_high;
+                    }
+                    output_sar = sar;
+
+                    af = effective_acceleration;
+                    ep = current_low;
+                    sar += af * (ep - sar);
+                    if sar < previous_high {
+                        sar = previous_high;
+                    }
+                    if sar < current_high {
+                        sar = current_high;
+                    }
+                } else {
+                    output_sar = sar;
+                    if current_high > ep {
+                        ep = current_high;
+                        af = (af + effective_acceleration).min(maximum);
+                    }
+                    sar += af * (ep - sar);
+                    if sar > previous_low {
+                        sar = previous_low;
+                    }
+                    if sar > current_low {
+                        sar = current_low;
+                    }
+                }
+            } else if current_high >= sar {
+                is_long = true;
+                sar = ep;
+                if sar > previous_low {
+                    sar = previous_low;
+                }
+                if sar > current_low {
+                    sar = current_low;
+                }
+                output_sar = sar;
+
+                af = effective_acceleration;
+                ep = current_high;
+                sar += af * (ep - sar);
+                if sar > previous_low {
+                    sar = previous_low;
+                }
+                if sar > current_low {
+                    sar = current_low;
+                }
+            } else {
+                output_sar = sar;
+                if current_low < ep {
+                    ep = current_low;
+                    af = (af + effective_acceleration).min(maximum);
+                }
+                sar += af * (ep - sar);
+                if sar < previous_high {
+                    sar = previous_high;
+                }
+                if sar < current_high {
+                    sar = current_high;
+                }
+            }
+
+            previous_high = current_high;
+            previous_low = current_low;
+            output_ptr.add(index).write(output_sar);
         }
         output.set_len(len);
     }

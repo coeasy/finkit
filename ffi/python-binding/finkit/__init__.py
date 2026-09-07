@@ -285,12 +285,10 @@ if hasattr(_native, "_fast_kama"):
 
     def kama(close, timeperiod=10, fastperiod=2, slowperiod=30):
         close = _as_contiguous_float64(close)
-        result = _native._fast_kama(close, timeperiod, fastperiod, slowperiod)
-        # TA-Lib KAMA lookback is `timeperiod`: index timeperiod-1 is the
-        # private recursion seed, not a public output value.
-        if timeperiod > 0 and result.size >= timeperiod:
-            result[timeperiod - 1] = np.nan
-        return result
+        # The Rust kernel writes the complete TA-Lib warm-up prefix, including
+        # the private seed slot at timeperiod-1, so no post-call patching is
+        # needed here.
+        return _native._fast_kama(close, timeperiod, fastperiod, slowperiod)
 
     kama = _translate_native_errors("kama", kama)
 
@@ -451,14 +449,9 @@ if hasattr(_native, "_fast_macd"):
 
     def macd(close, fastperiod=12, slowperiod=26, signalperiod=9):
         close = _as_contiguous_float64(close)
-        result = _native._fast_macd(close, fastperiod, slowperiod, signalperiod)
-        # TA-Lib exposes MACD only after the slow EMA and signal EMA lookbacks
-        # are both complete. Keep earlier recursion state private.
-        lookback = max(fastperiod, slowperiod) + signalperiod - 2
-        if lookback > 0:
-            for output in result:
-                output[:lookback] = np.nan
-        return result
+        # The native fast kernel already writes TA-Lib's public lookback
+        # contract, including hidden pre-signal MACD state.
+        return _native._fast_macd(close, fastperiod, slowperiod, signalperiod)
 
     macd = _translate_native_errors("macd", macd)
 
