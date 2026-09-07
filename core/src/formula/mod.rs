@@ -22,10 +22,10 @@ pub mod debugger;
 pub mod drawing;
 pub mod engine;
 pub mod executor;
-#[path = "functions.rs"]
-mod functions_legacy;
 #[path = "functions_router.rs"]
 pub mod functions;
+#[path = "functions.rs"]
+mod functions_legacy;
 pub mod hot_plan;
 pub mod jit;
 pub mod memory_pool;
