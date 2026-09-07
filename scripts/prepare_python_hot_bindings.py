@@ -19,6 +19,7 @@ from optimize_python_bindings import optimize_file
 ROOT = Path(__file__).resolve().parents[1]
 GENERATED = ROOT / "ffi" / "python-binding" / "src" / "generated.rs"
 LIB = ROOT / "ffi" / "python-binding" / "src" / "lib.rs"
+INIT = ROOT / "ffi" / "python-binding" / "finkit" / "__init__.py"
 
 
 def run(*args: str) -> None:
@@ -38,6 +39,75 @@ def replace_once_or_verify(text: str, old: str, new: str, label: str) -> str:
     if count == 0 and new in text:
         return text
     raise RuntimeError(f"{label}: expected exactly one source anchor, found {count}")
+
+
+def patch_hot_output_allocations() -> None:
+    """Allocate final NumPy outputs uninitialised and write them exactly once.
+
+    The native `_fast_*` convenience wrappers allocate `vec![0.0; n]` and then
+    overwrite every element through the canonical `*_into` kernels.  For large
+    arrays that performs a full redundant memory write before useful work.  The
+    public facade already exposes the `*_into` entry points, so allocate an
+    `np.empty_like` destination and let Rust fill the final ndarray directly.
+    """
+
+    text = INIT.read_text(encoding="utf-8")
+
+    replacements = (
+        (
+            '''        if close.dtype == np.float32 and hasattr(_native, "_fast_sma_f32"):
+            return _native._fast_sma_f32(close, timeperiod)
+        return _native._fast_sma(close, timeperiod)
+''',
+            '''        result = np.empty_like(close)
+        if close.dtype == np.float32 and hasattr(_native, "_fast_sma_f32_into"):
+            _native._fast_sma_f32_into(close, result, timeperiod)
+        else:
+            _native._fast_sma_into(close, result, timeperiod)
+        return result
+''',
+            "SMA single-write output",
+        ),
+        (
+            '''        if close.dtype == np.float32 and hasattr(_native, "_fast_ema_f32"):
+            return _native._fast_ema_f32(close, timeperiod)
+        return _native._fast_ema(close, timeperiod)
+''',
+            '''        result = np.empty_like(close)
+        if close.dtype == np.float32 and hasattr(_native, "_fast_ema_f32_into"):
+            _native._fast_ema_f32_into(close, result, timeperiod)
+        else:
+            _native._fast_ema_into(close, result, timeperiod)
+        return result
+''',
+            "EMA single-write output",
+        ),
+        (
+            '''        return _native._fast_wma(close, timeperiod)
+''',
+            '''        result = np.empty_like(close)
+        _native._fast_wma_into(close, result, timeperiod)
+        return result
+''',
+            "WMA single-write output",
+        ),
+        (
+            '''        return _native._fast_obv(close, volume)
+''',
+            '''        result = np.empty_like(close)
+        _native._fast_obv_into(close, volume, result)
+        return result
+''',
+            "OBV single-write output",
+        ),
+    )
+
+    for old, new, label in replacements:
+        text = replace_once_or_verify(text, old, new, label)
+
+    if "result = np.empty_like(close)" not in text:
+        raise RuntimeError("hot output allocation patch did not activate")
+    INIT.write_text(text, encoding="utf-8")
 
 
 def patch_batch_numpy_contract() -> None:
@@ -165,6 +235,11 @@ def main() -> int:
     # is idempotent and also upgrades the live SSOT generator to NumPy-direct.
     run(str(ROOT / "scripts" / "apply_architecture_v3_unified_kernel.py"))
 
+    # The public Python hot facade now allocates the final ndarray with
+    # `np.empty_like` and lets the caller-owned kernels fill it exactly once.
+    # This removes a full zero-fill pass for the common SMA/EMA/WMA/OBV paths.
+    patch_hot_output_allocations()
+
     # Regenerate after the unified-kernel transformation so the wheel contains
     # the same canonical binding contract on every platform.
     run(
@@ -194,7 +269,7 @@ def main() -> int:
     print(
         "[prepare/python-hot] NumPy-direct binding surface ready: "
         f"generated={generated_count}, lib={lib_count}, batch=zero-copy, "
-        "formula=canonical, native=v3"
+        "formula=canonical, native=v3, output=single-write"
     )
     return 0
 
