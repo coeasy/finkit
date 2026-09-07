@@ -11,11 +11,7 @@ fn nan_vec(len: usize) -> Array1<f64> {
 }
 
 #[inline]
-fn ensure_args_len(
-    name: &str,
-    args: &[Array1<f64>],
-    expected: usize,
-) -> Result<(), FormulaError> {
+fn ensure_args_len(name: &str, args: &[Array1<f64>], expected: usize) -> Result<(), FormulaError> {
     if args.len() < expected {
         return Err(FormulaError::InvalidParameter(format!(
             "{} requires at least {} arguments, got {}",
@@ -55,10 +51,7 @@ fn optional_f64(args: &[Array1<f64>], idx: usize, default: f64) -> f64 {
 }
 
 #[inline]
-fn canonical_atr(
-    ctx: &FormulaContext,
-    args: &[Array1<f64>],
-) -> Result<Array1<f64>, FormulaError> {
+fn canonical_atr(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("ATR", args, 4)?;
     let period = extract_n(args, 3, "ATR")?;
     match crate::indicators::volatility::atr(
@@ -73,10 +66,7 @@ fn canonical_atr(
 }
 
 #[inline]
-fn canonical_natr(
-    ctx: &FormulaContext,
-    args: &[Array1<f64>],
-) -> Result<Array1<f64>, FormulaError> {
+fn canonical_natr(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("NATR", args, 4)?;
     let period = extract_n(args, 3, "NATR")?;
     match crate::indicators::volatility::natr(
@@ -107,10 +97,7 @@ fn canonical_trange(
 }
 
 #[inline]
-fn canonical_std(
-    ctx: &FormulaContext,
-    args: &[Array1<f64>],
-) -> Result<Array1<f64>, FormulaError> {
+fn canonical_std(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("STD", args, 2)?;
     let period = extract_n(args, 1, "STD")?;
     match crate::indicators::statistics::std_dev(args[0].as_slice().unwrap(), period, 1.0) {
@@ -120,10 +107,7 @@ fn canonical_std(
 }
 
 #[inline]
-fn canonical_var(
-    ctx: &FormulaContext,
-    args: &[Array1<f64>],
-) -> Result<Array1<f64>, FormulaError> {
+fn canonical_var(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("VAR", args, 2)?;
     let period = extract_n(args, 1, "VAR")?;
     match crate::indicators::statistics::var(args[0].as_slice().unwrap(), period, 1.0) {
@@ -150,15 +134,12 @@ fn canonical_bband_component(
     ensure_args_len(name, args, 2)?;
     let period = extract_n(args, 1, name)?;
     let nbdev = optional_f64(args, 2, 2.0);
-    let result = match crate::indicators::overlap::bbands(
-        args[0].as_slice().unwrap(),
-        period,
-        nbdev,
-        nbdev,
-    ) {
-        Ok(result) => result,
-        Err(_) => return Ok(nan_vec(ctx.data_len)),
-    };
+    let result =
+        match crate::indicators::overlap::bbands(args[0].as_slice().unwrap(), period, nbdev, nbdev)
+        {
+            Ok(result) => result,
+            Err(_) => return Ok(nan_vec(ctx.data_len)),
+        };
 
     match component {
         BbandComponent::Upper => Ok(result.upper),
@@ -178,10 +159,7 @@ fn canonical_bband_component(
 }
 
 #[inline]
-fn canonical_boll(
-    ctx: &FormulaContext,
-    args: &[Array1<f64>],
-) -> Result<Array1<f64>, FormulaError> {
+fn canonical_boll(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     canonical_bband_component(ctx, args, "BOLL", BbandComponent::Upper)
 }
 
@@ -210,25 +188,17 @@ fn canonical_bollwidth(
 }
 
 #[inline]
-fn canonical_obv(
-    ctx: &FormulaContext,
-    args: &[Array1<f64>],
-) -> Result<Array1<f64>, FormulaError> {
+fn canonical_obv(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("OBV", args, 2)?;
-    match crate::math::volume_kernels::obv(
-        args[0].as_slice().unwrap(),
-        args[1].as_slice().unwrap(),
-    ) {
+    match crate::math::volume_kernels::obv(args[0].as_slice().unwrap(), args[1].as_slice().unwrap())
+    {
         Ok(result) => Ok(result),
         Err(_) => Ok(nan_vec(ctx.data_len)),
     }
 }
 
 #[inline]
-fn canonical_ad(
-    ctx: &FormulaContext,
-    args: &[Array1<f64>],
-) -> Result<Array1<f64>, FormulaError> {
+fn canonical_ad(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("AD", args, 4)?;
     match crate::math::volume_kernels::ad(
         args[0].as_slice().unwrap(),
