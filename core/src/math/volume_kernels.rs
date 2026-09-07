@@ -163,7 +163,7 @@ pub fn adosc_into(
             *output_ptr.add(i) = if i >= slow_period - 1 {
                 fast_ema - slow_ema
             } else {
-                0.0
+                f64::NAN
             };
         }
     }
@@ -273,7 +273,7 @@ mod tests {
         let volume = [100.0, 110.0, 120.0, 130.0, 140.0, 150.0];
         let mut out = [0.0; 6];
         adosc_into(&high, &low, &close, &volume, 3, 5, &mut out).unwrap();
-        assert_eq!(&out[..4], &[0.0; 4]);
+        assert!(out[..4].iter().all(|value| value.is_nan()));
         assert!(out[4].is_finite());
     }
 
