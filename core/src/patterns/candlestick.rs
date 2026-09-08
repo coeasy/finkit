@@ -451,36 +451,39 @@ pub fn inverted_hammer(
             constraint: "must have the same length".to_string(),
         });
     }
-    validate_input(open.len(), 10)?;
+    // TA-Lib defaults: BodyShort(RealBody, 10, 1.0),
+    // ShadowLong(RealBody, 0, 1.0), ShadowVeryShort(HighLow, 10, 0.1).
+    // The current candle is classified before it enters either average.
+    validate_input(open.len(), 11)?;
 
     let len = open.len();
     let mut output = Array1::zeros(len);
-    let period = 10;
-    let mut avg_ranges = RollingAverage::<10>::new();
+    let mut body_total = 0.0;
+    let mut high_low_total = 0.0;
+    for i in 1..11 {
+        body_total += (close[i] - open[i]).abs();
+        high_low_total += high[i] - low[i];
+    }
 
-    for i in 0..len {
-        let true_range = if i == 0 {
-            high[i] - low[i]
-        } else {
-            (high[i] - low[i])
-                .max((high[i] - close[i - 1]).abs())
-                .max((low[i] - close[i - 1]).abs())
-        };
-        avg_ranges.push(true_range);
-        if i < period {
-            continue;
-        }
-        let avg_range = avg_ranges.average();
-        let body_size = body(open[i], close[i]);
-        let up_shadow = upper_shadow(high[i], open[i], close[i]);
-        let lo_shadow = lower_shadow(low[i], open[i], close[i]);
+    let output_ptr: *mut i32 = output.as_slice_mut().unwrap().as_mut_ptr();
+    for i in 11..len {
+        let open_value = open[i];
+        let close_value = close[i];
+        let body_size = (close_value - open_value).abs();
+        let upper_shadow = high[i] - open_value.max(close_value);
+        let lower_shadow = open_value.min(close_value) - low[i];
+        let gap_down = open_value.max(close_value) < open[i - 1].min(close[i - 1]);
 
-        if up_shadow >= body_size * 2.0
-            && lo_shadow <= avg_range * 0.1
-            && body_size > avg_range * 0.1
+        if gap_down
+            && body_size < body_total / 10.0
+            && upper_shadow > body_size
+            && lower_shadow < 0.1 * (high_low_total / 10.0)
         {
-            output[i] = 100;
+            unsafe { *output_ptr.add(i) = 100 };
         }
+
+        body_total += body_size - (close[i - 10] - open[i - 10]).abs();
+        high_low_total += (high[i] - low[i]) - (high[i - 10] - low[i - 10]);
     }
 
     Ok(output)
@@ -974,62 +977,50 @@ pub fn three_black_crows(
             constraint: "must have the same length".to_string(),
         });
     }
+    // TA-Lib uses ShadowVeryShort(HighLow, 10, 0.1), with three staggered
+    // rolling totals so each lower shadow is compared with the ten candles
+    // preceding that specific candle.  This is both exact and allocation-free.
     validate_input(open.len(), 13)?;
 
     let len = open.len();
     let mut output = Array1::zeros(len);
-    let period = 10;
-    let mut avg_ranges = RollingAverage::<10>::new();
-    let open_ptr = open.as_ptr();
-    let high_ptr = high.as_ptr();
-    let low_ptr = low.as_ptr();
-    let close_ptr = close.as_ptr();
+    let mut shadow_total = [0.0; 3];
+    for i in 0..10 {
+        shadow_total[2] += high[i + 1] - low[i + 1];
+        shadow_total[1] += high[i + 2] - low[i + 2];
+        shadow_total[0] += high[i + 3] - low[i + 3];
+    }
+
     let output_ptr: *mut i32 = output.as_slice_mut().unwrap().as_mut_ptr();
+    for i in 13..len {
+        let first_black = close[i - 2] < open[i - 2];
+        let second_black = close[i - 1] < open[i - 1];
+        let third_black = close[i] < open[i];
+        let opens_within_bodies = open[i - 1] < open[i - 2]
+            && open[i - 1] > close[i - 2]
+            && open[i] < open[i - 1]
+            && open[i] > close[i - 1];
+        let lower_shadows_short = open[i - 2].min(close[i - 2]) - low[i - 2]
+            < 0.1 * (shadow_total[2] / 10.0)
+            && open[i - 1].min(close[i - 1]) - low[i - 1] < 0.1 * (shadow_total[1] / 10.0)
+            && open[i].min(close[i]) - low[i] < 0.1 * (shadow_total[0] / 10.0);
 
-    for i in 0..len {
-        let true_range = unsafe {
-            if i == 0 {
-                *high_ptr - *low_ptr
-            } else {
-                (*high_ptr.add(i) - *low_ptr.add(i))
-                    .max((*high_ptr.add(i) - *close_ptr.add(i - 1)).abs())
-                    .max((*low_ptr.add(i) - *close_ptr.add(i - 1)).abs())
-            }
-        };
-        avg_ranges.push(true_range);
-        if i < period || i < 2 {
-            continue;
+        if close[i - 3] >= open[i - 3]
+            && first_black
+            && second_black
+            && third_black
+            && opens_within_bodies
+            && high[i - 3] > close[i - 2]
+            && close[i - 2] > close[i - 1]
+            && close[i - 1] > close[i]
+            && lower_shadows_short
+        {
+            unsafe { *output_ptr.add(i) = -100 };
         }
-        let avg_range = avg_ranges.average();
 
-        let all_bearish = unsafe {
-            is_bearish(*open_ptr.add(i), *close_ptr.add(i))
-                && is_bearish(*open_ptr.add(i - 1), *close_ptr.add(i - 1))
-                && is_bearish(*open_ptr.add(i - 2), *close_ptr.add(i - 2))
-        };
-
-        let lower_closes = unsafe {
-            *close_ptr.add(i) < *close_ptr.add(i - 1)
-                && *close_ptr.add(i - 1) < *close_ptr.add(i - 2)
-        };
-
-        let opens_within_prev = unsafe {
-            *open_ptr.add(i) < *open_ptr.add(i - 1) && *open_ptr.add(i - 1) < *open_ptr.add(i - 2)
-        };
-
-        if all_bearish && lower_closes && opens_within_prev {
-            let bodies_large = unsafe {
-                body(*open_ptr.add(i), *close_ptr.add(i)) > avg_range * 0.5
-                    && body(*open_ptr.add(i - 1), *close_ptr.add(i - 1)) > avg_range * 0.5
-                    && body(*open_ptr.add(i - 2), *close_ptr.add(i - 2)) > avg_range * 0.5
-            };
-
-            if bodies_large {
-                unsafe {
-                    *output_ptr.add(i) = -100;
-                }
-            }
-        }
+        shadow_total[2] += (high[i - 2] - low[i - 2]) - (high[i - 12] - low[i - 12]);
+        shadow_total[1] += (high[i - 1] - low[i - 1]) - (high[i - 11] - low[i - 11]);
+        shadow_total[0] += (high[i] - low[i]) - (high[i - 10] - low[i - 10]);
     }
 
     Ok(output)

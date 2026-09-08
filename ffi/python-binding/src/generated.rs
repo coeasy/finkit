@@ -1646,13 +1646,13 @@ fn cdl_hammer(
 /// Inverted Hammer (倒锤子线)
 #[pyfunction]
 #[pyo3(signature = (open, high, low, close))]
-fn cdl_inverted_hammer(
-    py: Python<'_>,
-    open: PyReadonlyArray1<'_, f64>,
-    high: PyReadonlyArray1<'_, f64>,
-    low: PyReadonlyArray1<'_, f64>,
-    close: PyReadonlyArray1<'_, f64>,
-) -> PyResult<Vec<i32>> {
+fn cdl_inverted_hammer<'py>(
+    py: Python<'py>,
+    open: PyReadonlyArray1<'py, f64>,
+    high: PyReadonlyArray1<'py, f64>,
+    low: PyReadonlyArray1<'py, f64>,
+    close: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<i32>>> {
     let open = open
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
@@ -1665,11 +1665,12 @@ fn cdl_inverted_hammer(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    let values = py.detach(|| {
         candlestick::inverted_hammer(open, high, low, close)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
-    })
+    })?;
+    Ok(PyArray1::from_vec(py, values))
 }
 
 /// Hanging Man (上吊线)
@@ -1880,13 +1881,13 @@ fn cdl_three_white_soldiers(
 /// Three Black Crows (三乌鸦)
 #[pyfunction]
 #[pyo3(signature = (open, high, low, close))]
-fn cdl_three_black_crows(
-    py: Python<'_>,
-    open: PyReadonlyArray1<'_, f64>,
-    high: PyReadonlyArray1<'_, f64>,
-    low: PyReadonlyArray1<'_, f64>,
-    close: PyReadonlyArray1<'_, f64>,
-) -> PyResult<Vec<i32>> {
+fn cdl_three_black_crows<'py>(
+    py: Python<'py>,
+    open: PyReadonlyArray1<'py, f64>,
+    high: PyReadonlyArray1<'py, f64>,
+    low: PyReadonlyArray1<'py, f64>,
+    close: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<i32>>> {
     let open = open
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
@@ -1899,11 +1900,12 @@ fn cdl_three_black_crows(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    let values = py.detach(|| {
         candlestick::three_black_crows(open, high, low, close)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
-    })
+    })?;
+    Ok(PyArray1::from_vec(py, values))
 }
 
 /// Marubozu (光头光脚)
@@ -1935,4 +1937,3 @@ fn cdl_marubozu(
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
     })
 }
-
