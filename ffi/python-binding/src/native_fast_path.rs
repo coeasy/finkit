@@ -835,10 +835,19 @@ fn fast_t3<'py>(
     vfactor: f64,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let close = close.as_slice().map_err(value_error)?;
-    let output = py
-        .detach(|| indicators::t3(close, timeperiod, vfactor))
+    let len = close.len();
+    let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    unsafe { raw_output.set_len(len) };
+    let output =
+        unsafe { std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<f64>(), len) };
+    py.detach(|| indicators::t3_into(close, timeperiod, vfactor, output))
         .map_err(value_error)?;
-    Ok(PyArray1::from_vec(py, output.into_raw_vec()))
+    let ptr = raw_output.as_mut_ptr().cast::<f64>();
+    let capacity = raw_output.capacity();
+    forget(raw_output);
+    Ok(PyArray1::from_vec(py, unsafe {
+        Vec::from_raw_parts(ptr, len, capacity)
+    }))
 }
 
 #[pyfunction(name = "_fast_tsf")]

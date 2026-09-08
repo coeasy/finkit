@@ -1475,6 +1475,22 @@ pub fn mama_into(
 /// assert_eq!(result.len(), 20);
 /// ```
 pub fn t3(input: &[f64], period: usize, vfactor: f64) -> Result<Array1<f64>> {
+    let mut output = vec![0.0; input.len()];
+    t3_into(input, period, vfactor, &mut output)?;
+    Ok(Array1::from_vec(output))
+}
+
+/// Compute T3 directly into a caller-owned buffer.
+///
+/// The Python hot path uses this form with uninitialized storage so the
+/// warm-up prefix is written once without first clearing the full output.
+pub fn t3_into(input: &[f64], period: usize, vfactor: f64, output: &mut [f64]) -> Result<()> {
+    if period == 0 {
+        return Err(TaError::InvalidParameter {
+            name: "period".to_string(),
+            constraint: "greater than 0".to_string(),
+        });
+    }
     if !(0.0..=1.0).contains(&vfactor) {
         return Err(TaError::InvalidParameter {
             name: "vfactor".to_string(),
@@ -1484,6 +1500,12 @@ pub fn t3(input: &[f64], period: usize, vfactor: f64) -> Result<Array1<f64>> {
 
     let lookback = 6 * period.saturating_sub(1);
     validate_input(input.len(), lookback + 1)?;
+    if output.len() != input.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
 
     // T3 coefficients matching TA-Lib ta_T3.c
     let c1 = -vfactor * vfactor * vfactor;
@@ -1492,7 +1514,7 @@ pub fn t3(input: &[f64], period: usize, vfactor: f64) -> Result<Array1<f64>> {
     let c4 = 1.0 + 3.0 * vfactor + vfactor * vfactor * vfactor + 3.0 * vfactor * vfactor;
 
     let len = input.len();
-    let mut output = vec![f64::NAN; len];
+    output[..lookback].fill(f64::NAN);
     let k = crate::utils::smoothing_factor(period);
     let one_minus_k = 1.0 - k;
 
@@ -1537,7 +1559,7 @@ pub fn t3(input: &[f64], period: usize, vfactor: f64) -> Result<Array1<f64>> {
         ema[5] = ema[4] * k + ema[5] * one_minus_k;
         output[i] = c1 * ema[5] + c2 * ema[4] + c3 * ema[3] + c4 * ema[2];
     }
-    Ok(Array1::from_vec(output))
+    Ok(())
 }
 
 /// Hull Moving Average (HMA)

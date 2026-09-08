@@ -169,7 +169,19 @@ macro_rules! hl_period {
     };
 }
 
-unary_period!(trima, "trima", moving_avg::trima, 30);
+#[pyfunction(name = "trima")]
+#[pyo3(signature = (real, timeperiod=30))]
+fn trima<'py>(
+    py: Python<'py>,
+    real: PyReadonlyArray1<'py, f64>,
+    timeperiod: usize,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let real = real.as_slice().map_err(value_error)?;
+    let mut values = vec![0.0; real.len()];
+    py.detach(|| moving_avg::trima_into(real, timeperiod, &mut values))
+        .map_err(value_error)?;
+    Ok(PyArray1::from_vec(py, values))
+}
 unary_period!(rocp, "rocp", indicators::rocp, 10);
 unary_period!(rocr, "rocr", indicators::rocr, 10);
 unary_period!(rocr100, "rocr100", indicators::rocr100, 10);

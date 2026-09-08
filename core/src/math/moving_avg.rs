@@ -1039,6 +1039,13 @@ pub fn kama(
 /// ```
 #[inline]
 pub fn trima(input: &[f64], period: usize) -> Result<Array1<f64>> {
+    let mut output = vec![0.0; input.len()];
+    trima_into(input, period, &mut output)?;
+    Ok(Array1::from_vec(output))
+}
+
+/// Compute TRIMA directly into a caller-owned buffer.
+pub fn trima_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> {
     if period == 0 {
         return Err(TaError::InvalidParameter {
             name: "period".to_string(),
@@ -1047,41 +1054,120 @@ pub fn trima(input: &[f64], period: usize) -> Result<Array1<f64>> {
     }
     validate_input(input.len(), period)?;
 
+    if output.len() != input.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
+
     let len = input.len();
 
     if period == 1 {
-        return Ok(Array1::from_vec(input.to_vec()));
+        output.copy_from_slice(input);
+        return Ok(());
     }
 
-    let (first_period, second_period) = if period % 2 == 1 {
-        let half = period.div_ceil(2);
-        (half, half)
+    crate::utils::simd_fill_nan(&mut output[..period - 1]);
+
+    // Use the same weighted recurrence as TA-Lib.  It is equivalent to an
+    // SMA of an SMA, but needs only a few scalars and preserves TA-Lib's
+    // operation order over long series.
+    let input_ptr = input.as_ptr();
+    let output_ptr = output.as_mut_ptr();
+    if period % 2 == 1 {
+        let half = period >> 1;
+        let factor = 1.0 / ((half + 1) as f64 * (half + 1) as f64);
+        let middle_start = half;
+        let today_start = period - 1;
+        let mut numerator = 0.0;
+        let mut numerator_sub = 0.0;
+        let mut numerator_add = 0.0;
+
+        let mut index = middle_start as isize;
+        while index >= 0 {
+            let value = unsafe { *input_ptr.offset(index) };
+            numerator_sub += value;
+            numerator += numerator_sub;
+            index -= 1;
+        }
+        let mut index = middle_start + 1;
+        while index <= today_start {
+            let value = unsafe { *input_ptr.add(index) };
+            numerator_add += value;
+            numerator += numerator_add;
+            index += 1;
+        }
+        unsafe { *output_ptr.add(today_start) = numerator * factor };
+
+        let mut trailing = 1usize;
+        let mut middle = middle_start + 1;
+        let mut today = today_start + 1;
+        let mut temp = unsafe { *input_ptr };
+        while today < len {
+            numerator -= numerator_sub;
+            numerator_sub -= temp;
+            temp = unsafe { *input_ptr.add(middle) };
+            middle += 1;
+            numerator_sub += temp;
+            numerator += numerator_add;
+            numerator_add -= temp;
+            temp = unsafe { *input_ptr.add(today) };
+            today += 1;
+            numerator_add += temp;
+            numerator += temp;
+            temp = unsafe { *input_ptr.add(trailing) };
+            trailing += 1;
+            unsafe { *output_ptr.add(today - 1) = numerator * factor };
+        }
     } else {
-        (period / 2 + 1, period / 2)
-    };
+        let half = period >> 1;
+        let factor = 1.0 / (half as f64 * (half + 1) as f64);
+        let middle_start = half - 1;
+        let today_start = period - 1;
+        let mut numerator = 0.0;
+        let mut numerator_sub = 0.0;
+        let mut numerator_add = 0.0;
 
-    let s1_start = first_period - 1;
-    let mut sma1_buf = vec![f64::NAN; len];
-    sma_into(input, first_period, &mut sma1_buf)?;
+        let mut index = middle_start as isize;
+        while index >= 0 {
+            let value = unsafe { *input_ptr.offset(index) };
+            numerator_sub += value;
+            numerator += numerator_sub;
+            index -= 1;
+        }
+        let mut index = middle_start + 1;
+        while index <= today_start {
+            let value = unsafe { *input_ptr.add(index) };
+            numerator_add += value;
+            numerator += numerator_add;
+            index += 1;
+        }
+        unsafe { *output_ptr.add(today_start) = numerator * factor };
 
-    let total_warmup = s1_start + second_period - 1;
-    let mut output = vec![f64::NAN; len];
-
-    if total_warmup >= len {
-        return Ok(Array1::from(output));
+        let mut trailing = 1usize;
+        let mut middle = middle_start + 1;
+        let mut today = today_start + 1;
+        let mut temp = unsafe { *input_ptr };
+        while today < len {
+            numerator -= numerator_sub;
+            numerator_sub -= temp;
+            temp = unsafe { *input_ptr.add(middle) };
+            middle += 1;
+            numerator_sub += temp;
+            numerator_add -= temp;
+            numerator += numerator_add;
+            temp = unsafe { *input_ptr.add(today) };
+            today += 1;
+            numerator_add += temp;
+            numerator += temp;
+            temp = unsafe { *input_ptr.add(trailing) };
+            trailing += 1;
+            unsafe { *output_ptr.add(today - 1) = numerator * factor };
+        }
     }
 
-    let inv_p = 1.0 / second_period as f64;
-    // SIMD-accelerated initial sum.
-    let mut sum: f64 = simd_horizontal_sum(&sma1_buf[s1_start..s1_start + second_period]);
-    output[total_warmup] = sum * inv_p;
-
-    for i in (total_warmup + 1)..len {
-        sum += sma1_buf[i] - sma1_buf[i - second_period];
-        output[i] = sum * inv_p;
-    }
-
-    Ok(Array1::from(output))
+    Ok(())
 }
 
 /// Moving Average with Variable Period (MAVP)
@@ -2106,17 +2192,4 @@ mod tests {
         let r = ema_multi_periods(&data, &[3, 5], &mut [&mut a, &mut b]);
         assert!(r.is_err());
     }
-}
-
-// Zero-copy `_into` variants (B4 / TASK-315)
-pub fn trima_into(input: &[f64], period: usize, output: &mut [f64]) -> crate::error::Result<()> {
-    let result = trima(input, period)?;
-    if result.len() != output.len() {
-        return Err(crate::error::TaError::InvalidParameter {
-            name: "output".to_string(),
-            constraint: "must have the same length as input".to_string(),
-        });
-    }
-    output.copy_from_slice(result.as_slice().unwrap());
-    Ok(())
 }
