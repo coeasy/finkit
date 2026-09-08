@@ -2727,16 +2727,37 @@ pub fn cdl_ladder_bottom(
     validate_input(open.len(), 5)?;
     let len = open.len();
     let mut output = PatternResult::zeros(len);
+    let open_ptr = open.as_ptr();
+    let high_ptr = high.as_ptr();
+    let close_ptr = close.as_ptr();
+    let output_ptr = output.as_slice_mut().unwrap().as_mut_ptr();
     for i in 4..len {
-        let bear1 = is_bearish(open[i - 4], close[i - 4]);
-        let bear2 = is_bearish(open[i - 3], close[i - 3]) && close[i - 3] < close[i - 4];
-        let bear3 = is_bearish(open[i - 2], close[i - 2]) && close[i - 2] < close[i - 3];
-        let upper_shadow_4 = upper_shadow(high[i - 1], open[i - 1], close[i - 1]);
-        let body_4 = body(open[i - 1], close[i - 1]);
+        let bear1 = unsafe { is_bearish(*open_ptr.add(i - 4), *close_ptr.add(i - 4)) };
+        let bear2 = unsafe {
+            is_bearish(*open_ptr.add(i - 3), *close_ptr.add(i - 3))
+                && *close_ptr.add(i - 3) < *close_ptr.add(i - 4)
+        };
+        let bear3 = unsafe {
+            is_bearish(*open_ptr.add(i - 2), *close_ptr.add(i - 2))
+                && *close_ptr.add(i - 2) < *close_ptr.add(i - 3)
+        };
+        let upper_shadow_4 = unsafe {
+            upper_shadow(
+                *high_ptr.add(i - 1),
+                *open_ptr.add(i - 1),
+                *close_ptr.add(i - 1),
+            )
+        };
+        let body_4 = unsafe { body(*open_ptr.add(i - 1), *close_ptr.add(i - 1)) };
         let has_upper = upper_shadow_4 > body_4;
-        let bull5 = is_bullish(open[i], close[i]) && close[i] > open[i - 1];
+        let bull5 = unsafe {
+            is_bullish(*open_ptr.add(i), *close_ptr.add(i))
+                && *close_ptr.add(i) > *open_ptr.add(i - 1)
+        };
         if bear1 && bear2 && bear3 && has_upper && bull5 {
-            output[i] = 100;
+            unsafe {
+                *output_ptr.add(i) = 100;
+            }
         }
     }
     Ok(output)

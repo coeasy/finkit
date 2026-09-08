@@ -705,6 +705,217 @@ fn compute_hilbert_components(
 /// callers, while this variant only writes the requested terminal values and
 /// keeps all recursive state in fixed-size arrays.
 #[inline(always)]
+fn compute_hilbert_short<const PHASOR: bool>(
+    input: &[f64],
+    first: &mut [f64],
+    second: Option<&mut [f64]>,
+) -> Result<()> {
+    validate_input(input.len(), 32)?;
+    if first.len() != input.len() {
+        return Err(crate::error::TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
+    if let Some(values) = second.as_ref() {
+        if values.len() != input.len() {
+            return Err(crate::error::TaError::InvalidParameter {
+                name: "output".to_string(),
+                constraint: "must have the same length as input".to_string(),
+            });
+        }
+    }
+    first.fill(f64::NAN);
+    let second_ptr = second.map(|values| {
+        values.fill(f64::NAN);
+        values.as_mut_ptr()
+    });
+
+    let a = 0.0962;
+    let b = 0.5769;
+    let mut detrender_even = [0.0; 3];
+    let mut detrender_odd = [0.0; 3];
+    let mut q1_even = [0.0; 3];
+    let mut q1_odd = [0.0; 3];
+    let mut ji_even = [0.0; 3];
+    let mut ji_odd = [0.0; 3];
+    let mut jq_even = [0.0; 3];
+    let mut jq_odd = [0.0; 3];
+    let mut prev_detrender_even = 0.0;
+    let mut prev_detrender_odd = 0.0;
+    let mut prev_detrender_input_even = 0.0;
+    let mut prev_detrender_input_odd = 0.0;
+    let mut prev_q1_even = 0.0;
+    let mut prev_q1_odd = 0.0;
+    let mut prev_q1_input_even = 0.0;
+    let mut prev_q1_input_odd = 0.0;
+    let mut prev_ji_even = 0.0;
+    let mut prev_ji_odd = 0.0;
+    let mut prev_ji_input_even = 0.0;
+    let mut prev_ji_input_odd = 0.0;
+    let mut prev_jq_even = 0.0;
+    let mut prev_jq_odd = 0.0;
+    let mut prev_jq_input_even = 0.0;
+    let mut prev_jq_input_odd = 0.0;
+    let mut i1_even_prev3 = 0.0;
+    let mut i1_odd_prev3 = 0.0;
+    let mut i1_even_prev2 = 0.0;
+    let mut i1_odd_prev2 = 0.0;
+    let mut prev_q2 = 0.0;
+    let mut prev_i2 = 0.0;
+    let mut re = 0.0;
+    let mut im = 0.0;
+    let mut period = 0.0;
+    let mut smooth_period = 0.0;
+    let mut hilbert_idx = 0usize;
+    let rad2deg = 180.0 / std::f64::consts::PI;
+
+    let mut trailing_wma_idx = 0usize;
+    let mut period_wma_sub = input[0] + input[1] + input[2];
+    let mut period_wma_sum = input[0] + 2.0 * input[1] + 3.0 * input[2];
+    let mut trailing_wma_value = 0.0;
+    for today in 3..12 {
+        let value = input[today];
+        period_wma_sub += value;
+        period_wma_sub -= trailing_wma_value;
+        period_wma_sum += value * 4.0;
+        trailing_wma_value = input[trailing_wma_idx];
+        trailing_wma_idx += 1;
+        period_wma_sum -= period_wma_sub;
+    }
+
+    for i in 12..input.len() {
+        let value = input[i];
+        period_wma_sub += value;
+        period_wma_sub -= trailing_wma_value;
+        period_wma_sum += value * 4.0;
+        trailing_wma_value = input[trailing_wma_idx];
+        trailing_wma_idx += 1;
+        let smoothed = period_wma_sum * 0.1;
+        period_wma_sum -= period_wma_sub;
+        let adjusted_period = 0.075f64.mul_add(period, 0.54);
+
+        let (i1_value, q1_value) = if i & 1 == 0 {
+            let mut detrender_value = -detrender_even[hilbert_idx];
+            detrender_even[hilbert_idx] = a * smoothed;
+            detrender_value += a * smoothed;
+            detrender_value -= prev_detrender_even;
+            prev_detrender_even = b * prev_detrender_input_even;
+            detrender_value += prev_detrender_even;
+            prev_detrender_input_even = smoothed;
+            detrender_value *= adjusted_period;
+
+            let mut q1_value = -q1_even[hilbert_idx];
+            q1_even[hilbert_idx] = a * detrender_value;
+            q1_value += a * detrender_value;
+            q1_value -= prev_q1_even;
+            prev_q1_even = b * prev_q1_input_even;
+            q1_value += prev_q1_even;
+            prev_q1_input_even = detrender_value;
+            q1_value *= adjusted_period;
+
+            let mut ji_value = -ji_even[hilbert_idx];
+            ji_even[hilbert_idx] = a * i1_even_prev3;
+            ji_value += a * i1_even_prev3;
+            ji_value -= prev_ji_even;
+            prev_ji_even = b * prev_ji_input_even;
+            ji_value += prev_ji_even;
+            prev_ji_input_even = i1_even_prev3;
+            ji_value *= adjusted_period;
+
+            let mut jq_value = -jq_even[hilbert_idx];
+            jq_even[hilbert_idx] = a * q1_value;
+            jq_value += a * q1_value;
+            jq_value -= prev_jq_even;
+            prev_jq_even = b * prev_jq_input_even;
+            jq_value += prev_jq_even;
+            prev_jq_input_even = q1_value;
+            jq_value *= adjusted_period;
+
+            hilbert_idx = if hilbert_idx == 2 { 0 } else { hilbert_idx + 1 };
+            let current_q2 = 0.2f64.mul_add(q1_value + ji_value, 0.8 * prev_q2);
+            let current_i2 = 0.2f64.mul_add(i1_even_prev3 - jq_value, 0.8 * prev_i2);
+            i1_odd_prev3 = i1_odd_prev2;
+            i1_odd_prev2 = detrender_value;
+            re = 0.8f64.mul_add(re, 0.2 * current_i2.mul_add(prev_i2, current_q2 * prev_q2));
+            im = 0.8f64.mul_add(im, 0.2 * (current_i2 * prev_q2 - current_q2 * prev_i2));
+            prev_q2 = current_q2;
+            prev_i2 = current_i2;
+            (i1_even_prev3, q1_value)
+        } else {
+            let mut detrender_value = -detrender_odd[hilbert_idx];
+            detrender_odd[hilbert_idx] = a * smoothed;
+            detrender_value += a * smoothed;
+            detrender_value -= prev_detrender_odd;
+            prev_detrender_odd = b * prev_detrender_input_odd;
+            detrender_value += prev_detrender_odd;
+            prev_detrender_input_odd = smoothed;
+            detrender_value *= adjusted_period;
+
+            let mut q1_value = -q1_odd[hilbert_idx];
+            q1_odd[hilbert_idx] = a * detrender_value;
+            q1_value += a * detrender_value;
+            q1_value -= prev_q1_odd;
+            prev_q1_odd = b * prev_q1_input_odd;
+            q1_value += prev_q1_odd;
+            prev_q1_input_odd = detrender_value;
+            q1_value *= adjusted_period;
+
+            let mut ji_value = -ji_odd[hilbert_idx];
+            ji_odd[hilbert_idx] = a * i1_odd_prev3;
+            ji_value += a * i1_odd_prev3;
+            ji_value -= prev_ji_odd;
+            prev_ji_odd = b * prev_ji_input_odd;
+            ji_value += prev_ji_odd;
+            prev_ji_input_odd = i1_odd_prev3;
+            ji_value *= adjusted_period;
+
+            let mut jq_value = -jq_odd[hilbert_idx];
+            jq_odd[hilbert_idx] = a * q1_value;
+            jq_value += a * q1_value;
+            jq_value -= prev_jq_odd;
+            prev_jq_odd = b * prev_jq_input_odd;
+            jq_value += prev_jq_odd;
+            prev_jq_input_odd = q1_value;
+            jq_value *= adjusted_period;
+
+            let current_q2 = 0.2f64.mul_add(q1_value + ji_value, 0.8 * prev_q2);
+            let current_i2 = 0.2f64.mul_add(i1_odd_prev3 - jq_value, 0.8 * prev_i2);
+            i1_even_prev3 = i1_even_prev2;
+            i1_even_prev2 = detrender_value;
+            re = 0.8f64.mul_add(re, 0.2 * current_i2.mul_add(prev_i2, current_q2 * prev_q2));
+            im = 0.8f64.mul_add(im, 0.2 * (current_i2 * prev_q2 - current_q2 * prev_i2));
+            prev_q2 = current_q2;
+            prev_i2 = current_i2;
+            (i1_odd_prev3, q1_value)
+        };
+
+        let previous_period = period;
+        if im != 0.0 && re != 0.0 {
+            period = 360.0 / ((im / re).atan() * rad2deg);
+        }
+        period = period
+            .min(1.5 * previous_period)
+            .max(0.67 * previous_period);
+        period = period.clamp(6.0, 50.0);
+        period = 0.2f64.mul_add(period, 0.8 * previous_period);
+        smooth_period = 0.33f64.mul_add(period, 0.67 * smooth_period);
+
+        if i >= 32 {
+            if PHASOR {
+                first[i] = i1_value;
+                if let Some(ptr) = second_ptr {
+                    unsafe { *ptr.add(i) = q1_value };
+                }
+            } else {
+                first[i] = smooth_period;
+            }
+        }
+    }
+    Ok(())
+}
+
+#[inline(always)]
 fn compute_hilbert_selected<const MODE: u8>(
     input: &[f64],
     first: &mut [f64],
@@ -1036,7 +1247,7 @@ fn compute_hilbert_selected<const MODE: u8>(
 }
 
 pub fn ht_dcperiod_into(input: &[f64], output: &mut [f64]) -> Result<()> {
-    compute_hilbert_selected::<0>(input, output, None)
+    compute_hilbert_short::<false>(input, output, None)
 }
 
 pub fn ht_dcphase_into(input: &[f64], output: &mut [f64]) -> Result<()> {
@@ -1044,7 +1255,7 @@ pub fn ht_dcphase_into(input: &[f64], output: &mut [f64]) -> Result<()> {
 }
 
 pub fn ht_phasor_into(input: &[f64], in_phase: &mut [f64], quadrature: &mut [f64]) -> Result<()> {
-    compute_hilbert_selected::<2>(input, in_phase, Some(quadrature))
+    compute_hilbert_short::<true>(input, in_phase, Some(quadrature))
 }
 
 pub fn ht_sine_into(input: &[f64], sine: &mut [f64], lead_sine: &mut [f64]) -> Result<()> {

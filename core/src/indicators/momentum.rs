@@ -1436,7 +1436,7 @@ pub fn aroon_into(
 /// indexing from the million-row benchmark case. The result is written
 /// directly into caller-owned storage so formula and FFI paths do not need an
 /// intermediate Array1 or copy.
-#[inline(never)]
+#[inline(always)]
 fn cci_period14_into_impl<const USE_AVX2: bool>(
     high: &[f64],
     low: &[f64],
@@ -1452,22 +1452,51 @@ fn cci_period14_into_impl<const USE_AVX2: bool>(
         ring[ring_idx] = typical_price(high[index], low[index], close[index]);
         ring_idx += 1;
     }
+    let ring_ptr = ring.as_mut_ptr();
 
     for index in 13..len {
         let current = typical_price(high[index], low[index], close[index]);
-        ring[ring_idx] = current;
+        unsafe {
+            *ring_ptr.add(ring_idx) = current;
+        }
 
         // Preserve the canonical TA-Lib operation order. This avoids the
         // long-series drift of a rolling sum while keeping the window small
         // and stack-resident for the common period-14 path.
         let mut mean = 0.0;
-        for &value in &ring {
-            mean += value;
+        unsafe {
+            mean += *ring_ptr.add(0);
+            mean += *ring_ptr.add(1);
+            mean += *ring_ptr.add(2);
+            mean += *ring_ptr.add(3);
+            mean += *ring_ptr.add(4);
+            mean += *ring_ptr.add(5);
+            mean += *ring_ptr.add(6);
+            mean += *ring_ptr.add(7);
+            mean += *ring_ptr.add(8);
+            mean += *ring_ptr.add(9);
+            mean += *ring_ptr.add(10);
+            mean += *ring_ptr.add(11);
+            mean += *ring_ptr.add(12);
+            mean += *ring_ptr.add(13);
         }
         mean /= 14.0;
         let mut mean_deviation = 0.0;
-        for &value in &ring {
-            mean_deviation += (value - mean).abs();
+        unsafe {
+            mean_deviation += (*ring_ptr.add(0) - mean).abs();
+            mean_deviation += (*ring_ptr.add(1) - mean).abs();
+            mean_deviation += (*ring_ptr.add(2) - mean).abs();
+            mean_deviation += (*ring_ptr.add(3) - mean).abs();
+            mean_deviation += (*ring_ptr.add(4) - mean).abs();
+            mean_deviation += (*ring_ptr.add(5) - mean).abs();
+            mean_deviation += (*ring_ptr.add(6) - mean).abs();
+            mean_deviation += (*ring_ptr.add(7) - mean).abs();
+            mean_deviation += (*ring_ptr.add(8) - mean).abs();
+            mean_deviation += (*ring_ptr.add(9) - mean).abs();
+            mean_deviation += (*ring_ptr.add(10) - mean).abs();
+            mean_deviation += (*ring_ptr.add(11) - mean).abs();
+            mean_deviation += (*ring_ptr.add(12) - mean).abs();
+            mean_deviation += (*ring_ptr.add(13) - mean).abs();
         }
         let delta = current - mean;
         output[index] = if delta != 0.0 && mean_deviation != 0.0 {

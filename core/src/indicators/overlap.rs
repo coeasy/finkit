@@ -555,6 +555,22 @@ pub fn sarext_sar_into(
         });
     }
 
+    // SAREXT's public/default Python call uses the canonical Wilder
+    // parameters.  Keep a branch-free hot loop for that overwhelmingly common
+    // configuration; the general path below still handles every custom
+    // acceleration/offset combination.
+    if start_value == 0.0
+        && offset_on_reverse == 0.0
+        && af_init_long == 0.02
+        && af_long == 0.02
+        && af_max_long == 0.2
+        && af_init_short == 0.02
+        && af_short == 0.02
+        && af_max_short == 0.2
+    {
+        return sarext_default_sar_into(high, low, output);
+    }
+
     let len = high.len();
     let high_ptr = high.as_ptr();
     let low_ptr = low.as_ptr();
@@ -649,6 +665,84 @@ pub fn sarext_sar_into(
             }
             sar = (short_af * (ep - sar) + sar).max(prev_high).max(new_high);
         }
+    }
+    Ok(())
+}
+
+#[inline(always)]
+fn sarext_default_sar_into(high: &[f64], low: &[f64], output: &mut [f64]) -> Result<()> {
+    let high_ptr = high.as_ptr();
+    let low_ptr = low.as_ptr();
+    let output_ptr = output.as_mut_ptr();
+    unsafe {
+        *output_ptr = f64::NAN;
+    }
+
+    let up_move = unsafe { *high_ptr.add(1) - *high_ptr };
+    let down_move = unsafe { *low_ptr - *low_ptr.add(1) };
+    let mut is_long = !(down_move > up_move && down_move > 0.0);
+    let mut long_af = 0.02_f64;
+    let mut short_af = 0.02_f64;
+    let mut ep = if is_long {
+        unsafe { *high_ptr.add(1) }
+    } else {
+        unsafe { *low_ptr.add(1) }
+    };
+    let mut sar = if is_long {
+        unsafe { *low_ptr }
+    } else {
+        unsafe { *high_ptr }
+    };
+    let mut prev_low = unsafe { *low_ptr.add(1) };
+    let mut prev_high = unsafe { *high_ptr.add(1) };
+    let len = high.len();
+    let mut i = 1usize;
+
+    while i < len {
+        let new_low = unsafe { *low_ptr.add(i) };
+        let new_high = unsafe { *high_ptr.add(i) };
+        if is_long {
+            if new_low <= sar {
+                is_long = false;
+                sar = ep.max(prev_high).max(new_high);
+                unsafe {
+                    *output_ptr.add(i) = -sar;
+                }
+                short_af = 0.02;
+                ep = new_low;
+                sar = (short_af * (ep - sar) + sar).max(prev_high).max(new_high);
+            } else {
+                unsafe {
+                    *output_ptr.add(i) = sar;
+                }
+                if new_high > ep {
+                    ep = new_high;
+                    long_af = (long_af + 0.02).min(0.2);
+                }
+                sar = (long_af * (ep - sar) + sar).min(prev_low).min(new_low);
+            }
+        } else if new_high >= sar {
+            is_long = true;
+            sar = ep.min(prev_low).min(new_low);
+            unsafe {
+                *output_ptr.add(i) = sar;
+            }
+            long_af = 0.02;
+            ep = new_high;
+            sar = (long_af * (ep - sar) + sar).min(prev_low).min(new_low);
+        } else {
+            unsafe {
+                *output_ptr.add(i) = -sar;
+            }
+            if new_low < ep {
+                ep = new_low;
+                short_af = (short_af + 0.02).min(0.2);
+            }
+            sar = (short_af * (ep - sar) + sar).max(prev_high).max(new_high);
+        }
+        prev_low = new_low;
+        prev_high = new_high;
+        i += 1;
     }
     Ok(())
 }
