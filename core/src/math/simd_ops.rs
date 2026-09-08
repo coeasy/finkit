@@ -1090,15 +1090,25 @@ fn ad_line_scalar(high: &[f64], low: &[f64], close: &[f64], volume: &[f64], resu
         return;
     }
     let mut acc = 0.0;
+    let high_ptr = high.as_ptr();
+    let low_ptr = low.as_ptr();
+    let close_ptr = close.as_ptr();
+    let volume_ptr = volume.as_ptr();
+    let result_ptr = result.as_mut_ptr();
     for i in 0..len {
-        let hl = high[i] - low[i];
-        let mfm = if hl > 0.0 {
-            ((close[i] - low[i]) - (high[i] - close[i])) / hl
-        } else {
-            0.0
-        };
-        acc += mfm * volume[i];
-        result[i] = acc;
+        unsafe {
+            let h = *high_ptr.add(i);
+            let l = *low_ptr.add(i);
+            let c = *close_ptr.add(i);
+            let hl = h - l;
+            let mfm = if hl > 0.0 {
+                ((c - l) - (h - c)) / hl
+            } else {
+                0.0
+            };
+            acc += mfm * *volume_ptr.add(i);
+            *result_ptr.add(i) = acc;
+        }
     }
 }
 

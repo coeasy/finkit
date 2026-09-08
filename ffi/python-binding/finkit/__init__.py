@@ -609,6 +609,14 @@ if hasattr(_native, "_fast_ht_dcperiod"):
 
 if hasattr(_native, "_fast_bbands"):
 
+    def bbands(real, timeperiod=5, nbdevup=2.0, nbdevdn=2.0, matype=0):
+        if matype == 0:
+            real = _as_contiguous_float64(real)
+            return _native._fast_bbands(real, timeperiod, nbdevup, nbdevdn)
+        return _native.bbands(real, timeperiod, nbdevup, nbdevdn, matype)
+
+    bbands = _translate_native_errors("bbands", bbands)
+
     def bollinger_bands(close, timeperiod=20, nbdevup=2.0, nbdevdn=2.0, matype=0):
         if matype != 0:
             raise ValueError("bollinger_bands currently supports matype=0 only")

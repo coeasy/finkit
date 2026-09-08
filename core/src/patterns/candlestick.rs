@@ -3072,12 +3072,13 @@ pub fn cdl_3outside_into(
         });
     }
     let len = open.len();
-    output.fill(0);
+    output[..3].fill(0);
     let open_ptr = open.as_ptr();
     let close_ptr = close.as_ptr();
     let output_ptr = output.as_mut_ptr();
     for i in 3..len {
         unsafe {
+            *output_ptr.add(i) = 0;
             let open_2 = *open_ptr.add(i - 2);
             let close_2 = *close_ptr.add(i - 2);
             let open_1 = *open_ptr.add(i - 1);

@@ -8,6 +8,8 @@
 //! while giving VAR, STDDEV and SMA-BBANDS one shared rolling-moments kernel.
 
 use crate::error::{Result, TaError};
+use core::mem::MaybeUninit;
+use core::slice;
 
 const TA_EPSILON: f64 = 0.00000000000001;
 
@@ -98,14 +100,21 @@ pub fn variance(input: &[f64], period: usize) -> Result<Vec<f64>> {
     validate_period(input.len(), period, 1)?;
 
     let lookback = period - 1;
-    let mut output = vec![f64::NAN; input.len()];
+    let len = input.len();
+    let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    unsafe { raw_output.set_len(len) };
+    let output = unsafe { slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<f64>(), len) };
+    output[..lookback].fill(f64::NAN);
     let mut moments = RollingMoments::new(input, period);
     let output_ptr = output.as_mut_ptr();
-    for index in lookback..input.len() {
+    for index in lookback..len {
         let (_, variance) = moments.next(index);
         unsafe { *output_ptr.add(index) = variance };
     }
-    Ok(output)
+    let ptr = raw_output.as_mut_ptr().cast::<f64>();
+    let capacity = raw_output.capacity();
+    core::mem::forget(raw_output);
+    Ok(unsafe { Vec::from_raw_parts(ptr, len, capacity) })
 }
 
 /// Standard deviation as TA_STDDEV 0.7.1, fused with the canonical moment scan.

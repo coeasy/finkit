@@ -1180,6 +1180,7 @@ fn directional_di_into<const PLUS: bool, const INITIALIZE: bool>(
     }
     let len = close.len();
     let p = period as f64;
+    let inv_period = 1.0 / p;
     let mut smooth_dm = 0.0f64;
     let mut smooth_tr = 0.0f64;
 
@@ -1229,8 +1230,8 @@ fn directional_di_into<const PLUS: bool, const INITIALIZE: bool>(
             } else {
                 0.0
             };
-            smooth_dm = smooth_dm - smooth_dm / p + dm;
-            smooth_tr = smooth_tr - smooth_tr / p + tr;
+            smooth_dm = smooth_dm - smooth_dm * inv_period + dm;
+            smooth_tr = smooth_tr - smooth_tr * inv_period + tr;
             *output_ptr.add(i) = if smooth_tr > 0.0 {
                 100.0 * (smooth_dm / smooth_tr)
             } else {
@@ -2677,19 +2678,17 @@ pub fn adxr_into(
     period: usize,
     output: &mut [f64],
 ) -> Result<()> {
-    let adx_vals = compute_adx_only(high, low, close, period)?;
-    if adx_vals.len() != output.len() {
-        return Err(TaError::InvalidParameter {
-            name: "output".to_string(),
-            constraint: "must have the same length as the input series".to_string(),
-        });
-    }
-    output.fill(f64::NAN);
-    for i in period..output.len() {
-        let cur = adx_vals[i];
-        let prev = adx_vals[i + 1 - period];
+    // First materialize ADX in the caller-owned buffer, then walk backwards.
+    // Descending order keeps the lower-index ADX history intact until it has
+    // been consumed, so ADXR needs no second full-length scratch vector.
+    adx_into(high, low, close, period, output)?;
+    for i in (period..output.len()).rev() {
+        let cur = output[i];
+        let prev = output[i + 1 - period];
         if !cur.is_nan() && !prev.is_nan() {
             output[i] = (cur + prev) * 0.5;
+        } else {
+            output[i] = f64::NAN;
         }
     }
     Ok(())
@@ -3621,37 +3620,39 @@ pub fn stochrsi_into(
             constraint: "all periods must be greater than 0".to_string(),
         });
     }
-    let rsi_values = rsi(input, rsi_period)?;
-    let rsi_slice = rsi_values.as_slice().unwrap();
-    let len = rsi_slice.len();
+    // Reuse the caller-owned %K buffer for the RSI scratch series.  The
+    // monotonic queues retain both index and value, so already-consumed RSI
+    // slots can be replaced by raw %K without keeping a second full-length
+    // temporary array alive.
+    rsi_into(input, rsi_period, out_k)?;
+    let len = input.len();
     let window = stoch_period;
     let raw_start = rsi_period + window - 1;
     let output_start = raw_start + fastd_period - 1;
-    out_k.fill(f64::NAN);
     out_d.fill(f64::NAN);
 
-    let mut max_dq = VecDeque::with_capacity(window + 1);
-    let mut min_dq = VecDeque::with_capacity(window + 1);
+    let mut max_dq: VecDeque<(usize, f64)> = VecDeque::with_capacity(window + 1);
+    let mut min_dq: VecDeque<(usize, f64)> = VecDeque::with_capacity(window + 1);
     for i in rsi_period..len {
-        let value = rsi_slice[i];
-        while max_dq.back().is_some_and(|&j| rsi_slice[j] <= value) {
+        let value = out_k[i];
+        while max_dq.back().is_some_and(|&(_, queued)| queued <= value) {
             max_dq.pop_back();
         }
-        while min_dq.back().is_some_and(|&j| rsi_slice[j] >= value) {
+        while min_dq.back().is_some_and(|&(_, queued)| queued >= value) {
             min_dq.pop_back();
         }
-        max_dq.push_back(i);
-        min_dq.push_back(i);
+        max_dq.push_back((i, value));
+        min_dq.push_back((i, value));
         let start = i + 1 - window;
-        while max_dq.front().is_some_and(|&j| j < start) {
+        while max_dq.front().is_some_and(|&(j, _)| j < start) {
             max_dq.pop_front();
         }
-        while min_dq.front().is_some_and(|&j| j < start) {
+        while min_dq.front().is_some_and(|&(j, _)| j < start) {
             min_dq.pop_front();
         }
         if i >= raw_start {
-            let highest = rsi_slice[*max_dq.front().unwrap()];
-            let lowest = rsi_slice[*min_dq.front().unwrap()];
+            let highest = max_dq.front().unwrap().1;
+            let lowest = min_dq.front().unwrap().1;
             let range = highest - lowest;
             out_k[i] = if range > 1e-15 {
                 (value - lowest) / range * 100.0
@@ -3673,7 +3674,7 @@ pub fn stochrsi_into(
     }
     // The first `fastd_period - 1` raw values seed %D internally but are not
     // exposed as public %K values by TA-Lib.
-    out_k[raw_start..output_start].fill(f64::NAN);
+    out_k[..output_start.min(len)].fill(f64::NAN);
     Ok(())
 }
 
