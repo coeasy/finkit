@@ -795,10 +795,10 @@ unsafe fn ad_line_fallback(
     let mut acc = 0.0;
     for i in 0..len {
         let hl = high[i] - low[i];
-        let mfm = if hl.abs() < 1e-15 {
-            0.0
-        } else {
+        let mfm = if hl > 0.0 {
             ((close[i] - low[i]) - (high[i] - close[i])) / hl
+        } else {
+            0.0
         };
         acc += mfm * volume[i];
         result[i] = acc;
@@ -811,6 +811,7 @@ unsafe fn ad_line_fallback(
 // computed via the same block-level SIMD scan used elsewhere.
 #[cfg(all(feature = "std", target_arch = "x86_64"))]
 #[target_feature(enable = "avx2")]
+#[allow(dead_code)]
 unsafe fn ad_line_avx2(
     high: &[f64],
     low: &[f64],
@@ -860,10 +861,10 @@ unsafe fn ad_line_avx2(
     // 处理剩余元素
     for i in (chunks * 4)..len {
         let hl = high[i] - low[i];
-        let mfm = if hl.abs() < 1e-15 {
-            0.0
-        } else {
+        let mfm = if hl > 0.0 {
             ((close[i] - low[i]) - (high[i] - close[i])) / hl
+        } else {
+            0.0
         };
         result[i] = mfm * volume[i];
     }
@@ -1091,10 +1092,10 @@ fn ad_line_scalar(high: &[f64], low: &[f64], close: &[f64], volume: &[f64], resu
     let mut acc = 0.0;
     for i in 0..len {
         let hl = high[i] - low[i];
-        let mfm = if hl.abs() < 1e-15 {
-            0.0
-        } else {
+        let mfm = if hl > 0.0 {
             ((close[i] - low[i]) - (high[i] - close[i])) / hl
+        } else {
+            0.0
         };
         acc += mfm * volume[i];
         result[i] = acc;
@@ -1552,12 +1553,10 @@ pub fn simd_obv(close: &[f64], volume: &[f64], result: &mut [f64]) {
 }
 
 pub fn simd_ad_line(high: &[f64], low: &[f64], close: &[f64], volume: &[f64], result: &mut [f64]) {
-    #[cfg(all(feature = "std", target_arch = "x86_64"))]
-    {
-        if is_x86_feature_detected!("avx2") {
-            return unsafe { ad_line_avx2(high, low, close, volume, result) };
-        }
-    }
+    // AD is a prefix recurrence: the cumulative dependency makes the AVX2
+    // two-pass implementation slower than this fused scalar loop on the
+    // installed-wheel path. Keep the SIMD-named entry point for callers, but
+    // use the dependency-friendly kernel as the canonical implementation.
     ad_line_scalar(high, low, close, volume, result)
 }
 

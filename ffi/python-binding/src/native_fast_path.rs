@@ -40,6 +40,22 @@ fn rate_change_vec(input: &[f64], period: usize, mode: u8) -> PyResult<Vec<f64>>
     unsafe { raw_output.set_len(len) };
     let output = unsafe { std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast(), len) };
     output[..period].fill(f64::NAN);
+    #[cfg(all(target_arch = "x86_64"))]
+    if is_x86_feature_detected!("avx2") {
+        unsafe { rate_change_avx2(input, period, mode, output) };
+    } else {
+        rate_change_scalar(input, period, mode, output);
+    }
+    #[cfg(not(all(target_arch = "x86_64")))]
+    rate_change_scalar(input, period, mode, output);
+    let ptr = raw_output.as_mut_ptr().cast::<f64>();
+    let capacity = raw_output.capacity();
+    std::mem::forget(raw_output);
+    Ok(unsafe { Vec::from_raw_parts(ptr, len, capacity) })
+}
+
+#[inline(always)]
+fn rate_change_scalar(input: &[f64], period: usize, mode: u8, output: &mut [f64]) {
     match mode {
         0 => {
             for i in period..input.len() {
@@ -72,10 +88,54 @@ fn rate_change_vec(input: &[f64], period: usize, mode: u8) -> PyResult<Vec<f64>>
             }
         }
     }
-    let ptr = raw_output.as_mut_ptr().cast::<f64>();
-    let capacity = raw_output.capacity();
-    std::mem::forget(raw_output);
-    Ok(unsafe { Vec::from_raw_parts(ptr, len, capacity) })
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+unsafe fn rate_change_avx2(input: &[f64], period: usize, mode: u8, output: &mut [f64]) {
+    use std::arch::x86_64::*;
+
+    let len = input.len();
+    let body = len - period;
+    let chunks = body / 4;
+    let eps = _mm256_set1_pd(1e-15);
+    let nan = _mm256_set1_pd(f64::NAN);
+    let scale = _mm256_set1_pd(if mode == 2 { 100.0 } else { 1.0 });
+    let input_ptr = input.as_ptr();
+    let output_ptr = output.as_mut_ptr();
+
+    for chunk in 0..chunks {
+        let offset = period + chunk * 4;
+        let current = unsafe { _mm256_loadu_pd(input_ptr.add(offset)) };
+        let previous = unsafe { _mm256_loadu_pd(input_ptr.add(offset - period)) };
+        let abs_previous = _mm256_andnot_pd(_mm256_set1_pd(-0.0), previous);
+        let valid = _mm256_cmp_pd(abs_previous, eps, _CMP_GT_OS);
+        let ratio = if mode == 0 {
+            _mm256_div_pd(_mm256_sub_pd(current, previous), previous)
+        } else {
+            _mm256_div_pd(current, previous)
+        };
+        let scaled = _mm256_mul_pd(ratio, scale);
+        unsafe {
+            _mm256_storeu_pd(output_ptr.add(offset), _mm256_blendv_pd(nan, scaled, valid));
+        }
+    }
+
+    let start = period + chunks * 4;
+    for i in start..len {
+        let previous = input[i - period];
+        output[i] = if previous.abs() > 1e-15 {
+            if mode == 0 {
+                (input[i] - previous) / previous
+            } else if mode == 1 {
+                input[i] / previous
+            } else {
+                input[i] / previous * 100.0
+            }
+        } else {
+            f64::NAN
+        };
+    }
 }
 
 #[pyfunction(name = "_fast_rocp")]

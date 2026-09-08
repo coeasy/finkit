@@ -734,8 +734,8 @@ fn compute_hilbert_short<const PHASOR: bool, const TRENDLINE: bool>(
         let adjusted_period = 0.075 * period + 0.54;
 
         let (i1_value, q1_value) = if i & 1 == 0 {
-            let mut detrender_value = -detrender_even[hilbert_idx];
-            detrender_even[hilbert_idx] = a * smoothed;
+            let mut detrender_value = unsafe { -*detrender_even.get_unchecked(hilbert_idx) };
+            unsafe { *detrender_even.get_unchecked_mut(hilbert_idx) = a * smoothed };
             detrender_value += a * smoothed;
             detrender_value -= prev_detrender_even;
             prev_detrender_even = b * prev_detrender_input_even;
@@ -743,8 +743,8 @@ fn compute_hilbert_short<const PHASOR: bool, const TRENDLINE: bool>(
             prev_detrender_input_even = smoothed;
             detrender_value *= adjusted_period;
 
-            let mut q1_value = -q1_even[hilbert_idx];
-            q1_even[hilbert_idx] = a * detrender_value;
+            let mut q1_value = unsafe { -*q1_even.get_unchecked(hilbert_idx) };
+            unsafe { *q1_even.get_unchecked_mut(hilbert_idx) = a * detrender_value };
             q1_value += a * detrender_value;
             q1_value -= prev_q1_even;
             prev_q1_even = b * prev_q1_input_even;
@@ -752,8 +752,8 @@ fn compute_hilbert_short<const PHASOR: bool, const TRENDLINE: bool>(
             prev_q1_input_even = detrender_value;
             q1_value *= adjusted_period;
 
-            let mut ji_value = -ji_even[hilbert_idx];
-            ji_even[hilbert_idx] = a * i1_even_prev3;
+            let mut ji_value = unsafe { -*ji_even.get_unchecked(hilbert_idx) };
+            unsafe { *ji_even.get_unchecked_mut(hilbert_idx) = a * i1_even_prev3 };
             ji_value += a * i1_even_prev3;
             ji_value -= prev_ji_even;
             prev_ji_even = b * prev_ji_input_even;
@@ -761,8 +761,8 @@ fn compute_hilbert_short<const PHASOR: bool, const TRENDLINE: bool>(
             prev_ji_input_even = i1_even_prev3;
             ji_value *= adjusted_period;
 
-            let mut jq_value = -jq_even[hilbert_idx];
-            jq_even[hilbert_idx] = a * q1_value;
+            let mut jq_value = unsafe { -*jq_even.get_unchecked(hilbert_idx) };
+            unsafe { *jq_even.get_unchecked_mut(hilbert_idx) = a * q1_value };
             jq_value += a * q1_value;
             jq_value -= prev_jq_even;
             prev_jq_even = b * prev_jq_input_even;
@@ -781,8 +781,8 @@ fn compute_hilbert_short<const PHASOR: bool, const TRENDLINE: bool>(
             prev_i2 = current_i2;
             (i1_even_prev3, q1_value)
         } else {
-            let mut detrender_value = -detrender_odd[hilbert_idx];
-            detrender_odd[hilbert_idx] = a * smoothed;
+            let mut detrender_value = unsafe { -*detrender_odd.get_unchecked(hilbert_idx) };
+            unsafe { *detrender_odd.get_unchecked_mut(hilbert_idx) = a * smoothed };
             detrender_value += a * smoothed;
             detrender_value -= prev_detrender_odd;
             prev_detrender_odd = b * prev_detrender_input_odd;
@@ -790,8 +790,8 @@ fn compute_hilbert_short<const PHASOR: bool, const TRENDLINE: bool>(
             prev_detrender_input_odd = smoothed;
             detrender_value *= adjusted_period;
 
-            let mut q1_value = -q1_odd[hilbert_idx];
-            q1_odd[hilbert_idx] = a * detrender_value;
+            let mut q1_value = unsafe { -*q1_odd.get_unchecked(hilbert_idx) };
+            unsafe { *q1_odd.get_unchecked_mut(hilbert_idx) = a * detrender_value };
             q1_value += a * detrender_value;
             q1_value -= prev_q1_odd;
             prev_q1_odd = b * prev_q1_input_odd;
@@ -799,8 +799,8 @@ fn compute_hilbert_short<const PHASOR: bool, const TRENDLINE: bool>(
             prev_q1_input_odd = detrender_value;
             q1_value *= adjusted_period;
 
-            let mut ji_value = -ji_odd[hilbert_idx];
-            ji_odd[hilbert_idx] = a * i1_odd_prev3;
+            let mut ji_value = unsafe { -*ji_odd.get_unchecked(hilbert_idx) };
+            unsafe { *ji_odd.get_unchecked_mut(hilbert_idx) = a * i1_odd_prev3 };
             ji_value += a * i1_odd_prev3;
             ji_value -= prev_ji_odd;
             prev_ji_odd = b * prev_ji_input_odd;
@@ -808,8 +808,8 @@ fn compute_hilbert_short<const PHASOR: bool, const TRENDLINE: bool>(
             prev_ji_input_odd = i1_odd_prev3;
             ji_value *= adjusted_period;
 
-            let mut jq_value = -jq_odd[hilbert_idx];
-            jq_odd[hilbert_idx] = a * q1_value;
+            let mut jq_value = unsafe { -*jq_odd.get_unchecked(hilbert_idx) };
+            unsafe { *jq_odd.get_unchecked_mut(hilbert_idx) = a * q1_value };
             jq_value += a * q1_value;
             jq_value -= prev_jq_odd;
             prev_jq_odd = b * prev_jq_input_odd;
