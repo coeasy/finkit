@@ -62,6 +62,37 @@ def test_compiled_formula_common_unary_calls_match_canonical_api(source, referen
     np.testing.assert_allclose(result, reference(close), equal_nan=True)
 
 
+@pytest.mark.parametrize(
+    ("source", "reference"),
+    [
+        ("MAX(CLOSE, 5)", lambda o, h, l, c, v: finkit.max(c, 5)),
+        ("MIN(CLOSE, 5)", lambda o, h, l, c, v: finkit.min(c, 5)),
+        ("SUM(CLOSE, 5)", lambda o, h, l, c, v: finkit.sum(c, 5)),
+        ("ROCP(CLOSE, 5)", lambda o, h, l, c, v: finkit.rocp(c, 5)),
+        ("ROCR(CLOSE, 5)", lambda o, h, l, c, v: finkit.rocr(c, 5)),
+        ("ROCR100(CLOSE, 5)", lambda o, h, l, c, v: finkit.rocr100(c, 5)),
+        ("NATR(HIGH, LOW, CLOSE, 5)", lambda o, h, l, c, v: finkit.natr(h, l, c, 5)),
+        ("CCI(HIGH, LOW, CLOSE, 5)", lambda o, h, l, c, v: finkit.cci(h, l, c, 5)),
+        (
+            "MFI(HIGH, LOW, CLOSE, VOLUME, 5)",
+            lambda o, h, l, c, v: finkit.mfi(h, l, c, v, 5),
+        ),
+        ("OBV(CLOSE, VOLUME)", lambda o, h, l, c, v: finkit.obv(c, v)),
+        ("AD(HIGH, LOW, CLOSE, VOLUME)", lambda o, h, l, c, v: finkit.ad(h, l, c, v)),
+    ],
+)
+def test_compiled_formula_extended_canonical_kernels(source, reference):
+    open_, high, low, close, volume = _ohlcv(96)
+    result = finkit.CompiledFormula(source).eval_zero_copy(
+        open_, high, low, close, volume
+    )["__result__"]
+    np.testing.assert_allclose(
+        result,
+        reference(open_, high, low, close, volume),
+        equal_nan=True,
+    )
+
+
 def test_compiled_formula_rejects_mismatched_lengths():
     open_, high, low, close, volume = _ohlcv()
 

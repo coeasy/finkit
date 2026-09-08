@@ -22,7 +22,18 @@ enum CanonicalFormula {
     Rsi { period: usize },
     Mom { period: usize },
     Roc { period: usize },
+    Rocp { period: usize },
+    Rocr { period: usize },
+    Rocr100 { period: usize },
+    Max { period: usize },
+    Min { period: usize },
+    Sum { period: usize },
     Atr { period: usize },
+    Natr { period: usize },
+    Cci { period: usize },
+    Mfi { period: usize },
+    Obv,
+    Ad,
     Std { period: usize },
     Boll { period: usize, nbdev: f64 },
 }
@@ -45,6 +56,10 @@ fn is_low(name: &str) -> bool {
 
 fn is_close(name: &str) -> bool {
     matches!(name, "C" | "CLOSE")
+}
+
+fn is_volume(name: &str) -> bool {
+    matches!(name, "V" | "VOL" | "VOLUME")
 }
 
 fn canonical_formula(source: &str) -> Option<CanonicalFormula> {
@@ -86,9 +101,62 @@ fn canonical_formula(source: &str) -> Option<CanonicalFormula> {
             let period = args[1].parse::<usize>().ok()?;
             (period > 0).then_some(CanonicalFormula::Roc { period })
         }
+        "ROCP" if args.len() == 2 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Rocp { period })
+        }
+        "ROCR" if args.len() == 2 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Rocr { period })
+        }
+        "ROCR100" if args.len() == 2 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Rocr100 { period })
+        }
+        "MAX" if args.len() == 2 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Max { period })
+        }
+        "MIN" if args.len() == 2 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Min { period })
+        }
+        "SUM" if args.len() == 2 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Sum { period })
+        }
         "ATR" if args.len() == 4 && is_high(args[0]) && is_low(args[1]) && is_close(args[2]) => {
             let period = args[3].parse::<usize>().ok()?;
             (period > 0).then_some(CanonicalFormula::Atr { period })
+        }
+        "NATR" if args.len() == 4 && is_high(args[0]) && is_low(args[1]) && is_close(args[2]) => {
+            let period = args[3].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Natr { period })
+        }
+        "CCI" if args.len() == 4 && is_high(args[0]) && is_low(args[1]) && is_close(args[2]) => {
+            let period = args[3].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Cci { period })
+        }
+        "MFI"
+            if args.len() == 5
+                && is_high(args[0])
+                && is_low(args[1])
+                && is_close(args[2])
+                && is_volume(args[3]) =>
+        {
+            let period = args[4].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Mfi { period })
+        }
+        "OBV" if args.len() == 2 && is_close(args[0]) && is_volume(args[1]) => {
+            Some(CanonicalFormula::Obv)
+        }
+        "AD" if args.len() == 4
+            && is_high(args[0])
+            && is_low(args[1])
+            && is_close(args[2])
+            && is_volume(args[3]) =>
+        {
+            Some(CanonicalFormula::Ad)
         }
         "STD" if args.len() == 2 && is_close(args[0]) => {
             let period = args[1].parse::<usize>().ok()?;
@@ -108,6 +176,7 @@ fn eval_canonical_formula(
     high: &[f64],
     low: &[f64],
     close: &[f64],
+    volume: &[f64],
 ) -> PyResult<Array1<f64>> {
     match formula {
         CanonicalFormula::Sma { period } => {
@@ -137,7 +206,32 @@ fn eval_canonical_formula(
             .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
         CanonicalFormula::Roc { period } => ::finkit::indicators::roc(close, period)
             .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Rocp { period } => ::finkit::indicators::rocp(close, period)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Rocr { period } => ::finkit::indicators::rocr(close, period)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Rocr100 { period } => ::finkit::indicators::rocr100(close, period)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Max { period } => ::finkit::indicators::max(close, period)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Min { period } => ::finkit::indicators::min(close, period)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Sum { period } => ::finkit::indicators::sum(close, period)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
         CanonicalFormula::Atr { period } => ::finkit::indicators::atr(high, low, close, period)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Natr { period } => ::finkit::indicators::natr(high, low, close, period)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Cci { period } => ::finkit::indicators::cci(high, low, close, period)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Mfi { period } => {
+            ::finkit::indicators::mfi(high, low, close, volume, period).map_err(|error| {
+                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())
+            })
+        }
+        CanonicalFormula::Obv => ::finkit::indicators::obv(close, volume)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Ad => ::finkit::indicators::ad(high, low, close, volume)
             .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
         CanonicalFormula::Std { period } => rolling_stats::stddev(close, period, 1.0)
             .map(Array1::from_vec)
@@ -306,7 +400,7 @@ impl PyCompiledFormula {
         validate_lengths(&open, &high, &low, &close, &volume, amount.as_deref())?;
 
         if let Some(formula) = self.canonical {
-            let result = eval_canonical_formula(formula, &high, &low, &close)?;
+            let result = eval_canonical_formula(formula, &high, &low, &close, &volume)?;
             let context = make_context(open, high, low, close, volume, amount);
             self.stream_context = Some(context);
             return result_dict(py, self.stream_context.as_ref().unwrap(), result);
@@ -386,7 +480,7 @@ impl PyCompiledFormula {
         validate_lengths(open, high, low, close, volume, amount)?;
 
         if let Some(formula) = self.canonical {
-            let result = py.detach(|| eval_canonical_formula(formula, high, low, close))?;
+            let result = py.detach(|| eval_canonical_formula(formula, high, low, close, volume))?;
             let output = PyDict::new(py);
             output.set_item("__result__", PyArray1::from_vec(py, result.into_raw_vec()))?;
             return Ok(output);
