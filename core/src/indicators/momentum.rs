@@ -3199,53 +3199,55 @@ fn stochf_5_3(high: &[f64], low: &[f64], close: &[f64]) -> Result<StochResult> {
     let len = high.len();
     let mut fastk = vec![f64::NAN; len];
     let mut fastd = vec![f64::NAN; len];
-    let mut high_queue = [0usize; 6];
-    let mut low_queue = [0usize; 6];
-    let mut high_head = 0usize;
-    let mut high_tail = 0usize;
-    let mut low_head = 0usize;
-    let mut low_tail = 0usize;
+    let mut highest_idx = usize::MAX;
+    let mut lowest_idx = usize::MAX;
+    let mut highest = 0.0;
+    let mut lowest = 0.0;
     let mut d_ring = [0.0; 3];
     let mut d_sum = 0.0;
 
-    for i in 0..len {
-        while high_tail > high_head && high[high_queue[(high_tail - 1) % 6]] <= high[i] {
-            high_tail -= 1;
+    for today in 4..len {
+        let trailing = today - 4;
+        if highest_idx == usize::MAX || highest_idx < trailing {
+            highest_idx = trailing;
+            highest = high[trailing];
+            for i in (trailing + 1)..=today {
+                if high[i] > highest {
+                    highest_idx = i;
+                    highest = high[i];
+                }
+            }
+        } else if high[today] >= highest {
+            highest_idx = today;
+            highest = high[today];
         }
-        high_queue[high_tail % 6] = i;
-        high_tail += 1;
-        while low_tail > low_head && low[low_queue[(low_tail - 1) % 6]] >= low[i] {
-            low_tail -= 1;
+        if lowest_idx == usize::MAX || lowest_idx < trailing {
+            lowest_idx = trailing;
+            lowest = low[trailing];
+            for i in (trailing + 1)..=today {
+                if low[i] < lowest {
+                    lowest_idx = i;
+                    lowest = low[i];
+                }
+            }
+        } else if low[today] <= lowest {
+            lowest_idx = today;
+            lowest = low[today];
         }
-        low_queue[low_tail % 6] = i;
-        low_tail += 1;
-
-        if i < 4 {
-            continue;
-        }
-        let window_start = i - 4;
-        while high_queue[high_head % 6] < window_start {
-            high_head += 1;
-        }
-        while low_queue[low_head % 6] < window_start {
-            low_head += 1;
-        }
-        let highest = high[high_queue[high_head % 6]];
-        let lowest = low[low_queue[low_head % 6]];
         let range = highest - lowest;
         let value = if range > 1e-15 {
-            (close[i] - lowest) / range * 100.0
+            (close[today] - lowest) / range * 100.0
         } else {
             0.0
         };
-        if i >= 6 {
-            fastk[i] = value;
+        if today >= 6 {
+            fastk[today] = value;
         }
-        let ring_pos = (i - 4) % 3;
+        let ring_pos = (today - 4) % 3;
         d_sum += value - d_ring[ring_pos];
         d_ring[ring_pos] = value;
-        if i >= 6 {
-            fastd[i] = d_sum / 3.0;
+        if today >= 6 {
+            fastd[today] = d_sum / 3.0;
         }
     }
 
