@@ -980,14 +980,21 @@ pub fn three_black_crows(
     let mut output = Array1::zeros(len);
     let period = 10;
     let mut avg_ranges = RollingAverage::<10>::new();
+    let open_ptr = open.as_ptr();
+    let high_ptr = high.as_ptr();
+    let low_ptr = low.as_ptr();
+    let close_ptr = close.as_ptr();
+    let output_ptr: *mut i32 = output.as_slice_mut().unwrap().as_mut_ptr();
 
     for i in 0..len {
-        let true_range = if i == 0 {
-            high[i] - low[i]
-        } else {
-            (high[i] - low[i])
-                .max((high[i] - close[i - 1]).abs())
-                .max((low[i] - close[i - 1]).abs())
+        let true_range = unsafe {
+            if i == 0 {
+                *high_ptr - *low_ptr
+            } else {
+                (*high_ptr.add(i) - *low_ptr.add(i))
+                    .max((*high_ptr.add(i) - *close_ptr.add(i - 1)).abs())
+                    .max((*low_ptr.add(i) - *close_ptr.add(i - 1)).abs())
+            }
         };
         avg_ranges.push(true_range);
         if i < period || i < 2 {
@@ -995,21 +1002,32 @@ pub fn three_black_crows(
         }
         let avg_range = avg_ranges.average();
 
-        let all_bearish = is_bearish(open[i], close[i])
-            && is_bearish(open[i - 1], close[i - 1])
-            && is_bearish(open[i - 2], close[i - 2]);
+        let all_bearish = unsafe {
+            is_bearish(*open_ptr.add(i), *close_ptr.add(i))
+                && is_bearish(*open_ptr.add(i - 1), *close_ptr.add(i - 1))
+                && is_bearish(*open_ptr.add(i - 2), *close_ptr.add(i - 2))
+        };
 
-        let lower_closes = close[i] < close[i - 1] && close[i - 1] < close[i - 2];
+        let lower_closes = unsafe {
+            *close_ptr.add(i) < *close_ptr.add(i - 1)
+                && *close_ptr.add(i - 1) < *close_ptr.add(i - 2)
+        };
 
-        let opens_within_prev = open[i] < open[i - 1] && open[i - 1] < open[i - 2];
+        let opens_within_prev = unsafe {
+            *open_ptr.add(i) < *open_ptr.add(i - 1) && *open_ptr.add(i - 1) < *open_ptr.add(i - 2)
+        };
 
         if all_bearish && lower_closes && opens_within_prev {
-            let bodies_large = body(open[i], close[i]) > avg_range * 0.5
-                && body(open[i - 1], close[i - 1]) > avg_range * 0.5
-                && body(open[i - 2], close[i - 2]) > avg_range * 0.5;
+            let bodies_large = unsafe {
+                body(*open_ptr.add(i), *close_ptr.add(i)) > avg_range * 0.5
+                    && body(*open_ptr.add(i - 1), *close_ptr.add(i - 1)) > avg_range * 0.5
+                    && body(*open_ptr.add(i - 2), *close_ptr.add(i - 2)) > avg_range * 0.5
+            };
 
             if bodies_large {
-                output[i] = -100;
+                unsafe {
+                    *output_ptr.add(i) = -100;
+                }
             }
         }
     }

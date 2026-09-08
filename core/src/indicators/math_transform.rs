@@ -146,7 +146,7 @@ pub fn atan(data: &[f64]) -> Result<Array1<f64>> {
 /// ```
 pub fn ceil(data: &[f64]) -> Result<Array1<f64>> {
     validate_input(data.len(), 1)?;
-    Ok(data.iter().map(|x| x.ceil()).collect())
+    Ok(Array1::from_vec(map_expensive(data, f64::ceil)))
 }
 
 /// 余弦 (Vector Cosine)
@@ -388,7 +388,9 @@ pub fn sqrt(data: &[f64]) -> Result<Array1<f64>> {
             });
         }
     }
-    Ok(Array1::from_vec(map_expensive(data, f64::sqrt)))
+    let mut output = vec![0.0; data.len()];
+    crate::math::simd_ops::simd_sqrt(data, &mut output);
+    Ok(Array1::from_vec(output))
 }
 
 /// 正切 (Vector Tangent)

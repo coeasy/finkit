@@ -1320,6 +1320,44 @@ pub fn simd_sin_cos(input: &[f64], sin_out: &mut [f64], cos_out: &mut [f64]) {
     simd_sin_cos_scalar(input, sin_out, cos_out)
 }
 
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2")]
+unsafe fn simd_sqrt_avx2(input: &[f64], output: &mut [f64]) {
+    use core::arch::x86_64::*;
+    let n = input.len().min(output.len());
+    let input_ptr = input.as_ptr();
+    let output_ptr = output.as_mut_ptr();
+    let mut i = 0usize;
+    while i + 4 <= n {
+        let values = _mm256_loadu_pd(input_ptr.add(i));
+        let roots = _mm256_sqrt_pd(values);
+        _mm256_storeu_pd(output_ptr.add(i), roots);
+        i += 4;
+    }
+    while i < n {
+        *output_ptr.add(i) = f64_sqrt(*input_ptr.add(i));
+        i += 1;
+    }
+}
+
+#[inline]
+fn simd_sqrt_scalar(input: &[f64], output: &mut [f64]) {
+    for (source, destination) in input.iter().zip(output.iter_mut()) {
+        *destination = f64_sqrt(*source);
+    }
+}
+
+/// Computes square roots with runtime AVX2 dispatch and a scalar fallback.
+pub fn simd_sqrt(input: &[f64], output: &mut [f64]) {
+    #[cfg(all(feature = "std", target_arch = "x86_64"))]
+    {
+        if is_x86_feature_detected!("avx2") {
+            return unsafe { simd_sqrt_avx2(input, output) };
+        }
+    }
+    simd_sqrt_scalar(input, output)
+}
+
 // ============================================================================
 // SIMD Ultimate Oscillator raw series (bp / tr pre-pass)
 // ============================================================================
