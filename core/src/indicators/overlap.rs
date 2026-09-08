@@ -73,6 +73,88 @@ pub struct BbandsResult {
     pub lower: Array1<f64>,
 }
 
+#[inline]
+fn bbands_sma_into(
+    input: &[f64],
+    period: usize,
+    nb_dev_up: f64,
+    nb_dev_dn: f64,
+    middle: &mut [f64],
+    upper: &mut [f64],
+    lower: &mut [f64],
+) {
+    let len = input.len();
+    middle.fill(f64::NAN);
+    upper.fill(f64::NAN);
+    lower.fill(f64::NAN);
+
+    let inv_period = 1.0 / period as f64;
+    let mut ma_total = input[..period].iter().sum::<f64>();
+    let mut shift = input[0];
+    let mut var_total1 = 0.0;
+    let mut var_total2 = 0.0;
+    for &value in &input[..period] {
+        let delta = value - shift;
+        var_total1 += delta;
+        var_total2 += delta * delta;
+    }
+
+    let mut trailing_idx = 0usize;
+    let mut bars_since_reseed = 32 * period;
+    for i in period - 1..len {
+        if i >= period {
+            let value = input[i];
+            ma_total += value;
+            let delta = value - shift;
+            var_total1 += delta;
+            var_total2 += delta * delta;
+        }
+
+        let mean_shift = var_total1 * inv_period;
+        let mut variance = var_total2 * inv_period - mean_shift * mean_shift;
+        let trailing_delta = input[trailing_idx] - shift;
+        ma_total -= input[trailing_idx];
+        var_total1 -= trailing_delta;
+        var_total2 -= trailing_delta * trailing_delta;
+        trailing_idx += 1;
+        bars_since_reseed -= 1;
+
+        if variance < 0.000001 * (var_total2 * inv_period)
+            || trailing_delta > 1_000_000.0 * var_total2
+            || bars_since_reseed == 0
+        {
+            bars_since_reseed = 32 * period;
+            let window_start = i + 1 - period;
+            shift = input[window_start..=i].iter().sum::<f64>() * inv_period;
+            var_total1 = 0.0;
+            var_total2 = 0.0;
+            for &value in &input[window_start..=i] {
+                let delta = value - shift;
+                var_total1 += delta;
+                var_total2 += delta * delta;
+            }
+            let mean_shift = var_total1 * inv_period;
+            variance = var_total2 * inv_period - mean_shift * mean_shift;
+            if variance < 0.000000000001 * (var_total2 * inv_period) {
+                variance = 0.0;
+            }
+            let trailing_delta = input[window_start] - shift;
+            var_total1 -= trailing_delta;
+            var_total2 -= trailing_delta * trailing_delta;
+        }
+
+        let mean = (ma_total + input[trailing_idx - 1]) * inv_period;
+        let std = if variance != 0.0 {
+            variance.sqrt()
+        } else {
+            0.0
+        };
+        middle[i] = mean;
+        upper[i] = mean + std * nb_dev_up;
+        lower[i] = mean - std * nb_dev_dn;
+    }
+}
+
 /// Bollinger Bands (BBANDS)
 ///
 /// Upper = SMA + (std_dev * nb_dev_up)
@@ -120,49 +202,23 @@ pub fn bbands(
     validate_input(input.len(), period)?;
 
     let len = input.len();
-    let mut upper = init_output(len);
-    let mut middle = init_output(len);
-    let mut lower = init_output(len);
-    let inv_p = 1.0 / period as f64;
-
-    // TA-Lib's STDDEV uses the rolling sum/sum-of-squares form. Keeping the
-    // same operation order improves long-series parity and is cheaper than
-    // updating Welford's mean/M2 state for every bar.
-    let mut sum = input[..period].iter().sum::<f64>();
-    let mut sum_sq = input[..period]
-        .iter()
-        .map(|value| value * value)
-        .sum::<f64>();
-    let mean = sum * inv_p;
-    let std = (sum_sq - sum * mean).max(0.0).mul_add(inv_p, 0.0).sqrt();
-    middle[period - 1] = mean;
-    upper[period - 1] = mean + std * nb_dev_up;
-    lower[period - 1] = mean - std * nb_dev_dn;
-
-    // Pointer-based loop to eliminate bounds checking
-    let input_ptr = input.as_ptr();
-    let upper_ptr = upper.as_mut_ptr();
-    let middle_ptr = middle.as_mut_ptr();
-    let lower_ptr = lower.as_mut_ptr();
-
-    for i in period..len {
-        let old = unsafe { *input_ptr.add(i - period) };
-        let new = unsafe { *input_ptr.add(i) };
-        sum += new - old;
-        sum_sq += new * new - old * old;
-        let mean = sum * inv_p;
-        let std = (sum_sq - sum * mean).max(0.0).mul_add(inv_p, 0.0).sqrt();
-        unsafe {
-            *middle_ptr.add(i) = mean;
-            *upper_ptr.add(i) = mean + std * nb_dev_up;
-            *lower_ptr.add(i) = mean - std * nb_dev_dn;
-        }
-    }
+    let mut upper = vec![f64::NAN; len];
+    let mut middle = vec![f64::NAN; len];
+    let mut lower = vec![f64::NAN; len];
+    bbands_sma_into(
+        input,
+        period,
+        nb_dev_up,
+        nb_dev_dn,
+        &mut middle,
+        &mut upper,
+        &mut lower,
+    );
 
     Ok(BbandsResult {
-        upper,
-        middle,
-        lower,
+        upper: Array1::from_vec(upper),
+        middle: Array1::from_vec(middle),
+        lower: Array1::from_vec(lower),
     })
 }
 
@@ -1566,40 +1622,7 @@ pub fn bbands_into(
     }
     validate_input(len, period)?;
 
-    let inv_p = 1.0 / period as f64;
-
-    // Keep the same rolling sum/sum-of-squares order as the allocating path
-    // and TA-Lib's STDDEV kernel.
-    let mut sum = input[..period].iter().sum::<f64>();
-    let mut sum_sq = input[..period]
-        .iter()
-        .map(|value| value * value)
-        .sum::<f64>();
-    let mean = sum * inv_p;
-    let std = (sum_sq - sum * mean).max(0.0).mul_add(inv_p, 0.0).sqrt();
-    middle[period - 1] = mean;
-    upper[period - 1] = mean + std * nb_dev_up;
-    lower[period - 1] = mean - std * nb_dev_dn;
-
-    // Pointer-based loop to eliminate bounds checking
-    let input_ptr = input.as_ptr();
-    let upper_ptr = upper.as_mut_ptr();
-    let middle_ptr = middle.as_mut_ptr();
-    let lower_ptr = lower.as_mut_ptr();
-
-    for i in period..len {
-        let old = unsafe { *input_ptr.add(i - period) };
-        let new = unsafe { *input_ptr.add(i) };
-        sum += new - old;
-        sum_sq += new * new - old * old;
-        let mean = sum * inv_p;
-        let std = (sum_sq - sum * mean).max(0.0).mul_add(inv_p, 0.0).sqrt();
-        unsafe {
-            *middle_ptr.add(i) = mean;
-            *upper_ptr.add(i) = mean + std * nb_dev_up;
-            *lower_ptr.add(i) = mean - std * nb_dev_dn;
-        }
-    }
+    bbands_sma_into(input, period, nb_dev_up, nb_dev_dn, middle, upper, lower);
 
     Ok(())
 }
