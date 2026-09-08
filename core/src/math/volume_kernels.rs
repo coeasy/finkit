@@ -41,7 +41,9 @@ pub fn obv_into(close: &[f64], volume: &[f64], output: &mut [f64]) -> Result<()>
         let mut acc = *volume_ptr;
         let mut previous_close = *close_ptr;
         *output_ptr = acc;
-        for i in 1..close.len() {
+        let mut i = 1usize;
+        let unrolled_end = close.len().saturating_sub(3);
+        while i < unrolled_end {
             let current = *close_ptr.add(i);
             if current > previous_close {
                 acc += *volume_ptr.add(i);
@@ -50,6 +52,45 @@ pub fn obv_into(close: &[f64], volume: &[f64], output: &mut [f64]) -> Result<()>
             }
             previous_close = current;
             *output_ptr.add(i) = acc;
+
+            let current = *close_ptr.add(i + 1);
+            if current > previous_close {
+                acc += *volume_ptr.add(i + 1);
+            } else if current < previous_close {
+                acc -= *volume_ptr.add(i + 1);
+            }
+            previous_close = current;
+            *output_ptr.add(i + 1) = acc;
+
+            let current = *close_ptr.add(i + 2);
+            if current > previous_close {
+                acc += *volume_ptr.add(i + 2);
+            } else if current < previous_close {
+                acc -= *volume_ptr.add(i + 2);
+            }
+            previous_close = current;
+            *output_ptr.add(i + 2) = acc;
+
+            let current = *close_ptr.add(i + 3);
+            if current > previous_close {
+                acc += *volume_ptr.add(i + 3);
+            } else if current < previous_close {
+                acc -= *volume_ptr.add(i + 3);
+            }
+            previous_close = current;
+            *output_ptr.add(i + 3) = acc;
+            i += 4;
+        }
+        while i < close.len() {
+            let current = *close_ptr.add(i);
+            if current > previous_close {
+                acc += *volume_ptr.add(i);
+            } else if current < previous_close {
+                acc -= *volume_ptr.add(i);
+            }
+            previous_close = current;
+            *output_ptr.add(i) = acc;
+            i += 1;
         }
     }
     Ok(())
@@ -64,6 +105,13 @@ pub fn obv_vec(close: &[f64], volume: &[f64]) -> Result<Vec<f64>> {
     let output = unsafe {
         std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<f64>(), close.len())
     };
+    #[cfg(feature = "rayon")]
+    if close.len() >= 262_144 && close.len() == volume.len() && !close.is_empty() {
+        obv_into_parallel_fresh(close, volume, output)?;
+    } else {
+        obv_into(close, volume, output)?;
+    }
+    #[cfg(not(feature = "rayon"))]
     obv_into(close, volume, output)?;
 
     let ptr = raw_output.as_mut_ptr().cast::<f64>();
@@ -71,6 +119,60 @@ pub fn obv_vec(close: &[f64], volume: &[f64]) -> Result<Vec<f64>> {
     let capacity = raw_output.capacity();
     std::mem::forget(raw_output);
     Ok(unsafe { Vec::from_raw_parts(ptr, len, capacity) })
+}
+
+#[cfg(feature = "rayon")]
+fn obv_into_parallel_fresh(close: &[f64], volume: &[f64], output: &mut [f64]) -> Result<()> {
+    use rayon::prelude::*;
+
+    validate_same_len("volume", close.len(), volume.len())?;
+    validate_same_len("output", close.len(), output.len())?;
+    if close.is_empty() {
+        return Err(TaError::EmptyInput);
+    }
+
+    const CHUNK_SIZE: usize = 32 * 1024;
+    output[0] = volume[0];
+    let data = &close[1..];
+    let volume_data = &volume[1..];
+    let local_totals: Vec<f64> = output[1..]
+        .par_chunks_mut(CHUNK_SIZE)
+        .enumerate()
+        .map(|(chunk_index, chunk)| {
+            let start = chunk_index * CHUNK_SIZE;
+            let mut previous_close = close[start];
+            let mut local = 0.0;
+            for (offset, slot) in chunk.iter_mut().enumerate() {
+                let index = start + offset;
+                let current = data[index];
+                if current > previous_close {
+                    local += volume_data[index];
+                } else if current < previous_close {
+                    local -= volume_data[index];
+                }
+                previous_close = current;
+                *slot = local;
+            }
+            local
+        })
+        .collect();
+
+    let mut offsets = Vec::with_capacity(local_totals.len());
+    let mut offset = output[0];
+    for total in local_totals {
+        offsets.push(offset);
+        offset += total;
+    }
+    output[1..]
+        .par_chunks_mut(CHUNK_SIZE)
+        .enumerate()
+        .for_each(|(chunk_index, chunk)| {
+            let base = offsets[chunk_index];
+            for value in chunk {
+                *value += base;
+            }
+        });
+    Ok(())
 }
 
 /// Allocating OBV wrapper sharing the allocation-free canonical recurrence.
@@ -404,6 +506,22 @@ mod tests {
         let mut out = [0.0; 4];
         obv_into(&close, &volume, &mut out).unwrap();
         assert_eq!(obv(&close, &volume).unwrap().as_slice().unwrap(), &out);
+    }
+
+    #[cfg(feature = "rayon")]
+    #[test]
+    fn long_obv_parallel_path_matches_serial_reference() {
+        let len = 262_145;
+        let close: Vec<f64> = (0..len)
+            .map(|i| 100.0 + (i as f64 * 0.013).sin() + i as f64 * 0.0001)
+            .collect();
+        let volume: Vec<f64> = (0..len).map(|i| 1_000.0 + (i % 17) as f64).collect();
+        let mut expected = vec![0.0; len];
+        obv_into(&close, &volume, &mut expected).unwrap();
+        let actual = obv(&close, &volume).unwrap();
+        for (left, right) in actual.iter().zip(expected.iter()) {
+            assert!((left - right).abs() <= right.abs() * 1e-12 + 1e-9);
+        }
     }
 
     #[test]

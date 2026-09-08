@@ -1075,6 +1075,10 @@ pub fn trima_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()
     // copy of the even-period recurrence so the hot loop does not carry the
     // period-derived index arithmetic of the generic path.
     if period == 30 {
+        #[cfg(all(feature = "std", target_arch = "x86_64"))]
+        if crate::math::simd_ops::has_avx2() {
+            return unsafe { trima_period30_avx2_into(input, output) };
+        }
         return trima_period30_into(input, output);
     }
 
@@ -1182,7 +1186,6 @@ pub fn trima_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()
 fn trima_period30_into(input: &[f64], output: &mut [f64]) -> Result<()> {
     let input_ptr = input.as_ptr();
     let output_ptr = output.as_mut_ptr();
-    let input_end = unsafe { input_ptr.add(input.len()) };
     let factor = 1.0 / (15.0 * 16.0);
     let mut numerator = 0.0;
     let mut numerator_sub = 0.0;
@@ -1210,24 +1213,158 @@ fn trima_period30_into(input: &[f64], output: &mut [f64]) -> Result<()> {
         let mut today_ptr = input_ptr.add(30);
         let mut write_ptr = output_ptr.add(30);
         let mut temp = *input_ptr;
-        while today_ptr < input_end {
+        let mut remaining = input.len() - 30;
+        macro_rules! trima_step {
+            () => {{
+                numerator -= numerator_sub;
+                numerator_sub -= temp;
+                temp = *middle_ptr;
+                middle_ptr = middle_ptr.add(1);
+                numerator_sub += temp;
+                numerator_add -= temp;
+                numerator += numerator_add;
+                temp = *today_ptr;
+                today_ptr = today_ptr.add(1);
+                numerator_add += temp;
+                numerator += temp;
+                temp = *trailing_ptr;
+                trailing_ptr = trailing_ptr.add(1);
+                *write_ptr = numerator * factor;
+                write_ptr = write_ptr.add(1);
+            }};
+        }
+        while remaining >= 4 {
+            trima_step!();
+            trima_step!();
+            trima_step!();
+            trima_step!();
+            remaining -= 4;
+        }
+        while remaining >= 2 {
+            trima_step!();
+            trima_step!();
+            remaining -= 2;
+        }
+        if remaining != 0 {
             numerator -= numerator_sub;
-            numerator_sub -= temp;
-            temp = *middle_ptr;
-            middle_ptr = middle_ptr.add(1);
-            numerator_sub += temp;
-            numerator_add -= temp;
+            let middle = *middle_ptr;
+            numerator_add -= middle;
             numerator += numerator_add;
-            temp = *today_ptr;
-            today_ptr = today_ptr.add(1);
-            numerator_add += temp;
-            numerator += temp;
-            temp = *trailing_ptr;
-            trailing_ptr = trailing_ptr.add(1);
+            let today = *today_ptr;
+            numerator += today;
             *write_ptr = numerator * factor;
-            write_ptr = write_ptr.add(1);
         }
     }
+    Ok(())
+}
+
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2")]
+#[allow(unsafe_op_in_unsafe_fn)]
+unsafe fn trima_period30_avx2_into(input: &[f64], output: &mut [f64]) -> Result<()> {
+    use core::arch::x86_64::*;
+
+    #[inline(always)]
+    unsafe fn prefix4(value: __m256d) -> __m256d {
+        let lo = _mm256_castpd256_pd128(value);
+        let hi = _mm256_extractf128_pd(value, 1);
+        let lo_shift = _mm_castsi128_pd(_mm_slli_si128(_mm_castpd_si128(lo), 8));
+        let hi_shift = _mm_castsi128_pd(_mm_slli_si128(_mm_castpd_si128(hi), 8));
+        let lo_prefix = _mm_add_pd(lo, lo_shift);
+        let hi_prefix = _mm_add_pd(hi, hi_shift);
+        let lo_total = _mm_shuffle_pd(lo_prefix, lo_prefix, 0b11);
+        let hi_prefix = _mm_add_pd(hi_prefix, lo_total);
+        _mm256_set_m128d(hi_prefix, lo_prefix)
+    }
+
+    #[inline(always)]
+    unsafe fn last4(value: __m256d) -> f64 {
+        let hi = _mm256_extractf128_pd(value, 1);
+        _mm_cvtsd_f64(_mm_shuffle_pd(hi, hi, 0b11))
+    }
+
+    let input_ptr = input.as_ptr();
+    let output_ptr = output.as_mut_ptr();
+    let factor = 1.0 / (15.0 * 16.0);
+    let mut numerator = 0.0;
+    let mut numerator_sub = 0.0;
+    let mut numerator_add = 0.0;
+
+    let mut index = 14isize;
+    while index >= 0 {
+        let value = *input_ptr.offset(index);
+        numerator_sub += value;
+        numerator += numerator_sub;
+        index -= 1;
+    }
+    let mut index = 15usize;
+    while index <= 29 {
+        let value = *input_ptr.add(index);
+        numerator_add += value;
+        numerator += numerator_add;
+        index += 1;
+    }
+    *output_ptr.add(29) = numerator * factor;
+
+    let mut trailing_ptr = input_ptr.add(1);
+    let mut middle_ptr = input_ptr.add(15);
+    let mut today_ptr = input_ptr.add(30);
+    let mut write_ptr = output_ptr.add(30);
+    let mut temp = *input_ptr;
+    let mut remaining = input.len() - 30;
+    let zero = _mm256_setzero_pd();
+
+    while remaining >= 4 {
+        let trailing = _mm256_loadu_pd(trailing_ptr.sub(1));
+        let middle = _mm256_loadu_pd(middle_ptr);
+        let today = _mm256_loadu_pd(today_ptr);
+
+        let left_delta = _mm256_sub_pd(middle, trailing);
+        let right_delta = _mm256_sub_pd(today, middle);
+        let left_prefix = prefix4(left_delta);
+        let right_prefix = prefix4(right_delta);
+        let left_previous = _mm256_add_pd(
+            _mm256_set1_pd(numerator_sub),
+            _mm256_blend_pd(_mm256_permute4x64_pd(left_prefix, 0x90), zero, 0b0001),
+        );
+        let right_current = _mm256_add_pd(_mm256_set1_pd(numerator_add), right_prefix);
+        let numerator_delta = _mm256_sub_pd(right_current, left_previous);
+        let numerator_values = _mm256_add_pd(_mm256_set1_pd(numerator), prefix4(numerator_delta));
+        _mm256_storeu_pd(
+            write_ptr,
+            _mm256_mul_pd(numerator_values, _mm256_set1_pd(factor)),
+        );
+
+        numerator_sub = last4(_mm256_add_pd(_mm256_set1_pd(numerator_sub), left_prefix));
+        numerator_add = last4(right_current);
+        numerator = last4(numerator_values);
+        temp = *trailing_ptr.add(3);
+        trailing_ptr = trailing_ptr.add(4);
+        middle_ptr = middle_ptr.add(4);
+        today_ptr = today_ptr.add(4);
+        write_ptr = write_ptr.add(4);
+        remaining -= 4;
+    }
+
+    while remaining != 0 {
+        numerator -= numerator_sub;
+        numerator_sub -= temp;
+        temp = *middle_ptr;
+        middle_ptr = middle_ptr.add(1);
+        numerator_sub += temp;
+        numerator_add -= temp;
+        numerator += numerator_add;
+        temp = *today_ptr;
+        today_ptr = today_ptr.add(1);
+        numerator_add += temp;
+        numerator += temp;
+        temp = *trailing_ptr;
+        trailing_ptr = trailing_ptr.add(1);
+        *write_ptr = numerator * factor;
+        write_ptr = write_ptr.add(1);
+        remaining -= 1;
+    }
+
     Ok(())
 }
 

@@ -380,16 +380,13 @@ pub fn sinh(data: &[f64]) -> Result<Array1<f64>> {
 /// ```
 pub fn sqrt(data: &[f64]) -> Result<Array1<f64>> {
     validate_input(data.len(), 1)?;
-    for (i, &x) in data.iter().enumerate() {
-        if !x.is_finite() || x < 0.0 {
-            return Err(TaError::InvalidParameter {
-                name: format!("data[{}]", i),
-                constraint: "value >= 0".to_string(),
-            });
-        }
-    }
     let mut output = vec![0.0; data.len()];
-    crate::math::simd_ops::simd_sqrt(data, &mut output);
+    if let Some(index) = crate::math::simd_ops::simd_sqrt_checked(data, &mut output) {
+        return Err(TaError::InvalidParameter {
+            name: format!("data[{}]", index),
+            constraint: "value >= 0".to_string(),
+        });
+    }
     Ok(Array1::from_vec(output))
 }
 

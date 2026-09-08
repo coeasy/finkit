@@ -1350,6 +1350,67 @@ pub fn simd_sqrt(input: &[f64], output: &mut [f64]) {
     simd_sqrt_scalar(input, output)
 }
 
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2")]
+unsafe fn simd_sqrt_avx2_checked(input: &[f64], output: &mut [f64]) -> Option<usize> {
+    use core::arch::x86_64::*;
+
+    let n = input.len().min(output.len());
+    let input_ptr = input.as_ptr();
+    let output_ptr = output.as_mut_ptr();
+    let zero = _mm256_setzero_pd();
+    let exponent_mask = _mm256_set1_epi64x(0x7ff0_0000_0000_0000u64 as i64);
+    let mut i = 0usize;
+    while i + 4 <= n {
+        let values = _mm256_loadu_pd(input_ptr.add(i));
+        let bits = _mm256_castpd_si256(values);
+        let negative = _mm256_castpd_si256(_mm256_cmp_pd(values, zero, _CMP_LT_OQ));
+        let non_finite = _mm256_cmpeq_epi64(_mm256_and_si256(bits, exponent_mask), exponent_mask);
+        let invalid = _mm256_or_si256(negative, non_finite);
+        let invalid_mask = _mm256_movemask_pd(_mm256_castsi256_pd(invalid));
+        if invalid_mask != 0 {
+            for lane in 0..4 {
+                let value = *input_ptr.add(i + lane);
+                if !value.is_finite() || value < 0.0 {
+                    return Some(i + lane);
+                }
+            }
+        }
+        _mm256_storeu_pd(output_ptr.add(i), _mm256_sqrt_pd(values));
+        i += 4;
+    }
+    while i < n {
+        let value = *input_ptr.add(i);
+        if !value.is_finite() || value < 0.0 {
+            return Some(i);
+        }
+        *output_ptr.add(i) = value.sqrt();
+        i += 1;
+    }
+    None
+}
+
+fn simd_sqrt_checked_scalar(input: &[f64], output: &mut [f64]) -> Option<usize> {
+    for (i, (source, destination)) in input.iter().zip(output.iter_mut()).enumerate() {
+        if !source.is_finite() || *source < 0.0 {
+            return Some(i);
+        }
+        *destination = f64_sqrt(*source);
+    }
+    None
+}
+
+/// Computes square roots and validates the domain in the same pass.
+pub fn simd_sqrt_checked(input: &[f64], output: &mut [f64]) -> Option<usize> {
+    #[cfg(all(feature = "std", target_arch = "x86_64"))]
+    {
+        if is_x86_feature_detected!("avx2") {
+            return unsafe { simd_sqrt_avx2_checked(input, output) };
+        }
+    }
+    simd_sqrt_checked_scalar(input, output)
+}
+
 // ============================================================================
 // SIMD Ultimate Oscillator raw series (bp / tr pre-pass)
 // ============================================================================

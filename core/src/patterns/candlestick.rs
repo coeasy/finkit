@@ -2667,11 +2667,11 @@ pub fn cdl_hikkake(
         let low_ptr = low.as_ptr();
         let close_ptr = close.as_ptr();
         let output_ptr = output.as_mut_ptr();
+        let mut high_before = *high_ptr;
+        let mut high_prev = *high_ptr.add(1);
+        let mut low_before = *low_ptr;
+        let mut low_prev = *low_ptr.add(1);
         for i in 2..len {
-            let high_prev = *high_ptr.add(i - 1);
-            let low_prev = *low_ptr.add(i - 1);
-            let high_before = *high_ptr.add(i - 2);
-            let low_before = *low_ptr.add(i - 2);
             let current_high = *high_ptr.add(i);
             let current_low = *low_ptr.add(i);
             if high_prev < high_before
@@ -2701,6 +2701,10 @@ pub fn cdl_hikkake(
             if countdown > 0 {
                 countdown -= 1;
             }
+            high_before = high_prev;
+            high_prev = current_high;
+            low_before = low_prev;
+            low_prev = current_low;
         }
     }
     Ok(output)
