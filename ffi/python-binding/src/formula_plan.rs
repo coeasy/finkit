@@ -15,27 +15,73 @@ use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy)]
 enum CanonicalFormula {
-    Sma { period: usize },
-    Ema { period: usize },
-    Wma { period: usize },
-    Kama { period: usize },
-    Rsi { period: usize },
-    Mom { period: usize },
-    Roc { period: usize },
-    Rocp { period: usize },
-    Rocr { period: usize },
-    Rocr100 { period: usize },
-    Max { period: usize },
-    Min { period: usize },
-    Sum { period: usize },
-    Atr { period: usize },
-    Natr { period: usize },
-    Cci { period: usize },
-    Mfi { period: usize },
+    Sma {
+        period: usize,
+    },
+    Ema {
+        period: usize,
+    },
+    Wma {
+        period: usize,
+    },
+    Kama {
+        period: usize,
+    },
+    Rsi {
+        period: usize,
+    },
+    Mom {
+        period: usize,
+    },
+    Roc {
+        period: usize,
+    },
+    Rocp {
+        period: usize,
+    },
+    Rocr {
+        period: usize,
+    },
+    Rocr100 {
+        period: usize,
+    },
+    Max {
+        period: usize,
+    },
+    Min {
+        period: usize,
+    },
+    Sum {
+        period: usize,
+    },
+    Atr {
+        period: usize,
+    },
+    Natr {
+        period: usize,
+    },
+    Cci {
+        period: usize,
+    },
+    Mfi {
+        period: usize,
+    },
+    Adosc {
+        fast_period: usize,
+        slow_period: usize,
+    },
     Obv,
     Ad,
-    Std { period: usize },
-    Boll { period: usize, nbdev: f64 },
+    Trima {
+        period: usize,
+    },
+    Std {
+        period: usize,
+    },
+    Boll {
+        period: usize,
+        nbdev: f64,
+    },
 }
 
 fn normalize_formula(source: &str) -> String {
@@ -147,6 +193,20 @@ fn canonical_formula(source: &str) -> Option<CanonicalFormula> {
             let period = args[4].parse::<usize>().ok()?;
             (period > 0).then_some(CanonicalFormula::Mfi { period })
         }
+        "ADOSC"
+            if args.len() == 6
+                && is_high(args[0])
+                && is_low(args[1])
+                && is_close(args[2])
+                && is_volume(args[3]) =>
+        {
+            let fast_period = args[4].parse::<usize>().ok()?;
+            let slow_period = args[5].parse::<usize>().ok()?;
+            (fast_period > 0 && slow_period > 0).then_some(CanonicalFormula::Adosc {
+                fast_period,
+                slow_period,
+            })
+        }
         "OBV" if args.len() == 2 && is_close(args[0]) && is_volume(args[1]) => {
             Some(CanonicalFormula::Obv)
         }
@@ -157,6 +217,10 @@ fn canonical_formula(source: &str) -> Option<CanonicalFormula> {
             && is_volume(args[3]) =>
         {
             Some(CanonicalFormula::Ad)
+        }
+        "TRIMA" if args.len() == 2 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Trima { period })
         }
         "STD" if args.len() == 2 && is_close(args[0]) => {
             let period = args[1].parse::<usize>().ok()?;
@@ -229,9 +293,16 @@ fn eval_canonical_formula(
                 PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())
             })
         }
+        CanonicalFormula::Adosc {
+            fast_period,
+            slow_period,
+        } => ::finkit::indicators::adosc(high, low, close, volume, fast_period, slow_period)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
         CanonicalFormula::Obv => ::finkit::indicators::obv(close, volume)
             .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
         CanonicalFormula::Ad => ::finkit::indicators::ad(high, low, close, volume)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Trima { period } => ::finkit::math::moving_avg::trima(close, period)
             .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
         CanonicalFormula::Std { period } => rolling_stats::stddev(close, period, 1.0)
             .map(Array1::from_vec)

@@ -77,8 +77,13 @@ def test_compiled_formula_common_unary_calls_match_canonical_api(source, referen
             "MFI(HIGH, LOW, CLOSE, VOLUME, 5)",
             lambda o, h, l, c, v: finkit.mfi(h, l, c, v, 5),
         ),
+        (
+            "ADOSC(HIGH, LOW, CLOSE, VOLUME, 3, 10)",
+            lambda o, h, l, c, v: finkit.adosc(h, l, c, v, 3, 10),
+        ),
         ("OBV(CLOSE, VOLUME)", lambda o, h, l, c, v: finkit.obv(c, v)),
         ("AD(HIGH, LOW, CLOSE, VOLUME)", lambda o, h, l, c, v: finkit.ad(h, l, c, v)),
+        ("TRIMA(CLOSE, 5)", lambda o, h, l, c, v: finkit.trima(c, 5)),
     ],
 )
 def test_compiled_formula_extended_canonical_kernels(source, reference):

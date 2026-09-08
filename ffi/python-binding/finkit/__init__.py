@@ -199,7 +199,7 @@ if hasattr(_native, "_fast_wma"):
 
 if hasattr(_native, "_fast_obv"):
 
-    def obv(close, volume, out=None):
+    def _obv_normalized(close, volume, out=None):
         close = _as_contiguous_float64(close)
         volume = _as_contiguous_float64(volume)
         if out is not None:
@@ -208,7 +208,15 @@ if hasattr(_native, "_fast_obv"):
             return out
         return _native._fast_obv(close, volume)
 
-    obv = _translate_native_errors("obv", obv)
+    _obv_normalized = _translate_native_errors("obv", _obv_normalized)
+
+    def obv(close, volume, out=None):
+        if out is None:
+            try:
+                return _native._fast_obv(close, volume)
+            except (TypeError, ValueError, OverflowError):
+                return _obv_normalized(close, volume, out)
+        return _obv_normalized(close, volume, out)
 
 if hasattr(_native, "_fast_vwap"):
 
@@ -377,39 +385,58 @@ if hasattr(_native, "_fast_trange"):
 
 if hasattr(_native, "_fast_mfi"):
 
-    def mfi(high, low, close, volume, timeperiod=14):
+    def _mfi_normalized(high, low, close, volume, timeperiod=14):
         high = _as_contiguous_float64(high)
         low = _as_contiguous_float64(low)
         close = _as_contiguous_float64(close)
         volume = _as_contiguous_float64(volume)
         return _native._fast_mfi(high, low, close, volume, timeperiod)
 
-    mfi = _translate_native_errors("mfi", mfi)
+    _mfi_normalized = _translate_native_errors("mfi", _mfi_normalized)
+
+    def mfi(high, low, close, volume, timeperiod=14):
+        try:
+            return _native._fast_mfi(high, low, close, volume, timeperiod)
+        except (TypeError, ValueError, OverflowError):
+            return _mfi_normalized(high, low, close, volume, timeperiod)
 
 if hasattr(_native, "_fast_ad"):
 
-    def ad(high, low, close, volume):
+    def _ad_normalized(high, low, close, volume):
         high = _as_contiguous_float64(high)
         low = _as_contiguous_float64(low)
         close = _as_contiguous_float64(close)
         volume = _as_contiguous_float64(volume)
         return _native._fast_ad(high, low, close, volume)
 
-    ad = _translate_native_errors("ad", ad)
+    _ad_normalized = _translate_native_errors("ad", _ad_normalized)
+
+    def ad(high, low, close, volume):
+        try:
+            return _native._fast_ad(high, low, close, volume)
+        except (TypeError, ValueError, OverflowError):
+            return _ad_normalized(high, low, close, volume)
 
 if hasattr(_native, "_fast_adosc"):
 
-    def adosc(high, low, close, volume, fastperiod=3, slowperiod=10):
+    def _adosc_normalized(high, low, close, volume, fastperiod=3, slowperiod=10):
         high = _as_contiguous_float64(high)
         low = _as_contiguous_float64(low)
         close = _as_contiguous_float64(close)
         volume = _as_contiguous_float64(volume)
-        result = _native._fast_adosc(
-            high, low, close, volume, fastperiod, slowperiod
-        )
-        return result
+        return _native._fast_adosc(high, low, close, volume, fastperiod, slowperiod)
 
-    adosc = _translate_native_errors("adosc", adosc)
+    _adosc_normalized = _translate_native_errors("adosc", _adosc_normalized)
+
+    def adosc(high, low, close, volume, fastperiod=3, slowperiod=10):
+        try:
+            return _native._fast_adosc(
+                high, low, close, volume, fastperiod, slowperiod
+            )
+        except (TypeError, ValueError, OverflowError):
+            return _adosc_normalized(
+                high, low, close, volume, fastperiod, slowperiod
+            )
 
 if hasattr(_native, "_fast_bop"):
 
