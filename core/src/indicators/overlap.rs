@@ -455,6 +455,9 @@ pub fn sarext(
         sar = start_value.abs();
     }
 
+    sar_values[0] = if is_long { sar } else { -sar };
+    af_values[0] = if is_long { long_af } else { short_af };
+
     let mut new_low = low[1];
     let mut new_high = high[1];
     let mut today = 1usize;

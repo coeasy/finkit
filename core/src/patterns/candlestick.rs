@@ -2505,13 +2505,13 @@ pub fn cdl_rise_fall_3methods(
             constraint: "must have the same length".to_string(),
         });
     }
-    validate_input(open.len(), 15)?;
+    validate_input(open.len(), 5)?;
     let len = open.len();
     let mut output = PatternResult::zeros(len);
     let bodies = real_body_values(open, close);
     let avg_long = candle_avg_prior(&bodies, 10);
     let avg_short = avg_long.clone();
-    for i in 14..len {
+    for i in 4..len {
         let first_white = close[i - 4] >= open[i - 4];
         let middle_white = close[i - 3] >= open[i - 3];
         let final_white = close[i] >= open[i];
