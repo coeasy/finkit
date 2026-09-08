@@ -575,6 +575,21 @@ fn fast_hlc_period<'py>(
                 Ok::<Vec<f64>, crate::PyErr>(unsafe { Vec::from_raw_parts(ptr, len, capacity) })
             })
             .map_err(value_error)?,
+        "adxr" => py
+            .detach(|| {
+                let len = high.len();
+                let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);
+                unsafe { raw_output.set_len(len) };
+                let output = unsafe {
+                    std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<f64>(), len)
+                };
+                indicators::adxr_into(high, low, close, timeperiod, output).map_err(value_error)?;
+                let ptr = raw_output.as_mut_ptr().cast::<f64>();
+                let capacity = raw_output.capacity();
+                std::mem::forget(raw_output);
+                Ok::<Vec<f64>, crate::PyErr>(unsafe { Vec::from_raw_parts(ptr, len, capacity) })
+            })
+            .map_err(value_error)?,
         "cci" => {
             let len = high.len();
             let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);

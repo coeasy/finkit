@@ -97,6 +97,19 @@ fn canonical_trange(
 }
 
 #[inline]
+fn canonical_trima(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
+    ensure_args_len("TRIMA", args, 2)?;
+    let period = extract_n(args, 1, "TRIMA")?;
+    match crate::math::moving_avg::trima(args[0].as_slice().unwrap(), period) {
+        Ok(result) => Ok(result),
+        Err(_) => Ok(nan_vec(ctx.data_len)),
+    }
+}
+
+#[inline]
 fn canonical_std(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("STD", args, 2)?;
     let period = extract_n(args, 1, "STD")?;
@@ -216,9 +229,17 @@ fn canonical_adosc(
     ctx: &FormulaContext,
     args: &[Array1<f64>],
 ) -> Result<Array1<f64>, FormulaError> {
-    ensure_args_len("ADOSC", args, 6)?;
-    let fast_period = extract_n(args, 4, "ADOSC")?;
-    let slow_period = extract_n(args, 5, "ADOSC")?;
+    ensure_args_len("ADOSC", args, 4)?;
+    let fast_period = args
+        .get(4)
+        .map(|_| extract_n(args, 4, "ADOSC"))
+        .transpose()?
+        .unwrap_or(3);
+    let slow_period = args
+        .get(5)
+        .map(|_| extract_n(args, 5, "ADOSC"))
+        .transpose()?
+        .unwrap_or(10);
     match crate::math::volume_kernels::adosc(
         args[0].as_slice().unwrap(),
         args[1].as_slice().unwrap(),
@@ -226,6 +247,26 @@ fn canonical_adosc(
         args[3].as_slice().unwrap(),
         fast_period,
         slow_period,
+    ) {
+        Ok(result) => Ok(result),
+        Err(_) => Ok(nan_vec(ctx.data_len)),
+    }
+}
+
+#[inline]
+fn canonical_mfi(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+    ensure_args_len("MFI", args, 4)?;
+    let period = args
+        .get(4)
+        .map(|_| extract_n(args, 4, "MFI"))
+        .transpose()?
+        .unwrap_or(14);
+    match crate::math::mfi::mfi(
+        args[0].as_slice().unwrap(),
+        args[1].as_slice().unwrap(),
+        args[2].as_slice().unwrap(),
+        args[3].as_slice().unwrap(),
+        period,
     ) {
         Ok(result) => Ok(result),
         Err(_) => Ok(nan_vec(ctx.data_len)),
@@ -249,6 +290,7 @@ pub fn get_builtin_functions() -> HashMap<String, FormulaFn> {
     map.insert("ATR".to_string(), canonical_atr as FormulaFn);
     map.insert("NATR".to_string(), canonical_natr as FormulaFn);
     map.insert("TRANGE".to_string(), canonical_trange as FormulaFn);
+    map.insert("TRIMA".to_string(), canonical_trima as FormulaFn);
 
     map.insert("STD".to_string(), canonical_std as FormulaFn);
     map.insert("STDDEV".to_string(), canonical_std as FormulaFn);
@@ -264,6 +306,7 @@ pub fn get_builtin_functions() -> HashMap<String, FormulaFn> {
     map.insert("OBV".to_string(), canonical_obv as FormulaFn);
     map.insert("AD".to_string(), canonical_ad as FormulaFn);
     map.insert("ADOSC".to_string(), canonical_adosc as FormulaFn);
+    map.insert("MFI".to_string(), canonical_mfi as FormulaFn);
 
     // Registry aliases must follow the replaced canonical function pointers too.
     // This preserves the alias identity invariant after the canonical overrides.

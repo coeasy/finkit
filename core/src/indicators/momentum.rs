@@ -2666,6 +2666,35 @@ pub fn adxr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<A
     Ok(Array1::from_vec(output))
 }
 
+/// Write ADXR directly into a caller-owned buffer.
+///
+/// ADXR still needs the internal ADX history, but avoiding a second result
+/// allocation and copy matters for the public NumPy hot path.
+pub fn adxr_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    period: usize,
+    output: &mut [f64],
+) -> Result<()> {
+    let adx_vals = compute_adx_only(high, low, close, period)?;
+    if adx_vals.len() != output.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as the input series".to_string(),
+        });
+    }
+    output.fill(f64::NAN);
+    for i in period..output.len() {
+        let cur = adx_vals[i];
+        let prev = adx_vals[i + 1 - period];
+        if !cur.is_nan() && !prev.is_nan() {
+            output[i] = (cur + prev) * 0.5;
+        }
+    }
+    Ok(())
+}
+
 /// Aroon Oscillator (AROONOSC)
 ///
 /// AROONOSC = Aroon Up - Aroon Down
@@ -4837,7 +4866,6 @@ mod tests {
     impl_into_delegate!(minus_dm_into, minus_dm, (high: &[f64], low: &[f64]));
     impl_into_delegate!(plus_di_into, plus_di, (high: &[f64], low: &[f64], close: &[f64], period: usize));
     impl_into_delegate!(plus_dm_into, plus_dm, (high: &[f64], low: &[f64]));
-    impl_into_delegate!(adxr_into, adxr, (high: &[f64], low: &[f64], close: &[f64], period: usize));
     impl_into_delegate!(aroonosc_into, aroonosc, (high: &[f64], low: &[f64], period: usize));
     impl_into_delegate!(ppo_into, ppo, (input: &[f64], fast_period: usize, slow_period: usize));
     impl_into_delegate!(rocp_into, rocp, (input: &[f64], period: usize));

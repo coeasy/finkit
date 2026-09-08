@@ -134,6 +134,8 @@ pub fn linreg_slope(input: &[f64], period: usize) -> Result<Array1<f64>> {
 
     let mut sum_y = 0.0;
     let mut sum_xy = 0.0;
+    let reseed_interval = 32 * period;
+    let mut since_reseed = 0usize;
     for (j, &val) in input[..period].iter().enumerate() {
         sum_y += val;
         sum_xy += j as f64 * val;
@@ -146,6 +148,17 @@ pub fn linreg_slope(input: &[f64], period: usize) -> Result<Array1<f64>> {
         sum_xy += (period - 1) as f64 * new_val - (sum_y - old_val);
         sum_y += new_val - old_val;
         output[i] = (p * sum_xy - sum_x * sum_y) / denom;
+        since_reseed += 1;
+        if since_reseed == reseed_interval && i + 1 < len {
+            let start = i + 1 - period;
+            sum_y = 0.0;
+            sum_xy = 0.0;
+            for (j, &value) in input[start..=i].iter().enumerate() {
+                sum_y += value;
+                sum_xy += j as f64 * value;
+            }
+            since_reseed = 0;
+        }
     }
 
     Ok(output)
@@ -310,7 +323,7 @@ pub fn linreg_angle(input: &[f64], period: usize) -> Result<Array1<f64>> {
 
     let mut trailing_idx = 1usize;
     let mut trailing_value = input[0];
-    let mut bars_since_reseed = 32 * period;
+    let mut bars_since_reseed = 8 * period;
     let angle = |sxy: f64, sy: f64| {
         ((p * sxy - sum_x * sy) / divisor).atan() * (180.0 / std::f64::consts::PI)
     };
@@ -324,7 +337,7 @@ pub fn linreg_angle(input: &[f64], period: usize) -> Result<Array1<f64>> {
         bars_since_reseed -= 1;
 
         if bars_since_reseed == 0 || weighted_trailing.abs() > 100.0 * sum_abs {
-            bars_since_reseed = 32 * period;
+            bars_since_reseed = 8 * period;
             let window_start = today + 1 - period;
             sum_y = 0.0;
             sum_xy = 0.0;

@@ -168,6 +168,15 @@ if hasattr(_native, "_fast_sma"):
 
     sma = _translate_native_errors("sma", sma)
 
+    def ma(close, timeperiod=30, matype=0):
+        """Use the zero-copy SMA kernel for TA-Lib's default MA mode."""
+
+        if matype == 0:
+            return sma(close, timeperiod)
+        return _native.ma(close, timeperiod, matype)
+
+    ma = _translate_native_errors("ma", ma)
+
 if hasattr(_native, "_fast_ema"):
 
     def ema(close, timeperiod=14, out=None):
@@ -368,7 +377,19 @@ if hasattr(_native, "_fast_hlc_period"):
     def natr(high, low, close, timeperiod=14):
         return _hlc_period("natr", high, low, close, timeperiod)
 
-    for _fast_name in ("adx", "cci", "willr", "plus_di", "minus_di", "atr", "natr"):
+    def adxr(high, low, close, timeperiod=14):
+        return _hlc_period("adxr", high, low, close, timeperiod)
+
+    for _fast_name in (
+        "adx",
+        "adxr",
+        "cci",
+        "willr",
+        "plus_di",
+        "minus_di",
+        "atr",
+        "natr",
+    ):
         globals()[_fast_name] = _translate_native_errors(
             _fast_name, globals()[_fast_name]
         )
