@@ -40,17 +40,37 @@ fn rate_change_vec(input: &[f64], period: usize, mode: u8) -> PyResult<Vec<f64>>
     unsafe { raw_output.set_len(len) };
     let output = unsafe { std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast(), len) };
     output[..period].fill(f64::NAN);
-    for i in period..input.len() {
-        let previous = input[i - period];
-        output[i] = if previous.abs() > 1e-15 {
-            match mode {
-                0 => (input[i] - previous) / previous,
-                1 => input[i] / previous,
-                _ => input[i] / previous * 100.0,
+    match mode {
+        0 => {
+            for i in period..input.len() {
+                let previous = input[i - period];
+                output[i] = if previous.abs() > 1e-15 {
+                    (input[i] - previous) / previous
+                } else {
+                    f64::NAN
+                };
             }
-        } else {
-            f64::NAN
-        };
+        }
+        1 => {
+            for i in period..input.len() {
+                let previous = input[i - period];
+                output[i] = if previous.abs() > 1e-15 {
+                    input[i] / previous
+                } else {
+                    f64::NAN
+                };
+            }
+        }
+        _ => {
+            for i in period..input.len() {
+                let previous = input[i - period];
+                output[i] = if previous.abs() > 1e-15 {
+                    input[i] / previous * 100.0
+                } else {
+                    f64::NAN
+                };
+            }
+        }
     }
     let ptr = raw_output.as_mut_ptr().cast::<f64>();
     let capacity = raw_output.capacity();

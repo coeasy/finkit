@@ -128,19 +128,25 @@ fn mfi_period14_into(
         let close_ptr = close.as_ptr();
         let volume_ptr = volume.as_ptr();
         let output_ptr = output.as_mut_ptr();
+        let positive_ptr = positive_ring.as_mut_ptr();
+        let negative_ptr = negative_ring.as_mut_ptr();
         let mut prev_tp = typical_price(*high_ptr, *low_ptr, *close_ptr);
         for i in 1..close.len() {
             let tp = typical_price(*high_ptr.add(i), *low_ptr.add(i), *close_ptr.add(i));
             let money_flow = tp * *volume_ptr.add(i);
             let is_positive = tp > prev_tp;
             prev_tp = tp;
-
-            let positive = if is_positive { money_flow } else { 0.0 };
-            let negative = if is_positive { 0.0 } else { money_flow };
-            pos_sum += positive - *positive_ring.as_ptr().add(ring_idx);
-            neg_sum += negative - *negative_ring.as_ptr().add(ring_idx);
-            *positive_ring.as_mut_ptr().add(ring_idx) = positive;
-            *negative_ring.as_mut_ptr().add(ring_idx) = negative;
+            if is_positive {
+                pos_sum += money_flow - *positive_ptr.add(ring_idx);
+                neg_sum -= *negative_ptr.add(ring_idx);
+                *positive_ptr.add(ring_idx) = money_flow;
+                *negative_ptr.add(ring_idx) = 0.0;
+            } else {
+                pos_sum -= *positive_ptr.add(ring_idx);
+                neg_sum += money_flow - *negative_ptr.add(ring_idx);
+                *positive_ptr.add(ring_idx) = 0.0;
+                *negative_ptr.add(ring_idx) = money_flow;
+            }
             ring_idx += 1;
             if ring_idx == 14 {
                 ring_idx = 0;

@@ -177,10 +177,18 @@ fn trima<'py>(
     timeperiod: usize,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let real = real.as_slice().map_err(value_error)?;
-    let mut values = vec![0.0; real.len()];
-    py.detach(|| moving_avg::trima_into(real, timeperiod, &mut values))
+    let len = real.len();
+    let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    unsafe { raw_output.set_len(len) };
+    let output = unsafe { std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast(), len) };
+    py.detach(|| moving_avg::trima_into(real, timeperiod, output))
         .map_err(value_error)?;
-    Ok(PyArray1::from_vec(py, values))
+    let ptr = raw_output.as_mut_ptr().cast::<f64>();
+    let capacity = raw_output.capacity();
+    std::mem::forget(raw_output);
+    Ok(PyArray1::from_vec(py, unsafe {
+        Vec::from_raw_parts(ptr, len, capacity)
+    }))
 }
 unary_period!(rocp, "rocp", indicators::rocp, 10);
 unary_period!(rocr, "rocr", indicators::rocr, 10);
@@ -742,11 +750,37 @@ fn minmaxindex<'py>(
     ))
 }
 
+#[pyfunction(name = "cdl3outside")]
+fn cdl3outside<'py>(
+    py: Python<'py>,
+    open: PyReadonlyArray1<'py, f64>,
+    high: PyReadonlyArray1<'py, f64>,
+    low: PyReadonlyArray1<'py, f64>,
+    close: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<i32>>> {
+    let open = open.as_slice().map_err(value_error)?;
+    let high = high.as_slice().map_err(value_error)?;
+    let low = low.as_slice().map_err(value_error)?;
+    let close = close.as_slice().map_err(value_error)?;
+    let len = open.len();
+    let mut raw_output = Vec::<MaybeUninit<i32>>::with_capacity(len);
+    unsafe { raw_output.set_len(len) };
+    let output =
+        unsafe { std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<i32>(), len) };
+    py.detach(|| candlestick::cdl_3outside_into(open, high, low, close, output))
+        .map_err(value_error)?;
+    let ptr = raw_output.as_mut_ptr().cast::<i32>();
+    let capacity = raw_output.capacity();
+    std::mem::forget(raw_output);
+    Ok(PyArray1::from_vec(py, unsafe {
+        Vec::from_raw_parts(ptr, len, capacity)
+    }))
+}
+
 candle!(cdl2crows, "cdl2crows", cdl_2crows);
 candle!(cdl3blackcrows, "cdl3blackcrows", cdl_3black_crows);
 candle!(cdl3inside, "cdl3inside", cdl_3inside);
 candle!(cdl3linestrike, "cdl3linestrike", cdl_3linestrike);
-candle!(cdl3outside, "cdl3outside", cdl_3outside);
 candle!(cdl3starsinsouth, "cdl3starsinsouth", cdl_3starsinsouth);
 candle!(cdl3whitesoldiers, "cdl3whitesoldiers", cdl_3white_soldiers);
 candle!(cdlabandonedbaby, "cdlabandonedbaby", cdl_abandoned_baby);

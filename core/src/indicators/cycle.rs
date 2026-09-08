@@ -76,19 +76,8 @@ use ndarray::Array1;
 /// ```
 pub fn ht_dcperiod(input: &[f64]) -> Result<Array1<f64>> {
     validate_input(input.len(), 32)?;
-
-    let len = input.len();
-    let mut output = init_output(len);
-
-    // compute_hilbert_components 已经计算了 smooth_period
-    let (_detrender, _in_phase, _quadrature, _j1, _i2, _j2, _phase, period_out) =
-        compute_hilbert_components(input, len);
-
-    // 直接使用计算好的 period_out，从 index 32 开始有效
-    for i in 32..len {
-        output[i] = period_out[i];
-    }
-
+    let mut output = init_output(input.len());
+    ht_dcperiod_into(input, output.as_slice_mut().unwrap())?;
     Ok(output)
 }
 
@@ -115,18 +104,8 @@ pub fn ht_dcperiod(input: &[f64]) -> Result<Array1<f64>> {
 /// ```
 pub fn ht_dcphase(input: &[f64]) -> Result<Array1<f64>> {
     validate_input(input.len(), 32)?;
-
-    let len = input.len();
-    let mut output = init_output(len);
-
-    let (_detrender, _in_phase, _quadrature, _j1, _i2, _j2, phase, _period) =
-        compute_hilbert_components(input, len);
-
-    for i in 32..len {
-        // Convert phase from radians to degrees
-        output[i] = phase[i] * 180.0 / std::f64::consts::PI;
-    }
-
+    let mut output = init_output(input.len());
+    ht_dcphase_into(input, output.as_slice_mut().unwrap())?;
     Ok(output)
 }
 
@@ -154,21 +133,13 @@ pub fn ht_dcphase(input: &[f64]) -> Result<Array1<f64>> {
 /// ```
 pub fn ht_phasor(input: &[f64]) -> Result<(Array1<f64>, Array1<f64>)> {
     validate_input(input.len(), 32)?;
-
-    let len = input.len();
-    let mut in_phase_out = init_output(len);
-    let mut quadrature_out = init_output(len);
-
-    // 使用 IIR 递归滤波的 compute_hilbert_components（匹配 TA-Lib）
-    let (_detrender, in_phase, quadrature, _j1, _i2, _j2, _phase, _period) =
-        compute_hilbert_components(input, len);
-
-    // TA-Lib 兼容：首有效值从 index 32 开始
-    for i in 32..len {
-        in_phase_out[i] = in_phase[i];
-        quadrature_out[i] = quadrature[i];
-    }
-
+    let mut in_phase_out = init_output(input.len());
+    let mut quadrature_out = init_output(input.len());
+    ht_phasor_into(
+        input,
+        in_phase_out.as_slice_mut().unwrap(),
+        quadrature_out.as_slice_mut().unwrap(),
+    )?;
     Ok((in_phase_out, quadrature_out))
 }
 
@@ -195,31 +166,13 @@ pub fn ht_phasor(input: &[f64]) -> Result<(Array1<f64>, Array1<f64>)> {
 /// ```
 pub fn ht_sine(input: &[f64]) -> Result<(Array1<f64>, Array1<f64>)> {
     validate_input(input.len(), 32)?;
-
-    let len = input.len();
-    let mut sine = init_output(len);
-    let mut lead_sine = init_output(len);
-
-    let (_detrender, _in_phase, _quadrature, _j1, _i2, _j2, phase, _period) =
-        compute_hilbert_components(input, len);
-
-    // `phase` is atan(im/re) ∈ (-π/2, π/2): a bounded domain where the SIMD
-    // sin/cos polynomial is accurate to ~1e-11. Batch it through simd_sin_cos.
-    let mut phase_sin = vec![0.0_f64; len];
-    let mut phase_cos = vec![0.0_f64; len];
-    simd_ops::simd_sin_cos(
-        &phase[32..len],
-        &mut phase_sin[32..len],
-        &mut phase_cos[32..len],
-    );
-
-    // lead_sine = sin(p)·cos(π/4) + cos(p)·sin(π/4) = (sin(p) + cos(p))·√2/2
-    let lead_c = std::f64::consts::FRAC_1_SQRT_2; // cos(π/4) = sin(π/4) = √2/2
-    for i in 32..len {
-        sine[i] = phase_sin[i];
-        lead_sine[i] = (phase_sin[i] + phase_cos[i]) * lead_c;
-    }
-
+    let mut sine = init_output(input.len());
+    let mut lead_sine = init_output(input.len());
+    ht_sine_into(
+        input,
+        sine.as_slice_mut().unwrap(),
+        lead_sine.as_slice_mut().unwrap(),
+    )?;
     Ok((sine, lead_sine))
 }
 
@@ -248,24 +201,8 @@ pub fn ht_sine(input: &[f64]) -> Result<(Array1<f64>, Array1<f64>)> {
 /// ```
 pub fn ht_trendmode(input: &[f64]) -> Result<Array1<f64>> {
     validate_input(input.len(), 32)?;
-
-    let len = input.len();
-    let mut output = init_output(len);
-
-    let (_detrender, _in_phase, _quadrature, _j1, _i2, _j2, _phase, period_out) =
-        compute_hilbert_components(input, len);
-
-    // 使用计算好的 period_out，从 index 32 开始有效
-    for i in 32..len {
-        let dc_period = period_out[i];
-        // Trend mode when period is at extreme values
-        if dc_period <= 6.0 || dc_period >= 36.0 {
-            output[i] = 1.0;
-        } else {
-            output[i] = 0.0;
-        }
-    }
-
+    let mut output = init_output(input.len());
+    ht_trendmode_into(input, output.as_slice_mut().unwrap())?;
     Ok(output)
 }
 
@@ -342,36 +279,8 @@ pub fn ht_measurement(input: &[f64]) -> Result<Array1<f64>> {
 /// ```
 pub fn ht_trendline(input: &[f64]) -> Result<Array1<f64>> {
     validate_input(input.len(), 32)?;
-
-    let len = input.len();
-    let mut output = init_output(len);
-
-    let (_detrender, _in_phase, _quadrature, _j1, _i2, _j2, _phase, period_out) =
-        compute_hilbert_components(input, len);
-
-    let mut prev_trendline = 0.0;
-
-    for i in 32..len {
-        // WMA(4) smooth price: (4*price + 3*price[1] + 2*price[2] + price[3]) / 10
-        let smooth_price =
-            (4.0 * input[i] + 3.0 * input[i - 1] + 2.0 * input[i - 2] + input[i - 3]) / 10.0;
-
-        // TA-Lib 兼容：trend mode 当 dc_period <= 6 或 >= 36
-        let dc_period = period_out[i];
-        let trend_mode = dc_period <= 6.0 || dc_period >= 36.0;
-
-        let today_trendline = if trend_mode {
-            // Trend mode: 2:1 weighted average with previous trendline
-            (smooth_price + 2.0 * prev_trendline) / 3.0
-        } else {
-            // Cycle mode: reset to smooth price
-            smooth_price
-        };
-
-        prev_trendline = today_trendline;
-        output[i] = today_trendline;
-    }
-
+    let mut output = init_output(input.len());
+    ht_trendline_into(input, output.as_slice_mut().unwrap())?;
     Ok(output)
 }
 

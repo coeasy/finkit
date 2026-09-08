@@ -1,7 +1,6 @@
 use crate::error::{Result, TaError};
 use crate::utils::validate_input;
 use ndarray::Array1;
-use std::mem::{forget, MaybeUninit};
 
 /// Candlestick pattern result
 /// Values: 100 for bullish, -100 for bearish, 0 for no pattern
@@ -3030,6 +3029,19 @@ pub fn cdl_3outside(
     low: &[f64],
     close: &[f64],
 ) -> Result<PatternResult> {
+    let mut output = PatternResult::zeros(open.len());
+    cdl_3outside_into(open, high, low, close, output.as_slice_mut().unwrap())?;
+    Ok(output)
+}
+
+/// Caller-owned CDL3OUTSIDE kernel used by the Python fast path.
+pub fn cdl_3outside_into(
+    open: &[f64],
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    output: &mut [i32],
+) -> Result<()> {
     if open.len() != high.len() || open.len() != low.len() || open.len() != close.len() {
         return Err(TaError::InvalidParameter {
             name: "open, high, low, close".to_string(),
@@ -3037,49 +3049,35 @@ pub fn cdl_3outside(
         });
     }
     validate_input(open.len(), 3)?;
+    if output.len() != open.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
     let len = open.len();
-    let mut raw_output = Vec::<MaybeUninit<i32>>::with_capacity(len);
-    unsafe { raw_output.set_len(len) };
+    output.fill(0);
     let open_ptr = open.as_ptr();
     let close_ptr = close.as_ptr();
-    let output_ptr = raw_output.as_mut_ptr();
-    // TA-Lib's lookback is three bars for this pattern; keep index two at the
-    // neutral value even though the local shape only references three bars.
-    unsafe {
-        for i in 0..3.min(len) {
-            output_ptr.add(i).write(MaybeUninit::new(0));
-        }
-        for i in 3..len {
+    let output_ptr = output.as_mut_ptr();
+    for i in 3..len {
+        unsafe {
             let open_2 = *open_ptr.add(i - 2);
             let close_2 = *close_ptr.add(i - 2);
             let open_1 = *open_ptr.add(i - 1);
             let close_1 = *close_ptr.add(i - 1);
             let close_0 = *close_ptr.add(i);
-            let value = if close_1 >= open_1
-                && close_2 < open_2
-                && close_1 > open_2
-                && open_1 < close_2
-                && close_0 > close_1
+            if close_1 >= open_1 {
+                if close_2 < open_2 && close_1 > open_2 && open_1 < close_2 && close_0 > close_1 {
+                    *output_ptr.add(i) = 100;
+                }
+            } else if close_2 >= open_2 && open_1 > close_2 && close_1 < open_2 && close_0 < close_1
             {
-                100
-            } else if close_1 < open_1
-                && close_2 >= open_2
-                && open_1 > close_2
-                && close_1 < open_2
-                && close_0 < close_1
-            {
-                -100
-            } else {
-                0
-            };
-            output_ptr.add(i).write(MaybeUninit::new(value));
+                *output_ptr.add(i) = -100;
+            }
         }
-        let ptr = raw_output.as_mut_ptr().cast::<i32>();
-        let capacity = raw_output.capacity();
-        let length = raw_output.len();
-        forget(raw_output);
-        Ok(Array1::from_vec(Vec::from_raw_parts(ptr, length, capacity)))
     }
+    Ok(())
 }
 
 /// CDL3STARSINSOUTH — Three Stars In The South

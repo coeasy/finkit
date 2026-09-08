@@ -202,10 +202,18 @@ fn adosc_default_3_10_into(
         let close_ptr = close.as_ptr();
         let volume_ptr = volume.as_ptr();
         let output_ptr = output.as_mut_ptr();
-        let mut cumulative = 0.0;
-        let mut fast_ema = 0.0;
-        let mut slow_ema = 0.0;
-        for i in 0..high.len() {
+        output[..9].fill(f64::NAN);
+
+        let range = *high_ptr - *low_ptr;
+        let mut cumulative = if range > 0.0 {
+            (((*close_ptr - *low_ptr) - (*high_ptr - *close_ptr)) / range) * *volume_ptr
+        } else {
+            0.0
+        };
+        let mut fast_ema = cumulative;
+        let mut slow_ema = cumulative;
+
+        for i in 1..=9 {
             let h = *high_ptr.add(i);
             let l = *low_ptr.add(i);
             let range = h - l;
@@ -214,18 +222,22 @@ fn adosc_default_3_10_into(
                 let multiplier = ((c - l) - (h - c)) / range;
                 cumulative += multiplier * *volume_ptr.add(i);
             }
-            if i == 0 {
-                fast_ema = cumulative;
-                slow_ema = cumulative;
-            } else {
-                fast_ema = cumulative * 0.5 + fast_ema * 0.5;
-                slow_ema = cumulative * (2.0 / 11.0) + slow_ema * (1.0 - 2.0 / 11.0);
+            fast_ema = cumulative * 0.5 + fast_ema * 0.5;
+            slow_ema = cumulative * (2.0 / 11.0) + slow_ema * (1.0 - 2.0 / 11.0);
+        }
+        *output_ptr.add(9) = fast_ema - slow_ema;
+
+        for i in 10..high.len() {
+            let h = *high_ptr.add(i);
+            let l = *low_ptr.add(i);
+            let range = h - l;
+            if range > 0.0 {
+                let c = *close_ptr.add(i);
+                cumulative += (((c - l) - (h - c)) / range) * *volume_ptr.add(i);
             }
-            *output_ptr.add(i) = if i >= 9 {
-                fast_ema - slow_ema
-            } else {
-                f64::NAN
-            };
+            fast_ema = cumulative * 0.5 + fast_ema * 0.5;
+            slow_ema = cumulative * (2.0 / 11.0) + slow_ema * (1.0 - 2.0 / 11.0);
+            *output_ptr.add(i) = fast_ema - slow_ema;
         }
     }
     Ok(())
