@@ -6,28 +6,39 @@ use ndarray::Array1;
 /// Values: 100 for bullish, -100 for bearish, 0 for no pattern
 pub type PatternResult = Array1<i32>;
 
-/// Average True Range for candlestick calculations
-fn candle_avg_range(high: &[f64], low: &[f64], close: &[f64], period: usize, idx: usize) -> f64 {
-    let mut sum = 0.0;
-    let start = if idx >= period { idx - period + 1 } else { 0 };
-    let count = idx - start + 1;
+/// Precompute the average true range used by all candles in one pattern.
+///
+/// Candlestick rules often inspect the same rolling range several times per
+/// candle. Building it once keeps the hot loop branch-free and reduces the
+/// usual O(n * period) implementation to O(n).
+fn candle_avg_ranges(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Vec<f64> {
+    let mut ranges = Vec::with_capacity(high.len());
+    let mut rolling_sum = 0.0;
 
-    for i in start..=idx {
-        if i == 0 {
-            sum += high[i] - low[i];
+    for i in 0..high.len() {
+        let true_range = if i == 0 {
+            high[i] - low[i]
         } else {
-            let tr = (high[i] - low[i])
+            (high[i] - low[i])
                 .max((high[i] - close[i - 1]).abs())
-                .max((low[i] - close[i - 1]).abs());
-            sum += tr;
+                .max((low[i] - close[i - 1]).abs())
+        };
+        rolling_sum += true_range;
+        if i >= period {
+            let old_true_range = if i - period == 0 {
+                high[0] - low[0]
+            } else {
+                (high[i - period] - low[i - period])
+                    .max((high[i - period] - close[i - period - 1]).abs())
+                    .max((low[i - period] - close[i - period - 1]).abs())
+            };
+            rolling_sum -= old_true_range;
         }
+        let count = (i + 1).min(period);
+        ranges.push(rolling_sum / count as f64);
     }
 
-    if count > 0 {
-        sum / count as f64
-    } else {
-        0.0
-    }
+    ranges
 }
 
 /// Candle body size
@@ -83,9 +94,10 @@ pub fn doji(
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let avg_ranges = candle_avg_ranges(high, low, close, period);
 
     for i in period..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
+        let avg_range = avg_ranges[i];
         let body_size = body(open[i], close[i]);
 
         if body_size <= avg_range * doji_pct {
@@ -117,9 +129,10 @@ pub fn dragonfly_doji(
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let avg_ranges = candle_avg_ranges(high, low, close, period);
 
     for i in period..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
+        let avg_range = avg_ranges[i];
         let body_size = body(open[i], close[i]);
         let up_shadow = upper_shadow(high[i], open[i], close[i]);
         let lo_shadow = lower_shadow(low[i], open[i], close[i]);
@@ -156,9 +169,10 @@ pub fn gravestone_doji(
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let avg_ranges = candle_avg_ranges(high, low, close, period);
 
     for i in period..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
+        let avg_range = avg_ranges[i];
         let body_size = body(open[i], close[i]);
         let up_shadow = upper_shadow(high[i], open[i], close[i]);
         let lo_shadow = lower_shadow(low[i], open[i], close[i]);
@@ -195,9 +209,10 @@ pub fn long_legged_doji(
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let avg_ranges = candle_avg_ranges(high, low, close, period);
 
     for i in period..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
+        let avg_range = avg_ranges[i];
         let body_size = body(open[i], close[i]);
         let up_shadow = upper_shadow(high[i], open[i], close[i]);
         let lo_shadow = lower_shadow(low[i], open[i], close[i]);
@@ -302,9 +317,10 @@ pub fn hammer(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result<
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let avg_ranges = candle_avg_ranges(high, low, close, period);
 
     for i in period..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
+        let avg_range = avg_ranges[i];
         let body_size = body(open[i], close[i]);
         let up_shadow = upper_shadow(high[i], open[i], close[i]);
         let lo_shadow = lower_shadow(low[i], open[i], close[i]);
@@ -341,9 +357,10 @@ pub fn inverted_hammer(
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let avg_ranges = candle_avg_ranges(high, low, close, period);
 
     for i in period..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
+        let avg_range = avg_ranges[i];
         let body_size = body(open[i], close[i]);
         let up_shadow = upper_shadow(high[i], open[i], close[i]);
         let lo_shadow = lower_shadow(low[i], open[i], close[i]);
@@ -541,11 +558,12 @@ pub fn harami_cross(
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let avg_ranges = candle_avg_ranges(high, low, close, period);
 
     for i in period..len {
         let prev_body = body(open[i - 1], close[i - 1]);
         let curr_body = body(open[i], close[i]);
-        let avg_range = candle_avg_range(high, low, close, period, i);
+        let avg_range = avg_ranges[i];
 
         if curr_body < avg_range * 0.1 && curr_body < prev_body * 0.5 {
             let prev_high = open[i - 1].max(close[i - 1]);
@@ -669,6 +687,7 @@ pub fn morning_doji_star(
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let avg_ranges = candle_avg_ranges(high, low, close, period);
 
     for i in period..len {
         if i < 2 {
@@ -677,7 +696,7 @@ pub fn morning_doji_star(
         let first_body = body(open[i - 2], close[i - 2]);
         let second_body = body(open[i - 1], close[i - 1]);
         let third_body = body(open[i], close[i]);
-        let avg_range = candle_avg_range(high, low, close, period, i);
+        let avg_range = avg_ranges[i];
 
         if is_bearish(open[i - 2], close[i - 2])
             && second_body < avg_range * doji_pct
@@ -712,6 +731,7 @@ pub fn evening_doji_star(
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let avg_ranges = candle_avg_ranges(high, low, close, period);
 
     for i in period..len {
         if i < 2 {
@@ -720,7 +740,7 @@ pub fn evening_doji_star(
         let first_body = body(open[i - 2], close[i - 2]);
         let second_body = body(open[i - 1], close[i - 1]);
         let third_body = body(open[i], close[i]);
-        let avg_range = candle_avg_range(high, low, close, period, i);
+        let avg_range = avg_ranges[i];
 
         if is_bullish(open[i - 2], close[i - 2])
             && second_body < avg_range * doji_pct
@@ -755,12 +775,13 @@ pub fn three_white_soldiers(
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let avg_ranges = candle_avg_ranges(high, low, close, period);
 
     for i in period..len {
         if i < 2 {
             continue;
         }
-        let avg_range = candle_avg_range(high, low, close, period, i);
+        let avg_range = avg_ranges[i];
 
         let all_bullish = is_bullish(open[i], close[i])
             && is_bullish(open[i - 1], close[i - 1])
@@ -805,12 +826,13 @@ pub fn three_black_crows(
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let avg_ranges = candle_avg_ranges(high, low, close, period);
 
     for i in period..len {
         if i < 2 {
             continue;
         }
-        let avg_range = candle_avg_range(high, low, close, period, i);
+        let avg_range = avg_ranges[i];
 
         let all_bearish = is_bearish(open[i], close[i])
             && is_bearish(open[i - 1], close[i - 1])
@@ -1173,9 +1195,10 @@ pub fn spinning_top(
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let avg_ranges = candle_avg_ranges(high, low, close, period);
 
     for i in period..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
+        let avg_range = avg_ranges[i];
         let body_size = body(open[i], close[i]);
         let up_shadow = upper_shadow(high[i], open[i], close[i]);
         let lo_shadow = lower_shadow(low[i], open[i], close[i]);
@@ -1207,9 +1230,10 @@ pub fn high_wave(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Resu
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let avg_ranges = candle_avg_ranges(high, low, close, period);
 
     for i in period..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
+        let avg_range = avg_ranges[i];
         let body_size = body(open[i], close[i]);
         let total_shadow =
             upper_shadow(high[i], open[i], close[i]) + lower_shadow(low[i], open[i], close[i]);
@@ -1242,9 +1266,10 @@ pub fn rickshaw_man(
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let avg_ranges = candle_avg_ranges(high, low, close, period);
 
     for i in period..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
+        let avg_range = avg_ranges[i];
         let body_size = body(open[i], close[i]);
         let midpoint = (high[i] + low[i]) / 2.0;
         let open_close_mid = (open[i] + close[i]) / 2.0;
@@ -1276,9 +1301,10 @@ pub fn short_line(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Res
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let avg_ranges = candle_avg_ranges(high, low, close, period);
 
     for i in period..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
+        let avg_range = avg_ranges[i];
         let range = high[i] - low[i];
 
         if range < avg_range * 0.3 {
@@ -1304,9 +1330,10 @@ pub fn long_line(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Resu
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let avg_ranges = candle_avg_ranges(high, low, close, period);
 
     for i in period..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
+        let avg_range = avg_ranges[i];
         let body_size = body(open[i], close[i]);
 
         if body_size > avg_range * 2.0 {
@@ -1752,12 +1779,13 @@ pub fn identical_3crows(
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let avg_ranges = candle_avg_ranges(high, low, close, period);
 
     for i in period..len {
         if i < 2 {
             continue;
         }
-        let avg_range = candle_avg_range(high, low, close, period, i);
+        let avg_range = avg_ranges[i];
 
         if is_bearish(open[i - 2], close[i - 2])
             && is_bearish(open[i - 1], close[i - 1])
@@ -1900,9 +1928,10 @@ pub fn kicking(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let avg_ranges = candle_avg_ranges(high, low, close, period);
 
     for i in 1..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
+        let avg_range = avg_ranges[i];
         let body_1 = body(open[i - 1], close[i - 1]);
         let body_2 = body(open[i], close[i]);
 
@@ -1947,9 +1976,10 @@ pub fn kicking_by_length(
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let avg_ranges = candle_avg_ranges(high, low, close, period);
 
     for i in 1..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
+        let avg_range = avg_ranges[i];
         let body_1 = body(open[i - 1], close[i - 1]);
         let body_2 = body(open[i], close[i]);
 
@@ -1991,12 +2021,13 @@ pub fn advance_block(
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let avg_ranges = candle_avg_ranges(high, low, close, period);
 
     for i in period..len {
         if i < 2 {
             continue;
         }
-        let avg_range = candle_avg_range(high, low, close, period, i);
+        let avg_range = avg_ranges[i];
 
         if is_bullish(open[i - 2], close[i - 2])
             && is_bullish(open[i - 1], close[i - 1])
@@ -2033,12 +2064,13 @@ pub fn stalled_pattern(
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let avg_ranges = candle_avg_ranges(high, low, close, period);
 
     for i in period..len {
         if i < 2 {
             continue;
         }
-        let avg_range = candle_avg_range(high, low, close, period, i);
+        let avg_range = avg_ranges[i];
 
         if is_bullish(open[i - 2], close[i - 2])
             && is_bullish(open[i - 1], close[i - 1])
@@ -2184,8 +2216,9 @@ pub fn cdl_doji_star(
     validate_input(open.len(), 2)?;
     let len = open.len();
     let mut output = PatternResult::zeros(len);
+    let avg_ranges = candle_avg_ranges(high, low, close, 10);
     for i in 1..len {
-        let avg = candle_avg_range(high, low, close, 10, i);
+        let avg = avg_ranges[i];
         let body_prev = body(open[i - 1], close[i - 1]);
         let body_curr = body(open[i], close[i]);
         let is_doji = body_curr < avg * 0.1;
@@ -2409,11 +2442,12 @@ pub fn cdl_takuri(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Res
     validate_input(open.len(), 1)?;
     let len = open.len();
     let mut output = PatternResult::zeros(len);
+    let avg_ranges = candle_avg_ranges(high, low, close, 10);
     for i in 0..len {
         let b = body(open[i], close[i]);
         let ls = lower_shadow(low[i], open[i], close[i]);
         let us = upper_shadow(high[i], open[i], close[i]);
-        let avg = candle_avg_range(high, low, close, 10, i);
+        let avg = avg_ranges[i];
         if b < avg * 0.1 && ls > avg * 2.0 && us < avg * 0.1 {
             output[i] = 100;
         }
@@ -2437,8 +2471,9 @@ pub fn cdl_tristar(
     validate_input(open.len(), 3)?;
     let len = open.len();
     let mut output = PatternResult::zeros(len);
+    let avg_ranges = candle_avg_ranges(high, low, close, 10);
     for i in 2..len {
-        let avg = candle_avg_range(high, low, close, 10, i);
+        let avg = avg_ranges[i];
         let threshold = avg * 0.1;
         let doji1 = body(open[i - 2], close[i - 2]) < threshold;
         let doji2 = body(open[i - 1], close[i - 1]) < threshold;
@@ -2824,11 +2859,12 @@ pub fn cdl_majorminority(
     let len = open.len();
     let mut output = PatternResult::zeros(len);
     let period = 10;
+    let avg_ranges = candle_avg_ranges(high, low, close, period);
     for i in period..len {
         if i < 2 {
             continue;
         }
-        let avg_range = candle_avg_range(high, low, close, period, i);
+        let avg_range = avg_ranges[i];
         let body1 = body(open[i - 2], close[i - 2]);
         let body2 = body(open[i - 1], close[i - 1]);
         let body3 = body(open[i], close[i]);
