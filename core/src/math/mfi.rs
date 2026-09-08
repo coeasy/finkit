@@ -244,8 +244,8 @@ fn mfi_period14_into(
     output: &mut [f64],
 ) -> Result<()> {
     output[..14].fill(f64::NAN);
-    let mut flow_ring = [0.0_f64; 14];
-    let flow_ptr = flow_ring.as_mut_ptr();
+    let mut positive_ring = [0.0_f64; 14];
+    let mut negative_ring = [0.0_f64; 14];
     let mut pos_sum = 0.0;
     let mut neg_sum = 0.0;
     let mut ring_idx = 0usize;
@@ -260,25 +260,15 @@ fn mfi_period14_into(
         for i in 1..close.len() {
             let tp = typical_price(*high_ptr.add(i), *low_ptr.add(i), *close_ptr.add(i));
             let money_flow = tp * *volume_ptr.add(i);
-            let signed_flow = if tp > prev_tp {
-                money_flow
-            } else {
-                -money_flow
-            };
+            let is_positive = tp > prev_tp;
             prev_tp = tp;
 
-            let old_flow = *flow_ptr.add(ring_idx);
-            if old_flow > 0.0 {
-                pos_sum -= old_flow;
-            } else if old_flow < 0.0 {
-                neg_sum += old_flow;
-            }
-            if signed_flow > 0.0 {
-                pos_sum += signed_flow;
-            } else if signed_flow < 0.0 {
-                neg_sum -= signed_flow;
-            }
-            *flow_ptr.add(ring_idx) = signed_flow;
+            let positive = if is_positive { money_flow } else { 0.0 };
+            let negative = if is_positive { 0.0 } else { money_flow };
+            pos_sum += positive - *positive_ring.as_ptr().add(ring_idx);
+            neg_sum += negative - *negative_ring.as_ptr().add(ring_idx);
+            *positive_ring.as_mut_ptr().add(ring_idx) = positive;
+            *negative_ring.as_mut_ptr().add(ring_idx) = negative;
             ring_idx += 1;
             if ring_idx == 14 {
                 ring_idx = 0;

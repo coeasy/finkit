@@ -726,6 +726,8 @@ fn compute_hilbert_short<const PHASOR: bool, const TRENDLINE: bool>(
         }
     }
     first.fill(f64::NAN);
+    let input_ptr = input.as_ptr();
+    let first_ptr = first.as_mut_ptr();
     let second_ptr = second.map(|values| {
         values.fill(f64::NAN);
         values.as_mut_ptr()
@@ -784,26 +786,27 @@ fn compute_hilbert_short<const PHASOR: bool, const TRENDLINE: bool>(
     };
 
     let mut trailing_wma_idx = 0usize;
-    let mut period_wma_sub = input[0] + input[1] + input[2];
-    let mut period_wma_sum = input[0] + 2.0 * input[1] + 3.0 * input[2];
+    let mut period_wma_sub = unsafe { *input_ptr.add(0) + *input_ptr.add(1) + *input_ptr.add(2) };
+    let mut period_wma_sum =
+        unsafe { *input_ptr.add(0) + 2.0 * *input_ptr.add(1) + 3.0 * *input_ptr.add(2) };
     let mut trailing_wma_value = 0.0;
     let wma_warmup = if TRENDLINE { 34 } else { 9 };
     for today in 3..(3 + wma_warmup) {
-        let value = input[today];
+        let value = unsafe { *input_ptr.add(today) };
         period_wma_sub += value;
         period_wma_sub -= trailing_wma_value;
         period_wma_sum += value * 4.0;
-        trailing_wma_value = input[trailing_wma_idx];
+        trailing_wma_value = unsafe { *input_ptr.add(trailing_wma_idx) };
         trailing_wma_idx += 1;
         period_wma_sum -= period_wma_sub;
     }
 
     for i in (3 + wma_warmup)..input.len() {
-        let value = input[i];
+        let value = unsafe { *input_ptr.add(i) };
         period_wma_sub += value;
         period_wma_sub -= trailing_wma_value;
         period_wma_sum += value * 4.0;
-        trailing_wma_value = input[trailing_wma_idx];
+        trailing_wma_value = unsafe { *input_ptr.add(trailing_wma_idx) };
         trailing_wma_idx += 1;
         let smoothed = period_wma_sum * 0.1;
         period_wma_sum -= period_wma_sub;
@@ -925,16 +928,16 @@ fn compute_hilbert_short<const PHASOR: bool, const TRENDLINE: bool>(
             i_trend2 = i_trend1;
             i_trend1 = instant_trend;
             if i >= 63 {
-                first[i] = trendline;
+                unsafe { *first_ptr.add(i) = trendline };
             }
         } else if i >= 32 {
             if PHASOR {
-                first[i] = i1_value;
+                unsafe { *first_ptr.add(i) = i1_value };
                 if let Some(ptr) = second_ptr {
                     unsafe { *ptr.add(i) = q1_value };
                 }
             } else {
-                first[i] = smooth_period;
+                unsafe { *first_ptr.add(i) = smooth_period };
             }
         }
     }

@@ -1000,11 +1000,6 @@ pub fn three_black_crows(
             && open[i - 1] > close[i - 2]
             && open[i] < open[i - 1]
             && open[i] > close[i - 1];
-        let lower_shadows_short = open[i - 2].min(close[i - 2]) - low[i - 2]
-            < 0.1 * (shadow_total[2] / 10.0)
-            && open[i - 1].min(close[i - 1]) - low[i - 1] < 0.1 * (shadow_total[1] / 10.0)
-            && open[i].min(close[i]) - low[i] < 0.1 * (shadow_total[0] / 10.0);
-
         if close[i - 3] >= open[i - 3]
             && first_black
             && second_black
@@ -1013,9 +1008,14 @@ pub fn three_black_crows(
             && high[i - 3] > close[i - 2]
             && close[i - 2] > close[i - 1]
             && close[i - 1] > close[i]
-            && lower_shadows_short
         {
-            unsafe { *output_ptr.add(i) = -100 };
+            let lower_shadows_short = open[i - 2].min(close[i - 2]) - low[i - 2]
+                < 0.1 * (shadow_total[2] / 10.0)
+                && open[i - 1].min(close[i - 1]) - low[i - 1] < 0.1 * (shadow_total[1] / 10.0)
+                && open[i].min(close[i]) - low[i] < 0.1 * (shadow_total[0] / 10.0);
+            if lower_shadows_short {
+                unsafe { *output_ptr.add(i) = -100 };
+            }
         }
 
         shadow_total[2] += (high[i - 2] - low[i - 2]) - (high[i - 12] - low[i - 12]);
