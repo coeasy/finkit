@@ -284,6 +284,35 @@ fn ppo_compat<'py>(
     let real = real.as_slice().map_err(value_error)?;
     let values = py
         .detach(|| {
+            if matype == 0 {
+                if fastperiod == 0
+                    || slowperiod == 0
+                    || real.len() < fastperiod
+                    || real.len() < slowperiod
+                {
+                    return indicators::ppo(real, fastperiod, slowperiod);
+                }
+                let mut output = vec![f64::NAN; real.len()];
+                let mut fast_sum = real[..fastperiod].iter().sum::<f64>();
+                let mut slow_sum = real[..slowperiod].iter().sum::<f64>();
+                for i in 0..real.len() {
+                    if i >= fastperiod {
+                        fast_sum += real[i] - real[i - fastperiod];
+                    }
+                    if i >= slowperiod {
+                        slow_sum += real[i] - real[i - slowperiod];
+                    }
+                    if i + 1 >= slowperiod {
+                        let slow = slow_sum / slowperiod as f64;
+                        output[i] = if slow.abs() > 1e-15 {
+                            (fast_sum / fastperiod as f64 - slow) / slow * 100.0
+                        } else {
+                            0.0
+                        };
+                    }
+                }
+                return Ok::<_, ::finkit::error::TaError>(ndarray::Array1::from_vec(output));
+            }
             let ma_type = match matype {
                 0 => indicators::MaType::Sma,
                 1 => indicators::MaType::Ema,

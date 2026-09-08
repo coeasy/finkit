@@ -13,6 +13,7 @@ pub type PatternResult = Array1<i32>;
 /// usual O(n * period) implementation to O(n).
 fn candle_avg_ranges(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Vec<f64> {
     let mut ranges = Vec::with_capacity(high.len());
+    let mut true_ranges = Vec::with_capacity(high.len());
     let mut rolling_sum = 0.0;
 
     for i in 0..high.len() {
@@ -23,16 +24,10 @@ fn candle_avg_ranges(high: &[f64], low: &[f64], close: &[f64], period: usize) ->
                 .max((high[i] - close[i - 1]).abs())
                 .max((low[i] - close[i - 1]).abs())
         };
+        true_ranges.push(true_range);
         rolling_sum += true_range;
         if i >= period {
-            let old_true_range = if i - period == 0 {
-                high[0] - low[0]
-            } else {
-                (high[i - period] - low[i - period])
-                    .max((high[i - period] - close[i - period - 1]).abs())
-                    .max((low[i - period] - close[i - period - 1]).abs())
-            };
-            rolling_sum -= old_true_range;
+            rolling_sum -= true_ranges[i - period];
         }
         let count = (i + 1).min(period);
         ranges.push(rolling_sum / count as f64);

@@ -33,6 +33,47 @@ fn validate_period(len: usize, period: usize) -> PyResult<()> {
 }
 
 #[inline]
+fn rate_change_vec(input: &[f64], period: usize, mode: u8) -> PyResult<Vec<f64>> {
+    validate_period(input.len(), period + 1)?;
+    let mut output = vec![f64::NAN; input.len()];
+    for i in period..input.len() {
+        let previous = input[i - period];
+        if previous.abs() > 1e-15 {
+            output[i] = match mode {
+                0 => (input[i] - previous) / previous,
+                1 => input[i] / previous,
+                _ => input[i] / previous * 100.0,
+            };
+        }
+    }
+    Ok(output)
+}
+
+#[pyfunction(name = "_fast_rocp")]
+#[pyo3(signature = (close, timeperiod=10))]
+fn fast_rocp<'py>(
+    py: Python<'py>,
+    close: PyReadonlyArray1<'py, f64>,
+    timeperiod: usize,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let close = close.as_slice().map_err(value_error)?;
+    let values = py.detach(|| rate_change_vec(close, timeperiod, 0))?;
+    Ok(PyArray1::from_vec(py, values))
+}
+
+#[pyfunction(name = "_fast_rocr100")]
+#[pyo3(signature = (close, timeperiod=10))]
+fn fast_rocr100<'py>(
+    py: Python<'py>,
+    close: PyReadonlyArray1<'py, f64>,
+    timeperiod: usize,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let close = close.as_slice().map_err(value_error)?;
+    let values = py.detach(|| rate_change_vec(close, timeperiod, 2))?;
+    Ok(PyArray1::from_vec(py, values))
+}
+
+#[inline]
 fn validate_same_len(a: usize, b: usize) -> PyResult<()> {
     if a != b {
         return Err(value_error(
@@ -802,13 +843,11 @@ fn fast_mama<'py>(
     slowlimit: f64,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
     let close = close.as_slice().map_err(value_error)?;
-    let output = py
-        .detach(|| indicators::mama(close, fastlimit, slowlimit))
+    let mut mama = vec![f64::NAN; close.len()];
+    let mut fama = vec![f64::NAN; close.len()];
+    py.detach(|| indicators::mama_into(close, fastlimit, slowlimit, &mut mama, &mut fama))
         .map_err(value_error)?;
-    Ok((
-        PyArray1::from_vec(py, output.mama.into_raw_vec()),
-        PyArray1::from_vec(py, output.fama.into_raw_vec()),
-    ))
+    Ok((PyArray1::from_vec(py, mama), PyArray1::from_vec(py, fama)))
 }
 
 macro_rules! fast_ht_unary {
@@ -1050,6 +1089,8 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(fast_vwap, m)?)?;
     m.add_function(wrap_pyfunction!(fast_vwap_into, m)?)?;
     m.add_function(wrap_pyfunction!(fast_mom, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_rocp, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_rocr100, m)?)?;
     m.add_function(wrap_pyfunction!(fast_unary_period, m)?)?;
     m.add_function(wrap_pyfunction!(fast_unary_period_scale, m)?)?;
     m.add_function(wrap_pyfunction!(fast_kama, m)?)?;

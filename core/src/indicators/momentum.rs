@@ -2427,7 +2427,10 @@ pub fn adxr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<A
 
     for i in period..len {
         let cur = adx_vals[i];
-        let prev = adx_vals[i - period];
+        // TA-Lib's ADXR consumes the internal ADX value one bar after the
+        // public ADX lookback.  This is why the first ADXR value appears at
+        // 3 * period - 2 rather than 3 * period - 1.
+        let prev = adx_vals[i + 1 - period];
         if !cur.is_nan() && !prev.is_nan() {
             output[i] = (cur + prev) * 0.5;
         }
@@ -2451,12 +2454,71 @@ pub fn adxr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<A
 /// assert_eq!(result.len(), 10);
 /// ```
 pub fn aroonosc(high: &[f64], low: &[f64], period: usize) -> Result<Array1<f64>> {
-    // Reuse the canonical AROON kernel so both indicators share TA-Lib's
-    // period+1 lookback and tie-breaking rules.  The old specialised
-    // oscillator path seeded its first window with an absolute index and
-    // consequently under-reported the first oscillator value by one step.
-    let result = aroon(high, low, period)?;
-    Ok(&result.aroon_up - &result.aroon_down)
+    if high.len() != low.len() {
+        return Err(TaError::InvalidParameter {
+            name: "high and low".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    validate_input(high.len(), period + 1)?;
+    let mut output = Array1::from_elem(high.len(), f64::NAN);
+    let inv_period = 100.0 / period as f64;
+    let high_ptr = high.as_ptr();
+    let low_ptr = low.as_ptr();
+    unsafe {
+        let mut highest_idx = 0usize;
+        let mut lowest_idx = 0usize;
+        let mut highest = *high_ptr;
+        let mut lowest = *low_ptr;
+        for k in 1..=period {
+            let h = *high_ptr.add(k);
+            let l = *low_ptr.add(k);
+            if h >= highest {
+                highest = h;
+                highest_idx = k;
+            }
+            if l <= lowest {
+                lowest = l;
+                lowest_idx = k;
+            }
+        }
+        *output.uget_mut(period) = (highest_idx as f64 - lowest_idx as f64) * inv_period;
+        for i in period + 1..high.len() {
+            let window_start = i - period;
+            let new_h = *high_ptr.add(i);
+            let new_l = *low_ptr.add(i);
+            if highest_idx < window_start {
+                highest = *high_ptr.add(window_start);
+                highest_idx = window_start;
+                for k in window_start + 1..=i {
+                    let h = *high_ptr.add(k);
+                    if h >= highest {
+                        highest = h;
+                        highest_idx = k;
+                    }
+                }
+            } else if new_h >= highest {
+                highest = new_h;
+                highest_idx = i;
+            }
+            if lowest_idx < window_start {
+                lowest = *low_ptr.add(window_start);
+                lowest_idx = window_start;
+                for k in window_start + 1..=i {
+                    let l = *low_ptr.add(k);
+                    if l <= lowest {
+                        lowest = l;
+                        lowest_idx = k;
+                    }
+                }
+            } else if new_l <= lowest {
+                lowest = new_l;
+                lowest_idx = i;
+            }
+            *output.uget_mut(i) = (highest_idx as f64 - lowest_idx as f64) * inv_period;
+        }
+    }
+    Ok(output)
 }
 
 #[allow(dead_code)]
@@ -2618,6 +2680,67 @@ fn aroonosc_deque_inner(
 /// let result = indicators::macdext(&close, 12, MaType::Ema, 26, MaType::Ema, 9, MaType::Ema).unwrap();
 /// assert_eq!(result.macd.len(), 30);
 /// ```
+fn macdext_sma(
+    input: &[f64],
+    fast_period: usize,
+    slow_period: usize,
+    signal_period: usize,
+) -> Result<MacdResult> {
+    if fast_period == 0 || slow_period == 0 || signal_period == 0 {
+        return Err(TaError::InvalidParameter {
+            name: "fast_period/slow_period/signal_period".to_string(),
+            constraint: "greater than 0".to_string(),
+        });
+    }
+    let lookback = slow_period + signal_period - 1;
+    validate_input(input.len(), lookback)?;
+
+    let len = input.len();
+    let mut macd_line = vec![f64::NAN; len];
+    let mut fast_sum = input[..fast_period].iter().sum::<f64>();
+    let mut slow_sum = input[..slow_period].iter().sum::<f64>();
+    let fast_start = fast_period - 1;
+    let slow_start = slow_period - 1;
+
+    for i in 0..len {
+        if i >= fast_period {
+            fast_sum += input[i] - input[i - fast_period];
+        }
+        if i >= slow_period {
+            slow_sum += input[i] - input[i - slow_period];
+        }
+        if i >= slow_start {
+            let fast = if i == fast_start || i > fast_start {
+                fast_sum / fast_period as f64
+            } else {
+                f64::NAN
+            };
+            if !fast.is_nan() {
+                macd_line[i] = fast - slow_sum / slow_period as f64;
+            }
+        }
+    }
+
+    let signal_start = slow_start + signal_period - 1;
+    let mut signal = vec![f64::NAN; len];
+    let mut hist = vec![f64::NAN; len];
+    let mut signal_sum = macd_line[slow_start..=signal_start].iter().sum::<f64>();
+    signal[signal_start] = signal_sum / signal_period as f64;
+    hist[signal_start] = macd_line[signal_start] - signal[signal_start];
+    for i in signal_start + 1..len {
+        signal_sum += macd_line[i] - macd_line[i - signal_period];
+        signal[i] = signal_sum / signal_period as f64;
+        hist[i] = macd_line[i] - signal[i];
+    }
+    macd_line[..signal_start].fill(f64::NAN);
+
+    Ok(MacdResult {
+        macd: Array1::from_vec(macd_line),
+        signal: Array1::from_vec(signal),
+        hist: Array1::from_vec(hist),
+    })
+}
+
 pub fn macdext(
     input: &[f64],
     fast_period: usize,
@@ -2627,6 +2750,9 @@ pub fn macdext(
     signal_period: usize,
     signal_ma_type: MaType,
 ) -> Result<MacdResult> {
+    if fast_ma_type == MaType::Sma && slow_ma_type == MaType::Sma && signal_ma_type == MaType::Sma {
+        return macdext_sma(input, fast_period, slow_period, signal_period);
+    }
     let fast_ma = crate::indicators::overlap::ma(input, fast_period, fast_ma_type)?;
     let slow_ma = crate::indicators::overlap::ma(input, slow_period, slow_ma_type)?;
 
@@ -2876,6 +3002,10 @@ pub fn stochf(
     }
     validate_input(high.len(), fastk_period)?;
 
+    if fastk_period == 5 && fastd_period == 3 {
+        return stochf_5_3(high, low, close);
+    }
+
     let len = high.len();
     let mut fastk = vec![f64::NAN; len];
     let mut fastd = vec![f64::NAN; len];
@@ -2946,6 +3076,66 @@ pub fn stochf(
             if i >= d_start {
                 *fastd.get_unchecked_mut(i) = d_sum * inv_d;
             }
+        }
+    }
+
+    Ok(StochResult {
+        k: Array1::from(fastk),
+        d: Array1::from(fastd),
+    })
+}
+
+#[inline]
+fn stochf_5_3(high: &[f64], low: &[f64], close: &[f64]) -> Result<StochResult> {
+    validate_input(high.len(), 5)?;
+    let len = high.len();
+    let mut fastk = vec![f64::NAN; len];
+    let mut fastd = vec![f64::NAN; len];
+    let mut high_queue = [0usize; 6];
+    let mut low_queue = [0usize; 6];
+    let mut high_head = 0usize;
+    let mut high_tail = 0usize;
+    let mut low_head = 0usize;
+    let mut low_tail = 0usize;
+    let mut d_ring = [0.0; 3];
+    let mut d_sum = 0.0;
+
+    for i in 0..len {
+        while high_tail > high_head && high[high_queue[(high_tail - 1) % 6]] <= high[i] {
+            high_tail -= 1;
+        }
+        high_queue[high_tail % 6] = i;
+        high_tail += 1;
+        while low_tail > low_head && low[low_queue[(low_tail - 1) % 6]] >= low[i] {
+            low_tail -= 1;
+        }
+        low_queue[low_tail % 6] = i;
+        low_tail += 1;
+
+        if i < 4 {
+            continue;
+        }
+        let window_start = i - 4;
+        while high_queue[high_head % 6] < window_start {
+            high_head += 1;
+        }
+        while low_queue[low_head % 6] < window_start {
+            low_head += 1;
+        }
+        let highest = high[high_queue[high_head % 6]];
+        let lowest = low[low_queue[low_head % 6]];
+        let range = highest - lowest;
+        let value = if range > 1e-15 {
+            (close[i] - lowest) / range * 100.0
+        } else {
+            50.0
+        };
+        fastk[i] = value;
+        let ring_pos = (i - 4) % 3;
+        d_sum += value - d_ring[ring_pos];
+        d_ring[ring_pos] = value;
+        if i >= 6 {
+            fastd[i] = d_sum / 3.0;
         }
     }
 

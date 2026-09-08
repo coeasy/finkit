@@ -767,6 +767,18 @@ fn compute_hilbert_selected<const MODE: u8>(
     let mut i_trend3 = 0.0;
     let mut smooth_price = [0.0; 50];
     let mut smooth_price_idx = 0usize;
+    // HT_TRENDLINE averages the last dominant-period prices on every bar.
+    // A prefix sum makes that variable-length window O(1) instead of scanning
+    // up to 50 samples per bar. The other Hilbert terminals do not need it.
+    let trend_prefix = if MODE == 4 {
+        let mut prefix = vec![0.0; input.len() + 1];
+        for (index, &value) in input.iter().enumerate() {
+            prefix[index + 1] = prefix[index] + value;
+        }
+        prefix
+    } else {
+        Vec::new()
+    };
     let rad2deg = 180.0 / std::f64::consts::PI;
     // The dominant period is clamped to [6, 50].  Reusing this small phase
     // table removes up to 100 transcendental calls per bar from DCPHASE,
@@ -890,14 +902,10 @@ fn compute_hilbert_selected<const MODE: u8>(
                 1 | 3 | 4 | 5 => {
                     if MODE == 4 {
                         let dc_period_int = (smooth_period + 0.5) as usize;
-                        let mut raw_sum = 0.0;
-                        let input_ptr = input.as_ptr();
-                        for j in 0..dc_period_int {
-                            // TA-Lib caps the dominant period at 50; the
-                            // state machine has already advanced at least 34
-                            // bars before this path is entered.
-                            raw_sum += unsafe { *input_ptr.add(i - j) };
-                        }
+                        // TA-Lib caps the dominant period at 50; the state
+                        // machine has already advanced far enough for this
+                        // trailing window to be valid.
+                        let raw_sum = trend_prefix[i + 1] - trend_prefix[i + 1 - dc_period_int];
                         let instant_trend = if dc_period_int > 0 {
                             raw_sum / dc_period_int as f64
                         } else {

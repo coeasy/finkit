@@ -124,19 +124,17 @@ pub fn bbands(
     let mut middle = init_output(len);
     let mut lower = init_output(len);
     let inv_p = 1.0 / period as f64;
-    let period_f = period as f64;
 
-    // Welford online algorithm: O(1) per step for mean + population variance (TA-Lib compatible).
-    let mut mean = 0.0;
-    let mut m2 = 0.0;
-    for (j, &x) in input.iter().enumerate().take(period) {
-        let n = (j + 1) as f64;
-        let delta = x - mean;
-        mean += delta / n;
-        m2 += delta * (x - mean);
-    }
-
-    let std = (m2 * inv_p).max(0.0).sqrt();
+    // TA-Lib's STDDEV uses the rolling sum/sum-of-squares form. Keeping the
+    // same operation order improves long-series parity and is cheaper than
+    // updating Welford's mean/M2 state for every bar.
+    let mut sum = input[..period].iter().sum::<f64>();
+    let mut sum_sq = input[..period]
+        .iter()
+        .map(|value| value * value)
+        .sum::<f64>();
+    let mean = sum * inv_p;
+    let std = (sum_sq - sum * mean).max(0.0).mul_add(inv_p, 0.0).sqrt();
     middle[period - 1] = mean;
     upper[period - 1] = mean + std * nb_dev_up;
     lower[period - 1] = mean - std * nb_dev_dn;
@@ -150,10 +148,10 @@ pub fn bbands(
     for i in period..len {
         let old = unsafe { *input_ptr.add(i - period) };
         let new = unsafe { *input_ptr.add(i) };
-        let old_mean = mean;
-        mean += (new - old) / period_f;
-        m2 += (new - mean) * (new - old_mean) - (old - mean) * (old - old_mean);
-        let std = (m2 * inv_p).sqrt();
+        sum += new - old;
+        sum_sq += new * new - old * old;
+        let mean = sum * inv_p;
+        let std = (sum_sq - sum * mean).max(0.0).mul_add(inv_p, 0.0).sqrt();
         unsafe {
             *middle_ptr.add(i) = mean;
             *upper_ptr.add(i) = mean + std * nb_dev_up;
@@ -814,7 +812,7 @@ pub fn mama(input: &[f64], fast_limit: f64, slow_limit: f64) -> Result<MamaResul
         // Adjust period for next bar (same as HT_DCPERIOD)
         let temp_period = period;
         if im != 0.0 && re != 0.0 {
-            period = 360.0 / (im / re).atan();
+            period = 360.0 / ((im / re).atan() * rad2deg);
         }
 
         let temp15 = 1.5 * temp_period;
@@ -1143,7 +1141,7 @@ pub fn mama_into(
         // Adjust period for next bar (same as HT_DCPERIOD)
         let temp_period = period;
         if im != 0.0 && re != 0.0 {
-            period = 360.0 / (im / re).atan();
+            period = 360.0 / ((im / re).atan() * rad2deg);
         }
 
         let temp15 = 1.5 * temp_period;
@@ -1569,19 +1567,16 @@ pub fn bbands_into(
     validate_input(len, period)?;
 
     let inv_p = 1.0 / period as f64;
-    let period_f = period as f64;
 
-    // Welford online algorithm: O(1) per step for mean + population variance (TA-Lib compatible).
-    let mut mean = 0.0;
-    let mut m2 = 0.0;
-    for (j, &x) in input.iter().enumerate().take(period) {
-        let n = (j + 1) as f64;
-        let delta = x - mean;
-        mean += delta / n;
-        m2 += delta * (x - mean);
-    }
-
-    let std = (m2 * inv_p).max(0.0).sqrt();
+    // Keep the same rolling sum/sum-of-squares order as the allocating path
+    // and TA-Lib's STDDEV kernel.
+    let mut sum = input[..period].iter().sum::<f64>();
+    let mut sum_sq = input[..period]
+        .iter()
+        .map(|value| value * value)
+        .sum::<f64>();
+    let mean = sum * inv_p;
+    let std = (sum_sq - sum * mean).max(0.0).mul_add(inv_p, 0.0).sqrt();
     middle[period - 1] = mean;
     upper[period - 1] = mean + std * nb_dev_up;
     lower[period - 1] = mean - std * nb_dev_dn;
@@ -1595,10 +1590,10 @@ pub fn bbands_into(
     for i in period..len {
         let old = unsafe { *input_ptr.add(i - period) };
         let new = unsafe { *input_ptr.add(i) };
-        let old_mean = mean;
-        mean += (new - old) / period_f;
-        m2 += (new - mean) * (new - old_mean) - (old - mean) * (old - old_mean);
-        let std = (m2 * inv_p).sqrt();
+        sum += new - old;
+        sum_sq += new * new - old * old;
+        let mean = sum * inv_p;
+        let std = (sum_sq - sum * mean).max(0.0).mul_add(inv_p, 0.0).sqrt();
         unsafe {
             *middle_ptr.add(i) = mean;
             *upper_ptr.add(i) = mean + std * nb_dev_up;

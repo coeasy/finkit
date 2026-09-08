@@ -269,6 +269,21 @@ if hasattr(_native, "_fast_mom"):
 
     mom = _translate_native_errors("mom", mom)
 
+if hasattr(_native, "_fast_rocp"):
+
+    def rocp(close, timeperiod=10):
+        close = _as_contiguous_float64(close)
+        return _native._fast_rocp(close, timeperiod)
+
+    def rocr100(close, timeperiod=10):
+        close = _as_contiguous_float64(close)
+        return _native._fast_rocr100(close, timeperiod)
+
+    for _fast_name in ("rocp", "rocr100"):
+        globals()[_fast_name] = _translate_native_errors(
+            _fast_name, globals()[_fast_name]
+        )
+
 if hasattr(_native, "_fast_unary_period_scale"):
 
     def stddev(close, timeperiod=20, nbdev=1.0):
