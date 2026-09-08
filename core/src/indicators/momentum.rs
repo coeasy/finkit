@@ -3368,49 +3368,66 @@ fn stochf_5_3_into(
     let mut lowest = 0.0;
     let mut d_ring = [0.0; 3];
     let mut d_sum = 0.0;
+    let mut ring_pos = 0usize;
 
-    for today in 4..len {
-        let trailing = today - 4;
-        if highest_idx == usize::MAX || highest_idx < trailing {
-            highest_idx = trailing;
-            highest = high[trailing];
-            for i in (trailing + 1)..=today {
-                if high[i] > highest {
-                    highest_idx = i;
-                    highest = high[i];
+    unsafe {
+        let high_ptr = high.as_ptr();
+        let low_ptr = low.as_ptr();
+        let close_ptr = close.as_ptr();
+        let fastk_ptr = fastk.as_mut_ptr();
+        let fastd_ptr = fastd.as_mut_ptr();
+        for today in 4..len {
+            let trailing = today - 4;
+            if highest_idx == usize::MAX || highest_idx < trailing {
+                highest_idx = trailing;
+                highest = *high_ptr.add(trailing);
+                let mut i = trailing + 1;
+                while i <= today {
+                    let value = *high_ptr.add(i);
+                    if value > highest {
+                        highest_idx = i;
+                        highest = value;
+                    }
+                    i += 1;
                 }
+            } else if *high_ptr.add(today) >= highest {
+                highest_idx = today;
+                highest = *high_ptr.add(today);
             }
-        } else if high[today] >= highest {
-            highest_idx = today;
-            highest = high[today];
-        }
-        if lowest_idx == usize::MAX || lowest_idx < trailing {
-            lowest_idx = trailing;
-            lowest = low[trailing];
-            for i in (trailing + 1)..=today {
-                if low[i] < lowest {
-                    lowest_idx = i;
-                    lowest = low[i];
+            if lowest_idx == usize::MAX || lowest_idx < trailing {
+                lowest_idx = trailing;
+                lowest = *low_ptr.add(trailing);
+                let mut i = trailing + 1;
+                while i <= today {
+                    let value = *low_ptr.add(i);
+                    if value < lowest {
+                        lowest_idx = i;
+                        lowest = value;
+                    }
+                    i += 1;
                 }
+            } else if *low_ptr.add(today) <= lowest {
+                lowest_idx = today;
+                lowest = *low_ptr.add(today);
             }
-        } else if low[today] <= lowest {
-            lowest_idx = today;
-            lowest = low[today];
-        }
-        let range = highest - lowest;
-        let value = if range > 1e-15 {
-            (close[today] - lowest) / range * 100.0
-        } else {
-            0.0
-        };
-        if today >= 6 {
-            fastk[today] = value;
-        }
-        let ring_pos = (today - 4) % 3;
-        d_sum += value - d_ring[ring_pos];
-        d_ring[ring_pos] = value;
-        if today >= 6 {
-            fastd[today] = d_sum / 3.0;
+            let range = highest - lowest;
+            let value = if range > 1e-15 {
+                (*close_ptr.add(today) - lowest) / range * 100.0
+            } else {
+                0.0
+            };
+            if today >= 6 {
+                *fastk_ptr.add(today) = value;
+            }
+            d_sum += value - d_ring[ring_pos];
+            d_ring[ring_pos] = value;
+            if today >= 6 {
+                *fastd_ptr.add(today) = d_sum / 3.0;
+            }
+            ring_pos += 1;
+            if ring_pos == 3 {
+                ring_pos = 0;
+            }
         }
     }
 
