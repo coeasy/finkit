@@ -2992,23 +2992,29 @@ pub fn cdl_3outside(
     validate_input(open.len(), 3)?;
     let len = open.len();
     let mut output = PatternResult::zeros(len);
+    let open_ptr = open.as_ptr();
+    let close_ptr = close.as_ptr();
+    let output_ptr: *mut i32 = output.as_slice_mut().unwrap().as_mut_ptr();
     for i in 2..len {
-        if is_bearish(open[i - 2], close[i - 2])
-            && is_bullish(open[i - 1], close[i - 1])
-            && open[i - 1] <= close[i - 2]
-            && close[i - 1] >= open[i - 2]
-            && is_bullish(open[i], close[i])
-            && close[i] > close[i - 1]
+        let open_2 = unsafe { *open_ptr.add(i - 2) };
+        let close_2 = unsafe { *close_ptr.add(i - 2) };
+        let open_1 = unsafe { *open_ptr.add(i - 1) };
+        let close_1 = unsafe { *close_ptr.add(i - 1) };
+        let close_0 = unsafe { *close_ptr.add(i) };
+        if close_1 >= open_1
+            && close_2 < open_2
+            && close_1 > open_2
+            && open_1 < close_2
+            && close_0 > close_1
         {
-            output[i] = 100;
-        } else if is_bullish(open[i - 2], close[i - 2])
-            && is_bearish(open[i - 1], close[i - 1])
-            && open[i - 1] >= close[i - 2]
-            && close[i - 1] <= open[i - 2]
-            && is_bearish(open[i], close[i])
-            && close[i] < close[i - 1]
+            unsafe { *output_ptr.add(i) = 100 };
+        } else if close_1 < open_1
+            && close_2 >= open_2
+            && open_1 > close_2
+            && close_1 < open_2
+            && close_0 < close_1
         {
-            output[i] = -100;
+            unsafe { *output_ptr.add(i) = -100 };
         }
     }
     Ok(output)
