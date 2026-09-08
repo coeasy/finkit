@@ -1182,6 +1182,7 @@ pub fn trima_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()
 fn trima_period30_into(input: &[f64], output: &mut [f64]) -> Result<()> {
     let input_ptr = input.as_ptr();
     let output_ptr = output.as_mut_ptr();
+    let input_end = unsafe { input_ptr.add(input.len()) };
     let factor = 1.0 / (15.0 * 16.0);
     let mut numerator = 0.0;
     let mut numerator_sub = 0.0;
@@ -1204,25 +1205,27 @@ fn trima_period30_into(input: &[f64], output: &mut [f64]) -> Result<()> {
         }
         *output_ptr.add(29) = numerator * factor;
 
-        let mut trailing = 1usize;
-        let mut middle = 15usize;
-        let mut today = 30usize;
+        let mut trailing_ptr = input_ptr.add(1);
+        let mut middle_ptr = input_ptr.add(15);
+        let mut today_ptr = input_ptr.add(30);
+        let mut write_ptr = output_ptr.add(30);
         let mut temp = *input_ptr;
-        while today < input.len() {
+        while today_ptr < input_end {
             numerator -= numerator_sub;
             numerator_sub -= temp;
-            temp = *input_ptr.add(middle);
-            middle += 1;
+            temp = *middle_ptr;
+            middle_ptr = middle_ptr.add(1);
             numerator_sub += temp;
             numerator_add -= temp;
             numerator += numerator_add;
-            temp = *input_ptr.add(today);
-            today += 1;
+            temp = *today_ptr;
+            today_ptr = today_ptr.add(1);
             numerator_add += temp;
             numerator += temp;
-            temp = *input_ptr.add(trailing);
-            trailing += 1;
-            *output_ptr.add(today - 1) = numerator * factor;
+            temp = *trailing_ptr;
+            trailing_ptr = trailing_ptr.add(1);
+            *write_ptr = numerator * factor;
+            write_ptr = write_ptr.add(1);
         }
     }
     Ok(())

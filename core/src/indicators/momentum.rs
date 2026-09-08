@@ -520,49 +520,71 @@ fn stoch_default_5_3_3_into(
     let mut k_sum = 0.0;
     let mut d_sum = 0.0;
 
-    for i in 0..close.len() {
-        let new_high = high[i];
-        let new_low = low[i];
-        while max_tail > max_head && high[max_queue[(max_tail - 1) & MASK]] <= new_high {
-            max_tail -= 1;
-        }
-        max_queue[max_tail & MASK] = i;
-        max_tail += 1;
-        while min_tail > min_head && low[min_queue[(min_tail - 1) & MASK]] >= new_low {
-            min_tail -= 1;
-        }
-        min_queue[min_tail & MASK] = i;
-        min_tail += 1;
+    let high_ptr = high.as_ptr();
+    let low_ptr = low.as_ptr();
+    let close_ptr = close.as_ptr();
+    let k_out_ptr = k_out.as_mut_ptr();
+    let d_out_ptr = d_out.as_mut_ptr();
+    let len = close.len();
 
-        let window_start = i.saturating_sub(4);
-        while max_queue[max_head & MASK] < window_start {
-            max_head += 1;
-        }
-        while min_queue[min_head & MASK] < window_start {
-            min_head += 1;
-        }
-
-        let fast_k = if i >= 4 {
-            let highest = high[max_queue[max_head & MASK]];
-            let lowest = low[min_queue[min_head & MASK]];
-            let denom = highest - lowest;
-            if denom > 1e-15 {
-                (close[i] - lowest) / denom * 100.0
-            } else {
-                50.0
+    // This is the public default configuration, so keep the entire loop in
+    // pointer form.  The queue counters are monotonic and the masks prove
+    // that every queue/ring access stays within its fixed-size storage.
+    unsafe {
+        let mut ring_pos = 0usize;
+        for i in 0..len {
+            let new_high = *high_ptr.add(i);
+            let new_low = *low_ptr.add(i);
+            while max_tail > max_head
+                && *high_ptr.add(*max_queue.get_unchecked((max_tail - 1) & MASK)) <= new_high
+            {
+                max_tail -= 1;
             }
-        } else {
-            0.0
-        };
-        let ring_pos = i % 3;
-        k_sum += fast_k - fast_k_ring[ring_pos];
-        fast_k_ring[ring_pos] = fast_k;
-        let slow_k = if i >= 2 { k_sum / 3.0 } else { 0.0 };
-        d_sum += slow_k - k_ring[ring_pos];
-        k_ring[ring_pos] = slow_k;
-        if i >= LOOKBACK {
-            k_out[i] = slow_k;
-            d_out[i] = d_sum / 3.0;
+            *max_queue.get_unchecked_mut(max_tail & MASK) = i;
+            max_tail += 1;
+            while min_tail > min_head
+                && *low_ptr.add(*min_queue.get_unchecked((min_tail - 1) & MASK)) >= new_low
+            {
+                min_tail -= 1;
+            }
+            *min_queue.get_unchecked_mut(min_tail & MASK) = i;
+            min_tail += 1;
+
+            let window_start = i.saturating_sub(4);
+            while *max_queue.get_unchecked(max_head & MASK) < window_start {
+                max_head += 1;
+            }
+            while *min_queue.get_unchecked(min_head & MASK) < window_start {
+                min_head += 1;
+            }
+
+            let fast_k = if i >= 4 {
+                let highest = *high_ptr.add(*max_queue.get_unchecked(max_head & MASK));
+                let lowest = *low_ptr.add(*min_queue.get_unchecked(min_head & MASK));
+                let denom = highest - lowest;
+                if denom > 1e-15 {
+                    (*close_ptr.add(i) - lowest) / denom * 100.0
+                } else {
+                    50.0
+                }
+            } else {
+                0.0
+            };
+            let old_fast_k = *fast_k_ring.get_unchecked(ring_pos);
+            k_sum += fast_k - old_fast_k;
+            *fast_k_ring.get_unchecked_mut(ring_pos) = fast_k;
+            let slow_k = if i >= 2 { k_sum / 3.0 } else { 0.0 };
+            let old_slow_k = *k_ring.get_unchecked(ring_pos);
+            d_sum += slow_k - old_slow_k;
+            *k_ring.get_unchecked_mut(ring_pos) = slow_k;
+            if i >= LOOKBACK {
+                *k_out_ptr.add(i) = slow_k;
+                *d_out_ptr.add(i) = d_sum / 3.0;
+            }
+            ring_pos += 1;
+            if ring_pos == 3 {
+                ring_pos = 0;
+            }
         }
     }
 }

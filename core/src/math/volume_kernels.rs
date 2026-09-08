@@ -24,8 +24,8 @@ fn validate_same_len(name: &'static str, expected: usize, actual: usize) -> Resu
 /// Compute On-Balance Volume directly into `output`.
 ///
 /// OBV is a serial prefix recurrence. Keep the canonical fused scalar loop for
-/// the installed-wheel path; the AVX2 dispatcher materializes/rewrites the
-/// prefix scan in a way that is slower on the target benchmark sizes.
+/// the installed-wheel path; materializing a SIMD prefix scan is slower on
+/// the target benchmark sizes.
 #[inline]
 pub fn obv_into(close: &[f64], volume: &[f64], output: &mut [f64]) -> Result<()> {
     validate_same_len("volume", close.len(), volume.len())?;
@@ -197,6 +197,11 @@ fn adosc_default_3_10_into(
     volume: &[f64],
     output: &mut [f64],
 ) -> Result<()> {
+    #[cfg(all(feature = "std", target_arch = "x86_64"))]
+    if crate::math::simd_ops::has_avx2() {
+        return unsafe { adosc_default_3_10_avx2(high, low, close, volume, output) };
+    }
+
     unsafe {
         let high_ptr = high.as_ptr();
         let low_ptr = low.as_ptr();
@@ -238,6 +243,81 @@ fn adosc_default_3_10_into(
             }
             fast_ema = cumulative * 0.5 + fast_ema * 0.5;
             slow_ema = cumulative * (2.0 / 11.0) + slow_ema * (1.0 - 2.0 / 11.0);
+            *output_ptr.add(i) = fast_ema - slow_ema;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2")]
+#[allow(unsafe_op_in_unsafe_fn)]
+unsafe fn adosc_default_3_10_avx2(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    volume: &[f64],
+    output: &mut [f64],
+) -> Result<()> {
+    use core::arch::x86_64::*;
+
+    output[..9].fill(f64::NAN);
+    let high_ptr = high.as_ptr();
+    let low_ptr = low.as_ptr();
+    let close_ptr = close.as_ptr();
+    let volume_ptr = volume.as_ptr();
+    let output_ptr = output.as_mut_ptr();
+    let zero = _mm256_setzero_pd();
+    let mut cumulative = 0.0;
+    let mut fast_ema = 0.0;
+    let mut slow_ema = 0.0;
+
+    let chunks = high.len() / 4;
+    for chunk in 0..chunks {
+        let off = chunk * 4;
+        let vh = _mm256_loadu_pd(high_ptr.add(off));
+        let vl = _mm256_loadu_pd(low_ptr.add(off));
+        let vc = _mm256_loadu_pd(close_ptr.add(off));
+        let vv = _mm256_loadu_pd(volume_ptr.add(off));
+        let hl = _mm256_sub_pd(vh, vl);
+        let clv = _mm256_sub_pd(_mm256_sub_pd(vc, vl), _mm256_sub_pd(vh, vc));
+        let valid = _mm256_cmp_pd(hl, zero, _CMP_GT_OS);
+        let multiplier = _mm256_blendv_pd(zero, _mm256_div_pd(clv, hl), valid);
+        let flow = _mm256_mul_pd(multiplier, vv);
+        let values: [f64; 4] = core::mem::transmute(flow);
+
+        for (lane, money_flow) in values.into_iter().enumerate() {
+            let i = off + lane;
+            cumulative += money_flow;
+            if i == 0 {
+                fast_ema = cumulative;
+                slow_ema = cumulative;
+            } else {
+                fast_ema = cumulative * 0.5 + fast_ema * 0.5;
+                slow_ema = cumulative * (2.0 / 11.0) + slow_ema * (1.0 - 2.0 / 11.0);
+            }
+            if i >= 9 {
+                *output_ptr.add(i) = fast_ema - slow_ema;
+            }
+        }
+    }
+
+    for i in chunks * 4..high.len() {
+        let h = *high_ptr.add(i);
+        let l = *low_ptr.add(i);
+        let range = h - l;
+        if range > 0.0 {
+            let c = *close_ptr.add(i);
+            cumulative += (((c - l) - (h - c)) / range) * *volume_ptr.add(i);
+        }
+        if i == 0 {
+            fast_ema = cumulative;
+            slow_ema = cumulative;
+        } else {
+            fast_ema = cumulative * 0.5 + fast_ema * 0.5;
+            slow_ema = cumulative * (2.0 / 11.0) + slow_ema * (1.0 - 2.0 / 11.0);
+        }
+        if i >= 9 {
             *output_ptr.add(i) = fast_ema - slow_ema;
         }
     }

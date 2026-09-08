@@ -777,6 +777,33 @@ fn cdl3outside<'py>(
     }))
 }
 
+#[pyfunction(name = "cdldojistar")]
+fn cdldojistar<'py>(
+    py: Python<'py>,
+    open: PyReadonlyArray1<'py, f64>,
+    high: PyReadonlyArray1<'py, f64>,
+    low: PyReadonlyArray1<'py, f64>,
+    close: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<i32>>> {
+    let open = open.as_slice().map_err(value_error)?;
+    let high = high.as_slice().map_err(value_error)?;
+    let low = low.as_slice().map_err(value_error)?;
+    let close = close.as_slice().map_err(value_error)?;
+    let len = open.len();
+    let mut raw_output = Vec::<MaybeUninit<i32>>::with_capacity(len);
+    unsafe { raw_output.set_len(len) };
+    let output =
+        unsafe { std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<i32>(), len) };
+    py.detach(|| candlestick::cdl_doji_star_into(open, high, low, close, output))
+        .map_err(value_error)?;
+    let ptr = raw_output.as_mut_ptr().cast::<i32>();
+    let capacity = raw_output.capacity();
+    std::mem::forget(raw_output);
+    Ok(PyArray1::from_vec(py, unsafe {
+        Vec::from_raw_parts(ptr, len, capacity)
+    }))
+}
+
 candle!(cdl2crows, "cdl2crows", cdl_2crows);
 candle!(cdl3blackcrows, "cdl3blackcrows", cdl_3black_crows);
 candle!(cdl3inside, "cdl3inside", cdl_3inside);
@@ -800,7 +827,6 @@ candle!(
 candle!(cdlcounterattack, "cdlcounterattack", cdl_counterattack);
 candle!(cdldarkcloudcover, "cdldarkcloudcover", cdl_darkcloudcover);
 candle!(cdldoji, "cdldoji", cdl_doji);
-candle!(cdldojistar, "cdldojistar", cdl_doji_star);
 candle!(cdldragonflydoji, "cdldragonflydoji", cdl_dragonflydoji);
 candle!(cdlengulfing, "cdlengulfing", cdl_engulfing);
 candle!(

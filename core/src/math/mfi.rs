@@ -117,6 +117,7 @@ fn mfi_period14_into(
     volume: &[f64],
     output: &mut [f64],
 ) -> Result<()> {
+    let inv_three = 1.0 / 3.0;
     let mut positive_ring = [0.0_f64; 14];
     let mut negative_ring = [0.0_f64; 14];
     let mut pos_sum = 0.0;
@@ -131,9 +132,9 @@ fn mfi_period14_into(
         let output_ptr = output.as_mut_ptr();
         let positive_ptr = positive_ring.as_mut_ptr();
         let negative_ptr = negative_ring.as_mut_ptr();
-        let mut prev_tp = typical_price(*high_ptr, *low_ptr, *close_ptr);
+        let mut prev_tp = (*high_ptr + *low_ptr + *close_ptr) * inv_three;
         for i in 1..close.len() {
-            let tp = typical_price(*high_ptr.add(i), *low_ptr.add(i), *close_ptr.add(i));
+            let tp = (*high_ptr.add(i) + *low_ptr.add(i) + *close_ptr.add(i)) * inv_three;
             let money_flow = tp * *volume_ptr.add(i);
             let is_positive = tp > prev_tp;
             prev_tp = tp;

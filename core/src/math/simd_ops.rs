@@ -832,9 +832,8 @@ unsafe fn ad_line_avx2(
 
     let result_ptr = result.as_mut_ptr();
     let chunks = len / 4;
-    let eps = _mm256_set1_pd(1e-15);
     let zero = _mm256_setzero_pd();
-    let sign_mask = _mm256_set1_pd(f64::from_bits(0x7FFF_FFFF_FFFF_FFFFu64));
+    let mut acc = 0.0;
 
     // SIMD 计算 money flow volume
     for c in 0..chunks {
@@ -849,13 +848,17 @@ unsafe fn ad_line_avx2(
         let hc = _mm256_sub_pd(vh, vc);
         let clv = _mm256_sub_pd(cl, hc);
 
-        // 优化：使用更高效的除法和条件选择
-        let abs_hl = _mm256_and_pd(sign_mask, hl);
-        let valid = _mm256_cmp_pd(abs_hl, eps, _CMP_GT_OS);
+        // Match the scalar contract exactly: only a strictly positive range
+        // contributes money flow. The vector division is masked afterward.
+        let valid = _mm256_cmp_pd(hl, zero, _CMP_GT_OS);
         let div = _mm256_div_pd(clv, hl);
         let mfm = _mm256_blendv_pd(zero, div, valid);
         let mfv_v = _mm256_mul_pd(mfm, vvol);
-        _mm256_storeu_pd(result_ptr.add(off), mfv_v);
+        let values: [f64; 4] = core::mem::transmute(mfv_v);
+        for (lane, value) in values.into_iter().enumerate() {
+            acc += value;
+            *result_ptr.add(off + lane) = acc;
+        }
     }
 
     // 处理剩余元素
@@ -866,30 +869,8 @@ unsafe fn ad_line_avx2(
         } else {
             0.0
         };
-        result[i] = mfm * volume[i];
-    }
-
-    // 优化的 prefix sum：使用 4-way 展开减少循环开销
-    let mut acc = result[0];
-    let mut i = 1;
-    let unroll_end = len.saturating_sub(3);
-
-    while i < unroll_end {
-        acc += result[i];
+        acc += mfm * volume[i];
         result[i] = acc;
-        acc += result[i + 1];
-        result[i + 1] = acc;
-        acc += result[i + 2];
-        result[i + 2] = acc;
-        acc += result[i + 3];
-        result[i + 3] = acc;
-        i += 4;
-    }
-
-    while i < len {
-        acc += result[i];
-        result[i] = acc;
-        i += 1;
     }
 }
 
@@ -1563,10 +1544,12 @@ pub fn simd_obv(close: &[f64], volume: &[f64], result: &mut [f64]) {
 }
 
 pub fn simd_ad_line(high: &[f64], low: &[f64], close: &[f64], volume: &[f64], result: &mut [f64]) {
-    // AD is a prefix recurrence: the cumulative dependency makes the AVX2
-    // two-pass implementation slower than this fused scalar loop on the
-    // installed-wheel path. Keep the SIMD-named entry point for callers, but
-    // use the dependency-friendly kernel as the canonical implementation.
+    #[cfg(all(feature = "std", target_arch = "x86_64"))]
+    {
+        if is_x86_feature_detected!("avx2") {
+            return unsafe { ad_line_avx2(high, low, close, volume, result) };
+        }
+    }
     ad_line_scalar(high, low, close, volume, result)
 }
 

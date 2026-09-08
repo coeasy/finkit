@@ -2518,6 +2518,19 @@ pub fn cdl_doji_star(
     low: &[f64],
     close: &[f64],
 ) -> Result<PatternResult> {
+    let mut output = PatternResult::zeros(open.len());
+    cdl_doji_star_into(open, high, low, close, output.as_slice_mut().unwrap())?;
+    Ok(output)
+}
+
+/// Caller-owned CDLDOJISTAR kernel used by the Python compatibility path.
+pub fn cdl_doji_star_into(
+    open: &[f64],
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    output: &mut [i32],
+) -> Result<()> {
     if open.len() != high.len() || open.len() != low.len() || open.len() != close.len() {
         return Err(TaError::InvalidParameter {
             name: "open, high, low, close".to_string(),
@@ -2525,36 +2538,72 @@ pub fn cdl_doji_star(
         });
     }
     validate_input(open.len(), 2)?;
+    if output.len() != open.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
+
     let len = open.len();
-    let mut output = PatternResult::zeros(len);
-    let mut avg_ranges = RollingAverage::<10>::new();
-    for i in 0..len {
-        let true_range = if i == 0 {
-            high[i] - low[i]
-        } else {
-            (high[i] - low[i])
-                .max((high[i] - close[i - 1]).abs())
-                .max((low[i] - close[i - 1]).abs())
-        };
-        avg_ranges.push(true_range);
-        if i == 0 {
-            continue;
-        }
-        let avg = avg_ranges.average();
-        let body_prev = body(open[i - 1], close[i - 1]);
-        let body_curr = body(open[i], close[i]);
-        let is_doji = body_curr < avg * 0.1;
-        let long_prev = body_prev > avg * 0.6;
-        if is_doji && long_prev {
-            if is_bullish(open[i - 1], close[i - 1]) && open[i].min(close[i]) > close[i - 1] {
-                output[i] = -100; // bearish doji star
-            } else if is_bearish(open[i - 1], close[i - 1]) && open[i].max(close[i]) < close[i - 1]
-            {
-                output[i] = 100; // bullish doji star
+    let mut ranges = [0.0_f64; 10];
+    let mut rolling_sum = 0.0;
+    let mut next = 0usize;
+    let mut count = 0usize;
+    let open_ptr = open.as_ptr();
+    let high_ptr = high.as_ptr();
+    let low_ptr = low.as_ptr();
+    let close_ptr = close.as_ptr();
+    let output_ptr = output.as_mut_ptr();
+    unsafe {
+        for i in 0..len {
+            let h = *high_ptr.add(i);
+            let l = *low_ptr.add(i);
+            let true_range = if i == 0 {
+                h - l
+            } else {
+                let previous_close = *close_ptr.add(i - 1);
+                (h - l)
+                    .max((h - previous_close).abs())
+                    .max((l - previous_close).abs())
+            };
+            if count == 10 {
+                rolling_sum -= *ranges.get_unchecked(next);
+            } else {
+                count += 1;
             }
+            *ranges.get_unchecked_mut(next) = true_range;
+            rolling_sum += true_range;
+            next += 1;
+            if next == 10 {
+                next = 0;
+            }
+
+            let mut value = 0;
+            if i > 0 {
+                let avg = rolling_sum / count as f64;
+                let previous_open = *open_ptr.add(i - 1);
+                let previous_close = *close_ptr.add(i - 1);
+                let current_open = *open_ptr.add(i);
+                let current_close = *close_ptr.add(i);
+                let body_prev = (previous_close - previous_open).abs();
+                let body_curr = (current_close - current_open).abs();
+                if body_curr < avg * 0.1 && body_prev > avg * 0.6 {
+                    if previous_open < previous_close
+                        && current_open.min(current_close) > previous_close
+                    {
+                        value = -100;
+                    } else if previous_open > previous_close
+                        && current_open.max(current_close) < previous_close
+                    {
+                        value = 100;
+                    }
+                }
+            }
+            *output_ptr.add(i) = value;
         }
     }
-    Ok(output)
+    Ok(())
 }
 
 /// Up/Down Gap Side-by-Side White Lines (CDLGAPSIDESIDEWHITE)
