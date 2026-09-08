@@ -9,6 +9,7 @@ from __future__ import annotations
 from functools import wraps
 
 import numpy as np
+import builtins as _builtins
 
 from . import finkit as _native
 from .finkit import *  # noqa: F401,F403 — re-export native module
@@ -389,7 +390,7 @@ if hasattr(_native, "_fast_adosc"):
         )
         # TA-Lib ADOSC becomes public when the slower EMA has completed its
         # lookback; the core recursion may keep earlier internal seed values.
-        lookback = max(fastperiod, slowperiod) - 1
+        lookback = _builtins.max(fastperiod, slowperiod) - 1
         if lookback > 0:
             result[:lookback] = np.nan
         return result

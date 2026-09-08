@@ -1127,14 +1127,20 @@ pub fn mavp(
 
     let len = input.len();
     let mut output = init_output(len);
-
-    for i in 0..len {
+    // A prefix sum makes variable-period windows genuinely O(1) per point.
+    // The previous implementation invoked a SIMD reduction for every row,
+    // which is still O(n * period) and is particularly costly for MAVP's
+    // default 30-bar cap.
+    let mut prefix = vec![0.0; len + 1];
+    for (i, &value) in input.iter().enumerate() {
+        prefix[i + 1] = prefix[i] + value;
+    }
+    let lookback = min_period.saturating_sub(1);
+    for i in lookback..len {
         let p = (periods[i].round() as usize).clamp(min_period, max_period);
         if i + 1 >= p {
             let start = i + 1 - p;
-            // SIMD-accelerated window sum (4-6x faster than iterator sum).
-            let sum: f64 = simd_horizontal_sum(&input[start..=i]);
-            output[i] = sum / p as f64;
+            output[i] = (prefix[i + 1] - prefix[start]) / p as f64;
         }
     }
 

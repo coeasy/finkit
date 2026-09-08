@@ -2451,29 +2451,15 @@ pub fn adxr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<A
 /// assert_eq!(result.len(), 10);
 /// ```
 pub fn aroonosc(high: &[f64], low: &[f64], period: usize) -> Result<Array1<f64>> {
-    if high.len() != low.len() {
-        return Err(TaError::InvalidParameter {
-            name: "high, low".to_string(),
-            constraint: "must have the same length".to_string(),
-        });
-    }
-    validate_input(high.len(), period + 1)?;
-
-    let len = high.len();
-    let mut output = init_output(len);
-    let inv_period = 100.0 / period as f64;
-    let high_ptr = high.as_ptr();
-    let low_ptr = low.as_ptr();
-
-    if period <= 8 {
-        aroonosc_scan_inner(high_ptr, low_ptr, len, period, inv_period, &mut output);
-    } else {
-        aroonosc_deque_inner(high_ptr, low_ptr, len, period, inv_period, &mut output);
-    }
-
-    Ok(output)
+    // Reuse the canonical AROON kernel so both indicators share TA-Lib's
+    // period+1 lookback and tie-breaking rules.  The old specialised
+    // oscillator path seeded its first window with an absolute index and
+    // consequently under-reported the first oscillator value by one step.
+    let result = aroon(high, low, period)?;
+    Ok(&result.aroon_up - &result.aroon_down)
 }
 
+#[allow(dead_code)]
 fn aroonosc_scan_inner(
     high_ptr: *const f64,
     low_ptr: *const f64,
@@ -2551,6 +2537,7 @@ fn aroonosc_scan_inner(
     }
 }
 
+#[allow(dead_code)]
 fn aroonosc_deque_inner(
     high_ptr: *const f64,
     low_ptr: *const f64,
@@ -2683,7 +2670,69 @@ pub fn macdext(
 /// assert_eq!(result.macd.len(), 40);
 /// ```
 pub fn macdfix(input: &[f64]) -> Result<MacdResult> {
-    macd(input, 12, 26, 9)
+    macdfix_with_signal(input, 9)
+}
+
+/// MACDFIX with an explicit signal period, matching TA-Lib's optional
+/// `signalperiod` argument while keeping `macdfix`'s historical default.
+pub fn macdfix_with_signal(input: &[f64], signal_period: usize) -> Result<MacdResult> {
+    if signal_period == 0 {
+        return Err(TaError::InvalidParameter {
+            name: "signal_period".to_string(),
+            constraint: "greater than 0".to_string(),
+        });
+    }
+    validate_input(input.len(), 26 + signal_period - 1)?;
+    let len = input.len();
+    let mut macd_line = vec![f64::NAN; len];
+    let mut signal = vec![f64::NAN; len];
+    let mut hist = vec![f64::NAN; len];
+
+    // MACDFIX uses the fixed TA-Lib smoothing constants 0.15 and 0.075,
+    // rather than recomputing 2/(period+1) as the general MACD path does.
+    // The distinction is small but accumulates enough to fail parity.
+    let fast_period = 12;
+    let slow_period = 26;
+    let fast_k = 0.15;
+    let slow_k = 0.075;
+    let signal_k = 2.0 / (signal_period as f64 + 1.0);
+    let mut slow_sum = 0.0;
+    for &value in &input[..slow_period] {
+        slow_sum += value;
+    }
+    let mut fast_sum = 0.0;
+    for &value in &input[slow_period - fast_period..slow_period] {
+        fast_sum += value;
+    }
+    let mut fast = fast_sum / fast_period as f64;
+    let mut slow = slow_sum / slow_period as f64;
+    let first_macd = slow_period - 1;
+    let mut macd_value = fast - slow;
+    macd_line[first_macd] = macd_value;
+    for (i, &value) in input.iter().enumerate().skip(slow_period) {
+        fast = (value - fast).mul_add(fast_k, fast);
+        slow = (value - slow).mul_add(slow_k, slow);
+        macd_value = fast - slow;
+        macd_line[i] = macd_value;
+    }
+
+    let first_output = first_macd + signal_period - 1;
+    let mut signal_value =
+        macd_line[first_macd..=first_output].iter().sum::<f64>() / signal_period as f64;
+    signal[first_output] = signal_value;
+    hist[first_output] = macd_line[first_output] - signal_value;
+    for i in first_output + 1..len {
+        signal_value = (macd_line[i] - signal_value).mul_add(signal_k, signal_value);
+        signal[i] = signal_value;
+        hist[i] = macd_line[i] - signal_value;
+    }
+    // TA-Lib only exposes the stable signal zone for MACDFIX.
+    macd_line[..first_output].fill(f64::NAN);
+    Ok(MacdResult {
+        macd: Array1::from_vec(macd_line),
+        signal: Array1::from_vec(signal),
+        hist: Array1::from_vec(hist),
+    })
 }
 
 /// Percentage Price Oscillator (PPO)
@@ -2702,16 +2751,17 @@ pub fn macdfix(input: &[f64]) -> Result<MacdResult> {
 pub fn ppo(input: &[f64], fast_period: usize, slow_period: usize) -> Result<Array1<f64>> {
     let fast_ema = ema(input, fast_period)?;
     let slow_ema = ema(input, slow_period)?;
-
     let len = input.len();
     let mut output = init_output(len);
-
     for i in 0..len {
-        if !fast_ema[i].is_nan() && !slow_ema[i].is_nan() && slow_ema[i].abs() > 1e-15 {
-            output[i] = ((fast_ema[i] - slow_ema[i]) / slow_ema[i]) * 100.0;
+        if !fast_ema[i].is_nan() && !slow_ema[i].is_nan() {
+            output[i] = if slow_ema[i].abs() > 1e-15 {
+                (fast_ema[i] - slow_ema[i]) / slow_ema[i] * 100.0
+            } else {
+                0.0
+            };
         }
     }
-
     Ok(output)
 }
 
@@ -2928,114 +2978,62 @@ pub fn stochrsi(
     let rsi_vals = rsi(input, rsi_period)?;
     let rsi_slice = rsi_vals.as_slice().unwrap();
     let len = rsi_slice.len();
-
-    let mut rsi_clean = vec![0.0; len];
-    for (i, &v) in rsi_slice.iter().enumerate() {
-        if !v.is_nan() {
-            rsi_clean[i] = v;
-        }
+    if stoch_period == 0 || fastk_period == 0 || fastd_period == 0 {
+        return Err(TaError::InvalidParameter {
+            name: "stochastic periods".to_string(),
+            constraint: "all periods must be greater than 0".to_string(),
+        });
     }
 
+    // TA-Lib's STOCHRSI uses fastk_period for the RSI high/low window.  The
+    // public API keeps the historical stoch_period argument for Rust callers;
+    // Python compatibility passes the TA-Lib fastk period through that slot.
+    let window = stoch_period;
+    let raw_start = rsi_period + window - 1;
+    let output_start = raw_start + fastd_period - 1;
     let mut raw_k = init_output(len);
-    let valid_start = rsi_period + stoch_period - 1;
-
-    {
-        let mut max_dq: VecDeque<usize> = VecDeque::with_capacity(stoch_period + 1);
-        let mut min_dq: VecDeque<usize> = VecDeque::with_capacity(stoch_period + 1);
-
-        let seed_start = rsi_period;
-        for i in seed_start..len {
-            let v = rsi_clean[i];
-
-            while let Some(&back) = max_dq.back() {
-                if rsi_clean[back] <= v {
-                    max_dq.pop_back();
-                } else {
-                    break;
-                }
-            }
-            max_dq.push_back(i);
-
-            while let Some(&back) = min_dq.back() {
-                if rsi_clean[back] >= v {
-                    min_dq.pop_back();
-                } else {
-                    break;
-                }
-            }
-            min_dq.push_back(i);
-
-            let ws = if i + 1 >= stoch_period + seed_start {
-                i + 1 - stoch_period
-            } else {
-                seed_start
-            };
-            while let Some(&front) = max_dq.front() {
-                if front < ws {
-                    max_dq.pop_front();
-                } else {
-                    break;
-                }
-            }
-            while let Some(&front) = min_dq.front() {
-                if front < ws {
-                    min_dq.pop_front();
-                } else {
-                    break;
-                }
-            }
-
-            if i >= valid_start {
-                let highest = rsi_clean[*max_dq.front().unwrap()];
-                let lowest = rsi_clean[*min_dq.front().unwrap()];
-                let range = highest - lowest;
-                if range > 1e-15 {
-                    raw_k[i] = ((rsi_clean[i] - lowest) / range) * 100.0;
-                } else {
-                    raw_k[i] = 50.0;
-                }
-            }
+    let mut max_dq = VecDeque::with_capacity(window + 1);
+    let mut min_dq = VecDeque::with_capacity(window + 1);
+    for i in rsi_period..len {
+        let value = rsi_slice[i];
+        while max_dq.back().is_some_and(|&j| rsi_slice[j] <= value) {
+            max_dq.pop_back();
         }
-    }
-
-    // %K smoothing: SMA of raw %K, treating NaN (warm-up) inputs as 0.0.
-    // SIMD kernel is used; NaN positions are mapped to 0.0 first to mirror the
-    // scalar `sma_nan_as_zero_into` semantics (which counted NaNs as zero).
-    let mut fastk_ma = init_output(len);
-    {
-        let raw_k_clean: Vec<f64> = raw_k
-            .iter()
-            .map(|&v| if v.is_nan() { 0.0 } else { v })
-            .collect();
-        simd_ops::simd_sma(&raw_k_clean, fastk_period, fastk_ma.as_slice_mut().unwrap());
-    }
-
-    // %D smoothing: SMA of %K, again with NaN→0.0 pre-mapping.
-    let mut fastd_ma = init_output(len);
-    {
-        let fastk_ma_clean: Vec<f64> = fastk_ma
-            .iter()
-            .map(|&v| if v.is_nan() { 0.0 } else { v })
-            .collect();
-        simd_ops::simd_sma(
-            &fastk_ma_clean,
-            fastd_period,
-            fastd_ma.as_slice_mut().unwrap(),
-        );
+        while min_dq.back().is_some_and(|&j| rsi_slice[j] >= value) {
+            min_dq.pop_back();
+        }
+        max_dq.push_back(i);
+        min_dq.push_back(i);
+        let start = i + 1 - window;
+        while max_dq.front().is_some_and(|&j| j < start) {
+            max_dq.pop_front();
+        }
+        while min_dq.front().is_some_and(|&j| j < start) {
+            min_dq.pop_front();
+        }
+        if i >= raw_start {
+            let highest = rsi_slice[*max_dq.front().unwrap()];
+            let lowest = rsi_slice[*min_dq.front().unwrap()];
+            let range = highest - lowest;
+            raw_k[i] = if range > 1e-15 {
+                (value - lowest) / range * 100.0
+            } else {
+                0.0
+            };
+        }
     }
 
     let mut out_k = init_output(len);
     let mut out_d = init_output(len);
-    let k_start = valid_start + fastk_period - 1;
-    let d_start = k_start + fastd_period - 1;
-    for i in k_start..len {
-        if !fastk_ma[i].is_nan() {
-            out_k[i] = fastk_ma[i];
+    let mut sum = 0.0;
+    for i in raw_start..len {
+        sum += raw_k[i];
+        if i >= raw_start + fastd_period {
+            sum -= raw_k[i - fastd_period];
         }
-    }
-    for i in d_start..len {
-        if !fastd_ma[i].is_nan() {
-            out_d[i] = fastd_ma[i];
+        if i >= output_start {
+            out_k[i] = raw_k[i];
+            out_d[i] = sum / fastd_period as f64;
         }
     }
 

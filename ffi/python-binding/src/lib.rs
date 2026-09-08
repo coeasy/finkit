@@ -21,6 +21,7 @@ use formula_plan::PyCompiledFormula;
 use numpy::{PyArray1, PyReadonlyArray1};
 use pyo3::prelude::*;
 
+mod compat_api;
 mod features;
 #[cfg(feature = "formula")]
 mod formula_plan;
@@ -4415,6 +4416,9 @@ fn finkit(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // Batch Computation (Single GIL Release)
     m.add_function(wrap_pyfunction!(compute_indicators, m)?)?;
+
+    // TA-Lib-compatible direct bindings for the remaining core indicators.
+    compat_api::register(m)?;
 
     Ok(())
 }

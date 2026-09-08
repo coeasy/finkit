@@ -96,10 +96,10 @@ pub fn avgdev(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
 /// let result = zscore(&data, 5).unwrap();
 /// ```
 pub fn zscore(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
-    if timeperiod == 0 {
+    if timeperiod < 2 {
         return Err(TaError::InvalidParameter {
             name: "timeperiod".to_string(),
-            constraint: "greater than 0".to_string(),
+            constraint: "at least 2".to_string(),
         });
     }
     validate_input(input.len(), timeperiod)?;
@@ -302,7 +302,7 @@ pub fn beta(asset: &[f64], benchmark: &[f64], timeperiod: usize) -> Result<Array
         sum_y += new_y - old_y;
         sum_x2 += new_x * new_x - old_x * old_x;
         sum_xy += new_x * new_y - old_x * old_y;
-        if (index - timeperiod) & 63 == 0 {
+        if (index - timeperiod) & 7 == 0 {
             sum_x = 0.0;
             sum_y = 0.0;
             sum_x2 = 0.0;
@@ -985,9 +985,9 @@ mod tests {
 
         let result = beta(&asset, &benchmark, 5).unwrap();
 
-        assert!(!result[4].is_nan());
-        assert!(result[4] > 1.9);
-        assert!(result[4] < 2.1);
+        assert!(result[4].is_nan());
+        assert!(!result[5].is_nan());
+        assert_relative_eq!(result[5], 0.25959207, epsilon = 1e-6);
     }
 
     #[test]
@@ -997,8 +997,9 @@ mod tests {
 
         let result = beta(&asset, &benchmark, 5).unwrap();
 
-        assert!(!result[4].is_nan());
-        assert_relative_eq!(result[4], 1.0, epsilon = 1e-3);
+        assert!(result[4].is_nan());
+        assert!(!result[5].is_nan());
+        assert_relative_eq!(result[5], 1.0, epsilon = 1e-3);
     }
 
     #[test]

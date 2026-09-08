@@ -704,15 +704,15 @@ pub fn mama(input: &[f64], fast_limit: f64, slow_limit: f64) -> Result<MamaResul
             i1_for_odd_prev2 = detrender_val;
 
             // Phase: atan(Q1 / I1ForEvenPrev3) in degrees
-            phase_degrees = if i1_for_even_prev3.abs() > 1e-15 {
+            phase_degrees = if i1_for_even_prev3 != 0.0 {
                 (q1_val / i1_for_even_prev3).atan() * rad2deg
             } else {
                 0.0
             };
 
             // Re/Im use OLD prevQ2/prevI2 (before update), matching TA-Lib
-            re = 0.2f64.mul_add(i2.mul_add(prev_i2, q2 * prev_q2), 0.8 * re);
-            im = 0.2f64.mul_add(i2 * prev_q2 - q2 * prev_i2, 0.8 * im);
+            re = 0.8f64.mul_add(re, 0.2 * i2.mul_add(prev_i2, q2 * prev_q2));
+            im = 0.8f64.mul_add(im, 0.2 * (i2 * prev_q2 - q2 * prev_i2));
             prev_q2 = q2;
             prev_i2 = i2;
         } else {
@@ -766,15 +766,15 @@ pub fn mama(input: &[f64], fast_limit: f64, slow_limit: f64) -> Result<MamaResul
             i1_for_even_prev2 = detrender_val;
 
             // Phase: atan(Q1 / I1ForOddPrev3) in degrees
-            phase_degrees = if i1_for_odd_prev3.abs() > 1e-15 {
+            phase_degrees = if i1_for_odd_prev3 != 0.0 {
                 (q1_val / i1_for_odd_prev3).atan() * rad2deg
             } else {
                 0.0
             };
 
             // Re/Im use OLD prevQ2/prevI2 (before update), matching TA-Lib
-            re = 0.2f64.mul_add(i2.mul_add(prev_i2, q2 * prev_q2), 0.8 * re);
-            im = 0.2f64.mul_add(i2 * prev_q2 - q2 * prev_i2, 0.8 * im);
+            re = 0.8f64.mul_add(re, 0.2 * i2.mul_add(prev_i2, q2 * prev_q2));
+            im = 0.8f64.mul_add(im, 0.2 * (i2 * prev_q2 - q2 * prev_i2));
             prev_q2 = q2;
             prev_i2 = i2;
         }
@@ -813,7 +813,7 @@ pub fn mama(input: &[f64], fast_limit: f64, slow_limit: f64) -> Result<MamaResul
 
         // Adjust period for next bar (same as HT_DCPERIOD)
         let temp_period = period;
-        if im.abs() > 1e-10 && re.abs() > 1e-10 {
+        if im != 0.0 && re != 0.0 {
             period = 360.0 / (im / re).atan();
         }
 
@@ -830,7 +830,7 @@ pub fn mama(input: &[f64], fast_limit: f64, slow_limit: f64) -> Result<MamaResul
         } else if period > 50.0 {
             period = 50.0;
         }
-        period = 0.2 * period + 0.8 * temp_period;
+        period = 0.2f64.mul_add(period, 0.8 * temp_period);
     }
 
     Ok(MamaResult {
@@ -1033,15 +1033,15 @@ pub fn mama_into(
             i1_for_odd_prev2 = detrender_val;
 
             // Phase: atan(Q1 / I1ForEvenPrev3) in degrees
-            phase_degrees = if i1_for_even_prev3.abs() > 1e-15 {
+            phase_degrees = if i1_for_even_prev3 != 0.0 {
                 (q1_val / i1_for_even_prev3).atan() * rad2deg
             } else {
                 0.0
             };
 
             // Re/Im use OLD prevQ2/prevI2 (before update), matching TA-Lib
-            re = 0.2f64.mul_add(i2.mul_add(prev_i2, q2 * prev_q2), 0.8 * re);
-            im = 0.2f64.mul_add(i2 * prev_q2 - q2 * prev_i2, 0.8 * im);
+            re = 0.8f64.mul_add(re, 0.2 * i2.mul_add(prev_i2, q2 * prev_q2));
+            im = 0.8f64.mul_add(im, 0.2 * (i2 * prev_q2 - q2 * prev_i2));
             prev_q2 = q2;
             prev_i2 = i2;
         } else {
@@ -1095,15 +1095,15 @@ pub fn mama_into(
             i1_for_even_prev2 = detrender_val;
 
             // Phase: atan(Q1 / I1ForOddPrev3) in degrees
-            phase_degrees = if i1_for_odd_prev3.abs() > 1e-15 {
+            phase_degrees = if i1_for_odd_prev3 != 0.0 {
                 (q1_val / i1_for_odd_prev3).atan() * rad2deg
             } else {
                 0.0
             };
 
             // Re/Im use OLD prevQ2/prevI2 (before update), matching TA-Lib
-            re = 0.2f64.mul_add(i2.mul_add(prev_i2, q2 * prev_q2), 0.8 * re);
-            im = 0.2f64.mul_add(i2 * prev_q2 - q2 * prev_i2, 0.8 * im);
+            re = 0.8f64.mul_add(re, 0.2 * i2.mul_add(prev_i2, q2 * prev_q2));
+            im = 0.8f64.mul_add(im, 0.2 * (i2 * prev_q2 - q2 * prev_i2));
             prev_q2 = q2;
             prev_i2 = i2;
         }
@@ -1142,7 +1142,7 @@ pub fn mama_into(
 
         // Adjust period for next bar (same as HT_DCPERIOD)
         let temp_period = period;
-        if im.abs() > 1e-10 && re.abs() > 1e-10 {
+        if im != 0.0 && re != 0.0 {
             period = 360.0 / (im / re).atan();
         }
 
@@ -1159,7 +1159,7 @@ pub fn mama_into(
         } else if period > 50.0 {
             period = 50.0;
         }
-        period = 0.2 * period + 0.8 * temp_period;
+        period = 0.2f64.mul_add(period, 0.8 * temp_period);
     }
 
     Ok(())
