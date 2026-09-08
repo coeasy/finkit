@@ -687,15 +687,16 @@ fn compute_hilbert_short<const PHASOR: bool, const TRENDLINE: bool>(
     let mut i_trend3 = 0.0;
     let rad2deg = 180.0 / std::f64::consts::PI;
 
-    let trend_prefix = if TRENDLINE {
-        let mut prefix = vec![0.0; input.len() + 1];
-        for (index, &value) in input.iter().enumerate() {
-            prefix[index + 1] = prefix[index] + value;
-        }
-        prefix
-    } else {
-        Vec::new()
-    };
+    let mut trend_cumulative = 0.0;
+    let mut trend_prefix_ring = [0.0; 51];
+    if TRENDLINE {
+        trend_cumulative = input[0];
+        trend_prefix_ring[0] = trend_cumulative;
+        trend_cumulative += input[1];
+        trend_prefix_ring[1] = trend_cumulative;
+        trend_cumulative += input[2];
+        trend_prefix_ring[2] = trend_cumulative;
+    }
 
     let mut trailing_wma_idx = 0usize;
     let mut period_wma_sub = unsafe { *input_ptr.add(0) + *input_ptr.add(1) + *input_ptr.add(2) };
@@ -705,6 +706,10 @@ fn compute_hilbert_short<const PHASOR: bool, const TRENDLINE: bool>(
     let wma_warmup = if TRENDLINE { 34 } else { 9 };
     for today in 3..(3 + wma_warmup) {
         let value = unsafe { *input_ptr.add(today) };
+        if TRENDLINE {
+            trend_cumulative += value;
+            trend_prefix_ring[today % 51] = trend_cumulative;
+        }
         period_wma_sub += value;
         period_wma_sub -= trailing_wma_value;
         period_wma_sum += value * 4.0;
@@ -715,6 +720,10 @@ fn compute_hilbert_short<const PHASOR: bool, const TRENDLINE: bool>(
 
     for i in (3 + wma_warmup)..input.len() {
         let value = unsafe { *input_ptr.add(i) };
+        if TRENDLINE {
+            trend_cumulative += value;
+            trend_prefix_ring[i % 51] = trend_cumulative;
+        }
         period_wma_sub += value;
         period_wma_sub -= trailing_wma_value;
         period_wma_sum += value * 4.0;
@@ -832,7 +841,13 @@ fn compute_hilbert_short<const PHASOR: bool, const TRENDLINE: bool>(
 
         if TRENDLINE {
             let dc_period_int = (smooth_period + 0.5) as usize;
-            let raw_sum = trend_prefix[i + 1] - trend_prefix[i + 1 - dc_period_int];
+            let start = i + 1 - dc_period_int;
+            let previous_cumulative = if start == 0 {
+                0.0
+            } else {
+                trend_prefix_ring[(start - 1) % 51]
+            };
+            let raw_sum = trend_cumulative - previous_cumulative;
             let instant_trend = raw_sum / dc_period_int as f64;
             let trendline =
                 (4.0 * instant_trend + 3.0 * i_trend1 + 2.0 * i_trend2 + i_trend3) / 10.0;
