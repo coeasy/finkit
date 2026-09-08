@@ -2370,61 +2370,7 @@ pub fn mfi(
     volume: &[f64],
     period: usize,
 ) -> Result<Array1<f64>> {
-    if high.len() != low.len() || high.len() != close.len() || high.len() != volume.len() {
-        return Err(TaError::InvalidParameter {
-            name: "high, low, close, volume".to_string(),
-            constraint: "must have the same length".to_string(),
-        });
-    }
-    validate_input(high.len(), period + 1)?;
-
-    let len = close.len();
-    let mut output = vec![f64::NAN; len];
-
-    // Typical price (high+low+close)/3, batched through the SIMD fast path.
-    // This is elementwise and order-independent, so it is bit-identical to the
-    // scalar form while running 4 lanes at a time.
-    let mut tp = vec![0.0_f64; len];
-    simd_ops::simd_typical_price(high, low, close, &mut tp);
-
-    let mut pos_ring = vec![0.0_f64; period];
-    let mut neg_ring = vec![0.0_f64; period];
-    let mut pos_sum: f64 = 0.0;
-    let mut neg_sum: f64 = 0.0;
-    let mut ring_idx: usize = 0;
-
-    let mut prev_tp = tp[0];
-
-    for i in 1..len {
-        let tp_i = tp[i];
-        let mf_val = tp_i * volume[i];
-
-        let (pos, neg) = if tp_i > prev_tp {
-            (mf_val, 0.0)
-        } else {
-            (0.0, mf_val)
-        };
-        prev_tp = tp_i;
-
-        pos_sum += pos - pos_ring[ring_idx];
-        neg_sum += neg - neg_ring[ring_idx];
-        pos_ring[ring_idx] = pos;
-        neg_ring[ring_idx] = neg;
-        ring_idx += 1;
-        if ring_idx == period {
-            ring_idx = 0;
-        }
-
-        if i >= period {
-            output[i] = if neg_sum.abs() > 1e-15 {
-                100.0 - 100.0 / (1.0 + pos_sum / neg_sum)
-            } else {
-                100.0
-            };
-        }
-    }
-
-    Ok(Array1::from(output))
+    crate::math::mfi::mfi(high, low, close, volume, period)
 }
 
 /// Minus Directional Indicator (MINUS_DI)

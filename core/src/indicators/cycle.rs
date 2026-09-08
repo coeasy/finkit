@@ -725,11 +725,14 @@ fn compute_hilbert_short<const PHASOR: bool, const TRENDLINE: bool>(
             });
         }
     }
-    first.fill(f64::NAN);
+    let lookback = if TRENDLINE { 63 } else { 32 };
+    let first_warmup = lookback.min(first.len());
+    first[..first_warmup].fill(f64::NAN);
     let input_ptr = input.as_ptr();
     let first_ptr = first.as_mut_ptr();
     let second_ptr = second.map(|values| {
-        values.fill(f64::NAN);
+        let warmup = 32.min(values.len());
+        values[..warmup].fill(f64::NAN);
         values.as_mut_ptr()
     });
 
@@ -966,10 +969,12 @@ fn compute_hilbert_selected<const MODE: u8>(
         }
     }
     let lookback = if MODE == 0 || MODE == 2 { 32 } else { 63 };
-    first.fill(if MODE == 5 { 0.0 } else { f64::NAN });
+    let first_warmup = lookback.min(first.len());
+    first[..first_warmup].fill(if MODE == 5 { 0.0 } else { f64::NAN });
     let mut second = second;
     if let Some(values) = second.as_deref_mut() {
-        values.fill(f64::NAN);
+        let warmup = lookback.min(values.len());
+        values[..warmup].fill(f64::NAN);
     }
 
     let a = 0.0962;

@@ -216,7 +216,7 @@ pub fn adosc_into(
             let l = *low_ptr.add(i);
             let c = *close_ptr.add(i);
             let range = h - l;
-            if range.abs() >= 1e-15 {
+            if range > 0.0 {
                 cumulative += (((c - l) - (h - c)) / range) * *volume_ptr.add(i);
             }
 
@@ -224,8 +224,10 @@ pub fn adosc_into(
                 fast_ema = cumulative;
                 slow_ema = cumulative;
             } else {
-                fast_ema = cumulative * fast_k + fast_ema * fast_one_k;
-                slow_ema = cumulative * slow_k + slow_ema * slow_one_k;
+                // Match TA-Lib's fused EMA recurrence while avoiding the
+                // second multiply in the common scalar form.
+                fast_ema = fast_ema.mul_add(fast_one_k, cumulative * fast_k);
+                slow_ema = slow_ema.mul_add(slow_one_k, cumulative * slow_k);
             }
             if i >= slow_period - 1 {
                 *output_ptr.add(i) = fast_ema - slow_ema;

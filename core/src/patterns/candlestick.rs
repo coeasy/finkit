@@ -1,6 +1,7 @@
 use crate::error::{Result, TaError};
 use crate::utils::validate_input;
 use ndarray::Array1;
+use std::mem::{forget, MaybeUninit};
 
 /// Candlestick pattern result
 /// Values: 100 for bullish, -100 for bearish, 0 for no pattern
@@ -2954,14 +2955,60 @@ pub fn cdl_3inside(
     validate_input(open.len(), 3)?;
     let len = open.len();
     let mut output = PatternResult::zeros(len);
-    let up = three_inside_up(open, high, low, close)?;
-    let down = three_inside_down(open, high, low, close)?;
-    for i in 0..len {
-        if up[i] == 100 {
-            output[i] = 100;
-        } else if down[i] == -100 {
-            output[i] = -100;
+    let output_ptr = output.as_slice_mut().unwrap().as_mut_ptr();
+    // TA-Lib's default BodyLong and BodyShort settings both use a 10-bar
+    // real-body average.  The current candle is excluded from each average.
+    // Keeping both rolling totals in this fused loop avoids the two helper
+    // arrays used by the previous implementation and preserves the official
+    // warm-up/lookback semantics.
+    const BODY_AVG_PERIOD: usize = 10;
+    const LOOKBACK: usize = BODY_AVG_PERIOD + 2;
+    if len <= LOOKBACK {
+        return Ok(output);
+    }
+    let open_ptr = open.as_ptr();
+    let close_ptr = close.as_ptr();
+    let mut long_total = 0.0;
+    let mut short_total = 0.0;
+    for index in 0..BODY_AVG_PERIOD {
+        long_total += unsafe { (*close_ptr.add(index) - *open_ptr.add(index)).abs() };
+        short_total += unsafe { (*close_ptr.add(index + 1) - *open_ptr.add(index + 1)).abs() };
+    }
+    for i in LOOKBACK..len {
+        let first_open = unsafe { *open_ptr.add(i - 2) };
+        let first_close = unsafe { *close_ptr.add(i - 2) };
+        let second_open = unsafe { *open_ptr.add(i - 1) };
+        let second_close = unsafe { *close_ptr.add(i - 1) };
+        let third_open = unsafe { *open_ptr.add(i) };
+        let third_close = unsafe { *close_ptr.add(i) };
+        let first_max = first_open.max(first_close);
+        let first_min = first_open.min(first_close);
+        let second_max = second_open.max(second_close);
+        let second_min = second_open.min(second_close);
+        let first_body = (first_close - first_open).abs();
+        let second_body = (second_close - second_open).abs();
+
+        if second_max < first_max
+            && second_min > first_min
+            && first_body > long_total / BODY_AVG_PERIOD as f64
+            && second_body <= short_total / BODY_AVG_PERIOD as f64
+        {
+            if first_close >= first_open && third_close < third_open && third_close < first_open {
+                unsafe { *output_ptr.add(i) = -100 };
+            } else if first_close < first_open
+                && third_close >= third_open
+                && third_close > first_open
+            {
+                unsafe { *output_ptr.add(i) = 100 };
+            }
         }
+
+        let outgoing_long =
+            unsafe { (*close_ptr.add(i - LOOKBACK) - *open_ptr.add(i - LOOKBACK)).abs() };
+        let outgoing_short =
+            unsafe { (*close_ptr.add(i - LOOKBACK + 1) - *open_ptr.add(i - LOOKBACK + 1)).abs() };
+        long_total += first_body - outgoing_long;
+        short_total += second_body - outgoing_short;
     }
     Ok(output)
 }
@@ -2991,33 +3038,48 @@ pub fn cdl_3outside(
     }
     validate_input(open.len(), 3)?;
     let len = open.len();
-    let mut output = PatternResult::zeros(len);
+    let mut raw_output = Vec::<MaybeUninit<i32>>::with_capacity(len);
+    unsafe { raw_output.set_len(len) };
     let open_ptr = open.as_ptr();
     let close_ptr = close.as_ptr();
-    let output_ptr: *mut i32 = output.as_slice_mut().unwrap().as_mut_ptr();
-    for i in 2..len {
-        let open_2 = unsafe { *open_ptr.add(i - 2) };
-        let close_2 = unsafe { *close_ptr.add(i - 2) };
-        let open_1 = unsafe { *open_ptr.add(i - 1) };
-        let close_1 = unsafe { *close_ptr.add(i - 1) };
-        let close_0 = unsafe { *close_ptr.add(i) };
-        if close_1 >= open_1
-            && close_2 < open_2
-            && close_1 > open_2
-            && open_1 < close_2
-            && close_0 > close_1
-        {
-            unsafe { *output_ptr.add(i) = 100 };
-        } else if close_1 < open_1
-            && close_2 >= open_2
-            && open_1 > close_2
-            && close_1 < open_2
-            && close_0 < close_1
-        {
-            unsafe { *output_ptr.add(i) = -100 };
+    let output_ptr = raw_output.as_mut_ptr();
+    // TA-Lib's lookback is three bars for this pattern; keep index two at the
+    // neutral value even though the local shape only references three bars.
+    unsafe {
+        for i in 0..3.min(len) {
+            output_ptr.add(i).write(MaybeUninit::new(0));
         }
+        for i in 3..len {
+            let open_2 = *open_ptr.add(i - 2);
+            let close_2 = *close_ptr.add(i - 2);
+            let open_1 = *open_ptr.add(i - 1);
+            let close_1 = *close_ptr.add(i - 1);
+            let close_0 = *close_ptr.add(i);
+            let value = if close_1 >= open_1
+                && close_2 < open_2
+                && close_1 > open_2
+                && open_1 < close_2
+                && close_0 > close_1
+            {
+                100
+            } else if close_1 < open_1
+                && close_2 >= open_2
+                && open_1 > close_2
+                && close_1 < open_2
+                && close_0 < close_1
+            {
+                -100
+            } else {
+                0
+            };
+            output_ptr.add(i).write(MaybeUninit::new(value));
+        }
+        let ptr = raw_output.as_mut_ptr().cast::<i32>();
+        let capacity = raw_output.capacity();
+        let length = raw_output.len();
+        forget(raw_output);
+        Ok(Array1::from_vec(Vec::from_raw_parts(ptr, length, capacity)))
     }
-    Ok(output)
 }
 
 /// CDL3STARSINSOUTH — Three Stars In The South

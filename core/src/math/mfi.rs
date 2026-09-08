@@ -1,13 +1,11 @@
 //! Fused Money Flow Index kernel for the Architecture v3 hot path.
 //!
-//! MFI only needs the previous typical price and a `period`-sized signed
-//! money-flow ring. Computing TP inline removes the legacy full-length typical
-//! price allocation, while one signed ring replaces separate positive/negative
-//! rings without changing the public up/non-up classification semantics.
+//! MFI only needs the previous typical price and period-sized money-flow rings.
+//! Computing TP inline removes the legacy full-length typical-price allocation;
+//! the hot period-14 path keeps both rings on the stack like TA-Lib.
 
 use crate::error::{Result, TaError};
 use ndarray::Array1;
-use std::mem::{forget, MaybeUninit};
 
 #[inline(always)]
 fn typical_price(high: f64, low: f64, close: f64) -> f64 {
@@ -27,10 +25,10 @@ pub fn mfi(
             constraint: "must have the same length".to_string(),
         });
     }
-    if period == 0 {
+    if period < 2 {
         return Err(TaError::InvalidParameter {
             name: "period".to_string(),
-            constraint: "greater than 0".to_string(),
+            constraint: "between 2 and 100000".to_string(),
         });
     }
     if high.len() < period + 1 {
@@ -40,90 +38,16 @@ pub fn mfi(
         });
     }
 
-    let len = close.len();
-    let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);
-    // Positive money flow is stored as +x, non-positive-direction flow as -x.
-    // This halves ring storage and lets one outgoing value update the correct
-    // accumulator without a second ring lookup.
-    let mut small_flow_ring = [0.0_f64; 64];
-    let mut heap_flow_ring = if period > small_flow_ring.len() {
-        Some(vec![0.0_f64; period])
-    } else {
-        None
-    };
-    let flow_ptr = if period <= small_flow_ring.len() {
-        small_flow_ring.as_mut_ptr()
-    } else {
-        heap_flow_ring.as_mut().unwrap().as_mut_ptr()
-    };
-    let mut pos_sum = 0.0;
-    let mut neg_sum = 0.0;
-    let mut ring_idx = 0usize;
-    let mut prev_tp = typical_price(high[0], low[0], close[0]);
-
-    // MaybeUninit makes the no-prefill output strategy explicit and sound:
-    // every slot is written exactly once before ownership is reinterpreted as
-    // Vec<f64>, avoiding both a full-length NaN pass and per-element push checks.
-    let output = unsafe {
-        raw_output.set_len(len);
-        let high_ptr = high.as_ptr();
-        let low_ptr = low.as_ptr();
-        let close_ptr = close.as_ptr();
-        let volume_ptr = volume.as_ptr();
-        let output_ptr = raw_output.as_mut_ptr();
-        for index in 0..period {
-            output_ptr.add(index).write(MaybeUninit::new(f64::NAN));
-        }
-
-        for i in 1..len {
-            let tp = typical_price(*high_ptr.add(i), *low_ptr.add(i), *close_ptr.add(i));
-            let money_flow = tp * *volume_ptr.add(i);
-            let signed_flow = if tp > prev_tp {
-                money_flow
-            } else {
-                -money_flow
-            };
-            prev_tp = tp;
-
-            let old_flow = *flow_ptr.add(ring_idx);
-            if old_flow > 0.0 {
-                pos_sum -= old_flow;
-            } else if old_flow < 0.0 {
-                neg_sum += old_flow;
-            }
-
-            if signed_flow > 0.0 {
-                pos_sum += signed_flow;
-            } else if signed_flow < 0.0 {
-                neg_sum -= signed_flow;
-            }
-            *flow_ptr.add(ring_idx) = signed_flow;
-
-            ring_idx += 1;
-            if ring_idx == period {
-                ring_idx = 0;
-            }
-
-            if i >= period {
-                // Algebraically identical to 100 - 100/(1 + pos/neg), but
-                // requires one floating-point division instead of two.
-                let value = if neg_sum.abs() > 1e-15 {
-                    100.0 * pos_sum / (pos_sum + neg_sum)
-                } else {
-                    100.0
-                };
-                output_ptr.add(i).write(MaybeUninit::new(value));
-            }
-        }
-
-        let ptr = raw_output.as_mut_ptr().cast::<f64>();
-        let capacity = raw_output.capacity();
-        let length = raw_output.len();
-        forget(raw_output);
-        Vec::from_raw_parts(ptr, length, capacity)
-    };
-
-    Ok(Array1::from_vec(output))
+    let mut output = Array1::<f64>::zeros(close.len());
+    mfi_into(
+        high,
+        low,
+        close,
+        volume,
+        period,
+        output.as_slice_mut().unwrap(),
+    )?;
+    Ok(output)
 }
 
 /// Compute MFI directly into a caller-owned output buffer.
@@ -145,10 +69,10 @@ pub fn mfi_into(
             constraint: "must have the same length".to_string(),
         });
     }
-    if period == 0 {
+    if period < 2 {
         return Err(TaError::InvalidParameter {
             name: "period".to_string(),
-            constraint: "greater than 0".to_string(),
+            constraint: "between 2 and 100000".to_string(),
         });
     }
     if high.len() < period + 1 {
@@ -164,74 +88,23 @@ pub fn mfi_into(
         });
     }
 
+    output[..period].fill(f64::NAN);
     if period == 14 {
         return mfi_period14_into(high, low, close, volume, output);
     }
 
-    let len = close.len();
-    output[..period].fill(f64::NAN);
-
-    let mut small_flow_ring = [0.0_f64; 64];
-    let mut heap_flow_ring = if period > small_flow_ring.len() {
-        Some(vec![0.0_f64; period])
-    } else {
-        None
-    };
-    let flow_ptr = if period <= small_flow_ring.len() {
-        small_flow_ring.as_mut_ptr()
-    } else {
-        heap_flow_ring.as_mut().unwrap().as_mut_ptr()
-    };
-    let mut pos_sum = 0.0;
-    let mut neg_sum = 0.0;
-    let mut ring_idx = 0usize;
-    let mut prev_tp = typical_price(high[0], low[0], close[0]);
-
-    unsafe {
-        let high_ptr = high.as_ptr();
-        let low_ptr = low.as_ptr();
-        let close_ptr = close.as_ptr();
-        let volume_ptr = volume.as_ptr();
-        let output_ptr = output.as_mut_ptr();
-        for i in 1..len {
-            let tp = typical_price(*high_ptr.add(i), *low_ptr.add(i), *close_ptr.add(i));
-            let money_flow = tp * *volume_ptr.add(i);
-            let signed_flow = if tp > prev_tp {
-                money_flow
-            } else {
-                -money_flow
-            };
-            prev_tp = tp;
-
-            let old_flow = *flow_ptr.add(ring_idx);
-            if old_flow > 0.0 {
-                pos_sum -= old_flow;
-            } else if old_flow < 0.0 {
-                neg_sum += old_flow;
-            }
-
-            if signed_flow > 0.0 {
-                pos_sum += signed_flow;
-            } else if signed_flow < 0.0 {
-                neg_sum -= signed_flow;
-            }
-            *flow_ptr.add(ring_idx) = signed_flow;
-
-            ring_idx += 1;
-            if ring_idx == period {
-                ring_idx = 0;
-            }
-
-            if i >= period {
-                let value = if neg_sum.abs() > 1e-15 {
-                    100.0 * pos_sum / (pos_sum + neg_sum)
-                } else {
-                    100.0
-                };
-                *output_ptr.add(i) = value;
-            }
-        }
-    }
+    let mut positive = vec![0.0_f64; period];
+    let mut negative = vec![0.0_f64; period];
+    mfi_kernel_into(
+        high,
+        low,
+        close,
+        volume,
+        period,
+        &mut positive,
+        &mut negative,
+        output,
+    );
     Ok(())
 }
 
@@ -243,7 +116,6 @@ fn mfi_period14_into(
     volume: &[f64],
     output: &mut [f64],
 ) -> Result<()> {
-    output[..14].fill(f64::NAN);
     let mut positive_ring = [0.0_f64; 14];
     let mut negative_ring = [0.0_f64; 14];
     let mut pos_sum = 0.0;
@@ -274,22 +146,72 @@ fn mfi_period14_into(
                 ring_idx = 0;
             }
             if i >= 14 {
-                *output_ptr.add(i) = if neg_sum.abs() > 1e-15 {
-                    100.0 * pos_sum / (pos_sum + neg_sum)
-                } else {
-                    100.0
-                };
+                *output_ptr.add(i) = mfi_value(pos_sum, neg_sum);
             }
         }
     }
     Ok(())
 }
 
+#[inline(always)]
+fn mfi_value(pos_sum: f64, neg_sum: f64) -> f64 {
+    if neg_sum.abs() > 1.0e-15 {
+        100.0 * pos_sum / (pos_sum + neg_sum)
+    } else {
+        100.0
+    }
+}
+
+#[inline(always)]
+fn mfi_kernel_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    volume: &[f64],
+    period: usize,
+    positive_ring: &mut [f64],
+    negative_ring: &mut [f64],
+    output: &mut [f64],
+) {
+    let mut pos_sum = 0.0;
+    let mut neg_sum = 0.0;
+    let mut ring_idx = 0usize;
+    let mut prev_tp = typical_price(high[0], low[0], close[0]);
+
+    unsafe {
+        let high_ptr = high.as_ptr();
+        let low_ptr = low.as_ptr();
+        let close_ptr = close.as_ptr();
+        let volume_ptr = volume.as_ptr();
+        let output_ptr = output.as_mut_ptr();
+        for i in 1..close.len() {
+            let tp = typical_price(*high_ptr.add(i), *low_ptr.add(i), *close_ptr.add(i));
+            let money_flow = tp * *volume_ptr.add(i);
+            let positive = if tp > prev_tp { money_flow } else { 0.0 };
+            let negative = if tp > prev_tp { 0.0 } else { money_flow };
+            prev_tp = tp;
+
+            pos_sum += positive - *positive_ring.as_ptr().add(ring_idx);
+            neg_sum += negative - *negative_ring.as_ptr().add(ring_idx);
+            *positive_ring.as_mut_ptr().add(ring_idx) = positive;
+            *negative_ring.as_mut_ptr().add(ring_idx) = negative;
+
+            ring_idx += 1;
+            if ring_idx == period {
+                ring_idx = 0;
+            }
+            if i >= period {
+                *output_ptr.add(i) = mfi_value(pos_sum, neg_sum);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn legacy_reference(
+    fn reference(
         high: &[f64],
         low: &[f64],
         close: &[f64],
@@ -322,8 +244,8 @@ mod tests {
             ring_idx = (ring_idx + 1) % period;
 
             if i >= period {
-                output[i] = if neg_sum.abs() > 1e-15 {
-                    100.0 - 100.0 / (1.0 + pos_sum / neg_sum)
+                output[i] = if neg_sum.abs() > 1.0e-15 {
+                    100.0 * pos_sum / (pos_sum + neg_sum)
                 } else {
                     100.0
                 };
@@ -353,7 +275,7 @@ mod tests {
             100.0, 120.0, 130.0, 125.0, 140.0, 135.0, 150.0, 145.0, 160.0,
         ];
         let period = 3;
-        let expected = legacy_reference(&high, &low, &close, &volume, period);
+        let expected = reference(&high, &low, &close, &volume, period);
         let actual = mfi(&high, &low, &close, &volume, period).unwrap();
 
         for (lhs, rhs) in actual.iter().zip(expected.iter()) {

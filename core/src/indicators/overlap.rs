@@ -323,6 +323,69 @@ pub fn midprice_into(high: &[f64], low: &[f64], period: usize, output: &mut [f64
     }
 
     crate::utils::simd_fill_nan(&mut output[..period - 1]);
+    // Keep the common TA-Lib window sizes on cached extrema indices. Random
+    // price series expire an extremum only occasionally, so this avoids the
+    // per-bar queue maintenance cost while retaining exact rolling semantics.
+    if period <= 64 {
+        let high_ptr = high.as_ptr();
+        let low_ptr = low.as_ptr();
+        let output_ptr = output.as_mut_ptr();
+        let mut highest_idx = 0usize;
+        let mut lowest_idx = 0usize;
+        let mut highest = f64::NEG_INFINITY;
+        let mut lowest = f64::INFINITY;
+        unsafe {
+            for i in 0..high.len() {
+                let new_high = *high_ptr.add(i);
+                let new_low = *low_ptr.add(i);
+                if i < period {
+                    if new_high >= highest {
+                        highest = new_high;
+                        highest_idx = i;
+                    }
+                    if new_low <= lowest {
+                        lowest = new_low;
+                        lowest_idx = i;
+                    }
+                } else {
+                    let window_start = i + 1 - period;
+                    if highest_idx < window_start {
+                        highest = *high_ptr.add(window_start);
+                        highest_idx = window_start;
+                        for scan in (window_start + 1)..=i {
+                            let candidate = *high_ptr.add(scan);
+                            if candidate >= highest {
+                                highest = candidate;
+                                highest_idx = scan;
+                            }
+                        }
+                    } else if new_high >= highest {
+                        highest = new_high;
+                        highest_idx = i;
+                    }
+                    if lowest_idx < window_start {
+                        lowest = *low_ptr.add(window_start);
+                        lowest_idx = window_start;
+                        for scan in (window_start + 1)..=i {
+                            let candidate = *low_ptr.add(scan);
+                            if candidate <= lowest {
+                                lowest = candidate;
+                                lowest_idx = scan;
+                            }
+                        }
+                    } else if new_low <= lowest {
+                        lowest = new_low;
+                        lowest_idx = i;
+                    }
+                }
+
+                if i + 1 >= period {
+                    *output_ptr.add(i) = (highest + lowest) * 0.5;
+                }
+            }
+        }
+        return Ok(());
+    }
     rolling_minmax_visit(high, low, period, |i, highest, lowest| {
         output[i] = (highest + lowest) * 0.5;
     });

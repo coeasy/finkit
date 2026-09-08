@@ -13,9 +13,11 @@ use crate::formula::templates::{FormulaTemplate, FormulaTemplates};
 use crate::formula::types::*;
 use crate::formula::unified_dispatch::{unified_formula_executor, FormulaKernelDispatcher};
 use crate::unified_executor::UnifiedExecutor;
+use lru::LruCache;
 use ndarray::Array1;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::num::NonZeroUsize;
 use std::sync::Arc;
 
 type HotFormulaExecutor = UnifiedExecutor<FormulaKernelDispatcher>;
@@ -30,9 +32,9 @@ pub struct FormulaEngine {
     ///
     /// Effectful formulas are still executed by the compatibility executor;
     /// pure plans are eligible for the unified kernel path below.
-    hot_plan_cache: RefCell<HashMap<String, Arc<FormulaHotPlan>>>,
+    hot_plan_cache: RefCell<LruCache<String, Arc<FormulaHotPlan>>>,
     /// Reusable numeric executors whose arenas retain the hot-plan layout.
-    hot_executor_cache: RefCell<HashMap<String, HotFormulaExecutor>>,
+    hot_executor_cache: RefCell<LruCache<String, HotFormulaExecutor>>,
     templates: FormulaTemplates,
     jit_compiler: RefCell<JitCompiler>,
     /// Persistent bytecode cache and VM scratch buffers.
@@ -48,12 +50,13 @@ impl Default for FormulaEngine {
 
 impl FormulaEngine {
     pub fn new() -> Self {
+        let hot_capacity = NonZeroUsize::new(100).expect("constant cache capacity is non-zero");
         Self {
             executor: FormulaExecutor::new(),
             cache: FormulaCache::new(100),
             semantic_plan_cache: RefCell::new(HashMap::new()),
-            hot_plan_cache: RefCell::new(HashMap::new()),
-            hot_executor_cache: RefCell::new(HashMap::new()),
+            hot_plan_cache: RefCell::new(LruCache::new(hot_capacity)),
+            hot_executor_cache: RefCell::new(LruCache::new(hot_capacity)),
             templates: FormulaTemplates::new(),
             jit_compiler: RefCell::new(JitCompiler::new()),
             bytecode_cache: RefCell::new(HashMap::new()),
@@ -62,12 +65,13 @@ impl FormulaEngine {
     }
 
     pub fn with_cache_size(cache_size: usize) -> Self {
+        let hot_capacity = NonZeroUsize::new(cache_size.max(1)).expect("cache_size.max(1) > 0");
         Self {
             executor: FormulaExecutor::new(),
             cache: FormulaCache::new(cache_size),
             semantic_plan_cache: RefCell::new(HashMap::new()),
-            hot_plan_cache: RefCell::new(HashMap::new()),
-            hot_executor_cache: RefCell::new(HashMap::new()),
+            hot_plan_cache: RefCell::new(LruCache::new(hot_capacity)),
+            hot_executor_cache: RefCell::new(LruCache::new(hot_capacity)),
             templates: FormulaTemplates::new(),
             jit_compiler: RefCell::new(JitCompiler::new()),
             bytecode_cache: RefCell::new(HashMap::new()),
@@ -94,18 +98,14 @@ impl FormulaEngine {
         // unavailable for compatibility-only syntax; that syntax keeps the
         // existing executor path.
         if let Ok(hot_plan) = FormulaHotPlan::compile(&ast) {
-            if self.hot_plan_cache.borrow().len() >= self.cache.capacity().max(1) {
-                self.hot_plan_cache.borrow_mut().clear();
-                self.hot_executor_cache.borrow_mut().clear();
-            }
             let hot_plan = Arc::new(hot_plan);
             let hot_executor = unified_formula_executor(&hot_plan);
             self.hot_plan_cache
                 .borrow_mut()
-                .insert(source.to_string(), hot_plan);
+                .put(source.to_string(), hot_plan);
             self.hot_executor_cache
                 .borrow_mut()
-                .insert(source.to_string(), hot_executor);
+                .put(source.to_string(), hot_executor);
         }
         // Compile the optimized AST once so repeated evaluations share the
         // same CSE and constant-folding decisions while preserving assignment
@@ -159,7 +159,11 @@ impl FormulaEngine {
         formula: &CompiledFormula,
         ctx: &FormulaContext,
     ) -> Option<Result<Array1<f64>, FormulaError>> {
-        let plan = self.hot_plan_cache.borrow().get(&formula.source).cloned()?;
+        let plan = self
+            .hot_plan_cache
+            .borrow_mut()
+            .get(&formula.source)
+            .cloned()?;
         if plan.semantic().plan().has_observable_effects() {
             return None;
         }
