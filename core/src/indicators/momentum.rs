@@ -2569,60 +2569,36 @@ pub fn aroonosc(high: &[f64], low: &[f64], period: usize) -> Result<Array1<f64>>
     validate_input(high.len(), period + 1)?;
     let mut output = Array1::from_elem(high.len(), f64::NAN);
     let inv_period = 100.0 / period as f64;
-    let high_ptr = high.as_ptr();
-    let low_ptr = low.as_ptr();
-    unsafe {
-        let mut highest_idx = 0usize;
-        let mut lowest_idx = 0usize;
-        let mut highest = *high_ptr;
-        let mut lowest = *low_ptr;
-        for k in 1..=period {
-            let h = *high_ptr.add(k);
-            let l = *low_ptr.add(k);
-            if h >= highest {
-                highest = h;
-                highest_idx = k;
-            }
-            if l <= lowest {
-                lowest = l;
-                lowest_idx = k;
-            }
+    let mut highs = VecDeque::with_capacity(period + 1);
+    let mut lows = VecDeque::with_capacity(period + 1);
+    for i in 0..=period {
+        while highs.back().is_some_and(|&j| high[j] <= high[i]) {
+            highs.pop_back();
         }
-        *output.uget_mut(period) = (highest_idx as f64 - lowest_idx as f64) * inv_period;
-        for i in period + 1..high.len() {
-            let window_start = i - period;
-            let new_h = *high_ptr.add(i);
-            let new_l = *low_ptr.add(i);
-            if highest_idx < window_start {
-                highest = *high_ptr.add(window_start);
-                highest_idx = window_start;
-                for k in window_start + 1..=i {
-                    let h = *high_ptr.add(k);
-                    if h >= highest {
-                        highest = h;
-                        highest_idx = k;
-                    }
-                }
-            } else if new_h >= highest {
-                highest = new_h;
-                highest_idx = i;
-            }
-            if lowest_idx < window_start {
-                lowest = *low_ptr.add(window_start);
-                lowest_idx = window_start;
-                for k in window_start + 1..=i {
-                    let l = *low_ptr.add(k);
-                    if l <= lowest {
-                        lowest = l;
-                        lowest_idx = k;
-                    }
-                }
-            } else if new_l <= lowest {
-                lowest = new_l;
-                lowest_idx = i;
-            }
-            *output.uget_mut(i) = (highest_idx as f64 - lowest_idx as f64) * inv_period;
+        while lows.back().is_some_and(|&j| low[j] >= low[i]) {
+            lows.pop_back();
         }
+        highs.push_back(i);
+        lows.push_back(i);
+    }
+    output[period] = (highs[0] as f64 - lows[0] as f64) * inv_period;
+    for i in period + 1..high.len() {
+        let window_start = i - period;
+        while highs.back().is_some_and(|&j| high[j] <= high[i]) {
+            highs.pop_back();
+        }
+        while lows.back().is_some_and(|&j| low[j] >= low[i]) {
+            lows.pop_back();
+        }
+        highs.push_back(i);
+        lows.push_back(i);
+        while highs.front().is_some_and(|&j| j < window_start) {
+            highs.pop_front();
+        }
+        while lows.front().is_some_and(|&j| j < window_start) {
+            lows.pop_front();
+        }
+        output[i] = (highs[0] as f64 - lows[0] as f64) * inv_period;
     }
     Ok(output)
 }

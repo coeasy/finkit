@@ -35,18 +35,27 @@ fn validate_period(len: usize, period: usize) -> PyResult<()> {
 #[inline]
 fn rate_change_vec(input: &[f64], period: usize, mode: u8) -> PyResult<Vec<f64>> {
     validate_period(input.len(), period + 1)?;
-    let mut output = vec![f64::NAN; input.len()];
+    let len = input.len();
+    let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    unsafe { raw_output.set_len(len) };
+    let output = unsafe { std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast(), len) };
+    output[..period].fill(f64::NAN);
     for i in period..input.len() {
         let previous = input[i - period];
-        if previous.abs() > 1e-15 {
-            output[i] = match mode {
+        output[i] = if previous.abs() > 1e-15 {
+            match mode {
                 0 => (input[i] - previous) / previous,
                 1 => input[i] / previous,
                 _ => input[i] / previous * 100.0,
-            };
-        }
+            }
+        } else {
+            f64::NAN
+        };
     }
-    Ok(output)
+    let ptr = raw_output.as_mut_ptr().cast::<f64>();
+    let capacity = raw_output.capacity();
+    std::mem::forget(raw_output);
+    Ok(unsafe { Vec::from_raw_parts(ptr, len, capacity) })
 }
 
 #[pyfunction(name = "_fast_rocp")]
@@ -58,6 +67,18 @@ fn fast_rocp<'py>(
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let close = close.as_slice().map_err(value_error)?;
     let values = py.detach(|| rate_change_vec(close, timeperiod, 0))?;
+    Ok(PyArray1::from_vec(py, values))
+}
+
+#[pyfunction(name = "_fast_rocr")]
+#[pyo3(signature = (close, timeperiod=10))]
+fn fast_rocr<'py>(
+    py: Python<'py>,
+    close: PyReadonlyArray1<'py, f64>,
+    timeperiod: usize,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let close = close.as_slice().map_err(value_error)?;
+    let values = py.detach(|| rate_change_vec(close, timeperiod, 1))?;
     Ok(PyArray1::from_vec(py, values))
 }
 
@@ -475,10 +496,18 @@ fn fast_hlc_period<'py>(
             })
             .map_err(value_error)?,
         "cci" => {
-            let mut output = vec![0.0; high.len()];
-            py.detach(|| indicators::cci_into(high, low, close, timeperiod, &mut output))
+            let len = high.len();
+            let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);
+            unsafe { raw_output.set_len(len) };
+            let output = unsafe {
+                std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<f64>(), len)
+            };
+            py.detach(|| indicators::cci_into(high, low, close, timeperiod, output))
                 .map_err(value_error)?;
-            output
+            let ptr = raw_output.as_mut_ptr().cast::<f64>();
+            let capacity = raw_output.capacity();
+            std::mem::forget(raw_output);
+            unsafe { Vec::from_raw_parts(ptr, len, capacity) }
         }
         "plus_di" => py
             .detach(|| {
@@ -1090,6 +1119,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(fast_vwap_into, m)?)?;
     m.add_function(wrap_pyfunction!(fast_mom, m)?)?;
     m.add_function(wrap_pyfunction!(fast_rocp, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_rocr, m)?)?;
     m.add_function(wrap_pyfunction!(fast_rocr100, m)?)?;
     m.add_function(wrap_pyfunction!(fast_unary_period, m)?)?;
     m.add_function(wrap_pyfunction!(fast_unary_period_scale, m)?)?;

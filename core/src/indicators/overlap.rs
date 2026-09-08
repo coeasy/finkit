@@ -516,6 +516,131 @@ pub fn sarext(
     })
 }
 
+/// Zero-copy SAR-only SAREXT kernel for compatibility bindings.
+///
+/// The public [`sarext`] API also returns the acceleration-factor trace for
+/// Rust callers.  TA-Lib's Python SAREXT wrapper exposes only SAR, so keeping
+/// that trace out of this path avoids one full allocation and a write on every
+/// bar without changing the public result type.
+#[allow(clippy::too_many_arguments)]
+pub fn sarext_sar_into(
+    high: &[f64],
+    low: &[f64],
+    start_value: f64,
+    offset_on_reverse: f64,
+    af_init_long: f64,
+    af_long: f64,
+    af_max_long: f64,
+    af_init_short: f64,
+    af_short: f64,
+    af_max_short: f64,
+    output: &mut [f64],
+) -> Result<()> {
+    if high.len() != low.len() {
+        return Err(TaError::InvalidParameter {
+            name: "high and low".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    if high.len() < 2 {
+        return Err(TaError::InsufficientData {
+            length: high.len(),
+            required: 2,
+        });
+    }
+    if output.len() != high.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
+
+    let len = high.len();
+    output.fill(f64::NAN);
+    let mut long_af = af_init_long.min(af_max_long);
+    let mut short_af = af_init_short.min(af_max_short);
+    let long_step = af_long.min(af_max_long);
+    let short_step = af_short.min(af_max_short);
+
+    let up_move = high[1] - high[0];
+    let down_move = low[0] - low[1];
+    let mut is_long = if start_value == 0.0 {
+        !(down_move > up_move && down_move > 0.0)
+    } else {
+        start_value > 0.0
+    };
+    let mut ep;
+    let mut sar;
+    if start_value == 0.0 {
+        if is_long {
+            ep = high[1];
+            sar = low[0];
+        } else {
+            ep = low[1];
+            sar = high[0];
+        }
+    } else if start_value > 0.0 {
+        ep = high[1];
+        sar = start_value;
+    } else {
+        ep = low[1];
+        sar = start_value.abs();
+    }
+
+    // The Python compatibility layer masks bar 0 to TA-Lib's lookback NaN.
+    // Keep the same contract directly in the zero-copy kernel.
+    output[0] = f64::NAN;
+    let mut new_low = low[1];
+    let mut new_high = high[1];
+    let mut today = 1usize;
+    while today < len {
+        let prev_low = new_low;
+        let prev_high = new_high;
+        new_low = low[today];
+        new_high = high[today];
+        today += 1;
+
+        if is_long {
+            if new_low <= sar {
+                is_long = false;
+                sar = ep.max(prev_high).max(new_high);
+                if offset_on_reverse != 0.0 {
+                    sar += sar * offset_on_reverse;
+                }
+                output[today - 1] = -sar;
+                short_af = af_init_short;
+                ep = new_low;
+                sar = (short_af * (ep - sar) + sar).max(prev_high).max(new_high);
+            } else {
+                output[today - 1] = sar;
+                if new_high > ep {
+                    ep = new_high;
+                    long_af = (long_af + long_step).min(af_max_long);
+                }
+                sar = (long_af * (ep - sar) + sar).min(prev_low).min(new_low);
+            }
+        } else if new_high >= sar {
+            is_long = true;
+            sar = ep.min(prev_low).min(new_low);
+            if offset_on_reverse != 0.0 {
+                sar -= sar * offset_on_reverse;
+            }
+            output[today - 1] = sar;
+            long_af = af_init_long;
+            ep = new_high;
+            sar = (long_af * (ep - sar) + sar).min(prev_low).min(new_low);
+        } else {
+            output[today - 1] = -sar;
+            if new_low < ep {
+                ep = new_low;
+                short_af = (short_af + short_step).min(af_max_short);
+            }
+            sar = (short_af * (ep - sar) + sar).max(prev_high).max(new_high);
+        }
+    }
+    Ok(())
+}
+
 /// MAMA (MESA Adaptive Moving Average) Result
 #[derive(Debug, Clone)]
 pub struct MamaResult {

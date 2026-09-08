@@ -275,11 +275,15 @@ if hasattr(_native, "_fast_rocp"):
         close = _as_contiguous_float64(close)
         return _native._fast_rocp(close, timeperiod)
 
+    def rocr(close, timeperiod=10):
+        close = _as_contiguous_float64(close)
+        return _native._fast_rocr(close, timeperiod)
+
     def rocr100(close, timeperiod=10):
         close = _as_contiguous_float64(close)
         return _native._fast_rocr100(close, timeperiod)
 
-    for _fast_name in ("rocp", "rocr100"):
+    for _fast_name in ("rocp", "rocr", "rocr100"):
         globals()[_fast_name] = _translate_native_errors(
             _fast_name, globals()[_fast_name]
         )

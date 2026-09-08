@@ -8,6 +8,7 @@ use ::finkit::math::moving_avg;
 use ::finkit::patterns::candlestick;
 use numpy::{PyArray1, PyReadonlyArray1};
 use pyo3::prelude::*;
+use std::mem::MaybeUninit;
 
 #[inline]
 fn value_error(error: impl std::fmt::Display) -> PyErr {
@@ -538,30 +539,33 @@ fn sarext<'py>(
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let high = high.as_slice().map_err(value_error)?;
     let low = low.as_slice().map_err(value_error)?;
-    let mut values = py
-        .detach(|| {
-            indicators::sarext(
-                high,
-                low,
-                startvalue,
-                offsetonreverse,
-                afinitlong,
-                aflong,
-                afmaxlong,
-                afinitshort,
-                afshort,
-                afmaxshort,
-            )
-        })
-        .map_err(value_error)?
-        .sar
-        .into_raw_vec();
-    // TA-Lib's batch lookback starts at bar 1; the core API keeps its
-    // initialized bar-0 value for backward compatibility.
-    if let Some(first) = values.first_mut() {
-        *first = f64::NAN;
-    }
-    Ok(PyArray1::from_vec(py, values))
+    let len = high.len();
+    let mut raw_values = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    unsafe { raw_values.set_len(len) };
+    let mut values =
+        unsafe { std::slice::from_raw_parts_mut(raw_values.as_mut_ptr().cast::<f64>(), len) };
+    py.detach(|| {
+        indicators::sarext_sar_into(
+            high,
+            low,
+            startvalue,
+            offsetonreverse,
+            afinitlong,
+            aflong,
+            afmaxlong,
+            afinitshort,
+            afshort,
+            afmaxshort,
+            &mut values,
+        )
+    })
+    .map_err(value_error)?;
+    let ptr = raw_values.as_mut_ptr().cast::<f64>();
+    let capacity = raw_values.capacity();
+    std::mem::forget(raw_values);
+    Ok(PyArray1::from_vec(py, unsafe {
+        Vec::from_raw_parts(ptr, len, capacity)
+    }))
 }
 
 #[pyfunction(name = "minmax")]
