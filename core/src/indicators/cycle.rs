@@ -840,10 +840,19 @@ fn compute_hilbert_short<const PHASOR: bool, const TRENDLINE: bool>(
         if im != 0.0 && re != 0.0 {
             period = 360.0 / ((im / re).atan() * rad2deg);
         }
-        period = period
-            .min(1.5 * previous_period)
-            .max(0.67 * previous_period);
-        period = period.clamp(6.0, 50.0);
+        let max_period = 1.5 * previous_period;
+        if period > max_period {
+            period = max_period;
+        }
+        let min_period = 0.67 * previous_period;
+        if period < min_period {
+            period = min_period;
+        }
+        if period < 6.0 {
+            period = 6.0;
+        } else if period > 50.0 {
+            period = 50.0;
+        }
         period = 0.2 * period + 0.8 * previous_period;
         smooth_period = 0.33 * period + 0.67 * smooth_period;
 

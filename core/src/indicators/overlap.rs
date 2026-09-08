@@ -1547,17 +1547,20 @@ pub fn t3_into(input: &[f64], period: usize, vfactor: f64, output: &mut [f64]) -
             output[i] = c1 * ema[5] + c2 * ema[4] + c3 * ema[3] + c4 * ema[2];
         }
     }
+
+    let (mut ema0, mut ema1, mut ema2, mut ema3, mut ema4, mut ema5) =
+        (ema[0], ema[1], ema[2], ema[3], ema[4], ema[5]);
     // Once all six stages are seeded, the hot tail is a fixed dependency
     // chain. Keep it branch-free and unrolled instead of rechecking six
     // warm-up conditions for every bar.
     for i in (lookback + 1)..len {
-        ema[0] = input[i] * k + ema[0] * one_minus_k;
-        ema[1] = ema[0] * k + ema[1] * one_minus_k;
-        ema[2] = ema[1] * k + ema[2] * one_minus_k;
-        ema[3] = ema[2] * k + ema[3] * one_minus_k;
-        ema[4] = ema[3] * k + ema[4] * one_minus_k;
-        ema[5] = ema[4] * k + ema[5] * one_minus_k;
-        output[i] = c1 * ema[5] + c2 * ema[4] + c3 * ema[3] + c4 * ema[2];
+        ema0 = input[i] * k + ema0 * one_minus_k;
+        ema1 = ema0 * k + ema1 * one_minus_k;
+        ema2 = ema1 * k + ema2 * one_minus_k;
+        ema3 = ema2 * k + ema3 * one_minus_k;
+        ema4 = ema3 * k + ema4 * one_minus_k;
+        ema5 = ema4 * k + ema5 * one_minus_k;
+        output[i] = c1 * ema5 + c2 * ema4 + c3 * ema3 + c4 * ema2;
     }
     Ok(())
 }

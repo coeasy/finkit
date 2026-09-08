@@ -407,11 +407,6 @@ if hasattr(_native, "_fast_adosc"):
         result = _native._fast_adosc(
             high, low, close, volume, fastperiod, slowperiod
         )
-        # TA-Lib ADOSC becomes public when the slower EMA has completed its
-        # lookback; the core recursion may keep earlier internal seed values.
-        lookback = _builtins.max(fastperiod, slowperiod) - 1
-        if lookback > 0:
-            result[:lookback] = np.nan
         return result
 
     adosc = _translate_native_errors("adosc", adosc)

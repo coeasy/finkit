@@ -137,10 +137,11 @@ pub fn adosc_into(
             constraint: "must be greater than 0".to_string(),
         });
     }
-    if len < slow_period {
+    let lookback = fast_period.max(slow_period).saturating_sub(1);
+    if len <= lookback {
         return Err(TaError::InsufficientData {
             length: len,
-            required: slow_period,
+            required: lookback + 1,
         });
     }
 
@@ -178,7 +179,7 @@ pub fn adosc_into(
                 fast_ema = cumulative * fast_k + fast_ema * fast_one_k;
                 slow_ema = cumulative * slow_k + slow_ema * slow_one_k;
             }
-            *output_ptr.add(i) = if i >= slow_period - 1 {
+            *output_ptr.add(i) = if i >= lookback {
                 fast_ema - slow_ema
             } else {
                 f64::NAN
