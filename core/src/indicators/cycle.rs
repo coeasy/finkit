@@ -735,8 +735,9 @@ fn compute_hilbert_short<const PHASOR: bool, const TRENDLINE: bool>(
 
         let (i1_value, q1_value) = if i & 1 == 0 {
             let mut detrender_value = unsafe { -*detrender_even.get_unchecked(hilbert_idx) };
-            unsafe { *detrender_even.get_unchecked_mut(hilbert_idx) = a * smoothed };
-            detrender_value += a * smoothed;
+            let scaled_smoothed = a * smoothed;
+            unsafe { *detrender_even.get_unchecked_mut(hilbert_idx) = scaled_smoothed };
+            detrender_value += scaled_smoothed;
             detrender_value -= prev_detrender_even;
             prev_detrender_even = b * prev_detrender_input_even;
             detrender_value += prev_detrender_even;
@@ -744,8 +745,9 @@ fn compute_hilbert_short<const PHASOR: bool, const TRENDLINE: bool>(
             detrender_value *= adjusted_period;
 
             let mut q1_value = unsafe { -*q1_even.get_unchecked(hilbert_idx) };
-            unsafe { *q1_even.get_unchecked_mut(hilbert_idx) = a * detrender_value };
-            q1_value += a * detrender_value;
+            let scaled_detrender = a * detrender_value;
+            unsafe { *q1_even.get_unchecked_mut(hilbert_idx) = scaled_detrender };
+            q1_value += scaled_detrender;
             q1_value -= prev_q1_even;
             prev_q1_even = b * prev_q1_input_even;
             q1_value += prev_q1_even;
@@ -753,8 +755,9 @@ fn compute_hilbert_short<const PHASOR: bool, const TRENDLINE: bool>(
             q1_value *= adjusted_period;
 
             let mut ji_value = unsafe { -*ji_even.get_unchecked(hilbert_idx) };
-            unsafe { *ji_even.get_unchecked_mut(hilbert_idx) = a * i1_even_prev3 };
-            ji_value += a * i1_even_prev3;
+            let scaled_i1 = a * i1_even_prev3;
+            unsafe { *ji_even.get_unchecked_mut(hilbert_idx) = scaled_i1 };
+            ji_value += scaled_i1;
             ji_value -= prev_ji_even;
             prev_ji_even = b * prev_ji_input_even;
             ji_value += prev_ji_even;
@@ -762,8 +765,9 @@ fn compute_hilbert_short<const PHASOR: bool, const TRENDLINE: bool>(
             ji_value *= adjusted_period;
 
             let mut jq_value = unsafe { -*jq_even.get_unchecked(hilbert_idx) };
-            unsafe { *jq_even.get_unchecked_mut(hilbert_idx) = a * q1_value };
-            jq_value += a * q1_value;
+            let scaled_q1 = a * q1_value;
+            unsafe { *jq_even.get_unchecked_mut(hilbert_idx) = scaled_q1 };
+            jq_value += scaled_q1;
             jq_value -= prev_jq_even;
             prev_jq_even = b * prev_jq_input_even;
             jq_value += prev_jq_even;
@@ -782,8 +786,9 @@ fn compute_hilbert_short<const PHASOR: bool, const TRENDLINE: bool>(
             (i1_even_prev3, q1_value)
         } else {
             let mut detrender_value = unsafe { -*detrender_odd.get_unchecked(hilbert_idx) };
-            unsafe { *detrender_odd.get_unchecked_mut(hilbert_idx) = a * smoothed };
-            detrender_value += a * smoothed;
+            let scaled_smoothed = a * smoothed;
+            unsafe { *detrender_odd.get_unchecked_mut(hilbert_idx) = scaled_smoothed };
+            detrender_value += scaled_smoothed;
             detrender_value -= prev_detrender_odd;
             prev_detrender_odd = b * prev_detrender_input_odd;
             detrender_value += prev_detrender_odd;
@@ -791,8 +796,9 @@ fn compute_hilbert_short<const PHASOR: bool, const TRENDLINE: bool>(
             detrender_value *= adjusted_period;
 
             let mut q1_value = unsafe { -*q1_odd.get_unchecked(hilbert_idx) };
-            unsafe { *q1_odd.get_unchecked_mut(hilbert_idx) = a * detrender_value };
-            q1_value += a * detrender_value;
+            let scaled_detrender = a * detrender_value;
+            unsafe { *q1_odd.get_unchecked_mut(hilbert_idx) = scaled_detrender };
+            q1_value += scaled_detrender;
             q1_value -= prev_q1_odd;
             prev_q1_odd = b * prev_q1_input_odd;
             q1_value += prev_q1_odd;
@@ -800,8 +806,9 @@ fn compute_hilbert_short<const PHASOR: bool, const TRENDLINE: bool>(
             q1_value *= adjusted_period;
 
             let mut ji_value = unsafe { -*ji_odd.get_unchecked(hilbert_idx) };
-            unsafe { *ji_odd.get_unchecked_mut(hilbert_idx) = a * i1_odd_prev3 };
-            ji_value += a * i1_odd_prev3;
+            let scaled_i1 = a * i1_odd_prev3;
+            unsafe { *ji_odd.get_unchecked_mut(hilbert_idx) = scaled_i1 };
+            ji_value += scaled_i1;
             ji_value -= prev_ji_odd;
             prev_ji_odd = b * prev_ji_input_odd;
             ji_value += prev_ji_odd;
@@ -809,8 +816,9 @@ fn compute_hilbert_short<const PHASOR: bool, const TRENDLINE: bool>(
             ji_value *= adjusted_period;
 
             let mut jq_value = unsafe { -*jq_odd.get_unchecked(hilbert_idx) };
-            unsafe { *jq_odd.get_unchecked_mut(hilbert_idx) = a * q1_value };
-            jq_value += a * q1_value;
+            let scaled_q1 = a * q1_value;
+            unsafe { *jq_odd.get_unchecked_mut(hilbert_idx) = scaled_q1 };
+            jq_value += scaled_q1;
             jq_value -= prev_jq_odd;
             prev_jq_odd = b * prev_jq_input_odd;
             jq_value += prev_jq_odd;
