@@ -89,69 +89,28 @@ fn bbands_sma_into(
     lower.fill(f64::NAN);
 
     let inv_period = 1.0 / period as f64;
-    let mut ma_total = input[..period].iter().sum::<f64>();
-    let mut shift = input[0];
-    let mut var_total1 = 0.0;
-    let mut var_total2 = 0.0;
-    for &value in &input[..period] {
-        let delta = value - shift;
-        var_total1 += delta;
-        var_total2 += delta * delta;
+    let mut ma_total = 0.0;
+    let mut square_total = 0.0;
+    for &value in &input[..period - 1] {
+        ma_total += value;
+        square_total += value * value;
     }
 
     let mut trailing_idx = 0usize;
-    let mut bars_since_reseed = 32 * period;
     for i in period - 1..len {
-        if i >= period {
-            let value = input[i];
-            ma_total += value;
-            let delta = value - shift;
-            var_total1 += delta;
-            var_total2 += delta * delta;
-        }
-
-        let mean_shift = var_total1 * inv_period;
-        let mut variance = var_total2 * inv_period - mean_shift * mean_shift;
-        let trailing_delta = input[trailing_idx] - shift;
-        ma_total -= input[trailing_idx];
-        var_total1 -= trailing_delta;
-        var_total2 -= trailing_delta * trailing_delta;
-        trailing_idx += 1;
-        bars_since_reseed -= 1;
-
-        if variance < 0.000001 * (var_total2 * inv_period)
-            || trailing_delta > 1_000_000.0 * var_total2
-            || bars_since_reseed == 0
-        {
-            bars_since_reseed = 32 * period;
-            let window_start = i + 1 - period;
-            shift = input[window_start..=i].iter().sum::<f64>() * inv_period;
-            var_total1 = 0.0;
-            var_total2 = 0.0;
-            for &value in &input[window_start..=i] {
-                let delta = value - shift;
-                var_total1 += delta;
-                var_total2 += delta * delta;
-            }
-            let mean_shift = var_total1 * inv_period;
-            variance = var_total2 * inv_period - mean_shift * mean_shift;
-            if variance < 0.000000000001 * (var_total2 * inv_period) {
-                variance = 0.0;
-            }
-            let trailing_delta = input[window_start] - shift;
-            var_total1 -= trailing_delta;
-            var_total2 -= trailing_delta * trailing_delta;
-        }
-
-        let mean = (ma_total + input[trailing_idx - 1]) * inv_period;
-        let std = if variance != 0.0 {
-            variance.sqrt()
-        } else {
-            0.0
-        };
+        let value = input[i];
+        ma_total += value;
+        let mean = ma_total * inv_period;
+        square_total += value * value;
+        let variance = square_total * inv_period - mean * mean;
+        let std = if variance > 0.0 { variance.sqrt() } else { 0.0 };
         middle[i] = mean;
         upper[i] = mean + std * nb_dev_up;
         lower[i] = mean - std * nb_dev_dn;
+
+        ma_total -= input[trailing_idx];
+        square_total -= input[trailing_idx] * input[trailing_idx];
+        trailing_idx += 1;
     }
 }
 
@@ -463,79 +422,89 @@ pub fn sarext(
     let len = high.len();
     let mut sar_values = init_output(len);
     let mut af_values = init_output(len);
+    let mut long_af = af_init_long.min(af_max_long);
+    let mut short_af = af_init_short.min(af_max_short);
+    let long_step = af_long.min(af_max_long);
+    let short_step = af_short.min(af_max_short);
 
-    let mut is_long = start_value >= 0.0;
-    let initial_af = if is_long { af_init_long } else { af_init_short };
-    let mut af = initial_af;
-    let mut ep = if is_long { high[0] } else { low[0] };
-    let mut prev_sar = if is_long {
-        if start_value > 0.0 {
-            start_value
-        } else {
-            low[0]
-        }
+    // TA-Lib consumes the first bar and emits the first value at index 1.
+    // With no forced start value, the first directional movement decides the
+    // initial side; ties default to long.
+    let up_move = high[1] - high[0];
+    let down_move = low[0] - low[1];
+    let mut is_long = if start_value == 0.0 {
+        !(down_move > up_move && down_move > 0.0)
     } else {
-        if start_value < 0.0 {
-            -start_value
-        } else {
-            high[0]
-        }
+        start_value > 0.0
     };
-
-    sar_values[0] = if is_long { prev_sar } else { -prev_sar };
-    af_values[0] = af;
-
-    for i in 1..len {
-        let mut current_sar = prev_sar + af * (ep - prev_sar);
-
+    let mut ep;
+    let mut sar;
+    if start_value == 0.0 {
         if is_long {
-            if i >= 2 {
-                current_sar = current_sar.min(low[i - 1]);
-                if i >= 3 {
-                    current_sar = current_sar.min(low[i - 2]);
-                }
-            }
+            ep = high[1];
+            sar = low[0];
         } else {
-            if i >= 2 {
-                current_sar = current_sar.max(high[i - 1]);
-                if i >= 3 {
-                    current_sar = current_sar.max(high[i - 2]);
-                }
-            }
+            ep = low[1];
+            sar = high[0];
         }
+    } else if start_value > 0.0 {
+        ep = high[1];
+        sar = start_value;
+    } else {
+        ep = low[1];
+        sar = start_value.abs();
+    }
 
-        let mut switched = false;
+    let mut new_low = low[1];
+    let mut new_high = high[1];
+    let mut today = 1usize;
+    while today < len {
+        let prev_low = new_low;
+        let prev_high = new_high;
+        new_low = low[today];
+        new_high = high[today];
+        today += 1;
+
         if is_long {
-            if low[i] < current_sar {
+            if new_low <= sar {
                 is_long = false;
-                current_sar = ep + offset_on_reverse;
-                ep = low[i];
-                af = af_init_short;
-                switched = true;
+                sar = ep.max(prev_high).max(new_high);
+                if offset_on_reverse != 0.0 {
+                    sar += sar * offset_on_reverse;
+                }
+                sar_values[today - 1] = -sar;
+                short_af = af_init_short;
+                ep = new_low;
+                sar = (short_af * (ep - sar) + sar).max(prev_high).max(new_high);
+            } else {
+                sar_values[today - 1] = sar;
+                if new_high > ep {
+                    ep = new_high;
+                    long_af = (long_af + long_step).min(af_max_long);
+                }
+                sar = (long_af * (ep - sar) + sar).min(prev_low).min(new_low);
             }
+            af_values[today - 1] = long_af;
+        } else if new_high >= sar {
+            is_long = true;
+            sar = ep.min(prev_low).min(new_low);
+            if offset_on_reverse != 0.0 {
+                sar -= sar * offset_on_reverse;
+            }
+            sar_values[today - 1] = sar;
+            long_af = af_init_long;
+            ep = new_high;
+            sar = (long_af * (ep - sar) + sar).min(prev_low).min(new_low);
+            af_values[today - 1] = long_af;
         } else {
-            if high[i] > current_sar {
-                is_long = true;
-                current_sar = ep - offset_on_reverse;
-                ep = high[i];
-                af = af_init_long;
-                switched = true;
+            sar_values[today - 1] = -sar;
+            if new_low < ep {
+                ep = new_low;
+                short_af = (short_af + short_step).min(af_max_short);
             }
+            sar = (short_af * (ep - sar) + sar).max(prev_high).max(new_high);
+            af_values[today - 1] = short_af;
         }
-
-        if !switched {
-            if is_long && high[i] > ep {
-                ep = high[i];
-                af = (af + af_long).min(af_max_long);
-            } else if !is_long && low[i] < ep {
-                ep = low[i];
-                af = (af + af_short).min(af_max_short);
-            }
-        }
-
-        sar_values[i] = if is_long { current_sar } else { -current_sar };
-        af_values[i] = af;
-        prev_sar = current_sar.abs();
     }
 
     Ok(SarResult {

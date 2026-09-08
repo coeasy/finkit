@@ -262,61 +262,78 @@ pub fn beta(asset: &[f64], benchmark: &[f64], timeperiod: usize) -> Result<Array
 
     let len = asset.len();
     let mut output = init_output(len);
-
     let n = timeperiod as f64;
-    let returns = |values: &[f64], index: usize| -> f64 {
-        (values[index] - values[index - 1]) / values[index - 1]
-    };
+    let mut sum_xx = 0.0;
+    let mut sum_xy = 0.0;
     let mut sum_x = 0.0;
     let mut sum_y = 0.0;
-    let mut sum_x2 = 0.0;
-    let mut sum_xy = 0.0;
-    for index in 1..=timeperiod {
-        let x = returns(asset, index);
-        let y = returns(benchmark, index);
+    let mut last_x = asset[0];
+    let mut last_y = benchmark[0];
+    let mut trailing_last_x = asset[0];
+    let mut trailing_last_y = benchmark[0];
+    let mut trailing_idx = 1usize;
+
+    for i in 1..timeperiod {
+        let x = if last_x != 0.0 {
+            (asset[i] - last_x) / last_x
+        } else {
+            0.0
+        };
+        last_x = asset[i];
+        let y = if last_y != 0.0 {
+            (benchmark[i] - last_y) / last_y
+        } else {
+            0.0
+        };
+        last_y = benchmark[i];
+        sum_xx += x * x;
+        sum_xy += x * y;
         sum_x += x;
         sum_y += y;
-        sum_x2 += x * x;
-        sum_xy += x * y;
     }
 
-    let write_beta = |index: usize,
-                      sum_x: f64,
-                      sum_y: f64,
-                      sum_x2: f64,
-                      sum_xy: f64,
-                      output: &mut Array1<f64>| {
-        let denominator = n * sum_x2 - sum_x * sum_x;
-        if denominator > 1e-14 {
-            output[index] = (n * sum_xy - sum_x * sum_y) / denominator;
-        }
-    };
-    write_beta(timeperiod, sum_x, sum_y, sum_x2, sum_xy, &mut output);
+    for i in timeperiod..len {
+        let x = if last_x != 0.0 {
+            (asset[i] - last_x) / last_x
+        } else {
+            0.0
+        };
+        last_x = asset[i];
+        let y = if last_y != 0.0 {
+            (benchmark[i] - last_y) / last_y
+        } else {
+            0.0
+        };
+        last_y = benchmark[i];
+        sum_xx += x * x;
+        sum_xy += x * y;
+        sum_x += x;
+        sum_y += y;
 
-    for index in (timeperiod + 1)..len {
-        let old_x = returns(asset, index - timeperiod);
-        let old_y = returns(benchmark, index - timeperiod);
-        let new_x = returns(asset, index);
-        let new_y = returns(benchmark, index);
-        sum_x += new_x - old_x;
-        sum_y += new_y - old_y;
-        sum_x2 += new_x * new_x - old_x * old_x;
-        sum_xy += new_x * new_y - old_x * old_y;
-        if (index - timeperiod) & 7 == 0 {
-            sum_x = 0.0;
-            sum_y = 0.0;
-            sum_x2 = 0.0;
-            sum_xy = 0.0;
-            for return_index in (index + 1 - timeperiod)..=index {
-                let x = returns(asset, return_index);
-                let y = returns(benchmark, return_index);
-                sum_x += x;
-                sum_y += y;
-                sum_x2 += x * x;
-                sum_xy += x * y;
-            }
-        }
-        write_beta(index, sum_x, sum_y, sum_x2, sum_xy, &mut output);
+        let denominator = n * sum_xx - sum_x * sum_x;
+        output[i] = if denominator.abs() > 1e-14 {
+            (n * sum_xy - sum_x * sum_y) / denominator
+        } else {
+            0.0
+        };
+
+        let old_x = if trailing_last_x != 0.0 {
+            (asset[trailing_idx] - trailing_last_x) / trailing_last_x
+        } else {
+            0.0
+        };
+        trailing_last_x = asset[trailing_idx];
+        let old_y = if trailing_last_y != 0.0 {
+            (benchmark[trailing_idx] - trailing_last_y) / trailing_last_y
+        } else {
+            0.0
+        };
+        trailing_last_y = benchmark[trailing_idx];
+        trailing_idx += 1;
+        sum_xx -= old_x * old_x;
+        sum_xy -= old_x * old_y;
+        sum_x -= old_x;
+        sum_y -= old_y;
     }
 
     Ok(output)

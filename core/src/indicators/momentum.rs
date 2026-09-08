@@ -3170,9 +3170,11 @@ pub fn stochf(
             let fk = if denom > 1e-15 {
                 (*close_ptr.add(i) - lowest) / denom * 100.0
             } else {
-                50.0
+                0.0
             };
-            *fastk.get_unchecked_mut(i) = fk;
+            if i >= d_start {
+                *fastk.get_unchecked_mut(i) = fk;
+            }
 
             let d_idx = i - fastk_start;
             let ring_pos = d_idx % fastd_period;
@@ -3234,9 +3236,11 @@ fn stochf_5_3(high: &[f64], low: &[f64], close: &[f64]) -> Result<StochResult> {
         let value = if range > 1e-15 {
             (close[i] - lowest) / range * 100.0
         } else {
-            50.0
+            0.0
         };
-        fastk[i] = value;
+        if i >= 6 {
+            fastk[i] = value;
+        }
         let ring_pos = (i - 4) % 3;
         d_sum += value - d_ring[ring_pos];
         d_ring[ring_pos] = value;

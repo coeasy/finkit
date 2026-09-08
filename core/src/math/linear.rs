@@ -283,14 +283,64 @@ pub fn linreg(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// assert_eq!(result.len(), 10);
 /// ```
 pub fn linreg_angle(input: &[f64], period: usize) -> Result<Array1<f64>> {
-    let slope = linreg_slope(input, period)?;
+    if period < 2 {
+        return Err(TaError::InvalidParameter {
+            name: "period".to_string(),
+            constraint: "at least 2".to_string(),
+        });
+    }
+    validate_input(input.len(), period)?;
+
     let len = input.len();
     let mut output = init_output(len);
+    let p = period as f64;
+    let sum_x = p * (p - 1.0) * 0.5;
+    let sum_x_sq = p * (p - 1.0) * (2.0 * p - 1.0) / 6.0;
+    // Keep TA-Lib's sign and operation order for numerical parity.
+    let divisor = sum_x * sum_x - p * sum_x_sq;
+    let mut sum_y = 0.0;
+    let mut sum_xy = 0.0;
+    let mut sum_abs = 0.0;
+    for i in (0..period).rev() {
+        let value = input[period - 1 - i];
+        sum_y += value;
+        sum_xy += i as f64 * value;
+        sum_abs += value.abs();
+    }
 
-    for i in 0..len {
-        if !slope[i].is_nan() {
-            output[i] = slope[i].atan() * 180.0 / std::f64::consts::PI;
+    let mut trailing_idx = 1usize;
+    let mut trailing_value = input[0];
+    let mut bars_since_reseed = 32 * period;
+    let angle = |sxy: f64, sy: f64| {
+        ((p * sxy - sum_x * sy) / divisor).atan() * (180.0 / std::f64::consts::PI)
+    };
+    output[period - 1] = angle(sum_xy, sum_y);
+
+    for today in period..len {
+        let weighted_trailing = p * trailing_value;
+        sum_xy += sum_y - weighted_trailing;
+        sum_y += input[today] - trailing_value;
+        sum_abs += input[today].abs() - trailing_value.abs();
+        bars_since_reseed -= 1;
+
+        if bars_since_reseed == 0 || weighted_trailing.abs() > 100.0 * sum_abs {
+            bars_since_reseed = 32 * period;
+            let window_start = today + 1 - period;
+            sum_y = 0.0;
+            sum_xy = 0.0;
+            sum_abs = 0.0;
+            let mut weight = (period - 1) as f64;
+            for &value in &input[window_start..=today] {
+                sum_y += value;
+                sum_xy += weight * value;
+                sum_abs += value.abs();
+                weight -= 1.0;
+            }
         }
+
+        trailing_value = input[trailing_idx];
+        trailing_idx += 1;
+        output[today] = angle(sum_xy, sum_y);
     }
 
     Ok(output)
