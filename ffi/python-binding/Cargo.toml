@@ -20,6 +20,7 @@ numpy = "0.29.0"
 ndarray = { workspace = true, optional = true }
 
 [features]
-default = ["formula"]
+default = ["formula", "rayon"]
 formula = ["finkit/formula", "dep:ndarray"]
 abi3 = ["pyo3/abi3-py38"]
+rayon = ["finkit/rayon"]

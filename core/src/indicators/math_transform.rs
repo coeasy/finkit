@@ -18,6 +18,21 @@ use crate::error::{Result, TaError};
 use crate::utils::validate_input;
 use ndarray::Array1;
 
+#[cfg(feature = "rayon")]
+use rayon::prelude::*;
+
+#[inline]
+fn map_expensive<F>(data: &[f64], function: F) -> Vec<f64>
+where
+    F: Fn(f64) -> f64 + Sync + Send,
+{
+    #[cfg(feature = "rayon")]
+    if data.len() >= 8_192 {
+        return data.par_iter().map(|&value| function(value)).collect();
+    }
+    data.iter().map(|&value| function(value)).collect()
+}
+
 /// 反余弦 (Vector Arc Cosine)
 ///
 /// 计算每个元素的反余弦值（arccos），输入域 `[-1, 1]`，输出域 `[0, π]`。
@@ -49,7 +64,10 @@ pub fn acos(data: &[f64]) -> Result<Array1<f64>> {
             });
         }
     }
-    Ok(data.iter().map(|x| x.acos()).collect())
+    // The binding enables the rayon feature for large independent math
+    // transforms; the helper keeps the small-input path allocation-light.
+    let output = map_expensive(data, f64::acos);
+    Ok(Array1::from_vec(output))
 }
 
 /// 反正弦 (Vector Arc Sine)
@@ -83,7 +101,8 @@ pub fn asin(data: &[f64]) -> Result<Array1<f64>> {
             });
         }
     }
-    Ok(data.iter().map(|x| x.asin()).collect())
+    let output = map_expensive(data, f64::asin);
+    Ok(Array1::from_vec(output))
 }
 
 /// 反正切 (Vector Arc Tangent)
@@ -252,7 +271,8 @@ pub fn ln(data: &[f64]) -> Result<Array1<f64>> {
             });
         }
     }
-    Ok(data.iter().map(|x| x.ln()).collect())
+    let output = map_expensive(data, f64::ln);
+    Ok(Array1::from_vec(output))
 }
 
 /// 常用对数 (Vector Base-10 Logarithm)
@@ -286,7 +306,8 @@ pub fn log10(data: &[f64]) -> Result<Array1<f64>> {
             });
         }
     }
-    Ok(data.iter().map(|x| x.log10()).collect())
+    let output = map_expensive(data, f64::log10);
+    Ok(Array1::from_vec(output))
 }
 
 /// 正弦 (Vector Sine)
@@ -359,6 +380,7 @@ pub fn sinh(data: &[f64]) -> Result<Array1<f64>> {
 /// ```
 pub fn sqrt(data: &[f64]) -> Result<Array1<f64>> {
     validate_input(data.len(), 1)?;
+    let mut output = Vec::with_capacity(data.len());
     for (i, &x) in data.iter().enumerate() {
         if !x.is_finite() || x < 0.0 {
             return Err(TaError::InvalidParameter {
@@ -366,8 +388,9 @@ pub fn sqrt(data: &[f64]) -> Result<Array1<f64>> {
                 constraint: "value >= 0".to_string(),
             });
         }
+        output.push(x.sqrt());
     }
-    Ok(data.iter().map(|x| x.sqrt()).collect())
+    Ok(Array1::from_vec(output))
 }
 
 /// 正切 (Vector Tangent)
