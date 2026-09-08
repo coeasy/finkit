@@ -1484,6 +1484,7 @@ pub fn t3(input: &[f64], period: usize, vfactor: f64) -> Result<Array1<f64>> {
 ///
 /// The Python hot path uses this form with uninitialized storage so the
 /// warm-up prefix is written once without first clearing the full output.
+#[inline(always)]
 pub fn t3_into(input: &[f64], period: usize, vfactor: f64, output: &mut [f64]) -> Result<()> {
     if period == 0 {
         return Err(TaError::InvalidParameter {

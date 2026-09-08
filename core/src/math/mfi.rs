@@ -55,6 +55,7 @@ pub fn mfi(
 /// This is the binding hot path: it preserves the fused signed-flow ring and
 /// the established arithmetic while avoiding the temporary `Array1` and raw
 /// vector conversion at the FFI boundary.
+#[inline(always)]
 pub fn mfi_into(
     high: &[f64],
     low: &[f64],

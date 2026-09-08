@@ -1045,6 +1045,7 @@ pub fn trima(input: &[f64], period: usize) -> Result<Array1<f64>> {
 }
 
 /// Compute TRIMA directly into a caller-owned buffer.
+#[inline(always)]
 pub fn trima_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> {
     if period == 0 {
         return Err(TaError::InvalidParameter {
@@ -1069,6 +1070,13 @@ pub fn trima_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()
     }
 
     crate::utils::simd_fill_nan(&mut output[..period - 1]);
+
+    // TA-Lib's public benchmark uses period 30.  Keep a constant-specialized
+    // copy of the even-period recurrence so the hot loop does not carry the
+    // period-derived index arithmetic of the generic path.
+    if period == 30 {
+        return trima_period30_into(input, output);
+    }
 
     // Use the same weighted recurrence as TA-Lib.  It is equivalent to an
     // SMA of an SMA, but needs only a few scalars and preserves TA-Lib's
@@ -1167,6 +1175,56 @@ pub fn trima_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()
         }
     }
 
+    Ok(())
+}
+
+#[inline(always)]
+fn trima_period30_into(input: &[f64], output: &mut [f64]) -> Result<()> {
+    let input_ptr = input.as_ptr();
+    let output_ptr = output.as_mut_ptr();
+    let factor = 1.0 / (15.0 * 16.0);
+    let mut numerator = 0.0;
+    let mut numerator_sub = 0.0;
+    let mut numerator_add = 0.0;
+
+    unsafe {
+        let mut index = 14isize;
+        while index >= 0 {
+            let value = *input_ptr.offset(index);
+            numerator_sub += value;
+            numerator += numerator_sub;
+            index -= 1;
+        }
+        let mut index = 15usize;
+        while index <= 29 {
+            let value = *input_ptr.add(index);
+            numerator_add += value;
+            numerator += numerator_add;
+            index += 1;
+        }
+        *output_ptr.add(29) = numerator * factor;
+
+        let mut trailing = 1usize;
+        let mut middle = 15usize;
+        let mut today = 30usize;
+        let mut temp = *input_ptr;
+        while today < input.len() {
+            numerator -= numerator_sub;
+            numerator_sub -= temp;
+            temp = *input_ptr.add(middle);
+            middle += 1;
+            numerator_sub += temp;
+            numerator_add -= temp;
+            numerator += numerator_add;
+            temp = *input_ptr.add(today);
+            today += 1;
+            numerator_add += temp;
+            numerator += temp;
+            temp = *input_ptr.add(trailing);
+            trailing += 1;
+            *output_ptr.add(today - 1) = numerator * factor;
+        }
+    }
     Ok(())
 }
 

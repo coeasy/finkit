@@ -1435,6 +1435,7 @@ pub fn aroon(high: &[f64], low: &[f64], period: usize) -> Result<AroonResult> {
 /// Caller-owned monotonic-queue AROON kernel.  It keeps the newest equal
 /// extrema, matching the scalar implementation without rescanning an entire
 /// window when an old extremum leaves the lookback range.
+#[inline]
 pub fn aroon_into(
     high: &[f64],
     low: &[f64],
@@ -1458,28 +1459,77 @@ pub fn aroon_into(
     aroon_up.fill(f64::NAN);
     aroon_down.fill(f64::NAN);
 
-    let mut highs = std::collections::VecDeque::<usize>::with_capacity(period + 1);
-    let mut lows = std::collections::VecDeque::<usize>::with_capacity(period + 1);
+    // A bounded circular deque is enough because a monotonic queue contains
+    // at most one index per bar in the lookback window.  This avoids the
+    // general-purpose bookkeeping in VecDeque on the default period-14 path.
+    let capacity = period + 1;
+    let mut highs = vec![0usize; capacity];
+    let mut lows = vec![0usize; capacity];
+    let mut high_head = 0usize;
+    let mut low_head = 0usize;
+    let mut high_len = 0usize;
+    let mut low_len = 0usize;
     let inv_period = 100.0 / period as f64;
     for i in 0..high.len() {
-        while highs.back().is_some_and(|&index| high[index] <= high[i]) {
-            highs.pop_back();
-        }
-        highs.push_back(i);
-        while lows.back().is_some_and(|&index| low[index] >= low[i]) {
-            lows.pop_back();
-        }
-        lows.push_back(i);
         let window_start = i.saturating_sub(period);
-        while highs.front().is_some_and(|&index| index < window_start) {
-            highs.pop_front();
+        while high_len != 0 && highs[high_head] < window_start {
+            high_head += 1;
+            if high_head == capacity {
+                high_head = 0;
+            }
+            high_len -= 1;
         }
-        while lows.front().is_some_and(|&index| index < window_start) {
-            lows.pop_front();
+        while low_len != 0 && lows[low_head] < window_start {
+            low_head += 1;
+            if low_head == capacity {
+                low_head = 0;
+            }
+            low_len -= 1;
         }
+
+        while high_len != 0 {
+            let position = high_head + high_len - 1;
+            let back = if position >= capacity {
+                position - capacity
+            } else {
+                position
+            };
+            if high[highs[back]] > high[i] {
+                break;
+            }
+            high_len -= 1;
+        }
+        let position = high_head + high_len;
+        highs[if position >= capacity {
+            position - capacity
+        } else {
+            position
+        }] = i;
+        high_len += 1;
+
+        while low_len != 0 {
+            let position = low_head + low_len - 1;
+            let back = if position >= capacity {
+                position - capacity
+            } else {
+                position
+            };
+            if low[lows[back]] < low[i] {
+                break;
+            }
+            low_len -= 1;
+        }
+        let position = low_head + low_len;
+        lows[if position >= capacity {
+            position - capacity
+        } else {
+            position
+        }] = i;
+        low_len += 1;
+
         if i >= period {
-            aroon_up[i] = (period - (i - highs[0])) as f64 * inv_period;
-            aroon_down[i] = (period - (i - lows[0])) as f64 * inv_period;
+            aroon_up[i] = (period - (i - highs[high_head])) as f64 * inv_period;
+            aroon_down[i] = (period - (i - lows[low_head])) as f64 * inv_period;
         }
     }
     Ok(())

@@ -2593,6 +2593,7 @@ pub fn cdl_gap_side_white(
 /// Hikkake Pattern (CDLHIKKAKE)
 ///
 /// Inside bar followed by a false breakout.
+#[inline(always)]
 pub fn cdl_hikkake(
     open: &[f64],
     high: &[f64],
@@ -2612,30 +2613,45 @@ pub fn cdl_hikkake(
     let mut countdown = 0;
     let mut saved_high = 0.0;
     let mut saved_low = 0.0;
-    for i in 2..len {
-        if high[i - 1] < high[i - 2]
-            && low[i - 1] > low[i - 2]
-            && ((high[i] < high[i - 1] && low[i] < low[i - 1])
-                || (high[i] > high[i - 1] && low[i] > low[i - 1]))
-        {
-            pattern_result = if high[i] < high[i - 1] { 100 } else { -100 };
-            saved_high = high[i - 1];
-            saved_low = low[i - 1];
-            countdown = 4;
-            if i >= 5 {
-                output[i] = pattern_result;
+    unsafe {
+        let high_ptr = high.as_ptr();
+        let low_ptr = low.as_ptr();
+        let close_ptr = close.as_ptr();
+        let output_ptr = output.as_mut_ptr();
+        for i in 2..len {
+            let high_prev = *high_ptr.add(i - 1);
+            let low_prev = *low_ptr.add(i - 1);
+            let high_before = *high_ptr.add(i - 2);
+            let low_before = *low_ptr.add(i - 2);
+            let current_high = *high_ptr.add(i);
+            let current_low = *low_ptr.add(i);
+            if high_prev < high_before
+                && low_prev > low_before
+                && ((current_high < high_prev && current_low < low_prev)
+                    || (current_high > high_prev && current_low > low_prev))
+            {
+                pattern_result = if current_high < high_prev { 100 } else { -100 };
+                saved_high = high_prev;
+                saved_low = low_prev;
+                countdown = 4;
+                if i >= 5 {
+                    *output_ptr.add(i) = pattern_result;
+                }
+            } else if countdown > 0 {
+                let current_close = *close_ptr.add(i);
+                if (pattern_result > 0 && current_close > saved_high)
+                    || (pattern_result < 0 && current_close < saved_low)
+                {
+                    if i >= 5 {
+                        *output_ptr.add(i) =
+                            pattern_result + if pattern_result > 0 { 100 } else { -100 };
+                    }
+                    countdown = 0;
+                }
             }
-        } else if countdown > 0
-            && ((pattern_result > 0 && close[i] > saved_high)
-                || (pattern_result < 0 && close[i] < saved_low))
-        {
-            if i >= 5 {
-                output[i] = pattern_result + if pattern_result > 0 { 100 } else { -100 };
+            if countdown > 0 {
+                countdown -= 1;
             }
-            countdown = 0;
-        }
-        if countdown > 0 {
-            countdown -= 1;
         }
     }
     Ok(output)

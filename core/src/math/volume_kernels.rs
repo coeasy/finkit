@@ -116,7 +116,7 @@ pub fn ad(high: &[f64], low: &[f64], close: &[f64], volume: &[f64]) -> Result<Ar
 /// ADOSC is intentionally fused because both EMA recurrences are stateful. A
 /// materialized AD scratch vector would add a second full memory pass. This
 /// caller-owned implementation remains the canonical stateful kernel.
-#[inline]
+#[inline(always)]
 pub fn adosc_into(
     high: &[f64],
     low: &[f64],
