@@ -853,6 +853,113 @@ fn compute_adx_family(
     })
 }
 
+/// ADX-only recurrence for ADXR.  ADXR needs the ADX history but not the
+/// public +DI/-DI projections; avoiding those two full-length buffers keeps
+/// the hot path cache-friendly while preserving the family operation order.
+fn compute_adx_only(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Vec<f64>> {
+    if high.len() != low.len() || high.len() != close.len() {
+        return Err(TaError::InvalidParameter {
+            name: "high, low, close".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    validate_input(high.len(), period * 2)?;
+
+    let len = close.len();
+    let p = period as f64;
+    let mut smooth_plus_dm = 0.0;
+    let mut smooth_minus_dm = 0.0;
+    let mut smooth_tr = 0.0;
+    if period > 1 {
+        #[cfg(feature = "std")]
+        crate::math::simd_kernels::adx_warmup_into(
+            high,
+            low,
+            close,
+            period - 1,
+            &mut smooth_plus_dm,
+            &mut smooth_minus_dm,
+            &mut smooth_tr,
+        );
+        #[cfg(not(feature = "std"))]
+        for i in 1..period {
+            let up_move = high[i] - high[i - 1];
+            let down_move = low[i - 1] - low[i];
+            smooth_tr += crate::utils::true_range(high[i], low[i], close[i - 1]);
+            if up_move > down_move && up_move > 0.0 {
+                smooth_plus_dm += up_move;
+            }
+            if down_move > up_move && down_move > 0.0 {
+                smooth_minus_dm += down_move;
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn dx_from_state(plus_dm: f64, minus_dm: f64, tr: f64) -> f64 {
+        if tr.abs() <= 1e-15 {
+            return 0.0;
+        }
+        let plus_di = plus_dm / tr * 100.0;
+        let minus_di = minus_dm / tr * 100.0;
+        let sum = plus_di + minus_di;
+        if sum.abs() > 1e-15 {
+            (plus_di - minus_di).abs() / sum * 100.0
+        } else {
+            0.0
+        }
+    }
+
+    let mut output = vec![f64::NAN; len];
+    let adx_start = 2 * period;
+    let mut dx_sum = 0.0;
+    for i in period..adx_start.min(len) {
+        let up_move = high[i] - high[i - 1];
+        let down_move = low[i - 1] - low[i];
+        let pdm = if up_move > down_move && up_move > 0.0 {
+            up_move
+        } else {
+            0.0
+        };
+        let mdm = if down_move > up_move && down_move > 0.0 {
+            down_move
+        } else {
+            0.0
+        };
+        smooth_plus_dm = smooth_plus_dm - smooth_plus_dm / p + pdm;
+        smooth_minus_dm = smooth_minus_dm - smooth_minus_dm / p + mdm;
+        smooth_tr =
+            smooth_tr - smooth_tr / p + crate::utils::true_range(high[i], low[i], close[i - 1]);
+        dx_sum += dx_from_state(smooth_plus_dm, smooth_minus_dm, smooth_tr);
+    }
+    if adx_start < len {
+        let mut adx_value = dx_sum / p;
+        output[adx_start - 1] = adx_value;
+        for i in adx_start..len {
+            let up_move = high[i] - high[i - 1];
+            let down_move = low[i - 1] - low[i];
+            let pdm = if up_move > down_move && up_move > 0.0 {
+                up_move
+            } else {
+                0.0
+            };
+            let mdm = if down_move > up_move && down_move > 0.0 {
+                down_move
+            } else {
+                0.0
+            };
+            smooth_plus_dm = smooth_plus_dm - smooth_plus_dm / p + pdm;
+            smooth_minus_dm = smooth_minus_dm - smooth_minus_dm / p + mdm;
+            smooth_tr =
+                smooth_tr - smooth_tr / p + crate::utils::true_range(high[i], low[i], close[i - 1]);
+            let dx = dx_from_state(smooth_plus_dm, smooth_minus_dm, smooth_tr);
+            adx_value = (adx_value * (p - 1.0) + dx) / p;
+            output[i] = adx_value;
+        }
+    }
+    Ok(output)
+}
+
 /// Compute one directional indicator without ADX smoothing.
 ///
 /// `PLUS` is a const parameter so the hot loop contains no per-row direction
@@ -2420,8 +2527,7 @@ pub fn trix(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// assert_eq!(result.len(), 20);
 /// ```
 pub fn adxr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Array1<f64>> {
-    let family = compute_adx_family(high, low, close, period)?;
-    let adx_vals = &family.adx;
+    let adx_vals = compute_adx_only(high, low, close, period)?;
     let len = adx_vals.len();
     let mut output = vec![f64::NAN; len];
 
