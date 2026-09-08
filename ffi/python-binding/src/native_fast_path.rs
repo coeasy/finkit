@@ -724,21 +724,25 @@ fn fast_price_transform<'py>(
         validate_same_len(high.len(), values.len())?;
     }
 
-    let mut output = vec![0.0; high.len()];
+    let len = high.len();
+    let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    unsafe { raw_output.set_len(len) };
+    let output =
+        unsafe { std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<f64>(), len) };
     let result = match operation {
         "avgprice" => {
             let open = open.ok_or_else(|| value_error("AVGPRICE requires open data"))?;
             let close = close.ok_or_else(|| value_error("AVGPRICE requires close data"))?;
-            py.detach(|| indicators::avgprice_into(open, high, low, close, &mut output))
+            py.detach(|| indicators::avgprice_into(open, high, low, close, output))
         }
-        "medprice" => py.detach(|| indicators::medprice_into(high, low, &mut output)),
+        "medprice" => py.detach(|| indicators::medprice_into(high, low, output)),
         "typprice" => {
             let close = close.ok_or_else(|| value_error("TYPPRICE requires close data"))?;
-            py.detach(|| indicators::typprice_into(high, low, close, &mut output))
+            py.detach(|| indicators::typprice_into(high, low, close, output))
         }
         "wclprice" => {
             let close = close.ok_or_else(|| value_error("WCLPRICE requires close data"))?;
-            py.detach(|| indicators::wclprice_into(high, low, close, &mut output))
+            py.detach(|| indicators::wclprice_into(high, low, close, output))
         }
         _ => {
             return Err(value_error(format!(
@@ -747,7 +751,12 @@ fn fast_price_transform<'py>(
         }
     };
     result.map_err(value_error)?;
-    Ok(PyArray1::from_vec(py, output))
+    let ptr = raw_output.as_mut_ptr().cast::<f64>();
+    let capacity = raw_output.capacity();
+    std::mem::forget(raw_output);
+    Ok(PyArray1::from_vec(py, unsafe {
+        Vec::from_raw_parts(ptr, len, capacity)
+    }))
 }
 
 #[pyfunction(name = "_fast_apo")]

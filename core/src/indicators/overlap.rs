@@ -556,14 +556,19 @@ pub fn sarext_sar_into(
     }
 
     let len = high.len();
-    output.fill(f64::NAN);
+    let high_ptr = high.as_ptr();
+    let low_ptr = low.as_ptr();
+    let output_ptr = output.as_mut_ptr();
+    unsafe {
+        *output_ptr = f64::NAN;
+    }
     let mut long_af = af_init_long.min(af_max_long);
     let mut short_af = af_init_short.min(af_max_short);
     let long_step = af_long.min(af_max_long);
     let short_step = af_short.min(af_max_short);
 
-    let up_move = high[1] - high[0];
-    let down_move = low[0] - low[1];
+    let up_move = unsafe { *high_ptr.add(1) - *high_ptr };
+    let down_move = unsafe { *low_ptr - *low_ptr.add(1) };
     let mut is_long = if start_value == 0.0 {
         !(down_move > up_move && down_move > 0.0)
     } else {
@@ -573,31 +578,30 @@ pub fn sarext_sar_into(
     let mut sar;
     if start_value == 0.0 {
         if is_long {
-            ep = high[1];
-            sar = low[0];
+            ep = unsafe { *high_ptr.add(1) };
+            sar = unsafe { *low_ptr };
         } else {
-            ep = low[1];
-            sar = high[0];
+            ep = unsafe { *low_ptr.add(1) };
+            sar = unsafe { *high_ptr };
         }
     } else if start_value > 0.0 {
-        ep = high[1];
+        ep = unsafe { *high_ptr.add(1) };
         sar = start_value;
     } else {
-        ep = low[1];
+        ep = unsafe { *low_ptr.add(1) };
         sar = start_value.abs();
     }
 
     // The Python compatibility layer masks bar 0 to TA-Lib's lookback NaN.
     // Keep the same contract directly in the zero-copy kernel.
-    output[0] = f64::NAN;
-    let mut new_low = low[1];
-    let mut new_high = high[1];
+    let mut new_low = unsafe { *low_ptr.add(1) };
+    let mut new_high = unsafe { *high_ptr.add(1) };
     let mut today = 1usize;
     while today < len {
         let prev_low = new_low;
         let prev_high = new_high;
-        new_low = low[today];
-        new_high = high[today];
+        new_low = unsafe { *low_ptr.add(today) };
+        new_high = unsafe { *high_ptr.add(today) };
         today += 1;
 
         if is_long {
@@ -607,12 +611,16 @@ pub fn sarext_sar_into(
                 if offset_on_reverse != 0.0 {
                     sar += sar * offset_on_reverse;
                 }
-                output[today - 1] = -sar;
+                unsafe {
+                    *output_ptr.add(today - 1) = -sar;
+                }
                 short_af = af_init_short;
                 ep = new_low;
                 sar = (short_af * (ep - sar) + sar).max(prev_high).max(new_high);
             } else {
-                output[today - 1] = sar;
+                unsafe {
+                    *output_ptr.add(today - 1) = sar;
+                }
                 if new_high > ep {
                     ep = new_high;
                     long_af = (long_af + long_step).min(af_max_long);
@@ -625,12 +633,16 @@ pub fn sarext_sar_into(
             if offset_on_reverse != 0.0 {
                 sar -= sar * offset_on_reverse;
             }
-            output[today - 1] = sar;
+            unsafe {
+                *output_ptr.add(today - 1) = sar;
+            }
             long_af = af_init_long;
             ep = new_high;
             sar = (long_af * (ep - sar) + sar).min(prev_low).min(new_low);
         } else {
-            output[today - 1] = -sar;
+            unsafe {
+                *output_ptr.add(today - 1) = -sar;
+            }
             if new_low < ep {
                 ep = new_low;
                 short_af = (short_af + short_step).min(af_max_short);

@@ -236,13 +236,42 @@ fn bbands<'py>(
 )> {
     let real = real.as_slice().map_err(value_error)?;
     let _ = matype;
-    let result = py
-        .detach(|| indicators::bbands(real, timeperiod, nbdevup, nbdevdn))
+    let len = real.len();
+    let mut raw_upper = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    let mut raw_middle = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    let mut raw_lower = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    unsafe {
+        raw_upper.set_len(len);
+        raw_middle.set_len(len);
+        raw_lower.set_len(len);
+    }
+    let upper =
+        unsafe { std::slice::from_raw_parts_mut(raw_upper.as_mut_ptr().cast::<f64>(), len) };
+    let middle =
+        unsafe { std::slice::from_raw_parts_mut(raw_middle.as_mut_ptr().cast::<f64>(), len) };
+    let lower =
+        unsafe { std::slice::from_raw_parts_mut(raw_lower.as_mut_ptr().cast::<f64>(), len) };
+    py.detach(|| indicators::bbands_into(real, timeperiod, nbdevup, nbdevdn, middle, upper, lower))
         .map_err(value_error)?;
+    let upper_ptr = raw_upper.as_mut_ptr().cast::<f64>();
+    let middle_ptr = raw_middle.as_mut_ptr().cast::<f64>();
+    let lower_ptr = raw_lower.as_mut_ptr().cast::<f64>();
+    let upper_cap = raw_upper.capacity();
+    let middle_cap = raw_middle.capacity();
+    let lower_cap = raw_lower.capacity();
+    std::mem::forget(raw_upper);
+    std::mem::forget(raw_middle);
+    std::mem::forget(raw_lower);
     Ok((
-        PyArray1::from_vec(py, result.upper.into_raw_vec()),
-        PyArray1::from_vec(py, result.middle.into_raw_vec()),
-        PyArray1::from_vec(py, result.lower.into_raw_vec()),
+        PyArray1::from_vec(py, unsafe {
+            Vec::from_raw_parts(upper_ptr, len, upper_cap)
+        }),
+        PyArray1::from_vec(py, unsafe {
+            Vec::from_raw_parts(middle_ptr, len, middle_cap)
+        }),
+        PyArray1::from_vec(py, unsafe {
+            Vec::from_raw_parts(lower_ptr, len, lower_cap)
+        }),
     ))
 }
 
@@ -358,19 +387,36 @@ fn macdfix<'py>(
     Bound<'py, PyArray1<f64>>,
 )> {
     let real = real.as_slice().map_err(value_error)?;
-    let result = py
-        .detach(|| {
-            if signalperiod == 9 {
-                indicators::macdfix(real)
-            } else {
-                indicators::macdfix_with_signal(real, signalperiod)
-            }
-        })
+    let len = real.len();
+    let mut raw_macd = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    let mut raw_signal = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    let mut raw_hist = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    unsafe {
+        raw_macd.set_len(len);
+        raw_signal.set_len(len);
+        raw_hist.set_len(len);
+    }
+    let macd = unsafe { std::slice::from_raw_parts_mut(raw_macd.as_mut_ptr().cast::<f64>(), len) };
+    let signal =
+        unsafe { std::slice::from_raw_parts_mut(raw_signal.as_mut_ptr().cast::<f64>(), len) };
+    let hist = unsafe { std::slice::from_raw_parts_mut(raw_hist.as_mut_ptr().cast::<f64>(), len) };
+    py.detach(|| indicators::macdfix_into(real, signalperiod, macd, signal, hist))
         .map_err(value_error)?;
+    let macd_ptr = raw_macd.as_mut_ptr().cast::<f64>();
+    let signal_ptr = raw_signal.as_mut_ptr().cast::<f64>();
+    let hist_ptr = raw_hist.as_mut_ptr().cast::<f64>();
+    let macd_cap = raw_macd.capacity();
+    let signal_cap = raw_signal.capacity();
+    let hist_cap = raw_hist.capacity();
+    std::mem::forget(raw_macd);
+    std::mem::forget(raw_signal);
+    std::mem::forget(raw_hist);
     Ok((
-        PyArray1::from_vec(py, result.macd.into_raw_vec()),
-        PyArray1::from_vec(py, result.signal.into_raw_vec()),
-        PyArray1::from_vec(py, result.hist.into_raw_vec()),
+        PyArray1::from_vec(py, unsafe { Vec::from_raw_parts(macd_ptr, len, macd_cap) }),
+        PyArray1::from_vec(py, unsafe {
+            Vec::from_raw_parts(signal_ptr, len, signal_cap)
+        }),
+        PyArray1::from_vec(py, unsafe { Vec::from_raw_parts(hist_ptr, len, hist_cap) }),
     ))
 }
 
@@ -491,12 +537,38 @@ fn stochrsi<'py>(
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
     let real = real.as_slice().map_err(value_error)?;
     let _ = fastd_matype;
-    let result = py
-        .detach(|| indicators::stochrsi(real, timeperiod, fastk_period, fastk_period, fastd_period))
-        .map_err(value_error)?;
+    let len = real.len();
+    let mut raw_k = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    let mut raw_d = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    unsafe {
+        raw_k.set_len(len);
+        raw_d.set_len(len);
+    }
+    let mut out_k =
+        unsafe { std::slice::from_raw_parts_mut(raw_k.as_mut_ptr().cast::<f64>(), len) };
+    let mut out_d =
+        unsafe { std::slice::from_raw_parts_mut(raw_d.as_mut_ptr().cast::<f64>(), len) };
+    py.detach(|| {
+        indicators::stochrsi_into(
+            real,
+            timeperiod,
+            fastk_period,
+            fastk_period,
+            fastd_period,
+            &mut out_k,
+            &mut out_d,
+        )
+    })
+    .map_err(value_error)?;
+    let k_ptr = raw_k.as_mut_ptr().cast::<f64>();
+    let d_ptr = raw_d.as_mut_ptr().cast::<f64>();
+    let k_cap = raw_k.capacity();
+    let d_cap = raw_d.capacity();
+    std::mem::forget(raw_k);
+    std::mem::forget(raw_d);
     Ok((
-        PyArray1::from_vec(py, result.k.into_raw_vec()),
-        PyArray1::from_vec(py, result.d.into_raw_vec()),
+        PyArray1::from_vec(py, unsafe { Vec::from_raw_parts(k_ptr, len, k_cap) }),
+        PyArray1::from_vec(py, unsafe { Vec::from_raw_parts(d_ptr, len, d_cap) }),
     ))
 }
 

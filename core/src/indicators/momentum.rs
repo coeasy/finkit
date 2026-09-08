@@ -2943,6 +2943,70 @@ pub fn macdfix_with_signal(input: &[f64], signal_period: usize) -> Result<MacdRe
     })
 }
 
+/// Zero-copy MACDFIX kernel for bindings that already own the three output
+/// buffers.  The recurrence is kept separate from the allocating API so the
+/// compatibility layer does not materialize an intermediate `MacdResult`.
+pub fn macdfix_into(
+    input: &[f64],
+    signal_period: usize,
+    macd_line: &mut [f64],
+    signal: &mut [f64],
+    hist: &mut [f64],
+) -> Result<()> {
+    if signal_period == 0 {
+        return Err(TaError::InvalidParameter {
+            name: "signal_period".to_string(),
+            constraint: "greater than 0".to_string(),
+        });
+    }
+    validate_input(input.len(), 26 + signal_period - 1)?;
+    if macd_line.len() != input.len() || signal.len() != input.len() || hist.len() != input.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output slices".to_string(),
+            constraint: "must each have the same length as input".to_string(),
+        });
+    }
+    let len = input.len();
+
+    let mut slow_sum = 0.0;
+    for &value in &input[..26] {
+        slow_sum += value;
+    }
+    let mut fast_sum = 0.0;
+    for &value in &input[14..26] {
+        fast_sum += value;
+    }
+    let mut fast = fast_sum / 12.0;
+    let mut slow = slow_sum / 26.0;
+    let first_macd = 25;
+    let mut macd_value = fast - slow;
+    macd_line[first_macd] = macd_value;
+    for (i, &value) in input.iter().enumerate().skip(26) {
+        fast = (value - fast).mul_add(0.15, fast);
+        slow = (value - slow).mul_add(0.075, slow);
+        macd_value = fast - slow;
+        macd_line[i] = macd_value;
+    }
+
+    let first_output = first_macd + signal_period - 1;
+    signal[..first_output].fill(f64::NAN);
+    hist[..first_output].fill(f64::NAN);
+    let mut signal_value =
+        macd_line[first_macd..=first_output].iter().sum::<f64>() / signal_period as f64;
+    signal[first_output] = signal_value;
+    hist[first_output] = macd_line[first_output] - signal_value;
+    let signal_k = 2.0 / (signal_period as f64 + 1.0);
+    for i in first_output + 1..len {
+        signal_value = (macd_line[i] - signal_value).mul_add(signal_k, signal_value);
+        signal[i] = signal_value;
+        hist[i] = macd_line[i] - signal_value;
+    }
+    // TA-Lib only exposes the stable signal zone for MACDFIX; the earlier
+    // MACD state is used internally to seed the signal but remains NaN.
+    macd_line[..first_output].fill(f64::NAN);
+    Ok(())
+}
+
 /// Percentage Price Oscillator (PPO)
 ///
 /// PPO = ((fast_EMA - slow_EMA) / slow_EMA) * 100
@@ -3316,6 +3380,85 @@ pub fn stochrsi(
     }
 
     Ok(StochResult { k: out_k, d: out_d })
+}
+
+/// Zero-copy STOCHRSI path.  RSI remains a small scratch series, while the
+/// raw %K and public %K/%D outputs share the caller-owned buffers.
+pub fn stochrsi_into(
+    input: &[f64],
+    rsi_period: usize,
+    stoch_period: usize,
+    fastk_period: usize,
+    fastd_period: usize,
+    out_k: &mut [f64],
+    out_d: &mut [f64],
+) -> Result<()> {
+    if out_k.len() != input.len() || out_d.len() != input.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output slices".to_string(),
+            constraint: "must each have the same length as input".to_string(),
+        });
+    }
+    if stoch_period == 0 || fastk_period == 0 || fastd_period == 0 {
+        return Err(TaError::InvalidParameter {
+            name: "stochastic periods".to_string(),
+            constraint: "all periods must be greater than 0".to_string(),
+        });
+    }
+    let rsi_values = rsi(input, rsi_period)?;
+    let rsi_slice = rsi_values.as_slice().unwrap();
+    let len = rsi_slice.len();
+    let window = stoch_period;
+    let raw_start = rsi_period + window - 1;
+    let output_start = raw_start + fastd_period - 1;
+    out_k.fill(f64::NAN);
+    out_d.fill(f64::NAN);
+
+    let mut max_dq = VecDeque::with_capacity(window + 1);
+    let mut min_dq = VecDeque::with_capacity(window + 1);
+    for i in rsi_period..len {
+        let value = rsi_slice[i];
+        while max_dq.back().is_some_and(|&j| rsi_slice[j] <= value) {
+            max_dq.pop_back();
+        }
+        while min_dq.back().is_some_and(|&j| rsi_slice[j] >= value) {
+            min_dq.pop_back();
+        }
+        max_dq.push_back(i);
+        min_dq.push_back(i);
+        let start = i + 1 - window;
+        while max_dq.front().is_some_and(|&j| j < start) {
+            max_dq.pop_front();
+        }
+        while min_dq.front().is_some_and(|&j| j < start) {
+            min_dq.pop_front();
+        }
+        if i >= raw_start {
+            let highest = rsi_slice[*max_dq.front().unwrap()];
+            let lowest = rsi_slice[*min_dq.front().unwrap()];
+            let range = highest - lowest;
+            out_k[i] = if range > 1e-15 {
+                (value - lowest) / range * 100.0
+            } else {
+                0.0
+            };
+        }
+    }
+
+    let mut sum = 0.0;
+    for i in raw_start..len {
+        sum += out_k[i];
+        if i >= raw_start + fastd_period {
+            sum -= out_k[i - fastd_period];
+        }
+        if i >= output_start {
+            out_d[i] = sum / fastd_period as f64;
+        }
+    }
+    // The first `fastd_period - 1` raw values seed %D internally but are not
+    // exposed as public %K values by TA-Lib.
+    out_k[raw_start..output_start].fill(f64::NAN);
+    Ok(())
 }
 
 /// Ultimate Oscillator (ULTOSC)

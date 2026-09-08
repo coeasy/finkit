@@ -124,7 +124,7 @@ pub fn asin(data: &[f64]) -> Result<Array1<f64>> {
 /// ```
 pub fn atan(data: &[f64]) -> Result<Array1<f64>> {
     validate_input(data.len(), 1)?;
-    Ok(data.iter().map(|x| x.atan()).collect())
+    Ok(Array1::from_vec(map_expensive(data, f64::atan)))
 }
 
 /// 向上取整 (Vector Ceiling)
@@ -168,7 +168,7 @@ pub fn ceil(data: &[f64]) -> Result<Array1<f64>> {
 /// ```
 pub fn cos(data: &[f64]) -> Result<Array1<f64>> {
     validate_input(data.len(), 1)?;
-    Ok(data.iter().map(|x| x.cos()).collect())
+    Ok(Array1::from_vec(map_expensive(data, f64::cos)))
 }
 
 /// 双曲余弦 (Vector Hyperbolic Cosine)
@@ -193,7 +193,7 @@ pub fn cos(data: &[f64]) -> Result<Array1<f64>> {
 /// ```
 pub fn cosh(data: &[f64]) -> Result<Array1<f64>> {
     validate_input(data.len(), 1)?;
-    Ok(data.iter().map(|x| x.cosh()).collect())
+    Ok(Array1::from_vec(map_expensive(data, f64::cosh)))
 }
 
 /// 指数函数 (Vector Exponential)
@@ -215,7 +215,7 @@ pub fn cosh(data: &[f64]) -> Result<Array1<f64>> {
 /// ```
 pub fn exp(data: &[f64]) -> Result<Array1<f64>> {
     validate_input(data.len(), 1)?;
-    Ok(data.iter().map(|x| x.exp()).collect())
+    Ok(Array1::from_vec(map_expensive(data, f64::exp)))
 }
 
 /// 向下取整 (Vector Floor)
@@ -237,7 +237,7 @@ pub fn exp(data: &[f64]) -> Result<Array1<f64>> {
 /// ```
 pub fn floor(data: &[f64]) -> Result<Array1<f64>> {
     validate_input(data.len(), 1)?;
-    Ok(data.iter().map(|x| x.floor()).collect())
+    Ok(Array1::from_vec(map_expensive(data, f64::floor)))
 }
 
 /// 自然对数 (Vector Natural Logarithm)
@@ -329,7 +329,7 @@ pub fn log10(data: &[f64]) -> Result<Array1<f64>> {
 /// ```
 pub fn sin(data: &[f64]) -> Result<Array1<f64>> {
     validate_input(data.len(), 1)?;
-    Ok(data.iter().map(|x| x.sin()).collect())
+    Ok(Array1::from_vec(map_expensive(data, f64::sin)))
 }
 
 /// 双曲正弦 (Vector Hyperbolic Sine)
@@ -354,7 +354,7 @@ pub fn sin(data: &[f64]) -> Result<Array1<f64>> {
 /// ```
 pub fn sinh(data: &[f64]) -> Result<Array1<f64>> {
     validate_input(data.len(), 1)?;
-    Ok(data.iter().map(|x| x.sinh()).collect())
+    Ok(Array1::from_vec(map_expensive(data, f64::sinh)))
 }
 
 /// 平方根 (Vector Square Root)
@@ -380,7 +380,6 @@ pub fn sinh(data: &[f64]) -> Result<Array1<f64>> {
 /// ```
 pub fn sqrt(data: &[f64]) -> Result<Array1<f64>> {
     validate_input(data.len(), 1)?;
-    let mut output = Vec::with_capacity(data.len());
     for (i, &x) in data.iter().enumerate() {
         if !x.is_finite() || x < 0.0 {
             return Err(TaError::InvalidParameter {
@@ -388,9 +387,8 @@ pub fn sqrt(data: &[f64]) -> Result<Array1<f64>> {
                 constraint: "value >= 0".to_string(),
             });
         }
-        output.push(x.sqrt());
     }
-    Ok(Array1::from_vec(output))
+    Ok(Array1::from_vec(map_expensive(data, f64::sqrt)))
 }
 
 /// 正切 (Vector Tangent)
@@ -412,7 +410,7 @@ pub fn sqrt(data: &[f64]) -> Result<Array1<f64>> {
 /// ```
 pub fn tan(data: &[f64]) -> Result<Array1<f64>> {
     validate_input(data.len(), 1)?;
-    Ok(data.iter().map(|x| x.tan()).collect())
+    Ok(Array1::from_vec(map_expensive(data, f64::tan)))
 }
 
 /// 双曲正切 (Vector Hyperbolic Tangent)
@@ -437,7 +435,7 @@ pub fn tan(data: &[f64]) -> Result<Array1<f64>> {
 /// ```
 pub fn tanh(data: &[f64]) -> Result<Array1<f64>> {
     validate_input(data.len(), 1)?;
-    Ok(data.iter().map(|x| x.tanh()).collect())
+    Ok(Array1::from_vec(map_expensive(data, f64::tanh)))
 }
 
 #[cfg(test)]
