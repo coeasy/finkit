@@ -516,12 +516,28 @@ fn stochf<'py>(
     let _ = fastd_matype;
     let low = low.as_slice().map_err(value_error)?;
     let close = close.as_slice().map_err(value_error)?;
-    let result = py
-        .detach(|| indicators::stochf(high, low, close, fastk_period, fastd_period))
-        .map_err(value_error)?;
+    let len = close.len();
+    let mut raw_k = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    let mut raw_d = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    unsafe {
+        raw_k.set_len(len);
+        raw_d.set_len(len);
+    }
+    let out_k = unsafe { std::slice::from_raw_parts_mut(raw_k.as_mut_ptr().cast::<f64>(), len) };
+    let out_d = unsafe { std::slice::from_raw_parts_mut(raw_d.as_mut_ptr().cast::<f64>(), len) };
+    py.detach(|| {
+        indicators::stochf_into(high, low, close, fastk_period, fastd_period, out_k, out_d)
+    })
+    .map_err(value_error)?;
+    let k_ptr = raw_k.as_mut_ptr().cast::<f64>();
+    let d_ptr = raw_d.as_mut_ptr().cast::<f64>();
+    let k_cap = raw_k.capacity();
+    let d_cap = raw_d.capacity();
+    std::mem::forget(raw_k);
+    std::mem::forget(raw_d);
     Ok((
-        PyArray1::from_vec(py, result.k.into_raw_vec()),
-        PyArray1::from_vec(py, result.d.into_raw_vec()),
+        PyArray1::from_vec(py, unsafe { Vec::from_raw_parts(k_ptr, len, k_cap) }),
+        PyArray1::from_vec(py, unsafe { Vec::from_raw_parts(d_ptr, len, d_cap) }),
     ))
 }
 
@@ -586,11 +602,29 @@ fn ultosc<'py>(
     let high = high.as_slice().map_err(value_error)?;
     let low = low.as_slice().map_err(value_error)?;
     let close = close.as_slice().map_err(value_error)?;
-    let values = py
-        .detach(|| indicators::ultosc(high, low, close, timeperiod1, timeperiod2, timeperiod3))
-        .map_err(value_error)?
-        .into_raw_vec();
-    Ok(PyArray1::from_vec(py, values))
+    let len = close.len();
+    let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    unsafe { raw_output.set_len(len) };
+    let output =
+        unsafe { std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<f64>(), len) };
+    py.detach(|| {
+        indicators::ultosc_into(
+            high,
+            low,
+            close,
+            timeperiod1,
+            timeperiod2,
+            timeperiod3,
+            output,
+        )
+    })
+    .map_err(value_error)?;
+    let ptr = raw_output.as_mut_ptr().cast::<f64>();
+    let capacity = raw_output.capacity();
+    std::mem::forget(raw_output);
+    Ok(PyArray1::from_vec(py, unsafe {
+        Vec::from_raw_parts(ptr, len, capacity)
+    }))
 }
 
 #[pyfunction(name = "sarext")]

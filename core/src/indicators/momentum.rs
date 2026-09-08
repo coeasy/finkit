@@ -477,6 +477,11 @@ pub fn stoch_into(
         });
     }
 
+    if k_period == 5 && k_slow == 3 && d_period == 3 {
+        stoch_default_5_3_3_into(high, low, close, k_out, d_out);
+        return Ok(());
+    }
+
     #[cfg(all(feature = "std", target_arch = "x86_64"))]
     crate::math::simd_kernels::stoch_simd_into(
         high, low, close, k_period, k_slow, d_period, k_out, d_out,
@@ -485,6 +490,81 @@ pub fn stoch_into(
     stoch_fused_pipeline(high, low, close, k_period, k_slow, d_period, k_out, d_out);
 
     Ok(())
+}
+
+/// Fixed-period STOCH kernel for the TA-Lib default configuration. Keeping
+/// the two monotonic queues and both smoothing rings on the stack removes the
+/// small dynamic-indexing costs from the generic SIMD dispatcher.
+#[inline(always)]
+fn stoch_default_5_3_3_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    k_out: &mut [f64],
+    d_out: &mut [f64],
+) {
+    const MASK: usize = 7;
+    const LOOKBACK: usize = 8;
+    let warmup = LOOKBACK.min(k_out.len());
+    k_out[..warmup].fill(f64::NAN);
+    d_out[..warmup].fill(f64::NAN);
+
+    let mut max_queue = [0usize; 8];
+    let mut min_queue = [0usize; 8];
+    let mut max_head = 0usize;
+    let mut max_tail = 0usize;
+    let mut min_head = 0usize;
+    let mut min_tail = 0usize;
+    let mut fast_k_ring = [0.0; 3];
+    let mut k_ring = [0.0; 3];
+    let mut k_sum = 0.0;
+    let mut d_sum = 0.0;
+
+    for i in 0..close.len() {
+        let new_high = high[i];
+        let new_low = low[i];
+        while max_tail > max_head && high[max_queue[(max_tail - 1) & MASK]] <= new_high {
+            max_tail -= 1;
+        }
+        max_queue[max_tail & MASK] = i;
+        max_tail += 1;
+        while min_tail > min_head && low[min_queue[(min_tail - 1) & MASK]] >= new_low {
+            min_tail -= 1;
+        }
+        min_queue[min_tail & MASK] = i;
+        min_tail += 1;
+
+        let window_start = i.saturating_sub(4);
+        while max_queue[max_head & MASK] < window_start {
+            max_head += 1;
+        }
+        while min_queue[min_head & MASK] < window_start {
+            min_head += 1;
+        }
+
+        let fast_k = if i >= 4 {
+            let highest = high[max_queue[max_head & MASK]];
+            let lowest = low[min_queue[min_head & MASK]];
+            let denom = highest - lowest;
+            if denom > 1e-15 {
+                (close[i] - lowest) / denom * 100.0
+            } else {
+                50.0
+            }
+        } else {
+            0.0
+        };
+        let ring_pos = i % 3;
+        k_sum += fast_k - fast_k_ring[ring_pos];
+        fast_k_ring[ring_pos] = fast_k;
+        let slow_k = if i >= 2 { k_sum / 3.0 } else { 0.0 };
+        d_sum += slow_k - k_ring[ring_pos];
+        k_ring[ring_pos] = slow_k;
+        if i >= LOOKBACK {
+            k_out[i] = slow_k;
+            d_out[i] = d_sum / 3.0;
+        }
+    }
 }
 
 /// MACD Result
@@ -3011,8 +3091,8 @@ pub fn macdfix_into(
     let mut macd_value = fast - slow;
     macd_line[first_macd] = macd_value;
     for (i, &value) in input.iter().enumerate().skip(26) {
-        fast = (value - fast).mul_add(0.15, fast);
-        slow = (value - slow).mul_add(0.075, slow);
+        fast = (value - fast) * 0.15 + fast;
+        slow = (value - slow) * 0.075 + slow;
         macd_value = fast - slow;
         macd_line[i] = macd_value;
     }
@@ -3026,7 +3106,7 @@ pub fn macdfix_into(
     hist[first_output] = macd_line[first_output] - signal_value;
     let signal_k = 2.0 / (signal_period as f64 + 1.0);
     for i in first_output + 1..len {
-        signal_value = (macd_line[i] - signal_value).mul_add(signal_k, signal_value);
+        signal_value = (macd_line[i] - signal_value) * signal_k + signal_value;
         signal[i] = signal_value;
         hist[i] = macd_line[i] - signal_value;
     }
@@ -3262,12 +3342,64 @@ pub fn stochf(
     })
 }
 
+/// Zero-copy STOCHF variant used by the Python compatibility layer.
+pub fn stochf_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    fastk_period: usize,
+    fastd_period: usize,
+    out_k: &mut [f64],
+    out_d: &mut [f64],
+) -> Result<()> {
+    if high.len() != low.len() || high.len() != close.len() {
+        return Err(TaError::InvalidParameter {
+            name: "high, low, close".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    if out_k.len() != high.len() || out_d.len() != high.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output slices".to_string(),
+            constraint: "must each have the same length as input".to_string(),
+        });
+    }
+    validate_input(high.len(), fastk_period)?;
+    if fastk_period == 5 && fastd_period == 3 {
+        return stochf_5_3_into(high, low, close, out_k, out_d);
+    }
+
+    let result = stochf(high, low, close, fastk_period, fastd_period)?;
+    out_k.copy_from_slice(result.k.as_slice().unwrap());
+    out_d.copy_from_slice(result.d.as_slice().unwrap());
+    Ok(())
+}
+
 #[inline]
 fn stochf_5_3(high: &[f64], low: &[f64], close: &[f64]) -> Result<StochResult> {
     validate_input(high.len(), 5)?;
     let len = high.len();
     let mut fastk = vec![f64::NAN; len];
     let mut fastd = vec![f64::NAN; len];
+    stochf_5_3_into(high, low, close, &mut fastk, &mut fastd)?;
+    Ok(StochResult {
+        k: Array1::from(fastk),
+        d: Array1::from(fastd),
+    })
+}
+
+#[inline(always)]
+fn stochf_5_3_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    fastk: &mut [f64],
+    fastd: &mut [f64],
+) -> Result<()> {
+    validate_input(high.len(), 5)?;
+    let len = high.len();
+    fastk.fill(f64::NAN);
+    fastd.fill(f64::NAN);
     let mut highest_idx = usize::MAX;
     let mut lowest_idx = usize::MAX;
     let mut highest = 0.0;
@@ -3320,10 +3452,7 @@ fn stochf_5_3(high: &[f64], low: &[f64], close: &[f64]) -> Result<StochResult> {
         }
     }
 
-    Ok(StochResult {
-        k: Array1::from(fastk),
-        d: Array1::from(fastd),
-    })
+    Ok(())
 }
 
 /// Stochastic RSI (STOCHRSI)
@@ -3524,13 +3653,53 @@ pub fn ultosc(
     validate_input(high.len(), max_period + 1)?;
 
     let len = high.len();
+    let mut output = init_output(len);
+    ultosc_into(
+        high,
+        low,
+        close,
+        period1,
+        period2,
+        period3,
+        output.as_slice_mut().unwrap(),
+    )?;
+    Ok(output)
+}
+
+/// Zero-copy Ultimate Oscillator variant. The default periods use fixed-size
+/// rings so the hot path avoids three full-length scratch arrays.
+pub fn ultosc_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    period1: usize,
+    period2: usize,
+    period3: usize,
+    output: &mut [f64],
+) -> Result<()> {
+    if high.len() != low.len() || high.len() != close.len() {
+        return Err(TaError::InvalidParameter {
+            name: "high, low, close".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    if output.len() != high.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
+    let max_period = period1.max(period2).max(period3);
+    validate_input(high.len(), max_period + 1)?;
+    output.fill(f64::NAN);
+    if period1 == 7 && period2 == 14 && period3 == 28 {
+        return ultosc_default_7_14_28_into(high, low, close, output);
+    }
+
+    let len = high.len();
     let mut bp = vec![0.0; len];
     let mut tr = vec![0.0; len];
-
-    // Buying pressure / true range pre-pass, batched through the SIMD fast path.
     simd_ops::simd_bp_tr(high, low, close, &mut bp, &mut tr);
-
-    let mut output = init_output(len);
 
     let mut bp1_sum: f64 = bp[max_period + 1 - period1..=max_period].iter().sum();
     let mut tr1_sum: f64 = tr[max_period + 1 - period1..=max_period].iter().sum();
@@ -3583,7 +3752,72 @@ pub fn ultosc(
         output[i] = 100.0 * (4.0 * avg1 + 2.0 * avg2 + avg3) / 7.0;
     }
 
-    Ok(output)
+    Ok(())
+}
+
+#[inline(always)]
+fn ultosc_default_7_14_28_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    output: &mut [f64],
+) -> Result<()> {
+    let mut bp1 = [0.0; 7];
+    let mut tr1 = [0.0; 7];
+    let mut bp2 = [0.0; 14];
+    let mut tr2 = [0.0; 14];
+    let mut bp3 = [0.0; 28];
+    let mut tr3 = [0.0; 28];
+    let mut bp1_sum = 0.0;
+    let mut tr1_sum = 0.0;
+    let mut bp2_sum = 0.0;
+    let mut tr2_sum = 0.0;
+    let mut bp3_sum = 0.0;
+    let mut tr3_sum = 0.0;
+
+    for i in 0..high.len() {
+        let (bp, tr) = if i == 0 {
+            (0.0, 0.0)
+        } else {
+            let tl = low[i].min(close[i - 1]);
+            (close[i] - tl, high[i].max(close[i - 1]) - tl)
+        };
+        let idx1 = i % 7;
+        let idx2 = i % 14;
+        let idx3 = i % 28;
+        bp1_sum += bp - bp1[idx1];
+        tr1_sum += tr - tr1[idx1];
+        bp2_sum += bp - bp2[idx2];
+        tr2_sum += tr - tr2[idx2];
+        bp3_sum += bp - bp3[idx3];
+        tr3_sum += tr - tr3[idx3];
+        bp1[idx1] = bp;
+        tr1[idx1] = tr;
+        bp2[idx2] = bp;
+        tr2[idx2] = tr;
+        bp3[idx3] = bp;
+        tr3[idx3] = tr;
+
+        if i >= 28 {
+            let avg1 = if tr1_sum.abs() > 1e-15 {
+                bp1_sum / tr1_sum
+            } else {
+                0.0
+            };
+            let avg2 = if tr2_sum.abs() > 1e-15 {
+                bp2_sum / tr2_sum
+            } else {
+                0.0
+            };
+            let avg3 = if tr3_sum.abs() > 1e-15 {
+                bp3_sum / tr3_sum
+            } else {
+                0.0
+            };
+            output[i] = 100.0 * (4.0 * avg1 + 2.0 * avg2 + avg3) / 7.0;
+        }
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------

@@ -9,7 +9,7 @@ use crate::error::{Result, TaError};
 use ndarray::Array1;
 use std::mem::{forget, MaybeUninit};
 
-#[inline]
+#[inline(always)]
 fn typical_price(high: f64, low: f64, close: f64) -> f64 {
     (high + low + close) / 3.0
 }
@@ -164,6 +164,10 @@ pub fn mfi_into(
         });
     }
 
+    if period == 14 {
+        return mfi_period14_into(high, low, close, volume, output);
+    }
+
     let len = close.len();
     output[..period].fill(f64::NAN);
 
@@ -225,6 +229,66 @@ pub fn mfi_into(
                     100.0
                 };
                 *output_ptr.add(i) = value;
+            }
+        }
+    }
+    Ok(())
+}
+
+#[inline(always)]
+fn mfi_period14_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    volume: &[f64],
+    output: &mut [f64],
+) -> Result<()> {
+    output[..14].fill(f64::NAN);
+    let mut flow_ring = [0.0_f64; 14];
+    let flow_ptr = flow_ring.as_mut_ptr();
+    let mut pos_sum = 0.0;
+    let mut neg_sum = 0.0;
+    let mut ring_idx = 0usize;
+
+    unsafe {
+        let high_ptr = high.as_ptr();
+        let low_ptr = low.as_ptr();
+        let close_ptr = close.as_ptr();
+        let volume_ptr = volume.as_ptr();
+        let output_ptr = output.as_mut_ptr();
+        let mut prev_tp = typical_price(*high_ptr, *low_ptr, *close_ptr);
+        for i in 1..close.len() {
+            let tp = typical_price(*high_ptr.add(i), *low_ptr.add(i), *close_ptr.add(i));
+            let money_flow = tp * *volume_ptr.add(i);
+            let signed_flow = if tp > prev_tp {
+                money_flow
+            } else {
+                -money_flow
+            };
+            prev_tp = tp;
+
+            let old_flow = *flow_ptr.add(ring_idx);
+            if old_flow > 0.0 {
+                pos_sum -= old_flow;
+            } else if old_flow < 0.0 {
+                neg_sum += old_flow;
+            }
+            if signed_flow > 0.0 {
+                pos_sum += signed_flow;
+            } else if signed_flow < 0.0 {
+                neg_sum -= signed_flow;
+            }
+            *flow_ptr.add(ring_idx) = signed_flow;
+            ring_idx += 1;
+            if ring_idx == 14 {
+                ring_idx = 0;
+            }
+            if i >= 14 {
+                *output_ptr.add(i) = if neg_sum.abs() > 1e-15 {
+                    100.0 * pos_sum / (pos_sum + neg_sum)
+                } else {
+                    100.0
+                };
             }
         }
     }

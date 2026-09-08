@@ -705,12 +705,12 @@ fn compute_hilbert_components(
 /// callers, while this variant only writes the requested terminal values and
 /// keeps all recursive state in fixed-size arrays.
 #[inline(always)]
-fn compute_hilbert_short<const PHASOR: bool>(
+fn compute_hilbert_short<const PHASOR: bool, const TRENDLINE: bool>(
     input: &[f64],
     first: &mut [f64],
     second: Option<&mut [f64]>,
 ) -> Result<()> {
-    validate_input(input.len(), 32)?;
+    validate_input(input.len(), if TRENDLINE { 37 } else { 32 })?;
     if first.len() != input.len() {
         return Err(crate::error::TaError::InvalidParameter {
             name: "output".to_string(),
@@ -768,13 +768,27 @@ fn compute_hilbert_short<const PHASOR: bool>(
     let mut period = 0.0;
     let mut smooth_period = 0.0;
     let mut hilbert_idx = 0usize;
+    let mut i_trend1 = 0.0;
+    let mut i_trend2 = 0.0;
+    let mut i_trend3 = 0.0;
     let rad2deg = 180.0 / std::f64::consts::PI;
+
+    let trend_prefix = if TRENDLINE {
+        let mut prefix = vec![0.0; input.len() + 1];
+        for (index, &value) in input.iter().enumerate() {
+            prefix[index + 1] = prefix[index] + value;
+        }
+        prefix
+    } else {
+        Vec::new()
+    };
 
     let mut trailing_wma_idx = 0usize;
     let mut period_wma_sub = input[0] + input[1] + input[2];
     let mut period_wma_sum = input[0] + 2.0 * input[1] + 3.0 * input[2];
     let mut trailing_wma_value = 0.0;
-    for today in 3..12 {
+    let wma_warmup = if TRENDLINE { 34 } else { 9 };
+    for today in 3..(3 + wma_warmup) {
         let value = input[today];
         period_wma_sub += value;
         period_wma_sub -= trailing_wma_value;
@@ -784,7 +798,7 @@ fn compute_hilbert_short<const PHASOR: bool>(
         period_wma_sum -= period_wma_sub;
     }
 
-    for i in 12..input.len() {
+    for i in (3 + wma_warmup)..input.len() {
         let value = input[i];
         period_wma_sub += value;
         period_wma_sub -= trailing_wma_value;
@@ -793,7 +807,7 @@ fn compute_hilbert_short<const PHASOR: bool>(
         trailing_wma_idx += 1;
         let smoothed = period_wma_sum * 0.1;
         period_wma_sum -= period_wma_sub;
-        let adjusted_period = 0.075f64.mul_add(period, 0.54);
+        let adjusted_period = 0.075 * period + 0.54;
 
         let (i1_value, q1_value) = if i & 1 == 0 {
             let mut detrender_value = -detrender_even[hilbert_idx];
@@ -833,12 +847,12 @@ fn compute_hilbert_short<const PHASOR: bool>(
             jq_value *= adjusted_period;
 
             hilbert_idx = if hilbert_idx == 2 { 0 } else { hilbert_idx + 1 };
-            let current_q2 = 0.2f64.mul_add(q1_value + ji_value, 0.8 * prev_q2);
-            let current_i2 = 0.2f64.mul_add(i1_even_prev3 - jq_value, 0.8 * prev_i2);
+            let current_q2 = 0.2 * (q1_value + ji_value) + 0.8 * prev_q2;
+            let current_i2 = 0.2 * (i1_even_prev3 - jq_value) + 0.8 * prev_i2;
             i1_odd_prev3 = i1_odd_prev2;
             i1_odd_prev2 = detrender_value;
-            re = 0.8f64.mul_add(re, 0.2 * current_i2.mul_add(prev_i2, current_q2 * prev_q2));
-            im = 0.8f64.mul_add(im, 0.2 * (current_i2 * prev_q2 - current_q2 * prev_i2));
+            re = 0.8 * re + 0.2 * (current_i2 * prev_i2 + current_q2 * prev_q2);
+            im = 0.8 * im + 0.2 * (current_i2 * prev_q2 - current_q2 * prev_i2);
             prev_q2 = current_q2;
             prev_i2 = current_i2;
             (i1_even_prev3, q1_value)
@@ -879,12 +893,12 @@ fn compute_hilbert_short<const PHASOR: bool>(
             prev_jq_input_odd = q1_value;
             jq_value *= adjusted_period;
 
-            let current_q2 = 0.2f64.mul_add(q1_value + ji_value, 0.8 * prev_q2);
-            let current_i2 = 0.2f64.mul_add(i1_odd_prev3 - jq_value, 0.8 * prev_i2);
+            let current_q2 = 0.2 * (q1_value + ji_value) + 0.8 * prev_q2;
+            let current_i2 = 0.2 * (i1_odd_prev3 - jq_value) + 0.8 * prev_i2;
             i1_even_prev3 = i1_even_prev2;
             i1_even_prev2 = detrender_value;
-            re = 0.8f64.mul_add(re, 0.2 * current_i2.mul_add(prev_i2, current_q2 * prev_q2));
-            im = 0.8f64.mul_add(im, 0.2 * (current_i2 * prev_q2 - current_q2 * prev_i2));
+            re = 0.8 * re + 0.2 * (current_i2 * prev_i2 + current_q2 * prev_q2);
+            im = 0.8 * im + 0.2 * (current_i2 * prev_q2 - current_q2 * prev_i2);
             prev_q2 = current_q2;
             prev_i2 = current_i2;
             (i1_odd_prev3, q1_value)
@@ -898,10 +912,22 @@ fn compute_hilbert_short<const PHASOR: bool>(
             .min(1.5 * previous_period)
             .max(0.67 * previous_period);
         period = period.clamp(6.0, 50.0);
-        period = 0.2f64.mul_add(period, 0.8 * previous_period);
-        smooth_period = 0.33f64.mul_add(period, 0.67 * smooth_period);
+        period = 0.2 * period + 0.8 * previous_period;
+        smooth_period = 0.33 * period + 0.67 * smooth_period;
 
-        if i >= 32 {
+        if TRENDLINE {
+            let dc_period_int = (smooth_period + 0.5) as usize;
+            let raw_sum = trend_prefix[i + 1] - trend_prefix[i + 1 - dc_period_int];
+            let instant_trend = raw_sum / dc_period_int as f64;
+            let trendline =
+                (4.0 * instant_trend + 3.0 * i_trend1 + 2.0 * i_trend2 + i_trend3) / 10.0;
+            i_trend3 = i_trend2;
+            i_trend2 = i_trend1;
+            i_trend1 = instant_trend;
+            if i >= 63 {
+                first[i] = trendline;
+            }
+        } else if i >= 32 {
             if PHASOR {
                 first[i] = i1_value;
                 if let Some(ptr) = second_ptr {
@@ -1247,7 +1273,7 @@ fn compute_hilbert_selected<const MODE: u8>(
 }
 
 pub fn ht_dcperiod_into(input: &[f64], output: &mut [f64]) -> Result<()> {
-    compute_hilbert_short::<false>(input, output, None)
+    compute_hilbert_short::<false, false>(input, output, None)
 }
 
 pub fn ht_dcphase_into(input: &[f64], output: &mut [f64]) -> Result<()> {
@@ -1255,7 +1281,7 @@ pub fn ht_dcphase_into(input: &[f64], output: &mut [f64]) -> Result<()> {
 }
 
 pub fn ht_phasor_into(input: &[f64], in_phase: &mut [f64], quadrature: &mut [f64]) -> Result<()> {
-    compute_hilbert_short::<true>(input, in_phase, Some(quadrature))
+    compute_hilbert_short::<true, false>(input, in_phase, Some(quadrature))
 }
 
 pub fn ht_sine_into(input: &[f64], sine: &mut [f64], lead_sine: &mut [f64]) -> Result<()> {
@@ -1263,7 +1289,7 @@ pub fn ht_sine_into(input: &[f64], sine: &mut [f64], lead_sine: &mut [f64]) -> R
 }
 
 pub fn ht_trendline_into(input: &[f64], output: &mut [f64]) -> Result<()> {
-    compute_hilbert_selected::<4>(input, output, None)
+    compute_hilbert_short::<false, true>(input, output, None)
 }
 
 pub fn ht_trendmode_into(input: &[f64], output: &mut [f64]) -> Result<()> {

@@ -881,11 +881,34 @@ fn fast_mama<'py>(
     slowlimit: f64,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
     let close = close.as_slice().map_err(value_error)?;
-    let mut mama = vec![f64::NAN; close.len()];
-    let mut fama = vec![f64::NAN; close.len()];
-    py.detach(|| indicators::mama_into(close, fastlimit, slowlimit, &mut mama, &mut fama))
+    // `mama_into` initializes every output slot, including the warm-up NaNs.
+    // Leave storage uninitialized so the binding does not clear both buffers
+    // before the core kernel fills them.
+    let len = close.len();
+    let mut mama_raw = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    let mut fama_raw = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    unsafe {
+        mama_raw.set_len(len);
+        fama_raw.set_len(len);
+    }
+    let mama = unsafe { std::slice::from_raw_parts_mut(mama_raw.as_mut_ptr().cast::<f64>(), len) };
+    let fama = unsafe { std::slice::from_raw_parts_mut(fama_raw.as_mut_ptr().cast::<f64>(), len) };
+    py.detach(|| indicators::mama_into(close, fastlimit, slowlimit, mama, fama))
         .map_err(value_error)?;
-    Ok((PyArray1::from_vec(py, mama), PyArray1::from_vec(py, fama)))
+    let mama_ptr = mama_raw.as_mut_ptr().cast::<f64>();
+    let fama_ptr = fama_raw.as_mut_ptr().cast::<f64>();
+    let mama_capacity = mama_raw.capacity();
+    let fama_capacity = fama_raw.capacity();
+    forget(mama_raw);
+    forget(fama_raw);
+    Ok((
+        PyArray1::from_vec(py, unsafe {
+            Vec::from_raw_parts(mama_ptr, len, mama_capacity)
+        }),
+        PyArray1::from_vec(py, unsafe {
+            Vec::from_raw_parts(fama_ptr, len, fama_capacity)
+        }),
+    ))
 }
 
 macro_rules! fast_ht_unary {
@@ -896,10 +919,20 @@ macro_rules! fast_ht_unary {
             close: PyReadonlyArray1<'py, f64>,
         ) -> PyResult<Bound<'py, PyArray1<f64>>> {
             let close = close.as_slice().map_err(value_error)?;
-            let mut output = vec![0.0; close.len()];
-            py.detach(|| indicators::$indicator(close, &mut output))
+            let len = close.len();
+            let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);
+            unsafe { raw_output.set_len(len) };
+            let output = unsafe {
+                std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<f64>(), len)
+            };
+            py.detach(|| indicators::$indicator(close, output))
                 .map_err(value_error)?;
-            Ok(PyArray1::from_vec(py, output))
+            let ptr = raw_output.as_mut_ptr().cast::<f64>();
+            let capacity = raw_output.capacity();
+            forget(raw_output);
+            Ok(PyArray1::from_vec(py, unsafe {
+                Vec::from_raw_parts(ptr, len, capacity)
+            }))
         }
     };
 }
@@ -915,13 +948,32 @@ fn fast_ht_phasor<'py>(
     close: PyReadonlyArray1<'py, f64>,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
     let close = close.as_slice().map_err(value_error)?;
-    let mut in_phase = vec![0.0; close.len()];
-    let mut quadrature = vec![0.0; close.len()];
-    py.detach(|| indicators::ht_phasor_into(close, &mut in_phase, &mut quadrature))
+    let len = close.len();
+    let mut in_phase_raw = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    let mut quadrature_raw = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    unsafe {
+        in_phase_raw.set_len(len);
+        quadrature_raw.set_len(len);
+    }
+    let in_phase =
+        unsafe { std::slice::from_raw_parts_mut(in_phase_raw.as_mut_ptr().cast::<f64>(), len) };
+    let quadrature =
+        unsafe { std::slice::from_raw_parts_mut(quadrature_raw.as_mut_ptr().cast::<f64>(), len) };
+    py.detach(|| indicators::ht_phasor_into(close, in_phase, quadrature))
         .map_err(value_error)?;
+    let in_phase_ptr = in_phase_raw.as_mut_ptr().cast::<f64>();
+    let quadrature_ptr = quadrature_raw.as_mut_ptr().cast::<f64>();
+    let in_phase_capacity = in_phase_raw.capacity();
+    let quadrature_capacity = quadrature_raw.capacity();
+    forget(in_phase_raw);
+    forget(quadrature_raw);
     Ok((
-        PyArray1::from_vec(py, in_phase),
-        PyArray1::from_vec(py, quadrature),
+        PyArray1::from_vec(py, unsafe {
+            Vec::from_raw_parts(in_phase_ptr, len, in_phase_capacity)
+        }),
+        PyArray1::from_vec(py, unsafe {
+            Vec::from_raw_parts(quadrature_ptr, len, quadrature_capacity)
+        }),
     ))
 }
 
@@ -931,13 +983,31 @@ fn fast_ht_sine<'py>(
     close: PyReadonlyArray1<'py, f64>,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
     let close = close.as_slice().map_err(value_error)?;
-    let mut sine = vec![0.0; close.len()];
-    let mut lead_sine = vec![0.0; close.len()];
-    py.detach(|| indicators::ht_sine_into(close, &mut sine, &mut lead_sine))
+    let len = close.len();
+    let mut sine_raw = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    let mut lead_sine_raw = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    unsafe {
+        sine_raw.set_len(len);
+        lead_sine_raw.set_len(len);
+    }
+    let sine = unsafe { std::slice::from_raw_parts_mut(sine_raw.as_mut_ptr().cast::<f64>(), len) };
+    let lead_sine =
+        unsafe { std::slice::from_raw_parts_mut(lead_sine_raw.as_mut_ptr().cast::<f64>(), len) };
+    py.detach(|| indicators::ht_sine_into(close, sine, lead_sine))
         .map_err(value_error)?;
+    let sine_ptr = sine_raw.as_mut_ptr().cast::<f64>();
+    let lead_sine_ptr = lead_sine_raw.as_mut_ptr().cast::<f64>();
+    let sine_capacity = sine_raw.capacity();
+    let lead_sine_capacity = lead_sine_raw.capacity();
+    forget(sine_raw);
+    forget(lead_sine_raw);
     Ok((
-        PyArray1::from_vec(py, sine),
-        PyArray1::from_vec(py, lead_sine),
+        PyArray1::from_vec(py, unsafe {
+            Vec::from_raw_parts(sine_ptr, len, sine_capacity)
+        }),
+        PyArray1::from_vec(py, unsafe {
+            Vec::from_raw_parts(lead_sine_ptr, len, lead_sine_capacity)
+        }),
     ))
 }
 

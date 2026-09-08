@@ -674,75 +674,93 @@ fn sarext_default_sar_into(high: &[f64], low: &[f64], output: &mut [f64]) -> Res
     let high_ptr = high.as_ptr();
     let low_ptr = low.as_ptr();
     let output_ptr = output.as_mut_ptr();
-    unsafe {
-        *output_ptr = f64::NAN;
-    }
+    unsafe { *output_ptr = f64::NAN };
 
-    let up_move = unsafe { *high_ptr.add(1) - *high_ptr };
-    let down_move = unsafe { *low_ptr - *low_ptr.add(1) };
+    let first_high = unsafe { *high_ptr };
+    let first_low = unsafe { *low_ptr };
+    let second_high = unsafe { *high_ptr.add(1) };
+    let second_low = unsafe { *low_ptr.add(1) };
+    let up_move = second_high - first_high;
+    let down_move = first_low - second_low;
     let mut is_long = !(down_move > up_move && down_move > 0.0);
-    let mut long_af = 0.02_f64;
-    let mut short_af = 0.02_f64;
-    let mut ep = if is_long {
-        unsafe { *high_ptr.add(1) }
-    } else {
-        unsafe { *low_ptr.add(1) }
-    };
-    let mut sar = if is_long {
-        unsafe { *low_ptr }
-    } else {
-        unsafe { *high_ptr }
-    };
-    let mut prev_low = unsafe { *low_ptr.add(1) };
-    let mut prev_high = unsafe { *high_ptr.add(1) };
-    let len = high.len();
-    let mut i = 1usize;
+    let mut af = 0.02_f64;
+    let mut ep = if is_long { second_high } else { second_low };
+    let mut sar = if is_long { first_low } else { first_high };
+    let mut prev_low = second_low;
+    let mut prev_high = second_high;
 
-    while i < len {
+    for i in 1..high.len() {
         let new_low = unsafe { *low_ptr.add(i) };
         let new_high = unsafe { *high_ptr.add(i) };
         if is_long {
             if new_low <= sar {
                 is_long = false;
-                sar = ep.max(prev_high).max(new_high);
-                unsafe {
-                    *output_ptr.add(i) = -sar;
+                sar = ep;
+                if sar < prev_high {
+                    sar = prev_high;
                 }
-                short_af = 0.02;
+                if sar < new_high {
+                    sar = new_high;
+                }
+                unsafe { *output_ptr.add(i) = -sar };
+                af = 0.02;
                 ep = new_low;
-                sar = (short_af * (ep - sar) + sar).max(prev_high).max(new_high);
-            } else {
-                unsafe {
-                    *output_ptr.add(i) = sar;
+                sar += af * (ep - sar);
+                if sar < prev_high {
+                    sar = prev_high;
                 }
+                if sar < new_high {
+                    sar = new_high;
+                }
+            } else {
+                unsafe { *output_ptr.add(i) = sar };
                 if new_high > ep {
                     ep = new_high;
-                    long_af = (long_af + 0.02).min(0.2);
+                    af = (af + 0.02).min(0.2);
                 }
-                sar = (long_af * (ep - sar) + sar).min(prev_low).min(new_low);
+                sar += af * (ep - sar);
+                if sar > prev_low {
+                    sar = prev_low;
+                }
+                if sar > new_low {
+                    sar = new_low;
+                }
             }
         } else if new_high >= sar {
             is_long = true;
-            sar = ep.min(prev_low).min(new_low);
-            unsafe {
-                *output_ptr.add(i) = sar;
+            sar = ep;
+            if sar > prev_low {
+                sar = prev_low;
             }
-            long_af = 0.02;
+            if sar > new_low {
+                sar = new_low;
+            }
+            unsafe { *output_ptr.add(i) = sar };
+            af = 0.02;
             ep = new_high;
-            sar = (long_af * (ep - sar) + sar).min(prev_low).min(new_low);
-        } else {
-            unsafe {
-                *output_ptr.add(i) = -sar;
+            sar += af * (ep - sar);
+            if sar > prev_low {
+                sar = prev_low;
             }
+            if sar > new_low {
+                sar = new_low;
+            }
+        } else {
+            unsafe { *output_ptr.add(i) = -sar };
             if new_low < ep {
                 ep = new_low;
-                short_af = (short_af + 0.02).min(0.2);
+                af = (af + 0.02).min(0.2);
             }
-            sar = (short_af * (ep - sar) + sar).max(prev_high).max(new_high);
+            sar += af * (ep - sar);
+            if sar < prev_high {
+                sar = prev_high;
+            }
+            if sar < new_high {
+                sar = new_high;
+            }
         }
         prev_low = new_low;
         prev_high = new_high;
-        i += 1;
     }
     Ok(())
 }
@@ -893,7 +911,7 @@ pub fn mama(input: &[f64], fast_limit: f64, slow_limit: f64) -> Result<MamaResul
 
     // Main processing loop from bar 10 onward (lookback = 32, output starts at 32)
     for i in 12..len {
-        let adjusted_prev_period = 0.075f64.mul_add(period, 0.54);
+        let adjusted_prev_period = 0.075 * period + 0.54;
         let today_value = input[i];
 
         // Update WMA smoother
@@ -953,8 +971,8 @@ pub fn mama(input: &[f64], fast_limit: f64, slow_limit: f64) -> Result<MamaResul
             hilbert_idx = if hilbert_idx == 2 { 0 } else { hilbert_idx + 1 };
 
             // IIR recursive filtering for Q2 and I2
-            let q2 = 0.2f64.mul_add(q1_val + ji_val, 0.8 * prev_q2);
-            let i2 = 0.2f64.mul_add(i1_for_even_prev3 - jq_val, 0.8 * prev_i2);
+            let q2 = 0.2 * (q1_val + ji_val) + 0.8 * prev_q2;
+            let i2 = 0.2 * (i1_for_even_prev3 - jq_val) + 0.8 * prev_i2;
 
             // Update I1 delay lines for next odd bar
             i1_for_odd_prev3 = i1_for_odd_prev2;
@@ -968,8 +986,8 @@ pub fn mama(input: &[f64], fast_limit: f64, slow_limit: f64) -> Result<MamaResul
             };
 
             // Re/Im use OLD prevQ2/prevI2 (before update), matching TA-Lib
-            re = 0.8f64.mul_add(re, 0.2 * i2.mul_add(prev_i2, q2 * prev_q2));
-            im = 0.8f64.mul_add(im, 0.2 * (i2 * prev_q2 - q2 * prev_i2));
+            re = 0.8 * re + 0.2 * (i2 * prev_i2 + q2 * prev_q2);
+            im = 0.8 * im + 0.2 * (i2 * prev_q2 - q2 * prev_i2);
             prev_q2 = q2;
             prev_i2 = i2;
         } else {
@@ -1015,8 +1033,8 @@ pub fn mama(input: &[f64], fast_limit: f64, slow_limit: f64) -> Result<MamaResul
             jq_val *= adjusted_prev_period;
 
             // IIR recursive filtering for Q2 and I2
-            let q2 = 0.2f64.mul_add(q1_val + ji_val, 0.8 * prev_q2);
-            let i2 = 0.2f64.mul_add(i1_for_odd_prev3 - jq_val, 0.8 * prev_i2);
+            let q2 = 0.2 * (q1_val + ji_val) + 0.8 * prev_q2;
+            let i2 = 0.2 * (i1_for_odd_prev3 - jq_val) + 0.8 * prev_i2;
 
             // Update I1 delay lines for next even bar
             i1_for_even_prev3 = i1_for_even_prev2;
@@ -1030,8 +1048,8 @@ pub fn mama(input: &[f64], fast_limit: f64, slow_limit: f64) -> Result<MamaResul
             };
 
             // Re/Im use OLD prevQ2/prevI2 (before update), matching TA-Lib
-            re = 0.8f64.mul_add(re, 0.2 * i2.mul_add(prev_i2, q2 * prev_q2));
-            im = 0.8f64.mul_add(im, 0.2 * (i2 * prev_q2 - q2 * prev_i2));
+            re = 0.8 * re + 0.2 * (i2 * prev_i2 + q2 * prev_q2);
+            im = 0.8 * im + 0.2 * (i2 * prev_q2 - q2 * prev_i2);
             prev_q2 = q2;
             prev_i2 = i2;
         }
@@ -1058,9 +1076,9 @@ pub fn mama(input: &[f64], fast_limit: f64, slow_limit: f64) -> Result<MamaResul
         };
 
         // Update MAMA and FAMA
-        mama_val = (1.0 - alpha).mul_add(mama_val, alpha * today_value);
+        mama_val = (1.0 - alpha) * mama_val + alpha * today_value;
         let half_alpha = alpha * 0.5;
-        fama_val = (1.0 - half_alpha).mul_add(fama_val, half_alpha * mama_val);
+        fama_val = (1.0 - half_alpha) * fama_val + half_alpha * mama_val;
 
         // Store output (valid from bar 32 onward)
         if i >= 32 {
@@ -1087,7 +1105,7 @@ pub fn mama(input: &[f64], fast_limit: f64, slow_limit: f64) -> Result<MamaResul
         } else if period > 50.0 {
             period = 50.0;
         }
-        period = 0.2f64.mul_add(period, 0.8 * temp_period);
+        period = 0.2 * period + 0.8 * temp_period;
     }
 
     Ok(MamaResult {
@@ -1222,7 +1240,7 @@ pub fn mama_into(
 
     // Main processing loop from bar 12 onward (lookback = 32, output starts at 32)
     for i in 12..len {
-        let adjusted_prev_period = 0.075f64.mul_add(period, 0.54);
+        let adjusted_prev_period = 0.075 * period + 0.54;
         let today_value = input[i];
 
         // Update WMA smoother
@@ -1282,8 +1300,8 @@ pub fn mama_into(
             hilbert_idx = if hilbert_idx == 2 { 0 } else { hilbert_idx + 1 };
 
             // IIR recursive filtering for Q2 and I2
-            let q2 = 0.2f64.mul_add(q1_val + ji_val, 0.8 * prev_q2);
-            let i2 = 0.2f64.mul_add(i1_for_even_prev3 - jq_val, 0.8 * prev_i2);
+            let q2 = 0.2 * (q1_val + ji_val) + 0.8 * prev_q2;
+            let i2 = 0.2 * (i1_for_even_prev3 - jq_val) + 0.8 * prev_i2;
 
             // Update I1 delay lines for next odd bar
             i1_for_odd_prev3 = i1_for_odd_prev2;
@@ -1297,8 +1315,8 @@ pub fn mama_into(
             };
 
             // Re/Im use OLD prevQ2/prevI2 (before update), matching TA-Lib
-            re = 0.8f64.mul_add(re, 0.2 * i2.mul_add(prev_i2, q2 * prev_q2));
-            im = 0.8f64.mul_add(im, 0.2 * (i2 * prev_q2 - q2 * prev_i2));
+            re = 0.8 * re + 0.2 * (i2 * prev_i2 + q2 * prev_q2);
+            im = 0.8 * im + 0.2 * (i2 * prev_q2 - q2 * prev_i2);
             prev_q2 = q2;
             prev_i2 = i2;
         } else {
@@ -1344,8 +1362,8 @@ pub fn mama_into(
             jq_val *= adjusted_prev_period;
 
             // IIR recursive filtering for Q2 and I2
-            let q2 = 0.2f64.mul_add(q1_val + ji_val, 0.8 * prev_q2);
-            let i2 = 0.2f64.mul_add(i1_for_odd_prev3 - jq_val, 0.8 * prev_i2);
+            let q2 = 0.2 * (q1_val + ji_val) + 0.8 * prev_q2;
+            let i2 = 0.2 * (i1_for_odd_prev3 - jq_val) + 0.8 * prev_i2;
 
             // Update I1 delay lines for next even bar
             i1_for_even_prev3 = i1_for_even_prev2;
@@ -1359,8 +1377,8 @@ pub fn mama_into(
             };
 
             // Re/Im use OLD prevQ2/prevI2 (before update), matching TA-Lib
-            re = 0.8f64.mul_add(re, 0.2 * i2.mul_add(prev_i2, q2 * prev_q2));
-            im = 0.8f64.mul_add(im, 0.2 * (i2 * prev_q2 - q2 * prev_i2));
+            re = 0.8 * re + 0.2 * (i2 * prev_i2 + q2 * prev_q2);
+            im = 0.8 * im + 0.2 * (i2 * prev_q2 - q2 * prev_i2);
             prev_q2 = q2;
             prev_i2 = i2;
         }
@@ -1387,9 +1405,9 @@ pub fn mama_into(
         };
 
         // Update MAMA and FAMA
-        mama_val = (1.0 - alpha).mul_add(mama_val, alpha * today_value);
+        mama_val = (1.0 - alpha) * mama_val + alpha * today_value;
         let half_alpha = alpha * 0.5;
-        fama_val = (1.0 - half_alpha).mul_add(fama_val, half_alpha * mama_val);
+        fama_val = (1.0 - half_alpha) * fama_val + half_alpha * mama_val;
 
         // Store output (valid from bar 32 onward)
         if i >= 32 {
@@ -1416,7 +1434,7 @@ pub fn mama_into(
         } else if period > 50.0 {
             period = 50.0;
         }
-        period = 0.2f64.mul_add(period, 0.8 * temp_period);
+        period = 0.2 * period + 0.8 * temp_period;
     }
 
     Ok(())
@@ -1519,7 +1537,6 @@ pub fn t3(input: &[f64], period: usize, vfactor: f64) -> Result<Array1<f64>> {
         ema[5] = ema[4] * k + ema[5] * one_minus_k;
         output[i] = c1 * ema[5] + c2 * ema[4] + c3 * ema[3] + c4 * ema[2];
     }
-
     Ok(Array1::from_vec(output))
 }
 

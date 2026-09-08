@@ -144,6 +144,10 @@ pub fn adosc_into(
         });
     }
 
+    if fast_period == 3 && slow_period == 10 {
+        return adosc_default_3_10_into(high, low, close, volume, output);
+    }
+
     let fast_k = 2.0 / (fast_period as f64 + 1.0);
     let fast_one_k = 1.0 - fast_k;
     let slow_k = 2.0 / (slow_period as f64 + 1.0);
@@ -175,6 +179,49 @@ pub fn adosc_into(
                 slow_ema = cumulative * slow_k + slow_ema * slow_one_k;
             }
             *output_ptr.add(i) = if i >= slow_period - 1 {
+                fast_ema - slow_ema
+            } else {
+                f64::NAN
+            };
+        }
+    }
+    Ok(())
+}
+
+#[inline(always)]
+fn adosc_default_3_10_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    volume: &[f64],
+    output: &mut [f64],
+) -> Result<()> {
+    unsafe {
+        let high_ptr = high.as_ptr();
+        let low_ptr = low.as_ptr();
+        let close_ptr = close.as_ptr();
+        let volume_ptr = volume.as_ptr();
+        let output_ptr = output.as_mut_ptr();
+        let mut cumulative = 0.0;
+        let mut fast_ema = 0.0;
+        let mut slow_ema = 0.0;
+        for i in 0..high.len() {
+            let h = *high_ptr.add(i);
+            let l = *low_ptr.add(i);
+            let range = h - l;
+            if range > 0.0 {
+                let c = *close_ptr.add(i);
+                let multiplier = ((c - l) - (h - c)) / range;
+                cumulative += multiplier * *volume_ptr.add(i);
+            }
+            if i == 0 {
+                fast_ema = cumulative;
+                slow_ema = cumulative;
+            } else {
+                fast_ema = cumulative * 0.5 + fast_ema * 0.5;
+                slow_ema = cumulative * (2.0 / 11.0) + slow_ema * (1.0 - 2.0 / 11.0);
+            }
+            *output_ptr.add(i) = if i >= 9 {
                 fast_ema - slow_ema
             } else {
                 f64::NAN
