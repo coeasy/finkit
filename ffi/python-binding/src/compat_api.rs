@@ -403,10 +403,19 @@ fn mavp<'py>(
     matype: i32,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let real = real.as_slice().map_err(value_error)?;
-    let _ = matype;
     let periods = periods.as_slice().map_err(value_error)?;
+    let uniform_period = matype == 0 && periods.windows(2).all(|window| window[0] == window[1]);
     let values = py
-        .detach(|| moving_avg::mavp(real, periods, minperiod, maxperiod))
+        .detach(|| {
+            if uniform_period {
+                let period = (periods.first().copied().unwrap_or(minperiod as f64).round()
+                    as usize)
+                    .clamp(minperiod, maxperiod);
+                moving_avg::sma(real, period)
+            } else {
+                moving_avg::mavp(real, periods, minperiod, maxperiod)
+            }
+        })
         .map_err(value_error)?
         .into_raw_vec();
     let mut values = values;
