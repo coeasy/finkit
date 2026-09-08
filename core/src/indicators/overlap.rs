@@ -623,7 +623,7 @@ pub fn mama(input: &[f64], fast_limit: f64, slow_limit: f64) -> Result<MamaResul
     period_wma_sum += input[2] * 3.0;
 
     // Process from bar 3 (after WMA init) through bar 9 to warm up
-    for i in 3..10 {
+    for i in 3..12 {
         let today_value = input[i];
         period_wma_sub += today_value;
         period_wma_sub -= trailing_wma_value;
@@ -635,8 +635,8 @@ pub fn mama(input: &[f64], fast_limit: f64, slow_limit: f64) -> Result<MamaResul
     }
 
     // Main processing loop from bar 10 onward (lookback = 32, output starts at 32)
-    for i in 10..len {
-        let adjusted_prev_period = 0.075 * period + 0.54;
+    for i in 12..len {
+        let adjusted_prev_period = 0.075f64.mul_add(period, 0.54);
         let today_value = input[i];
 
         // Update WMA smoother
@@ -696,8 +696,8 @@ pub fn mama(input: &[f64], fast_limit: f64, slow_limit: f64) -> Result<MamaResul
             hilbert_idx = if hilbert_idx == 2 { 0 } else { hilbert_idx + 1 };
 
             // IIR recursive filtering for Q2 and I2
-            let q2 = 0.2 * (q1_val + ji_val) + 0.8 * prev_q2;
-            let i2 = 0.2 * (i1_for_even_prev3 - jq_val) + 0.8 * prev_i2;
+            let q2 = 0.2f64.mul_add(q1_val + ji_val, 0.8 * prev_q2);
+            let i2 = 0.2f64.mul_add(i1_for_even_prev3 - jq_val, 0.8 * prev_i2);
 
             // Update I1 delay lines for next odd bar
             i1_for_odd_prev3 = i1_for_odd_prev2;
@@ -711,8 +711,8 @@ pub fn mama(input: &[f64], fast_limit: f64, slow_limit: f64) -> Result<MamaResul
             };
 
             // Re/Im use OLD prevQ2/prevI2 (before update), matching TA-Lib
-            re = 0.2 * (i2 * prev_i2 + q2 * prev_q2) + 0.8 * re;
-            im = 0.2 * (i2 * prev_q2 - q2 * prev_i2) + 0.8 * im;
+            re = 0.2f64.mul_add(i2.mul_add(prev_i2, q2 * prev_q2), 0.8 * re);
+            im = 0.2f64.mul_add(i2 * prev_q2 - q2 * prev_i2, 0.8 * im);
             prev_q2 = q2;
             prev_i2 = i2;
         } else {
@@ -758,8 +758,8 @@ pub fn mama(input: &[f64], fast_limit: f64, slow_limit: f64) -> Result<MamaResul
             jq_val *= adjusted_prev_period;
 
             // IIR recursive filtering for Q2 and I2
-            let q2 = 0.2 * (q1_val + ji_val) + 0.8 * prev_q2;
-            let i2 = 0.2 * (i1_for_odd_prev3 - jq_val) + 0.8 * prev_i2;
+            let q2 = 0.2f64.mul_add(q1_val + ji_val, 0.8 * prev_q2);
+            let i2 = 0.2f64.mul_add(i1_for_odd_prev3 - jq_val, 0.8 * prev_i2);
 
             // Update I1 delay lines for next even bar
             i1_for_even_prev3 = i1_for_even_prev2;
@@ -773,8 +773,8 @@ pub fn mama(input: &[f64], fast_limit: f64, slow_limit: f64) -> Result<MamaResul
             };
 
             // Re/Im use OLD prevQ2/prevI2 (before update), matching TA-Lib
-            re = 0.2 * (i2 * prev_i2 + q2 * prev_q2) + 0.8 * re;
-            im = 0.2 * (i2 * prev_q2 - q2 * prev_i2) + 0.8 * im;
+            re = 0.2f64.mul_add(i2.mul_add(prev_i2, q2 * prev_q2), 0.8 * re);
+            im = 0.2f64.mul_add(i2 * prev_q2 - q2 * prev_i2, 0.8 * im);
             prev_q2 = q2;
             prev_i2 = i2;
         }
@@ -801,9 +801,9 @@ pub fn mama(input: &[f64], fast_limit: f64, slow_limit: f64) -> Result<MamaResul
         };
 
         // Update MAMA and FAMA
-        mama_val = alpha * today_value + (1.0 - alpha) * mama_val;
+        mama_val = (1.0 - alpha).mul_add(mama_val, alpha * today_value);
         let half_alpha = alpha * 0.5;
-        fama_val = half_alpha * mama_val + (1.0 - half_alpha) * fama_val;
+        fama_val = (1.0 - half_alpha).mul_add(fama_val, half_alpha * mama_val);
 
         // Store output (valid from bar 32 onward)
         if i >= 32 {
@@ -952,7 +952,7 @@ pub fn mama_into(
     period_wma_sum += input[2] * 3.0;
 
     // Process from bar 3 (after WMA init) through bar 9 to warm up
-    for i in 3..10 {
+    for i in 3..12 {
         let today_value = input[i];
         period_wma_sub += today_value;
         period_wma_sub -= trailing_wma_value;
@@ -963,9 +963,9 @@ pub fn mama_into(
         period_wma_sum -= period_wma_sub;
     }
 
-    // Main processing loop from bar 10 onward (lookback = 32, output starts at 32)
-    for i in 10..len {
-        let adjusted_prev_period = 0.075 * period + 0.54;
+    // Main processing loop from bar 12 onward (lookback = 32, output starts at 32)
+    for i in 12..len {
+        let adjusted_prev_period = 0.075f64.mul_add(period, 0.54);
         let today_value = input[i];
 
         // Update WMA smoother
@@ -1025,8 +1025,8 @@ pub fn mama_into(
             hilbert_idx = if hilbert_idx == 2 { 0 } else { hilbert_idx + 1 };
 
             // IIR recursive filtering for Q2 and I2
-            let q2 = 0.2 * (q1_val + ji_val) + 0.8 * prev_q2;
-            let i2 = 0.2 * (i1_for_even_prev3 - jq_val) + 0.8 * prev_i2;
+            let q2 = 0.2f64.mul_add(q1_val + ji_val, 0.8 * prev_q2);
+            let i2 = 0.2f64.mul_add(i1_for_even_prev3 - jq_val, 0.8 * prev_i2);
 
             // Update I1 delay lines for next odd bar
             i1_for_odd_prev3 = i1_for_odd_prev2;
@@ -1040,8 +1040,8 @@ pub fn mama_into(
             };
 
             // Re/Im use OLD prevQ2/prevI2 (before update), matching TA-Lib
-            re = 0.2 * (i2 * prev_i2 + q2 * prev_q2) + 0.8 * re;
-            im = 0.2 * (i2 * prev_q2 - q2 * prev_i2) + 0.8 * im;
+            re = 0.2f64.mul_add(i2.mul_add(prev_i2, q2 * prev_q2), 0.8 * re);
+            im = 0.2f64.mul_add(i2 * prev_q2 - q2 * prev_i2, 0.8 * im);
             prev_q2 = q2;
             prev_i2 = i2;
         } else {
@@ -1087,8 +1087,8 @@ pub fn mama_into(
             jq_val *= adjusted_prev_period;
 
             // IIR recursive filtering for Q2 and I2
-            let q2 = 0.2 * (q1_val + ji_val) + 0.8 * prev_q2;
-            let i2 = 0.2 * (i1_for_odd_prev3 - jq_val) + 0.8 * prev_i2;
+            let q2 = 0.2f64.mul_add(q1_val + ji_val, 0.8 * prev_q2);
+            let i2 = 0.2f64.mul_add(i1_for_odd_prev3 - jq_val, 0.8 * prev_i2);
 
             // Update I1 delay lines for next even bar
             i1_for_even_prev3 = i1_for_even_prev2;
@@ -1102,8 +1102,8 @@ pub fn mama_into(
             };
 
             // Re/Im use OLD prevQ2/prevI2 (before update), matching TA-Lib
-            re = 0.2 * (i2 * prev_i2 + q2 * prev_q2) + 0.8 * re;
-            im = 0.2 * (i2 * prev_q2 - q2 * prev_i2) + 0.8 * im;
+            re = 0.2f64.mul_add(i2.mul_add(prev_i2, q2 * prev_q2), 0.8 * re);
+            im = 0.2f64.mul_add(i2 * prev_q2 - q2 * prev_i2, 0.8 * im);
             prev_q2 = q2;
             prev_i2 = i2;
         }
@@ -1130,9 +1130,9 @@ pub fn mama_into(
         };
 
         // Update MAMA and FAMA
-        mama_val = alpha * today_value + (1.0 - alpha) * mama_val;
+        mama_val = (1.0 - alpha).mul_add(mama_val, alpha * today_value);
         let half_alpha = alpha * 0.5;
-        fama_val = half_alpha * mama_val + (1.0 - half_alpha) * fama_val;
+        fama_val = (1.0 - half_alpha).mul_add(fama_val, half_alpha * mama_val);
 
         // Store output (valid from bar 32 onward)
         if i >= 32 {
@@ -1207,57 +1207,63 @@ pub fn t3(input: &[f64], period: usize, vfactor: f64) -> Result<Array1<f64>> {
         });
     }
 
-    validate_input(input.len(), period)?;
+    let lookback = 6 * period.saturating_sub(1);
+    validate_input(input.len(), lookback + 1)?;
 
     // T3 coefficients matching TA-Lib ta_T3.c
     let c1 = -vfactor * vfactor * vfactor;
-    let c2 = 3.0 * vfactor * vfactor + vfactor * vfactor * vfactor;
-    let c3 = -6.0 * vfactor * vfactor - 3.0 * vfactor * vfactor * vfactor;
+    let c2 = 3.0 * vfactor * vfactor + 3.0 * vfactor * vfactor * vfactor;
+    let c3 = -6.0 * vfactor * vfactor - 3.0 * vfactor - 3.0 * vfactor * vfactor * vfactor;
     let c4 = 1.0 + 3.0 * vfactor + vfactor * vfactor * vfactor + 3.0 * vfactor * vfactor;
 
     let len = input.len();
-    let mut output = init_output(len);
-
-    // Zero-allocation T3: 6 cascaded EMA layers with SMA seeding (matching
-    // TA-Lib's EMA warm-up). Each layer is updated in-place per bar, avoiding
-    // the 6 intermediate `Array1` allocations of a naive 6x `ema()` approach.
+    let mut output = vec![f64::NAN; len];
     let k = crate::utils::smoothing_factor(period);
     let one_minus_k = 1.0 - k;
-    let inv_period = 1.0 / period as f64;
 
-    let mut counts = [0usize; 6];
-    let mut sums = [0.0f64; 6];
-    let mut prevs = [0.0f64; 6];
-
-    for i in 0..len {
-        let mut val = input[i];
-        for layer in 0..6 {
-            counts[layer] += 1;
-            if counts[layer] < period {
-                sums[layer] += val;
-                val = 0.0;
-            } else if counts[layer] == period {
-                sums[layer] += val;
-                prevs[layer] = sums[layer] * inv_period;
-                val = prevs[layer];
-            } else {
-                prevs[layer] = val * k + prevs[layer] * one_minus_k;
-                val = prevs[layer];
+    // Each EMA stage is seeded from the first `period` valid values of the
+    // preceding stage. Keep only the six recursive states and seed sums: the
+    // stage-start guard prevents the zero-filled warm-up bug of the old fused
+    // loop without allocating six full intermediate arrays.
+    let mut ema = [0.0; 6];
+    let mut sums = [0.0; 6];
+    for i in 0..=lookback {
+        let mut value = input[i];
+        for stage in 0..6 {
+            let stage_start = stage * (period - 1);
+            if i < stage_start {
+                break;
             }
+            if i < stage_start + period - 1 {
+                sums[stage] += value;
+                break;
+            }
+            if i == stage_start + period - 1 {
+                sums[stage] += value;
+                ema[stage] = sums[stage] / period as f64;
+            } else {
+                ema[stage] = value * k + ema[stage] * one_minus_k;
+            }
+            value = ema[stage];
         }
-
-        if counts[0] >= period
-            && counts[1] >= period
-            && counts[2] >= period
-            && counts[3] >= period
-            && counts[4] >= period
-            && counts[5] >= period
-        {
-            output[i] = c1 * prevs[5] + c2 * prevs[4] + c3 * prevs[3] + c4 * prevs[2];
+        if i >= lookback {
+            output[i] = c1 * ema[5] + c2 * ema[4] + c3 * ema[3] + c4 * ema[2];
         }
     }
+    // Once all six stages are seeded, the hot tail is a fixed dependency
+    // chain. Keep it branch-free and unrolled instead of rechecking six
+    // warm-up conditions for every bar.
+    for i in (lookback + 1)..len {
+        ema[0] = input[i] * k + ema[0] * one_minus_k;
+        ema[1] = ema[0] * k + ema[1] * one_minus_k;
+        ema[2] = ema[1] * k + ema[2] * one_minus_k;
+        ema[3] = ema[2] * k + ema[3] * one_minus_k;
+        ema[4] = ema[3] * k + ema[4] * one_minus_k;
+        ema[5] = ema[4] * k + ema[5] * one_minus_k;
+        output[i] = c1 * ema[5] + c2 * ema[4] + c3 * ema[3] + c4 * ema[2];
+    }
 
-    Ok(output)
+    Ok(Array1::from_vec(output))
 }
 
 /// Hull Moving Average (HMA)

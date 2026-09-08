@@ -100,24 +100,7 @@ pub fn ad_into(
         return Err(TaError::EmptyInput);
     }
 
-    unsafe {
-        let high_ptr = high.as_ptr();
-        let low_ptr = low.as_ptr();
-        let close_ptr = close.as_ptr();
-        let volume_ptr = volume.as_ptr();
-        let output_ptr = output.as_mut_ptr();
-        let mut cumulative = 0.0;
-        for index in 0..len {
-            let h = *high_ptr.add(index);
-            let l = *low_ptr.add(index);
-            let c = *close_ptr.add(index);
-            let range = h - l;
-            if range.abs() >= 1e-15 {
-                cumulative += (((c - l) - (h - c)) / range) * *volume_ptr.add(index);
-            }
-            *output_ptr.add(index) = cumulative;
-        }
-    }
+    crate::math::simd_ops::simd_ad_line(high, low, close, volume, output);
     Ok(())
 }
 

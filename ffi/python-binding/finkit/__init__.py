@@ -407,6 +407,143 @@ if hasattr(_native, "_fast_bop"):
 
     bop = _translate_native_errors("bop", bop)
 
+if hasattr(_native, "_fast_price_transform"):
+
+    def avgprice(open, high, low, close):
+        open = _as_contiguous_float64(open)
+        high = _as_contiguous_float64(high)
+        low = _as_contiguous_float64(low)
+        close = _as_contiguous_float64(close)
+        return _native._fast_price_transform("avgprice", open, high, low, close)
+
+    def medprice(high, low):
+        high = _as_contiguous_float64(high)
+        low = _as_contiguous_float64(low)
+        return _native._fast_price_transform("medprice", None, high, low, None)
+
+    def typprice(high, low, close):
+        high = _as_contiguous_float64(high)
+        low = _as_contiguous_float64(low)
+        close = _as_contiguous_float64(close)
+        return _native._fast_price_transform("typprice", None, high, low, close)
+
+    def wclprice(high, low, close):
+        high = _as_contiguous_float64(high)
+        low = _as_contiguous_float64(low)
+        close = _as_contiguous_float64(close)
+        return _native._fast_price_transform("wclprice", None, high, low, close)
+
+    for _fast_name in ("avgprice", "medprice", "typprice", "wclprice"):
+        globals()[_fast_name] = _translate_native_errors(
+            _fast_name, globals()[_fast_name]
+        )
+
+if hasattr(_native, "_fast_apo"):
+
+    def apo(close, fastperiod=12, slowperiod=26):
+        close = _as_contiguous_float64(close)
+        return _native._fast_apo(close, fastperiod, slowperiod)
+
+    apo = _translate_native_errors("apo", apo)
+
+if hasattr(_native, "_fast_dx"):
+
+    def dx(high, low, close, timeperiod=14):
+        high = _as_contiguous_float64(high)
+        low = _as_contiguous_float64(low)
+        close = _as_contiguous_float64(close)
+        return _native._fast_dx(high, low, close, timeperiod)
+
+    dx = _translate_native_errors("dx", dx)
+
+if hasattr(_native, "_fast_aroon"):
+
+    def aroon(high, low, timeperiod=14):
+        high = _as_contiguous_float64(high)
+        low = _as_contiguous_float64(low)
+        return _native._fast_aroon(high, low, timeperiod)
+
+    aroon = _translate_native_errors("aroon", aroon)
+
+if hasattr(_native, "_fast_trix"):
+
+    def trix(close, timeperiod=14):
+        close = _as_contiguous_float64(close)
+        return _native._fast_trix(close, timeperiod)
+
+    trix = _translate_native_errors("trix", trix)
+
+if hasattr(_native, "_fast_t3"):
+
+    def t3(close, timeperiod=5, vfactor=0.7):
+        close = _as_contiguous_float64(close)
+        return _native._fast_t3(close, timeperiod, vfactor)
+
+    t3 = _translate_native_errors("t3", t3)
+
+if hasattr(_native, "_fast_tsf"):
+
+    def tsf(close, timeperiod=14):
+        close = _as_contiguous_float64(close)
+        return _native._fast_tsf(close, timeperiod)
+
+    tsf = _translate_native_errors("tsf", tsf)
+
+if hasattr(_native, "_fast_beta"):
+
+    def beta(asset, benchmark, timeperiod=5):
+        asset = _as_contiguous_float64(asset)
+        benchmark = _as_contiguous_float64(benchmark)
+        return _native._fast_beta(asset, benchmark, timeperiod)
+
+    beta = _translate_native_errors("beta", beta)
+
+if hasattr(_native, "_fast_mama"):
+
+    def mama(close, fastlimit=0.5, slowlimit=0.05):
+        close = _as_contiguous_float64(close)
+        return _native._fast_mama(close, fastlimit, slowlimit)
+
+    mama = _translate_native_errors("mama", mama)
+
+if hasattr(_native, "_fast_ht_dcperiod"):
+
+    def ht_dcperiod(close):
+        close = _as_contiguous_float64(close)
+        return _native._fast_ht_dcperiod(close)
+
+    def ht_dcphase(close):
+        close = _as_contiguous_float64(close)
+        return _native._fast_ht_dcphase(close)
+
+    def ht_phasor(close):
+        close = _as_contiguous_float64(close)
+        return _native._fast_ht_phasor(close)
+
+    def ht_sine(close):
+        close = _as_contiguous_float64(close)
+        return _native._fast_ht_sine(close)
+
+    def ht_trendline(close):
+        close = _as_contiguous_float64(close)
+        return _native._fast_ht_trendline(close)
+
+    def ht_trendmode(close):
+        close = _as_contiguous_float64(close)
+        return _native._fast_ht_trendmode(close)
+
+    for _fast_name in (
+        "ht_dcperiod",
+        "ht_dcphase",
+        "ht_phasor",
+        "ht_sine",
+        "ht_trendline",
+        "ht_trendmode",
+    ):
+        globals()[_fast_name] = _translate_native_errors(
+            _fast_name, globals()[_fast_name]
+        )
+
 if hasattr(_native, "_fast_bbands"):
 
     def bollinger_bands(close, timeperiod=20, nbdevup=2.0, nbdevdn=2.0, matype=0):

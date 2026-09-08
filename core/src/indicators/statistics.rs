@@ -96,10 +96,10 @@ pub fn avgdev(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
 /// let result = zscore(&data, 5).unwrap();
 /// ```
 pub fn zscore(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
-    if timeperiod < 2 {
+    if timeperiod == 0 {
         return Err(TaError::InvalidParameter {
             name: "timeperiod".to_string(),
-            constraint: "at least 2".to_string(),
+            constraint: "greater than 0".to_string(),
         });
     }
     validate_input(input.len(), timeperiod)?;
@@ -258,54 +258,65 @@ pub fn beta(asset: &[f64], benchmark: &[f64], timeperiod: usize) -> Result<Array
             constraint: "at least 2".to_string(),
         });
     }
-    validate_input(asset.len(), timeperiod)?;
+    validate_input(asset.len(), timeperiod + 1)?;
 
     let len = asset.len();
     let mut output = init_output(len);
 
     let n = timeperiod as f64;
-
-    // Initialize accumulators with first window
-    // TA-Lib uses raw prices, not returns
-    let mut sum_a: f64 = 0.0;
-    let mut sum_b: f64 = 0.0;
-    let mut sum_ab: f64 = 0.0;
-    let mut sum_b2: f64 = 0.0;
-    for j in 0..timeperiod {
-        let a = asset[j];
-        let b = benchmark[j];
-        sum_a += a;
-        sum_b += b;
-        sum_ab += a * b;
-        sum_b2 += b * b;
+    let returns = |values: &[f64], index: usize| -> f64 {
+        (values[index] - values[index - 1]) / values[index - 1]
+    };
+    let mut sum_x = 0.0;
+    let mut sum_y = 0.0;
+    let mut sum_x2 = 0.0;
+    let mut sum_xy = 0.0;
+    for index in 1..=timeperiod {
+        let x = returns(asset, index);
+        let y = returns(benchmark, index);
+        sum_x += x;
+        sum_y += y;
+        sum_x2 += x * x;
+        sum_xy += x * y;
     }
 
-    // beta = Cov(asset, benchmark) / Var(benchmark)
-    // Using population variance (÷n) to match TA-Lib
-    // beta = (sum_ab - sum_a*sum_b/n) / (n * variance_b)
-    // where variance_b = (sum_b2 - sum_b*sum_b/n) / n
-    let variance_b = (sum_b2 - sum_b * sum_b / n) / n;
-    if variance_b.abs() > 1e-15 {
-        let covariance = (sum_ab - sum_a * sum_b / n) / n;
-        output[timeperiod - 1] = covariance / variance_b;
-    }
-
-    // Subsequent windows — incremental O(1) update per step
-    for i in timeperiod..len {
-        let old_a = asset[i - timeperiod];
-        let old_b = benchmark[i - timeperiod];
-        let new_a = asset[i];
-        let new_b = benchmark[i];
-        sum_a += new_a - old_a;
-        sum_b += new_b - old_b;
-        sum_ab += new_a * new_b - old_a * old_b;
-        sum_b2 += new_b * new_b - old_b * old_b;
-
-        let variance_b = (sum_b2 - sum_b * sum_b / n) / n;
-        if variance_b.abs() > 1e-15 {
-            let covariance = (sum_ab - sum_a * sum_b / n) / n;
-            output[i] = covariance / variance_b;
+    let write_beta = |index: usize,
+                      sum_x: f64,
+                      sum_y: f64,
+                      sum_x2: f64,
+                      sum_xy: f64,
+                      output: &mut Array1<f64>| {
+        let denominator = n * sum_x2 - sum_x * sum_x;
+        if denominator > 1e-14 {
+            output[index] = (n * sum_xy - sum_x * sum_y) / denominator;
         }
+    };
+    write_beta(timeperiod, sum_x, sum_y, sum_x2, sum_xy, &mut output);
+
+    for index in (timeperiod + 1)..len {
+        let old_x = returns(asset, index - timeperiod);
+        let old_y = returns(benchmark, index - timeperiod);
+        let new_x = returns(asset, index);
+        let new_y = returns(benchmark, index);
+        sum_x += new_x - old_x;
+        sum_y += new_y - old_y;
+        sum_x2 += new_x * new_x - old_x * old_x;
+        sum_xy += new_x * new_y - old_x * old_y;
+        if (index - timeperiod) & 63 == 0 {
+            sum_x = 0.0;
+            sum_y = 0.0;
+            sum_x2 = 0.0;
+            sum_xy = 0.0;
+            for return_index in (index + 1 - timeperiod)..=index {
+                let x = returns(asset, return_index);
+                let y = returns(benchmark, return_index);
+                sum_x += x;
+                sum_y += y;
+                sum_x2 += x * x;
+                sum_xy += x * y;
+            }
+        }
+        write_beta(index, sum_x, sum_y, sum_x2, sum_xy, &mut output);
     }
 
     Ok(output)

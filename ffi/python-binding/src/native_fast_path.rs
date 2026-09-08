@@ -627,6 +627,243 @@ fn fast_bop<'py>(
     Ok(PyArray1::from_vec(py, output.into_raw_vec()))
 }
 
+#[pyfunction(name = "_fast_price_transform")]
+fn fast_price_transform<'py>(
+    py: Python<'py>,
+    operation: &str,
+    open: Option<PyReadonlyArray1<'py, f64>>,
+    high: PyReadonlyArray1<'py, f64>,
+    low: PyReadonlyArray1<'py, f64>,
+    close: Option<PyReadonlyArray1<'py, f64>>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let high = high.as_slice().map_err(value_error)?;
+    let low = low.as_slice().map_err(value_error)?;
+    validate_same_len(high.len(), low.len())?;
+    let open = open
+        .as_ref()
+        .map(|values| values.as_slice().map_err(value_error))
+        .transpose()?;
+    let close = close
+        .as_ref()
+        .map(|values| values.as_slice().map_err(value_error))
+        .transpose()?;
+    if let Some(values) = open {
+        validate_same_len(high.len(), values.len())?;
+    }
+    if let Some(values) = close {
+        validate_same_len(high.len(), values.len())?;
+    }
+
+    let mut output = vec![0.0; high.len()];
+    let result = match operation {
+        "avgprice" => {
+            let open = open.ok_or_else(|| value_error("AVGPRICE requires open data"))?;
+            let close = close.ok_or_else(|| value_error("AVGPRICE requires close data"))?;
+            py.detach(|| indicators::avgprice_into(open, high, low, close, &mut output))
+        }
+        "medprice" => py.detach(|| indicators::medprice_into(high, low, &mut output)),
+        "typprice" => {
+            let close = close.ok_or_else(|| value_error("TYPPRICE requires close data"))?;
+            py.detach(|| indicators::typprice_into(high, low, close, &mut output))
+        }
+        "wclprice" => {
+            let close = close.ok_or_else(|| value_error("WCLPRICE requires close data"))?;
+            py.detach(|| indicators::wclprice_into(high, low, close, &mut output))
+        }
+        _ => {
+            return Err(value_error(format!(
+                "invalid parameter: unsupported price transform {operation}"
+            )))
+        }
+    };
+    result.map_err(value_error)?;
+    Ok(PyArray1::from_vec(py, output))
+}
+
+#[pyfunction(name = "_fast_apo")]
+#[pyo3(signature = (close, fastperiod=12, slowperiod=26))]
+fn fast_apo<'py>(
+    py: Python<'py>,
+    close: PyReadonlyArray1<'py, f64>,
+    fastperiod: usize,
+    slowperiod: usize,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let close = close.as_slice().map_err(value_error)?;
+    let output = py
+        .detach(|| indicators::apo(close, fastperiod, slowperiod))
+        .map_err(value_error)?;
+    Ok(PyArray1::from_vec(py, output.into_raw_vec()))
+}
+
+#[pyfunction(name = "_fast_dx")]
+#[pyo3(signature = (high, low, close, timeperiod=14))]
+fn fast_dx<'py>(
+    py: Python<'py>,
+    high: PyReadonlyArray1<'py, f64>,
+    low: PyReadonlyArray1<'py, f64>,
+    close: PyReadonlyArray1<'py, f64>,
+    timeperiod: usize,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let high = high.as_slice().map_err(value_error)?;
+    let low = low.as_slice().map_err(value_error)?;
+    let close = close.as_slice().map_err(value_error)?;
+    let mut output = vec![0.0; close.len()];
+    py.detach(|| indicators::dx_into(high, low, close, timeperiod, &mut output))
+        .map_err(value_error)?;
+    Ok(PyArray1::from_vec(py, output))
+}
+
+#[pyfunction(name = "_fast_aroon")]
+#[pyo3(signature = (high, low, timeperiod=14))]
+fn fast_aroon<'py>(
+    py: Python<'py>,
+    high: PyReadonlyArray1<'py, f64>,
+    low: PyReadonlyArray1<'py, f64>,
+    timeperiod: usize,
+) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
+    let high = high.as_slice().map_err(value_error)?;
+    let low = low.as_slice().map_err(value_error)?;
+    let mut aroon_up = vec![0.0; high.len()];
+    let mut aroon_down = vec![0.0; high.len()];
+    py.detach(|| indicators::aroon_into(high, low, timeperiod, &mut aroon_up, &mut aroon_down))
+        .map_err(value_error)?;
+    Ok((
+        PyArray1::from_vec(py, aroon_up),
+        PyArray1::from_vec(py, aroon_down),
+    ))
+}
+
+#[pyfunction(name = "_fast_trix")]
+#[pyo3(signature = (close, timeperiod=14))]
+fn fast_trix<'py>(
+    py: Python<'py>,
+    close: PyReadonlyArray1<'py, f64>,
+    timeperiod: usize,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let close = close.as_slice().map_err(value_error)?;
+    let output = py
+        .detach(|| indicators::trix(close, timeperiod))
+        .map_err(value_error)?;
+    Ok(PyArray1::from_vec(py, output.into_raw_vec()))
+}
+
+#[pyfunction(name = "_fast_t3")]
+#[pyo3(signature = (close, timeperiod=5, vfactor=0.7))]
+fn fast_t3<'py>(
+    py: Python<'py>,
+    close: PyReadonlyArray1<'py, f64>,
+    timeperiod: usize,
+    vfactor: f64,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let close = close.as_slice().map_err(value_error)?;
+    let output = py
+        .detach(|| indicators::t3(close, timeperiod, vfactor))
+        .map_err(value_error)?;
+    Ok(PyArray1::from_vec(py, output.into_raw_vec()))
+}
+
+#[pyfunction(name = "_fast_tsf")]
+#[pyo3(signature = (close, timeperiod=14))]
+fn fast_tsf<'py>(
+    py: Python<'py>,
+    close: PyReadonlyArray1<'py, f64>,
+    timeperiod: usize,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let close = close.as_slice().map_err(value_error)?;
+    let output = py
+        .detach(|| indicators::tsf(close, timeperiod))
+        .map_err(value_error)?;
+    Ok(PyArray1::from_vec(py, output.into_raw_vec()))
+}
+
+#[pyfunction(name = "_fast_beta")]
+#[pyo3(signature = (asset, benchmark, timeperiod=5))]
+fn fast_beta<'py>(
+    py: Python<'py>,
+    asset: PyReadonlyArray1<'py, f64>,
+    benchmark: PyReadonlyArray1<'py, f64>,
+    timeperiod: usize,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let asset = asset.as_slice().map_err(value_error)?;
+    let benchmark = benchmark.as_slice().map_err(value_error)?;
+    validate_same_len(asset.len(), benchmark.len())?;
+    let output = py
+        .detach(|| indicators::beta(asset, benchmark, timeperiod))
+        .map_err(value_error)?;
+    Ok(PyArray1::from_vec(py, output.into_raw_vec()))
+}
+
+#[pyfunction(name = "_fast_mama")]
+#[pyo3(signature = (close, fastlimit=0.5, slowlimit=0.05))]
+fn fast_mama<'py>(
+    py: Python<'py>,
+    close: PyReadonlyArray1<'py, f64>,
+    fastlimit: f64,
+    slowlimit: f64,
+) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
+    let close = close.as_slice().map_err(value_error)?;
+    let output = py
+        .detach(|| indicators::mama(close, fastlimit, slowlimit))
+        .map_err(value_error)?;
+    Ok((
+        PyArray1::from_vec(py, output.mama.into_raw_vec()),
+        PyArray1::from_vec(py, output.fama.into_raw_vec()),
+    ))
+}
+
+macro_rules! fast_ht_unary {
+    ($name:ident, $py_name:literal, $indicator:ident) => {
+        #[pyfunction(name = $py_name)]
+        fn $name<'py>(
+            py: Python<'py>,
+            close: PyReadonlyArray1<'py, f64>,
+        ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+            let close = close.as_slice().map_err(value_error)?;
+            let mut output = vec![0.0; close.len()];
+            py.detach(|| indicators::$indicator(close, &mut output))
+                .map_err(value_error)?;
+            Ok(PyArray1::from_vec(py, output))
+        }
+    };
+}
+
+fast_ht_unary!(fast_ht_dcperiod, "_fast_ht_dcperiod", ht_dcperiod_into);
+fast_ht_unary!(fast_ht_dcphase, "_fast_ht_dcphase", ht_dcphase_into);
+fast_ht_unary!(fast_ht_trendline, "_fast_ht_trendline", ht_trendline_into);
+fast_ht_unary!(fast_ht_trendmode, "_fast_ht_trendmode", ht_trendmode_into);
+
+#[pyfunction(name = "_fast_ht_phasor")]
+fn fast_ht_phasor<'py>(
+    py: Python<'py>,
+    close: PyReadonlyArray1<'py, f64>,
+) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
+    let close = close.as_slice().map_err(value_error)?;
+    let mut in_phase = vec![0.0; close.len()];
+    let mut quadrature = vec![0.0; close.len()];
+    py.detach(|| indicators::ht_phasor_into(close, &mut in_phase, &mut quadrature))
+        .map_err(value_error)?;
+    Ok((
+        PyArray1::from_vec(py, in_phase),
+        PyArray1::from_vec(py, quadrature),
+    ))
+}
+
+#[pyfunction(name = "_fast_ht_sine")]
+fn fast_ht_sine<'py>(
+    py: Python<'py>,
+    close: PyReadonlyArray1<'py, f64>,
+) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
+    let close = close.as_slice().map_err(value_error)?;
+    let mut sine = vec![0.0; close.len()];
+    let mut lead_sine = vec![0.0; close.len()];
+    py.detach(|| indicators::ht_sine_into(close, &mut sine, &mut lead_sine))
+        .map_err(value_error)?;
+    Ok((
+        PyArray1::from_vec(py, sine),
+        PyArray1::from_vec(py, lead_sine),
+    ))
+}
+
 #[pyfunction(name = "_fast_bbands")]
 #[pyo3(signature = (close, timeperiod=20, nbdevup=2.0, nbdevdn=2.0))]
 fn fast_bbands<'py>(
@@ -823,6 +1060,21 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(fast_ad, m)?)?;
     m.add_function(wrap_pyfunction!(fast_adosc, m)?)?;
     m.add_function(wrap_pyfunction!(fast_bop, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_price_transform, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_apo, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_dx, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_aroon, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_trix, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_t3, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_tsf, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_beta, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_mama, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_ht_dcperiod, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_ht_dcphase, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_ht_phasor, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_ht_sine, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_ht_trendline, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_ht_trendmode, m)?)?;
     m.add_function(wrap_pyfunction!(fast_bbands, m)?)?;
     m.add_function(wrap_pyfunction!(fast_sar, m)?)?;
     m.add_function(wrap_pyfunction!(fast_macd, m)?)?;

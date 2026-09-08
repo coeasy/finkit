@@ -1245,6 +1245,59 @@ pub fn aroon(high: &[f64], low: &[f64], period: usize) -> Result<AroonResult> {
     aroon_with_deques(high, low, period)
 }
 
+/// Caller-owned monotonic-queue AROON kernel.  It keeps the newest equal
+/// extrema, matching the scalar implementation without rescanning an entire
+/// window when an old extremum leaves the lookback range.
+pub fn aroon_into(
+    high: &[f64],
+    low: &[f64],
+    period: usize,
+    aroon_up: &mut [f64],
+    aroon_down: &mut [f64],
+) -> Result<()> {
+    if high.len() != low.len() {
+        return Err(TaError::InvalidParameter {
+            name: "high and low".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    if aroon_up.len() != high.len() || aroon_down.len() != high.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as high".to_string(),
+        });
+    }
+    validate_input(high.len(), period + 1)?;
+    aroon_up.fill(f64::NAN);
+    aroon_down.fill(f64::NAN);
+
+    let mut highs = std::collections::VecDeque::<usize>::with_capacity(period + 1);
+    let mut lows = std::collections::VecDeque::<usize>::with_capacity(period + 1);
+    let inv_period = 100.0 / period as f64;
+    for i in 0..high.len() {
+        while highs.back().is_some_and(|&index| high[index] <= high[i]) {
+            highs.pop_back();
+        }
+        highs.push_back(i);
+        while lows.back().is_some_and(|&index| low[index] >= low[i]) {
+            lows.pop_back();
+        }
+        lows.push_back(i);
+        let window_start = i.saturating_sub(period);
+        while highs.front().is_some_and(|&index| index < window_start) {
+            highs.pop_front();
+        }
+        while lows.front().is_some_and(|&index| index < window_start) {
+            lows.pop_front();
+        }
+        if i >= period {
+            aroon_up[i] = (period - (i - highs[0])) as f64 * inv_period;
+            aroon_down[i] = (period - (i - lows[0])) as f64 * inv_period;
+        }
+    }
+    Ok(())
+}
+
 /// Commodity Channel Index (CCI)
 ///
 /// Measures the current price level relative to an average price level over a given period.
@@ -1976,6 +2029,96 @@ pub fn dx(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Arr
     }
 
     Ok(dx_vals)
+}
+
+/// Caller-owned DX kernel that avoids materializing the complete ADX family
+/// when only DX is requested at the Python boundary.
+pub fn dx_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    period: usize,
+    output: &mut [f64],
+) -> Result<()> {
+    if high.len() != low.len() || high.len() != close.len() {
+        return Err(TaError::InvalidParameter {
+            name: "high, low, close".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    if output.len() != close.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as close".to_string(),
+        });
+    }
+    validate_input(close.len(), period * 2)?;
+    output.fill(f64::NAN);
+
+    let p = period as f64;
+    let mut smooth_plus_dm = 0.0;
+    let mut smooth_minus_dm = 0.0;
+    let mut smooth_tr = 0.0;
+    if period > 1 {
+        #[cfg(feature = "std")]
+        {
+            crate::math::simd_kernels::adx_warmup_into(
+                high,
+                low,
+                close,
+                period - 1,
+                &mut smooth_plus_dm,
+                &mut smooth_minus_dm,
+                &mut smooth_tr,
+            );
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            for i in 1..period {
+                let up_move = high[i] - high[i - 1];
+                let down_move = low[i - 1] - low[i];
+                smooth_tr += crate::utils::true_range(high[i], low[i], close[i - 1]);
+                if up_move > down_move && up_move > 0.0 {
+                    smooth_plus_dm += up_move;
+                }
+                if down_move > up_move && down_move > 0.0 {
+                    smooth_minus_dm += down_move;
+                }
+            }
+        }
+    }
+
+    for i in period..close.len() {
+        let up_move = high[i] - high[i - 1];
+        let down_move = low[i - 1] - low[i];
+        let tr = crate::utils::true_range(high[i], low[i], close[i - 1]);
+        let pdm = if up_move > down_move && up_move > 0.0 {
+            up_move
+        } else {
+            0.0
+        };
+        let mdm = if down_move > up_move && down_move > 0.0 {
+            down_move
+        } else {
+            0.0
+        };
+        smooth_plus_dm = smooth_plus_dm - smooth_plus_dm / p + pdm;
+        smooth_minus_dm = smooth_minus_dm - smooth_minus_dm / p + mdm;
+        smooth_tr = smooth_tr - smooth_tr / p + tr;
+        if smooth_tr.abs() > 1e-15 {
+            let pdi = smooth_plus_dm / smooth_tr * 100.0;
+            let mdi = smooth_minus_dm / smooth_tr * 100.0;
+            let sum = pdi + mdi;
+            output[i] = if sum.abs() > 1e-15 {
+                (pdi - mdi).abs() / sum * 100.0
+            } else {
+                0.0
+            };
+        } else {
+            output[i] = 0.0;
+        }
+    }
+    Ok(())
 }
 
 /// Money Flow Index (MFI)
