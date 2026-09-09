@@ -208,6 +208,27 @@ const ADOSC_PARAMS: &[ParamSpec] = &[
     ParamSpec::new("fast_period", "usize", Some("3"), Some("> 0")),
     ParamSpec::new("slow_period", "usize", Some("10"), Some("> 0")),
 ];
+const VWMA_PARAMS: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("20"), Some("> 0"))];
+const ZSCORE_PARAMS: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("20"), Some("> 1"))];
+const CMF_PARAMS: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("20"), Some("> 0"))];
+const FISHER_PARAMS: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("10"), Some("> 0"))];
+const TSI_PARAMS: &[ParamSpec] = &[
+    ParamSpec::new("long_period", "usize", Some("25"), Some("> 0")),
+    ParamSpec::new("short_period", "usize", Some("13"), Some("> 0")),
+];
+const CHOP_PARAMS: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("14"), Some("> 0"))];
+const KDJ_PARAMS: &[ParamSpec] = &[
+    ParamSpec::new("period", "usize", Some("9"), Some("> 0")),
+    ParamSpec::new("k_smoothing", "usize", Some("3"), Some("> 0")),
+    ParamSpec::new("d_smoothing", "usize", Some("3"), Some("> 0")),
+];
+const SUPERTREND_PARAMS: &[ParamSpec] = &[
+    ParamSpec::new("atr_period", "usize", Some("10"), Some("> 0")),
+    ParamSpec::new("multiplier", "f64", Some("3.0"), Some("> 0")),
+];
+const DONCHIAN_PARAMS: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("20"), Some("> 0"))];
+const TENKAN_PARAMS: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("9"), Some("> 0"))];
+const KIJUN_PARAMS: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("26"), Some("> 0"))];
 const BBANDS_PARAMS: &[ParamSpec] = &[
     ParamSpec::new("period", "usize", Some("20"), Some("> 1")),
     ParamSpec::new("stddev", "f64", Some("2.0"), Some(">= 0")),
@@ -429,6 +450,149 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             deterministic: true,
         },
         FunctionSpec {
+            name: "ZSCORE",
+            aliases: &["Z_SCORE"],
+            category: FunctionCategory::Statistics,
+            input: InputKind::Series,
+            params: ZSCORE_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "VWMA",
+            aliases: &[],
+            category: FunctionCategory::Overlap,
+            input: InputKind::Dynamic,
+            params: VWMA_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "CMF",
+            aliases: &[],
+            category: FunctionCategory::Volume,
+            input: InputKind::Hlcv,
+            params: CMF_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "FISHER",
+            aliases: &["FISHER_TRANSFORM"],
+            category: FunctionCategory::Momentum,
+            input: InputKind::Hlc,
+            params: FISHER_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "FISHER_SIGNAL",
+            aliases: &[],
+            category: FunctionCategory::Momentum,
+            input: InputKind::Hlc,
+            params: FISHER_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "TSI",
+            aliases: &[],
+            category: FunctionCategory::Momentum,
+            input: InputKind::Series,
+            params: TSI_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::Dynamic,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "CHOP",
+            aliases: &["CHOPPINESS"],
+            category: FunctionCategory::Volatility,
+            input: InputKind::Hlc,
+            params: CHOP_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "KDJ",
+            aliases: &["KD", "KDJ_K"],
+            category: FunctionCategory::Momentum,
+            input: InputKind::Hlc,
+            params: KDJ_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::Dynamic,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "KDJ_D",
+            aliases: &[],
+            category: FunctionCategory::Momentum,
+            input: InputKind::Hlc,
+            params: KDJ_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::Dynamic,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "KDJ_J",
+            aliases: &[],
+            category: FunctionCategory::Momentum,
+            input: InputKind::Hlc,
+            params: KDJ_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::Dynamic,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "ICHIMOKU_TENKAN",
+            aliases: &["TENKAN"],
+            category: FunctionCategory::Overlap,
+            input: InputKind::Hlc,
+            params: TENKAN_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "ICHIMOKU_KIJUN",
+            aliases: &["KIJUN", "KIJUN_SEN"],
+            category: FunctionCategory::Overlap,
+            input: InputKind::Hlc,
+            params: KIJUN_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "SUPERTREND",
+            aliases: &["SUPERTREND_LINE"],
+            category: FunctionCategory::Overlap,
+            input: InputKind::Hlc,
+            params: SUPERTREND_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::Dynamic,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
             name: "VWAP",
             aliases: &[],
             category: FunctionCategory::Volume,
@@ -436,6 +600,61 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             params: &[],
             outputs: 1,
             lookback: LookbackSpec::Dynamic,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "DONCHIAN",
+            aliases: &[],
+            category: FunctionCategory::Volatility,
+            input: InputKind::Hlc,
+            params: DONCHIAN_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "DONCHIAN_UPPER",
+            aliases: &[],
+            category: FunctionCategory::Volatility,
+            input: InputKind::Hlc,
+            params: DONCHIAN_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "DONCHIAN_LOWER",
+            aliases: &[],
+            category: FunctionCategory::Volatility,
+            input: InputKind::Hlc,
+            params: DONCHIAN_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "DONCHIAN_MIDDLE",
+            aliases: &["DONCHIAN_MID"],
+            category: FunctionCategory::Volatility,
+            input: InputKind::Hlc,
+            params: DONCHIAN_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "DONCHIAN_WIDTH",
+            aliases: &[],
+            category: FunctionCategory::Volatility,
+            input: InputKind::Hlc,
+            params: DONCHIAN_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
             streaming: true,
             deterministic: true,
         },
@@ -643,5 +862,43 @@ mod tests {
         for name in ["REF", "HHV", "LLV", "COUNT", "BARSLAST", "CROSS", "IF"] {
             assert!(registry.get(name).is_some(), "missing metadata for {name}");
         }
+    }
+
+    #[test]
+    fn modern_indicator_formulas_are_discoverable_and_pure() {
+        let registry = builtin_function_registry();
+        for name in [
+            "ZSCORE",
+            "VWMA",
+            "CMF",
+            "FISHER",
+            "FISHER_SIGNAL",
+            "TSI",
+            "CHOP",
+            "KDJ",
+            "KDJ_D",
+            "KDJ_J",
+            "ICHIMOKU_TENKAN",
+            "ICHIMOKU_KIJUN",
+            "SUPERTREND",
+            "VWAP",
+            "DONCHIAN",
+            "DONCHIAN_UPPER",
+            "DONCHIAN_LOWER",
+            "DONCHIAN_MIDDLE",
+            "DONCHIAN_WIDTH",
+        ] {
+            let spec = registry
+                .get(name)
+                .unwrap_or_else(|| panic!("missing metadata for {name}"));
+            assert!(spec.deterministic, "{name} must be deterministic");
+            assert!(spec.streaming, "{name} must be streamable");
+        }
+        assert_eq!(registry.get("z_score").unwrap().name, "ZSCORE");
+        assert_eq!(registry.get("kijun_sen").unwrap().name, "ICHIMOKU_KIJUN");
+        assert_eq!(
+            registry.get("donchian_mid").unwrap().name,
+            "DONCHIAN_MIDDLE"
+        );
     }
 }

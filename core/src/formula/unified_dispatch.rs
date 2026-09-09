@@ -84,6 +84,29 @@ impl KernelDispatcher for FormulaKernelDispatcher {
             return dispatch_volume_call(call, buffers);
         }
 
+        if call.kernel == KernelId::from_static("CALL:ZSCORE")
+            || call.kernel == KernelId::from_static("CALL:VWMA")
+            || call.kernel == KernelId::from_static("CALL:CMF")
+            || call.kernel == KernelId::from_static("CALL:FISHER")
+            || call.kernel == KernelId::from_static("CALL:FISHER_SIGNAL")
+            || call.kernel == KernelId::from_static("CALL:TSI")
+            || call.kernel == KernelId::from_static("CALL:CHOP")
+            || call.kernel == KernelId::from_static("CALL:KDJ")
+            || call.kernel == KernelId::from_static("CALL:KDJ_D")
+            || call.kernel == KernelId::from_static("CALL:KDJ_J")
+            || call.kernel == KernelId::from_static("CALL:ICHIMOKU_TENKAN")
+            || call.kernel == KernelId::from_static("CALL:ICHIMOKU_KIJUN")
+            || call.kernel == KernelId::from_static("CALL:SUPERTREND")
+            || call.kernel == KernelId::from_static("CALL:VWAP")
+            || call.kernel == KernelId::from_static("CALL:DONCHIAN")
+            || call.kernel == KernelId::from_static("CALL:DONCHIAN_UPPER")
+            || call.kernel == KernelId::from_static("CALL:DONCHIAN_LOWER")
+            || call.kernel == KernelId::from_static("CALL:DONCHIAN_MIDDLE")
+            || call.kernel == KernelId::from_static("CALL:DONCHIAN_WIDTH")
+        {
+            return dispatch_modern_call(call, buffers);
+        }
+
         if call.kernel == KernelId::from_static("UNARY:Neg") {
             return unary(call, buffers, |value| -value);
         }
@@ -527,6 +550,316 @@ fn dispatch_volume_call(
     result.map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))
 }
 
+/// Execute the formula catalogue's popular non-TA-Lib indicators through the
+/// same hot-plan ABI as the TA-Lib-compatible kernels.  The two most common
+/// rolling transforms (ZSCORE and VWMA) write directly into the plan buffer;
+/// composite indicators reuse their canonical public kernels and copy only the
+/// selected projection into the caller-owned output.
+fn dispatch_modern_call(
+    call: KernelCall<'_>,
+    buffers: &mut [Vec<f64>],
+) -> Result<(), KernelDispatchError> {
+    let is = |name| call.kernel == KernelId::from_static(name);
+    let arity_ok = if is("CALL:VWAP") {
+        call.inputs.len() == 2 || call.inputs.len() == 4
+    } else if is("CALL:VWMA") {
+        call.inputs.len() == 3
+    } else if is("CALL:ZSCORE") {
+        call.inputs.len() == 2
+    } else if is("CALL:CMF") {
+        call.inputs.len() == 5
+    } else if is("CALL:CHOP") {
+        call.inputs.len() == 4
+    } else if is("CALL:FISHER") || is("CALL:FISHER_SIGNAL") {
+        call.inputs.len() == 3
+    } else if is("CALL:TSI") {
+        (2..=3).contains(&call.inputs.len())
+    } else if is("CALL:KDJ") || is("CALL:KDJ_D") || is("CALL:KDJ_J") {
+        (3..=6).contains(&call.inputs.len())
+    } else if is("CALL:SUPERTREND") {
+        (4..=5).contains(&call.inputs.len())
+    } else {
+        call.inputs.len() == 3
+    };
+    if !arity_ok {
+        return Err(KernelDispatchError::new(FormulaKernelDispatcher::ERR_ARITY));
+    }
+
+    let output_slot = call.output.0;
+    let len = buffers
+        .get(output_slot)
+        .map(Vec::len)
+        .ok_or_else(|| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+    for input in call.inputs {
+        if input.0 == output_slot
+            || buffers
+                .get(input.0)
+                .is_none_or(|values| values.len() != len)
+        {
+            return Err(KernelDispatchError::new(
+                FormulaKernelDispatcher::ERR_PARAMETER,
+            ));
+        }
+    }
+
+    if is("CALL:ZSCORE") {
+        let period = period_from_slot(buffers, call.inputs[1].0)?;
+        let input_ptr = buffers[call.inputs[0].0].as_ptr();
+        let output_ptr = buffers[output_slot].as_mut_ptr();
+        let (input, output) = unsafe {
+            (
+                std::slice::from_raw_parts(input_ptr, len),
+                std::slice::from_raw_parts_mut(output_ptr, len),
+            )
+        };
+        return crate::indicators::statistics::zscore_into(input, period, output)
+            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER));
+    }
+
+    if is("CALL:VWMA") {
+        let period = period_from_slot(buffers, call.inputs[2].0)?;
+        let input_ptr = buffers[call.inputs[0].0].as_ptr();
+        let volume_ptr = buffers[call.inputs[1].0].as_ptr();
+        let output_ptr = buffers[output_slot].as_mut_ptr();
+        let (input, volume, output) = unsafe {
+            (
+                std::slice::from_raw_parts(input_ptr, len),
+                std::slice::from_raw_parts(volume_ptr, len),
+                std::slice::from_raw_parts_mut(output_ptr, len),
+            )
+        };
+        return crate::math::moving_avg::vwma_into(input, volume, period, output)
+            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER));
+    }
+
+    if is("CALL:VWAP") {
+        let output_ptr = buffers[output_slot].as_mut_ptr();
+        if call.inputs.len() == 2 {
+            let price_ptr = buffers[call.inputs[0].0].as_ptr();
+            let volume_ptr = buffers[call.inputs[1].0].as_ptr();
+            let (price, volume, output) = unsafe {
+                (
+                    std::slice::from_raw_parts(price_ptr, len),
+                    std::slice::from_raw_parts(volume_ptr, len),
+                    std::slice::from_raw_parts_mut(output_ptr, len),
+                )
+            };
+            let mut price_volume = 0.0;
+            let mut total_volume = 0.0;
+            for index in 0..len {
+                price_volume = price[index].mul_add(volume[index], price_volume);
+                total_volume += volume[index];
+                output[index] = if total_volume.abs() > 1e-15 {
+                    price_volume / total_volume
+                } else {
+                    f64::NAN
+                };
+            }
+            return Ok(());
+        }
+        let high_ptr = buffers[call.inputs[0].0].as_ptr();
+        let low_ptr = buffers[call.inputs[1].0].as_ptr();
+        let close_ptr = buffers[call.inputs[2].0].as_ptr();
+        let volume_ptr = buffers[call.inputs[3].0].as_ptr();
+        let (high, low, close, volume, output) = unsafe {
+            (
+                std::slice::from_raw_parts(high_ptr, len),
+                std::slice::from_raw_parts(low_ptr, len),
+                std::slice::from_raw_parts(close_ptr, len),
+                std::slice::from_raw_parts(volume_ptr, len),
+                std::slice::from_raw_parts_mut(output_ptr, len),
+            )
+        };
+        return crate::math::volume_kernels::vwap_into(high, low, close, volume, output)
+            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER));
+    }
+
+    let copy_result = |output: &mut [f64], result: &[f64]| {
+        if result.len() == output.len() {
+            output.copy_from_slice(result);
+            Ok(())
+        } else {
+            Err(KernelDispatchError::new(
+                FormulaKernelDispatcher::ERR_PARAMETER,
+            ))
+        }
+    };
+
+    if is("CALL:CMF") {
+        let period = period_from_slot(buffers, call.inputs[4].0)?;
+        let (high, low, close, volume, output) = unsafe {
+            (
+                std::slice::from_raw_parts(buffers[call.inputs[0].0].as_ptr(), len),
+                std::slice::from_raw_parts(buffers[call.inputs[1].0].as_ptr(), len),
+                std::slice::from_raw_parts(buffers[call.inputs[2].0].as_ptr(), len),
+                std::slice::from_raw_parts(buffers[call.inputs[3].0].as_ptr(), len),
+                std::slice::from_raw_parts_mut(buffers[output_slot].as_mut_ptr(), len),
+            )
+        };
+        let result = crate::indicators::volume_ext::cmf(high, low, close, volume, period)
+            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+        return copy_result(output, result.as_slice().unwrap());
+    }
+
+    if is("CALL:CHOP") {
+        let period = period_from_slot(buffers, call.inputs[3].0)?;
+        let (high, low, close, output) = unsafe {
+            (
+                std::slice::from_raw_parts(buffers[call.inputs[0].0].as_ptr(), len),
+                std::slice::from_raw_parts(buffers[call.inputs[1].0].as_ptr(), len),
+                std::slice::from_raw_parts(buffers[call.inputs[2].0].as_ptr(), len),
+                std::slice::from_raw_parts_mut(buffers[output_slot].as_mut_ptr(), len),
+            )
+        };
+        let result = crate::indicators::momentum_ext::chop(high, low, close, period)
+            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+        return copy_result(output, result.as_slice().unwrap());
+    }
+
+    if is("CALL:FISHER") || is("CALL:FISHER_SIGNAL") {
+        let period = period_from_slot(buffers, call.inputs[2].0)?;
+        let (high, low, output) = unsafe {
+            (
+                std::slice::from_raw_parts(buffers[call.inputs[0].0].as_ptr(), len),
+                std::slice::from_raw_parts(buffers[call.inputs[1].0].as_ptr(), len),
+                std::slice::from_raw_parts_mut(buffers[output_slot].as_mut_ptr(), len),
+            )
+        };
+        let result = crate::indicators::momentum_ext::fisher(high, low, period)
+            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+        let selected = if is("CALL:FISHER") {
+            result.fisher.as_slice().unwrap()
+        } else {
+            result.signal.as_slice().unwrap()
+        };
+        return copy_result(output, selected);
+    }
+
+    if is("CALL:TSI") {
+        let long_period = period_from_slot(buffers, call.inputs[1].0)?;
+        let short_period = call
+            .inputs
+            .get(2)
+            .map(|slot| period_from_slot(buffers, slot.0))
+            .transpose()?
+            .unwrap_or(13);
+        let (input, output) = unsafe {
+            (
+                std::slice::from_raw_parts(buffers[call.inputs[0].0].as_ptr(), len),
+                std::slice::from_raw_parts_mut(buffers[output_slot].as_mut_ptr(), len),
+            )
+        };
+        let result = crate::indicators::momentum_ext::tsi(input, long_period, short_period)
+            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+        return copy_result(output, result.as_slice().unwrap());
+    }
+
+    if is("CALL:KDJ") || is("CALL:KDJ_D") || is("CALL:KDJ_J") {
+        let n = call
+            .inputs
+            .get(3)
+            .map(|slot| period_from_slot(buffers, slot.0))
+            .transpose()?
+            .unwrap_or(9);
+        let m1 = call
+            .inputs
+            .get(4)
+            .map(|slot| period_from_slot(buffers, slot.0))
+            .transpose()?
+            .unwrap_or(3);
+        let m2 = call
+            .inputs
+            .get(5)
+            .map(|slot| period_from_slot(buffers, slot.0))
+            .transpose()?
+            .unwrap_or(3);
+        let (high, low, close, output) = unsafe {
+            (
+                std::slice::from_raw_parts(buffers[call.inputs[0].0].as_ptr(), len),
+                std::slice::from_raw_parts(buffers[call.inputs[1].0].as_ptr(), len),
+                std::slice::from_raw_parts(buffers[call.inputs[2].0].as_ptr(), len),
+                std::slice::from_raw_parts_mut(buffers[output_slot].as_mut_ptr(), len),
+            )
+        };
+        let result = crate::indicators::china::kdj(high, low, close, n, m1, m2)
+            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+        let selected = if is("CALL:KDJ_D") {
+            result.d.as_slice().unwrap()
+        } else if is("CALL:KDJ_J") {
+            result.j.as_slice().unwrap()
+        } else {
+            result.k.as_slice().unwrap()
+        };
+        return copy_result(output, selected);
+    }
+
+    if is("CALL:ICHIMOKU_TENKAN") || is("CALL:ICHIMOKU_KIJUN") {
+        let period = period_from_slot(buffers, call.inputs[2].0)?;
+        let (high, low, output) = unsafe {
+            (
+                std::slice::from_raw_parts(buffers[call.inputs[0].0].as_ptr(), len),
+                std::slice::from_raw_parts(buffers[call.inputs[1].0].as_ptr(), len),
+                std::slice::from_raw_parts_mut(buffers[output_slot].as_mut_ptr(), len),
+            )
+        };
+        let upper = crate::math::statistics::rolling_max(high, period)
+            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+        let lower = crate::math::statistics::rolling_min(low, period)
+            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+        for index in 0..len {
+            output[index] = if upper[index].is_finite() && lower[index].is_finite() {
+                (upper[index] + lower[index]) * 0.5
+            } else {
+                f64::NAN
+            };
+        }
+        return Ok(());
+    }
+
+    if is("CALL:SUPERTREND") {
+        let period = period_from_slot(buffers, call.inputs[3].0)?;
+        let multiplier = call
+            .inputs
+            .get(4)
+            .map(|slot| scalar_from_slot(buffers, slot.0))
+            .transpose()?
+            .unwrap_or(3.0);
+        let (high, low, close, output) = unsafe {
+            (
+                std::slice::from_raw_parts(buffers[call.inputs[0].0].as_ptr(), len),
+                std::slice::from_raw_parts(buffers[call.inputs[1].0].as_ptr(), len),
+                std::slice::from_raw_parts(buffers[call.inputs[2].0].as_ptr(), len),
+                std::slice::from_raw_parts_mut(buffers[output_slot].as_mut_ptr(), len),
+            )
+        };
+        let result =
+            crate::indicators::supertrend::supertrend(high, low, close, period, multiplier)
+                .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+        return copy_result(output, result.trend_line.as_slice().unwrap());
+    }
+
+    let period = period_from_slot(buffers, call.inputs[2].0)?;
+    let (high, low, output) = unsafe {
+        (
+            std::slice::from_raw_parts(buffers[call.inputs[0].0].as_ptr(), len),
+            std::slice::from_raw_parts(buffers[call.inputs[1].0].as_ptr(), len),
+            std::slice::from_raw_parts_mut(buffers[output_slot].as_mut_ptr(), len),
+        )
+    };
+    let result = crate::indicators::donchian::donchian(high, low, period)
+        .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+    let selected = if is("CALL:DONCHIAN_UPPER") {
+        result.upper.as_slice().unwrap()
+    } else if is("CALL:DONCHIAN_LOWER") {
+        result.lower.as_slice().unwrap()
+    } else if is("CALL:DONCHIAN_WIDTH") {
+        result.width.as_slice().unwrap()
+    } else {
+        result.middle.as_slice().unwrap()
+    };
+    copy_result(output, selected)
+}
+
 #[derive(Debug, Clone, Copy)]
 enum BinaryKernel {
     Add,
@@ -749,6 +1082,89 @@ mod tests {
         ];
 
         for (source, expected) in cases {
+            let actual = execute(source, &high, &low, &close, &volume);
+            assert_eq!(actual.len(), expected.len(), "{source}");
+            for (actual, expected) in actual.iter().zip(expected.iter()) {
+                assert!(
+                    (actual.is_nan() && expected.is_nan()) || (*actual - *expected).abs() < 1e-10,
+                    "{source}: actual={actual:?} expected={expected:?}"
+                );
+            }
+        }
+
+        let modern_cases = [
+            (
+                "ZSCORE(CLOSE,3)",
+                crate::indicators::statistics::zscore(&close, 3).unwrap(),
+            ),
+            (
+                "VWMA(CLOSE,VOLUME,3)",
+                crate::math::moving_avg::vwma(&close, &volume, 3).unwrap(),
+            ),
+            (
+                "CMF(HIGH,LOW,CLOSE,VOLUME,3)",
+                crate::indicators::volume_ext::cmf(&high, &low, &close, &volume, 3).unwrap(),
+            ),
+            (
+                "FISHER(HIGH,LOW,3)",
+                crate::indicators::momentum_ext::fisher(&high, &low, 3)
+                    .unwrap()
+                    .fisher,
+            ),
+            (
+                "FISHER_SIGNAL(HIGH,LOW,3)",
+                crate::indicators::momentum_ext::fisher(&high, &low, 3)
+                    .unwrap()
+                    .signal,
+            ),
+            (
+                "TSI(CLOSE,4,2)",
+                crate::indicators::momentum_ext::tsi(&close, 4, 2).unwrap(),
+            ),
+            (
+                "CHOP(HIGH,LOW,CLOSE,3)",
+                crate::indicators::momentum_ext::chop(&high, &low, &close, 3).unwrap(),
+            ),
+            (
+                "KDJ_D(HIGH,LOW,CLOSE,3,2,2)",
+                crate::indicators::china::kdj(&high, &low, &close, 3, 2, 2)
+                    .unwrap()
+                    .d,
+            ),
+            (
+                "ICHIMOKU_TENKAN(HIGH,LOW,3)",
+                crate::math::statistics::rolling_max(&high, 3)
+                    .unwrap()
+                    .iter()
+                    .zip(
+                        crate::math::statistics::rolling_min(&low, 3)
+                            .unwrap()
+                            .iter(),
+                    )
+                    .map(|(upper, lower)| {
+                        if upper.is_finite() && lower.is_finite() {
+                            (upper + lower) * 0.5
+                        } else {
+                            f64::NAN
+                        }
+                    })
+                    .collect(),
+            ),
+            (
+                "SUPERTREND(HIGH,LOW,CLOSE,3,2)",
+                crate::indicators::supertrend::supertrend(&high, &low, &close, 3, 2.0)
+                    .unwrap()
+                    .trend_line,
+            ),
+            (
+                "DONCHIAN_WIDTH(HIGH,LOW,3)",
+                crate::indicators::donchian::donchian(&high, &low, 3)
+                    .unwrap()
+                    .width,
+            ),
+        ];
+
+        for (source, expected) in modern_cases {
             let actual = execute(source, &high, &low, &close, &volume);
             assert_eq!(actual.len(), expected.len(), "{source}");
             for (actual, expected) in actual.iter().zip(expected.iter()) {

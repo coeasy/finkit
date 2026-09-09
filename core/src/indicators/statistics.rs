@@ -143,6 +143,56 @@ pub fn zscore(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
     Ok(output)
 }
 
+/// Write Z-Score directly into a caller-owned output slice.
+///
+/// The formula executor uses this fused rolling-moment path to avoid the two
+/// temporary arrays previously created for rolling mean and standard deviation.
+/// It intentionally keeps the sample-standard-deviation convention used by
+/// [`zscore`].
+#[inline]
+pub fn zscore_into(input: &[f64], timeperiod: usize, output: &mut [f64]) -> Result<()> {
+    if timeperiod < 2 {
+        return Err(TaError::InvalidParameter {
+            name: "timeperiod".to_string(),
+            constraint: "at least 2".to_string(),
+        });
+    }
+    if input.len() != output.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
+    validate_input(input.len(), timeperiod)?;
+
+    output.fill(f64::NAN);
+    let n = timeperiod as f64;
+    let inv_n = 1.0 / n;
+    let inv_n_minus_1 = 1.0 / (n - 1.0);
+    let mut sum = 0.0;
+    let mut sum_sq = 0.0;
+    for &value in &input[..timeperiod] {
+        sum += value;
+        sum_sq += value * value;
+    }
+
+    for index in timeperiod - 1..input.len() {
+        if index >= timeperiod {
+            let old = input[index - timeperiod];
+            let new = input[index];
+            sum += new - old;
+            sum_sq += new * new - old * old;
+        }
+        let mean = sum * inv_n;
+        let variance = ((sum_sq - sum * mean) * inv_n_minus_1).max(0.0);
+        let std_dev = variance.sqrt();
+        if std_dev > 1e-15 {
+            output[index] = (input[index] - mean) / std_dev;
+        }
+    }
+    Ok(())
+}
+
 /// Percent Rank (百分比排名)
 ///
 /// 计算当前值在过去窗口中的百分比排名，表示有多少比例的值低于当前值。

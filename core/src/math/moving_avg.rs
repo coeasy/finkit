@@ -1902,6 +1902,74 @@ pub fn vwma(input: &[f64], volume: &[f64], period: usize) -> Result<Array1<f64>>
     Ok(output)
 }
 
+/// Compute VWMA directly into a caller-owned output slice.
+///
+/// This is the allocation-free formula/FFI counterpart of [`vwma`].  The
+/// clean-input path is a single rolling numerator/denominator recurrence;
+/// windows containing NaN values are rebuilt only when the dirty window
+/// changes, preserving the public function's warm-up and missing-data rules.
+#[inline]
+pub fn vwma_into(input: &[f64], volume: &[f64], period: usize, output: &mut [f64]) -> Result<()> {
+    if period == 0 {
+        return Err(TaError::InvalidParameter {
+            name: "period".to_string(),
+            constraint: "greater than 0".to_string(),
+        });
+    }
+    if input.len() != volume.len() || input.len() != output.len() {
+        return Err(TaError::InvalidParameter {
+            name: "input, volume, output".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    validate_input(input.len(), period)?;
+
+    output.fill(f64::NAN);
+    let len = input.len();
+    let clean =
+        !input.iter().any(|value| value.is_nan()) && !volume.iter().any(|value| value.is_nan());
+
+    if clean {
+        let mut price_volume = 0.0;
+        let mut total_volume = 0.0;
+        for index in 0..period {
+            price_volume += input[index] * volume[index];
+            total_volume += volume[index];
+        }
+        if total_volume.abs() > 1e-15 {
+            output[period - 1] = price_volume / total_volume;
+        }
+        for index in period..len {
+            price_volume +=
+                input[index] * volume[index] - input[index - period] * volume[index - period];
+            total_volume += volume[index] - volume[index - period];
+            if total_volume.abs() > 1e-15 {
+                output[index] = price_volume / total_volume;
+            }
+        }
+        return Ok(());
+    }
+
+    for index in period - 1..len {
+        let start = index + 1 - period;
+        let mut price_volume = 0.0;
+        let mut total_volume = 0.0;
+        let mut valid = true;
+        for j in start..=index {
+            if input[j].is_nan() || volume[j].is_nan() {
+                valid = false;
+                break;
+            }
+            price_volume += input[j] * volume[j];
+            total_volume += volume[j];
+        }
+        if valid && total_volume.abs() > 1e-15 {
+            output[index] = price_volume / total_volume;
+        }
+    }
+    Ok(())
+}
+
 /// Compute Exponential Moving Averages for **multiple periods in a single pass**.
 ///
 /// This is the workhorse helper for downstream strategies that need the same
