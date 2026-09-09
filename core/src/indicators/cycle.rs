@@ -911,7 +911,10 @@ fn compute_hilbert_selected<const MODE: u8>(
     }
     let lookback = if MODE == 0 || MODE == 2 { 32 } else { 63 };
     let first_warmup = lookback.min(first.len());
-    first[..first_warmup].fill(if MODE == 5 { 0.0 } else { f64::NAN });
+    // Phase/trend terminals share a 63-bar lookback.  In particular,
+    // HT_TRENDMODE must not expose the default trend value (0) during warmup;
+    // TA-Lib marks those samples as unavailable.
+    first[..first_warmup].fill(f64::NAN);
     let mut second = second;
     if let Some(values) = second.as_deref_mut() {
         let warmup = lookback.min(values.len());
@@ -945,8 +948,8 @@ fn compute_hilbert_selected<const MODE: u8>(
     let mut prev_dc_phase = 0.0;
     let mut sine = 0.0;
     let mut lead_sine = 0.0;
-    let mut prev_sine = 0.0;
-    let mut prev_lead_sine = 0.0;
+    let mut prev_sine;
+    let mut prev_lead_sine;
     let mut days_in_trend = 0i32;
     let mut i_trend1 = 0.0;
     let mut i_trend2 = 0.0;
@@ -2154,25 +2157,31 @@ mod tests {
     }
 
     #[test]
-    fn test_ht_sine_simd_matches_scalar() {
-        // The SIMD sin/cos terminal stage must match a scalar f64::sin_cos reference
-        // (the phase is atan(im/re) ∈ (-π/2, π/2), where the polynomial is exact to ~1e-11).
+    fn test_ht_sine_simd_kernel_matches_scalar() {
+        // Keep the SIMD primitive's numerical contract independent from the
+        // Hilbert state machine.  HT_SINE now uses the unified state machine,
+        // whose dominant-phase correction is intentionally different from the
+        // old raw atan(im/re) reference used by this test.
         let n = 256;
         let input: Vec<f64> = (0..n)
             .map(|i| 100.0 + 10.0 * (i as f64 * 0.13).sin() + (i as f64 * 0.7).cos())
             .collect();
-        let (sine, lead) = ht_sine(&input).unwrap();
 
         let (_d, _ip, _q, _j1, _i2, _j2, phase, _p) = compute_hilbert_components(&input, n);
+        let mut simd_sine = vec![0.0; n - 32];
+        let mut simd_cosine = vec![0.0; n - 32];
+        simd_ops::simd_sin_cos(&phase[32..], &mut simd_sine, &mut simd_cosine);
         let lead_c = std::f64::consts::FRAC_1_SQRT_2; // cos(π/4) = sin(π/4) = √2/2
         let mut max_sine_err = 0.0_f64;
         let mut max_lead_err = 0.0_f64;
         for i in 32..n {
-            let (sp, cp) = phase[i].sin_cos();
-            let exp_sine = sp;
-            let exp_lead = (sp + cp) * lead_c;
-            max_sine_err = max_sine_err.max((sine[i] - exp_sine).abs());
-            max_lead_err = max_lead_err.max((lead[i] - exp_lead).abs());
+            let (scalar_sine, scalar_cosine) = phase[i].sin_cos();
+            max_sine_err = max_sine_err.max((simd_sine[i - 32] - scalar_sine).abs());
+            max_lead_err = max_lead_err.max(
+                ((simd_sine[i - 32] + simd_cosine[i - 32]) * lead_c
+                    - (scalar_sine + scalar_cosine) * lead_c)
+                    .abs(),
+            );
         }
         assert!(
             max_sine_err <= 1e-9,
@@ -2187,8 +2196,8 @@ mod tests {
 
         // Sanity: the kernel was actually exercised (finite, non-trivial output).
         let mut finite = 0;
-        for i in 32..n {
-            if sine[i].is_finite() && lead[i].is_finite() {
+        for i in 0..simd_sine.len() {
+            if simd_sine[i].is_finite() && simd_cosine[i].is_finite() {
                 finite += 1;
             }
         }
