@@ -3,7 +3,7 @@
 > **SSOT** — auto-generated from `core/src/indicators/mod.rs` and submodule `pub fn` exports.
 > Do not edit manually. Regenerate: `python scripts/gen_ssot_docs.py --generate`
 
-Modules exported from `indicators/mod.rs`: **34** | Public indicator functions: **319**
+Modules exported from `indicators/mod.rs`: **35** | Public indicator functions: **352**
 
 ## astock
 
@@ -112,12 +112,18 @@ Modules exported from `indicators/mod.rs`: **34** | Public indicator functions: 
 | `ehlers_roofing_filter_v2` |
 | `ehlers_sidewinder` |
 | `ht_dcperiod` |
+| `ht_dcperiod_into` |
 | `ht_dcphase` |
+| `ht_dcphase_into` |
 | `ht_measurement` |
 | `ht_phasor` |
+| `ht_phasor_into` |
 | `ht_sine` |
+| `ht_sine_into` |
 | `ht_trendline` |
+| `ht_trendline_into` |
 | `ht_trendmode` |
+| `ht_trendmode_into` |
 | `instantaneous_trendline` |
 | `roofing_filter` |
 | `super_smoother` |
@@ -186,25 +192,35 @@ Modules exported from `indicators/mod.rs`: **34** | Public indicator functions: 
 | `adx` |
 | `adx_into` |
 | `adxr` |
+| `adxr_into` |
 | `apo` |
 | `aroon` |
+| `aroon_into` |
 | `aroonosc` |
 | `bop` |
 | `cci` |
 | `cci_into` |
 | `cmo` |
+| `cmo_fast_into` |
 | `dx` |
+| `dx_into` |
 | `elder_ray` |
 | `macd` |
+| `macd_fast_into` |
 | `macd_into` |
+| `macd_line_into` |
 | `macdext` |
 | `macdfix` |
+| `macdfix_into` |
+| `macdfix_with_signal` |
 | `mfi` |
 | `minus_di` |
+| `minus_di_fast_into` |
 | `minus_dm` |
 | `mom` |
 | `mom_into` |
 | `plus_di` |
+| `plus_di_fast_into` |
 | `plus_dm` |
 | `ppo` |
 | `roc` |
@@ -217,9 +233,13 @@ Modules exported from `indicators/mod.rs`: **34** | Public indicator functions: 
 | `stoch` |
 | `stoch_into` |
 | `stochf` |
+| `stochf_into` |
 | `stochrsi` |
+| `stochrsi_into` |
 | `trix` |
+| `trix_into` |
 | `ultosc` |
+| `ultosc_into` |
 | `willr` |
 | `willr_into` |
 
@@ -269,7 +289,9 @@ Modules exported from `indicators/mod.rs`: **34** | Public indicator functions: 
 | `midprice_into` |
 | `sar` |
 | `sarext` |
+| `sarext_sar_into` |
 | `t3` |
+| `t3_into` |
 | `tema_into` |
 | `vidya` |
 
@@ -314,6 +336,20 @@ Modules exported from `indicators/mod.rs`: **34** | Public indicator functions: 
 | `rs_momentum` |
 | `rs_rating` |
 | `rs_slope` |
+
+## screening
+
+| Function |
+|----------|
+| `breakout_down` |
+| `breakout_up` |
+| `dead_cross` |
+| `gap_signal` |
+| `golden_cross` |
+| `ma_alignment` |
+| `relative_strength` |
+| `trend_breakout_signal` |
+| `volume_surge` |
 
 ## sentiment
 
@@ -375,6 +411,7 @@ Modules exported from `indicators/mod.rs`: **34** | Public indicator functions: 
 | `tsf` |
 | `var` |
 | `zscore` |
+| `zscore_into` |
 
 ## supertrend
 
@@ -458,6 +495,7 @@ _No `pub fn` exports in this module file._
 | `ad` |
 | `ad_into` |
 | `adosc` |
+| `adosc_into` |
 | `anchored_vwap` |
 | `obv` |
 | `obv_into` |

@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-09-09
+
+### Added
+
+- Cross-market screening indicators for crossover, breakout, volume expansion,
+  moving-average alignment, relative strength, gaps, and trend confirmation.
+- Formula DSL routes and aliases for the new screening indicators.
+- Versioned multi-language release workflow documentation and package build
+  contracts.
+
+### Performance and validation
+
+- Expanded the TA-Lib release-wheel gate to 155 compatible functions and 310
+  observations at 100K/1M values.
+- v0.1.5 local validation: 307/310 observations faster, geometric mean 2.03x,
+  zero runtime errors; the two existing `HT_TRENDMODE` mask exceptions remain
+  explicitly documented.
+
+### Documentation
+
+- Added the cross-market screening API and selection recipes.
+- Updated generated indicator/formula/version catalogs and the multi-language
+  installation/release guides.
+- Replaced stale six-indicator benchmark claims with the current full-matrix
+  report and per-observation caveats.
+
 ## [0.1.2] - Pending release (source baseline 2026-09-02)
 
 - Added cross-language version checks for .NET and Java binding metadata, with SSOT version-matrix coverage.
@@ -119,5 +145,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Multi-platform support (Linux, macOS, Windows)
 - CI/CD pipeline setup
 - Comprehensive test suite
-
 

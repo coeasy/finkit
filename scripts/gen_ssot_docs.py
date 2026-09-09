@@ -32,7 +32,10 @@ INDICATORS_DIR = ROOT / "core" / "src" / "indicators"
 STREAMING_MOD = ROOT / "core" / "src" / "streaming" / "mod.rs"
 STREAMING_DIR = ROOT / "core" / "src" / "streaming"
 FORMULA_MOD = ROOT / "core" / "src" / "formula" / "mod.rs"
-FORMULA_FUNCTIONS = ROOT / "core" / "src" / "formula" / "functions.rs"
+FORMULA_FUNCTION_SOURCES = (
+    ROOT / "core" / "src" / "formula" / "functions.rs",
+    ROOT / "core" / "src" / "formula" / "functions_router.rs",
+)
 FEATURES_MOD = ROOT / "core" / "src" / "features" / "mod.rs"
 PINE_BUILTIN = ROOT / "core" / "src" / "formula" / "pine" / "builtin_table.rs"
 FFI_LIB = ROOT / "ffi" / "c-binding" / "src" / "lib.rs"
@@ -220,16 +223,23 @@ def build_streaming_catalog() -> dict[str, list[str]]:
 
 
 def parse_formula_functions() -> list[str]:
-    """Parse formula/functions.rs for builtin function names."""
-    if not FORMULA_FUNCTIONS.is_file():
-        return []
+    """Parse legacy and routed formula sources for builtin function names.
+
+    The router is the source of truth for the optimized formula path, while
+    the legacy table still contains compatibility functions. Keep both in the
+    generated catalog so newly routed functions cannot disappear from the API
+    documentation.
+    """
     fns: list[str] = []
-    # Look for function name strings in get_builtin_functions()
-    fn_name_re = re.compile(r'"([A-Z_]+)"\s*,')
-    for line in FORMULA_FUNCTIONS.read_text(encoding="utf-8").splitlines():
-        m = fn_name_re.search(line)
-        if m:
-            fns.append(m.group(1))
+    # Match list entries (`"SMA",`) and routed inserts (`map.insert("SMA",`).
+    fn_name_re = re.compile(r'"([A-Z_]+)"\s*(?:,|\))')
+    for source in FORMULA_FUNCTION_SOURCES:
+        if not source.is_file():
+            continue
+        for line in source.read_text(encoding="utf-8").splitlines():
+            m = fn_name_re.search(line)
+            if m:
+                fns.append(m.group(1))
     return sorted(set(fns))
 
 
@@ -469,7 +479,7 @@ def format_formula_md(functions: list[str]) -> str:
     lines = [
         "# Formula Engine Functions",
         "",
-        "> **SSOT** — auto-generated from `core/src/formula/functions.rs`.",
+        "> **SSOT** — auto-generated from the legacy formula table and routed formula functions.",
         "> Do not edit manually. Regenerate: `python scripts/gen_ssot_docs.py --generate`",
         "",
         f"Built-in formula functions: **{len(functions)}**",

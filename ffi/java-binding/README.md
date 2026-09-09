@@ -1,6 +1,6 @@
 # Finkit Java/JNI Binding
 
-This directory contains the Java binding for Finkit `v0.1.3`, backed by a Rust JNI library.
+This directory contains the Java binding for Finkit `v0.1.5`, backed by a Rust JNI library.
 
 ## Status
 
@@ -12,7 +12,7 @@ The permanent multi-language CI validates the Java packaging path by:
 4. asserting that the native resource is present in the JAR;
 5. compiling and running a Java smoke program that loads the native library and computes SMA.
 
-The GitHub `v0.1.3` Release does not currently contain a Java JAR/native bundle, and this documentation does **not** assume that `com.finkit:finkit:0.1.3` has been published to Maven Central.
+The v0.1.5 workflow builds a Java JAR/native bundle, and this documentation does **not** assume that `com.finkit:finkit:0.1.5` has been published to Maven Central.
 
 ## Requirements
 
@@ -80,7 +80,7 @@ The native library name is platform-mapped, for example:
 - Linux: `libfinkit_java.so`;
 - macOS: `libfinkit_java.dylib`.
 
-A platform being recognized by the loader does not by itself mean that a prebuilt v0.1.3 artifact has been published for it.
+A platform being recognized by the loader does not by itself mean that a prebuilt v0.1.5 artifact has been published for it.
 
 ## Validate the JAR
 

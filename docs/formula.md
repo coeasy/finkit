@@ -4,6 +4,11 @@ Finkit's formula engine provides a terminal-style financial expression language 
 
 For the exact current function list, use [generated/formula-functions.md](generated/formula-functions.md). Do not rely on hard-coded counts in prose documentation.
 
+Cross-market screening functions and selection recipes are documented in
+[screening-formulas.md](screening-formulas.md). They are available both as
+native indicators and as routed formula functions such as `GOLDEN_CROSS`,
+`BREAKOUT`, `VOLUME_SURGE`, and `TREND_BREAKOUT`.
+
 ## 1. Core data variables
 
 The common market-series variables are:
