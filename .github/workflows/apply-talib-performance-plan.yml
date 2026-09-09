@@ -1,0 +1,103 @@
+name: Apply TA-Lib performance plan
+
+on:
+  push:
+    branches:
+      - fix/talib-performance-plan-20260904
+  workflow_dispatch:
+
+concurrency:
+  group: talib-performance-plan-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Normalize Rust migration scanners
+        run: python scripts/normalize_migration_parsers.py
+      - name: Validate migration scripts
+        run: |
+          python -m py_compile \
+            scripts/optimize_python_bindings.py \
+            scripts/apply_talib_performance_plan.py \
+            scripts/apply_talib_semantic_fixes.py \
+            scripts/apply_formula_runtime_performance_fixes.py \
+            scripts/apply_formula_output_fixes.py \
+            scripts/apply_talib_existing_contract_fixes.py \
+            scripts/apply_core_hotpath_fixes.py \
+            scripts/prepare_python_registry_ssot.py \
+            scripts/normalize_migration_parsers.py
+      - name: Prepare Python binding SSOT
+        run: python scripts/prepare_python_registry_ssot.py
+      - name: Apply binding and API migrations
+        run: python scripts/apply_talib_performance_plan.py
+      - name: Apply TA-Lib semantic fixes
+        run: python scripts/apply_talib_semantic_fixes.py
+      - name: Migrate legacy TA-Lib contract tests
+        run: python scripts/apply_talib_existing_contract_fixes.py
+      - name: Apply core hot-path fixes
+        run: python scripts/apply_core_hotpath_fixes.py
+      - name: Apply formula runtime performance fixes
+        run: python scripts/apply_formula_runtime_performance_fixes.py
+      - name: Apply formula result-only fast path
+        run: python scripts/apply_formula_output_fixes.py
+      - name: Format Rust
+        run: cargo fmt --all
+      - name: Validate generated binding stability
+        run: |
+          python scripts/sync_bindings.py --lang python --check
+          python scripts/optimize_python_bindings.py --check ffi/python-binding/src/generated.rs ffi/python-binding/src/lib.rs
+      - name: Compile Python binding
+        run: cargo check -p finkit-python --features abi3 --locked
+      - name: Core regression suite
+        run: |
+          cargo test -p finkit --lib --locked
+          cargo test -p finkit --test talib_semantic_contract --locked
+      - name: Validate diff
+        run: git diff --check
+      - name: Commit applied plan
+        run: |
+          if git diff --quiet; then
+            echo 'No generated changes to commit.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            docs/indicator_registry.json \
+            scripts/sync_bindings.py \
+            scripts/optimize_python_bindings.py \
+            scripts/apply_talib_semantic_fixes.py \
+            scripts/apply_formula_runtime_performance_fixes.py \
+            ffi/python-binding/src/generated.rs \
+            ffi/python-binding/src/lib.rs \
+            ffi/python-binding/src/formula_plan.rs \
+            ffi/python-binding/finkit/__init__.py \
+            ffi/python-binding/finkit/__init__.pyi \
+            ffi/python-binding/tests/test_talib_public_contract.py \
+            core/src/indicators/volatility.rs \
+            core/src/indicators/volume.rs \
+            core/src/indicators/momentum.rs \
+            core/src/indicators/overlap.rs \
+            core/src/math/moving_avg.rs \
+            core/src/math/simd_kernels.rs \
+            core/src/formula/functions.rs \
+            core/src/formula/engine.rs
+          git commit -m 'perf: implement TA-Lib parity and zero-copy runtime plan'
+          git pull --rebase origin fix/talib-performance-plan-20260904
+          git push origin HEAD:fix/talib-performance-plan-20260904

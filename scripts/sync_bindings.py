@@ -44,6 +44,8 @@ import re
 import sys
 from pathlib import Path
 
+from optimize_python_bindings import optimize_source as optimize_python_source
+
 ROOT = Path(__file__).resolve().parents[1]
 REG = ROOT / "docs" / "indicator_registry.json"
 
@@ -120,8 +122,12 @@ KNOWN_INFRA = {
 }
 
 
+PYTHON_REGISTRY_OVERLAY = ROOT / "target" / "python_registry_ssot.json"
+
+
 def load_registry() -> dict:
-    return json.loads(REG.read_text(encoding="utf-8"))
+    registry_path = PYTHON_REGISTRY_OVERLAY if PYTHON_REGISTRY_OVERLAY.exists() else REG
+    return json.loads(registry_path.read_text(encoding="utf-8"))
 
 
 def save_registry(reg: dict) -> None:
@@ -234,7 +240,7 @@ def candidate_names(ind: dict, lang: str) -> list[str]:
     # ta_sma -> sma).  The registry's `core_call` basename is NOT reliable for
     # candlestick patterns (e.g. ta_cdl_doji calls indicators::cdl::doji).
     pub = c_name[3:] if c_name.startswith("ta_") else c_name
-    core = ff["core_call"].split("::")[-1]
+    core = ff.get("core_call", pub).split("::")[-1]
     if lang in ("c", "go", "dotnet"):
         # go/dotnet expose chart/pattern indicators as `<c_name>_json`
         # (JSON-serialised) variants rather than the plain C ABI; accept both.
@@ -273,7 +279,10 @@ def match_indicator(ind: dict, lang: str, extracted: dict[str, dict]) -> str | N
             return cand
     # android: match by core name appearing as the 2nd macro arg
     if lang == "android":
-        core = ind["ffi"]["core_call"].split("::")[-1]
+        ff = ind["ffi"]
+        c_name = ff["c_name"]
+        pub = c_name[3:] if c_name.startswith("ta_") else c_name
+        core = ff.get("core_call", pub).split("::")[-1]
         alias = NAME_ALIASES.get(core, core)
         for nm, info in extracted.items():
             if (f", {core}," in info["body"]) or (f", {alias}," in info["body"]):
@@ -399,7 +408,9 @@ def emit_generated(lang: str, inds: list[dict]) -> str:
             # Wrap each generated function in catch_unwind so a panic inside
             # the core call cannot unwind across the FFI boundary.
             bodies.append(wrap_body(lang, body).rstrip("\n") + "\n")
-    return header + "\n".join(bodies) + "\n"
+    # Keep generated files POSIX-clean so the wheel workflow's `git diff
+    # --check` does not reject a second blank line at EOF.
+    return (header + "\n".join(bodies)).rstrip("\n") + "\n"
 
 
 def do_generate(langs: list[str], rewrite: bool) -> int:
@@ -410,6 +421,9 @@ def do_generate(langs: list[str], rewrite: bool) -> int:
         cfg = LANG_CFG[lang]
         gen_path = ROOT / cfg["gen"]
         text = emit_generated(lang, inds)
+        if lang == "python":
+            text, optimized_count = optimize_python_source(text)
+            print(f"[gen/python] NumPy-direct wrappers: {optimized_count}")
         if rewrite:
             lib_path = ROOT / cfg["lib"]
             src = lib_path.read_text(encoding="utf-8")
@@ -485,6 +499,12 @@ def do_check(langs: list[str]) -> int:
                 drift.append(f"missing:{c_name}")
                 continue
             body_now = extracted[nm]["body"]
+            if lang == "python":
+                impl_name = f"vec_{nm}_impl"
+                if impl_name in extracted:
+                    body_now = extracted[impl_name]["body"].replace(
+                        f"fn {impl_name}", f"fn {nm}", 1
+                    )
             # Compare through the same panic-wrapper normalisation so a
             # regenerated (wrapped) function is not flagged as drift against
             # the unwrapped source-of-truth body.

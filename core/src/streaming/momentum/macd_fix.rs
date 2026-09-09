@@ -57,8 +57,10 @@ impl StreamingMacdFix {
     pub fn new(signal_period: usize) -> Self {
         Self {
             signal_period,
-            fast_k: 2.0 / (MACDFIX_FAST_PERIOD as f64 + 1.0),
-            slow_k: 2.0 / (MACDFIX_SLOW_PERIOD as f64 + 1.0),
+            // MACDFIX is defined with TA-Lib's fixed constants, not the
+            // generic 2/(period+1) factors used by configurable MACD.
+            fast_k: 0.15,
+            slow_k: 0.075,
             signal_k: 2.0 / (signal_period as f64 + 1.0),
             slow_sum: 0.0,
             fast_sum: 0.0,

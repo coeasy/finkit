@@ -400,18 +400,25 @@ pub fn maxindex(data: &[f64], period: usize) -> Result<Array1<i64>> {
         return Ok(output);
     }
 
-    for end in (period - 1)..len {
-        let start = end + 1 - period;
-        let mut best_off = 0_i64;
-        let mut best_val = data[start];
-        for k in 1..period {
-            let v = data[start + k];
-            if v > best_val {
-                best_val = v;
-                best_off = k as i64;
-            }
+    let mut candidates = VecDeque::with_capacity(period);
+    for i in 0..len {
+        while candidates
+            .front()
+            .is_some_and(|&candidate| candidate + period <= i)
+        {
+            candidates.pop_front();
         }
-        output[end] = best_off;
+        while candidates
+            .back()
+            .is_some_and(|&candidate| data[candidate] < data[i])
+        {
+            candidates.pop_back();
+        }
+        candidates.push_back(i);
+        if i + 1 >= period {
+            let start = i + 1 - period;
+            output[i] = (candidates[0] - start) as i64;
+        }
     }
     Ok(output)
 }
@@ -456,18 +463,25 @@ pub fn minindex(data: &[f64], period: usize) -> Result<Array1<i64>> {
         return Ok(output);
     }
 
-    for end in (period - 1)..len {
-        let start = end + 1 - period;
-        let mut best_off = 0_i64;
-        let mut best_val = data[start];
-        for k in 1..period {
-            let v = data[start + k];
-            if v < best_val {
-                best_val = v;
-                best_off = k as i64;
-            }
+    let mut candidates = VecDeque::with_capacity(period);
+    for i in 0..len {
+        while candidates
+            .front()
+            .is_some_and(|&candidate| candidate + period <= i)
+        {
+            candidates.pop_front();
         }
-        output[end] = best_off;
+        while candidates
+            .back()
+            .is_some_and(|&candidate| data[candidate] > data[i])
+        {
+            candidates.pop_back();
+        }
+        candidates.push_back(i);
+        if i + 1 >= period {
+            let start = i + 1 - period;
+            output[i] = (candidates[0] - start) as i64;
+        }
     }
     Ok(output)
 }

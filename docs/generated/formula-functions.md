@@ -1,9 +1,9 @@
 # Formula Engine Functions
 
-> **SSOT** — auto-generated from `core/src/formula/functions.rs`.
+> **SSOT** — auto-generated from the legacy formula table and routed formula functions.
 > Do not edit manually. Regenerate: `python scripts/gen_ssot_docs.py --generate`
 
-Built-in formula functions: **230**
+Built-in formula functions: **245**
 
 These functions are available in the formula DSL for expressions like `SMA(CLOSE, 20)`.
 
@@ -49,6 +49,9 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `BOLLMID` |
 | `BOLLWIDTH` |
 | `BOP` |
+| `BREAKDOWN` |
+| `BREAKOUT` |
+| `CCI` |
 | `CEIL` |
 | `CEILING` |
 | `CHECKSIG` |
@@ -64,11 +67,13 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `COUNT` |
 | `CROSS` |
 | `CROSSBELOW` |
+| `CROSSUP` |
 | `CUMMAX` |
 | `CUMMIN` |
 | `CUMSUM` |
 | `DARVAS_BOX` |
 | `DEA` |
+| `DEAD_CROSS` |
 | `DEMA` |
 | `DEVSQ` |
 | `DIFF` |
@@ -115,6 +120,8 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `FOX_WIN_RATE` |
 | `FOX_ZIG` |
 | `FRACPART` |
+| `GAP_SIGNAL` |
+| `GOLDEN_CROSS` |
 | `HEIKIN_ASHI` |
 | `HHV` |
 | `HHVBARS` |
@@ -154,6 +161,7 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `MAX` |
 | `MAXINDEX` |
 | `MAXPRICE` |
+| `MA_ALIGN` |
 | `MEDIAN` |
 | `MEDPRICE` |
 | `MFI` |
@@ -188,6 +196,7 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `RANK` |
 | `REF` |
 | `REFDATE` |
+| `RELATIVE_STRENGTH` |
 | `RENKO` |
 | `REVERSE` |
 | `ROC` |
@@ -196,6 +205,7 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `ROUND` |
 | `RSI` |
 | `RS_RATIO` |
+| `SAR` |
 | `SAREXT` |
 | `SELECTCOND` |
 | `SIGN` |
@@ -203,6 +213,7 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `SINH` |
 | `SKEW` |
 | `SLOPE` |
+| `SMA` |
 | `SMARTSELECT` |
 | `SORT` |
 | `SQRT` |
@@ -222,6 +233,8 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `TOPN` |
 | `TOTALVOL` |
 | `TRANGE` |
+| `TREND_BREAKOUT` |
+| `TREND_SCREEN` |
 | `TRIMA` |
 | `TRIX` |
 | `TROUGH` |
@@ -233,6 +246,7 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `ULTOSC` |
 | `VALUEWHEN` |
 | `VAR` |
+| `VOLUME_SURGE` |
 | `VWMA` |
 | `WCLPRICE` |
 | `WILLIAMS_ALLIGATOR` |
@@ -240,6 +254,7 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `WINNER` |
 | `WMA` |
 | `ZIGZAG` |
+| `ZLCCV` |
 | `ZSCORE` |
 
 ## Usage Example

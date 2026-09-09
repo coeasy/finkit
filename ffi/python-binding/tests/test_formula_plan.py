@@ -29,6 +29,75 @@ def test_compiled_formula_reuses_plan_and_returns_numpy_arrays():
     assert not np.array_equal(first["__result__"], second["__result__"])
 
 
+def test_compiled_formula_kama_uses_canonical_numeric_kernel():
+    open_, high, low, close, volume = _ohlcv(96)
+    compiled = finkit.CompiledFormula("KAMA(CLOSE, 20)")
+
+    result = compiled.eval_zero_copy(open_, high, low, close, volume)["__result__"]
+
+    np.testing.assert_allclose(
+        result,
+        finkit.kama(close, timeperiod=20),
+        equal_nan=True,
+    )
+
+
+@pytest.mark.parametrize(
+    ("source", "reference"),
+    [
+        ("MA(CLOSE, 5)", lambda close: finkit.sma(close, 5)),
+        ("EMA(CLOSE, 5)", lambda close: finkit.ema(close, 5)),
+        ("WMA(CLOSE, 5)", lambda close: finkit.wma(close, 5)),
+        ("KAMA(CLOSE, 5)", lambda close: finkit.kama(close, 5)),
+        ("RSI(CLOSE, 5)", lambda close: finkit.rsi(close, 5)),
+        ("MOM(CLOSE, 5)", lambda close: finkit.mom(close, 5)),
+        ("ROC(CLOSE, 5)", lambda close: finkit.roc(close, 5)),
+    ],
+)
+def test_compiled_formula_common_unary_calls_match_canonical_api(source, reference):
+    open_, high, low, close, volume = _ohlcv(96)
+    result = finkit.CompiledFormula(source).eval_zero_copy(
+        open_, high, low, close, volume
+    )["__result__"]
+    np.testing.assert_allclose(result, reference(close), equal_nan=True)
+
+
+@pytest.mark.parametrize(
+    ("source", "reference"),
+    [
+        ("MAX(CLOSE, 5)", lambda o, h, l, c, v: finkit.max(c, 5)),
+        ("MIN(CLOSE, 5)", lambda o, h, l, c, v: finkit.min(c, 5)),
+        ("SUM(CLOSE, 5)", lambda o, h, l, c, v: finkit.sum(c, 5)),
+        ("ROCP(CLOSE, 5)", lambda o, h, l, c, v: finkit.rocp(c, 5)),
+        ("ROCR(CLOSE, 5)", lambda o, h, l, c, v: finkit.rocr(c, 5)),
+        ("ROCR100(CLOSE, 5)", lambda o, h, l, c, v: finkit.rocr100(c, 5)),
+        ("NATR(HIGH, LOW, CLOSE, 5)", lambda o, h, l, c, v: finkit.natr(h, l, c, 5)),
+        ("CCI(HIGH, LOW, CLOSE, 5)", lambda o, h, l, c, v: finkit.cci(h, l, c, 5)),
+        (
+            "MFI(HIGH, LOW, CLOSE, VOLUME, 5)",
+            lambda o, h, l, c, v: finkit.mfi(h, l, c, v, 5),
+        ),
+        (
+            "ADOSC(HIGH, LOW, CLOSE, VOLUME, 3, 10)",
+            lambda o, h, l, c, v: finkit.adosc(h, l, c, v, 3, 10),
+        ),
+        ("OBV(CLOSE, VOLUME)", lambda o, h, l, c, v: finkit.obv(c, v)),
+        ("AD(HIGH, LOW, CLOSE, VOLUME)", lambda o, h, l, c, v: finkit.ad(h, l, c, v)),
+        ("TRIMA(CLOSE, 5)", lambda o, h, l, c, v: finkit.trima(c, 5)),
+    ],
+)
+def test_compiled_formula_extended_canonical_kernels(source, reference):
+    open_, high, low, close, volume = _ohlcv(96)
+    result = finkit.CompiledFormula(source).eval_zero_copy(
+        open_, high, low, close, volume
+    )["__result__"]
+    np.testing.assert_allclose(
+        result,
+        reference(open_, high, low, close, volume),
+        equal_nan=True,
+    )
+
+
 def test_compiled_formula_rejects_mismatched_lengths():
     open_, high, low, close, volume = _ohlcv()
 

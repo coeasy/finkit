@@ -8,25 +8,34 @@ Finkit distinguishes three different claims:
 
 These states are intentionally not treated as equivalent.
 
-## Current v0.1.3 distribution
+## v0.1.5 distribution contract
 
-The published `v0.1.3` GitHub Release remains the authoritative distribution contract for that version:
+The `v0.1.5` tag and release workflow are the authoritative version contract:
 
-| Target | v0.1.3 published status | Installation path |
+| Target | v0.1.5 release path | Installation path |
 | --- | --- | --- |
-| Python | four ABI3 wheels | GitHub Release wheel |
-| Rust | `.crate` Release asset | Release asset or git tag/source |
+| Python | ABI3 wheels | GitHub Release wheel |
+| Rust | `.crate` asset | Release asset or git tag/source |
 | CLI | Linux x86_64 binary | GitHub Release or source build |
-| Node.js | source build/npm-pack CI path | repository source; no npm claim |
-| Java/JNI | source build/JAR CI path | repository source; no Maven Central claim |
-| C/C++ | source build/CMake install CI path | repository source; no binary SDK Release claim |
-| Go | source only in v0.1.3 | repository checkout |
-| .NET | source only in v0.1.3 | repository checkout |
-| Android | source only in v0.1.3 | repository checkout |
-| iOS | source only in v0.1.3 | repository checkout |
-| WASM | source only in v0.1.3 | repository checkout |
+| Node.js | platform `.tgz` candidates | CI artifact / source |
+| Java/JNI | versioned JAR | CI artifact / source |
+| C/C++ | versioned SDK archive | CI artifact / source |
+| Go | versioned module archive | CI artifact / source |
+| .NET | versioned NuGet package | CI artifact / source |
+| Android | versioned AAR | CI artifact / source |
+| iOS | versioned XCFramework | CI artifact / source |
+| WASM | web/node/bundler bundles | CI artifact / source |
 
-Do not retroactively describe the v0.1.3 Release as containing Go, NuGet, AAR, XCFramework, or WASM artifacts.
+An artifact is not a public registry package until its target registry has been
+published to and a clean consumer install has passed.
+
+## Screening API across bindings
+
+The market-neutral screening formulas are exposed through the Rust core and
+formula runtime. Bindings that embed the formula evaluator can call the same
+names without introducing language-specific indicator semantics. See
+[screening-formulas.md](screening-formulas.md) for signatures, aliases, warm-up
+rules, and A-share/HK/US/crypto usage notes.
 
 ## Next-release multi-language target
 
@@ -50,7 +59,7 @@ The current Node package manifest declares additional optional packages such as 
 
 ## Python
 
-Python remains the most complete binary-distribution path in v0.1.3. Four `cp38-abi3` wheels are published for Linux x86_64, Windows x86_64, macOS x86_64, and macOS arm64.
+Python remains the most complete binary-distribution path in v0.1.5. Four `cp38-abi3` wheels are built for Linux x86_64, Windows x86_64, macOS x86_64, and macOS arm64.
 
 Use [installation.md](installation.md) and [python.md](python.md) for exact wheel selection, NumPy input requirements, `CompiledFormula`, and troubleshooting.
 
@@ -60,7 +69,7 @@ Use the release tag when a crates.io package is not independently verified:
 
 ```toml
 [dependencies]
-finkit = { git = "https://github.com/coeasy/finkit", tag = "v0.1.3" }
+finkit = { git = "https://github.com/coeasy/finkit", tag = "v0.1.5" }
 ```
 
 Or use a local checkout:

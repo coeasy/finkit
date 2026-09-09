@@ -6,51 +6,113 @@ use ndarray::Array1;
 /// Values: 100 for bullish, -100 for bearish, 0 for no pattern
 pub type PatternResult = Array1<i32>;
 
-/// Average True Range for candlestick calculations
-fn candle_avg_range(high: &[f64], low: &[f64], close: &[f64], period: usize, idx: usize) -> f64 {
-    let mut sum = 0.0;
-    let start = if idx >= period { idx - period + 1 } else { 0 };
-    let count = idx - start + 1;
+/// Small fixed-size rolling average used by the candle hot paths.
+///
+/// TA-Lib updates its candle settings in the same pass that classifies a
+/// candle. Keeping the window on the stack avoids materializing one or more
+/// full-length helper vectors for every pattern invocation.
+#[derive(Clone, Copy)]
+struct RollingAverage<const N: usize> {
+    values: [f64; N],
+    sum: f64,
+    next: usize,
+    count: usize,
+}
 
-    for i in start..=idx {
-        if i == 0 {
-            sum += high[i] - low[i];
-        } else {
-            let tr = (high[i] - low[i])
-                .max((high[i] - close[i - 1]).abs())
-                .max((low[i] - close[i - 1]).abs());
-            sum += tr;
+impl<const N: usize> RollingAverage<N> {
+    #[inline(always)]
+    fn new() -> Self {
+        Self {
+            values: [0.0; N],
+            sum: 0.0,
+            next: 0,
+            count: 0,
         }
     }
 
-    if count > 0 {
-        sum / count as f64
-    } else {
-        0.0
+    #[inline(always)]
+    fn average(&self) -> f64 {
+        if self.count == 0 {
+            0.0
+        } else {
+            self.sum / self.count as f64
+        }
+    }
+
+    #[inline(always)]
+    fn push(&mut self, value: f64) {
+        if self.count == N {
+            self.sum -= self.values[self.next];
+        } else {
+            self.count += 1;
+        }
+        self.values[self.next] = value;
+        self.sum += value;
+        self.next += 1;
+        if self.next == N {
+            self.next = 0;
+        }
     }
 }
 
+/// Precompute the average true range used by all candles in one pattern.
+///
+/// Candlestick rules often inspect the same rolling range several times per
+/// candle. Building it once keeps the hot loop branch-free and reduces the
+/// usual O(n * period) implementation to O(n).
+fn candle_avg_ranges(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Vec<f64> {
+    let mut ranges = Vec::with_capacity(high.len());
+    let mut true_ranges = Vec::with_capacity(high.len());
+    let mut rolling_sum = 0.0;
+
+    for i in 0..high.len() {
+        let true_range = if i == 0 {
+            high[i] - low[i]
+        } else {
+            (high[i] - low[i])
+                .max((high[i] - close[i - 1]).abs())
+                .max((low[i] - close[i - 1]).abs())
+        };
+        true_ranges.push(true_range);
+        rolling_sum += true_range;
+        if i >= period {
+            rolling_sum -= true_ranges[i - period];
+        }
+        let count = (i + 1).min(period);
+        ranges.push(rolling_sum / count as f64);
+    }
+
+    ranges
+}
+
+/// TA-Lib candle settings compare the current candle with the average of the
+/// preceding bars; the current bar is added only after classification.
 /// Candle body size
+#[inline(always)]
 fn body(open: f64, close: f64) -> f64 {
     (close - open).abs()
 }
 
 /// Candle upper shadow
+#[inline(always)]
 fn upper_shadow(high: f64, open: f64, close: f64) -> f64 {
     high - open.max(close)
 }
 
 /// Candle lower shadow
+#[inline(always)]
 fn lower_shadow(low: f64, open: f64, close: f64) -> f64 {
     open.min(close) - low
 }
 
 /// Whether candle is bullish (white)
+#[inline(always)]
 fn is_bullish(open: f64, close: f64) -> bool {
     close > open
 }
 
 /// Whether candle is bearish (black)
+#[inline(always)]
 fn is_bearish(open: f64, close: f64) -> bool {
     close < open
 }
@@ -82,10 +144,20 @@ pub fn doji(
 
     let len = open.len();
     let mut output = Array1::zeros(len);
-    let period = 10;
-
-    for i in period..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
+    let mut ranges = [0.0; 10];
+    let mut rolling_sum = 0.0;
+    for i in 0..10 {
+        let value = high[i] - low[i];
+        ranges[i] = value;
+        rolling_sum += value;
+    }
+    for i in 10..len {
+        let avg_range = rolling_sum / 10.0;
+        let slot = i % 10;
+        rolling_sum -= ranges[slot];
+        let value = high[i] - low[i];
+        ranges[slot] = value;
+        rolling_sum += value;
         let body_size = body(open[i], close[i]);
 
         if body_size <= avg_range * doji_pct {
@@ -117,9 +189,21 @@ pub fn dragonfly_doji(
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let mut avg_ranges = RollingAverage::<10>::new();
 
-    for i in period..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
+    for i in 0..len {
+        let true_range = if i == 0 {
+            high[i] - low[i]
+        } else {
+            (high[i] - low[i])
+                .max((high[i] - close[i - 1]).abs())
+                .max((low[i] - close[i - 1]).abs())
+        };
+        avg_ranges.push(true_range);
+        if i < period {
+            continue;
+        }
+        let avg_range = avg_ranges.average();
         let body_size = body(open[i], close[i]);
         let up_shadow = upper_shadow(high[i], open[i], close[i]);
         let lo_shadow = lower_shadow(low[i], open[i], close[i]);
@@ -156,9 +240,21 @@ pub fn gravestone_doji(
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let mut avg_ranges = RollingAverage::<10>::new();
 
-    for i in period..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
+    for i in 0..len {
+        let true_range = if i == 0 {
+            high[i] - low[i]
+        } else {
+            (high[i] - low[i])
+                .max((high[i] - close[i - 1]).abs())
+                .max((low[i] - close[i - 1]).abs())
+        };
+        avg_ranges.push(true_range);
+        if i < period {
+            continue;
+        }
+        let avg_range = avg_ranges.average();
         let body_size = body(open[i], close[i]);
         let up_shadow = upper_shadow(high[i], open[i], close[i]);
         let lo_shadow = lower_shadow(low[i], open[i], close[i]);
@@ -194,18 +290,25 @@ pub fn long_legged_doji(
 
     let len = open.len();
     let mut output = Array1::zeros(len);
-    let period = 10;
-
-    for i in period..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
+    let mut ranges = [0.0; 10];
+    let mut rolling_sum = 0.0;
+    for i in 0..10 {
+        let value = high[i] - low[i];
+        ranges[i] = value;
+        rolling_sum += value;
+    }
+    for i in 10..len {
+        let avg_range = rolling_sum / 10.0;
+        let slot = i % 10;
+        rolling_sum -= ranges[slot];
+        let value = high[i] - low[i];
+        ranges[slot] = value;
+        rolling_sum += value;
         let body_size = body(open[i], close[i]);
         let up_shadow = upper_shadow(high[i], open[i], close[i]);
         let lo_shadow = lower_shadow(low[i], open[i], close[i]);
 
-        if body_size <= avg_range * doji_pct
-            && up_shadow > avg_range * 1.0
-            && lo_shadow > avg_range * 1.0
-        {
+        if body_size <= avg_range * doji_pct && (up_shadow > body_size || lo_shadow > body_size) {
             output[i] = 100;
         }
     }
@@ -302,9 +405,21 @@ pub fn hammer(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result<
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let mut avg_ranges = RollingAverage::<10>::new();
 
-    for i in period..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
+    for i in 0..len {
+        let true_range = if i == 0 {
+            high[i] - low[i]
+        } else {
+            (high[i] - low[i])
+                .max((high[i] - close[i - 1]).abs())
+                .max((low[i] - close[i - 1]).abs())
+        };
+        avg_ranges.push(true_range);
+        if i < period {
+            continue;
+        }
+        let avg_range = avg_ranges.average();
         let body_size = body(open[i], close[i]);
         let up_shadow = upper_shadow(high[i], open[i], close[i]);
         let lo_shadow = lower_shadow(low[i], open[i], close[i]);
@@ -336,24 +451,39 @@ pub fn inverted_hammer(
             constraint: "must have the same length".to_string(),
         });
     }
-    validate_input(open.len(), 10)?;
+    // TA-Lib defaults: BodyShort(RealBody, 10, 1.0),
+    // ShadowLong(RealBody, 0, 1.0), ShadowVeryShort(HighLow, 10, 0.1).
+    // The current candle is classified before it enters either average.
+    validate_input(open.len(), 11)?;
 
     let len = open.len();
     let mut output = Array1::zeros(len);
-    let period = 10;
+    let mut body_total = 0.0;
+    let mut high_low_total = 0.0;
+    for i in 1..11 {
+        body_total += (close[i] - open[i]).abs();
+        high_low_total += high[i] - low[i];
+    }
 
-    for i in period..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
-        let body_size = body(open[i], close[i]);
-        let up_shadow = upper_shadow(high[i], open[i], close[i]);
-        let lo_shadow = lower_shadow(low[i], open[i], close[i]);
+    let output_ptr: *mut i32 = output.as_slice_mut().unwrap().as_mut_ptr();
+    for i in 11..len {
+        let open_value = open[i];
+        let close_value = close[i];
+        let body_size = (close_value - open_value).abs();
+        let upper_shadow = high[i] - open_value.max(close_value);
+        let lower_shadow = open_value.min(close_value) - low[i];
+        let gap_down = open_value.max(close_value) < open[i - 1].min(close[i - 1]);
 
-        if up_shadow >= body_size * 2.0
-            && lo_shadow <= avg_range * 0.1
-            && body_size > avg_range * 0.1
+        if gap_down
+            && body_size < body_total / 10.0
+            && upper_shadow > body_size
+            && lower_shadow < 0.1 * (high_low_total / 10.0)
         {
-            output[i] = 100;
+            unsafe { *output_ptr.add(i) = 100 };
         }
+
+        body_total += body_size - (close[i - 10] - open[i - 10]).abs();
+        high_low_total += (high[i] - low[i]) - (high[i - 10] - low[i - 10]);
     }
 
     Ok(output)
@@ -541,11 +671,23 @@ pub fn harami_cross(
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let mut avg_ranges = RollingAverage::<10>::new();
 
-    for i in period..len {
+    for i in 0..len {
+        let true_range = if i == 0 {
+            high[i] - low[i]
+        } else {
+            (high[i] - low[i])
+                .max((high[i] - close[i - 1]).abs())
+                .max((low[i] - close[i - 1]).abs())
+        };
+        avg_ranges.push(true_range);
+        if i < period {
+            continue;
+        }
         let prev_body = body(open[i - 1], close[i - 1]);
         let curr_body = body(open[i], close[i]);
-        let avg_range = candle_avg_range(high, low, close, period, i);
+        let avg_range = avg_ranges.average();
 
         if curr_body < avg_range * 0.1 && curr_body < prev_body * 0.5 {
             let prev_high = open[i - 1].max(close[i - 1]);
@@ -664,20 +806,37 @@ pub fn morning_doji_star(
             constraint: "must have the same length".to_string(),
         });
     }
-    validate_input(open.len(), 12)?;
+    validate_input(open.len(), 10)?;
 
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let mut ranges = [0.0; 10];
+    let mut rolling_sum = 0.0;
 
+    for i in 0..10 {
+        let true_range = if i == 0 {
+            high[i] - low[i]
+        } else {
+            (high[i] - low[i])
+                .max((high[i] - close[i - 1]).abs())
+                .max((low[i] - close[i - 1]).abs())
+        };
+        ranges[i] = true_range;
+        rolling_sum += true_range;
+    }
     for i in period..len {
-        if i < 2 {
-            continue;
-        }
+        let slot = i % 10;
+        rolling_sum -= ranges[slot];
+        let true_range = (high[i] - low[i])
+            .max((high[i] - close[i - 1]).abs())
+            .max((low[i] - close[i - 1]).abs());
+        ranges[slot] = true_range;
+        rolling_sum += true_range;
         let first_body = body(open[i - 2], close[i - 2]);
         let second_body = body(open[i - 1], close[i - 1]);
         let third_body = body(open[i], close[i]);
-        let avg_range = candle_avg_range(high, low, close, period, i);
+        let avg_range = rolling_sum / 10.0;
 
         if is_bearish(open[i - 2], close[i - 2])
             && second_body < avg_range * doji_pct
@@ -707,20 +866,29 @@ pub fn evening_doji_star(
             constraint: "must have the same length".to_string(),
         });
     }
-    validate_input(open.len(), 12)?;
+    validate_input(open.len(), 10)?;
 
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let mut avg_ranges = RollingAverage::<10>::new();
 
-    for i in period..len {
-        if i < 2 {
+    for i in 0..len {
+        let true_range = if i == 0 {
+            high[i] - low[i]
+        } else {
+            (high[i] - low[i])
+                .max((high[i] - close[i - 1]).abs())
+                .max((low[i] - close[i - 1]).abs())
+        };
+        avg_ranges.push(true_range);
+        if i < period || i < 2 {
             continue;
         }
         let first_body = body(open[i - 2], close[i - 2]);
         let second_body = body(open[i - 1], close[i - 1]);
         let third_body = body(open[i], close[i]);
-        let avg_range = candle_avg_range(high, low, close, period, i);
+        let avg_range = avg_ranges.average();
 
         if is_bullish(open[i - 2], close[i - 2])
             && second_body < avg_range * doji_pct
@@ -755,12 +923,21 @@ pub fn three_white_soldiers(
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let mut avg_ranges = RollingAverage::<10>::new();
 
-    for i in period..len {
-        if i < 2 {
+    for i in 0..len {
+        let true_range = if i == 0 {
+            high[i] - low[i]
+        } else {
+            (high[i] - low[i])
+                .max((high[i] - close[i - 1]).abs())
+                .max((low[i] - close[i - 1]).abs())
+        };
+        avg_ranges.push(true_range);
+        if i < period || i < 2 {
             continue;
         }
-        let avg_range = candle_avg_range(high, low, close, period, i);
+        let avg_range = avg_ranges.average();
 
         let all_bullish = is_bullish(open[i], close[i])
             && is_bullish(open[i - 1], close[i - 1])
@@ -800,35 +977,50 @@ pub fn three_black_crows(
             constraint: "must have the same length".to_string(),
         });
     }
+    // TA-Lib uses ShadowVeryShort(HighLow, 10, 0.1), with three staggered
+    // rolling totals so each lower shadow is compared with the ten candles
+    // preceding that specific candle.  This is both exact and allocation-free.
     validate_input(open.len(), 13)?;
 
     let len = open.len();
     let mut output = Array1::zeros(len);
-    let period = 10;
+    let mut shadow_total = [0.0; 3];
+    for i in 0..10 {
+        shadow_total[2] += high[i + 1] - low[i + 1];
+        shadow_total[1] += high[i + 2] - low[i + 2];
+        shadow_total[0] += high[i + 3] - low[i + 3];
+    }
 
-    for i in period..len {
-        if i < 2 {
-            continue;
-        }
-        let avg_range = candle_avg_range(high, low, close, period, i);
-
-        let all_bearish = is_bearish(open[i], close[i])
-            && is_bearish(open[i - 1], close[i - 1])
-            && is_bearish(open[i - 2], close[i - 2]);
-
-        let lower_closes = close[i] < close[i - 1] && close[i - 1] < close[i - 2];
-
-        let opens_within_prev = open[i] < open[i - 1] && open[i - 1] < open[i - 2];
-
-        if all_bearish && lower_closes && opens_within_prev {
-            let bodies_large = body(open[i], close[i]) > avg_range * 0.5
-                && body(open[i - 1], close[i - 1]) > avg_range * 0.5
-                && body(open[i - 2], close[i - 2]) > avg_range * 0.5;
-
-            if bodies_large {
-                output[i] = -100;
+    let output_ptr: *mut i32 = output.as_slice_mut().unwrap().as_mut_ptr();
+    for i in 13..len {
+        let first_black = close[i - 2] < open[i - 2];
+        let second_black = close[i - 1] < open[i - 1];
+        let third_black = close[i] < open[i];
+        let opens_within_bodies = open[i - 1] < open[i - 2]
+            && open[i - 1] > close[i - 2]
+            && open[i] < open[i - 1]
+            && open[i] > close[i - 1];
+        if close[i - 3] >= open[i - 3]
+            && first_black
+            && second_black
+            && third_black
+            && opens_within_bodies
+            && high[i - 3] > close[i - 2]
+            && close[i - 2] > close[i - 1]
+            && close[i - 1] > close[i]
+        {
+            let lower_shadows_short = open[i - 2].min(close[i - 2]) - low[i - 2]
+                < 0.1 * (shadow_total[2] / 10.0)
+                && open[i - 1].min(close[i - 1]) - low[i - 1] < 0.1 * (shadow_total[1] / 10.0)
+                && open[i].min(close[i]) - low[i] < 0.1 * (shadow_total[0] / 10.0);
+            if lower_shadows_short {
+                unsafe { *output_ptr.add(i) = -100 };
             }
         }
+
+        shadow_total[2] += (high[i - 2] - low[i - 2]) - (high[i - 12] - low[i - 12]);
+        shadow_total[1] += (high[i - 1] - low[i - 1]) - (high[i - 11] - low[i - 11]);
+        shadow_total[0] += (high[i] - low[i]) - (high[i - 10] - low[i - 10]);
     }
 
     Ok(output)
@@ -1172,20 +1364,29 @@ pub fn spinning_top(
 
     let len = open.len();
     let mut output = Array1::zeros(len);
-    let period = 10;
-
-    for i in period..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
+    let mut bodies = [0.0; 10];
+    let mut rolling_sum = 0.0;
+    for i in 0..10 {
+        let value = body(open[i], close[i]);
+        bodies[i] = value;
+        rolling_sum += value;
+    }
+    for i in 10..len {
+        let avg_body = rolling_sum / 10.0;
+        let slot = i % 10;
+        rolling_sum -= bodies[slot];
         let body_size = body(open[i], close[i]);
+        bodies[slot] = body_size;
+        rolling_sum += body_size;
         let up_shadow = upper_shadow(high[i], open[i], close[i]);
         let lo_shadow = lower_shadow(low[i], open[i], close[i]);
 
-        if body_size < avg_range * 0.3
-            && up_shadow > body_size
-            && lo_shadow > body_size
-            && (up_shadow - lo_shadow).abs() < body_size
-        {
-            output[i] = 100;
+        if body_size < avg_body && up_shadow > body_size && lo_shadow > body_size {
+            output[i] = if is_bullish(open[i], close[i]) {
+                100
+            } else {
+                -100
+            };
         }
     }
 
@@ -1206,16 +1407,29 @@ pub fn high_wave(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Resu
 
     let len = open.len();
     let mut output = Array1::zeros(len);
-    let period = 10;
-
-    for i in period..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
+    let mut bodies = [0.0; 10];
+    let mut rolling_sum = 0.0;
+    for i in 0..10 {
+        let value = body(open[i], close[i]);
+        bodies[i] = value;
+        rolling_sum += value;
+    }
+    for i in 10..len {
+        let avg_body = rolling_sum / 10.0;
+        let slot = i % 10;
+        rolling_sum -= bodies[slot];
         let body_size = body(open[i], close[i]);
-        let total_shadow =
-            upper_shadow(high[i], open[i], close[i]) + lower_shadow(low[i], open[i], close[i]);
-
-        if body_size < avg_range * 0.2 && total_shadow > avg_range * 1.5 {
-            output[i] = 100;
+        bodies[slot] = body_size;
+        rolling_sum += body_size;
+        if body_size < avg_body
+            && upper_shadow(high[i], open[i], close[i]) > body_size * 2.0
+            && lower_shadow(low[i], open[i], close[i]) > body_size * 2.0
+        {
+            output[i] = if is_bullish(open[i], close[i]) {
+                100
+            } else {
+                -100
+            };
         }
     }
 
@@ -1242,17 +1456,27 @@ pub fn rickshaw_man(
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let mut avg_doji = RollingAverage::<10>::new();
+    let mut avg_near = RollingAverage::<5>::new();
 
-    for i in period..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
+    for i in 0..len {
+        let avg_doji_value = avg_doji.average();
+        let avg_near_value = avg_near.average();
+        let range = high[i] - low[i];
+        avg_doji.push(range);
+        avg_near.push(range);
+        if i < period {
+            continue;
+        }
         let body_size = body(open[i], close[i]);
-        let midpoint = (high[i] + low[i]) / 2.0;
-        let open_close_mid = (open[i] + close[i]) / 2.0;
+        let upper = open[i].max(close[i]);
+        let lower = open[i].min(close[i]);
 
-        if body_size < avg_range * 0.1
-            && upper_shadow(high[i], open[i], close[i]) > avg_range * 0.5
-            && lower_shadow(low[i], open[i], close[i]) > avg_range * 0.5
-            && (open_close_mid - midpoint).abs() < avg_range * 0.1
+        if body_size <= avg_doji_value * 0.1
+            && lower - low[i] > body_size
+            && high[i] - upper > body_size
+            && lower <= low[i] + (high[i] - low[i]) / 2.0 + avg_near_value * 0.2
+            && upper >= low[i] + (high[i] - low[i]) / 2.0 - avg_near_value * 0.2
         {
             output[i] = 100;
         }
@@ -1276,13 +1500,27 @@ pub fn short_line(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Res
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let mut avg_bodies = RollingAverage::<10>::new();
+    let mut avg_shadows = RollingAverage::<10>::new();
 
-    for i in period..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
-        let range = high[i] - low[i];
+    for i in 0..len {
+        let avg_body = avg_bodies.average();
+        let avg_shadow = avg_shadows.average();
+        let body_size = body(open[i], close[i]);
+        let up_shadow = upper_shadow(high[i], open[i], close[i]);
+        let lo_shadow = lower_shadow(low[i], open[i], close[i]);
+        avg_bodies.push(body_size);
+        avg_shadows.push(up_shadow + lo_shadow);
+        if i < period {
+            continue;
+        }
 
-        if range < avg_range * 0.3 {
-            output[i] = 100;
+        if body_size < avg_body && up_shadow < avg_shadow * 0.5 && lo_shadow < avg_shadow * 0.5 {
+            output[i] = if is_bullish(open[i], close[i]) {
+                100
+            } else {
+                -100
+            };
         }
     }
 
@@ -1304,12 +1542,22 @@ pub fn long_line(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Resu
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let mut avg_bodies = RollingAverage::<10>::new();
+    let mut avg_shadows = RollingAverage::<10>::new();
 
-    for i in period..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
+    for i in 0..len {
+        let avg_body = avg_bodies.average();
+        let avg_shadow = avg_shadows.average();
         let body_size = body(open[i], close[i]);
+        let up_shadow = upper_shadow(high[i], open[i], close[i]);
+        let lo_shadow = lower_shadow(low[i], open[i], close[i]);
+        avg_bodies.push(body_size);
+        avg_shadows.push(up_shadow + lo_shadow);
+        if i < period {
+            continue;
+        }
 
-        if body_size > avg_range * 2.0 {
+        if body_size > avg_body && up_shadow < avg_shadow * 0.5 && lo_shadow < avg_shadow * 0.5 {
             if is_bullish(open[i], close[i]) {
                 output[i] = 100;
             } else {
@@ -1400,7 +1648,7 @@ pub fn tweezer_top(
             constraint: "must have the same length".to_string(),
         });
     }
-    validate_input(open.len(), 12)?;
+    validate_input(open.len(), 2)?;
 
     let len = open.len();
     let mut output = Array1::zeros(len);
@@ -1432,7 +1680,7 @@ pub fn tweezer_bot(
             constraint: "must have the same length".to_string(),
         });
     }
-    validate_input(open.len(), 12)?;
+    validate_input(open.len(), 2)?;
 
     let len = open.len();
     let mut output = Array1::zeros(len);
@@ -1752,12 +2000,21 @@ pub fn identical_3crows(
     let len = open.len();
     let mut output = Array1::zeros(len);
     let period = 10;
+    let mut avg_ranges = RollingAverage::<10>::new();
 
-    for i in period..len {
-        if i < 2 {
+    for i in 0..len {
+        let true_range = if i == 0 {
+            high[i] - low[i]
+        } else {
+            (high[i] - low[i])
+                .max((high[i] - close[i - 1]).abs())
+                .max((low[i] - close[i - 1]).abs())
+        };
+        avg_ranges.push(true_range);
+        if i < period || i < 2 {
             continue;
         }
-        let avg_range = candle_avg_range(high, low, close, period, i);
+        let avg_range = avg_ranges.average();
 
         if is_bearish(open[i - 2], close[i - 2])
             && is_bearish(open[i - 1], close[i - 1])
@@ -1899,10 +2156,21 @@ pub fn kicking(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result
 
     let len = open.len();
     let mut output = Array1::zeros(len);
-    let period = 10;
+    let mut avg_ranges = RollingAverage::<10>::new();
 
-    for i in 1..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
+    for i in 0..len {
+        let true_range = if i == 0 {
+            high[i] - low[i]
+        } else {
+            (high[i] - low[i])
+                .max((high[i] - close[i - 1]).abs())
+                .max((low[i] - close[i - 1]).abs())
+        };
+        avg_ranges.push(true_range);
+        if i == 0 {
+            continue;
+        }
+        let avg_range = avg_ranges.average();
         let body_1 = body(open[i - 1], close[i - 1]);
         let body_2 = body(open[i], close[i]);
 
@@ -1946,10 +2214,21 @@ pub fn kicking_by_length(
 
     let len = open.len();
     let mut output = Array1::zeros(len);
-    let period = 10;
+    let mut avg_ranges = RollingAverage::<10>::new();
 
-    for i in 1..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
+    for i in 0..len {
+        let true_range = if i == 0 {
+            high[i] - low[i]
+        } else {
+            (high[i] - low[i])
+                .max((high[i] - close[i - 1]).abs())
+                .max((low[i] - close[i - 1]).abs())
+        };
+        avg_ranges.push(true_range);
+        if i == 0 {
+            continue;
+        }
+        let avg_range = avg_ranges.average();
         let body_1 = body(open[i - 1], close[i - 1]);
         let body_2 = body(open[i], close[i]);
 
@@ -1990,21 +2269,64 @@ pub fn advance_block(
 
     let len = open.len();
     let mut output = Array1::zeros(len);
-    let period = 10;
+    let mut body_window = RollingAverage::<10>::new();
+    let mut shadow_window = RollingAverage::<10>::new();
+    let mut near_window = RollingAverage::<5>::new();
+    let mut body_history = [0.0; 3];
+    let mut shadow_history = [0.0; 3];
+    let mut near_history = [0.0; 3];
 
-    for i in period..len {
-        if i < 2 {
+    for i in 0..len {
+        let avg_body = body_window.average();
+        let avg_shadow = shadow_window.average();
+        let avg_near = near_window.average();
+        body_history[i % 3] = avg_body;
+        shadow_history[i % 3] = avg_shadow;
+        near_history[i % 3] = avg_near;
+        let current_body = body(open[i], close[i]);
+        let current_shadow =
+            upper_shadow(high[i], open[i], close[i]) + lower_shadow(low[i], open[i], close[i]);
+        body_window.push(current_body);
+        shadow_window.push(current_shadow);
+        near_window.push(high[i] - low[i]);
+        if i < 12 {
             continue;
         }
-        let avg_range = candle_avg_range(high, low, close, period, i);
+        let first = i - 2;
+        let second = i - 1;
+        let white =
+            close[first] >= open[first] && close[second] >= open[second] && close[i] >= open[i];
+        let upper_first = upper_shadow(high[first], open[first], close[first]);
+        let upper_second = upper_shadow(high[second], open[second], close[second]);
+        let upper_third = upper_shadow(high[i], open[i], close[i]);
+        let first_body = body(open[first], close[first]);
+        let second_body = body(open[second], close[second]);
+        let third_body = current_body;
+        let near_first = near_history[first % 3] * 0.2;
+        let near_second = near_history[second % 3] * 0.2;
+        let far_first = near_history[first % 3] * 0.6;
+        let far_second = near_history[second % 3] * 0.6;
+        let shadow_short_first = shadow_history[first % 3] * 0.5;
+        let shadow_short_second = shadow_history[second % 3] * 0.5;
+        let shadow_short_third = shadow_history[i % 3] * 0.5;
+        let blocked = (second_body < first_body - far_first
+            && third_body < second_body + near_second)
+            || third_body < second_body - far_second
+            || (third_body < second_body
+                && second_body < first_body
+                && (upper_third > shadow_short_third || upper_second > shadow_short_second))
+            || (third_body < second_body && upper_third > third_body);
 
-        if is_bullish(open[i - 2], close[i - 2])
-            && is_bullish(open[i - 1], close[i - 1])
-            && is_bullish(open[i], close[i])
-            && close[i] > close[i - 1]
-            && close[i - 1] > close[i - 2]
-            && body(open[i], close[i]) < avg_range * 0.5
-            && body(open[i - 1], close[i - 1]) < body(open[i - 2], close[i - 2])
+        if white
+            && close[i] > close[second]
+            && close[second] > close[first]
+            && open[second] > open[first]
+            && open[second] <= close[first] + near_first
+            && open[i] > open[second]
+            && open[i] <= close[second] + near_second
+            && first_body > body_history[first % 3]
+            && upper_first < shadow_short_first
+            && blocked
         {
             output[i] = -100;
         }
@@ -2032,21 +2354,42 @@ pub fn stalled_pattern(
 
     let len = open.len();
     let mut output = Array1::zeros(len);
-    let period = 10;
+    let mut body_window = RollingAverage::<10>::new();
+    let mut range_window = RollingAverage::<10>::new();
+    let mut near_window = RollingAverage::<5>::new();
+    let mut body_history = [0.0; 3];
+    let mut range_history = [0.0; 3];
+    let mut near_history = [0.0; 3];
 
-    for i in period..len {
-        if i < 2 {
+    for i in 0..len {
+        let avg_body = body_window.average();
+        let avg_range = range_window.average();
+        let avg_near_value = near_window.average();
+        body_history[i % 3] = avg_body;
+        range_history[i % 3] = avg_range;
+        near_history[i % 3] = avg_near_value;
+        let current_body = body(open[i], close[i]);
+        body_window.push(current_body);
+        range_window.push(high[i] - low[i]);
+        near_window.push(high[i] - low[i]);
+        if i < 12 {
             continue;
         }
-        let avg_range = candle_avg_range(high, low, close, period, i);
-
-        if is_bullish(open[i - 2], close[i - 2])
-            && is_bullish(open[i - 1], close[i - 1])
-            && is_bullish(open[i], close[i])
-            && close[i] > close[i - 1]
-            && close[i - 1] > close[i - 2]
-            && body(open[i], close[i]) < avg_range * 0.3
-            && upper_shadow(high[i], open[i], close[i]) > body(open[i], close[i]) * 2.0
+        let first = i - 2;
+        let second = i - 1;
+        if close[first] >= open[first]
+            && close[second] >= open[second]
+            && close[i] >= open[i]
+            && close[i] > close[second]
+            && close[second] > close[first]
+            && body(open[first], close[first]) > body_history[first % 3]
+            && body(open[second], close[second]) > body_history[second % 3]
+            && upper_shadow(high[second], open[second], close[second])
+                < range_history[second % 3] * 0.1
+            && open[second] > open[first]
+            && open[second] <= close[first] + near_history[first % 3] * 0.2
+            && current_body < avg_body
+            && open[i] >= close[second] - current_body - near_history[second % 3] * 0.2
         {
             output[i] = -100;
         }
@@ -2175,6 +2518,19 @@ pub fn cdl_doji_star(
     low: &[f64],
     close: &[f64],
 ) -> Result<PatternResult> {
+    let mut output = PatternResult::zeros(open.len());
+    cdl_doji_star_into(open, high, low, close, output.as_slice_mut().unwrap())?;
+    Ok(output)
+}
+
+/// Caller-owned CDLDOJISTAR kernel used by the Python compatibility path.
+pub fn cdl_doji_star_into(
+    open: &[f64],
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    output: &mut [i32],
+) -> Result<()> {
     if open.len() != high.len() || open.len() != low.len() || open.len() != close.len() {
         return Err(TaError::InvalidParameter {
             name: "open, high, low, close".to_string(),
@@ -2182,24 +2538,72 @@ pub fn cdl_doji_star(
         });
     }
     validate_input(open.len(), 2)?;
+    if output.len() != open.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
+
     let len = open.len();
-    let mut output = PatternResult::zeros(len);
-    for i in 1..len {
-        let avg = candle_avg_range(high, low, close, 10, i);
-        let body_prev = body(open[i - 1], close[i - 1]);
-        let body_curr = body(open[i], close[i]);
-        let is_doji = body_curr < avg * 0.1;
-        let long_prev = body_prev > avg * 0.6;
-        if is_doji && long_prev {
-            if is_bullish(open[i - 1], close[i - 1]) && open[i].min(close[i]) > close[i - 1] {
-                output[i] = -100; // bearish doji star
-            } else if is_bearish(open[i - 1], close[i - 1]) && open[i].max(close[i]) < close[i - 1]
-            {
-                output[i] = 100; // bullish doji star
+    let mut ranges = [0.0_f64; 10];
+    let mut rolling_sum = 0.0;
+    let mut next = 0usize;
+    let mut count = 0usize;
+    let open_ptr = open.as_ptr();
+    let high_ptr = high.as_ptr();
+    let low_ptr = low.as_ptr();
+    let close_ptr = close.as_ptr();
+    let output_ptr = output.as_mut_ptr();
+    unsafe {
+        for i in 0..len {
+            let h = *high_ptr.add(i);
+            let l = *low_ptr.add(i);
+            let true_range = if i == 0 {
+                h - l
+            } else {
+                let previous_close = *close_ptr.add(i - 1);
+                (h - l)
+                    .max((h - previous_close).abs())
+                    .max((l - previous_close).abs())
+            };
+            if count == 10 {
+                rolling_sum -= *ranges.get_unchecked(next);
+            } else {
+                count += 1;
             }
+            *ranges.get_unchecked_mut(next) = true_range;
+            rolling_sum += true_range;
+            next += 1;
+            if next == 10 {
+                next = 0;
+            }
+
+            let mut value = 0;
+            if i > 0 {
+                let avg = rolling_sum / count as f64;
+                let previous_open = *open_ptr.add(i - 1);
+                let previous_close = *close_ptr.add(i - 1);
+                let current_open = *open_ptr.add(i);
+                let current_close = *close_ptr.add(i);
+                let body_prev = (previous_close - previous_open).abs();
+                let body_curr = (current_close - current_open).abs();
+                if body_curr < avg * 0.1 && body_prev > avg * 0.6 {
+                    if previous_open < previous_close
+                        && current_open.min(current_close) > previous_close
+                    {
+                        value = -100;
+                    } else if previous_open > previous_close
+                        && current_open.max(current_close) < previous_close
+                    {
+                        value = 100;
+                    }
+                }
+            }
+            *output_ptr.add(i) = value;
         }
     }
-    Ok(output)
+    Ok(())
 }
 
 /// Up/Down Gap Side-by-Side White Lines (CDLGAPSIDESIDEWHITE)
@@ -2238,6 +2642,7 @@ pub fn cdl_gap_side_white(
 /// Hikkake Pattern (CDLHIKKAKE)
 ///
 /// Inside bar followed by a false breakout.
+#[inline(always)]
 pub fn cdl_hikkake(
     open: &[f64],
     high: &[f64],
@@ -2253,14 +2658,53 @@ pub fn cdl_hikkake(
     validate_input(open.len(), 4)?;
     let len = open.len();
     let mut output = PatternResult::zeros(len);
-    for i in 3..len {
-        let inside = high[i - 2] < high[i - 3] && low[i - 2] > low[i - 3];
-        if inside {
-            if high[i - 1] > high[i - 3] && close[i] < low[i - 2] {
-                output[i] = -100;
-            } else if low[i - 1] < low[i - 3] && close[i] > high[i - 2] {
-                output[i] = 100;
+    let mut pattern_result = 0;
+    let mut countdown = 0;
+    let mut saved_high = 0.0;
+    let mut saved_low = 0.0;
+    unsafe {
+        let high_ptr = high.as_ptr();
+        let low_ptr = low.as_ptr();
+        let close_ptr = close.as_ptr();
+        let output_ptr = output.as_mut_ptr();
+        let mut high_before = *high_ptr;
+        let mut high_prev = *high_ptr.add(1);
+        let mut low_before = *low_ptr;
+        let mut low_prev = *low_ptr.add(1);
+        for i in 2..len {
+            let current_high = *high_ptr.add(i);
+            let current_low = *low_ptr.add(i);
+            if high_prev < high_before
+                && low_prev > low_before
+                && ((current_high < high_prev && current_low < low_prev)
+                    || (current_high > high_prev && current_low > low_prev))
+            {
+                pattern_result = if current_high < high_prev { 100 } else { -100 };
+                saved_high = high_prev;
+                saved_low = low_prev;
+                countdown = 4;
+                if i >= 5 {
+                    *output_ptr.add(i) = pattern_result;
+                }
+            } else if countdown > 0 {
+                let current_close = *close_ptr.add(i);
+                if (pattern_result > 0 && current_close > saved_high)
+                    || (pattern_result < 0 && current_close < saved_low)
+                {
+                    if i >= 5 {
+                        *output_ptr.add(i) =
+                            pattern_result + if pattern_result > 0 { 100 } else { -100 };
+                    }
+                    countdown = 0;
+                }
             }
+            if countdown > 0 {
+                countdown -= 1;
+            }
+            high_before = high_prev;
+            high_prev = current_high;
+            low_before = low_prev;
+            low_prev = current_low;
         }
     }
     Ok(output)
@@ -2343,16 +2787,37 @@ pub fn cdl_ladder_bottom(
     validate_input(open.len(), 5)?;
     let len = open.len();
     let mut output = PatternResult::zeros(len);
+    let open_ptr = open.as_ptr();
+    let high_ptr = high.as_ptr();
+    let close_ptr = close.as_ptr();
+    let output_ptr = output.as_slice_mut().unwrap().as_mut_ptr();
     for i in 4..len {
-        let bear1 = is_bearish(open[i - 4], close[i - 4]);
-        let bear2 = is_bearish(open[i - 3], close[i - 3]) && close[i - 3] < close[i - 4];
-        let bear3 = is_bearish(open[i - 2], close[i - 2]) && close[i - 2] < close[i - 3];
-        let upper_shadow_4 = upper_shadow(high[i - 1], open[i - 1], close[i - 1]);
-        let body_4 = body(open[i - 1], close[i - 1]);
+        let bear1 = unsafe { is_bearish(*open_ptr.add(i - 4), *close_ptr.add(i - 4)) };
+        let bear2 = unsafe {
+            is_bearish(*open_ptr.add(i - 3), *close_ptr.add(i - 3))
+                && *close_ptr.add(i - 3) < *close_ptr.add(i - 4)
+        };
+        let bear3 = unsafe {
+            is_bearish(*open_ptr.add(i - 2), *close_ptr.add(i - 2))
+                && *close_ptr.add(i - 2) < *close_ptr.add(i - 3)
+        };
+        let upper_shadow_4 = unsafe {
+            upper_shadow(
+                *high_ptr.add(i - 1),
+                *open_ptr.add(i - 1),
+                *close_ptr.add(i - 1),
+            )
+        };
+        let body_4 = unsafe { body(*open_ptr.add(i - 1), *close_ptr.add(i - 1)) };
         let has_upper = upper_shadow_4 > body_4;
-        let bull5 = is_bullish(open[i], close[i]) && close[i] > open[i - 1];
+        let bull5 = unsafe {
+            is_bullish(*open_ptr.add(i), *close_ptr.add(i))
+                && *close_ptr.add(i) > *open_ptr.add(i - 1)
+        };
         if bear1 && bear2 && bear3 && has_upper && bull5 {
-            output[i] = 100;
+            unsafe {
+                *output_ptr.add(i) = 100;
+            }
         }
     }
     Ok(output)
@@ -2376,23 +2841,74 @@ pub fn cdl_rise_fall_3methods(
     validate_input(open.len(), 5)?;
     let len = open.len();
     let mut output = PatternResult::zeros(len);
-    for i in 4..len {
-        let bull_first = is_bullish(open[i - 4], close[i - 4]);
-        let bear_first = is_bearish(open[i - 4], close[i - 4]);
-        let within_range = high[i - 3] <= high[i - 4]
-            && low[i - 3] >= low[i - 4]
-            && high[i - 2] <= high[i - 4]
-            && low[i - 2] >= low[i - 4]
-            && high[i - 1] <= high[i - 4]
-            && low[i - 1] >= low[i - 4];
-        if bull_first && within_range && is_bullish(open[i], close[i]) && close[i] > close[i - 4] {
-            output[i] = 100; // rising three methods
-        } else if bear_first
-            && within_range
-            && is_bearish(open[i], close[i])
-            && close[i] < close[i - 4]
+    let mut avg_window = RollingAverage::<10>::new();
+    let mut avg_history = [0.0; 5];
+    for i in 0..len {
+        let avg_body = avg_window.average();
+        avg_history[i % 5] = avg_body;
+        let current_body = body(open[i], close[i]);
+        avg_window.push(current_body);
+        if i < 4 {
+            continue;
+        }
+        let avg_first = avg_history[(i - 4) % 5];
+        let avg_second = avg_history[(i - 3) % 5];
+        let avg_third = avg_history[(i - 2) % 5];
+        let avg_fourth = avg_history[(i - 1) % 5];
+        let first_white = close[i - 4] >= open[i - 4];
+        let middle_white = close[i - 3] >= open[i - 3];
+        let final_white = close[i] >= open[i];
+        if middle_white == first_white
+            || (close[i - 2] >= open[i - 2]) != middle_white
+            || (close[i - 1] >= open[i - 1]) != middle_white
+            || final_white == first_white
         {
-            output[i] = -100; // falling three methods
+            continue;
+        }
+        let first_high = high[i - 4];
+        let first_low = low[i - 4];
+        let middle1_low = open[i - 3].min(close[i - 3]);
+        let middle1_high = open[i - 3].max(close[i - 3]);
+        let middle2_low = open[i - 2].min(close[i - 2]);
+        let middle2_high = open[i - 2].max(close[i - 2]);
+        let middle3_low = open[i - 1].min(close[i - 1]);
+        let middle3_high = open[i - 1].max(close[i - 1]);
+        if middle1_low >= first_high
+            || middle1_high <= first_low
+            || middle2_low >= first_high
+            || middle2_high <= first_low
+            || middle3_low >= first_high
+            || middle3_high <= first_low
+        {
+            continue;
+        }
+        let middle_trends = if first_white {
+            close[i - 2] < close[i - 3] && close[i - 1] < close[i - 2]
+        } else {
+            close[i - 2] > close[i - 3] && close[i - 1] > close[i - 2]
+        };
+        if !middle_trends {
+            continue;
+        }
+        let final_continues = if first_white {
+            open[i] > close[i - 1] && close[i] > close[i - 4]
+        } else {
+            open[i] < close[i - 1] && close[i] < close[i - 4]
+        };
+        if !final_continues {
+            continue;
+        }
+        let first_body = body(open[i - 4], close[i - 4]);
+        let second_body = body(open[i - 3], close[i - 3]);
+        let third_body = body(open[i - 2], close[i - 2]);
+        let fourth_body = body(open[i - 1], close[i - 1]);
+        if first_body > avg_first
+            && second_body < avg_second
+            && third_body < avg_third
+            && fourth_body < avg_fourth
+            && current_body > avg_body
+        {
+            output[i] = if first_white { 100 } else { -100 };
         }
     }
     Ok(output)
@@ -2409,11 +2925,20 @@ pub fn cdl_takuri(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Res
     validate_input(open.len(), 1)?;
     let len = open.len();
     let mut output = PatternResult::zeros(len);
+    let mut avg_ranges = RollingAverage::<10>::new();
     for i in 0..len {
+        let true_range = if i == 0 {
+            high[i] - low[i]
+        } else {
+            (high[i] - low[i])
+                .max((high[i] - close[i - 1]).abs())
+                .max((low[i] - close[i - 1]).abs())
+        };
+        avg_ranges.push(true_range);
         let b = body(open[i], close[i]);
         let ls = lower_shadow(low[i], open[i], close[i]);
         let us = upper_shadow(high[i], open[i], close[i]);
-        let avg = candle_avg_range(high, low, close, 10, i);
+        let avg = avg_ranges.average();
         if b < avg * 0.1 && ls > avg * 2.0 && us < avg * 0.1 {
             output[i] = 100;
         }
@@ -2434,23 +2959,31 @@ pub fn cdl_tristar(
             constraint: "must have the same length".to_string(),
         });
     }
-    validate_input(open.len(), 3)?;
+    validate_input(open.len(), 12)?;
     let len = open.len();
     let mut output = PatternResult::zeros(len);
-    for i in 2..len {
-        let avg = candle_avg_range(high, low, close, 10, i);
-        let threshold = avg * 0.1;
-        let doji1 = body(open[i - 2], close[i - 2]) < threshold;
-        let doji2 = body(open[i - 1], close[i - 1]) < threshold;
-        let doji3 = body(open[i], close[i]) < threshold;
+    let mut avg_window = RollingAverage::<10>::new();
+    let mut avg_history = [0.0; 3];
+    for i in 0..len {
+        let avg_doji = avg_window.average();
+        avg_history[i % 3] = avg_doji;
+        avg_window.push(high[i] - low[i]);
+        if i < 12 {
+            continue;
+        }
+        let threshold = avg_history[(i - 2) % 3] * 0.1;
+        let doji1 = body(open[i - 2], close[i - 2]) <= threshold;
+        let doji2 = body(open[i - 1], close[i - 1]) <= threshold;
+        let doji3 = body(open[i], close[i]) <= threshold;
         if doji1 && doji2 && doji3 {
-            let mid1 = (open[i - 2] + close[i - 2]) / 2.0;
-            let mid2 = (open[i - 1] + close[i - 1]) / 2.0;
-            let mid3 = (open[i] + close[i]) / 2.0;
-            if mid2 > mid1 && mid2 > mid3 {
-                output[i] = -100; // bearish tristar
-            } else if mid2 < mid1 && mid2 < mid3 {
-                output[i] = 100; // bullish tristar
+            if open[i - 1].min(close[i - 1]) > open[i - 2].max(close[i - 2])
+                && open[i].max(close[i]) < open[i - 1].max(close[i - 1])
+            {
+                output[i] = -100;
+            } else if open[i - 1].max(close[i - 1]) < open[i - 2].min(close[i - 2])
+                && open[i].min(close[i]) > open[i - 1].min(close[i - 1])
+            {
+                output[i] = 100;
             }
         }
     }
@@ -2490,14 +3023,60 @@ pub fn cdl_3inside(
     validate_input(open.len(), 3)?;
     let len = open.len();
     let mut output = PatternResult::zeros(len);
-    let up = three_inside_up(open, high, low, close)?;
-    let down = three_inside_down(open, high, low, close)?;
-    for i in 0..len {
-        if up[i] == 100 {
-            output[i] = 100;
-        } else if down[i] == -100 {
-            output[i] = -100;
+    let output_ptr = output.as_slice_mut().unwrap().as_mut_ptr();
+    // TA-Lib's default BodyLong and BodyShort settings both use a 10-bar
+    // real-body average.  The current candle is excluded from each average.
+    // Keeping both rolling totals in this fused loop avoids the two helper
+    // arrays used by the previous implementation and preserves the official
+    // warm-up/lookback semantics.
+    const BODY_AVG_PERIOD: usize = 10;
+    const LOOKBACK: usize = BODY_AVG_PERIOD + 2;
+    if len <= LOOKBACK {
+        return Ok(output);
+    }
+    let open_ptr = open.as_ptr();
+    let close_ptr = close.as_ptr();
+    let mut long_total = 0.0;
+    let mut short_total = 0.0;
+    for index in 0..BODY_AVG_PERIOD {
+        long_total += unsafe { (*close_ptr.add(index) - *open_ptr.add(index)).abs() };
+        short_total += unsafe { (*close_ptr.add(index + 1) - *open_ptr.add(index + 1)).abs() };
+    }
+    for i in LOOKBACK..len {
+        let first_open = unsafe { *open_ptr.add(i - 2) };
+        let first_close = unsafe { *close_ptr.add(i - 2) };
+        let second_open = unsafe { *open_ptr.add(i - 1) };
+        let second_close = unsafe { *close_ptr.add(i - 1) };
+        let third_open = unsafe { *open_ptr.add(i) };
+        let third_close = unsafe { *close_ptr.add(i) };
+        let first_max = first_open.max(first_close);
+        let first_min = first_open.min(first_close);
+        let second_max = second_open.max(second_close);
+        let second_min = second_open.min(second_close);
+        let first_body = (first_close - first_open).abs();
+        let second_body = (second_close - second_open).abs();
+
+        if second_max < first_max
+            && second_min > first_min
+            && first_body > long_total / BODY_AVG_PERIOD as f64
+            && second_body <= short_total / BODY_AVG_PERIOD as f64
+        {
+            if first_close >= first_open && third_close < third_open && third_close < first_open {
+                unsafe { *output_ptr.add(i) = -100 };
+            } else if first_close < first_open
+                && third_close >= third_open
+                && third_close > first_open
+            {
+                unsafe { *output_ptr.add(i) = 100 };
+            }
         }
+
+        let outgoing_long =
+            unsafe { (*close_ptr.add(i - LOOKBACK) - *open_ptr.add(i - LOOKBACK)).abs() };
+        let outgoing_short =
+            unsafe { (*close_ptr.add(i - LOOKBACK + 1) - *open_ptr.add(i - LOOKBACK + 1)).abs() };
+        long_total += first_body - outgoing_long;
+        short_total += second_body - outgoing_short;
     }
     Ok(output)
 }
@@ -2519,6 +3098,19 @@ pub fn cdl_3outside(
     low: &[f64],
     close: &[f64],
 ) -> Result<PatternResult> {
+    let mut output = PatternResult::zeros(open.len());
+    cdl_3outside_into(open, high, low, close, output.as_slice_mut().unwrap())?;
+    Ok(output)
+}
+
+/// Caller-owned CDL3OUTSIDE kernel used by the Python fast path.
+pub fn cdl_3outside_into(
+    open: &[f64],
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    output: &mut [i32],
+) -> Result<()> {
     if open.len() != high.len() || open.len() != low.len() || open.len() != close.len() {
         return Err(TaError::InvalidParameter {
             name: "open, high, low, close".to_string(),
@@ -2526,18 +3118,36 @@ pub fn cdl_3outside(
         });
     }
     validate_input(open.len(), 3)?;
+    if output.len() != open.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
     let len = open.len();
-    let mut output = PatternResult::zeros(len);
-    let up = three_outside_up(open, high, low, close)?;
-    let down = three_outside_down(open, high, low, close)?;
-    for i in 0..len {
-        if up[i] == 100 {
-            output[i] = 100;
-        } else if down[i] == -100 {
-            output[i] = -100;
+    output[..3].fill(0);
+    let open_ptr = open.as_ptr();
+    let close_ptr = close.as_ptr();
+    let output_ptr = output.as_mut_ptr();
+    for i in 3..len {
+        unsafe {
+            *output_ptr.add(i) = 0;
+            let open_2 = *open_ptr.add(i - 2);
+            let close_2 = *close_ptr.add(i - 2);
+            let open_1 = *open_ptr.add(i - 1);
+            let close_1 = *close_ptr.add(i - 1);
+            let close_0 = *close_ptr.add(i);
+            if close_1 >= open_1 {
+                if close_2 < open_2 && close_1 > open_2 && open_1 < close_2 && close_0 > close_1 {
+                    *output_ptr.add(i) = 100;
+                }
+            } else if close_2 >= open_2 && open_1 > close_2 && close_1 < open_2 && close_0 < close_1
+            {
+                *output_ptr.add(i) = -100;
+            }
         }
     }
-    Ok(output)
+    Ok(())
 }
 
 /// CDL3STARSINSOUTH — Three Stars In The South
@@ -2824,11 +3434,12 @@ pub fn cdl_majorminority(
     let len = open.len();
     let mut output = PatternResult::zeros(len);
     let period = 10;
+    let avg_ranges = candle_avg_ranges(high, low, close, period);
     for i in period..len {
         if i < 2 {
             continue;
         }
-        let avg_range = candle_avg_range(high, low, close, period, i);
+        let avg_range = avg_ranges[i];
         let body1 = body(open[i - 2], close[i - 2]);
         let body2 = body(open[i - 1], close[i - 1]);
         let body3 = body(open[i], close[i]);

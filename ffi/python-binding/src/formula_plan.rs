@@ -6,11 +6,316 @@
 //! the evaluation under the GIL while borrowing their memory.
 
 use ::finkit::formula::{CompiledFormula, FormulaContext, FormulaEngine};
+use ::finkit::math::rolling_stats;
 use ndarray::Array1;
 use numpy::{PyArray1, PyReadonlyArray1};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use std::sync::Arc;
+
+#[derive(Debug, Clone, Copy)]
+enum CanonicalFormula {
+    Sma {
+        period: usize,
+    },
+    Ema {
+        period: usize,
+    },
+    Wma {
+        period: usize,
+    },
+    Kama {
+        period: usize,
+    },
+    Rsi {
+        period: usize,
+    },
+    Mom {
+        period: usize,
+    },
+    Roc {
+        period: usize,
+    },
+    Rocp {
+        period: usize,
+    },
+    Rocr {
+        period: usize,
+    },
+    Rocr100 {
+        period: usize,
+    },
+    Max {
+        period: usize,
+    },
+    Min {
+        period: usize,
+    },
+    Sum {
+        period: usize,
+    },
+    Atr {
+        period: usize,
+    },
+    Natr {
+        period: usize,
+    },
+    Cci {
+        period: usize,
+    },
+    Mfi {
+        period: usize,
+    },
+    Adosc {
+        fast_period: usize,
+        slow_period: usize,
+    },
+    Obv,
+    Ad,
+    Trima {
+        period: usize,
+    },
+    Std {
+        period: usize,
+    },
+    Boll {
+        period: usize,
+        nbdev: f64,
+    },
+}
+
+fn normalize_formula(source: &str) -> String {
+    source
+        .chars()
+        .filter(|ch| !ch.is_whitespace())
+        .flat_map(char::to_uppercase)
+        .collect()
+}
+
+fn is_high(name: &str) -> bool {
+    matches!(name, "H" | "HIGH")
+}
+
+fn is_low(name: &str) -> bool {
+    matches!(name, "L" | "LOW")
+}
+
+fn is_close(name: &str) -> bool {
+    matches!(name, "C" | "CLOSE")
+}
+
+fn is_volume(name: &str) -> bool {
+    matches!(name, "V" | "VOL" | "VOLUME")
+}
+
+fn canonical_formula(source: &str) -> Option<CanonicalFormula> {
+    let normalized = normalize_formula(source);
+    let open = normalized.find('(')?;
+    let name = &normalized[..open];
+    let body = normalized.get(open + 1..normalized.len().checked_sub(1)?)?;
+    if !normalized.ends_with(')') {
+        return None;
+    }
+    let args: Vec<&str> = body.split(',').collect();
+
+    match name {
+        "MA" | "SMA" | "BOLLMID" if args.len() == 2 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Sma { period })
+        }
+        "EMA" if args.len() == 2 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Ema { period })
+        }
+        "WMA" if args.len() == 2 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Wma { period })
+        }
+        "KAMA" if args.len() == 2 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Kama { period })
+        }
+        "RSI" if args.len() == 2 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Rsi { period })
+        }
+        "MOM" if args.len() == 2 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Mom { period })
+        }
+        "ROC" if args.len() == 2 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Roc { period })
+        }
+        "ROCP" if args.len() == 2 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Rocp { period })
+        }
+        "ROCR" if args.len() == 2 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Rocr { period })
+        }
+        "ROCR100" if args.len() == 2 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Rocr100 { period })
+        }
+        "MAX" if args.len() == 2 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Max { period })
+        }
+        "MIN" if args.len() == 2 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Min { period })
+        }
+        "SUM" if args.len() == 2 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Sum { period })
+        }
+        "ATR" if args.len() == 4 && is_high(args[0]) && is_low(args[1]) && is_close(args[2]) => {
+            let period = args[3].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Atr { period })
+        }
+        "NATR" if args.len() == 4 && is_high(args[0]) && is_low(args[1]) && is_close(args[2]) => {
+            let period = args[3].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Natr { period })
+        }
+        "CCI" if args.len() == 4 && is_high(args[0]) && is_low(args[1]) && is_close(args[2]) => {
+            let period = args[3].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Cci { period })
+        }
+        "MFI"
+            if args.len() == 5
+                && is_high(args[0])
+                && is_low(args[1])
+                && is_close(args[2])
+                && is_volume(args[3]) =>
+        {
+            let period = args[4].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Mfi { period })
+        }
+        "ADOSC"
+            if args.len() == 6
+                && is_high(args[0])
+                && is_low(args[1])
+                && is_close(args[2])
+                && is_volume(args[3]) =>
+        {
+            let fast_period = args[4].parse::<usize>().ok()?;
+            let slow_period = args[5].parse::<usize>().ok()?;
+            (fast_period > 0 && slow_period > 0).then_some(CanonicalFormula::Adosc {
+                fast_period,
+                slow_period,
+            })
+        }
+        "OBV" if args.len() == 2 && is_close(args[0]) && is_volume(args[1]) => {
+            Some(CanonicalFormula::Obv)
+        }
+        "AD" if args.len() == 4
+            && is_high(args[0])
+            && is_low(args[1])
+            && is_close(args[2])
+            && is_volume(args[3]) =>
+        {
+            Some(CanonicalFormula::Ad)
+        }
+        "TRIMA" if args.len() == 2 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Trima { period })
+        }
+        "STD" if args.len() == 2 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Std { period })
+        }
+        "BOLL" if args.len() == 3 && is_close(args[0]) => {
+            let period = args[1].parse::<usize>().ok()?;
+            let nbdev = args[2].parse::<f64>().ok()?;
+            (period > 0).then_some(CanonicalFormula::Boll { period, nbdev })
+        }
+        _ => None,
+    }
+}
+
+fn eval_canonical_formula(
+    formula: CanonicalFormula,
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    volume: &[f64],
+) -> PyResult<Array1<f64>> {
+    match formula {
+        CanonicalFormula::Sma { period } => {
+            let mut output = vec![0.0; close.len()];
+            ::finkit::math::simd_kernels::sma_simd_into(close, period, &mut output);
+            Ok(Array1::from_vec(output))
+        }
+        CanonicalFormula::Ema { period } => {
+            let mut output = vec![0.0; close.len()];
+            ::finkit::math::moving_avg::ema_fast_into(close, period, &mut output).map_err(
+                |error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string()),
+            )?;
+            Ok(Array1::from_vec(output))
+        }
+        CanonicalFormula::Wma { period } => {
+            let mut output = vec![0.0; close.len()];
+            ::finkit::math::moving_avg::wma_into(close, period, &mut output).map_err(|error| {
+                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())
+            })?;
+            Ok(Array1::from_vec(output))
+        }
+        CanonicalFormula::Kama { period } => ::finkit::math::moving_avg::kama(close, period, 2, 30)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Rsi { period } => ::finkit::indicators::rsi(close, period)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Mom { period } => ::finkit::indicators::mom(close, period)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Roc { period } => ::finkit::indicators::roc(close, period)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Rocp { period } => ::finkit::indicators::rocp(close, period)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Rocr { period } => ::finkit::indicators::rocr(close, period)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Rocr100 { period } => ::finkit::indicators::rocr100(close, period)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Max { period } => ::finkit::indicators::max(close, period)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Min { period } => ::finkit::indicators::min(close, period)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Sum { period } => ::finkit::indicators::sum(close, period)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Atr { period } => ::finkit::indicators::atr(high, low, close, period)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Natr { period } => ::finkit::indicators::natr(high, low, close, period)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Cci { period } => ::finkit::indicators::cci(high, low, close, period)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Mfi { period } => {
+            ::finkit::indicators::mfi(high, low, close, volume, period).map_err(|error| {
+                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())
+            })
+        }
+        CanonicalFormula::Adosc {
+            fast_period,
+            slow_period,
+        } => ::finkit::indicators::adosc(high, low, close, volume, fast_period, slow_period)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Obv => ::finkit::indicators::obv(close, volume)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Ad => ::finkit::indicators::ad(high, low, close, volume)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Trima { period } => ::finkit::math::moving_avg::trima(close, period)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Std { period } => rolling_stats::stddev(close, period, 1.0)
+            .map(Array1::from_vec)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())),
+        CanonicalFormula::Boll { period, nbdev } => {
+            rolling_stats::bbands_sma(close, period, nbdev, nbdev)
+                .map(|(upper, _, _)| Array1::from_vec(upper))
+                .map_err(|error| {
+                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(error.to_string())
+                })
+        }
+    }
+}
 
 fn read_array<'py>(name: &str, array: PyReadonlyArray1<'py, f64>) -> PyResult<Vec<f64>> {
     array
@@ -115,6 +420,7 @@ pub struct PyCompiledFormula {
     engine: Option<FormulaEngine>,
     compiled: Arc<CompiledFormula>,
     stream_context: Option<FormulaContext>,
+    canonical: Option<CanonicalFormula>,
 }
 
 #[pymethods]
@@ -125,11 +431,13 @@ impl PyCompiledFormula {
         let compiled = engine
             .compile(&source)
             .map_err(|error| PyErr::new::<pyo3::exceptions::PySyntaxError, _>(error.to_string()))?;
+        let canonical = canonical_formula(&source);
         Ok(Self {
             source,
             engine: Some(engine),
             compiled: Arc::new(compiled),
             stream_context: None,
+            canonical,
         })
     }
 
@@ -162,6 +470,13 @@ impl PyCompiledFormula {
             .transpose()?;
         validate_lengths(&open, &high, &low, &close, &volume, amount.as_deref())?;
 
+        if let Some(formula) = self.canonical {
+            let result = eval_canonical_formula(formula, &high, &low, &close, &volume)?;
+            let context = make_context(open, high, low, close, volume, amount);
+            self.stream_context = Some(context);
+            return result_dict(py, self.stream_context.as_ref().unwrap(), result);
+        }
+
         let engine = self.engine.take().ok_or_else(|| {
             PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
                 "compiled formula is already being evaluated",
@@ -183,10 +498,9 @@ impl PyCompiledFormula {
 
     /// Evaluate without copying the contiguous NumPy OHLCV inputs.
     ///
-    /// The complete synchronous evaluation borrows the contiguous NumPy OHLCV
-    /// buffers. Direct MA/EMA/RSI/BOLLMID formulas additionally avoid input
-    /// argument materialisation; complex formulas may allocate intermediates
-    /// required by the existing array-based built-in ABI.
+    /// Common pure indicator formulas reuse the exact same canonical kernels
+    /// as the public indicator API. Other formulas continue through the
+    /// compiled zero-copy engine.
     #[pyo3(signature = (open, high, low, close, volume, amount=None))]
     #[allow(clippy::too_many_arguments)]
     fn eval_zero_copy<'py>(
@@ -235,6 +549,13 @@ impl PyCompiledFormula {
             })
             .transpose()?;
         validate_lengths(open, high, low, close, volume, amount)?;
+
+        if let Some(formula) = self.canonical {
+            let result = py.detach(|| eval_canonical_formula(formula, high, low, close, volume))?;
+            let output = PyDict::new(py);
+            output.set_item("__result__", PyArray1::from_vec(py, result.into_raw_vec()))?;
+            return Ok(output);
+        }
 
         let engine = self.engine.take().ok_or_else(|| {
             PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(

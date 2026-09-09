@@ -1,0 +1,68 @@
+name: Apply Architecture v3 round 2
+
+on:
+  push:
+    branches:
+      - perf/outperform-talib-v3-20260904
+    paths:
+      - '.github/workflows/apply-architecture-v3-round2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Apply Architecture v3.2 convergence
+        shell: bash
+        run: |
+          python - <<'PY'
+          import base64, gzip
+          from pathlib import Path
+          payload = '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'
+          target = Path('scripts/.apply_architecture_v3_round2.py')
+          target.write_bytes(gzip.decompress(base64.b64decode(payload)))
+          PY
+          python scripts/.apply_architecture_v3_round2.py
+          rm scripts/.apply_architecture_v3_round2.py
+      - name: Format Rust
+        run: cargo fmt --all
+      - name: Validate convergence contracts
+        run: |
+          cargo test -p finkit --lib --locked
+          cargo test -p finkit --test talib_semantic_contract --locked
+          cargo check -p finkit-python --features abi3 --locked
+          git diff --check
+      - name: Commit convergence
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo 'No convergence changes to commit.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            core/src/math/rolling_stats.rs \
+            core/src/indicators/overlap.rs \
+            core/src/indicators/momentum.rs \
+            core/src/unified_executor.rs \
+            core/src/formula/unified_dispatch.rs \
+            core/src/formula/mod.rs \
+            ffi/python-binding/src/native_fast_path.rs
+          git commit -m 'refactor(v3): converge rolling extrema and formula buffers'
+          git pull --rebase origin perf/outperform-talib-v3-20260904
+          git push origin HEAD:perf/outperform-talib-v3-20260904

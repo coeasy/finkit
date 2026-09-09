@@ -12,6 +12,29 @@ use finkit::math::moving_avg;
 use finkit::patterns::{candlestick, chart};
 ```
 
+### Cross-market screening
+
+`finkit::indicators` also exposes market-neutral selection primitives. They
+operate on aligned oldest-to-newest arrays and return an aligned signal or
+excess-return array. The formula runtime exposes the same operations through
+`GOLDEN_CROSS`, `DEAD_CROSS`, `BREAKOUT`, `BREAKDOWN`, `VOLUME_SURGE`,
+`MA_ALIGN`, `RELATIVE_STRENGTH`, `GAP_SIGNAL`, and `TREND_BREAKOUT`.
+
+```rust
+use finkit::indicators::{
+    breakout_up, dead_cross, golden_cross, ma_alignment, relative_strength,
+    trend_breakout_signal, volume_surge,
+};
+
+let cross = golden_cross(&ema_fast, &ema_slow)?;
+let breakout = breakout_up(&close, &high, 20)?;
+let volume_ok = volume_surge(&volume, 20, 1.5)?;
+let relative = relative_strength(&close, &benchmark_close, 20)?;
+```
+
+See [screening-formulas.md](screening-formulas.md) for all signatures,
+aliases, warm-up behavior, and A-share/HK/US/crypto selection recipes.
+
 ### Overlap Studies
 
 ```rust
@@ -506,7 +529,7 @@ const doubleTops = detect_double_top(high);
 <dependency>
     <groupId>com.finkit</groupId>
     <artifactId>finkit</artifactId>
-    <version>0.1.4</version>
+    <version>0.1.5</version>
 </dependency>
 ```
 

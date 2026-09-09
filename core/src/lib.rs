@@ -40,6 +40,9 @@ pub mod compute;
 #[cfg(all(feature = "std", not(feature = "no_std")))]
 /// Domain error types for indicator computations and the formula engine.
 pub mod error;
+#[cfg(feature = "std")]
+/// Numeric Architecture v3 execution plans compiled from semantic DAGs.
+pub mod execution_plan;
 #[cfg(feature = "formula")]
 /// Formula engine with AST parsing, bytecode compilation, JIT optimization, and SIMD acceleration.
 pub mod formula;
@@ -51,6 +54,9 @@ pub mod math;
 #[cfg(feature = "std")]
 /// Candlestick and chart pattern recognition (60+ patterns).
 pub mod patterns;
+#[cfg(feature = "std")]
+/// Numeric Architecture v3 executor shared by batch, formula, factor and streaming frontends.
+pub mod unified_executor;
 // `streaming` and `features` consume the *full* indicator surface (they
 // reference `crate::indicators::{overlap,volatility_ext,atr,sma,…}` and the
 // `formula` engine). They are therefore gated behind `indicators-all` so that
@@ -93,6 +99,9 @@ pub mod sector;
 #[cfg(feature = "std")]
 /// 选股因子合成 + 横截面排序.
 pub mod selectors;
+#[cfg(feature = "std")]
+/// Slot-addressed persistent rolling/streaming state storage for compute plans.
+pub mod state_arena;
 #[cfg(all(feature = "std", feature = "indicators-all"))]
 /// Streaming (incremental) O(1) per-bar indicator updates.
 pub mod streaming;

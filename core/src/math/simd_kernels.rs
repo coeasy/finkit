@@ -73,12 +73,11 @@ fn ema_scalar(data: &[f64], period: usize, out: &mut [f64]) {
         return;
     }
     let k = smoothing_factor(period);
-    let one_minus_k = 1.0 - k;
     let initial_sma: f64 = data[..period].iter().sum::<f64>() / period as f64;
     out[period - 1] = initial_sma;
     let mut prev = initial_sma;
     for i in period..len {
-        prev = data[i] * k + prev * one_minus_k;
+        prev = (data[i] - prev).mul_add(k, prev);
         out[i] = prev;
     }
 }
@@ -341,6 +340,136 @@ pub fn stoch_scalar(
     }
 }
 
+/// Allocation-free monotonic-queue STOCH path for the common short lookback.
+/// The counters are monotonic and index a power-of-two ring, so front expiry
+/// never shifts the queue and the queue length remains bounded by 64.
+#[cfg(feature = "std")]
+#[allow(clippy::too_many_arguments)]
+fn stoch_monotonic_fast_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    k_period: usize,
+    k_slow: usize,
+    d_period: usize,
+    k_out: &mut [f64],
+    d_out: &mut [f64],
+) {
+    let len = close.len();
+    if len < k_period {
+        for value in k_out.iter_mut().take(len) {
+            *value = f64::NAN;
+        }
+        for value in d_out.iter_mut().take(len) {
+            *value = f64::NAN;
+        }
+        return;
+    }
+
+    const MASK: usize = 127;
+    let fastk_start = k_period - 1;
+    let slowk_start = fastk_start + k_slow - 1;
+    let slowd_start = slowk_start + d_period - 1;
+    let inv_k_slow = 1.0 / k_slow as f64;
+    let inv_d_period = 1.0 / d_period as f64;
+    for value in k_out.iter_mut().take(slowd_start.min(len)) {
+        *value = f64::NAN;
+    }
+    for value in d_out.iter_mut().take(slowd_start.min(len)) {
+        *value = f64::NAN;
+    }
+
+    let mut max_queue = [0usize; 128];
+    let mut min_queue = [0usize; 128];
+    let mut max_head = 0usize;
+    let mut max_tail = 0usize;
+    let mut min_head = 0usize;
+    let mut min_tail = 0usize;
+    let mut fast_k_ring = alloc::vec![0.0_f64; k_slow];
+    let mut k_ring = alloc::vec![0.0_f64; d_period];
+    let mut fk_ring_pos = 0usize;
+    let mut d_ring_pos = 0usize;
+    let mut k_sum = 0.0;
+    let mut d_sum = 0.0;
+    let high_ptr = high.as_ptr();
+    let low_ptr = low.as_ptr();
+    let close_ptr = close.as_ptr();
+    let k_out_ptr = k_out.as_mut_ptr();
+    let d_out_ptr = d_out.as_mut_ptr();
+
+    for i in 0..len {
+        while max_tail > max_head {
+            let back = max_queue[(max_tail - 1) & MASK];
+            if unsafe { *high_ptr.add(back) <= *high_ptr.add(i) } {
+                max_tail -= 1;
+            } else {
+                break;
+            }
+        }
+        max_queue[max_tail & MASK] = i;
+        max_tail += 1;
+
+        while min_tail > min_head {
+            let back = min_queue[(min_tail - 1) & MASK];
+            if unsafe { *low_ptr.add(back) >= *low_ptr.add(i) } {
+                min_tail -= 1;
+            } else {
+                break;
+            }
+        }
+        min_queue[min_tail & MASK] = i;
+        min_tail += 1;
+
+        let window_start = (i + 1).saturating_sub(k_period);
+        while max_head < max_tail && max_queue[max_head & MASK] < window_start {
+            max_head += 1;
+        }
+        while min_head < min_tail && min_queue[min_head & MASK] < window_start {
+            min_head += 1;
+        }
+
+        let fk = if i >= fastk_start {
+            let highest = unsafe { *high_ptr.add(max_queue[max_head & MASK]) };
+            let lowest = unsafe { *low_ptr.add(min_queue[min_head & MASK]) };
+            let denom = highest - lowest;
+            if denom > 1e-15 {
+                (unsafe { *close_ptr.add(i) } - lowest) / denom * 100.0
+            } else {
+                50.0
+            }
+        } else {
+            0.0
+        };
+
+        k_sum += fk - fast_k_ring[fk_ring_pos];
+        fast_k_ring[fk_ring_pos] = fk;
+        fk_ring_pos += 1;
+        if fk_ring_pos == k_slow {
+            fk_ring_pos = 0;
+        }
+
+        let k_val = if i >= k_slow - 1 {
+            let value = k_sum * inv_k_slow;
+            if i >= slowd_start {
+                unsafe { *k_out_ptr.add(i) = value };
+            }
+            value
+        } else {
+            0.0
+        };
+
+        d_sum += k_val - k_ring[d_ring_pos];
+        k_ring[d_ring_pos] = k_val;
+        d_ring_pos += 1;
+        if d_ring_pos == d_period {
+            d_ring_pos = 0;
+        }
+        if i >= slowd_start {
+            unsafe { *d_out_ptr.add(i) = d_sum * inv_d_period };
+        }
+    }
+}
+
 #[cfg(feature = "std")]
 #[inline]
 pub fn cci_scalar(high: &[f64], low: &[f64], close: &[f64], period: usize, out: &mut [f64]) {
@@ -414,13 +543,12 @@ unsafe fn ema_fallback(data: &[f64], period: usize, out: &mut [f64]) {
     }
 
     let k = smoothing_factor(period);
-    let one_minus_k = 1.0 - k;
     let initial_sma: f64 = data[..period].iter().sum::<f64>() / period as f64;
     out[period - 1] = initial_sma;
 
     let mut prev = initial_sma;
     for i in period..len {
-        prev = data[i] * k + prev * one_minus_k;
+        prev = (data[i] - prev).mul_add(k, prev);
         out[i] = prev;
     }
 }
@@ -782,8 +910,6 @@ unsafe fn ema_avx512(data: &[f64], period: usize, out: &mut [f64]) {
     }
 
     let k = smoothing_factor(period);
-    let one_minus_k = 1.0 - k;
-
     let chunks = period / 8;
     let mut sum_vec = _mm512_setzero_pd();
     for c in 0..chunks {
@@ -800,7 +926,7 @@ unsafe fn ema_avx512(data: &[f64], period: usize, out: &mut [f64]) {
 
     let mut prev = initial_sma;
     for i in period..len {
-        prev = data[i] * k + prev * one_minus_k;
+        prev = (data[i] - prev).mul_add(k, prev);
         out[i] = prev;
     }
 }
@@ -827,13 +953,12 @@ unsafe fn ema_fallback_sse(data: &[f64], period: usize, out: &mut [f64]) {
     }
 
     let k = smoothing_factor(period);
-    let one_minus_k = 1.0 - k;
     let initial_sma: f64 = data[..period].iter().sum::<f64>() / period as f64;
     out[period - 1] = initial_sma;
 
     let mut prev = initial_sma;
     for i in period..len {
-        prev = data[i] * k + prev * one_minus_k;
+        prev = (data[i] - prev).mul_add(k, prev);
         out[i] = prev;
     }
 }
@@ -847,6 +972,11 @@ mod x86_dispatch {
         *CACHE.get_or_init(|| is_x86_feature_detected!("avx2"))
     }
 
+    pub fn has_fma() -> bool {
+        static CACHE: OnceLock<bool> = OnceLock::new();
+        *CACHE.get_or_init(|| is_x86_feature_detected!("fma"))
+    }
+
     pub fn has_sse2() -> bool {
         static CACHE: OnceLock<bool> = OnceLock::new();
         *CACHE.get_or_init(|| is_x86_feature_detected!("sse2"))
@@ -857,6 +987,16 @@ mod x86_dispatch {
         static CACHE: OnceLock<bool> = OnceLock::new();
         *CACHE.get_or_init(|| is_x86_feature_detected!("avx512f"))
     }
+}
+
+#[inline]
+pub(crate) fn avx2_fma_available() -> bool {
+    #[cfg(all(feature = "std", target_arch = "x86_64"))]
+    {
+        return x86_dispatch::has_avx2() && x86_dispatch::has_fma();
+    }
+    #[allow(unreachable_code)]
+    false
 }
 
 pub fn sma_simd_into(data: &[f64], period: usize, out: &mut [f64]) {
@@ -955,6 +1095,92 @@ pub fn ema_simd_into(data: &[f64], period: usize, out: &mut [f64]) {
     ema_scalar(data, period, out);
 }
 
+/// Fast public-boundary EMA kernel.
+///
+/// The formula engine and the Rust `ema_into` API retain the scalar/FMA
+/// recurrence used for bit-stable internal parity. Python's owned-array fast
+/// path can use this equivalent block-prefix recurrence: four dependent EMA
+/// samples are resolved with AVX2/FMA instructions at once.
+pub fn ema_fast_into(data: &[f64], period: usize, out: &mut [f64]) {
+    #[cfg(all(feature = "std", target_arch = "x86_64"))]
+    {
+        if x86_dispatch::has_avx2()
+            && x86_dispatch::has_fma()
+            && data.len() >= period.saturating_add(8)
+        {
+            return unsafe { ema_fast_avx2(data, period, out) };
+        }
+    }
+    ema_scalar(data, period, out);
+}
+
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2,fma")]
+pub(crate) unsafe fn ema_block4_avx2(data: *const f64, previous: f64, k: f64) -> [f64; 4] {
+    use core::arch::x86_64::*;
+
+    let one_minus_k = 1.0 - k;
+    let k_vec = _mm256_set1_pd(k);
+    let a_vec = _mm256_set1_pd(one_minus_k);
+    let a2_vec = _mm256_set1_pd(one_minus_k * one_minus_k);
+    let a3_vec = _mm256_set1_pd(one_minus_k * one_minus_k * one_minus_k);
+    let previous_coeff = _mm256_set_pd(
+        one_minus_k * one_minus_k * one_minus_k * one_minus_k,
+        one_minus_k * one_minus_k * one_minus_k,
+        one_minus_k * one_minus_k,
+        one_minus_k,
+    );
+    let zero = _mm256_setzero_pd();
+
+    let samples = _mm256_loadu_pd(data);
+    let weighted = _mm256_mul_pd(samples, k_vec);
+
+    // Expand the four closed-form recurrences:
+    // y[j] = z[j] + a*z[j-1] + a²*z[j-2] + ... + a^(j+1)*previous.
+    let shifted_one = _mm256_blend_pd(_mm256_permute4x64_pd(weighted, 0x93), zero, 0x01);
+    let shifted_two = _mm256_blend_pd(_mm256_permute4x64_pd(weighted, 0x44), zero, 0x03);
+    let shifted_three = _mm256_blend_pd(_mm256_permute4x64_pd(weighted, 0x00), zero, 0x07);
+    let mut result = _mm256_fmadd_pd(a_vec, shifted_one, weighted);
+    result = _mm256_fmadd_pd(a2_vec, shifted_two, result);
+    result = _mm256_fmadd_pd(a3_vec, shifted_three, result);
+    result = _mm256_fmadd_pd(previous_coeff, _mm256_set1_pd(previous), result);
+    core::mem::transmute(result)
+}
+
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2,fma")]
+unsafe fn ema_fast_avx2(data: &[f64], period: usize, out: &mut [f64]) {
+    let len = data.len().min(out.len());
+    if period == 0 || len == 0 {
+        return;
+    }
+    for value in out.iter_mut().take(period.saturating_sub(1).min(len)) {
+        *value = f64::NAN;
+    }
+    if len < period {
+        return;
+    }
+
+    let k = smoothing_factor(period);
+    let initial_sma = data[..period].iter().sum::<f64>() / period as f64;
+    out[period - 1] = initial_sma;
+
+    let mut previous = initial_sma;
+    let mut index = period;
+    while index + 4 <= len {
+        let values = ema_block4_avx2(data.as_ptr().add(index), previous, k);
+        out[index..index + 4].copy_from_slice(&values);
+        previous = values[3];
+        index += 4;
+    }
+
+    while index < len {
+        previous = (data[index] - previous).mul_add(k, previous);
+        *out.get_unchecked_mut(index) = previous;
+        index += 1;
+    }
+}
+
 #[cfg(feature = "std")]
 pub fn rsi_simd(data: &[f64], period: usize) -> alloc::vec::Vec<f64> {
     let mut out = alloc::vec![f64::NAN; data.len()];
@@ -1048,8 +1274,8 @@ pub fn stoch_simd(
     d_period: usize,
 ) -> SimdStochResult {
     let len = close.len();
-    let mut k = alloc::vec![f64::NAN; len];
-    let mut d = alloc::vec![f64::NAN; len];
+    let mut k = alloc::vec![0.0_f64; len];
+    let mut d = alloc::vec![0.0_f64; len];
     stoch_simd_into(high, low, close, k_period, k_slow, d_period, &mut k, &mut d);
     SimdStochResult { k, d }
 }
@@ -1066,6 +1292,12 @@ pub fn stoch_simd_into(
     k_out: &mut [f64],
     d_out: &mut [f64],
 ) {
+    if k_period <= 64 {
+        return stoch_monotonic_fast_into(
+            high, low, close, k_period, k_slow, d_period, k_out, d_out,
+        );
+    }
+
     #[cfg(all(feature = "std", target_arch = "x86_64"))]
     {
         if x86_dispatch::has_avx2() {
@@ -1327,6 +1559,17 @@ mod tests {
             let scalar = ema_scalar_ref(&data, period);
             let simd = ema_simd(&data, period);
             assert_slices_close(&scalar, &simd, 1e-12);
+        }
+    }
+
+    #[test]
+    fn test_ema_fast_matches_scalar() {
+        let data = generate_series(10_000);
+        for period in [5, 12, 26, 50] {
+            let scalar = ema_scalar_ref(&data, period);
+            let mut fast = alloc::vec![f64::NAN; data.len()];
+            ema_fast_into(&data, period, &mut fast);
+            assert_slices_close(&scalar, &fast, 1e-10);
         }
     }
 

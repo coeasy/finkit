@@ -1,86 +1,83 @@
-# Finkit 权威 Benchmark 报告
+# Finkit v0.1.5 vs TA-Lib benchmark report
 
-> **生成时间**: 2026-06-24
-> **环境**: Windows 10, x86_64 AVX2, Rust 2021 edition
-> **构建**: `--release` via Criterion.rs
+> This report records the release-wheel validation run on 2026-09-09. The
+> result is a local machine snapshot, not a universal latency guarantee.
 
----
+## Executive summary
 
-## 1. 核心指标性能 (10K bars)
+The current Python ABI3 wheel was compared with TA-Lib Python `0.6.8` across
+155 TA-Lib-compatible functions, two input sizes, and 310 observations:
 
-| 指标 | Finkit (µs) | TA-Lib C (µs) | 性能比 | 状态 |
-|------|----------|---------------|--------|------|
-| SMA(20) | 12.75 | 20.19 | **1.58x faster** | ✅ |
-| EMA(12) | 20.73 | 29.66 | **1.43x faster** | ✅ |
-| RSI(14) | 26.60 | 55.12 | **2.07x faster** | ✅ |
-| MACD(12,26,9) | 97.53 | 101.07 | **1.04x faster** | ✅ |
-| BBANDS(20,2) | 41.74 | 56.53 | **1.35x faster** | ✅ |
-| ATR(14) | 39.78 | 61.28 | **1.54x faster** | ✅ |
+| Measure | Result |
+| --- | ---: |
+| Input sizes | 100,000 and 1,000,000 values |
+| Compatible function cases | 155 |
+| Total observations | 310 |
+| Finkit faster | 307 / 310 |
+| Geometric-mean speedup | **2.03x** |
+| Runtime errors | 0 |
+| Known parity exceptions | 2 (`HT_TRENDMODE`, existing) |
 
-**结论**: 所有 6 个核心指标均超越 TA-Lib C，RSI 性能领先 2.07x。
+The current run supports the release goal that most compatible functions
+outperform TA-Lib on this host. It does not support claiming that every
+individual observation is faster. The three slower observations were `TRANGE`
+at 1M bars (`0.985x`), `CDLLONGLINE` at 1M (`0.954x`), and `CDLSHORTLINE`
+at 1M (`0.857x`).
 
----
+## Parity status
 
-## 2. 流式指标性能 (O(1) 增量更新)
+All functions completed without runtime errors. The only parity flags were the
+two existing `HT_TRENDMODE` observations at 100K and 1M bars. The reported
+absolute and relative differences were both zero; the flag is caused by the
+boolean/valid-mask contract rather than a numerical value difference. This is
+the same known issue tracked by the existing Hilbert tests and is independent
+of the v0.1.5 documentation, packaging, and screening changes.
 
-| 指标 | 10K (µs) | 100K (µs) | 500K (µs) | ns/val (500K) |
-|------|----------|-----------|-----------|---------------|
-| SMA(20) | 22 | 220 | 2,200 | **0.44** |
-| EMA(12) | 29 | 290 | 2,900 | **0.58** |
-| RSI(14) | 93 | 930 | 9,300 | **1.86** |
+## Representative speedups
 
-**结论**: 流式路径实现 O(1) 增量更新，性能稳定。
+The following values are from the same 100K/1M run and show the intended
+performance profile:
 
----
+| Function family | Representative result |
+| --- | ---: |
+| `EMA` | about 2.29x at 100K; 1.52x at 1M |
+| `ATR` | about 2.30x at 100K; 2.45x at 1M |
+| `MACD` | about 1.63x at 100K; 1.97x at 1M |
+| `HT_SINE` | about 3.77x at 100K; 3.78x at 1M |
+| `LINEARREG` | about 3.47x at 100K; 2.85x at 1M |
+| `COSH` / `EXP` | about 4.34x / 2.56x at 100K; 9.93x / 9.95x at 1M |
 
-## 3. 公式引擎性能
+## Scope of the new screening layer
 
-| 指标 | 原生 (µs) | 公式引擎 (µs) | 开销 |
-|------|-----------|---------------|------|
-| SMA(20) | 12.75 | 16.58 | 1.30x |
-| EMA(12) | 20.73 | 55.14 | 2.66x |
-| RSI(14) | 26.60 | 42.82 | 1.61x |
+`GOLDEN_CROSS`, `DEAD_CROSS`, `BREAKOUT`, `BREAKDOWN`, `VOLUME_SURGE`,
+`MA_ALIGN`, `RELATIVE_STRENGTH`, `GAP_SIGNAL`, and `TREND_BREAKOUT` are
+Finkit-native selection primitives. TA-Lib has no equivalent unified
+cross-market screening API, so they are not included in the 155-function parity
+denominator. Their validation contract covers warm-up, NaN, equal-length,
+look-ahead exclusion, and parameter checks; see
+[screening-formulas.md](screening-formulas.md).
 
-**结论**: 公式引擎开销 1.3x-2.7x，可接受范围。
+## Reproduce
 
----
-
-## 4. 性能回归门禁
-
-CI 自动检查以下指标，超过 baseline 10% 时失败：
-
-```yaml
-perf_gate:
-  SMA_20: 12.75 µs ± 10%
-  EMA_12: 20.73 µs ± 10%
-  RSI_14: 26.60 µs ± 10%
-  MACD: 97.53 µs ± 10%
-  ATR_14: 39.78 µs ± 10%
-```
-
----
-
-## 5. 复现方法
+Build the wheel and run the complete current gate:
 
 ```bash
-# 运行所有 benchmark
-cargo bench -p finkit
-
-# 生成权威报告
-python scripts/gen_benchmark_report.py
-
-# 性能门禁检查
-python scripts/gen_benchmark_report.py --perf-gate --threshold 10
+maturin build --release --features abi3 --strip --out dist/python/current
+python -m pip install --force-reinstall --no-deps dist/python/current/finkit-*.whl
+python scripts/benchmark_talib_all_current_gate.py \
+  --sizes 100000 1000000 \
+  --output dist/bench/talib-all-current-gate.json
 ```
 
----
+The JSON output contains every function, size, timing, parity mask, and error.
+Use the geometric mean and the per-observation rows together; a single noisy
+short function should not be presented as the overall result.
 
-## 6. 数据来源
+## Interpretation rules
 
-- **Criterion.rs**: 所有 benchmark 使用 Criterion 框架
-- **TA-Lib C**: 通过 FFI 直接调用，同机同数据
-- **数据集**: 10K/100K/500K bars，合成正弦波 OHLCV
-
----
-
-**注意**: 本报告由 `scripts/gen_benchmark_report.py` 自动生成，所有数据可复现。
+1. Compare Finkit and TA-Lib in the same process, Python runtime, input data,
+   and warm-up policy.
+2. Report parity separately from speed. A faster result with different
+   warm-up semantics is not an equivalent implementation.
+3. Repeat borderline ratios near `1.0x` before treating them as a regression.
+4. Keep public-wheel results separate from Rust in-process microbenchmarks.

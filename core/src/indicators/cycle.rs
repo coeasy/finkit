@@ -76,19 +76,8 @@ use ndarray::Array1;
 /// ```
 pub fn ht_dcperiod(input: &[f64]) -> Result<Array1<f64>> {
     validate_input(input.len(), 32)?;
-
-    let len = input.len();
-    let mut output = init_output(len);
-
-    // compute_hilbert_components 已经计算了 smooth_period
-    let (_smooth, _detrender, _in_phase, _quadrature, _j1, _i2, _j2, _phase, period_out) =
-        compute_hilbert_components(input, len);
-
-    // 直接使用计算好的 period_out，从 index 32 开始有效
-    for i in 32..len {
-        output[i] = period_out[i];
-    }
-
+    let mut output = init_output(input.len());
+    ht_dcperiod_into(input, output.as_slice_mut().unwrap())?;
     Ok(output)
 }
 
@@ -115,18 +104,8 @@ pub fn ht_dcperiod(input: &[f64]) -> Result<Array1<f64>> {
 /// ```
 pub fn ht_dcphase(input: &[f64]) -> Result<Array1<f64>> {
     validate_input(input.len(), 32)?;
-
-    let len = input.len();
-    let mut output = init_output(len);
-
-    let (_smooth, _detrender, _in_phase, _quadrature, _j1, _i2, _j2, phase, _period) =
-        compute_hilbert_components(input, len);
-
-    for i in 32..len {
-        // Convert phase from radians to degrees
-        output[i] = phase[i] * 180.0 / std::f64::consts::PI;
-    }
-
+    let mut output = init_output(input.len());
+    ht_dcphase_into(input, output.as_slice_mut().unwrap())?;
     Ok(output)
 }
 
@@ -154,21 +133,13 @@ pub fn ht_dcphase(input: &[f64]) -> Result<Array1<f64>> {
 /// ```
 pub fn ht_phasor(input: &[f64]) -> Result<(Array1<f64>, Array1<f64>)> {
     validate_input(input.len(), 32)?;
-
-    let len = input.len();
-    let mut in_phase_out = init_output(len);
-    let mut quadrature_out = init_output(len);
-
-    // 使用 IIR 递归滤波的 compute_hilbert_components（匹配 TA-Lib）
-    let (_smooth, _detrender, in_phase, quadrature, _j1, _i2, _j2, _phase, _period) =
-        compute_hilbert_components(input, len);
-
-    // TA-Lib 兼容：首有效值从 index 32 开始
-    for i in 32..len {
-        in_phase_out[i] = in_phase[i];
-        quadrature_out[i] = quadrature[i];
-    }
-
+    let mut in_phase_out = init_output(input.len());
+    let mut quadrature_out = init_output(input.len());
+    ht_phasor_into(
+        input,
+        in_phase_out.as_slice_mut().unwrap(),
+        quadrature_out.as_slice_mut().unwrap(),
+    )?;
     Ok((in_phase_out, quadrature_out))
 }
 
@@ -195,31 +166,13 @@ pub fn ht_phasor(input: &[f64]) -> Result<(Array1<f64>, Array1<f64>)> {
 /// ```
 pub fn ht_sine(input: &[f64]) -> Result<(Array1<f64>, Array1<f64>)> {
     validate_input(input.len(), 32)?;
-
-    let len = input.len();
-    let mut sine = init_output(len);
-    let mut lead_sine = init_output(len);
-
-    let (_smooth, _detrender, _in_phase, _quadrature, _j1, _i2, _j2, phase, _period) =
-        compute_hilbert_components(input, len);
-
-    // `phase` is atan(im/re) ∈ (-π/2, π/2): a bounded domain where the SIMD
-    // sin/cos polynomial is accurate to ~1e-11. Batch it through simd_sin_cos.
-    let mut phase_sin = vec![0.0_f64; len];
-    let mut phase_cos = vec![0.0_f64; len];
-    simd_ops::simd_sin_cos(
-        &phase[32..len],
-        &mut phase_sin[32..len],
-        &mut phase_cos[32..len],
-    );
-
-    // lead_sine = sin(p)·cos(π/4) + cos(p)·sin(π/4) = (sin(p) + cos(p))·√2/2
-    let lead_c = std::f64::consts::FRAC_1_SQRT_2; // cos(π/4) = sin(π/4) = √2/2
-    for i in 32..len {
-        sine[i] = phase_sin[i];
-        lead_sine[i] = (phase_sin[i] + phase_cos[i]) * lead_c;
-    }
-
+    let mut sine = init_output(input.len());
+    let mut lead_sine = init_output(input.len());
+    ht_sine_into(
+        input,
+        sine.as_slice_mut().unwrap(),
+        lead_sine.as_slice_mut().unwrap(),
+    )?;
     Ok((sine, lead_sine))
 }
 
@@ -248,24 +201,8 @@ pub fn ht_sine(input: &[f64]) -> Result<(Array1<f64>, Array1<f64>)> {
 /// ```
 pub fn ht_trendmode(input: &[f64]) -> Result<Array1<f64>> {
     validate_input(input.len(), 32)?;
-
-    let len = input.len();
-    let mut output = init_output(len);
-
-    let (_smooth, _detrender, _in_phase, _quadrature, _j1, _i2, _j2, _phase, period_out) =
-        compute_hilbert_components(input, len);
-
-    // 使用计算好的 period_out，从 index 32 开始有效
-    for i in 32..len {
-        let dc_period = period_out[i];
-        // Trend mode when period is at extreme values
-        if dc_period <= 6.0 || dc_period >= 36.0 {
-            output[i] = 1.0;
-        } else {
-            output[i] = 0.0;
-        }
-    }
-
+    let mut output = init_output(input.len());
+    ht_trendmode_into(input, output.as_slice_mut().unwrap())?;
     Ok(output)
 }
 
@@ -301,7 +238,7 @@ pub fn ht_measurement(input: &[f64]) -> Result<Array1<f64>> {
     let len = input.len();
     let mut output = init_output(len);
 
-    let (_smooth, _detrender, _in_phase, _quadrature, _j1, _i2, _j2, _phase, period_out) =
+    let (_detrender, _in_phase, _quadrature, _j1, _i2, _j2, _phase, period_out) =
         compute_hilbert_components(input, len);
 
     // 使用计算好的 period_out，从 index 32 开始有效
@@ -342,55 +279,14 @@ pub fn ht_measurement(input: &[f64]) -> Result<Array1<f64>> {
 /// ```
 pub fn ht_trendline(input: &[f64]) -> Result<Array1<f64>> {
     validate_input(input.len(), 32)?;
-
-    let len = input.len();
-    let mut output = init_output(len);
-
-    let (_smooth, _detrender, _in_phase, _quadrature, _j1, _i2, _j2, _phase, period_out) =
-        compute_hilbert_components(input, len);
-
-    let mut prev_trendline = 0.0;
-
-    for i in 32..len {
-        // WMA(4) smooth price: (4*price + 3*price[1] + 2*price[2] + price[3]) / 10
-        let smooth_price =
-            (4.0 * input[i] + 3.0 * input[i - 1] + 2.0 * input[i - 2] + input[i - 3]) / 10.0;
-
-        // TA-Lib 兼容：trend mode 当 dc_period <= 6 或 >= 36
-        let dc_period = period_out[i];
-        let trend_mode = dc_period <= 6.0 || dc_period >= 36.0;
-
-        let today_trendline = if trend_mode {
-            // Trend mode: 2:1 weighted average with previous trendline
-            (smooth_price + 2.0 * prev_trendline) / 3.0
-        } else {
-            // Cycle mode: reset to smooth price
-            smooth_price
-        };
-
-        prev_trendline = today_trendline;
-        output[i] = today_trendline;
-    }
-
+    let mut output = init_output(input.len());
+    ht_trendline_into(input, output.as_slice_mut().unwrap())?;
     Ok(output)
 }
 
 // ============================================================================
 // Internal Hilbert Transform Implementation
 // ============================================================================
-
-/// Compute the smoothed input using a 4-period weighted moving average.
-///
-/// Smooth = (4*Price + 3*Price[1] + 2*Price[2] + 1*Price[3]) / 10
-///
-/// Delegates to the AVX2 kernel [`simd_ops::simd_ht_smooth`] when available
-/// (scalar fallback otherwise). The first 3 entries are left as 0.0 — the
-/// downstream detrender starts at index 6, so these zeros are never read.
-fn smooth_input(input: &[f64], len: usize) -> Vec<f64> {
-    let mut smooth = vec![0.0; len];
-    simd_ops::simd_ht_smooth(input, &mut smooth[..len]);
-    smooth
-}
 
 /// Compute the detrender (zero-lag differentiator) from smoothed data.
 ///
@@ -440,7 +336,6 @@ fn compute_hilbert_components(
     input: &[f64],
     len: usize,
 ) -> (
-    Vec<f64>, // smooth
     Vec<f64>, // detrender
     Vec<f64>, // in_phase
     Vec<f64>, // quadrature
@@ -450,9 +345,6 @@ fn compute_hilbert_components(
     Vec<f64>, // phase
     Vec<f64>, // smooth_period (IIR-filtered, matches TA-Lib)
 ) {
-    // Compute smoothed price: WMA(4) = (4*p[i] + 3*p[i-1] + 2*p[i-2] + p[i-3]) / 10
-    let smooth = smooth_input(input, len);
-
     // Output buffers
     let mut detrender_out = vec![0.0; len];
     let mut in_phase_out = vec![0.0; len];
@@ -527,7 +419,8 @@ fn compute_hilbert_components(
     // Output starts at bar 32 (lookbackTotal = 32).
     for i in 10..len {
         let adjusted_prev_period = 0.075 * period + 0.54;
-        let smoothed_value = smooth[i];
+        let smoothed_value =
+            (4.0 * input[i] + 3.0 * input[i - 1] + 2.0 * input[i - 2] + input[i - 3]) / 10.0;
 
         if i % 2 == 0 {
             // ---- Even bar processing ----
@@ -705,7 +598,6 @@ fn compute_hilbert_components(
     }
 
     (
-        smooth,
         detrender_out,
         in_phase_out,
         quadrature_out,
@@ -715,6 +607,645 @@ fn compute_hilbert_components(
         phase_out,
         period_out,
     )
+}
+
+/// Allocation-minimal Hilbert state machine for the public single-indicator
+/// paths.  The historical shared helper above is retained for composite
+/// callers, while this variant only writes the requested terminal values and
+/// keeps all recursive state in fixed-size arrays.
+#[inline(always)]
+fn compute_hilbert_short<const PHASOR: bool, const TRENDLINE: bool>(
+    input: &[f64],
+    first: &mut [f64],
+    second: Option<&mut [f64]>,
+) -> Result<()> {
+    validate_input(input.len(), if TRENDLINE { 37 } else { 32 })?;
+    if first.len() != input.len() {
+        return Err(crate::error::TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
+    if let Some(values) = second.as_ref() {
+        if values.len() != input.len() {
+            return Err(crate::error::TaError::InvalidParameter {
+                name: "output".to_string(),
+                constraint: "must have the same length as input".to_string(),
+            });
+        }
+    }
+    let lookback = if TRENDLINE { 63 } else { 32 };
+    let first_warmup = lookback.min(first.len());
+    first[..first_warmup].fill(f64::NAN);
+    let input_ptr = input.as_ptr();
+    let first_ptr = first.as_mut_ptr();
+    let second_ptr = second.map(|values| {
+        let warmup = 32.min(values.len());
+        values[..warmup].fill(f64::NAN);
+        values.as_mut_ptr()
+    });
+
+    let a = 0.0962;
+    let b = 0.5769;
+    let mut detrender_even = [0.0; 3];
+    let mut detrender_odd = [0.0; 3];
+    let mut q1_even = [0.0; 3];
+    let mut q1_odd = [0.0; 3];
+    let mut ji_even = [0.0; 3];
+    let mut ji_odd = [0.0; 3];
+    let mut jq_even = [0.0; 3];
+    let mut jq_odd = [0.0; 3];
+    let mut prev_detrender_even = 0.0;
+    let mut prev_detrender_odd = 0.0;
+    let mut prev_detrender_input_even = 0.0;
+    let mut prev_detrender_input_odd = 0.0;
+    let mut prev_q1_even = 0.0;
+    let mut prev_q1_odd = 0.0;
+    let mut prev_q1_input_even = 0.0;
+    let mut prev_q1_input_odd = 0.0;
+    let mut prev_ji_even = 0.0;
+    let mut prev_ji_odd = 0.0;
+    let mut prev_ji_input_even = 0.0;
+    let mut prev_ji_input_odd = 0.0;
+    let mut prev_jq_even = 0.0;
+    let mut prev_jq_odd = 0.0;
+    let mut prev_jq_input_even = 0.0;
+    let mut prev_jq_input_odd = 0.0;
+    let mut i1_even_prev3 = 0.0;
+    let mut i1_odd_prev3 = 0.0;
+    let mut i1_even_prev2 = 0.0;
+    let mut i1_odd_prev2 = 0.0;
+    let mut prev_q2 = 0.0;
+    let mut prev_i2 = 0.0;
+    let mut re = 0.0;
+    let mut im = 0.0;
+    let mut period = 0.0;
+    let mut smooth_period = 0.0;
+    let mut hilbert_idx = 0usize;
+    let mut i_trend1 = 0.0;
+    let mut i_trend2 = 0.0;
+    let mut i_trend3 = 0.0;
+    let rad2deg = 180.0 / std::f64::consts::PI;
+
+    let mut trend_cumulative = 0.0;
+    let mut trend_prefix_ring = [0.0; 51];
+    if TRENDLINE {
+        trend_cumulative = input[0];
+        trend_prefix_ring[0] = trend_cumulative;
+        trend_cumulative += input[1];
+        trend_prefix_ring[1] = trend_cumulative;
+        trend_cumulative += input[2];
+        trend_prefix_ring[2] = trend_cumulative;
+    }
+
+    let mut trailing_wma_idx = 0usize;
+    let mut period_wma_sub = unsafe { *input_ptr.add(0) + *input_ptr.add(1) + *input_ptr.add(2) };
+    let mut period_wma_sum =
+        unsafe { *input_ptr.add(0) + 2.0 * *input_ptr.add(1) + 3.0 * *input_ptr.add(2) };
+    let mut trailing_wma_value = 0.0;
+    let wma_warmup = if TRENDLINE { 34 } else { 9 };
+    for today in 3..(3 + wma_warmup) {
+        let value = unsafe { *input_ptr.add(today) };
+        if TRENDLINE {
+            trend_cumulative += value;
+            trend_prefix_ring[today % 51] = trend_cumulative;
+        }
+        period_wma_sub += value;
+        period_wma_sub -= trailing_wma_value;
+        period_wma_sum += value * 4.0;
+        trailing_wma_value = unsafe { *input_ptr.add(trailing_wma_idx) };
+        trailing_wma_idx += 1;
+        period_wma_sum -= period_wma_sub;
+    }
+
+    for i in (3 + wma_warmup)..input.len() {
+        let value = unsafe { *input_ptr.add(i) };
+        if TRENDLINE {
+            trend_cumulative += value;
+            trend_prefix_ring[i % 51] = trend_cumulative;
+        }
+        period_wma_sub += value;
+        period_wma_sub -= trailing_wma_value;
+        period_wma_sum += value * 4.0;
+        trailing_wma_value = unsafe { *input_ptr.add(trailing_wma_idx) };
+        trailing_wma_idx += 1;
+        let smoothed = period_wma_sum * 0.1;
+        period_wma_sum -= period_wma_sub;
+        let adjusted_period = 0.075 * period + 0.54;
+
+        let (i1_value, q1_value) = if i & 1 == 0 {
+            let mut detrender_value = unsafe { -*detrender_even.get_unchecked(hilbert_idx) };
+            let scaled_smoothed = a * smoothed;
+            unsafe { *detrender_even.get_unchecked_mut(hilbert_idx) = scaled_smoothed };
+            detrender_value += scaled_smoothed;
+            detrender_value -= prev_detrender_even;
+            prev_detrender_even = b * prev_detrender_input_even;
+            detrender_value += prev_detrender_even;
+            prev_detrender_input_even = smoothed;
+            detrender_value *= adjusted_period;
+
+            let mut q1_value = unsafe { -*q1_even.get_unchecked(hilbert_idx) };
+            let scaled_detrender = a * detrender_value;
+            unsafe { *q1_even.get_unchecked_mut(hilbert_idx) = scaled_detrender };
+            q1_value += scaled_detrender;
+            q1_value -= prev_q1_even;
+            prev_q1_even = b * prev_q1_input_even;
+            q1_value += prev_q1_even;
+            prev_q1_input_even = detrender_value;
+            q1_value *= adjusted_period;
+
+            let mut ji_value = unsafe { -*ji_even.get_unchecked(hilbert_idx) };
+            let scaled_i1 = a * i1_even_prev3;
+            unsafe { *ji_even.get_unchecked_mut(hilbert_idx) = scaled_i1 };
+            ji_value += scaled_i1;
+            ji_value -= prev_ji_even;
+            prev_ji_even = b * prev_ji_input_even;
+            ji_value += prev_ji_even;
+            prev_ji_input_even = i1_even_prev3;
+            ji_value *= adjusted_period;
+
+            let mut jq_value = unsafe { -*jq_even.get_unchecked(hilbert_idx) };
+            let scaled_q1 = a * q1_value;
+            unsafe { *jq_even.get_unchecked_mut(hilbert_idx) = scaled_q1 };
+            jq_value += scaled_q1;
+            jq_value -= prev_jq_even;
+            prev_jq_even = b * prev_jq_input_even;
+            jq_value += prev_jq_even;
+            prev_jq_input_even = q1_value;
+            jq_value *= adjusted_period;
+
+            hilbert_idx = if hilbert_idx == 2 { 0 } else { hilbert_idx + 1 };
+            let current_q2 = 0.2 * (q1_value + ji_value) + 0.8 * prev_q2;
+            let current_i2 = 0.2 * (i1_even_prev3 - jq_value) + 0.8 * prev_i2;
+            i1_odd_prev3 = i1_odd_prev2;
+            i1_odd_prev2 = detrender_value;
+            re = 0.8 * re + 0.2 * (current_i2 * prev_i2 + current_q2 * prev_q2);
+            im = 0.8 * im + 0.2 * (current_i2 * prev_q2 - current_q2 * prev_i2);
+            prev_q2 = current_q2;
+            prev_i2 = current_i2;
+            (i1_even_prev3, q1_value)
+        } else {
+            let mut detrender_value = unsafe { -*detrender_odd.get_unchecked(hilbert_idx) };
+            let scaled_smoothed = a * smoothed;
+            unsafe { *detrender_odd.get_unchecked_mut(hilbert_idx) = scaled_smoothed };
+            detrender_value += scaled_smoothed;
+            detrender_value -= prev_detrender_odd;
+            prev_detrender_odd = b * prev_detrender_input_odd;
+            detrender_value += prev_detrender_odd;
+            prev_detrender_input_odd = smoothed;
+            detrender_value *= adjusted_period;
+
+            let mut q1_value = unsafe { -*q1_odd.get_unchecked(hilbert_idx) };
+            let scaled_detrender = a * detrender_value;
+            unsafe { *q1_odd.get_unchecked_mut(hilbert_idx) = scaled_detrender };
+            q1_value += scaled_detrender;
+            q1_value -= prev_q1_odd;
+            prev_q1_odd = b * prev_q1_input_odd;
+            q1_value += prev_q1_odd;
+            prev_q1_input_odd = detrender_value;
+            q1_value *= adjusted_period;
+
+            let mut ji_value = unsafe { -*ji_odd.get_unchecked(hilbert_idx) };
+            let scaled_i1 = a * i1_odd_prev3;
+            unsafe { *ji_odd.get_unchecked_mut(hilbert_idx) = scaled_i1 };
+            ji_value += scaled_i1;
+            ji_value -= prev_ji_odd;
+            prev_ji_odd = b * prev_ji_input_odd;
+            ji_value += prev_ji_odd;
+            prev_ji_input_odd = i1_odd_prev3;
+            ji_value *= adjusted_period;
+
+            let mut jq_value = unsafe { -*jq_odd.get_unchecked(hilbert_idx) };
+            let scaled_q1 = a * q1_value;
+            unsafe { *jq_odd.get_unchecked_mut(hilbert_idx) = scaled_q1 };
+            jq_value += scaled_q1;
+            jq_value -= prev_jq_odd;
+            prev_jq_odd = b * prev_jq_input_odd;
+            jq_value += prev_jq_odd;
+            prev_jq_input_odd = q1_value;
+            jq_value *= adjusted_period;
+
+            let current_q2 = 0.2 * (q1_value + ji_value) + 0.8 * prev_q2;
+            let current_i2 = 0.2 * (i1_odd_prev3 - jq_value) + 0.8 * prev_i2;
+            i1_even_prev3 = i1_even_prev2;
+            i1_even_prev2 = detrender_value;
+            re = 0.8 * re + 0.2 * (current_i2 * prev_i2 + current_q2 * prev_q2);
+            im = 0.8 * im + 0.2 * (current_i2 * prev_q2 - current_q2 * prev_i2);
+            prev_q2 = current_q2;
+            prev_i2 = current_i2;
+            (i1_odd_prev3, q1_value)
+        };
+
+        let previous_period = period;
+        if im != 0.0 && re != 0.0 {
+            period = 360.0 / ((im / re).atan() * rad2deg);
+        }
+        let max_period = 1.5 * previous_period;
+        if period > max_period {
+            period = max_period;
+        }
+        let min_period = 0.67 * previous_period;
+        if period < min_period {
+            period = min_period;
+        }
+        if period < 6.0 {
+            period = 6.0;
+        } else if period > 50.0 {
+            period = 50.0;
+        }
+        period = 0.2 * period + 0.8 * previous_period;
+        smooth_period = 0.33 * period + 0.67 * smooth_period;
+
+        if TRENDLINE {
+            let dc_period_int = (smooth_period + 0.5) as usize;
+            let start = i + 1 - dc_period_int;
+            let previous_cumulative = if start == 0 {
+                0.0
+            } else {
+                trend_prefix_ring[(start - 1) % 51]
+            };
+            let raw_sum = trend_cumulative - previous_cumulative;
+            let instant_trend = raw_sum / dc_period_int as f64;
+            let trendline =
+                (4.0 * instant_trend + 3.0 * i_trend1 + 2.0 * i_trend2 + i_trend3) / 10.0;
+            i_trend3 = i_trend2;
+            i_trend2 = i_trend1;
+            i_trend1 = instant_trend;
+            if i >= 63 {
+                unsafe { *first_ptr.add(i) = trendline };
+            }
+        } else if i >= 32 {
+            if PHASOR {
+                unsafe { *first_ptr.add(i) = i1_value };
+                if let Some(ptr) = second_ptr {
+                    unsafe { *ptr.add(i) = q1_value };
+                }
+            } else {
+                unsafe { *first_ptr.add(i) = smooth_period };
+            }
+        }
+    }
+    Ok(())
+}
+
+#[inline(always)]
+fn compute_hilbert_selected<const MODE: u8>(
+    input: &[f64],
+    first: &mut [f64],
+    second: Option<&mut [f64]>,
+) -> Result<()> {
+    validate_input(input.len(), 32)?;
+    if first.len() != input.len() {
+        return Err(crate::error::TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
+    if let Some(values) = second.as_ref() {
+        if values.len() != input.len() {
+            return Err(crate::error::TaError::InvalidParameter {
+                name: "output".to_string(),
+                constraint: "must have the same length as input".to_string(),
+            });
+        }
+    }
+    let lookback = if MODE == 0 || MODE == 2 { 32 } else { 63 };
+    let first_warmup = lookback.min(first.len());
+    // Phase/trend terminals share a 63-bar lookback.  In particular,
+    // HT_TRENDMODE must not expose the default trend value (0) during warmup;
+    // TA-Lib marks those samples as unavailable.
+    first[..first_warmup].fill(f64::NAN);
+    let mut second = second;
+    if let Some(values) = second.as_deref_mut() {
+        let warmup = lookback.min(values.len());
+        values[..warmup].fill(f64::NAN);
+    }
+
+    let a = 0.0962;
+    let b = 0.5769;
+    let mut detrender = [[0.0; 3]; 2];
+    let mut q1 = [[0.0; 3]; 2];
+    let mut ji = [[0.0; 3]; 2];
+    let mut jq = [[0.0; 3]; 2];
+    let mut prev_detrender = [0.0; 2];
+    let mut prev_detrender_input = [0.0; 2];
+    let mut prev_q1 = [0.0; 2];
+    let mut prev_q1_input = [0.0; 2];
+    let mut prev_ji = [0.0; 2];
+    let mut prev_ji_input = [0.0; 2];
+    let mut prev_jq = [0.0; 2];
+    let mut prev_jq_input = [0.0; 2];
+    let mut i1_prev3 = [0.0; 2];
+    let mut i1_prev2 = [0.0; 2];
+    let mut prev_q2 = 0.0;
+    let mut prev_i2 = 0.0;
+    let mut re = 0.0;
+    let mut im = 0.0;
+    let mut period = 0.0;
+    let mut smooth_period = 0.0;
+    let mut hilbert_idx = 0usize;
+    let mut dc_phase = 0.0;
+    let mut prev_dc_phase = 0.0;
+    let mut sine = 0.0;
+    let mut lead_sine = 0.0;
+    let mut prev_sine;
+    let mut prev_lead_sine;
+    let mut days_in_trend = 0i32;
+    let mut i_trend1 = 0.0;
+    let mut i_trend2 = 0.0;
+    let mut i_trend3 = 0.0;
+    let mut smooth_price = [0.0; 50];
+    let mut smooth_price_idx = 0usize;
+    // HT_TRENDLINE averages the last dominant-period prices on every bar.
+    // A prefix sum makes that variable-length window O(1) instead of scanning
+    // up to 50 samples per bar. The other Hilbert terminals do not need it.
+    let trend_prefix = if MODE == 4 {
+        let mut prefix = vec![0.0; input.len() + 1];
+        for (index, &value) in input.iter().enumerate() {
+            prefix[index + 1] = prefix[index] + value;
+        }
+        prefix
+    } else {
+        Vec::new()
+    };
+    let rad2deg = 180.0 / std::f64::consts::PI;
+    // The dominant period is clamped to [6, 50].  Reusing this small phase
+    // table removes up to 100 transcendental calls per bar from DCPHASE,
+    // SINE, and TRENDMODE while preserving the exact Rust libm values used by
+    // the scalar expression.
+    let mut phase_sin = [[0.0; 50]; 51];
+    let mut phase_cos = [[0.0; 50]; 51];
+    if MODE == 1 || MODE == 3 || MODE == 5 {
+        for period_len in 1..=50 {
+            for j in 0..period_len {
+                let angle = j as f64 * std::f64::consts::PI * 2.0 / period_len as f64;
+                phase_sin[period_len][j] = angle.sin();
+                phase_cos[period_len][j] = angle.cos();
+            }
+        }
+    }
+
+    // TA-Lib starts the two short-lookback indicators after nine WMA updates
+    // and the phase/trend indicators after thirty-four.  The distinction is
+    // observable because the Hilbert filters are recursive; processing the
+    // skipped bars changes every subsequent state value.
+    let wma_warmup = if MODE == 0 || MODE == 2 { 9 } else { 34 };
+    let mut trailing_wma_idx = 0usize;
+    let mut period_wma_sub = input[0] + input[1] + input[2];
+    let mut period_wma_sum = input[0] + 2.0 * input[1] + 3.0 * input[2];
+    let mut trailing_wma_value = 0.0;
+    for today in 3..(3 + wma_warmup) {
+        let value = input[today];
+        period_wma_sub += value;
+        period_wma_sub -= trailing_wma_value;
+        period_wma_sum += value * 4.0;
+        trailing_wma_value = input[trailing_wma_idx];
+        trailing_wma_idx += 1;
+        period_wma_sum -= period_wma_sub;
+    }
+
+    for i in (3 + wma_warmup)..input.len() {
+        let parity = i & 1;
+        let value = input[i];
+        period_wma_sub += value;
+        period_wma_sub -= trailing_wma_value;
+        period_wma_sum += value * 4.0;
+        trailing_wma_value = input[trailing_wma_idx];
+        trailing_wma_idx += 1;
+        let smoothed = period_wma_sum * 0.1;
+        period_wma_sum -= period_wma_sub;
+
+        if MODE == 1 || MODE == 3 || MODE == 5 {
+            smooth_price[smooth_price_idx] = smoothed;
+        }
+        let adjusted_period = 0.075f64.mul_add(period, 0.54);
+
+        let mut detrender_value = -detrender[parity][hilbert_idx];
+        detrender[parity][hilbert_idx] = a * smoothed;
+        detrender_value += a * smoothed;
+        detrender_value -= prev_detrender[parity];
+        prev_detrender[parity] = b * prev_detrender_input[parity];
+        detrender_value += prev_detrender[parity];
+        prev_detrender_input[parity] = smoothed;
+        detrender_value *= adjusted_period;
+
+        let mut q1_value = -q1[parity][hilbert_idx];
+        q1[parity][hilbert_idx] = a * detrender_value;
+        q1_value += a * detrender_value;
+        q1_value -= prev_q1[parity];
+        prev_q1[parity] = b * prev_q1_input[parity];
+        q1_value += prev_q1[parity];
+        prev_q1_input[parity] = detrender_value;
+        q1_value *= adjusted_period;
+
+        let mut ji_value = -ji[parity][hilbert_idx];
+        ji[parity][hilbert_idx] = a * i1_prev3[parity];
+        ji_value += a * i1_prev3[parity];
+        ji_value -= prev_ji[parity];
+        prev_ji[parity] = b * prev_ji_input[parity];
+        ji_value += prev_ji[parity];
+        prev_ji_input[parity] = i1_prev3[parity];
+        ji_value *= adjusted_period;
+
+        let mut jq_value = -jq[parity][hilbert_idx];
+        jq[parity][hilbert_idx] = a * q1_value;
+        jq_value += a * q1_value;
+        jq_value -= prev_jq[parity];
+        prev_jq[parity] = b * prev_jq_input[parity];
+        jq_value += prev_jq[parity];
+        prev_jq_input[parity] = q1_value;
+        jq_value *= adjusted_period;
+
+        if parity == 0 {
+            hilbert_idx = (hilbert_idx + 1) % 3;
+        }
+        let current_q2 = 0.2f64.mul_add(q1_value + ji_value, 0.8 * prev_q2);
+        let current_i2 = 0.2f64.mul_add(i1_prev3[parity] - jq_value, 0.8 * prev_i2);
+        let other = parity ^ 1;
+        i1_prev3[other] = i1_prev2[other];
+        i1_prev2[other] = detrender_value;
+
+        re = 0.8f64.mul_add(
+            re,
+            0.2 * (current_i2.mul_add(prev_i2, current_q2 * prev_q2)),
+        );
+        im = 0.8f64.mul_add(im, 0.2 * (current_i2 * prev_q2 - current_q2 * prev_i2));
+        prev_q2 = current_q2;
+        prev_i2 = current_i2;
+
+        let previous_period = period;
+        let phase = if re != 0.0 { (im / re).atan() } else { 0.0 };
+        if im != 0.0 && re != 0.0 {
+            period = 360.0 / (phase * rad2deg);
+        }
+        period = period
+            .min(1.5 * previous_period)
+            .max(0.67 * previous_period);
+        period = period.clamp(6.0, 50.0);
+        period = 0.2f64.mul_add(period, 0.8 * previous_period);
+        smooth_period = 0.33f64.mul_add(period, 0.67 * smooth_period);
+
+        if i >= lookback || (MODE != 0 && MODE != 2) {
+            match MODE {
+                0 => first[i] = smooth_period,
+                1 | 3 | 4 | 5 => {
+                    if MODE == 4 {
+                        let dc_period_int = (smooth_period + 0.5) as usize;
+                        // TA-Lib caps the dominant period at 50; the state
+                        // machine has already advanced far enough for this
+                        // trailing window to be valid.
+                        let raw_sum = trend_prefix[i + 1] - trend_prefix[i + 1 - dc_period_int];
+                        let instant_trend = if dc_period_int > 0 {
+                            raw_sum / dc_period_int as f64
+                        } else {
+                            0.0
+                        };
+                        let trendline =
+                            (4.0 * instant_trend + 3.0 * i_trend1 + 2.0 * i_trend2 + i_trend3)
+                                / 10.0;
+                        i_trend3 = i_trend2;
+                        i_trend2 = i_trend1;
+                        i_trend1 = instant_trend;
+                        if i >= lookback {
+                            first[i] = trendline;
+                        }
+                    } else {
+                        let dc_period = smooth_period + 0.5;
+                        let dc_period_int = dc_period as usize;
+                        let mut real_part = 0.0;
+                        let mut imag_part = 0.0;
+                        let mut idx = smooth_price_idx;
+                        for j in 0..dc_period_int {
+                            let price = smooth_price[idx];
+                            real_part += phase_sin[dc_period_int][j] * price;
+                            imag_part += phase_cos[dc_period_int][j] * price;
+                            idx = if idx == 0 { 49 } else { idx - 1 };
+                        }
+                        let abs_imag = imag_part.abs();
+                        if abs_imag > 0.0 {
+                            dc_phase = (real_part / imag_part).atan() * rad2deg;
+                        } else if abs_imag <= 0.01 {
+                            if real_part < 0.0 {
+                                dc_phase -= 90.0;
+                            } else if real_part > 0.0 {
+                                dc_phase += 90.0;
+                            }
+                        }
+                        dc_phase += 90.0;
+                        dc_phase += 360.0 / smooth_period;
+                        if imag_part < 0.0 {
+                            dc_phase += 180.0;
+                        }
+                        if dc_phase > 315.0 {
+                            dc_phase -= 360.0;
+                        }
+
+                        prev_sine = sine;
+                        prev_lead_sine = lead_sine;
+                        let (next_sine, next_cosine) = (dc_phase * rad2deg.recip()).sin_cos();
+                        sine = next_sine;
+                        lead_sine = (next_sine + next_cosine) * std::f64::consts::FRAC_1_SQRT_2;
+
+                        let mut raw_sum = 0.0;
+                        for j in 0..dc_period_int {
+                            raw_sum += input[i - j];
+                        }
+                        let instant_trend = if dc_period_int > 0 {
+                            raw_sum / dc_period_int as f64
+                        } else {
+                            0.0
+                        };
+                        let trendline =
+                            (4.0 * instant_trend + 3.0 * i_trend1 + 2.0 * i_trend2 + i_trend3)
+                                / 10.0;
+                        i_trend3 = i_trend2;
+                        i_trend2 = i_trend1;
+                        i_trend1 = instant_trend;
+
+                        if MODE == 1 {
+                            if i >= lookback {
+                                first[i] = dc_phase;
+                            }
+                        } else if MODE == 3 {
+                            if i >= lookback {
+                                first[i] = sine;
+                                if let Some(values) = second.as_deref_mut() {
+                                    values[i] = lead_sine;
+                                }
+                            }
+                        } else {
+                            let mut trend = 1i32;
+                            if (sine > lead_sine && prev_sine <= prev_lead_sine)
+                                || (sine < lead_sine && prev_sine >= prev_lead_sine)
+                            {
+                                days_in_trend = 0;
+                                trend = 0;
+                            }
+                            days_in_trend += 1;
+                            if (days_in_trend as f64) < 0.5 * smooth_period {
+                                trend = 0;
+                            }
+                            let phase_delta = dc_phase - prev_dc_phase;
+                            if smooth_period != 0.0
+                                && phase_delta > 0.67 * 360.0 / smooth_period
+                                && phase_delta < 1.5 * 360.0 / smooth_period
+                            {
+                                trend = 0;
+                            }
+                            let current_smooth_price = smooth_price[smooth_price_idx];
+                            if trendline != 0.0
+                                && ((current_smooth_price - trendline) / trendline).abs() >= 0.015
+                            {
+                                trend = 1;
+                            }
+                            if i >= lookback {
+                                first[i] = trend as f64;
+                            }
+                        }
+                        prev_dc_phase = dc_phase;
+                    }
+                }
+                2 => {
+                    first[i] = i1_prev3[parity];
+                    if let Some(values) = second.as_deref_mut() {
+                        values[i] = q1_value;
+                    }
+                }
+                _ => unreachable!("unsupported Hilbert selection"),
+            }
+        }
+        if MODE == 1 || MODE == 3 || MODE == 5 {
+            smooth_price_idx += 1;
+            if smooth_price_idx == 50 {
+                smooth_price_idx = 0;
+            }
+        }
+    }
+    Ok(())
+}
+
+pub fn ht_dcperiod_into(input: &[f64], output: &mut [f64]) -> Result<()> {
+    compute_hilbert_short::<false, false>(input, output, None)
+}
+
+pub fn ht_dcphase_into(input: &[f64], output: &mut [f64]) -> Result<()> {
+    compute_hilbert_selected::<1>(input, output, None)
+}
+
+pub fn ht_phasor_into(input: &[f64], in_phase: &mut [f64], quadrature: &mut [f64]) -> Result<()> {
+    compute_hilbert_short::<true, false>(input, in_phase, Some(quadrature))
+}
+
+pub fn ht_sine_into(input: &[f64], sine: &mut [f64], lead_sine: &mut [f64]) -> Result<()> {
+    compute_hilbert_selected::<3>(input, sine, Some(lead_sine))
+}
+
+pub fn ht_trendline_into(input: &[f64], output: &mut [f64]) -> Result<()> {
+    compute_hilbert_short::<false, true>(input, output, None)
+}
+
+pub fn ht_trendmode_into(input: &[f64], output: &mut [f64]) -> Result<()> {
+    compute_hilbert_selected::<5>(input, output, None)
 }
 
 // ============================================================================
@@ -1626,25 +2157,31 @@ mod tests {
     }
 
     #[test]
-    fn test_ht_sine_simd_matches_scalar() {
-        // The SIMD sin/cos terminal stage must match a scalar f64::sin_cos reference
-        // (the phase is atan(im/re) ∈ (-π/2, π/2), where the polynomial is exact to ~1e-11).
+    fn test_ht_sine_simd_kernel_matches_scalar() {
+        // Keep the SIMD primitive's numerical contract independent from the
+        // Hilbert state machine.  HT_SINE now uses the unified state machine,
+        // whose dominant-phase correction is intentionally different from the
+        // old raw atan(im/re) reference used by this test.
         let n = 256;
         let input: Vec<f64> = (0..n)
             .map(|i| 100.0 + 10.0 * (i as f64 * 0.13).sin() + (i as f64 * 0.7).cos())
             .collect();
-        let (sine, lead) = ht_sine(&input).unwrap();
 
-        let (_s, _d, _ip, _q, _j1, _i2, _j2, phase, _p) = compute_hilbert_components(&input, n);
+        let (_d, _ip, _q, _j1, _i2, _j2, phase, _p) = compute_hilbert_components(&input, n);
+        let mut simd_sine = vec![0.0; n - 32];
+        let mut simd_cosine = vec![0.0; n - 32];
+        simd_ops::simd_sin_cos(&phase[32..], &mut simd_sine, &mut simd_cosine);
         let lead_c = std::f64::consts::FRAC_1_SQRT_2; // cos(π/4) = sin(π/4) = √2/2
         let mut max_sine_err = 0.0_f64;
         let mut max_lead_err = 0.0_f64;
         for i in 32..n {
-            let (sp, cp) = phase[i].sin_cos();
-            let exp_sine = sp;
-            let exp_lead = (sp + cp) * lead_c;
-            max_sine_err = max_sine_err.max((sine[i] - exp_sine).abs());
-            max_lead_err = max_lead_err.max((lead[i] - exp_lead).abs());
+            let (scalar_sine, scalar_cosine) = phase[i].sin_cos();
+            max_sine_err = max_sine_err.max((simd_sine[i - 32] - scalar_sine).abs());
+            max_lead_err = max_lead_err.max(
+                ((simd_sine[i - 32] + simd_cosine[i - 32]) * lead_c
+                    - (scalar_sine + scalar_cosine) * lead_c)
+                    .abs(),
+            );
         }
         assert!(
             max_sine_err <= 1e-9,
@@ -1659,8 +2196,8 @@ mod tests {
 
         // Sanity: the kernel was actually exercised (finite, non-trivial output).
         let mut finite = 0;
-        for i in 32..n {
-            if sine[i].is_finite() && lead[i].is_finite() {
+        for i in 0..simd_sine.len() {
+            if simd_sine[i].is_finite() && simd_cosine[i].is_finite() {
                 finite += 1;
             }
         }

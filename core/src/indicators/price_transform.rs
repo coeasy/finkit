@@ -311,26 +311,38 @@ pub fn avgprice_into(
     close: &[f64],
     output: &mut [f64],
 ) -> crate::error::Result<()> {
-    let result = avgprice(open, high, low, close)?;
-    if result.len() != output.len() {
+    if open.len() != high.len() || open.len() != low.len() || open.len() != close.len() {
+        return Err(crate::error::TaError::InvalidParameter {
+            name: "open, high, low, close".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    validate_input(open.len(), 1)?;
+    if output.len() != open.len() {
         return Err(crate::error::TaError::InvalidParameter {
             name: "output".to_string(),
             constraint: "must have the same length as input".to_string(),
         });
     }
-    output.copy_from_slice(result.as_slice().unwrap());
+    crate::math::simd_ops::simd_avgprice(open, high, low, close, output);
     Ok(())
 }
 
 pub fn medprice_into(high: &[f64], low: &[f64], output: &mut [f64]) -> crate::error::Result<()> {
-    let result = medprice(high, low)?;
-    if result.len() != output.len() {
+    if high.len() != low.len() {
+        return Err(crate::error::TaError::InvalidParameter {
+            name: "high and low".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    validate_input(high.len(), 1)?;
+    if output.len() != high.len() {
         return Err(crate::error::TaError::InvalidParameter {
             name: "output".to_string(),
             constraint: "must have the same length as input".to_string(),
         });
     }
-    output.copy_from_slice(result.as_slice().unwrap());
+    crate::math::simd_ops::simd_median_price(high, low, output);
     Ok(())
 }
 
@@ -340,13 +352,19 @@ pub fn typprice_into(
     close: &[f64],
     output: &mut [f64],
 ) -> crate::error::Result<()> {
-    let result = typprice(high, low, close)?;
-    if result.len() != output.len() {
+    if high.len() != low.len() || high.len() != close.len() {
+        return Err(crate::error::TaError::InvalidParameter {
+            name: "high, low, close".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    validate_input(high.len(), 1)?;
+    if output.len() != high.len() {
         return Err(crate::error::TaError::InvalidParameter {
             name: "output".to_string(),
             constraint: "must have the same length as input".to_string(),
         });
     }
-    output.copy_from_slice(result.as_slice().unwrap());
+    crate::math::simd_ops::simd_typical_price(high, low, close, output);
     Ok(())
 }

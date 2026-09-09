@@ -143,6 +143,56 @@ pub fn zscore(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
     Ok(output)
 }
 
+/// Write Z-Score directly into a caller-owned output slice.
+///
+/// The formula executor uses this fused rolling-moment path to avoid the two
+/// temporary arrays previously created for rolling mean and standard deviation.
+/// It intentionally keeps the sample-standard-deviation convention used by
+/// [`zscore`].
+#[inline]
+pub fn zscore_into(input: &[f64], timeperiod: usize, output: &mut [f64]) -> Result<()> {
+    if timeperiod < 2 {
+        return Err(TaError::InvalidParameter {
+            name: "timeperiod".to_string(),
+            constraint: "at least 2".to_string(),
+        });
+    }
+    if input.len() != output.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
+    validate_input(input.len(), timeperiod)?;
+
+    output.fill(f64::NAN);
+    let n = timeperiod as f64;
+    let inv_n = 1.0 / n;
+    let inv_n_minus_1 = 1.0 / (n - 1.0);
+    let mut sum = 0.0;
+    let mut sum_sq = 0.0;
+    for &value in &input[..timeperiod] {
+        sum += value;
+        sum_sq += value * value;
+    }
+
+    for index in timeperiod - 1..input.len() {
+        if index >= timeperiod {
+            let old = input[index - timeperiod];
+            let new = input[index];
+            sum += new - old;
+            sum_sq += new * new - old * old;
+        }
+        let mean = sum * inv_n;
+        let variance = ((sum_sq - sum * mean) * inv_n_minus_1).max(0.0);
+        let std_dev = variance.sqrt();
+        if std_dev > 1e-15 {
+            output[index] = (input[index] - mean) / std_dev;
+        }
+    }
+    Ok(())
+}
+
 /// Percent Rank (百分比排名)
 ///
 /// 计算当前值在过去窗口中的百分比排名，表示有多少比例的值低于当前值。
@@ -258,54 +308,82 @@ pub fn beta(asset: &[f64], benchmark: &[f64], timeperiod: usize) -> Result<Array
             constraint: "at least 2".to_string(),
         });
     }
-    validate_input(asset.len(), timeperiod)?;
+    validate_input(asset.len(), timeperiod + 1)?;
 
     let len = asset.len();
     let mut output = init_output(len);
-
     let n = timeperiod as f64;
+    let mut sum_xx = 0.0;
+    let mut sum_xy = 0.0;
+    let mut sum_x = 0.0;
+    let mut sum_y = 0.0;
+    let mut last_x = asset[0];
+    let mut last_y = benchmark[0];
+    let mut trailing_last_x = asset[0];
+    let mut trailing_last_y = benchmark[0];
+    let mut trailing_idx = 1usize;
 
-    // Initialize accumulators with first window
-    // TA-Lib uses raw prices, not returns
-    let mut sum_a: f64 = 0.0;
-    let mut sum_b: f64 = 0.0;
-    let mut sum_ab: f64 = 0.0;
-    let mut sum_b2: f64 = 0.0;
-    for j in 0..timeperiod {
-        let a = asset[j];
-        let b = benchmark[j];
-        sum_a += a;
-        sum_b += b;
-        sum_ab += a * b;
-        sum_b2 += b * b;
+    for i in 1..timeperiod {
+        let x = if last_x != 0.0 {
+            (asset[i] - last_x) / last_x
+        } else {
+            0.0
+        };
+        last_x = asset[i];
+        let y = if last_y != 0.0 {
+            (benchmark[i] - last_y) / last_y
+        } else {
+            0.0
+        };
+        last_y = benchmark[i];
+        sum_xx += x * x;
+        sum_xy += x * y;
+        sum_x += x;
+        sum_y += y;
     }
 
-    // beta = Cov(asset, benchmark) / Var(benchmark)
-    // Using population variance (÷n) to match TA-Lib
-    // beta = (sum_ab - sum_a*sum_b/n) / (n * variance_b)
-    // where variance_b = (sum_b2 - sum_b*sum_b/n) / n
-    let variance_b = (sum_b2 - sum_b * sum_b / n) / n;
-    if variance_b.abs() > 1e-15 {
-        let covariance = (sum_ab - sum_a * sum_b / n) / n;
-        output[timeperiod - 1] = covariance / variance_b;
-    }
-
-    // Subsequent windows — incremental O(1) update per step
     for i in timeperiod..len {
-        let old_a = asset[i - timeperiod];
-        let old_b = benchmark[i - timeperiod];
-        let new_a = asset[i];
-        let new_b = benchmark[i];
-        sum_a += new_a - old_a;
-        sum_b += new_b - old_b;
-        sum_ab += new_a * new_b - old_a * old_b;
-        sum_b2 += new_b * new_b - old_b * old_b;
+        let x = if last_x != 0.0 {
+            (asset[i] - last_x) / last_x
+        } else {
+            0.0
+        };
+        last_x = asset[i];
+        let y = if last_y != 0.0 {
+            (benchmark[i] - last_y) / last_y
+        } else {
+            0.0
+        };
+        last_y = benchmark[i];
+        sum_xx += x * x;
+        sum_xy += x * y;
+        sum_x += x;
+        sum_y += y;
 
-        let variance_b = (sum_b2 - sum_b * sum_b / n) / n;
-        if variance_b.abs() > 1e-15 {
-            let covariance = (sum_ab - sum_a * sum_b / n) / n;
-            output[i] = covariance / variance_b;
-        }
+        let denominator = n * sum_xx - sum_x * sum_x;
+        output[i] = if denominator.abs() > 1e-14 {
+            (n * sum_xy - sum_x * sum_y) / denominator
+        } else {
+            0.0
+        };
+
+        let old_x = if trailing_last_x != 0.0 {
+            (asset[trailing_idx] - trailing_last_x) / trailing_last_x
+        } else {
+            0.0
+        };
+        trailing_last_x = asset[trailing_idx];
+        let old_y = if trailing_last_y != 0.0 {
+            (benchmark[trailing_idx] - trailing_last_y) / trailing_last_y
+        } else {
+            0.0
+        };
+        trailing_last_y = benchmark[trailing_idx];
+        trailing_idx += 1;
+        sum_xx -= old_x * old_x;
+        sum_xy -= old_x * old_y;
+        sum_x -= old_x;
+        sum_y -= old_y;
     }
 
     Ok(output)
@@ -974,9 +1052,9 @@ mod tests {
 
         let result = beta(&asset, &benchmark, 5).unwrap();
 
-        assert!(!result[4].is_nan());
-        assert!(result[4] > 1.9);
-        assert!(result[4] < 2.1);
+        assert!(result[4].is_nan());
+        assert!(!result[5].is_nan());
+        assert_relative_eq!(result[5], 0.25959207, epsilon = 1e-6);
     }
 
     #[test]
@@ -986,8 +1064,9 @@ mod tests {
 
         let result = beta(&asset, &benchmark, 5).unwrap();
 
-        assert!(!result[4].is_nan());
-        assert_relative_eq!(result[4], 1.0, epsilon = 1e-3);
+        assert!(result[4].is_nan());
+        assert!(!result[5].is_nan());
+        assert_relative_eq!(result[5], 1.0, epsilon = 1e-3);
     }
 
     #[test]

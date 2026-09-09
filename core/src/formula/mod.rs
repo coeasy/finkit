@@ -22,7 +22,11 @@ pub mod debugger;
 pub mod drawing;
 pub mod engine;
 pub mod executor;
+#[path = "functions_router.rs"]
 pub mod functions;
+#[path = "functions.rs"]
+mod functions_legacy;
+pub mod hot_plan;
 pub mod jit;
 pub mod memory_pool;
 pub mod ops;
@@ -31,6 +35,7 @@ pub mod optimizer;
 pub mod params;
 pub mod parser;
 pub mod pine;
+mod range_zero_copy;
 pub mod sandbox;
 // AArch64 guarantees NEON in the Finkit dispatch model, so the scalar fallback
 // statements that follow unconditional NEON returns are intentionally
@@ -40,6 +45,7 @@ pub mod sandbox;
 pub mod simd;
 pub mod templates;
 pub mod types;
+pub mod unified_dispatch;
 
 pub use ast::*;
 pub use bytecode::{compile_to_bytecode, Bytecode, BytecodeVM, ExecResult, OpCode};
@@ -51,6 +57,7 @@ pub use drawing::{DrawCommand, DrawResult};
 pub use engine::{FormulaEngine, FormulaResult};
 pub use executor::FormulaExecutor;
 pub use functions::get_builtin_functions;
+pub use hot_plan::{FormulaHotPlan, FormulaHotPlanError};
 pub use jit::{JitCompiler, OptimizedBytecode};
 pub use memory_pool::{BufferPool, ZeroCopyContext};
 pub use ops::*;
@@ -66,6 +73,7 @@ pub use simd::SimdOps;
 pub use templates::{FormulaTemplate, FormulaTemplates, TemplateCategory};
 pub use types::FormulaValue;
 pub use types::*;
+pub use unified_dispatch::{unified_formula_executor, FormulaKernelDispatcher};
 
 /// Formula language dialect selector.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

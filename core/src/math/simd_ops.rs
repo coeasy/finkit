@@ -726,9 +726,11 @@ unsafe fn obv_core_avx2(close: &[f64], volume: &[f64], result: &mut [f64]) {
         return;
     }
 
-    let mut delta = vec![0.0f64; len];
-    delta[0] = volume[0];
-    let delta_ptr = delta.as_mut_ptr();
+    // Reuse the caller-owned result as the delta scratch buffer. The prefix
+    // scan below is alias-safe because it loads one complete SIMD block before
+    // storing that same block, then advances monotonically.
+    result[0] = volume[0];
+    let result_ptr = result.as_mut_ptr();
     let zero = _mm256_setzero_pd();
 
     // Process 4 close deltas per iteration. Each lane compares close[i] vs
@@ -752,13 +754,13 @@ unsafe fn obv_core_avx2(close: &[f64], volume: &[f64], result: &mut [f64]) {
             let plus = _mm256_and_pd(vol, pos);
             let minus = _mm256_and_pd(vol, neg);
             let signed = _mm256_sub_pd(plus, minus);
-            _mm256_storeu_pd(delta_ptr.add(off + 1), signed);
+            _mm256_storeu_pd(result_ptr.add(off + 1), signed);
         }
     }
     // Scalar tail for the very last partial chunk.
     for i in ((((len.saturating_sub(1)) / 4) * 4 + 1).max(1))..len {
         let diff = close[i] - close[i - 1];
-        delta[i] = if diff > 0.0 {
+        result[i] = if diff > 0.0 {
             volume[i]
         } else if diff < 0.0 {
             -volume[i]
@@ -767,7 +769,8 @@ unsafe fn obv_core_avx2(close: &[f64], volume: &[f64], result: &mut [f64]) {
         };
     }
 
-    prefix_sum_avx2_kernel(&delta, result);
+    let deltas = core::slice::from_raw_parts(result.as_ptr(), len);
+    prefix_sum_avx2_kernel(deltas, result);
 }
 
 // Scalar fallback (no SIMD intrinsics)
@@ -792,10 +795,10 @@ unsafe fn ad_line_fallback(
     let mut acc = 0.0;
     for i in 0..len {
         let hl = high[i] - low[i];
-        let mfm = if hl.abs() < 1e-15 {
-            0.0
-        } else {
+        let mfm = if hl > 0.0 {
             ((close[i] - low[i]) - (high[i] - close[i])) / hl
+        } else {
+            0.0
         };
         acc += mfm * volume[i];
         result[i] = acc;
@@ -808,6 +811,7 @@ unsafe fn ad_line_fallback(
 // computed via the same block-level SIMD scan used elsewhere.
 #[cfg(all(feature = "std", target_arch = "x86_64"))]
 #[target_feature(enable = "avx2")]
+#[allow(dead_code)]
 unsafe fn ad_line_avx2(
     high: &[f64],
     low: &[f64],
@@ -828,9 +832,8 @@ unsafe fn ad_line_avx2(
 
     let result_ptr = result.as_mut_ptr();
     let chunks = len / 4;
-    let eps = _mm256_set1_pd(1e-15);
     let zero = _mm256_setzero_pd();
-    let sign_mask = _mm256_set1_pd(f64::from_bits(0x7FFF_FFFF_FFFF_FFFFu64));
+    let mut acc = 0.0;
 
     // SIMD 计算 money flow volume
     for c in 0..chunks {
@@ -845,47 +848,29 @@ unsafe fn ad_line_avx2(
         let hc = _mm256_sub_pd(vh, vc);
         let clv = _mm256_sub_pd(cl, hc);
 
-        // 优化：使用更高效的除法和条件选择
-        let abs_hl = _mm256_and_pd(sign_mask, hl);
-        let valid = _mm256_cmp_pd(abs_hl, eps, _CMP_GT_OS);
+        // Match the scalar contract exactly: only a strictly positive range
+        // contributes money flow. The vector division is masked afterward.
+        let valid = _mm256_cmp_pd(hl, zero, _CMP_GT_OS);
         let div = _mm256_div_pd(clv, hl);
         let mfm = _mm256_blendv_pd(zero, div, valid);
         let mfv_v = _mm256_mul_pd(mfm, vvol);
-        _mm256_storeu_pd(result_ptr.add(off), mfv_v);
+        let values: [f64; 4] = core::mem::transmute(mfv_v);
+        for (lane, value) in values.into_iter().enumerate() {
+            acc += value;
+            *result_ptr.add(off + lane) = acc;
+        }
     }
 
     // 处理剩余元素
     for i in (chunks * 4)..len {
         let hl = high[i] - low[i];
-        let mfm = if hl.abs() < 1e-15 {
-            0.0
-        } else {
+        let mfm = if hl > 0.0 {
             ((close[i] - low[i]) - (high[i] - close[i])) / hl
+        } else {
+            0.0
         };
-        result[i] = mfm * volume[i];
-    }
-
-    // 优化的 prefix sum：使用 4-way 展开减少循环开销
-    let mut acc = result[0];
-    let mut i = 1;
-    let unroll_end = len.saturating_sub(3);
-
-    while i < unroll_end {
-        acc += result[i];
+        acc += mfm * volume[i];
         result[i] = acc;
-        acc += result[i + 1];
-        result[i + 1] = acc;
-        acc += result[i + 2];
-        result[i + 2] = acc;
-        acc += result[i + 3];
-        result[i + 3] = acc;
-        i += 4;
-    }
-
-    while i < len {
-        acc += result[i];
-        result[i] = acc;
-        i += 1;
     }
 }
 
@@ -1086,15 +1071,25 @@ fn ad_line_scalar(high: &[f64], low: &[f64], close: &[f64], volume: &[f64], resu
         return;
     }
     let mut acc = 0.0;
+    let high_ptr = high.as_ptr();
+    let low_ptr = low.as_ptr();
+    let close_ptr = close.as_ptr();
+    let volume_ptr = volume.as_ptr();
+    let result_ptr = result.as_mut_ptr();
     for i in 0..len {
-        let hl = high[i] - low[i];
-        let mfm = if hl.abs() < 1e-15 {
-            0.0
-        } else {
-            ((close[i] - low[i]) - (high[i] - close[i])) / hl
-        };
-        acc += mfm * volume[i];
-        result[i] = acc;
+        unsafe {
+            let h = *high_ptr.add(i);
+            let l = *low_ptr.add(i);
+            let c = *close_ptr.add(i);
+            let hl = h - l;
+            let mfm = if hl > 0.0 {
+                ((c - l) - (h - c)) / hl
+            } else {
+                0.0
+            };
+            acc += mfm * *volume_ptr.add(i);
+            *result_ptr.add(i) = acc;
+        }
     }
 }
 
@@ -1315,6 +1310,105 @@ pub fn simd_sin_cos(input: &[f64], sin_out: &mut [f64], cos_out: &mut [f64]) {
         }
     }
     simd_sin_cos_scalar(input, sin_out, cos_out)
+}
+
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2")]
+unsafe fn simd_sqrt_avx2(input: &[f64], output: &mut [f64]) {
+    use core::arch::x86_64::*;
+    let n = input.len().min(output.len());
+    let input_ptr = input.as_ptr();
+    let output_ptr = output.as_mut_ptr();
+    let mut i = 0usize;
+    while i + 4 <= n {
+        let values = _mm256_loadu_pd(input_ptr.add(i));
+        let roots = _mm256_sqrt_pd(values);
+        _mm256_storeu_pd(output_ptr.add(i), roots);
+        i += 4;
+    }
+    while i < n {
+        *output_ptr.add(i) = f64_sqrt(*input_ptr.add(i));
+        i += 1;
+    }
+}
+
+#[inline]
+fn simd_sqrt_scalar(input: &[f64], output: &mut [f64]) {
+    for (source, destination) in input.iter().zip(output.iter_mut()) {
+        *destination = f64_sqrt(*source);
+    }
+}
+
+/// Computes square roots with runtime AVX2 dispatch and a scalar fallback.
+pub fn simd_sqrt(input: &[f64], output: &mut [f64]) {
+    #[cfg(all(feature = "std", target_arch = "x86_64"))]
+    {
+        if is_x86_feature_detected!("avx2") {
+            return unsafe { simd_sqrt_avx2(input, output) };
+        }
+    }
+    simd_sqrt_scalar(input, output)
+}
+
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2")]
+unsafe fn simd_sqrt_avx2_checked(input: &[f64], output: &mut [f64]) -> Option<usize> {
+    use core::arch::x86_64::*;
+
+    let n = input.len().min(output.len());
+    let input_ptr = input.as_ptr();
+    let output_ptr = output.as_mut_ptr();
+    let zero = _mm256_setzero_pd();
+    let exponent_mask = _mm256_set1_epi64x(0x7ff0_0000_0000_0000u64 as i64);
+    let mut i = 0usize;
+    while i + 4 <= n {
+        let values = _mm256_loadu_pd(input_ptr.add(i));
+        let bits = _mm256_castpd_si256(values);
+        let negative = _mm256_castpd_si256(_mm256_cmp_pd(values, zero, _CMP_LT_OQ));
+        let non_finite = _mm256_cmpeq_epi64(_mm256_and_si256(bits, exponent_mask), exponent_mask);
+        let invalid = _mm256_or_si256(negative, non_finite);
+        let invalid_mask = _mm256_movemask_pd(_mm256_castsi256_pd(invalid));
+        if invalid_mask != 0 {
+            for lane in 0..4 {
+                let value = *input_ptr.add(i + lane);
+                if !value.is_finite() || value < 0.0 {
+                    return Some(i + lane);
+                }
+            }
+        }
+        _mm256_storeu_pd(output_ptr.add(i), _mm256_sqrt_pd(values));
+        i += 4;
+    }
+    while i < n {
+        let value = *input_ptr.add(i);
+        if !value.is_finite() || value < 0.0 {
+            return Some(i);
+        }
+        *output_ptr.add(i) = value.sqrt();
+        i += 1;
+    }
+    None
+}
+
+fn simd_sqrt_checked_scalar(input: &[f64], output: &mut [f64]) -> Option<usize> {
+    for (i, (source, destination)) in input.iter().zip(output.iter_mut()).enumerate() {
+        if !source.is_finite() || *source < 0.0 {
+            return Some(i);
+        }
+        *destination = f64_sqrt(*source);
+    }
+    None
+}
+
+/// Computes square roots and validates the domain in the same pass.
+pub fn simd_sqrt_checked(input: &[f64], output: &mut [f64]) -> Option<usize> {
+    #[cfg(all(feature = "std", target_arch = "x86_64"))]
+    {
+        if is_x86_feature_detected!("avx2") {
+            return unsafe { simd_sqrt_avx2_checked(input, output) };
+        }
+    }
+    simd_sqrt_checked_scalar(input, output)
 }
 
 // ============================================================================
@@ -3388,14 +3482,24 @@ unsafe fn mom_avx2(input: &[f64], period: usize, result: &mut [f64]) {
     let ptr = input.as_ptr();
     let out_ptr = result.as_mut_ptr();
 
-    // Process 4 elements at a time using AVX2
+    // Process four AVX2 vectors per iteration. The unroll reduces loop and
+    // dispatch overhead on the small, bandwidth-bound MOM kernel.
     let chunks = (len - period) / 4;
-    for c in 0..chunks {
+    let unrolled = chunks / 4;
+    for c in 0..unrolled {
+        let i = period + c * 16;
+        for offset in [0usize, 4, 8, 12] {
+            let j = i + offset;
+            let v_curr = _mm256_loadu_pd(ptr.add(j));
+            let v_prev = _mm256_loadu_pd(ptr.add(j - period));
+            _mm256_storeu_pd(out_ptr.add(j), _mm256_sub_pd(v_curr, v_prev));
+        }
+    }
+    for c in (unrolled * 4)..chunks {
         let i = period + c * 4;
         let v_curr = _mm256_loadu_pd(ptr.add(i));
         let v_prev = _mm256_loadu_pd(ptr.add(i - period));
-        let v_diff = _mm256_sub_pd(v_curr, v_prev);
-        _mm256_storeu_pd(out_ptr.add(i), v_diff);
+        _mm256_storeu_pd(out_ptr.add(i), _mm256_sub_pd(v_curr, v_prev));
     }
 
     // Handle remaining elements

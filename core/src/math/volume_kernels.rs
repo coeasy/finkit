@@ -1,0 +1,572 @@
+//! Allocation-free volume indicator kernels for caller-owned output buffers.
+//!
+//! This module is deliberately below the public indicator layer. It gives the
+//! Python/FFI bindings and the canonical allocating APIs a common hot path without
+//! forcing a temporary `Vec`/`Array1` conversion. AD uses the runtime SIMD dispatcher;
+//! stateful recurrences that cannot be vectorized without scratch storage stay fused
+//! and allocation-free here.
+
+use crate::error::{Result, TaError};
+use ndarray::Array1;
+use std::mem::MaybeUninit;
+
+#[inline]
+fn validate_same_len(name: &'static str, expected: usize, actual: usize) -> Result<()> {
+    if expected != actual {
+        return Err(TaError::InvalidParameter {
+            name: name.to_string(),
+            constraint: "must have the same length as the primary input".to_string(),
+        });
+    }
+    Ok(())
+}
+
+/// Compute On-Balance Volume directly into `output`.
+///
+/// OBV is a serial prefix recurrence. Keep the canonical fused scalar loop for
+/// the installed-wheel path; materializing a SIMD prefix scan is slower on
+/// the target benchmark sizes.
+#[inline]
+pub fn obv_into(close: &[f64], volume: &[f64], output: &mut [f64]) -> Result<()> {
+    validate_same_len("volume", close.len(), volume.len())?;
+    validate_same_len("output", close.len(), output.len())?;
+    if close.is_empty() {
+        return Err(TaError::EmptyInput);
+    }
+
+    unsafe {
+        let close_ptr = close.as_ptr();
+        let volume_ptr = volume.as_ptr();
+        let output_ptr = output.as_mut_ptr();
+        let mut acc = *volume_ptr;
+        let mut previous_close = *close_ptr;
+        *output_ptr = acc;
+        let mut i = 1usize;
+        let unrolled_end = close.len().saturating_sub(3);
+        while i < unrolled_end {
+            let current = *close_ptr.add(i);
+            if current > previous_close {
+                acc += *volume_ptr.add(i);
+            } else if current < previous_close {
+                acc -= *volume_ptr.add(i);
+            }
+            previous_close = current;
+            *output_ptr.add(i) = acc;
+
+            let current = *close_ptr.add(i + 1);
+            if current > previous_close {
+                acc += *volume_ptr.add(i + 1);
+            } else if current < previous_close {
+                acc -= *volume_ptr.add(i + 1);
+            }
+            previous_close = current;
+            *output_ptr.add(i + 1) = acc;
+
+            let current = *close_ptr.add(i + 2);
+            if current > previous_close {
+                acc += *volume_ptr.add(i + 2);
+            } else if current < previous_close {
+                acc -= *volume_ptr.add(i + 2);
+            }
+            previous_close = current;
+            *output_ptr.add(i + 2) = acc;
+
+            let current = *close_ptr.add(i + 3);
+            if current > previous_close {
+                acc += *volume_ptr.add(i + 3);
+            } else if current < previous_close {
+                acc -= *volume_ptr.add(i + 3);
+            }
+            previous_close = current;
+            *output_ptr.add(i + 3) = acc;
+            i += 4;
+        }
+        while i < close.len() {
+            let current = *close_ptr.add(i);
+            if current > previous_close {
+                acc += *volume_ptr.add(i);
+            } else if current < previous_close {
+                acc -= *volume_ptr.add(i);
+            }
+            previous_close = current;
+            *output_ptr.add(i) = acc;
+            i += 1;
+        }
+    }
+    Ok(())
+}
+
+/// Allocate an OBV result without first clearing a buffer that the recurrence
+/// overwrites completely. Errors remain recoverable because `MaybeUninit` is
+/// dropped before it is converted to an initialized `Vec<f64>`.
+pub fn obv_vec(close: &[f64], volume: &[f64]) -> Result<Vec<f64>> {
+    let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(close.len());
+    unsafe { raw_output.set_len(close.len()) };
+    let output = unsafe {
+        std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<f64>(), close.len())
+    };
+    #[cfg(feature = "rayon")]
+    if close.len() >= 262_144 && close.len() == volume.len() && !close.is_empty() {
+        obv_into_parallel_fresh(close, volume, output)?;
+    } else {
+        obv_into(close, volume, output)?;
+    }
+    #[cfg(not(feature = "rayon"))]
+    obv_into(close, volume, output)?;
+
+    let ptr = raw_output.as_mut_ptr().cast::<f64>();
+    let len = raw_output.len();
+    let capacity = raw_output.capacity();
+    std::mem::forget(raw_output);
+    Ok(unsafe { Vec::from_raw_parts(ptr, len, capacity) })
+}
+
+#[cfg(feature = "rayon")]
+fn obv_into_parallel_fresh(close: &[f64], volume: &[f64], output: &mut [f64]) -> Result<()> {
+    use rayon::prelude::*;
+
+    validate_same_len("volume", close.len(), volume.len())?;
+    validate_same_len("output", close.len(), output.len())?;
+    if close.is_empty() {
+        return Err(TaError::EmptyInput);
+    }
+
+    const CHUNK_SIZE: usize = 32 * 1024;
+    output[0] = volume[0];
+    let data = &close[1..];
+    let volume_data = &volume[1..];
+    let local_totals: Vec<f64> = output[1..]
+        .par_chunks_mut(CHUNK_SIZE)
+        .enumerate()
+        .map(|(chunk_index, chunk)| {
+            let start = chunk_index * CHUNK_SIZE;
+            let mut previous_close = close[start];
+            let mut local = 0.0;
+            for (offset, slot) in chunk.iter_mut().enumerate() {
+                let index = start + offset;
+                let current = data[index];
+                if current > previous_close {
+                    local += volume_data[index];
+                } else if current < previous_close {
+                    local -= volume_data[index];
+                }
+                previous_close = current;
+                *slot = local;
+            }
+            local
+        })
+        .collect();
+
+    let mut offsets = Vec::with_capacity(local_totals.len());
+    let mut offset = output[0];
+    for total in local_totals {
+        offsets.push(offset);
+        offset += total;
+    }
+    output[1..]
+        .par_chunks_mut(CHUNK_SIZE)
+        .enumerate()
+        .for_each(|(chunk_index, chunk)| {
+            let base = offsets[chunk_index];
+            for value in chunk {
+                *value += base;
+            }
+        });
+    Ok(())
+}
+
+/// Allocating OBV wrapper sharing the allocation-free canonical recurrence.
+pub fn obv(close: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
+    Ok(Array1::from_vec(obv_vec(close, volume)?))
+}
+
+/// Compute the Accumulation/Distribution line directly into `output`.
+///
+/// The runtime SIMD dispatcher performs money-flow calculation and the cumulative
+/// scan directly in the caller-owned output without an additional full-length
+/// scratch allocation.
+#[inline]
+pub fn ad_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    volume: &[f64],
+    output: &mut [f64],
+) -> Result<()> {
+    let len = high.len();
+    validate_same_len("low", len, low.len())?;
+    validate_same_len("close", len, close.len())?;
+    validate_same_len("volume", len, volume.len())?;
+    validate_same_len("output", len, output.len())?;
+    if len == 0 {
+        return Err(TaError::EmptyInput);
+    }
+
+    crate::math::simd_ops::simd_ad_line(high, low, close, volume, output);
+    Ok(())
+}
+
+/// Allocating A/D wrapper sharing the canonical runtime dispatcher.
+pub fn ad(high: &[f64], low: &[f64], close: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
+    let mut output = vec![0.0; high.len()];
+    ad_into(high, low, close, volume, &mut output)?;
+    Ok(Array1::from_vec(output))
+}
+
+/// Compute Chaikin A/D Oscillator in a single pass.
+///
+/// ADOSC is intentionally fused because both EMA recurrences are stateful. A
+/// materialized AD scratch vector would add a second full memory pass. This
+/// caller-owned implementation remains the canonical stateful kernel.
+#[inline(always)]
+pub fn adosc_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    volume: &[f64],
+    fast_period: usize,
+    slow_period: usize,
+    output: &mut [f64],
+) -> Result<()> {
+    let len = high.len();
+    validate_same_len("low", len, low.len())?;
+    validate_same_len("close", len, close.len())?;
+    validate_same_len("volume", len, volume.len())?;
+    validate_same_len("output", len, output.len())?;
+    if fast_period == 0 || slow_period == 0 {
+        return Err(TaError::InvalidParameter {
+            name: "fast_period and slow_period".to_string(),
+            constraint: "must be greater than 0".to_string(),
+        });
+    }
+    let lookback = fast_period.max(slow_period).saturating_sub(1);
+    if len <= lookback {
+        return Err(TaError::InsufficientData {
+            length: len,
+            required: lookback + 1,
+        });
+    }
+
+    if fast_period == 3 && slow_period == 10 {
+        return adosc_default_3_10_into(high, low, close, volume, output);
+    }
+
+    let fast_k = 2.0 / (fast_period as f64 + 1.0);
+    let fast_one_k = 1.0 - fast_k;
+    let slow_k = 2.0 / (slow_period as f64 + 1.0);
+    let slow_one_k = 1.0 - slow_k;
+
+    unsafe {
+        let high_ptr = high.as_ptr();
+        let low_ptr = low.as_ptr();
+        let close_ptr = close.as_ptr();
+        let volume_ptr = volume.as_ptr();
+        let output_ptr = output.as_mut_ptr();
+        let mut cumulative = 0.0;
+        let mut fast_ema = 0.0;
+        let mut slow_ema = 0.0;
+        for i in 0..len {
+            let h = *high_ptr.add(i);
+            let l = *low_ptr.add(i);
+            let range = h - l;
+            if range > 0.0 {
+                let c = *close_ptr.add(i);
+                let multiplier = ((c - l) - (h - c)) / range;
+                cumulative += multiplier * *volume_ptr.add(i);
+            }
+            if i == 0 {
+                fast_ema = cumulative;
+                slow_ema = cumulative;
+            } else {
+                fast_ema = cumulative * fast_k + fast_ema * fast_one_k;
+                slow_ema = cumulative * slow_k + slow_ema * slow_one_k;
+            }
+            *output_ptr.add(i) = if i >= lookback {
+                fast_ema - slow_ema
+            } else {
+                f64::NAN
+            };
+        }
+    }
+    Ok(())
+}
+
+#[inline(always)]
+fn adosc_default_3_10_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    volume: &[f64],
+    output: &mut [f64],
+) -> Result<()> {
+    #[cfg(all(feature = "std", target_arch = "x86_64"))]
+    if crate::math::simd_ops::has_avx2() {
+        return unsafe { adosc_default_3_10_avx2(high, low, close, volume, output) };
+    }
+
+    unsafe {
+        let high_ptr = high.as_ptr();
+        let low_ptr = low.as_ptr();
+        let close_ptr = close.as_ptr();
+        let volume_ptr = volume.as_ptr();
+        let output_ptr = output.as_mut_ptr();
+        output[..9].fill(f64::NAN);
+
+        let range = *high_ptr - *low_ptr;
+        let mut cumulative = if range > 0.0 {
+            (((*close_ptr - *low_ptr) - (*high_ptr - *close_ptr)) / range) * *volume_ptr
+        } else {
+            0.0
+        };
+        let mut fast_ema = cumulative;
+        let mut slow_ema = cumulative;
+
+        for i in 1..=9 {
+            let h = *high_ptr.add(i);
+            let l = *low_ptr.add(i);
+            let range = h - l;
+            if range > 0.0 {
+                let c = *close_ptr.add(i);
+                let multiplier = ((c - l) - (h - c)) / range;
+                cumulative += multiplier * *volume_ptr.add(i);
+            }
+            fast_ema = cumulative * 0.5 + fast_ema * 0.5;
+            slow_ema = cumulative * (2.0 / 11.0) + slow_ema * (1.0 - 2.0 / 11.0);
+        }
+        *output_ptr.add(9) = fast_ema - slow_ema;
+
+        for i in 10..high.len() {
+            let h = *high_ptr.add(i);
+            let l = *low_ptr.add(i);
+            let range = h - l;
+            if range > 0.0 {
+                let c = *close_ptr.add(i);
+                cumulative += (((c - l) - (h - c)) / range) * *volume_ptr.add(i);
+            }
+            fast_ema = cumulative * 0.5 + fast_ema * 0.5;
+            slow_ema = cumulative * (2.0 / 11.0) + slow_ema * (1.0 - 2.0 / 11.0);
+            *output_ptr.add(i) = fast_ema - slow_ema;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2")]
+#[allow(unsafe_op_in_unsafe_fn)]
+unsafe fn adosc_default_3_10_avx2(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    volume: &[f64],
+    output: &mut [f64],
+) -> Result<()> {
+    use core::arch::x86_64::*;
+
+    output[..9].fill(f64::NAN);
+    let high_ptr = high.as_ptr();
+    let low_ptr = low.as_ptr();
+    let close_ptr = close.as_ptr();
+    let volume_ptr = volume.as_ptr();
+    let output_ptr = output.as_mut_ptr();
+    let zero = _mm256_setzero_pd();
+    let mut cumulative = 0.0;
+    let mut fast_ema = 0.0;
+    let mut slow_ema = 0.0;
+
+    let chunks = high.len() / 4;
+    for chunk in 0..chunks {
+        let off = chunk * 4;
+        let vh = _mm256_loadu_pd(high_ptr.add(off));
+        let vl = _mm256_loadu_pd(low_ptr.add(off));
+        let vc = _mm256_loadu_pd(close_ptr.add(off));
+        let vv = _mm256_loadu_pd(volume_ptr.add(off));
+        let hl = _mm256_sub_pd(vh, vl);
+        let clv = _mm256_sub_pd(_mm256_sub_pd(vc, vl), _mm256_sub_pd(vh, vc));
+        let valid = _mm256_cmp_pd(hl, zero, _CMP_GT_OS);
+        let multiplier = _mm256_blendv_pd(zero, _mm256_div_pd(clv, hl), valid);
+        let flow = _mm256_mul_pd(multiplier, vv);
+        let values: [f64; 4] = core::mem::transmute(flow);
+
+        for (lane, money_flow) in values.into_iter().enumerate() {
+            let i = off + lane;
+            cumulative += money_flow;
+            if i == 0 {
+                fast_ema = cumulative;
+                slow_ema = cumulative;
+            } else {
+                fast_ema = cumulative * 0.5 + fast_ema * 0.5;
+                slow_ema = cumulative * (2.0 / 11.0) + slow_ema * (1.0 - 2.0 / 11.0);
+            }
+            if i >= 9 {
+                *output_ptr.add(i) = fast_ema - slow_ema;
+            }
+        }
+    }
+
+    for i in chunks * 4..high.len() {
+        let h = *high_ptr.add(i);
+        let l = *low_ptr.add(i);
+        let range = h - l;
+        if range > 0.0 {
+            let c = *close_ptr.add(i);
+            cumulative += (((c - l) - (h - c)) / range) * *volume_ptr.add(i);
+        }
+        if i == 0 {
+            fast_ema = cumulative;
+            slow_ema = cumulative;
+        } else {
+            fast_ema = cumulative * 0.5 + fast_ema * 0.5;
+            slow_ema = cumulative * (2.0 / 11.0) + slow_ema * (1.0 - 2.0 / 11.0);
+        }
+        if i >= 9 {
+            *output_ptr.add(i) = fast_ema - slow_ema;
+        }
+    }
+    Ok(())
+}
+
+/// Allocating ADOSC wrapper sharing the canonical fused recurrence.
+pub fn adosc(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    volume: &[f64],
+    fast_period: usize,
+    slow_period: usize,
+) -> Result<Array1<f64>> {
+    let mut output = vec![0.0; high.len()];
+    adosc_into(
+        high,
+        low,
+        close,
+        volume,
+        fast_period,
+        slow_period,
+        &mut output,
+    )?;
+    Ok(Array1::from_vec(output))
+}
+
+/// Compute cumulative VWAP directly into `output`.
+///
+/// This is a single-pass recurrence with no scratch allocation. A zero cumulative
+/// volume leaves the corresponding output at `0.0`, matching the current public VWAP
+/// implementation.
+#[inline]
+pub fn vwap_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    volume: &[f64],
+    output: &mut [f64],
+) -> Result<()> {
+    let len = high.len();
+    validate_same_len("low", len, low.len())?;
+    validate_same_len("close", len, close.len())?;
+    validate_same_len("volume", len, volume.len())?;
+    validate_same_len("output", len, output.len())?;
+    if len == 0 {
+        return Err(TaError::EmptyInput);
+    }
+
+    let mut cum_tp_vol = 0.0;
+    let mut cum_volume = 0.0;
+    for i in 0..len {
+        let typical_price = (high[i] + low[i] + close[i]) * (1.0 / 3.0);
+        cum_tp_vol = typical_price.mul_add(volume[i], cum_tp_vol);
+        cum_volume += volume[i];
+        output[i] = if cum_volume.abs() > 1e-15 {
+            cum_tp_vol / cum_volume
+        } else {
+            0.0
+        };
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn obv_into_matches_expected_sequence() {
+        let close = [10.0, 11.0, 10.0, 10.0, 12.0];
+        let volume = [100.0, 50.0, 20.0, 30.0, 10.0];
+        let mut out = [0.0; 5];
+        obv_into(&close, &volume, &mut out).unwrap();
+        let expected = [100.0, 150.0, 130.0, 130.0, 140.0];
+        assert_eq!(out, expected);
+    }
+
+    #[test]
+    fn allocating_obv_wrapper_matches_into() {
+        let close = [10.0, 11.0, 10.0, 12.0];
+        let volume = [100.0, 50.0, 20.0, 10.0];
+        let mut out = [0.0; 4];
+        obv_into(&close, &volume, &mut out).unwrap();
+        assert_eq!(obv(&close, &volume).unwrap().as_slice().unwrap(), &out);
+    }
+
+    #[cfg(feature = "rayon")]
+    #[test]
+    fn long_obv_parallel_path_matches_serial_reference() {
+        let len = 262_145;
+        let close: Vec<f64> = (0..len)
+            .map(|i| 100.0 + (i as f64 * 0.013).sin() + i as f64 * 0.0001)
+            .collect();
+        let volume: Vec<f64> = (0..len).map(|i| 1_000.0 + (i % 17) as f64).collect();
+        let mut expected = vec![0.0; len];
+        obv_into(&close, &volume, &mut expected).unwrap();
+        let actual = obv(&close, &volume).unwrap();
+        for (left, right) in actual.iter().zip(expected.iter()) {
+            assert!((left - right).abs() <= right.abs() * 1e-12 + 1e-9);
+        }
+    }
+
+    #[test]
+    fn ad_into_matches_scalar_reference() {
+        let high = [10.0, 12.0, 14.0];
+        let low = [8.0, 10.0, 12.0];
+        let close = [9.0, 11.5, 12.5];
+        let volume = [100.0, 120.0, 80.0];
+        let mut out = [0.0; 3];
+        ad_into(&high, &low, &close, &volume, &mut out).unwrap();
+        assert_eq!(out[0], 0.0);
+        assert!(out[1] > out[0]);
+        assert!(out[2] < out[1]);
+    }
+
+    #[test]
+    fn adosc_into_warms_up_at_slow_period_minus_one() {
+        let high = [10.0, 11.0, 12.0, 13.0, 14.0, 15.0];
+        let low = [8.0, 9.0, 10.0, 11.0, 12.0, 13.0];
+        let close = [9.0, 10.5, 11.0, 12.5, 13.0, 14.5];
+        let volume = [100.0, 110.0, 120.0, 130.0, 140.0, 150.0];
+        let mut out = [0.0; 6];
+        adosc_into(&high, &low, &close, &volume, 3, 5, &mut out).unwrap();
+        assert!(out[..4].iter().all(|value| value.is_nan()));
+        assert!(out[4].is_finite());
+    }
+
+    #[test]
+    fn vwap_into_is_cumulative_and_allocation_free_at_api_boundary() {
+        let high = [10.0, 12.0, 14.0];
+        let low = [8.0, 10.0, 12.0];
+        let close = [9.0, 11.0, 13.0];
+        let volume = [1.0, 2.0, 1.0];
+        let mut out = [0.0; 3];
+        vwap_into(&high, &low, &close, &volume, &mut out).unwrap();
+        assert!((out[0] - 9.0).abs() < 1e-12);
+        assert!((out[1] - (31.0 / 3.0)).abs() < 1e-12);
+        assert!((out[2] - 11.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn output_length_is_part_of_the_contract() {
+        let close = [1.0, 2.0];
+        let volume = [1.0, 1.0];
+        let mut out = [0.0; 1];
+        assert!(obv_into(&close, &volume, &mut out).is_err());
+    }
+}
