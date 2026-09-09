@@ -233,6 +233,37 @@ const BBANDS_PARAMS: &[ParamSpec] = &[
     ParamSpec::new("period", "usize", Some("20"), Some("> 1")),
     ParamSpec::new("stddev", "f64", Some("2.0"), Some(">= 0")),
 ];
+const CROSS_SIGNAL_PARAMS: &[ParamSpec] = &[];
+const BREAKOUT_PARAMS: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("20"), Some("> 0"))];
+const VOLUME_SURGE_PARAMS: &[ParamSpec] = &[
+    ParamSpec::new("period", "usize", Some("20"), Some("> 0")),
+    ParamSpec::new("multiplier", "f64", Some("1.5"), Some(">= 0")),
+];
+const MA_ALIGN_PARAMS: &[ParamSpec] = &[
+    ParamSpec::new("fast_period", "usize", Some("5"), Some("fast < mid < slow")),
+    ParamSpec::new("mid_period", "usize", Some("20"), Some("fast < mid < slow")),
+    ParamSpec::new(
+        "slow_period",
+        "usize",
+        Some("60"),
+        Some("fast < mid < slow"),
+    ),
+];
+const RELATIVE_STRENGTH_PARAMS: &[ParamSpec] =
+    &[ParamSpec::new("period", "usize", Some("20"), Some("> 0"))];
+const GAP_SIGNAL_PARAMS: &[ParamSpec] = &[ParamSpec::new(
+    "threshold",
+    "f64",
+    Some("0.02"),
+    Some(">= 0"),
+)];
+const TREND_BREAKOUT_PARAMS: &[ParamSpec] = &[
+    ParamSpec::new("fast_period", "usize", Some("20"), Some("0 < fast < slow")),
+    ParamSpec::new("slow_period", "usize", Some("60"), Some("0 < fast < slow")),
+    ParamSpec::new("breakout_period", "usize", Some("20"), Some("> 0")),
+    ParamSpec::new("volume_period", "usize", Some("20"), Some("> 0")),
+    ParamSpec::new("volume_multiplier", "f64", Some("1.5"), Some(">= 0")),
+];
 const REF_PARAMS: &[ParamSpec] = &[ParamSpec::new("bars", "usize", None, Some(">= 0"))];
 const TWO_SERIES: &[ParamSpec] = &[];
 
@@ -725,6 +756,105 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             deterministic: true,
         },
         FunctionSpec {
+            name: "GOLDEN_CROSS",
+            aliases: &["CROSSUP", "BULLISH_CROSS"],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: CROSS_SIGNAL_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::Dynamic,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "DEAD_CROSS",
+            aliases: &["CROSSDOWN", "BEARISH_CROSS"],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: CROSS_SIGNAL_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::Dynamic,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "BREAKOUT",
+            aliases: &["BREAKOUT_UP", "PRICE_BREAKOUT"],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: BREAKOUT_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::Period,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "BREAKDOWN",
+            aliases: &["BREAKOUT_DOWN", "PRICE_BREAKDOWN"],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: BREAKOUT_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::Period,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "VOLUME_SURGE",
+            aliases: &["VOLSURGE", "VOLUME_EXPANSION"],
+            category: FunctionCategory::Formula,
+            input: InputKind::Series,
+            params: VOLUME_SURGE_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::Period,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "MA_ALIGN",
+            aliases: &["MA_ALIGNMENT", "TREND_ALIGN"],
+            category: FunctionCategory::Formula,
+            input: InputKind::Series,
+            params: MA_ALIGN_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::Dynamic,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "RELATIVE_STRENGTH",
+            aliases: &["RELSTRENGTH", "RS_EXCESS_RETURN"],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: RELATIVE_STRENGTH_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::Period,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "GAP_SIGNAL",
+            aliases: &["GAP"],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: GAP_SIGNAL_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::Dynamic,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "TREND_BREAKOUT",
+            aliases: &["TREND_SCREEN", "BREAKOUT_SCREEN"],
+            category: FunctionCategory::Formula,
+            input: InputKind::Hlcv,
+            params: TREND_BREAKOUT_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::Dynamic,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
             name: "IF",
             aliases: &["IFF"],
             category: FunctionCategory::Formula,
@@ -887,6 +1017,15 @@ mod tests {
             "DONCHIAN_LOWER",
             "DONCHIAN_MIDDLE",
             "DONCHIAN_WIDTH",
+            "GOLDEN_CROSS",
+            "DEAD_CROSS",
+            "BREAKOUT",
+            "BREAKDOWN",
+            "VOLUME_SURGE",
+            "MA_ALIGN",
+            "RELATIVE_STRENGTH",
+            "GAP_SIGNAL",
+            "TREND_BREAKOUT",
         ] {
             let spec = registry
                 .get(name)
@@ -900,5 +1039,8 @@ mod tests {
             registry.get("donchian_mid").unwrap().name,
             "DONCHIAN_MIDDLE"
         );
+        assert_eq!(registry.get("golden_cross").unwrap().name, "GOLDEN_CROSS");
+        assert_eq!(registry.get("volsurge").unwrap().name, "VOLUME_SURGE");
+        assert_eq!(registry.get("trend_screen").unwrap().name, "TREND_BREAKOUT");
     }
 }

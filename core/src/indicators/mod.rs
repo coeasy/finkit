@@ -93,6 +93,8 @@ pub mod price_transform;
 #[cfg(feature = "indicators-market")]
 pub mod relative_strength;
 #[cfg(feature = "indicators-market")]
+pub mod screening;
+#[cfg(feature = "indicators-market")]
 pub mod sentiment;
 #[cfg(feature = "indicators-market")]
 pub mod short_term;
@@ -172,6 +174,8 @@ pub use pivot::*;
 pub use price_transform::*;
 #[cfg(feature = "indicators-market")]
 pub use relative_strength::*;
+#[cfg(feature = "indicators-market")]
+pub use screening::*;
 #[cfg(feature = "indicators-market")]
 pub use sentiment::*;
 #[cfg(feature = "indicators-market")]

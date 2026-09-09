@@ -2,6 +2,7 @@ use ndarray::Array1;
 use std::collections::HashMap;
 
 use crate::formula::types::{FormulaContext, FormulaError};
+use crate::indicators::screening as lib_screening;
 
 type FormulaFn = fn(&FormulaContext, &[Array1<f64>]) -> Result<Array1<f64>, FormulaError>;
 
@@ -273,6 +274,154 @@ fn canonical_mfi(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f6
     }
 }
 
+#[inline]
+fn canonical_golden_cross(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
+    ensure_args_len("GOLDEN_CROSS", args, 2)?;
+    match lib_screening::golden_cross(args[0].as_slice().unwrap(), args[1].as_slice().unwrap()) {
+        Ok(result) => Ok(result),
+        Err(_) => Ok(nan_vec(ctx.data_len)),
+    }
+}
+
+#[inline]
+fn canonical_dead_cross(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
+    ensure_args_len("DEAD_CROSS", args, 2)?;
+    match lib_screening::dead_cross(args[0].as_slice().unwrap(), args[1].as_slice().unwrap()) {
+        Ok(result) => Ok(result),
+        Err(_) => Ok(nan_vec(ctx.data_len)),
+    }
+}
+
+#[inline]
+fn canonical_breakout(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
+    ensure_args_len("BREAKOUT", args, 3)?;
+    let period = extract_n(args, 2, "BREAKOUT")?;
+    match lib_screening::breakout_up(
+        args[0].as_slice().unwrap(),
+        args[1].as_slice().unwrap(),
+        period,
+    ) {
+        Ok(result) => Ok(result),
+        Err(_) => Ok(nan_vec(ctx.data_len)),
+    }
+}
+
+#[inline]
+fn canonical_breakdown(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
+    ensure_args_len("BREAKDOWN", args, 3)?;
+    let period = extract_n(args, 2, "BREAKDOWN")?;
+    match lib_screening::breakout_down(
+        args[0].as_slice().unwrap(),
+        args[1].as_slice().unwrap(),
+        period,
+    ) {
+        Ok(result) => Ok(result),
+        Err(_) => Ok(nan_vec(ctx.data_len)),
+    }
+}
+
+#[inline]
+fn canonical_volume_surge(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
+    ensure_args_len("VOLUME_SURGE", args, 2)?;
+    let period = extract_n(args, 1, "VOLUME_SURGE")?;
+    let multiplier = optional_f64(args, 2, 1.5);
+    match lib_screening::volume_surge(args[0].as_slice().unwrap(), period, multiplier) {
+        Ok(result) => Ok(result),
+        Err(_) => Ok(nan_vec(ctx.data_len)),
+    }
+}
+
+#[inline]
+fn canonical_ma_align(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
+    ensure_args_len("MA_ALIGN", args, 4)?;
+    let fast = extract_n(args, 1, "MA_ALIGN")?;
+    let mid = extract_n(args, 2, "MA_ALIGN")?;
+    let slow = extract_n(args, 3, "MA_ALIGN")?;
+    match lib_screening::ma_alignment(args[0].as_slice().unwrap(), fast, mid, slow) {
+        Ok(result) => Ok(result),
+        Err(_) => Ok(nan_vec(ctx.data_len)),
+    }
+}
+
+#[inline]
+fn canonical_relative_strength(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
+    ensure_args_len("RELATIVE_STRENGTH", args, 3)?;
+    let period = extract_n(args, 2, "RELATIVE_STRENGTH")?;
+    match lib_screening::relative_strength(
+        args[0].as_slice().unwrap(),
+        args[1].as_slice().unwrap(),
+        period,
+    ) {
+        Ok(result) => Ok(result),
+        Err(_) => Ok(nan_vec(ctx.data_len)),
+    }
+}
+
+#[inline]
+fn canonical_gap_signal(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
+    ensure_args_len("GAP_SIGNAL", args, 2)?;
+    let threshold = optional_f64(args, 2, 0.02);
+    match lib_screening::gap_signal(
+        args[0].as_slice().unwrap(),
+        args[1].as_slice().unwrap(),
+        threshold,
+    ) {
+        Ok(result) => Ok(result),
+        Err(_) => Ok(nan_vec(ctx.data_len)),
+    }
+}
+
+#[inline]
+fn canonical_trend_breakout(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
+    ensure_args_len("TREND_BREAKOUT", args, 8)?;
+    let fast = extract_n(args, 4, "TREND_BREAKOUT")?;
+    let slow = extract_n(args, 5, "TREND_BREAKOUT")?;
+    let breakout = extract_n(args, 6, "TREND_BREAKOUT")?;
+    let volume_period = extract_n(args, 7, "TREND_BREAKOUT")?;
+    let multiplier = optional_f64(args, 8, 1.5);
+    match lib_screening::trend_breakout_signal(
+        args[0].as_slice().unwrap(),
+        args[1].as_slice().unwrap(),
+        args[2].as_slice().unwrap(),
+        args[3].as_slice().unwrap(),
+        fast,
+        slow,
+        breakout,
+        volume_period,
+        multiplier,
+    ) {
+        Ok(result) => Ok(result),
+        Err(_) => Ok(nan_vec(ctx.data_len)),
+    }
+}
+
 /// Build the formula function table from the compatibility surface, then replace
 /// duplicate hot-path implementations with the same canonical kernels used by
 /// the public indicator APIs and language bindings.
@@ -308,6 +457,28 @@ pub fn get_builtin_functions() -> HashMap<String, FormulaFn> {
     map.insert("ADOSC".to_string(), canonical_adosc as FormulaFn);
     map.insert("MFI".to_string(), canonical_mfi as FormulaFn);
 
+    map.insert(
+        "GOLDEN_CROSS".to_string(),
+        canonical_golden_cross as FormulaFn,
+    );
+    map.insert("DEAD_CROSS".to_string(), canonical_dead_cross as FormulaFn);
+    map.insert("BREAKOUT".to_string(), canonical_breakout as FormulaFn);
+    map.insert("BREAKDOWN".to_string(), canonical_breakdown as FormulaFn);
+    map.insert(
+        "VOLUME_SURGE".to_string(),
+        canonical_volume_surge as FormulaFn,
+    );
+    map.insert("MA_ALIGN".to_string(), canonical_ma_align as FormulaFn);
+    map.insert(
+        "RELATIVE_STRENGTH".to_string(),
+        canonical_relative_strength as FormulaFn,
+    );
+    map.insert("GAP_SIGNAL".to_string(), canonical_gap_signal as FormulaFn);
+    map.insert(
+        "TREND_BREAKOUT".to_string(),
+        canonical_trend_breakout as FormulaFn,
+    );
+
     // Registry aliases must follow the replaced canonical function pointers too.
     // This preserves the alias identity invariant after the canonical overrides.
     for spec in crate::registry::builtin_function_registry().iter() {
@@ -320,4 +491,50 @@ pub fn get_builtin_functions() -> HashMap<String, FormulaFn> {
     }
 
     map
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ndarray::Array1;
+
+    fn context(len: usize) -> FormulaContext {
+        let open = Array1::from_vec((0..len).map(|i| 10.0 + i as f64).collect());
+        let high = Array1::from_vec((0..len).map(|i| 11.0 + i as f64).collect());
+        let low = Array1::from_vec((0..len).map(|i| 9.0 + i as f64).collect());
+        let close = Array1::from_vec((0..len).map(|i| 10.0 + i as f64).collect());
+        let volume = Array1::from_vec((0..len).map(|i| 100.0 + i as f64).collect());
+        FormulaContext::new(open, high, low, close, volume, None)
+    }
+
+    #[test]
+    fn screening_formulas_are_routed_and_aliases_resolve() {
+        let functions = get_builtin_functions();
+        for name in [
+            "GOLDEN_CROSS",
+            "DEAD_CROSS",
+            "BREAKOUT",
+            "BREAKDOWN",
+            "VOLUME_SURGE",
+            "MA_ALIGN",
+            "RELATIVE_STRENGTH",
+            "GAP_SIGNAL",
+            "TREND_BREAKOUT",
+        ] {
+            assert!(
+                functions.contains_key(name),
+                "missing routed function {name}"
+            );
+        }
+        assert!(functions.contains_key("CROSSUP"));
+        assert!(functions.contains_key("TREND_SCREEN"));
+
+        let ctx = context(32);
+        let fast = Array1::from_vec((0..32).map(|i| i as f64).collect());
+        let slow = Array1::from_vec((0..32).map(|i| (i + 1) as f64).collect());
+        let args = [fast, slow];
+        let result = functions["GOLDEN_CROSS"](&ctx, &args).unwrap();
+        assert_eq!(result.len(), 32);
+        assert!(result.iter().all(|value| *value == 0.0));
+    }
 }
