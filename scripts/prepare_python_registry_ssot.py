@@ -114,6 +114,17 @@ def main() -> int:
             if name is None:
                 continue
             ff.setdefault("bodies", {})["python"] = extracted[name]["body"]
+            # After the NumPy-direct migration, generated.py may contain a
+            # thin public wrapper plus its preserved Vec-returning
+            # `vec_<name>_impl` body.  The impl is the canonical source body;
+            # persisting the thin wrapper into the transient overlay makes
+            # the next prepare pass lose the implementation and breaks the
+            # wheel build.  Normalize it back to the original public name.
+            impl_name = f"vec_{name}_impl"
+            if impl_name in extracted:
+                ff["bodies"]["python"] = extracted[impl_name]["body"].replace(
+                    f"fn {impl_name}", f"fn {name}", 1
+                )
             c_name = ff["c_name"]
             public = c_name[3:] if c_name.startswith("ta_") else c_name
             expected = sb.NAME_ALIASES.get(public, public)

@@ -282,6 +282,7 @@ unsafe fn ema_inner_avx512(input: &[f64], period: usize, output: &mut [f64]) -> 
 }
 
 #[inline]
+#[allow(clippy::uninit_vec)]
 fn ema_inner(input: &[f64], period: usize, seed: EmaSeed) -> Result<Array1<f64>> {
     let len = input.len();
     // Every branch below writes every output element. Avoid eagerly filling a
@@ -601,6 +602,7 @@ pub fn wma(input: &[f64], period: usize) -> Result<Array1<f64>> {
 }
 
 #[inline]
+#[allow(clippy::uninit_vec)]
 fn wma_inner(input: &[f64], period: usize) -> Result<Array1<f64>> {
     let mut output = Vec::with_capacity(input.len());
     unsafe { output.set_len(input.len()) };
@@ -904,6 +906,7 @@ pub fn tema(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// assert_eq!(result.len(), 10);
 /// ```
 #[inline]
+#[allow(clippy::uninit_vec)]
 pub fn kama(
     input: &[f64],
     period: usize,

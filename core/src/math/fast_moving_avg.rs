@@ -17,6 +17,17 @@ fn invalid_period() -> TaError {
     }
 }
 
+#[inline]
+fn reject_if_non_finite(input: &[f64]) -> Result<()> {
+    if let Some(index) = input.iter().position(|value| !value.is_finite()) {
+        return Err(TaError::InvalidParameter {
+            name: "input".to_string(),
+            constraint: format!("non-finite value at index {index}"),
+        });
+    }
+    Ok(())
+}
+
 /// EMA into a caller-owned output buffer using the same SMA seed and FMA
 /// recurrence as the legacy implementation, but with a bounds-check-free hot
 /// loop.
@@ -144,6 +155,7 @@ pub fn kama(
     }
     // KAMA reads input[period] to produce the first recursive value.
     validate_input(input.len(), period + 1)?;
+    reject_if_non_finite(input)?;
 
     let len = input.len();
     let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);
@@ -193,6 +205,7 @@ pub fn kama_into(
         return Err(invalid_period());
     }
     validate_input(input.len(), period + 1)?;
+    reject_if_non_finite(input)?;
     unsafe {
         if period == 20 && fast_period == 2 && slow_period == 30 {
             dispatch_kama_kernel::<20, 2, 30>(

@@ -1739,6 +1739,7 @@ fn cci_generic_into(high: &[f64], low: &[f64], close: &[f64], period: usize, out
 }
 
 /// Commodity Channel Index (CCI).
+#[allow(clippy::uninit_vec)]
 pub fn cci(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Array1<f64>> {
     if high.len() != low.len() || high.len() != close.len() {
         return Err(TaError::InvalidParameter {
@@ -3564,12 +3565,12 @@ pub fn stochrsi(
         });
     }
 
-    // TA-Lib's STOCHRSI uses fastk_period for the RSI high/low window.  The
-    // public API keeps the historical stoch_period argument for Rust callers;
-    // Python compatibility passes the TA-Lib fastk period through that slot.
+    // The first pass produces the unsmoothed stochastic RSI.  TA-Lib then
+    // applies a `fastk_period` SMA to form %K and a `fastd_period` SMA to
+    // form %D.  Keep the historical `stoch_period` argument as the RSI
+    // high/low lookback used by the public Rust API.
     let window = stoch_period;
     let raw_start = rsi_period + window - 1;
-    let output_start = raw_start + fastd_period - 1;
     let mut raw_k = init_output(len);
     let mut max_dq = VecDeque::with_capacity(window + 1);
     let mut min_dq = VecDeque::with_capacity(window + 1);
@@ -3604,15 +3605,27 @@ pub fn stochrsi(
 
     let mut out_k = init_output(len);
     let mut out_d = init_output(len);
-    let mut sum = 0.0;
+    let k_start = raw_start + fastk_period - 1;
+    let d_start = k_start + fastd_period - 1;
+    let mut k_sum = 0.0;
     for i in raw_start..len {
-        sum += raw_k[i];
-        if i >= raw_start + fastd_period {
-            sum -= raw_k[i - fastd_period];
+        k_sum += raw_k[i];
+        if i >= raw_start + fastk_period {
+            k_sum -= raw_k[i - fastk_period];
         }
-        if i >= output_start {
-            out_k[i] = raw_k[i];
-            out_d[i] = sum / fastd_period as f64;
+        if i >= k_start {
+            out_k[i] = k_sum / fastk_period as f64;
+        }
+    }
+
+    let mut d_sum = 0.0;
+    for i in k_start..len {
+        d_sum += out_k[i];
+        if i >= k_start + fastd_period {
+            d_sum -= out_k[i - fastd_period];
+        }
+        if i >= d_start {
+            out_d[i] = d_sum / fastd_period as f64;
         }
     }
 
@@ -3645,12 +3658,14 @@ pub fn stochrsi_into(
     // Reuse the caller-owned %K buffer for the RSI scratch series.  The
     // monotonic queues retain both index and value, so already-consumed RSI
     // slots can be replaced by raw %K without keeping a second full-length
-    // temporary array alive.
+    // temporary array alive.  Small rings below preserve the raw and
+    // smoothed windows while the public buffers are written in place.
     rsi_into(input, rsi_period, out_k)?;
     let len = input.len();
     let window = stoch_period;
     let raw_start = rsi_period + window - 1;
-    let output_start = raw_start + fastd_period - 1;
+    let k_start = raw_start + fastk_period - 1;
+    let d_start = k_start + fastd_period - 1;
     out_d.fill(f64::NAN);
 
     let mut max_dq: VecDeque<(usize, f64)> = VecDeque::with_capacity(window + 1);
@@ -3684,19 +3699,31 @@ pub fn stochrsi_into(
         }
     }
 
-    let mut sum = 0.0;
+    let mut k_sum = 0.0;
+    let mut raw_ring = vec![0.0; fastk_period];
+    let mut raw_pos = 0usize;
+    let mut d_sum = 0.0;
+    let mut d_ring = vec![0.0; fastd_period];
+    let mut d_pos = 0usize;
     for i in raw_start..len {
-        sum += out_k[i];
-        if i >= raw_start + fastd_period {
-            sum -= out_k[i - fastd_period];
+        let raw = out_k[i];
+        k_sum += raw - raw_ring[raw_pos];
+        raw_ring[raw_pos] = raw;
+        raw_pos = (raw_pos + 1) % fastk_period;
+        if i >= k_start {
+            let smoothed_k = k_sum / fastk_period as f64;
+            out_k[i] = smoothed_k;
+            d_sum += smoothed_k - d_ring[d_pos];
+            d_ring[d_pos] = smoothed_k;
+            d_pos = (d_pos + 1) % fastd_period;
         }
-        if i >= output_start {
-            out_d[i] = sum / fastd_period as f64;
+        if i >= d_start {
+            out_d[i] = d_sum / fastd_period as f64;
         }
     }
-    // The first `fastd_period - 1` raw values seed %D internally but are not
+    // The first `fastk_period - 1` raw values seed %K internally but are not
     // exposed as public %K values by TA-Lib.
-    out_k[..output_start.min(len)].fill(f64::NAN);
+    out_k[..k_start.min(len)].fill(f64::NAN);
     Ok(())
 }
 

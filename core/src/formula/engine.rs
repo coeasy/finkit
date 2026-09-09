@@ -22,6 +22,79 @@ use std::sync::Arc;
 
 type HotFormulaExecutor = UnifiedExecutor<FormulaKernelDispatcher>;
 
+fn contains_implicit_kdj(ast: &AstNode) -> bool {
+    match ast {
+        AstNode::FunctionCall { name, args } => {
+            if name.eq_ignore_ascii_case("KDJ")
+                && (args.len() < 3
+                    || !args
+                        .iter()
+                        .take(3)
+                        .all(|arg| matches!(arg, AstNode::Variable(_))))
+            {
+                return true;
+            }
+            args.iter().any(contains_implicit_kdj)
+        }
+        AstNode::BinaryOp { left, right, .. } => {
+            contains_implicit_kdj(left) || contains_implicit_kdj(right)
+        }
+        AstNode::UnaryOp { expr, .. }
+        | AstNode::Assignment { expr, .. }
+        | AstNode::CompoundAssignment { expr, .. }
+        | AstNode::Output { expr, .. } => contains_implicit_kdj(expr),
+        AstNode::IndexAccess { array, index } => {
+            contains_implicit_kdj(array) || contains_implicit_kdj(index)
+        }
+        AstNode::Statements(nodes) | AstNode::DrawGeneric { args: nodes, .. } => {
+            nodes.iter().any(contains_implicit_kdj)
+        }
+        AstNode::DrawText { cond, price, .. } => {
+            contains_implicit_kdj(cond) || contains_implicit_kdj(price)
+        }
+        AstNode::DrawIcon {
+            cond, price, icon, ..
+        } => {
+            contains_implicit_kdj(cond)
+                || contains_implicit_kdj(price)
+                || contains_implicit_kdj(icon)
+        }
+        AstNode::StickLine {
+            cond,
+            price1,
+            price2,
+            width,
+            ..
+        } => {
+            contains_implicit_kdj(cond)
+                || contains_implicit_kdj(price1)
+                || contains_implicit_kdj(price2)
+                || contains_implicit_kdj(width)
+        }
+        AstNode::IfThenElse {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            contains_implicit_kdj(cond)
+                || contains_implicit_kdj(then_branch)
+                || contains_implicit_kdj(else_branch)
+        }
+        AstNode::ForLoop {
+            start, end, body, ..
+        } => {
+            contains_implicit_kdj(start)
+                || contains_implicit_kdj(end)
+                || body.iter().any(contains_implicit_kdj)
+        }
+        AstNode::WhileLoop { cond, .. } => contains_implicit_kdj(cond),
+        AstNode::Number(_)
+        | AstNode::StringLit(_)
+        | AstNode::Variable(_)
+        | AstNode::ParamDecl { .. } => false,
+    }
+}
+
 /// 公式引擎主入口
 pub struct FormulaEngine {
     executor: FormulaExecutor,
@@ -97,15 +170,17 @@ impl FormulaEngine {
         // same slot layout and canonical kernel dispatch. A plan may be
         // unavailable for compatibility-only syntax; that syntax keeps the
         // existing executor path.
-        if let Ok(hot_plan) = FormulaHotPlan::compile(&ast) {
-            let hot_plan = Arc::new(hot_plan);
-            let hot_executor = unified_formula_executor(&hot_plan);
-            self.hot_plan_cache
-                .borrow_mut()
-                .put(source.to_string(), hot_plan);
-            self.hot_executor_cache
-                .borrow_mut()
-                .put(source.to_string(), hot_executor);
+        if !contains_implicit_kdj(&ast) {
+            if let Ok(hot_plan) = FormulaHotPlan::compile(&ast) {
+                let hot_plan = Arc::new(hot_plan);
+                let hot_executor = unified_formula_executor(&hot_plan);
+                self.hot_plan_cache
+                    .borrow_mut()
+                    .put(source.to_string(), hot_plan);
+                self.hot_executor_cache
+                    .borrow_mut()
+                    .put(source.to_string(), hot_executor);
+            }
         }
         // Compile the optimized AST once so repeated evaluations share the
         // same CSE and constant-folding decisions while preserving assignment
@@ -821,7 +896,7 @@ impl FormulaEngine {
                                 .par_iter()
                                 .zip(local_ctxs.into_par_iter())
                                 .map(|(stmt, mut local_ctx)| {
-                                    let mut local_exec = FormulaExecutor::new();
+                                    let local_exec = FormulaExecutor::new();
                                     let result = local_exec.execute(stmt, &mut local_ctx);
                                     (
                                         result,

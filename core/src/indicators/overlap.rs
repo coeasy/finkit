@@ -1470,9 +1470,9 @@ pub fn mama_into(
 /// ```
 /// use finkit::indicators;
 ///
-/// let close: Vec<f64> = (1..=20).map(|x| x as f64).collect();
+/// let close: Vec<f64> = (1..=30).map(|x| x as f64).collect();
 /// let result = indicators::t3(&close, 5, 0.7).unwrap();
-/// assert_eq!(result.len(), 20);
+/// assert_eq!(result.len(), 30);
 /// ```
 pub fn t3(input: &[f64], period: usize, vfactor: f64) -> Result<Array1<f64>> {
     let mut output = vec![0.0; input.len()];

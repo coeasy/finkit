@@ -152,6 +152,7 @@ def patch_native_fast_path() -> None:
             ('"willr" =>', "1 =>"),
             ('"adx" =>', "2 =>"),
             ('"cci" =>', "3 =>"),
+            ('"adxr" =>', "8 =>"),
             ('"plus_di" =>', "4 =>"),
             ('"minus_di" =>', "5 =>"),
             ('"atr" =>', "6 =>"),
@@ -195,7 +196,37 @@ def patch_native_fast_path() -> None:
     Ok(PyArray1::from_vec(py, output))
 }
 '''
-    text = _replace_once(text, old_trange, new_trange, "TRANGE direct output")
+    # Round-6 may already have installed a caller-owned `trange_into` variant
+    # with an uninitialised output buffer.  The old exact-fragment replacement
+    # treated that valid canonical shape as an error, which made the wheel
+    # preparation step fail on every platform.  Recognise both source shapes,
+    # upgrade the legacy one, and enforce the shared-length contract once.
+    start = text.find("fn fast_trange")
+    if start < 0:
+        raise RuntimeError("TRANGE direct output: function not found")
+    next_attr = text.find("\n#[pyfunction", start + len("fn fast_trange"))
+    end = len(text) if next_attr < 0 else next_attr
+    trange = text[start:end]
+
+    if old_trange in trange:
+        trange = trange.replace(old_trange, new_trange, 1)
+    elif "indicators::trange_into(" not in trange:
+        raise RuntimeError(
+            "TRANGE direct output: expected legacy or caller-owned trange_into implementation"
+        )
+
+    validation = '''    validate_same_len(high.len(), low.len())?;
+    validate_same_len(high.len(), close.len())?;
+'''
+    if validation not in trange:
+        needle = "    let close = close.as_slice().map_err(value_error)?;\n"
+        if trange.count(needle) != 1:
+            raise RuntimeError(
+                "TRANGE direct output: cannot locate input validation anchor"
+            )
+        trange = trange.replace(needle, needle + validation, 1)
+
+    text = text[:start] + trange + text[end:]
     NATIVE.write_text(text, encoding="utf-8")
 
 
@@ -382,6 +413,7 @@ def patch_python_facade() -> None:
         '_hlc_period("minus_di",': "_hlc_period(5,",
         '_hlc_period("atr",': "_hlc_period(6,",
         '_hlc_period("natr",': "_hlc_period(7,",
+        '_hlc_period("adxr",': "_hlc_period(8,",
     }
     for old, new in replacements.items():
         if new in text:

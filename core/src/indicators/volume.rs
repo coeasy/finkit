@@ -39,6 +39,7 @@ pub struct VwapBandsResult {
 /// let result = indicators::ad(&high, &low, &close, &volume).unwrap();
 /// assert_eq!(result.len(), 10);
 /// ```
+#[allow(clippy::uninit_vec)]
 pub fn ad(high: &[f64], low: &[f64], close: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
     if high.len() != low.len() || high.len() != close.len() || high.len() != volume.len() {
         return Err(crate::error::TaError::InvalidParameter {
@@ -258,6 +259,7 @@ pub fn adosc_into(
 /// let result = indicators::obv(&close, &volume).unwrap();
 /// assert_eq!(result.len(), 10);
 /// ```
+#[allow(clippy::uninit_vec)]
 pub fn obv(close: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
     if close.len() != volume.len() {
         return Err(crate::error::TaError::InvalidParameter {

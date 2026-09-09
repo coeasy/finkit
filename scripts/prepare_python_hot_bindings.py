@@ -91,19 +91,29 @@ def patch_hot_output_allocations() -> None:
 ''',
             "WMA single-write output",
         ),
-        (
-            '''        return _native._fast_obv(close, volume)
-''',
-            '''        result = np.empty_like(close)
-        _native._fast_obv_into(close, volume, result)
-        return result
-''',
-            "OBV single-write output",
-        ),
     )
 
     for old, new, label in replacements:
         text = replace_once_or_verify(text, old, new, label)
+
+    # The public OBV compatibility wrapper intentionally contains a second
+    # direct _fast_obv call inside its fallback path. Restrict the
+    # single-write rewrite to the normalized helper, where both inputs are
+    # already contiguous and the caller-owned output contract is valid.
+    start = text.find("    def _obv_normalized")
+    end = text.find("    _obv_normalized =", start)
+    if start < 0 or end < 0:
+        raise RuntimeError("OBV single-write output: normalized helper not found")
+    obv_helper = text[start:end]
+    obv_helper = replace_once_or_verify(
+        obv_helper,
+        "        return _native._fast_obv(close, volume)\n",
+        "        result = np.empty_like(close)\n"
+        "        _native._fast_obv_into(close, volume, result)\n"
+        "        return result\n",
+        "OBV single-write output",
+    )
+    text = text[:start] + obv_helper + text[end:]
 
     if "result = np.empty_like(close)" not in text:
         raise RuntimeError("hot output allocation patch did not activate")
