@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 project(finkit
-    VERSION 0.1.5
+    VERSION 0.1.6
     DESCRIPTION "Finkit - Financial Technical Analysis Library C/C++ Bindings"
     LANGUAGES CXX C
 )
