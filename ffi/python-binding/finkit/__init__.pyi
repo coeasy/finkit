@@ -12,6 +12,42 @@ from numpy.typing import NDArray
 ArrayLike = Union[NDArray[np.floating], List[float], Tuple[float, ...]]
 Array1D = NDArray[np.floating]
 
+def resolve_market_session(
+    market: str,
+    timestamp: int,
+    timezone: Optional[str] = ...,
+    holidays: Optional[List[str]] = ...,
+    sessions: Optional[List[Tuple[int, int]]] = ...,
+    special_sessions: Optional[List[Tuple[str, List[Tuple[int, int]]]]] = ...,
+) -> Optional[Dict[str, Any]]:
+    """Resolve a Unix timestamp using a built-in market calendar preset."""
+    ...
+
+def resolve_market_session_config(config_json: str, timestamp: int) -> Optional[Dict[str, Any]]:
+    """Resolve a Unix timestamp from a versioned JSON exchange calendar."""
+    ...
+
+def resolve_market_session_csv(
+    csv: str,
+    market: str,
+    timestamp: int,
+    timezone: Optional[str] = ...,
+) -> Optional[Dict[str, Any]]:
+    """Resolve a Unix timestamp from an exchange-published annual CSV calendar."""
+    ...
+
+def compute_composite(
+    close: ArrayLike,
+    definitions: List[Tuple[str, str, List[str], List[float]]],
+    outputs: Optional[List[str]] = ...,
+    open: Optional[ArrayLike] = ...,
+    high: Optional[ArrayLike] = ...,
+    low: Optional[ArrayLike] = ...,
+    volume: Optional[ArrayLike] = ...,
+) -> Dict[str, Array1D]:
+    """Evaluate a dependency-aware graph of custom composite indicators."""
+    ...
+
 # ============================================================================
 # Overlap Studies
 # ============================================================================
@@ -681,20 +717,264 @@ def formula_eval_dialect(
 
 class KlineChart:
     """K-line chart visualization."""
-    
-    def __init__(self, data: List[Dict[str, Any]], *, title: str = "", width: int = 800, height: int = 600) -> None:
+
+    def __init__(
+        self,
+        data: "KlineData",
+        language: str = "zh",
+        title: str = "",
+        width: int = 1200,
+        height: int = 600,
+    ) -> None:
         ...
-    
-    def add_indicator(self, indicator_type: str, *, period: int = 14, **kwargs: Any) -> None:
+
+    def set_viewport(
+        self,
+        start: int = 0,
+        end: int = 0,
+        pixel_width: int = 1200,
+        pixel_height: int = 600,
+        overscan_bars: int = 0,
+        follow_latest: bool = False,
+    ) -> None:
         ...
-    
-    def render(self) -> str:
+
+    def append_kline(
+        self, date: str, open: float, high: float, low: float, close: float, volume: float
+    ) -> None:
+        ...
+
+    def update_last_kline(
+        self,
+        close: float,
+        high: Optional[float] = ...,
+        low: Optional[float] = ...,
+        volume: Optional[float] = ...,
+    ) -> None:
+        ...
+
+    def upsert_kline(
+        self, date: str, open: float, high: float, low: float, close: float, volume: float
+    ) -> str:
+        ...
+
+    def upsert_kline_timestamped(
+        self,
+        timestamp: int,
+        date: str,
+        open: float,
+        high: float,
+        low: float,
+        close: float,
+        volume: float,
+    ) -> str:
+        ...
+
+    def upsert_klines(
+        self,
+        updates: List[Tuple[str, float, float, float, float, float]],
+    ) -> List[str]:
+        ...
+
+    def set_lod_policy(self, level: str = "auto") -> None:
+        ...
+
+    def set_replay_window(
+        self,
+        window: int = 200,
+        cursor: Optional[int] = ...,
+        pixel_width: int = 1200,
+        pixel_height: int = 600,
+        overscan_bars: int = 0,
+    ) -> Tuple[int, int]:
+        ...
+
+    def replay_next(self) -> Optional[Tuple[int, int]]:
+        ...
+
+    def set_layer_visible(self, layer: str, visible: bool) -> None:
+        ...
+
+    def add_ma(self, periods: List[int]) -> None:
+        ...
+
+    def add_ema(self, periods: List[int]) -> None:
+        ...
+
+    def add_boll(self, period: int = 20, nb_dev: float = 2.0) -> None:
+        ...
+
+    def add_macd(self, fast: int = 12, slow: int = 26, signal: int = 9) -> None:
+        ...
+
+    def add_rsi(self, period: int = 14) -> None:
+        ...
+
+    def add_kdj(self, fast_k: int = 9, slow_k: int = 3, slow_d: int = 3) -> None:
+        ...
+
+    def add_sar(self, acceleration: float = 0.02, maximum: float = 0.2) -> None:
+        ...
+
+    def add_custom_indicator(self, name: str, values: ArrayLike) -> None:
+        ...
+
+    def set_custom_indicator_series(self, name: str, values: ArrayLike) -> None:
+        """Replace or register an aligned custom indicator series."""
+        ...
+
+    def add_event_marker(
+        self,
+        index: int,
+        label: str,
+        value: Optional[float] = ...,
+        color: str = "#f59e0b",
+        priority: int = 30,
+    ) -> None:
+        ...
+
+    def set_interaction(
+        self,
+        enabled: bool = True,
+        show_crosshair: bool = True,
+        show_data_window: bool = True,
+        enable_pan_zoom: bool = True,
+        enable_keyboard: bool = True,
+    ) -> None:
+        ...
+
+    def add_chan(
+        self,
+        min_stroke_bars: int = 6,
+        show_labels: bool = False,
+        variant: str = "standard",
+        stroke_policy: str = "configurable",
+        center_policy: str = "dynamic",
+        signal_min_strength: float = 0.0,
+        show_multi_timeframe_annotations: bool = False,
+    ) -> None:
+        ...
+
+    def add_chan_multi(self, factors: Optional[List[int]] = ..., variant: str = "standard") -> None:
+        ...
+
+    def set_chan_thresholds(
+        self,
+        min_stroke_change_ratio: float,
+        min_fractal_range_ratio: float,
+        signal_min_strength: float,
+        center_break_ratio: float,
+    ) -> None:
+        ...
+
+    def save_as_svg(self, path: str) -> None:
+        ...
+
+    def save_as_html(self, path: str) -> None:
+        ...
+
+    def save_as_canvas_html(self, path: str) -> None:
+        ...
+
+    def save_as_webgl_html(self, path: str) -> None:
+        ...
+
+    def save_as_webgpu_html(self, path: str) -> None:
+        ...
+
+    def to_svg_string(self) -> str:
+        ...
+
+    def to_canvas_html(self) -> str:
+        ...
+
+    def to_webgl_html(self) -> str:
+        ...
+
+    def to_webgpu_html(self) -> str:
         ...
 
 class KlineData:
-    """K-line data container."""
-    
-    def __init__(self, date: str, open: float, high: float, low: float, close: float, volume: float) -> None:
+    """Validated OHLCV container with optional Unix-second timestamps."""
+
+    def __init__(
+        self,
+        dates: List[str],
+        opens: ArrayLike,
+        highs: ArrayLike,
+        lows: ArrayLike,
+        closes: ArrayLike,
+        volumes: ArrayLike,
+        timestamps: Optional[List[int]] = ...,
+    ) -> None:
+        ...
+
+    def __len__(self) -> int:
+        ...
+
+    def validate(self) -> bool:
+        ...
+
+    def validate_ohlcv(self) -> bool:
+        ...
+
+    def validation_errors(self) -> List[str]:
+        ...
+
+    def set_timestamps(self, timestamps: List[int]) -> None:
+        ...
+
+    def push(
+        self, date: str, open: float, high: float, low: float, close: float, volume: float
+    ) -> None:
+        ...
+
+    def push_timestamped(
+        self,
+        timestamp: int,
+        date: str,
+        open: float,
+        high: float,
+        low: float,
+        close: float,
+        volume: float,
+    ) -> None:
+        ...
+
+    @staticmethod
+    def from_json(json_str: str) -> "KlineData":
+        ...
+
+    @staticmethod
+    def from_csv(csv_str: str) -> "KlineData":
+        ...
+
+    @property
+    def dates(self) -> List[str]:
+        ...
+
+    @property
+    def opens(self) -> List[float]:
+        ...
+
+    @property
+    def highs(self) -> List[float]:
+        ...
+
+    @property
+    def lows(self) -> List[float]:
+        ...
+
+    @property
+    def closes(self) -> List[float]:
+        ...
+
+    @property
+    def volumes(self) -> List[float]:
+        ...
+
+    @property
+    def timestamps(self) -> List[int]:
         ...
 
 # ============================================================================

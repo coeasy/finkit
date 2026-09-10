@@ -106,6 +106,17 @@ jobs:
         run: cargo test -p finkit-cli --locked
       - name: Test visualization integration flow
         run: cargo test -p finkit-visualization --locked
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+      - name: Exercise generated GPU controller contract
+        run: |
+          cargo run -p finkit-visualization --features html --example gpu_large_chart --locked
+          node scripts/test_webgl_runtime.mjs gpu_large_chart.html
+          node scripts/test_webgl_runtime.mjs gpu_large_chart.html --webgpu
+          cargo run -p finkit-visualization --features html --example improved_chart --locked
+          node scripts/test_webgl_runtime.mjs improved_chart_webgpu.html
+          node scripts/test_webgl_runtime.mjs improved_chart_webgpu.html --webgpu
 
   package-contract:
     name: Rust package contract

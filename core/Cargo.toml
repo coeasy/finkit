@@ -103,6 +103,7 @@ required-features = ["memory-profile"]
 
 [dependencies]
 serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
 bincode = { version = "1.3", optional = true }
 thiserror = { workspace = true, optional = true }
 ndarray = { workspace = true, optional = true }
@@ -181,7 +182,7 @@ std = ["dep:thiserror", "dep:ndarray", "dep:ahash"]
 no_std = []
 formula = ["std", "dep:pest", "dep:pest_derive", "dep:lru"]
 talib-c = ["std"]
-serde = ["std", "dep:serde", "dep:bincode"]
+serde = ["std", "dep:serde", "dep:serde_json", "dep:bincode"]
 nightly-avx512 = []
 precision-f32 = []
 rayon = ["std", "dep:rayon"]

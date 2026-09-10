@@ -94,7 +94,8 @@ fn test_chart_type_ohlc_bar() {
     let mut chart = KlineChart::new(config);
     chart.build_draw_list(&data, &[]).unwrap();
     let svg = chart.to_svg_string().unwrap();
-    assert!(svg.contains("<line"));
+    // Adjacent OHLC segments may be emitted as one batched SVG path.
+    assert!(svg.contains("<line") || svg.contains("<path"));
 }
 
 #[test]

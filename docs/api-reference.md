@@ -506,7 +506,7 @@ const doubleTops = detect_double_top(high);
 <dependency>
     <groupId>com.finkit</groupId>
     <artifactId>finkit</artifactId>
-    <version>0.1.4</version>
+    <version>0.1.5</version>
 </dependency>
 ```
 

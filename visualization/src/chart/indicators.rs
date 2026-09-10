@@ -14,6 +14,15 @@ fn data_len_from_layout(layout: &ChartLayout) -> usize {
     }
 }
 
+fn render_stride(n: usize, plot_width: f64) -> usize {
+    let max_points = (plot_width.max(64.0) * 2.0) as usize;
+    if n > max_points {
+        n.div_ceil(max_points)
+    } else {
+        1
+    }
+}
+
 #[allow(clippy::needless_range_loop)]
 fn draw_indicator_line(
     draw_list: &mut DrawList,
@@ -29,6 +38,7 @@ fn draw_indicator_line(
     }
 
     let mut segment: Vec<Point> = Vec::new();
+    let stride = render_stride(n, plot_area.width);
 
     for i in 0..n {
         let v = values[i];
@@ -41,6 +51,10 @@ fn draw_indicator_line(
                 });
             }
             segment.clear();
+            continue;
+        }
+
+        if stride > 1 && i != 0 && i + 1 != n && i % stride != 0 {
             continue;
         }
 
@@ -134,6 +148,29 @@ pub fn render_ema(
     }
 }
 
+/// Render a caller-computed custom series on the main price panel.
+pub fn render_custom(
+    draw_list: &mut DrawList,
+    data: &KlineData,
+    layout: &ChartLayout,
+    _config: &ChartConfig,
+    values: &[f64],
+    color: &str,
+    line_width: f32,
+) {
+    if data.is_empty() || values.len() != data.len() {
+        return;
+    }
+    let plot_area = &layout.main_panel.plot_area;
+    let y_scale = &layout.main_panel.y_scale;
+    let bar_width = plot_area.width / data.len() as f64;
+    let style = Style::new()
+        .with_stroke(Color::from_hex(color))
+        .with_line_width(line_width.max(0.5))
+        .with_fill(Color::TRANSPARENT);
+    draw_indicator_line(draw_list, values, plot_area, y_scale, bar_width, style);
+}
+
 pub fn render_boll(
     draw_list: &mut DrawList,
     data: &KlineData,
@@ -160,15 +197,21 @@ pub fn render_boll(
     let y_scale = &layout.main_panel.y_scale;
     let bar_width = plot_area.width / n as f64;
 
-    let mut fill_points: Vec<Point> = Vec::with_capacity(n * 2);
-    for i in 0..n {
+    let stride = render_stride(n, plot_area.width);
+    let sample_indices = if stride == 1 {
+        (0..n).collect::<Vec<_>>()
+    } else {
+        crate::decimate::every_nth(n, (n / stride).saturating_add(1))
+    };
+    let mut fill_points: Vec<Point> = Vec::with_capacity(sample_indices.len() * 2);
+    for &i in &sample_indices {
         if !upper[i].is_nan() && !lower[i].is_nan() {
             let x = plot_area.x + i as f64 * bar_width + bar_width / 2.0;
             let y_upper = y_scale.data_to_pixel(upper[i]);
             fill_points.push(Point::new(x, y_upper));
         }
     }
-    for i in (0..n).rev() {
+    for &i in sample_indices.iter().rev() {
         if !upper[i].is_nan() && !lower[i].is_nan() {
             let x = plot_area.x + i as f64 * bar_width + bar_width / 2.0;
             let y_lower = y_scale.data_to_pixel(lower[i]);
@@ -272,7 +315,8 @@ pub fn render_macd(
     let gap = (bar_width - hist_bar_width) / 2.0;
     let y_zero = y_scale.data_to_pixel(0.0);
 
-    for i in 0..n {
+    let hist_stride = render_stride(n, plot_area.width);
+    for i in (0..n).step_by(hist_stride) {
         let v = hist[i];
         if v.is_nan() {
             continue;
@@ -700,12 +744,23 @@ pub fn render_volume(
     layout: &ChartLayout,
     config: &ChartConfig,
 ) {
+    let indices: Vec<usize> = (0..data.len()).collect();
+    render_volume_indices(draw_list, data, layout, config, &indices);
+}
+
+pub fn render_volume_indices(
+    draw_list: &mut DrawList,
+    data: &KlineData,
+    layout: &ChartLayout,
+    config: &ChartConfig,
+    indices: &[usize],
+) {
     if !config.show_volume || layout.sub_panels.is_empty() {
         return;
     }
 
     let n = data.len();
-    if n == 0 {
+    if n == 0 || indices.is_empty() {
         return;
     }
 
@@ -721,7 +776,7 @@ pub fn render_volume(
     let up_color = Color::from_hex(config.color_scheme.up_color()).with_alpha(180);
     let down_color = Color::from_hex(config.color_scheme.down_color()).with_alpha(180);
 
-    for i in 0..n {
+    for &i in indices {
         let close = data.closes[i];
         let open = data.opens[i];
         let volume = data.volumes[i];

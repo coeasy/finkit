@@ -8,21 +8,285 @@
 
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
+use std::collections::{HashMap, HashSet};
 
+use finkit::calendar::{MarketCalendarPreset, SessionWindow, TimeZoneSpec, TradingCalendar};
+use finkit::chan::{ChanConfig, ChanVariant};
+use finkit::chan_mtf::ChanMultiConfig;
+use finkit::composite::{CompositeDefinition, CompositeEngine, CompositeExpr, CompositeOp};
+use finkit::factors::FactorContext;
 use finkit::indicators;
 use finkit::math::moving_avg;
 use finkit::patterns::{candlestick, chart};
+use finkit_visualization::interaction::ReplayState;
 
 mod streaming;
 mod sweep;
 mod transforms;
 
+#[napi(object)]
+pub struct CalendarSessionNapi {
+    pub session_day: i64,
+    pub session_index: u32,
+    pub open_timestamp: i64,
+    pub close_timestamp: i64,
+    pub source: Option<String>,
+    pub revision: Option<String>,
+}
+
+#[napi(object)]
+pub struct CalendarSessionOverrideNapi {
+    pub date: String,
+    pub sessions: Vec<CalendarSessionWindowNapi>,
+}
+
+#[napi(object)]
+pub struct CalendarSessionWindowNapi {
+    pub open_seconds: u32,
+    pub close_seconds: u32,
+}
+
+/// One node in a dependency-aware custom composite-indicator graph.
+#[napi(object)]
+pub struct CompositeDefinitionNapi {
+    pub name: String,
+    pub function: String,
+    pub inputs: Vec<String>,
+    pub params: Vec<f64>,
+}
+
+/// Resolve an exchange session for a Unix timestamp using a configurable
+/// market preset, timezone, holiday list and session overrides.
+#[napi]
+pub fn resolve_market_session(
+    market: String,
+    timestamp: i64,
+    timezone: Option<String>,
+    holidays: Option<Vec<String>>,
+    sessions: Option<Vec<CalendarSessionWindowNapi>>,
+    special_sessions: Option<Vec<CalendarSessionOverrideNapi>>,
+) -> Result<Option<CalendarSessionNapi>> {
+    let preset = MarketCalendarPreset::parse(&market)
+        .map_err(|error| Error::new(Status::InvalidArg, format!("{error}")))?;
+    let mut calendar = TradingCalendar::for_market(preset);
+    if let Some(timezone) = timezone {
+        calendar = calendar.with_timezone(
+            TimeZoneSpec::parse(&timezone)
+                .map_err(|error| Error::new(Status::InvalidArg, format!("{error}")))?,
+        );
+    }
+    if let Some(holidays) = holidays {
+        for holiday in holidays {
+            calendar
+                .add_holiday(&holiday)
+                .map_err(|error| Error::new(Status::InvalidArg, format!("{error}")))?;
+        }
+    }
+    if let Some(sessions) = sessions {
+        let sessions: Vec<SessionWindow> = sessions
+            .into_iter()
+            .map(|session| SessionWindow::new(session.open_seconds, session.close_seconds))
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|error| Error::new(Status::InvalidArg, format!("{error}")))?;
+        calendar = calendar.with_sessions(&sessions);
+    }
+    if let Some(special_sessions) = special_sessions {
+        for override_item in special_sessions {
+            let sessions: Vec<SessionWindow> = override_item
+                .sessions
+                .into_iter()
+                .map(|session| SessionWindow::new(session.open_seconds, session.close_seconds))
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(|error| Error::new(Status::InvalidArg, format!("{error}")))?;
+            calendar
+                .set_special_sessions(&override_item.date, &sessions)
+                .map_err(|error| Error::new(Status::InvalidArg, format!("{error}")))?;
+        }
+    }
+    let Some(session) = calendar
+        .session_for_timestamp_local(timestamp)
+        .map_err(|error| Error::new(Status::InvalidArg, format!("{error}")))?
+    else {
+        return Ok(None);
+    };
+    Ok(Some(CalendarSessionNapi {
+        session_day: session.session_day,
+        session_index: session.session_index as u32,
+        open_timestamp: session.open_timestamp,
+        close_timestamp: session.close_timestamp,
+        source: calendar.source().map(str::to_string),
+        revision: calendar.revision().map(str::to_string),
+    }))
+}
+
+/// Resolve a session from a versioned JSON calendar definition.
+#[napi]
+pub fn resolve_market_session_config(
+    config_json: String,
+    timestamp: i64,
+) -> Result<Option<CalendarSessionNapi>> {
+    let calendar = TradingCalendar::from_json(&config_json)
+        .map_err(|error| Error::new(Status::InvalidArg, format!("{error}")))?;
+    let Some(session) = calendar
+        .session_for_timestamp_local(timestamp)
+        .map_err(|error| Error::new(Status::InvalidArg, format!("{error}")))?
+    else {
+        return Ok(None);
+    };
+    Ok(Some(CalendarSessionNapi {
+        session_day: session.session_day,
+        session_index: session.session_index as u32,
+        open_timestamp: session.open_timestamp,
+        close_timestamp: session.close_timestamp,
+        source: calendar.source().map(str::to_string),
+        revision: calendar.revision().map(str::to_string),
+    }))
+}
+
+/// Resolve a session from an exchange-published annual CSV calendar.
+#[napi]
+pub fn resolve_market_session_csv(
+    csv: String,
+    market: String,
+    timestamp: i64,
+    timezone: Option<String>,
+) -> Result<Option<CalendarSessionNapi>> {
+    let calendar = TradingCalendar::from_csv(&csv, Some(&market), timezone.as_deref())
+        .map_err(|error| Error::new(Status::InvalidArg, format!("{error}")))?;
+    let Some(session) = calendar
+        .session_for_timestamp_local(timestamp)
+        .map_err(|error| Error::new(Status::InvalidArg, format!("{error}")))?
+    else {
+        return Ok(None);
+    };
+    Ok(Some(CalendarSessionNapi {
+        session_day: session.session_day,
+        session_index: session.session_index as u32,
+        open_timestamp: session.open_timestamp,
+        close_timestamp: session.close_timestamp,
+        source: calendar.source().map(str::to_string),
+        revision: calendar.revision().map(str::to_string),
+    }))
+}
+
+/// Evaluate a dependency-aware graph of custom composite indicators.
+///
+/// Inputs may reference `open`, `high`, `low`, `close`, `volume`, another
+/// definition name, or `const:<number>`. Built-in functions include SMA, EMA,
+/// RSI, ATR, MACD, Bollinger bands, VWMA, returns, z-score, rolling statistics,
+/// threshold/clip predicates and cross signals; element-wise arithmetic
+/// functions are also accepted.
+#[napi]
+pub fn compute_composite(
+    close: Vec<f64>,
+    definitions: Vec<CompositeDefinitionNapi>,
+    outputs: Option<Vec<String>>,
+    open: Option<Vec<f64>>,
+    high: Option<Vec<f64>>,
+    low: Option<Vec<f64>>,
+    volume: Option<Vec<f64>>,
+) -> Result<HashMap<String, Vec<f64>>> {
+    let names: HashSet<String> = definitions.iter().map(|item| item.name.clone()).collect();
+    if names.len() != definitions.len() {
+        return Err(Error::new(
+            Status::InvalidArg,
+            "composite definition names must be unique",
+        ));
+    }
+    let definitions = definitions
+        .into_iter()
+        .map(|item| {
+            let inputs = item
+                .inputs
+                .into_iter()
+                .map(|input| composite_input_expression_napi(&input, &names))
+                .collect::<Result<Vec<_>>>()?;
+            let expression = match item.function.to_ascii_lowercase().as_str() {
+                "add" => CompositeExpr::Op {
+                    op: CompositeOp::Add,
+                    inputs,
+                },
+                "sub" => CompositeExpr::Op {
+                    op: CompositeOp::Sub,
+                    inputs,
+                },
+                "mul" => CompositeExpr::Op {
+                    op: CompositeOp::Mul,
+                    inputs,
+                },
+                "div" => CompositeExpr::Op {
+                    op: CompositeOp::Div,
+                    inputs,
+                },
+                "min" => CompositeExpr::Op {
+                    op: CompositeOp::Min,
+                    inputs,
+                },
+                "max" => CompositeExpr::Op {
+                    op: CompositeOp::Max,
+                    inputs,
+                },
+                "weighted_average" | "weightedaverage" => {
+                    CompositeExpr::call("weighted_average", inputs, item.params)
+                }
+                _ => CompositeExpr::call(item.function, inputs, item.params),
+            };
+            Ok(CompositeDefinition::new(item.name, expression))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let output_names = outputs.unwrap_or_else(|| {
+        definitions
+            .iter()
+            .map(|definition| definition.name.clone())
+            .collect()
+    });
+    let output_refs: Vec<&str> = output_names.iter().map(String::as_str).collect();
+    let mut context = FactorContext::new();
+    context
+        .insert("close", close)
+        .map_err(|error| Error::new(Status::InvalidArg, error.to_string()))?;
+    for (name, values) in [
+        ("open", open),
+        ("high", high),
+        ("low", low),
+        ("volume", volume),
+    ] {
+        if let Some(values) = values {
+            context
+                .insert(name, values)
+                .map_err(|error| Error::new(Status::InvalidArg, error.to_string()))?;
+        }
+    }
+    CompositeEngine::new()
+        .evaluate(&definitions, &output_refs, &context)
+        .map(|values| values.into_iter().collect())
+        .map_err(|error| Error::new(Status::InvalidArg, error.to_string()))
+}
+
+fn composite_input_expression_napi(
+    input: &str,
+    definition_names: &HashSet<String>,
+) -> Result<CompositeExpr> {
+    if let Some(value) = input.strip_prefix("const:") {
+        let value = value.parse::<f64>().map_err(|_| {
+            Error::new(
+                Status::InvalidArg,
+                format!("invalid composite constant: {input}"),
+            )
+        })?;
+        return Ok(CompositeExpr::Constant(value));
+    }
+    if definition_names.contains(input) {
+        Ok(CompositeExpr::reference(input))
+    } else {
+        Ok(CompositeExpr::series(input))
+    }
+}
+
 #[cfg(feature = "formula")]
 use finkit::formula::{parse_formula, FormulaContext, FormulaEngine, FormulaError};
 #[cfg(feature = "formula")]
 use ndarray::Array1;
-#[cfg(feature = "formula")]
-use std::collections::HashMap;
 
 #[cfg(feature = "formula")]
 fn formula_error_to_napi(e: FormulaError) -> napi::Error {
@@ -1074,6 +1338,7 @@ pub fn fibonacci_retracement(
 #[napi(object)]
 pub struct KlineDataNapi {
     pub dates: Vec<String>,
+    pub timestamps: Option<Vec<i64>>,
     pub opens: Vec<f64>,
     pub highs: Vec<f64>,
     pub lows: Vec<f64>,
@@ -1081,16 +1346,31 @@ pub struct KlineDataNapi {
     pub volumes: Vec<f64>,
 }
 
+#[napi(object)]
+pub struct KlineQuoteNapi {
+    pub date: String,
+    pub timestamp: Option<i64>,
+    pub open: f64,
+    pub high: f64,
+    pub low: f64,
+    pub close: f64,
+    pub volume: f64,
+}
+
 impl From<KlineDataNapi> for finkit_visualization::data::KlineData {
     fn from(data: KlineDataNapi) -> Self {
-        Self::new(
+        let mut result = Self::new(
             data.dates,
             data.opens,
             data.highs,
             data.lows,
             data.closes,
             data.volumes,
-        )
+        );
+        if let Some(timestamps) = data.timestamps {
+            result.timestamps = timestamps;
+        }
+        result
     }
 }
 
@@ -1098,6 +1378,7 @@ impl From<finkit_visualization::data::KlineData> for KlineDataNapi {
     fn from(data: finkit_visualization::data::KlineData) -> Self {
         Self {
             dates: data.dates,
+            timestamps: (!data.timestamps.is_empty()).then_some(data.timestamps),
             opens: data.opens,
             highs: data.highs,
             lows: data.lows,
@@ -1115,9 +1396,11 @@ pub fn kline_data_new(
     lows: Vec<f64>,
     closes: Vec<f64>,
     volumes: Vec<f64>,
+    timestamps: Option<Vec<i64>>,
 ) -> KlineDataNapi {
     KlineDataNapi {
         dates,
+        timestamps,
         opens,
         highs,
         lows,
@@ -1133,9 +1416,23 @@ pub fn kline_data_validate(data: KlineDataNapi) -> bool {
 }
 
 #[napi]
+pub fn kline_data_validate_ohlcv(data: KlineDataNapi) -> bool {
+    let inner: finkit_visualization::data::KlineData = data.into();
+    inner.validate_ohlcv()
+}
+
+#[napi]
+pub fn kline_data_validation_errors(data: KlineDataNapi) -> Vec<String> {
+    let inner: finkit_visualization::data::KlineData = data.into();
+    inner.validation_errors()
+}
+
+#[napi]
 pub struct KlineChartNapi {
     inner: finkit_visualization::chart::KlineChart,
     data: Option<finkit_visualization::data::KlineData>,
+    indicators: Vec<finkit_visualization::config::IndicatorConfig>,
+    replay: ReplayState,
 }
 
 #[napi]
@@ -1163,40 +1460,404 @@ impl KlineChartNapi {
         chart
             .build_draw_list(&inner_data, &[])
             .map_err(|e| Error::new(Status::GenericFailure, format!("{}", e)))?;
+        let data_len = inner_data.len();
         Ok(Self {
             inner: chart,
             data: Some(inner_data),
+            indicators: Vec::new(),
+            replay: ReplayState::new(data_len, 200),
         })
     }
 
     #[napi]
     pub fn add_ma(&mut self, periods: Vec<u32>) {
-        if let Some(ref data) = self.data {
-            let p: Vec<usize> = periods.iter().map(|&x| x as usize).collect();
-            self.inner.add_ma(data, &p);
-        }
+        self.indicators
+            .push(finkit_visualization::config::IndicatorConfig::new(
+                finkit_visualization::config::IndicatorType::MA,
+                periods.into_iter().map(|value| value as f64).collect(),
+            ));
+        let _ = self.rebuild();
     }
 
     #[napi]
     pub fn add_macd(&mut self, fast: u32, slow: u32, signal: u32) {
-        if let Some(ref data) = self.data {
-            self.inner
-                .add_macd(data, fast as usize, slow as usize, signal as usize, 1);
-        }
+        self.indicators
+            .push(finkit_visualization::config::IndicatorConfig::new(
+                finkit_visualization::config::IndicatorType::MACD,
+                vec![fast as f64, slow as f64, signal as f64],
+            ));
+        let _ = self.rebuild();
     }
 
     #[napi]
     pub fn add_rsi(&mut self, period: u32) {
-        if let Some(ref data) = self.data {
-            self.inner.add_rsi(data, period as usize, 1);
-        }
+        self.indicators
+            .push(finkit_visualization::config::IndicatorConfig::new(
+                finkit_visualization::config::IndicatorType::RSI,
+                vec![period as f64],
+            ));
+        let _ = self.rebuild();
     }
 
     #[napi]
     pub fn add_boll(&mut self, period: u32, nb_dev: f64) {
-        if let Some(ref data) = self.data {
-            self.inner.add_boll(data, period as usize, nb_dev);
+        self.indicators
+            .push(finkit_visualization::config::IndicatorConfig::new(
+                finkit_visualization::config::IndicatorType::BOLL,
+                vec![period as f64, nb_dev],
+            ));
+        let _ = self.rebuild();
+    }
+
+    #[napi]
+    pub fn add_custom_indicator(&mut self, name: String, values: Vec<f64>) -> Result<()> {
+        self.set_custom_indicator(name, values)
+    }
+
+    /// Replaces or registers a custom indicator series without duplicating its
+    /// chart definition. This is intended for real-time recalculation after a
+    /// new bar is appended or the current bar is revised.
+    #[napi]
+    pub fn set_custom_indicator(&mut self, name: String, values: Vec<f64>) -> Result<()> {
+        let data_len = self.data.as_ref().map(|data| data.len()).unwrap_or(0);
+        if name.trim().is_empty() || values.len() != data_len {
+            return Err(Error::new(
+                Status::InvalidArg,
+                format!(
+                    "custom indicator '{}' has {} values, expected {}",
+                    name,
+                    values.len(),
+                    data_len
+                ),
+            ));
         }
+        self.inner
+            .set_custom_indicator_series(name.clone(), values)
+            .map_err(|e| Error::new(Status::InvalidArg, format!("{}", e)))?;
+        if !self.indicators.iter().any(|indicator| {
+            matches!(
+                &indicator.indicator_type,
+                finkit_visualization::config::IndicatorType::Custom(existing) if existing == &name
+            )
+        }) {
+            self.indicators
+                .push(finkit_visualization::config::IndicatorConfig::new(
+                    finkit_visualization::config::IndicatorType::Custom(name),
+                    vec![],
+                ));
+        }
+        self.rebuild()?;
+        Ok(())
+    }
+
+    #[napi]
+    pub fn add_event_marker(
+        &mut self,
+        index: u32,
+        label: String,
+        value: Option<f64>,
+        color: Option<String>,
+    ) -> Result<()> {
+        let mut marker = finkit_visualization::chart::EventMarker::new(index as usize, label)
+            .with_color(finkit_visualization::primitive::Color::from_hex(
+                color.as_deref().unwrap_or("#f59e0b"),
+            ));
+        if let Some(value) = value {
+            marker = marker.with_value(value);
+        }
+        self.inner.add_event_marker(marker);
+        self.inner
+            .render_incremental()
+            .map_err(|e| Error::new(Status::GenericFailure, format!("{}", e)))?;
+        Ok(())
+    }
+
+    #[napi]
+    pub fn set_viewport(
+        &mut self,
+        start: u32,
+        end: u32,
+        pixel_width: u32,
+        pixel_height: u32,
+        overscan_bars: u32,
+        follow_latest: bool,
+    ) -> Result<()> {
+        let viewport = if end == 0 {
+            finkit_visualization::viewport::Viewport::full()
+        } else {
+            finkit_visualization::viewport::Viewport::new(start as usize, end as usize)
+                .with_pixels(pixel_width, pixel_height)
+                .with_overscan(overscan_bars as usize)
+                .with_follow_latest(follow_latest)
+        };
+        self.inner.set_viewport(viewport);
+        self.rebuild()
+    }
+
+    #[napi]
+    pub fn set_lod_policy(&mut self, level: String) -> Result<()> {
+        let policy = match level.to_ascii_lowercase().as_str() {
+            "auto" => finkit_visualization::viewport::LodPolicy::Auto,
+            "raw" => finkit_visualization::viewport::LodPolicy::Fixed(
+                finkit_visualization::viewport::LodLevel::Raw,
+            ),
+            "balanced" => finkit_visualization::viewport::LodPolicy::Fixed(
+                finkit_visualization::viewport::LodLevel::Balanced,
+            ),
+            "overview" => finkit_visualization::viewport::LodPolicy::Fixed(
+                finkit_visualization::viewport::LodLevel::Overview,
+            ),
+            value => {
+                return Err(Error::new(
+                    Status::InvalidArg,
+                    format!("unknown LOD policy: {value}"),
+                ))
+            }
+        };
+        self.inner.set_lod_policy(policy);
+        self.rebuild()
+    }
+
+    #[napi]
+    pub fn set_layer_visible(&mut self, layer: String, visible: bool) -> Result<bool> {
+        let changed = self.inner.set_layer_visible(&layer, visible);
+        self.rebuild()?;
+        Ok(changed)
+    }
+
+    #[napi]
+    pub fn set_interaction(
+        &mut self,
+        enabled: bool,
+        show_crosshair: bool,
+        show_data_window: bool,
+        enable_pan_zoom: bool,
+        enable_keyboard: bool,
+    ) {
+        self.inner
+            .set_interaction_config(finkit_visualization::config::InteractionConfig {
+                enabled,
+                show_crosshair,
+                show_data_window,
+                enable_pan_zoom,
+                enable_keyboard,
+            });
+    }
+
+    #[napi]
+    pub fn set_replay_window(&mut self, window: u32, cursor: Option<u32>) -> Result<Vec<u32>> {
+        let total = self.data.as_ref().map(|data| data.len()).unwrap_or(0);
+        self.replay.window = window.max(1) as usize;
+        if let Some(cursor) = cursor {
+            self.replay.seek(cursor as usize, total);
+        } else {
+            self.replay.reset(total);
+        }
+        let (start, end) = self.replay.visible_range(total);
+        self.inner
+            .set_viewport(finkit_visualization::viewport::Viewport::new(start, end));
+        self.rebuild()?;
+        Ok(vec![start as u32, end as u32])
+    }
+
+    #[napi]
+    pub fn replay_next(&mut self) -> Result<Option<Vec<u32>>> {
+        let total = self.data.as_ref().map(|data| data.len()).unwrap_or(0);
+        if self.replay.advance(total).is_none() {
+            return Ok(None);
+        }
+        let (start, end) = self.replay.visible_range(total);
+        self.inner
+            .set_viewport(finkit_visualization::viewport::Viewport::new(start, end));
+        self.rebuild()?;
+        Ok(Some(vec![start as u32, end as u32]))
+    }
+
+    #[napi]
+    pub fn add_chan(
+        &mut self,
+        min_stroke_bars: u32,
+        show_labels: bool,
+        variant: String,
+        stroke_policy: String,
+        center_policy: String,
+        signal_min_strength: f64,
+        show_multi_timeframe_annotations: bool,
+    ) -> Result<()> {
+        let variant_name = variant.to_ascii_lowercase();
+        let chan_variant = match variant_name.as_str() {
+            "conservative" => ChanVariant::Conservative,
+            "aggressive" => ChanVariant::Aggressive,
+            _ => ChanVariant::Standard,
+        };
+        let mut render_config = self.inner.config().chan.clone();
+        render_config.enabled = true;
+        render_config.min_stroke_bars = min_stroke_bars.max(1) as usize;
+        render_config.show_labels = show_labels;
+        render_config.variant = variant;
+        render_config.stroke_policy = stroke_policy;
+        render_config.center_policy = center_policy;
+        render_config.signal_min_strength = signal_min_strength;
+        render_config.show_multi_timeframe_annotations = show_multi_timeframe_annotations;
+        self.inner.set_chan_render_config(render_config);
+        self.inner
+            .analyze_and_set_chan(
+                ChanConfig {
+                    min_stroke_bars: min_stroke_bars.max(1) as usize,
+                    ..ChanConfig::default()
+                }
+                .with_variant(chan_variant),
+            )
+            .map_err(|e| Error::new(Status::InvalidArg, format!("{}", e)))?;
+        self.rebuild()
+    }
+
+    #[napi]
+    pub fn add_chan_multi(&mut self, factors: Vec<u32>, variant: String) -> Result<()> {
+        let variant_name = variant.to_ascii_lowercase();
+        let chan_variant = match variant_name.as_str() {
+            "conservative" => ChanVariant::Conservative,
+            "aggressive" => ChanVariant::Aggressive,
+            _ => ChanVariant::Standard,
+        };
+        let mut render_config = self.inner.config().chan.clone();
+        render_config.enabled = true;
+        render_config.variant = variant;
+        render_config.show_multi_timeframe_annotations = true;
+        self.inner.set_chan_render_config(render_config);
+        self.inner
+            .analyze_and_set_chan_multi(ChanMultiConfig {
+                factors: factors.into_iter().map(|factor| factor as usize).collect(),
+                chan: ChanConfig::default().with_variant(chan_variant),
+                ..ChanMultiConfig::default()
+            })
+            .map_err(|e| Error::new(Status::InvalidArg, format!("{}", e)))?;
+        self.rebuild()
+    }
+
+    /// Update Chan signal/structure thresholds and reanalyze the active chart.
+    #[napi]
+    pub fn set_chan_thresholds(
+        &mut self,
+        min_stroke_change_ratio: f64,
+        min_fractal_range_ratio: f64,
+        signal_min_strength: f64,
+        center_break_ratio: f64,
+    ) -> Result<()> {
+        let mut render_config = self.inner.config().chan.clone();
+        render_config.min_stroke_change_ratio = min_stroke_change_ratio;
+        render_config.min_fractal_range_ratio = min_fractal_range_ratio;
+        render_config.signal_min_strength = signal_min_strength;
+        render_config.center_break_ratio = center_break_ratio;
+        self.inner.set_chan_render_config(render_config);
+        if self.inner.config().chan.enabled {
+            let data = self
+                .inner
+                .data()
+                .cloned()
+                .ok_or_else(|| Error::new(Status::InvalidArg, "chart has no data"))?;
+            let analysis =
+                finkit_visualization::chart::chan::analyze_configured(&data, self.inner.config())
+                    .map_err(|e| Error::new(Status::InvalidArg, format!("{}", e)))?;
+            self.inner.set_chan_analysis(analysis);
+        }
+        self.rebuild()
+    }
+
+    #[napi]
+    pub fn append_kline(
+        &mut self,
+        date: String,
+        open: f64,
+        high: f64,
+        low: f64,
+        close: f64,
+        volume: f64,
+    ) -> Result<()> {
+        self.inner
+            .append_kline(&date, open, high, low, close, volume)
+            .map_err(|e| Error::new(Status::InvalidArg, format!("{}", e)))?;
+        self.data = self.inner.data().cloned();
+        self.rebuild()
+    }
+
+    #[napi]
+    pub fn update_last_kline(
+        &mut self,
+        close: f64,
+        high: Option<f64>,
+        low: Option<f64>,
+        volume: Option<f64>,
+    ) -> Result<()> {
+        self.inner
+            .update_last_kline(close, high, low, volume)
+            .map_err(|e| Error::new(Status::InvalidArg, format!("{}", e)))?;
+        self.data = self.inner.data().cloned();
+        self.rebuild()
+    }
+
+    #[napi]
+    pub fn upsert_kline(
+        &mut self,
+        date: String,
+        open: f64,
+        high: f64,
+        low: f64,
+        close: f64,
+        volume: f64,
+        timestamp: Option<i64>,
+    ) -> Result<String> {
+        let update = match timestamp {
+            Some(timestamp) => self
+                .inner
+                .upsert_kline_with_timestamp(timestamp, &date, open, high, low, close, volume),
+            None => self
+                .inner
+                .upsert_kline(&date, open, high, low, close, volume),
+        }
+        .map_err(|e| Error::new(Status::InvalidArg, format!("{}", e)))?;
+        self.data = self.inner.data().cloned();
+        self.rebuild()?;
+        Ok(match update.kind {
+            finkit_visualization::chart::KlineUpdateKind::Appended => "appended",
+            finkit_visualization::chart::KlineUpdateKind::Updated => "updated",
+        }
+        .to_string())
+    }
+
+    /// Apply many live quotes and rebuild the chart once at the end.
+    #[napi]
+    pub fn upsert_klines(&mut self, updates: Vec<KlineQuoteNapi>) -> Result<Vec<String>> {
+        let bars: Vec<finkit_visualization::data::KlineBar> = updates
+            .into_iter()
+            .map(|update| {
+                let bar = finkit_visualization::data::KlineBar::new(
+                    update.date,
+                    update.open,
+                    update.high,
+                    update.low,
+                    update.close,
+                    update.volume,
+                );
+                update
+                    .timestamp
+                    .map_or(bar.clone(), |timestamp| bar.with_timestamp(timestamp))
+            })
+            .collect();
+        let result = self
+            .inner
+            .upsert_klines(&bars)
+            .map_err(|e| Error::new(Status::InvalidArg, format!("{}", e)))?;
+        self.data = self.inner.data().cloned();
+        self.rebuild()?;
+        Ok(result
+            .into_iter()
+            .map(|update| match update.kind {
+                finkit_visualization::chart::KlineUpdateKind::Appended => "appended",
+                finkit_visualization::chart::KlineUpdateKind::Updated => "updated",
+            })
+            .map(str::to_string)
+            .collect())
     }
 
     #[napi]
@@ -1210,6 +1871,81 @@ impl KlineChartNapi {
     pub fn to_svg(&mut self) -> Result<String> {
         self.inner
             .to_svg_string()
+            .map_err(|e| Error::new(Status::GenericFailure, format!("{}", e)))
+    }
+
+    #[napi]
+    pub fn save_as_canvas_html(&mut self, path: String) -> Result<()> {
+        self.inner
+            .save_as_canvas_html(&path)
+            .map_err(|e| Error::new(Status::GenericFailure, format!("{}", e)))
+    }
+
+    #[napi]
+    pub fn to_canvas_html(&mut self) -> Result<String> {
+        self.inner
+            .to_canvas_html_string()
+            .map_err(|e| Error::new(Status::GenericFailure, format!("{}", e)))
+    }
+
+    #[napi]
+    pub fn save_as_webgl_html(&mut self, path: String) -> Result<()> {
+        self.inner
+            .save_as_webgl_html(&path)
+            .map_err(|e| Error::new(Status::GenericFailure, format!("{}", e)))
+    }
+
+    #[napi]
+    pub fn save_as_webgpu_html(&mut self, path: String) -> Result<()> {
+        self.inner
+            .save_as_webgpu_html(&path)
+            .map_err(|e| Error::new(Status::GenericFailure, format!("{}", e)))
+    }
+
+    #[napi]
+    pub fn to_webgl_html(&mut self) -> Result<String> {
+        self.inner
+            .to_webgl_html_string()
+            .map_err(|e| Error::new(Status::GenericFailure, format!("{}", e)))
+    }
+
+    /// Return an explicitly WebGPU-preferred HTML document with WebGL2/Canvas fallback.
+    #[napi]
+    pub fn to_webgpu_html(&mut self) -> Result<String> {
+        self.inner
+            .to_webgpu_html_string()
+            .map_err(|e| Error::new(Status::GenericFailure, format!("{}", e)))
+    }
+
+    #[napi]
+    pub fn save_as_html(&mut self, path: String) -> Result<()> {
+        self.inner
+            .save_as_html(&path)
+            .map_err(|e| Error::new(Status::GenericFailure, format!("{}", e)))
+    }
+
+    #[napi]
+    pub fn to_html(&mut self) -> Result<String> {
+        self.inner
+            .to_html_string()
+            .map_err(|e| Error::new(Status::GenericFailure, format!("{}", e)))
+    }
+
+    #[napi]
+    pub fn to_json(&mut self) -> Result<String> {
+        self.inner
+            .to_json_string()
+            .map_err(|e| Error::new(Status::GenericFailure, format!("{}", e)))
+    }
+}
+
+impl KlineChartNapi {
+    fn rebuild(&mut self) -> Result<()> {
+        let Some(data) = self.data.clone() else {
+            return Err(Error::new(Status::InvalidArg, "chart has no data"));
+        };
+        self.inner
+            .build_draw_list(&data, &self.indicators)
             .map_err(|e| Error::new(Status::GenericFailure, format!("{}", e)))
     }
 }

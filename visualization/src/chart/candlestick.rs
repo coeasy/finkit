@@ -10,8 +10,22 @@ pub fn render_candlestick(
     layout: &ChartLayout,
     config: &ChartConfig,
 ) {
+    let indices: Vec<usize> = (0..data.len()).collect();
+    render_candlestick_indices(draw_list, data, layout, config, &indices);
+}
+
+/// Renders selected source rows while preserving their original x positions.
+/// This is important for decimated charts: structure overlays and timestamps
+/// continue to line up with the full-resolution data.
+pub fn render_candlestick_indices(
+    draw_list: &mut DrawList,
+    data: &KlineData,
+    layout: &ChartLayout,
+    config: &ChartConfig,
+    indices: &[usize],
+) {
     let n = data.len();
-    if n == 0 {
+    if n == 0 || indices.is_empty() {
         return;
     }
 
@@ -26,7 +40,7 @@ pub fn render_candlestick(
     let up_color = Color::from_hex(config.color_scheme.up_color());
     let down_color = Color::from_hex(config.color_scheme.down_color());
 
-    for i in 0..n {
+    for &i in indices {
         let open = data.opens[i];
         let high = data.highs[i];
         let low = data.lows[i];

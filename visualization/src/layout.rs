@@ -17,6 +17,16 @@ pub struct AxisInfo {
     pub max: f64,
 }
 
+/// Semantic scale family for a sub-panel. The default count-based API keeps
+/// the historical volume/percentage behavior; chart orchestration can pass
+/// explicit kinds so MACD is centered around zero and RSI/KDJ stay bounded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SubPanelKind {
+    Volume,
+    Oscillator,
+    Value,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChartLayout {
     pub total_rect: Rect,
@@ -47,7 +57,28 @@ impl LayoutCalculator {
         config: &ChartConfig,
         sub_panel_count: usize,
     ) -> ChartLayout {
-        let sub_panel_count = sub_panel_count.min(3);
+        let mut kinds = Vec::with_capacity(sub_panel_count);
+        for index in 0..sub_panel_count {
+            kinds.push(if index == 0 {
+                SubPanelKind::Volume
+            } else {
+                SubPanelKind::Oscillator
+            });
+        }
+        Self::calculate_with_sub_panel_kinds(data, config, &kinds)
+    }
+
+    pub fn calculate_with_sub_panel_kinds(
+        data: &KlineData,
+        config: &ChartConfig,
+        panel_kinds: &[SubPanelKind],
+    ) -> ChartLayout {
+        let kinds = if panel_kinds.is_empty() {
+            Vec::new()
+        } else {
+            panel_kinds.to_vec()
+        };
+        let sub_panel_count = kinds.len().min(3);
         let total_width = config.width as f64;
         let total_height = config.height as f64;
         let total_rect = Rect::new(0.0, 0.0, total_width, total_height);
@@ -141,12 +172,19 @@ impl LayoutCalculator {
                 + (i as f64 + 1.0) * Self::PANEL_SPACING
                 + i as f64 * sub_height;
 
-            let (sub_data_min, sub_data_max) = if i == 0 && !data.volumes.is_empty() {
-                let max = data.volumes.iter().cloned().fold(0.0_f64, f64::max);
-                (0.0, max)
-            } else {
-                (0.0, 100.0)
-            };
+            let (sub_data_min, sub_data_max) =
+                match kinds.get(i).copied().unwrap_or(SubPanelKind::Oscillator) {
+                    SubPanelKind::Volume if !data.volumes.is_empty() => {
+                        let max = data.volumes.iter().cloned().fold(0.0_f64, f64::max);
+                        (0.0, max)
+                    }
+                    SubPanelKind::Value => {
+                        let range = (main_data_max - main_data_min).abs().max(1.0);
+                        let bound = (range * 0.5).max(1.0);
+                        (-bound, bound)
+                    }
+                    _ => (0.0, 100.0),
+                };
 
             let sub_y_scale = Scale::linear_scale(
                 sub_data_min,
@@ -166,11 +204,14 @@ impl LayoutCalculator {
             };
 
             let sub_y_ticks = sub_y_scale.nice_ticks(Self::TICK_COUNT);
-            let sub_y_labels: Vec<String> = if i == 0 {
-                sub_y_ticks.iter().map(|&v| format_volume(v)).collect()
-            } else {
-                sub_y_ticks.iter().map(|&v| format_percentage(v)).collect()
-            };
+            let sub_y_labels: Vec<String> =
+                if matches!(kinds.get(i).copied(), Some(SubPanelKind::Volume)) {
+                    sub_y_ticks.iter().map(|&v| format_volume(v)).collect()
+                } else if matches!(kinds.get(i).copied(), Some(SubPanelKind::Value)) {
+                    sub_y_ticks.iter().map(|&v| format_price(v)).collect()
+                } else {
+                    sub_y_ticks.iter().map(|&v| format_percentage(v)).collect()
+                };
 
             let sub_y_axis = AxisInfo {
                 ticks: sub_y_ticks,

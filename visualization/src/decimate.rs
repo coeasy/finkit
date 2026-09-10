@@ -166,7 +166,6 @@ pub fn decimate(
     canvas_width: u32,
 ) -> DecimatedKline {
     let n = data.len();
-    let threshold = canvas_width as usize;
 
     if n == 0 {
         return DecimatedKline {
@@ -181,31 +180,7 @@ pub fn decimate(
         };
     }
 
-    if threshold == 0 || n <= threshold {
-        return DecimatedKline {
-            indices: (0..n).collect(),
-            dates: data.dates.clone(),
-            opens: data.opens.clone(),
-            highs: data.highs.clone(),
-            lows: data.lows.clone(),
-            closes: data.closes.clone(),
-            volumes: data.volumes.clone(),
-            original_len: n,
-        };
-    }
-
-    let indices = match strategy {
-        DecimateStrategy::Auto => {
-            if n > canvas_width as usize * 2 {
-                lttb(data.closes(), threshold)
-            } else {
-                (0..n).collect()
-            }
-        }
-        DecimateStrategy::LTTB => lttb(data.closes(), threshold),
-        DecimateStrategy::MinMax => min_max(data.highs(), data.lows(), threshold),
-        DecimateStrategy::EveryNth => every_nth(n, threshold),
-    };
+    let indices = select_indices(data, strategy, canvas_width);
 
     let mut dates = Vec::with_capacity(indices.len());
     let mut opens = Vec::with_capacity(indices.len());
@@ -232,6 +207,35 @@ pub fn decimate(
         closes,
         volumes,
         original_len: n,
+    }
+}
+
+/// Selects source rows without copying OHLCV data.
+///
+/// Rendering only needs the source indices. Keeping this separate from
+/// [`decimate`] avoids allocating a second full data set on every chart draw.
+pub fn select_indices(
+    data: &KlineData,
+    strategy: &DecimateStrategy,
+    canvas_width: u32,
+) -> Vec<usize> {
+    let n = data.len();
+    let threshold = canvas_width as usize;
+    if n == 0 || threshold == 0 || n <= threshold {
+        return (0..n).collect();
+    }
+
+    match strategy {
+        DecimateStrategy::Auto => {
+            if n > (canvas_width as usize).saturating_mul(2) {
+                lttb(data.closes(), threshold)
+            } else {
+                (0..n).collect()
+            }
+        }
+        DecimateStrategy::LTTB => lttb(data.closes(), threshold),
+        DecimateStrategy::MinMax => min_max(data.highs(), data.lows(), threshold),
+        DecimateStrategy::EveryNth => every_nth(n, threshold),
     }
 }
 

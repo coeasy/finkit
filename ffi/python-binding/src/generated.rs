@@ -13,11 +13,11 @@
 /// * `timeperiod` - Lookback period (default: 14)
 #[pyfunction]
 #[pyo3(signature = (close, timeperiod=14))]
-fn sma(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Vec<f64>> {
+fn sma(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Py<PyArray1<f64>>> {
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         moving_avg::sma(close, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -33,11 +33,11 @@ fn sma(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> P
 /// * `timeperiod` - Lookback period (default: 14)
 #[pyfunction]
 #[pyo3(signature = (close, timeperiod=14))]
-fn ema(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Vec<f64>> {
+fn ema(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Py<PyArray1<f64>>> {
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         moving_avg::ema(close, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -53,11 +53,11 @@ fn ema(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> P
 /// * `timeperiod` - Lookback period (default: 14)
 #[pyfunction]
 #[pyo3(signature = (close, timeperiod=14))]
-fn wma(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Vec<f64>> {
+fn wma(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Py<PyArray1<f64>>> {
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         moving_avg::wma(close, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -74,11 +74,11 @@ fn wma(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> P
 /// * `timeperiod` - Lookback period (default: 14)
 #[pyfunction]
 #[pyo3(signature = (close, timeperiod=14))]
-fn dema(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Vec<f64>> {
+fn dema(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Py<PyArray1<f64>>> {
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         moving_avg::dema(close, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -95,11 +95,11 @@ fn dema(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> 
 /// * `timeperiod` - Lookback period (default: 14)
 #[pyfunction]
 #[pyo3(signature = (close, timeperiod=14))]
-fn tema(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Vec<f64>> {
+fn tema(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Py<PyArray1<f64>>> {
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         moving_avg::tema(close, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -124,11 +124,11 @@ fn kama(
     timeperiod: usize,
     fastperiod: usize,
     slowperiod: usize,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         moving_avg::kama(close, timeperiod, fastperiod, slowperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -154,11 +154,11 @@ fn mama(
     close: PyReadonlyArray1<'_, f64>,
     fastlimit: f64,
     slowlimit: f64,
-) -> PyResult<(Vec<f64>, Vec<f64>)> {
+) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>)> {
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_arrays2_f64(py, || {
         indicators::mama(close, fastlimit, slowlimit)
             .map(|res| (res.mama.into_raw_vec(), res.fama.into_raw_vec()))
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -181,11 +181,11 @@ fn t3(
     close: PyReadonlyArray1<'_, f64>,
     timeperiod: usize,
     vfactor: f64,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::t3(close, timeperiod, vfactor)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -214,11 +214,11 @@ fn bollinger_bands(
     timeperiod: usize,
     nbdevup: f64,
     nbdevdn: f64,
-) -> PyResult<(Vec<f64>, Vec<f64>, Vec<f64>)> {
+) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>, Py<PyArray1<f64>>)> {
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_arrays3_f64(py, || {
         indicators::bbands(close, timeperiod, nbdevup, nbdevdn)
             .map(|res| {
                 (
@@ -244,11 +244,11 @@ fn midpoint(
     py: Python<'_>,
     close: PyReadonlyArray1<'_, f64>,
     timeperiod: usize,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::midpoint(close, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -271,14 +271,14 @@ fn midprice(
     high: PyReadonlyArray1<'_, f64>,
     low: PyReadonlyArray1<'_, f64>,
     timeperiod: usize,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let high = high
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
     let low = low
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::midprice(high, low, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -304,14 +304,14 @@ fn sar(
     low: PyReadonlyArray1<'_, f64>,
     acceleration: f64,
     maximum: f64,
-) -> PyResult<(Vec<f64>, Vec<f64>)> {
+) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>)> {
     let high = high
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
     let low = low
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_arrays2_f64(py, || {
         indicators::sar(high, low, acceleration, maximum)
             .map(|res| (res.sar.into_raw_vec(), res.af.into_raw_vec()))
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -327,11 +327,11 @@ fn sar(
 /// * `timeperiod` - Lookback period (default: 14)
 #[pyfunction]
 #[pyo3(signature = (close, timeperiod=14))]
-fn rsi(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Vec<f64>> {
+fn rsi(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Py<PyArray1<f64>>> {
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::rsi(close, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -358,11 +358,11 @@ fn macd(
     fastperiod: usize,
     slowperiod: usize,
     signalperiod: usize,
-) -> PyResult<(Vec<f64>, Vec<f64>, Vec<f64>)> {
+) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>, Py<PyArray1<f64>>)> {
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_arrays3_f64(py, || {
         indicators::macd(close, fastperiod, slowperiod, signalperiod)
             .map(|res| {
                 (
@@ -399,7 +399,7 @@ fn stoch(
     fastk_period: usize,
     slowk_period: usize,
     slowd_period: usize,
-) -> PyResult<(Vec<f64>, Vec<f64>)> {
+) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>)> {
     let high = high
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
@@ -409,7 +409,7 @@ fn stoch(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_arrays2_f64(py, || {
         indicators::stoch(high, low, close, fastk_period, slowk_period, slowd_period)
             .map(|res| (res.k.into_raw_vec(), res.d.into_raw_vec()))
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -433,7 +433,7 @@ fn adx(
     low: PyReadonlyArray1<'_, f64>,
     close: PyReadonlyArray1<'_, f64>,
     timeperiod: usize,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let high = high
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
@@ -443,7 +443,7 @@ fn adx(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::adx(high, low, close, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -468,14 +468,14 @@ fn aroon(
     high: PyReadonlyArray1<'_, f64>,
     low: PyReadonlyArray1<'_, f64>,
     timeperiod: usize,
-) -> PyResult<(Vec<f64>, Vec<f64>)> {
+) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>)> {
     let high = high
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
     let low = low
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_arrays2_f64(py, || {
         indicators::aroon(high, low, timeperiod)
             .map(|res| (res.aroon_up.into_raw_vec(), res.aroon_down.into_raw_vec()))
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -499,7 +499,7 @@ fn cci(
     low: PyReadonlyArray1<'_, f64>,
     close: PyReadonlyArray1<'_, f64>,
     timeperiod: usize,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let high = high
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
@@ -509,7 +509,7 @@ fn cci(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::cci(high, low, close, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -525,11 +525,11 @@ fn cci(
 /// * `timeperiod` - Lookback period (default: 10)
 #[pyfunction]
 #[pyo3(signature = (close, timeperiod=10))]
-fn mom(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Vec<f64>> {
+fn mom(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Py<PyArray1<f64>>> {
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::mom(close, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -545,11 +545,11 @@ fn mom(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> P
 /// * `timeperiod` - Lookback period (default: 10)
 #[pyfunction]
 #[pyo3(signature = (close, timeperiod=10))]
-fn roc(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Vec<f64>> {
+fn roc(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Py<PyArray1<f64>>> {
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::roc(close, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -573,7 +573,7 @@ fn willr(
     low: PyReadonlyArray1<'_, f64>,
     close: PyReadonlyArray1<'_, f64>,
     timeperiod: usize,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let high = high
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
@@ -583,7 +583,7 @@ fn willr(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::willr(high, low, close, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -605,11 +605,11 @@ fn apo(
     close: PyReadonlyArray1<'_, f64>,
     fastperiod: usize,
     slowperiod: usize,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::apo(close, fastperiod, slowperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -633,7 +633,7 @@ fn bop(
     high: PyReadonlyArray1<'_, f64>,
     low: PyReadonlyArray1<'_, f64>,
     close: PyReadonlyArray1<'_, f64>,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let open = open
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
@@ -646,7 +646,7 @@ fn bop(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::bop(open, high, low, close)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -662,11 +662,11 @@ fn bop(
 /// * `timeperiod` - Lookback period (default: 14)
 #[pyfunction]
 #[pyo3(signature = (close, timeperiod=14))]
-fn cmo(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Vec<f64>> {
+fn cmo(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Py<PyArray1<f64>>> {
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::cmo(close, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -692,7 +692,7 @@ fn mfi(
     close: PyReadonlyArray1<'_, f64>,
     volume: PyReadonlyArray1<'_, f64>,
     timeperiod: usize,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let high = high
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
@@ -705,7 +705,7 @@ fn mfi(
     let volume = volume
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::mfi(high, low, close, volume, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -721,11 +721,11 @@ fn mfi(
 /// * `timeperiod` - Lookback period (default: 14)
 #[pyfunction]
 #[pyo3(signature = (close, timeperiod=14))]
-fn trix(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Vec<f64>> {
+fn trix(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Py<PyArray1<f64>>> {
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::trix(close, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -740,11 +740,11 @@ fn vortex(
     low: PyReadonlyArray1<'_, f64>,
     close: PyReadonlyArray1<'_, f64>,
     timeperiod: usize,
-) -> PyResult<(Vec<f64>, Vec<f64>)> {
+) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>)> {
     let high = high.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
     let low = low.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
     let close = close.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_arrays2_f64(py, || {
         indicators::vortex(high, low, close, timeperiod)
             .map(|r| (r.vi_plus.into_raw_vec(), r.vi_minus.into_raw_vec()))
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -758,10 +758,10 @@ fn vzo(
     close: PyReadonlyArray1<'_, f64>,
     volume: PyReadonlyArray1<'_, f64>,
     timeperiod: usize,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let close = close.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
     let volume = volume.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::vzo(close, volume, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -774,9 +774,9 @@ fn volume_momentum(
     py: Python<'_>,
     volume: PyReadonlyArray1<'_, f64>,
     timeperiod: usize,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let volume = volume.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::volume_momentum(volume, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -789,9 +789,9 @@ fn volume_roc(
     py: Python<'_>,
     volume: PyReadonlyArray1<'_, f64>,
     timeperiod: usize,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let volume = volume.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::volume_roc(volume, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -804,9 +804,9 @@ fn chande_forecast_oscillator(
     py: Python<'_>,
     close: PyReadonlyArray1<'_, f64>,
     timeperiod: usize,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let close = close.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::chande_forecast_oscillator(close, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -822,12 +822,12 @@ fn twiggs_money_flow(
     close: PyReadonlyArray1<'_, f64>,
     volume: PyReadonlyArray1<'_, f64>,
     timeperiod: usize,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let high = high.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
     let low = low.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
     let close = close.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
     let volume = volume.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::twiggs_money_flow(high, low, close, volume, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -844,12 +844,12 @@ fn inertia(
     close: PyReadonlyArray1<'_, f64>,
     rvi_period: usize,
     linreg_period: usize,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let open = open.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
     let high = high.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
     let low = low.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
     let close = close.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::inertia(open, high, low, close, rvi_period, linreg_period)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -873,7 +873,7 @@ fn atr(
     low: PyReadonlyArray1<'_, f64>,
     close: PyReadonlyArray1<'_, f64>,
     timeperiod: usize,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let high = high
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
@@ -883,7 +883,7 @@ fn atr(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::atr(high, low, close, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -907,7 +907,7 @@ fn natr(
     low: PyReadonlyArray1<'_, f64>,
     close: PyReadonlyArray1<'_, f64>,
     timeperiod: usize,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let high = high
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
@@ -917,7 +917,7 @@ fn natr(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::natr(high, low, close, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -939,7 +939,7 @@ fn trange(
     high: PyReadonlyArray1<'_, f64>,
     low: PyReadonlyArray1<'_, f64>,
     close: PyReadonlyArray1<'_, f64>,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let high = high
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
@@ -949,7 +949,7 @@ fn trange(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::trange(high, low, close)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -969,14 +969,14 @@ fn obv(
     py: Python<'_>,
     close: PyReadonlyArray1<'_, f64>,
     volume: PyReadonlyArray1<'_, f64>,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
     let volume = volume
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::obv(close, volume)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -1000,7 +1000,7 @@ fn ad(
     low: PyReadonlyArray1<'_, f64>,
     close: PyReadonlyArray1<'_, f64>,
     volume: PyReadonlyArray1<'_, f64>,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let high = high
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
@@ -1013,7 +1013,7 @@ fn ad(
     let volume = volume
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::ad(high, low, close, volume)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -1041,7 +1041,7 @@ fn adosc(
     volume: PyReadonlyArray1<'_, f64>,
     fastperiod: usize,
     slowperiod: usize,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let high = high
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
@@ -1054,7 +1054,7 @@ fn adosc(
     let volume = volume
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::adosc(high, low, close, volume, fastperiod, slowperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -1069,11 +1069,11 @@ fn adosc(
 /// * `close` - Input data series (typically close prices)
 #[pyfunction]
 #[pyo3(signature = (close))]
-fn ht_dcperiod(py: Python<'_>, close: PyReadonlyArray1<'_, f64>) -> PyResult<Vec<f64>> {
+fn ht_dcperiod(py: Python<'_>, close: PyReadonlyArray1<'_, f64>) -> PyResult<Py<PyArray1<f64>>> {
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::ht_dcperiod(close)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -1088,11 +1088,11 @@ fn ht_dcperiod(py: Python<'_>, close: PyReadonlyArray1<'_, f64>) -> PyResult<Vec
 /// * `close` - Input data series
 #[pyfunction]
 #[pyo3(signature = (close))]
-fn ht_dcphase(py: Python<'_>, close: PyReadonlyArray1<'_, f64>) -> PyResult<Vec<f64>> {
+fn ht_dcphase(py: Python<'_>, close: PyReadonlyArray1<'_, f64>) -> PyResult<Py<PyArray1<f64>>> {
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::ht_dcphase(close)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -1110,11 +1110,11 @@ fn ht_dcphase(py: Python<'_>, close: PyReadonlyArray1<'_, f64>) -> PyResult<Vec<
 /// Tuple of (in_phase, quadrature) arrays
 #[pyfunction]
 #[pyo3(signature = (close))]
-fn ht_phasor(py: Python<'_>, close: PyReadonlyArray1<'_, f64>) -> PyResult<(Vec<f64>, Vec<f64>)> {
+fn ht_phasor(py: Python<'_>, close: PyReadonlyArray1<'_, f64>) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>)> {
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_arrays2_f64(py, || {
         indicators::ht_phasor(close)
             .map(|res| (res.0.into_raw_vec(), res.1.into_raw_vec()))
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -1132,11 +1132,11 @@ fn ht_phasor(py: Python<'_>, close: PyReadonlyArray1<'_, f64>) -> PyResult<(Vec<
 /// Tuple of (sine, lead_sine) arrays
 #[pyfunction]
 #[pyo3(signature = (close))]
-fn ht_sine(py: Python<'_>, close: PyReadonlyArray1<'_, f64>) -> PyResult<(Vec<f64>, Vec<f64>)> {
+fn ht_sine(py: Python<'_>, close: PyReadonlyArray1<'_, f64>) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>)> {
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_arrays2_f64(py, || {
         indicators::ht_sine(close)
             .map(|res| (res.0.into_raw_vec(), res.1.into_raw_vec()))
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -1151,11 +1151,11 @@ fn ht_sine(py: Python<'_>, close: PyReadonlyArray1<'_, f64>) -> PyResult<(Vec<f6
 /// * `close` - Input data series
 #[pyfunction]
 #[pyo3(signature = (close))]
-fn ht_trendmode(py: Python<'_>, close: PyReadonlyArray1<'_, f64>) -> PyResult<Vec<f64>> {
+fn ht_trendmode(py: Python<'_>, close: PyReadonlyArray1<'_, f64>) -> PyResult<Py<PyArray1<f64>>> {
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::ht_trendmode(close)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -1170,11 +1170,11 @@ fn ht_trendmode(py: Python<'_>, close: PyReadonlyArray1<'_, f64>) -> PyResult<Ve
 /// * `close` - Input data series (typically close prices)
 #[pyfunction]
 #[pyo3(signature = (close))]
-fn ht_trendline(py: Python<'_>, close: PyReadonlyArray1<'_, f64>) -> PyResult<Vec<f64>> {
+fn ht_trendline(py: Python<'_>, close: PyReadonlyArray1<'_, f64>) -> PyResult<Py<PyArray1<f64>>> {
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::ht_trendline(close)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -1194,11 +1194,11 @@ fn zscore(
     py: Python<'_>,
     close: PyReadonlyArray1<'_, f64>,
     timeperiod: usize,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::zscore(close, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -1220,14 +1220,14 @@ fn beta(
     asset: PyReadonlyArray1<'_, f64>,
     benchmark: PyReadonlyArray1<'_, f64>,
     timeperiod: usize,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let asset = asset
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
     let benchmark = benchmark
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::beta(asset, benchmark, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -1249,14 +1249,14 @@ fn correlation(
     input_a: PyReadonlyArray1<'_, f64>,
     input_b: PyReadonlyArray1<'_, f64>,
     timeperiod: usize,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let input_a = input_a
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
     let input_b = input_b
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::correlation(input_a, input_b, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -1278,11 +1278,11 @@ fn std_dev(
     close: PyReadonlyArray1<'_, f64>,
     timeperiod: usize,
     nbdev: f64,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::std_dev(close, timeperiod, nbdev)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -1298,11 +1298,11 @@ fn std_dev(
 /// * `timeperiod` - Rolling window size (default: 14)
 #[pyfunction]
 #[pyo3(signature = (close, timeperiod=14))]
-fn tsf(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Vec<f64>> {
+fn tsf(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Py<PyArray1<f64>>> {
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::tsf(close, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -1322,11 +1322,11 @@ fn linear_reg(
     py: Python<'_>,
     close: PyReadonlyArray1<'_, f64>,
     timeperiod: usize,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::linearreg(close, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -1346,11 +1346,11 @@ fn percent_rank(
     py: Python<'_>,
     close: PyReadonlyArray1<'_, f64>,
     timeperiod: usize,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::percent_rank(close, timeperiod)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -1374,7 +1374,7 @@ fn avgprice(
     high: PyReadonlyArray1<'_, f64>,
     low: PyReadonlyArray1<'_, f64>,
     close: PyReadonlyArray1<'_, f64>,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let open = open
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
@@ -1387,7 +1387,7 @@ fn avgprice(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::avgprice(open, high, low, close)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -1407,14 +1407,14 @@ fn medprice(
     py: Python<'_>,
     high: PyReadonlyArray1<'_, f64>,
     low: PyReadonlyArray1<'_, f64>,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let high = high
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
     let low = low
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::medprice(high, low)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -1436,7 +1436,7 @@ fn typprice(
     high: PyReadonlyArray1<'_, f64>,
     low: PyReadonlyArray1<'_, f64>,
     close: PyReadonlyArray1<'_, f64>,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let high = high
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
@@ -1446,7 +1446,7 @@ fn typprice(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::typprice(high, low, close)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
@@ -1468,7 +1468,7 @@ fn wclprice(
     high: PyReadonlyArray1<'_, f64>,
     low: PyReadonlyArray1<'_, f64>,
     close: PyReadonlyArray1<'_, f64>,
-) -> PyResult<Vec<f64>> {
+) -> PyResult<Py<PyArray1<f64>>> {
     let high = high
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
@@ -1478,7 +1478,7 @@ fn wclprice(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    py_array_f64(py, || {
         indicators::wclprice(high, low, close)
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))

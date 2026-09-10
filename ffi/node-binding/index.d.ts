@@ -67,6 +67,48 @@ export declare function transformZscore(data: Array<number>): Array<number>
 export declare function transformRank(data: Array<number>): Array<number>
 export declare function transformDiff(data: Array<number>): Array<number>
 export declare function transformRollingMean(data: Array<number>, window: number): Array<number>
+export interface CalendarSessionNapi {
+  sessionDay: number
+  sessionIndex: number
+  openTimestamp: number
+  closeTimestamp: number
+  source?: string
+  revision?: string
+}
+export interface CalendarSessionOverrideNapi {
+  date: string
+  sessions: Array<CalendarSessionWindowNapi>
+}
+export interface CalendarSessionWindowNapi {
+  openSeconds: number
+  closeSeconds: number
+}
+/** One node in a dependency-aware custom composite-indicator graph. */
+export interface CompositeDefinitionNapi {
+  name: string
+  function: string
+  inputs: Array<string>
+  params: Array<number>
+}
+/**
+ * Resolve an exchange session for a Unix timestamp using a configurable
+ * market preset, timezone, holiday list and session overrides.
+ */
+export declare function resolveMarketSession(market: string, timestamp: number, timezone?: string | undefined | null, holidays?: Array<string> | undefined | null, sessions?: Array<CalendarSessionWindowNapi> | undefined | null, specialSessions?: Array<CalendarSessionOverrideNapi> | undefined | null): CalendarSessionNapi | null
+/** Resolve a session from a versioned JSON calendar definition. */
+export declare function resolveMarketSessionConfig(configJson: string, timestamp: number): CalendarSessionNapi | null
+/** Resolve a session from an exchange-published annual CSV calendar. */
+export declare function resolveMarketSessionCsv(csv: string, market: string, timestamp: number, timezone?: string | undefined | null): CalendarSessionNapi | null
+/**
+ * Evaluate a dependency-aware graph of custom composite indicators.
+ *
+ * Inputs may reference `open`, `high`, `low`, `close`, `volume`, another
+ * definition name, or `const:<number>`. Built-in functions include SMA, EMA,
+ * RSI, ATR, MACD, Bollinger bands, VWMA, returns, z-score, rolling statistics,
+ * threshold/clip predicates and cross signals; element-wise arithmetic
+ * functions are also accepted.
+ */
+export declare function computeComposite(close: Array<number>, definitions: Array<CompositeDefinitionNapi>, outputs?: Array<string> | undefined | null, open?: Array<number> | undefined | null, high?: Array<number> | undefined | null, low?: Array<number> | undefined | null, volume?: Array<number> | undefined | null): Record<string, Array<number>>
 /**
  * Simple Moving Average (SMA)
  *
@@ -127,74 +169,6 @@ export declare function tema(close: Array<number>, timeperiod: number): Array<nu
  * @returns Array of KAMA values
  */
 export declare function kama(close: Array<number>, timeperiod: number): Array<number>
-/**
- * MESA Adaptive Moving Average (MAMA)
- *
- * Uses the Hilbert Transform to adapt to market cycles.
- *
- * @param close - Close prices array
- * @param fastlimit - Fast limit (default: 0.5)
- * @param slowlimit - Slow limit (default: 0.05)
- * @returns Object containing mama and fama arrays
- */
-export interface MamaResult {
-  mama: Array<number>
-  fama: Array<number>
-}
-/** Result of Darvas Box pattern detection. */
-export interface DarvasBoxResult {
-  boxTop: Array<number>
-  boxBottom: Array<number>
-  signal: Array<number>
-}
-/** Result of Renko brick construction. */
-export interface RenkoResult {
-  bricks: Array<number>
-  direction: Array<number>
-}
-/** Result of Kagi line construction. */
-export interface KagiResult {
-  kagi: Array<number>
-  direction: Array<number>
-}
-/** Result of Point & Figure chart. */
-export interface PnfResult {
-  pnf: Array<number>
-  columnType: Array<number>
-  newColumn: Array<number>
-}
-/** Result of Three Line Break chart. */
-export interface ThreeLineBreakResult {
-  line: Array<number>
-  direction: Array<number>
-}
-/** Result of Williams Alligator indicator. */
-export interface WilliamsAlligatorResult {
-  jaw: Array<number>
-  teeth: Array<number>
-  lips: Array<number>
-}
-/** Result of Heikin-Ashi candlestick. */
-export interface HeikinAshiResult {
-  haOpen: Array<number>
-  haHigh: Array<number>
-  haLow: Array<number>
-  haClose: Array<number>
-}
-/** Darvas Box breakout pattern. */
-export declare function darvasBox(high: Array<number>, low: Array<number>, close: Array<number>, lookback?: number | undefined | null, confirmation?: number | undefined | null): DarvasBoxResult
-/** Renko bricks construction. */
-export declare function renko(high: Array<number>, low: Array<number>, boxSize: number): RenkoResult
-/** Kagi line construction. */
-export declare function kagi(close: Array<number>, reversal: number): KagiResult
-/** Point & Figure X/O columns. */
-export declare function pointAndFigure(high: Array<number>, low: Array<number>, boxSize: number, reversal: number): PnfResult
-/** Three Line Break chart. */
-export declare function threeLineBreak(close: Array<number>, lines: number): ThreeLineBreakResult
-/** Williams Alligator (5/8/13 SMMA, Bill Williams). */
-export declare function williamsAlligator(close: Array<number>): WilliamsAlligatorResult
-/** Heikin-Ashi candlestick construction. */
-export declare function heikinAshi(open: Array<number>, high: Array<number>, low: Array<number>, close: Array<number>): HeikinAshiResult
 export declare function mama(close: Array<number>, fastlimit?: number | undefined | null, slowlimit?: number | undefined | null): MamaResult
 /**
  * Triple Exponential Moving Average (T3)
@@ -208,6 +182,31 @@ export declare function mama(close: Array<number>, fastlimit?: number | undefine
  */
 export declare function t3(close: Array<number>, timeperiod: number, vfactor?: number | undefined | null): Array<number>
 /**
+ * Bollinger Bands (BBANDS)
+ *
+ * Volatility bands placed above and below a moving average.
+ *
+ * @param close - Close prices array
+ * @param timeperiod - Number of periods (default: 5)
+ * @param nbdevup - Upper band standard deviations (default: 2.0)
+ * @param nbdevdn - Lower band standard deviations (default: 2.0)
+ * @returns Object containing upper, middle, and lower arrays
+ */
+export declare function bollingerBands(close: Array<number>, timeperiod: number, nbdevup: number, nbdevdn: number): BbandsResult
+/**
+ * Parabolic SAR (SAR)
+ *
+ * A trend-following indicator that provides stop levels.
+ *
+ * @param high - High prices array
+ * @param low - Low prices array
+ * @param close - Close prices array
+ * @param acceleration - Acceleration factor (default: 0.02)
+ * @param maximum - Maximum acceleration (default: 0.2)
+ * @returns Array of SAR values
+ */
+export declare function sar(high: Array<number>, low: Array<number>, acceleration: number, maximum: number): Array<number>
+/**
  * Relative Strength Index (RSI)
  *
  * Measures the magnitude of recent price changes to evaluate overbought/oversold conditions.
@@ -217,12 +216,6 @@ export declare function t3(close: Array<number>, timeperiod: number, vfactor?: n
  * @returns Array of RSI values (0-100)
  */
 export declare function rsi(close: Array<number>, timeperiod: number): Array<number>
-/** MACD Result structure */
-export interface MacdResult {
-  macd: Array<number>
-  signal: Array<number>
-  hist: Array<number>
-}
 /**
  * Moving Average Convergence Divergence (MACD)
  *
@@ -235,21 +228,6 @@ export interface MacdResult {
  * @returns Object containing macd, signal, and hist arrays
  */
 export declare function macd(close: Array<number>, fastperiod: number, slowperiod: number, signalperiod: number): MacdResult
-/**
- * MACD with custom moving average type (async for large datasets)
- *
- * @param close - Close prices array
- * @param fastperiod - Fast period
- * @param slowperiod - Slow period
- * @param signalperiod - Signal period
- * @returns Promise resolving to MacdResult
- */
-export declare function macdAsync(close: Array<number>, fastperiod: number, slowperiod: number, signalperiod: number): Promise<MacdResult>
-/** Stochastic Oscillator Result */
-export interface StochResult {
-  k: Array<number>
-  d: Array<number>
-}
 /**
  * Stochastic Oscillator (STOCH)
  *
@@ -276,46 +254,6 @@ export declare function stoch(high: Array<number>, low: Array<number>, close: Ar
  * @returns Array of ADX values
  */
 export declare function adx(high: Array<number>, low: Array<number>, close: Array<number>, timeperiod: number): Array<number>
-/**
- * Average True Range (ATR)
- *
- * Measures market volatility.
- *
- * @param high - High prices array
- * @param low - Low prices array
- * @param close - Close prices array
- * @param timeperiod - Number of periods (default: 14)
- * @returns Array of ATR values
- */
-export declare function atr(high: Array<number>, low: Array<number>, close: Array<number>, timeperiod: number): Array<number>
-/**
- * On Balance Volume (OBV)
- *
- * Measures buying and selling pressure using volume.
- *
- * @param close - Close prices array
- * @param volume - Volume array
- * @returns Array of OBV values
- */
-export declare function obv(close: Array<number>, volume: Array<number>): Array<number>
-/**
- * Parabolic SAR (SAR)
- *
- * A trend-following indicator that provides stop levels.
- *
- * @param high - High prices array
- * @param low - Low prices array
- * @param close - Close prices array
- * @param acceleration - Acceleration factor (default: 0.02)
- * @param maximum - Maximum acceleration (default: 0.2)
- * @returns Array of SAR values
- */
-export declare function sar(high: Array<number>, low: Array<number>, acceleration: number, maximum: number): Array<number>
-/** Aroon Indicator Result */
-export interface AroonResult {
-  aroonUp: Array<number>
-  aroonDown: Array<number>
-}
 /**
  * Aroon Indicator (AROON)
  *
@@ -405,18 +343,6 @@ export declare function bop(open: Array<number>, high: Array<number>, low: Array
  */
 export declare function cmo(close: Array<number>, timeperiod: number): Array<number>
 /**
- * Directional Movement Index (DX)
- *
- * Measures trend direction and strength.
- *
- * @param high - High prices array
- * @param low - Low prices array
- * @param close - Close prices array
- * @param timeperiod - Number of periods
- * @returns Array of DX values
- */
-export declare function dx(high: Array<number>, low: Array<number>, close: Array<number>, timeperiod: number): Array<number>
-/**
  * Money Flow Index (MFI)
  *
  * A momentum indicator that uses both price and volume.
@@ -430,26 +356,6 @@ export declare function dx(high: Array<number>, low: Array<number>, close: Array
  */
 export declare function mfi(high: Array<number>, low: Array<number>, close: Array<number>, volume: Array<number>, timeperiod: number): Array<number>
 /**
- * Minus Directional Indicator (MINUS_DI)
- *
- * @param high - High prices array
- * @param low - Low prices array
- * @param close - Close prices array
- * @param timeperiod - Number of periods
- * @returns Array of MINUS_DI values
- */
-export declare function minusDi(high: Array<number>, low: Array<number>, close: Array<number>, timeperiod: number): Array<number>
-/**
- * Plus Directional Indicator (PLUS_DI)
- *
- * @param high - High prices array
- * @param low - Low prices array
- * @param close - Close prices array
- * @param timeperiod - Number of periods
- * @returns Array of PLUS_DI values
- */
-export declare function plusDi(high: Array<number>, low: Array<number>, close: Array<number>, timeperiod: number): Array<number>
-/**
  * Triple Exponential Average (TRIX)
  *
  * A momentum oscillator that calculates a triple smoothed EMA.
@@ -459,6 +365,58 @@ export declare function plusDi(high: Array<number>, low: Array<number>, close: A
  * @returns Array of TRIX values (percentage)
  */
 export declare function trix(close: Array<number>, timeperiod: number): Array<number>
+export declare function vortex(high: Array<number>, low: Array<number>, close: Array<number>, timeperiod?: number | undefined | null): Array<Array<number>>
+export declare function vzo(close: Array<number>, volume: Array<number>, timeperiod?: number | undefined | null): Array<number>
+export declare function volumeMomentum(volume: Array<number>, timeperiod?: number | undefined | null): Array<number>
+export declare function volumeRoc(volume: Array<number>, timeperiod?: number | undefined | null): Array<number>
+export declare function chandeForecastOscillator(close: Array<number>, timeperiod?: number | undefined | null): Array<number>
+export declare function twiggsMoneyFlow(high: Array<number>, low: Array<number>, close: Array<number>, volume: Array<number>, timeperiod?: number | undefined | null): Array<number>
+export declare function inertiaIndicator(open: Array<number>, high: Array<number>, low: Array<number>, close: Array<number>, rviPeriod?: number | undefined | null, linregPeriod?: number | undefined | null): Array<number>
+/**
+ * Average True Range (ATR)
+ *
+ * Measures market volatility.
+ *
+ * @param high - High prices array
+ * @param low - Low prices array
+ * @param close - Close prices array
+ * @param timeperiod - Number of periods (default: 14)
+ * @returns Array of ATR values
+ */
+export declare function atr(high: Array<number>, low: Array<number>, close: Array<number>, timeperiod: number): Array<number>
+/**
+ * Natural Average True Range (NATR)
+ *
+ * Normalized ATR as a percentage.
+ *
+ * @param high - High prices array
+ * @param low - Low prices array
+ * @param close - Close prices array
+ * @param timeperiod - Number of periods (default: 14)
+ * @returns Array of NATR values (percentage)
+ */
+export declare function natr(high: Array<number>, low: Array<number>, close: Array<number>, timeperiod: number): Array<number>
+/**
+ * True Range (TRANGE)
+ *
+ * The greatest of the following: high - low, |high - prev_close|, |low - prev_close|.
+ *
+ * @param high - High prices array
+ * @param low - Low prices array
+ * @param close - Close prices array
+ * @returns Array of True Range values
+ */
+export declare function trange(high: Array<number>, low: Array<number>, close: Array<number>): Array<number>
+/**
+ * On Balance Volume (OBV)
+ *
+ * Measures buying and selling pressure using volume.
+ *
+ * @param close - Close prices array
+ * @param volume - Volume array
+ * @returns Array of OBV values
+ */
+export declare function obv(close: Array<number>, volume: Array<number>): Array<number>
 /**
  * Accumulation/Distribution Line (AD)
  *
@@ -485,47 +443,6 @@ export declare function ad(high: Array<number>, low: Array<number>, close: Array
  * @returns Array of ADOSC values
  */
 export declare function adosc(high: Array<number>, low: Array<number>, close: Array<number>, volume: Array<number>, fastperiod: number, slowperiod: number): Array<number>
-/** Bollinger Bands Result */
-export interface BbandsResult {
-  upper: Array<number>
-  middle: Array<number>
-  lower: Array<number>
-}
-/**
- * Bollinger Bands (BBANDS)
- *
- * Volatility bands placed above and below a moving average.
- *
- * @param close - Close prices array
- * @param timeperiod - Number of periods (default: 5)
- * @param nbdevup - Upper band standard deviations (default: 2.0)
- * @param nbdevdn - Lower band standard deviations (default: 2.0)
- * @returns Object containing upper, middle, and lower arrays
- */
-export declare function bollingerBands(close: Array<number>, timeperiod: number, nbdevup: number, nbdevdn: number): BbandsResult
-/**
- * Natural Average True Range (NATR)
- *
- * Normalized ATR as a percentage.
- *
- * @param high - High prices array
- * @param low - Low prices array
- * @param close - Close prices array
- * @param timeperiod - Number of periods (default: 14)
- * @returns Array of NATR values (percentage)
- */
-export declare function natr(high: Array<number>, low: Array<number>, close: Array<number>, timeperiod: number): Array<number>
-/**
- * True Range (TRANGE)
- *
- * The greatest of the following: high - low, |high - prev_close|, |low - prev_close|.
- *
- * @param high - High prices array
- * @param low - Low prices array
- * @param close - Close prices array
- * @returns Array of True Range values
- */
-export declare function trange(high: Array<number>, low: Array<number>, close: Array<number>): Array<number>
 /**
  * Hilbert Transform - Dominant Cycle Period (HT_DCPERIOD)
  *
@@ -544,11 +461,6 @@ export declare function htDcperiod(close: Array<number>): Array<number>
  * @returns Array of dominant cycle phase values in degrees
  */
 export declare function htDcphase(close: Array<number>): Array<number>
-/** Hilbert Transform - Phasor Components Result */
-export interface HtPhasorResult {
-  inPhase: Array<number>
-  quadrature: Array<number>
-}
 /**
  * Hilbert Transform - Phasor Components (HT_PHASOR)
  *
@@ -558,11 +470,6 @@ export interface HtPhasorResult {
  * @returns Object containing in_phase and quadrature arrays
  */
 export declare function htPhasor(close: Array<number>): HtPhasorResult
-/** Hilbert Transform - Sine Wave Result */
-export interface HtSineResult {
-  sine: Array<number>
-  leadSine: Array<number>
-}
 /**
  * Hilbert Transform - Sine Wave (HT_SINE)
  *
@@ -590,6 +497,79 @@ export declare function htTrendmode(close: Array<number>): Array<number>
  * @returns Array of trendline values
  */
 export declare function htTrendline(close: Array<number>): Array<number>
+/**
+ * Z-Score (ZSCORE)
+ *
+ * Calculates the number of standard deviations a data point is from the rolling mean.
+ *
+ * @param input - Input data array
+ * @param timeperiod - Rolling window size
+ * @returns Array of Z-Score values
+ */
+export declare function zscore(input: Array<number>, timeperiod: number): Array<number>
+/**
+ * Beta Coefficient (BETA)
+ *
+ * Measures the volatility of an asset relative to a benchmark.
+ *
+ * @param asset - Asset price array (e.g., stock)
+ * @param benchmark - Benchmark price array (e.g., market index)
+ * @param timeperiod - Rolling window size
+ * @returns Array of Beta values
+ */
+export declare function beta(asset: Array<number>, benchmark: Array<number>, timeperiod: number): Array<number>
+/**
+ * Pearson Correlation (CORREL)
+ *
+ * Calculates the rolling Pearson correlation coefficient between two series.
+ *
+ * @param input_a - First data array
+ * @param input_b - Second data array
+ * @param timeperiod - Rolling window size
+ * @returns Array of correlation values (-1 to 1)
+ */
+export declare function correlation(inputA: Array<number>, inputB: Array<number>, timeperiod: number): Array<number>
+/**
+ * Standard Deviation (STDDEV)
+ *
+ * Calculates the rolling sample standard deviation.
+ *
+ * @param input - Input data array
+ * @param timeperiod - Rolling window size
+ * @param nb_dev - Number of deviations (for API compatibility)
+ * @returns Array of standard deviation values
+ */
+export declare function stdDev(input: Array<number>, timeperiod: number, nbDev: number): Array<number>
+/**
+ * Time Series Forecast (TSF)
+ *
+ * Predicts the next value using linear regression extrapolation.
+ *
+ * @param input - Input data array
+ * @param timeperiod - Rolling window size
+ * @returns Array of TSF values
+ */
+export declare function tsf(input: Array<number>, timeperiod: number): Array<number>
+/**
+ * Linear Regression (LINEAR_REG)
+ *
+ * Calculates rolling linear regression predicted values.
+ *
+ * @param input - Input data array
+ * @param timeperiod - Rolling window size
+ * @returns Array of linear regression values
+ */
+export declare function linearReg(input: Array<number>, timeperiod: number): Array<number>
+/**
+ * Percent Rank (PERCENT_RANK)
+ *
+ * Calculates the percentage rank of current value within the rolling window.
+ *
+ * @param input - Input data array
+ * @param timeperiod - Rolling window size
+ * @returns Array of percent rank values (0-100)
+ */
+export declare function percentRank(input: Array<number>, timeperiod: number): Array<number>
 /**
  * Average Price (AVGPRICE)
  *
@@ -634,79 +614,6 @@ export declare function typprice(high: Array<number>, low: Array<number>, close:
  * @returns Array of weighted close prices
  */
 export declare function wclprice(high: Array<number>, low: Array<number>, close: Array<number>): Array<number>
-/**
- * Z-Score (ZSCORE)
- *
- * Calculates the number of standard deviations a data point is from the rolling mean.
- *
- * @param input - Input data array
- * @param timeperiod - Rolling window size
- * @returns Array of Z-Score values
- */
-export declare function zscore(input: Array<number>, timeperiod: number): Array<number>
-/**
- * Percent Rank (PERCENT_RANK)
- *
- * Calculates the percentage rank of current value within the rolling window.
- *
- * @param input - Input data array
- * @param timeperiod - Rolling window size
- * @returns Array of percent rank values (0-100)
- */
-export declare function percentRank(input: Array<number>, timeperiod: number): Array<number>
-/**
- * Beta Coefficient (BETA)
- *
- * Measures the volatility of an asset relative to a benchmark.
- *
- * @param asset - Asset price array (e.g., stock)
- * @param benchmark - Benchmark price array (e.g., market index)
- * @param timeperiod - Rolling window size
- * @returns Array of Beta values
- */
-export declare function beta(asset: Array<number>, benchmark: Array<number>, timeperiod: number): Array<number>
-/**
- * Pearson Correlation (CORREL)
- *
- * Calculates the rolling Pearson correlation coefficient between two series.
- *
- * @param input_a - First data array
- * @param input_b - Second data array
- * @param timeperiod - Rolling window size
- * @returns Array of correlation values (-1 to 1)
- */
-export declare function correlation(inputA: Array<number>, inputB: Array<number>, timeperiod: number): Array<number>
-/**
- * Standard Deviation (STDDEV)
- *
- * Calculates the rolling sample standard deviation.
- *
- * @param input - Input data array
- * @param timeperiod - Rolling window size
- * @param nb_dev - Number of deviations (for API compatibility)
- * @returns Array of standard deviation values
- */
-export declare function stdDev(input: Array<number>, timeperiod: number, nbDev: number): Array<number>
-/**
- * Linear Regression (LINEAR_REG)
- *
- * Calculates rolling linear regression predicted values.
- *
- * @param input - Input data array
- * @param timeperiod - Rolling window size
- * @returns Array of linear regression values
- */
-export declare function linearReg(input: Array<number>, timeperiod: number): Array<number>
-/**
- * Time Series Forecast (TSF)
- *
- * Predicts the next value using linear regression extrapolation.
- *
- * @param input - Input data array
- * @param timeperiod - Rolling window size
- * @returns Array of TSF values
- */
-export declare function tsf(input: Array<number>, timeperiod: number): Array<number>
 /**
  * Doji Pattern (CDLDOJI)
  *
@@ -777,13 +684,6 @@ export declare function cdlEngulfing(open: Array<number>, high: Array<number>, l
  */
 export declare function cdlHarami(open: Array<number>, high: Array<number>, low: Array<number>, close: Array<number>): Array<number>
 /**
- * Harami Cross (CDLHARAMICROSS)
- *
- * Harami where second candle is a Doji.
- * Returns 100 for bullish, -100 for bearish.
- */
-export declare function cdlHaramiCross(open: Array<number>, high: Array<number>, low: Array<number>, close: Array<number>): Array<number>
-/**
  * Morning Star (CDLMORNINGSTAR)
  *
  * Three-candle bullish reversal pattern.
@@ -795,18 +695,6 @@ export declare function cdlMorningStar(open: Array<number>, high: Array<number>,
  * Three-candle bearish reversal pattern.
  */
 export declare function cdlEveningStar(open: Array<number>, high: Array<number>, low: Array<number>, close: Array<number>): Array<number>
-/**
- * Morning Doji Star (CDLMORNINGDOJISTAR)
- *
- * Like Morning Star but second candle is a Doji.
- */
-export declare function cdlMorningDojiStar(open: Array<number>, high: Array<number>, low: Array<number>, close: Array<number>, dojiPct: number): Array<number>
-/**
- * Evening Doji Star (CDLEVENINGDOJISTAR)
- *
- * Like Evening Star but second candle is a Doji.
- */
-export declare function cdlEveningDojiStar(open: Array<number>, high: Array<number>, low: Array<number>, close: Array<number>, dojiPct: number): Array<number>
 /**
  * Three White Soldiers (CDLTHREEWHITESOLDIERS)
  *
@@ -825,6 +713,167 @@ export declare function cdlThreeBlackCrows(open: Array<number>, high: Array<numb
  * A candle with no shadows. Returns 100 for bullish, -100 for bearish.
  */
 export declare function cdlMarubozu(open: Array<number>, high: Array<number>, low: Array<number>, close: Array<number>, shadowPct: number): Array<number>
+/** Darvas Box breakout pattern. */
+export declare function darvasBox(high: Array<number>, low: Array<number>, close: Array<number>, lookback?: number | undefined | null, confirmation?: number | undefined | null): DarvasBoxResult
+/** Renko bricks construction. */
+export declare function renko(high: Array<number>, low: Array<number>, boxSize: number): RenkoResult
+/** Kagi line construction. */
+export declare function kagi(close: Array<number>, reversal: number): KagiResult
+/** Point & Figure X/O columns. */
+export declare function pointAndFigure(high: Array<number>, low: Array<number>, boxSize: number, reversal: number): PnfResult
+/** Three Line Break chart. */
+export declare function threeLineBreak(close: Array<number>, lines: number): ThreeLineBreakResult
+/** Williams Alligator (5/8/13 SMMA, Bill Williams). */
+export declare function williamsAlligator(close: Array<number>): WilliamsAlligatorResult
+/** Heikin-Ashi candlestick construction. */
+export declare function heikinAshi(open: Array<number>, high: Array<number>, low: Array<number>, close: Array<number>): HeikinAshiResult
+/**
+ * MESA Adaptive Moving Average (MAMA)
+ *
+ * Uses the Hilbert Transform to adapt to market cycles.
+ *
+ * @param close - Close prices array
+ * @param fastlimit - Fast limit (default: 0.5)
+ * @param slowlimit - Slow limit (default: 0.05)
+ * @returns Object containing mama and fama arrays
+ */
+export interface MamaResult {
+  mama: Array<number>
+  fama: Array<number>
+}
+/** Result of Darvas Box pattern detection. */
+export interface DarvasBoxResult {
+  boxTop: Array<number>
+  boxBottom: Array<number>
+  signal: Array<number>
+}
+/** Result of Renko brick construction. */
+export interface RenkoResult {
+  bricks: Array<number>
+  direction: Array<number>
+}
+/** Result of Kagi line construction. */
+export interface KagiResult {
+  kagi: Array<number>
+  direction: Array<number>
+}
+/** Result of Point & Figure chart. */
+export interface PnfResult {
+  pnf: Array<number>
+  columnType: Array<number>
+  newColumn: Array<number>
+}
+/** Result of Three Line Break chart. */
+export interface ThreeLineBreakResult {
+  line: Array<number>
+  direction: Array<number>
+}
+/** Result of Williams Alligator indicator. */
+export interface WilliamsAlligatorResult {
+  jaw: Array<number>
+  teeth: Array<number>
+  lips: Array<number>
+}
+/** Result of Heikin-Ashi candlestick. */
+export interface HeikinAshiResult {
+  haOpen: Array<number>
+  haHigh: Array<number>
+  haLow: Array<number>
+  haClose: Array<number>
+}
+/** MACD Result structure */
+export interface MacdResult {
+  macd: Array<number>
+  signal: Array<number>
+  hist: Array<number>
+}
+/**
+ * MACD with custom moving average type (async for large datasets)
+ *
+ * @param close - Close prices array
+ * @param fastperiod - Fast period
+ * @param slowperiod - Slow period
+ * @param signalperiod - Signal period
+ * @returns Promise resolving to MacdResult
+ */
+export declare function macdAsync(close: Array<number>, fastperiod: number, slowperiod: number, signalperiod: number): Promise<MacdResult>
+/** Stochastic Oscillator Result */
+export interface StochResult {
+  k: Array<number>
+  d: Array<number>
+}
+/** Aroon Indicator Result */
+export interface AroonResult {
+  aroonUp: Array<number>
+  aroonDown: Array<number>
+}
+/**
+ * Directional Movement Index (DX)
+ *
+ * Measures trend direction and strength.
+ *
+ * @param high - High prices array
+ * @param low - Low prices array
+ * @param close - Close prices array
+ * @param timeperiod - Number of periods
+ * @returns Array of DX values
+ */
+export declare function dx(high: Array<number>, low: Array<number>, close: Array<number>, timeperiod: number): Array<number>
+/**
+ * Minus Directional Indicator (MINUS_DI)
+ *
+ * @param high - High prices array
+ * @param low - Low prices array
+ * @param close - Close prices array
+ * @param timeperiod - Number of periods
+ * @returns Array of MINUS_DI values
+ */
+export declare function minusDi(high: Array<number>, low: Array<number>, close: Array<number>, timeperiod: number): Array<number>
+/**
+ * Plus Directional Indicator (PLUS_DI)
+ *
+ * @param high - High prices array
+ * @param low - Low prices array
+ * @param close - Close prices array
+ * @param timeperiod - Number of periods
+ * @returns Array of PLUS_DI values
+ */
+export declare function plusDi(high: Array<number>, low: Array<number>, close: Array<number>, timeperiod: number): Array<number>
+/** Bollinger Bands Result */
+export interface BbandsResult {
+  upper: Array<number>
+  middle: Array<number>
+  lower: Array<number>
+}
+/** Hilbert Transform - Phasor Components Result */
+export interface HtPhasorResult {
+  inPhase: Array<number>
+  quadrature: Array<number>
+}
+/** Hilbert Transform - Sine Wave Result */
+export interface HtSineResult {
+  sine: Array<number>
+  leadSine: Array<number>
+}
+/**
+ * Harami Cross (CDLHARAMICROSS)
+ *
+ * Harami where second candle is a Doji.
+ * Returns 100 for bullish, -100 for bearish.
+ */
+export declare function cdlHaramiCross(open: Array<number>, high: Array<number>, low: Array<number>, close: Array<number>): Array<number>
+/**
+ * Morning Doji Star (CDLMORNINGDOJISTAR)
+ *
+ * Like Morning Star but second candle is a Doji.
+ */
+export declare function cdlMorningDojiStar(open: Array<number>, high: Array<number>, low: Array<number>, close: Array<number>, dojiPct: number): Array<number>
+/**
+ * Evening Doji Star (CDLEVENINGDOJISTAR)
+ *
+ * Like Evening Star but second candle is a Doji.
+ */
+export declare function cdlEveningDojiStar(open: Array<number>, high: Array<number>, low: Array<number>, close: Array<number>, dojiPct: number): Array<number>
 /**
  * Piercing Pattern (CDLPIERCING)
  *
@@ -1248,21 +1297,26 @@ export interface FibonacciResult {
 export declare function fibonacciRetracement(high: Array<number>, low: Array<number>, startIndex: number, endIndex: number): FibonacciResult
 export interface KlineDataNapi {
   dates: Array<string>
+  timestamps?: Array<number>
   opens: Array<number>
   highs: Array<number>
   lows: Array<number>
   closes: Array<number>
   volumes: Array<number>
 }
-export declare function klineDataNew(dates: Array<string>, opens: Array<number>, highs: Array<number>, lows: Array<number>, closes: Array<number>, volumes: Array<number>): KlineDataNapi
+export interface KlineQuoteNapi {
+  date: string
+  timestamp?: number
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+}
+export declare function klineDataNew(dates: Array<string>, opens: Array<number>, highs: Array<number>, lows: Array<number>, closes: Array<number>, volumes: Array<number>, timestamps?: Array<number> | undefined | null): KlineDataNapi
 export declare function klineDataValidate(data: KlineDataNapi): boolean
-export declare function vortex(high: Array<number>, low: Array<number>, close: Array<number>, timeperiod?: number | undefined | null): Array<Array<number>>
-export declare function inertiaIndicator(open: Array<number>, high: Array<number>, low: Array<number>, close: Array<number>, rviPeriod?: number | undefined | null, linregPeriod?: number | undefined | null): Array<number>
-export declare function vzo(close: Array<number>, volume: Array<number>, timeperiod?: number | undefined | null): Array<number>
-export declare function volumeMomentum(volume: Array<number>, timeperiod?: number | undefined | null): Array<number>
-export declare function volumeRoc(volume: Array<number>, timeperiod?: number | undefined | null): Array<number>
-export declare function chandeForecastOscillator(close: Array<number>, timeperiod?: number | undefined | null): Array<number>
-export declare function twiggsMoneyFlow(high: Array<number>, low: Array<number>, close: Array<number>, volume: Array<number>, timeperiod?: number | undefined | null): Array<number>
+export declare function klineDataValidateOhlcv(data: KlineDataNapi): boolean
+export declare function klineDataValidationErrors(data: KlineDataNapi): Array<string>
 /**
  * Execute a trading formula
  *
@@ -1587,6 +1641,39 @@ export declare class KlineChartNapi {
   addMacd(fast: number, slow: number, signal: number): void
   addRsi(period: number): void
   addBoll(period: number, nbDev: number): void
+  addCustomIndicator(name: string, values: Array<number>): void
+  /**
+   * Replaces or registers a custom indicator series without duplicating its
+   * chart definition. This is intended for real-time recalculation after a
+   * new bar is appended or the current bar is revised.
+   */
+  setCustomIndicator(name: string, values: Array<number>): void
+  addEventMarker(index: number, label: string, value?: number | undefined | null, color?: string | undefined | null): void
+  setViewport(start: number, end: number, pixelWidth: number, pixelHeight: number, overscanBars: number, followLatest: boolean): void
+  setLodPolicy(level: string): void
+  setLayerVisible(layer: string, visible: boolean): boolean
+  setInteraction(enabled: boolean, showCrosshair: boolean, showDataWindow: boolean, enablePanZoom: boolean, enableKeyboard: boolean): void
+  setReplayWindow(window: number, cursor?: number | undefined | null): Array<number>
+  replayNext(): Array<number> | null
+  addChan(minStrokeBars: number, showLabels: boolean, variant: string, strokePolicy: string, centerPolicy: string, signalMinStrength: number, showMultiTimeframeAnnotations: boolean): void
+  addChanMulti(factors: Array<number>, variant: string): void
+  /** Update Chan signal/structure thresholds and reanalyze the active chart. */
+  setChanThresholds(minStrokeChangeRatio: number, minFractalRangeRatio: number, signalMinStrength: number, centerBreakRatio: number): void
+  appendKline(date: string, open: number, high: number, low: number, close: number, volume: number): void
+  updateLastKline(close: number, high?: number | undefined | null, low?: number | undefined | null, volume?: number | undefined | null): void
+  upsertKline(date: string, open: number, high: number, low: number, close: number, volume: number, timestamp?: number | undefined | null): string
+  /** Apply many live quotes and rebuild the chart once at the end. */
+  upsertKlines(updates: Array<KlineQuoteNapi>): Array<string>
   saveAsSvg(path: string): void
   toSvg(): string
+  saveAsCanvasHtml(path: string): void
+  toCanvasHtml(): string
+  saveAsWebglHtml(path: string): void
+  saveAsWebgpuHtml(path: string): void
+  toWebglHtml(): string
+  /** Return an explicitly WebGPU-preferred HTML document with WebGL2/Canvas fallback. */
+  toWebgpuHtml(): string
+  saveAsHtml(path: string): void
+  toHtml(): string
+  toJson(): string
 }

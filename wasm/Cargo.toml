@@ -13,6 +13,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 finkit = { path = "../core", default-features = false, features = ["std", "formula", "serde", "tracing", "indicators-all"] }
+finkit-visualization = { path = "../visualization", default-features = false, features = ["svg", "html"] }
 ndarray = { workspace = true }
 wasm-bindgen = "0.2"
 serde-wasm-bindgen = "0.6"

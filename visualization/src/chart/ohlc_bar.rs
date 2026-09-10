@@ -10,8 +10,19 @@ pub fn render_ohlc_bar(
     layout: &ChartLayout,
     config: &ChartConfig,
 ) {
+    let indices: Vec<usize> = (0..data.len()).collect();
+    render_ohlc_bar_indices(draw_list, data, layout, config, &indices);
+}
+
+pub fn render_ohlc_bar_indices(
+    draw_list: &mut DrawList,
+    data: &KlineData,
+    layout: &ChartLayout,
+    config: &ChartConfig,
+    indices: &[usize],
+) {
     let n = data.len();
-    if n == 0 {
+    if n == 0 || indices.is_empty() {
         return;
     }
 
@@ -25,7 +36,7 @@ pub fn render_ohlc_bar(
     let up_color = Color::from_hex(config.color_scheme.up_color());
     let down_color = Color::from_hex(config.color_scheme.down_color());
 
-    for i in 0..n {
+    for &i in indices {
         let open = data.opens[i];
         let high = data.highs[i];
         let low = data.lows[i];

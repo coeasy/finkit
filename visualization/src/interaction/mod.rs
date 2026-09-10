@@ -6,8 +6,155 @@ use crate::data::KlineData;
 use crate::geometry::Point;
 use crate::language::LanguageResource;
 use crate::layout::ChartLayout;
+use serde::{Deserialize, Serialize};
 
 pub use crosshair::CrosshairInfo;
+
+/// Pointer button used by the shared interaction state machine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PointerButton {
+    Primary,
+    Secondary,
+    Auxiliary,
+}
+
+/// Keyboard commands understood by chart frontends.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InteractionKey {
+    Previous,
+    Next,
+    First,
+    Last,
+    Escape,
+}
+
+/// Normalized input event. Frontends translate browser/native events into
+/// this small vocabulary before handing them to the shared controller.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum InteractionEvent {
+    PointerMove { point: Point },
+    PointerDown { point: Point, button: PointerButton },
+    PointerUp { point: Point, button: PointerButton },
+    Wheel { point: Point, delta_y: f64 },
+    Key(InteractionKey),
+    Leave,
+}
+
+/// Result of reducing one normalized input event.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum InteractionAction {
+    None,
+    Crosshair { point: Point },
+    Pan { dx: f64, dy: f64 },
+    Zoom { center: Point, factor: f64 },
+    Select { index: usize },
+    HideCrosshair,
+}
+
+/// Shared state machine for browser, WASM and native chart frontends.
+#[derive(Debug, Clone, PartialEq)]
+pub struct InteractionController {
+    pub state: ViewState,
+    pub selected_index: Option<usize>,
+    dragging: bool,
+    last_pointer: Option<Point>,
+}
+
+impl Default for InteractionController {
+    fn default() -> Self {
+        Self {
+            state: ViewState::default(),
+            selected_index: None,
+            dragging: false,
+            last_pointer: None,
+        }
+    }
+}
+
+impl InteractionController {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Reduce one input event and update the shared view/selection state.
+    pub fn handle(&mut self, event: InteractionEvent, data_len: usize) -> InteractionAction {
+        match event {
+            InteractionEvent::PointerDown {
+                point,
+                button: PointerButton::Primary,
+            } => {
+                self.dragging = true;
+                self.last_pointer = Some(point);
+                InteractionAction::None
+            }
+            InteractionEvent::PointerDown { .. } => InteractionAction::None,
+            InteractionEvent::PointerMove { point } => {
+                if self.dragging {
+                    if let Some(previous) = self.last_pointer.replace(point) {
+                        let dx = point.x - previous.x;
+                        let dy = point.y - previous.y;
+                        self.state.pan(dx, dy);
+                        return InteractionAction::Pan { dx, dy };
+                    }
+                }
+                self.state.set_cursor(Some(point));
+                InteractionAction::Crosshair { point }
+            }
+            InteractionEvent::PointerUp {
+                point,
+                button: PointerButton::Primary,
+            } => {
+                self.dragging = false;
+                self.last_pointer = Some(point);
+                InteractionAction::None
+            }
+            InteractionEvent::PointerUp { .. } => InteractionAction::None,
+            InteractionEvent::Wheel { point, delta_y } => {
+                let factor = if delta_y < 0.0 { 1.1 } else { 0.9 };
+                self.state.zoom(factor, &point);
+                InteractionAction::Zoom {
+                    center: point,
+                    factor,
+                }
+            }
+            InteractionEvent::Key(key) => {
+                let index = match key {
+                    InteractionKey::Previous => self.selected_index.unwrap_or(0).saturating_sub(1),
+                    InteractionKey::Next => self
+                        .selected_index
+                        .unwrap_or(0)
+                        .saturating_add(1)
+                        .min(data_len.saturating_sub(1)),
+                    InteractionKey::First => 0,
+                    InteractionKey::Last => data_len.saturating_sub(1),
+                    InteractionKey::Escape => {
+                        self.selected_index = None;
+                        self.state.set_cursor(None);
+                        return InteractionAction::HideCrosshair;
+                    }
+                };
+                if data_len == 0 {
+                    self.selected_index = None;
+                    return InteractionAction::None;
+                }
+                self.selected_index = Some(index.min(data_len - 1));
+                InteractionAction::Select {
+                    index: self.selected_index.unwrap_or(0),
+                }
+            }
+            InteractionEvent::Leave => {
+                self.dragging = false;
+                self.last_pointer = None;
+                self.state.set_cursor(None);
+                InteractionAction::HideCrosshair
+            }
+        }
+    }
+
+    pub fn is_dragging(&self) -> bool {
+        self.dragging
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ViewState {
@@ -18,6 +165,77 @@ pub struct ViewState {
     pub visible_start: usize,
     pub visible_end: usize,
     pub cursor: Option<Point>,
+}
+
+/// Deterministic source-index replay state shared by chart frontends.
+///
+/// `cursor` is the last source bar available to the replay. The visible
+/// window is always `[start, end)` and therefore can be fed directly into
+/// `Viewport::new(start, end)` without renderer-specific off-by-one rules.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub struct ReplayState {
+    pub cursor: usize,
+    pub window: usize,
+    pub step: usize,
+    pub speed: f32,
+    pub playing: bool,
+}
+
+impl ReplayState {
+    pub fn new(total: usize, window: usize) -> Self {
+        let window = window.max(1);
+        Self {
+            cursor: total.min(window).saturating_sub(1),
+            window,
+            step: 1,
+            speed: 1.0,
+            playing: false,
+        }
+    }
+
+    pub fn with_step(mut self, step: usize) -> Self {
+        self.step = step.max(1);
+        self
+    }
+
+    pub fn with_speed(mut self, speed: f32) -> Self {
+        self.speed = speed.max(0.01);
+        self
+    }
+
+    pub fn reset(&mut self, total: usize) {
+        self.cursor = total.min(self.window).saturating_sub(1);
+        self.playing = false;
+    }
+
+    pub fn seek(&mut self, index: usize, total: usize) -> usize {
+        self.cursor = index.min(total.saturating_sub(1));
+        self.cursor
+    }
+
+    /// Advance by `step`, returning the new cursor. Playback stops at the
+    /// final source bar and remains deterministic for repeated calls.
+    pub fn advance(&mut self, total: usize) -> Option<usize> {
+        if total == 0 {
+            self.playing = false;
+            return None;
+        }
+        let next = self.cursor.saturating_add(self.step);
+        self.cursor = next.min(total - 1);
+        if self.cursor == total - 1 {
+            self.playing = false;
+        }
+        Some(self.cursor)
+    }
+
+    pub fn visible_range(&self, total: usize) -> (usize, usize) {
+        if total == 0 {
+            return (0, 0);
+        }
+        let end = self.cursor.saturating_add(1).min(total);
+        let start = end.saturating_sub(self.window.max(1));
+        (start, end)
+    }
 }
 
 impl Default for ViewState {
@@ -217,5 +435,108 @@ mod tests {
         let (start, end) = state.visible_data_range(1200.0, 100);
         assert_eq!(start, 0);
         assert!(end > 0);
+    }
+
+    #[test]
+    fn test_interaction_controller_pan_and_crosshair() {
+        let mut controller = InteractionController::new();
+        assert_eq!(
+            controller.handle(
+                InteractionEvent::PointerDown {
+                    point: Point::new(10.0, 20.0),
+                    button: PointerButton::Primary,
+                },
+                100,
+            ),
+            InteractionAction::None
+        );
+        assert!(controller.is_dragging());
+        assert_eq!(
+            controller.handle(
+                InteractionEvent::PointerMove {
+                    point: Point::new(16.0, 24.0),
+                },
+                100,
+            ),
+            InteractionAction::Pan { dx: 6.0, dy: 4.0 }
+        );
+        assert_eq!(controller.state.offset_x, 6.0);
+        assert_eq!(controller.state.offset_y, 4.0);
+        controller.handle(
+            InteractionEvent::PointerUp {
+                point: Point::new(16.0, 24.0),
+                button: PointerButton::Primary,
+            },
+            100,
+        );
+        assert!(!controller.is_dragging());
+        assert!(matches!(
+            controller.handle(
+                InteractionEvent::PointerMove {
+                    point: Point::new(30.0, 40.0),
+                },
+                100,
+            ),
+            InteractionAction::Crosshair { .. }
+        ));
+    }
+
+    #[test]
+    fn test_interaction_controller_keyboard_selection_and_escape() {
+        let mut controller = InteractionController::new();
+        assert_eq!(
+            controller.handle(InteractionEvent::Key(InteractionKey::Last), 5),
+            InteractionAction::Select { index: 4 }
+        );
+        assert_eq!(
+            controller.handle(InteractionEvent::Key(InteractionKey::Previous), 5),
+            InteractionAction::Select { index: 3 }
+        );
+        assert_eq!(
+            controller.handle(InteractionEvent::Key(InteractionKey::Escape), 5),
+            InteractionAction::HideCrosshair
+        );
+        assert_eq!(controller.selected_index, None);
+    }
+
+    #[test]
+    fn test_interaction_controller_zoom_and_empty_selection() {
+        let mut controller = InteractionController::new();
+        let action = controller.handle(
+            InteractionEvent::Wheel {
+                point: Point::new(100.0, 100.0),
+                delta_y: -1.0,
+            },
+            0,
+        );
+        assert!(matches!(
+            action,
+            InteractionAction::Zoom { factor: 1.1, .. }
+        ));
+        assert_eq!(
+            controller.handle(InteractionEvent::Key(InteractionKey::Next), 0),
+            InteractionAction::None
+        );
+    }
+
+    #[test]
+    fn test_replay_state_window_seek_and_end() {
+        let mut replay = ReplayState::new(100, 20).with_step(5).with_speed(2.0);
+        assert_eq!(replay.visible_range(100), (0, 20));
+        assert_eq!(replay.advance(100), Some(24));
+        assert_eq!(replay.visible_range(100), (5, 25));
+        assert_eq!(replay.seek(97, 100), 97);
+        assert_eq!(replay.visible_range(100), (78, 98));
+        assert_eq!(replay.advance(100), Some(99));
+        assert!(!replay.playing);
+    }
+
+    #[test]
+    fn test_replay_state_empty_and_reset() {
+        let mut replay = ReplayState::new(0, 20);
+        assert_eq!(replay.visible_range(0), (0, 0));
+        assert_eq!(replay.advance(0), None);
+        replay.reset(8);
+        assert_eq!(replay.visible_range(8), (0, 8));
     }
 }

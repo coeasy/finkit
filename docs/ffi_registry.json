@@ -1,0 +1,3193 @@
+{
+  "version": "0.1.5",
+  "indicators": [
+    {
+      "name": "SMA",
+      "ffi": {
+        "c_name": "ta_sma",
+        "doc_group": "Moving averages & overlays",
+        "inputs": [
+          {
+            "name": "input",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 0,
+        "bodies": {
+          "python": "/// Simple Moving Average (SMA)\n///\n/// Calculates the arithmetic mean of the last `timeperiod` data points.\n///\n/// # Arguments\n/// * `close` - Input data series\n/// * `timeperiod` - Lookback period (default: 14)\n#[pyfunction]\n#[pyo3(signature = (close, timeperiod=14))]\nfn sma(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Py<PyArray1<f64>>> {\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        moving_avg::sma(close, timeperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "EMA",
+      "ffi": {
+        "c_name": "ta_ema",
+        "doc_group": "Moving averages & overlays",
+        "inputs": [
+          {
+            "name": "input",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 1,
+        "bodies": {
+          "python": "/// Exponential Moving Average (EMA)\n///\n/// Applies more weight to recent prices using exponential smoothing.\n///\n/// # Arguments\n/// * `close` - Input data series\n/// * `timeperiod` - Lookback period (default: 14)\n#[pyfunction]\n#[pyo3(signature = (close, timeperiod=14))]\nfn ema(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Py<PyArray1<f64>>> {\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        moving_avg::ema(close, timeperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "WMA",
+      "ffi": {
+        "c_name": "ta_wma",
+        "doc_group": "Moving averages & overlays",
+        "inputs": [
+          {
+            "name": "input",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 2,
+        "bodies": {
+          "python": "/// Weighted Moving Average (WMA)\n///\n/// Applies linearly decreasing weights to older data points.\n///\n/// # Arguments\n/// * `close` - Input data series\n/// * `timeperiod` - Lookback period (default: 14)\n#[pyfunction]\n#[pyo3(signature = (close, timeperiod=14))]\nfn wma(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Py<PyArray1<f64>>> {\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        moving_avg::wma(close, timeperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "DEMA",
+      "ffi": {
+        "c_name": "ta_dema",
+        "doc_group": "Moving averages & overlays",
+        "inputs": [
+          {
+            "name": "input",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 3,
+        "bodies": {
+          "python": "/// Double Exponential Moving Average (DEMA)\n///\n/// DEMA = 2 * EMA - EMA(EMA)\n/// Reduces lag compared to traditional EMA.\n///\n/// # Arguments\n/// * `close` - Input data series\n/// * `timeperiod` - Lookback period (default: 14)\n#[pyfunction]\n#[pyo3(signature = (close, timeperiod=14))]\nfn dema(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Py<PyArray1<f64>>> {\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        moving_avg::dema(close, timeperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "TEMA",
+      "ffi": {
+        "c_name": "ta_tema",
+        "doc_group": "Moving averages & overlays",
+        "inputs": [
+          {
+            "name": "input",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 4,
+        "bodies": {
+          "python": "/// Triple Exponential Moving Average (TEMA)\n///\n/// TEMA = 3 * EMA - 3 * EMA(EMA) + EMA(EMA(EMA))\n/// Further reduces lag compared to DEMA.\n///\n/// # Arguments\n/// * `close` - Input data series\n/// * `timeperiod` - Lookback period (default: 14)\n#[pyfunction]\n#[pyo3(signature = (close, timeperiod=14))]\nfn tema(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Py<PyArray1<f64>>> {\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        moving_avg::tema(close, timeperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "KAMA",
+      "ffi": {
+        "c_name": "ta_kama",
+        "doc_group": "Moving averages & overlays",
+        "inputs": [
+          {
+            "name": "input",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 5,
+        "bodies": {
+          "python": "/// Kaufman's Adaptive Moving Average (KAMA)\n///\n/// Adapts to market noise by adjusting the smoothing constant based on the\n/// Efficiency Ratio (ER).\n///\n/// # Arguments\n/// * `close` - Input data series\n/// * `timeperiod` - Lookback period for ER calculation (default: 10)\n/// * `fastperiod` - Fast EMA period (default: 2)\n/// * `slowperiod` - Slow EMA period (default: 30)\n#[pyfunction]\n#[pyo3(signature = (close, timeperiod=10, fastperiod=2, slowperiod=30))]\nfn kama(\n    py: Python<'_>,\n    close: PyReadonlyArray1<'_, f64>,\n    timeperiod: usize,\n    fastperiod: usize,\n    slowperiod: usize,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        moving_avg::kama(close, timeperiod, fastperiod, slowperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "MAMA",
+      "ffi": {
+        "c_name": "ta_mama",
+        "doc_group": "Moving averages & overlays",
+        "inputs": [
+          {
+            "name": "input",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "mama_out",
+            "c_type": "double",
+            "ptr": true
+          },
+          {
+            "name": "fama_out",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "fast_limit",
+            "c_type": "double",
+            "ptr": false
+          },
+          {
+            "name": "slow_limit",
+            "c_type": "double",
+            "ptr": false
+          }
+        ],
+        "order": 6,
+        "bodies": {
+          "python": "/// MESA Adaptive Moving Average (MAMA)\n///\n/// Uses Hilbert Transform to create an adaptive moving average that\n/// adapts to price fluctuations without the phase lag of traditional MAs.\n///\n/// # Arguments\n/// * `close` - Input data series\n/// * `fastlimit` - Fast limit for alpha (default: 0.5)\n/// * `slowlimit` - Slow limit for alpha (default: 0.05)\n///\n/// # Returns\n/// Tuple of (MAMA, FAMA) arrays\n#[pyfunction]\n#[pyo3(signature = (close, fastlimit=0.5, slowlimit=0.05))]\nfn mama(\n    py: Python<'_>,\n    close: PyReadonlyArray1<'_, f64>,\n    fastlimit: f64,\n    slowlimit: f64,\n) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>)> {\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_arrays2_f64(py, || {\n        indicators::mama(close, fastlimit, slowlimit)\n            .map(|res| (res.mama.into_raw_vec(), res.fama.into_raw_vec()))\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "T3",
+      "ffi": {
+        "c_name": "ta_t3",
+        "doc_group": "Moving averages & overlays",
+        "inputs": [
+          {
+            "name": "input",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          },
+          {
+            "name": "vfactor",
+            "c_type": "double",
+            "ptr": false
+          }
+        ],
+        "order": 7,
+        "bodies": {
+          "python": "/// T3 Moving Average (T3)\n///\n/// A moving average that uses exponential smoothing with a volume factor\n/// to reduce lag and improve signal quality.\n///\n/// # Arguments\n/// * `close` - Input data series\n/// * `timeperiod` - Lookback period (default: 5)\n/// * `vfactor` - Volume factor 0-1 (default: 0.7)\n#[pyfunction]\n#[pyo3(signature = (close, timeperiod=5, vfactor=0.7))]\nfn t3(\n    py: Python<'_>,\n    close: PyReadonlyArray1<'_, f64>,\n    timeperiod: usize,\n    vfactor: f64,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::t3(close, timeperiod, vfactor)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "Bollinger Bands",
+      "ffi": {
+        "c_name": "ta_bbands",
+        "doc_group": "Moving averages & overlays",
+        "inputs": [
+          {
+            "name": "input",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "upper",
+            "c_type": "double",
+            "ptr": true
+          },
+          {
+            "name": "middle",
+            "c_type": "double",
+            "ptr": true
+          },
+          {
+            "name": "lower",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          },
+          {
+            "name": "nbdevup",
+            "c_type": "double",
+            "ptr": false
+          },
+          {
+            "name": "nbdevdn",
+            "c_type": "double",
+            "ptr": false
+          }
+        ],
+        "order": 8,
+        "bodies": {
+          "python": "/// Bollinger Bands (BBANDS)\n///\n/// Upper = SMA + (std_dev * nbdevup)\n/// Middle = SMA\n/// Lower = SMA - (std_dev * nbdevdn)\n///\n/// # Arguments\n/// * `close` - Input data series\n/// * `timeperiod` - Lookback period (default: 5)\n/// * `nbdevup` - Number of standard deviations for upper band (default: 2.0)\n/// * `nbdevdn` - Number of standard deviations for lower band (default: 2.0)\n///\n/// # Returns\n/// Tuple of (upper, middle, lower) arrays\n#[pyfunction]\n#[pyo3(signature = (close, timeperiod=5, nbdevup=2.0, nbdevdn=2.0))]\nfn bollinger_bands(\n    py: Python<'_>,\n    close: PyReadonlyArray1<'_, f64>,\n    timeperiod: usize,\n    nbdevup: f64,\n    nbdevdn: f64,\n) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>, Py<PyArray1<f64>>)> {\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_arrays3_f64(py, || {\n        indicators::bbands(close, timeperiod, nbdevup, nbdevdn)\n            .map(|res| {\n                (\n                    res.upper.into_raw_vec(),\n                    res.middle.into_raw_vec(),\n                    res.lower.into_raw_vec(),\n                )\n            })\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "MIDPOINT",
+      "ffi": {
+        "c_name": "ta_midpoint",
+        "doc_group": "Moving averages & overlays",
+        "inputs": [
+          {
+            "name": "input",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 9,
+        "bodies": {
+          "python": "/// Midpoint (MIDPOINT)\n///\n/// MIDPOINT = (highest_high + lowest_low) / 2\n///\n/// # Arguments\n/// * `close` - Input data series\n/// * `timeperiod` - Lookback period (default: 14)\n#[pyfunction]\n#[pyo3(signature = (close, timeperiod=14))]\nfn midpoint(\n    py: Python<'_>,\n    close: PyReadonlyArray1<'_, f64>,\n    timeperiod: usize,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::midpoint(close, timeperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "MIDPRICE",
+      "ffi": {
+        "c_name": "ta_midprice",
+        "doc_group": "Moving averages & overlays",
+        "inputs": [
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 10,
+        "bodies": {
+          "python": "/// Midprice (MIDPRICE)\n///\n/// MIDPRICE = (highest_high + lowest_low) / 2\n/// Calculated using high and low prices\n///\n/// # Arguments\n/// * `high` - High prices\n/// * `low` - Low prices\n/// * `timeperiod` - Lookback period (default: 14)\n#[pyfunction]\n#[pyo3(signature = (high, low, timeperiod=14))]\nfn midprice(\n    py: Python<'_>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    timeperiod: usize,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::midprice(high, low, timeperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "SAR",
+      "ffi": {
+        "c_name": "ta_sar",
+        "doc_group": "Moving averages & overlays",
+        "inputs": [
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "acceleration",
+            "c_type": "double",
+            "ptr": false
+          },
+          {
+            "name": "maximum",
+            "c_type": "double",
+            "ptr": false
+          }
+        ],
+        "order": 11,
+        "bodies": {
+          "python": "/// Parabolic SAR (SAR)\n///\n/// # Arguments\n/// * `high` - High prices\n/// * `low` - Low prices\n/// * `close` - Close prices\n/// * `acceleration` - Acceleration factor step (default: 0.02)\n/// * `maximum` - Maximum acceleration factor (default: 0.2)\n///\n/// # Returns\n/// Tuple of (SAR, AF) arrays\n#[pyfunction]\n#[pyo3(signature = (high, low, acceleration=0.02, maximum=0.2))]\nfn sar(\n    py: Python<'_>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    acceleration: f64,\n    maximum: f64,\n) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>)> {\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_arrays2_f64(py, || {\n        indicators::sar(high, low, acceleration, maximum)\n            .map(|res| (res.sar.into_raw_vec(), res.af.into_raw_vec()))\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "RSI",
+      "ffi": {
+        "c_name": "ta_rsi",
+        "doc_group": "Momentum & oscillators",
+        "inputs": [
+          {
+            "name": "input",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 12,
+        "bodies": {
+          "python": "/// Relative Strength Index (RSI)\n///\n/// Measures the magnitude of recent price changes to evaluate overbought/oversold conditions.\n///\n/// # Arguments\n/// * `close` - Input data series\n/// * `timeperiod` - Lookback period (default: 14)\n#[pyfunction]\n#[pyo3(signature = (close, timeperiod=14))]\nfn rsi(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Py<PyArray1<f64>>> {\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::rsi(close, timeperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "MACD",
+      "ffi": {
+        "c_name": "ta_macd",
+        "doc_group": "Momentum & oscillators",
+        "inputs": [
+          {
+            "name": "input",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "macd_out",
+            "c_type": "double",
+            "ptr": true
+          },
+          {
+            "name": "signal_out",
+            "c_type": "double",
+            "ptr": true
+          },
+          {
+            "name": "hist_out",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "fast_period",
+            "c_type": "int32_t",
+            "ptr": false
+          },
+          {
+            "name": "slow_period",
+            "c_type": "int32_t",
+            "ptr": false
+          },
+          {
+            "name": "signal_period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 13,
+        "bodies": {
+          "python": "/// Moving Average Convergence Divergence (MACD)\n///\n/// Shows the relationship between two moving averages of a security's price.\n///\n/// # Arguments\n/// * `close` - Input data series\n/// * `fastperiod` - Fast EMA period (default: 12)\n/// * `slowperiod` - Slow EMA period (default: 26)\n/// * `signalperiod` - Signal line EMA period (default: 9)\n///\n/// # Returns\n/// Tuple of (MACD, Signal, Histogram) arrays\n#[pyfunction]\n#[pyo3(signature = (close, fastperiod=12, slowperiod=26, signalperiod=9))]\nfn macd(\n    py: Python<'_>,\n    close: PyReadonlyArray1<'_, f64>,\n    fastperiod: usize,\n    slowperiod: usize,\n    signalperiod: usize,\n) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>, Py<PyArray1<f64>>)> {\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_arrays3_f64(py, || {\n        indicators::macd(close, fastperiod, slowperiod, signalperiod)\n            .map(|res| {\n                (\n                    res.macd.into_raw_vec(),\n                    res.signal.into_raw_vec(),\n                    res.hist.into_raw_vec(),\n                )\n            })\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "Stochastic",
+      "ffi": {
+        "c_name": "ta_stoch",
+        "doc_group": "Momentum & oscillators",
+        "inputs": [
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "slowk",
+            "c_type": "double",
+            "ptr": true
+          },
+          {
+            "name": "slowd",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "fastk_period",
+            "c_type": "int32_t",
+            "ptr": false
+          },
+          {
+            "name": "slowk_period",
+            "c_type": "int32_t",
+            "ptr": false
+          },
+          {
+            "name": "slowd_period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 14,
+        "bodies": {
+          "python": "/// Stochastic Oscillator (STOCH)\n///\n/// Compares a security's closing price to its price range over a given period.\n///\n/// # Arguments\n/// * `high` - High prices\n/// * `low` - Low prices\n/// * `close` - Close prices\n/// * `fastk_period` - %K lookback period (default: 5)\n/// * `slowk_period` - %K slowing period (default: 3)\n/// * `slowd_period` - %D period (default: 3)\n///\n/// # Returns\n/// Tuple of (%K, %D) arrays\n#[pyfunction]\n#[pyo3(signature = (high, low, close, fastk_period=5, slowk_period=3, slowd_period=3))]\nfn stoch(\n    py: Python<'_>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n    fastk_period: usize,\n    slowk_period: usize,\n    slowd_period: usize,\n) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>)> {\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_arrays2_f64(py, || {\n        indicators::stoch(high, low, close, fastk_period, slowk_period, slowd_period)\n            .map(|res| (res.k.into_raw_vec(), res.d.into_raw_vec()))\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "ADX",
+      "ffi": {
+        "c_name": "ta_adx",
+        "doc_group": "Momentum & oscillators",
+        "inputs": [
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 15,
+        "bodies": {
+          "python": "/// Average Directional Index (ADX)\n///\n/// Measures trend strength regardless of trend direction.\n///\n/// # Arguments\n/// * `high` - High prices\n/// * `low` - Low prices\n/// * `close` - Close prices\n/// * `timeperiod` - Lookback period (default: 14)\n#[pyfunction]\n#[pyo3(signature = (high, low, close, timeperiod=14))]\nfn adx(\n    py: Python<'_>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n    timeperiod: usize,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::adx(high, low, close, timeperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "Aroon",
+      "ffi": {
+        "c_name": "ta_aroon",
+        "doc_group": "Momentum & oscillators",
+        "inputs": [
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "aroon_up",
+            "c_type": "double",
+            "ptr": true
+          },
+          {
+            "name": "aroon_down",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 16,
+        "bodies": {
+          "python": "/// Aroon Indicator (AROON)\n///\n/// Identifies trend changes and the strength of the trend.\n///\n/// # Arguments\n/// * `high` - High prices\n/// * `low` - Low prices\n/// * `timeperiod` - Lookback period (default: 14)\n///\n/// # Returns\n/// Tuple of (Aroon Up, Aroon Down) arrays\n#[pyfunction]\n#[pyo3(signature = (high, low, timeperiod=14))]\nfn aroon(\n    py: Python<'_>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    timeperiod: usize,\n) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>)> {\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_arrays2_f64(py, || {\n        indicators::aroon(high, low, timeperiod)\n            .map(|res| (res.aroon_up.into_raw_vec(), res.aroon_down.into_raw_vec()))\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "CCI",
+      "ffi": {
+        "c_name": "ta_cci",
+        "doc_group": "Momentum & oscillators",
+        "inputs": [
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 17,
+        "bodies": {
+          "python": "/// Commodity Channel Index (CCI)\n///\n/// Measures the current price level relative to an average price level over a given period.\n///\n/// # Arguments\n/// * `high` - High prices\n/// * `low` - Low prices\n/// * `close` - Close prices\n/// * `timeperiod` - Lookback period (default: 14)\n#[pyfunction]\n#[pyo3(signature = (high, low, close, timeperiod=14))]\nfn cci(\n    py: Python<'_>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n    timeperiod: usize,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::cci(high, low, close, timeperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "MOM",
+      "ffi": {
+        "c_name": "ta_mom",
+        "doc_group": "Momentum & oscillators",
+        "inputs": [
+          {
+            "name": "input",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 18,
+        "bodies": {
+          "python": "/// Momentum (MOM)\n///\n/// Measures the change in price over a given period.\n///\n/// # Arguments\n/// * `close` - Input data series\n/// * `timeperiod` - Lookback period (default: 10)\n#[pyfunction]\n#[pyo3(signature = (close, timeperiod=10))]\nfn mom(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Py<PyArray1<f64>>> {\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::mom(close, timeperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "ROC",
+      "ffi": {
+        "c_name": "ta_roc",
+        "doc_group": "Momentum & oscillators",
+        "inputs": [
+          {
+            "name": "input",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 19,
+        "bodies": {
+          "python": "/// Rate of Change (ROC)\n///\n/// Measures the percentage change in price over a given period.\n///\n/// # Arguments\n/// * `close` - Input data series\n/// * `timeperiod` - Lookback period (default: 10)\n#[pyfunction]\n#[pyo3(signature = (close, timeperiod=10))]\nfn roc(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Py<PyArray1<f64>>> {\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::roc(close, timeperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "Williams %R",
+      "ffi": {
+        "c_name": "ta_willr",
+        "doc_group": "Momentum & oscillators",
+        "inputs": [
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 20,
+        "bodies": {
+          "python": "/// Williams %R (WILLR)\n///\n/// A momentum indicator that measures overbought/oversold levels.\n///\n/// # Arguments\n/// * `high` - High prices\n/// * `low` - Low prices\n/// * `close` - Close prices\n/// * `timeperiod` - Lookback period (default: 14)\n#[pyfunction]\n#[pyo3(signature = (high, low, close, timeperiod=14))]\nfn willr(\n    py: Python<'_>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n    timeperiod: usize,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::willr(high, low, close, timeperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "APO",
+      "ffi": {
+        "c_name": "ta_apo",
+        "doc_group": "Momentum & oscillators",
+        "inputs": [
+          {
+            "name": "input",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "fast_period",
+            "c_type": "int32_t",
+            "ptr": false
+          },
+          {
+            "name": "slow_period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 21,
+        "bodies": {
+          "python": "/// Absolute Price Oscillator (APO)\n///\n/// The difference between two moving averages.\n///\n/// # Arguments\n/// * `close` - Input data series\n/// * `fastperiod` - Fast period (default: 12)\n/// * `slowperiod` - Slow period (default: 26)\n#[pyfunction]\n#[pyo3(signature = (close, fastperiod=12, slowperiod=26))]\nfn apo(\n    py: Python<'_>,\n    close: PyReadonlyArray1<'_, f64>,\n    fastperiod: usize,\n    slowperiod: usize,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::apo(close, fastperiod, slowperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "BOP",
+      "ffi": {
+        "c_name": "ta_bop",
+        "doc_group": "Momentum & oscillators",
+        "inputs": [
+          {
+            "name": "open",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [],
+        "order": 22,
+        "bodies": {
+          "python": "/// Balance of Power (BOP)\n///\n/// Measures the strength of buyers vs sellers in the market.\n///\n/// # Arguments\n/// * `open` - Open prices\n/// * `high` - High prices\n/// * `low` - Low prices\n/// * `close` - Close prices\n#[pyfunction]\n#[pyo3(signature = (open, high, low, close))]\nfn bop(\n    py: Python<'_>,\n    open: PyReadonlyArray1<'_, f64>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let open = open\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::bop(open, high, low, close)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "CMO",
+      "ffi": {
+        "c_name": "ta_cmo",
+        "doc_group": "Momentum & oscillators",
+        "inputs": [
+          {
+            "name": "input",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 23,
+        "bodies": {
+          "python": "/// Chande Momentum Oscillator (CMO)\n///\n/// A momentum indicator that measures the percentage of sum of up days vs sum of down days.\n///\n/// # Arguments\n/// * `close` - Input data series\n/// * `timeperiod` - Lookback period (default: 14)\n#[pyfunction]\n#[pyo3(signature = (close, timeperiod=14))]\nfn cmo(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Py<PyArray1<f64>>> {\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::cmo(close, timeperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "MFI",
+      "ffi": {
+        "c_name": "ta_mfi",
+        "doc_group": "Momentum & oscillators",
+        "inputs": [
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "volume",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 24,
+        "bodies": {
+          "python": "/// Money Flow Index (MFI)\n///\n/// A momentum indicator that uses both price and volume to identify overbought/oversold conditions.\n///\n/// # Arguments\n/// * `high` - High prices\n/// * `low` - Low prices\n/// * `close` - Close prices\n/// * `volume` - Volume data\n/// * `timeperiod` - Lookback period (default: 14)\n#[pyfunction]\n#[pyo3(signature = (high, low, close, volume, timeperiod=14))]\nfn mfi(\n    py: Python<'_>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n    volume: PyReadonlyArray1<'_, f64>,\n    timeperiod: usize,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let volume = volume\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::mfi(high, low, close, volume, timeperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "TRIX",
+      "ffi": {
+        "c_name": "ta_trix",
+        "doc_group": "Momentum & oscillators",
+        "inputs": [
+          {
+            "name": "input",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 25,
+        "bodies": {
+          "python": "/// Triple Exponential Average (TRIX)\n///\n/// A momentum oscillator that calculates a triple smoothed EMA.\n///\n/// # Arguments\n/// * `close` - Input data series\n/// * `timeperiod` - Lookback period (default: 14)\n#[pyfunction]\n#[pyo3(signature = (close, timeperiod=14))]\nfn trix(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Py<PyArray1<f64>>> {\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::trix(close, timeperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "Vortex",
+      "ffi": {
+        "c_name": "ta_vortex",
+        "doc_group": "Momentum & oscillators",
+        "inputs": [
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "vi_plus",
+            "c_type": "double",
+            "ptr": true
+          },
+          {
+            "name": "vi_minus",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 26,
+        "bodies": {
+          "python": "#[pyfunction]\n#[pyo3(signature = (high, low, close, timeperiod=14))]\nfn vortex(\n    py: Python<'_>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n    timeperiod: usize,\n) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>)> {\n    let high = high.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_arrays2_f64(py, || {\n        indicators::vortex(high, low, close, timeperiod)\n            .map(|r| (r.vi_plus.into_raw_vec(), r.vi_minus.into_raw_vec()))\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "VZO",
+      "ffi": {
+        "c_name": "ta_vzo",
+        "doc_group": "Momentum & oscillators",
+        "inputs": [
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "volume",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 27,
+        "bodies": {
+          "python": "#[pyfunction]\n#[pyo3(signature = (close, volume, timeperiod=14))]\nfn vzo(\n    py: Python<'_>,\n    close: PyReadonlyArray1<'_, f64>,\n    volume: PyReadonlyArray1<'_, f64>,\n    timeperiod: usize,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let close = close.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let volume = volume.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::vzo(close, volume, timeperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "Volume Momentum",
+      "ffi": {
+        "c_name": "ta_volume_momentum",
+        "doc_group": "Momentum & oscillators",
+        "inputs": [
+          {
+            "name": "volume",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 28,
+        "bodies": {
+          "python": "#[pyfunction]\n#[pyo3(signature = (volume, timeperiod=14))]\nfn volume_momentum(\n    py: Python<'_>,\n    volume: PyReadonlyArray1<'_, f64>,\n    timeperiod: usize,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let volume = volume.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::volume_momentum(volume, timeperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "Volume ROC",
+      "ffi": {
+        "c_name": "ta_volume_roc",
+        "doc_group": "Momentum & oscillators",
+        "inputs": [
+          {
+            "name": "volume",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 29,
+        "bodies": {
+          "python": "#[pyfunction]\n#[pyo3(signature = (volume, timeperiod=14))]\nfn volume_roc(\n    py: Python<'_>,\n    volume: PyReadonlyArray1<'_, f64>,\n    timeperiod: usize,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let volume = volume.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::volume_roc(volume, timeperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "CHANDE_FORECAST",
+      "ffi": {
+        "c_name": "ta_chande_forecast",
+        "doc_group": "Momentum & oscillators",
+        "inputs": [
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 30,
+        "bodies": {
+          "python": "#[pyfunction]\n#[pyo3(signature = (close, timeperiod=14))]\nfn chande_forecast_oscillator(\n    py: Python<'_>,\n    close: PyReadonlyArray1<'_, f64>,\n    timeperiod: usize,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let close = close.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::chande_forecast_oscillator(close, timeperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "Twiggs MF",
+      "ffi": {
+        "c_name": "ta_twiggs_mf",
+        "doc_group": "Momentum & oscillators",
+        "inputs": [
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "volume",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 31,
+        "bodies": {
+          "python": "#[pyfunction]\n#[pyo3(signature = (high, low, close, volume, timeperiod=14))]\nfn twiggs_money_flow(\n    py: Python<'_>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n    volume: PyReadonlyArray1<'_, f64>,\n    timeperiod: usize,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let high = high.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let volume = volume.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::twiggs_money_flow(high, low, close, volume, timeperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "Inertia",
+      "ffi": {
+        "c_name": "ta_inertia",
+        "doc_group": "Momentum & oscillators",
+        "inputs": [
+          {
+            "name": "open",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "rvi_period",
+            "c_type": "int32_t",
+            "ptr": false
+          },
+          {
+            "name": "linreg_period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 32,
+        "bodies": {
+          "python": "#[pyfunction]\n#[pyo3(signature = (open, high, low, close, rvi_period=10, linreg_period=14))]\nfn inertia(\n    py: Python<'_>,\n    open: PyReadonlyArray1<'_, f64>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n    rvi_period: usize,\n    linreg_period: usize,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let open = open.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let high = high.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::inertia(open, high, low, close, rvi_period, linreg_period)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "ATR",
+      "ffi": {
+        "c_name": "ta_atr",
+        "doc_group": "Volatility & volume",
+        "inputs": [
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 33,
+        "bodies": {
+          "python": "/// Average True Range (ATR)\n///\n/// A volatility indicator that measures the average price range over a given period.\n///\n/// # Arguments\n/// * `high` - High prices\n/// * `low` - Low prices\n/// * `close` - Close prices\n/// * `timeperiod` - Lookback period (default: 14)\n#[pyfunction]\n#[pyo3(signature = (high, low, close, timeperiod=14))]\nfn atr(\n    py: Python<'_>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n    timeperiod: usize,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::atr(high, low, close, timeperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "NATR",
+      "ffi": {
+        "c_name": "ta_natr",
+        "doc_group": "Volatility & volume",
+        "inputs": [
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 34,
+        "bodies": {
+          "python": "/// Normalized Average True Range (NATR)\n///\n/// The ATR expressed as a percentage of the close price.\n///\n/// # Arguments\n/// * `high` - High prices\n/// * `low` - Low prices\n/// * `close` - Close prices\n/// * `timeperiod` - Lookback period (default: 14)\n#[pyfunction]\n#[pyo3(signature = (high, low, close, timeperiod=14))]\nfn natr(\n    py: Python<'_>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n    timeperiod: usize,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::natr(high, low, close, timeperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "TRANGE",
+      "ffi": {
+        "c_name": "ta_trange",
+        "doc_group": "Volatility & volume",
+        "inputs": [
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [],
+        "order": 35,
+        "bodies": {
+          "python": "/// True Range (TRANGE)\n///\n/// The greatest of: High - Low, |High - Previous Close|, |Low - Previous Close|\n///\n/// # Arguments\n/// * `high` - High prices\n/// * `low` - Low prices\n/// * `close` - Close prices\n#[pyfunction]\n#[pyo3(signature = (high, low, close))]\nfn trange(\n    py: Python<'_>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::trange(high, low, close)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "OBV",
+      "ffi": {
+        "c_name": "ta_obv",
+        "doc_group": "Volatility & volume",
+        "inputs": [
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "volume",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [],
+        "order": 36,
+        "bodies": {
+          "python": "/// On Balance Volume (OBV)\n///\n/// A cumulative indicator that uses volume flow to predict price changes.\n///\n/// # Arguments\n/// * `close` - Close prices\n/// * `volume` - Volume data\n#[pyfunction]\n#[pyo3(signature = (close, volume))]\nfn obv(\n    py: Python<'_>,\n    close: PyReadonlyArray1<'_, f64>,\n    volume: PyReadonlyArray1<'_, f64>,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let volume = volume\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::obv(close, volume)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "AD",
+      "ffi": {
+        "c_name": "ta_ad",
+        "doc_group": "Volatility & volume",
+        "inputs": [
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "volume",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [],
+        "order": 37,
+        "bodies": {
+          "python": "/// Accumulation/Distribution Line (AD)\n///\n/// A cumulative indicator that uses volume and price to assess whether an asset is being accumulated or distributed.\n///\n/// # Arguments\n/// * `high` - High prices\n/// * `low` - Low prices\n/// * `close` - Close prices\n/// * `volume` - Volume data\n#[pyfunction]\n#[pyo3(signature = (high, low, close, volume))]\nfn ad(\n    py: Python<'_>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n    volume: PyReadonlyArray1<'_, f64>,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let volume = volume\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::ad(high, low, close, volume)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "ADOSC",
+      "ffi": {
+        "c_name": "ta_adosc",
+        "doc_group": "Volatility & volume",
+        "inputs": [
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "volume",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "fast_period",
+            "c_type": "int32_t",
+            "ptr": false
+          },
+          {
+            "name": "slow_period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 38,
+        "bodies": {
+          "python": "/// Chaikin A/D Oscillator (ADOSC)\n///\n/// Measures the momentum of the Accumulation/Distribution Line using two EMAs.\n///\n/// # Arguments\n/// * `high` - High prices\n/// * `low` - Low prices\n/// * `close` - Close prices\n/// * `volume` - Volume data\n/// * `fastperiod` - Fast EMA period (default: 3)\n/// * `slowperiod` - Slow EMA period (default: 10)\n#[pyfunction]\n#[pyo3(signature = (high, low, close, volume, fastperiod=3, slowperiod=10))]\nfn adosc(\n    py: Python<'_>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n    volume: PyReadonlyArray1<'_, f64>,\n    fastperiod: usize,\n    slowperiod: usize,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let volume = volume\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::adosc(high, low, close, volume, fastperiod, slowperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "HT_DCPERIOD",
+      "ffi": {
+        "c_name": "ta_ht_dcperiod",
+        "doc_group": "Hilbert transform",
+        "inputs": [
+          {
+            "name": "input",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [],
+        "order": 39,
+        "bodies": {
+          "python": "/// Hilbert Transform - Dominant Cycle Period (HT_DCPERIOD)\n///\n/// Measures the dominant cycle period of the price series using the Hilbert Transform.\n///\n/// # Arguments\n/// * `close` - Input data series (typically close prices)\n#[pyfunction]\n#[pyo3(signature = (close))]\nfn ht_dcperiod(py: Python<'_>, close: PyReadonlyArray1<'_, f64>) -> PyResult<Py<PyArray1<f64>>> {\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::ht_dcperiod(close)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "HT_DCPHASE",
+      "ffi": {
+        "c_name": "ta_ht_dcphase",
+        "doc_group": "Hilbert transform",
+        "inputs": [
+          {
+            "name": "input",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [],
+        "order": 40,
+        "bodies": {
+          "python": "/// Hilbert Transform - Dominant Cycle Phase (HT_DCPHASE)\n///\n/// Measures the dominant cycle phase of the price series in degrees (0-360).\n///\n/// # Arguments\n/// * `close` - Input data series\n#[pyfunction]\n#[pyo3(signature = (close))]\nfn ht_dcphase(py: Python<'_>, close: PyReadonlyArray1<'_, f64>) -> PyResult<Py<PyArray1<f64>>> {\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::ht_dcphase(close)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "HT_PHASOR",
+      "ffi": {
+        "c_name": "ta_ht_phasor",
+        "doc_group": "Hilbert transform",
+        "inputs": [
+          {
+            "name": "input",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "in_phase",
+            "c_type": "double",
+            "ptr": true
+          },
+          {
+            "name": "quadrature",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [],
+        "order": 41,
+        "bodies": {
+          "python": "/// Hilbert Transform - Phasor Components (HT_PHASOR)\n///\n/// Returns the in-phase and quadrature components of the Hilbert Transform.\n///\n/// # Arguments\n/// * `close` - Input data series\n///\n/// # Returns\n/// Tuple of (in_phase, quadrature) arrays\n#[pyfunction]\n#[pyo3(signature = (close))]\nfn ht_phasor(py: Python<'_>, close: PyReadonlyArray1<'_, f64>) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>)> {\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_arrays2_f64(py, || {\n        indicators::ht_phasor(close)\n            .map(|res| (res.0.into_raw_vec(), res.1.into_raw_vec()))\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "HT_SINE",
+      "ffi": {
+        "c_name": "ta_ht_sine",
+        "doc_group": "Hilbert transform",
+        "inputs": [
+          {
+            "name": "input",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "sine",
+            "c_type": "double",
+            "ptr": true
+          },
+          {
+            "name": "lead_sine",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [],
+        "order": 42,
+        "bodies": {
+          "python": "/// Hilbert Transform - Sine Wave (HT_SINE)\n///\n/// Returns the sine and lead sine wave components derived from the Hilbert Transform.\n///\n/// # Arguments\n/// * `close` - Input data series\n///\n/// # Returns\n/// Tuple of (sine, lead_sine) arrays\n#[pyfunction]\n#[pyo3(signature = (close))]\nfn ht_sine(py: Python<'_>, close: PyReadonlyArray1<'_, f64>) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>)> {\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_arrays2_f64(py, || {\n        indicators::ht_sine(close)\n            .map(|res| (res.0.into_raw_vec(), res.1.into_raw_vec()))\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "HT_TRENDMODE",
+      "ffi": {
+        "c_name": "ta_ht_trendmode",
+        "doc_group": "Hilbert transform",
+        "inputs": [
+          {
+            "name": "input",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [],
+        "order": 43,
+        "bodies": {
+          "python": "/// Hilbert Transform - Trend vs Cycle Mode (HT_TRENDMODE)\n///\n/// Indicates whether the market is in trend mode (1) or cycle mode (0).\n///\n/// # Arguments\n/// * `close` - Input data series\n#[pyfunction]\n#[pyo3(signature = (close))]\nfn ht_trendmode(py: Python<'_>, close: PyReadonlyArray1<'_, f64>) -> PyResult<Py<PyArray1<f64>>> {\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::ht_trendmode(close)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "HT_TRENDLINE",
+      "ffi": {
+        "c_name": "ta_ht_trendline",
+        "doc_group": "Hilbert transform",
+        "inputs": [
+          {
+            "name": "input",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [],
+        "order": 44,
+        "bodies": {
+          "python": "/// Hilbert Transform - Instantaneous Trendline (HT_TRENDLINE)\n///\n/// Computes the instantaneous trendline of the price series using the Hilbert Transform.\n///\n/// # Arguments\n/// * `close` - Input data series (typically close prices)\n#[pyfunction]\n#[pyo3(signature = (close))]\nfn ht_trendline(py: Python<'_>, close: PyReadonlyArray1<'_, f64>) -> PyResult<Py<PyArray1<f64>>> {\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::ht_trendline(close)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "ZSCORE",
+      "ffi": {
+        "c_name": "ta_zscore",
+        "doc_group": "Statistics & price transforms",
+        "inputs": [
+          {
+            "name": "input",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 45,
+        "bodies": {
+          "python": "/// Z-Score (Z分数/标准化)\n///\n/// Calculates the standard score of each data point relative to a rolling window.\n///\n/// # Arguments\n/// * `close` - Input data series\n/// * `timeperiod` - Rolling window size (default: 14)\n#[pyfunction]\n#[pyo3(signature = (close, timeperiod=14))]\nfn zscore(\n    py: Python<'_>,\n    close: PyReadonlyArray1<'_, f64>,\n    timeperiod: usize,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::zscore(close, timeperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "BETA",
+      "ffi": {
+        "c_name": "ta_beta",
+        "doc_group": "Statistics & price transforms",
+        "inputs": [
+          {
+            "name": "asset",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "benchmark",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 46,
+        "bodies": {
+          "python": "/// Beta Coefficient (Beta系数)\n///\n/// Calculates the Beta coefficient between two assets, measuring relative volatility.\n///\n/// # Arguments\n/// * `asset` - Asset price series (e.g., stock)\n/// * `benchmark` - Benchmark price series (e.g., market index)\n/// * `timeperiod` - Rolling window size (default: 5)\n#[pyfunction]\n#[pyo3(signature = (asset, benchmark, timeperiod=5))]\nfn beta(\n    py: Python<'_>,\n    asset: PyReadonlyArray1<'_, f64>,\n    benchmark: PyReadonlyArray1<'_, f64>,\n    timeperiod: usize,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let asset = asset\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let benchmark = benchmark\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::beta(asset, benchmark, timeperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "CORREL",
+      "ffi": {
+        "c_name": "ta_correlation",
+        "doc_group": "Statistics & price transforms",
+        "inputs": [
+          {
+            "name": "input_a",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "input_b",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 47,
+        "bodies": {
+          "python": "/// Correlation (Pearson Correlation Coefficient)\n///\n/// Calculates the rolling Pearson correlation coefficient between two price series.\n///\n/// # Arguments\n/// * `input_a` - First data series\n/// * `input_b` - Second data series\n/// * `timeperiod` - Rolling window size (default: 14)\n#[pyfunction]\n#[pyo3(signature = (input_a, input_b, timeperiod=14))]\nfn correlation(\n    py: Python<'_>,\n    input_a: PyReadonlyArray1<'_, f64>,\n    input_b: PyReadonlyArray1<'_, f64>,\n    timeperiod: usize,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let input_a = input_a\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let input_b = input_b\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::correlation(input_a, input_b, timeperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "STDDEV",
+      "ffi": {
+        "c_name": "ta_stddev",
+        "doc_group": "Statistics & price transforms",
+        "inputs": [
+          {
+            "name": "input",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          },
+          {
+            "name": "nb_dev",
+            "c_type": "double",
+            "ptr": false
+          }
+        ],
+        "order": 48,
+        "bodies": {
+          "python": "/// Standard Deviation (StdDev)\n///\n/// Calculates the rolling standard deviation (sample standard deviation).\n///\n/// # Arguments\n/// * `close` - Input data series\n/// * `timeperiod` - Rolling window size (default: 5)\n/// * `nbdev` - Number of standard deviations multiplier (default: 1.0)\n#[pyfunction]\n#[pyo3(signature = (close, timeperiod=5, nbdev=1.0))]\nfn std_dev(\n    py: Python<'_>,\n    close: PyReadonlyArray1<'_, f64>,\n    timeperiod: usize,\n    nbdev: f64,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::std_dev(close, timeperiod, nbdev)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "TSF",
+      "ffi": {
+        "c_name": "ta_tsf",
+        "doc_group": "Statistics & price transforms",
+        "inputs": [
+          {
+            "name": "input",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 49,
+        "bodies": {
+          "python": "/// Time Series Forecast (TSF)\n///\n/// Predicts the next time point value using linear regression extrapolation.\n///\n/// # Arguments\n/// * `close` - Input data series\n/// * `timeperiod` - Rolling window size (default: 14)\n#[pyfunction]\n#[pyo3(signature = (close, timeperiod=14))]\nfn tsf(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, timeperiod: usize) -> PyResult<Py<PyArray1<f64>>> {\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::tsf(close, timeperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "LINEAR_REG",
+      "ffi": {
+        "c_name": "ta_linear_reg",
+        "doc_group": "Statistics & price transforms",
+        "inputs": [
+          {
+            "name": "input",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 50,
+        "bodies": {
+          "python": "/// Linear Regression (线性回归)\n///\n/// Calculates rolling linear regression fitted values using least squares.\n///\n/// # Arguments\n/// * `close` - Input data series\n/// * `timeperiod` - Rolling window size (default: 14)\n#[pyfunction]\n#[pyo3(signature = (close, timeperiod=14))]\nfn linear_reg(\n    py: Python<'_>,\n    close: PyReadonlyArray1<'_, f64>,\n    timeperiod: usize,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::linearreg(close, timeperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "PERCENT_RANK",
+      "ffi": {
+        "c_name": "ta_percent_rank",
+        "doc_group": "Statistics & price transforms",
+        "inputs": [
+          {
+            "name": "input",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "period",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 51,
+        "bodies": {
+          "python": "/// Percent Rank (百分比排名)\n///\n/// Calculates the percentile rank of the current value within the rolling window.\n///\n/// # Arguments\n/// * `close` - Input data series\n/// * `timeperiod` - Rolling window size (default: 10)\n#[pyfunction]\n#[pyo3(signature = (close, timeperiod=10))]\nfn percent_rank(\n    py: Python<'_>,\n    close: PyReadonlyArray1<'_, f64>,\n    timeperiod: usize,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::percent_rank(close, timeperiod)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "AVGPRICE",
+      "ffi": {
+        "c_name": "ta_avgprice",
+        "doc_group": "Statistics & price transforms",
+        "inputs": [
+          {
+            "name": "open",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [],
+        "order": 52,
+        "bodies": {
+          "python": "/// Average Price (AVGPRICE)\n///\n/// (Open + High + Low + Close) / 4\n///\n/// # Arguments\n/// * `open` - Open prices\n/// * `high` - High prices\n/// * `low` - Low prices\n/// * `close` - Close prices\n#[pyfunction]\n#[pyo3(signature = (open, high, low, close))]\nfn avgprice(\n    py: Python<'_>,\n    open: PyReadonlyArray1<'_, f64>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let open = open\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::avgprice(open, high, low, close)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "MEDPRICE",
+      "ffi": {
+        "c_name": "ta_medprice",
+        "doc_group": "Statistics & price transforms",
+        "inputs": [
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [],
+        "order": 53,
+        "bodies": {
+          "python": "/// Median Price (MEDPRICE)\n///\n/// (High + Low) / 2\n///\n/// # Arguments\n/// * `high` - High prices\n/// * `low` - Low prices\n#[pyfunction]\n#[pyo3(signature = (high, low))]\nfn medprice(\n    py: Python<'_>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::medprice(high, low)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "TYPPRICE",
+      "ffi": {
+        "c_name": "ta_typprice",
+        "doc_group": "Statistics & price transforms",
+        "inputs": [
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [],
+        "order": 54,
+        "bodies": {
+          "python": "/// Typical Price (TYPPRICE)\n///\n/// (High + Low + Close) / 3\n///\n/// # Arguments\n/// * `high` - High prices\n/// * `low` - Low prices\n/// * `close` - Close prices\n#[pyfunction]\n#[pyo3(signature = (high, low, close))]\nfn typprice(\n    py: Python<'_>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::typprice(high, low, close)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "WCLPRICE",
+      "ffi": {
+        "c_name": "ta_wclprice",
+        "doc_group": "Statistics & price transforms",
+        "inputs": [
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [],
+        "order": 55,
+        "bodies": {
+          "python": "/// Weighted Close Price (WCLPRICE)\n///\n/// (High + Low + 2 * Close) / 4\n///\n/// # Arguments\n/// * `high` - High prices\n/// * `low` - Low prices\n/// * `close` - Close prices\n#[pyfunction]\n#[pyo3(signature = (high, low, close))]\nfn wclprice(\n    py: Python<'_>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::wclprice(high, low, close)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "CDL_DOJI",
+      "ffi": {
+        "c_name": "ta_cdl_doji",
+        "doc_group": "Candlestick patterns",
+        "inputs": [
+          {
+            "name": "open",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "int32_t",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "doji_pct",
+            "c_type": "double",
+            "ptr": false
+          }
+        ],
+        "order": 56,
+        "bodies": {
+          "python": "/// Doji (十字星)\n///\n/// Open and close are virtually the same.\n///\n/// # Arguments\n/// * `open` - Open prices\n/// * `high` - High prices\n/// * `low` - Low prices\n/// * `close` - Close prices\n/// * `doji_pct` - Doji threshold percentage (default: 0.1)\n#[pyfunction]\n#[pyo3(signature = (open, high, low, close, doji_pct=0.1))]\nfn cdl_doji(\n    py: Python<'_>,\n    open: PyReadonlyArray1<'_, f64>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n    doji_pct: f64,\n) -> PyResult<Vec<i32>> {\n    let open = open\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py.detach(|| {\n        candlestick::doji(open, high, low, close, doji_pct)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "CDL_DRAGONFLY_DOJI",
+      "ffi": {
+        "c_name": "ta_cdl_dragonfly_doji",
+        "doc_group": "Candlestick patterns",
+        "inputs": [
+          {
+            "name": "open",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "int32_t",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "doji_pct",
+            "c_type": "double",
+            "ptr": false
+          }
+        ],
+        "order": 57,
+        "bodies": {
+          "python": "/// Dragonfly Doji (蜻蜓十字)\n#[pyfunction]\n#[pyo3(signature = (open, high, low, close, doji_pct=0.1))]\nfn cdl_dragonfly_doji(\n    py: Python<'_>,\n    open: PyReadonlyArray1<'_, f64>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n    doji_pct: f64,\n) -> PyResult<Vec<i32>> {\n    let open = open\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py.detach(|| {\n        candlestick::dragonfly_doji(open, high, low, close, doji_pct)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "CDL_GRAVESTONE_DOJI",
+      "ffi": {
+        "c_name": "ta_cdl_gravestone_doji",
+        "doc_group": "Candlestick patterns",
+        "inputs": [
+          {
+            "name": "open",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "int32_t",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "doji_pct",
+            "c_type": "double",
+            "ptr": false
+          }
+        ],
+        "order": 58,
+        "bodies": {
+          "python": "/// Gravestone Doji (墓碑十字)\n#[pyfunction]\n#[pyo3(signature = (open, high, low, close, doji_pct=0.1))]\nfn cdl_gravestone_doji(\n    py: Python<'_>,\n    open: PyReadonlyArray1<'_, f64>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n    doji_pct: f64,\n) -> PyResult<Vec<i32>> {\n    let open = open\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py.detach(|| {\n        candlestick::gravestone_doji(open, high, low, close, doji_pct)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "CDL_LONGLEGGED_DOJI",
+      "ffi": {
+        "c_name": "ta_cdl_long_legged_doji",
+        "doc_group": "Candlestick patterns",
+        "inputs": [
+          {
+            "name": "open",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "int32_t",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "doji_pct",
+            "c_type": "double",
+            "ptr": false
+          }
+        ],
+        "order": 59,
+        "bodies": {
+          "python": "/// Long-Legged Doji (长腿十字)\n#[pyfunction]\n#[pyo3(signature = (open, high, low, close, doji_pct=0.1))]\nfn cdl_long_legged_doji(\n    py: Python<'_>,\n    open: PyReadonlyArray1<'_, f64>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n    doji_pct: f64,\n) -> PyResult<Vec<i32>> {\n    let open = open\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py.detach(|| {\n        candlestick::long_legged_doji(open, high, low, close, doji_pct)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "CDL_HAMMER",
+      "ffi": {
+        "c_name": "ta_cdl_hammer",
+        "doc_group": "Candlestick patterns",
+        "inputs": [
+          {
+            "name": "open",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "int32_t",
+            "ptr": true
+          }
+        ],
+        "params": [],
+        "order": 60,
+        "bodies": {
+          "python": "/// Hammer (锤子线)\n#[pyfunction]\n#[pyo3(signature = (open, high, low, close))]\nfn cdl_hammer(\n    py: Python<'_>,\n    open: PyReadonlyArray1<'_, f64>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n) -> PyResult<Vec<i32>> {\n    let open = open\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py.detach(|| {\n        candlestick::hammer(open, high, low, close)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "CDL_INVERTED_HAMMER",
+      "ffi": {
+        "c_name": "ta_cdl_inverted_hammer",
+        "doc_group": "Candlestick patterns",
+        "inputs": [
+          {
+            "name": "open",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "int32_t",
+            "ptr": true
+          }
+        ],
+        "params": [],
+        "order": 61,
+        "bodies": {
+          "python": "/// Inverted Hammer (倒锤子线)\n#[pyfunction]\n#[pyo3(signature = (open, high, low, close))]\nfn cdl_inverted_hammer(\n    py: Python<'_>,\n    open: PyReadonlyArray1<'_, f64>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n) -> PyResult<Vec<i32>> {\n    let open = open\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py.detach(|| {\n        candlestick::inverted_hammer(open, high, low, close)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "CDL_HANGING_MAN",
+      "ffi": {
+        "c_name": "ta_cdl_hanging_man",
+        "doc_group": "Candlestick patterns",
+        "inputs": [
+          {
+            "name": "open",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "int32_t",
+            "ptr": true
+          }
+        ],
+        "params": [],
+        "order": 62,
+        "bodies": {
+          "python": "/// Hanging Man (上吊线)\n#[pyfunction]\n#[pyo3(signature = (open, high, low, close))]\nfn cdl_hanging_man(\n    py: Python<'_>,\n    open: PyReadonlyArray1<'_, f64>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n) -> PyResult<Vec<i32>> {\n    let open = open\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py.detach(|| {\n        candlestick::hanging_man(open, high, low, close)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "CDL_SHOOTING_STAR",
+      "ffi": {
+        "c_name": "ta_cdl_shooting_star",
+        "doc_group": "Candlestick patterns",
+        "inputs": [
+          {
+            "name": "open",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "int32_t",
+            "ptr": true
+          }
+        ],
+        "params": [],
+        "order": 63,
+        "bodies": {
+          "python": "/// Shooting Star (射击之星)\n#[pyfunction]\n#[pyo3(signature = (open, high, low, close))]\nfn cdl_shooting_star(\n    py: Python<'_>,\n    open: PyReadonlyArray1<'_, f64>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n) -> PyResult<Vec<i32>> {\n    let open = open\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py.detach(|| {\n        candlestick::shooting_star(open, high, low, close)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "CDL_ENGULFING",
+      "ffi": {
+        "c_name": "ta_cdl_engulfing",
+        "doc_group": "Candlestick patterns",
+        "inputs": [
+          {
+            "name": "open",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "int32_t",
+            "ptr": true
+          }
+        ],
+        "params": [],
+        "order": 64,
+        "bodies": {
+          "python": "/// Engulfing Pattern (吞没形态)\n///\n/// Returns: 100 for bullish engulfing, -100 for bearish engulfing\n#[pyfunction]\n#[pyo3(signature = (open, high, low, close))]\nfn cdl_engulfing(\n    py: Python<'_>,\n    open: PyReadonlyArray1<'_, f64>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n) -> PyResult<Vec<i32>> {\n    let open = open\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py.detach(|| {\n        candlestick::engulfing(open, high, low, close)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "CDL_HARAMI",
+      "ffi": {
+        "c_name": "ta_cdl_harami",
+        "doc_group": "Candlestick patterns",
+        "inputs": [
+          {
+            "name": "open",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "int32_t",
+            "ptr": true
+          }
+        ],
+        "params": [],
+        "order": 65,
+        "bodies": {
+          "python": "/// Harami Pattern (孕线形态)\n#[pyfunction]\n#[pyo3(signature = (open, high, low, close))]\nfn cdl_harami(\n    py: Python<'_>,\n    open: PyReadonlyArray1<'_, f64>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n) -> PyResult<Vec<i32>> {\n    let open = open\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py.detach(|| {\n        candlestick::harami(open, high, low, close)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "CDL_MORNINGSTAR",
+      "ffi": {
+        "c_name": "ta_cdl_morning_star",
+        "doc_group": "Candlestick patterns",
+        "inputs": [
+          {
+            "name": "open",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "int32_t",
+            "ptr": true
+          }
+        ],
+        "params": [],
+        "order": 66,
+        "bodies": {
+          "python": "/// Morning Star (晨星)\n#[pyfunction]\n#[pyo3(signature = (open, high, low, close))]\nfn cdl_morning_star(\n    py: Python<'_>,\n    open: PyReadonlyArray1<'_, f64>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n) -> PyResult<Vec<i32>> {\n    let open = open\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py.detach(|| {\n        candlestick::morning_star(open, high, low, close)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "CDL_EVENINGSTAR",
+      "ffi": {
+        "c_name": "ta_cdl_evening_star",
+        "doc_group": "Candlestick patterns",
+        "inputs": [
+          {
+            "name": "open",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "int32_t",
+            "ptr": true
+          }
+        ],
+        "params": [],
+        "order": 67,
+        "bodies": {
+          "python": "/// Evening Star (暮星)\n#[pyfunction]\n#[pyo3(signature = (open, high, low, close))]\nfn cdl_evening_star(\n    py: Python<'_>,\n    open: PyReadonlyArray1<'_, f64>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n) -> PyResult<Vec<i32>> {\n    let open = open\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py.detach(|| {\n        candlestick::evening_star(open, high, low, close)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "CDL_3WHITE_SOLDIERS",
+      "ffi": {
+        "c_name": "ta_cdl_three_white_soldiers",
+        "doc_group": "Candlestick patterns",
+        "inputs": [
+          {
+            "name": "open",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "int32_t",
+            "ptr": true
+          }
+        ],
+        "params": [],
+        "order": 68,
+        "bodies": {
+          "python": "/// Three White Soldiers (三白兵)\n#[pyfunction]\n#[pyo3(signature = (open, high, low, close))]\nfn cdl_three_white_soldiers(\n    py: Python<'_>,\n    open: PyReadonlyArray1<'_, f64>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n) -> PyResult<Vec<i32>> {\n    let open = open\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py.detach(|| {\n        candlestick::three_white_soldiers(open, high, low, close)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "CDL_3BLACK_CROWS",
+      "ffi": {
+        "c_name": "ta_cdl_three_black_crows",
+        "doc_group": "Candlestick patterns",
+        "inputs": [
+          {
+            "name": "open",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "int32_t",
+            "ptr": true
+          }
+        ],
+        "params": [],
+        "order": 69,
+        "bodies": {
+          "python": "/// Three Black Crows (三乌鸦)\n#[pyfunction]\n#[pyo3(signature = (open, high, low, close))]\nfn cdl_three_black_crows(\n    py: Python<'_>,\n    open: PyReadonlyArray1<'_, f64>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n) -> PyResult<Vec<i32>> {\n    let open = open\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py.detach(|| {\n        candlestick::three_black_crows(open, high, low, close)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "CDL_MARUBOZU",
+      "ffi": {
+        "c_name": "ta_cdl_marubozu",
+        "doc_group": "Candlestick patterns",
+        "inputs": [
+          {
+            "name": "open",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "output",
+            "c_type": "int32_t",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "shadow_pct",
+            "c_type": "double",
+            "ptr": false
+          }
+        ],
+        "order": 70,
+        "bodies": {
+          "python": "/// Marubozu (光头光脚)\n#[pyfunction]\n#[pyo3(signature = (open, high, low, close, shadow_pct=0.05))]\nfn cdl_marubozu(\n    py: Python<'_>,\n    open: PyReadonlyArray1<'_, f64>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n    shadow_pct: f64,\n) -> PyResult<Vec<i32>> {\n    let open = open\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py.detach(|| {\n        candlestick::marubozu(open, high, low, close, shadow_pct)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        }
+      }
+    },
+    {
+      "name": "DARVAS_BOX",
+      "ffi": {
+        "c_name": "ta_darvas_box",
+        "doc_group": "Chart patterns (FTA-native)",
+        "inputs": [
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "out_top",
+            "c_type": "double",
+            "ptr": true
+          },
+          {
+            "name": "out_bottom",
+            "c_type": "double",
+            "ptr": true
+          },
+          {
+            "name": "out_signal",
+            "c_type": "int32_t",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "lookback",
+            "c_type": "int32_t",
+            "ptr": false
+          },
+          {
+            "name": "confirmation",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 71
+      }
+    },
+    {
+      "name": "RENKO",
+      "ffi": {
+        "c_name": "ta_renko",
+        "doc_group": "Chart patterns (FTA-native)",
+        "inputs": [
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "out_bricks",
+            "c_type": "double",
+            "ptr": true
+          },
+          {
+            "name": "out_dir",
+            "c_type": "int32_t",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "box_size",
+            "c_type": "double",
+            "ptr": false
+          }
+        ],
+        "order": 72
+      }
+    },
+    {
+      "name": "KAGI",
+      "ffi": {
+        "c_name": "ta_kagi",
+        "doc_group": "Chart patterns (FTA-native)",
+        "inputs": [
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "out_kagi",
+            "c_type": "double",
+            "ptr": true
+          },
+          {
+            "name": "out_dir",
+            "c_type": "int32_t",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "reversal",
+            "c_type": "double",
+            "ptr": false
+          }
+        ],
+        "order": 73
+      }
+    },
+    {
+      "name": "POINT_AND_FIGURE",
+      "ffi": {
+        "c_name": "ta_point_and_figure",
+        "doc_group": "Chart patterns (FTA-native)",
+        "inputs": [
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "out_pnf",
+            "c_type": "double",
+            "ptr": true
+          },
+          {
+            "name": "out_col",
+            "c_type": "int32_t",
+            "ptr": true
+          },
+          {
+            "name": "out_new",
+            "c_type": "int32_t",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "box_size",
+            "c_type": "double",
+            "ptr": false
+          },
+          {
+            "name": "reversal",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 74
+      }
+    },
+    {
+      "name": "THREE_LINE_BREAK",
+      "ffi": {
+        "c_name": "ta_three_line_break",
+        "doc_group": "Chart patterns (FTA-native)",
+        "inputs": [
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "out_line",
+            "c_type": "double",
+            "ptr": true
+          },
+          {
+            "name": "out_dir",
+            "c_type": "int32_t",
+            "ptr": true
+          }
+        ],
+        "params": [
+          {
+            "name": "lines",
+            "c_type": "int32_t",
+            "ptr": false
+          }
+        ],
+        "order": 75
+      }
+    },
+    {
+      "name": "WILLIAMS_ALLIGATOR",
+      "ffi": {
+        "c_name": "ta_williams_alligator",
+        "doc_group": "Chart patterns (FTA-native)",
+        "inputs": [
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "out_jaw",
+            "c_type": "double",
+            "ptr": true
+          },
+          {
+            "name": "out_teeth",
+            "c_type": "double",
+            "ptr": true
+          },
+          {
+            "name": "out_lips",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [],
+        "order": 76
+      }
+    },
+    {
+      "name": "HEIKIN_ASHI",
+      "ffi": {
+        "c_name": "ta_heikin_ashi",
+        "doc_group": "Chart patterns (FTA-native)",
+        "inputs": [
+          {
+            "name": "open",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "high",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "low",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          },
+          {
+            "name": "close",
+            "c_type": "double",
+            "ptr": true,
+            "const": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "out_o",
+            "c_type": "double",
+            "ptr": true
+          },
+          {
+            "name": "out_h",
+            "c_type": "double",
+            "ptr": true
+          },
+          {
+            "name": "out_l",
+            "c_type": "double",
+            "ptr": true
+          },
+          {
+            "name": "out_c",
+            "c_type": "double",
+            "ptr": true
+          }
+        ],
+        "params": [],
+        "order": 77
+      }
+    }
+  ]
+}

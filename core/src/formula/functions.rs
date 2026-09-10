@@ -5375,6 +5375,8 @@ pub fn get_builtin_functions() -> HashMap<String, FormulaFn> {
     map.insert("CORREL".to_string(), fn_correl);
     map.insert("BETA".to_string(), fn_beta);
     map.insert("LINEAR_REG".to_string(), fn_linear_reg);
+    // TA-Lib spelling compatibility: LINEARREG is the public function name.
+    map.insert("LINEARREG".to_string(), fn_linear_reg);
     map.insert("TSF".to_string(), fn_tsf);
     map.insert("PERCENT_RANK".to_string(), fn_percent_rank);
     map.insert("MIDPOINT".to_string(), fn_midpoint);

@@ -4,6 +4,8 @@
 
 use wasm_bindgen::prelude::*;
 
+use finkit::composite::{CompositeDefinition, CompositeEngine, CompositeExpr, CompositeOp};
+use finkit::factors::FactorContext;
 use finkit::formula::{
     parse_formula, DrawCommand, FormulaContext, FormulaEngine, FormulaTemplates,
 };
@@ -11,9 +13,13 @@ use finkit::indicators;
 use finkit::math::moving_avg;
 use finkit::patterns::{candlestick, chart};
 use ndarray::Array1;
+use serde::Deserialize;
+use std::collections::HashSet;
 
 mod streaming;
 mod transforms;
+#[path = "chart.rs"]
+mod wasm_chart;
 
 #[wasm_bindgen(start)]
 pub fn _start() {
@@ -23,6 +29,125 @@ pub fn _start() {
 
 fn to_js(e: impl std::fmt::Display) -> JsError {
     JsError::new(&format!("{}", e))
+}
+
+#[derive(Debug, Deserialize)]
+struct CompositeDefinitionWasm {
+    name: String,
+    function: String,
+    inputs: Vec<String>,
+    params: Vec<f64>,
+}
+
+/// Evaluate a dependency-aware custom composite-indicator graph.
+///
+/// `definitions` is an array of `{name, function, inputs, params}` objects.
+/// Inputs can reference OHLCV names, another definition, or `const:<number>`.
+/// Undefined optional arguments should be passed as `undefined`.
+#[wasm_bindgen(js_name = computeComposite)]
+pub fn compute_composite(
+    close: Vec<f64>,
+    definitions: JsValue,
+    outputs: JsValue,
+    open: JsValue,
+    high: JsValue,
+    low: JsValue,
+    volume: JsValue,
+) -> Result<JsValue, JsError> {
+    let definitions: Vec<CompositeDefinitionWasm> =
+        serde_wasm_bindgen::from_value(definitions).map_err(to_js)?;
+    let names: HashSet<String> = definitions.iter().map(|item| item.name.clone()).collect();
+    if names.len() != definitions.len() {
+        return Err(to_js("composite definition names must be unique"));
+    }
+    let definitions = definitions
+        .into_iter()
+        .map(|item| {
+            let inputs = item
+                .inputs
+                .into_iter()
+                .map(|input| composite_input_expression_wasm(&input, &names))
+                .collect::<Result<Vec<_>, JsError>>()?;
+            let expression = match item.function.to_ascii_lowercase().as_str() {
+                "add" => CompositeExpr::Op {
+                    op: CompositeOp::Add,
+                    inputs,
+                },
+                "sub" => CompositeExpr::Op {
+                    op: CompositeOp::Sub,
+                    inputs,
+                },
+                "mul" => CompositeExpr::Op {
+                    op: CompositeOp::Mul,
+                    inputs,
+                },
+                "div" => CompositeExpr::Op {
+                    op: CompositeOp::Div,
+                    inputs,
+                },
+                "min" => CompositeExpr::Op {
+                    op: CompositeOp::Min,
+                    inputs,
+                },
+                "max" => CompositeExpr::Op {
+                    op: CompositeOp::Max,
+                    inputs,
+                },
+                "weighted_average" | "weightedaverage" => {
+                    CompositeExpr::call("weighted_average", inputs, item.params)
+                }
+                _ => CompositeExpr::call(item.function, inputs, item.params),
+            };
+            Ok(CompositeDefinition::new(item.name, expression))
+        })
+        .collect::<Result<Vec<_>, JsError>>()?;
+    let outputs: Option<Vec<String>> = if outputs.is_undefined() || outputs.is_null() {
+        None
+    } else {
+        Some(serde_wasm_bindgen::from_value(outputs).map_err(to_js)?)
+    };
+    let output_names = outputs.unwrap_or_else(|| {
+        definitions
+            .iter()
+            .map(|definition| definition.name.clone())
+            .collect()
+    });
+    let output_refs: Vec<&str> = output_names.iter().map(String::as_str).collect();
+    let mut context = FactorContext::new();
+    context.insert("close", close).map_err(to_js)?;
+    for (name, value) in [
+        ("open", open),
+        ("high", high),
+        ("low", low),
+        ("volume", volume),
+    ] {
+        if !value.is_undefined() && !value.is_null() {
+            context
+                .insert(name, serde_wasm_bindgen::from_value(value).map_err(to_js)?)
+                .map_err(to_js)?;
+        }
+    }
+    let result = CompositeEngine::new()
+        .evaluate(&definitions, &output_refs, &context)
+        .map_err(to_js)?;
+    serde_wasm_bindgen::to_value(&result).map_err(to_js)
+}
+
+fn composite_input_expression_wasm(
+    input: &str,
+    definition_names: &HashSet<String>,
+) -> Result<CompositeExpr, JsError> {
+    if let Some(value) = input.strip_prefix("const:") {
+        let value = value
+            .parse::<f64>()
+            .map_err(|_| to_js(format!("invalid composite constant: {input}")))?;
+        return Ok(CompositeExpr::Constant(value));
+    }
+    if definition_names.contains(input) {
+        Ok(CompositeExpr::reference(input))
+    } else {
+        Ok(CompositeExpr::series(input))
+    }
 }
 
 // ───────────────────── Moving Averages ─────────────────────
@@ -43,9 +168,9 @@ mod tests {
         let input = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         let result = moving_avg::sma(&input, 3).unwrap();
         let vals = result.into_raw_vec_and_offset().0;
-        assert!((vals[0] - 2.0).abs() < 1e-10);
-        assert!((vals[1] - 3.0).abs() < 1e-10);
-        assert!((vals[2] - 4.0).abs() < 1e-10);
+        assert!(vals[0].is_nan());
+        assert!(vals[1].is_nan());
+        assert!((vals[2] - 2.0).abs() < 1e-10);
     }
 
     #[test]
@@ -53,8 +178,9 @@ mod tests {
         let input = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         let result = moving_avg::ema(&input, 3).unwrap();
         assert!(result.len() == input.len());
-        // First value should be SMA seed (average of first 3)
-        assert!((result[0] - 2.0).abs() < 1e-10);
+        // EMA uses an SMA seed at the end of the warm-up window.
+        assert!(result[0].is_nan());
+        assert!((result[2] - 2.0).abs() < 1e-10);
     }
 
     #[test]

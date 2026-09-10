@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""One-time enrichment: attach a structured `ffi` block to every indicator in
-docs/indicator_registry.json that is exposed by ffi/c-binding/include/finkit.h,
-making the registry the COMPLETE single source of truth for C binding codegen.
+"""Build the structured FFI sidecar for every indicator exposed by
+ffi/c-binding/include/finkit.h. The core registry stays free of binding-only
+metadata so its strict snapshot remains stable.
 
 For each `TA_API ta_result_t ta_*(...)` in the header we:
   - resolve it to a registry entry (by normalized name, then a manual alias
     map for indicators whose registry name differs from the C name);
   - if no registry entry exists yet (FTA-native chart/transform indicators),
     create one with sensible metadata so the registry covers the full C surface;
-  - store an `ffi` block: c_name, doc_group, inputs/outputs/params (the exact,
-    proven C signature) and an `order` index preserving header layout.
+  - store an `ffi` block in docs/ffi_registry.json: c_name, doc_group,
+    inputs/outputs/params (the exact, proven C signature) and an `order` index
+    preserving header layout.
 
 scripts/gen_c_header.py then regenerates finkit.h from these blocks.
 
@@ -25,6 +26,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 HEADER = ROOT / "ffi/c-binding/include/finkit.h"
 REGISTRY = ROOT / "docs/indicator_registry.json"
+FFI_REGISTRY = ROOT / "docs/ffi_registry.json"
 
 SECTION_RE = re.compile(r"──\s*(.+?)\s*──")
 FN_RE = re.compile(r"TA_API\s+ta_result_t\s+(ta_\w+)\s*\((.*?)\)\s*;", re.DOTALL)
@@ -144,6 +146,8 @@ def main() -> None:
             buf = ""
 
     reg = json.loads(REGISTRY.read_text(encoding="utf-8"))
+    ffi_reg = json.loads(FFI_REGISTRY.read_text(encoding="utf-8")) if FFI_REGISTRY.exists() else {"indicators": []}
+    sidecar_inds = {item["name"]: item for item in ffi_reg.get("indicators", [])}
     inds = reg.setdefault("indicators", [])
     norm_map = {norm(i["name"]): i for i in inds}
     name_map = {i["name"]: i for i in inds}
@@ -153,34 +157,44 @@ def main() -> None:
         ind = registry_name_for(cname, norm_map, name_map)
         inputs, outputs, params = parse_params(ps)
         if ind is None:
-            # Not yet in the registry: add it so the registry covers the full C surface.
+            # Keep FFI-only indicators in the sidecar so the core registry
+            # snapshot remains stable.
             ind = make_entry(cname, group, inputs, outputs, params)
             ind["ffi"]["order"] = idx
-            inds.append(ind)
-            norm_map[norm(ind["name"])] = ind
-            name_map[ind["name"]] = ind
+            name = ind["name"]
+            previous = sidecar_inds.get(name, {})
+            ffi = dict(previous.get("ffi", {}))
+            ffi.update(ind["ffi"])
+            sidecar_inds[name] = {"name": name, "ffi": ffi}
             added += 1
             enriched += 1
             continue
-        ind["ffi"] = {
+        ffi = dict(sidecar_inds.get(ind["name"], {}).get("ffi", {}))
+        ffi.update({
             "c_name": cname,
             "doc_group": group,
             "inputs": inputs,
             "outputs": outputs,
             "params": params,
             "order": idx,
-        }
-        if "order" not in ind["ffi"]:
-            ind["ffi"]["order"] = idx
+        })
+        sidecar_inds[ind["name"]] = {"name": ind["name"], "ffi": ffi}
         enriched += 1
 
-    REGISTRY.write_text(json.dumps(reg, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    ordered = sorted(sidecar_inds.values(), key=lambda item: item.get("ffi", {}).get("order", 0))
+    FFI_REGISTRY.write_text(
+        json.dumps({"version": reg.get("version"), "indicators": ordered}, indent=2, ensure_ascii=False)
+        + "\n",
+        encoding="utf-8",
+    )
     print(f"[enrich] parsed {len(parsed)} indicator fns from header")
     print(f"[enrich] enriched {enriched} registry entries (added {added} missing ones)")
     if unmatched:
         print(f"[enrich] WARNING unmatched: {unmatched}")
     else:
-        print("[enrich] all 78 header indicator fns now resolve in the registry ✅")
+        # Keep the generator usable under Windows consoles that still expose
+        # a legacy code page instead of UTF-8 stdout.
+        print("[enrich] all 78 header indicator fns now resolve in the registry (ok)")
 
 
 if __name__ == "__main__":

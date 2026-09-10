@@ -13,7 +13,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 finkit = { path = "../../core", default-features = false, features = ["std", "serde", "indicators-all"] }
-finkit-visualization = { path = "../../visualization", features = ["svg"] }
+finkit-visualization = { path = "../../visualization", features = ["svg", "html"] }
 napi = { version = "2", features = ["napi4", "tokio_rt"] }
 napi-derive = "2"
 tokio = { version = "1", features = ["rt", "sync"] }

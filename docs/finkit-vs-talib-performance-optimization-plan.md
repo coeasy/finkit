@@ -25,6 +25,20 @@ Finkit 当前存在明显的“核心计算性能”和“最终 Python 用户�
 
 **Python NumPy ABI 直出 -> Formula 输入/输出复制收敛 -> TA-Lib 语义/暖机对齐 -> 中间缓冲复用与 DAG 融合 -> SIMD/算法级热点优化 -> 多资产批处理并行。**
 
+### 本轮已落地：Python float64 直接 NumPy 返回
+
+生成式 Python 指标绑定已统一使用 `PyArray1` 所有权转移：核心计算在释放
+GIL 的闭包中完成，重新持有 GIL 后直接把 `Vec<f64>` 交给 NumPy，不再经过
+Python `list`。多输出 float64 指标（例如 MACD、BOLL、STOCH）也使用同一条
+路径；整数蜡烛形态保持原有返回语义。
+
+在 Windows 隔离 wheel 验证中，1,000,000 根连续 `float64` 输入的 `sma` 返回
+类型为 `numpy.ndarray`、`float64`、长度 1,000,000；单次 sanity 计时约
+`1.98 ms`。该数字不是跨机器 TA-Lib 结论，正式对标仍应使用本文件的固定
+环境、多轮中位数和同一输入协议；它只证明此前的 Python list 物化瓶颈已经
+从公共 API 路径移除。对应生成改写工具为
+`scripts/optimize_python_numpy_bindings.py`。
+
 ---
 
 ## 2. 对标范围升级
