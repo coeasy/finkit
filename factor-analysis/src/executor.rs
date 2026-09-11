@@ -264,7 +264,8 @@ impl ResearchExecutor {
                         information: InformationReport {
                             ic_by_horizon: required(&ic, "Information", stage.kind)?.clone(),
                             mean_ic: required(&mean_ic, "Information", stage.kind)?.clone(),
-                            statistics: required(&ic_statistics, "Information", stage.kind)?.clone(),
+                            statistics: required(&ic_statistics, "Information", stage.kind)?
+                                .clone(),
                         },
                         turnover: TurnoverReport {
                             bottom_quantile_turnover: required(
