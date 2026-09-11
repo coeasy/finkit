@@ -42,6 +42,8 @@ pub mod math;
 pub mod multi_period_resonance;
 #[cfg(feature = "std")]
 pub mod patterns;
+#[cfg(feature = "std")]
+pub mod performance;
 #[cfg(feature = "finkit-polars")]
 pub mod polars_ext;
 #[cfg(feature = "std")]
