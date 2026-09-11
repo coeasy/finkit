@@ -24,7 +24,10 @@ impl DirtyRange {
     /// A dirty range covering all rows.
     #[must_use]
     pub fn full(rows: usize) -> Self {
-        Self { start: 0, end: rows }
+        Self {
+            start: 0,
+            end: rows,
+        }
     }
 
     /// Whether no rows are dirty.
@@ -129,9 +132,7 @@ impl ResearchArtifactStore {
         self.values.is_empty()
     }
 
-    pub fn iter(
-        &self,
-    ) -> impl Iterator<Item = (&MaterializationKey, &ResearchArtifact)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&MaterializationKey, &ResearchArtifact)> {
         self.values.iter()
     }
 }
@@ -156,8 +157,14 @@ mod tests {
 
     #[test]
     fn dirty_ranges_merge_conservatively() {
-        assert_eq!(DirtyRange::new(5, 9).union(DirtyRange::new(2, 6)), DirtyRange::new(2, 9));
-        assert_eq!(DirtyRange::new(3, 3).union(DirtyRange::new(8, 10)), DirtyRange::new(8, 10));
+        assert_eq!(
+            DirtyRange::new(5, 9).union(DirtyRange::new(2, 6)),
+            DirtyRange::new(2, 9)
+        );
+        assert_eq!(
+            DirtyRange::new(3, 3).union(DirtyRange::new(8, 10)),
+            DirtyRange::new(8, 10)
+        );
     }
 
     #[test]
@@ -167,6 +174,9 @@ mod tests {
         store.insert(key(2), ResearchArtifact::Series(vec![2.0]));
         store.retain_revision(2);
         assert!(store.get(&key(1)).is_none());
-        assert_eq!(store.get(&key(2)), Some(&ResearchArtifact::Series(vec![2.0])));
+        assert_eq!(
+            store.get(&key(2)),
+            Some(&ResearchArtifact::Series(vec![2.0]))
+        );
     }
 }
