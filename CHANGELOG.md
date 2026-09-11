@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.15] - 2026-09-11
+
+- Add forming-bar repaint rollback to streaming MACDEXT.
+- Support scalar WMA, DEMA, TEMA, KAMA, T3, TRIMA, HMA, ALMA, and VIDYA
+  variants for streaming MACDEXT fast, slow, and signal lines.
+- Expose configurable streaming MACDEXT through the Python binding.
+- Make close-stream parsing injectable for deterministic CLI tests.
+
 ## [0.1.14] - 2026-09-11
 
 - Add registered, parameterized custom formula components with nested

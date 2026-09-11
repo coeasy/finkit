@@ -1,5 +1,5 @@
 {
-  "version": "0.1.14",
+  "version": "0.1.15",
   "generated_at": null,
   "indicators": [
     {
@@ -692,7 +692,7 @@
           "name": "fast_ma",
           "param_type": "usize",
           "default": "1",
-          "description": "Fast MA type (0=SMA, 1=EMA)"
+          "description": "Fast scalar MA type (SMA, EMA, WMA, DEMA, TEMA, KAMA, T3, TRIMA, HMA, ALMA, VIDYA)"
         },
         {
           "name": "slow_period",
@@ -704,7 +704,7 @@
           "name": "slow_ma",
           "param_type": "usize",
           "default": "1",
-          "description": "Slow MA type (0=SMA, 1=EMA)"
+          "description": "Slow scalar MA type (SMA, EMA, WMA, DEMA, TEMA, KAMA, T3, TRIMA, HMA, ALMA, VIDYA)"
         },
         {
           "name": "signal_period",
@@ -716,7 +716,7 @@
           "name": "signal_ma",
           "param_type": "usize",
           "default": "1",
-          "description": "Signal MA type (0=SMA, 1=EMA)"
+          "description": "Signal scalar MA type; use StreamingMacdExt::new_with_signal_ma"
         }
       ],
       "convergence": 35,
