@@ -19,20 +19,32 @@ impl FactorCandidate {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         expression.trim().hash(&mut hasher);
         let fingerprint = hasher.finish();
-        Self { name, expression, fingerprint }
+        Self {
+            name,
+            expression,
+            fingerprint,
+        }
     }
 }
 
 /// Remove expression-identical candidates by stable fingerprint, preserving first occurrence.
 pub fn deduplicate_candidates(candidates: &[FactorCandidate]) -> Vec<FactorCandidate> {
     let mut seen = std::collections::BTreeSet::new();
-    candidates.iter().filter(|candidate| seen.insert(candidate.fingerprint)).cloned().collect()
+    candidates
+        .iter()
+        .filter(|candidate| seen.insert(candidate.fingerprint))
+        .cloned()
+        .collect()
 }
 
 /// Minimum finite-value coverage for one factor column.
 pub fn coverage(frame: &ResearchFrame, factor: &str) -> ResearchResult<f64> {
     let values = frame.column(factor)?;
-    Ok(if values.is_empty() { 0.0 } else { values.iter().filter(|v| v.is_finite()).count() as f64 / values.len() as f64 })
+    Ok(if values.is_empty() {
+        0.0
+    } else {
+        values.iter().filter(|v| v.is_finite()).count() as f64 / values.len() as f64
+    })
 }
 
 /// Greedy redundancy filter: preserve the first factor from each highly correlated cluster.
@@ -50,7 +62,9 @@ pub fn correlation_screen<'a>(
                 corr.is_finite() && corr.abs() > max_abs_correlation
             })
         });
-        if !redundant { kept.push(candidate); }
+        if !redundant {
+            kept.push(candidate);
+        }
     }
     Ok(kept)
 }

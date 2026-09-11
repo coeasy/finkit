@@ -1,5 +1,8 @@
 use crate::error::{ResearchError, ResearchResult};
-use finkit::compute::{ComputeCapabilities, ComputeEffect, ComputeNode, ComputeNodeId, ComputePlan, LookbackRequirement};
+use finkit::compute::{
+    ComputeCapabilities, ComputeEffect, ComputeNode, ComputeNodeId, ComputePlan,
+    LookbackRequirement,
+};
 use serde::{Deserialize, Serialize};
 
 /// Semantic research stages. Dependency ordering is delegated to core `ComputePlan`.
@@ -40,17 +43,35 @@ impl ResearchPlan {
             ComputeNode::new(
                 ComputeNodeId(stage.id),
                 format!("research::{:?}", stage.kind),
-                stage.dependencies.iter().copied().map(ComputeNodeId).collect(),
+                stage
+                    .dependencies
+                    .iter()
+                    .copied()
+                    .map(ComputeNodeId)
+                    .collect(),
                 ComputeCapabilities {
                     deterministic: true,
-                    streaming: matches!(stage.kind, ResearchStageKind::Align | ResearchStageKind::ForwardReturns | ResearchStageKind::Rank | ResearchStageKind::Returns | ResearchStageKind::Information | ResearchStageKind::Turnover),
+                    streaming: matches!(
+                        stage.kind,
+                        ResearchStageKind::Align
+                            | ResearchStageKind::ForwardReturns
+                            | ResearchStageKind::Rank
+                            | ResearchStageKind::Returns
+                            | ResearchStageKind::Information
+                            | ResearchStageKind::Turnover
+                    ),
                     stateful: false,
                     lookback: LookbackRequirement::Dynamic,
-                    effect: if matches!(stage.kind, ResearchStageKind::Report) { ComputeEffect::EmitOutput("factor-study-report".to_string()) } else { ComputeEffect::Pure },
+                    effect: if matches!(stage.kind, ResearchStageKind::Report) {
+                        ComputeEffect::EmitOutput("factor-study-report".to_string())
+                    } else {
+                        ComputeEffect::Pure
+                    },
                 },
             )
         });
-        let plan = ComputePlan::compile(nodes).map_err(|error| ResearchError::InvalidConfig(error.to_string()))?;
+        let plan = ComputePlan::compile(nodes)
+            .map_err(|error| ResearchError::InvalidConfig(error.to_string()))?;
         Ok(Self { stages, plan })
     }
 
@@ -58,7 +79,9 @@ impl ResearchPlan {
         self.plan.execution_order().iter().map(|id| id.0).collect()
     }
 
-    pub fn stages(&self) -> &[ResearchStageSpec] { &self.stages }
+    pub fn stages(&self) -> &[ResearchStageSpec] {
+        &self.stages
+    }
 }
 
 /// Reproducibility metadata persisted with reports.
@@ -77,7 +100,9 @@ pub struct StudyProvenance {
 pub fn fingerprint(parts: &[&str]) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    for part in parts { part.hash(&mut hasher); }
+    for part in parts {
+        part.hash(&mut hasher);
+    }
     hasher.finish()
 }
 
@@ -88,9 +113,18 @@ mod tests {
     #[test]
     fn research_plan_reuses_compute_plan_ordering() {
         let plan = ResearchPlan::compile(vec![
-            ResearchStageSpec { id: 2, kind: ResearchStageKind::Information, dependencies: vec![1] },
-            ResearchStageSpec { id: 1, kind: ResearchStageKind::ForwardReturns, dependencies: vec![] },
-        ]).unwrap();
+            ResearchStageSpec {
+                id: 2,
+                kind: ResearchStageKind::Information,
+                dependencies: vec![1],
+            },
+            ResearchStageSpec {
+                id: 1,
+                kind: ResearchStageKind::ForwardReturns,
+                dependencies: vec![],
+            },
+        ])
+        .unwrap();
         assert_eq!(plan.execution_order(), vec![1, 2]);
     }
 }

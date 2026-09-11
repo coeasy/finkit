@@ -7,10 +7,14 @@
 #[cfg(all(feature = "std", feature = "no_std"))]
 compile_error!("Features \"std\" and \"no_std\" are mutually exclusive");
 
+extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
-extern crate alloc;
 
+#[cfg(feature = "std")]
+pub mod backtest;
+#[cfg(feature = "rayon")]
+pub mod batch;
 #[cfg(feature = "std")]
 pub mod buffer_arena;
 #[cfg(feature = "std")]
@@ -25,23 +29,19 @@ pub mod composite;
 pub mod compute;
 #[cfg(all(feature = "std", not(feature = "no_std")))]
 pub mod error;
+#[cfg(feature = "std")]
+pub mod factors;
+#[cfg(all(feature = "std", feature = "indicators-all", feature = "formula"))]
+pub mod features;
 #[cfg(feature = "formula")]
 pub mod formula;
 #[cfg(feature = "std")]
 pub mod indicators;
 pub mod math;
 #[cfg(feature = "std")]
-pub mod patterns;
-#[cfg(feature = "std")]
-pub mod backtest;
-#[cfg(feature = "rayon")]
-pub mod batch;
-#[cfg(feature = "std")]
-pub mod factors;
-#[cfg(all(feature = "std", feature = "indicators-all", feature = "formula"))]
-pub mod features;
-#[cfg(feature = "std")]
 pub mod multi_period_resonance;
+#[cfg(feature = "std")]
+pub mod patterns;
 #[cfg(feature = "finkit-polars")]
 pub mod polars_ext;
 #[cfg(feature = "std")]

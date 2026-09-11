@@ -14,7 +14,11 @@ pub struct PortfolioConstraints {
 
 impl Default for PortfolioConstraints {
     fn default() -> Self {
-        Self { gross_target: 1.0, max_abs_weight: 1.0, long_only: false }
+        Self {
+            gross_target: 1.0,
+            max_abs_weight: 1.0,
+            long_only: false,
+        }
     }
 }
 
@@ -26,18 +30,25 @@ pub fn target_weights(
     constraints: &PortfolioConstraints,
 ) -> ResearchResult<Vec<f64>> {
     if constraints.gross_target < 0.0 || constraints.max_abs_weight <= 0.0 {
-        return Err(ResearchError::InvalidConfig("invalid portfolio constraints".to_string()));
+        return Err(ResearchError::InvalidConfig(
+            "invalid portfolio constraints".to_string(),
+        ));
     }
     let mut weights = factor_weights(frame, factor_column, weight_config)?;
     for segment in 0..frame.index().date_segments().len() {
         let range = frame.index().date_segments().range(segment).unwrap();
         for row in range.clone() {
-            if constraints.long_only && weights[row] < 0.0 { weights[row] = 0.0; }
-            weights[row] = weights[row].clamp(-constraints.max_abs_weight, constraints.max_abs_weight);
+            if constraints.long_only && weights[row] < 0.0 {
+                weights[row] = 0.0;
+            }
+            weights[row] =
+                weights[row].clamp(-constraints.max_abs_weight, constraints.max_abs_weight);
         }
         let gross: f64 = range.clone().map(|row| weights[row].abs()).sum();
         if gross > f64::EPSILON {
-            for row in range { weights[row] = weights[row] / gross * constraints.gross_target; }
+            for row in range {
+                weights[row] = weights[row] / gross * constraints.gross_target;
+            }
         }
     }
     Ok(weights)
@@ -57,38 +68,61 @@ pub struct HoldingPeriodPortfolioEngine {
 
 impl HoldingPeriodPortfolioEngine {
     pub fn new(holding_dates: usize) -> ResearchResult<Self> {
-        if holding_dates == 0 { return Err(ResearchError::InvalidConfig("holding_dates must be > 0".to_string())); }
+        if holding_dates == 0 {
+            return Err(ResearchError::InvalidConfig(
+                "holding_dates must be > 0".to_string(),
+            ));
+        }
         Ok(Self { holding_dates })
     }
 
     /// Produce one normalized asset-weight map per research date.
-    pub fn positions(&self, frame: &ResearchFrame, row_weights: &[f64]) -> ResearchResult<Vec<BTreeMap<AssetId, f64>>> {
+    pub fn positions(
+        &self,
+        frame: &ResearchFrame,
+        row_weights: &[f64],
+    ) -> ResearchResult<Vec<BTreeMap<AssetId, f64>>> {
         if row_weights.len() != frame.index().len() {
-            return Err(ResearchError::LengthMismatch { name: "row_weights".to_string(), expected: frame.index().len(), actual: row_weights.len() });
+            return Err(ResearchError::LengthMismatch {
+                name: "row_weights".to_string(),
+                expected: frame.index().len(),
+                actual: row_weights.len(),
+            });
         }
         let mut active: VecDeque<Cohort> = VecDeque::new();
         let mut output = Vec::with_capacity(frame.index().date_segments().len());
         for date_idx in 0..frame.index().date_segments().len() {
-            while active.front().is_some_and(|cohort| cohort.expires_on_date <= date_idx) {
+            while active
+                .front()
+                .is_some_and(|cohort| cohort.expires_on_date <= date_idx)
+            {
                 active.pop_front();
             }
             let range = frame.index().date_segments().range(date_idx).unwrap();
             let cohort_weights: BTreeMap<AssetId, f64> = range
                 .filter_map(|row| {
                     let weight = row_weights[row];
-                    (weight.is_finite() && weight != 0.0).then_some((frame.index().assets()[row], weight))
+                    (weight.is_finite() && weight != 0.0)
+                        .then_some((frame.index().assets()[row], weight))
                 })
                 .collect();
             if !cohort_weights.is_empty() {
-                active.push_back(Cohort { expires_on_date: date_idx + self.holding_dates, weights: cohort_weights });
+                active.push_back(Cohort {
+                    expires_on_date: date_idx + self.holding_dates,
+                    weights: cohort_weights,
+                });
             }
             let mut combined = BTreeMap::<AssetId, f64>::new();
             for cohort in &active {
-                for (&asset, &weight) in &cohort.weights { *combined.entry(asset).or_default() += weight; }
+                for (&asset, &weight) in &cohort.weights {
+                    *combined.entry(asset).or_default() += weight;
+                }
             }
             let gross: f64 = combined.values().map(|weight| weight.abs()).sum();
             if gross > f64::EPSILON {
-                for weight in combined.values_mut() { *weight /= gross; }
+                for weight in combined.values_mut() {
+                    *weight /= gross;
+                }
             }
             output.push(combined);
         }
@@ -141,9 +175,12 @@ pub struct SquareRootImpactModel {
 impl CostModel for SquareRootImpactModel {
     fn estimate(&self, trade: TradeIntent, market: LiquiditySnapshot) -> f64 {
         let traded = trade.notional.abs() * trade.delta_weight.abs();
-        if traded == 0.0 || market.adv_notional <= 0.0 { return 0.0; }
+        if traded == 0.0 || market.adv_notional <= 0.0 {
+            return 0.0;
+        }
         let participation = (traded / market.adv_notional).max(0.0);
-        let impact_rate = self.impact_coefficient.max(0.0) * market.volatility.max(0.0) * participation.sqrt();
+        let impact_rate =
+            self.impact_coefficient.max(0.0) * market.volatility.max(0.0) * participation.sqrt();
         traded * (impact_rate + market.half_spread_bps.max(0.0) * 1e-4)
     }
 }
@@ -155,10 +192,20 @@ pub fn capacity_curve(
     market: LiquiditySnapshot,
     model: &dyn CostModel,
 ) -> Vec<(f64, f64)> {
-    aum_levels.iter().copied().map(|aum| {
-        let cost = model.estimate(TradeIntent { notional: aum, delta_weight }, market);
-        (aum, if aum > 0.0 { cost / aum } else { 0.0 })
-    }).collect()
+    aum_levels
+        .iter()
+        .copied()
+        .map(|aum| {
+            let cost = model.estimate(
+                TradeIntent {
+                    notional: aum,
+                    delta_weight,
+                },
+                market,
+            );
+            (aum, if aum > 0.0 { cost / aum } else { 0.0 })
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -168,9 +215,16 @@ mod tests {
 
     #[test]
     fn holding_engine_overlaps_cohorts() {
-        let index = PanelIndex::new(vec![1,1,2,2], vec![AssetId(1),AssetId(2),AssetId(1),AssetId(2)]).unwrap();
+        let index = PanelIndex::new(
+            vec![1, 1, 2, 2],
+            vec![AssetId(1), AssetId(2), AssetId(1), AssetId(2)],
+        )
+        .unwrap();
         let frame = ResearchFrame::new(index);
-        let positions = HoldingPeriodPortfolioEngine::new(2).unwrap().positions(&frame, &[0.5,-0.5,0.8,-0.2]).unwrap();
+        let positions = HoldingPeriodPortfolioEngine::new(2)
+            .unwrap()
+            .positions(&frame, &[0.5, -0.5, 0.8, -0.2])
+            .unwrap();
         assert_eq!(positions.len(), 2);
         assert!((positions[1].values().map(|v| v.abs()).sum::<f64>() - 1.0).abs() < 1e-12);
     }

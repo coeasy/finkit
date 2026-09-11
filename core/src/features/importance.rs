@@ -47,7 +47,7 @@ mod tests {
 
     #[test]
     fn discrete_mi_detects_dependency() {
-        let x = [0,1,0,1,0,1];
+        let x = [0, 1, 0, 1, 0, 1];
         assert!(mutual_info_discrete(&x, &x) > 0.0);
     }
 
@@ -56,7 +56,10 @@ mod tests {
         let n = 100;
         let signal: Vec<f64> = (0..n).map(|i| i as f64).collect();
         let noise: Vec<f64> = (0..n).map(|i| (i as f64 * 7.7).sin()).collect();
-        let target: Vec<f64> = signal.iter().map(|&v| if v > 50.0 { 1.0 } else { 0.0 }).collect();
+        let target: Vec<f64> = signal
+            .iter()
+            .map(|&v| if v > 50.0 { 1.0 } else { 0.0 })
+            .collect();
         let cols: Vec<&[f64]> = vec![signal.as_slice(), noise.as_slice()];
         assert_eq!(feature_importance_rank(&cols, &target, 10)[0].0, 0);
     }

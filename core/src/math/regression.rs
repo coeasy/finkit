@@ -43,7 +43,12 @@ fn solve_linear(mut a: Vec<Vec<f64>>, mut b: Vec<f64>) -> Option<Vec<f64>> {
     Some(b)
 }
 
-fn fit_impl(y: &[f64], x: &[&[f64]], weights: Option<&[f64]>, ridge: f64) -> Result<RegressionResult> {
+fn fit_impl(
+    y: &[f64],
+    x: &[&[f64]],
+    weights: Option<&[f64]>,
+    ridge: f64,
+) -> Result<RegressionResult> {
     if x.iter().any(|col| col.len() != y.len()) {
         return Err(TaError::InvalidParameter {
             name: "x".to_string(),
@@ -134,7 +139,11 @@ pub fn ols(y: &[f64], x: &[&[f64]]) -> Result<RegressionResult> {
 }
 
 /// Weighted least squares with intercept.
-pub fn weighted_least_squares(y: &[f64], x: &[&[f64]], weights: &[f64]) -> Result<RegressionResult> {
+pub fn weighted_least_squares(
+    y: &[f64],
+    x: &[&[f64]],
+    weights: &[f64],
+) -> Result<RegressionResult> {
     fit_impl(y, x, Some(weights), 0.0)
 }
 

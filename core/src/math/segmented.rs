@@ -20,7 +20,9 @@ impl SegmentLayout {
     /// Build contiguous segments from a sorted key slice.
     pub fn from_sorted_keys<T: PartialEq>(keys: &[T]) -> Self {
         if keys.is_empty() {
-            return Self { offsets: vec![0, 0] };
+            return Self {
+                offsets: vec![0, 0],
+            };
         }
         let mut offsets = vec![0];
         for i in 1..keys.len() {

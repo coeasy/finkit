@@ -25,10 +25,15 @@ pub fn common_start_returns(
     for (row, &asset) in frame.index().assets().iter().enumerate() {
         by_asset.entry(asset).or_default().push(row);
     }
-    let local_position: BTreeMap<usize, usize> = by_asset.values().flat_map(|rows| rows.iter().enumerate().map(|(local, &row)| (row, local))).collect();
+    let local_position: BTreeMap<usize, usize> = by_asset
+        .values()
+        .flat_map(|rows| rows.iter().enumerate().map(|(local, &row)| (row, local)))
+        .collect();
     let mut paths = Vec::new();
     for &event_row in event_rows {
-        if event_row >= frame.index().len() { continue; }
+        if event_row >= frame.index().len() {
+            continue;
+        }
         let asset = frame.index().assets()[event_row];
         let rows = &by_asset[&asset];
         let local = local_position[&event_row];
@@ -55,7 +60,9 @@ pub fn average_event_path(paths: &[EventPath], before: usize, after: usize) -> V
     let mut counts = vec![0usize; width];
     for path in paths {
         for (local, &value) in path.relative_returns.iter().enumerate() {
-            if !value.is_finite() { continue; }
+            if !value.is_finite() {
+                continue;
+            }
             let aligned = before as isize + local as isize - path.event_offset as isize;
             if aligned >= 0 && (aligned as usize) < width {
                 sums[aligned as usize] += value;
@@ -63,5 +70,14 @@ pub fn average_event_path(paths: &[EventPath], before: usize, after: usize) -> V
             }
         }
     }
-    sums.into_iter().zip(counts).map(|(sum, count)| if count == 0 { f64::NAN } else { sum / count as f64 }).collect()
+    sums.into_iter()
+        .zip(counts)
+        .map(|(sum, count)| {
+            if count == 0 {
+                f64::NAN
+            } else {
+                sum / count as f64
+            }
+        })
+        .collect()
 }

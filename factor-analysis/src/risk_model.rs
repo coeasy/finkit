@@ -17,7 +17,13 @@ pub fn newey_west_mean(values: &[f64], lags: usize) -> HacMeanResult {
     let x: Vec<f64> = values.iter().copied().filter(|v| v.is_finite()).collect();
     let n = x.len();
     if n == 0 {
-        return HacMeanResult { mean: f64::NAN, standard_error: f64::NAN, t_stat: f64::NAN, lags, observations: 0 };
+        return HacMeanResult {
+            mean: f64::NAN,
+            standard_error: f64::NAN,
+            t_stat: f64::NAN,
+            lags,
+            observations: 0,
+        };
     }
     let mean = x.iter().sum::<f64>() / n as f64;
     let centered: Vec<f64> = x.iter().map(|v| v - mean).collect();
@@ -25,13 +31,28 @@ pub fn newey_west_mean(values: &[f64], lags: usize) -> HacMeanResult {
     let max_lag = lags.min(n.saturating_sub(1));
     let mut long_run_var = gamma0;
     for lag in 1..=max_lag {
-        let gamma = centered[lag..].iter().zip(&centered[..n-lag]).map(|(a,b)| a*b).sum::<f64>() / n as f64;
+        let gamma = centered[lag..]
+            .iter()
+            .zip(&centered[..n - lag])
+            .map(|(a, b)| a * b)
+            .sum::<f64>()
+            / n as f64;
         let weight = 1.0 - lag as f64 / (max_lag + 1) as f64;
         long_run_var += 2.0 * weight * gamma;
     }
     let standard_error = (long_run_var.max(0.0) / n as f64).sqrt();
-    let t_stat = if standard_error > 1e-15 { mean / standard_error } else { f64::NAN };
-    HacMeanResult { mean, standard_error, t_stat, lags: max_lag, observations: n }
+    let t_stat = if standard_error > 1e-15 {
+        mean / standard_error
+    } else {
+        f64::NAN
+    };
+    HacMeanResult {
+        mean,
+        standard_error,
+        t_stat,
+        lags: max_lag,
+        observations: n,
+    }
 }
 
 /// Cross-sectional risk-model fit for one date.
@@ -48,7 +69,9 @@ pub fn fit_cross_sectional_risk_model(
     exposures: &[&[f64]],
 ) -> ResearchResult<CrossSectionalRiskFit> {
     if exposures.is_empty() {
-        return Err(ResearchError::InvalidConfig("risk model requires exposures".to_string()));
+        return Err(ResearchError::InvalidConfig(
+            "risk model requires exposures".to_string(),
+        ));
     }
     let fit = ols(asset_returns, exposures)?;
     Ok(CrossSectionalRiskFit {
@@ -61,23 +84,58 @@ pub fn fit_cross_sectional_risk_model(
 
 /// Herfindahl-Hirschman concentration of normalized absolute weights.
 pub fn hhi(weights: &[f64]) -> f64 {
-    let gross: f64 = weights.iter().filter(|v| v.is_finite()).map(|v| v.abs()).sum();
-    if gross <= f64::EPSILON { return 0.0; }
-    weights.iter().filter(|v| v.is_finite()).map(|v| (v.abs() / gross).powi(2)).sum()
+    let gross: f64 = weights
+        .iter()
+        .filter(|v| v.is_finite())
+        .map(|v| v.abs())
+        .sum();
+    if gross <= f64::EPSILON {
+        return 0.0;
+    }
+    weights
+        .iter()
+        .filter(|v| v.is_finite())
+        .map(|v| (v.abs() / gross).powi(2))
+        .sum()
 }
 
 /// Effective number of independent weight bets, `1 / HHI`.
 pub fn effective_number_of_bets(weights: &[f64]) -> f64 {
     let concentration = hhi(weights);
-    if concentration <= f64::EPSILON { 0.0 } else { 1.0 / concentration }
+    if concentration <= f64::EPSILON {
+        0.0
+    } else {
+        1.0 / concentration
+    }
 }
 
 /// Exposure of a portfolio to each factor column.
-pub fn portfolio_factor_exposure(weights: &[f64], exposures: &[&[f64]]) -> ResearchResult<Vec<f64>> {
+pub fn portfolio_factor_exposure(
+    weights: &[f64],
+    exposures: &[&[f64]],
+) -> ResearchResult<Vec<f64>> {
     if exposures.iter().any(|col| col.len() != weights.len()) {
-        return Err(ResearchError::LengthMismatch { name: "exposure".to_string(), expected: weights.len(), actual: exposures.iter().map(|c| c.len()).find(|&n| n != weights.len()).unwrap_or(0) });
+        return Err(ResearchError::LengthMismatch {
+            name: "exposure".to_string(),
+            expected: weights.len(),
+            actual: exposures
+                .iter()
+                .map(|c| c.len())
+                .find(|&n| n != weights.len())
+                .unwrap_or(0),
+        });
     }
-    Ok(exposures.iter().map(|column| weights.iter().zip(*column).filter(|(w,x)| w.is_finite() && x.is_finite()).map(|(w,x)| w*x).sum()).collect())
+    Ok(exposures
+        .iter()
+        .map(|column| {
+            weights
+                .iter()
+                .zip(*column)
+                .filter(|(w, x)| w.is_finite() && x.is_finite())
+                .map(|(w, x)| w * x)
+                .sum()
+        })
+        .collect())
 }
 
 /// Contribution to variance under factor covariance plus diagonal specific variance.
@@ -87,11 +145,21 @@ pub fn variance_attribution(
     asset_weights: &[f64],
     specific_variance: &[f64],
 ) -> ResearchResult<(f64, f64)> {
-    if factor_covariance.len() != factor_exposure.len() || factor_covariance.iter().any(|row| row.len() != factor_exposure.len()) {
-        return Err(ResearchError::InvalidConfig("factor covariance shape mismatch".to_string()));
+    if factor_covariance.len() != factor_exposure.len()
+        || factor_covariance
+            .iter()
+            .any(|row| row.len() != factor_exposure.len())
+    {
+        return Err(ResearchError::InvalidConfig(
+            "factor covariance shape mismatch".to_string(),
+        ));
     }
     if asset_weights.len() != specific_variance.len() {
-        return Err(ResearchError::LengthMismatch { name: "specific_variance".to_string(), expected: asset_weights.len(), actual: specific_variance.len() });
+        return Err(ResearchError::LengthMismatch {
+            name: "specific_variance".to_string(),
+            expected: asset_weights.len(),
+            actual: specific_variance.len(),
+        });
     }
     let mut factor_var = 0.0;
     for i in 0..factor_exposure.len() {
@@ -99,6 +167,10 @@ pub fn variance_attribution(
             factor_var += factor_exposure[i] * factor_covariance[i][j] * factor_exposure[j];
         }
     }
-    let specific_var = asset_weights.iter().zip(specific_variance).map(|(w,v)| w*w*v.max(0.0)).sum();
+    let specific_var = asset_weights
+        .iter()
+        .zip(specific_variance)
+        .map(|(w, v)| w * w * v.max(0.0))
+        .sum();
     Ok((factor_var.max(0.0), specific_var))
 }

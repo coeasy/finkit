@@ -61,24 +61,37 @@ pub fn purge_overlapping_intervals(
     train_indices: &[usize],
     test_indices: &[usize],
 ) -> Vec<usize> {
-    let tests: Vec<LabelInterval> = test_indices.iter().filter_map(|&i| intervals.get(i).copied()).collect();
+    let tests: Vec<LabelInterval> = test_indices
+        .iter()
+        .filter_map(|&i| intervals.get(i).copied())
+        .collect();
     train_indices
         .iter()
         .copied()
-        .filter(|&i| intervals.get(i).is_some_and(|candidate| !tests.iter().any(|test| candidate.overlaps(*test))))
+        .filter(|&i| {
+            intervals
+                .get(i)
+                .is_some_and(|candidate| !tests.iter().any(|test| candidate.overlaps(*test)))
+        })
         .collect()
 }
 
 /// Deterministic block-bootstrap sample indices using a tiny LCG.
 pub fn block_bootstrap_indices(n: usize, block: usize, seed: u64) -> Vec<usize> {
-    if n == 0 || block == 0 { return Vec::new(); }
+    if n == 0 || block == 0 {
+        return Vec::new();
+    }
     let mut state = seed.max(1);
     let mut out = Vec::with_capacity(n);
     while out.len() < n {
-        state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        state = state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         let start = (state as usize) % n;
         for offset in 0..block {
-            if out.len() == n { break; }
+            if out.len() == n {
+                break;
+            }
             out.push((start + offset) % n);
         }
     }
@@ -90,7 +103,9 @@ pub fn permutation_indices(n: usize, seed: u64) -> Vec<usize> {
     let mut indices: Vec<usize> = (0..n).collect();
     let mut state = seed.max(1);
     for i in (1..n).rev() {
-        state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        state = state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         let j = (state as usize) % (i + 1);
         indices.swap(i, j);
     }
@@ -110,7 +125,14 @@ mod tests {
 
     #[test]
     fn interval_purge_removes_overlap() {
-        let intervals = [LabelInterval { start: 0, end: 5 }, LabelInterval { start: 6, end: 8 }, LabelInterval { start: 4, end: 7 }];
-        assert_eq!(purge_overlapping_intervals(&intervals, &[0,1], &[2]), Vec::<usize>::new());
+        let intervals = [
+            LabelInterval { start: 0, end: 5 },
+            LabelInterval { start: 6, end: 8 },
+            LabelInterval { start: 4, end: 7 },
+        ];
+        assert_eq!(
+            purge_overlapping_intervals(&intervals, &[0, 1], &[2]),
+            Vec::<usize>::new()
+        );
     }
 }

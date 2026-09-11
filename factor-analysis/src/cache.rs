@@ -22,10 +22,16 @@ pub struct ResearchCache<V> {
 
 impl<V> ResearchCache<V> {
     pub fn new(capacity: usize) -> Self {
-        Self { capacity: capacity.max(1), values: BTreeMap::new(), order: VecDeque::new() }
+        Self {
+            capacity: capacity.max(1),
+            values: BTreeMap::new(),
+            order: VecDeque::new(),
+        }
     }
 
-    pub fn get(&self, key: &ResearchArtifactKey) -> Option<&V> { self.values.get(key) }
+    pub fn get(&self, key: &ResearchArtifactKey) -> Option<&V> {
+        self.values.get(key)
+    }
 
     pub fn insert(&mut self, key: ResearchArtifactKey, value: V) {
         if self.values.contains_key(&key) {
@@ -33,8 +39,11 @@ impl<V> ResearchCache<V> {
             return;
         }
         while self.values.len() >= self.capacity {
-            if let Some(oldest) = self.order.pop_front() { self.values.remove(&oldest); }
-            else { break; }
+            if let Some(oldest) = self.order.pop_front() {
+                self.values.remove(&oldest);
+            } else {
+                break;
+            }
         }
         self.order.push_back(key);
         self.values.insert(key, value);
@@ -45,6 +54,10 @@ impl<V> ResearchCache<V> {
         self.order.retain(|key| key.data_revision != revision);
     }
 
-    pub fn len(&self) -> usize { self.values.len() }
-    pub fn is_empty(&self) -> bool { self.values.is_empty() }
+    pub fn len(&self) -> usize {
+        self.values.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
 }

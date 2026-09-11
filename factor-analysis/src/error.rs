@@ -8,7 +8,11 @@ pub enum ResearchError {
     #[error("missing group column: {0}")]
     MissingGroup(String),
     #[error("length mismatch for {name}: expected {expected}, got {actual}")]
-    LengthMismatch { name: String, expected: usize, actual: usize },
+    LengthMismatch {
+        name: String,
+        expected: usize,
+        actual: usize,
+    },
     #[error("invalid research configuration: {0}")]
     InvalidConfig(String),
     #[error("research computation failed: {0}")]

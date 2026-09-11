@@ -77,7 +77,13 @@ pub fn percentile_rank(values: &[f64]) -> Vec<f64> {
     let denominator = (finite_count - 1) as f64;
     ranks(values, TiePolicy::Average)
         .into_iter()
-        .map(|rank| if rank.is_finite() { (rank - 1.0) / denominator } else { f64::NAN })
+        .map(|rank| {
+            if rank.is_finite() {
+                (rank - 1.0) / denominator
+            } else {
+                f64::NAN
+            }
+        })
         .collect()
 }
 

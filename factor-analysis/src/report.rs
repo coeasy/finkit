@@ -7,8 +7,8 @@ use crate::data::ResearchFrame;
 use crate::error::ResearchResult;
 use crate::orchestration::StudyProvenance;
 use crate::prepare::{
-    compute_forward_returns, data_quality, quantize_factor, DataQualityReport,
-    ForwardReturnConfig, QuantizeConfig,
+    compute_forward_returns, data_quality, quantize_factor, DataQualityReport, ForwardReturnConfig,
+    QuantizeConfig,
 };
 use finkit::returns::ReturnKind;
 use serde::{Deserialize, Serialize};
@@ -98,13 +98,26 @@ impl<'a> FactorStudy<'a> {
         }
     }
 
-    pub fn quantize_config(mut self, config: QuantizeConfig) -> Self { self.quantize = config; self }
-    pub fn weight_config(mut self, config: WeightConfig) -> Self { self.weights = config; self }
-    pub fn mode(mut self, mode: AnalysisMode) -> Self { self.mode = mode; self }
-    pub fn provenance(mut self, provenance: StudyProvenance) -> Self { self.provenance = provenance; self }
+    pub fn quantize_config(mut self, config: QuantizeConfig) -> Self {
+        self.quantize = config;
+        self
+    }
+    pub fn weight_config(mut self, config: WeightConfig) -> Self {
+        self.weights = config;
+        self
+    }
+    pub fn mode(mut self, mode: AnalysisMode) -> Self {
+        self.mode = mode;
+        self
+    }
+    pub fn provenance(mut self, provenance: StudyProvenance) -> Self {
+        self.provenance = provenance;
+        self
+    }
 
     pub fn full_report(&self) -> ResearchResult<FactorStudyReport> {
-        let forward_config = ForwardReturnConfig::new(self.periods.clone(), ReturnKind::Arithmetic)?;
+        let forward_config =
+            ForwardReturnConfig::new(self.periods.clone(), ReturnKind::Arithmetic)?;
         let forward = compute_forward_returns(self.frame, &self.price_column, &forward_config)?;
         let quantiles = quantize_factor(self.frame, &self.factor_column, &self.quantize)?;
         let weights = factor_weights(self.frame, &self.factor_column, &self.weights)?;
@@ -129,7 +142,10 @@ impl<'a> FactorStudy<'a> {
                 alpha_beta,
                 mean_return_by_quantile: quantile_returns,
             },
-            information: InformationReport { ic_by_horizon: ic, mean_ic },
+            information: InformationReport {
+                ic_by_horizon: ic,
+                mean_ic,
+            },
             turnover: TurnoverReport {
                 bottom_quantile_turnover: bottom_turnover,
                 top_quantile_turnover: top_turnover,
@@ -147,13 +163,43 @@ mod tests {
     #[test]
     fn full_report_connects_core_research_chain() {
         let index = PanelIndex::new(
-            vec![1,1,1,2,2,2,3,3,3],
-            vec![AssetId(1),AssetId(2),AssetId(3),AssetId(1),AssetId(2),AssetId(3),AssetId(1),AssetId(2),AssetId(3)],
-        ).unwrap();
+            vec![1, 1, 1, 2, 2, 2, 3, 3, 3],
+            vec![
+                AssetId(1),
+                AssetId(2),
+                AssetId(3),
+                AssetId(1),
+                AssetId(2),
+                AssetId(3),
+                AssetId(1),
+                AssetId(2),
+                AssetId(3),
+            ],
+        )
+        .unwrap();
         let mut frame = ResearchFrame::new(index);
-        frame.add_numeric("factor","factor",vec![1.0,2.0,3.0,1.0,2.0,3.0,1.0,2.0,3.0]).unwrap();
-        frame.add_numeric("price","market",vec![10.0,10.0,10.0,11.0,12.0,13.0,12.0,14.0,16.0]).unwrap();
-        let report = FactorStudy::new(&frame,"factor","price",vec![1]).quantize_config(QuantizeConfig { quantiles: 3, by_group: None, zero_aware: false }).full_report().unwrap();
+        frame
+            .add_numeric(
+                "factor",
+                "factor",
+                vec![1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 1.0, 2.0, 3.0],
+            )
+            .unwrap();
+        frame
+            .add_numeric(
+                "price",
+                "market",
+                vec![10.0, 10.0, 10.0, 11.0, 12.0, 13.0, 12.0, 14.0, 16.0],
+            )
+            .unwrap();
+        let report = FactorStudy::new(&frame, "factor", "price", vec![1])
+            .quantize_config(QuantizeConfig {
+                quantiles: 3,
+                by_group: None,
+                zero_aware: false,
+            })
+            .full_report()
+            .unwrap();
         assert_eq!(report.periods, vec![1]);
         assert!(report.information.mean_ic[&1] > 0.9);
     }

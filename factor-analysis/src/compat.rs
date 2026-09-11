@@ -32,7 +32,11 @@ pub mod alphalens {
         analysis::factor_weights(
             factor_data,
             factor_column,
-            &WeightConfig { demeaned, group_adjust, equal_weight },
+            &WeightConfig {
+                demeaned,
+                group_adjust,
+                equal_weight,
+            },
         )
     }
 

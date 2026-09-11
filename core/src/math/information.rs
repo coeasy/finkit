@@ -78,7 +78,11 @@ pub fn pairwise_pearson(x: &[f64], y: &[f64]) -> f64 {
         vy += dy * dy;
     }
     let denom = (vx * vy).sqrt();
-    if denom <= f64::EPSILON { 0.0 } else { cov / denom }
+    if denom <= f64::EPSILON {
+        0.0
+    } else {
+        cov / denom
+    }
 }
 
 #[cfg(test)]

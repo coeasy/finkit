@@ -63,7 +63,11 @@ pub struct QuantizeConfig {
 
 impl Default for QuantizeConfig {
     fn default() -> Self {
-        Self { quantiles: 5, by_group: None, zero_aware: false }
+        Self {
+            quantiles: 5,
+            by_group: None,
+            zero_aware: false,
+        }
     }
 }
 
@@ -89,7 +93,11 @@ fn assign_zero_aware(rows: &[(usize, f64)], quantiles: u16, out: &mut [u16]) {
     let upper = quantiles - lower;
     let negative: Vec<(usize, f64)> = rows.iter().copied().filter(|(_, v)| *v < 0.0).collect();
     let positive: Vec<(usize, f64)> = rows.iter().copied().filter(|(_, v)| *v > 0.0).collect();
-    let zero: Vec<usize> = rows.iter().filter(|(_, v)| *v == 0.0).map(|(i, _)| *i).collect();
+    let zero: Vec<usize> = rows
+        .iter()
+        .filter(|(_, v)| *v == 0.0)
+        .map(|(i, _)| *i)
+        .collect();
     assign_bucket_rows(&negative, lower, out);
     if !positive.is_empty() {
         let mut tmp = vec![0u16; out.len()];
@@ -113,7 +121,9 @@ pub fn quantize_factor(
     config: &QuantizeConfig,
 ) -> ResearchResult<Vec<u16>> {
     if config.quantiles == 0 {
-        return Err(ResearchError::InvalidConfig("quantiles must be > 0".to_string()));
+        return Err(ResearchError::InvalidConfig(
+            "quantiles must be > 0".to_string(),
+        ));
     }
     let factor = frame.column(factor_column)?;
     let group_values = match &config.by_group {
@@ -122,25 +132,38 @@ pub fn quantize_factor(
     };
     let mut out = vec![0u16; factor.len()];
     for segment in 0..frame.index().date_segments().len() {
-        let range = frame.index().date_segments().range(segment).expect("valid date segment");
+        let range = frame
+            .index()
+            .date_segments()
+            .range(segment)
+            .expect("valid date segment");
         if let Some(groups) = group_values {
             let mut grouped: BTreeMap<GroupId, Vec<(usize, f64)>> = BTreeMap::new();
             for row in range {
                 if factor[row].is_finite() {
-                    grouped.entry(groups[row]).or_default().push((row, factor[row]));
+                    grouped
+                        .entry(groups[row])
+                        .or_default()
+                        .push((row, factor[row]));
                 }
             }
             for rows in grouped.values() {
-                if config.zero_aware { assign_zero_aware(rows, config.quantiles, &mut out); }
-                else { assign_bucket_rows(rows, config.quantiles, &mut out); }
+                if config.zero_aware {
+                    assign_zero_aware(rows, config.quantiles, &mut out);
+                } else {
+                    assign_bucket_rows(rows, config.quantiles, &mut out);
+                }
             }
         } else {
             let rows: Vec<(usize, f64)> = range
                 .filter(|&row| factor[row].is_finite())
                 .map(|row| (row, factor[row]))
                 .collect();
-            if config.zero_aware { assign_zero_aware(&rows, config.quantiles, &mut out); }
-            else { assign_bucket_rows(&rows, config.quantiles, &mut out); }
+            if config.zero_aware {
+                assign_zero_aware(&rows, config.quantiles, &mut out);
+            } else {
+                assign_bucket_rows(&rows, config.quantiles, &mut out);
+            }
         }
     }
     Ok(out)
@@ -159,15 +182,25 @@ pub struct DataQualityReport {
     pub total_loss_ratio: f64,
 }
 
-pub fn data_quality(frame: &ResearchFrame, factor_column: &str) -> ResearchResult<DataQualityReport> {
+pub fn data_quality(
+    frame: &ResearchFrame,
+    factor_column: &str,
+) -> ResearchResult<DataQualityReport> {
     let factor = frame.column(factor_column)?;
     let input_rows = factor.len();
     let finite_factor_rows = factor.iter().filter(|v| v.is_finite()).count();
     let mut duplicate_keys = 0usize;
     let mut previous: Option<(i64, AssetId)> = None;
-    for (&ts, &asset) in frame.index().timestamps().iter().zip(frame.index().assets()) {
+    for (&ts, &asset) in frame
+        .index()
+        .timestamps()
+        .iter()
+        .zip(frame.index().assets())
+    {
         let key = (ts, asset);
-        if previous == Some(key) { duplicate_keys += 1; }
+        if previous == Some(key) {
+            duplicate_keys += 1;
+        }
         previous = Some(key);
     }
     let sizes: Vec<usize> = (0..frame.index().date_segments().len())
@@ -184,7 +217,11 @@ pub fn data_quality(frame: &ResearchFrame, factor_column: &str) -> ResearchResul
         date_count: sizes.len(),
         min_cross_section: sizes.iter().copied().min().unwrap_or(0),
         max_cross_section: sizes.iter().copied().max().unwrap_or(0),
-        total_loss_ratio: if input_rows == 0 { 0.0 } else { 1.0 - finite_factor_rows as f64 / input_rows as f64 },
+        total_loss_ratio: if input_rows == 0 {
+            0.0
+        } else {
+            1.0 - finite_factor_rows as f64 / input_rows as f64
+        },
     })
 }
 
@@ -196,11 +233,23 @@ mod tests {
     fn sample_frame() -> ResearchFrame {
         let index = PanelIndex::new(
             vec![1, 1, 2, 2, 3, 3],
-            vec![AssetId(1), AssetId(2), AssetId(1), AssetId(2), AssetId(1), AssetId(2)],
-        ).unwrap();
+            vec![
+                AssetId(1),
+                AssetId(2),
+                AssetId(1),
+                AssetId(2),
+                AssetId(1),
+                AssetId(2),
+            ],
+        )
+        .unwrap();
         let mut frame = ResearchFrame::new(index);
-        frame.add_numeric("price", "market", vec![10.0, 20.0, 11.0, 18.0, 12.0, 21.0]).unwrap();
-        frame.add_numeric("factor", "factor", vec![1.0, -1.0, 2.0, -2.0, 3.0, -3.0]).unwrap();
+        frame
+            .add_numeric("price", "market", vec![10.0, 20.0, 11.0, 18.0, 12.0, 21.0])
+            .unwrap();
+        frame
+            .add_numeric("factor", "factor", vec![1.0, -1.0, 2.0, -2.0, 3.0, -3.0])
+            .unwrap();
         frame
     }
 
@@ -216,7 +265,16 @@ mod tests {
     #[test]
     fn quantiles_are_date_local() {
         let frame = sample_frame();
-        let q = quantize_factor(&frame, "factor", &QuantizeConfig { quantiles: 2, by_group: None, zero_aware: false }).unwrap();
+        let q = quantize_factor(
+            &frame,
+            "factor",
+            &QuantizeConfig {
+                quantiles: 2,
+                by_group: None,
+                zero_aware: false,
+            },
+        )
+        .unwrap();
         assert_eq!(&q[..2], &[2, 1]);
     }
 }

@@ -35,17 +35,30 @@ impl PanelIndex {
             ));
         }
         let date_segments = SegmentLayout::from_sorted_keys(&timestamps);
-        Ok(Self { timestamps, assets, date_segments })
+        Ok(Self {
+            timestamps,
+            assets,
+            date_segments,
+        })
     }
 
-    pub fn len(&self) -> usize { self.timestamps.len() }
-    pub fn is_empty(&self) -> bool { self.timestamps.is_empty() }
-    pub fn timestamps(&self) -> &[i64] { &self.timestamps }
-    pub fn assets(&self) -> &[AssetId] { &self.assets }
-    pub fn date_segments(&self) -> &SegmentLayout { &self.date_segments }
+    pub fn len(&self) -> usize {
+        self.timestamps.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.timestamps.is_empty()
+    }
+    pub fn timestamps(&self) -> &[i64] {
+        &self.timestamps
+    }
+    pub fn assets(&self) -> &[AssetId] {
+        &self.assets
+    }
+    pub fn date_segments(&self) -> &SegmentLayout {
+        &self.date_segments
+    }
     pub fn dates(&self) -> Vec<i64> {
-        self.date_segments
-            .map(|range| self.timestamps[range.start])
+        self.date_segments.map(|range| self.timestamps[range.start])
     }
 }
 
@@ -67,8 +80,12 @@ impl ResearchFrame {
         }
     }
 
-    pub fn index(&self) -> &PanelIndex { &self.index }
-    pub fn numeric(&self) -> &FeatureMatrix { &self.numeric }
+    pub fn index(&self) -> &PanelIndex {
+        &self.index
+    }
+    pub fn numeric(&self) -> &FeatureMatrix {
+        &self.numeric
+    }
 
     pub fn add_numeric(
         &mut self,
@@ -83,11 +100,16 @@ impl ResearchFrame {
                 actual: values.len(),
             });
         }
-        self.numeric.add_column(Feature::new(name, category, 0), values);
+        self.numeric
+            .add_column(Feature::new(name, category, 0), values);
         Ok(())
     }
 
-    pub fn add_group(&mut self, name: impl Into<String>, values: Vec<GroupId>) -> ResearchResult<()> {
+    pub fn add_group(
+        &mut self,
+        name: impl Into<String>,
+        values: Vec<GroupId>,
+    ) -> ResearchResult<()> {
         let name = name.into();
         if values.len() != self.index.len() {
             return Err(ResearchError::LengthMismatch {
@@ -113,7 +135,9 @@ impl ResearchFrame {
             .ok_or_else(|| ResearchError::MissingGroup(name.to_string()))
     }
 
-    pub fn has_group(&self, name: &str) -> bool { self.groups.contains_key(name) }
+    pub fn has_group(&self, name: &str) -> bool {
+        self.groups.contains_key(name)
+    }
 }
 
 /// Borrowed view of one factor column aligned to a research frame.
@@ -125,7 +149,10 @@ pub struct FactorPanelView<'a> {
 
 impl<'a> FactorPanelView<'a> {
     pub fn from_frame(frame: &'a ResearchFrame, factor: &str) -> ResearchResult<Self> {
-        Ok(Self { index: frame.index(), factor: frame.column(factor)? })
+        Ok(Self {
+            index: frame.index(),
+            factor: frame.column(factor)?,
+        })
     }
 }
 
@@ -135,12 +162,12 @@ mod tests {
 
     #[test]
     fn frame_reuses_feature_matrix_and_panel_segments() {
-        let index = PanelIndex::new(
-            vec![1, 1, 2],
-            vec![AssetId(1), AssetId(2), AssetId(1)],
-        ).unwrap();
+        let index =
+            PanelIndex::new(vec![1, 1, 2], vec![AssetId(1), AssetId(2), AssetId(1)]).unwrap();
         let mut frame = ResearchFrame::new(index);
-        frame.add_numeric("factor", "factor", vec![1.0, 2.0, 3.0]).unwrap();
+        frame
+            .add_numeric("factor", "factor", vec![1.0, 2.0, 3.0])
+            .unwrap();
         assert_eq!(frame.numeric().cols(), 1);
         assert_eq!(frame.index().date_segments().offsets(), &[0, 2, 3]);
     }

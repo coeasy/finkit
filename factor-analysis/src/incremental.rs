@@ -32,7 +32,12 @@ impl IncrementalForwardReturnEngine {
         periods.retain(|period| *period > 0);
         periods.sort_unstable();
         periods.dedup();
-        Self { periods, kind, next_date_index: 0, history: BTreeMap::new() }
+        Self {
+            periods,
+            kind,
+            next_date_index: 0,
+            history: BTreeMap::new(),
+        }
     }
 
     /// Append one complete/partial cross-sectional session. Only fully matured horizons are emitted.
@@ -55,15 +60,22 @@ impl IncrementalForwardReturnEngine {
                 }
             }
             queue.push_back(PendingPrice { date_index, price });
-            while queue.front().is_some_and(|item| date_index.saturating_sub(item.date_index) >= max_period) {
+            while queue
+                .front()
+                .is_some_and(|item| date_index.saturating_sub(item.date_index) >= max_period)
+            {
                 queue.pop_front();
             }
         }
         matured
     }
 
-    pub fn pending_assets(&self) -> usize { self.history.len() }
-    pub fn date_count(&self) -> usize { self.next_date_index }
+    pub fn pending_assets(&self) -> usize {
+        self.history.len()
+    }
+    pub fn date_count(&self) -> usize {
+        self.next_date_index
+    }
 }
 
 #[cfg(test)]
