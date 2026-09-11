@@ -41,13 +41,15 @@ DISTINCT_SEMANTIC_OWNERS = {
 
 # (path, facade function) -> token proving the reviewed delegate target.
 # Facades may adapt output/error/container types, but may not implement their
-# own algorithmic traversal.
+# own algorithmic traversal. Binding facades may delegate through another
+# registered facade; the complete chain is therefore mechanically verified.
 DELEGATING_FACADES = {
     ("core/src/features/labels.rs", "forward_return"): "core_forward_return",
     ("core/src/features/labels.rs", "forward_return_arithmetic"): "core_forward_return",
     ("core/src/features/rolling_stats.rs", "linear_regression_slope"): "simple_slope",
     ("core/src/features/importance.rs", "mutual_info_discrete"): "mutual_information_discrete",
     ("core/src/features/importance.rs", "mutual_info_continuous"): "mutual_information_continuous",
+    ("ffi/python-binding/src/features.rs", "forward_return"): "features::forward_return",
     ("wasm/src/lib.rs", "sortino_ratio"): "indicators::sortino_ratio",
     ("wasm/src/lib.rs", "max_drawdown"): "indicators::max_drawdown",
 }
