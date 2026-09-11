@@ -1,0 +1,46 @@
+name: Research multilingual integrate 2
+
+on:
+  push:
+    branches:
+      - feat/factor-research-architecture
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feat/factor-research-architecture
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Apply multilingual bridges
+        run: python scripts/research_multilang_integrate.py
+      - name: Refresh deterministic lockfile
+        run: cargo generate-lockfile
+      - name: Format
+        run: cargo fmt --all --check
+      - name: Research unit tests
+        run: cargo test -p finkit-factor-analysis --locked
+      - name: Workspace compile gate
+        run: cargo check --workspace --all-targets --locked
+      - name: Java source gate
+        run: mvn -q -f ffi/java-binding/pom.xml -DskipTests package
+      - name: Dotnet source gate
+        run: dotnet build ffi/dotnet-binding/src/Finkit/Finkit.csproj
+      - name: Commit only after all gates pass
+        run: |
+          rm .github/workflows/research-multilang-integrate.yml
+          rm .github/workflows/research-multilang-integrate2.yml
+          rm scripts/research_multilang_integrate.py
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "feat: integrate multilingual factor research API"
+          git push origin HEAD:feat/factor-research-architecture
