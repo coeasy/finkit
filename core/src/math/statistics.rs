@@ -1,4 +1,5 @@
 use crate::error::{Result, TaError};
+use crate::math::rank::fractional_ranks;
 use ndarray::Array1;
 
 /// Calculate arithmetic mean
@@ -564,8 +565,8 @@ pub fn kendall_tau(x: &[f64], y: &[f64]) -> Result<f64> {
 
 /// Compute Spearman rank correlation coefficient between two series.
 ///
-/// Assigns fractional ranks to each series, then computes Pearson correlation
-/// on the ranks.
+/// Assigns canonical fractional ranks to each series, then computes Pearson
+/// correlation on the ranks.
 ///
 /// # Arguments
 /// * `x` - First data series
@@ -612,32 +613,6 @@ pub fn spearman_rank(x: &[f64], y: &[f64]) -> Result<f64> {
         return Ok(0.0);
     }
     Ok(cov / denom)
-}
-
-/// Assign fractional ranks to data (handles ties by averaging ranks).
-fn fractional_ranks(data: &[f64]) -> Vec<f64> {
-    let n = data.len();
-    let mut indices: Vec<usize> = (0..n).collect();
-    indices.sort_by(|&a, &b| {
-        data[a]
-            .partial_cmp(&data[b])
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-
-    let mut ranks = vec![0.0; n];
-    let mut i = 0;
-    while i < n {
-        let mut j = i;
-        while j < n - 1 && (data[indices[j + 1]] - data[indices[j]]).abs() < 1e-15 {
-            j += 1;
-        }
-        let avg_rank = (i + j) as f64 / 2.0 + 1.0;
-        for k in i..=j {
-            ranks[indices[k]] = avg_rank;
-        }
-        i = j + 1;
-    }
-    ranks
 }
 
 #[cfg(test)]
