@@ -22,7 +22,12 @@ pub fn evaluate_backtest(
     config: PerformanceConfig,
 ) -> BacktestEvaluation {
     let equity = result.equity_curve.as_slice().unwrap_or(&[]);
-    let returns = one_period_returns(equity, ReturnKind::Arithmetic);
+    let mut returns = one_period_returns(equity, ReturnKind::Arithmetic);
+    // The legacy backtest defines the pre-first-bar strategy return as zero.
+    // Preserve that alignment so old and rich metrics have an exact SSOT contract.
+    if let Some(first) = returns.first_mut() {
+        *first = 0.0;
+    }
     let trade_returns: Vec<f64> = result.trades.iter().map(|trade| trade.return_pct).collect();
     let holding_periods: Vec<usize> = result
         .trades
@@ -60,5 +65,9 @@ mod tests {
         assert!(evaluation.performance.returns.total_return > 0.0);
         assert_eq!(evaluation.trades.trades, result.n_trades);
         assert!(evaluation.performance.drawdown.max_drawdown >= 0.0);
+        assert!((evaluation.performance.returns.total_return - result.total_return).abs() < 1e-12);
+        assert!((evaluation.performance.risk.sharpe_ratio - result.sharpe).abs() < 1e-12);
+        assert!((evaluation.performance.risk.sortino_ratio - result.sortino).abs() < 1e-12);
+        assert!((evaluation.performance.drawdown.max_drawdown - result.max_drawdown).abs() < 1e-12);
     }
 }
