@@ -1,23 +1,12 @@
-use crate::analysis::{
-    factor_alpha_beta, factor_returns, factor_weights, information_coefficient,
-    mean_information_coefficient, mean_return_by_quantile, quantile_turnover, rank_autocorrelation,
-    AlphaBeta, WeightConfig,
-};
+use crate::analysis::{AlphaBeta, WeightConfig};
 use crate::data::ResearchFrame;
-use crate::error::{ResearchError, ResearchResult};
-use crate::factor_metrics::{
-    quantile_diagnostics, summarize_ic, IcStatistics, QuantileDiagnostics,
-};
+use crate::error::ResearchResult;
+use crate::executor::{ResearchExecutionRequest, ResearchExecutor};
+use crate::factor_metrics::{IcStatistics, QuantileDiagnostics};
 use crate::orchestration::StudyProvenance;
 use crate::performance::EvaluationConfig;
-use crate::portfolio_performance::{
-    evaluate_factor_holding_periods, FactorPortfolioPerformanceReport,
-};
-use crate::prepare::{
-    compute_forward_returns, data_quality, quantize_factor, DataQualityReport, ForwardReturnConfig,
-    QuantizeConfig,
-};
-use finkit::returns::ReturnKind;
+use crate::portfolio_performance::FactorPortfolioPerformanceReport;
+use crate::prepare::{DataQualityReport, QuantizeConfig};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -82,7 +71,10 @@ impl FactorStudyReport {
     }
 }
 
-/// End-to-end factor research study.
+/// End-to-end factor research study compatibility facade.
+///
+/// Configuration remains source-compatible, while stage orchestration is owned
+/// exclusively by `ResearchPlan` + `ResearchExecutor`.
 #[derive(Debug)]
 pub struct FactorStudy<'a> {
     frame: &'a ResearchFrame,
@@ -153,84 +145,25 @@ impl<'a> FactorStudy<'a> {
         self
     }
 
+    /// Execute the canonical standard research plan and return its report.
+    ///
+    /// This method is retained as the public compatibility facade; it no longer
+    /// owns a second hand-written research workflow.
     pub fn full_report(&self) -> ResearchResult<FactorStudyReport> {
-        if self.periods.is_empty() || self.periods.iter().any(|&period| period == 0) {
-            return Err(ResearchError::InvalidConfig(
-                "factor study periods must contain at least one positive horizon".to_string(),
-            ));
-        }
-
-        // Performance for an H-day factor must use actual daily P&L of overlapping
-        // H-day cohorts. Compute the one-day asset return once even when the caller
-        // only requested longer research horizons.
-        let mut calculation_periods = self.periods.clone();
-        if !calculation_periods.contains(&1) {
-            calculation_periods.push(1);
-        }
-        calculation_periods.sort_unstable();
-        calculation_periods.dedup();
-        let forward_config = ForwardReturnConfig::new(calculation_periods, ReturnKind::Arithmetic)?;
-        let mut forward = compute_forward_returns(self.frame, &self.price_column, &forward_config)?;
-        let daily_asset_returns = forward.get(&1).cloned().unwrap_or_default();
-        if !self.periods.contains(&1) {
-            forward.remove(&1);
-        }
-
-        let quantiles = quantize_factor(self.frame, &self.factor_column, &self.quantize)?;
-        let weights = factor_weights(self.frame, &self.factor_column, &self.weights)?;
-        let factor_ret = factor_returns(self.frame, &weights, &forward)?;
-        let ic = information_coefficient(self.frame, &self.factor_column, &forward)?;
-        let mean_ic = mean_information_coefficient(&ic);
-        let ic_statistics = ic
-            .iter()
-            .map(|(&period, values)| (period, summarize_ic(values, period.saturating_sub(1))))
-            .collect();
-        let alpha_beta = factor_alpha_beta(self.frame, &factor_ret, &forward);
-        let quantile_returns = mean_return_by_quantile(&quantiles, &forward);
-        let quantile_diagnostics = quantile_diagnostics(&quantile_returns);
-        let bottom_turnover = quantile_turnover(self.frame, &quantiles, 1, 1)?;
-        let top_turnover = quantile_turnover(self.frame, &quantiles, self.quantize.quantiles, 1)?;
-        let rank_auto = rank_autocorrelation(self.frame, &self.factor_column, 1)?;
-        let performance = evaluate_factor_holding_periods(
-            self.frame,
-            &weights,
-            &daily_asset_returns,
-            &self.periods,
-            self.execution_lag,
-            self.evaluation,
-        )?;
-        let cumulative = performance
-            .by_holding_period
-            .iter()
-            .map(|(&period, result)| (period, result.gross_cumulative_wealth.clone()))
-            .collect();
-
-        Ok(FactorStudyReport {
-            mode: self.mode,
-            provenance: self.provenance.clone(),
-            data_quality: data_quality(self.frame, &self.factor_column)?,
-            quantiles: self.quantize.quantiles,
-            periods: self.periods.clone(),
+        ResearchExecutor::execute_standard(ResearchExecutionRequest {
+            frame: self.frame,
+            factor_column: &self.factor_column,
+            price_column: &self.price_column,
+            periods: &self.periods,
+            quantize: &self.quantize,
+            weights: &self.weights,
+            evaluation: self.evaluation,
             execution_lag: self.execution_lag,
-            returns: ReturnsReport {
-                factor_returns: factor_ret,
-                cumulative_returns: cumulative,
-                alpha_beta,
-                mean_return_by_quantile: quantile_returns,
-                quantile_diagnostics,
-            },
-            information: InformationReport {
-                ic_by_horizon: ic,
-                mean_ic,
-                statistics: ic_statistics,
-            },
-            turnover: TurnoverReport {
-                bottom_quantile_turnover: bottom_turnover,
-                top_quantile_turnover: top_turnover,
-                rank_autocorrelation: rank_auto,
-            },
-            performance,
+            mode: self.mode,
+            provenance: &self.provenance,
+            data_revision: 0,
         })
+        .map(|result| result.report)
     }
 }
 
