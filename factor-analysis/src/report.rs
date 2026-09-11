@@ -5,6 +5,7 @@ use crate::analysis::{
 };
 use crate::data::ResearchFrame;
 use crate::error::ResearchResult;
+use crate::factor_metrics::{quantile_diagnostics, summarize_ic, IcStatistics, QuantileDiagnostics};
 use crate::orchestration::StudyProvenance;
 use crate::performance::{
     evaluate_horizons, evaluate_portfolio_by_date, universe_returns, EvaluationConfig,
@@ -32,6 +33,7 @@ pub struct ReturnsReport {
     pub cumulative_returns: BTreeMap<usize, Vec<f64>>,
     pub alpha_beta: BTreeMap<usize, AlphaBeta>,
     pub mean_return_by_quantile: BTreeMap<u16, BTreeMap<usize, f64>>,
+    pub quantile_diagnostics: QuantileDiagnostics,
 }
 
 /// Information-coefficient section.
@@ -39,6 +41,8 @@ pub struct ReturnsReport {
 pub struct InformationReport {
     pub ic_by_horizon: BTreeMap<usize, Vec<f64>>,
     pub mean_ic: BTreeMap<usize, f64>,
+    /// IC dispersion, ICIR, naive t-stat, HAC/Newey-West t-stat and sign ratios.
+    pub statistics: BTreeMap<usize, IcStatistics>,
 }
 
 /// Turnover and rank-persistence section.
@@ -141,9 +145,14 @@ impl<'a> FactorStudy<'a> {
         let factor_ret = factor_returns(self.frame, &weights, &forward)?;
         let ic = information_coefficient(self.frame, &self.factor_column, &forward)?;
         let mean_ic = mean_information_coefficient(&ic);
+        let ic_statistics = ic
+            .iter()
+            .map(|(&period, values)| (period, summarize_ic(values, period.saturating_sub(1))))
+            .collect();
         let cumulative = cumulative_factor_returns(&factor_ret);
         let alpha_beta = factor_alpha_beta(self.frame, &factor_ret, &forward);
         let quantile_returns = mean_return_by_quantile(&quantiles, &forward);
+        let quantile_diagnostics = quantile_diagnostics(&quantile_returns);
         let bottom_turnover = quantile_turnover(self.frame, &quantiles, 1, 1)?;
         let top_turnover = quantile_turnover(self.frame, &quantiles, self.quantize.quantiles, 1)?;
         let rank_auto = rank_autocorrelation(self.frame, &self.factor_column, 1)?;
@@ -164,10 +173,12 @@ impl<'a> FactorStudy<'a> {
                 cumulative_returns: cumulative,
                 alpha_beta,
                 mean_return_by_quantile: quantile_returns,
+                quantile_diagnostics,
             },
             information: InformationReport {
                 ic_by_horizon: ic,
                 mean_ic,
+                statistics: ic_statistics,
             },
             turnover: TurnoverReport {
                 bottom_quantile_turnover: bottom_turnover,
@@ -226,6 +237,8 @@ mod tests {
             .unwrap();
         assert_eq!(report.periods, vec![1]);
         assert!(report.information.mean_ic[&1] > 0.9);
+        assert!(report.information.statistics[&1].positive_ratio > 0.0);
+        assert!(report.returns.quantile_diagnostics.spread_by_horizon.contains_key(&1));
         let performance = &report.performance.by_horizon[&1];
         assert!(performance.returns.observations > 0);
         assert!(performance.benchmark.is_some());
