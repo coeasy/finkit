@@ -345,8 +345,8 @@ mod tests {
             max_abs_weight: 0.2,
             long_only: false,
         };
-        let weights = target_weights(&frame, "factor", &WeightConfig::default(), &constraints)
-            .unwrap();
+        let weights =
+            target_weights(&frame, "factor", &WeightConfig::default(), &constraints).unwrap();
         let gross: f64 = weights.iter().map(|weight| weight.abs()).sum();
         assert!((gross - 0.8).abs() < 1e-12);
         assert!(weights.iter().all(|weight| weight.abs() <= 0.2 + 1e-12));
