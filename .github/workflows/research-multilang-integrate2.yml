@@ -23,6 +23,8 @@ jobs:
         run: python scripts/research_multilang_integrate.py
       - name: Apply generic quant-evaluation multilingual bridges
         run: python scripts/research_quant_eval_integrate.py
+      - name: Apply evaluation semantic fixups
+        run: python scripts/research_eval_fixups.py
       - name: Refresh deterministic lockfile
         run: cargo generate-lockfile
       - name: Format generated Rust
@@ -54,9 +56,13 @@ jobs:
           EOF
           c++ -std=c++17 -Wall -Wextra -Werror -Iffi/c-binding/include -fsyntax-only /tmp/finkit_research_cpp.cpp
       - name: Python source registration gate
-        run: grep -q 'research_api::register_research_api' ffi/python-binding/src/lib.rs
+        run: |
+          grep -q 'research_api::register_research_api' ffi/python-binding/src/lib.rs
+          grep -q 'fn quant_evaluation_json' ffi/python-binding/src/research_api.rs
       - name: Node research export gate
         run: grep -q 'pub fn quant_evaluation_json' ffi/node-binding/src/lib.rs
+      - name: Android research export gate
+        run: grep -q 'quantEvaluationJson' ffi/android-binding/android/src/main/java/com/finkit/indicators/Finkit.java
       - name: Go source format gate
         run: |
           if command -v gofmt >/dev/null 2>&1; then
@@ -65,7 +71,7 @@ jobs:
       - name: Swift source parse gate
         run: |
           if command -v swiftc >/dev/null 2>&1; then
-            find ffi/ios-binding -name 'FactorResearch.swift' -o -name 'QuantEvaluation.swift' | xargs -r swiftc -parse
+            find ffi/ios-binding \( -name 'FactorResearch.swift' -o -name 'QuantEvaluation.swift' \) -print0 | xargs -0 -r swiftc -parse
           fi
       - name: Commit only after all gates pass
         run: |
@@ -73,6 +79,7 @@ jobs:
           rm .github/workflows/research-multilang-integrate2.yml
           rm scripts/research_multilang_integrate.py
           rm scripts/research_quant_eval_integrate.py
+          rm scripts/research_eval_fixups.py
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add -A
