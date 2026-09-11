@@ -10,19 +10,24 @@
 //! * [`registry`] — a typed view of `docs/indicator_registry.json`, the
 //!   canonical single source of truth that also drives
 //!   `scripts/gen_ssot_docs.py`. Embedding it at compile time lets bindings
-//!   and the (future) code generator read the exact same list the docs are
-//!   built from, with no runtime file dependency.
+//!   and the code generator read the exact same list the docs are built from,
+//!   with no runtime file dependency.
 //! * [`types`] — numeric / array conversion helpers to keep each binding's
 //!   glue minimal.
 //! * [`golden`] — cross-language golden reference vectors and a comparator,
 //!   so every binding's test suite asserts against the same canonical values.
-//!
-//! The crate is intentionally dependency-light (only `serde` / `serde_json`)
-//! so any binding can depend on it without pulling in a language runtime.
+//! * [`research`] — the versioned JSON-in/JSON-out factor-research contract
+//!   shared by every language binding. Statistical logic remains in Rust.
 
 pub mod error;
 pub mod golden;
 pub mod leak;
 pub mod panic;
 pub mod registry;
+pub mod research;
 pub mod types;
+
+pub use research::{
+    factor_study_json, FactorStudyRequest, FactorStudyResponse, ResearchApiError,
+    FACTOR_STUDY_SCHEMA_VERSION,
+};
