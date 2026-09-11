@@ -3,6 +3,8 @@ from pathlib import Path
 import re
 import subprocess
 
+# Reviewed against PR #29's latest real CI failures; this no-op marker retriggers
+# the one-shot fix workflow without changing production behavior.
 ROOT = Path(__file__).resolve().parents[1]
 BASE_GO_SHA = "a6603b35b04d39a668a5c59287a2600abfa19076"
 
