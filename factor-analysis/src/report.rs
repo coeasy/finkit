@@ -1,10 +1,12 @@
 use crate::analysis::{AlphaBeta, WeightConfig};
+use crate::context::ResearchContext;
 use crate::data::ResearchFrame;
 use crate::error::ResearchResult;
-use crate::executor::{ResearchExecutionRequest, ResearchExecutor};
+use crate::executor::ResearchExecutor;
 use crate::factor_metrics::{IcStatistics, QuantileDiagnostics};
 use crate::orchestration::StudyProvenance;
 use crate::performance::EvaluationConfig;
+use crate::policy::ResearchPolicy;
 use crate::portfolio_performance::FactorPortfolioPerformanceReport;
 use crate::prepare::{DataQualityReport, QuantizeConfig};
 use serde::{Deserialize, Serialize};
@@ -73,8 +75,9 @@ impl FactorStudyReport {
 
 /// End-to-end factor research study compatibility facade.
 ///
-/// Configuration remains source-compatible, while stage orchestration is owned
-/// exclusively by `ResearchPlan` + `ResearchExecutor`.
+/// Configuration remains source-compatible, while normalization and stage
+/// orchestration are owned exclusively by `ResearchPolicy`/`ResearchContext`
+/// and `ResearchPlan` + `ResearchExecutor`.
 #[derive(Debug)]
 pub struct FactorStudy<'a> {
     frame: &'a ResearchFrame,
@@ -147,22 +150,23 @@ impl<'a> FactorStudy<'a> {
 
     /// Execute the canonical standard research plan and return its report.
     ///
-    /// This method is retained as the public compatibility facade; it no longer
-    /// owns a second hand-written research workflow.
+    /// This compatibility method now creates the same normalized context used
+    /// by revision-aware sessions, eliminating a separate batch policy path.
     pub fn full_report(&self) -> ResearchResult<FactorStudyReport> {
-        ResearchExecutor::execute_standard(ResearchExecutionRequest {
-            frame: self.frame,
-            factor_column: &self.factor_column,
-            price_column: &self.price_column,
-            periods: &self.periods,
-            quantize: &self.quantize,
-            weights: &self.weights,
-            evaluation: self.evaluation,
-            execution_lag: self.execution_lag,
-            mode: self.mode,
-            provenance: &self.provenance,
-            data_revision: 0,
-        })
+        let policy = ResearchPolicy::new(
+            self.periods.clone(),
+            self.quantize.clone(),
+            self.weights.clone(),
+            self.evaluation,
+            self.execution_lag,
+        )?;
+        let context = ResearchContext::batch(self.frame, policy, self.provenance.clone())?;
+        ResearchExecutor::execute_standard_context(
+            &context,
+            &self.factor_column,
+            &self.price_column,
+            self.mode,
+        )
         .map(|result| result.report)
     }
 }
