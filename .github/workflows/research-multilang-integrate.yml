@@ -1,0 +1,275 @@
+name: Research multilingual integrate
+
+on:
+  push:
+    branches: [feat/factor-research-architecture]
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    if: github.event.head_commit.message == 'ci: stage multilingual research integration'
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feat/factor-research-architecture
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Apply thin multilingual research bridges
+        shell: python
+        run: |
+          from pathlib import Path
+
+          dep = 'finkit-ffi-common = { path = "../ffi-common" }\n'
+          for cargo_name in [
+              'ffi/node-binding/Cargo.toml',
+              'ffi/java-binding/Cargo.toml',
+              'ffi/android-binding/Cargo.toml',
+              'ffi/dotnet-binding/Cargo.toml',
+              'ffi/go-binding/Cargo.toml',
+              'ffi/ios-binding/Cargo.toml',
+          ]:
+              p = Path(cargo_name)
+              if not p.exists():
+                  continue
+              text = p.read_text()
+              if 'finkit-ffi-common' not in text:
+                  marker = '[dependencies]\n'
+                  if marker not in text:
+                      raise SystemExit(f'missing dependencies section: {cargo_name}')
+                  text = text.replace(marker, marker + dep, 1)
+                  p.write_text(text)
+
+          wasm_cargo = Path('wasm/Cargo.toml')
+          if wasm_cargo.exists():
+              text = wasm_cargo.read_text()
+              if 'finkit-ffi-common' not in text:
+                  text = text.replace('[dependencies]\n', '[dependencies]\nfinkit-ffi-common = { path = "../ffi/ffi-common" }\n', 1)
+                  wasm_cargo.write_text(text)
+
+          def append_once(path, marker, code):
+              p = Path(path)
+              if not p.exists():
+                  raise SystemExit(f'missing source: {path}')
+              text = p.read_text()
+              if marker not in text:
+                  p.write_text(text.rstrip() + '\n\n' + code.strip() + '\n')
+
+          append_once('ffi/node-binding/src/lib.rs', 'pub fn factor_study_json(', r'''
+          /// Run the versioned Rust factor-research contract from Node.js.
+          #[napi_derive::napi]
+          pub fn factor_study_json(request_json: String) -> String {
+              finkit_ffi_common::factor_study_json(&request_json)
+          }
+          ''')
+
+          append_once('ffi/java-binding/src/lib.rs', 'Java_com_finkit_FactorResearch_factorStudyJson', r'''
+          /// JNI bridge for the language-neutral factor research API.
+          #[no_mangle]
+          pub extern "system" fn Java_com_finkit_FactorResearch_factorStudyJson(
+              mut env: jni::JNIEnv<'_>,
+              _class: jni::objects::JClass<'_>,
+              request: jni::objects::JString<'_>,
+          ) -> jni::sys::jstring {
+              let request: String = match env.get_string(&request) {
+                  Ok(value) => value.into(),
+                  Err(error) => {
+                      return env
+                          .new_string(format!(r#"{{"schema_version":1,"ok":false,"error":{{"code":"invalid_utf8","message":{:?}}}}}"#, error.to_string()))
+                          .map(|value| value.into_raw())
+                          .unwrap_or(std::ptr::null_mut());
+                  }
+              };
+              env.new_string(finkit_ffi_common::factor_study_json(&request))
+                  .map(|value| value.into_raw())
+                  .unwrap_or(std::ptr::null_mut())
+          }
+          ''')
+
+          java = Path('ffi/java-binding/java/src/main/java/com/finkit/FactorResearch.java')
+          java.parent.mkdir(parents=True, exist_ok=True)
+          java.write_text('''package com.finkit;\n\n/** Versioned panel-aware factor research API backed by the canonical Rust engine. */\npublic final class FactorResearch {\n    static { NativeLoader.load(); }\n    private FactorResearch() {}\n    public static native String factorStudyJson(String requestJson);\n}\n''')
+
+          append_once('ffi/android-binding/src/lib.rs', 'Java_com_finkit_indicators_Finkit_factorStudyJson', r'''
+          /// Android JNI bridge for the canonical factor research JSON contract.
+          #[no_mangle]
+          pub extern "system" fn Java_com_finkit_indicators_Finkit_factorStudyJson(
+              mut env: jni::JNIEnv<'_>,
+              _class: jni::objects::JClass<'_>,
+              request: jni::objects::JString<'_>,
+          ) -> jni::sys::jstring {
+              let request: String = match env.get_string(&request) {
+                  Ok(value) => value.into(),
+                  Err(_) => return std::ptr::null_mut(),
+              };
+              env.new_string(finkit_ffi_common::factor_study_json(&request))
+                  .map(|value| value.into_raw())
+                  .unwrap_or(std::ptr::null_mut())
+          }
+          ''')
+          android_java = Path('ffi/android-binding/android/src/main/java/com/finkit/indicators/Finkit.java')
+          text = android_java.read_text()
+          decl = '    public static native String factorStudyJson(String requestJson);\n'
+          if decl not in text:
+              pos = text.rfind('}')
+              text = text[:pos].rstrip() + '\n\n    /** Run schema-versioned panel factor research and return the JSON report envelope. */\n' + decl + text[pos:]
+              android_java.write_text(text)
+
+          native_bridge = r'''
+          fn research_string_ptr(value: String) -> *mut std::os::raw::c_char {
+              std::ffi::CString::new(value)
+                  .map(std::ffi::CString::into_raw)
+                  .unwrap_or(std::ptr::null_mut())
+          }
+          unsafe fn research_request(ptr: *const std::os::raw::c_char) -> String {
+              if ptr.is_null() {
+                  return r#"{"schema_version":1,"ok":false,"error":{"code":"null_pointer","message":"request_json is null"}}"#.to_string();
+              }
+              match std::ffi::CStr::from_ptr(ptr).to_str() {
+                  Ok(request) => finkit_ffi_common::factor_study_json(request),
+                  Err(error) => format!(r#"{{"schema_version":1,"ok":false,"error":{{"code":"invalid_utf8","message":{:?}}}}}"#, error.to_string()),
+              }
+          }
+          '''
+
+          append_once('ffi/dotnet-binding/src/lib.rs', 'finkit_dotnet_factor_study_json', native_bridge + r'''
+          #[no_mangle]
+          pub unsafe extern "C" fn finkit_dotnet_factor_study_json(request_json: *const std::os::raw::c_char) -> *mut std::os::raw::c_char {
+              research_string_ptr(research_request(request_json))
+          }
+          #[no_mangle]
+          pub unsafe extern "C" fn finkit_dotnet_factor_study_free_string(value: *mut std::os::raw::c_char) {
+              if !value.is_null() { drop(std::ffi::CString::from_raw(value)); }
+          }
+          ''')
+          cs = Path('ffi/dotnet-binding/src/Finkit/FactorResearch.cs')
+          cs.write_text(r'''using System;
+          using System.Runtime.InteropServices;
+          
+          namespace Finkit;
+          
+          /// <summary>Versioned panel factor research backed by the canonical Rust engine.</summary>
+          public static class FactorResearch
+          {
+              private const string NativeLibrary = "finkit_dotnet";
+              [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
+              private static extern IntPtr finkit_dotnet_factor_study_json([MarshalAs(UnmanagedType.LPUTF8Str)] string requestJson);
+              [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
+              private static extern void finkit_dotnet_factor_study_free_string(IntPtr value);
+              public static string RunJson(string requestJson)
+              {
+                  if (requestJson is null) throw new ArgumentNullException(nameof(requestJson));
+                  var ptr = finkit_dotnet_factor_study_json(requestJson);
+                  if (ptr == IntPtr.Zero) throw new InvalidOperationException("Native factor research returned null");
+                  try { return Marshal.PtrToStringUTF8(ptr) ?? string.Empty; }
+                  finally { finkit_dotnet_factor_study_free_string(ptr); }
+              }
+          }
+          ''')
+
+          append_once('ffi/go-binding/src/lib.rs', 'finkit_go_factor_study_json', native_bridge + r'''
+          #[no_mangle]
+          pub unsafe extern "C" fn finkit_go_factor_study_json(request_json: *const std::os::raw::c_char) -> *mut std::os::raw::c_char {
+              research_string_ptr(research_request(request_json))
+          }
+          #[no_mangle]
+          pub unsafe extern "C" fn finkit_go_factor_study_free_string(value: *mut std::os::raw::c_char) {
+              if !value.is_null() { drop(std::ffi::CString::from_raw(value)); }
+          }
+          ''')
+          go = Path('ffi/go-binding/go/ta/research.go')
+          go.write_text(r'''package ta
+          
+          /*
+          #cgo LDFLAGS: -lfinkit_go
+          #include <stdlib.h>
+          char* finkit_go_factor_study_json(const char* request_json);
+          void finkit_go_factor_study_free_string(char* value);
+          */
+          import "C"
+          import (
+              "errors"
+              "unsafe"
+          )
+          
+          // FactorStudyJSON runs the schema-versioned canonical Rust factor research engine.
+          func FactorStudyJSON(requestJSON string) (string, error) {
+              request := C.CString(requestJSON)
+              defer C.free(unsafe.Pointer(request))
+              response := C.finkit_go_factor_study_json(request)
+              if response == nil { return "", errors.New("native factor research returned nil") }
+              defer C.finkit_go_factor_study_free_string(response)
+              return C.GoString(response), nil
+          }
+          ''')
+
+          append_once('ffi/ios-binding/src/lib.rs', 'finkit_ios_factor_study_json', native_bridge + r'''
+          #[no_mangle]
+          pub unsafe extern "C" fn finkit_ios_factor_study_json(request_json: *const std::os::raw::c_char) -> *mut std::os::raw::c_char {
+              research_string_ptr(research_request(request_json))
+          }
+          #[no_mangle]
+          pub unsafe extern "C" fn finkit_ios_factor_study_free_string(value: *mut std::os::raw::c_char) {
+              if !value.is_null() { drop(std::ffi::CString::from_raw(value)); }
+          }
+          ''')
+          swift_files = list(Path('ffi/ios-binding').glob('**/*.swift'))
+          if swift_files:
+              swift = swift_files[0].parent / 'FactorResearch.swift'
+              swift.write_text(r'''import Foundation
+          
+          @_silgen_name("finkit_ios_factor_study_json")
+          private func nativeFactorStudyJSON(_ request: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>?
+          @_silgen_name("finkit_ios_factor_study_free_string")
+          private func nativeFactorStudyFreeString(_ value: UnsafeMutablePointer<CChar>)
+          
+          public enum FactorResearch {
+              public static func runJSON(_ request: String) throws -> String {
+                  guard let output = request.withCString({ nativeFactorStudyJSON($0) }) else {
+                      throw NSError(domain: "Finkit.FactorResearch", code: 1, userInfo: [NSLocalizedDescriptionKey: "Native factor research returned nil"])
+                  }
+                  defer { nativeFactorStudyFreeString(output) }
+                  return String(cString: output)
+              }
+          }
+          ''')
+
+          append_once('wasm/src/lib.rs', 'pub fn factor_study_json(', r'''
+          /// Execute the same schema-versioned factor research contract used by native bindings.
+          #[wasm_bindgen::prelude::wasm_bindgen]
+          pub fn factor_study_json(request_json: &str) -> String {
+              finkit_ffi_common::factor_study_json(request_json)
+          }
+          ''')
+      - name: Refresh lockfile and format
+        run: |
+          cargo generate-lockfile
+          cargo fmt --all
+      - name: Check all Rust research surfaces
+        run: |
+          cargo test -p finkit-factor-analysis --locked
+          cargo check -p finkit-ffi-common --locked
+          cargo check -p finkit-ffi --locked
+          cargo check -p finkit-node --locked
+          cargo check -p finkit-java --locked
+          cargo check -p finkit-android --locked
+          cargo check -p finkit-dotnet --locked
+          cargo check -p finkit-go --locked
+          cargo check -p finkit-ios --locked
+          cargo check -p finkit-wasm --locked
+      - name: Check Java and .NET source surfaces
+        run: |
+          if command -v mvn >/dev/null 2>&1; then mvn -q -f ffi/java-binding/pom.xml -DskipTests package; fi
+          if command -v dotnet >/dev/null 2>&1; then dotnet build ffi/dotnet-binding/src/Finkit/Finkit.csproj --no-restore || dotnet build ffi/dotnet-binding/src/Finkit/Finkit.csproj; fi
+      - name: Commit verified integration and remove bootstrap workflow
+        run: |
+          rm .github/workflows/research-multilang-integrate.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "feat: integrate multilingual factor research API"
+          git push origin HEAD:feat/factor-research-architecture
