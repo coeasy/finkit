@@ -12,12 +12,25 @@
 //!
 //! - [`moving_avg`] — SMA, EMA, WMA, DEMA, TEMA, KAMA, T3, TRIMA, HMA, ALMA, MAVP (requires `std` feature)
 //! - [`statistics`] — Rolling variance, standard deviation, min, max, correlation (requires `std` feature)
-//! - [`linear`] — Linear regression and related functions (requires `std` feature)
+//! - [`linear`] — Legacy linear-regression facade (requires `std` feature)
+//! - [`regression`] — Canonical multivariate regression/residualization kernel
+//! - [`rank`] / [`quantile`] / [`information`] — shared cross-sectional research primitives
+//! - [`segmented`] — contiguous segment execution layout for date/group operations
 
+#[cfg(feature = "std")]
+pub mod information;
 #[cfg(feature = "std")]
 pub mod linear;
 #[cfg(feature = "std")]
 pub mod moving_avg;
+#[cfg(feature = "std")]
+pub mod quantile;
+#[cfg(feature = "std")]
+pub mod rank;
+#[cfg(feature = "std")]
+pub mod regression;
+#[cfg(feature = "std")]
+pub mod segmented;
 // B1: `libm_shim` is the `no_std`-portable home for the float primitives used
 // by the isolated numeric helpers. It is compiled in both `std` and `no_std`
 // builds (its `FloatExt`/`f64_*` helpers route to `core`/`libm` accordingly).
