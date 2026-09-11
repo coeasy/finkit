@@ -4,9 +4,12 @@ use finkit::compute::{
     LookbackRequirement,
 };
 use serde::{Deserialize, Serialize};
+use std::hash::{Hash, Hasher};
 
 /// Semantic research stages. Dependency ordering is delegated to core `ComputePlan`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
 pub enum ResearchStageKind {
     Align,
     ForwardReturns,
@@ -21,6 +24,14 @@ pub enum ResearchStageKind {
     Event,
     Portfolio,
     Report,
+}
+
+/// Stable built-in orchestration profiles. Custom callers can still compile an
+/// explicit `ResearchPlan` from stage specifications.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ResearchProfile {
+    CoreStudy,
+    FullStudy,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -75,12 +86,90 @@ impl ResearchPlan {
         Ok(Self { stages, plan })
     }
 
+    /// Compile the built-in core/full factor-study profile.
+    ///
+    /// `FullStudy` currently shares the same mandatory stages as `CoreStudy`;
+    /// optional advanced services are added through explicit custom plans until
+    /// each service has a typed executor artifact contract.
+    pub fn for_profile(profile: ResearchProfile) -> ResearchResult<Self> {
+        match profile {
+            ResearchProfile::CoreStudy | ResearchProfile::FullStudy => Self::standard_factor_study(),
+        }
+    }
+
+    /// Canonical plan behind the compatibility `FactorStudy::full_report` API.
+    pub fn standard_factor_study() -> ResearchResult<Self> {
+        Self::compile(vec![
+            ResearchStageSpec {
+                id: 0,
+                kind: ResearchStageKind::Align,
+                dependencies: vec![],
+            },
+            ResearchStageSpec {
+                id: 1,
+                kind: ResearchStageKind::ForwardReturns,
+                dependencies: vec![0],
+            },
+            ResearchStageSpec {
+                id: 2,
+                kind: ResearchStageKind::Clean,
+                dependencies: vec![0],
+            },
+            ResearchStageSpec {
+                id: 3,
+                kind: ResearchStageKind::Quantize,
+                dependencies: vec![0, 2],
+            },
+            ResearchStageSpec {
+                id: 4,
+                kind: ResearchStageKind::Returns,
+                dependencies: vec![1, 3],
+            },
+            ResearchStageSpec {
+                id: 5,
+                kind: ResearchStageKind::Information,
+                dependencies: vec![1],
+            },
+            ResearchStageSpec {
+                id: 6,
+                kind: ResearchStageKind::Turnover,
+                dependencies: vec![3],
+            },
+            ResearchStageSpec {
+                id: 7,
+                kind: ResearchStageKind::Portfolio,
+                dependencies: vec![1, 4],
+            },
+            ResearchStageSpec {
+                id: 8,
+                kind: ResearchStageKind::Report,
+                dependencies: vec![2, 3, 4, 5, 6, 7],
+            },
+        ])
+    }
+
     pub fn execution_order(&self) -> Vec<usize> {
         self.plan.execution_order().iter().map(|id| id.0).collect()
     }
 
     pub fn stages(&self) -> &[ResearchStageSpec] {
         &self.stages
+    }
+
+    pub fn stage(&self, id: usize) -> Option<&ResearchStageSpec> {
+        self.stages.iter().find(|stage| stage.id == id)
+    }
+
+    /// Deterministic semantic identity used by materialization keys.
+    #[must_use]
+    pub fn fingerprint(&self) -> u64 {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        for stage in &self.stages {
+            stage.id.hash(&mut hasher);
+            stage.kind.hash(&mut hasher);
+            stage.dependencies.hash(&mut hasher);
+        }
+        hasher.finish()
     }
 }
 
@@ -98,7 +187,6 @@ pub struct StudyProvenance {
 
 /// Stable hash helper for plan/data metadata. Not intended as a cryptographic digest.
 pub fn fingerprint(parts: &[&str]) -> u64 {
-    use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     for part in parts {
         part.hash(&mut hasher);
@@ -126,5 +214,13 @@ mod tests {
         ])
         .unwrap();
         assert_eq!(plan.execution_order(), vec![1, 2]);
+    }
+
+    #[test]
+    fn standard_factor_study_is_a_single_dependency_order() {
+        let plan = ResearchPlan::standard_factor_study().unwrap();
+        assert_eq!(plan.execution_order(), (0..=8).collect::<Vec<_>>());
+        assert_eq!(plan.stage(8).unwrap().kind, ResearchStageKind::Report);
+        assert_ne!(plan.fingerprint(), 0);
     }
 }
