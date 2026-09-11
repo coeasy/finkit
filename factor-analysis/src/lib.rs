@@ -5,12 +5,14 @@
 
 pub mod analysis;
 pub mod api;
+pub mod artifacts;
 pub mod cache;
 pub mod compat;
 pub mod data;
 pub mod error;
 pub mod evaluation_api;
 pub mod event;
+pub mod executor;
 pub mod factor_metrics;
 pub mod incremental;
 pub mod mining;
@@ -28,9 +30,11 @@ pub mod validation;
 
 pub use analysis::*;
 pub use api::*;
+pub use artifacts::*;
 pub use data::*;
 pub use error::*;
 pub use evaluation_api::*;
+pub use executor::*;
 pub use factor_metrics::*;
 pub use performance::*;
 pub use portfolio_performance::*;
