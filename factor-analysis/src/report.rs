@@ -8,8 +8,7 @@ use crate::error::ResearchResult;
 use crate::factor_metrics::{quantile_diagnostics, summarize_ic, IcStatistics, QuantileDiagnostics};
 use crate::orchestration::StudyProvenance;
 use crate::performance::{
-    evaluate_horizons, evaluate_portfolio_by_date, universe_returns, EvaluationConfig,
-    PerformanceReport,
+    build_performance_report, universe_returns, EvaluationConfig, PerformanceReport,
 };
 use crate::prepare::{
     compute_forward_returns, data_quality, quantize_factor, DataQualityReport, ForwardReturnConfig,
@@ -64,7 +63,7 @@ pub struct FactorStudyReport {
     pub returns: ReturnsReport,
     pub information: InformationReport,
     pub turnover: TurnoverReport,
-    /// Unified strategy/risk/benchmark/portfolio evaluation for every horizon.
+    /// Unified gross/net strategy, risk, benchmark, cost and portfolio evaluation.
     pub performance: PerformanceReport,
 }
 
@@ -157,11 +156,13 @@ impl<'a> FactorStudy<'a> {
         let top_turnover = quantile_turnover(self.frame, &quantiles, self.quantize.quantiles, 1)?;
         let rank_auto = rank_autocorrelation(self.frame, &self.factor_column, 1)?;
         let universe = universe_returns(self.frame, &forward);
-        let performance = PerformanceReport {
-            config: self.evaluation,
-            by_horizon: evaluate_horizons(&factor_ret, &universe, self.evaluation),
-            portfolio: evaluate_portfolio_by_date(self.frame, &weights),
-        };
+        let performance = build_performance_report(
+            self.frame,
+            &factor_ret,
+            &universe,
+            &weights,
+            self.evaluation,
+        );
         Ok(FactorStudyReport {
             mode: self.mode,
             provenance: self.provenance.clone(),
@@ -233,16 +234,28 @@ mod tests {
                 by_group: None,
                 zero_aware: false,
             })
+            .evaluation_config(EvaluationConfig {
+                transaction_cost_bps: 5.0,
+                slippage_bps: 2.0,
+                ..EvaluationConfig::default()
+            })
             .full_report()
             .unwrap();
         assert_eq!(report.periods, vec![1]);
         assert!(report.information.mean_ic[&1] > 0.9);
         assert!(report.information.statistics[&1].positive_ratio > 0.0);
-        assert!(report.returns.quantile_diagnostics.spread_by_horizon.contains_key(&1));
-        let performance = &report.performance.by_horizon[&1];
-        assert!(performance.returns.observations > 0);
-        assert!(performance.benchmark.is_some());
+        assert!(report
+            .returns
+            .quantile_diagnostics
+            .spread_by_horizon
+            .contains_key(&1));
+        let gross = &report.performance.by_horizon[&1];
+        let net = &report.performance.after_cost_by_horizon[&1];
+        assert!(gross.returns.observations > 0);
+        assert!(gross.benchmark.is_some());
+        assert!(net.returns.total_return <= gross.returns.total_return);
         assert_eq!(report.performance.portfolio.by_date.len(), 3);
+        assert_eq!(report.performance.portfolio.turnover_by_date.len(), 3);
         serde_json::to_string(&report).unwrap();
     }
 }
