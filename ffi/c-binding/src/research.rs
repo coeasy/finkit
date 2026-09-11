@@ -9,13 +9,14 @@ fn response_ptr(response: String) -> *mut c_char {
         .unwrap_or(ptr::null_mut())
 }
 
-fn request_text<'a>(request_json: *const c_char) -> Result<&'a str, String> {
+fn request_text(request_json: *const c_char) -> Result<String, String> {
     if request_json.is_null() {
         return Err("null_pointer\0request_json is null".to_string());
     }
     let request = unsafe { CStr::from_ptr(request_json) };
     request
         .to_str()
+        .map(str::to_owned)
         .map_err(|error| format!("invalid_utf8\0{error}"))
 }
 
@@ -32,7 +33,7 @@ fn split_boundary_error(error: &str) -> (&str, &str) {
 #[no_mangle]
 pub unsafe extern "C" fn finkit_factor_study_json(request_json: *const c_char) -> *mut c_char {
     let result = catch_unwind(AssertUnwindSafe(|| match request_text(request_json) {
-        Ok(request) => finkit_ffi_common::factor_study_json(request),
+        Ok(request) => finkit_ffi_common::factor_study_json(&request),
         Err(error) => {
             let (code, message) = split_boundary_error(&error);
             finkit_ffi_common::factor_study_error_json(code, message)
@@ -53,7 +54,7 @@ pub unsafe extern "C" fn finkit_quant_evaluation_json(
     request_json: *const c_char,
 ) -> *mut c_char {
     let result = catch_unwind(AssertUnwindSafe(|| match request_text(request_json) {
-        Ok(request) => finkit_ffi_common::quant_evaluation_json(request),
+        Ok(request) => finkit_ffi_common::quant_evaluation_json(&request),
         Err(error) => {
             let (code, message) = split_boundary_error(&error);
             finkit_ffi_common::quant_evaluation_error_json(code, message)
