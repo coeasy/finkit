@@ -197,11 +197,8 @@ mod tests {
 
     #[test]
     fn panel_index_rejects_duplicate_date_asset_keys_even_when_not_adjacent() {
-        let error = PanelIndex::new(
-            vec![1, 1, 1],
-            vec![AssetId(1), AssetId(2), AssetId(1)],
-        )
-        .unwrap_err();
+        let error =
+            PanelIndex::new(vec![1, 1, 1], vec![AssetId(1), AssetId(2), AssetId(1)]).unwrap_err();
         assert!(error.to_string().contains("duplicate (timestamp, asset)"));
     }
 
