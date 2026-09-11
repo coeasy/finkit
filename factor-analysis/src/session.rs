@@ -89,10 +89,7 @@ impl ResearchSession {
             && self.last_result.is_some()
         {
             return Ok((
-                self.last_result
-                    .as_ref()
-                    .expect("checked above")
-                    .clone(),
+                self.last_result.as_ref().expect("checked above").clone(),
                 ResearchReuseDecision::ReuseAll,
             ));
         }
@@ -164,13 +161,13 @@ mod tests {
         let (_, first) = session
             .execute(&context, "factor", "price", AnalysisMode::Native)
             .unwrap();
-        assert!(matches!(
-            first,
-            ResearchReuseDecision::FullRecompute { .. }
-        ));
+        assert!(matches!(first, ResearchReuseDecision::FullRecompute { .. }));
 
         let unchanged = context
-            .next_revision(&frame, DirtyRange::new(frame.index().len(), frame.index().len()))
+            .next_revision(
+                &frame,
+                DirtyRange::new(frame.index().len(), frame.index().len()),
+            )
             .unwrap();
         let (_, second) = session
             .execute(&unchanged, "factor", "price", AnalysisMode::Native)
