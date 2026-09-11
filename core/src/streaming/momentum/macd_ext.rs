@@ -4,18 +4,26 @@
 //! `indicators::momentum::macdext` function. The full TA-Lib MACDEXT allows
 //! each MA (fast, slow, signal) to be any of the supported `MaType` values.
 //!
-//! Streaming-only support: this implementation currently supports
-//! `MaType::Sma` and `MaType::Ema` for the fast and slow lines. Other
-//! MA types (Wma, Dema, Tema, ...) are technically usable in the batch
-//! function, but the streaming versions of those are heavier-weight and
-//! have been intentionally omitted from this first pass. The signal line
-//! is always an `Ema` for now, matching the typical TA-Lib usage.
+//! Streaming support covers the scalar MA variants available in the streaming
+//! module: SMA, EMA, WMA, DEMA, TEMA, KAMA, T3, TRIMA, HMA, ALMA, and VIDYA.
+//! MAMA is intentionally excluded because it produces a pair of lines, while
+//! FRAMA has no streaming implementation yet. The signal line is always an
+//! EMA for now, matching the typical TA-Lib usage.
 
 use crate::impl_standard_methods;
 use crate::indicators::overlap::MaType;
 use crate::streaming::momentum::macd::MacdOutput;
+use crate::streaming::overlap::alma::StreamingAlma;
+use crate::streaming::overlap::dema::StreamingDema;
 use crate::streaming::overlap::ema::StreamingEma;
+use crate::streaming::overlap::hma::StreamingHma;
+use crate::streaming::overlap::kama::StreamingKama;
 use crate::streaming::overlap::sma::StreamingSma;
+use crate::streaming::overlap::t3::StreamingT3;
+use crate::streaming::overlap::tema::StreamingTema;
+use crate::streaming::overlap::trima::StreamingTrima;
+use crate::streaming::overlap::vidya::StreamingVidya;
+use crate::streaming::overlap::wma::StreamingWma;
 use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 
 /// Result of constructing a [`StreamingMacdExt`] with an unsupported MA type.
@@ -40,12 +48,30 @@ pub struct StreamingMacdExt {
 enum MaKind {
     Sma,
     Ema,
+    Wma,
+    Dema,
+    Tema,
+    Kama,
+    T3,
+    Trima,
+    Hma,
+    Alma,
+    Vidya,
 }
 
 #[derive(Clone)]
 enum MaState {
     Sma(StreamingSma),
     Ema(StreamingEma),
+    Wma(StreamingWma),
+    Dema(StreamingDema),
+    Tema(StreamingTema),
+    Kama(StreamingKama),
+    T3(StreamingT3),
+    Trima(StreamingTrima),
+    Hma(StreamingHma),
+    Alma(StreamingAlma),
+    Vidya(StreamingVidya),
 }
 
 #[derive(Clone)]
@@ -63,6 +89,15 @@ impl MaState {
         match kind {
             MaKind::Sma => MaState::Sma(StreamingSma::new(period)),
             MaKind::Ema => MaState::Ema(StreamingEma::new(period)),
+            MaKind::Wma => MaState::Wma(StreamingWma::new(period)),
+            MaKind::Dema => MaState::Dema(StreamingDema::new(period)),
+            MaKind::Tema => MaState::Tema(StreamingTema::new(period)),
+            MaKind::Kama => MaState::Kama(StreamingKama::new(period)),
+            MaKind::T3 => MaState::T3(StreamingT3::new(period)),
+            MaKind::Trima => MaState::Trima(StreamingTrima::new(period)),
+            MaKind::Hma => MaState::Hma(StreamingHma::new(period)),
+            MaKind::Alma => MaState::Alma(StreamingAlma::new(period, 6.0, 0.85)),
+            MaKind::Vidya => MaState::Vidya(StreamingVidya::new(period.max(9), 9)),
         }
     }
 
@@ -70,6 +105,15 @@ impl MaState {
         match self {
             MaState::Sma(s) => s.next(value),
             MaState::Ema(e) => e.next(value),
+            MaState::Wma(w) => w.next(value),
+            MaState::Dema(d) => d.next(value),
+            MaState::Tema(t) => t.next(value),
+            MaState::Kama(k) => k.next(value),
+            MaState::T3(t) => t.next(value),
+            MaState::Trima(t) => t.next(value),
+            MaState::Hma(h) => h.next(value),
+            MaState::Alma(a) => a.next(value),
+            MaState::Vidya(v) => v.next(value),
         }
     }
 
@@ -77,6 +121,15 @@ impl MaState {
         match self {
             MaState::Sma(s) => s.reset(),
             MaState::Ema(e) => e.reset(),
+            MaState::Wma(w) => w.reset(),
+            MaState::Dema(d) => d.reset(),
+            MaState::Tema(t) => t.reset(),
+            MaState::Kama(k) => k.reset(),
+            MaState::T3(t) => t.reset(),
+            MaState::Trima(t) => t.reset(),
+            MaState::Hma(h) => h.reset(),
+            MaState::Alma(a) => a.reset(),
+            MaState::Vidya(v) => v.reset(),
         }
     }
 
@@ -84,6 +137,15 @@ impl MaState {
         match self {
             MaState::Sma(s) => s.is_ready(),
             MaState::Ema(e) => e.is_ready(),
+            MaState::Wma(w) => w.is_ready(),
+            MaState::Dema(d) => d.is_ready(),
+            MaState::Tema(t) => t.is_ready(),
+            MaState::Kama(k) => k.is_ready(),
+            MaState::T3(t) => t.is_ready(),
+            MaState::Trima(t) => t.is_ready(),
+            MaState::Hma(h) => h.is_ready(),
+            MaState::Alma(a) => a.is_ready(),
+            MaState::Vidya(v) => v.is_ready(),
         }
     }
 }
@@ -92,6 +154,15 @@ fn kind_from(ma_type: MaType) -> Result<MaKind, UnsupportedMaType> {
     match ma_type {
         MaType::Sma => Ok(MaKind::Sma),
         MaType::Ema => Ok(MaKind::Ema),
+        MaType::Wma => Ok(MaKind::Wma),
+        MaType::Dema => Ok(MaKind::Dema),
+        MaType::Tema => Ok(MaKind::Tema),
+        MaType::Kama => Ok(MaKind::Kama),
+        MaType::T3 => Ok(MaKind::T3),
+        MaType::Trima => Ok(MaKind::Trima),
+        MaType::Hma => Ok(MaKind::Hma),
+        MaType::Alma => Ok(MaKind::Alma),
+        MaType::Vidya => Ok(MaKind::Vidya),
         other => Err(UnsupportedMaType(other)),
     }
 }
@@ -244,11 +315,37 @@ mod tests {
 
     #[test]
     fn test_streaming_macd_ext_unsupported_ma() {
-        // Wma is not yet supported in the streaming version.
-        let res = StreamingMacdExt::new(12, MaType::Wma, 26, MaType::Ema, 9);
+        // MAMA returns two lines and FRAMA has no streaming implementation.
+        let res = StreamingMacdExt::new(12, MaType::Mama, 26, MaType::Ema, 9);
         assert!(res.is_err());
-        let res = StreamingMacdExt::new(12, MaType::Ema, 26, MaType::Tema, 9);
+        let res = StreamingMacdExt::new(12, MaType::Ema, 26, MaType::Frama, 9);
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_streaming_macd_ext_common_ma_variants() {
+        let variants = [
+            MaType::Wma,
+            MaType::Dema,
+            MaType::Tema,
+            MaType::Kama,
+            MaType::T3,
+            MaType::Trima,
+            MaType::Hma,
+            MaType::Alma,
+            MaType::Vidya,
+        ];
+        for variant in variants {
+            let mut macd = StreamingMacdExt::new(10, variant, 20, MaType::Ema, 5).unwrap();
+            for index in 0..100 {
+                macd.next(100.0 + (index as f64 * 0.17).sin());
+            }
+            assert!(
+                macd.is_ready(),
+                "variant {:?} did not become ready",
+                variant
+            );
+        }
     }
 
     #[test]

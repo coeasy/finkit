@@ -2,6 +2,7 @@ use crate::impl_standard_methods;
 use crate::streaming::overlap::ema::StreamingEma;
 use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 
+#[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamingTema {
     ema1: StreamingEma,

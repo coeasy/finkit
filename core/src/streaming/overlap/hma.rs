@@ -4,6 +4,7 @@ use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 /// Streaming Hull Moving Average (HMA).
 ///
 /// HMA = WMA(2 * WMA(input, period/2) - WMA(input, period), sqrt(period))
+#[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamingHma {
     period: usize,
