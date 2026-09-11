@@ -48,6 +48,19 @@ jobs:
           PY
       - name: Apply evaluation semantic fixups
         run: python scripts/research_eval_fixups.py
+      - name: Normalize borrowed benchmark assertion
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('factor-analysis/src/performance.rs')
+          text = path.read_text()
+          old = 'assert!(report.benchmark.unwrap().tracking_error >= 0.0);'
+          new = 'assert!(report.benchmark.as_ref().unwrap().tracking_error >= 0.0);'
+          if old not in text and new not in text:
+              raise SystemExit('expected benchmark assertion anchor not found')
+          if old in text:
+              path.write_text(text.replace(old, new, 1))
+          PY
       - name: Refresh deterministic lockfile
         run: cargo generate-lockfile
       - name: Format generated Rust
@@ -98,6 +111,7 @@ jobs:
           fi
       - name: Commit only after all gates pass
         run: |
+          rm .github/workflows/research-integrate.yml
           rm .github/workflows/research-multilang-integrate.yml
           rm .github/workflows/research-multilang-integrate2.yml
           rm scripts/research_multilang_integrate.py
