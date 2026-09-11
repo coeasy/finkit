@@ -49,7 +49,11 @@ pub fn summarize_ic(values: &[f64], hac_lags: usize) -> IcStatistics {
         standard_deviation: std,
         icir: if std > f64::EPSILON { mean / std } else { 0.0 },
         naive_t_stat: naive_t,
-        hac_t_stat: if hac.t_stat.is_finite() { hac.t_stat } else { 0.0 },
+        hac_t_stat: if hac.t_stat.is_finite() {
+            hac.t_stat
+        } else {
+            0.0
+        },
         positive_ratio: finite.iter().filter(|v| **v > 0.0).count() as f64 / finite.len() as f64,
         negative_ratio: finite.iter().filter(|v| **v < 0.0).count() as f64 / finite.len() as f64,
     }

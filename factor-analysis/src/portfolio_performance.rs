@@ -51,11 +51,7 @@ fn position_turnover(positions: &[BTreeMap<AssetId, f64>]) -> Vec<f64> {
             continue;
         }
         let previous = &positions[date - 1];
-        let assets: BTreeSet<AssetId> = current
-            .keys()
-            .chain(previous.keys())
-            .copied()
-            .collect();
+        let assets: BTreeSet<AssetId> = current.keys().chain(previous.keys()).copied().collect();
         result.push(
             0.5 * assets
                 .iter()
@@ -86,10 +82,7 @@ fn summarize_positions(positions: &[BTreeMap<AssetId, f64>]) -> PortfolioSummary
             .map(|v| v.effective_number_of_bets)
             .sum::<f64>()
             / count,
-        maximum_abs_weight: by_date
-            .iter()
-            .map(|v| v.max_abs_weight)
-            .fold(0.0, f64::max),
+        maximum_abs_weight: by_date.iter().map(|v| v.max_abs_weight).fold(0.0, f64::max),
         by_date,
     }
 }
@@ -132,11 +125,13 @@ fn daily_portfolio_returns(
                 represented_weight += weight.abs();
             }
         }
-        output.push(if position.is_empty() || represented_weight <= f64::EPSILON {
-            f64::NAN
-        } else {
-            pnl
-        });
+        output.push(
+            if position.is_empty() || represented_weight <= f64::EPSILON {
+                f64::NAN
+            } else {
+                pnl
+            },
+        );
     }
     Ok(output)
 }
@@ -188,7 +183,8 @@ pub fn evaluate_factor_holding_periods(
     let benchmark = equal_weight_benchmark_returns(frame, daily_asset_returns)?;
     let mut by_holding_period = BTreeMap::new();
     for &period in holding_periods {
-        let positions = HoldingPeriodPortfolioEngine::new(period)?.positions(frame, target_row_weights)?;
+        let positions =
+            HoldingPeriodPortfolioEngine::new(period)?.positions(frame, target_row_weights)?;
         let gross_returns = daily_portfolio_returns(frame, &positions, daily_asset_returns)?;
         let portfolio = summarize_positions(&positions);
         let costs = evaluate_costs(&portfolio.turnover_by_date, config);
@@ -197,7 +193,12 @@ pub fn evaluate_factor_holding_periods(
             .enumerate()
             .map(|(date, value)| {
                 if value.is_finite() {
-                    *value - costs.estimated_cost_rate_by_date.get(date).copied().unwrap_or(0.0)
+                    *value
+                        - costs
+                            .estimated_cost_rate_by_date
+                            .get(date)
+                            .copied()
+                            .unwrap_or(0.0)
                 } else {
                     *value
                 }
@@ -229,8 +230,14 @@ mod tests {
         let index = PanelIndex::new(
             vec![1, 1, 2, 2, 3, 3, 4, 4],
             vec![
-                AssetId(1), AssetId(2), AssetId(1), AssetId(2), AssetId(1), AssetId(2),
-                AssetId(1), AssetId(2),
+                AssetId(1),
+                AssetId(2),
+                AssetId(1),
+                AssetId(2),
+                AssetId(1),
+                AssetId(2),
+                AssetId(1),
+                AssetId(2),
             ],
         )
         .unwrap();

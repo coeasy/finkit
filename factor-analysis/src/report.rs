@@ -5,7 +5,9 @@ use crate::analysis::{
 };
 use crate::data::ResearchFrame;
 use crate::error::ResearchResult;
-use crate::factor_metrics::{quantile_diagnostics, summarize_ic, IcStatistics, QuantileDiagnostics};
+use crate::factor_metrics::{
+    quantile_diagnostics, summarize_ic, IcStatistics, QuantileDiagnostics,
+};
 use crate::orchestration::StudyProvenance;
 use crate::performance::EvaluationConfig;
 use crate::portfolio_performance::{
@@ -151,8 +153,7 @@ impl<'a> FactorStudy<'a> {
         }
         calculation_periods.sort_unstable();
         calculation_periods.dedup();
-        let forward_config =
-            ForwardReturnConfig::new(calculation_periods, ReturnKind::Arithmetic)?;
+        let forward_config = ForwardReturnConfig::new(calculation_periods, ReturnKind::Arithmetic)?;
         let mut forward = compute_forward_returns(self.frame, &self.price_column, &forward_config)?;
         let daily_asset_returns = forward.get(&1).cloned().unwrap_or_default();
         if !self.periods.contains(&1) {
@@ -240,9 +241,7 @@ mod tests {
             .add_numeric(
                 "factor",
                 "factor",
-                vec![
-                    1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 1.0, 2.0, 3.0,
-                ],
+                vec![1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 1.0, 2.0, 3.0],
             )
             .unwrap();
         frame

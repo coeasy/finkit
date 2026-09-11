@@ -157,7 +157,11 @@ pub fn block_bootstrap_mean_ci(
     confidence: f64,
     seed: u64,
 ) -> ConfidenceInterval {
-    let finite: Vec<f64> = values.iter().copied().filter(|value| value.is_finite()).collect();
+    let finite: Vec<f64> = values
+        .iter()
+        .copied()
+        .filter(|value| value.is_finite())
+        .collect();
     if finite.is_empty() || block == 0 || samples == 0 || !(0.0 < confidence && confidence < 1.0) {
         return ConfidenceInterval {
             estimate: 0.0,
@@ -175,9 +179,8 @@ pub fn block_bootstrap_mean_ci(
             block.min(finite.len()),
             seed.wrapping_add(sample as u64 + 1),
         );
-        bootstrap_means.push(
-            indices.iter().map(|&index| finite[index]).sum::<f64>() / indices.len() as f64,
-        );
+        bootstrap_means
+            .push(indices.iter().map(|&index| finite[index]).sum::<f64>() / indices.len() as f64);
     }
     bootstrap_means.sort_by(f64::total_cmp);
     let alpha = (1.0 - confidence) * 0.5;
@@ -192,7 +195,11 @@ pub fn block_bootstrap_mean_ci(
 
 /// Two-sided deterministic sign-flip randomization p-value for a zero mean.
 pub fn sign_flip_mean_p_value(values: &[f64], samples: usize, seed: u64) -> f64 {
-    let finite: Vec<f64> = values.iter().copied().filter(|value| value.is_finite()).collect();
+    let finite: Vec<f64> = values
+        .iter()
+        .copied()
+        .filter(|value| value.is_finite())
+        .collect();
     if finite.is_empty() || samples == 0 {
         return 1.0;
     }
@@ -202,7 +209,13 @@ pub fn sign_flip_mean_p_value(values: &[f64], samples: usize, seed: u64) -> f64 
     for _ in 0..samples {
         let randomized = finite
             .iter()
-            .map(|value| if lcg_next(&mut state) & 1 == 0 { *value } else { -*value })
+            .map(|value| {
+                if lcg_next(&mut state) & 1 == 0 {
+                    *value
+                } else {
+                    -*value
+                }
+            })
             .sum::<f64>()
             / finite.len() as f64;
         if randomized.abs() >= observed {
@@ -222,10 +235,13 @@ fn standard_normal_cdf(x: f64) -> f64 {
     let density = (-0.5 * ax * ax).exp() / (2.0 * std::f64::consts::PI).sqrt();
     let polynomial = t
         * (0.319381530
-            + t * (-0.356563782
-                + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
+            + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
     let upper = 1.0 - density * polynomial;
-    if x >= 0.0 { upper } else { 1.0 - upper }
+    if x >= 0.0 {
+        upper
+    } else {
+        1.0 - upper
+    }
 }
 
 fn inverse_standard_normal(probability: f64) -> f64 {
@@ -257,8 +273,8 @@ pub fn probabilistic_sharpe_ratio(
         return 0.0;
     }
     let kurtosis = excess_kurt + 3.0;
-    let variance_term = 1.0 - skew * observed_sharpe
-        + ((kurtosis - 1.0) / 4.0) * observed_sharpe * observed_sharpe;
+    let variance_term =
+        1.0 - skew * observed_sharpe + ((kurtosis - 1.0) / 4.0) * observed_sharpe * observed_sharpe;
     if variance_term <= f64::EPSILON || !variance_term.is_finite() {
         return 0.0;
     }
@@ -269,12 +285,19 @@ pub fn probabilistic_sharpe_ratio(
 
 /// PSR calculated directly from per-period returns.
 pub fn probabilistic_sharpe_from_returns(returns: &[f64], benchmark_sharpe: f64) -> f64 {
-    let finite: Vec<f64> = returns.iter().copied().filter(|value| value.is_finite()).collect();
+    let finite: Vec<f64> = returns
+        .iter()
+        .copied()
+        .filter(|value| value.is_finite())
+        .collect();
     if finite.len() < 2 {
         return 0.0;
     }
     let mean = finite.iter().sum::<f64>() / finite.len() as f64;
-    let variance = finite.iter().map(|value| (value - mean).powi(2)).sum::<f64>()
+    let variance = finite
+        .iter()
+        .map(|value| (value - mean).powi(2))
+        .sum::<f64>()
         / (finite.len() - 1) as f64;
     if variance <= f64::EPSILON {
         return 0.0;
@@ -306,7 +329,10 @@ pub fn deflated_sharpe_ratio(
         return probabilistic_sharpe_ratio(observed_sharpe, 0.0, observations, skew, excess_kurt);
     }
     let mean = trials.iter().sum::<f64>() / trials.len() as f64;
-    let variance = trials.iter().map(|value| (value - mean).powi(2)).sum::<f64>()
+    let variance = trials
+        .iter()
+        .map(|value| (value - mean).powi(2))
+        .sum::<f64>()
         / (trials.len() - 1) as f64;
     let trial_std = variance.sqrt();
     let n = trials.len() as f64;
@@ -364,7 +390,12 @@ pub fn probability_of_backtest_overfitting(
         if !selected.is_finite() {
             continue;
         }
-        let valid: Vec<f64> = oos.iter().take(width).copied().filter(|v| v.is_finite()).collect();
+        let valid: Vec<f64> = oos
+            .iter()
+            .take(width)
+            .copied()
+            .filter(|v| v.is_finite())
+            .collect();
         if valid.len() < 2 {
             continue;
         }
@@ -402,7 +433,11 @@ mod tests {
         let bh = benjamini_hochberg(&p);
         let bonf = bonferroni(&p);
         let holm_values = holm(&p);
-        assert!(bh.iter().chain(&bonf).chain(&holm_values).all(|v| (0.0..=1.0).contains(v)));
+        assert!(bh
+            .iter()
+            .chain(&bonf)
+            .chain(&holm_values)
+            .all(|v| (0.0..=1.0).contains(v)));
         assert!(bh[0] <= bh[3]);
     }
 

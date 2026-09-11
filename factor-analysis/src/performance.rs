@@ -341,11 +341,7 @@ pub fn portfolio_turnover_by_date(frame: &ResearchFrame, weights: &[f64]) -> Vec
             continue;
         }
         let previous = &maps[index - 1];
-        let assets: BTreeSet<AssetId> = current
-            .keys()
-            .chain(previous.keys())
-            .copied()
-            .collect();
+        let assets: BTreeSet<AssetId> = current.keys().chain(previous.keys()).copied().collect();
         let one_way = 0.5
             * assets
                 .iter()
@@ -372,7 +368,8 @@ pub fn evaluate_portfolio_by_date(
     let turnover_by_date = portfolio_turnover_by_date(frame, weights);
     let count = by_date.len().max(1) as f64;
     PortfolioSummaryReport {
-        average_turnover: turnover_by_date.iter().sum::<f64>() / turnover_by_date.len().max(1) as f64,
+        average_turnover: turnover_by_date.iter().sum::<f64>()
+            / turnover_by_date.len().max(1) as f64,
         turnover_by_date,
         average_gross_exposure: by_date.iter().map(|v| v.gross_exposure).sum::<f64>() / count,
         average_net_exposure: by_date.iter().map(|v| v.net_exposure).sum::<f64>() / count,
@@ -382,18 +379,12 @@ pub fn evaluate_portfolio_by_date(
             .map(|v| v.effective_number_of_bets)
             .sum::<f64>()
             / count,
-        maximum_abs_weight: by_date
-            .iter()
-            .map(|v| v.max_abs_weight)
-            .fold(0.0, f64::max),
+        maximum_abs_weight: by_date.iter().map(|v| v.max_abs_weight).fold(0.0, f64::max),
         by_date,
     }
 }
 
-pub fn evaluate_costs(
-    turnover_by_date: &[f64],
-    config: EvaluationConfig,
-) -> CostSummaryReport {
+pub fn evaluate_costs(turnover_by_date: &[f64], config: EvaluationConfig) -> CostSummaryReport {
     let total_bps = config.transaction_cost_bps.max(0.0) + config.slippage_bps.max(0.0);
     let estimated_cost_rate_by_date: Vec<f64> = turnover_by_date
         .iter()
@@ -514,7 +505,9 @@ mod tests {
             &[0.5, -0.5, 0.8, -0.2, 0.4, -0.6],
             config,
         );
-        assert!(report.after_cost_by_horizon[&1].returns.total_return
-            < report.by_horizon[&1].returns.total_return);
+        assert!(
+            report.after_cost_by_horizon[&1].returns.total_return
+                < report.by_horizon[&1].returns.total_return
+        );
     }
 }

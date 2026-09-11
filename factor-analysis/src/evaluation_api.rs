@@ -137,7 +137,9 @@ pub fn validate_quant_evaluation_request(
         });
     }
     if request.returns.is_empty() || !request.returns.iter().any(|value| value.is_finite()) {
-        return Err(invalid("returns must contain at least one finite observation"));
+        return Err(invalid(
+            "returns must contain at least one finite observation",
+        ));
     }
     if let Some(benchmark) = &request.benchmark_returns {
         if benchmark.len() != request.returns.len() {
@@ -217,9 +219,10 @@ pub fn run_quant_evaluation(
     } else {
         (None, None)
     };
-    let trades = request.trade_returns.as_ref().map(|returns| {
-        core::evaluate_trades(returns, request.holding_periods.as_deref()).into()
-    });
+    let trades = request
+        .trade_returns
+        .as_ref()
+        .map(|returns| core::evaluate_trades(returns, request.holding_periods.as_deref()).into());
     let portfolio = request
         .weights
         .as_ref()
@@ -303,7 +306,9 @@ mod tests {
         assert!(response.ok);
         let report = response.report.unwrap();
         assert!(report.gross.returns.total_return > 0.0);
-        assert!(report.after_cost.unwrap().returns.total_return < report.gross.returns.total_return);
+        assert!(
+            report.after_cost.unwrap().returns.total_return < report.gross.returns.total_return
+        );
         assert_eq!(report.trades.unwrap().trades, 3);
         assert!(report.portfolio.unwrap().gross_exposure > 0.0);
     }

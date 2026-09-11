@@ -20,9 +20,8 @@ pub mod research;
 pub mod types;
 
 pub use research::{
-    factor_study_error_json, factor_study_json, quant_evaluation_error_json,
-    quant_evaluation_json, FactorStudyRequest, FactorStudyResponse, QuantEvaluationApiError,
-    QuantEvaluationApiReport, QuantEvaluationRequest, QuantEvaluationResponse, ResearchApiError,
-    FACTOR_STUDY_MIN_SCHEMA_VERSION, FACTOR_STUDY_SCHEMA_VERSION,
-    QUANT_EVALUATION_SCHEMA_VERSION,
+    factor_study_error_json, factor_study_json, quant_evaluation_error_json, quant_evaluation_json,
+    FactorStudyRequest, FactorStudyResponse, QuantEvaluationApiError, QuantEvaluationApiReport,
+    QuantEvaluationRequest, QuantEvaluationResponse, ResearchApiError,
+    FACTOR_STUDY_MIN_SCHEMA_VERSION, FACTOR_STUDY_SCHEMA_VERSION, QUANT_EVALUATION_SCHEMA_VERSION,
 };

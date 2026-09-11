@@ -21,9 +21,7 @@ fn request_text(request_json: *const c_char) -> Result<String, String> {
 }
 
 fn split_boundary_error(error: &str) -> (&str, &str) {
-    error
-        .split_once('\0')
-        .unwrap_or(("invalid_request", error))
+    error.split_once('\0').unwrap_or(("invalid_request", error))
 }
 
 /// Run the canonical factor-research JSON contract.
@@ -50,9 +48,7 @@ pub unsafe extern "C" fn finkit_factor_study_json(request_json: *const c_char) -
 
 /// Run the generic quantitative strategy/portfolio evaluation JSON contract.
 #[no_mangle]
-pub unsafe extern "C" fn finkit_quant_evaluation_json(
-    request_json: *const c_char,
-) -> *mut c_char {
+pub unsafe extern "C" fn finkit_quant_evaluation_json(request_json: *const c_char) -> *mut c_char {
     let result = catch_unwind(AssertUnwindSafe(|| match request_text(request_json) {
         Ok(request) => finkit_ffi_common::quant_evaluation_json(&request),
         Err(error) => {

@@ -17,10 +17,7 @@ pub struct BacktestEvaluation {
 
 /// Evaluate a completed backtest with the same performance kernels used by
 /// factor research and portfolio studies.
-pub fn evaluate_backtest(
-    result: &BacktestResult,
-    config: PerformanceConfig,
-) -> BacktestEvaluation {
+pub fn evaluate_backtest(result: &BacktestResult, config: PerformanceConfig) -> BacktestEvaluation {
     let equity = result.equity_curve.as_slice().unwrap_or(&[]);
     let mut returns = one_period_returns(equity, ReturnKind::Arithmetic);
     // The legacy backtest defines the pre-first-bar strategy return as zero.

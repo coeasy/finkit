@@ -233,7 +233,11 @@ pub fn omega_ratio(returns: &[f64], threshold: f64) -> f64 {
         }
     }
     if losses <= f64::EPSILON {
-        if gains > 0.0 { f64::INFINITY } else { 0.0 }
+        if gains > 0.0 {
+            f64::INFINITY
+        } else {
+            0.0
+        }
     } else {
         gains / losses
     }
@@ -265,7 +269,11 @@ pub fn tail_ratio(returns: &[f64]) -> f64 {
     let upper = linear_quantile(&finite, 0.95);
     let lower = linear_quantile(&finite, 0.05).abs();
     if lower <= f64::EPSILON {
-        if upper > 0.0 { f64::INFINITY } else { 0.0 }
+        if upper > 0.0 {
+            f64::INFINITY
+        } else {
+            0.0
+        }
     } else {
         upper / lower
     }
@@ -545,7 +553,11 @@ pub fn evaluate_benchmark(
         }
         let s = samples.iter().map(|v| v.0).sum::<f64>() / samples.len() as f64;
         let b = samples.iter().map(|v| v.1).sum::<f64>() / samples.len() as f64;
-        if b.abs() > f64::EPSILON { s / b } else { 0.0 }
+        if b.abs() > f64::EPSILON {
+            s / b
+        } else {
+            0.0
+        }
     };
     let excess_annual = annualized_return(&strategy, annualization)
         - ((1.0 + config.risk_free_rate).powi(annualization as i32) - 1.0);
@@ -571,7 +583,11 @@ pub fn evaluate_benchmark(
 
 /// Trade-level metrics from per-trade returns and optional holding periods.
 pub fn evaluate_trades(trade_returns: &[f64], holding_periods: Option<&[usize]>) -> TradeMetrics {
-    let finite: Vec<f64> = trade_returns.iter().copied().filter(|v| v.is_finite()).collect();
+    let finite: Vec<f64> = trade_returns
+        .iter()
+        .copied()
+        .filter(|v| v.is_finite())
+        .collect();
     if finite.is_empty() {
         return TradeMetrics::default();
     }
@@ -606,11 +622,7 @@ pub fn evaluate_trades(trade_returns: &[f64], holding_periods: Option<&[usize]>)
         }
     }
 
-    let valid_holding: Vec<usize> = holding_periods
-        .unwrap_or(&[])
-        .iter()
-        .copied()
-        .collect();
+    let valid_holding: Vec<usize> = holding_periods.unwrap_or(&[]).iter().copied().collect();
 
     TradeMetrics {
         trades: finite.len(),
@@ -704,7 +716,10 @@ mod tests {
 
     #[test]
     fn trade_metrics_capture_extremes_and_streaks() {
-        let metrics = evaluate_trades(&[0.1, 0.2, -0.05, -0.1, -0.02, 0.04], Some(&[1, 2, 3, 4, 5, 6]));
+        let metrics = evaluate_trades(
+            &[0.1, 0.2, -0.05, -0.1, -0.02, 0.04],
+            Some(&[1, 2, 3, 4, 5, 6]),
+        );
         assert_eq!(metrics.trades, 6);
         assert_eq!(metrics.max_consecutive_losses, 3);
         assert_eq!(metrics.best_trade_return, 0.2);

@@ -748,6 +748,7 @@ name = "finkit-ffi"
 version = "0.1.15"
 dependencies = [
  "finkit",
+ "finkit-ffi-common",
  "libc",
  "ndarray 0.16.1",
  "serde_json",
@@ -757,6 +758,7 @@ dependencies = [
 name = "finkit-ffi-common"
 version = "0.1.15"
 dependencies = [
+ "finkit-factor-analysis",
  "serde",
  "serde_json",
 ]

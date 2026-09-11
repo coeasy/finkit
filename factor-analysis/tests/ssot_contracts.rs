@@ -22,5 +22,7 @@ fn research_concentration_facades_match_core_performance_owner() {
     let weights = [0.4, 0.3, -0.2, -0.1];
     let canonical = evaluate_portfolio(&weights);
     assert!((hhi(&weights) - canonical.hhi).abs() < 1e-12);
-    assert!((effective_number_of_bets(&weights) - canonical.effective_number_of_bets).abs() < 1e-12);
+    assert!(
+        (effective_number_of_bets(&weights) - canonical.effective_number_of_bets).abs() < 1e-12
+    );
 }
