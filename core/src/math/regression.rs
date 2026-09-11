@@ -163,6 +163,40 @@ pub fn residualize(y: &[f64], x: &[&[f64]]) -> Result<Vec<f64>> {
     Ok(ols(y, x)?.residuals)
 }
 
+/// Simple OLS slope without materializing residuals; used by rolling/statistical helpers.
+pub fn simple_slope(y: &[f64], x: &[f64]) -> Result<f64> {
+    if y.len() != x.len() {
+        return Err(TaError::InvalidParameter {
+            name: "x, y".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    let valid: Vec<(f64, f64)> = y
+        .iter()
+        .copied()
+        .zip(x.iter().copied())
+        .filter(|(yv, xv)| yv.is_finite() && xv.is_finite())
+        .collect();
+    if valid.len() < 2 {
+        return Err(TaError::InsufficientData {
+            length: valid.len(),
+            required: 2,
+        });
+    }
+    let n = valid.len() as f64;
+    let sum_x = valid.iter().map(|(_, xv)| *xv).sum::<f64>();
+    let sum_y = valid.iter().map(|(yv, _)| *yv).sum::<f64>();
+    let sum_xy = valid.iter().map(|(yv, xv)| yv * xv).sum::<f64>();
+    let sum_x2 = valid.iter().map(|(_, xv)| xv * xv).sum::<f64>();
+    let denom = n * sum_x2 - sum_x * sum_x;
+    if denom.abs() < 1e-15 {
+        return Err(TaError::ComputationError {
+            message: "regression design is singular".to_string(),
+        });
+    }
+    Ok((n * sum_xy - sum_x * sum_y) / denom)
+}
+
 /// Simple OLS facade for one exposure.
 pub fn simple_ols(y: &[f64], x: &[f64]) -> Result<RegressionResult> {
     ols(y, &[x])

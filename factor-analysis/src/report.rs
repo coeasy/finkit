@@ -7,8 +7,8 @@ use crate::data::ResearchFrame;
 use crate::error::ResearchResult;
 use crate::orchestration::StudyProvenance;
 use crate::prepare::{
-    compute_forward_returns, data_quality, quantize_factor, DataQualityReport,
-    ForwardReturnConfig, QuantizeConfig,
+    compute_forward_returns, data_quality, quantize_factor, DataQualityReport, ForwardReturnConfig,
+    QuantizeConfig,
 };
 use finkit::returns::ReturnKind;
 use serde::{Deserialize, Serialize};
@@ -132,8 +132,7 @@ impl<'a> FactorStudy<'a> {
         let alpha_beta = factor_alpha_beta(self.frame, &factor_ret, &forward);
         let quantile_returns = mean_return_by_quantile(&quantiles, &forward);
         let bottom_turnover = quantile_turnover(self.frame, &quantiles, 1, 1)?;
-        let top_turnover =
-            quantile_turnover(self.frame, &quantiles, self.quantize.quantiles, 1)?;
+        let top_turnover = quantile_turnover(self.frame, &quantiles, self.quantize.quantiles, 1)?;
         let rank_auto = rank_autocorrelation(self.frame, &self.factor_column, 1)?;
         Ok(FactorStudyReport {
             mode: self.mode,

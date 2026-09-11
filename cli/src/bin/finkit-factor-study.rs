@@ -39,19 +39,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut reader = csv::Reader::from_path(&args.input)?;
     let headers = reader.headers()?.clone();
-    let timestamp_idx = headers.iter().position(|h| h == "timestamp").ok_or("missing timestamp column")?;
-    let asset_idx = headers.iter().position(|h| h == "asset").ok_or("missing asset column")?;
-    let factor_idx = headers.iter().position(|h| h == "factor").ok_or("missing factor column")?;
-    let price_idx = headers.iter().position(|h| h == "price").ok_or("missing price column")?;
+    let timestamp_idx = headers
+        .iter()
+        .position(|h| h == "timestamp")
+        .ok_or("missing timestamp column")?;
+    let asset_idx = headers
+        .iter()
+        .position(|h| h == "asset")
+        .ok_or("missing asset column")?;
+    let factor_idx = headers
+        .iter()
+        .position(|h| h == "factor")
+        .ok_or("missing factor column")?;
+    let price_idx = headers
+        .iter()
+        .position(|h| h == "price")
+        .ok_or("missing price column")?;
 
     let mut rows = Vec::new();
     for record in reader.records() {
         let record = record?;
         rows.push(Row {
-            timestamp: record.get(timestamp_idx).ok_or("missing timestamp value")?.parse()?,
-            asset: record.get(asset_idx).ok_or("missing asset value")?.to_string(),
-            factor: record.get(factor_idx).ok_or("missing factor value")?.parse()?,
-            price: record.get(price_idx).ok_or("missing price value")?.parse()?,
+            timestamp: record
+                .get(timestamp_idx)
+                .ok_or("missing timestamp value")?
+                .parse()?,
+            asset: record
+                .get(asset_idx)
+                .ok_or("missing asset value")?
+                .to_string(),
+            factor: record
+                .get(factor_idx)
+                .ok_or("missing factor value")?
+                .parse()?,
+            price: record
+                .get(price_idx)
+                .ok_or("missing price value")?
+                .parse()?,
         });
     }
     rows.sort_by(|a, b| a.timestamp.cmp(&b.timestamp).then(a.asset.cmp(&b.asset)));
@@ -71,8 +95,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         rows.iter().map(|row| asset_ids[&row.asset]).collect(),
     )?;
     let mut frame = ResearchFrame::new(index);
-    frame.add_numeric("factor", "factor", rows.iter().map(|row| row.factor).collect())?;
-    frame.add_numeric("price", "market", rows.iter().map(|row| row.price).collect())?;
+    frame.add_numeric(
+        "factor",
+        "factor",
+        rows.iter().map(|row| row.factor).collect(),
+    )?;
+    frame.add_numeric(
+        "price",
+        "market",
+        rows.iter().map(|row| row.price).collect(),
+    )?;
 
     let report = FactorStudy::new(&frame, "factor", "price", periods)
         .quantize_config(QuantizeConfig {
