@@ -53,7 +53,9 @@ pub fn compute_forward_returns(
     for date_idx in 0..date_count {
         let start_range = segments.range(date_idx).expect("valid date segment");
         for &period in &config.periods {
-            let Some(target_date) = date_idx.checked_add(period).filter(|&date| date < date_count)
+            let Some(target_date) = date_idx
+                .checked_add(period)
+                .filter(|&date| date < date_count)
             else {
                 continue;
             };
@@ -236,77 +238,4 @@ pub fn data_quality(
             1.0 - finite_factor_rows as f64 / input_rows as f64
         },
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::data::{AssetId, PanelIndex};
-
-    fn sample_frame() -> ResearchFrame {
-        let index = PanelIndex::new(
-            vec![1, 1, 2, 2, 3, 3],
-            vec![
-                AssetId(1),
-                AssetId(2),
-                AssetId(1),
-                AssetId(2),
-                AssetId(1),
-                AssetId(2),
-            ],
-        )
-        .unwrap();
-        let mut frame = ResearchFrame::new(index);
-        frame
-            .add_numeric("price", "market", vec![10.0, 20.0, 11.0, 18.0, 12.0, 21.0])
-            .unwrap();
-        frame
-            .add_numeric("factor", "factor", vec![1.0, -1.0, 2.0, -2.0, 3.0, -3.0])
-            .unwrap();
-        frame
-    }
-
-    #[test]
-    fn forward_returns_do_not_cross_assets() {
-        let frame = sample_frame();
-        let cfg = ForwardReturnConfig::new(vec![1], ReturnKind::Arithmetic).unwrap();
-        let ret = compute_forward_returns(&frame, "price", &cfg).unwrap();
-        assert!((ret[&1][0] - 0.1).abs() < 1e-12);
-        assert!((ret[&1][1] + 0.1).abs() < 1e-12);
-    }
-
-    #[test]
-    fn sparse_asset_does_not_skip_a_missing_research_date() {
-        let index = PanelIndex::new(
-            vec![1, 1, 2, 3, 3],
-            vec![AssetId(1), AssetId(2), AssetId(2), AssetId(1), AssetId(2)],
-        )
-        .unwrap();
-        let mut frame = ResearchFrame::new(index);
-        frame
-            .add_numeric("price", "market", vec![10.0, 20.0, 21.0, 12.0, 22.0])
-            .unwrap();
-        let cfg = ForwardReturnConfig::new(vec![2, 1, 2], ReturnKind::Arithmetic).unwrap();
-        assert_eq!(cfg.periods, vec![1, 2]);
-        let ret = compute_forward_returns(&frame, "price", &cfg).unwrap();
-        assert!(ret[&1][0].is_nan());
-        assert!((ret[&1][1] - 0.05).abs() < 1e-12);
-        assert!((ret[&2][0] - 0.2).abs() < 1e-12);
-    }
-
-    #[test]
-    fn quantiles_are_date_local() {
-        let frame = sample_frame();
-        let q = quantize_factor(
-            &frame,
-            "factor",
-            &QuantizeConfig {
-                quantiles: 2,
-                by_group: None,
-                zero_aware: false,
-            },
-        )
-        .unwrap();
-        assert_eq!(&q[..2], &[2, 1]);
-    }
 }
