@@ -32,6 +32,7 @@ pub struct StreamingMacdExt {
     signal_ema: StreamingEma,
     count: usize,
     last_value: Option<MacdOutput>,
+    snapshot: Option<SnapshotState>,
     last_open_time: i64,
 }
 
@@ -41,9 +42,20 @@ enum MaKind {
     Ema,
 }
 
+#[derive(Clone)]
 enum MaState {
     Sma(StreamingSma),
     Ema(StreamingEma),
+}
+
+#[derive(Clone)]
+struct SnapshotState {
+    fast_state: MaState,
+    slow_state: MaState,
+    signal_ema: StreamingEma,
+    count: usize,
+    last_value: Option<MacdOutput>,
+    last_open_time: i64,
 }
 
 impl MaState {
@@ -106,8 +118,39 @@ impl StreamingMacdExt {
             signal_ema: StreamingEma::new(signal_period),
             count: 0,
             last_value: None,
+            snapshot: None,
             last_open_time: 0,
         })
+    }
+
+    /// Feed an OHLCV bar with forming-bar repaint support.
+    ///
+    /// A repeated non-zero `open_time()` replaces the previous forming bar.
+    /// The pre-bar state is restored before calculating the replacement, so
+    /// repeated quote updates do not accumulate duplicate observations.
+    pub fn compute_bar(&mut self, bar: &dyn crate::streaming::traits::Ohlcv) -> Option<MacdOutput> {
+        let timestamp = bar.open_time();
+        if timestamp != 0 && timestamp == self.last_open_time {
+            if let Some(snapshot) = self.snapshot.take() {
+                self.fast_state = snapshot.fast_state;
+                self.slow_state = snapshot.slow_state;
+                self.signal_ema = snapshot.signal_ema;
+                self.count = snapshot.count;
+                self.last_value = snapshot.last_value;
+                self.last_open_time = snapshot.last_open_time;
+            }
+        }
+
+        self.snapshot = Some(SnapshotState {
+            fast_state: self.fast_state.clone(),
+            slow_state: self.slow_state.clone(),
+            signal_ema: self.signal_ema.clone(),
+            count: self.count,
+            last_value: self.last_value,
+            last_open_time: self.last_open_time,
+        });
+        self.last_open_time = timestamp;
+        self.next(bar.close())
     }
 }
 
@@ -142,6 +185,7 @@ impl StreamingIndicator<f64, MacdOutput> for StreamingMacdExt {
         self.signal_ema.reset();
         self.count = 0;
         self.last_value = None;
+        self.snapshot = None;
         self.last_open_time = 0;
     }
 
@@ -167,10 +211,6 @@ impl IndicatorMeta for StreamingMacdExt {
         self.count().max(35)
     }
 }
-
-// ---------------------------------------------------------------------------
-// (Repaint helpers — not currently wired up, kept for future composition.)
-// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
@@ -227,6 +267,40 @@ mod tests {
         m.reset();
         assert!(!m.is_ready());
         assert_eq!(m.count(), 0);
+    }
+
+    #[test]
+    fn test_streaming_macd_ext_repaint() {
+        use crate::streaming::OhlcvBar;
+
+        let data = [10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0];
+        let mut repainting = StreamingMacdExt::new(3, MaType::Ema, 5, MaType::Ema, 3).unwrap();
+        for (index, &value) in data.iter().enumerate() {
+            repainting.compute_bar(&OhlcvBar::new_with_time(
+                0.0,
+                0.0,
+                0.0,
+                value,
+                0.0,
+                (index + 1) as i64 * 1000,
+            ));
+        }
+        repainting.compute_bar(&OhlcvBar::new_with_time(0.0, 0.0, 0.0, 100.0, 0.0, 9000));
+        repainting.compute_bar(&OhlcvBar::new_with_time(0.0, 0.0, 0.0, 200.0, 0.0, 9000));
+        let result_repaint =
+            repainting.compute_bar(&OhlcvBar::new_with_time(0.0, 0.0, 0.0, 18.0, 0.0, 9000));
+
+        let mut clean = StreamingMacdExt::new(3, MaType::Ema, 5, MaType::Ema, 3).unwrap();
+        for &value in &data {
+            clean.next(value);
+        }
+        let result_clean = clean.next(18.0);
+
+        let repaint = result_repaint.unwrap();
+        let clean = result_clean.unwrap();
+        assert!((repaint.macd - clean.macd).abs() < 1e-10);
+        assert!((repaint.signal - clean.signal).abs() < 1e-10);
+        assert!((repaint.histogram - clean.histogram).abs() < 1e-10);
     }
 
     #[test]
