@@ -1,0 +1,69 @@
+name: PR29 final one-shot fix
+
+on:
+  push:
+    branches:
+      - feat/factor-research-architecture
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-verify:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feat/factor-research-architecture
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt,clippy
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 1.23.x
+          cache-dependency-path: ffi/go-binding/go/go.mod
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+      - name: Apply final source fixes
+        run: python scripts/pr29_final_fix.py
+      - name: Format Rust and Go
+        run: |
+          cargo fmt --all
+          gofmt -w ffi/go-binding/go/ta/ta.go
+      - name: Verify formatting and research SSOT
+        run: |
+          cargo fmt --all --check
+          python scripts/check_research_ssot.py
+      - name: Verify HT_SINE correctness and performance
+        run: |
+          cargo test -p finkit indicators::cycle::tests::test_ht_sine --locked
+          cargo test -p finkit indicators::cycle::tests::test_ht_sine_throughput --locked -- --nocapture
+      - name: Verify factor research
+        run: cargo test -p finkit-factor-analysis --locked
+      - name: Verify visualization including examples
+        run: cargo test -p finkit-visualization --all-targets --locked
+      - name: Verify Go binding
+        run: |
+          cargo build -p finkit-go --release --locked
+          cd ffi/go-binding/go
+          LD_LIBRARY_PATH="$GITHUB_WORKSPACE/target/release" CGO_ENABLED=1 go test ./...
+      - name: Verify .NET binding
+        run: |
+          cargo build -p finkit-dotnet --release --locked
+          dotnet build ffi/dotnet-binding/src/Finkit/Finkit.csproj --configuration Release
+      - name: Verify workspace and lint
+        run: |
+          cargo check --workspace --all-targets --locked
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Commit only after all targeted gates pass
+        run: |
+          rm .github/workflows/pr29-final-fix.yml
+          rm scripts/pr29_final_fix.py
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: close PR29 correctness performance and binding gates"
+          git push origin HEAD:feat/factor-research-architecture
