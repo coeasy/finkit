@@ -76,11 +76,21 @@ impl HoldingPeriodPortfolioEngine {
         Ok(Self { holding_dates })
     }
 
-    /// Produce one normalized asset-weight map per research date.
+    /// Produce one normalized asset-weight map per research date using zero execution lag.
     pub fn positions(
         &self,
         frame: &ResearchFrame,
         row_weights: &[f64],
+    ) -> ResearchResult<Vec<BTreeMap<AssetId, f64>>> {
+        self.positions_with_lag(frame, row_weights, 0)
+    }
+
+    /// Produce positions after delaying factor formation by `execution_lag` research dates.
+    pub fn positions_with_lag(
+        &self,
+        frame: &ResearchFrame,
+        row_weights: &[f64],
+        execution_lag: usize,
     ) -> ResearchResult<Vec<BTreeMap<AssetId, f64>>> {
         if row_weights.len() != frame.index().len() {
             return Err(ResearchError::LengthMismatch {
@@ -98,19 +108,25 @@ impl HoldingPeriodPortfolioEngine {
             {
                 active.pop_front();
             }
-            let range = frame.index().date_segments().range(date_idx).unwrap();
-            let cohort_weights: BTreeMap<AssetId, f64> = range
-                .filter_map(|row| {
-                    let weight = row_weights[row];
-                    (weight.is_finite() && weight != 0.0)
-                        .then_some((frame.index().assets()[row], weight))
-                })
-                .collect();
-            if !cohort_weights.is_empty() {
-                active.push_back(Cohort {
-                    expires_on_date: date_idx + self.holding_dates,
-                    weights: cohort_weights,
-                });
+            if let Some(formation_date) = date_idx.checked_sub(execution_lag) {
+                let range = frame
+                    .index()
+                    .date_segments()
+                    .range(formation_date)
+                    .expect("valid formation date");
+                let cohort_weights: BTreeMap<AssetId, f64> = range
+                    .filter_map(|row| {
+                        let weight = row_weights[row];
+                        (weight.is_finite() && weight != 0.0)
+                            .then_some((frame.index().assets()[row], weight))
+                    })
+                    .collect();
+                if !cohort_weights.is_empty() {
+                    active.push_back(Cohort {
+                        expires_on_date: date_idx + self.holding_dates,
+                        weights: cohort_weights,
+                    });
+                }
             }
             let mut combined = BTreeMap::<AssetId, f64>::new();
             for cohort in &active {
@@ -212,6 +228,23 @@ pub fn capacity_curve(
 mod tests {
     use super::*;
     use crate::data::{PanelIndex, ResearchFrame};
+
+    #[test]
+    fn execution_lag_delays_cohort_activation() {
+        let index = PanelIndex::new(
+            vec![1, 1, 2, 2],
+            vec![AssetId(1), AssetId(2), AssetId(1), AssetId(2)],
+        )
+        .unwrap();
+        let frame = ResearchFrame::new(index);
+        let positions = HoldingPeriodPortfolioEngine::new(1)
+            .unwrap()
+            .positions_with_lag(&frame, &[0.5, -0.5, 0.8, -0.2], 1)
+            .unwrap();
+        assert!(positions[0].is_empty());
+        assert_eq!(positions[1].get(&AssetId(1)).copied(), Some(0.5));
+        assert_eq!(positions[1].get(&AssetId(2)).copied(), Some(-0.5));
+    }
 
     #[test]
     fn holding_engine_overlaps_cohorts() {

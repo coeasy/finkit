@@ -542,7 +542,8 @@ pub fn evaluate_benchmark(
     };
     let strategy_mean = mean(&strategy);
     let benchmark_mean = mean(&benchmark);
-    let alpha_per_period = strategy_mean - beta * benchmark_mean;
+    let alpha_per_period =
+        (strategy_mean - config.risk_free_rate) - beta * (benchmark_mean - config.risk_free_rate);
     let corr = correlation(&strategy, &benchmark).unwrap_or(0.0);
 
     let upside: Vec<(f64, f64)> = pairs.iter().copied().filter(|v| v.1 > 0.0).collect();
@@ -622,7 +623,16 @@ pub fn evaluate_trades(trade_returns: &[f64], holding_periods: Option<&[usize]>)
         }
     }
 
-    let valid_holding: Vec<usize> = holding_periods.unwrap_or(&[]).iter().copied().collect();
+    let valid_holding: Vec<usize> = holding_periods
+        .filter(|periods| periods.len() == trade_returns.len())
+        .map(|periods| {
+            trade_returns
+                .iter()
+                .zip(periods.iter().copied())
+                .filter_map(|(ret, period)| ret.is_finite().then_some(period))
+                .collect()
+        })
+        .unwrap_or_default();
 
     TradeMetrics {
         trades: finite.len(),
@@ -724,6 +734,14 @@ mod tests {
         assert_eq!(metrics.max_consecutive_losses, 3);
         assert_eq!(metrics.best_trade_return, 0.2);
         assert_eq!(metrics.max_holding_period, 6);
+    }
+
+    #[test]
+    fn trade_holding_periods_follow_finite_trade_returns() {
+        let metrics = evaluate_trades(&[0.10, f64::NAN, -0.05], Some(&[1, 100, 3]));
+        assert_eq!(metrics.trades, 2);
+        assert!((metrics.average_holding_period - 2.0).abs() < 1e-12);
+        assert_eq!(metrics.max_holding_period, 3);
     }
 
     #[test]

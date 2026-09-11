@@ -50,6 +50,9 @@ pub struct FactorStudyRequest {
     pub equal_weight: bool,
     #[serde(default = "default_mode")]
     pub mode: AnalysisMode,
+    /// Research-date lag between factor formation and portfolio activation.
+    #[serde(default)]
+    pub execution_lag: usize,
     /// Quantitative evaluation settings shared by every language binding.
     #[serde(default)]
     pub evaluation: EvaluationConfig,
@@ -219,6 +222,7 @@ pub fn run_factor_study(
 
     FactorStudy::new(&frame, "factor", "price", request.periods.clone())
         .mode(request.mode)
+        .execution_lag(request.execution_lag)
         .quantize_config(QuantizeConfig {
             quantiles: request.quantiles,
             by_group: request.quantize_by_group.then(|| "group".to_string()),
@@ -282,6 +286,7 @@ mod tests {
             demeaned: true,
             equal_weight: false,
             mode: AnalysisMode::Native,
+            execution_lag: 0,
             evaluation: EvaluationConfig::default(),
         }
     }
@@ -293,7 +298,8 @@ mod tests {
         let report = response.report.unwrap();
         assert_eq!(report.periods, vec![1]);
         assert_eq!(report.quantiles, 3);
-        assert!(report.performance.by_horizon.contains_key(&1));
+        assert_eq!(report.execution_lag, 0);
+        assert!(report.performance.by_holding_period.contains_key(&1));
     }
 
     #[test]

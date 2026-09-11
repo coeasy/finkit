@@ -1,7 +1,7 @@
 use crate::analysis::{
-    cumulative_factor_returns, factor_alpha_beta, factor_returns, factor_weights,
-    information_coefficient, mean_information_coefficient, mean_return_by_quantile,
-    quantile_turnover, rank_autocorrelation, AlphaBeta, WeightConfig,
+    factor_alpha_beta, factor_returns, factor_weights, information_coefficient,
+    mean_information_coefficient, mean_return_by_quantile, quantile_turnover, rank_autocorrelation,
+    AlphaBeta, WeightConfig,
 };
 use crate::data::ResearchFrame;
 use crate::error::ResearchResult;
@@ -67,6 +67,8 @@ pub struct FactorStudyReport {
     pub data_quality: DataQualityReport,
     pub quantiles: u16,
     pub periods: Vec<usize>,
+    /// Number of research dates between signal formation and portfolio activation.
+    pub execution_lag: usize,
     pub returns: ReturnsReport,
     pub information: InformationReport,
     pub turnover: TurnoverReport,
@@ -91,6 +93,7 @@ pub struct FactorStudy<'a> {
     quantize: QuantizeConfig,
     weights: WeightConfig,
     evaluation: EvaluationConfig,
+    execution_lag: usize,
     mode: AnalysisMode,
     provenance: StudyProvenance,
 }
@@ -110,6 +113,7 @@ impl<'a> FactorStudy<'a> {
             quantize: QuantizeConfig::default(),
             weights: WeightConfig::default(),
             evaluation: EvaluationConfig::default(),
+            execution_lag: 0,
             mode: AnalysisMode::Native,
             provenance: StudyProvenance {
                 library_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -130,6 +134,11 @@ impl<'a> FactorStudy<'a> {
 
     pub fn evaluation_config(mut self, config: EvaluationConfig) -> Self {
         self.evaluation = config;
+        self
+    }
+
+    pub fn execution_lag(mut self, execution_lag: usize) -> Self {
+        self.execution_lag = execution_lag;
         self
     }
 
@@ -169,7 +178,6 @@ impl<'a> FactorStudy<'a> {
             .iter()
             .map(|(&period, values)| (period, summarize_ic(values, period.saturating_sub(1))))
             .collect();
-        let cumulative = cumulative_factor_returns(&factor_ret);
         let alpha_beta = factor_alpha_beta(self.frame, &factor_ret, &forward);
         let quantile_returns = mean_return_by_quantile(&quantiles, &forward);
         let quantile_diagnostics = quantile_diagnostics(&quantile_returns);
@@ -181,8 +189,14 @@ impl<'a> FactorStudy<'a> {
             &weights,
             &daily_asset_returns,
             &self.periods,
+            self.execution_lag,
             self.evaluation,
         )?;
+        let cumulative = performance
+            .by_holding_period
+            .iter()
+            .map(|(&period, result)| (period, result.gross_cumulative_wealth.clone()))
+            .collect();
 
         Ok(FactorStudyReport {
             mode: self.mode,
@@ -190,6 +204,7 @@ impl<'a> FactorStudy<'a> {
             data_quality: data_quality(self.frame, &self.factor_column)?,
             quantiles: self.quantize.quantiles,
             periods: self.periods.clone(),
+            execution_lag: self.execution_lag,
             returns: ReturnsReport {
                 factor_returns: factor_ret,
                 cumulative_returns: cumulative,
@@ -273,6 +288,11 @@ mod tests {
             .full_report()
             .unwrap();
         assert_eq!(report.periods, vec![1, 2]);
+        assert_eq!(report.execution_lag, 0);
+        assert_eq!(
+            report.returns.cumulative_returns[&1],
+            report.performance.by_holding_period[&1].gross_cumulative_wealth
+        );
         assert!(report.information.mean_ic[&1] > 0.9);
         assert!(report.information.statistics[&1].positive_ratio > 0.0);
         assert!(report

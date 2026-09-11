@@ -14,6 +14,7 @@ use crate::performance::{
 };
 use crate::portfolio::HoldingPeriodPortfolioEngine;
 use finkit::performance as core;
+use finkit::returns::cumulative_returns;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -23,6 +24,14 @@ pub struct HorizonPortfolioPerformance {
     pub gross: QuantEvaluationReport,
     /// Actual daily P&L after linear turnover costs/slippage.
     pub after_cost: QuantEvaluationReport,
+    /// Daily tradable return stream before costs.
+    pub gross_daily_returns: Vec<f64>,
+    /// Daily tradable return stream after costs.
+    pub after_cost_daily_returns: Vec<f64>,
+    /// Wealth curve compounded from the daily tradable gross return stream.
+    pub gross_cumulative_wealth: Vec<f64>,
+    /// Wealth curve compounded from the daily tradable net return stream.
+    pub after_cost_cumulative_wealth: Vec<f64>,
     pub portfolio: PortfolioSummaryReport,
     pub costs: CostSummaryReport,
 }
@@ -147,23 +156,19 @@ fn equal_weight_benchmark_returns(
             actual: daily_asset_returns.len(),
         });
     }
-    Ok(frame
-        .index()
-        .date_segments()
-        .map(|range| {
-            let valid: Vec<f64> = range
-                .filter_map(|row| {
-                    let value = daily_asset_returns[row];
-                    value.is_finite().then_some(value)
-                })
-                .collect();
-            if valid.is_empty() {
-                f64::NAN
-            } else {
-                valid.iter().sum::<f64>() / valid.len() as f64
-            }
-        })
-        .collect())
+    Ok(frame.index().date_segments().map(|range| {
+        let valid: Vec<f64> = range
+            .filter_map(|row| {
+                let value = daily_asset_returns[row];
+                value.is_finite().then_some(value)
+            })
+            .collect();
+        if valid.is_empty() {
+            f64::NAN
+        } else {
+            valid.iter().sum::<f64>() / valid.len() as f64
+        }
+    }))
 }
 
 pub fn evaluate_factor_holding_periods(
@@ -171,6 +176,7 @@ pub fn evaluate_factor_holding_periods(
     target_row_weights: &[f64],
     daily_asset_returns: &[f64],
     holding_periods: &[usize],
+    execution_lag: usize,
     config: EvaluationConfig,
 ) -> ResearchResult<FactorPortfolioPerformanceReport> {
     if target_row_weights.len() != frame.index().len() {
@@ -183,8 +189,11 @@ pub fn evaluate_factor_holding_periods(
     let benchmark = equal_weight_benchmark_returns(frame, daily_asset_returns)?;
     let mut by_holding_period = BTreeMap::new();
     for &period in holding_periods {
-        let positions =
-            HoldingPeriodPortfolioEngine::new(period)?.positions(frame, target_row_weights)?;
+        let positions = HoldingPeriodPortfolioEngine::new(period)?.positions_with_lag(
+            frame,
+            target_row_weights,
+            execution_lag,
+        )?;
         let gross_returns = daily_portfolio_returns(frame, &positions, daily_asset_returns)?;
         let portfolio = summarize_positions(&positions);
         let costs = evaluate_costs(&portfolio.turnover_by_date, config);
@@ -204,11 +213,19 @@ pub fn evaluate_factor_holding_periods(
                 }
             })
             .collect();
+        let gross = evaluate_quant_performance(&gross_returns, Some(&benchmark), config);
+        let after_cost = evaluate_quant_performance(&net_returns, Some(&benchmark), config);
+        let gross_cumulative_wealth = cumulative_returns(&gross_returns, 1.0);
+        let after_cost_cumulative_wealth = cumulative_returns(&net_returns, 1.0);
         by_holding_period.insert(
             period,
             HorizonPortfolioPerformance {
-                gross: evaluate_quant_performance(&gross_returns, Some(&benchmark), config),
-                after_cost: evaluate_quant_performance(&net_returns, Some(&benchmark), config),
+                gross,
+                after_cost,
+                gross_daily_returns: gross_returns,
+                after_cost_daily_returns: net_returns,
+                gross_cumulative_wealth,
+                after_cost_cumulative_wealth,
                 portfolio,
                 costs,
             },
@@ -249,6 +266,7 @@ mod tests {
             &weights,
             &daily_returns,
             &[1, 2],
+            0,
             EvaluationConfig::default(),
         )
         .unwrap();

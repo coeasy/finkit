@@ -12,6 +12,7 @@ workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
+finkit-ffi-common = { path = "../ffi/ffi-common" }
 finkit = { path = "../core", default-features = false, features = ["std", "formula", "serde", "tracing", "indicators-all"] }
 finkit-visualization = { path = "../visualization", default-features = false, features = ["svg", "html"] }
 ndarray = { workspace = true }

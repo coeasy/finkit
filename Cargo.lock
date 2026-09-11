@@ -700,6 +700,7 @@ version = "0.1.15"
 dependencies = [
  "android_logger",
  "finkit",
+ "finkit-ffi-common",
  "jni",
  "ndarray 0.16.1",
 ]
@@ -803,6 +804,7 @@ name = "finkit-node"
 version = "0.1.15"
 dependencies = [
  "finkit",
+ "finkit-ffi-common",
  "finkit-visualization",
  "napi",
  "napi-build",
@@ -843,6 +845,7 @@ version = "0.1.15"
 dependencies = [
  "console_error_panic_hook",
  "finkit",
+ "finkit-ffi-common",
  "finkit-visualization",
  "getrandom 0.3.4",
  "ndarray 0.16.1",

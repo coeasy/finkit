@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct EvaluationConfig {
     pub annualization: usize,
     pub risk_free_rate: f64,
@@ -315,20 +316,16 @@ pub fn evaluate_horizons(
 }
 
 fn date_weight_maps(frame: &ResearchFrame, weights: &[f64]) -> Vec<BTreeMap<AssetId, f64>> {
-    frame
-        .index()
-        .date_segments()
-        .map(|range| {
-            range
-                .filter_map(|row| {
-                    let weight = weights[row];
-                    weight
-                        .is_finite()
-                        .then_some((frame.index().assets()[row], weight))
-                })
-                .collect()
-        })
-        .collect()
+    frame.index().date_segments().map(|range| {
+        range
+            .filter_map(|row| {
+                let weight = weights[row];
+                weight
+                    .is_finite()
+                    .then_some((frame.index().assets()[row], weight))
+            })
+            .collect()
+    })
 }
 
 /// One-way weight turnover. The first observation is initial portfolio deployment.
@@ -363,8 +360,7 @@ pub fn evaluate_portfolio_by_date(
     let by_date: Vec<PortfolioMetricsReport> = frame
         .index()
         .date_segments()
-        .map(|range| core::evaluate_portfolio(&weights[range]).into())
-        .collect();
+        .map(|range| core::evaluate_portfolio(&weights[range]).into());
     let turnover_by_date = portfolio_turnover_by_date(frame, weights);
     let count = by_date.len().max(1) as f64;
     PortfolioSummaryReport {
@@ -458,7 +454,7 @@ mod tests {
         );
         assert!(report.returns.total_return > 0.0);
         assert!(report.risk.annualized_volatility > 0.0);
-        assert!(report.benchmark.unwrap().tracking_error >= 0.0);
+        assert!(report.benchmark.as_ref().unwrap().tracking_error >= 0.0);
         serde_json::to_string(&report).unwrap();
     }
 

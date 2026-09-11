@@ -2700,3 +2700,15 @@ impl StreamingSuperTrendHandle {
         self.inner.is_ready()
     }
 }
+
+/// Execute the same schema-versioned factor research contract used by native bindings.
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn factor_study_json(request_json: &str) -> String {
+    finkit_ffi_common::factor_study_json(request_json)
+}
+
+/// Evaluate arbitrary returns through the canonical quantitative evaluation contract.
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn quant_evaluation_json(request_json: &str) -> String {
+    finkit_ffi_common::quant_evaluation_json(request_json)
+}
