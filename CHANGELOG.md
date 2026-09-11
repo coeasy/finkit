@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.13] - 2026-09-11
+
+- Correct the Rust CDLDOJI public wrapper to use TA-Lib's default 0.1
+  BodyDoji factor, matching the Python binding and compatibility contract.
+
 ## [0.1.12] - 2026-09-11
 
 - Complete the maintained TA-Lib 0.6.x compatibility matrix at 161/161 on

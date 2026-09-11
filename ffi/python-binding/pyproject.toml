@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "finkit"
-version = "0.1.12"
+version = "0.1.13"
 description = "High-performance financial technical analysis library for quantitative trading"
 authors = [
     {name = "Finkit Contributors"}

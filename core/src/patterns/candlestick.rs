@@ -2862,10 +2862,10 @@ pub fn cdl_darkcloudcover(
 
 /// CDLDOJI — Doji
 pub fn cdl_doji(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result<PatternResult> {
-    // TA-Lib's default BodyDoji candle setting uses the preceding average
-    // real body directly (factor 1.0); the generic helper keeps its explicit
-    // percentage parameter for callers that want a stricter custom rule.
-    doji(open, high, low, close, 1.0)
+    // TA-Lib's default BodyDoji candle setting uses 10% of the preceding
+    // HighLow average; the generic helper keeps its explicit percentage
+    // parameter for callers that want a custom rule.
+    doji(open, high, low, close, 0.1)
 }
 
 /// CDLDRAGONFLYDOJI — Dragonfly Doji
