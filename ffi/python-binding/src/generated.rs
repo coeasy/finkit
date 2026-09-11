@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────────────────
 // GENERATED FILE — do not edit by hand.
-// Source of truth: docs/indicator_registry.json (ffi.bodies.<lang>).
+// Source of truth: docs/ffi_registry.json (ffi.bodies.<lang>).
 // Regenerate with: python3 scripts/sync_bindings.py --lang python --generate --rewrite
 // ─────────────────────────────────────────────────────────────────────
 
@@ -1494,7 +1494,7 @@ fn wclprice(
 /// * `high` - High prices
 /// * `low` - Low prices
 /// * `close` - Close prices
-/// * `doji_pct` - Doji threshold factor (default: 0.1, matching TA-Lib BodyDoji)
+/// * `doji_pct` - Doji threshold percentage (default: 0.1)
 #[pyfunction]
 #[pyo3(signature = (open, high, low, close, doji_pct=0.1))]
 fn cdl_doji(
