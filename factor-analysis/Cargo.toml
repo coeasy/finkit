@@ -1,0 +1,23 @@
+[package]
+name = "finkit-factor-analysis"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Factor research, Alphalens-compatible analysis, validation, and portfolio research for Finkit"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+finkit = { path = "../core" }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+thiserror.workspace = true
+rayon = { version = "1", optional = true }
+
+[features]
+default = []
+rayon = ["dep:rayon", "finkit/rayon"]
