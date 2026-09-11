@@ -84,11 +84,18 @@ pub fn doji(
     let mut output = Array1::zeros(len);
     let period = 10;
 
+    // TA-Lib's BodyDoji setting is a 10-bar average of the preceding real
+    // bodies multiplied by the default 0.1 factor. The current candle is
+    // deliberately excluded from the average; using true range here creates
+    // false positives on volatile bars.
     for i in period..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
+        let avg_body = (i - period..i)
+            .map(|j| body(open[j], close[j]))
+            .sum::<f64>()
+            / period as f64;
         let body_size = body(open[i], close[i]);
 
-        if body_size <= avg_range * doji_pct {
+        if body_size <= avg_body * doji_pct {
             output[i] = 100;
         }
     }
@@ -2642,7 +2649,10 @@ pub fn cdl_darkcloudcover(
 
 /// CDLDOJI — Doji
 pub fn cdl_doji(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result<PatternResult> {
-    doji(open, high, low, close, 0.1)
+    // TA-Lib's default BodyDoji candle setting uses the preceding average
+    // real body directly (factor 1.0); the generic helper keeps its explicit
+    // percentage parameter for callers that want a stricter custom rule.
+    doji(open, high, low, close, 1.0)
 }
 
 /// CDLDRAGONFLYDOJI — Dragonfly Doji

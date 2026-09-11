@@ -144,6 +144,36 @@ def test_compute_indicators_talib_compatibility_mode():
     assert np.isfinite(compat["macd_3_5_2_0"][5:]).any()
 
 
+def test_compute_indicators_talib_compatibility_extended_lookbacks():
+    """Regression coverage for the exact multi-output compatibility adapters."""
+    try:
+        import finkit as ta
+    except ImportError:
+        print("SKIP: finkit not installed")
+        return
+
+    n = 80
+    close = 100.0 + np.arange(n, dtype=np.float64) * 0.2 + np.sin(np.arange(n) * 0.13)
+    alternate = 200.0 + np.arange(n, dtype=np.float64) * 0.1 + np.cos(np.arange(n) * 0.11)
+    results = ta.compute_indicators(
+        close=close,
+        secondary=alternate,
+        requests=[
+            ("stochrsi", [14, 5, 3, 0]),
+            ("macdfix", [9]),
+            ("beta", [5]),
+        ],
+        talib_compat=True,
+    )
+
+    assert np.isnan(results["stochrsi_14_5_3_0_0"][:20]).all()
+    assert np.isfinite(results["stochrsi_14_5_3_0_0"][20:]).any()
+    assert np.isnan(results["macdfix_9_0"][:33]).all()
+    assert np.isfinite(results["macdfix_9_0"][33:]).any()
+    assert np.isnan(results["beta_5"][:5]).all()
+    assert np.isfinite(results["beta_5"][5:]).any()
+
+
 def test_compute_indicators_gil_release():
     """Verify batch computation releases GIL by running concurrent calls."""
     try:

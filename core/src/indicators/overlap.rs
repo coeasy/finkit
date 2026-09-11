@@ -693,8 +693,10 @@ pub fn mama(input: &[f64], fast_limit: f64, slow_limit: f64) -> Result<MamaResul
     period_wma_sub += input[2];
     period_wma_sum += input[2] * 3.0;
 
-    // Process from bar 3 (after WMA init) through bar 9 to warm up
-    for i in 3..10 {
+    // Match TA-Lib's nine WMA warm-up updates (bars 3..11). The recursive
+    // Hilbert state starts at bar 12; processing bars 10/11 here would make
+    // MAMA diverge even though the public lookback is 32.
+    for i in 3..12 {
         let today_value = input[i];
         period_wma_sub += today_value;
         period_wma_sub -= trailing_wma_value;
@@ -705,8 +707,8 @@ pub fn mama(input: &[f64], fast_limit: f64, slow_limit: f64) -> Result<MamaResul
         period_wma_sum -= period_wma_sub;
     }
 
-    // Main processing loop from bar 10 onward (lookback = 32, output starts at 32)
-    for i in 10..len {
+    // Main processing loop from bar 12 onward (lookback = 32, output starts at 32)
+    for i in 12..len {
         let adjusted_prev_period = 0.075 * period + 0.54;
         let today_value = input[i];
 
@@ -885,7 +887,7 @@ pub fn mama(input: &[f64], fast_limit: f64, slow_limit: f64) -> Result<MamaResul
         // Adjust period for next bar (same as HT_DCPERIOD)
         let temp_period = period;
         if im.abs() > 1e-10 && re.abs() > 1e-10 {
-            period = 360.0 / (im / re).atan();
+            period = 360.0 / ((im / re).atan() * 180.0 / std::f64::consts::PI);
         }
 
         let temp15 = 1.5 * temp_period;
@@ -1022,8 +1024,8 @@ pub fn mama_into(
     period_wma_sub += input[2];
     period_wma_sum += input[2] * 3.0;
 
-    // Process from bar 3 (after WMA init) through bar 9 to warm up
-    for i in 3..10 {
+    // Match TA-Lib's nine WMA warm-up updates (bars 3..11).
+    for i in 3..12 {
         let today_value = input[i];
         period_wma_sub += today_value;
         period_wma_sub -= trailing_wma_value;
@@ -1034,8 +1036,8 @@ pub fn mama_into(
         period_wma_sum -= period_wma_sub;
     }
 
-    // Main processing loop from bar 10 onward (lookback = 32, output starts at 32)
-    for i in 10..len {
+    // Main processing loop from bar 12 onward (lookback = 32, output starts at 32)
+    for i in 12..len {
         let adjusted_prev_period = 0.075 * period + 0.54;
         let today_value = input[i];
 
@@ -1214,7 +1216,7 @@ pub fn mama_into(
         // Adjust period for next bar (same as HT_DCPERIOD)
         let temp_period = period;
         if im.abs() > 1e-10 && re.abs() > 1e-10 {
-            period = 360.0 / (im / re).atan();
+            period = 360.0 / ((im / re).atan() * 180.0 / std::f64::consts::PI);
         }
 
         let temp15 = 1.5 * temp_period;

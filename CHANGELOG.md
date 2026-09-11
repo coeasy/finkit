@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.11] - 2026-09-11
+
+- Add exact TA-Lib compatibility implementations for STOCHRSI, MACDFIX and
+  BETA, including their multi-output, lookback and secondary-input contracts.
+- Correct the shared Hilbert recursive warm-up and radian/degree period
+  conversion; HT_DCPERIOD, HT_DCPHASE, HT_PHASOR, HT_SINE, MAMA and the
+  trend-mode path now match TA-Lib on the maintained comparison matrix.
+- Add the TA-Lib dominant-cycle phase projection and raw-price trendline
+  calculation, plus regression coverage for the extended compatibility paths.
+- Align CDLDOJI with TA-Lib's preceding real-body average candle setting.
+
 ## [0.1.10] - 2026-09-11
 
 - Correct TA-Lib MACDEXT lookback selection for its `slowperiod` and

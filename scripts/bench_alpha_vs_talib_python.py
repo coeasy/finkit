@@ -350,7 +350,7 @@ def talib_lookback(name: str, params: tuple[float, ...]) -> int:
     if name == "stochf":
         return period(0, 5) + period(1, 3) - 2
     if name == "stochrsi":
-        return period(0, 14) + period(1, 5) + period(3, 3) - 2
+        return period(0, 14) + period(1, 5) + period(2, 3) - 2
     if name == "trix":
         return 3 * period(0, 30) - 2
     if name == "ultosc":
@@ -454,7 +454,7 @@ def run(args: argparse.Namespace) -> int:
             results.append(row)
             continue
         direct = resolve_direct(finkit, name)
-        use_batch_compat = name in {"SAR", "PLUS_DM", "MINUS_DM", "PPO"}
+        use_batch_compat = name in {"SAR", "PLUS_DM", "MINUS_DM", "PPO", "STOCHRSI", "MACDFIX", "BETA"}
         if use_batch_compat and callable(getattr(finkit, "compute_indicators", None)):
             alpha_call = lambda n=name, s=spec: invoke_batch(finkit, data, n, s)
             row["adapter"] = "compute_indicators"

@@ -4707,6 +4707,15 @@ fn compute_all_indicators(
         );
         let result = if talib_compat && req.name.eq_ignore_ascii_case("ppo") {
             talib_percentage_oscillator(close, &req.params)
+        } else if talib_compat && req.name.eq_ignore_ascii_case("macdfix") {
+            talib_macdfix(close, &req.params)
+        } else if talib_compat && req.name.eq_ignore_ascii_case("stochrsi") {
+            talib_stochrsi(close, &req.params)
+        } else if talib_compat && req.name.eq_ignore_ascii_case("beta") {
+            match secondary {
+                Some(other) => talib_beta(close, other, &req.params),
+                None => IndicatorResult::Error("BETA requires secondary data".to_string()),
+            }
         } else if talib_compat
             && matches!(
                 req.name.to_ascii_lowercase().as_str(),
@@ -4769,6 +4778,204 @@ fn talib_percentage_oscillator(input: &[f64], params: &[f64]) -> IndicatorResult
         }
         (Err(error), _) | (_, Err(error)) => IndicatorResult::Error(error.to_string()),
     }
+}
+
+/// TA-Lib MACDFIX uses fixed smoothing constants (0.15 and 0.075), rather
+/// than the period-derived EMA constants used by the general MACD function.
+/// It also seeds both fixed EMAs from the shared 26-bar window and seeds the
+/// signal EMA from the first signal-period MACD values. Keeping this lockstep
+/// implementation at the compatibility boundary preserves finkit's native
+/// MACD semantics while making migration results bit-for-bit comparable.
+fn talib_macdfix(input: &[f64], params: &[f64]) -> IndicatorResult {
+    let signal_period = params.first().copied().unwrap_or(9.0).max(1.0) as usize;
+    let lookback_signal = signal_period.saturating_sub(1);
+    let lookback_total = 25 + lookback_signal;
+    let mut macd = vec![f64::NAN; input.len()];
+    let mut signal = vec![f64::NAN; input.len()];
+    let mut hist = vec![f64::NAN; input.len()];
+    if input.len() <= lookback_total {
+        return IndicatorResult::Triple(macd, signal, hist);
+    }
+
+    let fast_k = 0.15;
+    let slow_k = 0.075;
+    let signal_k = 2.0 / (signal_period as f64 + 1.0);
+    let mut today = 0usize;
+    let mut slow_seed = 0.0;
+    for _ in 0..(26 - 12) {
+        slow_seed += input[today];
+        today += 1;
+    }
+    let mut fast = 0.0;
+    for _ in 0..12 {
+        fast += input[today];
+        slow_seed += input[today];
+        today += 1;
+    }
+    let mut slow = slow_seed / 26.0;
+    fast /= 12.0;
+
+    // The first MACD value is the 26-bar seed endpoint (index 25). Advance
+    // both fixed EMAs through the leading stable period before seeding the
+    // signal line.
+    let mut macd_value = fast - slow;
+    let signal_seed_end = lookback_total - lookback_signal;
+    while today <= signal_seed_end.saturating_sub(1) {
+        let value = input[today];
+        today += 1;
+        fast = (value - fast).mul_add(fast_k, fast);
+        slow = (value - slow).mul_add(slow_k, slow);
+        macd_value = fast - slow;
+    }
+
+    let mut signal_value = macd_value;
+    for _ in 1..signal_period {
+        let value = input[today];
+        today += 1;
+        fast = (value - fast).mul_add(fast_k, fast);
+        slow = (value - slow).mul_add(slow_k, slow);
+        macd_value = fast - slow;
+        signal_value += macd_value;
+    }
+    signal_value /= signal_period as f64;
+
+    // Advance to the first public output bar. For signal_period=1 this loop
+    // is intentionally empty and the signal equals the MACD line.
+    while today <= lookback_total {
+        let value = input[today];
+        today += 1;
+        fast = (value - fast).mul_add(fast_k, fast);
+        slow = (value - slow).mul_add(slow_k, slow);
+        macd_value = fast - slow;
+        signal_value = if signal_period == 1 {
+            macd_value
+        } else {
+            (macd_value - signal_value).mul_add(signal_k, signal_value)
+        };
+    }
+
+    let mut index = lookback_total;
+    loop {
+        macd[index] = macd_value;
+        signal[index] = signal_value;
+        hist[index] = macd_value - signal_value;
+        if today >= input.len() {
+            break;
+        }
+        let value = input[today];
+        today += 1;
+        fast = (value - fast).mul_add(fast_k, fast);
+        slow = (value - slow).mul_add(slow_k, slow);
+        macd_value = fast - slow;
+        signal_value = if signal_period == 1 {
+            macd_value
+        } else {
+            (macd_value - signal_value).mul_add(signal_k, signal_value)
+        };
+        index += 1;
+    }
+    IndicatorResult::Triple(macd, signal, hist)
+}
+
+/// TA-Lib BETA is a regression of percentage returns, with the first input as
+/// the market/index (x) and the second input as the security (y). The native
+/// finkit indicator intentionally retains its historical raw-price contract;
+/// this stable compatibility implementation keeps the two contracts separate.
+fn talib_beta(market: &[f64], security: &[f64], params: &[f64]) -> IndicatorResult {
+    let period = params.first().copied().unwrap_or(5.0).max(1.0) as usize;
+    if market.len() != security.len() {
+        return IndicatorResult::Error("BETA inputs must have equal lengths".to_string());
+    }
+    let mut output = vec![f64::NAN; market.len()];
+    if period == 0 || market.len() <= period {
+        return IndicatorResult::Single(output);
+    }
+
+    for i in period..market.len() {
+        let start = i + 1 - period;
+        let mut returns_x = Vec::with_capacity(period);
+        let mut returns_y = Vec::with_capacity(period);
+        for j in start..=i {
+            let x = if market[j - 1] != 0.0 {
+                (market[j] - market[j - 1]) / market[j - 1]
+            } else {
+                0.0
+            };
+            let y = if security[j - 1] != 0.0 {
+                (security[j] - security[j - 1]) / security[j - 1]
+            } else {
+                0.0
+            };
+            returns_x.push(x);
+            returns_y.push(y);
+        }
+        let shift_x = returns_x[0];
+        let shift_y = returns_y[0];
+        let mut sum_x = 0.0;
+        let mut sum_y = 0.0;
+        let mut sum_xx = 0.0;
+        let mut sum_xy = 0.0;
+        for (x, y) in returns_x.iter().zip(returns_y.iter()) {
+            let x = *x - shift_x;
+            let y = *y - shift_y;
+            sum_x += x;
+            sum_y += y;
+            sum_xx += x * x;
+            sum_xy += x * y;
+        }
+        let n = period as f64;
+        let denominator = n * sum_xx - sum_x * sum_x;
+        if denominator > 1e-14 * (n * sum_xx).abs() {
+            output[i] = (n * sum_xy - sum_x * sum_y) / denominator;
+        } else {
+            output[i] = 0.0;
+        }
+    }
+    IndicatorResult::Single(output)
+}
+
+/// TA-Lib's STOCHRSI uses the RSI time period as the stochastic window too.
+/// The native finkit primitive intentionally exposes that window separately,
+/// so the compatibility boundary computes the TA-Lib contract explicitly:
+/// raw stochastic K is available before the public output start, while K is
+/// emitted at the same point as the fast-D SMA.
+fn talib_stochrsi(input: &[f64], params: &[f64]) -> IndicatorResult {
+    let rsi_period = params.first().copied().unwrap_or(14.0).max(1.0) as usize;
+    let fastk_period = params.get(1).copied().unwrap_or(5.0).max(1.0) as usize;
+    let fastd_period = params.get(2).copied().unwrap_or(3.0).max(1.0) as usize;
+    let rsi = match indicators::rsi(input, rsi_period) {
+        Ok(values) => values,
+        Err(error) => return IndicatorResult::Error(error.to_string()),
+    };
+    let rsi = rsi.as_slice().unwrap_or(&[]);
+    let len = input.len();
+    let raw_start = rsi_period + fastk_period - 1;
+    let public_start = raw_start + fastd_period - 1;
+    let mut raw = vec![f64::NAN; len];
+    for i in raw_start..len {
+        let window = &rsi[i + 1 - fastk_period..=i];
+        if window.iter().all(|value| value.is_finite()) {
+            let lowest = window.iter().copied().fold(f64::INFINITY, f64::min);
+            let highest = window.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+            let range = highest - lowest;
+            raw[i] = if range.abs() > 1e-15 {
+                (rsi[i] - lowest) / range * 100.0
+            } else {
+                0.0
+            };
+        }
+    }
+
+    let mut out_k = vec![f64::NAN; len];
+    let mut out_d = vec![f64::NAN; len];
+    for i in public_start..len {
+        out_k[i] = raw[i];
+        let window = &raw[i + 1 - fastd_period..=i];
+        if window.iter().all(|value| value.is_finite()) {
+            out_d[i] = window.iter().sum::<f64>() / fastd_period as f64;
+        }
+    }
+    IndicatorResult::Double(out_k, out_d)
 }
 
 fn params_first_or(req: &IndicatorRequest, default: usize) -> usize {
@@ -4848,7 +5055,7 @@ fn apply_talib_compatibility(
         "t3" => 6 * period(0, 5).saturating_sub(1),
         "dema" => 2 * period(0, 30).saturating_sub(1),
         "tema" => 3 * period(0, 30).saturating_sub(1),
-        "ht_trendline" => 63,
+        "ht_dcphase" | "ht_sine" | "ht_trendmode" | "ht_trendline" => 63,
         "adx" => 2 * period(0, 14).saturating_sub(1),
         "adxr" => 3 * period(0, 14).saturating_sub(1),
         "apo" | "ppo" => period(1, 26).saturating_sub(1),
@@ -4873,7 +5080,7 @@ fn apply_talib_compatibility(
         }
         "stoch" => period(0, 5) + period(1, 3) + period(3, 3) - 3,
         "stochf" => period(0, 5) + period(1, 3) - 2,
-        "stochrsi" => period(0, 14) + period(1, 5) + period(3, 3) - 2,
+        "stochrsi" => period(0, 14) + period(1, 5) + period(2, 3) - 2,
         "trix" => 3 * period(0, 30) - 2,
         "ultosc" => period(2, 28),
         "atr" | "natr" => period(0, 14),
@@ -4946,6 +5153,14 @@ fn apply_talib_compatibility(
                 // TA-Lib returns (aroondown, aroonup), while the native
                 // finkit result is (aroonup, aroondown).
                 IndicatorResult::Double(down, up)
+            }
+            other => other,
+        },
+        "ht_trendmode" => match result {
+            IndicatorResult::Single(mut values) => {
+                let end = lookback.min(values.len());
+                values[..end].fill(0.0);
+                IndicatorResult::Single(values)
             }
             other => other,
         },
