@@ -269,9 +269,7 @@ mod tests {
             [dependency],
             FactorKind::TimeSeries,
             FactorDirection::HigherBetter,
-            Arc::new(move |inputs: &FactorInputs<'_>| {
-                Ok(inputs.get(&dependency_owned)?.to_vec())
-            }),
+            Arc::new(move |inputs: &FactorInputs<'_>| Ok(inputs.get(&dependency_owned)?.to_vec())),
         )
     }
 
