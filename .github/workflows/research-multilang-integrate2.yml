@@ -19,30 +19,63 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - name: Apply multilingual bridges
+      - name: Apply factor-research multilingual bridges
         run: python scripts/research_multilang_integrate.py
+      - name: Apply generic quant-evaluation multilingual bridges
+        run: python scripts/research_quant_eval_integrate.py
       - name: Refresh deterministic lockfile
         run: cargo generate-lockfile
       - name: Format generated Rust
         run: cargo fmt --all
       - name: Verify format
         run: cargo fmt --all --check
-      - name: Research unit tests
+      - name: Research and evaluation unit tests
         run: cargo test -p finkit-factor-analysis --locked
+      - name: Core performance and backtest evaluation tests
+        run: |
+          cargo test -p finkit performance --locked
+          cargo test -p finkit backtest_evaluation --locked
       - name: Workspace compile gate
         run: cargo check --workspace --all-targets --locked
       - name: Java source gate
         run: mvn -q -f ffi/java-binding/pom.xml -DskipTests package
       - name: Dotnet source gate
         run: dotnet build ffi/dotnet-binding/src/Finkit/Finkit.csproj
+      - name: C and C++ research header syntax gate
+        run: |
+          cat > /tmp/finkit_research_c.c <<'EOF'
+          #include "finkit_research.h"
+          int main(void) { return 0; }
+          EOF
+          cc -std=c11 -Wall -Wextra -Werror -Iffi/c-binding/include -fsyntax-only /tmp/finkit_research_c.c
+          cat > /tmp/finkit_research_cpp.cpp <<'EOF'
+          #include "finkit_research.hpp"
+          int main() { return 0; }
+          EOF
+          c++ -std=c++17 -Wall -Wextra -Werror -Iffi/c-binding/include -fsyntax-only /tmp/finkit_research_cpp.cpp
+      - name: Python source registration gate
+        run: grep -q 'research_api::register_research_api' ffi/python-binding/src/lib.rs
+      - name: Node research export gate
+        run: grep -q 'pub fn quant_evaluation_json' ffi/node-binding/src/lib.rs
+      - name: Go source format gate
+        run: |
+          if command -v gofmt >/dev/null 2>&1; then
+            gofmt -w ffi/go-binding/go/ta/research.go ffi/go-binding/go/ta/quant_evaluation.go
+          fi
+      - name: Swift source parse gate
+        run: |
+          if command -v swiftc >/dev/null 2>&1; then
+            find ffi/ios-binding -name 'FactorResearch.swift' -o -name 'QuantEvaluation.swift' | xargs -r swiftc -parse
+          fi
       - name: Commit only after all gates pass
         run: |
           rm .github/workflows/research-multilang-integrate.yml
           rm .github/workflows/research-multilang-integrate2.yml
           rm scripts/research_multilang_integrate.py
+          rm scripts/research_quant_eval_integrate.py
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add -A
           git diff --cached --quiet && exit 0
-          git commit -m "feat: integrate multilingual factor research API"
+          git commit -m "feat: integrate multilingual factor research and quant evaluation APIs"
           git push origin HEAD:feat/factor-research-architecture
