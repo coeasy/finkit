@@ -13,6 +13,8 @@ extern crate std;
 
 #[cfg(feature = "std")]
 pub mod backtest;
+#[cfg(feature = "std")]
+pub mod backtest_evaluation;
 #[cfg(feature = "rayon")]
 pub mod batch;
 #[cfg(feature = "std")]
