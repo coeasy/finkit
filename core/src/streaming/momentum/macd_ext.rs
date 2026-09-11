@@ -37,7 +37,7 @@ pub struct StreamingMacdExt {
     slow_kind: MaKind,
     fast_state: MaState,
     slow_state: MaState,
-    signal_ema: StreamingEma,
+    signal_state: MaState,
     count: usize,
     last_value: Option<MacdOutput>,
     snapshot: Option<SnapshotState>,
@@ -78,7 +78,7 @@ enum MaState {
 struct SnapshotState {
     fast_state: MaState,
     slow_state: MaState,
-    signal_ema: StreamingEma,
+    signal_state: MaState,
     count: usize,
     last_value: Option<MacdOutput>,
     last_open_time: i64,
@@ -168,10 +168,10 @@ fn kind_from(ma_type: MaType) -> Result<MaKind, UnsupportedMaType> {
 }
 
 impl StreamingMacdExt {
-    /// Construct a new streaming MACDEXT. The signal line is always EMA.
+    /// Construct a new streaming MACDEXT with an EMA signal line.
     ///
-    /// Returns `Err(UnsupportedMaType)` if the supplied fast or slow MA type
-    /// is not yet supported in the streaming implementation.
+    /// Returns `Err(UnsupportedMaType)` if the supplied MA type is not
+    /// supported in the scalar streaming implementation.
     pub fn new(
         fast_period: usize,
         fast_ma_type: MaType,
@@ -179,14 +179,36 @@ impl StreamingMacdExt {
         slow_ma_type: MaType,
         signal_period: usize,
     ) -> Result<Self, UnsupportedMaType> {
+        Self::new_with_signal_ma(
+            fast_period,
+            fast_ma_type,
+            slow_period,
+            slow_ma_type,
+            signal_period,
+            MaType::Ema,
+        )
+    }
+
+    /// Construct a streaming MACDEXT with an explicit scalar signal MA.
+    ///
+    /// [`Self::new`] remains the compatibility-friendly EMA-signal shortcut.
+    pub fn new_with_signal_ma(
+        fast_period: usize,
+        fast_ma_type: MaType,
+        slow_period: usize,
+        slow_ma_type: MaType,
+        signal_period: usize,
+        signal_ma_type: MaType,
+    ) -> Result<Self, UnsupportedMaType> {
         let fast_kind = kind_from(fast_ma_type)?;
         let slow_kind = kind_from(slow_ma_type)?;
+        let signal_kind = kind_from(signal_ma_type)?;
         Ok(Self {
             fast_kind,
             slow_kind,
             fast_state: MaState::new(fast_kind, fast_period),
             slow_state: MaState::new(slow_kind, slow_period),
-            signal_ema: StreamingEma::new(signal_period),
+            signal_state: MaState::new(signal_kind, signal_period),
             count: 0,
             last_value: None,
             snapshot: None,
@@ -205,7 +227,7 @@ impl StreamingMacdExt {
             if let Some(snapshot) = self.snapshot.take() {
                 self.fast_state = snapshot.fast_state;
                 self.slow_state = snapshot.slow_state;
-                self.signal_ema = snapshot.signal_ema;
+                self.signal_state = snapshot.signal_state;
                 self.count = snapshot.count;
                 self.last_value = snapshot.last_value;
                 self.last_open_time = snapshot.last_open_time;
@@ -215,7 +237,7 @@ impl StreamingMacdExt {
         self.snapshot = Some(SnapshotState {
             fast_state: self.fast_state.clone(),
             slow_state: self.slow_state.clone(),
-            signal_ema: self.signal_ema.clone(),
+            signal_state: self.signal_state.clone(),
             count: self.count,
             last_value: self.last_value,
             last_open_time: self.last_open_time,
@@ -236,7 +258,7 @@ impl StreamingIndicator<f64, MacdOutput> for StreamingMacdExt {
             return None;
         };
         let macd = fast - slow;
-        let Some(signal) = self.signal_ema.next(macd) else {
+        let Some(signal) = self.signal_state.next(macd) else {
             self.last_value = None;
             return None;
         };
@@ -253,7 +275,7 @@ impl StreamingIndicator<f64, MacdOutput> for StreamingMacdExt {
     fn reset(&mut self) {
         self.fast_state.reset();
         self.slow_state.reset();
-        self.signal_ema.reset();
+        self.signal_state.reset();
         self.count = 0;
         self.last_value = None;
         self.snapshot = None;
@@ -261,7 +283,7 @@ impl StreamingIndicator<f64, MacdOutput> for StreamingMacdExt {
     }
 
     fn is_ready(&self) -> bool {
-        self.fast_state.is_ready() && self.slow_state.is_ready() && self.signal_ema.is_ready()
+        self.fast_state.is_ready() && self.slow_state.is_ready() && self.signal_state.is_ready()
     }
 
     impl_standard_methods!(output = MacdOutput);
@@ -275,7 +297,7 @@ impl IndicatorMeta for StreamingMacdExt {
         "momentum"
     }
     fn description() -> &'static str {
-        "MACD with controllable MA type (Sma/Ema supported)"
+        "MACD with configurable scalar MA types for fast, slow, and signal lines"
     }
     fn warm_up_period(&self) -> usize {
         // Conservative upper bound.
@@ -346,6 +368,17 @@ mod tests {
                 variant
             );
         }
+    }
+
+    #[test]
+    fn test_streaming_macd_ext_explicit_signal_variant() {
+        let mut macd =
+            StreamingMacdExt::new_with_signal_ma(10, MaType::Wma, 20, MaType::Ema, 5, MaType::Dema)
+                .unwrap();
+        for index in 0..120 {
+            macd.next(100.0 + (index as f64 * 0.13).cos());
+        }
+        assert!(macd.is_ready());
     }
 
     #[test]
