@@ -47,9 +47,56 @@ pub struct FormulaAnalysis {
     pub diagnostics: Vec<FormulaDiagnostic>,
 }
 
+/// Stable metadata describing the shape and validity contract of a formula
+/// result.  The evaluator continues to return `f64` arrays for compatibility;
+/// this sidecar makes warm-up rows, NaN semantics and named outputs explicit
+/// for charting, bindings and downstream formula composition.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct FormulaSeriesMetadata {
+    /// Version of the result metadata contract.
+    pub schema_version: String,
+    /// Number of rows in the result.
+    pub length: usize,
+    /// Canonical scalar storage type.
+    pub dtype: String,
+    /// Named output variables plus the final expression result.
+    pub output_names: Vec<String>,
+    /// Null/invalid values are represented by IEEE NaN in the current ABI.
+    pub null_policy: String,
+    /// Conservative number of leading rows that may be unavailable.
+    pub required_lookback: Option<usize>,
+    pub warmup: usize,
+    /// First row that may contain a valid value, if the result is non-empty.
+    pub valid_start: Option<usize>,
+    pub has_future_data: bool,
+    pub supports_streaming: bool,
+    pub has_observable_effects: bool,
+}
+
 impl FormulaAnalysis {
     pub fn is_safe_for_incremental_evaluation(&self) -> bool {
         self.supports_streaming && !self.has_future_data && !self.has_observable_effects
+    }
+
+    /// Build the result sidecar without executing the formula.
+    pub fn result_metadata(&self, length: usize) -> FormulaSeriesMetadata {
+        let warmup = self.required_lookback.unwrap_or(0);
+        let mut output_names = self.assigned_variables.clone();
+        output_names.push("__result__".to_string());
+        FormulaSeriesMetadata {
+            schema_version: "finkit.formula-series.v1".to_string(),
+            length,
+            dtype: "float64".to_string(),
+            output_names,
+            null_policy: "nan".to_string(),
+            required_lookback: self.required_lookback,
+            warmup,
+            valid_start: (length > 0).then(|| warmup.min(length)),
+            has_future_data: self.has_future_data,
+            supports_streaming: self.supports_streaming,
+            has_observable_effects: self.has_observable_effects,
+        }
     }
 }
 
@@ -578,5 +625,18 @@ mod tests {
         assert!(report.has_future_data);
         assert_eq!(report.unknown_functions, vec!["CUSTOM", "REFX"]);
         assert!(!report.supports_streaming);
+    }
+
+    #[test]
+    fn exposes_result_metadata_contract() {
+        let ast = parse_formula("X:=MA(CLOSE,5); X").unwrap();
+        let report = analyze_formula(&ast);
+        let metadata = report.result_metadata(20);
+        assert_eq!(metadata.schema_version, "finkit.formula-series.v1");
+        assert_eq!(metadata.dtype, "float64");
+        assert_eq!(metadata.output_names, vec!["X", "__result__"]);
+        assert_eq!(metadata.required_lookback, Some(4));
+        assert_eq!(metadata.valid_start, Some(4));
+        assert_eq!(metadata.null_policy, "nan");
     }
 }

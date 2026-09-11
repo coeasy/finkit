@@ -10,7 +10,7 @@
 |---|---|---|
 | FormulaEngine.eval | 对 FormulaContext 执行完整公式 | 由调用方管理上下文；复杂公式可产生中间数组 |
 | FormulaEngine.eval_range | 计算半开区间 [start, end) | 自动扩展公式所需 lookback，再裁剪返回结果；OHLCV 窗口借用，结果长度为 end - start |
-| FormulaEngine.eval_last | 返回最后一根结果 | 对直接字面量 EMA 且连续 append 的上下文使用 O(1) 状态更新；其他公式自动回退到精确 range 计算 |
+| FormulaEngine.eval_last | 返回最后一根结果 | 对直接字面量 EMA、MA、RSI、公式语义 ATR 且连续 append 的上下文使用 O(1) 状态更新；其他公式自动回退到精确 range 计算 |
 | FormulaEngine.eval_zero_copy_inputs | 从连续切片借用 OHLCV 输入 | 同步调用期间借用输入；直接 MA/EMA/RSI/BOLLMID 路径可避免输入 Array1 物化 |
 | FormulaEngine.eval_range_zero_copy_inputs | 借用输入计算半开区间 | 不建立 retained context；适合图表窗口刷新 |
 | Python CompiledFormula.eval | 复用编译计划和引擎执行 | 输入复制到 owned stream context，便于后续 append_bar 和 eval_last |
@@ -19,6 +19,7 @@
 | FormulaContext.append_bar_with_amount | 追加 OHLCV 和可选 amount | 保持 amount 与 bar 数量对齐；缺失 amount 使用 NaN |
 | FormulaEngine.analyze | 静态分析公式 | 返回依赖、lookback、未来数据、状态节点、副作用、流式能力和诊断 |
 | inspect_formula_compatibility | 检查终端兼容性 | 返回 semantic profile 和逐函数 exact/near/approximate/host_required/unsupported 状态 |
+| FormulaEngine.metadata | 查询结果元数据 | 返回长度、输出序列名、dtype、NaN 策略、lookback/warm-up、有效起点和流式能力 |
 | Python CompiledFormula.reset | 清空 retained context | 保留 compiled plan 和 engine cache；下一次带数组的 eval 建立新 context |
 
 ## 2. 输入契约
@@ -35,6 +36,8 @@
 - 公式产生的用户变量可以作为附加结果返回；内部 CSE 临时变量以 _CSE 开头时不作为用户变量导出。
 - 返回数组长度与执行模式一致：完整求值为输入长度，range 为 end - start，last 为一个标量。
 - warm-up 期间沿用指标实现约定的 NaN 语义；不得在不同绑定中悄悄改成 0 或删除前置位置。
+- `FormulaSeriesMetadata` 是与数值数组并行的稳定契约：`dtype` 当前为 `float64`，`null_policy` 当前为 `nan`，`valid_start` 是保守有效起点，不代表每个后续位置一定非 NaN。
+- 输出名包含公式变量和保留主结果名 `__result__`；绑定不得依据数组长度猜测输出含义。
 
 ## 4. Range、Last 和 Append 的一致性
 
@@ -77,6 +80,7 @@
 - 复杂公式的中间分配可解释；
 - 静态分析应能识别依赖、lookback、未来数据和未知函数；
 - 每个外部终端公式应能输出语义 profile 和逐函数兼容状态；
+- TA-Lib Python 公共 161 函数目录必须保持唯一、可查询；目录登记、运行时已注册、host_required 和 unsupported 必须在兼容报告中区分；
 - 跨 Python、C、Node、CLI 的 golden fixture 保持输出命名、warm-up 和错误类别一致。
 
 ## 8. 版本策略

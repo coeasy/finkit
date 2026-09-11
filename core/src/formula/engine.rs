@@ -1,4 +1,4 @@
-use crate::formula::analysis::{analyze_formula, FormulaAnalysis};
+use crate::formula::analysis::{analyze_formula, FormulaAnalysis, FormulaSeriesMetadata};
 use crate::formula::ast::AstNode;
 use crate::formula::bytecode::{compile_to_bytecode, Bytecode, BytecodeVM};
 use crate::formula::compiler::{CompiledFormula, FormulaCache};
@@ -11,6 +11,8 @@ use crate::formula::params::{apply_params, parse_params, validate_params, ParamD
 use crate::formula::parser::parse_formula;
 use crate::formula::templates::{FormulaTemplate, FormulaTemplates};
 use crate::formula::types::*;
+use crate::streaming::indicators::{StreamingRsi, StreamingSma};
+use crate::streaming::StreamingIndicator;
 use ndarray::Array1;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -24,6 +26,60 @@ struct StreamingEmaState {
     value: f64,
     valid: bool,
     previous_input: f64,
+}
+
+enum StreamingFormulaIndicator {
+    Sma(StreamingSma),
+    Rsi(StreamingRsi),
+    Atr(StreamingSmaAtr),
+}
+
+/// Formula ATR uses a rolling SMA of true range.  The general streaming ATR
+/// indicator intentionally implements Wilder/RMA, so it cannot be reused for
+/// this formula path without changing one of the two public contracts.
+struct StreamingSmaAtr {
+    tr_sma: StreamingSma,
+    previous_close: f64,
+    count: usize,
+}
+
+impl StreamingSmaAtr {
+    fn new(period: usize) -> Self {
+        Self {
+            tr_sma: StreamingSma::new(period),
+            previous_close: f64::NAN,
+            count: 0,
+        }
+    }
+
+    fn next(&mut self, high: f64, low: f64, close: f64) -> Option<f64> {
+        let true_range = if self.count == 0 {
+            high - low
+        } else {
+            (high - low)
+                .max((high - self.previous_close).abs())
+                .max((low - self.previous_close).abs())
+        };
+        self.count += 1;
+        self.previous_close = close;
+        self.tr_sma.next(true_range)
+    }
+}
+
+impl StreamingFormulaIndicator {
+    fn next(&mut self, input: [f64; 3]) -> Option<f64> {
+        match self {
+            Self::Sma(indicator) => indicator.next(input[0]),
+            Self::Rsi(indicator) => indicator.next(input[0]),
+            Self::Atr(indicator) => indicator.next(input[0], input[1], input[2]),
+        }
+    }
+}
+
+struct StreamingFormulaState {
+    len: usize,
+    last_input: [f64; 3],
+    indicator: StreamingFormulaIndicator,
 }
 
 /// 公式引擎主入口
@@ -40,6 +96,9 @@ pub struct FormulaEngine {
     /// Stateful fast paths for append/eval_last.  A failed continuity check
     /// simply falls back to the exact range evaluator.
     streaming_ema: RefCell<HashMap<String, StreamingEmaState>>,
+    /// O(1) append paths for common direct formula indicators whose existing
+    /// streaming implementations have exactly the same warm-up contract.
+    streaming_common: RefCell<HashMap<String, StreamingFormulaState>>,
 }
 
 impl Default for FormulaEngine {
@@ -59,6 +118,7 @@ impl FormulaEngine {
             bytecode_cache: RefCell::new(HashMap::new()),
             bytecode_vm: RefCell::new(BytecodeVM::new()),
             streaming_ema: RefCell::new(HashMap::new()),
+            streaming_common: RefCell::new(HashMap::new()),
         }
     }
 
@@ -72,6 +132,7 @@ impl FormulaEngine {
             bytecode_cache: RefCell::new(HashMap::new()),
             bytecode_vm: RefCell::new(BytecodeVM::new()),
             streaming_ema: RefCell::new(HashMap::new()),
+            streaming_common: RefCell::new(HashMap::new()),
         }
     }
 
@@ -402,6 +463,9 @@ impl FormulaEngine {
         if let Some(value) = self.try_eval_last_streaming_ema(formula, ctx) {
             return Ok(value);
         }
+        if let Some(value) = self.try_eval_last_streaming_common(formula, ctx) {
+            return Ok(value);
+        }
         let result = self.eval_range(formula, ctx, ctx.data_len - 1, ctx.data_len)?;
         Ok(result[0])
     }
@@ -528,6 +592,117 @@ impl FormulaEngine {
         Some(state.value)
     }
 
+    /// O(1) append path for direct MA/RSI/ATR formula calls.  The first call
+    /// seeds the indicator from the supplied history; subsequent calls are
+    /// accepted only for a genuine one-bar append with an unchanged previous
+    /// input.  Any mutation or discontinuity falls back to exact evaluation.
+    fn try_eval_last_streaming_common(
+        &self,
+        formula: &CompiledFormula,
+        ctx: &FormulaContext,
+    ) -> Option<f64> {
+        let (kind, input_names, period) = match &formula.ast {
+            AstNode::FunctionCall { name, args } if args.len() >= 2 => {
+                let upper = name.to_ascii_uppercase();
+                let period_index = match upper.as_str() {
+                    "MA" | "RSI" => 1,
+                    "ATR" => 3,
+                    _ => return None,
+                };
+                let Some(AstNode::Number(period)) = args.get(period_index) else {
+                    return None;
+                };
+                if !period.is_finite() || *period < 1.0 || period.fract() != 0.0 {
+                    return None;
+                }
+                let required_inputs = if upper == "ATR" { 3 } else { 1 };
+                let names = args
+                    .get(..required_inputs)?
+                    .iter()
+                    .map(|arg| match arg {
+                        AstNode::Variable(name) => Some(name.clone()),
+                        _ => None,
+                    })
+                    .collect::<Option<Vec<_>>>()?;
+                (upper, names, *period as usize)
+            }
+            _ => return None,
+        };
+        if ctx.data_len == 0
+            || input_names.iter().any(|name| {
+                ctx.get_data(name)
+                    .is_none_or(|values| values.len() != ctx.data_len)
+            })
+        {
+            self.streaming_common.borrow_mut().remove(&formula.source);
+            return None;
+        }
+
+        let values = |index: usize| -> Option<[f64; 3]> {
+            let mut input = [0.0; 3];
+            for (slot, name) in input_names.iter().enumerate() {
+                let series = ctx.get_data(name)?;
+                input[slot] = *series.get(index)?;
+            }
+            if input[..input_names.len()]
+                .iter()
+                .any(|value| !value.is_finite())
+            {
+                None
+            } else {
+                Some(input)
+            }
+        };
+
+        let mut states = self.streaming_common.borrow_mut();
+        let state_was_existing = states.contains_key(&formula.source);
+        if !state_was_existing {
+            let mut indicator = match kind.as_str() {
+                "MA" => StreamingFormulaIndicator::Sma(StreamingSma::new(period)),
+                "RSI" => StreamingFormulaIndicator::Rsi(StreamingRsi::new(period)),
+                "ATR" => StreamingFormulaIndicator::Atr(StreamingSmaAtr::new(period)),
+                _ => return None,
+            };
+            let mut last = [f64::NAN; 3];
+            let mut value = None;
+            for index in 0..ctx.data_len {
+                let input = values(index)?;
+                last = input;
+                value = indicator.next(input);
+            }
+            let value = value.unwrap_or(f64::NAN);
+            states.insert(
+                formula.source.clone(),
+                StreamingFormulaState {
+                    len: ctx.data_len,
+                    last_input: last,
+                    indicator,
+                },
+            );
+            return Some(value);
+        }
+
+        let state = states.get_mut(&formula.source)?;
+        if state.len == ctx.data_len {
+            states.remove(&formula.source);
+            return None;
+        }
+        if state.len + 1 != ctx.data_len {
+            states.remove(&formula.source);
+            return None;
+        }
+        let previous = values(state.len - 1)?;
+        if previous != state.last_input {
+            states.remove(&formula.source);
+            return None;
+        }
+        let current = values(state.len)?;
+        let value = state.indicator.next(current);
+        state.len = ctx.data_len;
+        state.last_input = current;
+        Some(value.unwrap_or(f64::NAN))
+    }
+
     /// Analyze a formula without executing it.
     pub fn analyze(&mut self, source: &str) -> Result<FormulaAnalysis, FormulaError> {
         let formula = self.compile(source)?;
@@ -537,6 +712,25 @@ impl FormulaEngine {
     /// Analyze an already parsed/compiled AST without executing it.
     pub fn analyze_ast(&self, ast: &AstNode) -> FormulaAnalysis {
         analyze_formula(ast)
+    }
+
+    /// Return the stable result-shape and warm-up contract for a formula.
+    pub fn metadata(
+        &mut self,
+        source: &str,
+        data_len: usize,
+    ) -> Result<FormulaSeriesMetadata, FormulaError> {
+        let analysis = self.analyze(source)?;
+        Ok(analysis.result_metadata(data_len))
+    }
+
+    /// Return metadata for an already compiled formula.
+    pub fn metadata_for_formula(
+        &self,
+        formula: &CompiledFormula,
+        data_len: usize,
+    ) -> FormulaSeriesMetadata {
+        analyze_formula(&formula.ast).result_metadata(data_len)
     }
 
     /// Evaluate common NumPy-backed formulas directly from borrowed slices.
@@ -984,6 +1178,7 @@ impl FormulaEngine {
     pub fn clear_cache(&mut self) {
         self.cache.clear();
         self.streaming_ema.borrow_mut().clear();
+        self.streaming_common.borrow_mut().clear();
     }
 
     pub fn compile_bytecode(&mut self, source: &str) -> Result<Bytecode, FormulaError> {
@@ -1847,6 +2042,37 @@ mod tests {
     }
 
     #[test]
+    fn test_streaming_common_formula_paths_match_batch() {
+        for source in ["MA(CLOSE, 5)", "RSI(CLOSE, 5)", "ATR(HIGH, LOW, CLOSE, 5)"] {
+            let mut engine = FormulaEngine::new();
+            let formula = engine.compile(source).unwrap();
+            let mut ctx = make_ctx(20);
+            let _first = engine.eval_last(&formula, &ctx).unwrap();
+
+            ctx.append_bar(12.0, 13.0, 11.0, 13.25, 2000.0);
+            let streamed = engine.eval_last(&formula, &ctx).unwrap();
+
+            let mut expected_ctx = make_ctx(21);
+            expected_ctx.close[20] = 13.25;
+            expected_ctx.high[20] = 13.0;
+            expected_ctx.low[20] = 11.0;
+            expected_ctx.open[20] = 12.0;
+            expected_ctx.volume[20] = 2000.0;
+            let expected = FormulaEngine::new()
+                .eval(source, &mut expected_ctx)
+                .unwrap()[20];
+            if expected.is_nan() {
+                assert!(streamed.is_nan(), "{source} streamed value should be NaN");
+            } else {
+                assert!(
+                    (streamed - expected).abs() < 1e-10,
+                    "{source}: streamed={streamed} expected={expected}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn test_formula_analysis_is_available_from_engine() {
         let mut engine = FormulaEngine::new();
         let report = engine.analyze("MA5:=MA(CLOSE,5); MA5 + OPEN").unwrap();
@@ -1854,6 +2080,17 @@ mod tests {
         assert!(report.input_variables.contains(&"CLOSE".to_string()));
         assert!(report.input_variables.contains(&"OPEN".to_string()));
         assert!(report.assigned_variables.contains(&"MA5".to_string()));
+    }
+
+    #[test]
+    fn test_formula_metadata_is_stable_for_bindings() {
+        let mut engine = FormulaEngine::new();
+        let metadata = engine.metadata("MA5:=MA(CLOSE,5); MA5", 20).unwrap();
+        assert_eq!(metadata.schema_version, "finkit.formula-series.v1");
+        assert_eq!(metadata.length, 20);
+        assert_eq!(metadata.output_names, vec!["MA5", "__result__"]);
+        assert_eq!(metadata.valid_start, Some(4));
+        assert_eq!(metadata.null_policy, "nan");
     }
 
     #[test]

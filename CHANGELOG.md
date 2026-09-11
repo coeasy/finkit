@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.8] - 2026-09-11
+
+- Add a shared formula result metadata contract for dtype, output names,
+  NaN/null policy, lookback, warm-up and valid-start semantics across Rust,
+  Python, Node and WASM.
+- Add a complete 161-function public TA-Lib catalog with explicit runtime
+  coverage, category, output-count and compatibility-report fields; unsupported
+  and host-required functions are no longer ambiguous.
+- Add O(1) append/eval-last formula paths for direct MA, RSI and formula-SMA
+  ATR, with exact fallback on mutation or discontinuity.
+- Add binding APIs for formula metadata and TA-Lib catalog discovery.
+- Preserve separate Wilder/RMA streaming ATR semantics from the formula-layer
+  rolling-SMA true-range contract, with differential regression coverage.
+
 ## [0.1.7] - 2026-09-11
 
 - Add formula static analysis for dependencies, lookback, future-data risks,
@@ -131,4 +145,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Multi-platform support (Linux, macOS, Windows)
 - CI/CD pipeline setup
 - Comprehensive test suite
-

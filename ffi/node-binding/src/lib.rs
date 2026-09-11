@@ -2236,6 +2236,23 @@ pub struct FormulaAnalysisResult {
     pub diagnostics: Vec<String>,
 }
 
+/// Stable result shape and validity metadata for chart and binding clients.
+#[napi(object)]
+#[cfg(feature = "formula")]
+pub struct FormulaMetadataResult {
+    pub schema_version: String,
+    pub length: u32,
+    pub dtype: String,
+    pub output_names: Vec<String>,
+    pub null_policy: String,
+    pub required_lookback: Option<u32>,
+    pub warmup: u32,
+    pub valid_start: Option<u32>,
+    pub has_future_data: bool,
+    pub supports_streaming: bool,
+    pub has_observable_effects: bool,
+}
+
 #[napi]
 #[cfg(feature = "formula")]
 pub fn formula_analyze(source: String) -> Result<FormulaAnalysisResult> {
@@ -2261,6 +2278,37 @@ pub fn formula_analyze(source: String) -> Result<FormulaAnalysisResult> {
             .map(|item| format!("{}: {}", item.code, item.message))
             .collect(),
     })
+}
+
+/// Return the stable result shape, warm-up and null-value contract.
+#[napi]
+#[cfg(feature = "formula")]
+pub fn formula_metadata(source: String, data_len: Option<u32>) -> Result<FormulaMetadataResult> {
+    let mut engine = FormulaEngine::new();
+    let metadata = engine
+        .metadata(&source, data_len.unwrap_or(0) as usize)
+        .map_err(formula_error_to_napi)?;
+    Ok(FormulaMetadataResult {
+        schema_version: metadata.schema_version,
+        length: metadata.length as u32,
+        dtype: metadata.dtype,
+        output_names: metadata.output_names,
+        null_policy: metadata.null_policy,
+        required_lookback: metadata.required_lookback.map(|v| v as u32),
+        warmup: metadata.warmup as u32,
+        valid_start: metadata.valid_start.map(|v| v as u32),
+        has_future_data: metadata.has_future_data,
+        supports_streaming: metadata.supports_streaming,
+        has_observable_effects: metadata.has_observable_effects,
+    })
+}
+
+/// Return the complete TA-Lib public function catalog used by compatibility reports.
+#[napi]
+#[cfg(feature = "formula")]
+pub fn formula_talib_catalog() -> Result<String> {
+    serde_json::to_string(&finkit::formula::ta_lib_function_contracts())
+        .map_err(|error| Error::new(Status::GenericFailure, error.to_string()))
 }
 
 /// Return a JSON compatibility report for a terminal dialect.

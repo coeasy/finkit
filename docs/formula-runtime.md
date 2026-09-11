@@ -34,6 +34,10 @@ Before evaluation, `CompiledFormula.analyze()` exposes input dependencies,
 lookback, future-data warnings, stateful nodes and streaming suitability.
 `CompiledFormula.compatibility_report(terminal)` exposes terminal semantic
 policies and per-function exact/near/approximate/host-required status.
+`CompiledFormula.metadata(data_len)` exposes the shared result contract:
+output names, `float64` dtype, NaN null policy, conservative warm-up and the
+first potentially valid row. Compatibility reports also expose the complete
+TA-Lib public catalog revision and registered-runtime coverage.
 
 ## Range and last-bar evaluation
 
@@ -77,3 +81,7 @@ the complete history.
   keeps an optional amount series aligned and uses NaN when amount is missing.
 - CSE only merges pure expression subtrees. Drawing, alert, selection, and other
   side-effecting nodes are not merged.
+- Direct `eval_last` append updates for `MA`, `RSI`, and formula-semantic
+  `ATR(HIGH, LOW, CLOSE, N)` use dedicated O(1) state; the general streaming
+  `ATR` indicator uses Wilder/RMA semantics and is intentionally not reused for
+  the formula SMA-TR contract.

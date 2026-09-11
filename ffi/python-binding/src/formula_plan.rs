@@ -175,6 +175,48 @@ impl PyCompiledFormula {
         Ok(output)
     }
 
+    /// Return the stable result shape, warm-up and null-value contract.
+    #[pyo3(signature = (data_len = 0))]
+    fn metadata<'py>(&self, py: Python<'py>, data_len: usize) -> PyResult<Bound<'py, PyDict>> {
+        let metadata = self
+            .engine
+            .as_ref()
+            .expect("compiled formula engine is available")
+            .metadata_for_formula(&self.compiled, data_len);
+        let output = PyDict::new(py);
+        output.set_item("schema_version", metadata.schema_version)?;
+        output.set_item("length", metadata.length)?;
+        output.set_item("dtype", metadata.dtype)?;
+        output.set_item("output_names", metadata.output_names)?;
+        output.set_item("null_policy", metadata.null_policy)?;
+        output.set_item("required_lookback", metadata.required_lookback)?;
+        output.set_item("warmup", metadata.warmup)?;
+        output.set_item("valid_start", metadata.valid_start)?;
+        output.set_item("has_future_data", metadata.has_future_data)?;
+        output.set_item("supports_streaming", metadata.supports_streaming)?;
+        output.set_item("has_observable_effects", metadata.has_observable_effects)?;
+        Ok(output)
+    }
+
+    /// Return the complete TA-Lib public function catalog used by compatibility reports.
+    fn talib_catalog<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyDict>>> {
+        ::finkit::formula::ta_lib_function_contracts()
+            .into_iter()
+            .map(|item| {
+                let dict = PyDict::new(py);
+                dict.set_item("name", item.name)?;
+                dict.set_item("category", item.category)?;
+                dict.set_item("input_shape", item.input_shape)?;
+                dict.set_item("outputs", item.outputs)?;
+                dict.set_item("lookback", item.lookback)?;
+                dict.set_item("warmup_policy", item.warmup_policy)?;
+                dict.set_item("nan_policy", item.nan_policy)?;
+                dict.set_item("runtime_registered", item.runtime_registered)?;
+                Ok(dict)
+            })
+            .collect()
+    }
+
     /// Inspect terminal-specific semantic compatibility without evaluation.
     #[pyo3(signature = (terminal = "finkit"))]
     fn compatibility_report<'py>(
@@ -208,10 +250,20 @@ impl PyCompiledFormula {
                 dict.set_item("name", &item.name)?;
                 dict.set_item("status", item.status.as_str())?;
                 dict.set_item("message", &item.message)?;
+                dict.set_item("cataloged", item.cataloged)?;
+                dict.set_item("runtime_registered", item.runtime_registered)?;
+                dict.set_item("category", &item.category)?;
+                dict.set_item("outputs", item.outputs)?;
                 Ok::<_, PyErr>(dict.into_any())
             })
             .collect::<PyResult<_>>()?;
         output.set_item("functions", functions)?;
+        output.set_item("ta_lib_catalog_version", report.ta_lib_catalog_version)?;
+        output.set_item("ta_lib_function_count", report.ta_lib_function_count)?;
+        output.set_item(
+            "ta_lib_runtime_registered_count",
+            report.ta_lib_runtime_registered_count,
+        )?;
         Ok(output)
     }
 

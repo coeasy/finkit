@@ -1282,6 +1282,20 @@ pub fn formula_analyze(source: &str) -> Result<JsValue, JsError> {
 }
 
 #[wasm_bindgen]
+pub fn formula_metadata(source: &str, data_len: Option<u32>) -> Result<JsValue, JsError> {
+    let mut engine = FormulaEngine::new();
+    let metadata = engine
+        .metadata(source, data_len.unwrap_or(0) as usize)
+        .map_err(to_js)?;
+    serde_wasm_bindgen::to_value(&metadata).map_err(to_js)
+}
+
+#[wasm_bindgen]
+pub fn formula_talib_catalog() -> Result<JsValue, JsError> {
+    serde_wasm_bindgen::to_value(&finkit::formula::ta_lib_function_contracts()).map_err(to_js)
+}
+
+#[wasm_bindgen]
 pub fn formula_compatibility_report(
     source: &str,
     terminal: Option<String>,

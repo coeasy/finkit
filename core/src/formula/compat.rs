@@ -8,6 +8,8 @@
 
 use super::FormulaDialect;
 use crate::formula::analysis::{analyze_formula, FormulaAnalysis};
+use crate::formula::contracts::{ta_lib_function_contracts, TA_LIB_CATALOG_VERSION};
+use std::collections::HashMap;
 
 /// Stable schema identifier for terminal compatibility discovery.
 pub const FORMULA_TERMINAL_SCHEMA_VERSION: &str = "finkit.formula-terminal.v1";
@@ -89,6 +91,10 @@ pub struct FunctionCompatibility {
     pub name: String,
     pub status: CompatibilityStatus,
     pub message: String,
+    pub cataloged: bool,
+    pub runtime_registered: bool,
+    pub category: Option<String>,
+    pub outputs: Option<usize>,
 }
 
 /// Complete source compatibility report.
@@ -100,6 +106,10 @@ pub struct FormulaCompatibilityReport {
     pub profile: SemanticProfile,
     pub analysis: FormulaAnalysis,
     pub functions: Vec<FunctionCompatibility>,
+    /// Catalog revision used when classifying TA-Lib names.
+    pub ta_lib_catalog_version: String,
+    pub ta_lib_function_count: usize,
+    pub ta_lib_runtime_registered_count: usize,
 }
 
 impl CompatibilityLevel {
@@ -220,10 +230,21 @@ pub fn inspect_formula_compatibility(
     let normalized_source = normalize_terminal_source(source, terminal);
     let ast = super::parse_formula_with_dialect(&normalized_source, terminal.canonical_dialect())?;
     let analysis = analyze_formula(&ast);
+    let catalog = ta_lib_function_contracts();
+    let catalog_by_name: HashMap<&str, _> = catalog
+        .iter()
+        .map(|item| (item.name.as_str(), item))
+        .collect();
+    let ta_lib_runtime_registered_count = catalog
+        .iter()
+        .filter(|item| item.runtime_registered)
+        .count();
     let functions = analysis
         .called_functions
         .iter()
         .map(|name| {
+            let contract = catalog_by_name.get(name.as_str()).copied();
+            let runtime_registered = !analysis.unknown_functions.contains(name);
             let status = if analysis.unknown_functions.contains(name) {
                 if matches!(
                     name.as_str(),
@@ -260,13 +281,21 @@ pub fn inspect_formula_compatibility(
                     "requires host-provided market/session metadata".to_string()
                 }
                 CompatibilityStatus::Unsupported => {
-                    "no compatible runtime implementation is registered".to_string()
+                    if contract.is_some() {
+                        "TA-Lib function is cataloged, but no compatible formula adapter is registered".to_string()
+                    } else {
+                        "no compatible runtime implementation is registered".to_string()
+                    }
                 }
             };
             FunctionCompatibility {
                 name: name.clone(),
                 status,
                 message,
+                cataloged: contract.is_some(),
+                runtime_registered,
+                category: contract.as_ref().map(|item| item.category.clone()),
+                outputs: contract.as_ref().map(|item| item.outputs),
             }
         })
         .collect();
@@ -276,6 +305,9 @@ pub fn inspect_formula_compatibility(
         profile: terminal.semantic_profile(),
         analysis,
         functions,
+        ta_lib_catalog_version: TA_LIB_CATALOG_VERSION.to_string(),
+        ta_lib_function_count: catalog.len(),
+        ta_lib_runtime_registered_count,
     })
 }
 

@@ -19,6 +19,7 @@ pub mod bytecode;
 pub mod compat;
 pub mod compiler;
 pub mod compute_ir;
+pub mod contracts;
 pub mod debugger;
 pub mod drawing;
 pub mod engine;
@@ -42,7 +43,10 @@ pub mod simd;
 pub mod templates;
 pub mod types;
 
-pub use analysis::{analyze_formula, FormulaAnalysis, FormulaDiagnostic, FormulaDiagnosticLevel};
+pub use analysis::{
+    analyze_formula, FormulaAnalysis, FormulaDiagnostic, FormulaDiagnosticLevel,
+    FormulaSeriesMetadata,
+};
 pub use ast::*;
 pub use bytecode::{compile_to_bytecode, Bytecode, BytecodeVM, ExecResult, OpCode};
 pub use compat::{
@@ -52,6 +56,10 @@ pub use compat::{
 };
 pub use compiler::{CompiledFormula, FormulaCache, FormulaCompiler};
 pub use compute_ir::{lower_formula_ast, lower_formula_ast_with_registry, FormulaComputePlan};
+pub use contracts::{
+    ta_lib_function_contract, ta_lib_function_contracts, FormulaFunctionContract,
+    TA_LIB_CATALOG_VERSION,
+};
 pub use debugger::{DebugEvent, FormulaDebugger, FormulaErrorWithLocation};
 pub use drawing::{DrawCommand, DrawResult};
 pub use engine::{FormulaEngine, FormulaResult};
