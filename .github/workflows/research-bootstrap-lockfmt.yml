@@ -1,0 +1,42 @@
+name: Research bootstrap lockfmt
+
+on:
+  push:
+    branches:
+      - feat/factor-research-architecture
+
+permissions:
+  contents: write
+
+concurrency:
+  group: research-bootstrap-lockfmt
+  cancel-in-progress: true
+
+jobs:
+  normalize:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feat/factor-research-architecture
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Regenerate deterministic lockfile
+        run: cargo generate-lockfile
+      - name: Format workspace Rust
+        run: cargo fmt --all
+      - name: Verify normalized sources
+        run: |
+          cargo fmt --all --check
+          cargo metadata --locked --format-version 1 --no-deps >/dev/null
+      - name: Commit lockfile and formatting only
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add Cargo.lock
+          git diff --name-only -- '*.rs' | xargs -r git add --
+          git diff --cached --quiet && exit 0
+          git commit -m "chore: normalize research lockfile and formatting"
+          git push origin HEAD:feat/factor-research-architecture
