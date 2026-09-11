@@ -23,7 +23,9 @@ jobs:
         run: python scripts/research_multilang_integrate.py
       - name: Refresh deterministic lockfile
         run: cargo generate-lockfile
-      - name: Format
+      - name: Format generated Rust
+        run: cargo fmt --all
+      - name: Verify format
         run: cargo fmt --all --check
       - name: Research unit tests
         run: cargo test -p finkit-factor-analysis --locked
