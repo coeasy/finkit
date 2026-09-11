@@ -62,58 +62,65 @@ impl StreamingSar {
             return result;
         }
 
-        let is_long = self.direction == 1;
-        let mut current_sar = self.sar + self.af * (self.ep - self.sar);
-
-        if is_long {
-            if self.count >= 3 {
-                current_sar = current_sar.min(self.prev_low);
-            }
-            if self.count >= 4 {
-                current_sar = current_sar.min(self.prev_low2);
-            }
-        } else if self.count >= 3 {
-            current_sar = current_sar.max(self.prev_high);
-            if self.count >= 4 {
-                current_sar = current_sar.max(self.prev_high2);
-            }
+        // Match TA-Lib's batch state machine: the stored SAR is the value
+        // emitted for the current bar, and the recursive step prepares the
+        // value for the next bar. The second bar establishes direction from
+        // the first +DM/-DM pair; ties default to long.
+        if self.count == 2 {
+            let up_move = high - self.prev_high;
+            let down_move = self.prev_low - low;
+            self.direction = if down_move > up_move && down_move > 0.0 { -1 } else { 1 };
+            self.ep = if self.direction == 1 { high } else { low };
+            self.prev_high = high;
+            self.prev_low = low;
         }
 
-        let mut switched = false;
-        if is_long {
-            if low < current_sar {
+        let prev_high = self.prev_high;
+        let prev_low = self.prev_low;
+        let output_sar;
+        let next_sar;
+        if self.direction == 1 {
+            if low <= self.sar {
                 self.direction = -1;
-                current_sar = self.ep;
-                self.ep = low;
+                output_sar = self.ep.max(prev_high).max(high);
                 self.af = self.acceleration;
-                switched = true;
+                self.ep = low;
+                let candidate = self.af.mul_add(self.ep - output_sar, output_sar);
+                next_sar = candidate.max(prev_high).max(high);
+            } else {
+                output_sar = self.sar;
+                if high > self.ep {
+                    self.ep = high;
+                    self.af = (self.af + self.acceleration).min(self.maximum);
+                }
+                let candidate = self.af.mul_add(self.ep - output_sar, output_sar);
+                next_sar = candidate.min(prev_low).min(low);
             }
-        } else if high > current_sar {
+        } else if high >= self.sar {
             self.direction = 1;
-            current_sar = self.ep;
-            self.ep = high;
+            output_sar = self.ep.min(prev_low).min(low);
             self.af = self.acceleration;
-            switched = true;
-        }
-
-        if !switched {
-            if self.direction == 1 && high > self.ep {
-                self.ep = high;
-                self.af = (self.af + self.acceleration).min(self.maximum);
-            } else if self.direction == -1 && low < self.ep {
+            self.ep = high;
+            let candidate = self.af.mul_add(self.ep - output_sar, output_sar);
+            next_sar = candidate.min(prev_low).min(low);
+        } else {
+            output_sar = self.sar;
+            if low < self.ep {
                 self.ep = low;
                 self.af = (self.af + self.acceleration).min(self.maximum);
             }
+            let candidate = self.af.mul_add(self.ep - output_sar, output_sar);
+            next_sar = candidate.max(prev_high).max(high);
         }
 
-        self.sar = current_sar;
+        self.sar = next_sar;
         self.prev_low2 = self.prev_low;
         self.prev_low = low;
         self.prev_high2 = self.prev_high;
         self.prev_high = high;
 
         let result = Some(SarOutput {
-            sar: self.sar,
+            sar: output_sar,
             direction: self.direction,
         });
         self.last_value = result;

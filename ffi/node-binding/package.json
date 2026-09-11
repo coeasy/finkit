@@ -1,6 +1,6 @@
 {
   "name": "finkit",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "description": "High-performance financial technical analysis library for Node.js, powered by Rust and NAPI-RS. 150+ indicators, 60+ candlestick patterns, and chart pattern recognition.",
   "main": "index.js",
   "types": "index.d.ts",
@@ -71,14 +71,14 @@
     "typescript": "^5.0.0"
   },
   "optionalDependencies": {
-    "finkit-darwin-arm64": "0.1.11",
-    "finkit-darwin-x64": "0.1.11",
-    "finkit-linux-arm64-gnu": "0.1.11",
-    "finkit-linux-arm64-musl": "0.1.11",
-    "finkit-linux-x64-gnu": "0.1.11",
-    "finkit-linux-x64-musl": "0.1.11",
-    "finkit-win32-x64-msvc": "0.1.11",
-    "finkit-win32-arm64-msvc": "0.1.11"
+    "finkit-darwin-arm64": "0.1.12",
+    "finkit-darwin-x64": "0.1.12",
+    "finkit-linux-arm64-gnu": "0.1.12",
+    "finkit-linux-arm64-musl": "0.1.12",
+    "finkit-linux-x64-gnu": "0.1.12",
+    "finkit-linux-x64-musl": "0.1.12",
+    "finkit-win32-x64-msvc": "0.1.12",
+    "finkit-win32-arm64-msvc": "0.1.12"
   },
   "files": [
     "index.js",

@@ -55,6 +55,67 @@ fn is_bearish(open: f64, close: f64) -> bool {
     close < open
 }
 
+// TA-Lib's candlestick rules use a shared CandleSettings table. Keep these
+// defaults centralized so patterns consistently exclude the current candle
+// from trailing averages and use the correct range type.
+const CDL_AVG_PERIOD: usize = 10;
+
+#[inline]
+fn talib_body(open: f64, close: f64) -> f64 {
+    (close - open).abs()
+}
+
+#[inline]
+fn talib_upper_shadow(open: f64, high: f64, close: f64) -> f64 {
+    high - open.max(close)
+}
+
+#[inline]
+fn talib_lower_shadow(open: f64, low: f64, close: f64) -> f64 {
+    open.min(close) - low
+}
+
+/// CandleSetting range: 0 = RealBody, 1 = HighLow, 2 = Shadows.
+#[inline]
+fn talib_range(open: f64, high: f64, low: f64, close: f64, range_type: u8) -> f64 {
+    match range_type {
+        0 => talib_body(open, close),
+        1 => high - low,
+        _ => talib_upper_shadow(open, high, close) + talib_lower_shadow(open, low, close),
+    }
+}
+
+/// TA_CANDLEAVERAGE for the default TA-Lib settings, excluding the current
+/// candle when `period` is non-zero.
+#[inline]
+fn talib_average(
+    open: &[f64],
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    idx: usize,
+    period: usize,
+    factor: f64,
+    range_type: u8,
+) -> f64 {
+    if period == 0 {
+        return factor * talib_range(open[idx], high[idx], low[idx], close[idx], range_type)
+            / if range_type == 2 { 2.0 } else { 1.0 };
+    }
+    if idx < period {
+        return 0.0;
+    }
+    let sum = (idx - period..idx)
+        .map(|j| talib_range(open[j], high[j], low[j], close[j], range_type))
+        .sum::<f64>();
+    factor * sum / period as f64 / if range_type == 2 { 2.0 } else { 1.0 }
+}
+
+#[inline]
+fn talib_color(open: f64, close: f64) -> i32 {
+    if close >= open { 100 } else { -100 }
+}
+
 /// Doji (DOJI)
 ///
 /// Open and close are virtually the same.
@@ -78,24 +139,17 @@ pub fn doji(
             constraint: "must have the same length".to_string(),
         });
     }
-    validate_input(open.len(), 10)?;
+    validate_input(open.len(), CDL_AVG_PERIOD + 1)?;
 
     let len = open.len();
     let mut output = Array1::zeros(len);
-    let period = 10;
+    let period = CDL_AVG_PERIOD;
 
-    // TA-Lib's BodyDoji setting is a 10-bar average of the preceding real
-    // bodies multiplied by the default 0.1 factor. The current candle is
-    // deliberately excluded from the average; using true range here creates
-    // false positives on volatile bars.
+    // TA-Lib's BodyDoji setting uses the preceding HighLow average and a
+    // default factor of 0.1. The current candle is excluded.
     for i in period..len {
-        let avg_body = (i - period..i)
-            .map(|j| body(open[j], close[j]))
-            .sum::<f64>()
-            / period as f64;
-        let body_size = body(open[i], close[i]);
-
-        if body_size <= avg_body * doji_pct {
+        let threshold = talib_average(open, high, low, close, i, period, doji_pct, 1);
+        if talib_body(open[i], close[i]) <= threshold {
             output[i] = 100;
         }
     }
@@ -201,17 +255,12 @@ pub fn long_legged_doji(
 
     let len = open.len();
     let mut output = Array1::zeros(len);
-    let period = 10;
-
-    for i in period..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
-        let body_size = body(open[i], close[i]);
-        let up_shadow = upper_shadow(high[i], open[i], close[i]);
-        let lo_shadow = lower_shadow(low[i], open[i], close[i]);
-
-        if body_size <= avg_range * doji_pct
-            && up_shadow > avg_range * 1.0
-            && lo_shadow > avg_range * 1.0
+    for i in CDL_AVG_PERIOD..len {
+        let doji = talib_average(open, high, low, close, i, CDL_AVG_PERIOD, doji_pct, 1);
+        let long_shadow = talib_average(open, high, low, close, i, 0, 1.0, 0);
+        if talib_body(open[i], close[i]) <= doji
+            && (talib_lower_shadow(open[i], low[i], close[i]) > long_shadow
+                || talib_upper_shadow(open[i], high[i], close[i]) > long_shadow)
         {
             output[i] = 100;
         }
@@ -235,7 +284,7 @@ pub fn doji_4prices(
             constraint: "must have the same length".to_string(),
         });
     }
-    validate_input(open.len(), 1)?;
+    validate_input(open.len(), CDL_AVG_PERIOD + 1)?;
 
     let len = open.len();
     let mut output = Array1::zeros(len);
@@ -262,6 +311,7 @@ pub fn marubozu(
     close: &[f64],
     shadow_pct: f64,
 ) -> Result<PatternResult> {
+    let _ = shadow_pct;
     if open.len() != high.len() || open.len() != low.len() || open.len() != close.len() {
         return Err(TaError::InvalidParameter {
             name: "open, high, low, close".to_string(),
@@ -273,20 +323,26 @@ pub fn marubozu(
     let len = open.len();
     let mut output = Array1::zeros(len);
 
-    for i in 0..len {
-        let body_size = body(open[i], close[i]);
-        let up_shadow = upper_shadow(high[i], open[i], close[i]);
-        let lo_shadow = lower_shadow(low[i], open[i], close[i]);
-
-        if body_size > 0.0
-            && up_shadow / body_size < shadow_pct
-            && lo_shadow / body_size < shadow_pct
-        {
-            if is_bullish(open[i], close[i]) {
-                output[i] = 100;
-            } else {
-                output[i] = -100;
+    if len <= CDL_AVG_PERIOD {
+        for i in 0..len {
+            let body_size = body(open[i], close[i]);
+            let up_shadow = upper_shadow(high[i], open[i], close[i]);
+            let lo_shadow = lower_shadow(low[i], open[i], close[i]);
+            if body_size > 0.0 && up_shadow / body_size < shadow_pct && lo_shadow / body_size < shadow_pct {
+                output[i] = if is_bullish(open[i], close[i]) { 100 } else { -100 };
             }
+        }
+        return Ok(output);
+    }
+
+    for i in CDL_AVG_PERIOD..len {
+        let body_long = talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 1.0, 0);
+        let shadow_short = talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 0.1, 1);
+        if talib_body(open[i], close[i]) > body_long
+            && talib_upper_shadow(open[i], high[i], close[i]) < shadow_short
+            && talib_lower_shadow(open[i], low[i], close[i]) < shadow_short
+        {
+            output[i] = talib_color(open[i], close[i]);
         }
     }
 
@@ -308,17 +364,15 @@ pub fn hammer(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result<
 
     let len = open.len();
     let mut output = Array1::zeros(len);
-    let period = 10;
-
-    for i in period..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
-        let body_size = body(open[i], close[i]);
-        let up_shadow = upper_shadow(high[i], open[i], close[i]);
-        let lo_shadow = lower_shadow(low[i], open[i], close[i]);
-
-        if lo_shadow >= body_size * 2.0
-            && up_shadow <= avg_range * 0.1
-            && body_size > avg_range * 0.1
+    for i in CDL_AVG_PERIOD..len {
+        let body_short = talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 1.0, 0);
+        let shadow_long = talib_average(open, high, low, close, i, 0, 1.0, 0);
+        let shadow_very_short = talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 0.1, 1);
+        let near = talib_average(open, high, low, close, i - 1, 5, 0.2, 1);
+        if talib_body(open[i], close[i]) < body_short
+            && talib_lower_shadow(open[i], low[i], close[i]) > shadow_long
+            && talib_upper_shadow(open[i], high[i], close[i]) < shadow_very_short
+            && open[i].min(close[i]) <= low[i - 1] + near
         {
             output[i] = 100;
         }
@@ -347,17 +401,14 @@ pub fn inverted_hammer(
 
     let len = open.len();
     let mut output = Array1::zeros(len);
-    let period = 10;
-
-    for i in period..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
-        let body_size = body(open[i], close[i]);
-        let up_shadow = upper_shadow(high[i], open[i], close[i]);
-        let lo_shadow = lower_shadow(low[i], open[i], close[i]);
-
-        if up_shadow >= body_size * 2.0
-            && lo_shadow <= avg_range * 0.1
-            && body_size > avg_range * 0.1
+    for i in CDL_AVG_PERIOD..len {
+        let body_short = talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 1.0, 0);
+        let shadow_long = talib_average(open, high, low, close, i, 0, 1.0, 0);
+        let shadow_very_short = talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 0.1, 1);
+        if open[i].max(close[i]) < open[i - 1].min(close[i - 1])
+            && talib_body(open[i], close[i]) < body_short
+            && talib_upper_shadow(open[i], high[i], close[i]) > shadow_long
+            && talib_lower_shadow(open[i], low[i], close[i]) < shadow_very_short
         {
             output[i] = 100;
         }
@@ -505,22 +556,21 @@ pub fn harami(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result<
     let len = open.len();
     let mut output = Array1::zeros(len);
 
-    for i in 1..len {
-        let prev_body = body(open[i - 1], close[i - 1]);
-        let curr_body = body(open[i], close[i]);
-
-        if curr_body < prev_body * 0.5 {
-            let prev_high = open[i - 1].max(close[i - 1]);
-            let prev_low = open[i - 1].min(close[i - 1]);
-            let curr_high = open[i].max(close[i]);
-            let curr_low = open[i].min(close[i]);
-
+    for i in (CDL_AVG_PERIOD + 1)..len {
+        let prev_long = talib_average(open, high, low, close, i - 1, CDL_AVG_PERIOD, 1.0, 0);
+        let curr_short = talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 1.0, 0);
+        let prev_high = open[i - 1].max(close[i - 1]);
+        let prev_low = open[i - 1].min(close[i - 1]);
+        let curr_high = open[i].max(close[i]);
+        let curr_low = open[i].min(close[i]);
+        if talib_body(open[i - 1], close[i - 1]) > prev_long
+            && talib_body(open[i], close[i]) <= curr_short
+        {
+            let sign = if close[i - 1] >= open[i - 1] { -1 } else { 1 };
             if curr_high < prev_high && curr_low > prev_low {
-                if is_bearish(open[i - 1], close[i - 1]) && is_bullish(open[i], close[i]) {
-                    output[i] = 100;
-                } else if is_bullish(open[i - 1], close[i - 1]) && is_bearish(open[i], close[i]) {
-                    output[i] = -100;
-                }
+                output[i] = sign * 100;
+            } else if curr_high <= prev_high && curr_low >= prev_low {
+                output[i] = sign * 80;
             }
         }
     }
@@ -543,29 +593,25 @@ pub fn harami_cross(
             constraint: "must have the same length".to_string(),
         });
     }
-    validate_input(open.len(), 11)?;
+    validate_input(open.len(), 2)?;
 
     let len = open.len();
     let mut output = Array1::zeros(len);
-    let period = 10;
-
-    for i in period..len {
-        let prev_body = body(open[i - 1], close[i - 1]);
-        let curr_body = body(open[i], close[i]);
-        let avg_range = candle_avg_range(high, low, close, period, i);
-
-        if curr_body < avg_range * 0.1 && curr_body < prev_body * 0.5 {
-            let prev_high = open[i - 1].max(close[i - 1]);
-            let prev_low = open[i - 1].min(close[i - 1]);
-            let curr_high = open[i].max(close[i]);
-            let curr_low = open[i].min(close[i]);
-
+    for i in (CDL_AVG_PERIOD + 1)..len {
+        let prev_long = talib_average(open, high, low, close, i - 1, CDL_AVG_PERIOD, 1.0, 0);
+        let curr_doji = talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 0.1, 1);
+        let prev_high = open[i - 1].max(close[i - 1]);
+        let prev_low = open[i - 1].min(close[i - 1]);
+        let curr_high = open[i].max(close[i]);
+        let curr_low = open[i].min(close[i]);
+        if talib_body(open[i - 1], close[i - 1]) > prev_long
+            && talib_body(open[i], close[i]) <= curr_doji
+        {
+            let sign = if close[i - 1] >= open[i - 1] { -1 } else { 1 };
             if curr_high < prev_high && curr_low > prev_low {
-                if is_bearish(open[i - 1], close[i - 1]) {
-                    output[i] = 100;
-                } else if is_bullish(open[i - 1], close[i - 1]) {
-                    output[i] = -100;
-                }
+                output[i] = sign * 100;
+            } else if curr_high <= prev_high && curr_low >= prev_low {
+                output[i] = sign * 80;
             }
         }
     }
@@ -596,16 +642,21 @@ pub fn morning_star(
     let len = open.len();
     let mut output = Array1::zeros(len);
 
-    for i in 2..len {
-        let first_body = body(open[i - 2], close[i - 2]);
-        let second_body = body(open[i - 1], close[i - 1]);
-        let third_body = body(open[i], close[i]);
+    for i in (CDL_AVG_PERIOD + 2)..len {
+        let first_body = talib_body(open[i - 2], close[i - 2]);
+        let second_body = talib_body(open[i - 1], close[i - 1]);
+        let third_body = talib_body(open[i], close[i]);
+        let first_long = talib_average(open, high, low, close, i - 2, CDL_AVG_PERIOD, 1.0, 0);
+        let second_short = talib_average(open, high, low, close, i - 1, CDL_AVG_PERIOD, 1.0, 0);
+        let third_short = talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 1.0, 0);
 
-        if is_bearish(open[i - 2], close[i - 2])
-            && second_body < first_body * 0.3
-            && is_bullish(open[i], close[i])
-            && third_body > first_body * 0.5
-            && close[i] > (open[i - 2] + close[i - 2]) / 2.0
+        if close[i - 2] < open[i - 2]
+            && close[i] >= open[i]
+            && open[i - 1].max(close[i - 1]) < open[i - 2].min(close[i - 2])
+            && close[i] > close[i - 2] + first_body * 0.3
+            && first_body > first_long
+            && second_body <= second_short
+            && third_body > third_short
         {
             output[i] = 100;
         }
@@ -637,16 +688,21 @@ pub fn evening_star(
     let len = open.len();
     let mut output = Array1::zeros(len);
 
-    for i in 2..len {
-        let first_body = body(open[i - 2], close[i - 2]);
-        let second_body = body(open[i - 1], close[i - 1]);
-        let third_body = body(open[i], close[i]);
+    for i in (CDL_AVG_PERIOD + 2)..len {
+        let first_body = talib_body(open[i - 2], close[i - 2]);
+        let second_body = talib_body(open[i - 1], close[i - 1]);
+        let third_body = talib_body(open[i], close[i]);
+        let first_long = talib_average(open, high, low, close, i - 2, CDL_AVG_PERIOD, 1.0, 0);
+        let second_short = talib_average(open, high, low, close, i - 1, CDL_AVG_PERIOD, 1.0, 0);
+        let third_short = talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 1.0, 0);
 
-        if is_bullish(open[i - 2], close[i - 2])
-            && second_body < first_body * 0.3
-            && is_bearish(open[i], close[i])
-            && third_body > first_body * 0.5
-            && close[i] < (open[i - 2] + close[i - 2]) / 2.0
+        if close[i - 2] >= open[i - 2]
+            && close[i] < open[i]
+            && open[i - 1].min(close[i - 1]) > open[i - 2].max(close[i - 2])
+            && close[i] < close[i - 2] - first_body * 0.3
+            && first_body > first_long
+            && second_body <= second_short
+            && third_body > third_short
         {
             output[i] = -100;
         }
@@ -671,25 +727,24 @@ pub fn morning_doji_star(
             constraint: "must have the same length".to_string(),
         });
     }
-    validate_input(open.len(), 12)?;
+    validate_input(open.len(), 3)?;
 
     let len = open.len();
     let mut output = Array1::zeros(len);
-    let period = 10;
-
-    for i in period..len {
-        if i < 2 {
-            continue;
-        }
-        let first_body = body(open[i - 2], close[i - 2]);
-        let second_body = body(open[i - 1], close[i - 1]);
-        let third_body = body(open[i], close[i]);
-        let avg_range = candle_avg_range(high, low, close, period, i);
-
-        if is_bearish(open[i - 2], close[i - 2])
-            && second_body < avg_range * doji_pct
-            && is_bullish(open[i], close[i])
-            && third_body > first_body * 0.5
+    for i in (CDL_AVG_PERIOD + 2)..len {
+        let first_body = talib_body(open[i - 2], close[i - 2]);
+        let second_body = talib_body(open[i - 1], close[i - 1]);
+        let third_body = talib_body(open[i], close[i]);
+        let first_long = talib_average(open, high, low, close, i - 2, CDL_AVG_PERIOD, 1.0, 0);
+        let second_doji = talib_average(open, high, low, close, i - 1, CDL_AVG_PERIOD, doji_pct, 1);
+        let third_short = talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 1.0, 0);
+        if close[i - 2] < open[i - 2]
+            && close[i] >= open[i]
+            && open[i - 1].max(close[i - 1]) < open[i - 2].min(close[i - 2])
+            && close[i] > close[i - 2] + first_body * 0.3
+            && first_body > first_long
+            && second_body <= second_doji
+            && third_body > third_short
         {
             output[i] = 100;
         }
@@ -714,25 +769,24 @@ pub fn evening_doji_star(
             constraint: "must have the same length".to_string(),
         });
     }
-    validate_input(open.len(), 12)?;
+    validate_input(open.len(), 3)?;
 
     let len = open.len();
     let mut output = Array1::zeros(len);
-    let period = 10;
-
-    for i in period..len {
-        if i < 2 {
-            continue;
-        }
-        let first_body = body(open[i - 2], close[i - 2]);
-        let second_body = body(open[i - 1], close[i - 1]);
-        let third_body = body(open[i], close[i]);
-        let avg_range = candle_avg_range(high, low, close, period, i);
-
-        if is_bullish(open[i - 2], close[i - 2])
-            && second_body < avg_range * doji_pct
-            && is_bearish(open[i], close[i])
-            && third_body > first_body * 0.5
+    for i in (CDL_AVG_PERIOD + 2)..len {
+        let first_body = talib_body(open[i - 2], close[i - 2]);
+        let second_body = talib_body(open[i - 1], close[i - 1]);
+        let third_body = talib_body(open[i], close[i]);
+        let first_long = talib_average(open, high, low, close, i - 2, CDL_AVG_PERIOD, 1.0, 0);
+        let second_doji = talib_average(open, high, low, close, i - 1, CDL_AVG_PERIOD, doji_pct, 1);
+        let third_short = talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 1.0, 0);
+        if close[i - 2] >= open[i - 2]
+            && close[i] < open[i]
+            && open[i - 1].min(close[i - 1]) > open[i - 2].max(close[i - 2])
+            && close[i] < close[i - 2] - first_body * 0.3
+            && first_body > first_long
+            && second_body <= second_doji
+            && third_body > third_short
         {
             output[i] = -100;
         }
@@ -861,13 +915,16 @@ pub fn three_inside_up(
     let len = open.len();
     let mut output = Array1::zeros(len);
 
-    for i in 2..len {
-        if is_bearish(open[i - 2], close[i - 2])
-            && body(open[i - 1], close[i - 1]) < body(open[i - 2], close[i - 2])
-            && open[i - 1].max(close[i - 1]) < open[i - 2].max(close[i - 2])
+    for i in (CDL_AVG_PERIOD + 2)..len {
+        let first_body = talib_body(open[i - 2], close[i - 2]);
+        let second_body = talib_body(open[i - 1], close[i - 1]);
+        if open[i - 1].max(close[i - 1]) < open[i - 2].max(close[i - 2])
             && open[i - 1].min(close[i - 1]) > open[i - 2].min(close[i - 2])
-            && is_bullish(open[i], close[i])
-            && close[i] > open[i - 2].max(close[i - 2])
+            && first_body > talib_average(open, high, low, close, i - 2, CDL_AVG_PERIOD, 1.0, 0)
+            && second_body <= talib_average(open, high, low, close, i - 1, CDL_AVG_PERIOD, 1.0, 0)
+            && close[i - 2] < open[i - 2]
+            && close[i] >= open[i]
+            && close[i] > open[i - 2]
         {
             output[i] = 100;
         }
@@ -897,11 +954,10 @@ pub fn three_outside_up(
     let mut output = Array1::zeros(len);
 
     for i in 2..len {
-        if is_bearish(open[i - 2], close[i - 2])
-            && is_bullish(open[i - 1], close[i - 1])
-            && open[i - 1] <= close[i - 2]
-            && close[i - 1] >= open[i - 2]
-            && is_bullish(open[i], close[i])
+        if close[i - 1] >= open[i - 1]
+            && close[i - 2] < open[i - 2]
+            && close[i - 1] > open[i - 2]
+            && open[i - 1] < close[i - 2]
             && close[i] > close[i - 1]
         {
             output[i] = 100;
@@ -931,13 +987,16 @@ pub fn three_inside_down(
     let len = open.len();
     let mut output = Array1::zeros(len);
 
-    for i in 2..len {
-        if is_bullish(open[i - 2], close[i - 2])
-            && body(open[i - 1], close[i - 1]) < body(open[i - 2], close[i - 2])
-            && open[i - 1].max(close[i - 1]) < open[i - 2].max(close[i - 2])
+    for i in (CDL_AVG_PERIOD + 2)..len {
+        let first_body = talib_body(open[i - 2], close[i - 2]);
+        let second_body = talib_body(open[i - 1], close[i - 1]);
+        if open[i - 1].max(close[i - 1]) < open[i - 2].max(close[i - 2])
             && open[i - 1].min(close[i - 1]) > open[i - 2].min(close[i - 2])
-            && is_bearish(open[i], close[i])
-            && close[i] < open[i - 2].min(close[i - 2])
+            && first_body > talib_average(open, high, low, close, i - 2, CDL_AVG_PERIOD, 1.0, 0)
+            && second_body <= talib_average(open, high, low, close, i - 1, CDL_AVG_PERIOD, 1.0, 0)
+            && close[i - 2] >= open[i - 2]
+            && close[i] < open[i]
+            && close[i] < open[i - 2]
         {
             output[i] = -100;
         }
@@ -967,11 +1026,10 @@ pub fn three_outside_down(
     let mut output = Array1::zeros(len);
 
     for i in 2..len {
-        if is_bullish(open[i - 2], close[i - 2])
-            && is_bearish(open[i - 1], close[i - 1])
-            && open[i - 1] >= close[i - 2]
-            && close[i - 1] <= open[i - 2]
-            && is_bearish(open[i], close[i])
+        if close[i - 1] < open[i - 1]
+            && close[i - 2] >= open[i - 2]
+            && open[i - 1] > close[i - 2]
+            && close[i - 1] < open[i - 2]
             && close[i] < close[i - 1]
         {
             output[i] = -100;
@@ -1001,17 +1059,30 @@ pub fn three_stars_in_south(
     let len = open.len();
     let mut output = Array1::zeros(len);
 
-    for i in 3..len {
-        // First: long black candle
-        if is_bearish(open[i - 3], close[i - 3])
-            // Second: black candle with lower low and gap down
-            && is_bearish(open[i - 2], close[i - 2])
-            && low[i - 2] < low[i - 3]
-            // Third: small-bodied candle (spinning top or doji)
-            && body(open[i - 1], close[i - 1]) < body(open[i - 2], close[i - 2])
-            // Fourth: white candle that closes within first candle's body
-            && is_bullish(open[i], close[i])
-            && close[i] > close[i - 3]
+    for i in (CDL_AVG_PERIOD + 2)..len {
+        let first_body = talib_body(open[i - 2], close[i - 2]);
+        let second_body = talib_body(open[i - 1], close[i - 1]);
+        let third_body = talib_body(open[i], close[i]);
+        let first_long = talib_average(open, high, low, close, i - 2, CDL_AVG_PERIOD, 1.0, 0);
+        let first_shadow = talib_average(open, high, low, close, i - 2, 0, 1.0, 0);
+        let second_shadow = talib_average(open, high, low, close, i - 1, CDL_AVG_PERIOD, 0.1, 1);
+        let third_shadow = talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 0.1, 1);
+        if close[i - 2] < open[i - 2]
+            && close[i - 1] < open[i - 1]
+            && close[i] < open[i]
+            && first_body > first_long
+            && talib_lower_shadow(open[i - 2], low[i - 2], close[i - 2]) > first_shadow
+            && second_body < first_body
+            && open[i - 1] > close[i - 2]
+            && open[i - 1] <= high[i - 2]
+            && low[i - 1] < close[i - 2]
+            && low[i - 1] >= low[i - 2]
+            && talib_lower_shadow(open[i - 1], low[i - 1], close[i - 1]) > second_shadow
+            && third_body < talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 1.0, 0)
+            && talib_lower_shadow(open[i], low[i], close[i]) < third_shadow
+            && talib_upper_shadow(open[i], high[i], close[i]) < third_shadow
+            && low[i] > low[i - 1]
+            && high[i] < high[i - 1]
         {
             output[i] = 100;
         }
@@ -1090,11 +1161,14 @@ pub fn stick_sandwich(
     let len = open.len();
     let mut output = Array1::zeros(len);
 
-    for i in 2..len {
-        if is_bullish(open[i - 2], close[i - 2])
-            && is_bearish(open[i - 1], close[i - 1])
-            && is_bullish(open[i], close[i])
-            && (close[i - 2] - close[i]).abs() < (close[i - 2] * 0.01)
+    for i in (CDL_AVG_PERIOD + 2)..len {
+        let equal = talib_average(open, high, low, close, i - 2, 5, 0.05, 1);
+        if close[i - 2] < open[i - 2]
+            && close[i - 1] >= open[i - 1]
+            && close[i] < open[i]
+            && low[i - 1] > close[i - 2]
+            && close[i] <= close[i - 2] + equal
+            && close[i] >= close[i - 2] - equal
         {
             output[i] = 100;
         }
@@ -1118,11 +1192,17 @@ pub fn belt_hold(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Resu
     let len = open.len();
     let mut output = Array1::zeros(len);
 
-    for i in 0..len {
-        if is_bullish(open[i], close[i]) && (open[i] - low[i]).abs() < 1e-10 {
-            output[i] = 100;
-        } else if is_bearish(open[i], close[i]) && (open[i] - high[i]).abs() < 1e-10 {
-            output[i] = -100;
+    for i in CDL_AVG_PERIOD..len {
+        let body_long = talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 1.0, 0);
+        let shadow_short = talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 0.1, 1);
+        let body = talib_body(open[i], close[i]);
+        let color = talib_color(open[i], close[i]);
+        let lower = talib_lower_shadow(open[i], low[i], close[i]);
+        let upper = talib_upper_shadow(open[i], high[i], close[i]);
+        if body > body_long
+            && ((color > 0 && lower < shadow_short) || (color < 0 && upper < shadow_short))
+        {
+            output[i] = color;
         }
     }
 
@@ -1149,11 +1229,17 @@ pub fn closing_marubozu(
     let len = open.len();
     let mut output = Array1::zeros(len);
 
-    for i in 0..len {
-        if is_bullish(open[i], close[i]) && (high[i] - close[i]).abs() < 1e-10 {
-            output[i] = 100;
-        } else if is_bearish(open[i], close[i]) && (low[i] - close[i]).abs() < 1e-10 {
-            output[i] = -100;
+    for i in CDL_AVG_PERIOD..len {
+        let body_long = talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 1.0, 0);
+        let shadow_short = talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 0.1, 1);
+        let body = talib_body(open[i], close[i]);
+        let color = talib_color(open[i], close[i]);
+        let upper = talib_upper_shadow(open[i], high[i], close[i]);
+        let lower = talib_lower_shadow(open[i], low[i], close[i]);
+        if body > body_long
+            && ((color > 0 && upper < shadow_short) || (color < 0 && lower < shadow_short))
+        {
+            output[i] = color;
         }
     }
 
@@ -1179,20 +1265,14 @@ pub fn spinning_top(
 
     let len = open.len();
     let mut output = Array1::zeros(len);
-    let period = 10;
+    for i in CDL_AVG_PERIOD..len {
+        let body_size = talib_body(open[i], close[i]);
+        let avg_body = talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 1.0, 0);
+        let up_shadow = talib_upper_shadow(open[i], high[i], close[i]);
+        let lo_shadow = talib_lower_shadow(open[i], low[i], close[i]);
 
-    for i in period..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
-        let body_size = body(open[i], close[i]);
-        let up_shadow = upper_shadow(high[i], open[i], close[i]);
-        let lo_shadow = lower_shadow(low[i], open[i], close[i]);
-
-        if body_size < avg_range * 0.3
-            && up_shadow > body_size
-            && lo_shadow > body_size
-            && (up_shadow - lo_shadow).abs() < body_size
-        {
-            output[i] = 100;
+        if avg_body > body_size && up_shadow > body_size && lo_shadow > body_size {
+            output[i] = talib_color(open[i], close[i]);
         }
     }
 
@@ -1209,20 +1289,19 @@ pub fn high_wave(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Resu
             constraint: "must have the same length".to_string(),
         });
     }
-    validate_input(open.len(), 11)?;
+    validate_input(open.len(), CDL_AVG_PERIOD + 1)?;
 
     let len = open.len();
     let mut output = Array1::zeros(len);
-    let period = 10;
+    for i in CDL_AVG_PERIOD..len {
+        let body_size = talib_body(open[i], close[i]);
+        let avg_body = talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 1.0, 0);
+        let long_shadow = talib_average(open, high, low, close, i, 0, 2.0, 0);
+        let up_shadow = talib_upper_shadow(open[i], high[i], close[i]);
+        let lo_shadow = talib_lower_shadow(open[i], low[i], close[i]);
 
-    for i in period..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
-        let body_size = body(open[i], close[i]);
-        let total_shadow =
-            upper_shadow(high[i], open[i], close[i]) + lower_shadow(low[i], open[i], close[i]);
-
-        if body_size < avg_range * 0.2 && total_shadow > avg_range * 1.5 {
-            output[i] = 100;
+        if avg_body > body_size && up_shadow > long_shadow && lo_shadow > long_shadow {
+            output[i] = talib_color(open[i], close[i]);
         }
     }
 
@@ -1244,22 +1323,24 @@ pub fn rickshaw_man(
             constraint: "must have the same length".to_string(),
         });
     }
-    validate_input(open.len(), 11)?;
+    validate_input(open.len(), CDL_AVG_PERIOD + 1)?;
 
     let len = open.len();
     let mut output = Array1::zeros(len);
-    let period = 10;
+    for i in CDL_AVG_PERIOD..len {
+        let body_size = talib_body(open[i], close[i]);
+        let doji = talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 0.1, 1);
+        let long_shadow = talib_average(open, high, low, close, i, 0, 1.0, 0);
+        let near = talib_average(open, high, low, close, i, 5, 0.2, 1);
+        let midpoint = low[i] + (high[i] - low[i]) / 2.0;
+        let min_body = open[i].min(close[i]);
+        let max_body = open[i].max(close[i]);
 
-    for i in period..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
-        let body_size = body(open[i], close[i]);
-        let midpoint = (high[i] + low[i]) / 2.0;
-        let open_close_mid = (open[i] + close[i]) / 2.0;
-
-        if body_size < avg_range * 0.1
-            && upper_shadow(high[i], open[i], close[i]) > avg_range * 0.5
-            && lower_shadow(low[i], open[i], close[i]) > avg_range * 0.5
-            && (open_close_mid - midpoint).abs() < avg_range * 0.1
+        if body_size <= doji
+            && talib_lower_shadow(open[i], low[i], close[i]) > long_shadow
+            && talib_upper_shadow(open[i], high[i], close[i]) > long_shadow
+            && min_body <= midpoint + near
+            && max_body >= midpoint - near
         {
             output[i] = 100;
         }
@@ -1278,18 +1359,19 @@ pub fn short_line(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Res
             constraint: "must have the same length".to_string(),
         });
     }
-    validate_input(open.len(), 11)?;
+    validate_input(open.len(), CDL_AVG_PERIOD + 1)?;
 
     let len = open.len();
     let mut output = Array1::zeros(len);
-    let period = 10;
+    for i in CDL_AVG_PERIOD..len {
+        let body_size = talib_body(open[i], close[i]);
+        let avg_body = talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 1.0, 0);
+        let avg_shadow = talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 1.0, 2);
+        let up_shadow = talib_upper_shadow(open[i], high[i], close[i]);
+        let lo_shadow = talib_lower_shadow(open[i], low[i], close[i]);
 
-    for i in period..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
-        let range = high[i] - low[i];
-
-        if range < avg_range * 0.3 {
-            output[i] = 100;
+        if avg_body > body_size && avg_shadow > up_shadow && avg_shadow > lo_shadow {
+            output[i] = talib_color(open[i], close[i]);
         }
     }
 
@@ -1306,22 +1388,19 @@ pub fn long_line(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Resu
             constraint: "must have the same length".to_string(),
         });
     }
-    validate_input(open.len(), 11)?;
+    validate_input(open.len(), CDL_AVG_PERIOD + 1)?;
 
     let len = open.len();
     let mut output = Array1::zeros(len);
-    let period = 10;
+    for i in CDL_AVG_PERIOD..len {
+        let body_size = talib_body(open[i], close[i]);
+        let avg_body = talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 1.0, 0);
+        let avg_shadow = talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 1.0, 2);
+        let up_shadow = talib_upper_shadow(open[i], high[i], close[i]);
+        let lo_shadow = talib_lower_shadow(open[i], low[i], close[i]);
 
-    for i in period..len {
-        let avg_range = candle_avg_range(high, low, close, period, i);
-        let body_size = body(open[i], close[i]);
-
-        if body_size > avg_range * 2.0 {
-            if is_bullish(open[i], close[i]) {
-                output[i] = 100;
-            } else {
-                output[i] = -100;
-            }
+        if body_size > avg_body && avg_shadow > up_shadow && avg_shadow > lo_shadow {
+            output[i] = talib_color(open[i], close[i]);
         }
     }
 
@@ -1344,12 +1423,17 @@ pub fn piercing(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Resul
     let len = open.len();
     let mut output = Array1::zeros(len);
 
-    for i in 1..len {
-        if is_bearish(open[i - 1], close[i - 1])
-            && is_bullish(open[i], close[i])
-            && open[i] < close[i - 1]
-            && close[i] > (open[i - 1] + close[i - 1]) / 2.0
+    for i in (CDL_AVG_PERIOD + 1)..len {
+        let prev_body = talib_body(open[i - 1], close[i - 1]);
+        let prev_long = talib_average(open, high, low, close, i - 1, CDL_AVG_PERIOD, 1.0, 0);
+        let curr_long = talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 1.0, 0);
+        if close[i - 1] < open[i - 1]
+            && prev_body > prev_long
+            && close[i] >= open[i]
+            && talib_body(open[i], close[i]) > curr_long
+            && open[i] < low[i - 1]
             && close[i] < open[i - 1]
+            && close[i] > close[i - 1] + prev_body * 0.5
         {
             output[i] = 100;
         }
@@ -1378,12 +1462,15 @@ pub fn dark_cloud_cover(
     let len = open.len();
     let mut output = Array1::zeros(len);
 
-    for i in 1..len {
-        if is_bullish(open[i - 1], close[i - 1])
-            && is_bearish(open[i], close[i])
-            && open[i] > close[i - 1]
-            && close[i] < (open[i - 1] + close[i - 1]) / 2.0
+    for i in CDL_AVG_PERIOD..len {
+        let first_body = talib_body(open[i - 1], close[i - 1]);
+        let long_body = talib_average(open, high, low, close, i - 1, CDL_AVG_PERIOD, 1.0, 0);
+        if close[i - 1] >= open[i - 1]
+            && first_body > long_body
+            && close[i] < open[i]
+            && open[i] > high[i - 1]
             && close[i] > open[i - 1]
+            && close[i] < close[i - 1] - first_body * 0.5
         {
             output[i] = -100;
         }
@@ -1592,16 +1679,25 @@ pub fn mat_hold(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Resul
     let len = open.len();
     let mut output = Array1::zeros(len);
 
-    for i in 4..len {
-        if is_bullish(open[i - 4], close[i - 4])
+    for i in (CDL_AVG_PERIOD + 4)..len {
+        let first_body = talib_body(open[i - 4], close[i - 4]);
+        let first_long = first_body > talib_average(open, high, low, close, i - 4, CDL_AVG_PERIOD, 1.0, 0);
+        let short3 = talib_body(open[i - 3], close[i - 3]) < talib_average(open, high, low, close, i - 3, CDL_AVG_PERIOD, 1.0, 0);
+        let short4 = talib_body(open[i - 2], close[i - 2]) < talib_average(open, high, low, close, i - 2, CDL_AVG_PERIOD, 1.0, 0);
+        let short5 = talib_body(open[i - 1], close[i - 1]) < talib_average(open, high, low, close, i - 1, CDL_AVG_PERIOD, 1.0, 0);
+        let up = is_bullish(open[i - 4], close[i - 4])
             && is_bearish(open[i - 3], close[i - 3])
-            && open[i - 3] > close[i - 4]
-            && is_bearish(open[i - 2], close[i - 2])
-            && is_bearish(open[i - 1], close[i - 1])
-            && close[i - 2] > close[i - 4] * 0.9
             && is_bullish(open[i], close[i])
-            && close[i] > close[i - 4]
-        {
+            && open[i - 3].min(close[i - 3]) > open[i - 4].max(close[i - 4])
+            && open[i - 2].min(close[i - 2]) < close[i - 4]
+            && open[i - 1].min(close[i - 1]) < close[i - 4]
+            && open[i - 2].min(close[i - 2]) > close[i - 4] - first_body * 0.5
+            && open[i - 1].min(close[i - 1]) > close[i - 4] - first_body * 0.5
+            && open[i - 2].max(close[i - 2]) < open[i - 3]
+            && open[i - 1].max(close[i - 1]) < open[i - 2].max(close[i - 2])
+            && open[i] > close[i - 1]
+            && close[i] > high[i - 3].max(high[i - 2]).max(high[i - 1]);
+        if up && first_long && short3 && short4 && short5 {
             output[i] = 100;
         }
     }
@@ -1624,17 +1720,26 @@ pub fn tasuki_gap(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Res
     let len = open.len();
     let mut output = Array1::zeros(len);
 
-    for i in 2..len {
-        // Bullish tasuki gap
-        if is_bullish(open[i - 2], close[i - 2])
+    for i in (CDL_AVG_PERIOD + 2)..len {
+        let near = talib_average(open, high, low, close, i - 1, 5, 0.2, 1);
+        let up = open[i - 1].min(close[i - 1]) > open[i - 2].max(close[i - 2])
             && is_bullish(open[i - 1], close[i - 1])
-            && low[i - 1] > high[i - 2]
             && is_bearish(open[i], close[i])
-            && close[i] > close[i - 2]
             && open[i] < close[i - 1]
+            && open[i] > open[i - 1]
+            && close[i] < open[i - 1]
+            && close[i] > open[i - 2].max(close[i - 2])
+            && (talib_body(open[i - 1], close[i - 1]) - talib_body(open[i], close[i])).abs() < near;
+        let down = open[i - 1].max(close[i - 1]) < open[i - 2].min(close[i - 2])
+            && is_bearish(open[i - 1], close[i - 1])
+            && is_bullish(open[i], close[i])
+            && open[i] < open[i - 1]
+            && open[i] > close[i - 1]
             && close[i] > open[i - 1]
-        {
-            output[i] = 100;
+            && close[i] < open[i - 2].min(close[i - 2])
+            && (talib_body(open[i - 1], close[i - 1]) - talib_body(open[i], close[i])).abs() < near;
+        if up || down {
+            output[i] = if up { 100 } else { -100 };
         }
     }
 
@@ -1694,13 +1799,19 @@ pub fn counter_attack(
     let len = open.len();
     let mut output = Array1::zeros(len);
 
-    for i in 1..len {
-        if (close[i] - close[i - 1]).abs() < 1e-10 {
-            if is_bearish(open[i - 1], close[i - 1]) && is_bullish(open[i], close[i]) {
-                output[i] = 100;
-            } else if is_bullish(open[i - 1], close[i - 1]) && is_bearish(open[i], close[i]) {
-                output[i] = -100;
-            }
+    for i in (CDL_AVG_PERIOD + 1)..len {
+        let equal = talib_average(open, high, low, close, i - 1, 5, 0.05, 1);
+        let prev_long = talib_average(open, high, low, close, i - 1, CDL_AVG_PERIOD, 1.0, 0);
+        let curr_long = talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 1.0, 0);
+        let prev_body = talib_body(open[i - 1], close[i - 1]);
+        let curr_body = talib_body(open[i], close[i]);
+        if (close[i - 1] >= open[i - 1]) != (close[i] >= open[i])
+            && prev_body > prev_long
+            && curr_body > curr_long
+            && close[i] <= close[i - 1] + equal
+            && close[i] >= close[i - 1] - equal
+        {
+            output[i] = if close[i] >= open[i] { 100 } else { -100 };
         }
     }
 
@@ -1727,10 +1838,11 @@ pub fn matching_low(
     let len = open.len();
     let mut output = Array1::zeros(len);
 
-    for i in 1..len {
+    for i in 6..len {
+        let equal = talib_average(open, high, low, close, i - 1, 5, 0.05, 1);
         if is_bearish(open[i - 1], close[i - 1])
             && is_bearish(open[i], close[i])
-            && (close[i] - close[i - 1]).abs() < 1e-10
+            && (close[i] - close[i - 1]).abs() <= equal
         {
             output[i] = 100;
         }
@@ -1802,15 +1914,18 @@ pub fn unique_3_river(
     let len = open.len();
     let mut output = Array1::zeros(len);
 
-    for i in 3..len {
-        if is_bearish(open[i - 3], close[i - 3])
-            && is_bearish(open[i - 2], close[i - 2])
-            && low[i - 2] < low[i - 3]
-            && is_bullish(open[i - 1], close[i - 1])
-            && open[i - 1] < close[i - 2]
-            && close[i - 1] > close[i - 2]
+    for i in (CDL_AVG_PERIOD + 2)..len {
+        if is_bearish(open[i - 2], close[i - 2])
+            && is_bearish(open[i - 1], close[i - 1])
             && is_bullish(open[i], close[i])
-            && open[i] < close[i - 1]
+            && close[i - 1] > close[i - 2]
+            && open[i - 1] <= open[i - 2]
+            && low[i - 1] < low[i - 2]
+            && open[i] > low[i - 1]
+            && talib_body(open[i - 2], close[i - 2])
+                > talib_average(open, high, low, close, i - 2, CDL_AVG_PERIOD, 1.0, 0)
+            && talib_body(open[i], close[i])
+                < talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 1.0, 0)
         {
             output[i] = 100;
         }
@@ -1834,19 +1949,24 @@ pub fn breakaway(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Resu
     let len = open.len();
     let mut output = Array1::zeros(len);
 
-    for i in 4..len {
-        // Bullish breakaway
-        if is_bearish(open[i - 4], close[i - 4])
-            && is_bearish(open[i - 3], close[i - 3])
-            && close[i - 3] < close[i - 4]
-            && is_bearish(open[i - 2], close[i - 2])
-            && close[i - 2] < close[i - 3]
-            && is_bearish(open[i - 1], close[i - 1])
-            && is_bullish(open[i], close[i])
-            && open[i] < close[i - 1]
-            && close[i] > close[i - 3]
-        {
-            output[i] = 100;
+    for i in (CDL_AVG_PERIOD + 4)..len {
+        let first_long = talib_body(open[i - 4], close[i - 4])
+            > talib_average(open, high, low, close, i - 4, CDL_AVG_PERIOD, 1.0, 0);
+        let same_124 = is_bullish(open[i - 4], close[i - 4]) == is_bullish(open[i - 3], close[i - 3])
+            && is_bullish(open[i - 3], close[i - 3]) == is_bullish(open[i - 1], close[i - 1]);
+        let opposite = is_bullish(open[i], close[i]) != is_bullish(open[i - 1], close[i - 1]);
+        let down = !is_bullish(open[i - 4], close[i - 4])
+            && open[i - 3].max(close[i - 3]) < open[i - 4].min(close[i - 4])
+            && high[i - 2] < high[i - 3] && low[i - 2] < low[i - 3]
+            && high[i - 1] < high[i - 2] && low[i - 1] < low[i - 2]
+            && close[i] > open[i - 3] && close[i] < close[i - 4];
+        let up = is_bullish(open[i - 4], close[i - 4])
+            && open[i - 3].min(close[i - 3]) > open[i - 4].max(close[i - 4])
+            && high[i - 2] > high[i - 3] && low[i - 2] > low[i - 3]
+            && high[i - 1] > high[i - 2] && low[i - 1] > low[i - 2]
+            && close[i] < open[i - 3] && close[i] > close[i - 4];
+        if first_long && same_124 && opposite && (down || up) {
+            output[i] = talib_color(open[i], close[i]);
         }
     }
 
@@ -1873,17 +1993,19 @@ pub fn concealing_baby_swallow(
     let len = open.len();
     let mut output = Array1::zeros(len);
 
-    for i in 3..len {
-        if is_bearish(open[i - 3], close[i - 3])
-            && is_bearish(open[i - 2], close[i - 2])
-            && open[i - 2] > close[i - 3]
-            && close[i - 2] < close[i - 3]
-            && is_bearish(open[i - 1], close[i - 1])
-            && open[i - 1] > close[i - 2]
-            && low[i - 1] < low[i - 2]
-            && is_bullish(open[i], close[i])
-            && open[i] < open[i - 1]
-            && close[i] > open[i - 2]
+    for i in (CDL_AVG_PERIOD + 3)..len {
+        let short = |j: usize| talib_average(open, high, low, close, j, CDL_AVG_PERIOD, 0.1, 1);
+        let black = |j: usize| is_bearish(open[j], close[j]);
+        let marubozu = |j: usize| {
+            talib_lower_shadow(open[j], low[j], close[j]) < short(j)
+                && talib_upper_shadow(open[j], high[j], close[j]) < short(j)
+        };
+        if black(i - 3) && black(i - 2) && black(i - 1) && black(i)
+            && marubozu(i - 3) && marubozu(i - 2)
+            && open[i - 1].max(close[i - 1]) < open[i - 2].min(close[i - 2])
+            && talib_upper_shadow(open[i - 1], high[i - 1], close[i - 1]) > short(i - 1)
+            && high[i - 1] > close[i - 2]
+            && high[i] > high[i - 1] && low[i] < low[i - 1]
         {
             output[i] = 100;
         }
@@ -1997,21 +2119,35 @@ pub fn advance_block(
 
     let len = open.len();
     let mut output = Array1::zeros(len);
-    let period = 10;
-
-    for i in period..len {
-        if i < 2 {
-            continue;
-        }
-        let avg_range = candle_avg_range(high, low, close, period, i);
-
-        if is_bullish(open[i - 2], close[i - 2])
-            && is_bullish(open[i - 1], close[i - 1])
-            && is_bullish(open[i], close[i])
+    for i in (CDL_AVG_PERIOD + 2)..len {
+        let b1 = talib_body(open[i - 2], close[i - 2]);
+        let b2 = talib_body(open[i - 1], close[i - 1]);
+        let b3 = talib_body(open[i], close[i]);
+        let near1 = talib_average(open, high, low, close, i - 2, 5, 0.2, 1);
+        let near2 = talib_average(open, high, low, close, i - 1, 5, 0.2, 1);
+        let far1 = talib_average(open, high, low, close, i - 2, 5, 0.6, 1);
+        let far2 = talib_average(open, high, low, close, i - 1, 5, 0.6, 1);
+        let short1 = talib_average(open, high, low, close, i - 2, CDL_AVG_PERIOD, 1.0, 2);
+        let short2 = talib_average(open, high, low, close, i - 1, CDL_AVG_PERIOD, 1.0, 2);
+        let short3 = talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 1.0, 2);
+        let long3 = talib_average(open, high, low, close, i, 0, 1.0, 0);
+        let weakened = (b2 < b1 - far1 && b3 < b2 + near2)
+            || b3 < b2 - far2
+            || (b3 < b2 && b2 < b1 && (talib_upper_shadow(open[i], high[i], close[i]) > short3
+                || talib_upper_shadow(open[i - 1], high[i - 1], close[i - 1]) > short2))
+            || (b3 < b2 && talib_upper_shadow(open[i], high[i], close[i]) > long3);
+        if close[i - 2] >= open[i - 2]
+            && close[i - 1] >= open[i - 1]
+            && close[i] >= open[i]
             && close[i] > close[i - 1]
             && close[i - 1] > close[i - 2]
-            && body(open[i], close[i]) < avg_range * 0.5
-            && body(open[i - 1], close[i - 1]) < body(open[i - 2], close[i - 2])
+            && open[i - 1] > open[i - 2]
+            && open[i - 1] <= close[i - 2] + near1
+            && open[i] > open[i - 1]
+            && open[i] <= close[i - 1] + near2
+            && b1 > talib_average(open, high, low, close, i - 2, CDL_AVG_PERIOD, 1.0, 0)
+            && talib_upper_shadow(open[i - 2], high[i - 2], close[i - 2]) < short1
+            && weakened
         {
             output[i] = -100;
         }
@@ -2039,21 +2175,25 @@ pub fn stalled_pattern(
 
     let len = open.len();
     let mut output = Array1::zeros(len);
-    let period = 10;
-
-    for i in period..len {
-        if i < 2 {
-            continue;
-        }
-        let avg_range = candle_avg_range(high, low, close, period, i);
-
-        if is_bullish(open[i - 2], close[i - 2])
-            && is_bullish(open[i - 1], close[i - 1])
-            && is_bullish(open[i], close[i])
+    for i in (CDL_AVG_PERIOD + 2)..len {
+        let b1 = talib_body(open[i - 2], close[i - 2]);
+        let b2 = talib_body(open[i - 1], close[i - 1]);
+        let b3 = talib_body(open[i], close[i]);
+        let near1 = talib_average(open, high, low, close, i - 2, 5, 0.2, 1);
+        let near2 = talib_average(open, high, low, close, i - 1, 5, 0.2, 1);
+        if close[i - 2] >= open[i - 2]
+            && close[i - 1] >= open[i - 1]
+            && close[i] >= open[i]
             && close[i] > close[i - 1]
             && close[i - 1] > close[i - 2]
-            && body(open[i], close[i]) < avg_range * 0.3
-            && upper_shadow(high[i], open[i], close[i]) > body(open[i], close[i]) * 2.0
+            && b1 > talib_average(open, high, low, close, i - 2, CDL_AVG_PERIOD, 1.0, 0)
+            && b2 > talib_average(open, high, low, close, i - 1, CDL_AVG_PERIOD, 1.0, 0)
+            && talib_upper_shadow(open[i - 1], high[i - 1], close[i - 1])
+                < talib_average(open, high, low, close, i - 1, CDL_AVG_PERIOD, 0.1, 1)
+            && open[i - 1] > open[i - 2]
+            && open[i - 1] <= close[i - 2] + near1
+            && b3 < talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 1.0, 0)
+            && open[i] >= close[i - 1] - b3 - near2
         {
             output[i] = -100;
         }
@@ -2077,12 +2217,16 @@ pub fn thrusting(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Resu
     let len = open.len();
     let mut output = Array1::zeros(len);
 
-    for i in 1..len {
-        if is_bearish(open[i - 1], close[i - 1])
-            && is_bullish(open[i], close[i])
-            && open[i] < close[i - 1]
-            && close[i] < (open[i - 1] + close[i - 1]) / 2.0
-            && close[i] > close[i - 1]
+    for i in (CDL_AVG_PERIOD + 1)..len {
+        let prev_body = talib_body(open[i - 1], close[i - 1]);
+        let prev_long = talib_average(open, high, low, close, i - 1, CDL_AVG_PERIOD, 1.0, 0);
+        let equal = talib_average(open, high, low, close, i - 1, 5, 0.05, 1);
+        if close[i - 1] < open[i - 1]
+            && prev_body > prev_long
+            && close[i] >= open[i]
+            && open[i] < low[i - 1]
+            && close[i] > close[i - 1] + equal
+            && close[i] <= close[i - 1] + prev_body * 0.5
         {
             output[i] = -100;
         }
@@ -2106,11 +2250,16 @@ pub fn in_neck(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result
     let len = open.len();
     let mut output = Array1::zeros(len);
 
-    for i in 1..len {
-        if is_bearish(open[i - 1], close[i - 1])
-            && is_bullish(open[i], close[i])
-            && open[i] < close[i - 1]
-            && (close[i] - close[i - 1]).abs() < (close[i - 1] * 0.01)
+    for i in (CDL_AVG_PERIOD + 1)..len {
+        let prev_body = talib_body(open[i - 1], close[i - 1]);
+        let prev_long = talib_average(open, high, low, close, i - 1, CDL_AVG_PERIOD, 1.0, 0);
+        let equal = talib_average(open, high, low, close, i - 1, 5, 0.05, 1);
+        if close[i - 1] < open[i - 1]
+            && prev_body > prev_long
+            && close[i] >= open[i]
+            && open[i] < low[i - 1]
+            && close[i] <= close[i - 1] + equal
+            && close[i] >= close[i - 1]
         {
             output[i] = -100;
         }
@@ -2134,11 +2283,14 @@ pub fn on_neck(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result
     let len = open.len();
     let mut output = Array1::zeros(len);
 
-    for i in 1..len {
+    for i in (CDL_AVG_PERIOD + 1)..len {
+        let body_long = talib_average(open, high, low, close, i - 1, CDL_AVG_PERIOD, 1.0, 0);
+        let equal = talib_average(open, high, low, close, i - 1, 5, 0.05, 1);
         if is_bearish(open[i - 1], close[i - 1])
+            && talib_body(open[i - 1], close[i - 1]) > body_long
             && is_bullish(open[i], close[i])
-            && open[i] < close[i - 1]
-            && (close[i] - close[i - 1]).abs() < 1e-10
+            && open[i] < low[i - 1]
+            && (close[i] - low[i - 1]).abs() <= equal
         {
             output[i] = -100;
         }
@@ -2160,13 +2312,18 @@ pub fn cdl_2crows(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Res
     validate_input(open.len(), 3)?;
     let len = open.len();
     let mut output = PatternResult::zeros(len);
-    for i in 2..len {
-        let bull1 = is_bullish(open[i - 2], close[i - 2]);
-        let bear2 = is_bearish(open[i - 1], close[i - 1]);
-        let bear3 = is_bearish(open[i], close[i]);
-        let gap_up = open[i - 1] > close[i - 2];
-        let engulf = open[i] > open[i - 1] && close[i] < close[i - 1] && close[i] > close[i - 2];
-        if bull1 && bear2 && bear3 && gap_up && engulf {
+    for i in (CDL_AVG_PERIOD + 2)..len {
+        let long_first = talib_body(open[i - 2], close[i - 2])
+            > talib_average(open, high, low, close, i - 2, CDL_AVG_PERIOD, 1.0, 0);
+        let first_white = is_bullish(open[i - 2], close[i - 2]);
+        let second_black = is_bearish(open[i - 1], close[i - 1]);
+        let third_black = is_bearish(open[i], close[i]);
+        let gap_up = open[i - 1].min(close[i - 1]) > open[i - 2].max(close[i - 2]);
+        let engulf = open[i] < open[i - 1]
+            && open[i] > close[i - 1]
+            && close[i] > open[i - 2]
+            && close[i] < close[i - 2];
+        if first_white && long_first && second_black && third_black && gap_up && engulf {
             output[i] = -100;
         }
     }
@@ -2188,21 +2345,21 @@ pub fn cdl_doji_star(
             constraint: "must have the same length".to_string(),
         });
     }
-    validate_input(open.len(), 2)?;
+    validate_input(open.len(), CDL_AVG_PERIOD + 2)?;
     let len = open.len();
     let mut output = PatternResult::zeros(len);
-    for i in 1..len {
-        let avg = candle_avg_range(high, low, close, 10, i);
-        let body_prev = body(open[i - 1], close[i - 1]);
-        let body_curr = body(open[i], close[i]);
-        let is_doji = body_curr < avg * 0.1;
-        let long_prev = body_prev > avg * 0.6;
-        if is_doji && long_prev {
-            if is_bullish(open[i - 1], close[i - 1]) && open[i].min(close[i]) > close[i - 1] {
-                output[i] = -100; // bearish doji star
-            } else if is_bearish(open[i - 1], close[i - 1]) && open[i].max(close[i]) < close[i - 1]
-            {
-                output[i] = 100; // bullish doji star
+    for i in (CDL_AVG_PERIOD + 1)..len {
+        let long_prev = talib_average(open, high, low, close, i - 1, CDL_AVG_PERIOD, 1.0, 0);
+        let doji = talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 0.1, 1);
+        let prev_body = talib_body(open[i - 1], close[i - 1]);
+        let curr_body = talib_body(open[i], close[i]);
+        let gaps_up = open[i].min(close[i]) > open[i - 1].max(close[i - 1]);
+        let gaps_down = open[i].max(close[i]) < open[i - 1].min(close[i - 1]);
+        if prev_body > long_prev && curr_body <= doji {
+            if close[i - 1] >= open[i - 1] && gaps_up {
+                output[i] = -100;
+            } else if close[i - 1] < open[i - 1] && gaps_down {
+                output[i] = 100;
             }
         }
     }
@@ -2225,17 +2382,21 @@ pub fn cdl_gap_side_white(
     validate_input(open.len(), 3)?;
     let len = open.len();
     let mut output = PatternResult::zeros(len);
-    for i in 2..len {
-        let bull2 = is_bullish(open[i - 1], close[i - 1]);
-        let bull3 = is_bullish(open[i], close[i]);
-        let similar_size = (body(open[i], close[i]) - body(open[i - 1], close[i - 1])).abs()
-            < body(open[i - 1], close[i - 1]) * 0.3;
-        let similar_open = (open[i] - open[i - 1]).abs() < body(open[i - 1], close[i - 1]) * 0.3;
-        if bull2 && bull3 && similar_size && similar_open {
-            if is_bullish(open[i - 2], close[i - 2]) && open[i - 1] > close[i - 2] {
-                output[i] = 100; // upside gap
-            } else if is_bearish(open[i - 2], close[i - 2]) && open[i - 1] < close[i - 2] {
-                output[i] = -100; // downside gap
+    for i in 5..len {
+        let near = talib_average(open, high, low, close, i - 1, 5, 0.2, 1);
+        let equal = talib_average(open, high, low, close, i - 1, 5, 0.05, 1);
+        let up_gap = open[i - 1].min(close[i - 1]) > open[i - 2].max(close[i - 2])
+            && open[i].min(close[i]) > open[i - 2].max(close[i - 2]);
+        let down_gap = open[i - 1].max(close[i - 1]) < open[i - 2].min(close[i - 2])
+            && open[i].max(close[i]) < open[i - 2].min(close[i - 2]);
+        let size_near = talib_body(open[i], close[i]) >= talib_body(open[i - 1], close[i - 1]) - near
+            && talib_body(open[i], close[i]) <= talib_body(open[i - 1], close[i - 1]) + near;
+        let open_equal = open[i] >= open[i - 1] - equal && open[i] <= open[i - 1] + equal;
+        if size_near && open_equal && close[i - 1] >= open[i - 1] && close[i] >= open[i] {
+            if up_gap {
+                output[i] = 100;
+            } else if down_gap {
+                output[i] = -100;
             }
         }
     }
@@ -2257,17 +2418,33 @@ pub fn cdl_hikkake(
             constraint: "must have the same length".to_string(),
         });
     }
-    validate_input(open.len(), 4)?;
+    validate_input(open.len(), 3)?;
     let len = open.len();
     let mut output = PatternResult::zeros(len);
-    for i in 3..len {
-        let inside = high[i - 2] < high[i - 3] && low[i - 2] > low[i - 3];
-        if inside {
-            if high[i - 1] > high[i - 3] && close[i] < low[i - 2] {
-                output[i] = -100;
-            } else if low[i - 1] < low[i - 3] && close[i] > high[i - 2] {
-                output[i] = 100;
-            }
+    let mut pattern_result = 0i32;
+    let mut saved_high = 0.0;
+    let mut saved_low = 0.0;
+    let mut countdown = 0i32;
+    for i in 5..len {
+        if high[i - 1] < high[i - 2]
+            && low[i - 1] > low[i - 2]
+            && ((high[i] < high[i - 1] && low[i] < low[i - 1])
+                || (high[i] > high[i - 1] && low[i] > low[i - 1]))
+        {
+            pattern_result = if high[i] < high[i - 1] { 100 } else { -100 };
+            saved_high = high[i - 1];
+            saved_low = low[i - 1];
+            countdown = 4;
+            output[i] = pattern_result;
+        } else if countdown > 0
+            && ((pattern_result > 0 && close[i] > saved_high)
+                || (pattern_result < 0 && close[i] < saved_low))
+        {
+            output[i] = pattern_result + if pattern_result > 0 { 100 } else { -100 };
+            countdown = 0;
+        }
+        if countdown > 0 {
+            countdown -= 1;
         }
     }
     Ok(output)
@@ -2289,15 +2466,33 @@ pub fn cdl_hikkake_mod(
     validate_input(open.len(), 5)?;
     let len = open.len();
     let mut output = PatternResult::zeros(len);
-    for i in 4..len {
-        let inside = high[i - 3] < high[i - 4] && low[i - 3] > low[i - 4];
-        let second_inside = high[i - 2] < high[i - 3] && low[i - 2] > low[i - 3];
-        if inside && second_inside {
-            if high[i - 1] > high[i - 4] && close[i] < low[i - 3] {
-                output[i] = -100;
-            } else if low[i - 1] < low[i - 4] && close[i] > high[i - 3] {
-                output[i] = 100;
-            }
+    let mut pattern_result = 0i32;
+    let mut pattern_high = 0.0;
+    let mut pattern_low = 0.0;
+    let mut pattern_count = 0i32;
+    for i in (CDL_AVG_PERIOD)..len {
+        let near = talib_average(open, high, low, close, i - 2, 5, 0.2, 1);
+        let inside = high[i - 2] < high[i - 3] && low[i - 2] > low[i - 3]
+            && high[i - 1] < high[i - 2] && low[i - 1] > low[i - 2];
+        let bullish = high[i] < high[i - 1] && low[i] < low[i - 1]
+            && close[i - 2] <= low[i - 2] + near;
+        let bearish = high[i] > high[i - 1] && low[i] > low[i - 1]
+            && close[i - 2] >= high[i - 2] - near;
+        if inside && (bullish || bearish) {
+            pattern_result = if bullish { 100 } else { -100 };
+            pattern_high = high[i - 1];
+            pattern_low = low[i - 1];
+            pattern_count = 4;
+            output[i] = pattern_result;
+        } else if pattern_count > 0
+            && ((pattern_result > 0 && close[i] > pattern_high)
+                || (pattern_result < 0 && close[i] < pattern_low))
+        {
+            output[i] = pattern_result + if pattern_result > 0 { 100 } else { -100 };
+            pattern_count = 0;
+        }
+        if pattern_count > 0 {
+            pattern_count -= 1;
         }
     }
     Ok(output)
@@ -2321,11 +2516,15 @@ pub fn cdl_homing_pigeon(
     validate_input(open.len(), 2)?;
     let len = open.len();
     let mut output = PatternResult::zeros(len);
-    for i in 1..len {
+    let start = if len <= CDL_AVG_PERIOD { 1 } else { CDL_AVG_PERIOD };
+    for i in start..len {
         let bear1 = is_bearish(open[i - 1], close[i - 1]);
         let bear2 = is_bearish(open[i], close[i]);
-        let contained = open[i] < open[i - 1] && close[i] > close[i - 1];
-        if bear1 && bear2 && contained {
+        let first_long = len <= CDL_AVG_PERIOD || talib_body(open[i - 1], close[i - 1])
+            > talib_average(open, _high, _low, close, i - 1, CDL_AVG_PERIOD, 1.0, 0);
+        let second_short = len <= CDL_AVG_PERIOD || talib_body(open[i], close[i])
+            <= talib_average(open, _high, _low, close, i, CDL_AVG_PERIOD, 1.0, 0);
+        if bear1 && bear2 && first_long && second_short && open[i] < open[i - 1] && close[i] > close[i - 1] {
             output[i] = 100;
         }
     }
@@ -2350,15 +2549,21 @@ pub fn cdl_ladder_bottom(
     validate_input(open.len(), 5)?;
     let len = open.len();
     let mut output = PatternResult::zeros(len);
-    for i in 4..len {
-        let bear1 = is_bearish(open[i - 4], close[i - 4]);
-        let bear2 = is_bearish(open[i - 3], close[i - 3]) && close[i - 3] < close[i - 4];
-        let bear3 = is_bearish(open[i - 2], close[i - 2]) && close[i - 2] < close[i - 3];
-        let upper_shadow_4 = upper_shadow(high[i - 1], open[i - 1], close[i - 1]);
-        let body_4 = body(open[i - 1], close[i - 1]);
-        let has_upper = upper_shadow_4 > body_4;
-        let bull5 = is_bullish(open[i], close[i]) && close[i] > open[i - 1];
-        if bear1 && bear2 && bear3 && has_upper && bull5 {
+    for i in (CDL_AVG_PERIOD + 4)..len {
+        let very_short = talib_average(open, high, low, close, i - 1, CDL_AVG_PERIOD, 0.1, 1);
+        if close[i - 4] < open[i - 4]
+            && close[i - 3] < open[i - 3]
+            && close[i - 2] < open[i - 2]
+            && open[i - 4] > open[i - 3]
+            && open[i - 3] > open[i - 2]
+            && close[i - 4] > close[i - 3]
+            && close[i - 3] > close[i - 2]
+            && close[i - 1] < open[i - 1]
+            && talib_upper_shadow(open[i - 1], high[i - 1], close[i - 1]) > very_short
+            && close[i] >= open[i]
+            && open[i] > open[i - 1]
+            && close[i] > high[i - 1]
+        {
             output[i] = 100;
         }
     }
@@ -2383,23 +2588,28 @@ pub fn cdl_rise_fall_3methods(
     validate_input(open.len(), 5)?;
     let len = open.len();
     let mut output = PatternResult::zeros(len);
-    for i in 4..len {
-        let bull_first = is_bullish(open[i - 4], close[i - 4]);
-        let bear_first = is_bearish(open[i - 4], close[i - 4]);
-        let within_range = high[i - 3] <= high[i - 4]
-            && low[i - 3] >= low[i - 4]
-            && high[i - 2] <= high[i - 4]
-            && low[i - 2] >= low[i - 4]
-            && high[i - 1] <= high[i - 4]
-            && low[i - 1] >= low[i - 4];
-        if bull_first && within_range && is_bullish(open[i], close[i]) && close[i] > close[i - 4] {
-            output[i] = 100; // rising three methods
-        } else if bear_first
-            && within_range
-            && is_bearish(open[i], close[i])
-            && close[i] < close[i - 4]
-        {
-            output[i] = -100; // falling three methods
+    for i in (CDL_AVG_PERIOD + 4)..len {
+        let sign = if is_bullish(open[i - 4], close[i - 4]) { 1.0 } else { -1.0 };
+        let same_colors = (is_bullish(open[i - 4], close[i - 4]) != is_bullish(open[i - 3], close[i - 3]))
+            && is_bullish(open[i - 3], close[i - 3]) == is_bullish(open[i - 2], close[i - 2])
+            && is_bullish(open[i - 2], close[i - 2]) == is_bullish(open[i - 1], close[i - 1])
+            && is_bullish(open[i - 1], close[i - 1]) != is_bullish(open[i], close[i]);
+        let contained = [i - 3, i - 2, i - 1].iter().all(|&j| {
+            open[j].min(close[j]) < high[i - 4] && open[j].max(close[j]) > low[i - 4]
+        });
+        let falling = close[i - 2] * sign < close[i - 3] * sign
+            && close[i - 1] * sign < close[i - 2] * sign;
+        let final_move = open[i] * sign > close[i - 1] * sign && close[i] * sign > close[i - 4] * sign;
+        let first_long = talib_body(open[i - 4], close[i - 4])
+            > talib_average(open, high, low, close, i - 4, CDL_AVG_PERIOD, 1.0, 0);
+        let last_long = talib_body(open[i], close[i])
+            > talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 1.0, 0);
+        let small = [i - 3, i - 2, i - 1].iter().all(|&j| {
+            talib_body(open[j], close[j])
+                < talib_average(open, high, low, close, j, CDL_AVG_PERIOD, 1.0, 0)
+        });
+        if same_colors && contained && falling == (sign > 0.0) && final_move && first_long && last_long && small {
+            output[i] = (sign as i32) * 100;
         }
     }
     Ok(output)
@@ -2416,12 +2626,14 @@ pub fn cdl_takuri(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Res
     validate_input(open.len(), 1)?;
     let len = open.len();
     let mut output = PatternResult::zeros(len);
-    for i in 0..len {
-        let b = body(open[i], close[i]);
-        let ls = lower_shadow(low[i], open[i], close[i]);
-        let us = upper_shadow(high[i], open[i], close[i]);
-        let avg = candle_avg_range(high, low, close, 10, i);
-        if b < avg * 0.1 && ls > avg * 2.0 && us < avg * 0.1 {
+    for i in CDL_AVG_PERIOD..len {
+        let doji = talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 0.1, 1);
+        let very_short = talib_average(open, high, low, close, i, CDL_AVG_PERIOD, 0.1, 1);
+        let very_long = talib_average(open, high, low, close, i, 0, 2.0, 0);
+        if talib_body(open[i], close[i]) <= doji
+            && talib_upper_shadow(open[i], high[i], close[i]) < very_short
+            && talib_lower_shadow(open[i], low[i], close[i]) > very_long
+        {
             output[i] = 100;
         }
     }
@@ -2444,20 +2656,21 @@ pub fn cdl_tristar(
     validate_input(open.len(), 3)?;
     let len = open.len();
     let mut output = PatternResult::zeros(len);
-    for i in 2..len {
-        let avg = candle_avg_range(high, low, close, 10, i);
-        let threshold = avg * 0.1;
-        let doji1 = body(open[i - 2], close[i - 2]) < threshold;
-        let doji2 = body(open[i - 1], close[i - 1]) < threshold;
-        let doji3 = body(open[i], close[i]) < threshold;
-        if doji1 && doji2 && doji3 {
-            let mid1 = (open[i - 2] + close[i - 2]) / 2.0;
-            let mid2 = (open[i - 1] + close[i - 1]) / 2.0;
-            let mid3 = (open[i] + close[i]) / 2.0;
-            if mid2 > mid1 && mid2 > mid3 {
-                output[i] = -100; // bearish tristar
-            } else if mid2 < mid1 && mid2 < mid3 {
-                output[i] = 100; // bullish tristar
+    for i in (CDL_AVG_PERIOD + 2)..len {
+        let doji = talib_average(open, high, low, close, i - 2, CDL_AVG_PERIOD, 0.1, 1);
+        if talib_body(open[i - 2], close[i - 2]) <= doji
+            && talib_body(open[i - 1], close[i - 1]) <= doji
+            && talib_body(open[i], close[i]) <= doji
+        {
+            if open[i - 1].min(close[i - 1]) > open[i - 2].max(close[i - 2])
+                && open[i].max(close[i]) < open[i - 1].max(close[i - 1])
+            {
+                output[i] = -100;
+            }
+            if open[i - 1].max(close[i - 1]) < open[i - 2].min(close[i - 2])
+                && open[i].min(close[i]) > open[i - 1].min(close[i - 1])
+            {
+                output[i] = 100;
             }
         }
     }

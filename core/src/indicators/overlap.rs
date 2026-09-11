@@ -354,69 +354,66 @@ pub fn sar(high: &[f64], low: &[f64], acceleration: f64, maximum: f64) -> Result
     let mut sar_values = init_output(len);
     let mut af_values = init_output(len);
 
-    // Assume initial trend is up (first bar)
-    let mut is_long = true;
-    let mut ep = high[0]; // Extreme point
-    let mut af = acceleration;
-    let mut prev_sar = low[0];
-
-    sar_values[0] = prev_sar;
+    // TA-Lib consumes the first bar to establish the initial extreme point
+    // and emits the first value at index 1. Direction is inferred from the
+    // first +DM/-DM pair; ties default to long.
+    let up_move = high[1] - high[0];
+    let down_move = low[0] - low[1];
+    let mut is_long = !(down_move > up_move && down_move > 0.0);
+    let mut af = acceleration.min(maximum);
+    let mut ep = if is_long { high[1] } else { low[1] };
+    let mut current_sar = if is_long { low[0] } else { high[0] };
+    // Keep the library's historical full-length contract at index 0. The
+    // TA-Lib compatibility adapter masks this bootstrap slot using lookback=1.
+    sar_values[0] = current_sar;
     af_values[0] = af;
 
     for i in 1..len {
-        let mut current_sar = prev_sar + af * (ep - prev_sar);
+        let current_high = high[i];
+        let current_low = low[i];
+        let prev_high = if i == 1 { current_high } else { high[i - 1] };
+        let prev_low = if i == 1 { current_low } else { low[i - 1] };
 
-        // SAR limits
         if is_long {
-            if i >= 2 {
-                current_sar = current_sar.min(low[i - 1]);
-                if i >= 3 {
-                    current_sar = current_sar.min(low[i - 2]);
-                }
-            }
-        } else {
-            if i >= 2 {
-                current_sar = current_sar.max(high[i - 1]);
-                if i >= 3 {
-                    current_sar = current_sar.max(high[i - 2]);
-                }
-            }
-        }
-
-        // Check for SAR crossover
-        let mut switched = false;
-        if is_long {
-            if low[i] < current_sar {
+            if current_low <= current_sar {
                 is_long = false;
-                current_sar = ep;
-                ep = low[i];
-                af = acceleration;
-                switched = true;
+                current_sar = ep.max(prev_high).max(current_high);
+                sar_values[i] = current_sar;
+                af = acceleration.min(maximum);
+                ep = current_low;
+                current_sar = af.mul_add(ep - current_sar, current_sar);
+                current_sar = current_sar.max(prev_high).max(current_high);
+                af_values[i] = af;
+                continue;
             }
+
+            sar_values[i] = current_sar;
+            if current_high > ep {
+                ep = current_high;
+                af = (af + acceleration).min(maximum);
+            }
+            current_sar = af.mul_add(ep - current_sar, current_sar);
+            current_sar = current_sar.min(prev_low).min(current_low);
+        } else if current_high >= current_sar {
+            is_long = true;
+            current_sar = ep.min(prev_low).min(current_low);
+            sar_values[i] = current_sar;
+            af = acceleration.min(maximum);
+            ep = current_high;
+            current_sar = af.mul_add(ep - current_sar, current_sar);
+            current_sar = current_sar.min(prev_low).min(current_low);
+            af_values[i] = af;
+            continue;
         } else {
-            if high[i] > current_sar {
-                is_long = true;
-                current_sar = ep;
-                ep = high[i];
-                af = acceleration;
-                switched = true;
-            }
-        }
-
-        // Update EP and AF
-        if !switched {
-            if is_long && high[i] > ep {
-                ep = high[i];
-                af = (af + acceleration).min(maximum);
-            } else if !is_long && low[i] < ep {
-                ep = low[i];
+            sar_values[i] = current_sar;
+            if current_low < ep {
+                ep = current_low;
                 af = (af + acceleration).min(maximum);
             }
+            current_sar = af.mul_add(ep - current_sar, current_sar);
+            current_sar = current_sar.max(prev_high).max(current_high);
         }
-
-        sar_values[i] = current_sar;
         af_values[i] = af;
-        prev_sar = current_sar;
     }
 
     Ok(SarResult {
@@ -481,78 +478,82 @@ pub fn sarext(
     let mut sar_values = init_output(len);
     let mut af_values = init_output(len);
 
-    let mut is_long = start_value >= 0.0;
-    let initial_af = if is_long { af_init_long } else { af_init_short };
-    let mut af = initial_af;
-    let mut ep = if is_long { high[0] } else { low[0] };
-    let mut prev_sar = if is_long {
-        if start_value > 0.0 {
-            start_value
-        } else {
-            low[0]
-        }
+    let mut is_long = if start_value == 0.0 {
+        let up_move = high[1] - high[0];
+        let down_move = low[0] - low[1];
+        !(down_move > up_move && down_move > 0.0)
     } else {
-        if start_value < 0.0 {
-            -start_value
-        } else {
-            high[0]
-        }
+        start_value > 0.0
     };
-
-    sar_values[0] = if is_long { prev_sar } else { -prev_sar };
-    af_values[0] = af;
+    let long_step = af_long.min(af_max_long);
+    let short_step = af_short.min(af_max_short);
+    let mut current_af_long = af_init_long.min(af_max_long);
+    let mut current_af_short = af_init_short.min(af_max_short);
+    let mut ep = if start_value == 0.0 {
+        if is_long { high[1] } else { low[1] }
+    } else if is_long {
+        high[1]
+    } else {
+        low[1]
+    };
+    let mut current_sar = if start_value == 0.0 {
+        if is_long { low[0] } else { high[0] }
+    } else {
+        start_value.abs()
+    };
+    sar_values[0] = if is_long { current_sar } else { -current_sar };
+    af_values[0] = if is_long { current_af_long } else { current_af_short };
 
     for i in 1..len {
-        let mut current_sar = prev_sar + af * (ep - prev_sar);
+        let current_high = high[i];
+        let current_low = low[i];
+        let prev_high = if i == 1 { current_high } else { high[i - 1] };
+        let prev_low = if i == 1 { current_low } else { low[i - 1] };
 
         if is_long {
-            if i >= 2 {
-                current_sar = current_sar.min(low[i - 1]);
-                if i >= 3 {
-                    current_sar = current_sar.min(low[i - 2]);
-                }
-            }
-        } else {
-            if i >= 2 {
-                current_sar = current_sar.max(high[i - 1]);
-                if i >= 3 {
-                    current_sar = current_sar.max(high[i - 2]);
-                }
-            }
-        }
-
-        let mut switched = false;
-        if is_long {
-            if low[i] < current_sar {
+            if current_low <= current_sar {
                 is_long = false;
-                current_sar = ep + offset_on_reverse;
-                ep = low[i];
-                af = af_init_short;
-                switched = true;
+                current_sar = ep.max(prev_high).max(current_high);
+                if offset_on_reverse != 0.0 {
+                    current_sar += current_sar * offset_on_reverse;
+                }
+                sar_values[i] = -current_sar;
+                current_af_short = af_init_short.min(af_max_short);
+                ep = current_low;
+                current_sar = current_af_short.mul_add(ep - current_sar, current_sar);
+                current_sar = current_sar.max(prev_high).max(current_high);
+            } else {
+                sar_values[i] = current_sar;
+                if current_high > ep {
+                    ep = current_high;
+                    current_af_long = (current_af_long + long_step).min(af_max_long);
+                }
+                current_sar = current_af_long.mul_add(ep - current_sar, current_sar);
+                current_sar = current_sar.min(prev_low).min(current_low);
             }
+            af_values[i] = current_af_long;
+        } else if current_high >= current_sar {
+            is_long = true;
+            current_sar = ep.min(prev_low).min(current_low);
+            if offset_on_reverse != 0.0 {
+                current_sar -= current_sar * offset_on_reverse;
+            }
+            sar_values[i] = current_sar;
+            current_af_long = af_init_long.min(af_max_long);
+            ep = current_high;
+            current_sar = current_af_long.mul_add(ep - current_sar, current_sar);
+            current_sar = current_sar.min(prev_low).min(current_low);
+            af_values[i] = current_af_long;
         } else {
-            if high[i] > current_sar {
-                is_long = true;
-                current_sar = ep - offset_on_reverse;
-                ep = high[i];
-                af = af_init_long;
-                switched = true;
+            sar_values[i] = -current_sar;
+            if current_low < ep {
+                ep = current_low;
+                current_af_short = (current_af_short + short_step).min(af_max_short);
             }
+            current_sar = current_af_short.mul_add(ep - current_sar, current_sar);
+            current_sar = current_sar.max(prev_high).max(current_high);
+            af_values[i] = current_af_short;
         }
-
-        if !switched {
-            if is_long && high[i] > ep {
-                ep = high[i];
-                af = (af + af_long).min(af_max_long);
-            } else if !is_long && low[i] < ep {
-                ep = low[i];
-                af = (af + af_short).min(af_max_short);
-            }
-        }
-
-        sar_values[i] = if is_long { current_sar } else { -current_sar };
-        af_values[i] = af;
-        prev_sar = current_sar.abs();
     }
 
     Ok(SarResult {
@@ -1284,8 +1285,8 @@ pub fn t3(input: &[f64], period: usize, vfactor: f64) -> Result<Array1<f64>> {
 
     // T3 coefficients matching TA-Lib ta_T3.c
     let c1 = -vfactor * vfactor * vfactor;
-    let c2 = 3.0 * vfactor * vfactor + vfactor * vfactor * vfactor;
-    let c3 = -6.0 * vfactor * vfactor - 3.0 * vfactor * vfactor * vfactor;
+    let c2 = 3.0 * (vfactor * vfactor - c1);
+    let c3 = -6.0 * vfactor * vfactor - 3.0 * (vfactor - c1);
     let c4 = 1.0 + 3.0 * vfactor + vfactor * vfactor * vfactor + 3.0 * vfactor * vfactor;
 
     let len = input.len();
@@ -1303,19 +1304,20 @@ pub fn t3(input: &[f64], period: usize, vfactor: f64) -> Result<Array1<f64>> {
     let mut prevs = [0.0f64; 6];
 
     for i in 0..len {
-        let mut val = input[i];
+        let mut val = Some(input[i]);
         for layer in 0..6 {
+            let Some(current) = val else { break };
             counts[layer] += 1;
             if counts[layer] < period {
-                sums[layer] += val;
-                val = 0.0;
+                sums[layer] += current;
+                val = None;
             } else if counts[layer] == period {
-                sums[layer] += val;
+                sums[layer] += current;
                 prevs[layer] = sums[layer] * inv_period;
-                val = prevs[layer];
+                val = Some(prevs[layer]);
             } else {
-                prevs[layer] = val * k + prevs[layer] * one_minus_k;
-                val = prevs[layer];
+                prevs[layer] = current * k + prevs[layer] * one_minus_k;
+                val = Some(prevs[layer]);
             }
         }
 

@@ -454,7 +454,7 @@ def run(args: argparse.Namespace) -> int:
             results.append(row)
             continue
         direct = resolve_direct(finkit, name)
-        use_batch_compat = name in {"SAR", "PLUS_DM", "MINUS_DM", "PPO", "STOCHRSI", "MACDFIX", "BETA"}
+        use_batch_compat = name in {"SAR", "PLUS_DM", "MINUS_DM", "PPO", "STOCHRSI", "MACDFIX", "BETA", "HT_TRENDMODE"}
         if use_batch_compat and callable(getattr(finkit, "compute_indicators", None)):
             alpha_call = lambda n=name, s=spec: invoke_batch(finkit, data, n, s)
             row["adapter"] = "compute_indicators"

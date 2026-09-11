@@ -395,7 +395,7 @@ pub fn ht_trendline(input: &[f64]) -> Result<Array1<f64>> {
     let mut output = init_output(len);
 
     let (_smooth, _detrender, _in_phase, _quadrature, _j1, _i2, _j2, _phase, period_out) =
-        compute_hilbert_components(input, len);
+        compute_hilbert_components_from(input, len, 37);
 
     let mut itrend1 = 0.0;
     let mut itrend2 = 0.0;

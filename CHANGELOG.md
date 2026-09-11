@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.12] - 2026-09-11
+
+- Complete the maintained TA-Lib 0.6.x compatibility matrix at 161/161 on
+  multiple long-input lengths and seeds, including SAR/SAREXT bootstrap
+  semantics, T3 warm-up/coefficient behavior and extended candlestick rules.
+- Add shared CandleSettings-based thresholds for candlestick compatibility,
+  while preserving native full-length and short-input API behavior.
+- Correct streaming T3 coefficients and align cycle/trendline compatibility
+  paths with the batch implementation.
+
 ## [0.1.11] - 2026-09-11
 
 - Add exact TA-Lib compatibility implementations for STOCHRSI, MACDFIX and

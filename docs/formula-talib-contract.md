@@ -21,9 +21,9 @@ default native finkit behavior.
 
 The differential matrix must be read as two independent gates: callable
 coverage (`161/161` in the maintained Python environment) and numerical parity
-(reported per function; the current development smoke matrix is `133/161`, with the remaining failures concentrated in
-candlestick edge-case rules, Hilbert-cycle variants, MAMA, MACDEXT/MACDFIX,
-STOCHRSI and BETA). A catalog entry is not promoted to exact parity until its
+(reported per function; the current release matrix is `161/161` across the
+maintained long-input seed/length checks). A catalog entry is not promoted to
+exact parity until its
 parameter, warm-up, NaN, output-count and differential golden contract is
 complete.
 

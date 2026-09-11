@@ -3,28 +3,28 @@
 > **SSOT** — auto-generated from workspace `Cargo.toml` and binding manifests (including .NET and Java metadata).
 > Do not edit manually. Regenerate: `python scripts/gen_ssot_docs.py --generate`
 
-Canonical workspace version: **`0.1.11`**
+Canonical workspace version: **`0.1.12`**
 
 | Package | Path | Version | Source | Match |
 |---------|------|---------|--------|-------|
-| workspace | `Cargo.toml` | 0.1.11 | workspace.package | ✅ canonical |
-| finkit | `core/Cargo.toml` | 0.1.11 | workspace | ✅ |
-| finkit-visualization | `visualization/Cargo.toml` | 0.1.11 | workspace | ✅ |
-| finkit-ffi | `ffi/c-binding/Cargo.toml` | 0.1.11 | workspace | ✅ |
-| finkit-ffi-common | `ffi/ffi-common/Cargo.toml` | 0.1.11 | workspace | ✅ |
-| finkit-python | `ffi/python-binding/Cargo.toml` | 0.1.11 | workspace | ✅ |
-| finkit-node | `ffi/node-binding/Cargo.toml` | 0.1.11 | workspace | ✅ |
-| finkit-go | `ffi/go-binding/Cargo.toml` | 0.1.11 | workspace | ✅ |
-| finkit-dotnet | `ffi/dotnet-binding/Cargo.toml` | 0.1.11 | workspace | ✅ |
-| finkit-ios | `ffi/ios-binding/Cargo.toml` | 0.1.11 | workspace | ✅ |
-| finkit-java | `ffi/java-binding/Cargo.toml` | 0.1.11 | workspace | ✅ |
-| finkit-android | `ffi/android-binding/Cargo.toml` | 0.1.11 | workspace | ✅ |
-| finkit-cli | `cli/Cargo.toml` | 0.1.11 | workspace | ✅ |
-| finkit-wasm | `wasm/Cargo.toml` | 0.1.11 | workspace | ✅ |
-| finkit-python (pyproject) | `ffi/python-binding/pyproject.toml` | 0.1.11 | project.version | ✅ |
-| finkit-node (package.json) | `ffi/node-binding/package.json` | 0.1.11 | version | ✅ |
-| finkit-dotnet (.csproj) | `ffi/dotnet-binding/src/Finkit/Finkit.csproj` | 0.1.11 | Version | ✅ |
-| finkit-java (pom.xml) | `ffi/java-binding/pom.xml` | 0.1.11 | project.version | ✅ |
+| workspace | `Cargo.toml` | 0.1.12 | workspace.package | ✅ canonical |
+| finkit | `core/Cargo.toml` | 0.1.12 | workspace | ✅ |
+| finkit-visualization | `visualization/Cargo.toml` | 0.1.12 | workspace | ✅ |
+| finkit-ffi | `ffi/c-binding/Cargo.toml` | 0.1.12 | workspace | ✅ |
+| finkit-ffi-common | `ffi/ffi-common/Cargo.toml` | 0.1.12 | workspace | ✅ |
+| finkit-python | `ffi/python-binding/Cargo.toml` | 0.1.12 | workspace | ✅ |
+| finkit-node | `ffi/node-binding/Cargo.toml` | 0.1.12 | workspace | ✅ |
+| finkit-go | `ffi/go-binding/Cargo.toml` | 0.1.12 | workspace | ✅ |
+| finkit-dotnet | `ffi/dotnet-binding/Cargo.toml` | 0.1.12 | workspace | ✅ |
+| finkit-ios | `ffi/ios-binding/Cargo.toml` | 0.1.12 | workspace | ✅ |
+| finkit-java | `ffi/java-binding/Cargo.toml` | 0.1.12 | workspace | ✅ |
+| finkit-android | `ffi/android-binding/Cargo.toml` | 0.1.12 | workspace | ✅ |
+| finkit-cli | `cli/Cargo.toml` | 0.1.12 | workspace | ✅ |
+| finkit-wasm | `wasm/Cargo.toml` | 0.1.12 | workspace | ✅ |
+| finkit-python (pyproject) | `ffi/python-binding/pyproject.toml` | 0.1.12 | project.version | ✅ |
+| finkit-node (package.json) | `ffi/node-binding/package.json` | 0.1.12 | version | ✅ |
+| finkit-dotnet (.csproj) | `ffi/dotnet-binding/src/Finkit/Finkit.csproj` | 0.1.12 | Version | ✅ |
+| finkit-java (pom.xml) | `ffi/java-binding/pom.xml` | 0.1.12 | project.version | ✅ |
 
 ## Benchmark data
 
