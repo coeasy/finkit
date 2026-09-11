@@ -6,6 +6,10 @@ use crate::analysis::{
 use crate::data::ResearchFrame;
 use crate::error::ResearchResult;
 use crate::orchestration::StudyProvenance;
+use crate::performance::{
+    evaluate_horizons, evaluate_portfolio_by_date, universe_returns, EvaluationConfig,
+    PerformanceReport,
+};
 use crate::prepare::{
     compute_forward_returns, data_quality, quantize_factor, DataQualityReport, ForwardReturnConfig,
     QuantizeConfig,
@@ -56,6 +60,8 @@ pub struct FactorStudyReport {
     pub returns: ReturnsReport,
     pub information: InformationReport,
     pub turnover: TurnoverReport,
+    /// Unified strategy/risk/benchmark/portfolio evaluation for every horizon.
+    pub performance: PerformanceReport,
 }
 
 impl FactorStudyReport {
@@ -73,6 +79,7 @@ pub struct FactorStudy<'a> {
     periods: Vec<usize>,
     quantize: QuantizeConfig,
     weights: WeightConfig,
+    evaluation: EvaluationConfig,
     mode: AnalysisMode,
     provenance: StudyProvenance,
 }
@@ -91,6 +98,7 @@ impl<'a> FactorStudy<'a> {
             periods,
             quantize: QuantizeConfig::default(),
             weights: WeightConfig::default(),
+            evaluation: EvaluationConfig::default(),
             mode: AnalysisMode::Native,
             provenance: StudyProvenance {
                 library_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -106,6 +114,11 @@ impl<'a> FactorStudy<'a> {
 
     pub fn weight_config(mut self, config: WeightConfig) -> Self {
         self.weights = config;
+        self
+    }
+
+    pub fn evaluation_config(mut self, config: EvaluationConfig) -> Self {
+        self.evaluation = config;
         self
     }
 
@@ -134,6 +147,12 @@ impl<'a> FactorStudy<'a> {
         let bottom_turnover = quantile_turnover(self.frame, &quantiles, 1, 1)?;
         let top_turnover = quantile_turnover(self.frame, &quantiles, self.quantize.quantiles, 1)?;
         let rank_auto = rank_autocorrelation(self.frame, &self.factor_column, 1)?;
+        let universe = universe_returns(self.frame, &forward);
+        let performance = PerformanceReport {
+            config: self.evaluation,
+            by_horizon: evaluate_horizons(&factor_ret, &universe, self.evaluation),
+            portfolio: evaluate_portfolio_by_date(self.frame, &weights),
+        };
         Ok(FactorStudyReport {
             mode: self.mode,
             provenance: self.provenance.clone(),
@@ -155,6 +174,7 @@ impl<'a> FactorStudy<'a> {
                 top_quantile_turnover: top_turnover,
                 rank_autocorrelation: rank_auto,
             },
+            performance,
         })
     }
 }
@@ -206,5 +226,10 @@ mod tests {
             .unwrap();
         assert_eq!(report.periods, vec![1]);
         assert!(report.information.mean_ic[&1] > 0.9);
+        let performance = &report.performance.by_horizon[&1];
+        assert!(performance.returns.observations > 0);
+        assert!(performance.benchmark.is_some());
+        assert_eq!(report.performance.portfolio.by_date.len(), 3);
+        serde_json::to_string(&report).unwrap();
     }
 }
