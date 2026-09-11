@@ -4,6 +4,7 @@
 //! kernels into panel-aware factor research workflows without duplicating core algorithms.
 
 pub mod analysis;
+pub mod api;
 pub mod cache;
 pub mod compat;
 pub mod data;
@@ -22,6 +23,7 @@ pub mod stability;
 pub mod validation;
 
 pub use analysis::*;
+pub use api::*;
 pub use data::*;
 pub use error::*;
 pub use prepare::*;
