@@ -1,17 +1,28 @@
 use crate::analysis::WeightConfig;
 use crate::data::{AssetId, GroupId, PanelIndex, ResearchFrame};
 use crate::error::ResearchError;
+use crate::performance::EvaluationConfig;
 use crate::prepare::QuantizeConfig;
 use crate::report::{AnalysisMode, FactorStudy, FactorStudyReport};
 use serde::{Deserialize, Serialize};
 
-/// Version of the language-neutral factor research request/response contract.
-pub const FACTOR_STUDY_SCHEMA_VERSION: u32 = 1;
+/// Current version of the language-neutral factor research request/response contract.
+pub const FACTOR_STUDY_SCHEMA_VERSION: u32 = 2;
+/// Oldest request schema accepted by the current engine.
+pub const FACTOR_STUDY_MIN_SCHEMA_VERSION: u32 = 1;
 
-fn default_schema_version() -> u32 { FACTOR_STUDY_SCHEMA_VERSION }
-fn default_quantiles() -> u16 { 5 }
-fn default_true() -> bool { true }
-fn default_mode() -> AnalysisMode { AnalysisMode::Native }
+fn default_schema_version() -> u32 {
+    FACTOR_STUDY_SCHEMA_VERSION
+}
+fn default_quantiles() -> u16 {
+    5
+}
+fn default_true() -> bool {
+    true
+}
+fn default_mode() -> AnalysisMode {
+    AnalysisMode::Native
+}
 
 /// Language-neutral request for a complete panel-aware factor study.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -39,6 +50,9 @@ pub struct FactorStudyRequest {
     pub equal_weight: bool,
     #[serde(default = "default_mode")]
     pub mode: AnalysisMode,
+    /// Quantitative evaluation settings shared by every language binding.
+    #[serde(default)]
+    pub evaluation: EvaluationConfig,
 }
 
 /// Stable error payload used at every FFI boundary.
@@ -50,11 +64,17 @@ pub struct ResearchApiError {
 
 impl ResearchApiError {
     fn invalid_request(message: impl Into<String>) -> Self {
-        Self { code: "invalid_request".to_string(), message: message.into() }
+        Self {
+            code: "invalid_request".to_string(),
+            message: message.into(),
+        }
     }
 
     fn computation(error: ResearchError) -> Self {
-        Self { code: "computation_failed".to_string(), message: error.to_string() }
+        Self {
+            code: "computation_failed".to_string(),
+            message: error.to_string(),
+        }
     }
 }
 
@@ -94,18 +114,24 @@ impl FactorStudyResponse {
 
 /// Validate the canonical request before any allocation-heavy computation.
 pub fn validate_factor_study_request(request: &FactorStudyRequest) -> Result<(), ResearchApiError> {
-    if request.schema_version != FACTOR_STUDY_SCHEMA_VERSION {
+    if !(FACTOR_STUDY_MIN_SCHEMA_VERSION..=FACTOR_STUDY_SCHEMA_VERSION)
+        .contains(&request.schema_version)
+    {
         return Err(ResearchApiError {
             code: "unsupported_schema".to_string(),
             message: format!(
-                "unsupported factor study schema version {}; expected {}",
-                request.schema_version, FACTOR_STUDY_SCHEMA_VERSION
+                "unsupported factor study schema version {}; supported range is {}..={}",
+                request.schema_version,
+                FACTOR_STUDY_MIN_SCHEMA_VERSION,
+                FACTOR_STUDY_SCHEMA_VERSION
             ),
         });
     }
     let rows = request.timestamps.len();
     if rows == 0 {
-        return Err(ResearchApiError::invalid_request("factor study input must contain at least one row"));
+        return Err(ResearchApiError::invalid_request(
+            "factor study input must contain at least one row",
+        ));
     }
     for (name, actual) in [
         ("assets", request.assets.len()),
@@ -121,32 +147,63 @@ pub fn validate_factor_study_request(request: &FactorStudyRequest) -> Result<(),
     if let Some(groups) = &request.groups {
         if groups.len() != rows {
             return Err(ResearchApiError::invalid_request(format!(
-                "groups length mismatch: expected {rows}, got {}", groups.len()
+                "groups length mismatch: expected {rows}, got {}",
+                groups.len()
             )));
         }
     }
     if request.periods.is_empty() || request.periods.iter().any(|&period| period == 0) {
-        return Err(ResearchApiError::invalid_request("periods must contain at least one positive horizon"));
+        return Err(ResearchApiError::invalid_request(
+            "periods must contain at least one positive horizon",
+        ));
     }
     if request.quantiles == 0 {
-        return Err(ResearchApiError::invalid_request("quantiles must be greater than zero"));
+        return Err(ResearchApiError::invalid_request(
+            "quantiles must be greater than zero",
+        ));
     }
     if (request.quantize_by_group || request.group_neutral) && request.groups.is_none() {
         return Err(ResearchApiError::invalid_request(
             "groups are required when quantize_by_group or group_neutral is enabled",
         ));
     }
+    if request.evaluation.annualization == 0 {
+        return Err(ResearchApiError::invalid_request(
+            "evaluation.annualization must be greater than zero",
+        ));
+    }
+    if !request.evaluation.risk_free_rate.is_finite()
+        || !request.evaluation.minimum_acceptable_return.is_finite()
+    {
+        return Err(ResearchApiError::invalid_request(
+            "evaluation rates must be finite",
+        ));
+    }
+    if !(0.0..1.0).contains(&request.evaluation.var_confidence)
+        || request.evaluation.var_confidence == 0.0
+    {
+        return Err(ResearchApiError::invalid_request(
+            "evaluation.var_confidence must be in (0, 1)",
+        ));
+    }
     Ok(())
 }
 
 /// Execute a factor study from the canonical request contract.
-pub fn run_factor_study(request: &FactorStudyRequest) -> Result<FactorStudyReport, ResearchApiError> {
+pub fn run_factor_study(
+    request: &FactorStudyRequest,
+) -> Result<FactorStudyReport, ResearchApiError> {
     validate_factor_study_request(request)?;
     let assets = request.assets.iter().copied().map(AssetId).collect();
-    let index = PanelIndex::new(request.timestamps.clone(), assets).map_err(ResearchApiError::computation)?;
+    let index = PanelIndex::new(request.timestamps.clone(), assets)
+        .map_err(ResearchApiError::computation)?;
     let mut frame = ResearchFrame::new(index);
-    frame.add_numeric("factor", "factor", request.factor.clone()).map_err(ResearchApiError::computation)?;
-    frame.add_numeric("price", "market", request.prices.clone()).map_err(ResearchApiError::computation)?;
+    frame
+        .add_numeric("factor", "factor", request.factor.clone())
+        .map_err(ResearchApiError::computation)?;
+    frame
+        .add_numeric("price", "market", request.prices.clone())
+        .map_err(ResearchApiError::computation)?;
     if let Some(groups) = &request.groups {
         frame
             .add_group("group", groups.iter().copied().map(GroupId).collect())
@@ -165,6 +222,7 @@ pub fn run_factor_study(request: &FactorStudyRequest) -> Result<FactorStudyRepor
             group_adjust: request.group_neutral.then(|| "group".to_string()),
             equal_weight: request.equal_weight,
         })
+        .evaluation_config(request.evaluation)
         .full_report()
         .map_err(ResearchApiError::computation)
 }
@@ -217,6 +275,7 @@ mod tests {
             demeaned: true,
             equal_weight: false,
             mode: AnalysisMode::Native,
+            evaluation: EvaluationConfig::default(),
         }
     }
 
@@ -227,17 +286,26 @@ mod tests {
         let report = response.report.unwrap();
         assert_eq!(report.periods, vec![1]);
         assert_eq!(report.quantiles, 3);
+        assert!(report.performance.by_horizon.contains_key(&1));
+    }
+
+    #[test]
+    fn schema_one_remains_backward_compatible() {
+        let mut legacy = request();
+        legacy.schema_version = 1;
+        assert!(run_factor_study_response(&legacy).ok);
     }
 
     #[test]
     fn json_boundary_never_throws_binding_specific_errors() {
-        let response: FactorStudyResponse = serde_json::from_str(&run_factor_study_json("not json")).unwrap();
+        let response: FactorStudyResponse =
+            serde_json::from_str(&run_factor_study_json("not json")).unwrap();
         assert!(!response.ok);
         assert_eq!(response.error.unwrap().code, "invalid_json");
     }
 
     #[test]
-    fn schema_and_lengths_are_validated_before_compute() {
+    fn schema_lengths_and_evaluation_are_validated_before_compute() {
         let mut invalid = request();
         invalid.assets.pop();
         let response = run_factor_study_response(&invalid);
@@ -248,6 +316,11 @@ mod tests {
         unsupported.schema_version = FACTOR_STUDY_SCHEMA_VERSION + 1;
         let response = run_factor_study_response(&unsupported);
         assert_eq!(response.error.unwrap().code, "unsupported_schema");
+
+        let mut invalid_evaluation = request();
+        invalid_evaluation.evaluation.annualization = 0;
+        let response = run_factor_study_response(&invalid_evaluation);
+        assert_eq!(response.error.unwrap().code, "invalid_request");
     }
 
     #[test]
