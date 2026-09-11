@@ -7,8 +7,8 @@ use crate::data::ResearchFrame;
 use crate::error::ResearchResult;
 use crate::orchestration::StudyProvenance;
 use crate::prepare::{
-    compute_forward_returns, data_quality, quantize_factor, DataQualityReport, ForwardReturnConfig,
-    QuantizeConfig,
+    compute_forward_returns, data_quality, quantize_factor, DataQualityReport,
+    ForwardReturnConfig, QuantizeConfig,
 };
 use finkit::returns::ReturnKind;
 use serde::{Deserialize, Serialize};
@@ -65,6 +65,7 @@ impl FactorStudyReport {
 }
 
 /// End-to-end factor research study.
+#[derive(Debug)]
 pub struct FactorStudy<'a> {
     frame: &'a ResearchFrame,
     factor_column: String,
@@ -102,14 +103,17 @@ impl<'a> FactorStudy<'a> {
         self.quantize = config;
         self
     }
+
     pub fn weight_config(mut self, config: WeightConfig) -> Self {
         self.weights = config;
         self
     }
+
     pub fn mode(mut self, mode: AnalysisMode) -> Self {
         self.mode = mode;
         self
     }
+
     pub fn provenance(mut self, provenance: StudyProvenance) -> Self {
         self.provenance = provenance;
         self
@@ -128,7 +132,8 @@ impl<'a> FactorStudy<'a> {
         let alpha_beta = factor_alpha_beta(self.frame, &factor_ret, &forward);
         let quantile_returns = mean_return_by_quantile(&quantiles, &forward);
         let bottom_turnover = quantile_turnover(self.frame, &quantiles, 1, 1)?;
-        let top_turnover = quantile_turnover(self.frame, &quantiles, self.quantize.quantiles, 1)?;
+        let top_turnover =
+            quantile_turnover(self.frame, &quantiles, self.quantize.quantiles, 1)?;
         let rank_auto = rank_autocorrelation(self.frame, &self.factor_column, 1)?;
         Ok(FactorStudyReport {
             mode: self.mode,
