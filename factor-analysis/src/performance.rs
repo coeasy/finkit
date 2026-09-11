@@ -3,10 +3,10 @@
 //! Numerical formulas remain owned by the core SSOT. This module only adds
 //! research semantics and a stable serde schema for all language bindings.
 
-use crate::data::ResearchFrame;
+use crate::data::{AssetId, ResearchFrame};
 use finkit::performance as core;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct EvaluationConfig {
@@ -14,6 +14,10 @@ pub struct EvaluationConfig {
     pub risk_free_rate: f64,
     pub minimum_acceptable_return: f64,
     pub var_confidence: f64,
+    /// Linear commission/fees in basis points per unit of portfolio turnover.
+    pub transaction_cost_bps: f64,
+    /// Additional linear slippage in basis points per unit of portfolio turnover.
+    pub slippage_bps: f64,
 }
 
 impl Default for EvaluationConfig {
@@ -23,6 +27,8 @@ impl Default for EvaluationConfig {
             risk_free_rate: 0.0,
             minimum_acceptable_return: 0.0,
             var_confidence: 0.95,
+            transaction_cost_bps: 0.0,
+            slippage_bps: 0.0,
         }
     }
 }
@@ -112,11 +118,24 @@ pub struct PortfolioMetricsReport {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PortfolioSummaryReport {
     pub by_date: Vec<PortfolioMetricsReport>,
+    /// One-way portfolio turnover. First date represents initial deployment.
+    pub turnover_by_date: Vec<f64>,
+    pub average_turnover: f64,
     pub average_gross_exposure: f64,
     pub average_net_exposure: f64,
     pub average_hhi: f64,
     pub average_effective_number_of_bets: f64,
     pub maximum_abs_weight: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CostSummaryReport {
+    pub transaction_cost_bps: f64,
+    pub slippage_bps: f64,
+    pub total_linear_cost_bps: f64,
+    pub estimated_cost_rate_by_date: Vec<f64>,
+    pub average_cost_rate: f64,
+    pub cumulative_cost_rate: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -130,13 +149,21 @@ pub struct QuantEvaluationReport {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PerformanceReport {
     pub config: EvaluationConfig,
+    /// Gross performance before transaction costs.
     pub by_horizon: BTreeMap<usize, QuantEvaluationReport>,
+    /// Net performance after linear transaction cost and slippage assumptions.
+    pub after_cost_by_horizon: BTreeMap<usize, QuantEvaluationReport>,
     pub portfolio: PortfolioSummaryReport,
+    pub costs: CostSummaryReport,
 }
 
 #[inline]
 fn finite_or_zero(value: f64) -> f64 {
-    if value.is_finite() { value } else { 0.0 }
+    if value.is_finite() {
+        value
+    } else {
+        0.0
+    }
 }
 
 impl From<core::ReturnMetrics> for ReturnMetricsReport {
@@ -236,7 +263,8 @@ pub fn evaluate_quant_performance(
         returns: evaluation.returns.into(),
         risk: evaluation.risk.into(),
         drawdown: evaluation.drawdown.into(),
-        benchmark: benchmark.map(|values| core::evaluate_benchmark(returns, values, core_config).into()),
+        benchmark: benchmark
+            .map(|values| core::evaluate_benchmark(returns, values, core_config).into()),
     }
 }
 
@@ -258,7 +286,11 @@ pub fn universe_returns(
                         count += 1;
                     }
                 }
-                if count == 0 { f64::NAN } else { sum / count as f64 }
+                if count == 0 {
+                    f64::NAN
+                } else {
+                    sum / count as f64
+                }
             });
             (period, per_date)
         })
@@ -274,19 +306,74 @@ pub fn evaluate_horizons(
         .iter()
         .map(|(&period, returns)| {
             let benchmark = benchmark_returns.get(&period).map(Vec::as_slice);
-            (period, evaluate_quant_performance(returns, benchmark, config))
+            (
+                period,
+                evaluate_quant_performance(returns, benchmark, config),
+            )
         })
         .collect()
 }
 
-pub fn evaluate_portfolio_by_date(frame: &ResearchFrame, weights: &[f64]) -> PortfolioSummaryReport {
+fn date_weight_maps(frame: &ResearchFrame, weights: &[f64]) -> Vec<BTreeMap<AssetId, f64>> {
+    frame
+        .index()
+        .date_segments()
+        .map(|range| {
+            range
+                .filter_map(|row| {
+                    let weight = weights[row];
+                    weight
+                        .is_finite()
+                        .then_some((frame.index().assets()[row], weight))
+                })
+                .collect()
+        })
+        .collect()
+}
+
+/// One-way weight turnover. The first observation is initial portfolio deployment.
+pub fn portfolio_turnover_by_date(frame: &ResearchFrame, weights: &[f64]) -> Vec<f64> {
+    let maps = date_weight_maps(frame, weights);
+    let mut turnover = Vec::with_capacity(maps.len());
+    for (index, current) in maps.iter().enumerate() {
+        if index == 0 {
+            turnover.push(current.values().map(|weight| weight.abs()).sum());
+            continue;
+        }
+        let previous = &maps[index - 1];
+        let assets: BTreeSet<AssetId> = current
+            .keys()
+            .chain(previous.keys())
+            .copied()
+            .collect();
+        let one_way = 0.5
+            * assets
+                .iter()
+                .map(|asset| {
+                    (current.get(asset).copied().unwrap_or(0.0)
+                        - previous.get(asset).copied().unwrap_or(0.0))
+                    .abs()
+                })
+                .sum::<f64>();
+        turnover.push(one_way);
+    }
+    turnover
+}
+
+pub fn evaluate_portfolio_by_date(
+    frame: &ResearchFrame,
+    weights: &[f64],
+) -> PortfolioSummaryReport {
     let by_date: Vec<PortfolioMetricsReport> = frame
         .index()
         .date_segments()
         .map(|range| core::evaluate_portfolio(&weights[range]).into())
         .collect();
+    let turnover_by_date = portfolio_turnover_by_date(frame, weights);
     let count = by_date.len().max(1) as f64;
     PortfolioSummaryReport {
+        average_turnover: turnover_by_date.iter().sum::<f64>() / turnover_by_date.len().max(1) as f64,
+        turnover_by_date,
         average_gross_exposure: by_date.iter().map(|v| v.gross_exposure).sum::<f64>() / count,
         average_net_exposure: by_date.iter().map(|v| v.net_exposure).sum::<f64>() / count,
         average_hhi: by_date.iter().map(|v| v.hhi).sum::<f64>() / count,
@@ -295,8 +382,74 @@ pub fn evaluate_portfolio_by_date(frame: &ResearchFrame, weights: &[f64]) -> Por
             .map(|v| v.effective_number_of_bets)
             .sum::<f64>()
             / count,
-        maximum_abs_weight: by_date.iter().map(|v| v.max_abs_weight).fold(0.0, f64::max),
+        maximum_abs_weight: by_date
+            .iter()
+            .map(|v| v.max_abs_weight)
+            .fold(0.0, f64::max),
         by_date,
+    }
+}
+
+pub fn evaluate_costs(
+    turnover_by_date: &[f64],
+    config: EvaluationConfig,
+) -> CostSummaryReport {
+    let total_bps = config.transaction_cost_bps.max(0.0) + config.slippage_bps.max(0.0);
+    let estimated_cost_rate_by_date: Vec<f64> = turnover_by_date
+        .iter()
+        .map(|turnover| turnover.max(0.0) * total_bps * 1e-4)
+        .collect();
+    CostSummaryReport {
+        transaction_cost_bps: config.transaction_cost_bps.max(0.0),
+        slippage_bps: config.slippage_bps.max(0.0),
+        total_linear_cost_bps: total_bps,
+        average_cost_rate: estimated_cost_rate_by_date.iter().sum::<f64>()
+            / estimated_cost_rate_by_date.len().max(1) as f64,
+        cumulative_cost_rate: estimated_cost_rate_by_date.iter().sum(),
+        estimated_cost_rate_by_date,
+    }
+}
+
+pub fn after_cost_returns(
+    gross_returns: &BTreeMap<usize, Vec<f64>>,
+    cost_rates: &[f64],
+) -> BTreeMap<usize, Vec<f64>> {
+    gross_returns
+        .iter()
+        .map(|(&period, values)| {
+            let net = values
+                .iter()
+                .enumerate()
+                .map(|(index, &value)| {
+                    if value.is_finite() {
+                        value - cost_rates.get(index).copied().unwrap_or(0.0)
+                    } else {
+                        value
+                    }
+                })
+                .collect();
+            (period, net)
+        })
+        .collect()
+}
+
+/// Build the complete gross/net performance report from one set of target weights.
+pub fn build_performance_report(
+    frame: &ResearchFrame,
+    factor_returns: &BTreeMap<usize, Vec<f64>>,
+    benchmark_returns: &BTreeMap<usize, Vec<f64>>,
+    weights: &[f64],
+    config: EvaluationConfig,
+) -> PerformanceReport {
+    let portfolio = evaluate_portfolio_by_date(frame, weights);
+    let costs = evaluate_costs(&portfolio.turnover_by_date, config);
+    let net_returns = after_cost_returns(factor_returns, &costs.estimated_cost_rate_by_date);
+    PerformanceReport {
+        config,
+        by_horizon: evaluate_horizons(factor_returns, benchmark_returns, config),
+        after_cost_by_horizon: evaluate_horizons(&net_returns, benchmark_returns, config),
+        portfolio,
+        costs,
     }
 }
 
@@ -319,7 +472,7 @@ mod tests {
     }
 
     #[test]
-    fn portfolio_summary_is_segmented_by_date() {
+    fn portfolio_summary_is_segmented_and_has_turnover() {
         let index = PanelIndex::new(
             vec![1, 1, 2, 2],
             vec![AssetId(1), AssetId(2), AssetId(1), AssetId(2)],
@@ -328,6 +481,40 @@ mod tests {
         let frame = ResearchFrame::new(index);
         let report = evaluate_portfolio_by_date(&frame, &[0.5, -0.5, 0.75, -0.25]);
         assert_eq!(report.by_date.len(), 2);
+        assert_eq!(report.turnover_by_date.len(), 2);
         assert!(report.average_gross_exposure > 0.0);
+    }
+
+    #[test]
+    fn costs_reduce_net_performance() {
+        let index = PanelIndex::new(
+            vec![1, 1, 2, 2, 3, 3],
+            vec![
+                AssetId(1),
+                AssetId(2),
+                AssetId(1),
+                AssetId(2),
+                AssetId(1),
+                AssetId(2),
+            ],
+        )
+        .unwrap();
+        let frame = ResearchFrame::new(index);
+        let gross = BTreeMap::from([(1usize, vec![0.02, 0.02, 0.02])]);
+        let benchmark = BTreeMap::from([(1usize, vec![0.0, 0.0, 0.0])]);
+        let config = EvaluationConfig {
+            transaction_cost_bps: 10.0,
+            slippage_bps: 5.0,
+            ..EvaluationConfig::default()
+        };
+        let report = build_performance_report(
+            &frame,
+            &gross,
+            &benchmark,
+            &[0.5, -0.5, 0.8, -0.2, 0.4, -0.6],
+            config,
+        );
+        assert!(report.after_cost_by_horizon[&1].returns.total_return
+            < report.by_horizon[&1].returns.total_return);
     }
 }
