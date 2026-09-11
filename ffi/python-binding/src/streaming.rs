@@ -1,3 +1,4 @@
+use finkit::indicators::MaType;
 use finkit::streaming::indicators::*;
 use finkit::streaming::{CheckpointState, OhlcvBar, StreamingIndicator};
 use pyo3::prelude::*;
@@ -675,6 +676,92 @@ impl StreamingMACD {
                 },
             })
             .collect()
+    }
+
+    fn reset(&mut self) {
+        self.inner.reset();
+    }
+
+    fn is_ready(&self) -> bool {
+        self.inner.is_ready()
+    }
+
+    fn count(&self) -> usize {
+        self.inner.count()
+    }
+}
+
+fn parse_macd_ext_ma_type(value: &str) -> PyResult<MaType> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "sma" => Ok(MaType::Sma),
+        "ema" => Ok(MaType::Ema),
+        "wma" => Ok(MaType::Wma),
+        "dema" => Ok(MaType::Dema),
+        "tema" => Ok(MaType::Tema),
+        "kama" => Ok(MaType::Kama),
+        "t3" => Ok(MaType::T3),
+        "trima" => Ok(MaType::Trima),
+        "hma" => Ok(MaType::Hma),
+        "alma" => Ok(MaType::Alma),
+        "vidya" => Ok(MaType::Vidya),
+        other => Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "unsupported MACDEXT MA type: {other}"
+        ))),
+    }
+}
+
+/// Streaming MACDEXT with configurable scalar MA types.
+#[pyclass]
+pub struct StreamingMACDEXT {
+    inner: StreamingMacdExt,
+}
+
+#[pymethods]
+impl StreamingMACDEXT {
+    #[new]
+    #[pyo3(signature = (fast_period=12, slow_period=26, signal_period=9, fast_ma="ema", slow_ma="ema", signal_ma="ema"))]
+    fn new(
+        fast_period: usize,
+        slow_period: usize,
+        signal_period: usize,
+        fast_ma: &str,
+        slow_ma: &str,
+        signal_ma: &str,
+    ) -> PyResult<Self> {
+        let inner = StreamingMacdExt::new_with_signal_ma(
+            fast_period,
+            parse_macd_ext_ma_type(fast_ma)?,
+            slow_period,
+            parse_macd_ext_ma_type(slow_ma)?,
+            signal_period,
+            parse_macd_ext_ma_type(signal_ma)?,
+        )
+        .map_err(|error| {
+            pyo3::exceptions::PyValueError::new_err(format!(
+                "unsupported MACDEXT MA type: {:?}",
+                error.0
+            ))
+        })?;
+        Ok(Self { inner })
+    }
+
+    fn update(&mut self, value: f64) -> MACDResult {
+        match self.inner.next(value) {
+            Some(out) => MACDResult {
+                macd: out.macd,
+                signal: out.signal,
+                histogram: out.histogram,
+            },
+            None => MACDResult {
+                macd: f64::NAN,
+                signal: f64::NAN,
+                histogram: f64::NAN,
+            },
+        }
+    }
+
+    fn update_batch(&mut self, values: Vec<f64>) -> Vec<MACDResult> {
+        values.into_iter().map(|value| self.update(value)).collect()
     }
 
     fn reset(&mut self) {
@@ -2035,6 +2122,7 @@ pub fn register_streaming_classes(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyStreamingStochRsi>()?;
     m.add_class::<MACDResult>()?;
     m.add_class::<StreamingMACD>()?;
+    m.add_class::<StreamingMACDEXT>()?;
     m.add_class::<StreamingBOLL>()?;
     m.add_class::<StreamingATR>()?;
     m.add_class::<StreamingADX>()?;

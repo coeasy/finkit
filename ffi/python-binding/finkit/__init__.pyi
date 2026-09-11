@@ -4,7 +4,7 @@ This file provides type hints for the native Rust extension module.
 Auto-generated from Rust FFI signatures.
 """
 
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 from numpy.typing import NDArray
 
@@ -1002,6 +1002,40 @@ class StreamingEMA(StreamingIndicator):
     def __init__(self, period: int) -> None:
         ...
 
+class MACDResult:
+    macd: float
+    signal: float
+    histogram: float
+
+class StreamingMACDEXT:
+    """Streaming MACD with configurable scalar MA types."""
+
+    def __init__(
+        self,
+        fast_period: int = 12,
+        slow_period: int = 26,
+        signal_period: int = 9,
+        fast_ma: str = "ema",
+        slow_ma: str = "ema",
+        signal_ma: str = "ema",
+    ) -> None:
+        ...
+
+    def update(self, value: float) -> MACDResult:
+        ...
+
+    def update_batch(self, values: Sequence[float]) -> List[MACDResult]:
+        ...
+
+    def reset(self) -> None:
+        ...
+
+    def is_ready(self) -> bool:
+        ...
+
+    def count(self) -> int:
+        ...
+
 class StreamingRSI(StreamingIndicator):
     """Streaming Relative Strength Index."""
     
@@ -1088,7 +1122,7 @@ __all__ = [
     # Visualization
     "KlineChart", "KlineData",
     # Streaming Indicators
-    "StreamingIndicator", "StreamingSMA", "StreamingEMA", "StreamingRSI",
+    "StreamingIndicator", "StreamingSMA", "StreamingEMA", "StreamingMACDEXT", "StreamingRSI",
     # Exceptions
     "FinkitError", "InsufficientDataError", "InvalidParameterError",
     "IndicatorNotFoundError",
