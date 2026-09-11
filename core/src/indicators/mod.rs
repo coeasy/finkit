@@ -181,6 +181,10 @@ pub use top_bottom::*;
 pub use volatility::*;
 #[cfg(all(feature = "indicators-volatility", feature = "indicators-all"))]
 pub use volatility_ext::*;
+#[cfg(all(feature = "indicators-volatility", feature = "indicators-all"))]
+pub use volatility_ext::max_drawdown as rolling_max_drawdown;
+#[cfg(all(feature = "indicators-volatility", feature = "indicators-all"))]
+pub use volatility_ext::sortino_ratio as rolling_sortino_ratio;
 #[cfg(feature = "indicators-volume")]
 pub use volume::*;
 #[cfg(feature = "indicators-volume")]
