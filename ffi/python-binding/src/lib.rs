@@ -4855,8 +4855,20 @@ fn apply_talib_compatibility(
         "aroon" | "aroonosc" => period(0, 14),
         "cmo" | "rsi" => period(0, 14),
         "macd" | "macdext" | "macdfix" => {
-            let slow = if name == "macdfix" { 26 } else { period(1, 26) };
-            let signal = if name == "macdfix" { 9 } else { period(2, 9) };
+            let slow = if name == "macdfix" {
+                26
+            } else if name == "macdext" {
+                period(2, 26)
+            } else {
+                period(1, 26)
+            };
+            let signal = if name == "macdfix" {
+                9
+            } else if name == "macdext" {
+                period(4, 9)
+            } else {
+                period(2, 9)
+            };
             slow + signal - 2
         }
         "stoch" => period(0, 5) + period(1, 3) + period(3, 3) - 3,

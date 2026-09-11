@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.10] - 2026-09-11
+
+- Correct TA-Lib MACDEXT lookback selection for its `slowperiod` and
+  `signalperiod` parameter positions in the compatibility adapter.
+
 ## [0.1.9] - 2026-09-11
 
 - Add opt-in Python `compute_indicators(..., talib_compat=True)` semantics for

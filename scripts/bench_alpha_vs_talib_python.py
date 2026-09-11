@@ -342,8 +342,8 @@ def talib_lookback(name: str, params: tuple[float, ...]) -> int:
     if name in {"cmo", "rsi"}:
         return period(0, 14)
     if name in {"macd", "macdext", "macdfix"}:
-        slow = 26 if name == "macdfix" else period(1, 26)
-        signal = 9 if name == "macdfix" else period(2, 9)
+        slow = 26 if name == "macdfix" else (period(2, 26) if name == "macdext" else period(1, 26))
+        signal = 9 if name == "macdfix" else (period(4, 9) if name == "macdext" else period(2, 9))
         return slow + signal - 2
     if name == "stoch":
         return period(0, 5) + period(1, 3) + period(3, 3) - 3
