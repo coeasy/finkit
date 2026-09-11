@@ -32,6 +32,8 @@ pub mod compute;
 #[cfg(all(feature = "std", not(feature = "no_std")))]
 pub mod error;
 #[cfg(feature = "std")]
+pub mod factor_system;
+#[cfg(feature = "std")]
 pub mod factors;
 #[cfg(all(feature = "std", feature = "indicators-all", feature = "formula"))]
 pub mod features;
