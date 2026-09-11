@@ -310,7 +310,7 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { NapiStreamingSma, NapiStreamingEma, NapiStreamingWma, NapiStreamingDema, NapiStreamingTema, NapiStreamingKama, NapiStreamingT3, NapiStreamingRsi, NapiStreamingMom, NapiStreamingRoc, NapiStreamingMacd, NapiStreamingBoll, NapiStreamingAtr, NapiStreamingAdx, NapiStreamingCci, NapiStreamingStoch, NapiStreamingAroon, NapiStreamingObv, NapiStreamingVwap, NapiStreamingWillr, NapiStreamingMfi, NapiStreamingNatr, NapiStreamingTrange, NapiStreamingDonchian, NapiStreamingIchimoku, NapiStreamingSupertrend, NapiStreamingKeltner, sweepSma, sweepEma, sweepRsi, sweepEngineRun, Pipeline, transformLogReturn, transformZscore, transformRank, transformDiff, transformRollingMean, resolveMarketSession, resolveMarketSessionConfig, resolveMarketSessionCsv, computeComposite, sma, ema, wma, dema, tema, kama, mama, t3, bollingerBands, sar, rsi, macd, stoch, adx, aroon, cci, mom, roc, willr, apo, bop, cmo, mfi, trix, vortex, vzo, volumeMomentum, volumeRoc, chandeForecastOscillator, twiggsMoneyFlow, inertiaIndicator, atr, natr, trange, obv, ad, adosc, htDcperiod, htDcphase, htPhasor, htSine, htTrendmode, htTrendline, zscore, beta, correlation, stdDev, tsf, linearReg, percentRank, avgprice, medprice, typprice, wclprice, cdlDoji, cdlDragonflyDoji, cdlGravestoneDoji, cdlLongLeggedDoji, cdlHammer, cdlInvertedHammer, cdlHangingMan, cdlShootingStar, cdlEngulfing, cdlHarami, cdlMorningStar, cdlEveningStar, cdlThreeWhiteSoldiers, cdlThreeBlackCrows, cdlMarubozu, darvasBox, renko, kagi, pointAndFigure, threeLineBreak, williamsAlligator, heikinAshi, macdAsync, dx, minusDi, plusDi, cdlHaramiCross, cdlMorningDojiStar, cdlEveningDojiStar, cdlPiercing, cdlDarkCloudCover, cdlBeltHold, cdlSpinningTop, cdlHighWave, cdlRickshawMan, cdlTweezerTop, cdlTweezerBot, cdlKicking, detectHeadShoulders, detectDoubleTop, detectDoubleBottom, detectHeadShouldersBottom, detectTripleTop, detectTripleBottom, ichimoku, supertrend, vwap, anchoredVwap, vwapBands, elderRay, donchian, PivotMethod, pivotPoints, volumeProfile, fibonacciRetracement, klineDataNew, klineDataValidate, klineDataValidateOhlcv, klineDataValidationErrors, KlineChartNapi, formulaEval, formulaEvalMulti, formulaEvalDraw, formulaEvalDebug, formulaGetTemplate, formulaSearchTemplates, formulaListCategories, formulaValidate, formulaEvalJit, formulaEvalSimd, formulaEvalZeroCopy } = nativeBinding
+const { NapiStreamingSma, NapiStreamingEma, NapiStreamingWma, NapiStreamingDema, NapiStreamingTema, NapiStreamingKama, NapiStreamingT3, NapiStreamingRsi, NapiStreamingMom, NapiStreamingRoc, NapiStreamingMacd, NapiStreamingMacdExt, NapiStreamingBoll, NapiStreamingAtr, NapiStreamingAdx, NapiStreamingCci, NapiStreamingStoch, NapiStreamingAroon, NapiStreamingObv, NapiStreamingVwap, NapiStreamingWillr, NapiStreamingMfi, NapiStreamingNatr, NapiStreamingTrange, NapiStreamingDonchian, NapiStreamingIchimoku, NapiStreamingSupertrend, NapiStreamingKeltner, sweepSma, sweepEma, sweepRsi, sweepEngineRun, Pipeline, transformLogReturn, transformZscore, transformRank, transformDiff, transformRollingMean, resolveMarketSession, resolveMarketSessionConfig, resolveMarketSessionCsv, computeComposite, sma, ema, wma, dema, tema, kama, mama, t3, bollingerBands, sar, rsi, macd, stoch, adx, aroon, cci, mom, roc, willr, apo, bop, cmo, mfi, trix, vortex, vzo, volumeMomentum, volumeRoc, chandeForecastOscillator, twiggsMoneyFlow, inertiaIndicator, atr, natr, trange, obv, ad, adosc, htDcperiod, htDcphase, htPhasor, htSine, htTrendmode, htTrendline, zscore, beta, correlation, stdDev, tsf, linearReg, percentRank, avgprice, medprice, typprice, wclprice, cdlDoji, cdlDragonflyDoji, cdlGravestoneDoji, cdlLongLeggedDoji, cdlHammer, cdlInvertedHammer, cdlHangingMan, cdlShootingStar, cdlEngulfing, cdlHarami, cdlMorningStar, cdlEveningStar, cdlThreeWhiteSoldiers, cdlThreeBlackCrows, cdlMarubozu, darvasBox, renko, kagi, pointAndFigure, threeLineBreak, williamsAlligator, heikinAshi, macdAsync, dx, minusDi, plusDi, cdlHaramiCross, cdlMorningDojiStar, cdlEveningDojiStar, cdlPiercing, cdlDarkCloudCover, cdlBeltHold, cdlSpinningTop, cdlHighWave, cdlRickshawMan, cdlTweezerTop, cdlTweezerBot, cdlKicking, detectHeadShoulders, detectDoubleTop, detectDoubleBottom, detectHeadShouldersBottom, detectTripleTop, detectTripleBottom, ichimoku, supertrend, vwap, anchoredVwap, vwapBands, elderRay, donchian, PivotMethod, pivotPoints, volumeProfile, fibonacciRetracement, klineDataNew, klineDataValidate, klineDataValidateOhlcv, klineDataValidationErrors, KlineChartNapi, formulaEval, FormulaRegistryNapi, formulaEvalMulti, formulaEvalDraw, formulaEvalDebug, formulaGetTemplate, formulaSearchTemplates, formulaListCategories, formulaValidate, formulaAnalyze, formulaMetadata, formulaTalibCatalog, formulaCompatibilityReport, formulaEvalJit, formulaEvalSimd, formulaEvalZeroCopy } = nativeBinding
 
 module.exports.NapiStreamingSma = NapiStreamingSma
 module.exports.NapiStreamingEma = NapiStreamingEma
@@ -323,6 +323,7 @@ module.exports.NapiStreamingRsi = NapiStreamingRsi
 module.exports.NapiStreamingMom = NapiStreamingMom
 module.exports.NapiStreamingRoc = NapiStreamingRoc
 module.exports.NapiStreamingMacd = NapiStreamingMacd
+module.exports.NapiStreamingMacdExt = NapiStreamingMacdExt
 module.exports.NapiStreamingBoll = NapiStreamingBoll
 module.exports.NapiStreamingAtr = NapiStreamingAtr
 module.exports.NapiStreamingAdx = NapiStreamingAdx
@@ -468,6 +469,7 @@ module.exports.klineDataValidateOhlcv = klineDataValidateOhlcv
 module.exports.klineDataValidationErrors = klineDataValidationErrors
 module.exports.KlineChartNapi = KlineChartNapi
 module.exports.formulaEval = formulaEval
+module.exports.FormulaRegistryNapi = FormulaRegistryNapi
 module.exports.formulaEvalMulti = formulaEvalMulti
 module.exports.formulaEvalDraw = formulaEvalDraw
 module.exports.formulaEvalDebug = formulaEvalDebug
@@ -475,6 +477,10 @@ module.exports.formulaGetTemplate = formulaGetTemplate
 module.exports.formulaSearchTemplates = formulaSearchTemplates
 module.exports.formulaListCategories = formulaListCategories
 module.exports.formulaValidate = formulaValidate
+module.exports.formulaAnalyze = formulaAnalyze
+module.exports.formulaMetadata = formulaMetadata
+module.exports.formulaTalibCatalog = formulaTalibCatalog
+module.exports.formulaCompatibilityReport = formulaCompatibilityReport
 module.exports.formulaEvalJit = formulaEvalJit
 module.exports.formulaEvalSimd = formulaEvalSimd
 module.exports.formulaEvalZeroCopy = formulaEvalZeroCopy

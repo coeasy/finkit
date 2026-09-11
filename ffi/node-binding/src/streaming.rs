@@ -2,6 +2,29 @@ use finkit::streaming::OhlcvBar;
 use finkit::streaming::StreamingIndicator;
 use napi_derive::napi;
 
+fn parse_ma_type(value: Option<String>) -> napi::Result<finkit::indicators::MaType> {
+    let value = value.unwrap_or_else(|| "ema".to_string());
+    match value.trim().to_ascii_lowercase().as_str() {
+        "sma" => Ok(finkit::indicators::MaType::Sma),
+        "ema" => Ok(finkit::indicators::MaType::Ema),
+        "wma" => Ok(finkit::indicators::MaType::Wma),
+        "dema" => Ok(finkit::indicators::MaType::Dema),
+        "tema" => Ok(finkit::indicators::MaType::Tema),
+        "kama" => Ok(finkit::indicators::MaType::Kama),
+        "t3" => Ok(finkit::indicators::MaType::T3),
+        "trima" => Ok(finkit::indicators::MaType::Trima),
+        "hma" => Ok(finkit::indicators::MaType::Hma),
+        "alma" => Ok(finkit::indicators::MaType::Alma),
+        "vidya" => Ok(finkit::indicators::MaType::Vidya),
+        "mama" | "frama" => Err(napi::Error::from_reason(format!(
+            "MACDEXT streaming does not support MA type `{value}`"
+        ))),
+        _ => Err(napi::Error::from_reason(format!(
+            "unknown MACDEXT MA type `{value}`; expected sma, ema, wma, dema, tema, kama, t3, trima, hma, alma, or vidya"
+        ))),
+    }
+}
+
 // ============================================================================
 // Category 1: f64 → f64 (single-period constructor)
 // ============================================================================
@@ -111,6 +134,78 @@ impl NapiStreamingMacd {
                 histogram: f64::NAN,
             },
         }
+    }
+
+    #[napi]
+    pub fn reset(&mut self) {
+        self.inner.reset();
+    }
+
+    #[napi(getter)]
+    pub fn is_ready(&self) -> bool {
+        self.inner.is_ready()
+    }
+
+    #[napi(getter)]
+    pub fn count(&self) -> u32 {
+        self.inner.count() as u32
+    }
+}
+
+/// Streaming MACD with independently configurable scalar MA types.
+///
+/// The constructor accepts case-insensitive names (`sma`, `ema`, `wma`,
+/// `dema`, `tema`, `kama`, `t3`, `trima`, `hma`, `alma`, `vidya`). MAMA and
+/// FRAMA remain batch-only because their streaming contracts are different.
+#[napi]
+pub struct NapiStreamingMacdExt {
+    inner: finkit::streaming::indicators::StreamingMacdExt,
+}
+
+#[napi]
+impl NapiStreamingMacdExt {
+    #[napi(constructor)]
+    pub fn new(
+        fast_period: Option<u32>,
+        fast_ma_type: Option<String>,
+        slow_period: Option<u32>,
+        slow_ma_type: Option<String>,
+        signal_period: Option<u32>,
+        signal_ma_type: Option<String>,
+    ) -> napi::Result<Self> {
+        let inner = finkit::streaming::indicators::StreamingMacdExt::new_with_signal_ma(
+            fast_period.unwrap_or(12) as usize,
+            parse_ma_type(fast_ma_type)?,
+            slow_period.unwrap_or(26) as usize,
+            parse_ma_type(slow_ma_type)?,
+            signal_period.unwrap_or(9) as usize,
+            parse_ma_type(signal_ma_type)?,
+        )
+        .map_err(|error| {
+            napi::Error::from_reason(format!("unsupported MACDEXT MA type: {error:?}"))
+        })?;
+        Ok(Self { inner })
+    }
+
+    #[napi]
+    pub fn update(&mut self, value: f64) -> MacdResult {
+        match self.inner.next(value) {
+            Some(out) => MacdResult {
+                macd: out.macd,
+                signal: out.signal,
+                histogram: out.histogram,
+            },
+            None => MacdResult {
+                macd: f64::NAN,
+                signal: f64::NAN,
+                histogram: f64::NAN,
+            },
+        }
+    }
+
+    #[napi]
+    pub fn update_batch(&mut self, values: Vec<f64>) -> Vec<MacdResult> {
+        values.into_iter().map(|value| self.update(value)).collect()
     }
 
     #[napi]

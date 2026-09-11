@@ -10,10 +10,30 @@ test('loads the native binding and computes SMA', () => {
 })
 
 test('exports core indicator and formula entry points', () => {
-  for (const name of ['sma', 'ema', 'rsi', 'macd', 'formulaEval', 'formulaValidate']) {
+  for (const name of ['sma', 'ema', 'rsi', 'macd', 'formulaEval', 'formulaValidate', 'formulaAnalyze', 'formulaMetadata', 'formulaCompatibilityReport']) {
     assert.equal(typeof finkit[name], 'function', `${name} must be exported`)
   }
   assert.equal(typeof finkit.computeComposite, 'function')
+})
+
+test('supports configurable streaming MACDEXT MA variants', () => {
+  const macd = new finkit.NapiStreamingMacdExt(5, 'sma', 10, 'wma', 3, 'tema')
+  const values = macd.updateBatch(Array.from({ length: 40 }, (_, i) => 50 + Math.sin(i / 3)))
+  assert.equal(values.length, 40)
+  assert.equal(macd.count, 40)
+  assert.ok(values.some((value) => Number.isFinite(value.macd)))
+  assert.throws(() => new finkit.NapiStreamingMacdExt(12, 'mama', 26, 'ema', 9, 'ema'))
+})
+
+test('supports persistent composable formula components', () => {
+  const registry = new finkit.FormulaRegistryNapi()
+  registry.register('ZMA', ['X', 'N'], 'MA(X, N) + EMA(X, N)')
+  assert.deepEqual(registry.names(), ['ZMA'])
+  const data = [1, 2, 3, 4, 5, 6]
+  const result = registry.eval('zma(CLOSE, 3)', data, data, data, data, data)
+  assert.equal(result.__result__.length, data.length)
+  assert.ok(Number.isFinite(result.__result__[5]))
+  assert.equal(registry.unregister('zma'), true)
 })
 
 test('evaluates dependency-aware composite indicators', () => {

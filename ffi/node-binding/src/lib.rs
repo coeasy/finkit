@@ -2025,6 +2025,93 @@ pub fn formula_eval(
     Ok(output)
 }
 
+/// Persistent registry for parameterized expression components.
+///
+/// This keeps custom formulas in the native FormulaEngine, so Node callers
+/// can compose the same case-insensitive, cache-invalidating components as
+/// Rust and Python callers without rewriting formula source text.
+#[napi]
+#[cfg(feature = "formula")]
+pub struct FormulaRegistryNapi {
+    engine: FormulaEngine,
+}
+
+#[napi]
+#[cfg(feature = "formula")]
+impl FormulaRegistryNapi {
+    #[napi(constructor)]
+    pub fn new() -> Self {
+        Self {
+            engine: FormulaEngine::new(),
+        }
+    }
+
+    /// Register an expression-only component such as `ZMA(X, N) = MA(X, N) + EMA(X, N)`.
+    #[napi]
+    pub fn register(
+        &mut self,
+        name: String,
+        parameters: Vec<String>,
+        source: String,
+    ) -> Result<()> {
+        let refs: Vec<&str> = parameters.iter().map(String::as_str).collect();
+        self.engine
+            .register_custom_formula(&name, &refs, &source)
+            .map_err(formula_error_to_napi)
+    }
+
+    /// Remove one registered component and return whether it existed.
+    #[napi]
+    pub fn unregister(&mut self, name: String) -> Result<bool> {
+        self.engine
+            .unregister_custom_formula(&name)
+            .map_err(formula_error_to_napi)
+    }
+
+    /// Remove all registered components.
+    #[napi]
+    pub fn clear(&mut self) {
+        self.engine.clear_custom_formulas();
+    }
+
+    /// Return names in deterministic uppercase order.
+    #[napi]
+    pub fn names(&self) -> Vec<String> {
+        self.engine.custom_formula_names()
+    }
+
+    /// Evaluate a formula using the persistent custom-component registry.
+    #[napi]
+    pub fn eval(
+        &mut self,
+        source: String,
+        open: Vec<f64>,
+        high: Vec<f64>,
+        low: Vec<f64>,
+        close: Vec<f64>,
+        volume: Vec<f64>,
+    ) -> Result<HashMap<String, Vec<f64>>> {
+        let mut ctx = FormulaContext::new(
+            Array1::from_vec(open),
+            Array1::from_vec(high),
+            Array1::from_vec(low),
+            Array1::from_vec(close),
+            Array1::from_vec(volume),
+            None,
+        );
+        let result = self
+            .engine
+            .eval(&source, &mut ctx)
+            .map_err(formula_error_to_napi)?;
+        let mut output = HashMap::new();
+        for (name, value) in ctx.variables {
+            output.insert(name.to_string(), value.to_vec());
+        }
+        output.insert("__result__".to_string(), result.to_vec());
+        Ok(output)
+    }
+}
+
 #[napi(object)]
 #[cfg(feature = "formula")]
 pub struct FormulaMultiResult {

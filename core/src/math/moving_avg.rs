@@ -34,6 +34,7 @@ pub enum EmaSeed {
 /// `indicator_input_rejected_total` counter (O-2) when the `metrics` feature
 /// is enabled, and emits a `tracing::warn!` event for observability.
 #[inline]
+#[allow(unused_variables)]
 fn reject_if_non_finite(name: &'static str, input: &[f64]) -> Result<()> {
     if let Some(idx) = input.iter().position(|v| !v.is_finite()) {
         #[cfg(feature = "metrics")]

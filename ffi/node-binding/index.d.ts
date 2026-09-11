@@ -1370,23 +1370,43 @@ export declare function formulaListCategories(): Array<string>
  * @returns `true` if the formula is syntactically valid, `false` otherwise.
  */
 export declare function formulaValidate(source: string): boolean
+/** Static dependency and execution analysis for a formula. */
 export interface FormulaAnalysisResult {
-    inputVariables: Array<string>
-    assignedVariables: Array<string>
-    calledFunctions: Array<string>
-    unknownFunctions: Array<string>
-    requiredLookback: number | null
-    estimatedNodes: number
-    estimatedCost: number
-    hasFutureData: boolean
-    hasStatefulFunctions: boolean
-    hasObservableEffects: boolean
-    hasControlFlow: boolean
-    supportsStreaming: boolean
-    diagnostics: Array<string>
+  inputVariables: Array<string>
+  assignedVariables: Array<string>
+  calledFunctions: Array<string>
+  unknownFunctions: Array<string>
+  requiredLookback?: number
+  estimatedNodes: number
+  estimatedCost: number
+  hasFutureData: boolean
+  hasStatefulFunctions: boolean
+  hasObservableEffects: boolean
+  hasControlFlow: boolean
+  supportsStreaming: boolean
+  diagnostics: Array<string>
+}
+/** Stable result shape and validity metadata for chart and binding clients. */
+export interface FormulaMetadataResult {
+  schemaVersion: string
+  length: number
+  dtype: string
+  outputNames: Array<string>
+  nullPolicy: string
+  requiredLookback?: number
+  warmup: number
+  validStart?: number
+  hasFutureData: boolean
+  supportsStreaming: boolean
+  hasObservableEffects: boolean
 }
 export declare function formulaAnalyze(source: string): FormulaAnalysisResult
-export declare function formulaCompatibilityReport(source: string, terminal?: string): string
+/** Return the stable result shape, warm-up and null-value contract. */
+export declare function formulaMetadata(source: string, dataLen?: number | undefined | null): FormulaMetadataResult
+/** Return the complete TA-Lib public function catalog used by compatibility reports. */
+export declare function formulaTalibCatalog(): string
+/** Return a JSON compatibility report for a terminal dialect. */
+export declare function formulaCompatibilityReport(source: string, terminal?: string | undefined | null): string
 /**
  * Execute a trading formula with JIT compilation
  *
@@ -1520,6 +1540,21 @@ export declare class NapiStreamingRoc {
 export declare class NapiStreamingMacd {
   constructor(fastPeriod?: number | undefined | null, slowPeriod?: number | undefined | null, signalPeriod?: number | undefined | null)
   update(value: number): MacdResult
+  reset(): void
+  get isReady(): boolean
+  get count(): number
+}
+/**
+ * Streaming MACD with independently configurable scalar MA types.
+ *
+ * The constructor accepts case-insensitive names (`sma`, `ema`, `wma`,
+ * `dema`, `tema`, `kama`, `t3`, `trima`, `hma`, `alma`, `vidya`). MAMA and
+ * FRAMA remain batch-only because their streaming contracts are different.
+ */
+export declare class NapiStreamingMacdExt {
+  constructor(fastPeriod?: number | undefined | null, fastMaType?: string | undefined | null, slowPeriod?: number | undefined | null, slowMaType?: string | undefined | null, signalPeriod?: number | undefined | null, signalMaType?: string | undefined | null)
+  update(value: number): MacdResult
+  updateBatch(values: Array<number>): Array<MacdResult>
   reset(): void
   get isReady(): boolean
   get count(): number
@@ -1693,4 +1728,24 @@ export declare class KlineChartNapi {
   saveAsHtml(path: string): void
   toHtml(): string
   toJson(): string
+}
+/**
+ * Persistent registry for parameterized expression components.
+ *
+ * This keeps custom formulas in the native FormulaEngine, so Node callers
+ * can compose the same case-insensitive, cache-invalidating components as
+ * Rust and Python callers without rewriting formula source text.
+ */
+export declare class FormulaRegistryNapi {
+  constructor()
+  /** Register an expression-only component such as `ZMA(X, N) = MA(X, N) + EMA(X, N)`. */
+  register(name: string, parameters: Array<string>, source: string): void
+  /** Remove one registered component and return whether it existed. */
+  unregister(name: string): boolean
+  /** Remove all registered components. */
+  clear(): void
+  /** Return names in deterministic uppercase order. */
+  names(): Array<string>
+  /** Evaluate a formula using the persistent custom-component registry. */
+  eval(source: string, open: Array<number>, high: Array<number>, low: Array<number>, close: Array<number>, volume: Array<number>): Record<string, Array<number>>
 }

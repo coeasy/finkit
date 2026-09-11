@@ -7,11 +7,13 @@ use std::ffi::CString;
 use std::os::raw::{c_char, c_double, c_int, c_void};
 
 use finkit::formula::{FormulaContext, FormulaEngine};
+use finkit::indicators::MaType;
 use finkit::indicators::{
     ad, adosc, adx, aroon, atr, bbands, beta, cci, correlation, dema, ema, ht_dcperiod, ht_dcphase,
     ht_phasor, ht_sine, ht_trendline, ht_trendmode, kama, linear_reg, macd, mom, natr, obv, roc,
     rsi, sma, std_dev, stoch, t3, tema, trange, tsf, willr, wma, zscore,
 };
+use finkit::streaming::indicators::StreamingMacdExt;
 use finkit::streaming::indicators::{
     BollOutput, MacdOutput, StreamingAtr, StreamingBoll, StreamingEma, StreamingMacd, StreamingRsi,
     StreamingSma,
@@ -281,6 +283,109 @@ pub extern "C" fn ta_streaming_macd_free(handle: *mut c_void) {
     ffi_catch_void(|| unsafe {
         if !handle.is_null() {
             drop(Box::from_raw(handle as *mut StreamingMacd));
+        }
+    })
+}
+
+fn parse_streaming_ma_type(value: c_int) -> Option<MaType> {
+    match value {
+        0 => Some(MaType::Sma),
+        1 => Some(MaType::Ema),
+        2 => Some(MaType::Wma),
+        3 => Some(MaType::Dema),
+        4 => Some(MaType::Tema),
+        5 => Some(MaType::Kama),
+        6 => Some(MaType::T3),
+        7 => Some(MaType::Trima),
+        8 => Some(MaType::Hma),
+        9 => Some(MaType::Alma),
+        10 => Some(MaType::Vidya),
+        _ => None,
+    }
+}
+
+/// Construct a streaming MACDEXT. MA type values are stable and match the
+/// public Go constants: SMA=0, EMA=1, WMA=2, DEMA=3, TEMA=4, KAMA=5,
+/// T3=6, TRIMA=7, HMA=8, ALMA=9, VIDYA=10.
+#[no_mangle]
+pub extern "C" fn ta_streaming_macd_ext_new(
+    fast: c_int,
+    fast_ma_type: c_int,
+    slow: c_int,
+    slow_ma_type: c_int,
+    signal: c_int,
+    signal_ma_type: c_int,
+) -> *mut c_void {
+    if fast <= 0 || slow <= 0 || signal <= 0 {
+        return std::ptr::null_mut();
+    }
+    let (Some(fast_ma), Some(slow_ma), Some(signal_ma)) = (
+        parse_streaming_ma_type(fast_ma_type),
+        parse_streaming_ma_type(slow_ma_type),
+        parse_streaming_ma_type(signal_ma_type),
+    ) else {
+        return std::ptr::null_mut();
+    };
+    ffi_catch_ptr(|| {
+        StreamingMacdExt::new_with_signal_ma(
+            fast as usize,
+            fast_ma,
+            slow as usize,
+            slow_ma,
+            signal as usize,
+            signal_ma,
+        )
+        .ok()
+        .map(boxed_handle)
+        .unwrap_or(std::ptr::null_mut())
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn ta_streaming_macd_ext_update(
+    handle: *mut c_void,
+    value: c_double,
+    macd_out: *mut c_double,
+    signal_out: *mut c_double,
+    hist_out: *mut c_double,
+) -> c_int {
+    ffi_catch_i32(|| unsafe {
+        if macd_out.is_null() || signal_out.is_null() || hist_out.is_null() {
+            return 0;
+        }
+        let Some(indicator) = (handle as *mut StreamingMacdExt).as_mut() else {
+            return 0;
+        };
+        match indicator.next(value) {
+            Some(MacdOutput {
+                macd,
+                signal,
+                histogram,
+            }) => {
+                *macd_out = macd;
+                *signal_out = signal;
+                *hist_out = histogram;
+                1
+            }
+            None => 0,
+        }
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn ta_streaming_macd_ext_reset(handle: *mut c_void) {
+    ffi_catch_void(|| unsafe {
+        if let Some(indicator) = (handle as *mut StreamingMacdExt).as_mut() {
+            indicator.reset();
+        }
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn ta_streaming_macd_ext_free(handle: *mut c_void) {
+    ffi_catch_void(|| unsafe {
+        if !handle.is_null() {
+            drop(Box::from_raw(handle as *mut StreamingMacdExt));
         }
     })
 }

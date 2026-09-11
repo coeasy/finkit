@@ -6,7 +6,9 @@ use crate::formula::compute_ir::FormulaComputePlan;
 use crate::formula::custom::FormulaRegistry;
 use crate::formula::debugger::FormulaDebugger;
 use crate::formula::executor::FormulaExecutor;
-use crate::formula::jit::{JitCompiler, OptimizedBytecode};
+use crate::formula::jit::JitCompiler;
+#[cfg(feature = "formula-jit")]
+use crate::formula::jit::OptimizedBytecode;
 use crate::formula::optimizer::{DependencyAnalyzer, FormulaOptimizer};
 use crate::formula::params::{apply_params, parse_params, validate_params, ParamDef, ParamValues};
 use crate::formula::parser::parse_formula;

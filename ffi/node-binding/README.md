@@ -1,12 +1,12 @@
 # Finkit Node.js Binding
 
-This directory contains the NAPI-RS binding for Finkit `v0.1.4`.
+This directory contains the NAPI-RS binding for Finkit `v0.1.15`.
 
 ## Status
 
 The Node binding is **source-build and CI-packaging validated**. The multi-language workflow builds the native module, runs the real `node:test` smoke suite, stages the platform native file, and validates `npm pack` on the currently exercised CI target.
 
-The GitHub `v0.1.4` Release does not currently contain Node packages, and this documentation does not assume that the root `finkit` package or all optional native platform packages have been published to npm.
+The GitHub `v0.1.15` Release does not currently contain Node packages, and this documentation does not assume that the root `finkit` package or all optional native platform packages have been published to npm.
 
 ## Requirements
 
@@ -20,7 +20,7 @@ The GitHub `v0.1.4` Release does not currently contain Node packages, and this d
 ```bash
 git clone https://github.com/coeasy/finkit.git
 cd finkit
-git checkout v0.1.4
+git checkout v0.1.15
 cd ffi/node-binding
 
 npm install
@@ -28,7 +28,7 @@ npm run build
 npm test
 ```
 
-The smoke test loads the real native module and verifies SMA output. It also checks that the exported surface contains `sma`, `ema`, `rsi`, `macd`, `formulaEval`, and `formulaValidate`.
+The smoke test loads the real native module and verifies SMA output. It also checks that the exported surface contains `sma`, `ema`, `rsi`, `macd`, `NapiStreamingMacdExt`, `FormulaRegistryNapi`, `formulaEval`, and `formulaValidate`.
 
 ## Local usage
 
@@ -116,7 +116,7 @@ compute/chart layer and does not own a market-data source or trading session.
 
 ## Package layout
 
-`package.json` declares the root package `finkit` version `0.1.4`, ESM/CommonJS entry points, TypeScript definitions, and optional platform-native packages.
+`package.json` declares the root package `finkit` version `0.1.15`, ESM/CommonJS entry points, TypeScript definitions, and optional platform-native packages.
 
 The declared platform package set currently includes:
 
@@ -145,6 +145,17 @@ The native binding exposes formula functions such as `formulaEval` and `formulaV
 - [Formula grammar](../../docs/formula/grammar.md)
 - [Generated formula function catalog](../../docs/generated/formula-functions.md)
 
+For persistent custom components, use `FormulaRegistryNapi`. Components are
+expression-only and expanded by the native engine before analysis and
+execution, so nested registrations share the same cache invalidation and
+validation rules as Rust/Python:
+
+```js
+const registry = new finkit.FormulaRegistryNapi()
+registry.register('ZMA', ['X', 'N'], 'MA(X, N) + EMA(X, N)')
+const result = registry.eval('ZMA(CLOSE, 20)', open, high, low, close, volume)
+```
+
 ## Composite indicators
 
 `computeComposite()` evaluates a dependency-aware graph of custom indicators;
@@ -172,7 +183,7 @@ The exact supported indicator registry can change as the Rust core evolves. Use 
 
 ## Distribution note
 
-Do not use `npm install finkit` as a guaranteed v0.1.4 installation instruction until the npm registry and all required native dependency packages have been verified. For the current release, source build is the documented Node path.
+Do not use `npm install finkit` as a guaranteed v0.1.15 installation instruction until the npm registry and all required native dependency packages have been verified. For the current release, source build is the documented Node path.
 
 ## License
 

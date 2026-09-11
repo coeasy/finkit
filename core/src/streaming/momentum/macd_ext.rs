@@ -7,8 +7,8 @@
 //! Streaming support covers the scalar MA variants available in the streaming
 //! module: SMA, EMA, WMA, DEMA, TEMA, KAMA, T3, TRIMA, HMA, ALMA, and VIDYA.
 //! MAMA is intentionally excluded because it produces a pair of lines, while
-//! FRAMA has no streaming implementation yet. The signal line is always an
-//! EMA for now, matching the typical TA-Lib usage.
+//! FRAMA has no streaming implementation yet. All three scalar lines may use
+//! an independently selected supported MA type.
 
 use crate::impl_standard_methods;
 use crate::indicators::overlap::MaType;
@@ -146,6 +146,22 @@ impl MaState {
             MaState::Hma(h) => h.is_ready(),
             MaState::Alma(a) => a.is_ready(),
             MaState::Vidya(v) => v.is_ready(),
+        }
+    }
+
+    fn warm_up_period(&self) -> usize {
+        match self {
+            MaState::Sma(s) => s.warm_up_period(),
+            MaState::Ema(e) => e.warm_up_period(),
+            MaState::Wma(w) => w.warm_up_period(),
+            MaState::Dema(d) => d.warm_up_period(),
+            MaState::Tema(t) => t.warm_up_period(),
+            MaState::Kama(k) => k.warm_up_period(),
+            MaState::T3(t) => t.warm_up_period(),
+            MaState::Trima(t) => t.warm_up_period(),
+            MaState::Hma(h) => h.warm_up_period(),
+            MaState::Alma(a) => a.warm_up_period(),
+            MaState::Vidya(v) => v.warm_up_period(),
         }
     }
 }
@@ -300,8 +316,14 @@ impl IndicatorMeta for StreamingMacdExt {
         "MACD with configurable scalar MA types for fast, slow, and signal lines"
     }
     fn warm_up_period(&self) -> usize {
-        // Conservative upper bound.
-        self.count().max(35)
+        // Fast and slow lines consume the same input stream. The signal line
+        // starts only after both are ready, so its warm-up is added to the
+        // slower input-line warm-up minus the first signal observation.
+        self.fast_state
+            .warm_up_period()
+            .max(self.slow_state.warm_up_period())
+            .saturating_add(self.signal_state.warm_up_period())
+            .saturating_sub(1)
     }
 }
 
@@ -368,6 +390,16 @@ mod tests {
                 variant
             );
         }
+    }
+
+    #[test]
+    fn test_streaming_macd_ext_reports_variant_warmup() {
+        let macd =
+            StreamingMacdExt::new_with_signal_ma(3, MaType::T3, 5, MaType::Dema, 2, MaType::Sma)
+                .unwrap();
+        // T3(3) needs 13 samples, DEMA(5) needs 9, then SMA(2) consumes
+        // the first two MACD observations: max(13, 9) + 2 - 1 = 14.
+        assert_eq!(macd.warm_up_period(), 14);
     }
 
     #[test]
