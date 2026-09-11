@@ -83,7 +83,11 @@ impl<'a> ResearchContext<'a> {
 
     /// Build the next context after a data mutation without losing normalized
     /// policy or provenance identity.
-    pub fn next_revision(&self, frame: &'a ResearchFrame, dirty: DirtyRange) -> ResearchResult<Self> {
+    pub fn next_revision(
+        &self,
+        frame: &'a ResearchFrame,
+        dirty: DirtyRange,
+    ) -> ResearchResult<Self> {
         Self::new(
             frame,
             self.policy.clone(),
@@ -105,9 +109,12 @@ mod tests {
     fn context_carries_policy_identity_across_revisions() {
         let frame = ResearchFrame::new(PanelIndex::new(vec![1], vec![AssetId(1)]).unwrap());
         let policy = ResearchPolicy::standard(vec![1]).unwrap();
-        let context = ResearchContext::batch(&frame, policy.clone(), StudyProvenance::default())
-            .unwrap();
-        assert_eq!(context.provenance().config_fingerprint, policy.fingerprint());
+        let context =
+            ResearchContext::batch(&frame, policy.clone(), StudyProvenance::default()).unwrap();
+        assert_eq!(
+            context.provenance().config_fingerprint,
+            policy.fingerprint()
+        );
         assert_eq!(context.revision(), 0);
         assert_eq!(context.dirty_range(), DirtyRange::full(1));
 
