@@ -28,6 +28,6 @@ pub mod research;
 pub mod types;
 
 pub use research::{
-    factor_study_json, FactorStudyRequest, FactorStudyResponse, ResearchApiError,
-    FACTOR_STUDY_SCHEMA_VERSION,
+    factor_study_error_json, factor_study_json, FactorStudyRequest, FactorStudyResponse,
+    ResearchApiError, FACTOR_STUDY_MIN_SCHEMA_VERSION, FACTOR_STUDY_SCHEMA_VERSION,
 };
