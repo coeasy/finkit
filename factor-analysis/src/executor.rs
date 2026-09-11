@@ -24,7 +24,9 @@ use crate::prepare::{
     compute_forward_returns, data_quality, quantize_factor, DataQualityReport, ForwardReturnConfig,
     QuantizeConfig,
 };
-use crate::report::{AnalysisMode, FactorStudyReport, InformationReport, ReturnsReport, TurnoverReport};
+use crate::report::{
+    AnalysisMode, FactorStudyReport, InformationReport, ReturnsReport, TurnoverReport,
+};
 use finkit::returns::ReturnKind;
 use std::collections::BTreeMap;
 
@@ -171,11 +173,8 @@ impl ResearchExecutor {
                 }
                 ResearchStageKind::Information => {
                     let forward_ref = required(&forward, "ForwardReturns", stage.kind)?;
-                    let values = information_coefficient(
-                        request.frame,
-                        request.factor_column,
-                        forward_ref,
-                    )?;
+                    let values =
+                        information_coefficient(request.frame, request.factor_column, forward_ref)?;
                     let means = mean_information_coefficient(&values);
                     let stats = values
                         .iter()
@@ -184,7 +183,12 @@ impl ResearchExecutor {
                         })
                         .collect();
                     artifacts.insert(
-                        artifact_key(&request, plan_fingerprint, stage_id, "information_coefficient"),
+                        artifact_key(
+                            &request,
+                            plan_fingerprint,
+                            stage_id,
+                            "information_coefficient",
+                        ),
                         ResearchArtifact::HorizonSeries(values.clone()),
                     );
                     ic = Some(values);
@@ -193,12 +197,7 @@ impl ResearchExecutor {
                 }
                 ResearchStageKind::Turnover => {
                     let quantile_ref = required(&quantiles, "Quantize", stage.kind)?;
-                    bottom_turnover = Some(quantile_turnover(
-                        request.frame,
-                        quantile_ref,
-                        1,
-                        1,
-                    )?);
+                    bottom_turnover = Some(quantile_turnover(request.frame, quantile_ref, 1, 1)?);
                     top_turnover = Some(quantile_turnover(
                         request.frame,
                         quantile_ref,
@@ -227,9 +226,7 @@ impl ResearchExecutor {
                     let cumulative = value
                         .by_holding_period
                         .iter()
-                        .map(|(&period, result)| {
-                            (period, result.gross_cumulative_wealth.clone())
-                        })
+                        .map(|(&period, result)| (period, result.gross_cumulative_wealth.clone()))
                         .collect();
                     artifacts.insert(
                         artifact_key(&request, plan_fingerprint, stage_id, "cumulative_returns"),
@@ -242,9 +239,7 @@ impl ResearchExecutor {
                     let cumulative = performance
                         .by_holding_period
                         .iter()
-                        .map(|(&period, result)| {
-                            (period, result.gross_cumulative_wealth.clone())
-                        })
+                        .map(|(&period, result)| (period, result.gross_cumulative_wealth.clone()))
                         .collect();
                     final_report = Some(FactorStudyReport {
                         mode: request.mode,
@@ -263,22 +258,13 @@ impl ResearchExecutor {
                                 stage.kind,
                             )?
                             .clone(),
-                            quantile_diagnostics: required(
-                                &quantile_diag,
-                                "Returns",
-                                stage.kind,
-                            )?
-                            .clone(),
+                            quantile_diagnostics: required(&quantile_diag, "Returns", stage.kind)?
+                                .clone(),
                         },
                         information: InformationReport {
                             ic_by_horizon: required(&ic, "Information", stage.kind)?.clone(),
                             mean_ic: required(&mean_ic, "Information", stage.kind)?.clone(),
-                            statistics: required(
-                                &ic_statistics,
-                                "Information",
-                                stage.kind,
-                            )?
-                            .clone(),
+                            statistics: required(&ic_statistics, "Information", stage.kind)?.clone(),
                         },
                         turnover: TurnoverReport {
                             bottom_quantile_turnover: required(
@@ -287,18 +273,10 @@ impl ResearchExecutor {
                                 stage.kind,
                             )?
                             .clone(),
-                            top_quantile_turnover: required(
-                                &top_turnover,
-                                "Turnover",
-                                stage.kind,
-                            )?
-                            .clone(),
-                            rank_autocorrelation: required(
-                                &rank_auto,
-                                "Turnover",
-                                stage.kind,
-                            )?
-                            .clone(),
+                            top_quantile_turnover: required(&top_turnover, "Turnover", stage.kind)?
+                                .clone(),
+                            rank_autocorrelation: required(&rank_auto, "Turnover", stage.kind)?
+                                .clone(),
                         },
                         performance,
                     });
@@ -407,7 +385,9 @@ mod tests {
             .add_numeric(
                 "price",
                 "market",
-                vec![10.0, 10.0, 10.0, 11.0, 12.0, 13.0, 12.0, 14.0, 16.0, 13.0, 17.0, 21.0],
+                vec![
+                    10.0, 10.0, 10.0, 11.0, 12.0, 13.0, 12.0, 14.0, 16.0, 13.0, 17.0, 21.0,
+                ],
             )
             .unwrap();
         frame
@@ -439,7 +419,10 @@ mod tests {
         .unwrap();
 
         assert_eq!(result.report.periods, periods);
-        assert_eq!(result.trace.executed_stages.last(), Some(&ResearchStageKind::Report));
+        assert_eq!(
+            result.trace.executed_stages.last(),
+            Some(&ResearchStageKind::Report)
+        );
         assert!(!result.artifacts.is_empty());
     }
 }
