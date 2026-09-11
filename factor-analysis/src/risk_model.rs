@@ -83,30 +83,16 @@ pub fn fit_cross_sectional_risk_model(
 }
 
 /// Herfindahl-Hirschman concentration of normalized absolute weights.
+///
+/// This facade is retained for compatibility; the numerical owner lives in
+/// `finkit::performance` and is shared with backtest/portfolio evaluation.
 pub fn hhi(weights: &[f64]) -> f64 {
-    let gross: f64 = weights
-        .iter()
-        .filter(|v| v.is_finite())
-        .map(|v| v.abs())
-        .sum();
-    if gross <= f64::EPSILON {
-        return 0.0;
-    }
-    weights
-        .iter()
-        .filter(|v| v.is_finite())
-        .map(|v| (v.abs() / gross).powi(2))
-        .sum()
+    finkit::performance::evaluate_portfolio(weights).hhi
 }
 
 /// Effective number of independent weight bets, `1 / HHI`.
 pub fn effective_number_of_bets(weights: &[f64]) -> f64 {
-    let concentration = hhi(weights);
-    if concentration <= f64::EPSILON {
-        0.0
-    } else {
-        1.0 / concentration
-    }
+    finkit::performance::evaluate_portfolio(weights).effective_number_of_bets
 }
 
 /// Exposure of a portfolio to each factor column.
