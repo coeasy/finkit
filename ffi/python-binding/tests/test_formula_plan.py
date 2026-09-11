@@ -29,6 +29,20 @@ def test_compiled_formula_reuses_plan_and_returns_numpy_arrays():
     assert not np.array_equal(first["__result__"], second["__result__"])
 
 
+def test_formula_registry_composes_nested_indicator_expression():
+    open_, high, low, close, volume = _ohlcv()
+    registry = finkit.FormulaRegistry()
+    registry.register("ZMA", ["X", "N"], "MA(X, N) + EMA(X, N)")
+    assert registry.names() == ["ZMA"]
+
+    plan = registry.compile("zma(CLOSE, 3)")
+    actual = plan.eval(open_, high, low, close, volume)["__result__"]
+    expected = finkit.formula_eval(
+        "MA(CLOSE, 3) + EMA(CLOSE, 3)", open_, high, low, close, volume
+    )["__result__"]
+    np.testing.assert_allclose(actual, expected, equal_nan=True)
+
+
 def test_compiled_formula_rejects_mismatched_lengths():
     open_, high, low, close, volume = _ohlcv()
 

@@ -69,7 +69,11 @@ impl StreamingSar {
         if self.count == 2 {
             let up_move = high - self.prev_high;
             let down_move = self.prev_low - low;
-            self.direction = if down_move > up_move && down_move > 0.0 { -1 } else { 1 };
+            self.direction = if down_move > up_move && down_move > 0.0 {
+                -1
+            } else {
+                1
+            };
             self.ep = if self.direction == 1 { high } else { low };
             self.prev_high = high;
             self.prev_low = low;

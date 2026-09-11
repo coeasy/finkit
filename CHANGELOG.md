@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.14] - 2026-09-11
+
+- Add registered, parameterized custom formula components with nested
+  expansion, built-in shadowing protection and bounded expansion limits.
+- Expose the same custom formula registry through the Python binding.
+- Add explicit custom-edge PSI calculation with finite-value filtering and
+  stable outlier handling.
+- Add a shared crosshair data-window snapshot and visible-range-aware cursor
+  mapping for native/WASM chart frontends.
+
 ## [0.1.13] - 2026-09-11
 
 - Correct the Rust CDLDOJI public wrapper to use TA-Lib's default 0.1

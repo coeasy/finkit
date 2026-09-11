@@ -3,6 +3,7 @@ use crate::formula::ast::AstNode;
 use crate::formula::bytecode::{compile_to_bytecode, Bytecode, BytecodeVM};
 use crate::formula::compiler::{CompiledFormula, FormulaCache};
 use crate::formula::compute_ir::FormulaComputePlan;
+use crate::formula::custom::FormulaRegistry;
 use crate::formula::debugger::FormulaDebugger;
 use crate::formula::executor::FormulaExecutor;
 use crate::formula::jit::{JitCompiler, OptimizedBytecode};
@@ -99,6 +100,8 @@ pub struct FormulaEngine {
     /// O(1) append paths for common direct formula indicators whose existing
     /// streaming implementations have exactly the same warm-up contract.
     streaming_common: RefCell<HashMap<String, StreamingFormulaState>>,
+    /// User-defined expression components expanded before semantic planning.
+    custom_formulas: FormulaRegistry,
 }
 
 impl Default for FormulaEngine {
@@ -119,6 +122,7 @@ impl FormulaEngine {
             bytecode_vm: RefCell::new(BytecodeVM::new()),
             streaming_ema: RefCell::new(HashMap::new()),
             streaming_common: RefCell::new(HashMap::new()),
+            custom_formulas: FormulaRegistry::new(),
         }
     }
 
@@ -133,6 +137,7 @@ impl FormulaEngine {
             bytecode_vm: RefCell::new(BytecodeVM::new()),
             streaming_ema: RefCell::new(HashMap::new()),
             streaming_common: RefCell::new(HashMap::new()),
+            custom_formulas: FormulaRegistry::new(),
         }
     }
 
@@ -143,6 +148,10 @@ impl FormulaEngine {
         }
 
         let ast = parse_formula(source).map_err(FormulaError::ParseError)?;
+        let ast = self
+            .custom_formulas
+            .expand(&ast)
+            .map_err(FormulaError::InvalidOperation)?;
         // Semantic analysis is deliberately performed before AST optimization.
         // This locks dependencies/effects against the source program so later
         // optimization and incremental execution cannot accidentally erase an
@@ -165,6 +174,71 @@ impl FormulaEngine {
         self.cache.insert(source, formula.clone());
 
         Ok(formula)
+    }
+
+    /// Register a reusable, parameterized expression component.
+    ///
+    /// Components are expanded before analysis and execution, so a formula
+    /// such as `SIGNAL(CLOSE)` can be composed from built-ins without adding a
+    /// new runtime function. Registration invalidates compiled plans because
+    /// an existing source may now resolve a newly registered component.
+    pub fn register_custom_formula(
+        &mut self,
+        name: &str,
+        parameters: &[&str],
+        source: &str,
+    ) -> Result<(), FormulaError> {
+        self.custom_formulas
+            .register(name, parameters, source)
+            .map_err(FormulaError::InvalidOperation)?;
+        self.invalidate_formula_caches();
+        Ok(())
+    }
+
+    /// Alias for [`Self::register_custom_formula`] for registry-oriented APIs.
+    pub fn register_formula(
+        &mut self,
+        name: &str,
+        parameters: &[&str],
+        source: &str,
+    ) -> Result<(), FormulaError> {
+        self.register_custom_formula(name, parameters, source)
+    }
+
+    /// Remove one custom component and invalidate compiled plans if removed.
+    pub fn unregister_custom_formula(&mut self, name: &str) -> Result<bool, FormulaError> {
+        let removed = self
+            .custom_formulas
+            .unregister(name)
+            .map_err(FormulaError::InvalidOperation)?;
+        if removed {
+            self.invalidate_formula_caches();
+        }
+        Ok(removed)
+    }
+
+    /// Remove all custom components and invalidate compiled plans.
+    pub fn clear_custom_formulas(&mut self) {
+        self.custom_formulas.clear();
+        self.invalidate_formula_caches();
+    }
+
+    /// Return registered custom component names in deterministic order.
+    pub fn custom_formula_names(&self) -> Vec<String> {
+        self.custom_formulas.names()
+    }
+
+    /// Inspect the registry used by this engine.
+    pub fn custom_formula_registry(&self) -> &FormulaRegistry {
+        &self.custom_formulas
+    }
+
+    fn invalidate_formula_caches(&mut self) {
+        self.cache.clear();
+        self.semantic_plan_cache.borrow_mut().clear();
+        self.bytecode_cache.borrow_mut().clear();
+        self.streaming_ema.borrow_mut().clear();
+        self.streaming_common.borrow_mut().clear();
     }
 
     /// 执行已编译的公式
@@ -941,8 +1015,8 @@ impl FormulaEngine {
         source: &str,
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
-        let ast = parse_formula(source).map_err(FormulaError::ParseError)?;
-        let pruned = DependencyAnalyzer::analyze_and_prune(&ast);
+        let formula = self.compile(source)?;
+        let pruned = DependencyAnalyzer::analyze_and_prune(&formula.ast);
         self.executor.execute(&pruned, ctx)
     }
 
@@ -1265,8 +1339,8 @@ impl FormulaEngine {
         source: &str,
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
-        let ast = parse_formula(source).map_err(FormulaError::ParseError)?;
-        let ast = FormulaOptimizer::optimize(&ast);
+        let formula = self.compile(source)?;
+        let ast = FormulaOptimizer::optimize(&formula.ast);
         let bytecode = compile_to_bytecode(&ast, source).map_err(FormulaError::RuntimeError)?;
         let mut jit = self.jit_compiler.borrow_mut();
         let optimized = jit.compile_cached(bytecode);
@@ -1322,8 +1396,8 @@ impl FormulaEngine {
 
     #[cfg(feature = "formula-jit")]
     pub fn compile_jit(&mut self, source: &str) -> Result<OptimizedBytecode, FormulaError> {
-        let ast = parse_formula(source).map_err(FormulaError::ParseError)?;
-        let ast = FormulaOptimizer::optimize(&ast);
+        let formula = self.compile(source)?;
+        let ast = FormulaOptimizer::optimize(&formula.ast);
         let bytecode = compile_to_bytecode(&ast, source).map_err(FormulaError::RuntimeError)?;
         let mut jit = self.jit_compiler.borrow_mut();
         Ok(jit.compile_cached(bytecode))
@@ -2120,6 +2194,26 @@ mod tests {
         for (a, b) in borrowed.iter().zip(owned.iter()) {
             assert!((a - b).abs() < 1e-12 || (a.is_nan() && b.is_nan()));
         }
+    }
+
+    #[test]
+    fn custom_components_are_compiled_and_cached_as_canonical_formulas() {
+        let mut engine = FormulaEngine::new();
+        engine
+            .register_custom_formula("ZMA", &["X", "N"], "MA(X, N) + EMA(X, N)")
+            .unwrap();
+        let mut ctx = make_ctx(32);
+        let composed = engine.eval("zma(CLOSE, 5)", &mut ctx).unwrap();
+
+        let mut baseline_ctx = make_ctx(32);
+        let baseline = FormulaEngine::new()
+            .eval("MA(CLOSE, 5) + EMA(CLOSE, 5)", &mut baseline_ctx)
+            .unwrap();
+        for (actual, expected) in composed.iter().zip(baseline.iter()) {
+            assert!((actual - expected).abs() < 1e-12 || (actual.is_nan() && expected.is_nan()));
+        }
+        assert_eq!(engine.custom_formula_names(), vec!["ZMA".to_string()]);
+        assert!(engine.unregister_custom_formula("zma").unwrap());
     }
 
     #[test]

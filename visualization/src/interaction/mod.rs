@@ -8,7 +8,7 @@ use crate::language::LanguageResource;
 use crate::layout::ChartLayout;
 use serde::{Deserialize, Serialize};
 
-pub use crosshair::CrosshairInfo;
+pub use crosshair::{CrosshairDataWindow, CrosshairInfo};
 
 /// Pointer button used by the shared interaction state machine.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -320,6 +320,29 @@ impl ViewState {
         crosshair::find_nearest_kline(cursor_x, layout, data_len)
     }
 
+    /// Find the nearest source bar in the current visible range.
+    pub fn find_nearest_kline_in_range(
+        &self,
+        cursor_x: f64,
+        layout: &ChartLayout,
+        data_len: usize,
+        visible_start: usize,
+        visible_end: usize,
+    ) -> usize {
+        crosshair::find_nearest_kline_in_range(
+            cursor_x,
+            layout,
+            data_len,
+            visible_start,
+            visible_end,
+        )
+    }
+
+    /// Build the unified floating data window for one source bar.
+    pub fn data_window(&self, index: usize, data: &KlineData) -> Option<CrosshairDataWindow> {
+        crosshair::data_window(index, data)
+    }
+
     pub fn format_tooltip(
         &self,
         index: usize,
@@ -336,7 +359,13 @@ impl ViewState {
         data: &KlineData,
         layout: &ChartLayout,
     ) -> Option<CrosshairInfo> {
-        let index = crosshair::find_nearest_kline(cursor_x, layout, data.len());
+        let (start, end) = if self.visible_end > self.visible_start {
+            (self.visible_start, self.visible_end)
+        } else {
+            (0, data.len())
+        };
+        let index =
+            crosshair::find_nearest_kline_in_range(cursor_x, layout, data.len(), start, end);
         crosshair::create_crosshair_info(index, cursor_x, cursor_y, data)
     }
 }

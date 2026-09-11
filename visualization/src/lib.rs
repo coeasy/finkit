@@ -18,4 +18,6 @@ pub mod scene;
 pub mod text;
 pub mod viewport;
 
+pub use interaction::{CrosshairDataWindow, CrosshairInfo};
+
 pub use error::{Result, VisualizationError};

@@ -33,7 +33,7 @@ use finkit_visualization::language::Language;
 use finkit_visualization::primitive::Color;
 use finkit_visualization::viewport::{LodLevel, LodPolicy, Viewport};
 #[cfg(feature = "formula")]
-use formula_plan::PyCompiledFormula;
+use formula_plan::{PyCompiledFormula, PyFormulaRegistry};
 use numpy::{PyArray1, PyReadonlyArray1};
 use pyo3::marker::Ungil;
 use pyo3::prelude::*;
@@ -6433,6 +6433,7 @@ fn finkit(m: &Bound<'_, PyModule>) -> PyResult<()> {
     #[cfg(feature = "formula")]
     {
         m.add_class::<PyCompiledFormula>()?;
+        m.add_class::<PyFormulaRegistry>()?;
         m.add_function(wrap_pyfunction!(formula_eval, m)?)?;
         m.add_function(wrap_pyfunction!(formula_eval_dialect, m)?)?;
         m.add_function(wrap_pyfunction!(formula_eval_bytecode, m)?)?;

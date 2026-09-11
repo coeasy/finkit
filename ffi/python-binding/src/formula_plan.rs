@@ -119,6 +119,76 @@ pub struct PyCompiledFormula {
     stream_context: Option<FormulaContext>,
 }
 
+/// Reusable registry for parameterized expression components.
+///
+/// Components are expanded and validated by the Rust engine before a plan is
+/// returned, so Python callers can build the same nested custom indicators as
+/// native Rust callers without textual source rewriting.
+#[pyclass(name = "FormulaRegistry", unsendable)]
+pub struct PyFormulaRegistry {
+    engine: Option<FormulaEngine>,
+}
+
+#[pymethods]
+impl PyFormulaRegistry {
+    #[new]
+    fn new() -> Self {
+        Self {
+            engine: Some(FormulaEngine::new()),
+        }
+    }
+
+    /// Register an expression-only component, e.g. `MA(X, N) + EMA(X, N)`.
+    fn register(&mut self, name: String, parameters: Vec<String>, source: String) -> PyResult<()> {
+        let refs: Vec<&str> = parameters.iter().map(String::as_str).collect();
+        self.engine
+            .as_mut()
+            .expect("formula registry engine is available")
+            .register_custom_formula(&name, &refs, &source)
+            .map_err(formula_runtime_error)
+    }
+
+    /// Remove one component and return whether it existed.
+    fn unregister(&mut self, name: &str) -> PyResult<bool> {
+        self.engine
+            .as_mut()
+            .expect("formula registry engine is available")
+            .unregister_custom_formula(name)
+            .map_err(formula_runtime_error)
+    }
+
+    /// Return registered component names in deterministic order.
+    fn names(&self) -> Vec<String> {
+        self.engine
+            .as_ref()
+            .expect("formula registry engine is available")
+            .custom_formula_names()
+    }
+
+    /// Compile a source formula using this registry.
+    fn compile(&mut self, source: String) -> PyResult<PyCompiledFormula> {
+        let mut engine = self
+            .engine
+            .take()
+            .expect("formula registry engine is available");
+        let compiled = match engine.compile(&source) {
+            Ok(compiled) => compiled,
+            Err(error) => {
+                self.engine = Some(engine);
+                return Err(PyErr::new::<pyo3::exceptions::PySyntaxError, _>(
+                    error.to_string(),
+                ));
+            }
+        };
+        Ok(PyCompiledFormula {
+            source,
+            engine: Some(engine),
+            compiled: Arc::new(compiled),
+            stream_context: None,
+        })
+    }
+}
+
 #[pymethods]
 impl PyCompiledFormula {
     #[new]

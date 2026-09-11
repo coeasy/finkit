@@ -146,6 +146,31 @@ latest = plan.eval_last()
 
 Use `reset()` when you want to discard the retained market context while keeping the compiled formula/runtime caches.
 
+### Registered composite formulas
+
+For reusable custom indicators, register an expression component instead of
+copying source text into every strategy. Components are parameterized,
+case-insensitive, nestable, and expanded before semantic analysis, optimizer,
+SIMD, bytecode, and JIT paths. Built-in functions cannot be shadowed; bodies
+are expression-only and expansion is bounded to prevent recursive or
+unbounded formula graphs.
+
+Rust:
+
+```rust
+let mut engine = FormulaEngine::new();
+engine.register_custom_formula(
+    "ZMA",
+    &["X", "N"],
+    "MA(X, N) + EMA(X, N)",
+)?;
+let result = engine.eval("ZMA(CLOSE, 20)", &mut context)?;
+```
+
+Python exposes the same contract through `FormulaRegistry`; call
+`registry.register(name, parameters, source)` and then
+`registry.compile(source)` to obtain a reusable `CompiledFormula` plan.
+
 See [formula-runtime.md](formula-runtime.md) and [formula-runtime-contract.md](formula-runtime-contract.md) for the detailed ownership and reuse contract.
 
 ## 8. CLI formula execution

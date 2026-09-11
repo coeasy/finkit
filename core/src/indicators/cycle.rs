@@ -200,6 +200,14 @@ pub fn ht_sine(input: &[f64]) -> Result<(Array1<f64>, Array1<f64>)> {
     let mut sine = init_output(len);
     let mut lead_sine = init_output(len);
 
+    // The public input contract historically accepts 32 bars, while the
+    // TA-Lib-compatible phase projection needs 63 bars before its first
+    // finite sample. Keep the public shape and return warm-up NaNs instead of
+    // allowing `len - 63` to underflow for short-but-valid inputs.
+    if len <= 63 {
+        return Ok((sine, lead_sine));
+    }
+
     let (_smooth, _detrender, _in_phase, _quadrature, _j1, _i2, _j2, _phase, period) =
         compute_hilbert_components_from(input, len, 37);
 
@@ -1665,6 +1673,14 @@ mod tests {
         let (sine, lead_sine) = ht_sine(&input).unwrap();
         assert_eq!(sine.len(), 100);
         assert_eq!(lead_sine.len(), 100);
+    }
+
+    #[test]
+    fn test_ht_sine_short_public_input_returns_warmup_nan() {
+        let input = sine_wave(32, 0.1, 1.0, 50.0);
+        let (sine, lead_sine) = ht_sine(&input).unwrap();
+        assert!(sine.iter().all(|value| value.is_nan()));
+        assert!(lead_sine.iter().all(|value| value.is_nan()));
     }
 
     #[test]

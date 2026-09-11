@@ -20,6 +20,7 @@ pub mod compat;
 pub mod compiler;
 pub mod compute_ir;
 pub mod contracts;
+pub mod custom;
 pub mod debugger;
 pub mod drawing;
 pub mod engine;
@@ -60,6 +61,7 @@ pub use contracts::{
     ta_lib_function_contract, ta_lib_function_contracts, FormulaFunctionContract,
     TA_LIB_CATALOG_VERSION,
 };
+pub use custom::{CustomFormula, FormulaRegistry};
 pub use debugger::{DebugEvent, FormulaDebugger, FormulaErrorWithLocation};
 pub use drawing::{DrawCommand, DrawResult};
 pub use engine::{FormulaEngine, FormulaResult};

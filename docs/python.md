@@ -1,31 +1,31 @@
 # Python Guide
 
-Finkit Python uses PyO3 + maturin and ships `v0.1.13` as platform-specific CPython stable-ABI wheels (`cp38-abi3`). The same wheel for a platform is validated across GIL-enabled CPython 3.8-3.14 on the supported matrix.
+Finkit Python uses PyO3 + maturin and ships `v0.1.14` as platform-specific CPython stable-ABI wheels (`cp38-abi3`). The same wheel for a platform is validated across GIL-enabled CPython 3.8-3.14 on the supported matrix.
 
 ## Release status
 
-`v0.1.13` is published on GitHub Releases. The verified wheel families are:
+`v0.1.14` is published on GitHub Releases. The verified wheel families are:
 
 - Linux x86_64 — manylinux 2.17 / manylinux2014;
 - Windows x86_64 — `win_amd64`;
 - macOS x86_64;
 - macOS arm64.
 
-Not in the v0.1.13 wheel matrix: Linux arm64, musllinux, 32-bit Windows, PyPy, and free-threaded CPython.
+Not in the v0.1.14 wheel matrix: Linux arm64, musllinux, 32-bit Windows, PyPy, and free-threaded CPython.
 
-The GitHub Release is the documented installation source for v0.1.13. Registry publication is separate; do not assume PyPI contains this exact package/version unless independently verified.
+The GitHub Release is the documented installation source for v0.1.14. Registry publication is separate; do not assume PyPI contains this exact package/version unless independently verified.
 
 ## Install a Release wheel
 
-Download the matching `finkit-0.1.13-cp38-abi3-*.whl` from:
+Download the matching `finkit-0.1.14-cp38-abi3-*.whl` from:
 
-`https://github.com/coeasy/finkit/releases/tag/v0.1.13`
+`https://github.com/coeasy/finkit/releases/tag/v0.1.14`
 
 Then install:
 
 ```bash
 python -m pip install --upgrade pip
-python -m pip install ./finkit-0.1.13-<matching-platform>.whl
+python -m pip install ./finkit-0.1.14-<matching-platform>.whl
 ```
 
 Verify outside the source tree:
@@ -49,7 +49,7 @@ PY
 ```bash
 git clone https://github.com/coeasy/finkit.git
 cd finkit
-git checkout v0.1.13
+git checkout v0.1.14
 
 python3 -m venv .venv
 source .venv/bin/activate  # PowerShell: .\.venv\Scripts\Activate.ps1
@@ -321,6 +321,19 @@ result = plan.eval(open_, high, low, close, volume)
 ma20 = result["__result__"]
 ```
 
+For reusable custom combinations, use the shared registry contract:
+
+```python
+registry = ta.FormulaRegistry()
+registry.register("ZMA", ["X", "N"], "MA(X, N) + EMA(X, N)")
+plan = registry.compile("ZMA(CLOSE, 20)")
+result = plan.eval(open_, high, low, close, volume)
+```
+
+Registered components are expression-only, can be nested, cannot shadow
+built-ins, and are bounded during expansion to prevent accidental recursive
+formula graphs.
+
 ### `eval()`
 
 `eval()` copies the input arrays into an owned formula context. This is the correct starting point when you plan to call `append_bar()` later.
@@ -486,7 +499,7 @@ Install the generated wheel from a clean directory and run tests against the ins
 
 The Python Wheels workflow:
 
-1. builds the four v0.1.13 platform wheels;
+1. builds the four v0.1.14 platform wheels;
 2. installs/tests each platform wheel outside the source tree;
 3. reuses the Linux ABI3 wheel across CPython 3.8-3.14 compatibility jobs;
 4. validates package version, wheel metadata, and platform coverage;
@@ -518,7 +531,7 @@ Confirm that pip and Python use the same environment, and test outside the repos
 
 ```bash
 python -m pip install --upgrade pip numpy
-python -m pip install --force-reinstall ./finkit-0.1.13-<matching-platform>.whl
+python -m pip install --force-reinstall ./finkit-0.1.14-<matching-platform>.whl
 ```
 
 ### `eval_zero_copy()` rejects an array

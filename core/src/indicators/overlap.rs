@@ -490,19 +490,31 @@ pub fn sarext(
     let mut current_af_long = af_init_long.min(af_max_long);
     let mut current_af_short = af_init_short.min(af_max_short);
     let mut ep = if start_value == 0.0 {
-        if is_long { high[1] } else { low[1] }
+        if is_long {
+            high[1]
+        } else {
+            low[1]
+        }
     } else if is_long {
         high[1]
     } else {
         low[1]
     };
     let mut current_sar = if start_value == 0.0 {
-        if is_long { low[0] } else { high[0] }
+        if is_long {
+            low[0]
+        } else {
+            high[0]
+        }
     } else {
         start_value.abs()
     };
     sar_values[0] = if is_long { current_sar } else { -current_sar };
-    af_values[0] = if is_long { current_af_long } else { current_af_short };
+    af_values[0] = if is_long {
+        current_af_long
+    } else {
+        current_af_short
+    };
 
     for i in 1..len {
         let current_high = high[i];
