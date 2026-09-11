@@ -55,12 +55,12 @@ pub extern "system" fn Java_com_finkit_FactorResearch_factorStudyJson(
     let request: String = match env.get_string(&request) {
         Ok(value) => value.into(),
         Err(error) => {
-            let fallback = serde_json::json!({
-                "schema_version": 1,
-                "ok": false,
-                "error": {"code": "invalid_utf8", "message": error.to_string()}
-            }).to_string();
-            return env.new_string(fallback)
+            let fallback = finkit_ffi_common::factor_study_error_json(
+                "invalid_utf8",
+                &error.to_string(),
+            );
+            return env
+                .new_string(fallback)
                 .map(|value| value.into_raw())
                 .unwrap_or(std::ptr::null_mut());
         }
@@ -82,11 +82,17 @@ pub extern "system" fn Java_com_finkit_indicators_Finkit_factorStudyJson(
     _class: jni::objects::JClass<'_>,
     request: jni::objects::JString<'_>,
 ) -> jni::sys::jstring {
-    let request: String = match env.get_string(&request) {
-        Ok(value) => value.into(),
-        Err(_) => return std::ptr::null_mut(),
+    let response = match env.get_string(&request) {
+        Ok(value) => {
+            let request: String = value.into();
+            finkit_ffi_common::factor_study_json(&request)
+        }
+        Err(error) => finkit_ffi_common::factor_study_error_json(
+            "invalid_utf8",
+            &error.to_string(),
+        ),
     };
-    env.new_string(finkit_ffi_common::factor_study_json(&request))
+    env.new_string(response)
         .map(|value| value.into_raw())
         .unwrap_or(std::ptr::null_mut())
 }
@@ -107,24 +113,34 @@ fn research_string_ptr(value: String) -> *mut std::os::raw::c_char {
 }
 unsafe fn research_request_json(ptr: *const std::os::raw::c_char) -> String {
     if ptr.is_null() {
-        return serde_json::json!({"schema_version": 1, "ok": false, "error": {"code": "null_pointer", "message": "request_json is null"}}).to_string();
+        return finkit_ffi_common::factor_study_error_json(
+            "null_pointer",
+            "request_json is null",
+        );
     }
     let request = unsafe { std::ffi::CStr::from_ptr(ptr) };
     match request.to_str() {
         Ok(request) => finkit_ffi_common::factor_study_json(request),
-        Err(error) => serde_json::json!({"schema_version": 1, "ok": false, "error": {"code": "invalid_utf8", "message": error.to_string()}}).to_string(),
+        Err(error) => finkit_ffi_common::factor_study_error_json(
+            "invalid_utf8",
+            &error.to_string(),
+        ),
     }
 }
 '''
 
 append_once('ffi/dotnet-binding/src/lib.rs', 'finkit_dotnet_factor_study_json', NATIVE_HELPERS + r'''
 #[no_mangle]
-pub unsafe extern "C" fn finkit_dotnet_factor_study_json(request_json: *const std::os::raw::c_char) -> *mut std::os::raw::c_char {
+pub unsafe extern "C" fn finkit_dotnet_factor_study_json(
+    request_json: *const std::os::raw::c_char,
+) -> *mut std::os::raw::c_char {
     research_string_ptr(unsafe { research_request_json(request_json) })
 }
 #[no_mangle]
 pub unsafe extern "C" fn finkit_dotnet_factor_study_free_string(value: *mut std::os::raw::c_char) {
-    if !value.is_null() { drop(unsafe { std::ffi::CString::from_raw(value) }); }
+    if !value.is_null() {
+        drop(unsafe { std::ffi::CString::from_raw(value) });
+    }
 }
 ''')
 Path('ffi/dotnet-binding/src/Finkit/FactorResearch.cs').write_text(r'''using System;
@@ -151,12 +167,16 @@ public static class FactorResearch
 
 append_once('ffi/go-binding/src/lib.rs', 'finkit_go_factor_study_json', NATIVE_HELPERS + r'''
 #[no_mangle]
-pub unsafe extern "C" fn finkit_go_factor_study_json(request_json: *const std::os::raw::c_char) -> *mut std::os::raw::c_char {
+pub unsafe extern "C" fn finkit_go_factor_study_json(
+    request_json: *const std::os::raw::c_char,
+) -> *mut std::os::raw::c_char {
     research_string_ptr(unsafe { research_request_json(request_json) })
 }
 #[no_mangle]
 pub unsafe extern "C" fn finkit_go_factor_study_free_string(value: *mut std::os::raw::c_char) {
-    if !value.is_null() { drop(unsafe { std::ffi::CString::from_raw(value) }); }
+    if !value.is_null() {
+        drop(unsafe { std::ffi::CString::from_raw(value) });
+    }
 }
 ''')
 Path('ffi/go-binding/go/ta/research.go').write_text(r'''package ta
@@ -184,12 +204,16 @@ func FactorStudyJSON(requestJSON string) (string, error) {
 
 append_once('ffi/ios-binding/src/lib.rs', 'finkit_ios_factor_study_json', NATIVE_HELPERS + r'''
 #[no_mangle]
-pub unsafe extern "C" fn finkit_ios_factor_study_json(request_json: *const std::os::raw::c_char) -> *mut std::os::raw::c_char {
+pub unsafe extern "C" fn finkit_ios_factor_study_json(
+    request_json: *const std::os::raw::c_char,
+) -> *mut std::os::raw::c_char {
     research_string_ptr(unsafe { research_request_json(request_json) })
 }
 #[no_mangle]
 pub unsafe extern "C" fn finkit_ios_factor_study_free_string(value: *mut std::os::raw::c_char) {
-    if !value.is_null() { drop(unsafe { std::ffi::CString::from_raw(value) }); }
+    if !value.is_null() {
+        drop(unsafe { std::ffi::CString::from_raw(value) });
+    }
 }
 ''')
 swift_files = list(Path('ffi/ios-binding').glob('**/*.swift'))
