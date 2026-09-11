@@ -179,11 +179,18 @@ pub fn validate_factor_study_request(request: &FactorStudyRequest) -> Result<(),
             "evaluation rates must be finite",
         ));
     }
-    if !(0.0..1.0).contains(&request.evaluation.var_confidence)
-        || request.evaluation.var_confidence == 0.0
-    {
+    if !(0.0 < request.evaluation.var_confidence && request.evaluation.var_confidence < 1.0) {
         return Err(ResearchApiError::invalid_request(
             "evaluation.var_confidence must be in (0, 1)",
+        ));
+    }
+    if !request.evaluation.transaction_cost_bps.is_finite()
+        || request.evaluation.transaction_cost_bps < 0.0
+        || !request.evaluation.slippage_bps.is_finite()
+        || request.evaluation.slippage_bps < 0.0
+    {
+        return Err(ResearchApiError::invalid_request(
+            "evaluation transaction_cost_bps and slippage_bps must be finite and non-negative",
         ));
     }
     Ok(())
@@ -320,6 +327,11 @@ mod tests {
         let mut invalid_evaluation = request();
         invalid_evaluation.evaluation.annualization = 0;
         let response = run_factor_study_response(&invalid_evaluation);
+        assert_eq!(response.error.unwrap().code, "invalid_request");
+
+        let mut invalid_cost = request();
+        invalid_cost.evaluation.transaction_cost_bps = -1.0;
+        let response = run_factor_study_response(&invalid_cost);
         assert_eq!(response.error.unwrap().code, "invalid_request");
     }
 
