@@ -3,7 +3,7 @@ use crate::error::{ResearchError, ResearchResult};
 use finkit::math::rank::percentile_rank;
 use finkit::returns::{return_between, ReturnKind};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Forward-return computation configuration.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -13,40 +13,57 @@ pub struct ForwardReturnConfig {
 }
 
 impl ForwardReturnConfig {
-    pub fn new(periods: Vec<usize>, kind: ReturnKind) -> ResearchResult<Self> {
+    pub fn new(mut periods: Vec<usize>, kind: ReturnKind) -> ResearchResult<Self> {
         if periods.is_empty() || periods.iter().any(|&period| period == 0) {
             return Err(ResearchError::InvalidConfig(
                 "forward-return periods must be non-empty and > 0".to_string(),
             ));
         }
+        periods.sort_unstable();
+        periods.dedup();
         Ok(Self { periods, kind })
     }
 }
 
-/// Compute forward returns by asset, so no return can cross an instrument boundary.
+/// Compute forward returns on the exact research-date horizon for the same asset.
+///
+/// A `period = 1` label always means the next research date. If the asset is
+/// absent on that exact date, the label remains `NaN`; the implementation never
+/// skips across a missing session to a later observation.
 pub fn compute_forward_returns(
     frame: &ResearchFrame,
     price_column: &str,
     config: &ForwardReturnConfig,
 ) -> ResearchResult<BTreeMap<usize, Vec<f64>>> {
     let prices = frame.column(price_column)?;
-    let mut by_asset: BTreeMap<AssetId, Vec<usize>> = BTreeMap::new();
-    for (row, &asset) in frame.index().assets().iter().enumerate() {
-        by_asset.entry(asset).or_default().push(row);
-    }
+    let segments = frame.index().date_segments();
+    let date_count = segments.len();
+    let rows_by_date: Vec<BTreeMap<AssetId, usize>> = segments.map(|range| {
+        range
+            .map(|row| (frame.index().assets()[row], row))
+            .collect()
+    });
     let mut result: BTreeMap<usize, Vec<f64>> = config
         .periods
         .iter()
         .copied()
         .map(|period| (period, vec![f64::NAN; frame.index().len()]))
         .collect();
-    for rows in by_asset.values() {
+
+    for date_idx in 0..date_count {
+        let start_range = segments.range(date_idx).expect("valid date segment");
         for &period in &config.periods {
+            let Some(target_date) = date_idx.checked_add(period).filter(|&date| date < date_count)
+            else {
+                continue;
+            };
+            let target_rows = &rows_by_date[target_date];
             let out = result.get_mut(&period).expect("period initialized");
-            for local in 0..rows.len().saturating_sub(period) {
-                let start = rows[local];
-                let end = rows[local + period];
-                out[start] = return_between(prices[start], prices[end], config.kind);
+            for start in start_range.clone() {
+                let asset = frame.index().assets()[start];
+                if let Some(&end) = target_rows.get(&asset) {
+                    out[start] = return_between(prices[start], prices[end], config.kind);
+                }
             }
         }
     }
@@ -190,18 +207,14 @@ pub fn data_quality(
     let input_rows = factor.len();
     let finite_factor_rows = factor.iter().filter(|v| v.is_finite()).count();
     let mut duplicate_keys = 0usize;
-    let mut previous: Option<(i64, AssetId)> = None;
-    for (&ts, &asset) in frame
-        .index()
-        .timestamps()
-        .iter()
-        .zip(frame.index().assets())
-    {
-        let key = (ts, asset);
-        if previous == Some(key) {
-            duplicate_keys += 1;
+    for segment in 0..frame.index().date_segments().len() {
+        let range = frame.index().date_segments().range(segment).unwrap();
+        let mut seen = BTreeSet::new();
+        for row in range {
+            if !seen.insert(frame.index().assets()[row]) {
+                duplicate_keys += 1;
+            }
         }
-        previous = Some(key);
     }
     let sizes: Vec<usize> = (0..frame.index().date_segments().len())
         .map(|segment| {
@@ -260,6 +273,25 @@ mod tests {
         let ret = compute_forward_returns(&frame, "price", &cfg).unwrap();
         assert!((ret[&1][0] - 0.1).abs() < 1e-12);
         assert!((ret[&1][1] + 0.1).abs() < 1e-12);
+    }
+
+    #[test]
+    fn sparse_asset_does_not_skip_a_missing_research_date() {
+        let index = PanelIndex::new(
+            vec![1, 1, 2, 3, 3],
+            vec![AssetId(1), AssetId(2), AssetId(2), AssetId(1), AssetId(2)],
+        )
+        .unwrap();
+        let mut frame = ResearchFrame::new(index);
+        frame
+            .add_numeric("price", "market", vec![10.0, 20.0, 21.0, 12.0, 22.0])
+            .unwrap();
+        let cfg = ForwardReturnConfig::new(vec![2, 1, 2], ReturnKind::Arithmetic).unwrap();
+        assert_eq!(cfg.periods, vec![1, 2]);
+        let ret = compute_forward_returns(&frame, "price", &cfg).unwrap();
+        assert!(ret[&1][0].is_nan());
+        assert!((ret[&1][1] - 0.05).abs() < 1e-12);
+        assert!((ret[&2][0] - 0.2).abs() < 1e-12);
     }
 
     #[test]

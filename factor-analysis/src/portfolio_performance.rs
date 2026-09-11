@@ -126,6 +126,7 @@ fn daily_portfolio_returns(
                     .then_some((frame.index().assets()[row], value))
             })
             .collect();
+        let expected_weight: f64 = position.values().map(|weight| weight.abs()).sum();
         let mut pnl = 0.0_f64;
         let mut represented_weight = 0.0_f64;
         for (&asset, &weight) in position {
@@ -134,8 +135,12 @@ fn daily_portfolio_returns(
                 represented_weight += weight.abs();
             }
         }
+        let coverage_tolerance = 1e-12 * expected_weight.max(1.0);
         output.push(
-            if position.is_empty() || represented_weight <= f64::EPSILON {
+            if position.is_empty()
+                || expected_weight <= f64::EPSILON
+                || represented_weight + coverage_tolerance < expected_weight
+            {
                 f64::NAN
             } else {
                 pnl
@@ -273,5 +278,14 @@ mod tests {
         assert_eq!(report.by_holding_period.len(), 2);
         assert_eq!(report.by_holding_period[&2].portfolio.by_date.len(), 4);
         assert!(report.by_holding_period[&2].gross.returns.observations >= 2);
+    }
+
+    #[test]
+    fn missing_held_asset_return_does_not_silently_shrink_exposure() {
+        let index = PanelIndex::new(vec![1, 1], vec![AssetId(1), AssetId(2)]).unwrap();
+        let frame = ResearchFrame::new(index);
+        let positions = vec![BTreeMap::from([(AssetId(1), 0.5), (AssetId(2), -0.5)])];
+        let returns = daily_portfolio_returns(&frame, &positions, &[0.02, f64::NAN]).unwrap();
+        assert!(returns[0].is_nan());
     }
 }

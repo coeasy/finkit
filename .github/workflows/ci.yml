@@ -91,6 +91,25 @@ jobs:
       - name: Run core docs tests
         run: cargo test -p finkit --doc --locked
 
+  research-test:
+    name: Factor research correctness and SSOT
+    needs: version-consistency
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    env:
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Enforce research single-source-of-truth ownership
+        run: python scripts/check_research_ssot.py
+      - name: Run factor-analysis unit, integration, invariant and doc tests
+        run: cargo test -p finkit-factor-analysis --locked
+
   runtime-integration-tests:
     name: Runtime integration tests
     needs: version-consistency

@@ -118,7 +118,7 @@ Factor research reports support explicit linear commission and slippage assumpti
 - gross performance
 - after-cost performance
 
-The existing portfolio research layer additionally exposes pluggable linear and square-root impact cost models and capacity curves.
+The existing portfolio research layer additionally exposes pluggable linear and square-root impact cost models and capacity curves. Negative or non-finite direct Rust cost-rate inputs are never allowed to manufacture a negative transaction cost.
 
 ### Factor quality metrics
 
@@ -157,7 +157,11 @@ The factor-research validation layer includes:
 
 All random/resampling utilities accept deterministic seeds.
 
-## Critical multi-period semantics
+## Critical panel and horizon semantics
+
+Research input is a date-sorted panel. Every `(timestamp, asset)` key must be unique; duplicate keys are rejected rather than being silently overwritten by map-based portfolio and alignment operations. Numeric and categorical column names are also unique within a `ResearchFrame`.
+
+A forward-return period is measured in **research dates**, not in the next available observation for an individual asset. For `period = 1`, an asset must have a price on the exact next research date. If that asset is missing on the next date, its one-period forward return is `NaN`; Finkit never skips across a missing session and relabels a later price as a one-period return. This prevents sparse-universe data from silently changing the requested prediction horizon.
 
 A multi-day forward factor return is a **research label**, not an independent daily P&L observation.
 
@@ -177,9 +181,9 @@ Daily Portfolio P&L
 Performance / Drawdown / Cost metrics
 ```
 
-For every requested holding period, `FactorStudyReport.performance.by_holding_period` is computed from the daily P&L of the real overlapping cohort portfolio. This is the authoritative strategy-performance surface.
+For every requested holding period, `FactorStudyReport.performance.by_holding_period` is computed from the daily P&L of the real overlapping cohort portfolio. A portfolio date is excluded from performance when a non-zero held weight has no finite asset return; missing held returns are not silently treated as zero or as reduced exposure.
 
-The compatibility `returns.cumulative_returns` field remains a horizon-observation research curve for Alphalens-style analysis and must not be confused with tradable multi-day portfolio equity.
+`FactorStudyReport.returns.factor_returns` remains the horizon-level research diagnostic. `FactorStudyReport.returns.cumulative_returns` is the gross cumulative wealth curve from the corresponding overlapping daily portfolio P&L and is therefore aligned with `performance.by_holding_period[period].gross_cumulative_wealth`. Consumers must not compound overlapping multi-day `factor_returns` directly.
 
 ## Rust APIs
 
@@ -250,7 +254,9 @@ If `turnover` is omitted, after-cost metrics are intentionally omitted rather th
 
 ## FactorStudy contract
 
-The factor-study response schema is version `2`. Request schema versions `1` and `2` remain accepted during the migration period. Schema v2 adds quantitative evaluation configuration and the complete performance section.
+The factor-study response schema is version `2`. Request schema versions `1` and `2` remain accepted during the migration period. Schema v2 adds quantitative evaluation configuration, `execution_lag`, and the complete performance section. When an older schema omits `execution_lag`, the value defaults to `0`, preserving the existing zero-lag behavior.
+
+`execution_lag = N` means a signal formed on research date `t` can first activate a portfolio cohort on research date `t + N`. Holding-period expiry is counted from the activation date, so lagging a signal does not shorten its requested holding period.
 
 Every supported language consumes the same Rust-owned JSON schema. Current surfaces are:
 
@@ -274,6 +280,8 @@ Every supported language consumes the same Rust-owned JSON schema. Current surfa
 
 For factor holding-period performance, Finkit first converts each holding period to actual daily overlapping portfolio P&L, so the annualization remains based on daily observations rather than incorrectly treating every multi-day forward label as an independent period.
 
+Portfolio `gross_target` is enforced subject to `max_abs_weight`. The allocator redistributes uncapped weights while preserving their signs and relative magnitudes; if the requested gross exposure is mathematically infeasible under the cap, the portfolio remains under the target rather than violating the cap.
+
 ## Engineering gates
 
 The quantitative evaluation implementation is protected by:
@@ -282,7 +290,10 @@ The quantitative evaluation implementation is protected by:
 - cross-module equality tests between legacy backtest metrics and the canonical evaluator;
 - HHI/effective-bets equality tests between factor-risk facades and the core owner;
 - no-lookahead and future-mutation locality tests;
-- factor-research unit tests;
+- sparse-panel exact-horizon tests;
+- duplicate panel-key and duplicate-column invariant tests;
+- portfolio cap and missing-held-return tests;
+- permanent factor-research unit/integration/invariant/doc tests in the main CI workflow;
 - workspace all-target compilation;
 - Rust format / lint gates;
 - Java, .NET, C/C++, Python, Node, Android, Go, Swift and WASM binding gates;

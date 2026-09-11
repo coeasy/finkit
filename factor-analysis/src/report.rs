@@ -4,7 +4,7 @@ use crate::analysis::{
     AlphaBeta, WeightConfig,
 };
 use crate::data::ResearchFrame;
-use crate::error::ResearchResult;
+use crate::error::{ResearchError, ResearchResult};
 use crate::factor_metrics::{
     quantile_diagnostics, summarize_ic, IcStatistics, QuantileDiagnostics,
 };
@@ -33,9 +33,8 @@ pub enum AnalysisMode {
 pub struct ReturnsReport {
     /// Horizon return observations used for factor diagnostics and Alphalens parity.
     pub factor_returns: BTreeMap<usize, Vec<f64>>,
-    /// Compatibility cumulative curves over horizon observations. For tradable
-    /// multi-day portfolio performance use `performance.by_holding_period`,
-    /// which correctly models overlapping cohorts using daily P&L.
+    /// Gross cumulative wealth from the tradable overlapping daily P&L for each
+    /// requested holding period. Do not compound multi-day `factor_returns` directly.
     pub cumulative_returns: BTreeMap<usize, Vec<f64>>,
     pub alpha_beta: BTreeMap<usize, AlphaBeta>,
     pub mean_return_by_quantile: BTreeMap<u16, BTreeMap<usize, f64>>,
@@ -103,8 +102,10 @@ impl<'a> FactorStudy<'a> {
         frame: &'a ResearchFrame,
         factor_column: impl Into<String>,
         price_column: impl Into<String>,
-        periods: Vec<usize>,
+        mut periods: Vec<usize>,
     ) -> Self {
+        periods.sort_unstable();
+        periods.dedup();
         Self {
             frame,
             factor_column: factor_column.into(),
@@ -153,6 +154,12 @@ impl<'a> FactorStudy<'a> {
     }
 
     pub fn full_report(&self) -> ResearchResult<FactorStudyReport> {
+        if self.periods.is_empty() || self.periods.iter().any(|&period| period == 0) {
+            return Err(ResearchError::InvalidConfig(
+                "factor study periods must contain at least one positive horizon".to_string(),
+            ));
+        }
+
         // Performance for an H-day factor must use actual daily P&L of overlapping
         // H-day cohorts. Compute the one-day asset return once even when the caller
         // only requested longer research horizons.
@@ -274,7 +281,7 @@ mod tests {
     #[test]
     fn full_report_connects_core_research_chain() {
         let frame = frame();
-        let report = FactorStudy::new(&frame, "factor", "price", vec![1, 2])
+        let report = FactorStudy::new(&frame, "factor", "price", vec![2, 1, 2])
             .quantize_config(QuantizeConfig {
                 quantiles: 3,
                 by_group: None,
@@ -319,5 +326,16 @@ mod tests {
         assert_eq!(report.periods, vec![2]);
         assert!(!report.returns.factor_returns.contains_key(&1));
         assert!(report.performance.by_holding_period.contains_key(&2));
+    }
+
+    #[test]
+    fn empty_or_zero_periods_are_rejected_for_direct_rust_callers() {
+        let frame = frame();
+        assert!(FactorStudy::new(&frame, "factor", "price", Vec::new())
+            .full_report()
+            .is_err());
+        assert!(FactorStudy::new(&frame, "factor", "price", vec![0, 1])
+            .full_report()
+            .is_err());
     }
 }

@@ -2,7 +2,7 @@ use crate::error::{ResearchError, ResearchResult};
 use finkit::features::{Feature, FeatureMatrix};
 use finkit::math::segmented::SegmentLayout;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Dictionary-encoded asset identifier used on research hot paths.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -12,7 +12,7 @@ pub struct AssetId(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct GroupId(pub u32);
 
-/// Sorted `(timestamp, asset)` panel index.
+/// Date-sorted panel index with unique `(timestamp, asset)` keys.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PanelIndex {
     timestamps: Vec<i64>,
@@ -35,6 +35,18 @@ impl PanelIndex {
             ));
         }
         let date_segments = SegmentLayout::from_sorted_keys(&timestamps);
+        for segment in 0..date_segments.len() {
+            let range = date_segments.range(segment).expect("valid date segment");
+            let mut seen = BTreeSet::new();
+            for row in range {
+                if !seen.insert(assets[row]) {
+                    return Err(ResearchError::InvalidConfig(format!(
+                        "PanelIndex contains duplicate (timestamp, asset) key: ({}, {})",
+                        timestamps[row], assets[row].0
+                    )));
+                }
+            }
+        }
         Ok(Self {
             timestamps,
             assets,
@@ -93,15 +105,21 @@ impl ResearchFrame {
         category: impl Into<String>,
         values: Vec<f64>,
     ) -> ResearchResult<()> {
+        let name = name.into();
         if values.len() != self.index.len() {
             return Err(ResearchError::LengthMismatch {
-                name: "numeric column".to_string(),
+                name: format!("numeric column {name}"),
                 expected: self.index.len(),
                 actual: values.len(),
             });
         }
+        if self.numeric.column_by_name(&name).is_some() {
+            return Err(ResearchError::InvalidConfig(format!(
+                "duplicate numeric column: {name}"
+            )));
+        }
         self.numeric
-            .add_column(Feature::new(name, category, 0), values);
+            .add_column(Feature::new(name, category.into(), 0), values);
         Ok(())
     }
 
@@ -113,10 +131,15 @@ impl ResearchFrame {
         let name = name.into();
         if values.len() != self.index.len() {
             return Err(ResearchError::LengthMismatch {
-                name,
+                name: name.clone(),
                 expected: self.index.len(),
                 actual: values.len(),
             });
+        }
+        if self.groups.contains_key(&name) {
+            return Err(ResearchError::InvalidConfig(format!(
+                "duplicate group column: {name}"
+            )));
         }
         self.groups.insert(name, values);
         Ok(())
@@ -170,5 +193,33 @@ mod tests {
             .unwrap();
         assert_eq!(frame.numeric().cols(), 1);
         assert_eq!(frame.index().date_segments().offsets(), &[0, 2, 3]);
+    }
+
+    #[test]
+    fn panel_index_rejects_duplicate_date_asset_keys_even_when_not_adjacent() {
+        let error = PanelIndex::new(
+            vec![1, 1, 1],
+            vec![AssetId(1), AssetId(2), AssetId(1)],
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("duplicate (timestamp, asset)"));
+    }
+
+    #[test]
+    fn frame_rejects_duplicate_column_names() {
+        let index = PanelIndex::new(vec![1, 2], vec![AssetId(1), AssetId(1)]).unwrap();
+        let mut frame = ResearchFrame::new(index);
+        frame
+            .add_numeric("factor", "factor", vec![1.0, 2.0])
+            .unwrap();
+        assert!(frame
+            .add_numeric("factor", "factor", vec![3.0, 4.0])
+            .is_err());
+        frame
+            .add_group("group", vec![GroupId(1), GroupId(1)])
+            .unwrap();
+        assert!(frame
+            .add_group("group", vec![GroupId(2), GroupId(2)])
+            .is_err());
     }
 }
