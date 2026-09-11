@@ -23,6 +23,18 @@ jobs:
         run: python scripts/research_multilang_integrate.py
       - name: Apply generic quant-evaluation multilingual bridges
         run: python scripts/research_quant_eval_integrate.py
+      - name: Normalize current semantic-fixup anchor
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/research_eval_fixups.py')
+          text = path.read_text()
+          old = """    '''        assert_eq!(report.periods, vec![1]);\n        assert!(report.information.mean_ic[&1] > 0.9);''',\n    '''        assert_eq!(report.periods, vec![1]);\n        assert_eq!(report.execution_lag, 0);"""
+          new = """    '''        assert_eq!(report.periods, vec![1, 2]);\n        assert!(report.information.mean_ic[&1] > 0.9);''',\n    '''        assert_eq!(report.periods, vec![1, 2]);\n        assert_eq!(report.execution_lag, 0);"""
+          if old not in text:
+              raise SystemExit('expected report semantic-fixup anchor not found')
+          path.write_text(text.replace(old, new, 1))
+          PY
       - name: Apply evaluation semantic fixups
         run: python scripts/research_eval_fixups.py
       - name: Refresh deterministic lockfile
