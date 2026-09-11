@@ -7,8 +7,9 @@ use crate::data::ResearchFrame;
 use crate::error::ResearchResult;
 use crate::factor_metrics::{quantile_diagnostics, summarize_ic, IcStatistics, QuantileDiagnostics};
 use crate::orchestration::StudyProvenance;
-use crate::performance::{
-    build_performance_report, universe_returns, EvaluationConfig, PerformanceReport,
+use crate::performance::EvaluationConfig;
+use crate::portfolio_performance::{
+    evaluate_factor_holding_periods, FactorPortfolioPerformanceReport,
 };
 use crate::prepare::{
     compute_forward_returns, data_quality, quantize_factor, DataQualityReport, ForwardReturnConfig,
@@ -28,7 +29,11 @@ pub enum AnalysisMode {
 /// Returns section of a factor study.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ReturnsReport {
+    /// Horizon return observations used for factor diagnostics and Alphalens parity.
     pub factor_returns: BTreeMap<usize, Vec<f64>>,
+    /// Compatibility cumulative curves over horizon observations. For tradable
+    /// multi-day portfolio performance use `performance.by_holding_period`,
+    /// which correctly models overlapping cohorts using daily P&L.
     pub cumulative_returns: BTreeMap<usize, Vec<f64>>,
     pub alpha_beta: BTreeMap<usize, AlphaBeta>,
     pub mean_return_by_quantile: BTreeMap<u16, BTreeMap<usize, f64>>,
@@ -63,8 +68,9 @@ pub struct FactorStudyReport {
     pub returns: ReturnsReport,
     pub information: InformationReport,
     pub turnover: TurnoverReport,
-    /// Unified gross/net strategy, risk, benchmark, cost and portfolio evaluation.
-    pub performance: PerformanceReport,
+    /// Tradable daily P&L evaluation for each requested holding period. Multi-day
+    /// periods use overlapping cohorts rather than naively compounding forward returns.
+    pub performance: FactorPortfolioPerformanceReport,
 }
 
 impl FactorStudyReport {
@@ -136,9 +142,23 @@ impl<'a> FactorStudy<'a> {
     }
 
     pub fn full_report(&self) -> ResearchResult<FactorStudyReport> {
+        // Performance for an H-day factor must use actual daily P&L of overlapping
+        // H-day cohorts. Compute the one-day asset return once even when the caller
+        // only requested longer research horizons.
+        let mut calculation_periods = self.periods.clone();
+        if !calculation_periods.contains(&1) {
+            calculation_periods.push(1);
+        }
+        calculation_periods.sort_unstable();
+        calculation_periods.dedup();
         let forward_config =
-            ForwardReturnConfig::new(self.periods.clone(), ReturnKind::Arithmetic)?;
-        let forward = compute_forward_returns(self.frame, &self.price_column, &forward_config)?;
+            ForwardReturnConfig::new(calculation_periods, ReturnKind::Arithmetic)?;
+        let mut forward = compute_forward_returns(self.frame, &self.price_column, &forward_config)?;
+        let daily_asset_returns = forward.get(&1).cloned().unwrap_or_default();
+        if !self.periods.contains(&1) {
+            forward.remove(&1);
+        }
+
         let quantiles = quantize_factor(self.frame, &self.factor_column, &self.quantize)?;
         let weights = factor_weights(self.frame, &self.factor_column, &self.weights)?;
         let factor_ret = factor_returns(self.frame, &weights, &forward)?;
@@ -155,14 +175,14 @@ impl<'a> FactorStudy<'a> {
         let bottom_turnover = quantile_turnover(self.frame, &quantiles, 1, 1)?;
         let top_turnover = quantile_turnover(self.frame, &quantiles, self.quantize.quantiles, 1)?;
         let rank_auto = rank_autocorrelation(self.frame, &self.factor_column, 1)?;
-        let universe = universe_returns(self.frame, &forward);
-        let performance = build_performance_report(
+        let performance = evaluate_factor_holding_periods(
             self.frame,
-            &factor_ret,
-            &universe,
             &weights,
+            &daily_asset_returns,
+            &self.periods,
             self.evaluation,
-        );
+        )?;
+
         Ok(FactorStudyReport {
             mode: self.mode,
             provenance: self.provenance.clone(),
@@ -196,11 +216,13 @@ mod tests {
     use super::*;
     use crate::data::{AssetId, PanelIndex, ResearchFrame};
 
-    #[test]
-    fn full_report_connects_core_research_chain() {
+    fn frame() -> ResearchFrame {
         let index = PanelIndex::new(
-            vec![1, 1, 1, 2, 2, 2, 3, 3, 3],
+            vec![1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4],
             vec![
+                AssetId(1),
+                AssetId(2),
+                AssetId(3),
                 AssetId(1),
                 AssetId(2),
                 AssetId(3),
@@ -218,17 +240,27 @@ mod tests {
             .add_numeric(
                 "factor",
                 "factor",
-                vec![1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 1.0, 2.0, 3.0],
+                vec![
+                    1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 1.0, 2.0, 3.0,
+                ],
             )
             .unwrap();
         frame
             .add_numeric(
                 "price",
                 "market",
-                vec![10.0, 10.0, 10.0, 11.0, 12.0, 13.0, 12.0, 14.0, 16.0],
+                vec![
+                    10.0, 10.0, 10.0, 11.0, 12.0, 13.0, 12.0, 14.0, 16.0, 13.0, 15.0, 18.0,
+                ],
             )
             .unwrap();
-        let report = FactorStudy::new(&frame, "factor", "price", vec![1])
+        frame
+    }
+
+    #[test]
+    fn full_report_connects_core_research_chain() {
+        let frame = frame();
+        let report = FactorStudy::new(&frame, "factor", "price", vec![1, 2])
             .quantize_config(QuantizeConfig {
                 quantiles: 3,
                 by_group: None,
@@ -241,7 +273,7 @@ mod tests {
             })
             .full_report()
             .unwrap();
-        assert_eq!(report.periods, vec![1]);
+        assert_eq!(report.periods, vec![1, 2]);
         assert!(report.information.mean_ic[&1] > 0.9);
         assert!(report.information.statistics[&1].positive_ratio > 0.0);
         assert!(report
@@ -249,13 +281,24 @@ mod tests {
             .quantile_diagnostics
             .spread_by_horizon
             .contains_key(&1));
-        let gross = &report.performance.by_horizon[&1];
-        let net = &report.performance.after_cost_by_horizon[&1];
-        assert!(gross.returns.observations > 0);
-        assert!(gross.benchmark.is_some());
-        assert!(net.returns.total_return <= gross.returns.total_return);
-        assert_eq!(report.performance.portfolio.by_date.len(), 3);
-        assert_eq!(report.performance.portfolio.turnover_by_date.len(), 3);
+        let one_day = &report.performance.by_holding_period[&1];
+        let two_day = &report.performance.by_holding_period[&2];
+        assert!(one_day.gross.returns.observations > 0);
+        assert!(one_day.gross.benchmark.is_some());
+        assert!(one_day.after_cost.returns.total_return <= one_day.gross.returns.total_return);
+        assert_eq!(two_day.portfolio.by_date.len(), 4);
+        assert_eq!(two_day.portfolio.turnover_by_date.len(), 4);
         serde_json::to_string(&report).unwrap();
+    }
+
+    #[test]
+    fn longer_horizon_does_not_require_user_to_request_one_day_output() {
+        let frame = frame();
+        let report = FactorStudy::new(&frame, "factor", "price", vec![2])
+            .full_report()
+            .unwrap();
+        assert_eq!(report.periods, vec![2]);
+        assert!(!report.returns.factor_returns.contains_key(&1));
+        assert!(report.performance.by_holding_period.contains_key(&2));
     }
 }
