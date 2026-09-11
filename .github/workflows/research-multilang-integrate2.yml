@@ -23,17 +23,28 @@ jobs:
         run: python scripts/research_multilang_integrate.py
       - name: Apply generic quant-evaluation multilingual bridges
         run: python scripts/research_quant_eval_integrate.py
-      - name: Normalize current semantic-fixup anchor
+      - name: Normalize current semantic-fixup anchors
         run: |
           python - <<'PY'
           from pathlib import Path
           path = Path('scripts/research_eval_fixups.py')
           text = path.read_text()
-          old = """    '''        assert_eq!(report.periods, vec![1]);\n        assert!(report.information.mean_ic[&1] > 0.9);''',\n    '''        assert_eq!(report.periods, vec![1]);\n        assert_eq!(report.execution_lag, 0);"""
-          new = """    '''        assert_eq!(report.periods, vec![1, 2]);\n        assert!(report.information.mean_ic[&1] > 0.9);''',\n    '''        assert_eq!(report.periods, vec![1, 2]);\n        assert_eq!(report.execution_lag, 0);"""
-          if old not in text:
+
+          helper_old = """    if new in text:\n        return\n"""
+          helper_new = """    if new and new in text:\n        return\n"""
+          if helper_old not in text and helper_new not in text:
+              raise SystemExit('expected semantic-fixup helper anchor not found')
+          if helper_old in text:
+              text = text.replace(helper_old, helper_new, 1)
+
+          report_old = """    '''        assert_eq!(report.periods, vec![1]);\n        assert!(report.information.mean_ic[&1] > 0.9);''',\n    '''        assert_eq!(report.periods, vec![1]);\n        assert_eq!(report.execution_lag, 0);"""
+          report_new = """    '''        assert_eq!(report.periods, vec![1, 2]);\n        assert!(report.information.mean_ic[&1] > 0.9);''',\n    '''        assert_eq!(report.periods, vec![1, 2]);\n        assert_eq!(report.execution_lag, 0);"""
+          if report_old not in text and report_new not in text:
               raise SystemExit('expected report semantic-fixup anchor not found')
-          path.write_text(text.replace(old, new, 1))
+          if report_old in text:
+              text = text.replace(report_old, report_new, 1)
+
+          path.write_text(text)
           PY
       - name: Apply evaluation semantic fixups
         run: python scripts/research_eval_fixups.py
