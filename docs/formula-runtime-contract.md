@@ -9,12 +9,16 @@
 | 入口 | 语义 | 所有权与性能边界 |
 |---|---|---|
 | FormulaEngine.eval | 对 FormulaContext 执行完整公式 | 由调用方管理上下文；复杂公式可产生中间数组 |
-| FormulaEngine.eval_range | 计算半开区间 [start, end) | 自动扩展公式所需 lookback，再裁剪返回结果；结果长度为 end - start |
-| FormulaEngine.eval_last | 返回最后一根结果 | 当前通过最后一个区间求值，属于正确性优先的局部计算，不等同于专用 O(1) 状态机 |
+| FormulaEngine.eval_range | 计算半开区间 [start, end) | 自动扩展公式所需 lookback，再裁剪返回结果；OHLCV 窗口借用，结果长度为 end - start |
+| FormulaEngine.eval_last | 返回最后一根结果 | 对直接字面量 EMA 且连续 append 的上下文使用 O(1) 状态更新；其他公式自动回退到精确 range 计算 |
 | FormulaEngine.eval_zero_copy_inputs | 从连续切片借用 OHLCV 输入 | 同步调用期间借用输入；直接 MA/EMA/RSI/BOLLMID 路径可避免输入 Array1 物化 |
+| FormulaEngine.eval_range_zero_copy_inputs | 借用输入计算半开区间 | 不建立 retained context；适合图表窗口刷新 |
 | Python CompiledFormula.eval | 复用编译计划和引擎执行 | 输入复制到 owned stream context，便于后续 append_bar 和 eval_last |
 | Python CompiledFormula.eval_zero_copy | NumPy 借用路径 | 必须是非空、等长、连续的一维 float64 数组；复杂公式仍可能分配中间数组 |
 | Python CompiledFormula.append_bar | 向 retained context 追加一根 OHLCV | Vec push 为摊销 O(1)；追加后需调用 eval_last 才会重新计算结果 |
+| FormulaContext.append_bar_with_amount | 追加 OHLCV 和可选 amount | 保持 amount 与 bar 数量对齐；缺失 amount 使用 NaN |
+| FormulaEngine.analyze | 静态分析公式 | 返回依赖、lookback、未来数据、状态节点、副作用、流式能力和诊断 |
+| inspect_formula_compatibility | 检查终端兼容性 | 返回 semantic profile 和逐函数 exact/near/approximate/host_required/unsupported 状态 |
 | Python CompiledFormula.reset | 清空 retained context | 保留 compiled plan 和 engine cache；下一次带数组的 eval 建立新 context |
 
 ## 2. 输入契约
@@ -23,7 +27,7 @@
 - amount 为可选输入；如果提供，必须与 OHLCV 等长。
 - eval_zero_copy 和 NumPy zero-copy 入口要求连续的 float64 一维数组；不连续视图应先调用 numpy.ascontiguousarray。
 - 输入数组在 borrowed 同步求值完成前必须保持存活；运行时不得把 borrowed context 保存到下一次调用。
-- append_bar 当前只追加 OHLCV；如果公式依赖 amount，应在扩展该 API 前明确缺失 amount 的 NaN/拒绝策略。
+- append_bar 当前只追加 OHLCV；依赖 amount 的流式调用应使用 append_bar_with_amount，缺失 amount 按 NaN 处理。
 
 ## 3. 输出契约
 
@@ -47,6 +51,7 @@
 对外应使用以下分层表述：
 
 - borrowed input：输入 OHLCV 在同步执行期间可被借用；
+- borrowed range：eval_range 的 OHLCV 子窗口只保存同步调用期间有效的借用视图；不会跨调用逃逸；
 - direct zero-copy kernel：已支持的简单公式可以直接使用输入切片；
 - pooled execution：运行时复用 scratch/buffer，减少重复分配；
 - complex formula：数组型内建函数可能产生中间数组；
@@ -70,6 +75,8 @@
 - 连续与非连续 NumPy 输入行为稳定；
 - owned、borrowed direct kernel、Bytecode 和 optimized 路径在支持范围内一致；
 - 复杂公式的中间分配可解释；
+- 静态分析应能识别依赖、lookback、未来数据和未知函数；
+- 每个外部终端公式应能输出语义 profile 和逐函数兼容状态；
 - 跨 Python、C、Node、CLI 的 golden fixture 保持输出命名、warm-up 和错误类别一致。
 
 ## 8. 版本策略

@@ -18,7 +18,7 @@ Finkit 当前存在明显的“核心计算性能”和“最终 Python 用户�
 2. `ffi/python-binding/finkit/__init__.py` 又对 list 执行 `np.asarray()`，形成 `Rust Vec -> Python list/float objects -> NumPy ndarray` 的二次物化链路。
 3. 多输出指标会把这个成本按输出数量放大。MACD 三数组输出在 1M bars 的耗时接近单输出指标的约 3 倍，与该模型高度一致。
 4. `CompiledFormula.eval_zero_copy()` 已经能够直接借用 NumPy 输入并直接返回 `PyArray1`，说明仓库已有正确技术基础；但普通指标绑定还没有统一走这条路径。
-5. `CompiledFormula.eval()` 与 `eval_range()` 仍会通过 `slice.to_vec()` 复制全部 OHLCV 输入；`result_dict()` 对上下文变量还存在 clone，复杂公式会产生额外内存流量。
+5. `CompiledFormula.eval()` 仍会复制到可追加的 owned context；core `eval_range()` 已改为借用 OHLCV range，复杂公式仍可能产生中间数组。
 6. 当前 CI 的 `performance_regression` 主要验证 Rust 内部相对性能，不会发现 Python wheel 公共 API 的这种数量级回归。
 
 因此，下一阶段优化顺序必须是：
@@ -248,9 +248,9 @@ PyResult<(
 
 ---
 
-## 3.4 Formula `eval_range()` 仍复制完整 OHLCV
+## 3.4 Formula `eval_range()` borrowed range（core 已实现）
 
-当前 `eval_range()` 进入 Rust 后先把完整数组 `to_vec()`，之后 core 才根据 `[start,end)` 和 lookback 处理范围。
+core `eval_range()` 现在根据 `[start,end)` 和 lookback 创建 borrowed OHLCV 子窗口；Python `CompiledFormula.eval_range()` 仍因 retained context 生命周期而复制输入，这是安全的 owned-stream API 约束。
 
 这会让“只计算尾部 100 bars”仍支付整个 1M OHLCV 的 Python->Rust复制成本。
 
@@ -264,7 +264,7 @@ NumPy full input
  -> output requested [start,end)
 ```
 
-验收要求：当输入从 100K 扩到 1M、但请求 range 长度固定为 1K 时，`eval_range()` 延迟不应近似 10x 增长。
+验收要求：core borrowed range 在输入从 100K 扩到 1M、请求 range 长度固定为 1K 时，不应因为 OHLCV 拷贝而近似 10x 增长；Python owned-stream API 单独记录复制成本。
 
 ---
 

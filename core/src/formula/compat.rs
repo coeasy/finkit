@@ -7,12 +7,14 @@
 //! execution engine.
 
 use super::FormulaDialect;
+use crate::formula::analysis::{analyze_formula, FormulaAnalysis};
 
 /// Stable schema identifier for terminal compatibility discovery.
 pub const FORMULA_TERMINAL_SCHEMA_VERSION: &str = "finkit.formula-terminal.v1";
 
 /// Formula source terminal understood by the compatibility layer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum FormulaTerminal {
     /// Native Finkit / AlphaTA-compatible formula syntax.
     Finkit,
@@ -42,6 +44,62 @@ pub enum CompatibilityLevel {
     Native,
     /// A documented common syntax/function subset is supported.
     CommonSubset,
+}
+
+/// Result of checking one formula feature against a terminal contract.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum CompatibilityStatus {
+    Exact,
+    Near,
+    Approximate,
+    HostRequired,
+    Unsupported,
+}
+
+impl CompatibilityStatus {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Exact => "exact",
+            Self::Near => "near",
+            Self::Approximate => "approximate",
+            Self::HostRequired => "host_required",
+            Self::Unsupported => "unsupported",
+        }
+    }
+}
+
+/// Explicit semantic choices used by a terminal adapter.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct SemanticProfile {
+    pub id: String,
+    pub null_policy: String,
+    pub boolean_numeric_policy: String,
+    pub sma_policy: String,
+    pub lookahead_policy: String,
+    pub requires_session_metadata: bool,
+}
+
+/// Function-level compatibility result.  It is intentionally small and
+/// serializable so Python/Node/CLI consumers can show the same report.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct FunctionCompatibility {
+    pub name: String,
+    pub status: CompatibilityStatus,
+    pub message: String,
+}
+
+/// Complete source compatibility report.
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct FormulaCompatibilityReport {
+    pub terminal: FormulaTerminal,
+    pub normalized_source: String,
+    pub profile: SemanticProfile,
+    pub analysis: FormulaAnalysis,
+    pub functions: Vec<FunctionCompatibility>,
 }
 
 impl CompatibilityLevel {
@@ -106,6 +164,119 @@ impl FormulaTerminal {
             Self::TradingView => "pine",
         }
     }
+
+    /// Semantic contract used when importing formulas from this terminal.
+    pub fn semantic_profile(self) -> SemanticProfile {
+        match self {
+            Self::Finkit => SemanticProfile {
+                id: "finkit-native-v1".to_string(),
+                null_policy: "nan-propagating".to_string(),
+                boolean_numeric_policy: "true-is-1".to_string(),
+                sma_policy: "simple-ma".to_string(),
+                lookahead_policy: "disallow-future".to_string(),
+                requires_session_metadata: false,
+            },
+            Self::TongDaXin => SemanticProfile {
+                id: "tdx-v1".to_string(),
+                null_policy: "nan-propagating".to_string(),
+                boolean_numeric_policy: "true-is-1".to_string(),
+                sma_policy: "recursive-sma".to_string(),
+                lookahead_policy: "explicit-only".to_string(),
+                requires_session_metadata: true,
+            },
+            Self::TongHuaShun => SemanticProfile {
+                id: "ths-v1".to_string(),
+                null_policy: "nan-propagating".to_string(),
+                boolean_numeric_policy: "true-is-1".to_string(),
+                sma_policy: "recursive-sma".to_string(),
+                lookahead_policy: "explicit-only".to_string(),
+                requires_session_metadata: true,
+            },
+            Self::EastMoney => SemanticProfile {
+                id: "eastmoney-v1".to_string(),
+                null_policy: "nan-propagating".to_string(),
+                boolean_numeric_policy: "true-is-1".to_string(),
+                sma_policy: "recursive-sma".to_string(),
+                lookahead_policy: "explicit-only".to_string(),
+                requires_session_metadata: true,
+            },
+            Self::TradingView => SemanticProfile {
+                id: "pine-v5-subset-v1".to_string(),
+                null_policy: "na-propagating".to_string(),
+                boolean_numeric_policy: "bool-context".to_string(),
+                sma_policy: "ta.sma".to_string(),
+                lookahead_policy: "request-security-controlled".to_string(),
+                requires_session_metadata: true,
+            },
+        }
+    }
+}
+
+/// Parse and inspect a source formula for a declared terminal.
+pub fn inspect_formula_compatibility(
+    source: &str,
+    terminal: FormulaTerminal,
+) -> Result<FormulaCompatibilityReport, String> {
+    let normalized_source = normalize_terminal_source(source, terminal);
+    let ast = super::parse_formula_with_dialect(&normalized_source, terminal.canonical_dialect())?;
+    let analysis = analyze_formula(&ast);
+    let functions = analysis
+        .called_functions
+        .iter()
+        .map(|name| {
+            let status = if analysis.unknown_functions.contains(name) {
+                if matches!(
+                    name.as_str(),
+                    "SECURITY"
+                        | "REQUEST.SECURITY"
+                        | "CAPITAL"
+                        | "FINANCE"
+                        | "DYNAINFO"
+                        | "WINNER"
+                        | "COST"
+                ) {
+                    CompatibilityStatus::HostRequired
+                } else {
+                    CompatibilityStatus::Unsupported
+                }
+            } else if analysis.has_future_data
+                && matches!(name.as_str(), "REFX" | "BACKSET" | "FUTURE")
+            {
+                CompatibilityStatus::Approximate
+            } else if terminal == FormulaTerminal::Finkit {
+                CompatibilityStatus::Exact
+            } else {
+                CompatibilityStatus::Near
+            };
+            let message = match status {
+                CompatibilityStatus::Exact => "native runtime implementation".to_string(),
+                CompatibilityStatus::Near => {
+                    "mapped through the canonical AlphaTA runtime".to_string()
+                }
+                CompatibilityStatus::Approximate => {
+                    "future-data semantics need explicit review".to_string()
+                }
+                CompatibilityStatus::HostRequired => {
+                    "requires host-provided market/session metadata".to_string()
+                }
+                CompatibilityStatus::Unsupported => {
+                    "no compatible runtime implementation is registered".to_string()
+                }
+            };
+            FunctionCompatibility {
+                name: name.clone(),
+                status,
+                message,
+            }
+        })
+        .collect();
+    Ok(FormulaCompatibilityReport {
+        terminal,
+        normalized_source,
+        profile: terminal.semantic_profile(),
+        analysis,
+        functions,
+    })
 }
 
 /// Normalize transport-level source differences before parsing.
@@ -201,5 +372,22 @@ mod tests {
         let source = "\u{feff}MA5:=MA(CLOSE,5);\r\nCROSS(CLOSE,MA5);\r";
         let normalized = normalize_terminal_source(source, FormulaTerminal::TongDaXin);
         assert_eq!(normalized, "MA5:=MA(CLOSE,5);\nCROSS(CLOSE,MA5);\n");
+    }
+
+    #[test]
+    fn compatibility_report_exposes_semantics_and_host_requirements() {
+        let report = inspect_formula_compatibility(
+            "X:=MA(CLOSE,5); X + SECURITY(CLOSE, 'WEEK')",
+            FormulaTerminal::TongDaXin,
+        )
+        .unwrap();
+        assert_eq!(report.profile.sma_policy, "recursive-sma");
+        assert!(report
+            .functions
+            .iter()
+            .any(|item| item.name == "MA" && item.status == CompatibilityStatus::Near));
+        assert!(report.functions.iter().any(|item| {
+            item.name == "SECURITY" && item.status == CompatibilityStatus::HostRequired
+        }));
     }
 }

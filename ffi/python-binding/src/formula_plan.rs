@@ -5,7 +5,9 @@
 //! The NumPy zero-copy entry point requires contiguous float64 arrays and keeps
 //! the evaluation under the GIL while borrowing their memory.
 
-use ::finkit::formula::{CompiledFormula, FormulaContext, FormulaEngine};
+use ::finkit::formula::{
+    inspect_formula_compatibility, CompiledFormula, FormulaContext, FormulaEngine,
+};
 use ndarray::Array1;
 use numpy::{PyArray1, PyReadonlyArray1};
 use pyo3::prelude::*;
@@ -136,6 +138,81 @@ impl PyCompiledFormula {
     #[getter]
     fn source(&self) -> &str {
         &self.source
+    }
+
+    /// Return dependency, lookback, future-data and streaming diagnostics.
+    fn analyze<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let analysis = self
+            .engine
+            .as_ref()
+            .expect("compiled formula engine is available")
+            .analyze_ast(&self.compiled.ast);
+        let output = PyDict::new(py);
+        output.set_item("input_variables", analysis.input_variables)?;
+        output.set_item("assigned_variables", analysis.assigned_variables)?;
+        output.set_item("called_functions", analysis.called_functions)?;
+        output.set_item("unknown_functions", analysis.unknown_functions)?;
+        output.set_item("required_lookback", analysis.required_lookback)?;
+        output.set_item("estimated_nodes", analysis.estimated_nodes)?;
+        output.set_item("estimated_cost", analysis.estimated_cost)?;
+        output.set_item("has_future_data", analysis.has_future_data)?;
+        output.set_item("has_stateful_functions", analysis.has_stateful_functions)?;
+        output.set_item("has_observable_effects", analysis.has_observable_effects)?;
+        output.set_item("has_control_flow", analysis.has_control_flow)?;
+        output.set_item("supports_streaming", analysis.supports_streaming)?;
+        let diagnostics: Vec<_> = analysis
+            .diagnostics
+            .iter()
+            .map(|item| {
+                let dict = PyDict::new(py);
+                dict.set_item("code", &item.code)?;
+                dict.set_item("level", format!("{:?}", item.level))?;
+                dict.set_item("message", &item.message)?;
+                Ok::<_, PyErr>(dict.into_any())
+            })
+            .collect::<PyResult<_>>()?;
+        output.set_item("diagnostics", diagnostics)?;
+        Ok(output)
+    }
+
+    /// Inspect terminal-specific semantic compatibility without evaluation.
+    #[pyo3(signature = (terminal = "finkit"))]
+    fn compatibility_report<'py>(
+        &self,
+        py: Python<'py>,
+        terminal: &str,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let terminal = ::finkit::formula::FormulaTerminal::from_str(terminal).ok_or_else(|| {
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                "unknown formula terminal: {terminal}"
+            ))
+        })?;
+        let report = inspect_formula_compatibility(&self.source, terminal)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyValueError, _>(error))?;
+        let output = PyDict::new(py);
+        output.set_item("terminal", terminal.as_str())?;
+        output.set_item("normalized_source", report.normalized_source)?;
+        output.set_item("profile_id", report.profile.id)?;
+        output.set_item("null_policy", report.profile.null_policy)?;
+        output.set_item("sma_policy", report.profile.sma_policy)?;
+        output.set_item("lookahead_policy", report.profile.lookahead_policy)?;
+        output.set_item(
+            "requires_session_metadata",
+            report.profile.requires_session_metadata,
+        )?;
+        let functions: Vec<_> = report
+            .functions
+            .iter()
+            .map(|item| {
+                let dict = PyDict::new(py);
+                dict.set_item("name", &item.name)?;
+                dict.set_item("status", item.status.as_str())?;
+                dict.set_item("message", &item.message)?;
+                Ok::<_, PyErr>(dict.into_any())
+            })
+            .collect::<PyResult<_>>()?;
+        output.set_item("functions", functions)?;
+        Ok(output)
     }
 
     /// Evaluate using the pooled engine. Inputs are copied into the owned
@@ -299,6 +376,77 @@ impl PyCompiledFormula {
         let output = PyDict::new(py);
         output.set_item("__result__", PyArray1::from_vec(py, result.into_raw_vec()))?;
         self.stream_context = Some(context);
+        Ok(output)
+    }
+
+    /// Evaluate a half-open range while borrowing contiguous NumPy inputs.
+    /// Unlike `eval_range`, this method does not establish an owned retained
+    /// stream context and is intended for repeated chart-window refreshes.
+    #[pyo3(signature = (open, high, low, close, volume, start, end, amount=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn eval_range_zero_copy<'py>(
+        &mut self,
+        py: Python<'py>,
+        open: PyReadonlyArray1<'py, f64>,
+        high: PyReadonlyArray1<'py, f64>,
+        low: PyReadonlyArray1<'py, f64>,
+        close: PyReadonlyArray1<'py, f64>,
+        volume: PyReadonlyArray1<'py, f64>,
+        start: usize,
+        end: usize,
+        amount: Option<PyReadonlyArray1<'py, f64>>,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let open = open.as_slice().map_err(|error| {
+            PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!("open: {error}"))
+        })?;
+        let high = high.as_slice().map_err(|error| {
+            PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!("high: {error}"))
+        })?;
+        let low = low.as_slice().map_err(|error| {
+            PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!("low: {error}"))
+        })?;
+        let close = close.as_slice().map_err(|error| {
+            PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!("close: {error}"))
+        })?;
+        let volume = volume.as_slice().map_err(|error| {
+            PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!("volume: {error}"))
+        })?;
+        let amount = amount
+            .as_ref()
+            .map(|array| {
+                array.as_slice().map_err(|error| {
+                    PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!("amount: {error}"))
+                })
+            })
+            .transpose()?;
+        let data_len = validate_lengths(open, high, low, close, volume, amount)?;
+        if start > end || end > data_len {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "eval_range_zero_copy expects 0 <= start <= end <= input length",
+            ));
+        }
+        let engine = self.engine.take().ok_or_else(|| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "compiled formula is already being evaluated",
+            )
+        })?;
+        let result = engine
+            .eval_range_zero_copy_inputs(
+                &self.compiled,
+                open,
+                high,
+                low,
+                close,
+                volume,
+                amount,
+                start,
+                end,
+            )
+            .map_err(formula_runtime_error);
+        self.engine = Some(engine);
+        let result = result?;
+        let output = PyDict::new(py);
+        output.set_item("__result__", PyArray1::from_vec(py, result.into_raw_vec()))?;
         Ok(output)
     }
 

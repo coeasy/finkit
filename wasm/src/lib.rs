@@ -7,7 +7,8 @@ use wasm_bindgen::prelude::*;
 use finkit::composite::{CompositeDefinition, CompositeEngine, CompositeExpr, CompositeOp};
 use finkit::factors::FactorContext;
 use finkit::formula::{
-    parse_formula, DrawCommand, FormulaContext, FormulaEngine, FormulaTemplates,
+    inspect_formula_compatibility, parse_formula, DrawCommand, FormulaContext, FormulaEngine,
+    FormulaTemplates, FormulaTerminal,
 };
 use finkit::indicators;
 use finkit::math::moving_avg;
@@ -1270,6 +1271,26 @@ pub fn formula_eval_multi(
 #[wasm_bindgen]
 pub fn formula_validate(source: &str) -> bool {
     parse_formula(source).is_ok()
+}
+
+#[wasm_bindgen]
+pub fn formula_analyze(source: &str) -> Result<JsValue, JsError> {
+    let mut engine = FormulaEngine::new();
+    let formula = engine.compile(source).map_err(to_js)?;
+    let analysis = engine.analyze_ast(&formula.ast);
+    serde_wasm_bindgen::to_value(&analysis).map_err(to_js)
+}
+
+#[wasm_bindgen]
+pub fn formula_compatibility_report(
+    source: &str,
+    terminal: Option<String>,
+) -> Result<JsValue, JsError> {
+    let terminal_name = terminal.as_deref().unwrap_or("finkit");
+    let terminal = FormulaTerminal::from_str(terminal_name)
+        .ok_or_else(|| JsError::new("unknown formula terminal"))?;
+    let report = inspect_formula_compatibility(source, terminal).map_err(to_js)?;
+    serde_wasm_bindgen::to_value(&report).map_err(to_js)
 }
 
 #[wasm_bindgen(getter_with_clone)]

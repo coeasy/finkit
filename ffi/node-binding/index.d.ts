@@ -1370,6 +1370,23 @@ export declare function formulaListCategories(): Array<string>
  * @returns `true` if the formula is syntactically valid, `false` otherwise.
  */
 export declare function formulaValidate(source: string): boolean
+export interface FormulaAnalysisResult {
+    inputVariables: Array<string>
+    assignedVariables: Array<string>
+    calledFunctions: Array<string>
+    unknownFunctions: Array<string>
+    requiredLookback: number | null
+    estimatedNodes: number
+    estimatedCost: number
+    hasFutureData: boolean
+    hasStatefulFunctions: boolean
+    hasObservableEffects: boolean
+    hasControlFlow: boolean
+    supportsStreaming: boolean
+    diagnostics: Array<string>
+}
+export declare function formulaAnalyze(source: string): FormulaAnalysisResult
+export declare function formulaCompatibilityReport(source: string, terminal?: string): string
 /**
  * Execute a trading formula with JIT compilation
  *

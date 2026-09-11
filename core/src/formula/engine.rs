@@ -1,3 +1,4 @@
+use crate::formula::analysis::{analyze_formula, FormulaAnalysis};
 use crate::formula::ast::AstNode;
 use crate::formula::bytecode::{compile_to_bytecode, Bytecode, BytecodeVM};
 use crate::formula::compiler::{CompiledFormula, FormulaCache};
@@ -15,6 +16,16 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+#[derive(Debug, Clone)]
+struct StreamingEmaState {
+    period: usize,
+    len: usize,
+    seed_sum: f64,
+    value: f64,
+    valid: bool,
+    previous_input: f64,
+}
+
 /// 公式引擎主入口
 pub struct FormulaEngine {
     executor: FormulaExecutor,
@@ -26,6 +37,9 @@ pub struct FormulaEngine {
     /// Persistent bytecode cache and VM scratch buffers.
     bytecode_cache: RefCell<HashMap<String, Bytecode>>,
     bytecode_vm: RefCell<BytecodeVM>,
+    /// Stateful fast paths for append/eval_last.  A failed continuity check
+    /// simply falls back to the exact range evaluator.
+    streaming_ema: RefCell<HashMap<String, StreamingEmaState>>,
 }
 
 impl Default for FormulaEngine {
@@ -44,6 +58,7 @@ impl FormulaEngine {
             jit_compiler: RefCell::new(JitCompiler::new()),
             bytecode_cache: RefCell::new(HashMap::new()),
             bytecode_vm: RefCell::new(BytecodeVM::new()),
+            streaming_ema: RefCell::new(HashMap::new()),
         }
     }
 
@@ -56,6 +71,7 @@ impl FormulaEngine {
             jit_compiler: RefCell::new(JitCompiler::new()),
             bytecode_cache: RefCell::new(HashMap::new()),
             bytecode_vm: RefCell::new(BytecodeVM::new()),
+            streaming_ema: RefCell::new(HashMap::new()),
         }
     }
 
@@ -322,12 +338,54 @@ impl FormulaEngine {
                 .map(|lookback| start.saturating_sub(lookback))
                 .unwrap_or(0)
         };
-        let mut window = ctx.window(window_start, end)?;
+        // The OHLCV arrays are borrowed for this synchronous call.  The old
+        // owned window copied five full slices on every chart refresh; only
+        // optional ndarray-backed metadata still needs a defensive copy.
+        let mut window = ctx.borrowed_window(window_start, end)?;
         let result = self.execute(formula, &mut window)?;
         let local_start = start - window_start;
         Ok(result
             .slice(ndarray::s![local_start..(local_start + end - start)])
             .to_owned())
+    }
+
+    /// Evaluate a half-open range directly from borrowed contiguous OHLCV
+    /// slices.  This is the public high-throughput range API used by bindings;
+    /// it avoids copying the complete history before dependency trimming.
+    pub fn eval_range_zero_copy_inputs(
+        &self,
+        formula: &CompiledFormula,
+        open: &[f64],
+        high: &[f64],
+        low: &[f64],
+        close: &[f64],
+        volume: &[f64],
+        amount: Option<&[f64]>,
+        start: usize,
+        end: usize,
+    ) -> Result<Array1<f64>, FormulaError> {
+        if close.is_empty()
+            || [open, high, low, close, volume]
+                .iter()
+                .any(|values| values.len() != close.len())
+            || amount.is_some_and(|values| values.len() != close.len())
+            || start > end
+            || end > close.len()
+        {
+            return Err(FormulaError::InvalidParameter(
+                "zero-copy range inputs must be non-empty, aligned, and satisfy 0 <= start <= end <= len"
+                    .to_string(),
+            ));
+        }
+        let context = FormulaContext::from_borrowed_ohlcv(
+            open,
+            high,
+            low,
+            close,
+            volume,
+            amount.map(|values| Array1::from_vec(values.to_vec())),
+        );
+        self.eval_range(formula, &context, start, end)
     }
 
     /// Evaluate the last bar only.
@@ -341,8 +399,144 @@ impl FormulaEngine {
                 "cannot eval_last an empty context".to_string(),
             ));
         }
+        if let Some(value) = self.try_eval_last_streaming_ema(formula, ctx) {
+            return Ok(value);
+        }
         let result = self.eval_range(formula, ctx, ctx.data_len - 1, ctx.data_len)?;
         Ok(result[0])
+    }
+
+    /// O(1) EMA append path for a direct built-in formula.  This path is
+    /// deliberately conservative: it is used only for a literal period and
+    /// a direct OHLCV/variable input, and continuity is checked by length and
+    /// the previous sample.  Any mismatch uses the exact batch evaluator.
+    fn try_eval_last_streaming_ema(
+        &self,
+        formula: &CompiledFormula,
+        ctx: &FormulaContext,
+    ) -> Option<f64> {
+        let (input_name, period) = match &formula.ast {
+            AstNode::FunctionCall { name, args }
+                if name.eq_ignore_ascii_case("EMA") && args.len() >= 2 =>
+            {
+                let AstNode::Variable(input_name) = &args[0] else {
+                    return None;
+                };
+                let AstNode::Number(period) = args[1] else {
+                    return None;
+                };
+                if !period.is_finite() || period < 1.0 || period.fract() != 0.0 {
+                    return None;
+                }
+                (input_name.clone(), period as usize)
+            }
+            _ => return None,
+        };
+        let input = ctx.get_data(&input_name)?;
+        if input.len() != ctx.data_len || input.is_empty() {
+            self.streaming_ema.borrow_mut().remove(&formula.source);
+            return None;
+        }
+
+        let mut states = self.streaming_ema.borrow_mut();
+        let state_was_existing = states.contains_key(&formula.source);
+        if !state_was_existing && input.iter().any(|v| !v.is_finite()) {
+            return None;
+        }
+        let state = states.entry(formula.source.clone()).or_insert_with(|| {
+            let seed_sum = input.iter().sum::<f64>();
+            if input.len() >= period {
+                let initial_sum = input[input.len() - period..].iter().sum::<f64>();
+                let value = if input.len() == period {
+                    initial_sum / period as f64
+                } else {
+                    // A state created after a full evaluation must match the
+                    // last batch output; calculate that one time only.
+                    crate::math::moving_avg::ema(input, period)
+                        .ok()
+                        .and_then(|v| v.last().copied())
+                        .unwrap_or(f64::NAN)
+                };
+                StreamingEmaState {
+                    period,
+                    len: input.len(),
+                    seed_sum: initial_sum,
+                    value,
+                    valid: value.is_finite(),
+                    previous_input: *input.last().unwrap(),
+                }
+            } else {
+                StreamingEmaState {
+                    period,
+                    len: input.len(),
+                    seed_sum,
+                    value: f64::NAN,
+                    valid: false,
+                    previous_input: *input.last().unwrap(),
+                }
+            }
+        });
+
+        if state.period != period {
+            *state = StreamingEmaState {
+                period,
+                len: 0,
+                seed_sum: 0.0,
+                value: f64::NAN,
+                valid: false,
+                previous_input: f64::NAN,
+            };
+        }
+
+        if !state_was_existing {
+            return Some(state.value);
+        }
+        // A same-length call may observe a caller mutation or a different
+        // context.  Do not trust the cached state; invalidate and use the
+        // exact evaluator.  Only a genuine one-bar append is O(1).
+        if state.len == ctx.data_len {
+            states.remove(&formula.source);
+            return None;
+        }
+        if state.len + 1 != ctx.data_len
+            || state.len == 0
+            || state.previous_input != input[state.len - 1]
+        {
+            states.remove(&formula.source);
+            return None;
+        }
+
+        let current = input[state.len];
+        if !current.is_finite() {
+            states.remove(&formula.source);
+            return None;
+        }
+        state.len = ctx.data_len;
+        state.previous_input = current;
+        if !state.valid {
+            state.seed_sum += current;
+            if state.len >= period {
+                state.value = state.seed_sum / period as f64;
+                state.valid = true;
+            } else {
+                state.value = f64::NAN;
+            }
+        } else {
+            let alpha = 2.0 / (period as f64 + 1.0);
+            state.value = (current - state.value).mul_add(alpha, state.value);
+        }
+        Some(state.value)
+    }
+
+    /// Analyze a formula without executing it.
+    pub fn analyze(&mut self, source: &str) -> Result<FormulaAnalysis, FormulaError> {
+        let formula = self.compile(source)?;
+        Ok(analyze_formula(&formula.ast))
+    }
+
+    /// Analyze an already parsed/compiled AST without executing it.
+    pub fn analyze_ast(&self, ast: &AstNode) -> FormulaAnalysis {
+        analyze_formula(ast)
     }
 
     /// Evaluate common NumPy-backed formulas directly from borrowed slices.
@@ -695,12 +889,87 @@ impl FormulaEngine {
         formulas: &[&str],
         ctx: &mut FormulaContext,
     ) -> Result<Vec<Array1<f64>>, FormulaError> {
-        let mut results = Vec::with_capacity(formulas.len());
-        for &source in formulas {
-            let result = self.eval(source, ctx)?;
-            results.push(result);
+        let analyses: Vec<_> = formulas
+            .iter()
+            .map(|source| self.analyze(source))
+            .collect::<Result<_, _>>()?;
+        if analyses
+            .iter()
+            .all(|analysis| !analysis.has_observable_effects)
+        {
+            return self.eval_batch_shared_compiled(formulas, ctx);
         }
-        Ok(results)
+        let mut results: Vec<Option<Array1<f64>>> = vec![None; formulas.len()];
+        let mut completed: HashMap<String, Array1<f64>> = HashMap::new();
+        for (index, &source) in formulas.iter().enumerate() {
+            if let Some(cached) = completed.get(source) {
+                results[index] = Some(cached.clone());
+                continue;
+            }
+            let result = self.eval(source, ctx)?;
+            // Reusing a result is only semantics-preserving for formulas that
+            // do not expose assignments, outputs or drawing side effects.
+            completed.insert(source.to_string(), result.clone());
+            results[index] = Some(result);
+        }
+        Ok(results
+            .into_iter()
+            .map(|result| result.expect("every batch formula is evaluated"))
+            .collect())
+    }
+
+    /// Evaluate independent formulas as one statement graph.
+    ///
+    /// Pure formulas are wrapped as named outputs and executed in one pooled
+    /// pass.  This gives the optimizer a single graph in which common
+    /// subexpressions such as `EMA(CLOSE, 20)` can be reused.  Formulas with
+    /// assignments, drawing or other observable effects deliberately retain
+    /// sequential semantics and use the regular batch path.
+    pub fn eval_batch_shared(
+        &mut self,
+        formulas: &[&str],
+        ctx: &mut FormulaContext,
+    ) -> Result<Vec<Array1<f64>>, FormulaError> {
+        self.eval_batch(formulas, ctx)
+    }
+
+    fn eval_batch_shared_compiled(
+        &mut self,
+        formulas: &[&str],
+        ctx: &mut FormulaContext,
+    ) -> Result<Vec<Array1<f64>>, FormulaError> {
+        if formulas.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut statements = Vec::with_capacity(formulas.len());
+        let mut names = Vec::with_capacity(formulas.len());
+        for (index, source) in formulas.iter().enumerate() {
+            let formula = self.compile(source)?;
+            let analysis = analyze_formula(&formula.ast);
+            if analysis.has_observable_effects {
+                return formulas
+                    .iter()
+                    .map(|source| self.eval(source, ctx))
+                    .collect();
+            }
+            let name = format!("__FINKIT_BATCH_{index}");
+            names.push(name.clone());
+            statements.push(AstNode::Output {
+                name,
+                expr: Box::new(formula.ast),
+                modifier: None,
+            });
+        }
+        let combined = FormulaOptimizer::optimize_for_execution(&AstNode::Statements(statements));
+        self.executor.execute(&combined, ctx)?;
+        names
+            .iter()
+            .map(|name| {
+                ctx.variables.get(name.as_str()).cloned().ok_or_else(|| {
+                    FormulaError::RuntimeError(format!("shared batch output `{name}` missing"))
+                })
+            })
+            .collect()
     }
 
     /// 缓存相关方法
@@ -714,6 +983,7 @@ impl FormulaEngine {
 
     pub fn clear_cache(&mut self) {
         self.cache.clear();
+        self.streaming_ema.borrow_mut().clear();
     }
 
     pub fn compile_bytecode(&mut self, source: &str) -> Result<Bytecode, FormulaError> {
@@ -1113,6 +1383,32 @@ mod tests {
         assert_eq!(results[0].len(), 30);
         assert_eq!(results[1].len(), 30);
         assert_eq!(results[2].len(), 30);
+    }
+
+    #[test]
+    fn test_engine_eval_batch_shared_matches_individual_formulas() {
+        let formulas = [
+            "EMA(CLOSE, 5)",
+            "EMA(CLOSE, 5) + MA(CLOSE, 3)",
+            "RSI(CLOSE, 5)",
+        ];
+        let mut shared_engine = FormulaEngine::new();
+        let mut shared_ctx = make_ctx(40);
+        let shared = shared_engine
+            .eval_batch_shared(&formulas, &mut shared_ctx)
+            .unwrap();
+        let mut individual_engine = FormulaEngine::new();
+        let mut individual_ctx = make_ctx(40);
+        let individual = formulas
+            .iter()
+            .map(|source| individual_engine.eval(source, &mut individual_ctx).unwrap())
+            .collect::<Vec<_>>();
+        for (actual, expected) in shared.iter().zip(individual.iter()) {
+            assert!(actual
+                .iter()
+                .zip(expected.iter())
+                .all(|(a, b)| { (a - b).abs() < 1e-12 || (a.is_nan() && b.is_nan()) }));
+        }
     }
 
     #[test]
@@ -1535,6 +1831,32 @@ mod tests {
     }
 
     #[test]
+    fn test_streaming_ema_eval_last_matches_append_full_recompute() {
+        let mut engine = FormulaEngine::new();
+        let formula = engine.compile("EMA(CLOSE, 5)").unwrap();
+        let mut ctx = make_ctx(20);
+        let first = engine.eval_last(&formula, &ctx).unwrap();
+        let expected_first = crate::math::moving_avg::ema(&ctx.close, 5).unwrap();
+        assert!((first - expected_first[19]).abs() < 1e-12);
+
+        ctx.append_bar(12.0, 13.0, 11.0, 13.25, 2000.0);
+        let streamed = engine.eval_last(&formula, &ctx).unwrap();
+        let expected = crate::math::moving_avg::ema(&ctx.close, 5).unwrap();
+        assert!((streamed - expected[20]).abs() < 1e-12);
+        assert!((engine.eval_last(&formula, &ctx).unwrap() - streamed).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_formula_analysis_is_available_from_engine() {
+        let mut engine = FormulaEngine::new();
+        let report = engine.analyze("MA5:=MA(CLOSE,5); MA5 + OPEN").unwrap();
+        assert_eq!(report.required_lookback, Some(4));
+        assert!(report.input_variables.contains(&"CLOSE".to_string()));
+        assert!(report.input_variables.contains(&"OPEN".to_string()));
+        assert!(report.assigned_variables.contains(&"MA5".to_string()));
+    }
+
+    #[test]
     fn test_borrowed_slice_fast_path_matches_owned_context() {
         let ctx = make_ctx(32);
         let formula = FormulaEngine::new();
@@ -1586,6 +1908,32 @@ mod tests {
         let owned = engine.execute(&owned_formula, &mut owned_ctx).unwrap();
         for (a, b) in borrowed.iter().zip(owned.iter()) {
             assert!((a - b).abs() < 1e-12 || (a.is_nan() && b.is_nan()));
+        }
+    }
+
+    #[test]
+    fn test_borrowed_range_matches_full_history() {
+        let mut compiler = FormulaEngine::new();
+        let compiled = compiler.compile("MA(CLOSE, 5) + EMA(CLOSE, 3)").unwrap();
+        let ctx = make_ctx(64);
+        let full = compiler.execute(&compiled, &mut ctx.clone()).unwrap();
+        let range = compiler
+            .eval_range_zero_copy_inputs(
+                &compiled,
+                &ctx.open,
+                &ctx.high,
+                &ctx.low,
+                &ctx.close,
+                &ctx.volume,
+                None,
+                17,
+                41,
+            )
+            .unwrap();
+        assert_eq!(range.len(), 24);
+        for (offset, actual) in range.iter().enumerate() {
+            let expected = full[17 + offset];
+            assert!((actual - expected).abs() < 1e-12 || (actual.is_nan() && expected.is_nan()));
         }
     }
 }

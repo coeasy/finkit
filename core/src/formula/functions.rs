@@ -17,7 +17,8 @@ use crate::math::linear as lib_linear;
 use crate::math::moving_avg as lib_ma;
 use crate::math::statistics as lib_stat;
 
-type FormulaFn = fn(&FormulaContext, &[Array1<f64>]) -> Result<Array1<f64>, FormulaError>;
+pub(crate) type FormulaFn =
+    fn(&FormulaContext, &[Array1<f64>]) -> Result<Array1<f64>, FormulaError>;
 
 fn nan_vec(len: usize) -> Array1<f64> {
     Array1::from_elem(len, f64::NAN)

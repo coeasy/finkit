@@ -284,7 +284,9 @@ fn composite_input_expression_napi(
 }
 
 #[cfg(feature = "formula")]
-use finkit::formula::{parse_formula, FormulaContext, FormulaEngine, FormulaError};
+use finkit::formula::{
+    parse_formula, FormulaContext, FormulaEngine, FormulaError, FormulaTerminal,
+};
 #[cfg(feature = "formula")]
 use ndarray::Array1;
 
@@ -2213,6 +2215,67 @@ pub fn formula_list_categories() -> Result<Vec<String>> {
 #[cfg(feature = "formula")]
 pub fn formula_validate(source: String) -> bool {
     parse_formula(&source).is_ok()
+}
+
+/// Static dependency and execution analysis for a formula.
+#[napi(object)]
+#[cfg(feature = "formula")]
+pub struct FormulaAnalysisResult {
+    pub input_variables: Vec<String>,
+    pub assigned_variables: Vec<String>,
+    pub called_functions: Vec<String>,
+    pub unknown_functions: Vec<String>,
+    pub required_lookback: Option<u32>,
+    pub estimated_nodes: u32,
+    pub estimated_cost: u32,
+    pub has_future_data: bool,
+    pub has_stateful_functions: bool,
+    pub has_observable_effects: bool,
+    pub has_control_flow: bool,
+    pub supports_streaming: bool,
+    pub diagnostics: Vec<String>,
+}
+
+#[napi]
+#[cfg(feature = "formula")]
+pub fn formula_analyze(source: String) -> Result<FormulaAnalysisResult> {
+    let mut engine = FormulaEngine::new();
+    let formula = engine.compile(&source).map_err(formula_error_to_napi)?;
+    let analysis = engine.analyze_ast(&formula.ast);
+    Ok(FormulaAnalysisResult {
+        input_variables: analysis.input_variables,
+        assigned_variables: analysis.assigned_variables,
+        called_functions: analysis.called_functions,
+        unknown_functions: analysis.unknown_functions,
+        required_lookback: analysis.required_lookback.map(|v| v as u32),
+        estimated_nodes: analysis.estimated_nodes as u32,
+        estimated_cost: analysis.estimated_cost as u32,
+        has_future_data: analysis.has_future_data,
+        has_stateful_functions: analysis.has_stateful_functions,
+        has_observable_effects: analysis.has_observable_effects,
+        has_control_flow: analysis.has_control_flow,
+        supports_streaming: analysis.supports_streaming,
+        diagnostics: analysis
+            .diagnostics
+            .into_iter()
+            .map(|item| format!("{}: {}", item.code, item.message))
+            .collect(),
+    })
+}
+
+/// Return a JSON compatibility report for a terminal dialect.
+#[napi]
+#[cfg(feature = "formula")]
+pub fn formula_compatibility_report(source: String, terminal: Option<String>) -> Result<String> {
+    let terminal = terminal.as_deref().unwrap_or("finkit").to_string();
+    let terminal = FormulaTerminal::from_str(&terminal)
+        .ok_or_else(|| Error::new(Status::InvalidArg, "unknown formula terminal"))?;
+    finkit::formula::inspect_formula_compatibility(&source, terminal)
+        .map_err(|error| Error::new(Status::InvalidArg, error))
+        .and_then(|report| {
+            serde_json::to_string(&report)
+                .map_err(|error| Error::new(Status::GenericFailure, error.to_string()))
+        })
 }
 
 /// Execute a trading formula with JIT compilation

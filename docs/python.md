@@ -1,31 +1,31 @@
 # Python Guide
 
-Finkit Python uses PyO3 + maturin and ships `v0.1.6` as platform-specific CPython stable-ABI wheels (`cp38-abi3`). The same wheel for a platform is validated across GIL-enabled CPython 3.8-3.14 on the supported matrix.
+Finkit Python uses PyO3 + maturin and ships `v0.1.7` as platform-specific CPython stable-ABI wheels (`cp38-abi3`). The same wheel for a platform is validated across GIL-enabled CPython 3.8-3.14 on the supported matrix.
 
 ## Release status
 
-`v0.1.6` is published on GitHub Releases. The verified wheel families are:
+`v0.1.7` is published on GitHub Releases. The verified wheel families are:
 
 - Linux x86_64 — manylinux 2.17 / manylinux2014;
 - Windows x86_64 — `win_amd64`;
 - macOS x86_64;
 - macOS arm64.
 
-Not in the v0.1.6 wheel matrix: Linux arm64, musllinux, 32-bit Windows, PyPy, and free-threaded CPython.
+Not in the v0.1.7 wheel matrix: Linux arm64, musllinux, 32-bit Windows, PyPy, and free-threaded CPython.
 
-The GitHub Release is the documented installation source for v0.1.6. Registry publication is separate; do not assume PyPI contains this exact package/version unless independently verified.
+The GitHub Release is the documented installation source for v0.1.7. Registry publication is separate; do not assume PyPI contains this exact package/version unless independently verified.
 
 ## Install a Release wheel
 
-Download the matching `finkit-0.1.6-cp38-abi3-*.whl` from:
+Download the matching `finkit-0.1.7-cp38-abi3-*.whl` from:
 
-`https://github.com/coeasy/finkit/releases/tag/v0.1.6`
+`https://github.com/coeasy/finkit/releases/tag/v0.1.7`
 
 Then install:
 
 ```bash
 python -m pip install --upgrade pip
-python -m pip install ./finkit-0.1.6-<matching-platform>.whl
+python -m pip install ./finkit-0.1.7-<matching-platform>.whl
 ```
 
 Verify outside the source tree:
@@ -49,7 +49,7 @@ PY
 ```bash
 git clone https://github.com/coeasy/finkit.git
 cd finkit
-git checkout v0.1.6
+git checkout v0.1.7
 
 python3 -m venv .venv
 source .venv/bin/activate  # PowerShell: .\.venv\Scripts\Activate.ps1
@@ -362,6 +362,17 @@ out = plan.eval_range(
 
 The runtime uses dependency/lookback information to include the required prefix conservatively.
 
+For high-frequency chart-window refreshes, use `eval_range_zero_copy()` with
+contiguous float64 arrays. It borrows the full input history, computes the
+required dependency window, and does not create a retained owned context:
+
+```python
+out = plan.eval_range_zero_copy(
+    open_, high, low, close, volume,
+    900, 1000,
+)["__result__"]
+```
+
 ### `eval_last()`
 
 With arrays:
@@ -388,6 +399,22 @@ plan.reset()
 ```
 
 `reset()` removes the retained market context but does not discard the compiled formula itself.
+
+### `analyze()` and `compatibility_report()`
+
+Inspect a formula before running it:
+
+```python
+analysis = plan.analyze()
+print(analysis["required_lookback"], analysis["supports_streaming"])
+report = plan.compatibility_report("tdx")
+print(report["sma_policy"], report["functions"])
+```
+
+The analysis identifies input dependencies, stateful and future-data functions,
+side effects, unknown functions and conservative streaming suitability. The
+compatibility report identifies terminal semantic policies and marks each
+function as exact, near, approximate, host-required or unsupported.
 
 ## Formula result dictionaries
 
@@ -459,7 +486,7 @@ Install the generated wheel from a clean directory and run tests against the ins
 
 The Python Wheels workflow:
 
-1. builds the four v0.1.6 platform wheels;
+1. builds the four v0.1.7 platform wheels;
 2. installs/tests each platform wheel outside the source tree;
 3. reuses the Linux ABI3 wheel across CPython 3.8-3.14 compatibility jobs;
 4. validates package version, wheel metadata, and platform coverage;
@@ -491,7 +518,7 @@ Confirm that pip and Python use the same environment, and test outside the repos
 
 ```bash
 python -m pip install --upgrade pip numpy
-python -m pip install --force-reinstall ./finkit-0.1.6-<matching-platform>.whl
+python -m pip install --force-reinstall ./finkit-0.1.7-<matching-platform>.whl
 ```
 
 ### `eval_zero_copy()` rejects an array

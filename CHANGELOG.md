@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.7] - 2026-09-11
+
+- Add formula static analysis for dependencies, lookback, future-data risks,
+  side effects, stateful nodes and streaming suitability.
+- Add terminal semantic profiles and function-level compatibility reports for
+  Finkit, TongDaXin, TongHuaShun, EastMoney and Pine.
+- Add borrowed range evaluation and Python `eval_range_zero_copy` for chart
+  window refreshes without copying complete OHLCV history.
+- Add conservative O(1) EMA updates for continuous append/eval-last streams,
+  with exact fallback when continuity cannot be proven.
+- Expose formula analysis and compatibility APIs through Python, Node and WASM.
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
@@ -119,5 +131,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Multi-platform support (Linux, macOS, Windows)
 - CI/CD pipeline setup
 - Comprehensive test suite
-
 
