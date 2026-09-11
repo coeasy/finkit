@@ -7,9 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
 
 /// Semantic research stages. Dependency ordering is delegated to core `ComputePlan`.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum ResearchStageKind {
     Align,
     ForwardReturns,
@@ -93,7 +91,9 @@ impl ResearchPlan {
     /// each service has a typed executor artifact contract.
     pub fn for_profile(profile: ResearchProfile) -> ResearchResult<Self> {
         match profile {
-            ResearchProfile::CoreStudy | ResearchProfile::FullStudy => Self::standard_factor_study(),
+            ResearchProfile::CoreStudy | ResearchProfile::FullStudy => {
+                Self::standard_factor_study()
+            }
         }
     }
 
