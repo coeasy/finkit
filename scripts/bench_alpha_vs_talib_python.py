@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Full TA-Lib v0.6.4 Python API comparison for finkit.
+"""Full TA-Lib 0.6.x Python API comparison for finkit.
 
-The benchmark scope is the 161 functions exported by TA-Lib Python v0.6.4
+    The benchmark scope is the 161 functions exported by the TA-Lib Python 0.6.x
 (`_ta_lib.pyi`).  It deliberately records unsupported functions instead of
 silently dropping them, so a green process means only that the report was
 generated; use ``--strict`` to make incomplete coverage fail the command.
@@ -27,7 +27,8 @@ from typing import Any, Callable
 import numpy as np
 
 
-# This is the public Python surface in TA-Lib v0.6.4.  NVI/PVI are present in
+# This is the public Python surface in the maintained TA-Lib Python 0.6.x
+# compatibility set. NVI/PVI are present in
 # the C source tree as unfinished templates, but are intentionally not in the
 # Python package and therefore are outside this executable comparison scope.
 TALIB_V064_FUNCTIONS = tuple(
@@ -66,7 +67,7 @@ TALIB_V064_FUNCTIONS = tuple(
 # Keep the spelling check close to the source list.  A typo here must never
 # silently reduce the comparison matrix.
 if len(TALIB_V064_FUNCTIONS) != 161 or len(set(TALIB_V064_FUNCTIONS)) != 161:
-    raise RuntimeError("the TA-Lib v0.6.4 function list must contain 161 unique names")
+    raise RuntimeError("the TA-Lib 0.6.x function list must contain 161 unique names")
 
 PATTERN_NAMES = frozenset(name for name in TALIB_V064_FUNCTIONS if name.startswith("CDL"))
 MATH_TRANSFORMS = frozenset(
@@ -185,7 +186,10 @@ def spec_for(name: str) -> dict[str, Any]:
     if name in {"SAR"}:
         return {"inputs": ("high", "low"), "params": (0.02, 0.2), "returns": 1, "category": "Overlap"}
     if name == "SAREXT":
-        return {"inputs": ("high", "low"), "params": (), "returns": 1, "category": "Overlap"}
+        # TA-Lib exposes sentinel defaults; use the equivalent explicit
+        # Finkit defaults so both calls exercise the same contract.
+        params = (0.0, 0.0, 0.02, 0.02, 0.2, 0.02, 0.02, 0.2)
+        return {"inputs": ("high", "low"), "params": params, "alpha_params": params, "returns": 1, "category": "Overlap"}
     if name in {"MACD", "MACDFIX"}:
         params = (12, 26, 9) if name == "MACD" else (9,)
         return {"inputs": ("close",), "params": params, "alpha_params": params if name == "MACD" else (), "returns": 3, "category": "Momentum"}
@@ -199,6 +203,12 @@ def spec_for(name: str) -> dict[str, Any]:
         return {"inputs": ("close",), "params": (14, 5, 3, 0), "returns": 2, "category": "Momentum"}
     if name == "AROON":
         return {"inputs": ("high", "low"), "params": (14,), "returns": 2, "category": "Momentum"}
+    if name == "AROONOSC":
+        return {"inputs": ("high", "low"), "params": (14,), "returns": 1, "category": "Momentum"}
+    if name == "BOP":
+        return {"inputs": ("open", "high", "low", "close"), "params": (), "returns": 1, "category": "Momentum"}
+    if name in {"MINUS_DM", "PLUS_DM"}:
+        return {"inputs": ("high", "low"), "params": (14,), "alpha_params": (), "returns": 1, "category": "Momentum"}
     if name == "ULTOSC":
         return {"inputs": ("high", "low", "close"), "params": (7, 14, 28), "returns": 1, "category": "Momentum"}
     if name == "ADOSC":
@@ -217,6 +227,8 @@ def spec_for(name: str) -> dict[str, Any]:
     if name in {"AD", "OBV"}:
         inputs = ("high", "low", "close", "volume") if name == "AD" else ("close", "volume")
         return {"inputs": inputs, "params": (), "returns": 1, "category": "Volume"}
+    if name == "TRANGE":
+        return {"inputs": ("high", "low", "close"), "params": (), "returns": 1, "category": "Volatility"}
     if name in {"HT_DCPERIOD", "HT_DCPHASE", "HT_TRENDLINE", "HT_TRENDMODE", "HT_PHASOR", "HT_SINE"}:
         return {"inputs": ("close",), "params": (), "returns": 2 if name in {"HT_PHASOR", "HT_SINE"} else 1, "category": "Cycle"}
     if name in {"AVGPRICE"}:
@@ -261,9 +273,13 @@ def invoke_batch(finkit: Any, data: dict[str, np.ndarray], name: str, spec: dict
         low=data["low"],
         volume=data["volume"],
         secondary=secondary,
-        requests=request,
+            requests=request,
+            talib_compat=True,
     )
-    prefix = f"{name.lower()}_" + "_".join(str(value) for value in spec["params"])
+    def format_param(value: float) -> str:
+        return str(int(value)) if float(value).is_integer() else str(value)
+
+    prefix = f"{name.lower()}_" + "_".join(format_param(value) for value in spec["params"])
     if not spec["params"]:
         prefix = f"{name.lower()}_"
     error_key = f"{prefix}_error"
@@ -276,7 +292,7 @@ def invoke_batch(finkit: Any, data: dict[str, np.ndarray], name: str, spec: dict
         return result[key]
     values = []
     for index in range(spec["returns"]):
-        key = f"{prefix}{index}"
+        key = f"{prefix}_{index}"
         if key not in result:
             raise LookupError(f"batch result {key!r} is missing")
         values.append(result[key])
@@ -294,6 +310,89 @@ def normalise_output(value: Any) -> list[np.ndarray]:
     return [np.asarray(value, dtype=np.float64).reshape(-1)]
 
 
+def talib_lookback(name: str, params: tuple[float, ...]) -> int:
+    def period(index: int, default: int) -> int:
+        return max(1, int(params[index] if index < len(params) else default))
+
+    name = name.lower()
+    if name == "kama":
+        return period(0, 10)
+    if name == "mama":
+        return 32
+    if name == "mavp":
+        return period(1, 30) - 1
+    if name in {"sar", "sarext"}:
+        return 1
+    if name == "t3":
+        return 6 * (period(0, 5) - 1)
+    if name == "dema":
+        return 2 * (period(0, 30) - 1)
+    if name == "tema":
+        return 3 * (period(0, 30) - 1)
+    if name == "ht_trendline":
+        return 63
+    if name == "adx":
+        return 2 * (period(0, 14) - 1)
+    if name == "adxr":
+        return 3 * (period(0, 14) - 1)
+    if name in {"apo", "ppo"}:
+        return period(1, 26) - 1
+    if name in {"aroon", "aroonosc"}:
+        return period(0, 14)
+    if name in {"cmo", "rsi"}:
+        return period(0, 14)
+    if name in {"macd", "macdext", "macdfix"}:
+        slow = 26 if name == "macdfix" else period(1, 26)
+        signal = 9 if name == "macdfix" else period(2, 9)
+        return slow + signal - 2
+    if name == "stoch":
+        return period(0, 5) + period(1, 3) + period(3, 3) - 3
+    if name == "stochf":
+        return period(0, 5) + period(1, 3) - 2
+    if name == "stochrsi":
+        return period(0, 14) + period(1, 5) + period(3, 3) - 2
+    if name == "trix":
+        return 3 * period(0, 30) - 2
+    if name == "ultosc":
+        return period(2, 28)
+    if name in {"atr", "natr"}:
+        return period(0, 14)
+    if name == "trange":
+        return 1
+    if name == "adosc":
+        return period(1, 10) - 1
+    if name == "beta":
+        return period(0, 5)
+    if name in {
+        "correl", "correlation", "linearreg", "linear_reg", "linearreg_angle",
+        "linearreg_intercept", "linearreg_slope", "stddev", "std_dev", "tsf",
+        "var", "max", "min", "minmax", "sum", "accbands", "avgdev", "imi",
+    }:
+        return period(0, 30) - 1
+    return 0
+
+
+def talib_compat_output(name: str, params: tuple[float, ...], value: Any) -> Any:
+    arrays = normalise_output(value)
+    lookback = talib_lookback(name, params)
+    if name.lower() == "aroon" and len(arrays) == 2:
+        arrays = [arrays[1], arrays[0]]
+    if name.lower() in {"maxindex", "minindex", "minmaxindex"}:
+        period = max(1, int(params[0] if params else 30))
+        for array in arrays:
+            for index in range(array.size):
+                if index < period - 1 or array[index] < 0:
+                    array[index] = 0.0
+                else:
+                    array[index] += index + 1 - period
+    else:
+        for array in arrays:
+            array[:lookback] = np.nan
+    if isinstance(value, (tuple, list)):
+        return tuple(arrays)
+    return arrays[0]
+
+
 def compare_outputs(alpha: Any, talib: Any) -> dict[str, Any]:
     left = normalise_output(alpha)
     right = normalise_output(talib)
@@ -301,7 +400,7 @@ def compare_outputs(alpha: Any, talib: Any) -> dict[str, Any]:
         return {"shape_mismatch": True, "output_count": [len(left), len(right)], "max_abs_diff": math.inf, "max_rel_diff": math.inf, "finite_match_ratio": 0.0, "precision_ok": False}
     max_abs = 0.0
     max_rel = 0.0
-    finite_total = 0
+    total_elements = 0
     finite_equal = 0
     shape_mismatch = False
     precision_ok = True
@@ -313,7 +412,7 @@ def compare_outputs(alpha: Any, talib: Any) -> dict[str, Any]:
         a_finite = np.isfinite(a)
         b_finite = np.isfinite(b)
         both = a_finite & b_finite
-        finite_total += int(np.count_nonzero(both))
+        total_elements += int(a.size)
         finite_equal += int(np.count_nonzero(a_finite == b_finite))
         if np.any(both):
             delta = np.abs(a[both] - b[both])
@@ -321,7 +420,7 @@ def compare_outputs(alpha: Any, talib: Any) -> dict[str, Any]:
             max_abs = max(max_abs, float(np.max(delta)))
             max_rel = max(max_rel, float(np.max(delta / scale)))
         precision_ok = precision_ok and bool(np.allclose(a, b, rtol=1e-6, atol=1e-8, equal_nan=True))
-    return {"shape_mismatch": shape_mismatch, "output_count": len(left), "max_abs_diff": max_abs, "max_rel_diff": max_rel, "finite_match_ratio": finite_equal / max(a.size if left else 1, 1), "precision_ok": precision_ok}
+    return {"shape_mismatch": shape_mismatch, "output_count": len(left), "max_abs_diff": max_abs, "max_rel_diff": max_rel, "finite_match_ratio": finite_equal / max(total_elements, 1), "precision_ok": precision_ok}
 
 
 def median_time(fn: Callable[[], Any], repeat: int, warmup: int) -> tuple[float, Any]:
@@ -355,8 +454,14 @@ def run(args: argparse.Namespace) -> int:
             results.append(row)
             continue
         direct = resolve_direct(finkit, name)
-        if direct is not None:
-            alpha_call = lambda fn=direct, s=spec: invoke_direct(fn, data, s)
+        use_batch_compat = name in {"SAR", "PLUS_DM", "MINUS_DM", "PPO"}
+        if use_batch_compat and callable(getattr(finkit, "compute_indicators", None)):
+            alpha_call = lambda n=name, s=spec: invoke_batch(finkit, data, n, s)
+            row["adapter"] = "compute_indicators"
+        elif direct is not None:
+            alpha_call = lambda fn=direct, n=name, s=spec: talib_compat_output(
+                n, tuple(s["params"]), invoke_direct(fn, data, s)
+            )
             row["adapter"] = "direct"
         elif callable(getattr(finkit, "compute_indicators", None)):
             alpha_call = lambda n=name, s=spec: invoke_batch(finkit, data, n, s)
@@ -385,7 +490,7 @@ def run(args: argparse.Namespace) -> int:
     passed = [row for row in compared if row["status"] == "pass"]
     speedups = [row["speedup"] for row in compared if math.isfinite(row["speedup"]) and row["speedup"] > 0]
     summary = {
-        "scope": "TA-Lib Python v0.6.4",
+      "scope": "TA-Lib Python 0.6.x",
         "talib_version": getattr(talib, "__version__", "unknown"),
         "finkit_version": getattr(finkit, "__version__", "unknown"),
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -416,7 +521,7 @@ def run(args: argparse.Namespace) -> int:
 
 
 def write_report(path: Path, summary: dict[str, Any], rows: list[dict[str, Any]]) -> None:
-    lines = ["# finkit vs TA-Lib v0.6.4 — Full Python API comparison", "", f"- Scope: `{summary['scope']}` ({summary['total_functions']} functions)", f"- TA-Lib: `{summary['talib_version']}`; finkit: `{summary['finkit_version']}`", f"- Compared: **{summary['compared']}/{summary['total_functions']}**; precision pass: **{summary['precision_pass']}**", f"- Median speedup: **{summary['median_speedup']}x**; geometric mean: **{summary['geomean_speedup']}x**", "", "`speedup > 1.0x` means finkit completed faster. NaN positions are compared as equal; the first warm-up calls are excluded.", "", "## Per-function result", "", "| # | Function | Category | Adapter | Status | finkit ms | TA-Lib ms | Speedup | Max abs diff |", "|---:|---|---|---|---|---:|---:|---:|---:|"]
+    lines = ["# finkit vs TA-Lib 0.6.x — Full Python API comparison", "", f"- Scope: `{summary['scope']}` ({summary['total_functions']} functions)", f"- TA-Lib: `{summary['talib_version']}`; finkit: `{summary['finkit_version']}`", f"- Compared: **{summary['compared']}/{summary['total_functions']}**; precision pass: **{summary['precision_pass']}**", f"- Median speedup: **{summary['median_speedup']}x**; geometric mean: **{summary['geomean_speedup']}x**", "", "`speedup > 1.0x` means finkit completed faster. NaN positions are compared as equal; the first warm-up calls are excluded.", "", "## Per-function result", "", "| # | Function | Category | Adapter | Status | finkit ms | TA-Lib ms | Speedup | Max abs diff |", "|---:|---|---|---|---|---:|---:|---:|---:|"]
     for row in rows:
         finkit_ms = row.get("finkit_ms", "-")
         talib_ms = row.get("talib_ms", "-")

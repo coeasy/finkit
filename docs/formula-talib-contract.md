@@ -12,10 +12,20 @@ separate layers:
    `host_required` and `unsupported` per called function. It also reports the
    catalog revision and global runtime coverage.
 
-The current v0.1.8 baseline has 161 catalog entries and 87 registered formula
-adapters. The remaining entries are intentionally visible as unsupported or
-host-dependent until a parameter, warm-up, NaN, output-count and differential
-golden contract is added.
+The current release keeps 161 catalog entries and reports formula-runtime
+registration separately from binding-level execution. The Python batch binding
+also exposes an explicit `talib_compat=True` adapter. It normalizes TA-Lib
+lookback/NaN conventions, absolute index outputs, directional-movement
+smoothing, AROON output order and PPO moving-average type without changing the
+default native finkit behavior.
+
+The differential matrix must be read as two independent gates: callable
+coverage (`161/161` in the maintained Python environment) and numerical parity
+(reported per function, with the remaining failures concentrated in
+candlestick edge-case rules, Hilbert-cycle variants, MAMA, MACDEXT/MACDFIX,
+STOCHRSI and BETA). A catalog entry is not promoted to exact parity until its
+parameter, warm-up, NaN, output-count and differential golden contract is
+complete.
 
 Each catalog entry exposes:
 
@@ -39,3 +49,20 @@ The repository benchmark is intentionally allowed to report precision failures
 and unavailable adapters. `--strict` remains a release gate for a claimed full
 numeric compatibility release; a normal run is a coverage report and must not
 be interpreted as a full-pass result.
+
+## Python batch compatibility mode
+
+```python
+results = finkit.compute_indicators(
+    close=close,
+    high=high,
+    low=low,
+    volume=volume,
+    requests=[("maxindex", [30]), ("ppo", [12, 26, 0])],
+    talib_compat=True,
+)
+```
+
+The flag is deliberately opt-in. Native formulas and charts retain finkit's
+existing warm-up and index semantics; migration code can request the TA-Lib
+contract at the boundary.

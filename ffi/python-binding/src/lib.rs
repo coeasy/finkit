@@ -4590,6 +4590,8 @@ fn parse_indicator_requests(requests: Vec<(String, Vec<f64>)>) -> Vec<IndicatorR
 /// * `close` - Close prices (required for most indicators)
 /// * `volume` - Volume data (optional, required for indicators like OBV, MFI)
 /// * `requests` - List of (indicator_name, params) tuples
+/// * `talib_compat` - Apply TA-Lib Python lookback, NaN and index conventions
+///   without changing the default native finkit semantics.
 ///
 /// # Returns
 /// Dictionary mapping indicator names (with params suffix) to computed values.
@@ -4605,7 +4607,7 @@ fn parse_indicator_requests(requests: Vec<(String, Vec<f64>)>) -> Vec<IndicatorR
 /// print(results["sma_14"])
 /// ```
 #[pyfunction]
-#[pyo3(signature = (close, requests, open=None, high=None, low=None, volume=None, secondary=None))]
+#[pyo3(signature = (close, requests, open=None, high=None, low=None, volume=None, secondary=None, talib_compat=false))]
 fn compute_indicators<'py>(
     py: Python<'py>,
     close: PyReadonlyArray1<'_, f64>,
@@ -4615,6 +4617,7 @@ fn compute_indicators<'py>(
     low: Option<PyReadonlyArray1<'_, f64>>,
     volume: Option<PyReadonlyArray1<'_, f64>>,
     secondary: Option<PyReadonlyArray1<'_, f64>>,
+    talib_compat: bool,
 ) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
     let close_slice = close
         .as_slice()
@@ -4637,6 +4640,7 @@ fn compute_indicators<'py>(
             volume_vec.as_deref(),
             secondary_vec.as_deref(),
             &indicator_requests,
+            talib_compat,
         )
     });
 
@@ -4687,6 +4691,7 @@ fn compute_all_indicators(
     volume: Option<&[f64]>,
     secondary: Option<&[f64]>,
     requests: &[IndicatorRequest],
+    talib_compat: bool,
 ) -> Vec<(String, IndicatorResult)> {
     let mut results = Vec::with_capacity(requests.len());
 
@@ -4700,11 +4705,270 @@ fn compute_all_indicators(
                 .collect::<Vec<_>>()
                 .join("_")
         );
-        let result = compute_single_indicator(open, high, low, close, volume, secondary, req);
+        let result = if talib_compat && req.name.eq_ignore_ascii_case("ppo") {
+            talib_percentage_oscillator(close, &req.params)
+        } else if talib_compat
+            && matches!(
+                req.name.to_ascii_lowercase().as_str(),
+                "plus_dm" | "minus_dm"
+            )
+        {
+            match (high, low) {
+                (Some(high), Some(low)) => talib_directional_movement(
+                    high,
+                    low,
+                    params_first_or(req, 14),
+                    req.name.eq_ignore_ascii_case("plus_dm"),
+                ),
+                _ => IndicatorResult::Error(format!(
+                    "{} requires high and low data",
+                    req.name.to_ascii_uppercase()
+                )),
+            }
+        } else {
+            compute_single_indicator(open, high, low, close, volume, secondary, req)
+        };
+        let result = if talib_compat {
+            apply_talib_compatibility(&req.name, &req.params, result)
+        } else {
+            result
+        };
         results.push((key, result));
     }
 
     results
+}
+
+fn talib_percentage_oscillator(input: &[f64], params: &[f64]) -> IndicatorResult {
+    let fast = params.first().copied().unwrap_or(12.0).max(1.0) as usize;
+    let slow = params.get(1).copied().unwrap_or(26.0).max(1.0) as usize;
+    let ma_type = params.get(2).copied().unwrap_or(0.0) as usize;
+    let kind = match ma_type {
+        0 => indicators::MaType::Sma,
+        1 => indicators::MaType::Ema,
+        2 => indicators::MaType::Wma,
+        3 => indicators::MaType::Dema,
+        4 => indicators::MaType::Tema,
+        5 => indicators::MaType::Trima,
+        6 => indicators::MaType::Kama,
+        8 => indicators::MaType::T3,
+        _ => indicators::MaType::Ema,
+    };
+    match (
+        indicators::ma(input, fast, kind),
+        indicators::ma(input, slow, kind),
+    ) {
+        (Ok(fast_ma), Ok(slow_ma)) => {
+            let mut output = vec![f64::NAN; input.len()];
+            for i in 0..input.len() {
+                if fast_ma[i].is_finite() && slow_ma[i].is_finite() && slow_ma[i].abs() > 1e-15 {
+                    output[i] = (fast_ma[i] - slow_ma[i]) / slow_ma[i] * 100.0;
+                }
+            }
+            IndicatorResult::Single(output)
+        }
+        (Err(error), _) | (_, Err(error)) => IndicatorResult::Error(error.to_string()),
+    }
+}
+
+fn params_first_or(req: &IndicatorRequest, default: usize) -> usize {
+    req.params
+        .first()
+        .copied()
+        .unwrap_or(default as f64)
+        .max(1.0) as usize
+}
+
+fn talib_directional_movement(
+    high: &[f64],
+    low: &[f64],
+    period: usize,
+    plus: bool,
+) -> IndicatorResult {
+    if high.len() != low.len() || high.len() < period {
+        return IndicatorResult::Error(
+            "high and low must have equal lengths and contain at least one period".to_string(),
+        );
+    }
+    let mut raw = vec![0.0; high.len()];
+    for i in 1..high.len() {
+        let up_move = high[i] - high[i - 1];
+        let down_move = low[i - 1] - low[i];
+        raw[i] = if plus {
+            if up_move > 0.0 && up_move > down_move {
+                up_move
+            } else {
+                0.0
+            }
+        } else if down_move > 0.0 && down_move > up_move {
+            down_move
+        } else {
+            0.0
+        };
+    }
+
+    let mut output = vec![f64::NAN; high.len()];
+    let first = period - 1;
+    let mut smooth: f64 = raw[1..=first].iter().sum();
+    output[first] = smooth;
+    let inv_period = 1.0 / period as f64;
+    for i in (first + 1)..high.len() {
+        smooth = smooth - smooth * inv_period + raw[i];
+        output[i] = smooth;
+    }
+    IndicatorResult::Single(output)
+}
+
+/// Normalize the intentionally permissive internal indicator contract to the
+/// TA-Lib Python contract. The default batch API keeps finkit's native
+/// semantics; callers opt into this adapter explicitly so existing formulas
+/// and charting code do not change underneath them.
+fn apply_talib_compatibility(
+    name: &str,
+    params: &[f64],
+    result: IndicatorResult,
+) -> IndicatorResult {
+    let name = name.to_ascii_lowercase();
+    if matches!(result, IndicatorResult::Error(_)) {
+        return result;
+    }
+
+    let period = |index: usize, default: usize| {
+        params
+            .get(index)
+            .copied()
+            .unwrap_or(default as f64)
+            .max(1.0) as usize
+    };
+    let lookback = match name.as_str() {
+        "kama" => period(0, 10),
+        "mama" => 32,
+        "mavp" => period(1, 30).saturating_sub(1),
+        "sar" | "sarext" => 1,
+        "t3" => 6 * period(0, 5).saturating_sub(1),
+        "dema" => 2 * period(0, 30).saturating_sub(1),
+        "tema" => 3 * period(0, 30).saturating_sub(1),
+        "ht_trendline" => 63,
+        "adx" => 2 * period(0, 14).saturating_sub(1),
+        "adxr" => 3 * period(0, 14).saturating_sub(1),
+        "apo" | "ppo" => period(1, 26).saturating_sub(1),
+        "aroon" | "aroonosc" => period(0, 14),
+        "cmo" | "rsi" => period(0, 14),
+        "macd" | "macdext" | "macdfix" => {
+            let slow = if name == "macdfix" { 26 } else { period(1, 26) };
+            let signal = if name == "macdfix" { 9 } else { period(2, 9) };
+            slow + signal - 2
+        }
+        "stoch" => period(0, 5) + period(1, 3) + period(3, 3) - 3,
+        "stochf" => period(0, 5) + period(1, 3) - 2,
+        "stochrsi" => period(0, 14) + period(1, 5) + period(3, 3) - 2,
+        "trix" => 3 * period(0, 30) - 2,
+        "ultosc" => period(2, 28),
+        "atr" | "natr" => period(0, 14),
+        "trange" => 1,
+        "adosc" => period(1, 10).saturating_sub(1),
+        "beta" => period(0, 5),
+        "correl"
+        | "correlation"
+        | "linearreg"
+        | "linear_reg"
+        | "linearreg_angle"
+        | "linearreg_intercept"
+        | "linearreg_slope"
+        | "stddev"
+        | "std_dev"
+        | "tsf"
+        | "var"
+        | "max"
+        | "min"
+        | "minmax"
+        | "sum"
+        | "accbands"
+        | "avgdev"
+        | "imi" => period(0, 30).saturating_sub(1),
+        "maxindex" | "minindex" | "minmaxindex" => 0,
+        _ => 0,
+    };
+
+    // The native SAR result also carries its acceleration-factor trace. The
+    // TA-Lib public function exposes only the SAR series.
+    let result = if name == "sar" {
+        match result {
+            IndicatorResult::Double(sar, _) => IndicatorResult::Single(sar),
+            other => other,
+        }
+    } else {
+        result
+    };
+
+    match name.as_str() {
+        "maxindex" | "minindex" | "minmaxindex" => {
+            let p = period(0, 30);
+            fn absolute_index(values: &mut [f64], period: usize) {
+                for (i, value) in values.iter_mut().enumerate() {
+                    if i < period.saturating_sub(1) || *value < 0.0 {
+                        *value = 0.0;
+                    } else {
+                        *value += (i + 1 - period) as f64;
+                    }
+                }
+            }
+            match result {
+                IndicatorResult::Single(mut values) => {
+                    absolute_index(&mut values, p);
+                    IndicatorResult::Single(values)
+                }
+                IndicatorResult::Double(mut first, mut second) => {
+                    absolute_index(&mut first, p);
+                    absolute_index(&mut second, p);
+                    IndicatorResult::Double(first, second)
+                }
+                other => other,
+            }
+        }
+        "aroon" => match result {
+            IndicatorResult::Double(mut up, mut down) => {
+                let end = lookback.min(up.len()).min(down.len());
+                up[..end].fill(f64::NAN);
+                down[..end].fill(f64::NAN);
+                // TA-Lib returns (aroondown, aroonup), while the native
+                // finkit result is (aroonup, aroondown).
+                IndicatorResult::Double(down, up)
+            }
+            other => other,
+        },
+        _ => {
+            fn mask(values: &mut [f64], lookback: usize) {
+                let end = lookback.min(values.len());
+                values[..end].fill(f64::NAN);
+            }
+            match result {
+                IndicatorResult::Single(mut values) => {
+                    mask(&mut values, lookback);
+                    IndicatorResult::Single(values)
+                }
+                IndicatorResult::Double(mut first, mut second) => {
+                    mask(&mut first, lookback);
+                    mask(&mut second, lookback);
+                    IndicatorResult::Double(first, second)
+                }
+                IndicatorResult::Triple(mut first, mut second, mut third) => {
+                    mask(&mut first, lookback);
+                    mask(&mut second, lookback);
+                    mask(&mut third, lookback);
+                    IndicatorResult::Triple(first, second, third)
+                }
+                IndicatorResult::Quad(mut first, mut second, mut third, mut fourth) => {
+                    mask(&mut first, lookback);
+                    mask(&mut second, lookback);
+                    mask(&mut third, lookback);
+                    mask(&mut fourth, lookback);
+                    IndicatorResult::Quad(first, second, third, fourth)
+                }
+                other => other,
+            }
+        }
+    }
 }
 
 fn pattern_result(result: ::finkit::Result<candlestick::PatternResult>) -> IndicatorResult {
@@ -4779,6 +5043,33 @@ fn compute_single_indicator(
                 .map(|arr| IndicatorResult::Single(arr.into_raw_vec()))
                 .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
         }
+        "sarext" => match (high, low) {
+            (Some(h), Some(l)) => {
+                let start_value = params.first().copied().unwrap_or(0.0);
+                let offset_on_reverse = params.get(1).copied().unwrap_or(0.0);
+                let af_init_long = params.get(2).copied().unwrap_or(0.02);
+                let af_long = params.get(3).copied().unwrap_or(0.02);
+                let af_max_long = params.get(4).copied().unwrap_or(0.2);
+                let af_init_short = params.get(5).copied().unwrap_or(0.02);
+                let af_short = params.get(6).copied().unwrap_or(0.02);
+                let af_max_short = params.get(7).copied().unwrap_or(0.2);
+                indicators::sarext(
+                    h,
+                    l,
+                    start_value,
+                    offset_on_reverse,
+                    af_init_long,
+                    af_long,
+                    af_max_long,
+                    af_init_short,
+                    af_short,
+                    af_max_short,
+                )
+                .map(|res| IndicatorResult::Single(res.sar.into_raw_vec()))
+                .unwrap_or_else(|e| IndicatorResult::Error(e.to_string()))
+            }
+            _ => IndicatorResult::Error("SAREXT requires high and low data".to_string()),
+        },
         "accbands" => {
             let period = params.first().copied().unwrap_or(20.0) as usize;
             match (high, low) {

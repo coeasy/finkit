@@ -2044,9 +2044,14 @@ pub fn adxr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<A
     let len = adx_vals.len();
     let mut output = vec![f64::NAN; len];
 
-    for i in period..len {
+    // TA-Lib's ADXR pairs today's ADX with the value at `today - period + 1`
+    // and therefore becomes valid at 3 * period - 2. Using `today - period`
+    // shifts the result one bar late and leaves a spurious NaN at the first
+    // valid position.
+    let first = 3 * period.saturating_sub(1);
+    for i in first..len {
         let cur = adx_vals[i];
-        let prev = adx_vals[i - period];
+        let prev = adx_vals[i - period + 1];
         if !cur.is_nan() && !prev.is_nan() {
             output[i] = (cur + prev) * 0.5;
         }
@@ -2076,23 +2081,16 @@ pub fn aroonosc(high: &[f64], low: &[f64], period: usize) -> Result<Array1<f64>>
             constraint: "must have the same length".to_string(),
         });
     }
-    validate_input(high.len(), period + 1)?;
-
-    let len = high.len();
-    let mut output = init_output(len);
-    let inv_period = 100.0 / period as f64;
-    let high_ptr = high.as_ptr();
-    let low_ptr = low.as_ptr();
-
-    if period <= 8 {
-        aroonosc_scan_inner(high_ptr, low_ptr, len, period, inv_period, &mut output);
-    } else {
-        aroonosc_deque_inner(high_ptr, low_ptr, len, period, inv_period, &mut output);
-    }
-
-    Ok(output)
+    // Derive the oscillator from the canonical AROON implementation. The
+    // former specialized kernels used a `1..=period` window and consequently
+    // disagreed with TA-Lib at the first bar and whenever the oldest bar was
+    // the extremum. Keeping one source of truth also prevents the AROON and
+    // AROONOSC compatibility paths from drifting apart.
+    let result = aroon(high, low, period)?;
+    Ok(&result.aroon_up - &result.aroon_down)
 }
 
+#[allow(dead_code)]
 fn aroonosc_scan_inner(
     high_ptr: *const f64,
     low_ptr: *const f64,
@@ -2170,6 +2168,7 @@ fn aroonosc_scan_inner(
     }
 }
 
+#[allow(dead_code)]
 fn aroonosc_deque_inner(
     high_ptr: *const f64,
     low_ptr: *const f64,

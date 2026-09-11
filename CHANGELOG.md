@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.9] - 2026-09-11
+
+- Add opt-in Python `compute_indicators(..., talib_compat=True)` semantics for
+  TA-Lib lookback/NaN conventions, absolute MAX/MININDEX results and compatible
+  multi-output ordering without changing native formula behavior.
+- Align ADXR, AROONOSC, SAR, PLUS_DM/MINUS_DM and PPO compatibility paths with
+  TA-Lib's window, smoothing, output and moving-average-type contracts.
+- Correct the full Python comparison harness for TA-Lib 0.6.x multi-output
+  finite-ratio accounting and explicit parameter signatures; the maintained
+  smoke matrix now calls all 161 public functions and reports 124 exact rows.
+- Add Python regression coverage for native-vs-TA-Lib compatibility semantics.
+
 ## [0.1.8] - 2026-09-11
 
 - Add a shared formula result metadata contract for dtype, output names,

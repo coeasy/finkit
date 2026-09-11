@@ -119,6 +119,31 @@ def test_compute_indicators_multi_output():
     print("Multi-output batch computation test passed")
 
 
+def test_compute_indicators_talib_compatibility_mode():
+    """The opt-in adapter normalizes TA-Lib warmups and absolute indexes."""
+    try:
+        import finkit as ta
+    except ImportError:
+        print("SKIP: finkit not installed")
+        return
+
+    close = np.arange(1, 21, dtype=np.float64)
+    native = ta.compute_indicators(
+        close=close,
+        requests=[("maxindex", [3]), ("macd", [3, 5, 2])],
+    )
+    compat = ta.compute_indicators(
+        close=close,
+        requests=[("maxindex", [3]), ("macd", [3, 5, 2])],
+        talib_compat=True,
+    )
+
+    np.testing.assert_array_equal(native["maxindex_3"][:3], [-1.0, -1.0, 2.0])
+    np.testing.assert_array_equal(compat["maxindex_3"][:4], [0.0, 0.0, 2.0, 3.0])
+    assert np.isnan(compat["macd_3_5_2_0"][:5]).all()
+    assert np.isfinite(compat["macd_3_5_2_0"][5:]).any()
+
+
 def test_compute_indicators_gil_release():
     """Verify batch computation releases GIL by running concurrent calls."""
     try:
