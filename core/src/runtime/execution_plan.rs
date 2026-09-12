@@ -213,7 +213,12 @@ impl ExecutionPlanBuilder {
         }
 
         let key = key.into();
-        let signature = (family_rank(family), key.clone(), dependencies.clone(), lookback);
+        let signature = (
+            family_rank(family),
+            key.clone(),
+            dependencies.clone(),
+            lookback,
+        );
         if let Some(existing) = self.interned.get(&signature) {
             return Ok(*existing);
         }
@@ -301,6 +306,9 @@ mod tests {
                 lookback: 0,
             },
         ];
-        assert_eq!(ExecutionPlan::from_nodes(nodes).unwrap_err(), ExecutionPlanError::Cycle);
+        assert_eq!(
+            ExecutionPlan::from_nodes(nodes).unwrap_err(),
+            ExecutionPlanError::Cycle
+        );
     }
 }
