@@ -1,6 +1,8 @@
 mod compat;
 mod extrema;
 mod moving_average;
+#[cfg(test)]
+mod parity_tests;
 mod registry;
 mod rsi_core;
 mod statistics;
