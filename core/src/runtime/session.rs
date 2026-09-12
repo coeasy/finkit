@@ -197,7 +197,7 @@ impl RuntimeSession {
             .next_row
             .ok_or(RuntimeSessionError::CheckpointHasNoRowBoundary)?;
         Ok(ExecutionScheduler::dirty_from_checkpoint(
-            &self.plan, &dirty, rows, next_row,
+            &self.plan, dirty, rows, next_row,
         )?)
     }
 
