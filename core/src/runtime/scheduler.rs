@@ -229,13 +229,9 @@ mod tests {
             .intern_recursive_node(KernelFamily::MovingAverage, "ema:20", vec![input])
             .unwrap();
         let plan = builder.build().unwrap();
-        let scheduled = ExecutionScheduler::dirty_from_checkpoint(
-            &plan,
-            DirtyRange::new(50, 51),
-            100,
-            40,
-        )
-        .unwrap();
+        let scheduled =
+            ExecutionScheduler::dirty_from_checkpoint(&plan, DirtyRange::new(50, 51), 100, 40)
+                .unwrap();
         assert_eq!(scheduled.affected, DirtyRange::new(50, 100));
         assert_eq!(scheduled.recompute, DirtyRange::new(40, 100));
     }
@@ -248,13 +244,8 @@ mod tests {
             .unwrap();
         let plan = builder.build().unwrap();
         assert_eq!(
-            ExecutionScheduler::dirty_from_checkpoint(
-                &plan,
-                DirtyRange::new(50, 51),
-                100,
-                60,
-            )
-            .unwrap_err(),
+            ExecutionScheduler::dirty_from_checkpoint(&plan, DirtyRange::new(50, 51), 100, 60,)
+                .unwrap_err(),
             ScheduleError::CheckpointAfterDirty {
                 checkpoint_row: 60,
                 dirty_start: 50,
