@@ -17,7 +17,7 @@ pub mod session;
 pub mod state_arena;
 
 pub use execution_plan::{
-    ExecutionPlan, ExecutionPlanBuilder, ExecutionPlanError, NodeId, PlanNode,
+    DependencyHorizon, ExecutionPlan, ExecutionPlanBuilder, ExecutionPlanError, NodeId, PlanNode,
 };
 pub use kernel_adapter::{
     ExtremaKernelAdapter, KernelAdapterError, KernelExecutor, OhlcInput, StatisticsOutput,
