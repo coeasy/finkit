@@ -4,50 +4,59 @@
 [![Docs Check](https://github.com/coeasy/finkit/actions/workflows/docs-check.yml/badge.svg)](https://github.com/coeasy/finkit/actions/workflows/docs-check.yml)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue)](LICENSE)
 
-**A Rust-powered quantitative finance engine for indicators, formulas, factors, streaming analytics, and research workflows.**
+**A Rust-powered quantitative finance compute engine for research, realtime analytics, factor workflows, and multi-language products.**
 
-Finkit turns financial computation into reusable infrastructure. Instead of maintaining separate implementations for batch indicators, terminal-style formulas, factor graphs, streaming calculations, and language bindings, Finkit builds them around one Rust core and one set of numerical/runtime contracts.
+Finkit is a reusable **Quant Compute Runtime**. It brings technical indicators, formulas, factor DAGs, streaming analytics, feature engineering, research workflows, and language bindings onto one canonical Rust core and one set of numerical/runtime contracts.
 
-Use it when you need a fast calculation engine behind notebooks, research services, screening systems, analytics APIs, dashboards, or multi-language SDKs — without coupling the calculation layer to brokerage, order management, or a specific trading platform.
+Use Finkit behind research notebooks, market scanners, factor platforms, analytics APIs, realtime dashboards, data pipelines, or financial SDKs when you want one calculation layer instead of separate implementations for every product surface.
 
-[中文说明](README.zh-CN.md) · [Product overview](docs/product-overview.md) · [Documentation](docs/README.md) · [Current release](https://github.com/coeasy/finkit/releases/tag/v0.1.15)
+[中文说明](README.zh-CN.md) · [Product overview](docs/product-overview.md) · [中文产品说明](docs/product-overview-zh.md) · [Documentation](docs/README.md)
 
-Current published release: **v0.1.15**.
+Current published release: **v0.1.15**. The Unified Runtime and Factor Research work in PR #29 is next-release candidate architecture and is not treated as released until the same commit passes the full release gate.
 
-## Why Finkit
+## What problem does Finkit solve?
 
-### One calculation core
+Quant systems rarely become difficult because one indicator is missing. They become difficult because the same calculations are reimplemented across notebooks, services, streaming paths, factor platforms, and SDKs. Over time, numerical semantics drift, formulas are parsed repeatedly, dependency graphs are rediscovered, caches diverge, and small data revisions trigger unnecessary full recomputation.
 
-Rust owns the canonical numerical implementation. Python, Node.js, Java/JNI, C/C++, Go, .NET, Android, iOS, WASM, CLI, and other adapters are delivery surfaces rather than independent algorithm forks.
+Finkit's product rule is straightforward: **one Rust core, canonical kernels, reusable execution plans, shared correctness contracts, and multiple delivery surfaces.**
 
-### Reusable execution instead of repeated parsing
+## Why teams use Finkit
 
-Compile formulas and factor dependency graphs once, validate them once, and reuse them across repeated requests. The runtime is moving toward a shared execution model for batch, factor, research, range, and streaming workloads.
+| Product value | What it means |
+| --- | --- |
+| Canonical numerical semantics | Different bindings reuse one implementation instead of maintaining algorithm forks |
+| Reusable execution plans | Compile and validate formula/factor dependencies once, then execute repeatedly |
+| Batch and realtime continuity | Batch evaluation, streaming state, and safe local recomputation share contracts |
+| Research-ready primitives | Indicators, transforms, labels, statistics, factor graphs, validation, and research analysis can compose |
+| Explainable performance | SIMD, zero-copy, `_into`, streaming, and DirtyRange optimizations have explicit safety boundaries |
+| Multi-language delivery | Rust owns the algorithms; bindings expose the product to other runtimes |
 
-### Research-ready, not just indicator-ready
+## What can you build with it?
 
-Finkit includes technical indicators, formulas, transforms, feature engineering, labeling, factor graphs, statistics, risk helpers, validation primitives, and the developing Factor Research layer. The goal is to connect the path from raw market series to reusable research artifacts without rebuilding the same math in multiple modules.
+**Research platforms.** Calculate indicators, formulas, features, labels, factors, and research statistics with fewer notebook-to-production semantic gaps.
 
-### Performance with correctness gates
+**Market scanners and analytics services.** Precompile reusable formulas and factor graphs and apply them consistently across many aligned datasets.
 
-Hot paths are backed by SIMD, zero-copy/borrowed inputs where appropriate, reusable output buffers, streaming state, and benchmark gates. Numerical behavior is guarded by parity/reference tests, no-lookahead rules for predictive research, SSOT-generated metadata, Clippy, docs checks, and multi-language packaging tests.
+**Realtime analytics.** Update streaming indicators one bar at a time and avoid unnecessary recomputation where a dependency chain can prove local execution is safe.
+
+**Factor and ML pipelines.** Reuse canonical rolling statistics, normalization, labels, regression, ranking, information metrics, and validation primitives instead of rebuilding the math around each experiment.
+
+**Financial SDKs.** Keep numerical behavior in one Rust engine and expose it through Python, CLI, Node, Java, C/C++, Go, .NET, mobile, or WASM delivery layers.
 
 ## Product capability map
 
-| Layer | What it provides | Status |
+| Layer | Capability | Position |
 | --- | --- | --- |
-| Technical analysis | Trend, momentum, volatility, volume, cycle, statistics, price transforms, patterns, A-share helpers | Stable core |
-| Formula engine | Parsing, compilation, reusable plans, bytecode/JIT paths, range/last evaluation, append-oriented workflows | Stable core |
-| Streaming engine | One-bar-at-a-time indicators, retained state, convergence/parity tests | Stable core |
-| Feature engineering | Lags, rolling statistics, normalization, labels, combinations, selection, export | Stable core |
-| Factor engine | Named factor DAGs, dependency validation, borrowed inputs, compiled `FactorPlan` | Stable core / expanding |
-| Unified Runtime | Shared execution boundary, typed artifact identity, range execution contracts | Next-release architecture |
-| Factor Research | Preparation, validation, Alphalens-style analysis, multi-factor, portfolio/risk/report workflows | Next-release expansion |
-| Multi-language SDKs | Python, Rust, CLI plus source/CI paths for Node, Java, C/C++, Go, .NET, Android, iOS, WASM | Mixed publication state; see docs |
+| Technical Analysis | Trend, momentum, volatility, volume, cycle, statistics, price transforms, patterns, market helpers | Stable core |
+| Formula Engine | Parser, compiler, cache, bytecode/JIT, range/last evaluation, append workflows | Stable core |
+| Streaming Engine | Bar-by-bar updates, retained state, batch/stream parity validation | Stable core |
+| Feature Engineering | Lags, rolling statistics, normalization, labels, combinations, selection, export | Stable core |
+| Factor Engine | Named factor DAGs, dependency validation, borrowed inputs, `FactorPlan` | Stable core / expanding |
+| Unified Runtime | Typed artifacts, full/borrowed/range/into execution, DirtyRange | Next-release candidate |
+| Factor Research | Prepare, validate, analyze, multi-factor, portfolio, reporting workflows | Next-release expansion |
+| Multi-language Delivery | Rust, Python, CLI plus native/mobile/WASM binding paths | Publication state varies |
 
-“CI validated” and “published package” are intentionally different states. See [language bindings](docs/language-bindings.md) before assuming a public registry package exists for a target.
-
-## Architecture
+## One runtime, multiple workloads
 
 ```text
 Market data / external arrays
@@ -55,57 +64,32 @@ Market data / external arrays
           ▼
   MarketFrame / typed inputs
           │
-          ├───────────────┬────────────────┬─────────────────┐
-          ▼               ▼                ▼                 ▼
-     Indicators        Formula          Factors          Streaming
-          │               │                │                 │
-          └───────────────┴────────┬───────┴─────────────────┘
-                                  ▼
-                         ComputePlan / FactorPlan
-                                  │
-                                  ▼
-                           Unified Runtime
-                    full / borrowed / range / into
-                                  │
-                      ┌───────────┴───────────┐
-                      ▼                       ▼
-               Feature / Research      Runtime artifacts
-                      │                       │
-                      └───────────┬───────────┘
-                                  ▼
-             Rust / Python / CLI / native bindings / WASM
+          ├──────── Formula
+          ├──────── Factors
+          ├──────── Streaming
+          └──────── Research
+                   │
+                   ▼
+            ComputePlan / FactorPlan
+                   │
+                   ▼
+             Unified Runtime
+        full / borrowed / range / into
+                   │
+         ┌─────────┴─────────┐
+         ▼                   ▼
+    retained state       typed artifacts
 ```
 
-The architectural rule is simple: **reuse canonical kernels and canonical plans; do not create another hidden copy of the same formula, statistic, dependency graph, or cache.**
+The next-release runtime candidate adds typed deterministic `ArtifactHash`, routes `FactorPlan` through the shared `UnifiedRuntime`, and turns `DirtyRange` into an actual local execution boundary. Local recomputation is allowed only when the complete dependency chain proves it is incremental, fixed-lookback, and time-series-safe. Cross-sectional, dynamic-lookback, or unknown contracts fall back to full execution.
 
-## What the next-release runtime adds
-
-The current factor-research branch is consolidating several previously separate concepts into the shared runtime:
-
-- typed, deterministic `ArtifactHash` identity instead of untyped ad-hoc hashes;
-- `FactorPlan` execution through the shared `UnifiedRuntime` boundary;
-- `DirtyRange` propagation that distinguishes changed input rows, affected output rows, and the historical recomputation window;
-- local recomputation only when the complete dependency chain explicitly proves it is incremental, time-series-safe, and fixed-lookback;
-- conservative full fallback for cross-sectional, dynamic-lookback, or otherwise unsafe nodes;
-- retained output materializations for range/into execution instead of recomputing clean rows.
-
-These are correctness constraints first and performance optimizations second. Finkit will not label an execution path “incremental” when doing so can change results.
-
-## Typical use cases
-
-- **Research notebooks and services** — calculate indicators, formulas, features, labels, factors, and evaluation inputs from the same core.
-- **Market scanners and screeners** — precompile reusable formulas/factors and evaluate many aligned datasets consistently.
-- **Realtime analytics** — use streaming indicators and retained state for low-overhead bar-by-bar updates.
-- **Quant data pipelines** — generate feature matrices, transforms, labels, and research artifacts without duplicating statistical kernels.
-- **Analytics APIs** — place Rust computation behind Python, Node, Java, C/C++, Go, .NET, mobile, or WASM delivery layers.
-- **Cross-platform SDKs** — keep numerical semantics in one core while exposing idiomatic APIs to multiple runtimes.
+That policy is intentional: **correct first, fast second.**
 
 ## Quick start: Python
 
 The authoritative v0.1.15 binary distribution is the GitHub Release. Download the wheel matching your platform and install it locally:
 
 ```bash
-python -m pip install --upgrade pip
 python -m pip install ./finkit-0.1.15-<platform>.whl
 ```
 
@@ -117,43 +101,12 @@ close = np.arange(1.0, 101.0, dtype=np.float64)
 
 sma20 = ta.sma(close, timeperiod=20)
 rsi14 = ta.rsi(close, timeperiod=14)
-macd, signal, hist = ta.macd(
-    close,
-    fastperiod=12,
-    slowperiod=26,
-    signalperiod=9,
-)
+macd, signal, hist = ta.macd(close, 12, 26, 9)
 
-print("SMA20", sma20[-1])
-print("RSI14", rsi14[-1])
-print("MACD", macd[-1], signal[-1], hist[-1])
+print(sma20[-1], rsi14[-1], macd[-1])
 ```
-
-Time-series outputs preserve input alignment. Rolling indicators normally contain leading warm-up `NaN` values until enough bars are available.
-
-## Reusable formula execution
-
-```python
-import numpy as np
-import finkit as ta
-
-n = 1000
-open_ = np.arange(n, dtype=np.float64)
-high = open_ + 1.0
-low = open_ - 1.0
-close = open_ + 0.5
-volume = np.full(n, 1000.0, dtype=np.float64)
-
-plan = ta.CompiledFormula("MA(CLOSE, 20)")
-result = plan.eval(open_, high, low, close, volume)
-ma20 = result["__result__"]
-```
-
-Reusable plans also expose optimized paths such as zero-copy evaluation, range evaluation, latest-value evaluation, and append-oriented execution where supported by the binding/runtime contract.
 
 ## Quick start: Rust
-
-Until a public crates.io package/version is independently verified, use the release tag or a local path:
 
 ```toml
 [dependencies]
@@ -168,102 +121,41 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let close: Vec<f64> = (1..=100).map(|v| v as f64).collect();
     let sma20 = moving_avg::sma(&close, 20)?;
     let rsi14 = indicators::rsi(&close, 14)?;
-
-    println!("SMA20 = {:?}", sma20.last());
-    println!("RSI14 = {:?}", rsi14.last());
+    println!("{:?} {:?}", sma20.last(), rsi14.last());
     Ok(())
 }
 ```
 
-## Quick start: CLI
+## Performance and correctness
 
-```bash
-git clone https://github.com/coeasy/finkit.git
-cd finkit
-cargo build -p finkit-cli --release --locked
-./target/release/finkit-cli --help
-```
+Finkit optimizes the whole execution path: SIMD kernels, borrowed/zero-copy inputs, caller-owned `_into` outputs, persistent compiled plans, streaming state, dependency reuse, local DirtyRange recomputation, and reusable buffers.
 
-```bash
-./target/release/finkit-cli sma --input close.txt --period 20
-./target/release/finkit-cli rsi --input close.txt --period 14 --format json
-./target/release/finkit-cli atr --input ohlcv.csv --period 14
-./target/release/finkit-cli formula "MA(CLOSE, 5)" --input ohlcv.csv
-./target/release/finkit-cli streaming ema --input ohlcv.csv --period 20
-```
+Those optimizations remain constrained by numerical correctness. Time series are oldest-to-newest, aligned arrays stay aligned, rolling outputs preserve warm-up `NaN`, predictive research follows point-in-time/no-lookahead rules, and unsafe incremental plans must fall back to full execution.
 
-## Distribution and language status
+Strict performance contracts belong in dedicated benchmark and relative-performance gates. Ordinary unit tests should not turn transient shared-runner timing jitter into false product regressions.
 
-The GitHub `v0.1.15` Release is the authoritative distribution for that version. It contains verified Python ABI3 wheels, the Rust crate release asset, a Linux x86_64 CLI binary, and checksums.
+## Distribution status is explicit
 
-Other language integrations have different maturity/publication states. Node.js, Java/JNI, C/C++, Go, .NET, Android, iOS, and WASM all have source and/or CI packaging paths, but a build candidate is not automatically a public npm/Maven/NuGet/Go/Android/Swift package.
+Finkit distinguishes source availability, CI validation, package candidates, GitHub Release assets, and public registry packages. A binding existing in the repository does not automatically mean that npm, Maven, NuGet, Go, Android, Swift, or another registry package is publicly released.
 
-See [docs/language-bindings.md](docs/language-bindings.md) for the exact contract.
-
-## Correctness and data conventions
-
-Across bindings and runtimes:
-
-- bars are ordered oldest → newest;
-- related OHLCV arrays must remain aligned;
-- rolling outputs preserve alignment with leading warm-up `NaN` values;
-- combine multiple outputs with a joint finite-value mask instead of dropping rows independently;
-- zero-copy borrowed inputs must not be resized or mutated concurrently during evaluation;
-- predictive research must preserve point-in-time/no-lookahead semantics;
-- unsafe incremental plans must fall back to full execution rather than silently changing results.
-
-## Performance model
-
-Finkit optimizes the entire execution path, not only individual formulas:
-
-- SIMD kernels for selected hot paths;
-- reusable `_into` output APIs to reduce allocation;
-- zero-copy/borrowed input paths where ownership permits;
-- persistent compiled formula plans;
-- streaming state for bar-by-bar calculations;
-- shared factor dependency plans;
-- DirtyRange-based local execution for proven-safe dependency chains;
-- benchmark and relative-performance gates in CI.
-
-Performance is CPU-, compiler-, feature-, and workload-dependent. Treat checked-in benchmark reports as measured snapshots, not universal latency guarantees.
+See [docs/language-bindings.md](docs/language-bindings.md) for the exact support/publication matrix.
 
 ## Documentation
 
-| Document | Purpose |
-| --- | --- |
-| [Product overview](docs/product-overview.md) | Product positioning, architecture, capabilities, users, scenarios, roadmap |
-| [中文产品说明](docs/product-overview-zh.md) | 中文产品定位与能力说明 |
-| [中文宣传文稿](docs/promotion-zh.md) | Website/community/release promotional copy |
-| [Getting started](docs/getting-started.md) | First successful installation and calculation |
-| [Installation](docs/installation.md) | Release assets, source builds and verification |
-| [Complete usage guide](docs/usage.md) | End-to-end usage and runtime conventions |
-| [Language bindings](docs/language-bindings.md) | Exact support/publication matrix |
-| [Runtime and factors](docs/runtime-and-factors.md) | Unified Runtime, FactorPlan, DirtyRange and factor execution |
-| [Factor research architecture](docs/factor-research-architecture.md) | Reuse-first research architecture and implementation sequence |
-| [Formula engine](docs/formula.md) | Formula syntax and execution |
-| [API reference](docs/api-reference.md) | Public API overview |
-| [Development](docs/development.md) | Build, test, benchmark, package and CI workflow |
-
-Generated files under `docs/generated/`, `docs/indicator_registry.json`, and benchmark baselines are machine-readable/CI contracts and are intentionally retained.
-
-## Build and verify
-
-```bash
-cargo fmt --all -- --check
-cargo check --workspace --locked
-cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-cargo test -p finkit --locked
-cargo test --workspace --doc --locked
-python scripts/check_versions.py
-python scripts/gen_ssot_docs.py --check
-python scripts/check_docs_links.py
-```
+- [Product overview](docs/product-overview.md)
+- [中文产品说明](docs/product-overview-zh.md)
+- [中文宣传文稿](docs/promotion-zh.md)
+- [品牌与媒体素材](docs/media-kit-zh.md)
+- [Getting started](docs/getting-started.md)
+- [Complete usage guide](docs/usage.md)
+- [Runtime and factors](docs/runtime-and-factors.md)
+- [Factor research architecture](docs/factor-research-architecture.md)
+- [Language bindings](docs/language-bindings.md)
+- [Development and verification](docs/development.md)
 
 ## What Finkit is not
 
-Finkit is not an OMS, brokerage adapter, exchange gateway, matching engine, or a turnkey live-trading platform. It is the **calculation and research engine** that those systems can call.
-
-Keeping that boundary explicit lets the project optimize numerical correctness, runtime reuse, data alignment, research safety, and cross-language delivery without coupling the core to a broker or execution venue.
+Finkit is not an OMS, brokerage adapter, exchange gateway, matching engine, or turnkey live-trading platform. It is the **calculation, research, and realtime analytics engine** those systems can call.
 
 ## License
 
