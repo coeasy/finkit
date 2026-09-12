@@ -140,9 +140,14 @@ impl DirtyRange {
         if self.is_empty() {
             return self;
         }
+        let expanded_end = self.end.saturating_add(lookback);
         Self {
             start: self.start,
-            end: self.end.saturating_add(lookback).min(rows),
+            end: if expanded_end < rows {
+                expanded_end
+            } else {
+                rows
+            },
         }
     }
 
