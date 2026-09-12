@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "finkit"
 version = "0.1.15"
-description = "High-performance financial technical analysis library for quantitative trading"
+description = "Rust-powered quantitative finance engine for indicators, formulas, factors, streaming analytics, and research workflows"
 authors = [
     {name = "Finkit Contributors"}
 ]
@@ -15,15 +15,15 @@ maintainers = [
 readme = "README.md"
 license = {text = "MIT OR Apache-2.0"}
 keywords = [
+    "quantitative-finance",
     "technical-analysis",
-    "trading",
-    "quantitative",
-    "finance",
-    "finkit",
-    "stock",
-    "crypto",
+    "factor-research",
+    "streaming",
+    "financial-data",
     "indicators",
+    "formula-engine",
     "rust",
+    "numpy",
     "performance"
 ]
 dependencies = [
@@ -62,7 +62,7 @@ requires-python = ">=3.8,<3.15"
 
 [project.urls]
 Homepage = "https://github.com/coeasy/finkit"
-Documentation = "https://github.com/coeasy/finkit/tree/main/docs/python.md"
+Documentation = "https://github.com/coeasy/finkit/tree/main/docs/README.md"
 Repository = "https://github.com/coeasy/finkit"
 Issues = "https://github.com/coeasy/finkit/issues"
 Changelog = "https://github.com/coeasy/finkit/releases"
