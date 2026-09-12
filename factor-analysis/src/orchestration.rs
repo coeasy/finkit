@@ -54,13 +54,15 @@ impl StageIncrementalCapability {
 impl ResearchStageKind {
     /// Authoritative incremental capability for this semantic stage.
     ///
-    /// `ForwardReturns` is currently the only stage backed by a dedicated
-    /// append-aware engine. Other stages remain correctness-first `FullOnly`
-    /// until their typed materializations are consumed directly by the common
-    /// executor.
+    /// `Align` is a stateless orchestration boundary and therefore cannot
+    /// invalidate incremental execution by itself. `ForwardReturns` is backed
+    /// by a dedicated append-aware engine. Other stages remain correctness-first
+    /// `FullOnly` until their typed materializations are consumed directly by
+    /// the common executor.
     #[must_use]
     pub const fn incremental_capability(self) -> StageIncrementalCapability {
         match self {
+            Self::Align => StageIncrementalCapability::RangeSafe,
             Self::ForwardReturns => StageIncrementalCapability::AppendSafe,
             _ => StageIncrementalCapability::FullOnly,
         }
@@ -299,6 +301,10 @@ mod tests {
     #[test]
     fn incremental_capability_is_conservative_and_explicit() {
         assert_eq!(
+            ResearchStageKind::Align.incremental_capability(),
+            StageIncrementalCapability::RangeSafe
+        );
+        assert_eq!(
             ResearchStageKind::ForwardReturns.incremental_capability(),
             StageIncrementalCapability::AppendSafe
         );
@@ -306,6 +312,9 @@ mod tests {
             ResearchStageKind::Report.incremental_capability(),
             StageIncrementalCapability::FullOnly
         );
+        assert!(ResearchStageKind::Align
+            .incremental_capability()
+            .supports_range());
         assert!(ResearchStageKind::ForwardReturns
             .incremental_capability()
             .supports_append());
@@ -319,9 +328,10 @@ mod tests {
         let plan = ResearchPlan::standard_factor_study().unwrap();
         let append_blocker = plan.first_append_blocker().unwrap();
         let range_blocker = plan.first_range_blocker().unwrap();
-        assert_eq!(append_blocker.id, 0);
-        assert_eq!(append_blocker.kind, ResearchStageKind::Align);
-        assert_eq!(range_blocker.id, 0);
+        assert_eq!(append_blocker.id, 2);
+        assert_eq!(append_blocker.kind, ResearchStageKind::Clean);
+        assert_eq!(range_blocker.id, 1);
+        assert_eq!(range_blocker.kind, ResearchStageKind::ForwardReturns);
         assert!(!plan.supports_append_incremental());
         assert!(!plan.supports_range_incremental());
     }
