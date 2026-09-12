@@ -270,7 +270,10 @@ mod tests {
         assert_eq!(arena.get::<Vec<u64>>(handle).unwrap().len(), 5);
 
         arena.restore(&checkpoint);
-        assert_eq!(arena.get::<Vec<u64>>(handle).unwrap().as_slice(), &[1, 2, 3, 4]);
+        assert_eq!(
+            arena.get::<Vec<u64>>(handle).unwrap().as_slice(),
+            &[1, 2, 3, 4]
+        );
     }
 
     #[test]
