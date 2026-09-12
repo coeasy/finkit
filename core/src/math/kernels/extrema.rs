@@ -44,7 +44,10 @@ impl MonotonicExtrema {
             }
         }
 
-        self.values.front().map(|(_, value)| *value).unwrap_or(value)
+        self.values
+            .front()
+            .map(|(_, value)| *value)
+            .unwrap_or(value)
     }
 
     pub fn reset(&mut self) {
