@@ -42,7 +42,10 @@ metrics-exporter-prometheus = { version = "0.15", default-features = false }
 
 [profile.release]
 opt-level = 3
-lto = "thin"
+# Finkit is primarily a compute engine: prefer whole-program optimization for
+# shipped artifacts so cross-module hot paths can be inlined and folded just
+# like the benchmark profile. CI still compiles ordinary debug checks separately.
+lto = "fat"
 codegen-units = 1
 strip = "debuginfo"
 
