@@ -13,6 +13,7 @@ Choose the path that matches your goal:
 | Understand the product | [Product overview](product-overview.md) |
 | 中文产品介绍 | [中文产品说明](product-overview-zh.md) |
 | 宣传/项目介绍素材 | [中文宣传文稿](promotion-zh.md) |
+| 评估竞品与性能优势 | [竞品对比与超越路线](competitive-positioning-zh.md) |
 | Install and calculate something | [Getting started](getting-started.md) |
 | Verify install/release assets | [Installation](installation.md) |
 | Learn the end-to-end APIs | [Complete usage guide](usage.md) |
@@ -139,13 +140,14 @@ For exact supported functions and Pine mappings, prefer generated catalogs over 
 
 | Document | Purpose |
 | --- | --- |
-| [benchmark-results.md](benchmark-results.md) | Current benchmark summary |
-| [BENCHMARK_VS_TALIB.md](BENCHMARK_VS_TALIB.md) | TA-Lib comparison methodology |
-| [BENCHMARK_REPORT.md](BENCHMARK_REPORT.md) | Generated benchmark snapshot |
+| [competitive-positioning-zh.md](competitive-positioning-zh.md) | 竞品能力矩阵、可证明优势与超越路线 |
+| [benchmark-results.md](benchmark-results.md) | Current benchmark/evidence summary |
+| [BENCHMARK_VS_TALIB.md](BENCHMARK_VS_TALIB.md) | TA-Lib comparison and reproducibility contract |
+| [BENCHMARK_REPORT.md](BENCHMARK_REPORT.md) | Checked-in historical benchmark snapshot |
 | [FUZZING.md](FUZZING.md) | Fuzz targets and crash reproduction |
 | [development.md](development.md) | Build, test, benchmark, package and CI workflow |
 
-Benchmark values are measured snapshots, not universal latency/throughput guarantees. Re-run the benchmark harness on the target CPU/compiler/runtime before making production commitments.
+Benchmark values are measured snapshots, not universal latency/throughput guarantees. Re-run the benchmark harness on the target CPU/compiler/runtime before making production commitments. The scheduled `competitive-benchmark.yml` workflow produces commit-bound TA-Lib evidence; it complements, rather than replaces, correctness and regression gates in normal PR CI.
 
 ## Generated source of truth — do not delete
 
