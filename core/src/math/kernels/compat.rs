@@ -42,11 +42,7 @@ fn validate(input: &[f64], window: usize, output: &[f64]) -> Result<(), KernelCo
 }
 
 /// Legacy-aligned SMA using the canonical O(1) moving-average state.
-pub fn sma_into(
-    input: &[f64],
-    window: usize,
-    output: &mut [f64],
-) -> Result<(), KernelCompatError> {
+pub fn sma_into(input: &[f64], window: usize, output: &mut [f64]) -> Result<(), KernelCompatError> {
     validate(input, window, output)?;
     output.fill(f64::NAN);
     if window > input.len() {
@@ -63,11 +59,7 @@ pub fn sma_into(
 }
 
 /// Legacy-aligned WMA using the canonical O(1) weighted recurrence.
-pub fn wma_into(
-    input: &[f64],
-    window: usize,
-    output: &mut [f64],
-) -> Result<(), KernelCompatError> {
+pub fn wma_into(input: &[f64], window: usize, output: &mut [f64]) -> Result<(), KernelCompatError> {
     validate(input, window, output)?;
     output.fill(f64::NAN);
     if window > input.len() {
