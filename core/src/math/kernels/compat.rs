@@ -6,7 +6,7 @@
 
 use super::{
     AdxState, AtrState, MonotonicExtrema, MovingAverageKind, MovingAverageState,
-    RollingWelfordState,
+    RollingExtremaPair, RollingWelfordState,
 };
 use std::fmt;
 
@@ -176,6 +176,74 @@ pub fn rolling_min_into(
     rolling_extrema_into(input, window, output, false)
 }
 
+/// Legacy-aligned MIDPOINT from one input series.
+pub fn midpoint_into(
+    input: &[f64],
+    period: usize,
+    output: &mut [f64],
+) -> Result<(), KernelCompatError> {
+    validate(input, period, output)?;
+    output.fill(f64::NAN);
+    let mut state = RollingExtremaPair::new(period);
+    for (index, value) in input.iter().copied().enumerate() {
+        let (highest, lowest) = state.update(value, value);
+        if state.is_ready() {
+            output[index] = (highest + lowest) * 0.5;
+        }
+    }
+    Ok(())
+}
+
+/// Legacy-aligned MIDPRICE from high/low series.
+pub fn midprice_into(
+    high: &[f64],
+    low: &[f64],
+    period: usize,
+    output: &mut [f64],
+) -> Result<(), KernelCompatError> {
+    if high.len() != low.len() {
+        return Err(KernelCompatError::OhlcLengthMismatch);
+    }
+    validate(high, period, output)?;
+    output.fill(f64::NAN);
+    let mut state = RollingExtremaPair::new(period);
+    for index in 0..high.len() {
+        let (highest, lowest) = state.update(high[index], low[index]);
+        if state.is_ready() {
+            output[index] = (highest + lowest) * 0.5;
+        }
+    }
+    Ok(())
+}
+
+/// TA-Lib-aligned Williams %R from the paired extrema kernel.
+pub fn willr_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    period: usize,
+    output: &mut [f64],
+) -> Result<(), KernelCompatError> {
+    validate_ohlc(high, low, close, output)?;
+    if period == 0 {
+        return Err(KernelCompatError::InvalidWindow(period));
+    }
+    output.fill(f64::NAN);
+    let mut state = RollingExtremaPair::new(period);
+    for index in 0..high.len() {
+        let (highest, lowest) = state.update(high[index], low[index]);
+        if state.is_ready() {
+            let denominator = highest - lowest;
+            output[index] = if denominator > 1e-15 {
+                (highest - close[index]) / denominator * -100.0
+            } else {
+                0.0
+            };
+        }
+    }
+    Ok(())
+}
+
 /// TA-Lib-aligned ATR using the canonical streaming state.
 pub fn atr_into(
     high: &[f64],
@@ -287,6 +355,44 @@ mod tests {
         rolling_min_into(&input, 17, &mut canonical_min).unwrap();
         assert_series_eq(legacy_max.as_slice().unwrap(), &canonical_max, 1e-12);
         assert_series_eq(legacy_min.as_slice().unwrap(), &canonical_min, 1e-12);
+    }
+
+    #[test]
+    fn paired_extrema_matches_midpoint_and_midprice() {
+        let input: Vec<f64> = (0..160)
+            .map(|i| 30.0 + (i as f64 * 0.19).sin() * 5.0 + (i % 4) as f64)
+            .collect();
+        let high: Vec<f64> = input.iter().map(|value| value + 1.2).collect();
+        let low: Vec<f64> = input.iter().map(|value| value - 0.8).collect();
+        let legacy_midpoint = indicators::midpoint(&input, 15).unwrap();
+        let legacy_midprice = indicators::midprice(&high, &low, 15).unwrap();
+        let mut canonical_midpoint = vec![0.0; input.len()];
+        let mut canonical_midprice = vec![0.0; input.len()];
+        midpoint_into(&input, 15, &mut canonical_midpoint).unwrap();
+        midprice_into(&high, &low, 15, &mut canonical_midprice).unwrap();
+        assert_series_eq(
+            legacy_midpoint.as_slice().unwrap(),
+            &canonical_midpoint,
+            1e-12,
+        );
+        assert_series_eq(
+            legacy_midprice.as_slice().unwrap(),
+            &canonical_midprice,
+            1e-12,
+        );
+    }
+
+    #[test]
+    fn paired_extrema_matches_legacy_willr() {
+        let close: Vec<f64> = (0..180)
+            .map(|i| 70.0 + (i as f64 * 0.13).sin() * 4.0 + i as f64 * 0.01)
+            .collect();
+        let high: Vec<f64> = close.iter().map(|value| value + 1.4).collect();
+        let low: Vec<f64> = close.iter().map(|value| value - 1.1).collect();
+        let legacy = indicators::willr(&high, &low, &close, 14).unwrap();
+        let mut canonical = vec![0.0; close.len()];
+        willr_into(&high, &low, &close, 14, &mut canonical).unwrap();
+        assert_series_eq(legacy.as_slice().unwrap(), &canonical, 1e-12);
     }
 
     #[test]
