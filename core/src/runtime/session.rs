@@ -85,7 +85,10 @@ impl RuntimeSession {
     /// Number of bound node states.
     #[must_use]
     pub fn bound_state_count(&self) -> usize {
-        self.state_handles.iter().filter(|handle| handle.is_some()).count()
+        self.state_handles
+            .iter()
+            .filter(|handle| handle.is_some())
+            .count()
     }
 
     /// Bind one typed state to a plan node.
@@ -184,11 +187,29 @@ mod tests {
             .bind_state(node, MovingAverageState::new(MovingAverageKind::Sma, 3))
             .unwrap();
 
-        assert_eq!(session.state_mut::<MovingAverageState>(node).unwrap().update(3.0), 3.0);
+        assert_eq!(
+            session
+                .state_mut::<MovingAverageState>(node)
+                .unwrap()
+                .update(3.0),
+            3.0
+        );
         let checkpoint = session.checkpoint();
-        assert_eq!(session.state_mut::<MovingAverageState>(node).unwrap().update(6.0), 4.5);
+        assert_eq!(
+            session
+                .state_mut::<MovingAverageState>(node)
+                .unwrap()
+                .update(6.0),
+            4.5
+        );
         session.restore(&checkpoint);
-        assert_eq!(session.state_mut::<MovingAverageState>(node).unwrap().update(9.0), 6.0);
+        assert_eq!(
+            session
+                .state_mut::<MovingAverageState>(node)
+                .unwrap()
+                .update(9.0),
+            6.0
+        );
     }
 
     #[test]
@@ -198,9 +219,7 @@ mod tests {
             .intern_node(KernelFamily::MovingAverage, "sma:5", vec![], 4)
             .unwrap();
         let session = RuntimeSession::new(builder.build().unwrap());
-        let scheduled = session
-            .schedule_dirty(DirtyRange::new(10, 11), 20)
-            .unwrap();
+        let scheduled = session.schedule_dirty(DirtyRange::new(10, 11), 20).unwrap();
         assert_eq!(scheduled.affected, DirtyRange::new(10, 15));
         assert_eq!(scheduled.recompute, DirtyRange::new(6, 15));
     }
