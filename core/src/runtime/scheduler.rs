@@ -9,6 +9,10 @@ use std::fmt;
 pub enum ScheduleError {
     /// Dirty range exceeds the authoritative row count.
     DirtyRangeOutOfBounds { dirty: DirtyRange, rows: usize },
+    /// The plan contains a recursive dependency (for example EMA/ATR/ADX), so
+    /// an arbitrary historical edit cannot be reduced to a finite lookback
+    /// without replaying from a proven checkpoint.
+    RecursiveDependencyRequiresCheckpoint,
 }
 
 impl fmt::Display for ScheduleError {
@@ -18,6 +22,10 @@ impl fmt::Display for ScheduleError {
                 f,
                 "dirty range {}..{} exceeds runtime rows {rows}",
                 dirty.start, dirty.end
+            ),
+            Self::RecursiveDependencyRequiresCheckpoint => write!(
+                f,
+                "dirty-range execution contains recursive state and requires checkpoint replay"
             ),
         }
     }
@@ -55,8 +63,9 @@ impl ExecutionScheduler {
         }
     }
 
-    /// Schedule the minimal row interval implied by the plan's cumulative
-    /// lookback contract.
+    /// Schedule the minimal row interval implied by finite cumulative
+    /// lookbacks. Recursive state is rejected here because correct historical
+    /// replay requires a checkpoint boundary, not a guessed finite window.
     pub fn dirty(
         plan: &ExecutionPlan,
         dirty: DirtyRange,
@@ -74,7 +83,9 @@ impl ExecutionScheduler {
             });
         }
 
-        let lookback = plan.max_lookback();
+        let lookback = plan
+            .max_lookback()
+            .ok_or(ScheduleError::RecursiveDependencyRequiresCheckpoint)?;
         let affected = dirty.propagate_forward(lookback, rows);
         let recompute = affected.with_lookback(lookback);
         Ok(ScheduledExecution {
@@ -107,9 +118,25 @@ mod tests {
         let plan = builder.build().unwrap();
 
         let scheduled = ExecutionScheduler::dirty(&plan, DirtyRange::new(50, 51), 100).unwrap();
-        assert_eq!(plan.max_lookback(), 28);
+        assert_eq!(plan.max_lookback(), Some(28));
         assert_eq!(scheduled.affected, DirtyRange::new(50, 79));
         assert_eq!(scheduled.recompute, DirtyRange::new(22, 79));
+    }
+
+    #[test]
+    fn recursive_plan_requires_checkpoint_for_dirty_replay() {
+        let mut builder = ExecutionPlanBuilder::new();
+        let input = builder
+            .intern_node(KernelFamily::MovingAverage, "close", vec![], 0)
+            .unwrap();
+        builder
+            .intern_recursive_node(KernelFamily::MovingAverage, "ema:20", vec![input])
+            .unwrap();
+        let plan = builder.build().unwrap();
+        assert_eq!(
+            ExecutionScheduler::dirty(&plan, DirtyRange::new(50, 51), 100).unwrap_err(),
+            ScheduleError::RecursiveDependencyRequiresCheckpoint
+        );
     }
 
     #[test]
