@@ -10,7 +10,7 @@ Finkit is a reusable **Quant Compute Runtime**. It brings technical indicators, 
 
 Use Finkit behind research notebooks, market scanners, factor platforms, analytics APIs, realtime dashboards, data pipelines, or financial SDKs when you want one calculation layer instead of separate implementations for every product surface.
 
-[中文说明](README.zh-CN.md) · [Product overview](docs/product-overview.md) · [中文产品说明](docs/product-overview-zh.md) · [Documentation](docs/README.md)
+[中文说明](README.zh-CN.md) · [Product overview](docs/product-overview.md) · [中文产品说明](docs/product-overview-zh.md) · [Competitive strategy](docs/competitive-positioning-zh.md) · [Documentation](docs/README.md)
 
 Current published release: **v0.1.15**. The Unified Runtime and Factor Research work in PR #29 is next-release candidate architecture and is not treated as released until the same commit passes the full release gate.
 
@@ -132,7 +132,15 @@ Finkit optimizes the whole execution path: SIMD kernels, borrowed/zero-copy inpu
 
 Those optimizations remain constrained by numerical correctness. Time series are oldest-to-newest, aligned arrays stay aligned, rolling outputs preserve warm-up `NaN`, predictive research follows point-in-time/no-lookahead rules, and unsafe incremental plans must fall back to full execution.
 
-Strict performance contracts belong in dedicated benchmark and relative-performance gates. Ordinary unit tests should not turn transient shared-runner timing jitter into false product regressions.
+Strict performance contracts run in dedicated release-mode regression gates. The HT_SINE whole-function budget remains `<1000 ns/bar`, but is measured in an optimized single-threaded gate instead of a noisy concurrent debug test. DirtyRange also carries a row-efficiency contract: a local historical revision must remain local and must match a full recomputation exactly.
+
+## Competitive performance is evidence-based
+
+Finkit does not treat “fastest” as a permanent adjective. Direct competitor results are tied to a commit, CPU/platform, compiler, dataset, feature set, and competitor version.
+
+The repository includes a reproducible TA-Lib C comparison pipeline, machine-readable reports, and a scheduled TA-Lib 0.7.1 head-to-head guardrail. The long-term target for canonical hot paths is to match or beat TA-Lib while preserving parity; the broader differentiation is reusable Formula/Factor plans, safe DirtyRange recomputation, low-allocation execution, research reuse, and one semantic core across language bindings.
+
+See [the competitive positioning and superiority roadmap](docs/competitive-positioning-zh.md) and [TA-Lib benchmark contract](docs/BENCHMARK_VS_TALIB.md).
 
 ## Distribution status is explicit
 
@@ -146,6 +154,8 @@ See [docs/language-bindings.md](docs/language-bindings.md) for the exact support
 - [中文产品说明](docs/product-overview-zh.md)
 - [中文宣传文稿](docs/promotion-zh.md)
 - [品牌与媒体素材](docs/media-kit-zh.md)
+- [竞品对比与超越路线](docs/competitive-positioning-zh.md)
+- [Benchmark evidence](docs/benchmark-results.md)
 - [Getting started](docs/getting-started.md)
 - [Complete usage guide](docs/usage.md)
 - [Runtime and factors](docs/runtime-and-factors.md)
