@@ -87,7 +87,10 @@ jobs:
       - name: Verify generated registry snapshot
         run: git diff --exit-code -- docs/indicator_registry.json
       - name: Run core tests with compiler warnings denied
-        run: cargo test -p finkit --locked
+        # The historical HT_SINE absolute throughput budget is enforced below
+        # in release mode with one test thread. Keeping the debug wall-clock
+        # probe in this highly concurrent job created false runner-jitter reds.
+        run: cargo test -p finkit --locked -- --skip test_ht_sine_throughput
       - name: Run core docs tests
         run: cargo test -p finkit --doc --locked
 
@@ -165,7 +168,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Zero-allocation hot-path contract
         run: cargo test -p finkit --test memory_regression --release --locked -- --test-threads=1
-      - name: Relative performance contract
+      - name: Relative and absolute performance contracts
         run: cargo test -p finkit --test performance_regression --release --locked -- --test-threads=1
       - name: Compile benchmark suite with compiler warnings denied
         run: cargo bench -p finkit --no-run --locked
