@@ -20,6 +20,8 @@ pub enum RuntimeSessionError {
     State(StateArenaError),
     /// Row scheduling failed.
     Schedule(ScheduleError),
+    /// A checkpoint without a row boundary cannot prove safe recursive replay.
+    CheckpointHasNoRowBoundary,
 }
 
 impl fmt::Display for RuntimeSessionError {
@@ -32,6 +34,10 @@ impl fmt::Display for RuntimeSessionError {
             Self::StateNotBound(node) => write!(f, "runtime state not bound to node {}", node.0),
             Self::State(error) => error.fmt(f),
             Self::Schedule(error) => error.fmt(f),
+            Self::CheckpointHasNoRowBoundary => write!(
+                f,
+                "runtime checkpoint has no row boundary for recursive dirty replay"
+            ),
         }
     }
 }
@@ -54,6 +60,16 @@ impl From<ScheduleError> for RuntimeSessionError {
 #[derive(Debug, Clone)]
 pub struct RuntimeSessionCheckpoint {
     arena: StateArenaCheckpoint,
+    next_row: Option<usize>,
+}
+
+impl RuntimeSessionCheckpoint {
+    /// First row not represented in the saved kernel states. `None` means the
+    /// checkpoint is state-only and cannot prove a historical replay boundary.
+    #[must_use]
+    pub const fn next_row(&self) -> Option<usize> {
+        self.next_row
+    }
 }
 
 /// Long-lived execution session that reuses a plan and all kernel state.
@@ -127,11 +143,25 @@ impl RuntimeSession {
         Ok(self.arena.get_mut::<T>(handle)?)
     }
 
-    /// Capture all node states in one immutable image.
+    /// Capture all node states without attaching a row boundary.
+    ///
+    /// This remains useful for branch/rollback workflows, but recursive
+    /// historical replay must use [`Self::checkpoint_at`].
     #[must_use]
     pub fn checkpoint(&self) -> RuntimeSessionCheckpoint {
         RuntimeSessionCheckpoint {
             arena: self.arena.checkpoint(),
+            next_row: None,
+        }
+    }
+
+    /// Capture node states after all rows strictly before `next_row` have been
+    /// processed. This row boundary can later prove safe recursive replay.
+    #[must_use]
+    pub fn checkpoint_at(&self, next_row: usize) -> RuntimeSessionCheckpoint {
+        RuntimeSessionCheckpoint {
+            arena: self.arena.checkpoint(),
+            next_row: Some(next_row),
         }
     }
 
@@ -146,13 +176,29 @@ impl RuntimeSession {
         ExecutionScheduler::full(&self.plan, rows)
     }
 
-    /// Build a proven minimal DirtyRange schedule.
+    /// Build a proven minimal DirtyRange schedule for a finite-window plan.
     pub fn schedule_dirty(
         &self,
         dirty: DirtyRange,
         rows: usize,
     ) -> Result<ScheduledExecution, RuntimeSessionError> {
         Ok(ExecutionScheduler::dirty(&self.plan, dirty, rows)?)
+    }
+
+    /// Build a correct historical-edit schedule using a row-addressable
+    /// checkpoint. Recursive plans replay from that checkpoint to the end.
+    pub fn schedule_dirty_from_checkpoint(
+        &self,
+        checkpoint: &RuntimeSessionCheckpoint,
+        dirty: DirtyRange,
+        rows: usize,
+    ) -> Result<ScheduledExecution, RuntimeSessionError> {
+        let next_row = checkpoint
+            .next_row
+            .ok_or(RuntimeSessionError::CheckpointHasNoRowBoundary)?;
+        Ok(ExecutionScheduler::dirty_from_checkpoint(
+            &self.plan, &dirty, rows, next_row,
+        )?)
     }
 
     fn state_handle(&self, node: NodeId) -> Result<StateHandle, RuntimeSessionError> {
@@ -222,5 +268,34 @@ mod tests {
         let scheduled = session.schedule_dirty(DirtyRange::new(10, 11), 20).unwrap();
         assert_eq!(scheduled.affected, DirtyRange::new(10, 15));
         assert_eq!(scheduled.recompute, DirtyRange::new(6, 15));
+    }
+
+    #[test]
+    fn recursive_dirty_schedule_uses_checkpoint_boundary() {
+        let mut builder = ExecutionPlanBuilder::new();
+        builder
+            .intern_recursive_node(KernelFamily::Volatility, "atr:14", vec![])
+            .unwrap();
+        let session = RuntimeSession::new(builder.build().unwrap());
+        let checkpoint = session.checkpoint_at(40);
+        let scheduled = session
+            .schedule_dirty_from_checkpoint(&checkpoint, DirtyRange::new(50, 51), 100)
+            .unwrap();
+        assert_eq!(scheduled.affected, DirtyRange::new(50, 100));
+        assert_eq!(scheduled.recompute, DirtyRange::new(40, 100));
+    }
+
+    #[test]
+    fn state_only_checkpoint_cannot_drive_recursive_replay() {
+        let mut builder = ExecutionPlanBuilder::new();
+        builder
+            .intern_recursive_node(KernelFamily::MovingAverage, "ema:10", vec![])
+            .unwrap();
+        let session = RuntimeSession::new(builder.build().unwrap());
+        let checkpoint = session.checkpoint();
+        assert!(matches!(
+            session.schedule_dirty_from_checkpoint(&checkpoint, DirtyRange::new(5, 6), 10),
+            Err(RuntimeSessionError::CheckpointHasNoRowBoundary)
+        ));
     }
 }
