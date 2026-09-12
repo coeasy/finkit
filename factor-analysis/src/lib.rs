@@ -6,6 +6,9 @@
 pub mod analysis;
 pub mod api;
 pub mod artifacts;
+#[deprecated(
+    note = "use artifacts::ResearchArtifactStore and MaterializationKey; cache is a compatibility-only revision cache"
+)]
 pub mod cache;
 pub mod compat;
 pub mod context;
