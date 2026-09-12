@@ -2,6 +2,8 @@
 //!
 //! The plan is deliberately backend-neutral: Formula, Factor and indicator
 //! frontends can compile semantic work into the same node/dependency model.
+//! Fixed-window and recursive dependencies are represented separately so a
+//! DirtyRange scheduler cannot silently truncate an EMA/ATR-style history.
 
 use crate::math::kernels::KernelFamily;
 use std::collections::{BTreeMap, VecDeque};
@@ -10,6 +12,16 @@ use std::fmt;
 /// Stable zero-based identifier for one plan node.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeId(pub usize);
+
+/// Historical dependency contract for a plan node.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum DependencyHorizon {
+    /// Output depends on at most this many prior rows.
+    Fixed(usize),
+    /// Output recursively depends on all prior state unless replay starts from
+    /// a valid checkpoint.
+    Recursive,
+}
 
 /// One reusable kernel node in an execution plan.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -22,8 +34,8 @@ pub struct PlanNode {
     pub key: String,
     /// Direct dependencies consumed by this node.
     pub dependencies: Vec<NodeId>,
-    /// Historical rows required by this node itself.
-    pub lookback: usize,
+    /// Historical dependency contract for this operation.
+    pub horizon: DependencyHorizon,
 }
 
 /// Plan validation failures.
@@ -60,8 +72,8 @@ impl std::error::Error for ExecutionPlanError {}
 pub struct ExecutionPlan {
     nodes: Vec<PlanNode>,
     order: Vec<NodeId>,
-    cumulative_lookback: Vec<usize>,
-    max_lookback: usize,
+    cumulative_lookback: Vec<Option<usize>>,
+    max_lookback: Option<usize>,
 }
 
 impl ExecutionPlan {
@@ -115,20 +127,29 @@ impl ExecutionPlan {
             return Err(ExecutionPlanError::Cycle);
         }
 
-        let mut cumulative_lookback = vec![0_usize; nodes.len()];
-        let mut max_lookback = 0_usize;
+        let mut cumulative_lookback = vec![Some(0_usize); nodes.len()];
         for node_id in &order {
             let node = &nodes[node_id.0];
-            let dependency_lookback = node
-                .dependencies
-                .iter()
-                .map(|dependency| cumulative_lookback[dependency.0])
-                .max()
-                .unwrap_or(0);
-            let lookback = dependency_lookback.saturating_add(node.lookback);
-            cumulative_lookback[node_id.0] = lookback;
-            max_lookback = max_lookback.max(lookback);
+            let dependency_lookback = node.dependencies.iter().try_fold(
+                0_usize,
+                |current, dependency| {
+                    cumulative_lookback[dependency.0].map(|value| current.max(value))
+                },
+            );
+            cumulative_lookback[node_id.0] = match (dependency_lookback, node.horizon) {
+                (Some(dependency), DependencyHorizon::Fixed(lookback)) => {
+                    Some(dependency.saturating_add(lookback))
+                }
+                _ => None,
+            };
         }
+
+        let max_lookback = cumulative_lookback
+            .iter()
+            .copied()
+            .try_fold(0_usize, |current, lookback| {
+                lookback.map(|value| current.max(value))
+            });
 
         Ok(Self {
             nodes,
@@ -162,16 +183,24 @@ impl ExecutionPlan {
         self.nodes.get(id.0)
     }
 
-    /// Cumulative historical dependency requirement for one node.
+    /// Cumulative finite lookback for one node. `None` means the node itself
+    /// or one dependency is recursive and requires checkpoint/replay.
     #[must_use]
     pub fn cumulative_lookback(&self, id: NodeId) -> Option<usize> {
-        self.cumulative_lookback.get(id.0).copied()
+        self.cumulative_lookback.get(id.0).copied().flatten()
     }
 
-    /// Maximum cumulative lookback across the complete plan.
+    /// Maximum finite lookback across the plan. `None` means arbitrary
+    /// DirtyRange execution is unsafe without a checkpoint boundary.
     #[must_use]
-    pub const fn max_lookback(&self) -> usize {
+    pub const fn max_lookback(&self) -> Option<usize> {
         self.max_lookback
+    }
+
+    /// Whether DirtyRange can be derived from finite lookbacks alone.
+    #[must_use]
+    pub const fn supports_dirty_range_without_checkpoint(&self) -> bool {
+        self.max_lookback.is_some()
     }
 }
 
@@ -179,7 +208,7 @@ impl ExecutionPlan {
 #[derive(Debug, Default)]
 pub struct ExecutionPlanBuilder {
     nodes: Vec<PlanNode>,
-    interned: BTreeMap<(u8, String, Vec<NodeId>, usize), NodeId>,
+    interned: BTreeMap<(u8, String, Vec<NodeId>, DependencyHorizon), NodeId>,
 }
 
 impl ExecutionPlanBuilder {
@@ -192,16 +221,38 @@ impl ExecutionPlanBuilder {
         }
     }
 
-    /// Add or reuse one semantic kernel node.
-    ///
-    /// `dependencies` are order-sensitive so non-commutative operations are
-    /// never incorrectly merged.
+    /// Add or reuse a fixed-window semantic kernel node.
     pub fn intern_node(
         &mut self,
         family: KernelFamily,
         key: impl Into<String>,
         dependencies: Vec<NodeId>,
         lookback: usize,
+    ) -> Result<NodeId, ExecutionPlanError> {
+        self.intern_with_horizon(
+            family,
+            key,
+            dependencies,
+            DependencyHorizon::Fixed(lookback),
+        )
+    }
+
+    /// Add or reuse a recursive state node such as EMA, ATR or ADX.
+    pub fn intern_recursive_node(
+        &mut self,
+        family: KernelFamily,
+        key: impl Into<String>,
+        dependencies: Vec<NodeId>,
+    ) -> Result<NodeId, ExecutionPlanError> {
+        self.intern_with_horizon(family, key, dependencies, DependencyHorizon::Recursive)
+    }
+
+    fn intern_with_horizon(
+        &mut self,
+        family: KernelFamily,
+        key: impl Into<String>,
+        dependencies: Vec<NodeId>,
+        horizon: DependencyHorizon,
     ) -> Result<NodeId, ExecutionPlanError> {
         for dependency in &dependencies {
             if dependency.0 >= self.nodes.len() {
@@ -217,7 +268,7 @@ impl ExecutionPlanBuilder {
             family_rank(family),
             key.clone(),
             dependencies.clone(),
-            lookback,
+            horizon,
         );
         if let Some(existing) = self.interned.get(&signature) {
             return Ok(*existing);
@@ -229,7 +280,7 @@ impl ExecutionPlanBuilder {
             family,
             key,
             dependencies,
-            lookback,
+            horizon,
         });
         self.interned.insert(signature, id);
         Ok(id)
@@ -260,13 +311,13 @@ mod tests {
         let input = builder
             .intern_node(KernelFamily::MovingAverage, "close", vec![], 0)
             .unwrap();
-        let ema_a = builder
-            .intern_node(KernelFamily::MovingAverage, "ema:12", vec![input], 11)
+        let sma_a = builder
+            .intern_node(KernelFamily::MovingAverage, "sma:12", vec![input], 11)
             .unwrap();
-        let ema_b = builder
-            .intern_node(KernelFamily::MovingAverage, "ema:12", vec![input], 11)
+        let sma_b = builder
+            .intern_node(KernelFamily::MovingAverage, "sma:12", vec![input], 11)
             .unwrap();
-        assert_eq!(ema_a, ema_b);
+        assert_eq!(sma_a, sma_b);
         let plan = builder.build().unwrap();
         assert_eq!(plan.len(), 2);
     }
@@ -285,7 +336,27 @@ mod tests {
             .unwrap();
         let plan = builder.build().unwrap();
         assert_eq!(plan.cumulative_lookback(stats), Some(28));
-        assert_eq!(plan.max_lookback(), 28);
+        assert_eq!(plan.max_lookback(), Some(28));
+        assert!(plan.supports_dirty_range_without_checkpoint());
+    }
+
+    #[test]
+    fn recursive_dependency_propagates_through_downstream_nodes() {
+        let mut builder = ExecutionPlanBuilder::new();
+        let input = builder
+            .intern_node(KernelFamily::MovingAverage, "close", vec![], 0)
+            .unwrap();
+        let ema = builder
+            .intern_recursive_node(KernelFamily::MovingAverage, "ema:12", vec![input])
+            .unwrap();
+        let stats = builder
+            .intern_node(KernelFamily::Statistics, "stddev:10", vec![ema], 9)
+            .unwrap();
+        let plan = builder.build().unwrap();
+        assert_eq!(plan.cumulative_lookback(ema), None);
+        assert_eq!(plan.cumulative_lookback(stats), None);
+        assert_eq!(plan.max_lookback(), None);
+        assert!(!plan.supports_dirty_range_without_checkpoint());
     }
 
     #[test]
@@ -296,14 +367,14 @@ mod tests {
                 family: KernelFamily::MovingAverage,
                 key: "a".to_string(),
                 dependencies: vec![NodeId(1)],
-                lookback: 0,
+                horizon: DependencyHorizon::Fixed(0),
             },
             PlanNode {
                 id: NodeId(1),
                 family: KernelFamily::Statistics,
                 key: "b".to_string(),
                 dependencies: vec![NodeId(0)],
-                lookback: 0,
+                horizon: DependencyHorizon::Fixed(0),
             },
         ];
         assert_eq!(
