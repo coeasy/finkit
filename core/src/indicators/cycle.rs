@@ -213,30 +213,40 @@ pub fn ht_sine(input: &[f64]) -> Result<(Array1<f64>, Array1<f64>)> {
 
     let dc_phase = dominant_cycle_phase(input, &period);
     let deg2rad = std::f64::consts::PI / 180.0;
-    let mut phase_radians = vec![0.0_f64; len - 63];
+    let phase_len = len - 63;
+    let mut phase_radians = vec![0.0_f64; phase_len];
+    let mut phase_cos_sign = vec![1.0_f64; phase_len];
     let pi = std::f64::consts::PI;
+    let half_pi = std::f64::consts::FRAC_PI_2;
     let two_pi = 2.0 * pi;
     for (offset, value) in dc_phase[63..].iter().enumerate() {
         let mut phase = (*value * deg2rad).rem_euclid(two_pi);
         if phase > pi {
             phase -= two_pi;
         }
-        // The AVX2 polynomial is deliberately specialized for [-pi/2, pi/2].
-        // Reduce the TA-Lib phase into that interval while preserving sine.
-        if phase > pi / 2.0 {
+        // Keep the AVX2 polynomial inside [-pi/2, pi/2], but remember
+        // the original cosine quadrant so lead-sine can reuse the same
+        // SIMD sin/cos evaluation instead of calling scalar sin again.
+        if phase > half_pi {
             phase = pi - phase;
-        } else if phase < -pi / 2.0 {
+            phase_cos_sign[offset] = -1.0;
+        } else if phase < -half_pi {
             phase = -pi - phase;
+            phase_cos_sign[offset] = -1.0;
         }
         phase_radians[offset] = phase;
     }
     let mut phase_sin = vec![0.0_f64; len];
-    let mut phase_cos = vec![0.0_f64; len - 63];
+    let mut phase_cos = vec![0.0_f64; phase_len];
     simd_ops::simd_sin_cos(&phase_radians, &mut phase_sin[63..len], &mut phase_cos);
 
     for i in 63..len {
-        sine[i] = phase_sin[i];
-        lead_sine[i] = ((dc_phase[i] + 45.0) * deg2rad).sin();
+        let offset = i - 63;
+        let sin_phase = phase_sin[i];
+        let cos_phase = phase_cos[offset] * phase_cos_sign[offset];
+        sine[i] = sin_phase;
+        lead_sine[i] =
+            (sin_phase + cos_phase) * std::f64::consts::FRAC_1_SQRT_2;
     }
 
     Ok((sine, lead_sine))
