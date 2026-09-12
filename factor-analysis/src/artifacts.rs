@@ -1,63 +1,8 @@
 //! Typed research materializations shared by batch and incremental execution.
 
+pub use finkit::unified_runtime::{ArtifactHash, DirtyRange};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::hash::{Hash, Hasher};
-use std::ops::Range;
-
-/// Half-open row range invalidated by a data change.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DirtyRange {
-    pub start: usize,
-    pub end: usize,
-}
-
-impl DirtyRange {
-    /// Build a validated half-open dirty range.
-    #[must_use]
-    pub fn new(start: usize, end: usize) -> Self {
-        Self {
-            start: start.min(end),
-            end: end.max(start),
-        }
-    }
-
-    /// A dirty range covering all rows.
-    #[must_use]
-    pub fn full(rows: usize) -> Self {
-        Self {
-            start: 0,
-            end: rows,
-        }
-    }
-
-    /// Whether no rows are dirty.
-    #[must_use]
-    pub fn is_empty(self) -> bool {
-        self.start == self.end
-    }
-
-    /// Convert to a standard range.
-    #[must_use]
-    pub fn as_range(self) -> Range<usize> {
-        self.start..self.end
-    }
-
-    /// Merge two invalidation ranges conservatively.
-    #[must_use]
-    pub fn union(self, other: Self) -> Self {
-        if self.is_empty() {
-            return other;
-        }
-        if other.is_empty() {
-            return self;
-        }
-        Self {
-            start: self.start.min(other.start),
-            end: self.end.max(other.end),
-        }
-    }
-}
 
 /// Data revision and the rows changed since the previous materialization.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -129,7 +74,7 @@ pub struct ArtifactRef {
     pub rows: usize,
     pub columns: usize,
     pub dtype: String,
-    pub content_hash: u64,
+    pub content_hash: ArtifactHash,
     pub lifecycle: ArtifactLifecycle,
 }
 
@@ -203,14 +148,13 @@ impl ResearchArtifact {
         }
     }
 
+    /// Stable typed content identity shared with the unified runtime.
     #[must_use]
-    pub fn content_hash(&self) -> u64 {
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    pub fn content_hash(&self) -> ArtifactHash {
         match serde_json::to_vec(self) {
-            Ok(bytes) => bytes.hash(&mut hasher),
-            Err(_) => self.kind_name().hash(&mut hasher),
+            Ok(bytes) => ArtifactHash::from_bytes(&bytes),
+            Err(_) => ArtifactHash::from_bytes(self.kind_name().as_bytes()),
         }
-        hasher.finish()
     }
 }
 
@@ -275,7 +219,7 @@ impl ResearchArtifactStore {
                 let (rows, columns) = artifact.shape();
                 ArtifactRef {
                     id: format!(
-                        "stage{}:{}:r{}:{content_hash:016x}",
+                        "stage{}:{}:r{}:{content_hash}",
                         key.stage_id, key.output, key.data_revision
                     ),
                     kind: artifact.kind_name().to_string(),
@@ -388,9 +332,11 @@ mod tests {
     }
 
     #[test]
-    fn artifact_references_are_stable_and_payload_free() {
+    fn artifact_references_are_stable_typed_and_payload_free() {
+        let artifact = ResearchArtifact::Series(vec![1.0, 2.0, 3.0]);
+        let expected_hash = artifact.content_hash();
         let mut store = ResearchArtifactStore::new();
-        store.insert(key(7), ResearchArtifact::Series(vec![1.0, 2.0, 3.0]));
+        store.insert(key(7), artifact);
         let first = store.references(ArtifactLifecycle::Revision);
         let second = store.references(ArtifactLifecycle::Revision);
         assert_eq!(first, second);
@@ -398,7 +344,9 @@ mod tests {
         assert_eq!(first[0].rows, 3);
         assert_eq!(first[0].columns, 1);
         assert_eq!(first[0].dtype, "f64");
+        assert_eq!(first[0].content_hash, expected_hash);
         assert_eq!(first[0].lifecycle, ArtifactLifecycle::Revision);
         assert!(first[0].id.contains("stage1:series:r7"));
+        assert!(first[0].id.ends_with(&expected_hash.to_string()));
     }
 }
