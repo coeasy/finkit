@@ -1,0 +1,112 @@
+name: PR29 exact source patch
+
+on:
+  push:
+    branches:
+      - feat/factor-research-architecture
+    paths:
+      - .github/workflows/pr29-source-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Apply exact source patches
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          cycle_path = Path("core/src/indicators/cycle.rs")
+          cycle = cycle_path.read_text()
+          old = '''    let phase_len = len - 63;
+    let mut phase_radians = Vec::with_capacity(phase_len);
+    for &phase_deg in &dc_phase[63..] {
+        let phase = phase_deg.to_radians().rem_euclid(std::f64::consts::TAU);
+        let phase = if phase > std::f64::consts::PI {
+            phase - std::f64::consts::TAU
+        } else {
+            phase
+        };
+        let reduced = if phase > std::f64::consts::FRAC_PI_2 {
+            std::f64::consts::PI - phase
+        } else if phase < -std::f64::consts::FRAC_PI_2 {
+            -std::f64::consts::PI - phase
+        } else {
+            phase
+        };
+        phase_radians.push(reduced);
+    }
+
+    let mut phase_sin = vec![0.0; phase_len];
+    let mut phase_cos = vec![0.0; phase_len];
+    crate::math::simd_ops::simd_sin_cos(&phase_radians, &mut phase_sin, &mut phase_cos);
+
+    sine[63..].copy_from_slice(&phase_sin);
+    for (offset, phase_deg) in dc_phase[63..].iter().enumerate() {
+        let i = offset + 63;
+        lead_sine[i] = (phase_deg.to_radians() + std::f64::consts::FRAC_PI_4).sin();
+    }
+'''
+          new = '''    let phase_len = len - 63;
+    let mut phase_radians = Vec::with_capacity(phase_len);
+    for &phase_deg in &dc_phase[63..] {
+        let phase = phase_deg.to_radians().rem_euclid(std::f64::consts::TAU);
+        phase_radians.push(if phase > std::f64::consts::PI {
+            phase - std::f64::consts::TAU
+        } else {
+            phase
+        });
+    }
+
+    let mut phase_sin = vec![0.0; phase_len];
+    let mut phase_cos = vec![0.0; phase_len];
+    crate::math::simd_ops::simd_sin_cos(&phase_radians, &mut phase_sin, &mut phase_cos);
+
+    sine[63..].copy_from_slice(&phase_sin);
+    for offset in 0..phase_len {
+        let i = offset + 63;
+        lead_sine[i] = (phase_sin[offset] + phase_cos[offset]) * std::f64::consts::FRAC_1_SQRT_2;
+    }
+'''
+          if cycle.count(old) != 1:
+              raise SystemExit(f"expected exactly one HT_SINE block, found {cycle.count(old)}")
+          cycle_path.write_text(cycle.replace(old, new, 1))
+
+          go_path = Path("ffi/go-binding/go/ta/ta.go")
+          go = go_path.read_text()
+          old_go = "\t\tcInt(fastPeriod), cInt(fastMa), cInt(slowPeriod), cInt(slowMa), cInt(signalPeriod), cInt(signalMa),"
+          new_go = "\t\tcInt(fastPeriod), cInt(int(fastMa)), cInt(slowPeriod), cInt(int(slowMa)), cInt(signalPeriod), cInt(int(signalMa)),"
+          if go.count(old_go) != 1:
+              raise SystemExit(f"expected exactly one Go MACDEXT ABI call, found {go.count(old_go)}")
+          go_path.write_text(go.replace(old_go, new_go, 1))
+
+          orchestration = Path("factor-analysis/src/orchestration.rs")
+          text = orchestration.read_text()
+          orchestration.write_text(text.rstrip("\n") + "\n")
+          PY
+
+      - name: Verify patch shape
+        shell: bash
+        run: |
+          git diff --check
+          git diff --stat
+          test "$(git diff --name-only | sort)" = "$(printf '%s\n' core/src/indicators/cycle.rs factor-analysis/src/orchestration.rs ffi/go-binding/go/ta/ta.go | sort)"
+          grep -F 'cInt(int(fastMa))' ffi/go-binding/go/ta/ta.go
+          grep -F 'phase_cos[offset]' core/src/indicators/cycle.rs
+
+      - name: Commit exact source patch
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add core/src/indicators/cycle.rs factor-analysis/src/orchestration.rs ffi/go-binding/go/ta/ta.go
+          git commit -m 'fix: close final hot-path and CGO release gaps'
+          git push origin HEAD:feat/factor-research-architecture
