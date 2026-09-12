@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::hash::{Hash, Hasher};
 use std::ops::Range;
 
 /// Half-open row range invalidated by a data change.
@@ -107,6 +108,31 @@ impl MaterializationKey {
     }
 }
 
+/// Intended retention scope of a research artifact reference.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ArtifactLifecycle {
+    Ephemeral,
+    Session,
+    Revision,
+    Persistent,
+}
+
+/// Lightweight data-plane descriptor for one typed research artifact.
+///
+/// Reports and SDKs can expose this metadata without serializing the full
+/// numeric payload into the control-plane JSON envelope.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ArtifactRef {
+    pub id: String,
+    pub kind: String,
+    pub rows: usize,
+    pub columns: usize,
+    pub dtype: String,
+    pub content_hash: u64,
+    pub lifecycle: ArtifactLifecycle,
+}
+
 /// Typed values produced by research stages.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "value")]
@@ -141,6 +167,50 @@ impl ResearchArtifact {
             Self::HorizonSeries(values) => Some(values),
             _ => None,
         }
+    }
+
+    #[must_use]
+    pub fn kind_name(&self) -> &'static str {
+        match self {
+            Self::Scalar(_) => "scalar",
+            Self::Series(_) => "series",
+            Self::Quantiles(_) => "quantiles",
+            Self::HorizonSeries(_) => "horizon_series",
+            Self::Json(_) => "json",
+        }
+    }
+
+    #[must_use]
+    pub fn shape(&self) -> (usize, usize) {
+        match self {
+            Self::Scalar(_) => (1, 1),
+            Self::Series(values) => (values.len(), 1),
+            Self::Quantiles(values) => (values.len(), 1),
+            Self::HorizonSeries(values) => {
+                let rows = values.values().map(Vec::len).max().unwrap_or(0);
+                (rows, values.len())
+            }
+            Self::Json(_) => (1, 1),
+        }
+    }
+
+    #[must_use]
+    pub fn dtype(&self) -> &'static str {
+        match self {
+            Self::Quantiles(_) => "u16",
+            Self::Json(_) => "json",
+            _ => "f64",
+        }
+    }
+
+    #[must_use]
+    pub fn content_hash(&self) -> u64 {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        match serde_json::to_vec(self) {
+            Ok(bytes) => bytes.hash(&mut hasher),
+            Err(_) => self.kind_name().hash(&mut hasher),
+        }
+        hasher.finish()
     }
 }
 
@@ -193,6 +263,30 @@ impl ResearchArtifactStore {
 
     pub fn retain_revision(&mut self, revision: u64) {
         self.values.retain(|key, _| key.data_revision == revision);
+    }
+
+    /// Build stable lightweight references without copying artifact payloads.
+    #[must_use]
+    pub fn references(&self, lifecycle: ArtifactLifecycle) -> Vec<ArtifactRef> {
+        self.values
+            .iter()
+            .map(|(key, artifact)| {
+                let content_hash = artifact.content_hash();
+                let (rows, columns) = artifact.shape();
+                ArtifactRef {
+                    id: format!(
+                        "stage{}:{}:r{}:{content_hash:016x}",
+                        key.stage_id, key.output, key.data_revision
+                    ),
+                    kind: artifact.kind_name().to_string(),
+                    rows,
+                    columns,
+                    dtype: artifact.dtype().to_string(),
+                    content_hash,
+                    lifecycle,
+                }
+            })
+            .collect()
     }
 
     #[must_use]
@@ -291,5 +385,20 @@ mod tests {
         assert_eq!(series.as_series(), Some([1.0, 2.0].as_slice()));
         assert!(series.as_quantiles().is_none());
         assert!(series.as_horizon_series().is_none());
+    }
+
+    #[test]
+    fn artifact_references_are_stable_and_payload_free() {
+        let mut store = ResearchArtifactStore::new();
+        store.insert(key(7), ResearchArtifact::Series(vec![1.0, 2.0, 3.0]));
+        let first = store.references(ArtifactLifecycle::Revision);
+        let second = store.references(ArtifactLifecycle::Revision);
+        assert_eq!(first, second);
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].rows, 3);
+        assert_eq!(first[0].columns, 1);
+        assert_eq!(first[0].dtype, "f64");
+        assert_eq!(first[0].lifecycle, ArtifactLifecycle::Revision);
+        assert!(first[0].id.contains("stage1:series:r7"));
     }
 }
