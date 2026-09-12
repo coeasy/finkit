@@ -236,16 +236,23 @@ pub fn ht_sine(input: &[f64]) -> Result<(Array1<f64>, Array1<f64>)> {
         }
         phase_radians[offset] = phase;
     }
-    let mut phase_sin = vec![0.0_f64; len];
-    let mut phase_cos = vec![0.0_f64; phase_len];
-    simd_ops::simd_sin_cos(&phase_radians, &mut phase_sin[63..len], &mut phase_cos);
+    let sine_values = sine
+        .as_slice_mut()
+        .expect("ht_sine output must be contiguous");
+    let lead_sine_values = lead_sine
+        .as_slice_mut()
+        .expect("ht_sine lead output must be contiguous");
+    simd_ops::simd_sin_cos(
+        &phase_radians,
+        &mut sine_values[63..len],
+        &mut lead_sine_values[63..len],
+    );
 
-    for i in 63..len {
-        let offset = i - 63;
-        let sin_phase = phase_sin[i];
-        let cos_phase = phase_cos[offset] * phase_cos_sign[offset];
-        sine[i] = sin_phase;
-        lead_sine[i] = (sin_phase + cos_phase) * std::f64::consts::FRAC_1_SQRT_2;
+    for offset in 0..phase_len {
+        let i = offset + 63;
+        let sin_phase = sine_values[i];
+        let cos_phase = lead_sine_values[i] * phase_cos_sign[offset];
+        lead_sine_values[i] = (sin_phase + cos_phase) * std::f64::consts::FRAC_1_SQRT_2;
     }
 
     Ok((sine, lead_sine))
@@ -723,6 +730,7 @@ fn compute_hilbert_components_from(
         } else {
             // ---- Odd bar processing ----
             // Detrender IIR highpass: y[n] = (a*x[n] - buffer[n-6] - prev_y + b*prev_x) * adj
+            // where buffer[n-6] = a*x[n-6], prev_y = b*x[n-4], prev_x = x[n-2]
             let mut detrender_val = -detrender_odd[hilbert_idx];
             detrender_odd[hilbert_idx] = a_coeff * smoothed_value;
             detrender_val += a_coeff * smoothed_value;
@@ -1797,7 +1805,6 @@ mod tests {
             "ht_sine SIMD lead error {} exceeds 1e-9",
             max_lead_err
         );
-
         // Sanity: the kernel was actually exercised (finite, non-trivial output).
         let mut finite = 0;
         for i in 63..n {
