@@ -26,59 +26,37 @@ jobs:
 
           cycle_path = Path("core/src/indicators/cycle.rs")
           cycle = cycle_path.read_text()
-          old = '''    let phase_len = len - 63;
-    let mut phase_radians = Vec::with_capacity(phase_len);
-    for &phase_deg in &dc_phase[63..] {
-        let phase = phase_deg.to_radians().rem_euclid(std::f64::consts::TAU);
-        let phase = if phase > std::f64::consts::PI {
-            phase - std::f64::consts::TAU
-        } else {
-            phase
-        };
-        let reduced = if phase > std::f64::consts::FRAC_PI_2 {
-            std::f64::consts::PI - phase
-        } else if phase < -std::f64::consts::FRAC_PI_2 {
-            -std::f64::consts::PI - phase
-        } else {
-            phase
-        };
-        phase_radians.push(reduced);
-    }
-
-    let mut phase_sin = vec![0.0; phase_len];
-    let mut phase_cos = vec![0.0; phase_len];
-    crate::math::simd_ops::simd_sin_cos(&phase_radians, &mut phase_sin, &mut phase_cos);
-
-    sine[63..].copy_from_slice(&phase_sin);
-    for (offset, phase_deg) in dc_phase[63..].iter().enumerate() {
-        let i = offset + 63;
-        lead_sine[i] = (phase_deg.to_radians() + std::f64::consts::FRAC_PI_4).sin();
-    }
-'''
-          new = '''    let phase_len = len - 63;
-    let mut phase_radians = Vec::with_capacity(phase_len);
-    for &phase_deg in &dc_phase[63..] {
-        let phase = phase_deg.to_radians().rem_euclid(std::f64::consts::TAU);
-        phase_radians.push(if phase > std::f64::consts::PI {
-            phase - std::f64::consts::TAU
-        } else {
-            phase
-        });
-    }
-
-    let mut phase_sin = vec![0.0; phase_len];
-    let mut phase_cos = vec![0.0; phase_len];
-    crate::math::simd_ops::simd_sin_cos(&phase_radians, &mut phase_sin, &mut phase_cos);
-
-    sine[63..].copy_from_slice(&phase_sin);
-    for offset in 0..phase_len {
-        let i = offset + 63;
-        lead_sine[i] = (phase_sin[offset] + phase_cos[offset]) * std::f64::consts::FRAC_1_SQRT_2;
-    }
-'''
-          if cycle.count(old) != 1:
-              raise SystemExit(f"expected exactly one HT_SINE block, found {cycle.count(old)}")
-          cycle_path.write_text(cycle.replace(old, new, 1))
+          start_marker = "    let phase_len = len - 63;\n"
+          end_marker = "    Ok((sine, lead_sine))"
+          if cycle.count(start_marker) != 1:
+              raise SystemExit(f"expected one HT_SINE start marker, found {cycle.count(start_marker)}")
+          start = cycle.index(start_marker)
+          end = cycle.index(end_marker, start)
+          new_lines = [
+              "    let phase_len = len - 63;",
+              "    let mut phase_radians = Vec::with_capacity(phase_len);",
+              "    for &phase_deg in &dc_phase[63..] {",
+              "        let phase = phase_deg.to_radians().rem_euclid(std::f64::consts::TAU);",
+              "        phase_radians.push(if phase > std::f64::consts::PI {",
+              "            phase - std::f64::consts::TAU",
+              "        } else {",
+              "            phase",
+              "        });",
+              "    }",
+              "",
+              "    let mut phase_sin = vec![0.0; phase_len];",
+              "    let mut phase_cos = vec![0.0; phase_len];",
+              "    crate::math::simd_ops::simd_sin_cos(&phase_radians, &mut phase_sin, &mut phase_cos);",
+              "",
+              "    sine[63..].copy_from_slice(&phase_sin);",
+              "    for offset in 0..phase_len {",
+              "        let i = offset + 63;",
+              "        lead_sine[i] =",
+              "            (phase_sin[offset] + phase_cos[offset]) * std::f64::consts::FRAC_1_SQRT_2;",
+              "    }",
+              "",
+          ]
+          cycle_path.write_text(cycle[:start] + "\n".join(new_lines) + "\n" + cycle[end:])
 
           go_path = Path("ffi/go-binding/go/ta/ta.go")
           go = go_path.read_text()
@@ -98,7 +76,9 @@ jobs:
         run: |
           git diff --check
           git diff --stat
-          test "$(git diff --name-only | sort)" = "$(printf '%s\n' core/src/indicators/cycle.rs factor-analysis/src/orchestration.rs ffi/go-binding/go/ta/ta.go | sort)"
+          expected="$(printf '%s\n' core/src/indicators/cycle.rs factor-analysis/src/orchestration.rs ffi/go-binding/go/ta/ta.go | sort)"
+          actual="$(git diff --name-only | sort)"
+          test "$actual" = "$expected"
           grep -F 'cInt(int(fastMa))' ffi/go-binding/go/ta/ta.go
           grep -F 'phase_cos[offset]' core/src/indicators/cycle.rs
 
