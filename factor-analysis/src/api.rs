@@ -1,9 +1,13 @@
 use crate::analysis::WeightConfig;
+use crate::context::ResearchContext;
 use crate::data::{AssetId, GroupId, PanelIndex, ResearchFrame};
 use crate::error::ResearchError;
+use crate::executor::ResearchExecutor;
+use crate::orchestration::StudyProvenance;
 use crate::performance::EvaluationConfig;
+use crate::policy::ResearchPolicy;
 use crate::prepare::QuantizeConfig;
-use crate::report::{AnalysisMode, FactorStudy, FactorStudyReport};
+use crate::report::{AnalysisMode, FactorStudyReport};
 use serde::{Deserialize, Serialize};
 
 /// Current version of the language-neutral factor research request/response contract.
@@ -200,6 +204,11 @@ pub fn validate_factor_study_request(request: &FactorStudyRequest) -> Result<(),
 }
 
 /// Execute a factor study from the canonical request contract.
+///
+/// The language-neutral API enters the same normalized `ResearchContext` and
+/// `ResearchExecutor` path used by direct Rust batch calls and revision-aware
+/// sessions. `FactorStudy` remains a source-compatibility facade rather than a
+/// second orchestration boundary.
 pub fn run_factor_study(
     request: &FactorStudyRequest,
 ) -> Result<FactorStudyReport, ResearchApiError> {
@@ -220,21 +229,34 @@ pub fn run_factor_study(
             .map_err(ResearchApiError::computation)?;
     }
 
-    FactorStudy::new(&frame, "factor", "price", request.periods.clone())
-        .mode(request.mode)
-        .execution_lag(request.execution_lag)
-        .quantize_config(QuantizeConfig {
+    let policy = ResearchPolicy::new(
+        request.periods.clone(),
+        QuantizeConfig {
             quantiles: request.quantiles,
             by_group: request.quantize_by_group.then(|| "group".to_string()),
             zero_aware: request.zero_aware,
-        })
-        .weight_config(WeightConfig {
+        },
+        WeightConfig {
             demeaned: request.demeaned,
             group_adjust: request.group_neutral.then(|| "group".to_string()),
             equal_weight: request.equal_weight,
-        })
-        .evaluation_config(request.evaluation)
-        .full_report()
+        },
+        request.evaluation,
+        request.execution_lag,
+    )
+    .map_err(ResearchApiError::computation)?;
+    let context = ResearchContext::batch(
+        &frame,
+        policy,
+        StudyProvenance {
+            library_version: env!("CARGO_PKG_VERSION").to_string(),
+            ..StudyProvenance::default()
+        },
+    )
+    .map_err(ResearchApiError::computation)?;
+
+    ResearchExecutor::execute_standard_context(&context, "factor", "price", request.mode)
+        .map(|result| result.report)
         .map_err(ResearchApiError::computation)
 }
 
