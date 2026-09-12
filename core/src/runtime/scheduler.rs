@@ -9,10 +9,16 @@ use std::fmt;
 pub enum ScheduleError {
     /// Dirty range exceeds the authoritative row count.
     DirtyRangeOutOfBounds { dirty: DirtyRange, rows: usize },
-    /// The plan contains a recursive dependency (for example EMA/ATR/ADX), so
-    /// an arbitrary historical edit cannot be reduced to a finite lookback
-    /// without replaying from a proven checkpoint.
+    /// The plan contains recursive state and no replay checkpoint was supplied.
     RecursiveDependencyRequiresCheckpoint,
+    /// A supplied checkpoint is newer than the first changed row and therefore
+    /// already contains state contaminated by the historical edit.
+    CheckpointAfterDirty {
+        checkpoint_row: usize,
+        dirty_start: usize,
+    },
+    /// Checkpoint lies outside the authoritative row range.
+    CheckpointOutOfBounds { checkpoint_row: usize, rows: usize },
 }
 
 impl fmt::Display for ScheduleError {
@@ -27,6 +33,20 @@ impl fmt::Display for ScheduleError {
                 f,
                 "dirty-range execution contains recursive state and requires checkpoint replay"
             ),
+            Self::CheckpointAfterDirty {
+                checkpoint_row,
+                dirty_start,
+            } => write!(
+                f,
+                "checkpoint row {checkpoint_row} is after dirty start {dirty_start}"
+            ),
+            Self::CheckpointOutOfBounds {
+                checkpoint_row,
+                rows,
+            } => write!(
+                f,
+                "checkpoint row {checkpoint_row} exceeds runtime rows {rows}"
+            ),
         }
     }
 }
@@ -40,9 +60,9 @@ pub struct ScheduledExecution {
     pub nodes: Vec<NodeId>,
     /// Raw input rows changed by the caller.
     pub input_dirty: DirtyRange,
-    /// Output rows potentially affected after forward propagation.
+    /// Output rows potentially affected after propagation.
     pub affected: DirtyRange,
-    /// Input rows required after backward lookback expansion.
+    /// Input rows required to reconstruct state and affected outputs.
     pub recompute: DirtyRange,
 }
 
@@ -71,29 +91,89 @@ impl ExecutionScheduler {
         dirty: DirtyRange,
         rows: usize,
     ) -> Result<ScheduledExecution, ScheduleError> {
-        if !dirty.is_within(rows) {
-            return Err(ScheduleError::DirtyRangeOutOfBounds { dirty, rows });
-        }
+        Self::validate_dirty(dirty, rows)?;
         if dirty.is_empty() {
-            return Ok(ScheduledExecution {
-                nodes: Vec::new(),
-                input_dirty: dirty,
-                affected: dirty,
-                recompute: dirty,
-            });
+            return Ok(Self::empty(dirty));
         }
 
         let lookback = plan
             .max_lookback()
             .ok_or(ScheduleError::RecursiveDependencyRequiresCheckpoint)?;
+        Ok(Self::fixed_window_schedule(plan, dirty, rows, lookback))
+    }
+
+    /// Schedule a historical edit with a checkpoint whose state represents all
+    /// rows strictly before `checkpoint_row`.
+    ///
+    /// Fixed-window plans still use their smaller mathematically proven range.
+    /// Recursive plans replay from the checkpoint through the end because a
+    /// changed historical value can affect every subsequent recursive state.
+    pub fn dirty_from_checkpoint(
+        plan: &ExecutionPlan,
+        dirty: DirtyRange,
+        rows: usize,
+        checkpoint_row: usize,
+    ) -> Result<ScheduledExecution, ScheduleError> {
+        Self::validate_dirty(dirty, rows)?;
+        if checkpoint_row > rows {
+            return Err(ScheduleError::CheckpointOutOfBounds {
+                checkpoint_row,
+                rows,
+            });
+        }
+        if dirty.is_empty() {
+            return Ok(Self::empty(dirty));
+        }
+        if checkpoint_row > dirty.start {
+            return Err(ScheduleError::CheckpointAfterDirty {
+                checkpoint_row,
+                dirty_start: dirty.start,
+            });
+        }
+
+        if let Some(lookback) = plan.max_lookback() {
+            return Ok(Self::fixed_window_schedule(plan, dirty, rows, lookback));
+        }
+
+        Ok(ScheduledExecution {
+            nodes: plan.execution_order().to_vec(),
+            input_dirty: dirty,
+            affected: DirtyRange::new(dirty.start, rows),
+            recompute: DirtyRange::new(checkpoint_row, rows),
+        })
+    }
+
+    fn fixed_window_schedule(
+        plan: &ExecutionPlan,
+        dirty: DirtyRange,
+        rows: usize,
+        lookback: usize,
+    ) -> ScheduledExecution {
         let affected = dirty.propagate_forward(lookback, rows);
         let recompute = affected.with_lookback(lookback);
-        Ok(ScheduledExecution {
+        ScheduledExecution {
             nodes: plan.execution_order().to_vec(),
             input_dirty: dirty,
             affected,
             recompute,
-        })
+        }
+    }
+
+    fn validate_dirty(dirty: DirtyRange, rows: usize) -> Result<(), ScheduleError> {
+        if !dirty.is_within(rows) {
+            Err(ScheduleError::DirtyRangeOutOfBounds { dirty, rows })
+        } else {
+            Ok(())
+        }
+    }
+
+    fn empty(dirty: DirtyRange) -> ScheduledExecution {
+        ScheduledExecution {
+            nodes: Vec::new(),
+            input_dirty: dirty,
+            affected: dirty,
+            recompute: dirty,
+        }
     }
 }
 
@@ -136,6 +216,49 @@ mod tests {
         assert_eq!(
             ExecutionScheduler::dirty(&plan, DirtyRange::new(50, 51), 100).unwrap_err(),
             ScheduleError::RecursiveDependencyRequiresCheckpoint
+        );
+    }
+
+    #[test]
+    fn recursive_plan_replays_from_safe_checkpoint_to_end() {
+        let mut builder = ExecutionPlanBuilder::new();
+        let input = builder
+            .intern_node(KernelFamily::MovingAverage, "close", vec![], 0)
+            .unwrap();
+        builder
+            .intern_recursive_node(KernelFamily::MovingAverage, "ema:20", vec![input])
+            .unwrap();
+        let plan = builder.build().unwrap();
+        let scheduled = ExecutionScheduler::dirty_from_checkpoint(
+            &plan,
+            DirtyRange::new(50, 51),
+            100,
+            40,
+        )
+        .unwrap();
+        assert_eq!(scheduled.affected, DirtyRange::new(50, 100));
+        assert_eq!(scheduled.recompute, DirtyRange::new(40, 100));
+    }
+
+    #[test]
+    fn contaminated_checkpoint_is_rejected() {
+        let mut builder = ExecutionPlanBuilder::new();
+        builder
+            .intern_recursive_node(KernelFamily::Volatility, "atr:14", vec![])
+            .unwrap();
+        let plan = builder.build().unwrap();
+        assert_eq!(
+            ExecutionScheduler::dirty_from_checkpoint(
+                &plan,
+                DirtyRange::new(50, 51),
+                100,
+                60,
+            )
+            .unwrap_err(),
+            ScheduleError::CheckpointAfterDirty {
+                checkpoint_row: 60,
+                dirty_start: 50,
+            }
         );
     }
 
