@@ -306,16 +306,12 @@ mod tests {
             ResearchStageKind::Report.incremental_capability(),
             StageIncrementalCapability::FullOnly
         );
-        assert!(
-            ResearchStageKind::ForwardReturns
-                .incremental_capability()
-                .supports_append()
-        );
-        assert!(
-            !ResearchStageKind::ForwardReturns
-                .incremental_capability()
-                .supports_range()
-        );
+        assert!(ResearchStageKind::ForwardReturns
+            .incremental_capability()
+            .supports_append());
+        assert!(!ResearchStageKind::ForwardReturns
+            .incremental_capability()
+            .supports_range());
     }
 
     #[test]

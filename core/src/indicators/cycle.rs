@@ -245,8 +245,7 @@ pub fn ht_sine(input: &[f64]) -> Result<(Array1<f64>, Array1<f64>)> {
         let sin_phase = phase_sin[i];
         let cos_phase = phase_cos[offset] * phase_cos_sign[offset];
         sine[i] = sin_phase;
-        lead_sine[i] =
-            (sin_phase + cos_phase) * std::f64::consts::FRAC_1_SQRT_2;
+        lead_sine[i] = (sin_phase + cos_phase) * std::f64::consts::FRAC_1_SQRT_2;
     }
 
     Ok((sine, lead_sine))
