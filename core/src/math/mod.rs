@@ -5,6 +5,7 @@
 
 #[cfg(feature = "std")]
 pub mod information;
+pub mod libm_shim;
 #[cfg(feature = "std")]
 pub mod linear;
 #[cfg(feature = "std")]
@@ -17,7 +18,6 @@ pub mod rank;
 pub mod regression;
 #[cfg(feature = "std")]
 pub mod segmented;
-pub mod libm_shim;
 pub mod simd_kernels;
 pub mod simd_ops;
 #[cfg(feature = "std")]
