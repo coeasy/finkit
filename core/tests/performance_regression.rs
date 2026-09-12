@@ -1,6 +1,13 @@
+use finkit::compute::FactorPlan;
+use finkit::factors::{
+    BorrowedFactorContext, FactorDefinition, FactorDirection, FactorEngine, FactorKind,
+    FactorRegistry,
+};
 use finkit::indicators::ht_sine;
 use finkit::math::simd_kernels::{sma_scalar_naive_into, sma_simd_into};
+use finkit::unified_runtime::{DirtyRange, RuntimeExecutionMode, UnifiedRuntime};
 use std::hint::black_box;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 fn sample(len: usize) -> Vec<f64> {
@@ -109,4 +116,82 @@ fn ht_sine_release_throughput_stays_within_budget() {
         ns_per_bar < BUDGET_NS_PER_BAR,
         "ht_sine release throughput regression: {ns_per_bar:.2} ns/bar >= {BUDGET_NS_PER_BAR:.0} ns/bar"
     );
+}
+
+#[test]
+fn dirty_range_execution_keeps_work_local_and_matches_full_recompute() {
+    // A one-row historical correction in a 100K-row series with a fixed
+    // 20-row lookback should evaluate only 41 rows: 20 rows of history,
+    // the dirty row itself, and the 20 future outputs that depend on it.
+    // This is a row-efficiency contract, not a noisy wall-clock assertion.
+    const ROWS: usize = 100_000;
+    const LOOKBACK: usize = 20;
+    const DIRTY_ROW: usize = 50_000;
+
+    let mut registry = FactorRegistry::new();
+    registry
+        .register(FactorDefinition::new(
+            "rolling_21_sum",
+            ["close"],
+            FactorKind::TimeSeries,
+            FactorDirection::Neutral,
+            Arc::new(|inputs| {
+                let close = inputs.get("close")?;
+                let mut output = vec![f64::NAN; close.len()];
+                for index in LOOKBACK..close.len() {
+                    output[index] = close[index - LOOKBACK..=index].iter().sum();
+                }
+                Ok(output)
+            }),
+        ))
+        .unwrap();
+    let plan = FactorPlan::compile(&registry, &["rolling_21_sum"]).unwrap();
+    let engine = FactorEngine::new(registry);
+
+    let original: Vec<f64> = (0..ROWS)
+        .map(|index| 100.0 + (index as f64 * 0.013).sin())
+        .collect();
+    let original_context = BorrowedFactorContext::new()
+        .with_series("close", &original)
+        .unwrap();
+    let full = UnifiedRuntime::execute_factor_plan_borrowed(&plan, &engine, &original_context)
+        .unwrap();
+    let mut ranged_output = full.output;
+
+    let mut changed = original.clone();
+    changed[DIRTY_ROW] += 7.0;
+    let changed_context = BorrowedFactorContext::new()
+        .with_series("close", &changed)
+        .unwrap();
+    let trace = UnifiedRuntime::execute_factor_plan_range_into_borrowed(
+        &plan,
+        &engine,
+        &changed_context,
+        &mut ranged_output,
+        DirtyRange::new(DIRTY_ROW, DIRTY_ROW + 1),
+        LOOKBACK,
+    )
+    .unwrap();
+
+    assert_eq!(trace.recomputed_rows, LOOKBACK * 2 + 1);
+    assert!(
+        trace.recomputed_rows * 1_000 < ROWS,
+        "dirty-range execution recomputed too much work: {} of {ROWS} rows",
+        trace.recomputed_rows
+    );
+    assert!(matches!(trace.mode, RuntimeExecutionMode::Range { .. }));
+
+    let expected = UnifiedRuntime::execute_factor_plan_borrowed(&plan, &engine, &changed_context)
+        .unwrap();
+    let ranged = &ranged_output["rolling_21_sum"];
+    let full_changed = &expected.output["rolling_21_sum"];
+    for index in 0..ROWS {
+        if ranged[index].is_nan() && full_changed[index].is_nan() {
+            continue;
+        }
+        assert_eq!(
+            ranged[index], full_changed[index],
+            "dirty-range result diverged from full recompute at row {index}"
+        );
+    }
 }
