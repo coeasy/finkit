@@ -118,6 +118,32 @@ pub enum ResearchArtifact {
     Json(serde_json::Value),
 }
 
+impl ResearchArtifact {
+    #[must_use]
+    pub fn as_series(&self) -> Option<&[f64]> {
+        match self {
+            Self::Series(values) => Some(values),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub fn as_quantiles(&self) -> Option<&[u16]> {
+        match self {
+            Self::Quantiles(values) => Some(values),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub fn as_horizon_series(&self) -> Option<&BTreeMap<usize, Vec<f64>>> {
+        match self {
+            Self::HorizonSeries(values) => Some(values),
+            _ => None,
+        }
+    }
+}
+
 /// In-memory materialization store used by the research executor.
 ///
 /// The key includes data, plan, parameter and algorithm/schema identity so a
@@ -257,5 +283,13 @@ mod tests {
         let mut incompatible = desired;
         incompatible.schema_version += 1;
         assert!(store.latest_compatible_before(&incompatible).is_none());
+    }
+
+    #[test]
+    fn typed_artifact_accessors_reject_wrong_variants() {
+        let series = ResearchArtifact::Series(vec![1.0, 2.0]);
+        assert_eq!(series.as_series(), Some([1.0, 2.0].as_slice()));
+        assert!(series.as_quantiles().is_none());
+        assert!(series.as_horizon_series().is_none());
     }
 }
