@@ -1,6 +1,9 @@
 //! Typed adapters from canonical kernels into the unified runtime.
 
-use crate::math::kernels::{MonotonicExtrema, MovingAverageState, TrueRangeState, WelfordState};
+use crate::math::kernels::{
+    AdxOutput, AdxState, AtrState, MonotonicExtrema, MovingAverageState, RsiState, TrueRangeState,
+    WelfordState,
+};
 use std::fmt;
 
 /// Batch execution failure shared by typed adapters.
@@ -117,7 +120,7 @@ impl KernelExecutor for WelfordState {
     }
 }
 
-/// OHLC tuple required by true-range calculations.
+/// OHLC tuple required by price-range kernels.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct OhlcInput {
     /// High price.
@@ -136,6 +139,63 @@ impl KernelExecutor for TrueRangeState {
     #[inline]
     fn update(&mut self, input: Self::Input) -> Self::Output {
         TrueRangeState::update(self, input.high, input.low, input.close)
+    }
+
+    fn snapshot(&self) -> Self::Snapshot {
+        *self
+    }
+
+    fn restore(&mut self, snapshot: &Self::Snapshot) {
+        *self = *snapshot;
+    }
+}
+
+impl KernelExecutor for AtrState {
+    type Input = OhlcInput;
+    type Output = Option<f64>;
+    type Snapshot = AtrState;
+
+    #[inline]
+    fn update(&mut self, input: Self::Input) -> Self::Output {
+        AtrState::update(self, input.high, input.low, input.close)
+    }
+
+    fn snapshot(&self) -> Self::Snapshot {
+        *self
+    }
+
+    fn restore(&mut self, snapshot: &Self::Snapshot) {
+        *self = *snapshot;
+    }
+}
+
+impl KernelExecutor for AdxState {
+    type Input = OhlcInput;
+    type Output = Option<AdxOutput>;
+    type Snapshot = AdxState;
+
+    #[inline]
+    fn update(&mut self, input: Self::Input) -> Self::Output {
+        AdxState::update(self, input.high, input.low, input.close)
+    }
+
+    fn snapshot(&self) -> Self::Snapshot {
+        *self
+    }
+
+    fn restore(&mut self, snapshot: &Self::Snapshot) {
+        *self = *snapshot;
+    }
+}
+
+impl KernelExecutor for RsiState {
+    type Input = f64;
+    type Output = Option<f64>;
+    type Snapshot = RsiState;
+
+    #[inline]
+    fn update(&mut self, input: Self::Input) -> Self::Output {
+        RsiState::update(self, input)
     }
 
     fn snapshot(&self) -> Self::Snapshot {
@@ -208,6 +268,31 @@ mod tests {
         assert_eq!(state.update(4.0), 3.0);
         KernelExecutor::restore(&mut state, &snapshot);
         assert_eq!(state.update(6.0), 4.0);
+    }
+
+    #[test]
+    fn atr_adapter_preserves_warmup() {
+        let mut state = AtrState::new(2);
+        let bars = [
+            OhlcInput {
+                high: 10.0,
+                low: 8.0,
+                close: 9.0,
+            },
+            OhlcInput {
+                high: 12.0,
+                low: 10.0,
+                close: 11.0,
+            },
+            OhlcInput {
+                high: 14.0,
+                low: 12.0,
+                close: 13.0,
+            },
+        ];
+        let mut output = [None; 3];
+        KernelExecutor::update_batch(&mut state, &bars, &mut output).unwrap();
+        assert_eq!(output, [None, None, Some(3.0)]);
     }
 
     #[test]
