@@ -1,0 +1,69 @@
+name: PR29 artifact dataplane rerun
+
+on:
+  push:
+    branches:
+      - feat/factor-research-architecture
+    paths:
+      - .github/workflows/pr29-artifact-dataplane-rerun.yml
+
+permissions:
+  contents: write
+
+jobs:
+  converge:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt,clippy
+      - name: Reuse validated bounded patch and apply clippy fix
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          workflow = Path('.github/workflows/pr29-artifact-dataplane-once.yml').read_text().splitlines()
+          start = next(i for i, line in enumerate(workflow) if "python - <<'PY'" in line) + 1
+          end = next(i for i in range(start, len(workflow)) if workflow[i].strip() == 'PY')
+          patch = textwrap.dedent('\n'.join(workflow[start:end])) + '\n'
+          Path('/tmp/apply_artifact_dataplane.py').write_text(patch)
+          PY
+          python /tmp/apply_artifact_dataplane.py
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('factor-analysis/src/executor.rs')
+          text = path.read_text()
+          old = 'factor_returns(request.frame, &computed_weights, forward_ref)?;'
+          new = 'factor_returns(request.frame, computed_weights, forward_ref)?;'
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f'expected one clippy op-ref target, found {count}')
+          path.write_text(text.replace(old, new, 1))
+          PY
+      - name: Normalize formatting
+        run: cargo fmt --all
+      - name: Verify bounded diff
+        shell: bash
+        run: |
+          git diff --check
+          git diff --name-only | sort > /tmp/actual
+          printf '%s\n' factor-analysis/src/api.rs factor-analysis/src/executor.rs | sort > /tmp/expected
+          diff -u /tmp/expected /tmp/actual
+          git diff --stat
+      - name: Test factor research
+        run: cargo test -p finkit-factor-analysis --locked
+      - name: Clippy factor research
+        run: cargo clippy -p finkit-factor-analysis --all-targets --locked -- -D warnings
+      - name: Commit architecture convergence
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add factor-analysis/src/api.rs factor-analysis/src/executor.rs
+          git commit -m 'refactor(research): make artifact store the execution data plane'
+          git push origin HEAD:feat/factor-research-architecture
