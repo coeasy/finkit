@@ -137,9 +137,11 @@ ok "environment metadata written to ${OUT}/environment.json"
 hdr "[bench-vs-talib] step 3: cargo bench --features talib-c"
 cd "${ROOT}/core"
 if [[ -n "${BENCH_FILTER}" ]]; then
-  cargo bench --bench talib_c_comparison --features talib-c -- "${BENCH_FILTER}"
+  cargo bench --bench talib_c_comparison --features talib-c --locked -- "${BENCH_FILTER}"
+  MIN_PAIRS=1
 else
-  cargo bench --bench talib_c_comparison --features talib-c
+  cargo bench --bench talib_c_comparison --features talib-c --locked
+  MIN_PAIRS=6
 fi
 cd "${ROOT}"
 
@@ -149,7 +151,8 @@ JSON_OUT="${OUT}/results.json"
 python3 "${SCRIPT_DIR}/bench_report.py" \
     --criterion-dir "${ROOT}/target/criterion" \
     --output       "${OUT}/finkit-vs-talib.md" \
-    --json-out     "${JSON_OUT}"
+    --json-out     "${JSON_OUT}" \
+    --require-pairs "${MIN_PAIRS}"
 
 # ---- 5. compact summary table --------------------------------------------
 hdr "[bench-vs-talib] step 5: render dist/bench/summary.md"
@@ -173,7 +176,7 @@ for k in order:
     v = bench[k]
     delta = v.get("delta_pp")
     delta_s = "—" if delta is None else f"{delta:.2e}"
-    print(f"| {k} | {v.get('category', '?')} | {v['fta_us']:.2f} | "
+    print(f"| {k} | {v.get('category', '?')} | {v['finkit_us']:.2f} | "
           f"{v['talib_us']:.2f} | {v['speedup']:.2f}x | {delta_s} | {v['status']} |")
 
 print()
