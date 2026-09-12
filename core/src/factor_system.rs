@@ -2,13 +2,16 @@
 //!
 //! This module adds stable factor metadata, aliases, version identity and a
 //! precompiled execution facade without changing the legacy `FactorDefinition`
-//! shape. Numerical work remains owned by `factors` and dependency planning by
-//! `compute::FactorPlan`.
+//! shape. Numerical work remains owned by `factors`, dependency planning by
+//! `compute::FactorPlan`, and execution by the canonical unified runtime.
 
 use crate::compute::FactorPlan;
 use crate::factors::{
     BorrowedFactorContext, FactorContext, FactorDefinition, FactorEngine, FactorError, FactorKind,
     FactorRegistry, FactorResult,
+};
+use crate::unified_runtime::{
+    DirtyRange, RuntimeExecution, RuntimeExecutionTrace, UnifiedRuntime,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -26,9 +29,14 @@ pub struct FactorMetadata {
     pub deterministic: bool,
     /// Whether a stateful streaming implementation is available.
     pub streaming: bool,
-    /// Whether an append/range incremental strategy is available.
+    /// Whether this factor explicitly supports incremental/range execution.
+    ///
+    /// Range execution is enabled only when this is true, the factor is a
+    /// time-series factor, and `fixed_lookback` is known for every planned
+    /// factor node.
     pub incremental: bool,
-    /// Optional fixed lookback in rows. `None` means dynamic/unknown.
+    /// Fixed number of historical rows required by this factor node.
+    /// `None` means dynamic/unknown and therefore prevents safe range execution.
     pub fixed_lookback: Option<usize>,
 }
 
@@ -78,7 +86,10 @@ impl FactorCatalog {
         Self::default()
     }
 
-    /// Build a catalog around an existing registry using default metadata.
+    /// Build a catalog around an existing registry using conservative metadata.
+    ///
+    /// Legacy definitions remain full-recompute by default until callers add
+    /// explicit incremental capability metadata.
     #[must_use]
     pub fn from_registry(registry: FactorRegistry) -> Self {
         let metadata = registry
@@ -194,11 +205,43 @@ impl FactorCatalog {
                 format!("{name}@{version}")
             })
             .collect();
+
+        let range_lookback = self.range_lookback_for_plan(&plan);
         Ok(CompiledFactorPlan {
             plan,
             targets: canonical,
             semantic_identity: identity,
+            range_lookback,
         })
+    }
+
+    /// Prove range safety and calculate the full dependency-chain lookback.
+    ///
+    /// Each node's own lookback is added to the maximum cumulative lookback of
+    /// computed factor dependencies. Raw inputs contribute zero. Returning
+    /// `None` is a mandatory full-recompute fallback, never a guessed window.
+    fn range_lookback_for_plan(&self, plan: &FactorPlan) -> Option<usize> {
+        let mut cumulative = BTreeMap::<String, usize>::new();
+        let mut plan_max = 0usize;
+
+        for name in plan.execution_order() {
+            let definition = self.registry.get(name)?;
+            let metadata = self.metadata.get(name).cloned().unwrap_or_default();
+            if !metadata.incremental || definition.kind != FactorKind::TimeSeries {
+                return None;
+            }
+            let own_lookback = metadata.fixed_lookback?;
+            let upstream = definition
+                .dependencies
+                .iter()
+                .filter_map(|dependency| cumulative.get(dependency).copied())
+                .max()
+                .unwrap_or(0);
+            let total = upstream.saturating_add(own_lookback);
+            cumulative.insert(name.clone(), total);
+            plan_max = plan_max.max(total);
+        }
+        Some(plan_max)
     }
 }
 
@@ -208,6 +251,9 @@ pub struct CompiledFactorPlan {
     plan: FactorPlan,
     targets: Vec<String>,
     semantic_identity: Vec<String>,
+    /// `Some` is a proof that every factor node can safely execute over a
+    /// bounded time-series slice. The value is the dependency-chain lookback.
+    range_lookback: Option<usize>,
 }
 
 impl CompiledFactorPlan {
@@ -236,14 +282,25 @@ impl CompiledFactorPlan {
         &self.semantic_identity
     }
 
-    /// Execute over owned aligned inputs through the existing canonical
-    /// `FactorEngine` implementation.
+    /// Whether the complete factor DAG has an explicit safe range contract.
+    #[must_use]
+    pub const fn supports_range_incremental(&self) -> bool {
+        self.range_lookback.is_some()
+    }
+
+    /// Historical rows required before the dirty interval for safe execution.
+    #[must_use]
+    pub const fn range_lookback(&self) -> Option<usize> {
+        self.range_lookback
+    }
+
+    /// Execute over owned aligned inputs through the unified runtime.
     pub fn execute(
         &self,
         engine: &FactorEngine,
         context: &FactorContext,
     ) -> FactorResult<BTreeMap<String, Vec<f64>>> {
-        self.plan.execute(engine, context)
+        Ok(self.execute_runtime(engine, context)?.output)
     }
 
     /// Execute over borrowed aligned inputs without copying raw input arrays.
@@ -252,7 +309,73 @@ impl CompiledFactorPlan {
         engine: &FactorEngine,
         context: &BorrowedFactorContext<'_>,
     ) -> FactorResult<BTreeMap<String, Vec<f64>>> {
-        self.plan.execute_borrowed(engine, context)
+        Ok(self.execute_runtime_borrowed(engine, context)?.output)
+    }
+
+    /// Execute through the unified runtime and retain runtime evidence.
+    pub fn execute_runtime(
+        &self,
+        engine: &FactorEngine,
+        context: &FactorContext,
+    ) -> FactorResult<RuntimeExecution<BTreeMap<String, Vec<f64>>>> {
+        UnifiedRuntime::execute_factor_plan(&self.plan, engine, context)
+    }
+
+    /// Zero-copy borrowed execution through the unified runtime.
+    pub fn execute_runtime_borrowed(
+        &self,
+        engine: &FactorEngine,
+        context: &BorrowedFactorContext<'_>,
+    ) -> FactorResult<RuntimeExecution<BTreeMap<String, Vec<f64>>>> {
+        UnifiedRuntime::execute_factor_plan_borrowed(&self.plan, engine, context)
+    }
+
+    /// Recompute only the dirty region when every node has proved range safety.
+    pub fn execute_range_borrowed(
+        &self,
+        engine: &FactorEngine,
+        context: &BorrowedFactorContext<'_>,
+        previous: &BTreeMap<String, Vec<f64>>,
+        dirty: DirtyRange,
+    ) -> FactorResult<RuntimeExecution<BTreeMap<String, Vec<f64>>>> {
+        let lookback = self.require_range_lookback()?;
+        UnifiedRuntime::execute_factor_plan_range_borrowed(
+            &self.plan,
+            engine,
+            context,
+            previous,
+            dirty,
+            lookback,
+        )
+    }
+
+    /// In-place form of dirty-range execution. Clean rows and their allocations
+    /// are retained unchanged.
+    pub fn execute_range_into_borrowed(
+        &self,
+        engine: &FactorEngine,
+        context: &BorrowedFactorContext<'_>,
+        output: &mut BTreeMap<String, Vec<f64>>,
+        dirty: DirtyRange,
+    ) -> FactorResult<RuntimeExecutionTrace> {
+        let lookback = self.require_range_lookback()?;
+        UnifiedRuntime::execute_factor_plan_range_into_borrowed(
+            &self.plan,
+            engine,
+            context,
+            output,
+            dirty,
+            lookback,
+        )
+    }
+
+    fn require_range_lookback(&self) -> FactorResult<usize> {
+        self.range_lookback.ok_or_else(|| {
+            FactorError::InvalidParameter(
+                "factor plan is not range-safe: every node must be incremental, time-series, and have a fixed lookback"
+                    .to_string(),
+            )
+        })
     }
 }
 
@@ -260,6 +383,7 @@ impl CompiledFactorPlan {
 mod tests {
     use super::*;
     use crate::factors::{FactorDirection, FactorInputs};
+    use crate::unified_runtime::RuntimeExecutionMode;
     use std::sync::Arc;
 
     fn identity(name: &str, dependency: &str) -> FactorDefinition {
@@ -273,6 +397,15 @@ mod tests {
         )
     }
 
+    fn range_metadata(version: &str, lookback: usize) -> FactorMetadata {
+        FactorMetadata {
+            version: version.to_string(),
+            incremental: true,
+            fixed_lookback: Some(lookback),
+            ..FactorMetadata::default()
+        }
+    }
+
     #[test]
     fn catalog_resolves_aliases_and_preserves_versions() {
         let mut catalog = FactorCatalog::new();
@@ -283,6 +416,7 @@ mod tests {
                     version: "2".to_string(),
                     aliases: vec!["mom".to_string()],
                     incremental: true,
+                    fixed_lookback: Some(0),
                     ..FactorMetadata::default()
                 },
             )
@@ -293,6 +427,7 @@ mod tests {
         let plan = catalog.compile(&["mom", "momentum"]).unwrap();
         assert_eq!(plan.targets(), &["momentum".to_string()]);
         assert_eq!(plan.semantic_identity(), &["momentum@2".to_string()]);
+        assert!(plan.supports_range_incremental());
     }
 
     #[test]
@@ -306,6 +441,7 @@ mod tests {
             .unwrap();
         let plan = catalog.compile(&["score"]).unwrap();
         assert_eq!(plan.execution_order(), &["base", "score"]);
+        assert!(!plan.supports_range_incremental());
 
         let close = [1.0, 2.0, 3.0];
         let context = BorrowedFactorContext::new()
@@ -314,5 +450,81 @@ mod tests {
         let engine = FactorEngine::new(catalog.into_registry());
         let result = plan.execute_borrowed(&engine, &context).unwrap();
         assert_eq!(result["score"], close);
+    }
+
+    #[test]
+    fn range_plan_accumulates_dependency_lookback_and_splices_dirty_rows() {
+        let mut catalog = FactorCatalog::new();
+        catalog
+            .register(identity("base", "close"), range_metadata("1", 2))
+            .unwrap();
+        catalog
+            .register(identity("score", "base"), range_metadata("1", 3))
+            .unwrap();
+        let plan = catalog.compile(&["score"]).unwrap();
+        assert_eq!(plan.range_lookback(), Some(5));
+
+        let original = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+        let initial = BorrowedFactorContext::new()
+            .with_series("close", &original)
+            .unwrap();
+        let engine = FactorEngine::new(catalog.clone().into_registry());
+        let full = plan.execute_runtime_borrowed(&engine, &initial).unwrap();
+
+        let changed = [1.0, 2.0, 3.0, 4.0, 5.0, 60.0, 7.0, 8.0];
+        let revised = BorrowedFactorContext::new()
+            .with_series("close", &changed)
+            .unwrap();
+        let ranged = plan
+            .execute_range_borrowed(
+                &engine,
+                &revised,
+                &full.output,
+                DirtyRange::new(5, 6),
+            )
+            .unwrap();
+
+        assert_eq!(ranged.output["score"], changed);
+        assert_eq!(
+            ranged.trace.mode,
+            RuntimeExecutionMode::Range {
+                dirty: DirtyRange::new(5, 6),
+                recompute: DirtyRange::new(0, 6),
+            }
+        );
+        assert_eq!(ranged.trace.recomputed_rows, 6);
+    }
+
+    #[test]
+    fn cross_sectional_or_unbounded_nodes_force_full_fallback() {
+        let mut catalog = FactorCatalog::new();
+        let cross = FactorDefinition::new(
+            "cross",
+            ["close"],
+            FactorKind::CrossSectional,
+            FactorDirection::HigherBetter,
+            Arc::new(|inputs| Ok(inputs.get("close")?.to_vec())),
+        );
+        catalog
+            .register(cross, range_metadata("1", 0))
+            .unwrap();
+        let plan = catalog.compile(&["cross"]).unwrap();
+        assert!(!plan.supports_range_incremental());
+
+        let close = [1.0, 2.0];
+        let context = BorrowedFactorContext::new()
+            .with_series("close", &close)
+            .unwrap();
+        let engine = FactorEngine::new(catalog.into_registry());
+        let full = plan.execute_borrowed(&engine, &context).unwrap();
+        let error = plan
+            .execute_range_borrowed(
+                &engine,
+                &context,
+                &full,
+                DirtyRange::new(1, 2),
+            )
+            .unwrap_err();
+        assert!(matches!(error, FactorError::InvalidParameter(_)));
     }
 }
