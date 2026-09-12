@@ -11,6 +11,8 @@ pub mod execution_plan;
 pub mod kernel_adapter;
 #[path = "runtime/scheduler.rs"]
 pub mod scheduler;
+#[path = "runtime/session.rs"]
+pub mod session;
 #[path = "runtime/state_arena.rs"]
 pub mod state_arena;
 
@@ -21,4 +23,5 @@ pub use kernel_adapter::{
     ExtremaKernelAdapter, KernelAdapterError, KernelExecutor, OhlcInput, StatisticsOutput,
 };
 pub use scheduler::{ExecutionScheduler, ScheduleError, ScheduledExecution};
+pub use session::{RuntimeSession, RuntimeSessionCheckpoint, RuntimeSessionError};
 pub use state_arena::{StateArena, StateArenaCheckpoint, StateArenaError, StateHandle};
