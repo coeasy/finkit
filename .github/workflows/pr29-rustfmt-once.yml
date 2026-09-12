@@ -1,0 +1,45 @@
+name: PR29 rustfmt once
+
+on:
+  push:
+    branches:
+      - feat/factor-research-architecture
+    paths:
+      - .github/workflows/pr29-rustfmt-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Format workspace
+        run: cargo fmt --all
+      - name: Verify bounded formatting diff
+        shell: bash
+        run: |
+          git diff --check
+          git diff --name-only | sort > /tmp/actual
+          printf '%s\n' \
+            core/src/indicators/cycle.rs \
+            factor-analysis/src/artifacts.rs \
+            factor-analysis/src/lib.rs \
+            factor-analysis/src/orchestration.rs | sort > /tmp/allowed
+          test -s /tmp/actual
+          while IFS= read -r file; do grep -Fxq "$file" /tmp/allowed; done < /tmp/actual
+          git diff --stat
+      - name: Commit formatting only
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add core/src/indicators/cycle.rs factor-analysis/src/artifacts.rs factor-analysis/src/lib.rs factor-analysis/src/orchestration.rs
+          git commit -m 'style: normalize research and HT_SINE formatting'
+          git push origin HEAD:feat/factor-research-architecture
