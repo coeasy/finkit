@@ -31,10 +31,7 @@ pub struct KernelCapability {
 
 /// Canonical moving-average constructor used by runtime planners.
 #[must_use]
-pub fn moving_average(
-    kind: MovingAverageKind,
-    window: usize,
-) -> MovingAverageState {
+pub fn moving_average(kind: MovingAverageKind, window: usize) -> MovingAverageState {
     MovingAverageState::new(kind, window)
 }
 
