@@ -1,290 +1,145 @@
 # Finkit 项目宣传文稿
 
-> 本文是面向 GitHub、技术社区、博客、公众号、Release Announcement 和项目介绍页面的宣传素材。技术事实以当前 README、文档与正式 Release 为准。
-
 ## 推荐标题
 
-### 主标题
+**Finkit：把量化计算从“函数集合”升级为可复用的金融计算 Runtime**
 
-**Finkit：用 Rust 打造统一的量化金融计算引擎**
+备选：
 
-### 备选标题
+- Finkit：一套 Rust 核心，连接指标、公式、因子、流式计算与研究分析
+- Finkit：面向量化研究与实时分析的高性能多语言金融计算引擎
+- 从 TA 指标到 Unified Runtime：Finkit 正在构建量化系统的计算底座
 
-- **从技术指标到因子研究：Finkit 正在把量化计算收敛到一个统一 Runtime**
-- **一套 Rust 内核，多语言量化计算：Finkit 的产品化升级**
-- **不只是 TA-Lib 替代：Finkit 想解决量化系统里的重复计算与语义漂移**
-- **指标、公式、因子、流式、研究一次打通：Finkit 的统一计算架构**
+## 30 秒介绍
 
-## 30 秒项目介绍
+Finkit 是一个 Rust 驱动的量化金融计算引擎。它不只提供技术指标，还把 Formula、Factor DAG、Streaming、Feature Engineering、Research 与多语言绑定放到统一计算核心上。
 
-Finkit 是一个以 Rust 为统一内核的高性能量化金融计算引擎。
+它适合用于量化研究平台、行情分析服务、选股系统、因子平台、数据流水线、实时看板和金融 SDK。团队可以在一个核心里维护数值语义，再通过不同语言与产品形态复用，而不是在每个系统里重复实现同一套指标和统计逻辑。
 
-它不是简单堆叠技术指标，而是试图把量化系统中长期分散的几条计算链路统一起来：
+当前正式发布版本为 v0.1.15；Unified Runtime、typed Artifact、DirtyRange 局部执行与扩展后的 Factor Research 正在 PR #29 中作为下一版本候选能力完成 same-SHA 门禁验证。
 
-**技术指标 → Formula → Factor DAG → Streaming → Feature Engineering → Factor Research → 多语言 SDK。**
+## 长篇宣传稿
 
-Finkit 的目标是让同一套金融计算语义只实现一次、验证一次、优化一次，再通过 Python、Rust、Node.js、Java、C/C++、Go、.NET、Android、iOS 和 WASM 等不同入口复用。
+很多量化项目最初都从几个指标函数开始。
 
-如果你正在搭建量化研究平台、行情分析服务、选股系统、因子服务、实时看板、数据流水线或跨语言金融 SDK，Finkit 希望成为其中稳定、可复用的计算底座。
+SMA、EMA、RSI、MACD 很快就能算出来；再往后，团队开始加入公式引擎、选股逻辑、因子、特征工程、实时行情、回测统计和多语言服务。此时真正困难的往往不再是“还缺哪个指标”，而是同一套金融计算逻辑逐渐分裂成多套实现。
 
-## 正式宣传稿
+研究员在 Python 里写一套，实时服务在 Rust 或 Java 里重写一套，因子平台维护自己的 DAG，流式计算维护自己的状态，SDK 又复制一套包装逻辑。随着系统变大，结果会发生语义漂移，依赖关系被重复发现，缓存彼此孤立，局部数据修订也可能导致整段历史重新计算。
 
-在很多量化项目里，真正难维护的并不是“少几个指标”，而是同一套计算逻辑在不同系统里不断复制。
+**Finkit 希望解决的是这个更底层的问题：把金融计算本身做成可以长期复用的基础设施。**
 
-研究员在 Python 里写一版，生产服务在 Rust/C++ 里再写一版；前端或 Node 服务又有一套；实时计算和历史批量计算使用不同代码；Formula 有自己的缓存，Factor 有自己的 DAG，Feature 又维护一套统计函数。时间一长，性能问题、数值差异、边界行为和版本兼容开始一起出现。
+Finkit 以 Rust 作为 canonical compute core，把技术指标、Formula、Factor、Streaming、Feature 与 Research 能力围绕统一数值合同组织。Python、CLI 以及其他语言绑定是产品交付层，而不是算法的第二份实现。
 
-**Finkit 想解决的正是这个问题。**
+对于重复使用的公式和因子，Finkit 不满足于“每次调用一个函数”。公式可以提前编译，因子依赖可以形成 `FactorPlan`，执行时复用已经验证过的依赖结构。下一版本候选架构进一步把 FactorPlan 接入 `UnifiedRuntime`，并使用 typed `ArtifactHash` 统一研究产物身份。
 
-### 一个 Rust Core，而不是多套算法分支
+数据发生局部修改时，Finkit 也不会简单把接口命名为 `range` 就宣称支持增量执行。`DirtyRange` 会区分输入变化、受影响输出和历史 recompute window；只有完整依赖链都能证明 fixed-lookback、incremental、time-series safe 时，Runtime 才执行局部重算。横截面或动态 lookback 节点则自动回退到 full execution。
 
-Finkit 将 Rust 作为 canonical computation core。
+这体现了 Finkit 的核心工程观：**性能优化必须建立在正确性证明之上。**
 
-指标、统计、收益率、回归、排序、风险等核心数学语义集中维护，多语言绑定负责“暴露能力”，而不是各自重新实现算法。
+在性能层面，Finkit 已经围绕 SIMD、borrowed/zero-copy 输入、caller-owned `_into` 输出、persistent compiled plan、streaming state、buffer reuse 与局部重算持续收敛。但项目不会把一台机器上的单次 benchmark 数字包装成普遍承诺，而是通过专用 performance regression、参考值/parity、Clippy、SSOT、跨语言构建和发布门禁来验证结果。
 
-这样做带来的价值不只是性能，更重要的是：
+在产品层面，Finkit 的目标也已经从“技术分析库”扩大为一套 Quant Compute Runtime：你可以把它放在研究 Notebook 后面，也可以放进行情 API、选股服务、因子平台、实时分析服务或多语言 SDK 中。它不负责账户、订单和券商连接，而专注做好这些系统共同依赖的计算层。
 
-- 同一输入在不同语言中保持一致语义；
-- 修复一次 bug，不需要同步修改多套算法；
-- 性能优化可以直接惠及多个绑定；
-- CI 可以围绕统一内核建立真正的 parity 和回归门禁。
+对于只需要偶尔调用几个常见 TA 指标的用户，传统指标库可能已经足够；但对于需要长期维护研究、实时、因子与多语言产品的团队，Finkit 更关心的是如何让这些能力共享同一个核心，而不是继续增加新的重复实现。
 
-### 从函数调用升级到可复用执行计划
+## 面向不同用户的表达
 
-传统指标库通常是：调用一次函数，得到一次结果。
+### 面向量化研究员
 
-Finkit 在此基础上继续向“运行时”方向演进。
+你可以把 Finkit 看作一套比传统 TA 库更完整的研究计算底座：不仅有指标，还有 Formula、Feature、Label、Factor、统计、验证和 Factor Research 能力，并且这些模块在逐步共享同一个 Runtime。
 
-Formula 可以预编译，Factor 依赖图可以提前解析，执行顺序可以提前验证，中间缓冲区和状态可以复用。对于重复计算场景，不再每次从头解析、从头建图、从头分配。
+### 面向工程团队
 
-这让 Finkit 更适合：
+Finkit 的重点是减少跨模块、跨语言重复实现。算法和正确性合同集中在 Rust 核心，Formula/Factor 可以提前形成计划，Streaming 与 DirtyRange 负责增量更新，多语言绑定负责接入产品。
 
-- 行情扫描；
-- 批量因子计算；
-- 长时间运行的分析服务；
-- 高频重复请求；
-- 实时流式更新；
-- Notebook → 服务化迁移。
+### 面向产品团队
 
-### 真正的 DirtyRange，而不是“名字叫增量”
+如果你的产品需要行情计算、技术分析、选股、因子、研究统计或实时看板，Finkit 可以作为独立的计算服务或嵌入式引擎，而无需把产品绑定到某个券商或交易框架。
 
-Finkit 新一轮架构升级中，一个重要方向是 Unified Runtime + DirtyRange。
+### 面向开源社区
 
-历史数据发生修订时，真正需要回答三个问题：
-
-1. 哪些输入行变了？
-2. 这些变化会影响未来多少输出？
-3. 为了重新计算这些输出，需要向历史补多少 lookback？
-
-Finkit 把这三件事分别建模为 input dirty、affected output 和 recompute window。
-
-只有完整依赖链都能证明是 incremental、fixed-lookback、time-series safe 时，才允许局部重算。
-
-如果出现 cross-sectional、动态 lookback 或无法确认的执行语义，Runtime 会回退到 full execution。
-
-**性能优化不能以悄悄算错为代价。**
-
-### 从技术分析扩展到 Factor Research
-
-Finkit 已经拥有大量指标、Formula、Streaming、Feature、Risk、Backtest、Calendar 等基础能力。
-
-新的 Factor Research 架构不会重新造一套研究框架，而是把这些已有能力重新组合：
-
-```text
-MarketFrame / external data
-        ↓
-Indicators / Formula / Factor
-        ↓
-Feature / Research data
-        ↓
-Prepare / Validate / Analyze
-        ↓
-Multi-Factor / Neutralization / Portfolio / Risk
-        ↓
-Research Artifact / Report
-```
-
-研究层重点覆盖：
-
-- forward returns；
-- quantile / group analysis；
-- IC / rank IC；
-- turnover / stability；
-- neutralization；
-- multi-factor；
-- portfolio / attribution；
-- risk / capacity；
-- validation / no-lookahead；
-- research report / artifact。
-
-核心原则仍然是 reuse-first：收益率、回归、排序、分位数、风险、日历等能力必须复用 canonical kernel，而不是研究模块再复制一遍。
-
-### 批量与实时计算都要
-
-Finkit 同时重视 batch 与 streaming。
-
-对于历史计算，批量 kernel 可以利用 SIMD、连续内存和 `_into` 输出复用。
-
-对于实时计算，Streaming Indicator 保留状态，只处理新 Bar。
-
-对于历史修订，DirtyRange 提供安全的局部重算路径。
-
-三种执行模型不应该是三套不相关代码，而应该在相同数学语义下互相验证。
-
-### 多语言不是“有绑定就算完成”
-
-Finkit 的另一个产品化原则是：明确区分交付状态。
-
-项目把语言支持拆成：
-
-- Source exists；
-- CI validated；
-- Package candidate；
-- GitHub Release asset；
-- Public registry package。
-
-这意味着仓库里有 Node/Go/.NET/Android/iOS 代码，并不自动等于 npm/NuGet/Maven/Swift Package 已正式发布。
-
-对用户来说，这比“支持十几种语言”一句口号更重要：**你可以准确知道哪些路径已经真正构建、测试、打包和发布。**
-
-## Finkit 适合谁
-
-### 量化研究员
-
-希望把指标、Formula、Feature、Factor、Research Analysis 放在同一套语义和工具链里。
-
-### 量化平台团队
-
-希望构建选股、行情分析、因子服务、研究服务或计算 API，并减少重复算法实现。
-
-### 实时行情产品
-
-需要 Streaming Indicator、可复用执行计划和低开销更新机制。
-
-### 数据与机器学习团队
-
-需要金融特征、标签、rolling statistics、PCA、MI、CV、regime/stability 等基础能力。
-
-### 多语言产品团队
-
-希望同一套金融算法可以被 Python、Node、Java、C++、Go、.NET、移动端和浏览器调用。
-
-## Finkit 与传统指标库有什么不同？
-
-传统指标库最重要的问题通常是：
-
-> “有没有这个指标？”
-
-Finkit 更关注：
-
-> “这个计算能不能被长期复用、重复执行、增量更新、跨语言交付、研究验证，并保持相同语义？”
-
-所以项目重点不只是继续增加函数数量，而是持续收敛：
-
-- canonical kernel；
-- Unified Runtime；
-- ComputePlan / FactorPlan；
-- BufferArena；
-- DirtyRange；
-- Artifact identity / provenance；
-- SSOT metadata；
-- multi-language release gates。
-
-## 当前版本
-
-当前正式发布版本为 **v0.1.15**。
-
-该版本的权威分发来源是 GitHub Release。已发布资产与其他语言的 CI/源码状态请以 README 与 language-bindings 文档为准。
-
-正在开发的下一版本重点推进 Unified Runtime、typed Artifact、DirtyRange、Factor Research 与多语言交付链路。
-
-## 我们坚持的工程原则
-
-### 不用 mock 掩盖真实链路
-
-发布门禁要验证真实构建、真实包、真实运行路径。
-
-### 不拼接不同 SHA 的 CI 结果
-
-只有同一个最终 SHA 的门禁全部绿色，才有资格作为发布证据。
-
-### 不为了性能降低正确性
-
-无法证明安全的 incremental execution 就 full fallback。
-
-### 不重复造轮子
-
-已有 canonical kernel 就复用，发现重复实现就收敛。
-
-### 不让文档超前于发布事实
-
-CI candidate 和 public package 是两件事。
+Finkit 欢迎围绕指标 parity、Runtime、Streaming、Factor Research、多语言 SDK、benchmark 与文档参与贡献。项目更重视可复用实现和可验证门禁，而不是简单堆叠 API 数量。
 
 ## GitHub About 推荐描述
 
-推荐使用：
+英文推荐：
 
-> **Rust-powered quantitative finance engine for indicators, formulas, factors, streaming analytics, factor research, and multi-language SDKs.**
+> Rust-powered quantitative finance compute engine for indicators, formulas, factor graphs, streaming analytics, research workflows, and multi-language products.
 
-更短版本：
+短版：
 
-> **High-performance multi-language quantitative finance engine powered by Rust.**
+> Quant compute runtime for research, realtime analytics, factors, and multi-language SDKs.
 
-中文一句话：
+中文版：
 
-> **基于 Rust 的高性能多语言量化金融计算引擎，覆盖指标、公式、因子、流式分析与因子研究。**
+> Rust 驱动的量化金融计算引擎，统一指标、公式、因子、流式分析、研究工作流与多语言交付。
 
-## 社区发布短文案
+## 官网 / README Hero 推荐文案
 
-### 版本 A：技术社区
+**标题**
 
-Finkit 正在从“高性能技术指标库”升级为统一的量化金融计算引擎。
+> One compute core for quantitative research and realtime analytics.
 
-项目以 Rust 为 canonical core，继续打通 Indicators / Formula / Factor / Streaming / Feature / Factor Research，并通过 Python、Node、Java、C/C++、Go、.NET、移动端和 WASM 输出同一套数值语义。
+**中文标题**
 
-新架构重点包括 Unified Runtime、typed Artifact、FactorPlan、DirtyRange 局部执行和 reuse-first Factor Research。增量计算只有在依赖链能够证明安全时才启用，否则自动 full fallback。
+> 一套计算核心，连接量化研究与实时分析。
 
-如果你在做量化研究平台、行情分析、选股、因子服务、实时计算或金融 SDK，欢迎关注和参与 Finkit。
+**副标题**
 
-### 版本 B：简短介绍
+> Finkit uses a canonical Rust core to unify indicators, formulas, factor graphs, streaming computation, research analytics, and multi-language delivery.
 
-Finkit：一个 Rust 驱动的多语言量化金融计算引擎。
+**中文副标题**
 
-不仅有指标，还在统一 Formula、Factor DAG、Streaming、Feature Engineering 和 Factor Research。目标是让金融计算只实现一次、优化一次、验证一次，再跨语言复用。
+> Finkit 以统一 Rust 核心连接指标、公式、因子 DAG、流式计算、研究分析和多语言产品交付。
 
-### 版本 C：产品介绍
+## 发布公告模板
 
-用一个 Rust Core，支撑从研究 Notebook 到生产分析服务。
+### 社区版本 A：技术导向
 
-Finkit 提供指标、公式、因子、流式、特征和研究计算，并持续通过 Unified Runtime、DirtyRange 和 typed Artifact 收敛重复执行与重复实现问题。
+Finkit 正在从高性能技术分析库进一步收敛为统一 Quant Compute Runtime。下一版本候选架构把 typed Artifact、FactorPlan、Unified Runtime 与真正的 DirtyRange 局部执行连到同一主链，同时继续保持跨语言、正确性和性能门禁。当前正式版本仍为 v0.1.15，新架构会在 same-SHA 全矩阵验证完成后再进入发布判断。
 
-## 社交媒体超短文案
+### 社区版本 B：产品导向
 
-**Finkit = Rust Core + Indicators + Formula + Factor + Streaming + Research + Multi-language.**
+如果你的量化项目已经出现“研究代码一套、实时服务一套、因子平台一套、SDK 又一套”的问题，Finkit 想做的是把这些计算重新收回一个核心。它不仅计算指标，也提供公式、因子、Streaming、Feature、Research 和多语言接入能力，让金融计算成为可复用基础设施。
 
-不是只追求“更多指标”，而是把量化计算做成可复用、可验证、可增量、可跨语言交付的基础设施。
+### 社区版本 C：简短版
 
-## 推荐配套链接
+Finkit：Rust 驱动的 Quant Compute Runtime。一个核心统一指标、Formula、Factor、Streaming、Research 和多语言 SDK。
 
-对外宣传时建议同时提供：
+## 社交媒体短文案
 
-- GitHub 主仓库；
-- README / 中文 README；
-- Product Overview；
-- Getting Started；
-- Runtime & Factors；
-- Factor Research Architecture；
-- Release 页面；
-- Benchmark 文档。
+**极短版**
 
-## 宣传时避免的表述
+> Finkit = Rust Quant Compute Runtime：指标 + Formula + Factor + Streaming + Research + Multi-language。
 
-为了保证对外信息可信，不建议使用：
+**产品版**
 
-- “所有平台都已发布”——实际不同语言发布状态不同；
-- “100% TA-Lib 完全兼容”——除非最终完整 parity gate 明确证明；
-- “永远比 TA-Lib 快 X 倍”——性能依赖机器和 workload；
-- “完整实盘交易平台”——Finkit 不负责 OMS/券商接入；
-- “零拷贝所有路径”——只在明确 ownership/contiguous input 契约下成立；
-- “所有因子都支持局部增量”——只有 range-safe 依赖链才能 DirtyRange 执行。
+> 不想再为 Notebook、服务端和 SDK 重写三遍同一个指标？Finkit 用一个 Rust 核心统一金融计算语义，并把 Formula、Factor、Streaming 与 Research 接到同一执行体系。
 
-可信的产品宣传应该和代码、CI、Release 保持同一事实源。
+**工程版**
+
+> Finkit 正在把 FactorPlan、typed Artifact 与 DirtyRange 接入 Unified Runtime：只有依赖链证明安全时才局部执行，不能证明就 full fallback。性能优化先服从正确性。
+
+## 可以宣传的事实与需要避免的说法
+
+可以明确说明：Finkit 使用 Rust 核心；提供指标、Formula、Streaming、Feature、Factor 等能力；v0.1.15 是当前正式发布版本；下一版本 Runtime/Research 能力正在 PR #29 验证；Python/Rust/CLI 与其他绑定存在不同发布状态；项目通过 CI、正确性和性能门禁验证核心路径。
+
+在没有对应公开证据前，不应宣传“所有语言均已在公共 registry 发布”“所有指标都比 TA-Lib 快”“完全替代 Alphalens”“所有工作负载都支持增量执行”或固定延迟/吞吐承诺。
+
+## 推荐 CTA
+
+- **想快速开始**：阅读 Getting Started，先完成第一个指标或 Formula 计算。
+- **想评估产品适配度**：阅读《Finkit 产品说明》。
+- **想了解 Runtime 重构**：阅读 Runtime 与 Factor / Factor Research Architecture。
+- **想对外介绍项目**：直接使用《品牌与媒体素材》。
+- **想贡献代码**：从 correctness、performance、bindings 或 docs 门禁开始。
+
+## 相关链接
+
+- [README 中文版](../README.zh-CN.md)
+- [产品说明](product-overview-zh.md)
+- [品牌与媒体素材](media-kit-zh.md)
+- [完整文档索引](README.md)
+- [Runtime 与 Factor](runtime-and-factors.md)
+- [Factor Research 架构](factor-research-architecture.md)
+- [多语言绑定](language-bindings.md)
