@@ -90,7 +90,7 @@ impl ExecutionScheduler {
 mod tests {
     use super::*;
     use crate::math::kernels::KernelFamily;
-    use crate::runtime::execution_plan::ExecutionPlanBuilder;
+    use crate::runtime_engine::ExecutionPlanBuilder;
 
     #[test]
     fn dirty_schedule_uses_cumulative_plan_lookback() {
