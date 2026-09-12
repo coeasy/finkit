@@ -10,9 +10,7 @@ use crate::factors::{
     BorrowedFactorContext, FactorContext, FactorDefinition, FactorEngine, FactorError, FactorKind,
     FactorRegistry, FactorResult,
 };
-use crate::unified_runtime::{
-    DirtyRange, RuntimeExecution, RuntimeExecutionTrace, UnifiedRuntime,
-};
+use crate::unified_runtime::{DirtyRange, RuntimeExecution, RuntimeExecutionTrace, UnifiedRuntime};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Stable metadata attached to a registered factor independently of its
@@ -340,12 +338,7 @@ impl CompiledFactorPlan {
     ) -> FactorResult<RuntimeExecution<BTreeMap<String, Vec<f64>>>> {
         let lookback = self.require_range_lookback()?;
         UnifiedRuntime::execute_factor_plan_range_borrowed(
-            &self.plan,
-            engine,
-            context,
-            previous,
-            dirty,
-            lookback,
+            &self.plan, engine, context, previous, dirty, lookback,
         )
     }
 
@@ -360,12 +353,7 @@ impl CompiledFactorPlan {
     ) -> FactorResult<RuntimeExecutionTrace> {
         let lookback = self.require_range_lookback()?;
         UnifiedRuntime::execute_factor_plan_range_into_borrowed(
-            &self.plan,
-            engine,
-            context,
-            output,
-            dirty,
-            lookback,
+            &self.plan, engine, context, output, dirty, lookback,
         )
     }
 
@@ -476,12 +464,7 @@ mod tests {
             .with_series("close", &changed)
             .unwrap();
         let ranged = plan
-            .execute_range_borrowed(
-                &engine,
-                &revised,
-                &full.output,
-                DirtyRange::new(5, 6),
-            )
+            .execute_range_borrowed(&engine, &revised, &full.output, DirtyRange::new(5, 6))
             .unwrap();
 
         assert_eq!(ranged.output["score"], changed);
@@ -505,9 +488,7 @@ mod tests {
             FactorDirection::HigherBetter,
             Arc::new(|inputs| Ok(inputs.get("close")?.to_vec())),
         );
-        catalog
-            .register(cross, range_metadata("1", 0))
-            .unwrap();
+        catalog.register(cross, range_metadata("1", 0)).unwrap();
         let plan = catalog.compile(&["cross"]).unwrap();
         assert!(!plan.supports_range_incremental());
 
@@ -518,12 +499,7 @@ mod tests {
         let engine = FactorEngine::new(catalog.into_registry());
         let full = plan.execute_borrowed(&engine, &context).unwrap();
         let error = plan
-            .execute_range_borrowed(
-                &engine,
-                &context,
-                &full,
-                DirtyRange::new(1, 2),
-            )
+            .execute_range_borrowed(&engine, &context, &full, DirtyRange::new(1, 2))
             .unwrap_err();
         assert!(matches!(error, FactorError::InvalidParameter(_)));
     }
