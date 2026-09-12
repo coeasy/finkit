@@ -7,8 +7,8 @@ mod statistics;
 mod volatility;
 
 pub use compat::{
-    rolling_max_into, rolling_min_into, rolling_sample_stddev_into, rolling_sample_variance_into,
-    sma_into, wma_into, KernelCompatError,
+    adx_into, atr_into, rolling_max_into, rolling_min_into, rolling_sample_stddev_into,
+    rolling_sample_variance_into, sma_into, wma_into, KernelCompatError,
 };
 pub use extrema::MonotonicExtrema;
 pub use moving_average::{MovingAverageKind, MovingAverageState};
