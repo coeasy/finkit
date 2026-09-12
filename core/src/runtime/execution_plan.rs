@@ -298,6 +298,7 @@ const fn family_rank(family: KernelFamily) -> u8 {
         KernelFamily::Statistics => 1,
         KernelFamily::Volatility => 2,
         KernelFamily::Extrema => 3,
+        KernelFamily::Momentum => 4,
     }
 }
 
