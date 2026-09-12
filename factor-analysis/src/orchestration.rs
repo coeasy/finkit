@@ -24,6 +24,49 @@ pub enum ResearchStageKind {
     Report,
 }
 
+/// Incremental execution guarantee implemented by one research stage.
+///
+/// This is deliberately conservative. A stage is not marked append/range safe
+/// until its executor can reuse the authoritative typed materialization without
+/// changing batch semantics.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum StageIncrementalCapability {
+    /// The stage currently requires a full recomputation for any dirty input.
+    FullOnly,
+    /// The stage can safely extend a previous materialization for appended rows.
+    AppendSafe,
+    /// The stage can safely recompute an arbitrary dirty range.
+    RangeSafe,
+}
+
+impl StageIncrementalCapability {
+    #[must_use]
+    pub const fn supports_append(self) -> bool {
+        matches!(self, Self::AppendSafe | Self::RangeSafe)
+    }
+
+    #[must_use]
+    pub const fn supports_range(self) -> bool {
+        matches!(self, Self::RangeSafe)
+    }
+}
+
+impl ResearchStageKind {
+    /// Authoritative incremental capability for this semantic stage.
+    ///
+    /// `ForwardReturns` is currently the only stage backed by a dedicated
+    /// append-aware engine. Other stages remain correctness-first `FullOnly`
+    /// until their typed materializations are consumed directly by the common
+    /// executor.
+    #[must_use]
+    pub const fn incremental_capability(self) -> StageIncrementalCapability {
+        match self {
+            Self::ForwardReturns => StageIncrementalCapability::AppendSafe,
+            _ => StageIncrementalCapability::FullOnly,
+        }
+    }
+}
+
 /// Stable built-in orchestration profiles. Custom callers can still compile an
 /// explicit `ResearchPlan` from stage specifications.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -37,6 +80,13 @@ pub struct ResearchStageSpec {
     pub id: usize,
     pub kind: ResearchStageKind,
     pub dependencies: Vec<usize>,
+}
+
+impl ResearchStageSpec {
+    #[must_use]
+    pub const fn incremental_capability(&self) -> StageIncrementalCapability {
+        self.kind.incremental_capability()
+    }
 }
 
 /// Research graph backed by the existing canonical compute planner.
@@ -60,15 +110,7 @@ impl ResearchPlan {
                     .collect(),
                 ComputeCapabilities {
                     deterministic: true,
-                    streaming: matches!(
-                        stage.kind,
-                        ResearchStageKind::Align
-                            | ResearchStageKind::ForwardReturns
-                            | ResearchStageKind::Rank
-                            | ResearchStageKind::Returns
-                            | ResearchStageKind::Information
-                            | ResearchStageKind::Turnover
-                    ),
+                    streaming: stage.kind.incremental_capability().supports_append(),
                     stateful: false,
                     lookback: LookbackRequirement::Dynamic,
                     effect: if matches!(stage.kind, ResearchStageKind::Report) {
@@ -160,6 +202,36 @@ impl ResearchPlan {
         self.stages.iter().find(|stage| stage.id == id)
     }
 
+    /// First stage in execution order that prevents append-only incremental
+    /// execution. `None` means every stage has an append-safe implementation.
+    #[must_use]
+    pub fn first_append_blocker(&self) -> Option<&ResearchStageSpec> {
+        self.plan.execution_order().iter().find_map(|id| {
+            let stage = self.stage(id.0)?;
+            (!stage.incremental_capability().supports_append()).then_some(stage)
+        })
+    }
+
+    /// First stage in execution order that prevents arbitrary dirty-range
+    /// incremental execution.
+    #[must_use]
+    pub fn first_range_blocker(&self) -> Option<&ResearchStageSpec> {
+        self.plan.execution_order().iter().find_map(|id| {
+            let stage = self.stage(id.0)?;
+            (!stage.incremental_capability().supports_range()).then_some(stage)
+        })
+    }
+
+    #[must_use]
+    pub fn supports_append_incremental(&self) -> bool {
+        self.first_append_blocker().is_none()
+    }
+
+    #[must_use]
+    pub fn supports_range_incremental(&self) -> bool {
+        self.first_range_blocker().is_none()
+    }
+
     /// Deterministic semantic identity used by materialization keys.
     #[must_use]
     pub fn fingerprint(&self) -> u64 {
@@ -222,5 +294,39 @@ mod tests {
         assert_eq!(plan.execution_order(), (0..=8).collect::<Vec<_>>());
         assert_eq!(plan.stage(8).unwrap().kind, ResearchStageKind::Report);
         assert_ne!(plan.fingerprint(), 0);
+    }
+
+    #[test]
+    fn incremental_capability_is_conservative_and_explicit() {
+        assert_eq!(
+            ResearchStageKind::ForwardReturns.incremental_capability(),
+            StageIncrementalCapability::AppendSafe
+        );
+        assert_eq!(
+            ResearchStageKind::Report.incremental_capability(),
+            StageIncrementalCapability::FullOnly
+        );
+        assert!(
+            ResearchStageKind::ForwardReturns
+                .incremental_capability()
+                .supports_append()
+        );
+        assert!(
+            !ResearchStageKind::ForwardReturns
+                .incremental_capability()
+                .supports_range()
+        );
+    }
+
+    #[test]
+    fn standard_plan_reports_the_first_incremental_blocker() {
+        let plan = ResearchPlan::standard_factor_study().unwrap();
+        let append_blocker = plan.first_append_blocker().unwrap();
+        let range_blocker = plan.first_range_blocker().unwrap();
+        assert_eq!(append_blocker.id, 0);
+        assert_eq!(append_blocker.kind, ResearchStageKind::Align);
+        assert_eq!(range_blocker.id, 0);
+        assert!(!plan.supports_append_incremental());
+        assert!(!plan.supports_range_incremental());
     }
 }
