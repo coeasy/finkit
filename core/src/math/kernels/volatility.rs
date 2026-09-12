@@ -99,12 +99,7 @@ pub struct DirectionalMovementState {
 
 impl DirectionalMovementState {
     #[inline]
-    pub fn update(
-        &mut self,
-        high: f64,
-        low: f64,
-        close: f64,
-    ) -> Option<DirectionalMovement> {
+    pub fn update(&mut self, high: f64, low: f64, close: f64) -> Option<DirectionalMovement> {
         let previous = match (
             self.previous_high.replace(high),
             self.previous_low.replace(low),
