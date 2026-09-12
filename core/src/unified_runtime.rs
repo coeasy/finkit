@@ -404,12 +404,8 @@ mod tests {
         let original_context = BorrowedFactorContext::new()
             .with_series("close", &original)
             .unwrap();
-        let full = UnifiedRuntime::execute_factor_plan_borrowed(
-            &plan,
-            &engine,
-            &original_context,
-        )
-        .unwrap();
+        let full = UnifiedRuntime::execute_factor_plan_borrowed(&plan, &engine, &original_context)
+            .unwrap();
         assert_eq!(visited_rows.load(Ordering::SeqCst), original.len());
 
         let changed = [1.0, 2.0, 3.0, 40.0, 5.0, 6.0];
@@ -427,7 +423,10 @@ mod tests {
         .unwrap();
 
         assert_eq!(visited_rows.load(Ordering::SeqCst), original.len() + 2);
-        assert_eq!(ranged.output["score"], vec![2.0, 4.0, 6.0, 80.0, 10.0, 12.0]);
+        assert_eq!(
+            ranged.output["score"],
+            vec![2.0, 4.0, 6.0, 80.0, 10.0, 12.0]
+        );
         assert_eq!(
             ranged.trace.mode,
             RuntimeExecutionMode::Range {
