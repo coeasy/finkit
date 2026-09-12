@@ -3,7 +3,7 @@
 //! This module owns cross-domain execution identity and dirty-range semantics.
 //! Domain planners remain responsible for proving that a node is range-safe;
 //! once that proof exists, [`UnifiedRuntime`] executes only the required input
-//! slice and splices the computed rows into the retained materialization.
+//! slice and splices the affected rows into the retained materialization.
 
 use crate::compute::FactorPlan;
 use crate::factors::{
@@ -120,12 +120,29 @@ impl DirtyRange {
         self.start..self.end
     }
 
-    /// Expand the range backwards for a node's historical dependency.
+    /// Expand backwards to provide historical rows required by an output
+    /// interval. This does not change the output interval itself.
     #[must_use]
     pub const fn with_lookback(self, lookback: usize) -> Self {
         Self {
             start: self.start.saturating_sub(lookback),
             end: self.end,
+        }
+    }
+
+    /// Propagate an input mutation forward through a trailing-window dependency.
+    ///
+    /// If a node needs `lookback` previous rows, mutating input row `i` can
+    /// affect outputs from `i` through `i + lookback`. Dependency-chain
+    /// lookbacks therefore expand the dirty range's end before execution.
+    #[must_use]
+    pub const fn propagate_forward(self, lookback: usize, rows: usize) -> Self {
+        if self.is_empty() {
+            return self;
+        }
+        Self {
+            start: self.start,
+            end: self.end.saturating_add(lookback).min(rows),
         }
     }
 
@@ -158,11 +175,13 @@ impl DirtyRange {
 pub enum RuntimeExecutionMode {
     /// Every row was recomputed.
     Full,
-    /// Only a dirty interval, plus required lookback, was evaluated.
+    /// Only rows affected by one input dirty range were evaluated.
     Range {
-        /// Rows whose published values were replaced.
-        dirty: DirtyRange,
-        /// Input slice actually evaluated after lookback expansion.
+        /// Rows changed in the authoritative raw input.
+        input_dirty: DirtyRange,
+        /// Output interval affected after dependency propagation.
+        affected: DirtyRange,
+        /// Input slice actually evaluated after historical lookback expansion.
         recompute: DirtyRange,
     },
 }
@@ -234,11 +253,12 @@ impl UnifiedRuntime {
         })
     }
 
-    /// Recompute only a proven-safe dirty interval and return a new output map.
+    /// Recompute only rows affected by a proven-safe raw-input dirty interval.
     ///
     /// `lookback` is supplied by the semantic planner after accumulating the
-    /// historical requirements of the complete dependency chain. Callers must
-    /// not use this entry point for plans that cannot prove range safety.
+    /// historical requirements of the complete dependency chain. The runtime
+    /// first propagates the raw change forward through that dependency chain,
+    /// then expands backwards only as far as needed to evaluate those outputs.
     pub fn execute_factor_plan_range_borrowed(
         plan: &FactorPlan,
         engine: &FactorEngine,
@@ -259,8 +279,8 @@ impl UnifiedRuntime {
         Ok(RuntimeExecution { output, trace })
     }
 
-    /// In-place dirty-range execution that preserves all clean rows without
-    /// cloning the retained materialization.
+    /// In-place dirty-range execution that preserves all unaffected rows and
+    /// their allocations.
     pub fn execute_factor_plan_range_into_borrowed(
         plan: &FactorPlan,
         engine: &FactorEngine,
@@ -282,7 +302,8 @@ impl UnifiedRuntime {
         if dirty.is_empty() {
             return Ok(RuntimeExecutionTrace {
                 mode: RuntimeExecutionMode::Range {
-                    dirty,
+                    input_dirty: dirty,
+                    affected: dirty,
                     recompute: dirty,
                 },
                 rows,
@@ -291,7 +312,8 @@ impl UnifiedRuntime {
             });
         }
 
-        let recompute = dirty.with_lookback(lookback);
+        let affected = dirty.propagate_forward(lookback, rows);
+        let recompute = affected.with_lookback(lookback);
         let mut sliced = BorrowedFactorContext::new();
         for input in plan.required_raw_inputs() {
             let values = context
@@ -301,8 +323,8 @@ impl UnifiedRuntime {
         }
 
         let partial = plan.execute_borrowed(engine, &sliced)?;
-        let offset = dirty.start - recompute.start;
-        let source_end = offset + dirty.len();
+        let offset = affected.start - recompute.start;
+        let source_end = offset + affected.len();
         for name in plan.execution_order() {
             let source = partial.get(name).ok_or_else(|| {
                 FactorError::InvalidParameter(format!(
@@ -321,11 +343,15 @@ impl UnifiedRuntime {
                     "dirty-range execution requires retained output for {name}"
                 ))
             })?;
-            target[dirty.as_range()].copy_from_slice(&source[offset..source_end]);
+            target[affected.as_range()].copy_from_slice(&source[offset..source_end]);
         }
 
         Ok(RuntimeExecutionTrace {
-            mode: RuntimeExecutionMode::Range { dirty, recompute },
+            mode: RuntimeExecutionMode::Range {
+                input_dirty: dirty,
+                affected,
+                recompute,
+            },
             rows,
             executed_nodes: plan.execution_order().len(),
             recomputed_rows: recompute.len(),
@@ -372,15 +398,17 @@ mod tests {
     }
 
     #[test]
-    fn dirty_range_expands_only_backwards_for_lookback() {
-        let dirty = DirtyRange::new(5, 8);
-        assert_eq!(dirty.with_lookback(3), DirtyRange::new(2, 8));
-        assert_eq!(dirty.len(), 3);
-        assert!(dirty.is_within(8));
+    fn dirty_range_propagates_forward_then_expands_for_history() {
+        let dirty = DirtyRange::new(5, 6);
+        let affected = dirty.propagate_forward(3, 12);
+        assert_eq!(affected, DirtyRange::new(5, 9));
+        assert_eq!(affected.with_lookback(3), DirtyRange::new(2, 9));
+        assert_eq!(dirty.len(), 1);
+        assert!(dirty.is_within(12));
     }
 
     #[test]
-    fn range_runtime_executes_only_the_expanded_slice() {
+    fn range_runtime_executes_only_affected_window_plus_history() {
         let visited_rows = Arc::new(AtomicUsize::new(0));
         let counter = Arc::clone(&visited_rows);
         let mut registry = FactorRegistry::new();
@@ -422,7 +450,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(visited_rows.load(Ordering::SeqCst), original.len() + 2);
+        assert_eq!(visited_rows.load(Ordering::SeqCst), original.len() + 3);
         assert_eq!(
             ranged.output["score"],
             vec![2.0, 4.0, 6.0, 80.0, 10.0, 12.0]
@@ -430,10 +458,11 @@ mod tests {
         assert_eq!(
             ranged.trace.mode,
             RuntimeExecutionMode::Range {
-                dirty: DirtyRange::new(3, 4),
-                recompute: DirtyRange::new(2, 4),
+                input_dirty: DirtyRange::new(3, 4),
+                affected: DirtyRange::new(3, 5),
+                recompute: DirtyRange::new(2, 5),
             }
         );
-        assert_eq!(ranged.trace.recomputed_rows, 2);
+        assert_eq!(ranged.trace.recomputed_rows, 3);
     }
 }
