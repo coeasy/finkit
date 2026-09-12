@@ -11,6 +11,9 @@ pub enum ScheduleError {
     DirtyRangeOutOfBounds { dirty: DirtyRange, rows: usize },
     /// The plan contains recursive state and no replay checkpoint was supplied.
     RecursiveDependencyRequiresCheckpoint,
+    /// One or more finite horizons depend on runtime parameters that have not
+    /// yet been resolved into fixed lookbacks.
+    DynamicHorizonRequiresResolution,
     /// A supplied checkpoint is newer than the first changed row and therefore
     /// already contains state contaminated by the historical edit.
     CheckpointAfterDirty {
@@ -32,6 +35,10 @@ impl fmt::Display for ScheduleError {
             Self::RecursiveDependencyRequiresCheckpoint => write!(
                 f,
                 "dirty-range execution contains recursive state and requires checkpoint replay"
+            ),
+            Self::DynamicHorizonRequiresResolution => write!(
+                f,
+                "dirty-range execution contains unresolved runtime-dependent lookbacks"
             ),
             Self::CheckpointAfterDirty {
                 checkpoint_row,
@@ -84,8 +91,8 @@ impl ExecutionScheduler {
     }
 
     /// Schedule the minimal row interval implied by finite cumulative
-    /// lookbacks. Recursive state is rejected here because correct historical
-    /// replay requires a checkpoint boundary, not a guessed finite window.
+    /// lookbacks. Recursive state and unresolved runtime lookbacks are rejected
+    /// rather than guessed.
     pub fn dirty(
         plan: &ExecutionPlan,
         dirty: DirtyRange,
@@ -95,19 +102,26 @@ impl ExecutionScheduler {
         if dirty.is_empty() {
             return Ok(Self::empty(dirty));
         }
+        if plan.has_dynamic_horizon() {
+            return Err(ScheduleError::DynamicHorizonRequiresResolution);
+        }
+        if plan.has_recursive_horizon() {
+            return Err(ScheduleError::RecursiveDependencyRequiresCheckpoint);
+        }
 
         let lookback = plan
             .max_lookback()
-            .ok_or(ScheduleError::RecursiveDependencyRequiresCheckpoint)?;
+            .expect("fixed-only plan has a finite cumulative lookback");
         Ok(Self::fixed_window_schedule(plan, dirty, rows, lookback))
     }
 
     /// Schedule a historical edit with a checkpoint whose state represents all
     /// rows strictly before `checkpoint_row`.
     ///
-    /// Fixed-window plans still use their smaller mathematically proven range.
-    /// Recursive plans replay from the checkpoint through the end because a
-    /// changed historical value can affect every subsequent recursive state.
+    /// Dynamic horizons must still be resolved first. Fixed-window plans use
+    /// their smaller mathematically proven range. Recursive plans replay from
+    /// the checkpoint through the end because a changed historical value can
+    /// affect every subsequent recursive state.
     pub fn dirty_from_checkpoint(
         plan: &ExecutionPlan,
         dirty: DirtyRange,
@@ -124,6 +138,9 @@ impl ExecutionScheduler {
         if dirty.is_empty() {
             return Ok(Self::empty(dirty));
         }
+        if plan.has_dynamic_horizon() {
+            return Err(ScheduleError::DynamicHorizonRequiresResolution);
+        }
         if checkpoint_row > dirty.start {
             return Err(ScheduleError::CheckpointAfterDirty {
                 checkpoint_row,
@@ -131,7 +148,10 @@ impl ExecutionScheduler {
             });
         }
 
-        if let Some(lookback) = plan.max_lookback() {
+        if !plan.has_recursive_horizon() {
+            let lookback = plan
+                .max_lookback()
+                .expect("fixed-only plan has a finite cumulative lookback");
             return Ok(Self::fixed_window_schedule(plan, dirty, rows, lookback));
         }
 
@@ -187,7 +207,7 @@ mod tests {
     fn dirty_schedule_uses_cumulative_plan_lookback() {
         let mut builder = ExecutionPlanBuilder::new();
         let input = builder
-            .intern_node(KernelFamily::MovingAverage, "close", vec![], 0)
+            .intern_node(KernelFamily::Scalar, "close", vec![], 0)
             .unwrap();
         let sma = builder
             .intern_node(KernelFamily::MovingAverage, "sma:20", vec![input], 19)
@@ -207,7 +227,7 @@ mod tests {
     fn recursive_plan_requires_checkpoint_for_dirty_replay() {
         let mut builder = ExecutionPlanBuilder::new();
         let input = builder
-            .intern_node(KernelFamily::MovingAverage, "close", vec![], 0)
+            .intern_node(KernelFamily::Scalar, "close", vec![], 0)
             .unwrap();
         builder
             .intern_recursive_node(KernelFamily::MovingAverage, "ema:20", vec![input])
@@ -220,10 +240,33 @@ mod tests {
     }
 
     #[test]
+    fn dynamic_plan_requires_runtime_resolution() {
+        let mut builder = ExecutionPlanBuilder::new();
+        builder
+            .intern_dynamic_node(KernelFamily::MovingAverage, "sma:runtime", vec![])
+            .unwrap();
+        let plan = builder.build().unwrap();
+        assert_eq!(
+            ExecutionScheduler::dirty(&plan, DirtyRange::new(10, 11), 100).unwrap_err(),
+            ScheduleError::DynamicHorizonRequiresResolution
+        );
+        assert_eq!(
+            ExecutionScheduler::dirty_from_checkpoint(
+                &plan,
+                DirtyRange::new(10, 11),
+                100,
+                0,
+            )
+            .unwrap_err(),
+            ScheduleError::DynamicHorizonRequiresResolution
+        );
+    }
+
+    #[test]
     fn recursive_plan_replays_from_safe_checkpoint_to_end() {
         let mut builder = ExecutionPlanBuilder::new();
         let input = builder
-            .intern_node(KernelFamily::MovingAverage, "close", vec![], 0)
+            .intern_node(KernelFamily::Scalar, "close", vec![], 0)
             .unwrap();
         builder
             .intern_recursive_node(KernelFamily::MovingAverage, "ema:20", vec![input])
@@ -244,7 +287,7 @@ mod tests {
             .unwrap();
         let plan = builder.build().unwrap();
         assert_eq!(
-            ExecutionScheduler::dirty_from_checkpoint(&plan, DirtyRange::new(50, 51), 100, 60,)
+            ExecutionScheduler::dirty_from_checkpoint(&plan, DirtyRange::new(50, 51), 100, 60)
                 .unwrap_err(),
             ScheduleError::CheckpointAfterDirty {
                 checkpoint_row: 60,
