@@ -1,3 +1,4 @@
+use finkit::indicators::ht_sine;
 use finkit::math::simd_kernels::{sma_scalar_naive_into, sma_simd_into};
 use std::hint::black_box;
 use std::time::{Duration, Instant};
@@ -20,6 +21,18 @@ fn best_of(mut run: impl FnMut(), rounds: usize) -> Duration {
         })
         .min()
         .expect("at least one timing round")
+}
+
+fn median_ns_per_bar(mut run: impl FnMut(), bars_per_round: usize, rounds: usize) -> f64 {
+    assert!(rounds > 0 && rounds % 2 == 1);
+    let mut samples = Vec::with_capacity(rounds);
+    for _ in 0..rounds {
+        let start = Instant::now();
+        run();
+        samples.push(start.elapsed().as_nanos() as f64 / bars_per_round as f64);
+    }
+    samples.sort_by(f64::total_cmp);
+    samples[rounds / 2]
 }
 
 #[test]
@@ -57,5 +70,43 @@ fn optimized_sma_keeps_linear_path_advantage() {
     assert!(
         optimized_time.as_nanos() * 5 <= naive_time.as_nanos() * 4,
         "optimized SMA regression: optimized={optimized_time:?}, naive={naive_time:?}"
+    );
+}
+
+#[test]
+fn ht_sine_release_throughput_stays_within_budget() {
+    // Keep the historical <1000 ns/bar contract, but enforce it in the
+    // dedicated release-mode, single-threaded performance gate. The ordinary
+    // debug unit-test suite runs many tests concurrently on shared runners and
+    // is not a reliable place for an absolute wall-clock assertion.
+    const LEN: usize = 4_000;
+    const ITERS: usize = 64;
+    const ROUNDS: usize = 5;
+    const BUDGET_NS_PER_BAR: f64 = 1_000.0;
+
+    let input: Vec<f64> = (0..LEN)
+        .map(|index| {
+            let x = index as f64;
+            100.0 + 10.0 * (x * 0.13).sin() + (x * 0.7).cos()
+        })
+        .collect();
+
+    for _ in 0..8 {
+        black_box(ht_sine(black_box(&input)).unwrap());
+    }
+
+    let ns_per_bar = median_ns_per_bar(
+        || {
+            for _ in 0..ITERS {
+                black_box(ht_sine(black_box(&input)).unwrap());
+            }
+        },
+        LEN * ITERS,
+        ROUNDS,
+    );
+
+    assert!(
+        ns_per_bar < BUDGET_NS_PER_BAR,
+        "ht_sine release throughput regression: {ns_per_bar:.2} ns/bar >= {BUDGET_NS_PER_BAR:.0} ns/bar"
     );
 }
