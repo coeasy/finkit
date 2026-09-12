@@ -4,7 +4,10 @@
 //! direct parity tests against the legacy implementations before call sites
 //! are switched over.
 
-use super::{MonotonicExtrema, MovingAverageKind, MovingAverageState, RollingWelfordState};
+use super::{
+    AdxState, AtrState, MonotonicExtrema, MovingAverageKind, MovingAverageState,
+    RollingWelfordState,
+};
 use std::fmt;
 
 /// Canonical-kernel compatibility execution errors.
@@ -12,6 +15,7 @@ use std::fmt;
 pub enum KernelCompatError {
     InvalidWindow(usize),
     LengthMismatch { input: usize, output: usize },
+    OhlcLengthMismatch,
 }
 
 impl fmt::Display for KernelCompatError {
@@ -22,6 +26,7 @@ impl fmt::Display for KernelCompatError {
                 f,
                 "kernel compatibility output length mismatch: input={input}, output={output}"
             ),
+            Self::OhlcLengthMismatch => write!(f, "OHLC inputs must have identical lengths"),
         }
     }
 }
@@ -35,6 +40,24 @@ fn validate(input: &[f64], window: usize, output: &[f64]) -> Result<(), KernelCo
     if input.len() != output.len() {
         return Err(KernelCompatError::LengthMismatch {
             input: input.len(),
+            output: output.len(),
+        });
+    }
+    Ok(())
+}
+
+fn validate_ohlc(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    output: &[f64],
+) -> Result<(), KernelCompatError> {
+    if high.len() != low.len() || high.len() != close.len() {
+        return Err(KernelCompatError::OhlcLengthMismatch);
+    }
+    if high.len() != output.len() {
+        return Err(KernelCompatError::LengthMismatch {
+            input: high.len(),
             output: output.len(),
         });
     }
@@ -153,9 +176,56 @@ pub fn rolling_min_into(
     rolling_extrema_into(input, window, output, false)
 }
 
+/// TA-Lib-aligned ATR using the canonical streaming state.
+pub fn atr_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    period: usize,
+    output: &mut [f64],
+) -> Result<(), KernelCompatError> {
+    validate_ohlc(high, low, close, output)?;
+    if period == 0 {
+        return Err(KernelCompatError::InvalidWindow(period));
+    }
+    output.fill(f64::NAN);
+    let mut state = AtrState::new(period);
+    for index in 0..high.len() {
+        if let Some(value) = state.update(high[index], low[index], close[index]) {
+            output[index] = value;
+        }
+    }
+    Ok(())
+}
+
+/// TA-Lib-aligned ADX using the canonical shared DMI state.
+pub fn adx_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    period: usize,
+    output: &mut [f64],
+) -> Result<(), KernelCompatError> {
+    validate_ohlc(high, low, close, output)?;
+    if period == 0 {
+        return Err(KernelCompatError::InvalidWindow(period));
+    }
+    output.fill(f64::NAN);
+    let mut state = AdxState::new(period);
+    for index in 0..high.len() {
+        if let Some(family) = state.update(high[index], low[index], close[index]) {
+            if let Some(adx) = family.adx {
+                output[index] = adx;
+            }
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::indicators;
     use crate::math::{moving_avg, statistics};
 
     fn assert_series_eq(left: &[f64], right: &[f64], tolerance: f64) {
@@ -217,5 +287,39 @@ mod tests {
         rolling_min_into(&input, 17, &mut canonical_min).unwrap();
         assert_series_eq(legacy_max.as_slice().unwrap(), &canonical_max, 1e-12);
         assert_series_eq(legacy_min.as_slice().unwrap(), &canonical_min, 1e-12);
+    }
+
+    #[test]
+    fn canonical_atr_matches_legacy_public_api() {
+        let close: Vec<f64> = (0..160)
+            .map(|i| 100.0 + (i as f64 * 0.09).sin() * 4.0 + i as f64 * 0.02)
+            .collect();
+        let high: Vec<f64> = close.iter().map(|value| value + 1.25).collect();
+        let low: Vec<f64> = close.iter().map(|value| value - 0.85).collect();
+        let legacy = indicators::atr(&high, &low, &close, 14).unwrap();
+        let mut canonical = vec![0.0; close.len()];
+        atr_into(&high, &low, &close, 14, &mut canonical).unwrap();
+        assert_series_eq(legacy.as_slice().unwrap(), &canonical, 1e-12);
+    }
+
+    #[test]
+    fn canonical_adx_matches_legacy_public_api() {
+        let close: Vec<f64> = (0..240)
+            .map(|i| 80.0 + (i as f64 * 0.07).sin() * 6.0 + i as f64 * 0.04)
+            .collect();
+        let high: Vec<f64> = close
+            .iter()
+            .enumerate()
+            .map(|(i, value)| value + 1.0 + (i % 5) as f64 * 0.03)
+            .collect();
+        let low: Vec<f64> = close
+            .iter()
+            .enumerate()
+            .map(|(i, value)| value - 0.9 - (i % 7) as f64 * 0.02)
+            .collect();
+        let legacy = indicators::adx(&high, &low, &close, 14).unwrap();
+        let mut canonical = vec![0.0; close.len()];
+        adx_into(&high, &low, &close, 14, &mut canonical).unwrap();
+        assert_series_eq(legacy.as_slice().unwrap(), &canonical, 1e-10);
     }
 }
