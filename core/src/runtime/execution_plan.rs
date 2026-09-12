@@ -2,8 +2,8 @@
 //!
 //! The plan is deliberately backend-neutral: Formula, Factor and indicator
 //! frontends can compile semantic work into the same node/dependency model.
-//! Fixed-window and recursive dependencies are represented separately so a
-//! DirtyRange scheduler cannot silently truncate an EMA/ATR-style history.
+//! Fixed-window, recursive, and runtime-resolved dependencies are represented
+//! separately so DirtyRange scheduling never guesses a history contract.
 
 use crate::math::kernels::KernelFamily;
 use std::collections::{BTreeMap, VecDeque};
@@ -21,6 +21,9 @@ pub enum DependencyHorizon {
     /// Output recursively depends on all prior state unless replay starts from
     /// a valid checkpoint.
     Recursive,
+    /// A finite horizon exists, but runtime parameters must resolve its exact
+    /// value before a minimal DirtyRange can be proven.
+    Dynamic,
 }
 
 /// One reusable kernel node in an execution plan.
@@ -74,6 +77,8 @@ pub struct ExecutionPlan {
     order: Vec<NodeId>,
     cumulative_lookback: Vec<Option<usize>>,
     max_lookback: Option<usize>,
+    has_recursive_horizon: bool,
+    has_dynamic_horizon: bool,
 }
 
 impl ExecutionPlan {
@@ -127,6 +132,13 @@ impl ExecutionPlan {
             return Err(ExecutionPlanError::Cycle);
         }
 
+        let has_recursive_horizon = nodes
+            .iter()
+            .any(|node| node.horizon == DependencyHorizon::Recursive);
+        let has_dynamic_horizon = nodes
+            .iter()
+            .any(|node| node.horizon == DependencyHorizon::Dynamic);
+
         let mut cumulative_lookback = vec![Some(0_usize); nodes.len()];
         for node_id in &order {
             let node = &nodes[node_id.0];
@@ -156,6 +168,8 @@ impl ExecutionPlan {
             order,
             cumulative_lookback,
             max_lookback,
+            has_recursive_horizon,
+            has_dynamic_horizon,
         })
     }
 
@@ -184,17 +198,29 @@ impl ExecutionPlan {
     }
 
     /// Cumulative finite lookback for one node. `None` means the node itself
-    /// or one dependency is recursive and requires checkpoint/replay.
+    /// or one dependency is recursive/dynamic.
     #[must_use]
     pub fn cumulative_lookback(&self, id: NodeId) -> Option<usize> {
         self.cumulative_lookback.get(id.0).copied().flatten()
     }
 
-    /// Maximum finite lookback across the plan. `None` means arbitrary
-    /// DirtyRange execution is unsafe without a checkpoint boundary.
+    /// Maximum finite lookback across the plan. `None` means the plan first
+    /// needs a checkpoint (recursive) or runtime parameter resolution (dynamic).
     #[must_use]
     pub const fn max_lookback(&self) -> Option<usize> {
         self.max_lookback
+    }
+
+    /// Whether at least one node has recursive state.
+    #[must_use]
+    pub const fn has_recursive_horizon(&self) -> bool {
+        self.has_recursive_horizon
+    }
+
+    /// Whether at least one node still needs a runtime-resolved finite horizon.
+    #[must_use]
+    pub const fn has_dynamic_horizon(&self) -> bool {
+        self.has_dynamic_horizon
     }
 
     /// Whether DirtyRange can be derived from finite lookbacks alone.
@@ -247,6 +273,17 @@ impl ExecutionPlanBuilder {
         self.intern_with_horizon(family, key, dependencies, DependencyHorizon::Recursive)
     }
 
+    /// Add or reuse a finite-window node whose horizon must be resolved from
+    /// runtime parameters before minimal DirtyRange scheduling is allowed.
+    pub fn intern_dynamic_node(
+        &mut self,
+        family: KernelFamily,
+        key: impl Into<String>,
+        dependencies: Vec<NodeId>,
+    ) -> Result<NodeId, ExecutionPlanError> {
+        self.intern_with_horizon(family, key, dependencies, DependencyHorizon::Dynamic)
+    }
+
     fn intern_with_horizon(
         &mut self,
         family: KernelFamily,
@@ -294,11 +331,12 @@ impl ExecutionPlanBuilder {
 
 const fn family_rank(family: KernelFamily) -> u8 {
     match family {
-        KernelFamily::MovingAverage => 0,
-        KernelFamily::Statistics => 1,
-        KernelFamily::Volatility => 2,
-        KernelFamily::Extrema => 3,
-        KernelFamily::Momentum => 4,
+        KernelFamily::Scalar => 0,
+        KernelFamily::MovingAverage => 1,
+        KernelFamily::Statistics => 2,
+        KernelFamily::Volatility => 3,
+        KernelFamily::Extrema => 4,
+        KernelFamily::Momentum => 5,
     }
 }
 
@@ -310,7 +348,7 @@ mod tests {
     fn planner_interns_common_subexpressions() {
         let mut builder = ExecutionPlanBuilder::new();
         let input = builder
-            .intern_node(KernelFamily::MovingAverage, "close", vec![], 0)
+            .intern_node(KernelFamily::Scalar, "close", vec![], 0)
             .unwrap();
         let sma_a = builder
             .intern_node(KernelFamily::MovingAverage, "sma:12", vec![input], 11)
@@ -327,7 +365,7 @@ mod tests {
     fn cumulative_lookback_follows_dependency_chain() {
         let mut builder = ExecutionPlanBuilder::new();
         let input = builder
-            .intern_node(KernelFamily::MovingAverage, "close", vec![], 0)
+            .intern_node(KernelFamily::Scalar, "close", vec![], 0)
             .unwrap();
         let rolling = builder
             .intern_node(KernelFamily::MovingAverage, "sma:20", vec![input], 19)
@@ -345,7 +383,7 @@ mod tests {
     fn recursive_dependency_propagates_through_downstream_nodes() {
         let mut builder = ExecutionPlanBuilder::new();
         let input = builder
-            .intern_node(KernelFamily::MovingAverage, "close", vec![], 0)
+            .intern_node(KernelFamily::Scalar, "close", vec![], 0)
             .unwrap();
         let ema = builder
             .intern_recursive_node(KernelFamily::MovingAverage, "ema:12", vec![input])
@@ -357,7 +395,24 @@ mod tests {
         assert_eq!(plan.cumulative_lookback(ema), None);
         assert_eq!(plan.cumulative_lookback(stats), None);
         assert_eq!(plan.max_lookback(), None);
-        assert!(!plan.supports_dirty_range_without_checkpoint());
+        assert!(plan.has_recursive_horizon());
+        assert!(!plan.has_dynamic_horizon());
+    }
+
+    #[test]
+    fn dynamic_dependency_remains_unresolved() {
+        let mut builder = ExecutionPlanBuilder::new();
+        let input = builder
+            .intern_node(KernelFamily::Scalar, "close", vec![], 0)
+            .unwrap();
+        let dynamic = builder
+            .intern_dynamic_node(KernelFamily::MovingAverage, "sma:runtime", vec![input])
+            .unwrap();
+        let plan = builder.build().unwrap();
+        assert_eq!(plan.cumulative_lookback(dynamic), None);
+        assert_eq!(plan.max_lookback(), None);
+        assert!(plan.has_dynamic_horizon());
+        assert!(!plan.has_recursive_horizon());
     }
 
     #[test]
@@ -365,7 +420,7 @@ mod tests {
         let nodes = vec![
             PlanNode {
                 id: NodeId(0),
-                family: KernelFamily::MovingAverage,
+                family: KernelFamily::Scalar,
                 key: "a".to_string(),
                 dependencies: vec![NodeId(1)],
                 horizon: DependencyHorizon::Fixed(0),
