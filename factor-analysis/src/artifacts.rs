@@ -79,6 +79,34 @@ pub struct MaterializationKey {
     pub schema_version: u32,
 }
 
+impl MaterializationKey {
+    /// Whether two keys describe the same stage/output contract independently
+    /// of the concrete source-data revision.
+    ///
+    /// A positive result is only a prerequisite for incremental reuse. The
+    /// executor must additionally verify the stage's incremental capability and
+    /// the current [`DirtyRange`] before carrying a previous artifact forward.
+    #[must_use]
+    pub fn same_contract(&self, other: &Self) -> bool {
+        self.stage_id == other.stage_id
+            && self.output == other.output
+            && self.plan_fingerprint == other.plan_fingerprint
+            && self.semantics_fingerprint == other.semantics_fingerprint
+            && self.parameter_fingerprint == other.parameter_fingerprint
+            && self.algorithm_version == other.algorithm_version
+            && self.schema_version == other.schema_version
+    }
+
+    /// Whether the full materialization identity, including data revision and
+    /// fingerprint, matches exactly.
+    #[must_use]
+    pub fn same_revision_identity(&self, other: &Self) -> bool {
+        self.same_contract(other)
+            && self.data_revision == other.data_revision
+            && self.data_fingerprint == other.data_fingerprint
+    }
+}
+
 /// Typed values produced by research stages.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "value")]
@@ -108,6 +136,25 @@ impl ResearchArtifactStore {
     #[must_use]
     pub fn get(&self, key: &MaterializationKey) -> Option<&ResearchArtifact> {
         self.values.get(key)
+    }
+
+    /// Find the newest older materialization with the same execution contract.
+    ///
+    /// This method deliberately ignores only data revision/fingerprint. Callers
+    /// must still apply stage capability + dirty-range checks before reuse. It
+    /// exists so batch and incremental execution can converge on the same typed
+    /// store rather than growing a second revision cache.
+    #[must_use]
+    pub fn latest_compatible_before(
+        &self,
+        desired: &MaterializationKey,
+    ) -> Option<(&MaterializationKey, &ResearchArtifact)> {
+        self.values
+            .iter()
+            .filter(|(key, _)| {
+                key.data_revision < desired.data_revision && key.same_contract(desired)
+            })
+            .max_by_key(|(key, _)| key.data_revision)
     }
 
     pub fn insert(&mut self, key: MaterializationKey, artifact: ResearchArtifact) {
@@ -146,7 +193,7 @@ mod tests {
             stage_id: 1,
             output: "series".to_string(),
             data_revision: revision,
-            data_fingerprint: 2,
+            data_fingerprint: revision + 10,
             plan_fingerprint: 3,
             semantics_fingerprint: 4,
             parameter_fingerprint: 5,
@@ -178,5 +225,37 @@ mod tests {
             store.get(&key(2)),
             Some(&ResearchArtifact::Series(vec![2.0]))
         );
+    }
+
+    #[test]
+    fn contract_compatibility_excludes_revision_but_not_semantics() {
+        let previous = key(1);
+        let current = key(2);
+        assert!(previous.same_contract(&current));
+        assert!(!previous.same_revision_identity(&current));
+
+        let mut changed_policy = current.clone();
+        changed_policy.parameter_fingerprint += 1;
+        assert!(!previous.same_contract(&changed_policy));
+
+        let mut changed_algorithm = current.clone();
+        changed_algorithm.algorithm_version += 1;
+        assert!(!previous.same_contract(&changed_algorithm));
+    }
+
+    #[test]
+    fn artifact_store_returns_only_latest_older_compatible_revision() {
+        let mut store = ResearchArtifactStore::new();
+        store.insert(key(1), ResearchArtifact::Series(vec![1.0]));
+        store.insert(key(3), ResearchArtifact::Series(vec![3.0]));
+
+        let desired = key(4);
+        let (matched, artifact) = store.latest_compatible_before(&desired).unwrap();
+        assert_eq!(matched.data_revision, 3);
+        assert_eq!(artifact, &ResearchArtifact::Series(vec![3.0]));
+
+        let mut incompatible = desired;
+        incompatible.schema_version += 1;
+        assert!(store.latest_compatible_before(&incompatible).is_none());
     }
 }
