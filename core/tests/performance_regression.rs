@@ -154,8 +154,8 @@ fn dirty_range_execution_keeps_work_local_and_matches_full_recompute() {
     let original_context = BorrowedFactorContext::new()
         .with_series("close", &original)
         .unwrap();
-    let full = UnifiedRuntime::execute_factor_plan_borrowed(&plan, &engine, &original_context)
-        .unwrap();
+    let full =
+        UnifiedRuntime::execute_factor_plan_borrowed(&plan, &engine, &original_context).unwrap();
     let mut ranged_output = full.output;
 
     let mut changed = original.clone();
@@ -181,8 +181,8 @@ fn dirty_range_execution_keeps_work_local_and_matches_full_recompute() {
     );
     assert!(matches!(trace.mode, RuntimeExecutionMode::Range { .. }));
 
-    let expected = UnifiedRuntime::execute_factor_plan_borrowed(&plan, &engine, &changed_context)
-        .unwrap();
+    let expected =
+        UnifiedRuntime::execute_factor_plan_borrowed(&plan, &engine, &changed_context).unwrap();
     let ranged = &ranged_output["rolling_21_sum"];
     let full_changed = &expected.output["rolling_21_sum"];
     for index in 0..ROWS {
