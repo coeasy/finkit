@@ -130,12 +130,12 @@ impl ExecutionPlan {
         let mut cumulative_lookback = vec![Some(0_usize); nodes.len()];
         for node_id in &order {
             let node = &nodes[node_id.0];
-            let dependency_lookback = node.dependencies.iter().try_fold(
-                0_usize,
-                |current, dependency| {
-                    cumulative_lookback[dependency.0].map(|value| current.max(value))
-                },
-            );
+            let dependency_lookback =
+                node.dependencies
+                    .iter()
+                    .try_fold(0_usize, |current, dependency| {
+                        cumulative_lookback[dependency.0].map(|value| current.max(value))
+                    });
             cumulative_lookback[node_id.0] = match (dependency_lookback, node.horizon) {
                 (Some(dependency), DependencyHorizon::Fixed(lookback)) => {
                     Some(dependency.saturating_add(lookback))
