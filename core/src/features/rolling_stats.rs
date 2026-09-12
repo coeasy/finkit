@@ -3,6 +3,7 @@
 //! All implementations use O(n) online algorithms for numerical stability.
 
 use crate::error::{Result, TaError};
+use crate::math::regression::simple_slope;
 use ndarray::Array1;
 
 /// Default minimum subsequence length for Hurst R/S analysis.
@@ -35,16 +36,7 @@ fn rs_statistic(segment: &[f64]) -> Option<f64> {
 
 /// Slope of simple linear regression y = a + b*x (returns b).
 fn linear_regression_slope(x: &[f64], y: &[f64]) -> f64 {
-    let n = x.len() as f64;
-    let sum_x: f64 = x.iter().sum();
-    let sum_y: f64 = y.iter().sum();
-    let sum_xy: f64 = x.iter().zip(y.iter()).map(|(xi, yi)| xi * yi).sum();
-    let sum_x2: f64 = x.iter().map(|xi| xi * xi).sum();
-    let denom = n * sum_x2 - sum_x * sum_x;
-    if denom.abs() < 1e-15 {
-        return f64::NAN;
-    }
-    (n * sum_xy - sum_x * sum_y) / denom
+    simple_slope(y, x).unwrap_or(f64::NAN)
 }
 
 /// Rolling skewness using Welford's online algorithm.

@@ -47,17 +47,16 @@ pub fn var_historical(returns: &[f64], confidence: f64) -> f64 {
 /// `mean + z * std` formula. `z` is the standard-normal quantile for
 /// the given confidence (e.g. 1.645 for 95%, 2.326 for 99%).
 pub fn var_parametric(returns: &[f64], confidence: f64) -> f64 {
-    if returns.len() < 2 || confidence <= 0.0 || confidence >= 1.0 {
+    if confidence <= 0.0 || confidence >= 1.0 {
         return 0.0;
     }
-    let n = returns.len() as f64;
-    let mean = returns.iter().filter(|r| r.is_finite()).sum::<f64>() / n;
-    let var: f64 = returns
-        .iter()
-        .filter(|r| r.is_finite())
-        .map(|r| (r - mean).powi(2))
-        .sum::<f64>()
-        / (n - 1.0);
+    let finite: Vec<f64> = returns.iter().copied().filter(|r| r.is_finite()).collect();
+    if finite.len() < 2 {
+        return 0.0;
+    }
+    let n = finite.len() as f64;
+    let mean = finite.iter().sum::<f64>() / n;
+    let var = finite.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / (n - 1.0);
     let std = var.sqrt();
     let z = normal_quantile(confidence);
     -(mean - z * std)

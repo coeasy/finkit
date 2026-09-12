@@ -9,6 +9,7 @@ Canonical workspace version: **`0.1.15`**
 |---------|------|---------|--------|-------|
 | workspace | `Cargo.toml` | 0.1.15 | workspace.package | ✅ canonical |
 | finkit | `core/Cargo.toml` | 0.1.15 | workspace | ✅ |
+| finkit-factor-analysis | `factor-analysis/Cargo.toml` | 0.1.15 | workspace | ✅ |
 | finkit-visualization | `visualization/Cargo.toml` | 0.1.15 | workspace | ✅ |
 | finkit-ffi | `ffi/c-binding/Cargo.toml` | 0.1.15 | workspace | ✅ |
 | finkit-ffi-common | `ffi/ffi-common/Cargo.toml` | 0.1.15 | workspace | ✅ |

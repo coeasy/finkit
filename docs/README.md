@@ -1,54 +1,93 @@
 # Finkit Documentation
 
-This directory is the canonical documentation set for the current Finkit codebase. It keeps the published **v0.1.3** distribution facts separate from next-release multi-language build/package work so that CI candidates are not mistaken for already published packages.
+This directory is the canonical documentation set for Finkit.
+
+Finkit is a Rust-powered quantitative finance engine for technical analysis, reusable formulas, factor graphs, streaming computation, feature engineering, and research workflows. The documentation deliberately separates **published v0.1.15 distribution facts** from **next-release runtime/research work** so CI candidates are never presented as already released packages.
 
 ## Start here
 
-New users should follow this order:
+Choose the path that matches your goal:
 
-1. [Getting started](getting-started.md) — first successful indicator/formula/CLI run.
-2. [Installation](installation.md) — verified release assets, source builds, prerequisites, checksums.
-3. [Complete usage guide](usage.md) — data conventions, Python/Rust usage, formulas, streaming, factors/runtime.
-4. [CLI guide](cli.md) — file formats and indicator/formula/streaming commands.
-5. [Language bindings](language-bindings.md) — Python, Rust, Node.js, Java/JNI, C/C++, Go, .NET, Android, iOS, and WASM status.
-6. [Runtime and factors](runtime-and-factors.md) — MarketFrame, factor plans, dependency safety and reuse.
-7. [Troubleshooting](troubleshooting.md) — installation, NumPy/NaN, OHLCV, formula/runtime, CLI, native-loader, Go/.NET/mobile/WASM diagnosis.
+| Goal | Start with |
+| --- | --- |
+| Understand the product | [Product overview](product-overview.md) |
+| 中文产品介绍 | [中文产品说明](product-overview-zh.md) |
+| 宣传/项目介绍素材 | [中文宣传文稿](promotion-zh.md) |
+| 评估竞品与性能优势 | [竞品对比与超越路线](competitive-positioning-zh.md) |
+| Install and calculate something | [Getting started](getting-started.md) |
+| Verify install/release assets | [Installation](installation.md) |
+| Learn the end-to-end APIs | [Complete usage guide](usage.md) |
+| Use Python | [Python guide](python.md) |
+| Use the CLI | [CLI guide](cli.md) |
+| Understand language/package status | [Language bindings](language-bindings.md) |
+| Build factor/runtime workloads | [Runtime and factors](runtime-and-factors.md) |
+| Understand research architecture | [Factor research architecture](factor-research-architecture.md) |
+| Diagnose failures | [Troubleshooting](troubleshooting.md) |
 
-## What is actually distributed in v0.1.3
+## Product model
 
-The GitHub `v0.1.3` Release is the authoritative binary/source distribution for that version. It contains:
+Finkit is organized around one core idea: **financial semantics should be canonical and reusable across execution modes and languages.**
 
-- Python ABI3 wheel — Linux x86_64;
-- Python ABI3 wheel — Windows x86_64;
-- Python ABI3 wheel — macOS x86_64;
-- Python ABI3 wheel — macOS arm64;
-- `finkit-0.1.3.crate`;
+```text
+Indicators / Formula / Factors / Streaming
+                 │
+                 ▼
+        canonical kernels + plans
+                 │
+                 ▼
+            Unified Runtime
+                 │
+        ┌────────┴────────┐
+        ▼                 ▼
+    Features          Research
+        │                 │
+        └────────┬────────┘
+                 ▼
+Rust / Python / CLI / native bindings / WASM
+```
+
+The project is a calculation/research engine, not an OMS, brokerage connector, exchange gateway, matching engine, or turnkey live-trading platform.
+
+## Published v0.1.15 contract
+
+The GitHub `v0.1.15` Release is the authoritative distribution contract for the current published version.
+
+Its release assets include:
+
+- four Python `cp38-abi3` wheels for Linux x86_64, Windows x86_64, macOS x86_64, and macOS arm64;
+- `finkit-0.1.15.crate`;
 - `finkit-cli-linux-x86_64`;
 - `SHA256SUMS`.
 
-Node.js, Java/JNI, and C/C++ build/package paths are CI validated from source for the v0.1.3 line, but their packages are not part of the v0.1.3 Release asset set and are not claimed as public registry distributions.
+Public package registries are a separate contract. Do not assume PyPI, crates.io, npm, Maven Central, NuGet, a public Go module, Android Maven coordinates, or Swift package coordinates are available unless that exact package/version has been published and smoke-tested.
 
-Go, .NET, Android, iOS, and WASM were source/development integrations in the published v0.1.3 contract. The next-release branch adds real packaging/target validation gates for them; that does not retroactively change v0.1.3.
+## Next-release architecture
 
-## Next-release multi-language validation
+The active next-release work expands the reusable runtime and factor-research stack. The key architectural changes include:
 
-The expanded multi-language workflow now requires target-specific jobs for:
+- typed, deterministic `ArtifactHash` identity;
+- `FactorPlan` execution through the shared `UnifiedRuntime` boundary;
+- `DirtyRange` invalidation with explicit input-dirty, affected-output, and historical recompute ranges;
+- local execution only for dependency chains that are proven incremental, fixed-lookback, and time-series safe;
+- conservative full fallback for cross-sectional, dynamic-lookback, or unknown execution contracts;
+- retained materializations for caller-owned range/into updates;
+- reuse-first Factor Research integration built on canonical returns/statistics/regression/rank/risk/calendar infrastructure.
 
-| Target | Gate |
-| --- | --- |
-| Go/CGO | native Rust build, `go test`, external-module example |
-| .NET | native Rust build, .NET 8 tests, NuGet RID inspection |
-| WASM | `wasm32-unknown-unknown` release build |
-| Android | four NDK ABIs, Gradle AAR assembly, AAR native payload inspection |
-| iOS | arm64 device + universal simulator XCFramework build |
-| Node.js | native tests plus root/platform npm package candidates |
-| Java/JNI | JAR native resource + JVM runtime smoke |
-| C/C++ | CMake build/test/install package |
-| Rust/CLI | crate + Linux CLI packaging |
+These capabilities are next-release development facts and are not retroactively claimed as published v0.1.15 assets.
 
-A target is only considered **CI validated** after its final-head job is green. A CI artifact is still not a public registry package or final GitHub Release asset.
+## Multi-language validation model
 
-Registry publication is a separate contract. Do not document `pip install finkit`, `cargo add finkit`, `npm install finkit`, Maven Central, NuGet, public `go get`, Android Maven coordinates, or SPM/CocoaPods coordinates as generally available until that exact distribution is actually published and smoke-tested.
+Finkit distinguishes five states:
+
+1. **source exists**;
+2. **CI validated**;
+3. **package candidate**;
+4. **GitHub Release asset**;
+5. **public registry package**.
+
+The expanded multi-language workflow includes target-specific validation paths for Go/CGO, .NET, WASM, Android, iOS, Node.js, Java/JNI, C/C++, Rust/CLI, and Python packaging.
+
+A target is only considered CI validated after its final-head job actually runs and passes. A green job from another SHA is not evidence for the current release candidate.
 
 ## User guides
 
@@ -58,12 +97,12 @@ Registry publication is a separate contract. Do not document `pip install finkit
 | [installation.md](installation.md) | Release assets, prerequisites, source builds and installation verification |
 | [usage.md](usage.md) | End-to-end usage patterns and data/runtime conventions |
 | [python.md](python.md) | ABI3 wheels, NumPy, `CompiledFormula`, pandas and troubleshooting |
-| [cli.md](cli.md) | CLI input formats, indicator/formula/streaming commands |
-| [language-bindings.md](language-bindings.md) | Detailed binding, package-candidate, and publication support matrix |
-| [runtime-and-factors.md](runtime-and-factors.md) | Factor/runtime workflow, dependency validation, reuse and alignment |
-| [troubleshooting.md](troubleshooting.md) | Failure isolation and supported recovery workflows across languages |
+| [cli.md](cli.md) | CLI input formats and indicator/formula/streaming commands |
+| [language-bindings.md](language-bindings.md) | Binding, package-candidate and publication support matrix |
+| [runtime-and-factors.md](runtime-and-factors.md) | Unified Runtime, FactorPlan, DirtyRange, dependency safety and reuse |
+| [troubleshooting.md](troubleshooting.md) | Failure isolation across install/runtime/native build paths |
 | [indicators.md](indicators.md) | Human-readable indicator reference |
-| [features.md](features.md) | Feature/capability overview |
+| [features.md](features.md) | Feature engineering API/module guide |
 
 Binding-specific source guides also live with their implementations, including `ffi/go-binding/README.md`, `ffi/dotnet-binding/README.md`, `ffi/android-binding/README.md`, `ffi/ios-binding/README.md`, and `wasm/README.md`.
 
@@ -71,16 +110,16 @@ Binding-specific source guides also live with their implementations, including `
 
 | Document | Purpose |
 | --- | --- |
-| [formula.md](formula.md) | Formula syntax, evaluation and binding-specific debugging guidance |
+| [formula.md](formula.md) | Formula syntax, evaluation and debugging guidance |
 | [formula/grammar.md](formula/grammar.md) | Core formula grammar |
 | [formula/pine-grammar.md](formula/pine-grammar.md) | Supported Pine grammar subset |
 | [formula-runtime.md](formula-runtime.md) | Persistent compiled plans and incremental execution |
 | [formula-runtime-contract.md](formula-runtime-contract.md) | Ownership, `eval_range`, `eval_last`, append, warm-up and concurrency semantics |
 | [formula-templates.md](formula-templates.md) | Reusable formula patterns |
 | [formula-performance.md](formula-performance.md) | Formula optimization and benchmark notes |
-| [migration/pine-to-finkit.md](migration/pine-to-finkit.md) | Pine indicator migration guidance and semantic boundaries |
+| [migration/pine-to-finkit.md](migration/pine-to-finkit.md) | Pine migration guidance and semantic boundaries |
 
-For exact supported functions and Pine mappings, prefer the generated catalogs over hard-coded counts or compatibility percentages. Formula debugger coverage is binding-specific: the Go/CGO source currently exposes `FormulaEvalDebugJSON`; do not invent an identically named method for every other binding.
+For exact supported functions and Pine mappings, prefer generated catalogs over hard-coded counts or compatibility percentages.
 
 ## API and architecture
 
@@ -93,7 +132,7 @@ For exact supported functions and Pine mappings, prefer the generated catalogs o
 | [architecture/overview.md](architecture/overview.md) | Crate/binding architecture |
 | [architecture/dataflow.md](architecture/dataflow.md) | Batch, streaming, formula and binding data flow |
 | [architecture/formula-engine.md](architecture/formula-engine.md) | Formula parser/compiler/runtime internals |
-| [factor-research-architecture.md](factor-research-architecture.md) | Canonical reuse-first Factor Research / Alphalens / multi-factor / validation / portfolio architecture and implementation sequence |
+| [factor-research-architecture.md](factor-research-architecture.md) | Reuse-first Factor Research / Alphalens-style / multi-factor / portfolio architecture |
 | [ffi/memory-contract.md](ffi/memory-contract.md) | C ABI ownership/lifetime contract |
 | [ffi/error-codes.md](ffi/error-codes.md) | Cross-language/native error codes |
 
@@ -101,17 +140,18 @@ For exact supported functions and Pine mappings, prefer the generated catalogs o
 
 | Document | Purpose |
 | --- | --- |
-| [benchmark-results.md](benchmark-results.md) | Current benchmark summary |
-| [BENCHMARK_VS_TALIB.md](BENCHMARK_VS_TALIB.md) | TA-Lib comparison methodology |
-| [BENCHMARK_REPORT.md](BENCHMARK_REPORT.md) | Generated benchmark snapshot |
+| [competitive-positioning-zh.md](competitive-positioning-zh.md) | 竞品能力矩阵、可证明优势与超越路线 |
+| [benchmark-results.md](benchmark-results.md) | Current benchmark/evidence summary |
+| [BENCHMARK_VS_TALIB.md](BENCHMARK_VS_TALIB.md) | TA-Lib comparison and reproducibility contract |
+| [BENCHMARK_REPORT.md](BENCHMARK_REPORT.md) | Checked-in historical benchmark snapshot |
 | [FUZZING.md](FUZZING.md) | Fuzz targets and crash reproduction |
 | [development.md](development.md) | Build, test, benchmark, package and CI workflow |
 
-Benchmark values are measured snapshots, not universal latency/throughput guarantees. Re-run the benchmark harness on the target CPU/compiler/runtime before making production commitments.
+Benchmark values are measured snapshots, not universal latency/throughput guarantees. Re-run the benchmark harness on the target CPU/compiler/runtime before making production commitments. The scheduled `competitive-benchmark.yml` workflow produces commit-bound TA-Lib evidence; it complements, rather than replaces, correctness and regression gates in normal PR CI.
 
-## Generated source of truth — do not delete as old docs
+## Generated source of truth — do not delete
 
-The following files are generated or machine-readable contracts and are intentionally retained even when simplifying prose documentation:
+The following files are generated or machine-readable contracts and are intentionally retained:
 
 - `indicator_registry.json` — canonical indicator registry snapshot;
 - `generated/indicators.md` — generated indicator catalog;
@@ -123,35 +163,31 @@ The following files are generated or machine-readable contracts and are intentio
 - `generated/version-matrix.md` — generated release/version matrix;
 - `benchmark-baseline.json` — performance-gate baseline where used by CI/scripts.
 
-`scripts/gen_ssot_docs.py --check` and `scripts/check_versions.py` validate these contracts. `scripts/check_docs_links.py` makes broken repository-local Markdown links fail Docs Check.
+`scripts/gen_ssot_docs.py --check`, `scripts/check_versions.py`, and `scripts/check_docs_links.py` protect these contracts.
 
-## Documentation cleanup policy
+## Documentation rules
 
-Active `docs/` should not contain:
+Active documentation should not contain:
 
-- completed release plans or old version roadmaps;
-- stale PRD/progress snapshots;
-- temporary repair notes;
-- duplicated directory placeholder READMEs when a canonical guide already exists;
-- old package/brand names that imply a current public API;
-- unverified registry-install commands;
-- hard-coded capability counts/compatibility percentages that are already generated from SSOT;
+- completed release plans presented as current product behavior;
+- stale PR/progress snapshots;
+- duplicate implementation notes when a canonical guide exists;
+- unverified public-registry install commands;
+- hard-coded capability counts already available from SSOT;
 - examples that call APIs absent from the relevant binding;
-- CI candidate artifacts written as if they are already published packages.
-
-Git history and closed pull requests remain the historical record.
-
-## Updating documentation safely
+- CI package candidates written as if they are published distributions;
+- performance numbers presented as universal guarantees;
+- incremental-execution claims that ignore range-safety constraints.
 
 When code or release behavior changes:
 
 1. update the user-facing guide that owns the behavior;
-2. update `README.md` and this index when the public installation/support contract changes;
+2. update root README / product overview if the product contract changes;
 3. update binding-specific docs together with package metadata;
-4. regenerate SSOT docs through the generator rather than hand-editing generated files;
+4. regenerate SSOT docs instead of hand-editing generated files;
 5. run link/version/SSOT checks;
-6. distinguish **source exists**, **CI validated**, **package candidate**, **GitHub Release asset**, and **public registry package**;
-7. verify every public API used in examples exists in the relevant binding source/API contract.
+6. distinguish source, CI validation, candidates, release assets, and public packages;
+7. verify every public API used in an example exists in that binding.
 
 Recommended validation:
 
@@ -163,4 +199,4 @@ cargo fmt --all -- --check
 cargo test --workspace --doc --locked
 ```
 
-_Last reviewed against the published `v0.1.3` contract and the next-release multi-language branch: 2026-09-03._
+_Last product/documentation review: 2026-09-12. Published distribution baseline: v0.1.15._

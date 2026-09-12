@@ -633,20 +633,8 @@ impl FactorEngine {
 
 /// Simple return over `period` bars with NaN warm-up values.
 pub fn time_series_return(values: &[f64], period: usize) -> FactorResult<Vec<f64>> {
-    if period == 0 {
-        return Err(FactorError::InvalidParameter(
-            "period must be greater than zero".to_string(),
-        ));
-    }
-    let mut output = vec![f64::NAN; values.len()];
-    for index in period..values.len() {
-        let current = values[index];
-        let previous = values[index - period];
-        if current.is_finite() && previous.is_finite() && previous != 0.0 {
-            output[index] = current / previous - 1.0;
-        }
-    }
-    Ok(output)
+    crate::returns::lagged_return(values, period, crate::returns::ReturnKind::Arithmetic)
+        .map_err(|error| FactorError::InvalidParameter(error.to_string()))
 }
 
 /// Rolling population volatility of one-bar returns.
@@ -717,35 +705,7 @@ pub fn zscore(values: &[f64]) -> Vec<f64> {
 
 /// Percentile rank finite values into `[0, 1]`, averaging ties.
 pub fn percentile_rank(values: &[f64]) -> Vec<f64> {
-    let mut finite: Vec<(usize, f64)> = values
-        .iter()
-        .copied()
-        .enumerate()
-        .filter(|(_, value)| value.is_finite())
-        .collect();
-    finite.sort_by(|left, right| left.1.total_cmp(&right.1));
-
-    let mut output = vec![f64::NAN; values.len()];
-    if finite.len() == 1 {
-        output[finite[0].0] = 0.5;
-        return output;
-    }
-
-    let denominator = (finite.len() - 1) as f64;
-    let mut start = 0;
-    while start < finite.len() {
-        let mut end = start + 1;
-        while end < finite.len() && finite[end].1 == finite[start].1 {
-            end += 1;
-        }
-        let average_position = (start + end - 1) as f64 / 2.0;
-        let rank = average_position / denominator;
-        for &(original_index, _) in &finite[start..end] {
-            output[original_index] = rank;
-        }
-        start = end;
-    }
-    output
+    crate::math::rank::percentile_rank(values)
 }
 
 /// Clamp finite observations to lower and upper empirical quantiles.
@@ -787,49 +747,8 @@ pub fn neutralize(values: &[f64], exposure: &[f64]) -> FactorResult<Vec<f64>> {
             actual: exposure.len(),
         });
     }
-    let pairs: Vec<(f64, f64)> = values
-        .iter()
-        .copied()
-        .zip(exposure.iter().copied())
-        .filter(|(value, factor)| value.is_finite() && factor.is_finite())
-        .collect();
-    if pairs.len() < 2 {
-        return Ok(vec![f64::NAN; values.len()]);
-    }
-
-    let count = pairs.len() as f64;
-    let mean_y = pairs.iter().map(|(value, _)| value).sum::<f64>() / count;
-    let mean_x = pairs.iter().map(|(_, factor)| factor).sum::<f64>() / count;
-    let covariance = pairs
-        .iter()
-        .map(|(value, factor)| (factor - mean_x) * (value - mean_y))
-        .sum::<f64>();
-    let variance_x = pairs
-        .iter()
-        .map(|(_, factor)| {
-            let delta = factor - mean_x;
-            delta * delta
-        })
-        .sum::<f64>();
-    let beta = if variance_x > f64::EPSILON {
-        covariance / variance_x
-    } else {
-        0.0
-    };
-    let intercept = mean_y - beta * mean_x;
-
-    Ok(values
-        .iter()
-        .copied()
-        .zip(exposure.iter().copied())
-        .map(|(value, factor)| {
-            if value.is_finite() && factor.is_finite() {
-                value - intercept - beta * factor
-            } else {
-                f64::NAN
-            }
-        })
-        .collect())
+    crate::math::regression::residualize(values, &[exposure])
+        .map_err(|error| FactorError::Compute(error.to_string()))
 }
 
 /// Build the stable v0.1.2 built-in price-factor registry.

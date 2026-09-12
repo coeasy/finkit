@@ -213,30 +213,46 @@ pub fn ht_sine(input: &[f64]) -> Result<(Array1<f64>, Array1<f64>)> {
 
     let dc_phase = dominant_cycle_phase(input, &period);
     let deg2rad = std::f64::consts::PI / 180.0;
-    let mut phase_radians = vec![0.0_f64; len - 63];
+    let phase_len = len - 63;
+    let mut phase_radians = vec![0.0_f64; phase_len];
+    let mut phase_cos_sign = vec![1.0_f64; phase_len];
     let pi = std::f64::consts::PI;
+    let half_pi = std::f64::consts::FRAC_PI_2;
     let two_pi = 2.0 * pi;
     for (offset, value) in dc_phase[63..].iter().enumerate() {
         let mut phase = (*value * deg2rad).rem_euclid(two_pi);
         if phase > pi {
             phase -= two_pi;
         }
-        // The AVX2 polynomial is deliberately specialized for [-pi/2, pi/2].
-        // Reduce the TA-Lib phase into that interval while preserving sine.
-        if phase > pi / 2.0 {
+        // Keep the AVX2 polynomial inside [-pi/2, pi/2], but remember
+        // the original cosine quadrant so lead-sine can reuse the same
+        // SIMD sin/cos evaluation instead of calling scalar sin again.
+        if phase > half_pi {
             phase = pi - phase;
-        } else if phase < -pi / 2.0 {
+            phase_cos_sign[offset] = -1.0;
+        } else if phase < -half_pi {
             phase = -pi - phase;
+            phase_cos_sign[offset] = -1.0;
         }
         phase_radians[offset] = phase;
     }
-    let mut phase_sin = vec![0.0_f64; len];
-    let mut phase_cos = vec![0.0_f64; len - 63];
-    simd_ops::simd_sin_cos(&phase_radians, &mut phase_sin[63..len], &mut phase_cos);
+    let sine_values = sine
+        .as_slice_mut()
+        .expect("ht_sine output must be contiguous");
+    let lead_sine_values = lead_sine
+        .as_slice_mut()
+        .expect("ht_sine lead output must be contiguous");
+    simd_ops::simd_sin_cos(
+        &phase_radians,
+        &mut sine_values[63..len],
+        &mut lead_sine_values[63..len],
+    );
 
-    for i in 63..len {
-        sine[i] = phase_sin[i];
-        lead_sine[i] = ((dc_phase[i] + 45.0) * deg2rad).sin();
+    for offset in 0..phase_len {
+        let i = offset + 63;
+        let sin_phase = sine_values[i];
+        let cos_phase = lead_sine_values[i] * phase_cos_sign[offset];
+        lead_sine_values[i] = (sin_phase + cos_phase) * std::f64::consts::FRAC_1_SQRT_2;
     }
 
     Ok((sine, lead_sine))
@@ -714,6 +730,7 @@ fn compute_hilbert_components_from(
         } else {
             // ---- Odd bar processing ----
             // Detrender IIR highpass: y[n] = (a*x[n] - buffer[n-6] - prev_y + b*prev_x) * adj
+            // where buffer[n-6] = a*x[n-6], prev_y = b*x[n-4], prev_x = x[n-2]
             let mut detrender_val = -detrender_odd[hilbert_idx];
             detrender_odd[hilbert_idx] = a_coeff * smoothed_value;
             detrender_val += a_coeff * smoothed_value;
@@ -1788,7 +1805,6 @@ mod tests {
             "ht_sine SIMD lead error {} exceeds 1e-9",
             max_lead_err
         );
-
         // Sanity: the kernel was actually exercised (finite, non-trivial output).
         let mut finite = 0;
         for i in 63..n {

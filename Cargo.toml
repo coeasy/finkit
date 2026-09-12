@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "core",
+    "factor-analysis",
     "visualization",
     "ffi/c-binding",
     "ffi/ffi-common",
@@ -20,9 +21,9 @@ resolver = "2"
 [workspace.package]
 version = "0.1.15"
 edition = "2021"
-rust-version = "1.85" # workspace-wide MSRV for audited dependencies
+rust-version = "1.85"
 authors = ["Finkit Contributors"]
-description = "A high-performance Financial Technical Analysis library in Rust"
+description = "High-performance quantitative finance engine for indicators, formulas, factors, streaming analytics, and research workflows"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/coeasy/finkit"
 homepage = "https://github.com/coeasy/finkit"
@@ -33,20 +34,18 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 ndarray = "0.16"
 thiserror = "1.0"
-# JNI bindings (used by java-binding and android-binding).
 jni = "0.21"
-# X-0 / O-1: tracing ecosystem (default features; tracing-subscriber optional
-# so downstream users opt into actual log output).
 tracing = { version = "0.1", default-features = false, features = ["std", "attributes"] }
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter"] }
-# X-0 / O-2: metrics ecosystem (lightweight default; prometheus exporter
-# behind an opt-in feature).
 metrics = "0.23"
 metrics-exporter-prometheus = { version = "0.15", default-features = false }
 
 [profile.release]
 opt-level = 3
-lto = "thin"
+# Finkit is primarily a compute engine: prefer whole-program optimization for
+# shipped artifacts so cross-module hot paths can be inlined and folded just
+# like the benchmark profile. CI still compiles ordinary debug checks separately.
+lto = "fat"
 codegen-units = 1
 strip = "debuginfo"
 
@@ -55,8 +54,6 @@ codegen-units = 16
 
 [profile.release.package."finkit-go"]
 codegen-units = 16
-
-# finkit-java uses default release profile (codegen-units=1) for maximum optimization.
 
 [profile.release.package."finkit-node"]
 codegen-units = 16
@@ -78,14 +75,9 @@ codegen-units = 1
 opt-level = 3
 
 [profile.bench.package."*"]
-# Allow per-crate opt-out only for the FFI binding crates which produce
-# larger binaries that don't benefit from fat LTO during the gate.
 codegen-units = 16
 
 [workspace.lints.rust]
-# `unsafe_op_in_unsafe_fn` is set to "warn" to encourage explicit unsafe blocks
-# within unsafe functions. Existing code has ~260 violations (mostly SIMD); new
-# unsafe fns should use explicit `unsafe { ... }` blocks per the style guide.
 unsafe_op_in_unsafe_fn = "warn"
 missing_debug_implementations = "warn"
 
