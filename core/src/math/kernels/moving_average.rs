@@ -11,7 +11,9 @@ pub enum MovingAverageKind {
     Sma,
     /// First-value seeded EMA recursion. Batch APIs with SMA seeding should
     /// warm the state explicitly before switching to the recursive phase.
-    Ema { alpha: f64 },
+    Ema {
+        alpha: f64,
+    },
     Wma,
 }
 
