@@ -15,4 +15,7 @@ pub use moving_average::{MovingAverageKind, MovingAverageState};
 pub use registry::{capabilities, moving_average, KernelCapability, KernelFamily};
 pub use rsi_core::RsiState;
 pub use statistics::{RollingStatistics, RollingWelfordState, WelfordState};
-pub use volatility::TrueRangeState;
+pub use volatility::{
+    AdxOutput, AdxState, AtrState, DirectionalIndex, DirectionalMovement,
+    DirectionalMovementState, DmiState, TrueRangeState,
+};
