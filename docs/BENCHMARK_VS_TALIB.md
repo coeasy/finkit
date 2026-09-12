@@ -1,139 +1,181 @@
-# Finkit vs TA-Lib C — Benchmark & Precision Report
+# Finkit vs TA-Lib C — Benchmark & Precision Contract
 
-> Companion to the one-click build setup (see the repo root `README.md`
-> for the bootstrap command). This document explains how to read the
-> outputs of `scripts/bench-vs-talib.sh` and what to do when a regression
-> appears.
+> This document defines how Finkit compares against TA-Lib C without turning one benchmark machine into a universal marketing claim. For the broader ecosystem strategy, see [competitive-positioning-zh.md](competitive-positioning-zh.md).
 
-## Where the data comes from
+## Why TA-Lib remains the primary numerical baseline
 
-`scripts/bench-vs-talib.sh` is the single command that runs the entire
-head-to-head:
+TA-Lib is a long-lived production technical-analysis library with a C/C++ core, broad language support, a native Rust implementation path, and an expanding streaming API. Finkit therefore treats TA-Lib as both:
 
-1. **`cargo bench --bench talib_c_comparison --features talib-c`** — runs
-   Criterion benchmarks for ~30 indicators. Each indicator gets a `Finkit_X`
-   and a `talib_X` entry, plus a `_vs_talib` group suffix.
+- a **numerical compatibility reference** for overlapping indicators; and
+- a **direct native-performance competitor** for equivalent batch workloads.
 
-2. **`scripts/bench_report.py --json-out dist/bench/results.json`** —
-   parses Criterion's `target/criterion/**/new/estimates.json` and writes:
-   * `docs/BENCHMARK_REPORT.md` — long-form report (multi-scale tables,
-     per-category breakdowns).
-   * `dist/bench/results.json` — per-indicator `speedup`, `status`
-     (`✅ / ⚠️ / ❌`), and (later) `delta_pp`.
+The comparison target used by the scheduled workflow is **TA-Lib 0.7.1**. When another version is used locally, that version must appear in `dist/bench/environment.json`.
 
-3. **`scripts/bench_vs_talib_precision.py`** *(only with `--precision`)* —
-   for each indicator, generates 100 000 random OHLCV samples, calls
-   Finkit and TA-Lib on the same input, then writes
-   `dist/bench/precision.{md,json}` and merges `delta_pp` back into
-   `dist/bench/results.json`.
+Official reference: <https://ta-lib.org/>.
 
-4. **Summary renderer** — `dist/bench/summary.md` is a compact table
-   that joins speedup with `delta_pp`. The single file to read first.
+## One-command local run
+
+```bash
+./scripts/bench-vs-talib.sh --precision
+```
+
+The script performs these stages:
+
+1. detect or install TA-Lib C;
+2. record commit/platform/compiler/TA-Lib metadata;
+3. run `cargo bench -p finkit --bench talib_c_comparison --features talib-c --locked`;
+4. parse Criterion results with `scripts/bench_report.py`;
+5. render a compact paired summary;
+6. optionally run the Python precision comparison.
+
+Outputs under `dist/bench/`:
+
+- `environment.json` — machine and toolchain evidence;
+- `results.json` — versioned machine-readable benchmark schema;
+- `summary.md` — compact paired table;
+- `finkit-vs-talib.md` — long-form Criterion report;
+- `precision.json` / `precision.md` when `--precision` is enabled.
+
+## Evidence contract
+
+A performance statement is valid only when all of the following are known:
+
+- exact Finkit commit SHA;
+- clean/dirty working-tree state;
+- CPU architecture / machine class;
+- Rust compiler and Cargo version;
+- build profile and feature flags;
+- TA-Lib version;
+- dataset size and parameters;
+- benchmark harness version;
+- paired Finkit and TA-Lib rows from the same run.
+
+If paired rows are missing, the run is invalid. `bench_report.py --require-pairs N` exists specifically to prevent empty-report success.
 
 ## Reading the summary
 
-```
-| Indicator | Category | Finkit (us) | TA-Lib C (us) | Speedup | Δ (pp)  | Status |
-| SMA_20    | Overlap  | 0.83        | 1.12          | 1.35x   | 2.0e-12 | ✅     |
-| ATR_14    | Volat.   | 1.10        | 0.78          | 0.71x   | 4.1e-13 | ❌     |
-```
-
-| Column      | What to look for                                              |
-| ----------- | ------------------------------------------------------------- |
-| `Finkit (us)` / `TA-Lib C (us)` | Wall-clock per call (microseconds, smaller = better) |
-| `Speedup`   | `TA-Lib C / Finkit` (higher = Finkit is faster). `>1.0x` is good |
-| `Δ (pp)`    | Max relative diff vs TA-Lib output (precision SLA: < 1e-12)   |
-| `Status`    | `✅` within gate, `⚠️` within 25%, `❌` exceeded the gate       |
-
-Bottom of the file summarizes:
-
-```
-- Total: 30
-- Finkit faster: 24
-- Finkit within 25%: 4
-- Finkit >25% slower: 2
+```text
+| Indicator | Category | Finkit (us) | TA-Lib C (us) | Speedup | Delta | Status |
+| SMA_20    | Overlap  | 0.83        | 1.12          | 1.35x   | ...   | OK     |
 ```
 
-## SLA gates
+`Speedup = TA-Lib time / Finkit time`:
 
-| Gate                | Threshold              | What it means                                |
-| ------------------- | ---------------------- | -------------------------------------------- |
-| Speed gate          | Finkit ≤ 1.25 × TA-Lib | Listed in the `Watch List` if exceeded       |
-| Speed gate (hard)   | Finkit ≤ 1.0 × TA-Lib  | Listed under `Needs Optimization`            |
-| Regression gate     | Finkit ≤ 1.05 × baseline (`docs/benchmark-baseline.json`) | Catches local regressions vs committed numbers |
-| 1M ns/bar SLA       | Per-indicator ceiling in `ONE_M_NS_BAR_SLA` (in `bench_report.py`) | Catches O(n²) algorithms scaling poorly at 1M bars |
-| Precision SLA       | `max_abs < 1e-9` and `max_rel < 1e-12` (default) | Catches algorithm divergence in the parity check |
+- `> 1.0x`: Finkit is faster on that measured workload;
+- `= 1.0x`: effectively tied at the point estimate;
+- `< 1.0x`: Finkit is slower and belongs on the optimization watchlist.
 
-## When a regression appears
+The reporter's display status currently uses:
 
-1. **Speed regression** (`Speedup < 1.0x` and `Status == ❌`):
-   * Re-run with `--bench-filter <indicator>` to isolate the noise.
-   * Compare to `docs/benchmark-baseline.json` to confirm it's not noise.
-   * If reproducible, profile with `cargo flamegraph --bench talib_c_comparison`.
+- `✅`: Finkit <= TA-Lib;
+- `⚠️`: Finkit is slower but within 25%;
+- `❌`: Finkit is more than 25% slower.
 
-2. **Precision regression** (`Δ (pp) > 1e-10`):
-   * Run `python scripts/bench_vs_talib_precision.py --exit-on-fail`.
-   * Check the per-array breakdown in `dist/bench/precision.md`.
-   * The aggregate picks the **worst** of the component arrays; if a
-     single sub-output (e.g. `MACD.hist`) regresses, the whole row flags.
+The 25% boundary is a **severe-regression guardrail**, not the end goal. For the canonical hot-path watchlist, the optimization target is `speedup >= 1.0x`.
 
-3. **Both at once** — the most common cause is a forgotten `py.allow_threads`
-   wrapper in the Python binding or a SIMD lane misalignment. Re-run
-   `cargo test -p finkit` and inspect the failing parity tests.
+## Precision before speed
 
-## Reproducing the numbers
+Performance is only comparable after semantics are aligned. The precision stage uses identical OHLCV inputs and verifies overlapping outputs.
+
+Default parity expectations are governed by the test/precision harness, including:
+
+- warm-up position and output alignment;
+- NaN handling;
+- multi-output arrays independently;
+- absolute and relative numerical tolerances;
+- no silent row filtering.
+
+A faster implementation with incompatible output semantics is not counted as a competitive win.
+
+## CI and scheduled competitor evidence
+
+Normal PR CI protects correctness and implementation regressions:
 
 ```bash
-# Same hardware, same commit
-git checkout <commit-sha>
-./scripts/bench-vs-talib.sh --precision
-
-# Cross-machine comparison
-./scripts/bench-vs-talib.sh --precision 2>&1 | tee /tmp/$(hostname).log
+cargo test -p finkit --locked
+cargo test -p finkit --test memory_regression --release --locked -- --test-threads=1
+cargo test -p finkit --test performance_regression --release --locked -- --test-threads=1
+cargo bench -p finkit --no-run --locked
 ```
 
-For machine-to-machine comparisons, use the JSON:
+The dedicated `.github/workflows/competitive-benchmark.yml` runs weekly and manually:
 
-```bash
-jq '.benchmarks | to_entries
-   | map({k:.key, v:.value.speedup}) | sort_by(-.v)' \
-   dist/bench/results.json
-```
+1. installs TA-Lib 0.7.1;
+2. runs the paired Criterion suite;
+3. requires a non-empty benchmark set;
+4. blocks >25% competitor regressions;
+5. uploads report + JSON + environment evidence.
 
-## Known precision caveats
+This separation is intentional: PR CI must stay reliable and fast enough for development, while direct native competitor measurements run in a reproducible dedicated workflow.
 
-| Indicator group        | Expected `max_rel` | Why                                                                  |
-| ---------------------- | ------------------ | -------------------------------------------------------------------- |
-| SMA / EMA / WMA        | 0                  | O(1) update identical to TA-Lib's O(1) update                        |
-| RSI                    | 0                  | Wilder smoothing is identical                                        |
-| MACD (line / signal)   | ~1e-15             | EMA of EMA introduces one extra rounding step                        |
-| MACD (hist)            | ~1e-13             | hist = line - signal amplifies the EMA error                         |
-| BBANDS                 | ~1e-13             | Popvar uses two-pass; Welford uses one-pass; ~1 ULP drift            |
-| ATR                    | ~1e-13             | Wilder smoothing on TR                                               |
-| ADX                    | ~1e-10             | DM smoothing uses RMA inside Wilder; sign of `+DM` vs `-DM`          |
-| STOCH (slowk)          | ~1e-13             | SMA of raw %K                                                        |
-| STOCH (slowd)          | ~1e-12             | SMA of slowK                                                         |
-| OBV                    | 0                  | Pure cumulative sum                                                  |
-| Hilbert Transform      | ~1e-10             | Internal accumulator precision; within tolerance                      |
+## Performance gates
 
-If a row drifts outside its expected range, file an issue with the
-`dist/bench/precision.json` and the failing commit.
+| Gate | Contract | Purpose |
+| --- | --- | --- |
+| Numerical parity | per-indicator tolerance | reject semantic drift |
+| `_into` allocation | 0 hot-path heap allocations where contracted | reject hidden allocation regressions |
+| Algorithmic regression | optimized path retains relative advantage | catch O(n × period) fallback |
+| HT_SINE throughput | `< 1000 ns/bar`, release + one test thread | preserve existing whole-function budget without debug-runner jitter |
+| TA-Lib severe guardrail | Finkit <= 1.25 × TA-Lib | weekly competitor regression protection |
+| TA-Lib superiority target | Finkit <= TA-Lib | ongoing canonical hot-path goal |
+| Historical baseline | script-specific committed baseline | detect same-project regressions |
 
-## CI integration
+## Historical checked-in snapshot
 
-There is no dedicated weekly CI workflow for the precision comparison.
-Run the weekly precision check locally with:
+`BENCHMARK_REPORT.md` currently contains a **2026-06-24 Windows x86_64 AVX2** snapshot. It is useful as historical evidence, not as a promise about every current CPU or commit.
 
-```bash
-./scripts/bench-vs-talib.sh --precision
-```
+Any new product claim should prefer a freshly generated artifact from the current head.
 
-A `❌` in `summary.md` (or a precision row > 1e-9) indicates a regression.
+## Diagnosing a slow row
 
-## See also
+When `speedup < 1.0x`:
 
-* [BENCHMARK_REPORT.md](BENCHMARK_REPORT.md) — the long-form report
-  (auto-generated, refreshed on every bench run).
-* [Benchmark results](benchmark-results.md) — concise performance summary.
-* `EFFICIENCY_COMPARISON.md` — broader ecosystem comparison (planned;
-  not yet published).
+1. rerun only that indicator with the same input size;
+2. confirm parity first;
+3. inspect allocation count and caller-owned `_into` availability;
+4. profile kernel vs wrapper/FFI time separately;
+5. look for repeated parsing, dependency discovery, temporary buffers, and duplicated intermediate series;
+6. compare small, medium, and 1M-row scaling before changing the algorithm;
+7. update the watchlist only after the same implementation passes correctness tests.
+
+Typical optimization classes:
+
+- O(1) rolling state instead of window re-scan;
+- shared TR / DM / EMA / rolling-stat intermediates;
+- caller-owned output buffers;
+- borrowed input instead of copies;
+- SIMD only when its setup cost wins at the tested scale;
+- persistent plan / scratch reuse for repeated workloads.
+
+## Beyond single indicators
+
+TA-Lib head-to-head covers only one part of Finkit's product value. The competitive suite must also grow around:
+
+- Formula parse+execute vs compile-once+execute-many;
+- Factor discovery vs precompiled `FactorPlan`;
+- full vs DirtyRange range/range-into recomputation;
+- compute-many shared intermediates;
+- Python / Node / C ABI end-to-end overhead;
+- research-pipeline workloads.
+
+These workloads are where Finkit's Unified Runtime can create a structural advantage that a single isolated indicator benchmark cannot demonstrate.
+
+## Claim rules
+
+Allowed:
+
+> On benchmark artifact X, Finkit SMA/RSI/etc. was Yx faster than TA-Lib 0.7.1 on the recorded runner.
+
+Allowed:
+
+> Finkit has a weekly TA-Lib paired benchmark guardrail and a stricter long-term target of matching or beating TA-Lib on canonical hot paths.
+
+Not allowed without broader evidence:
+
+> Finkit is universally faster than TA-Lib.
+
+Not allowed:
+
+> Finkit is the fastest quantitative library.
+
+Performance superiority must remain a reproducible result, not a permanent adjective.
