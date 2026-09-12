@@ -441,7 +441,7 @@ mod tests {
     }
 
     #[test]
-    fn range_plan_accumulates_dependency_lookback_and_splices_dirty_rows() {
+    fn range_plan_accumulates_dependency_lookback_and_propagates_dirty_rows() {
         let mut catalog = FactorCatalog::new();
         catalog
             .register(identity("base", "close"), range_metadata("1", 2))
@@ -471,11 +471,12 @@ mod tests {
         assert_eq!(
             ranged.trace.mode,
             RuntimeExecutionMode::Range {
-                dirty: DirtyRange::new(5, 6),
-                recompute: DirtyRange::new(0, 6),
+                input_dirty: DirtyRange::new(5, 6),
+                affected: DirtyRange::new(5, 8),
+                recompute: DirtyRange::new(0, 8),
             }
         );
-        assert_eq!(ranged.trace.recomputed_rows, 6);
+        assert_eq!(ranged.trace.recomputed_rows, 8);
     }
 
     #[test]
