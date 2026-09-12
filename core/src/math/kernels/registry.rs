@@ -8,6 +8,8 @@ use super::{MovingAverageKind, MovingAverageState};
 /// Runtime family of a reusable quantitative kernel.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KernelFamily {
+    /// Scalar arithmetic, variables, constants and generic formula operations.
+    Scalar,
     /// Rolling and moving average calculations.
     MovingAverage,
     /// Online statistical calculations.
@@ -43,8 +45,14 @@ pub fn moving_average(kind: MovingAverageKind, window: usize) -> MovingAverageSt
 
 /// Returns built-in Architecture V4 kernel-family capabilities.
 #[must_use]
-pub const fn capabilities() -> [KernelCapability; 5] {
+pub const fn capabilities() -> [KernelCapability; 6] {
     [
+        KernelCapability {
+            family: KernelFamily::Scalar,
+            streaming: true,
+            dirty_range: true,
+            recursive_state_possible: false,
+        },
         KernelCapability {
             family: KernelFamily::MovingAverage,
             streaming: true,
@@ -93,7 +101,12 @@ mod tests {
             .iter()
             .find(|capability| capability.family == KernelFamily::Extrema)
             .unwrap();
+        let scalar = capabilities
+            .iter()
+            .find(|capability| capability.family == KernelFamily::Scalar)
+            .unwrap();
         assert!(momentum.recursive_state_possible);
         assert!(!extrema.recursive_state_possible);
+        assert!(!scalar.recursive_state_possible);
     }
 }
