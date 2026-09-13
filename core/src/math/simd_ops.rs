@@ -3488,26 +3488,43 @@ unsafe fn mom_avx2(input: &[f64], period: usize, result: &mut [f64]) {
     // Process four AVX2 vectors per iteration. The unroll reduces loop and
     // dispatch overhead on the small, bandwidth-bound MOM kernel.
     let chunks = (len - period) / 4;
-    let unrolled = chunks / 4;
-    for c in 0..unrolled {
-        let i = period + c * 16;
-        for offset in [0usize, 4, 8, 12] {
-            let j = i + offset;
-            let v_curr = _mm256_loadu_pd(ptr.add(j));
-            let v_prev = _mm256_loadu_pd(ptr.add(j - period));
-            _mm256_storeu_pd(out_ptr.add(j), _mm256_sub_pd(v_curr, v_prev));
-        }
+    let unrolled_end = period + (chunks / 4) * 16;
+    let mut i = period;
+    while i < unrolled_end {
+        let v0 = _mm256_sub_pd(
+            _mm256_loadu_pd(ptr.add(i)),
+            _mm256_loadu_pd(ptr.add(i - period)),
+        );
+        let v1 = _mm256_sub_pd(
+            _mm256_loadu_pd(ptr.add(i + 4)),
+            _mm256_loadu_pd(ptr.add(i + 4 - period)),
+        );
+        let v2 = _mm256_sub_pd(
+            _mm256_loadu_pd(ptr.add(i + 8)),
+            _mm256_loadu_pd(ptr.add(i + 8 - period)),
+        );
+        let v3 = _mm256_sub_pd(
+            _mm256_loadu_pd(ptr.add(i + 12)),
+            _mm256_loadu_pd(ptr.add(i + 12 - period)),
+        );
+        _mm256_storeu_pd(out_ptr.add(i), v0);
+        _mm256_storeu_pd(out_ptr.add(i + 4), v1);
+        _mm256_storeu_pd(out_ptr.add(i + 8), v2);
+        _mm256_storeu_pd(out_ptr.add(i + 12), v3);
+        i += 16;
     }
-    for c in (unrolled * 4)..chunks {
-        let i = period + c * 4;
+    let vector_end = period + chunks * 4;
+    while i < vector_end {
         let v_curr = _mm256_loadu_pd(ptr.add(i));
         let v_prev = _mm256_loadu_pd(ptr.add(i - period));
         _mm256_storeu_pd(out_ptr.add(i), _mm256_sub_pd(v_curr, v_prev));
+        i += 4;
     }
 
     // Handle remaining elements
-    for i in (period + chunks * 4)..len {
+    while i < len {
         result[i] = input[i] - input[i - period];
+        i += 1;
     }
 }
 
