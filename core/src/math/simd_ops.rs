@@ -3563,8 +3563,31 @@ fn mom_scalar(input: &[f64], period: usize, result: &mut [f64]) {
         *r = f64::NAN;
     }
 
-    for i in period..len {
-        result[i] = input[i] - input[i - period];
+    // Keep the portable fallback allocation-free and bounds-check-light for
+    // x86 runners without AVX2. The fixed unroll mirrors the SIMD path while
+    // remaining valid on every supported target.
+    let input_ptr = input.as_ptr();
+    let result_ptr = result.as_mut_ptr();
+    let mut i = period;
+    let unrolled_end = period + ((len - period) / 8) * 8;
+    while i < unrolled_end {
+        unsafe {
+            *result_ptr.add(i) = *input_ptr.add(i) - *input_ptr.add(i - period);
+            *result_ptr.add(i + 1) = *input_ptr.add(i + 1) - *input_ptr.add(i + 1 - period);
+            *result_ptr.add(i + 2) = *input_ptr.add(i + 2) - *input_ptr.add(i + 2 - period);
+            *result_ptr.add(i + 3) = *input_ptr.add(i + 3) - *input_ptr.add(i + 3 - period);
+            *result_ptr.add(i + 4) = *input_ptr.add(i + 4) - *input_ptr.add(i + 4 - period);
+            *result_ptr.add(i + 5) = *input_ptr.add(i + 5) - *input_ptr.add(i + 5 - period);
+            *result_ptr.add(i + 6) = *input_ptr.add(i + 6) - *input_ptr.add(i + 6 - period);
+            *result_ptr.add(i + 7) = *input_ptr.add(i + 7) - *input_ptr.add(i + 7 - period);
+        }
+        i += 8;
+    }
+    while i < len {
+        unsafe {
+            *result_ptr.add(i) = *input_ptr.add(i) - *input_ptr.add(i - period);
+        }
+        i += 1;
     }
 }
 

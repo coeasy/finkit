@@ -1331,7 +1331,7 @@ fn fast_stoch<'py>(
     let d_output = unsafe { PyArray1::new(py, [len], false) };
     let k_output_addr = k_output.data() as usize;
     let d_output_addr = d_output.data() as usize;
-    py.detach(|| unsafe {
+    let compute = || unsafe {
         indicators::stoch_into(
             high,
             low,
@@ -1342,8 +1342,13 @@ fn fast_stoch<'py>(
             std::slice::from_raw_parts_mut(k_output_addr as *mut f64, len),
             std::slice::from_raw_parts_mut(d_output_addr as *mut f64, len),
         )
-    })
-    .map_err(value_error)?;
+    };
+    let result = if len <= 16_384 {
+        compute()
+    } else {
+        py.detach(compute)
+    };
+    result.map_err(value_error)?;
     Ok((k_output, d_output))
 }
 
