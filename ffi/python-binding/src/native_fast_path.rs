@@ -485,6 +485,31 @@ fn fast_mom<'py>(
     Ok(output)
 }
 
+#[pyfunction(name = "_fast_mom10")]
+fn fast_mom10<'py>(
+    py: Python<'py>,
+    close: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    const PERIOD: usize = 10;
+    let close = close.as_slice().map_err(value_error)?;
+    validate_period(close.len(), PERIOD)?;
+    let output = unsafe { PyArray1::new(py, [close.len()], false) };
+    let output_addr = output.data() as usize;
+    let compute = || unsafe {
+        ::finkit::math::simd_ops::simd_mom(
+            close,
+            PERIOD,
+            std::slice::from_raw_parts_mut(output_addr as *mut f64, close.len()),
+        )
+    };
+    if close.len() <= 16_384 {
+        compute();
+    } else {
+        py.detach(compute);
+    }
+    Ok(output)
+}
+
 #[pyfunction(name = "_fast_unary_period")]
 fn fast_unary_period<'py>(
     py: Python<'py>,
@@ -1476,6 +1501,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(fast_vwap, m)?)?;
     m.add_function(wrap_pyfunction!(fast_vwap_into, m)?)?;
     m.add_function(wrap_pyfunction!(fast_mom, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_mom10, m)?)?;
     m.add_function(wrap_pyfunction!(fast_rocp, m)?)?;
     m.add_function(wrap_pyfunction!(fast_rocr, m)?)?;
     m.add_function(wrap_pyfunction!(fast_rocr100, m)?)?;

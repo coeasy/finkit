@@ -282,6 +282,8 @@ if hasattr(_native, "_fast_mom"):
 
     def mom(close, timeperiod=10):
         close = _as_contiguous_float64(close)
+        if timeperiod == 10 and hasattr(_native, "_fast_mom10"):
+            return _native._fast_mom10(close)
         return _native._fast_mom(close, timeperiod)
 
     mom = _translate_native_errors("mom", mom)
