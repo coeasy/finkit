@@ -84,9 +84,13 @@ fn bbands_sma_into(
     lower: &mut [f64],
 ) {
     let len = input.len();
-    middle.fill(f64::NAN);
-    upper.fill(f64::NAN);
-    lower.fill(f64::NAN);
+    // The caller-owned FFI buffers are uninitialized. Only the warm-up prefix
+    // needs an explicit NaN fill; every later slot is written by the fused
+    // rolling scan below. This avoids three full-length initialization passes
+    // on the benchmark-critical path.
+    middle[..period - 1].fill(f64::NAN);
+    upper[..period - 1].fill(f64::NAN);
+    lower[..period - 1].fill(f64::NAN);
 
     let inv_period = 1.0 / period as f64;
     let mut ma_total = 0.0;
@@ -97,20 +101,27 @@ fn bbands_sma_into(
     }
 
     let mut trailing_idx = 0usize;
-    for i in period - 1..len {
-        let value = input[i];
-        ma_total += value;
-        let mean = ma_total * inv_period;
-        square_total += value * value;
-        let variance = square_total * inv_period - mean * mean;
-        let std = if variance > 0.0 { variance.sqrt() } else { 0.0 };
-        middle[i] = mean;
-        upper[i] = mean + std * nb_dev_up;
-        lower[i] = mean - std * nb_dev_dn;
+    unsafe {
+        let input_ptr = input.as_ptr();
+        let middle_ptr = middle.as_mut_ptr();
+        let upper_ptr = upper.as_mut_ptr();
+        let lower_ptr = lower.as_mut_ptr();
+        for i in period - 1..len {
+            let value = *input_ptr.add(i);
+            ma_total += value;
+            let mean = ma_total * inv_period;
+            square_total += value * value;
+            let variance = square_total * inv_period - mean * mean;
+            let std = if variance > 0.0 { variance.sqrt() } else { 0.0 };
+            *middle_ptr.add(i) = mean;
+            *upper_ptr.add(i) = mean + std * nb_dev_up;
+            *lower_ptr.add(i) = mean - std * nb_dev_dn;
 
-        ma_total -= input[trailing_idx];
-        square_total -= input[trailing_idx] * input[trailing_idx];
-        trailing_idx += 1;
+            let trailing = *input_ptr.add(trailing_idx);
+            ma_total -= trailing;
+            square_total -= trailing * trailing;
+            trailing_idx += 1;
+        }
     }
 }
 

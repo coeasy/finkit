@@ -28,12 +28,12 @@
 //! let close: Vec<f64> = (0..1024).map(|i| 100.0 + (i as f64) * 0.01).collect();
 //!
 //! let jobs: Vec<IndicatorJob> = vec![
-//!     IndicatorJob::new("sma_20", Box::new(|data| {
+//!     IndicatorJob::new("sma_20", |data: &[f64]| {
 //!         indicators::sma(data, 20).map(|a| a.to_vec())
-//!     })),
-//!     IndicatorJob::new("ema_50", Box::new(|data| {
+//!     }),
+//!     IndicatorJob::new("ema_50", |data: &[f64]| {
 //!         indicators::ema(data, 50).map(|a| a.to_vec())
-//!     })),
+//!     }),
 //! ];
 //!
 //! let results = run_parallel(&jobs, &close);

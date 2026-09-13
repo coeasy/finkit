@@ -19,13 +19,58 @@ fn invalid_period() -> TaError {
 
 #[inline]
 fn reject_if_non_finite(input: &[f64]) -> Result<()> {
-    if let Some(index) = input.iter().position(|value| !value.is_finite()) {
+    let first_invalid = {
+        #[cfg(all(feature = "std", target_arch = "x86_64"))]
+        {
+            if is_x86_feature_detected!("avx2") {
+                unsafe { first_non_finite_avx2(input) }
+            } else {
+                input.iter().position(|value| !value.is_finite())
+            }
+        }
+        #[cfg(not(all(feature = "std", target_arch = "x86_64")))]
+        {
+            input.iter().position(|value| !value.is_finite())
+        }
+    };
+    if let Some(index) = first_invalid {
         return Err(TaError::InvalidParameter {
             name: "input".to_string(),
             constraint: format!("non-finite value at index {index}"),
         });
     }
     Ok(())
+}
+
+/// Find the first NaN or infinity four values at a time on the x86 hot path.
+/// The scalar fallback keeps the same error index and semantics on every other
+/// target. This validation is intentionally separate from the recursive KAMA
+/// loop so the arithmetic kernel remains branch-free.
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2")]
+unsafe fn first_non_finite_avx2(input: &[f64]) -> Option<usize> {
+    use core::arch::x86_64::*;
+
+    let infinity = _mm256_set1_pd(f64::INFINITY);
+    let absolute_mask = _mm256_set1_pd(-0.0);
+    let mut index = 0usize;
+    while index + 4 <= input.len() {
+        let values = unsafe { _mm256_loadu_pd(input.as_ptr().add(index)) };
+        let absolute = _mm256_andnot_pd(absolute_mask, values);
+        let finite = _mm256_cmp_pd(absolute, infinity, _CMP_LT_OQ);
+        if _mm256_movemask_pd(finite) != 0b1111 {
+            for offset in 0..4 {
+                if !input[index + offset].is_finite() {
+                    return Some(index + offset);
+                }
+            }
+        }
+        index += 4;
+    }
+    input[index..]
+        .iter()
+        .position(|value| !value.is_finite())
+        .map(|offset| index + offset)
 }
 
 /// EMA into a caller-owned output buffer using the same SMA seed and FMA
