@@ -2013,6 +2013,7 @@ unsafe fn correl_avx2(x: &[f64], y: &[f64], period: usize, result: &mut [f64]) {
     }
 }
 
+#[allow(clippy::similar_names)]
 fn correl_scalar(x: &[f64], y: &[f64], period: usize, result: &mut [f64]) {
     let len = x.len().min(y.len()).min(result.len());
     if period < 2 || len == 0 || len < period {
@@ -2159,6 +2160,7 @@ unsafe fn beta_avx2(asset: &[f64], benchmark: &[f64], period: usize, result: &mu
     }
 }
 
+#[allow(clippy::similar_names)]
 fn beta_scalar(asset: &[f64], benchmark: &[f64], period: usize, result: &mut [f64]) {
     let len = asset.len().min(benchmark.len()).min(result.len());
     if period < 2 || len == 0 || len < period {
@@ -2374,6 +2376,7 @@ unsafe fn linreg_avx2(data: &[f64], period: usize, result: &mut [f64]) {
     }
 }
 
+#[allow(clippy::similar_names)]
 fn linreg_scalar(data: &[f64], period: usize, result: &mut [f64]) {
     let len = data.len().min(result.len());
     if period < 2 || len == 0 || len < period {
@@ -2614,7 +2617,7 @@ pub fn simd_kama(
 /// AVX2 路径批处理 4 步递推，使用 `_mm256_fmadd_pd`；非 x86_64 / 缺 AVX2 走标量。
 #[cfg(feature = "std")]
 pub fn simd_ema_next(prev: f64, sample: f64, k: f64) -> f64 {
-    #[cfg(all(target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2") {
             return unsafe { ema_next_avx2(prev, sample, k) };
@@ -2654,7 +2657,7 @@ pub fn simd_cmo(src: &[f64], period: usize, out: &mut [f64]) {
     for r in out.iter_mut().take(period) {
         *r = f64::NAN;
     }
-    #[cfg(all(target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2") {
             unsafe { cmo_avx2(src, period, out, len) };
@@ -2949,7 +2952,7 @@ pub fn simd_ht_smooth(input: &[f64], out: &mut [f64]) {
     out[0] = 0.0;
     out[1] = 0.0;
     out[2] = 0.0;
-    #[cfg(all(target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2") {
             unsafe { ht_smooth_avx2(input, out, len) };
@@ -3017,7 +3020,7 @@ pub fn simd_ht_detrender(smooth: &[f64], out: &mut [f64]) {
     for o in out.iter_mut().take(10) {
         *o = 0.0;
     }
-    #[cfg(all(target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2") {
             unsafe { ht_detrender_avx2(smooth, out, len) };
@@ -3109,7 +3112,7 @@ pub fn simd_ht_components(detrender: &[f64], phase_out: &mut [f64]) {
     for o in phase_out.iter_mut().take(16) {
         *o = 0.0;
     }
-    #[cfg(all(target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2") {
             unsafe { ht_components_avx2(detrender, phase_out, len) };
@@ -3237,7 +3240,7 @@ unsafe fn ht_components_avx2(detrender: &[f64], phase_out: &mut [f64], len: usiz
 #[cfg(feature = "std")]
 pub fn simd_diff_sum(a: &[f64], b: &[f64], period: usize) -> f64 {
     debug_assert!(period <= a.len() && period <= b.len());
-    #[cfg(all(target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2") {
             return unsafe { diff_sum_avx2(a, b, period) };
@@ -3274,7 +3277,7 @@ unsafe fn diff_sum_avx2(a: &[f64], b: &[f64], period: usize) -> f64 {
 #[cfg(feature = "std")]
 pub fn simd_max_diff_sum(a: &[f64], b: &[f64], period: usize) -> f64 {
     debug_assert!(period <= a.len() && period <= b.len());
-    #[cfg(all(target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2") {
             return unsafe { max_diff_sum_avx2(a, b, period) };
@@ -3327,7 +3330,7 @@ unsafe fn max_diff_sum_avx2(a: &[f64], b: &[f64], period: usize) -> f64 {
 #[cfg(feature = "std")]
 pub fn simd_dual_diff_init(high: &[f64], open: &[f64], low: &[f64], period: usize) -> (f64, f64) {
     debug_assert!(period <= high.len() && period <= open.len() && period <= low.len());
-    #[cfg(all(target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2") {
             return unsafe { dual_diff_init_avx2(high, open, low, period) };
@@ -3382,7 +3385,7 @@ unsafe fn dual_diff_init_avx2(
 #[cfg(feature = "std")]
 pub fn simd_dual_max_init(high: &[f64], close: &[f64], low: &[f64], period: usize) -> (f64, f64) {
     debug_assert!(period + 1 <= high.len() && period + 1 <= close.len() && period + 1 <= low.len());
-    #[cfg(all(target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2") {
             return unsafe { dual_max_init_avx2(high, close, low, period) };

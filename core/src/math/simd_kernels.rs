@@ -77,7 +77,14 @@ fn ema_scalar(data: &[f64], period: usize, out: &mut [f64]) {
     out[period - 1] = initial_sma;
     let mut prev = initial_sma;
     for i in period..len {
-        prev = (data[i] - prev).mul_add(k, prev);
+        #[cfg(feature = "std")]
+        {
+            prev = (data[i] - prev).mul_add(k, prev);
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            prev += k * (data[i] - prev);
+        }
         out[i] = prev;
     }
 }
@@ -130,6 +137,7 @@ fn rsi_from_averages(avg_gain: f64, avg_loss: f64) -> f64 {
 }
 
 #[inline]
+#[allow(clippy::similar_names)]
 fn macd_scalar(
     data: &[f64],
     fast_period: usize,
@@ -989,6 +997,7 @@ mod x86_dispatch {
     }
 }
 
+#[cfg(feature = "std")]
 #[inline]
 pub(crate) fn avx2_fma_available() -> bool {
     #[cfg(all(feature = "std", target_arch = "x86_64"))]
