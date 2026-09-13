@@ -6,6 +6,7 @@
 //! its first SAR at index 1.
 
 use crate::error::{Result, TaError};
+use core::{mem::MaybeUninit, slice};
 
 #[inline]
 fn validate_params(acceleration: f64, maximum: f64) -> Result<()> {
@@ -274,13 +275,43 @@ pub fn sar_with_af(
 /// paths still share the same canonical [`SarState`] transition logic.
 pub fn sar(high: &[f64], low: &[f64], acceleration: f64, maximum: f64) -> Result<Vec<f64>> {
     validate_inputs(high, low, acceleration, maximum)?;
+    let len = high.len();
+    let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    unsafe { raw_output.set_len(len) };
+    let output = unsafe { slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<f64>(), len) };
+    sar_into(high, low, acceleration, maximum, output)?;
+
+    let ptr = raw_output.as_mut_ptr().cast::<f64>();
+    let capacity = raw_output.capacity();
+    core::mem::forget(raw_output);
+    Ok(unsafe { Vec::from_raw_parts(ptr, len, capacity) })
+}
+
+/// Calculate Parabolic SAR directly into a caller-owned output slice.
+///
+/// This is the installed-wheel hot-path variant: it keeps the canonical SAR
+/// transition loop while avoiding the temporary Rust buffer and the copy into
+/// the final NumPy array.
+pub fn sar_into(
+    high: &[f64],
+    low: &[f64],
+    acceleration: f64,
+    maximum: f64,
+    output: &mut [f64],
+) -> Result<()> {
+    validate_inputs(high, low, acceleration, maximum)?;
+    if output.len() != high.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
     let mut state = SarState::try_new(acceleration, maximum)?;
     let len = high.len();
-    let mut output = Vec::<f64>::with_capacity(len);
 
-    // Every slot is written exactly once before the Vec length is published.
-    // This removes both the unused AF allocation and the per-row Vec::push
-    // capacity branch from the benchmark-critical single-output path.
+    // Every slot is written exactly once. This removes both the unused AF
+    // allocation and the per-row Vec::push capacity branch from the
+    // benchmark-critical single-output path.
     unsafe {
         let high_ptr = high.as_ptr();
         let low_ptr = low.as_ptr();
@@ -384,10 +415,9 @@ pub fn sar(high: &[f64], low: &[f64], acceleration: f64, maximum: f64) -> Result
             previous_low = current_low;
             output_ptr.add(index).write(output_sar);
         }
-        output.set_len(len);
     }
 
-    Ok(output)
+    Ok(())
 }
 
 #[cfg(test)]

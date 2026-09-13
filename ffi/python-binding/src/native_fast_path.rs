@@ -1187,10 +1187,21 @@ fn fast_sar<'py>(
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let high = high.as_slice().map_err(value_error)?;
     let low = low.as_slice().map_err(value_error)?;
-    let output = py
-        .detach(|| sar_kernel::sar(high, low, acceleration, maximum))
-        .map_err(value_error)?;
-    Ok(PyArray1::from_vec(py, output))
+    validate_same_len(high.len(), low.len())?;
+    let output = unsafe { PyArray1::new(py, [high.len()], false) };
+    let output_addr = output.data() as usize;
+    py.detach(|| unsafe {
+        let output_ptr = output_addr as *mut f64;
+        sar_kernel::sar_into(
+            high,
+            low,
+            acceleration,
+            maximum,
+            std::slice::from_raw_parts_mut(output_ptr, high.len()),
+        )
+    })
+    .map_err(value_error)?;
+    Ok(output)
 }
 
 #[pyfunction(name = "_fast_macd")]
