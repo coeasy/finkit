@@ -8,7 +8,7 @@ use ::finkit::indicators;
 use ::finkit::math::{
     moving_avg, reduction, rolling_stats, sar as sar_kernel, typed_moving_avg, volume_kernels,
 };
-use numpy::{PyArray1, PyReadonlyArray1, PyReadwriteArray1};
+use numpy::{PyArray1, PyArrayMethods, PyReadonlyArray1, PyReadwriteArray1};
 use pyo3::prelude::*;
 use std::mem::{forget, MaybeUninit};
 
@@ -412,10 +412,17 @@ fn fast_mom<'py>(
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let close = close.as_slice().map_err(value_error)?;
     validate_period(close.len(), timeperiod)?;
-    Ok(PyArray1::from_vec(
-        py,
-        py.detach(|| mom_vec(close, timeperiod)),
-    ))
+    let output = unsafe { PyArray1::new(py, [close.len()], false) };
+    let output_addr = output.data() as usize;
+    py.detach(|| unsafe {
+        let output_ptr = output_addr as *mut f64;
+        ::finkit::math::simd_ops::simd_mom(
+            close,
+            timeperiod,
+            std::slice::from_raw_parts_mut(output_ptr, close.len()),
+        )
+    });
+    Ok(output)
 }
 
 #[pyfunction(name = "_fast_unary_period")]
@@ -478,9 +485,22 @@ fn fast_unary_period_scale<'py>(
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let close = close.as_slice().map_err(value_error)?;
     let output = match operation {
-        "stddev" => py
-            .detach(|| rolling_stats::stddev(close, timeperiod, scale))
-            .map_err(value_error)?,
+        "stddev" => {
+            validate_period(close.len(), timeperiod)?;
+            let output = unsafe { PyArray1::new(py, [close.len()], false) };
+            let output_addr = output.data() as usize;
+            py.detach(|| unsafe {
+                let output_ptr = output_addr as *mut f64;
+                rolling_stats::stddev_rolling_into(
+                    close,
+                    timeperiod,
+                    scale,
+                    std::slice::from_raw_parts_mut(output_ptr, close.len()),
+                )
+            })
+            .map_err(value_error)?;
+            return Ok(output);
+        }
         "var" => py
             .detach(|| rolling_stats::variance(close, timeperiod))
             .map_err(value_error)?,
@@ -671,6 +691,8 @@ fn fast_trange<'py>(
     let high = high.as_slice().map_err(value_error)?;
     let low = low.as_slice().map_err(value_error)?;
     let close = close.as_slice().map_err(value_error)?;
+    validate_same_len(high.len(), low.len())?;
+    validate_same_len(high.len(), close.len())?;
     let len = high.len();
     let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);
     unsafe { raw_output.set_len(len) };
@@ -1129,14 +1151,29 @@ fn fast_bbands<'py>(
     Bound<'py, PyArray1<f64>>,
 )> {
     let close = close.as_slice().map_err(value_error)?;
-    let (upper, middle, lower) = py
-        .detach(|| rolling_stats::bbands_sma(close, timeperiod, nbdevup, nbdevdn))
-        .map_err(value_error)?;
-    Ok((
-        PyArray1::from_vec(py, upper),
-        PyArray1::from_vec(py, middle),
-        PyArray1::from_vec(py, lower),
-    ))
+    validate_period(close.len(), timeperiod)?;
+    let upper = unsafe { PyArray1::new(py, [close.len()], false) };
+    let middle = unsafe { PyArray1::new(py, [close.len()], false) };
+    let lower = unsafe { PyArray1::new(py, [close.len()], false) };
+    let upper_addr = upper.data() as usize;
+    let middle_addr = middle.data() as usize;
+    let lower_addr = lower.data() as usize;
+    py.detach(|| unsafe {
+        let upper_ptr = upper_addr as *mut f64;
+        let middle_ptr = middle_addr as *mut f64;
+        let lower_ptr = lower_addr as *mut f64;
+        rolling_stats::bbands_sma_into(
+            close,
+            timeperiod,
+            nbdevup,
+            nbdevdn,
+            std::slice::from_raw_parts_mut(upper_ptr, close.len()),
+            std::slice::from_raw_parts_mut(middle_ptr, close.len()),
+            std::slice::from_raw_parts_mut(lower_ptr, close.len()),
+        )
+    })
+    .map_err(value_error)?;
+    Ok((upper, middle, lower))
 }
 
 #[pyfunction(name = "_fast_sar")]

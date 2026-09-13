@@ -199,6 +199,51 @@ pub fn stddev_into(input: &[f64], period: usize, nb_dev: f64, output: &mut [f64]
     Ok(())
 }
 
+/// Standard deviation written directly into a caller-owned output slice using
+/// the canonical rolling-moment order used by the TA-Lib fast path.
+pub fn stddev_rolling_into(
+    input: &[f64],
+    period: usize,
+    nb_dev: f64,
+    output: &mut [f64],
+) -> Result<()> {
+    validate_period(input.len(), period, 2)?;
+    if output.len() != input.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
+
+    let lookback = period - 1;
+    output[..lookback].fill(f64::NAN);
+    let mut moments = RollingMoments::new(input, period);
+    let output_ptr = output.as_mut_ptr();
+    if nb_dev == 1.0 {
+        for index in lookback..input.len() {
+            let (_, variance) = moments.next(index);
+            let value = if !is_zero_or_negative(variance) {
+                variance.sqrt()
+            } else {
+                0.0
+            };
+            unsafe { *output_ptr.add(index) = value };
+        }
+    } else {
+        for index in lookback..input.len() {
+            let (_, variance) = moments.next(index);
+            let value = if !is_zero_or_negative(variance) {
+                variance.sqrt() * nb_dev
+            } else {
+                0.0
+            };
+            unsafe { *output_ptr.add(index) = value };
+        }
+    }
+
+    Ok(())
+}
+
 /// Upper Bollinger band written directly into a caller-owned output slice.
 ///
 /// Formula `BOLL` historically returns the upper band only. Keeping that
@@ -342,7 +387,6 @@ pub fn bbands_sma(
     validate_period(input.len(), period, 2)?;
 
     let len = input.len();
-    let lookback = period - 1;
     // Every slot after the lookback is written by the fused scan. Keep the
     // three result vectors uninitialized until then so BBANDS does not pay
     // three full zero-fill passes before overwriting them.
@@ -354,6 +398,42 @@ pub fn bbands_sma(
         middle.set_len(len);
         lower.set_len(len);
     }
+    bbands_sma_into(
+        input,
+        period,
+        nb_dev_up,
+        nb_dev_down,
+        &mut upper,
+        &mut middle,
+        &mut lower,
+    )?;
+
+    Ok((upper, middle, lower))
+}
+
+/// Write SMA Bollinger Bands directly into caller-owned output buffers.
+///
+/// This is the NumPy boundary variant of [`bbands_sma`]. It keeps the same
+/// rolling moment state and arithmetic order while avoiding the Rust-Vec to
+/// NumPy copies on the installed-wheel hot path.
+pub fn bbands_sma_into(
+    input: &[f64],
+    period: usize,
+    nb_dev_up: f64,
+    nb_dev_down: f64,
+    upper: &mut [f64],
+    middle: &mut [f64],
+    lower: &mut [f64],
+) -> Result<()> {
+    validate_period(input.len(), period, 2)?;
+    if upper.len() != input.len() || middle.len() != input.len() || lower.len() != input.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "all output buffers must have the same length as input".to_string(),
+        });
+    }
+
+    let lookback = period - 1;
     upper[..lookback].fill(f64::NAN);
     middle[..lookback].fill(f64::NAN);
     lower[..lookback].fill(f64::NAN);
@@ -362,7 +442,7 @@ pub fn bbands_sma(
     let lower_ptr = lower.as_mut_ptr();
     let mut moments = RollingMoments::new(input, period);
 
-    for index in lookback..len {
+    for index in lookback..input.len() {
         let (middle_value, variance) = moments.next(index);
         let stddev = if !is_zero_or_negative(variance) {
             variance.sqrt()
@@ -376,8 +456,7 @@ pub fn bbands_sma(
             *lower_ptr.add(index) = middle_value - stddev * nb_dev_down;
         }
     }
-
-    Ok((upper, middle, lower))
+    Ok(())
 }
 
 #[cfg(test)]
