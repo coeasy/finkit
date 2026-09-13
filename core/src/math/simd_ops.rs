@@ -3485,10 +3485,11 @@ unsafe fn mom_avx2(input: &[f64], period: usize, result: &mut [f64]) {
     let ptr = input.as_ptr();
     let out_ptr = result.as_mut_ptr();
 
-    // Process four AVX2 vectors per iteration. The unroll reduces loop and
-    // dispatch overhead on the small, bandwidth-bound MOM kernel.
+    // Process eight AVX2 vectors per iteration. The wider unroll keeps the
+    // tiny bandwidth-bound kernel out of the loop-control bottleneck on the
+    // installed-wheel benchmark sizes.
     let chunks = (len - period) / 4;
-    let unrolled_end = period + (chunks / 4) * 16;
+    let unrolled_end = period + (chunks / 8) * 32;
     let mut i = period;
     while i < unrolled_end {
         let v0 = _mm256_sub_pd(
@@ -3507,11 +3508,31 @@ unsafe fn mom_avx2(input: &[f64], period: usize, result: &mut [f64]) {
             _mm256_loadu_pd(ptr.add(i + 12)),
             _mm256_loadu_pd(ptr.add(i + 12 - period)),
         );
+        let v4 = _mm256_sub_pd(
+            _mm256_loadu_pd(ptr.add(i + 16)),
+            _mm256_loadu_pd(ptr.add(i + 16 - period)),
+        );
+        let v5 = _mm256_sub_pd(
+            _mm256_loadu_pd(ptr.add(i + 20)),
+            _mm256_loadu_pd(ptr.add(i + 20 - period)),
+        );
+        let v6 = _mm256_sub_pd(
+            _mm256_loadu_pd(ptr.add(i + 24)),
+            _mm256_loadu_pd(ptr.add(i + 24 - period)),
+        );
+        let v7 = _mm256_sub_pd(
+            _mm256_loadu_pd(ptr.add(i + 28)),
+            _mm256_loadu_pd(ptr.add(i + 28 - period)),
+        );
         _mm256_storeu_pd(out_ptr.add(i), v0);
         _mm256_storeu_pd(out_ptr.add(i + 4), v1);
         _mm256_storeu_pd(out_ptr.add(i + 8), v2);
         _mm256_storeu_pd(out_ptr.add(i + 12), v3);
-        i += 16;
+        _mm256_storeu_pd(out_ptr.add(i + 16), v4);
+        _mm256_storeu_pd(out_ptr.add(i + 20), v5);
+        _mm256_storeu_pd(out_ptr.add(i + 24), v6);
+        _mm256_storeu_pd(out_ptr.add(i + 28), v7);
+        i += 32;
     }
     let vector_end = period + chunks * 4;
     while i < vector_end {
