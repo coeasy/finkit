@@ -414,14 +414,23 @@ fn fast_mom<'py>(
     validate_period(close.len(), timeperiod)?;
     let output = unsafe { PyArray1::new(py, [close.len()], false) };
     let output_addr = output.data() as usize;
-    py.detach(|| unsafe {
+    let compute = || unsafe {
         let output_ptr = output_addr as *mut f64;
         ::finkit::math::simd_ops::simd_mom(
             close,
             timeperiod,
             std::slice::from_raw_parts_mut(output_ptr, close.len()),
         )
-    });
+    };
+    // The kernel is only a few loads/subtractions for short inputs. Avoiding
+    // the GIL transition on that path keeps the fixed Python call overhead
+    // from dominating the 10k benchmark case while retaining parallelism for
+    // larger arrays.
+    if close.len() <= 16_384 {
+        compute();
+    } else {
+        py.detach(compute);
+    }
     Ok(output)
 }
 
@@ -1315,17 +1324,14 @@ fn fast_stoch<'py>(
     let low = low.as_slice().map_err(value_error)?;
     let close = close.as_slice().map_err(value_error)?;
     let len = close.len();
-    // The STOCH kernels write both output slices completely (including the
-    // warm-up prefix), so avoid clearing two full buffers before dispatch.
-    let mut k_raw = Vec::<MaybeUninit<f64>>::with_capacity(len);
-    let mut d_raw = Vec::<MaybeUninit<f64>>::with_capacity(len);
-    unsafe {
-        k_raw.set_len(len);
-        d_raw.set_len(len);
-    }
-    let k_out = unsafe { std::slice::from_raw_parts_mut(k_raw.as_mut_ptr().cast::<f64>(), len) };
-    let d_out = unsafe { std::slice::from_raw_parts_mut(d_raw.as_mut_ptr().cast::<f64>(), len) };
-    py.detach(|| {
+    // Write both outputs directly into their final NumPy allocations. The
+    // kernels cover the warm-up prefix, so no intermediate Vecs or copies are
+    // needed on this two-output hot path.
+    let k_output = unsafe { PyArray1::new(py, [len], false) };
+    let d_output = unsafe { PyArray1::new(py, [len], false) };
+    let k_output_addr = k_output.data() as usize;
+    let d_output_addr = d_output.data() as usize;
+    py.detach(|| unsafe {
         indicators::stoch_into(
             high,
             low,
@@ -1333,20 +1339,12 @@ fn fast_stoch<'py>(
             fastk_period,
             slowk_period,
             slowd_period,
-            k_out,
-            d_out,
+            std::slice::from_raw_parts_mut(k_output_addr as *mut f64, len),
+            std::slice::from_raw_parts_mut(d_output_addr as *mut f64, len),
         )
     })
     .map_err(value_error)?;
-    let k_ptr = k_raw.as_mut_ptr().cast::<f64>();
-    let d_ptr = d_raw.as_mut_ptr().cast::<f64>();
-    let k_capacity = k_raw.capacity();
-    let d_capacity = d_raw.capacity();
-    std::mem::forget(k_raw);
-    std::mem::forget(d_raw);
-    let k_vec = unsafe { Vec::from_raw_parts(k_ptr, len, k_capacity) };
-    let d_vec = unsafe { Vec::from_raw_parts(d_ptr, len, d_capacity) };
-    Ok((PyArray1::from_vec(py, k_vec), PyArray1::from_vec(py, d_vec)))
+    Ok((k_output, d_output))
 }
 
 macro_rules! reduction_fn {
