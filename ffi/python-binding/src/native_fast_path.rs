@@ -694,18 +694,19 @@ fn fast_trange<'py>(
     validate_same_len(high.len(), low.len())?;
     validate_same_len(high.len(), close.len())?;
     let len = high.len();
-    let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);
-    unsafe { raw_output.set_len(len) };
-    let output =
-        unsafe { std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<f64>(), len) };
-    py.detach(|| indicators::trange_into(high, low, close, output))
-        .map_err(value_error)?;
-    let ptr = raw_output.as_mut_ptr().cast::<f64>();
-    let capacity = raw_output.capacity();
-    std::mem::forget(raw_output);
-    Ok(PyArray1::from_vec(py, unsafe {
-        Vec::from_raw_parts(ptr, len, capacity)
-    }))
+    let output = unsafe { PyArray1::new(py, [len], false) };
+    let output_addr = output.data() as usize;
+    py.detach(|| unsafe {
+        let output_ptr = output_addr as *mut f64;
+        indicators::trange_into(
+            high,
+            low,
+            close,
+            std::slice::from_raw_parts_mut(output_ptr, len),
+        )
+    })
+    .map_err(value_error)?;
+    Ok(output)
 }
 
 #[pyfunction(name = "_fast_mfi")]
