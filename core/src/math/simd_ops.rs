@@ -3459,12 +3459,97 @@ pub fn simd_mom(input: &[f64], period: usize, result: &mut [f64]) {
     #[cfg(all(feature = "std", target_arch = "x86_64"))]
     {
         if is_x86_feature_detected!("avx2") {
+            if period == 10 {
+                return unsafe { mom10_avx2(input, result) };
+            }
             return unsafe { mom_avx2(input, period, result) };
         }
         return unsafe { mom_sse2(input, period, result) };
     }
     #[cfg(not(all(feature = "std", target_arch = "x86_64")))]
     mom_scalar(input, period, result)
+}
+
+/// Fixed-period MOM kernel for the public default (10 bars).
+///
+/// The general AVX2 kernel must subtract a runtime period for every vector.
+/// MOM10 is the hot path used by the Python release gate, so keeping the
+/// offset constant lets LLVM fold those address calculations into the load
+/// addressing mode while retaining the same output and warm-up semantics.
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2")]
+unsafe fn mom10_avx2(input: &[f64], result: &mut [f64]) {
+    use core::arch::x86_64::*;
+    const PERIOD: usize = 10;
+    let len = input.len().min(result.len());
+    if len <= PERIOD {
+        for r in result.iter_mut().take(len) {
+            *r = f64::NAN;
+        }
+        return;
+    }
+
+    for r in result.iter_mut().take(PERIOD) {
+        *r = f64::NAN;
+    }
+
+    let ptr = input.as_ptr();
+    let out_ptr = result.as_mut_ptr();
+    let unrolled_end = PERIOD + ((len - PERIOD) / 32) * 32;
+    let mut i = PERIOD;
+    while i < unrolled_end {
+        let v0 = _mm256_sub_pd(
+            _mm256_loadu_pd(ptr.add(i)),
+            _mm256_loadu_pd(ptr.add(i - PERIOD)),
+        );
+        let v1 = _mm256_sub_pd(
+            _mm256_loadu_pd(ptr.add(i + 4)),
+            _mm256_loadu_pd(ptr.add(i + 4 - PERIOD)),
+        );
+        let v2 = _mm256_sub_pd(
+            _mm256_loadu_pd(ptr.add(i + 8)),
+            _mm256_loadu_pd(ptr.add(i + 8 - PERIOD)),
+        );
+        let v3 = _mm256_sub_pd(
+            _mm256_loadu_pd(ptr.add(i + 12)),
+            _mm256_loadu_pd(ptr.add(i + 12 - PERIOD)),
+        );
+        let v4 = _mm256_sub_pd(
+            _mm256_loadu_pd(ptr.add(i + 16)),
+            _mm256_loadu_pd(ptr.add(i + 16 - PERIOD)),
+        );
+        let v5 = _mm256_sub_pd(
+            _mm256_loadu_pd(ptr.add(i + 20)),
+            _mm256_loadu_pd(ptr.add(i + 20 - PERIOD)),
+        );
+        let v6 = _mm256_sub_pd(
+            _mm256_loadu_pd(ptr.add(i + 24)),
+            _mm256_loadu_pd(ptr.add(i + 24 - PERIOD)),
+        );
+        let v7 = _mm256_sub_pd(
+            _mm256_loadu_pd(ptr.add(i + 28)),
+            _mm256_loadu_pd(ptr.add(i + 28 - PERIOD)),
+        );
+        _mm256_storeu_pd(out_ptr.add(i), v0);
+        _mm256_storeu_pd(out_ptr.add(i + 4), v1);
+        _mm256_storeu_pd(out_ptr.add(i + 8), v2);
+        _mm256_storeu_pd(out_ptr.add(i + 12), v3);
+        _mm256_storeu_pd(out_ptr.add(i + 16), v4);
+        _mm256_storeu_pd(out_ptr.add(i + 20), v5);
+        _mm256_storeu_pd(out_ptr.add(i + 24), v6);
+        _mm256_storeu_pd(out_ptr.add(i + 28), v7);
+        i += 32;
+    }
+    while i + 3 < len {
+        let current = _mm256_loadu_pd(ptr.add(i));
+        let previous = _mm256_loadu_pd(ptr.add(i - PERIOD));
+        _mm256_storeu_pd(out_ptr.add(i), _mm256_sub_pd(current, previous));
+        i += 4;
+    }
+    while i < len {
+        *out_ptr.add(i) = *ptr.add(i) - *ptr.add(i - PERIOD);
+        i += 1;
+    }
 }
 
 #[cfg(all(feature = "std", target_arch = "x86_64"))]
