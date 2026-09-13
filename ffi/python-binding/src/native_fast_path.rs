@@ -661,10 +661,23 @@ fn fast_binary_period<'py>(
     validate_same_len(input_a.len(), input_b.len())?;
     let output = match operation {
         "midprice" => {
-            let mut output = vec![0.0; input_a.len()];
-            py.detach(|| indicators::midprice_into(input_a, input_b, timeperiod, &mut output))
-                .map_err(value_error)?;
-            output
+            let len = input_a.len();
+            let output = unsafe { PyArray1::new(py, [len], false) };
+            let output_addr = output.data() as usize;
+            let compute = || unsafe {
+                indicators::midprice_into(
+                    input_a,
+                    input_b,
+                    timeperiod,
+                    std::slice::from_raw_parts_mut(output_addr as *mut f64, len),
+                )
+            };
+            if len <= 16_384 {
+                compute().map_err(value_error)?;
+            } else {
+                py.detach(compute).map_err(value_error)?;
+            }
+            return Ok(output);
         }
         "correl" => py
             .detach(|| rolling_stats::correlation(input_a, input_b, timeperiod))
