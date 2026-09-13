@@ -280,13 +280,23 @@ if hasattr(_native, "_fast_unary_period"):
 
 if hasattr(_native, "_fast_mom"):
 
-    def mom(close, timeperiod=10):
-        close = _as_contiguous_float64(close)
-        if timeperiod == 10 and hasattr(_native, "_fast_mom10"):
-            return _native._fast_mom10(close)
+    def _mom_checked(close, timeperiod):
         return _native._fast_mom(close, timeperiod)
 
-    mom = _translate_native_errors("mom", mom)
+    _mom_checked = _translate_native_errors("mom", _mom_checked)
+
+    def mom(close, timeperiod=10):
+        close = _as_contiguous_float64(close)
+        if type(timeperiod) is int and timeperiod == 10 and hasattr(
+            _native, "_fast_mom10"
+        ):
+            if close.size < 10:
+                raise InsufficientDataError(
+                    "input data length is less than required minimum"
+                )
+            return _native._fast_mom10(close)
+        return _mom_checked(close, timeperiod)
+
 
 if hasattr(_native, "_fast_rocp"):
 
