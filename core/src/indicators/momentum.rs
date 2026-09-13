@@ -515,10 +515,10 @@ fn stoch_default_5_3_3_into(
     let mut max_tail = 0usize;
     let mut min_head = 0usize;
     let mut min_tail = 0usize;
-    let mut fast_k_ring = [0.0; 3];
-    let mut k_ring = [0.0; 3];
-    let mut k_sum = 0.0;
-    let mut d_sum = 0.0;
+    let mut fast_k_prev1 = 0.0;
+    let mut fast_k_prev2 = 0.0;
+    let mut slow_k_prev1 = 0.0;
+    let mut slow_k_prev2 = 0.0;
 
     let high_ptr = high.as_ptr();
     let low_ptr = low.as_ptr();
@@ -531,7 +531,6 @@ fn stoch_default_5_3_3_into(
     // pointer form.  The queue counters are monotonic and the masks prove
     // that every queue/ring access stays within its fixed-size storage.
     unsafe {
-        let mut ring_pos = 0usize;
         for i in 0..len {
             let new_high = *high_ptr.add(i);
             let new_low = *low_ptr.add(i);
@@ -570,21 +569,20 @@ fn stoch_default_5_3_3_into(
             } else {
                 0.0
             };
-            let old_fast_k = *fast_k_ring.get_unchecked(ring_pos);
-            k_sum += fast_k - old_fast_k;
-            *fast_k_ring.get_unchecked_mut(ring_pos) = fast_k;
-            let slow_k = if i >= 2 { k_sum / 3.0 } else { 0.0 };
-            let old_slow_k = *k_ring.get_unchecked(ring_pos);
-            d_sum += slow_k - old_slow_k;
-            *k_ring.get_unchecked_mut(ring_pos) = slow_k;
+            let slow_k = if i >= 2 {
+                (fast_k + fast_k_prev1 + fast_k_prev2) / 3.0
+            } else {
+                0.0
+            };
+            let d_sum = slow_k + slow_k_prev1 + slow_k_prev2;
             if i >= LOOKBACK {
                 *k_out_ptr.add(i) = slow_k;
                 *d_out_ptr.add(i) = d_sum / 3.0;
             }
-            ring_pos += 1;
-            if ring_pos == 3 {
-                ring_pos = 0;
-            }
+            fast_k_prev2 = fast_k_prev1;
+            fast_k_prev1 = fast_k;
+            slow_k_prev2 = slow_k_prev1;
+            slow_k_prev1 = slow_k;
         }
     }
 }
