@@ -3461,8 +3461,60 @@ pub fn simd_mom(input: &[f64], period: usize, result: &mut [f64]) {
         if is_x86_feature_detected!("avx2") {
             return unsafe { mom_avx2(input, period, result) };
         }
+        return unsafe { mom_sse2(input, period, result) };
     }
+    #[cfg(not(all(feature = "std", target_arch = "x86_64")))]
     mom_scalar(input, period, result)
+}
+
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
+#[target_feature(enable = "sse2")]
+unsafe fn mom_sse2(input: &[f64], period: usize, result: &mut [f64]) {
+    use core::arch::x86_64::*;
+    let len = input.len().min(result.len());
+    if period == 0 || len <= period {
+        for r in result.iter_mut().take(len) {
+            *r = f64::NAN;
+        }
+        return;
+    }
+
+    for r in result.iter_mut().take(period) {
+        *r = f64::NAN;
+    }
+
+    let input_ptr = input.as_ptr();
+    let result_ptr = result.as_mut_ptr();
+    let mut i = period;
+    let unrolled_end = period + ((len - period) / 16) * 16;
+    while i < unrolled_end {
+        macro_rules! mom_sse2_pair {
+            ($offset:expr) => {
+                let current = _mm_loadu_pd(input_ptr.add(i + $offset));
+                let previous = _mm_loadu_pd(input_ptr.add(i + $offset - period));
+                _mm_storeu_pd(result_ptr.add(i + $offset), _mm_sub_pd(current, previous));
+            };
+        }
+        mom_sse2_pair!(0);
+        mom_sse2_pair!(2);
+        mom_sse2_pair!(4);
+        mom_sse2_pair!(6);
+        mom_sse2_pair!(8);
+        mom_sse2_pair!(10);
+        mom_sse2_pair!(12);
+        mom_sse2_pair!(14);
+        i += 16;
+    }
+    while i + 1 < len {
+        let current = _mm_loadu_pd(input_ptr.add(i));
+        let previous = _mm_loadu_pd(input_ptr.add(i - period));
+        _mm_storeu_pd(result_ptr.add(i), _mm_sub_pd(current, previous));
+        i += 2;
+    }
+    while i < len {
+        *result_ptr.add(i) = *input_ptr.add(i) - *input_ptr.add(i - period);
+        i += 1;
+    }
 }
 
 #[cfg(all(feature = "std", target_arch = "x86_64"))]
