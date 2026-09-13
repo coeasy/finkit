@@ -207,10 +207,23 @@ fn fast_sma<'py>(
     timeperiod: usize,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let close = close.as_slice().map_err(value_error)?;
-    let mut output = vec![0.0; close.len()];
-    py.detach(|| moving_avg::sma_into(close, timeperiod, &mut output))
-        .map_err(value_error)?;
-    Ok(PyArray1::from_vec(py, output))
+    let len = close.len();
+    let output = unsafe { PyArray1::new(py, [len], false) };
+    let output_addr = output.data() as usize;
+    let compute = || unsafe {
+        moving_avg::sma_into(
+            close,
+            timeperiod,
+            std::slice::from_raw_parts_mut(output_addr as *mut f64, len),
+        )
+    };
+    let result = if len <= 16_384 {
+        compute()
+    } else {
+        py.detach(compute)
+    };
+    result.map_err(value_error)?;
+    Ok(output)
 }
 
 #[pyfunction(name = "_fast_sma_into")]
@@ -263,10 +276,23 @@ fn fast_ema<'py>(
     timeperiod: usize,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let close = close.as_slice().map_err(value_error)?;
-    let mut output = vec![0.0; close.len()];
-    py.detach(|| moving_avg::ema_fast_into(close, timeperiod, &mut output))
-        .map_err(value_error)?;
-    Ok(PyArray1::from_vec(py, output))
+    let len = close.len();
+    let output = unsafe { PyArray1::new(py, [len], false) };
+    let output_addr = output.data() as usize;
+    let compute = || unsafe {
+        moving_avg::ema_fast_into(
+            close,
+            timeperiod,
+            std::slice::from_raw_parts_mut(output_addr as *mut f64, len),
+        )
+    };
+    let result = if len <= 16_384 {
+        compute()
+    } else {
+        py.detach(compute)
+    };
+    result.map_err(value_error)?;
+    Ok(output)
 }
 
 #[pyfunction(name = "_fast_ema_into")]
@@ -319,10 +345,23 @@ fn fast_wma<'py>(
     timeperiod: usize,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let close = close.as_slice().map_err(value_error)?;
-    let mut output = vec![0.0; close.len()];
-    py.detach(|| moving_avg::wma_into(close, timeperiod, &mut output))
-        .map_err(value_error)?;
-    Ok(PyArray1::from_vec(py, output))
+    let len = close.len();
+    let output = unsafe { PyArray1::new(py, [len], false) };
+    let output_addr = output.data() as usize;
+    let compute = || unsafe {
+        moving_avg::wma_into(
+            close,
+            timeperiod,
+            std::slice::from_raw_parts_mut(output_addr as *mut f64, len),
+        )
+    };
+    let result = if len <= 16_384 {
+        compute()
+    } else {
+        py.detach(compute)
+    };
+    result.map_err(value_error)?;
+    Ok(output)
 }
 
 #[pyfunction(name = "_fast_wma_into")]
