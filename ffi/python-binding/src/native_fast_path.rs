@@ -236,8 +236,12 @@ fn fast_sma_into(
 ) -> PyResult<()> {
     let close = close.as_slice().map_err(value_error)?;
     let output = output.as_slice_mut().map_err(value_error)?;
-    py.detach(|| moving_avg::sma_into(close, timeperiod, output))
-        .map_err(value_error)
+    let mut compute = || moving_avg::sma_into(close, timeperiod, output);
+    if close.len() <= 16_384 {
+        compute().map_err(value_error)
+    } else {
+        py.detach(compute).map_err(value_error)
+    }
 }
 
 #[pyfunction(name = "_fast_sma_f32")]
@@ -305,8 +309,12 @@ fn fast_ema_into(
 ) -> PyResult<()> {
     let close = close.as_slice().map_err(value_error)?;
     let output = output.as_slice_mut().map_err(value_error)?;
-    py.detach(|| moving_avg::ema_fast_into(close, timeperiod, output))
-        .map_err(value_error)
+    let mut compute = || moving_avg::ema_fast_into(close, timeperiod, output);
+    if close.len() <= 16_384 {
+        compute().map_err(value_error)
+    } else {
+        py.detach(compute).map_err(value_error)
+    }
 }
 
 #[pyfunction(name = "_fast_ema_f32")]
@@ -374,8 +382,12 @@ fn fast_wma_into(
 ) -> PyResult<()> {
     let close = close.as_slice().map_err(value_error)?;
     let output = output.as_slice_mut().map_err(value_error)?;
-    py.detach(|| moving_avg::wma_into(close, timeperiod, output))
-        .map_err(value_error)
+    let mut compute = || moving_avg::wma_into(close, timeperiod, output);
+    if close.len() <= 16_384 {
+        compute().map_err(value_error)
+    } else {
+        py.detach(compute).map_err(value_error)
+    }
 }
 
 #[pyfunction(name = "_fast_obv")]
