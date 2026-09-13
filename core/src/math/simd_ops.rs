@@ -3458,9 +3458,6 @@ unsafe fn dual_max_init_avx2(
 pub fn simd_mom(input: &[f64], period: usize, result: &mut [f64]) {
     #[cfg(all(feature = "std", target_arch = "x86_64"))]
     {
-        if period == 10 && input.len().min(result.len()) <= 16_384 {
-            return mom10_scalar(input, result);
-        }
         if is_x86_feature_detected!("avx2") {
             if period == 10 {
                 return unsafe { mom10_avx2(input, result) };
@@ -3471,41 +3468,6 @@ pub fn simd_mom(input: &[f64], period: usize, result: &mut [f64]) {
     }
     #[cfg(not(all(feature = "std", target_arch = "x86_64")))]
     mom_scalar(input, period, result)
-}
-
-#[inline(always)]
-fn mom10_scalar(input: &[f64], result: &mut [f64]) {
-    const PERIOD: usize = 10;
-    let len = input.len().min(result.len());
-    if len <= PERIOD {
-        result.iter_mut().take(len).for_each(|r| *r = f64::NAN);
-        return;
-    }
-    result[..PERIOD].fill(f64::NAN);
-
-    let input_ptr = input.as_ptr();
-    let result_ptr = result.as_mut_ptr();
-    let unrolled_end = PERIOD + ((len - PERIOD) / 8) * 8;
-    let mut i = PERIOD;
-    while i < unrolled_end {
-        unsafe {
-            *result_ptr.add(i) = *input_ptr.add(i) - *input_ptr.add(i - PERIOD);
-            *result_ptr.add(i + 1) = *input_ptr.add(i + 1) - *input_ptr.add(i + 1 - PERIOD);
-            *result_ptr.add(i + 2) = *input_ptr.add(i + 2) - *input_ptr.add(i + 2 - PERIOD);
-            *result_ptr.add(i + 3) = *input_ptr.add(i + 3) - *input_ptr.add(i + 3 - PERIOD);
-            *result_ptr.add(i + 4) = *input_ptr.add(i + 4) - *input_ptr.add(i + 4 - PERIOD);
-            *result_ptr.add(i + 5) = *input_ptr.add(i + 5) - *input_ptr.add(i + 5 - PERIOD);
-            *result_ptr.add(i + 6) = *input_ptr.add(i + 6) - *input_ptr.add(i + 6 - PERIOD);
-            *result_ptr.add(i + 7) = *input_ptr.add(i + 7) - *input_ptr.add(i + 7 - PERIOD);
-        }
-        i += 8;
-    }
-    while i < len {
-        unsafe {
-            *result_ptr.add(i) = *input_ptr.add(i) - *input_ptr.add(i - PERIOD);
-        }
-        i += 1;
-    }
 }
 
 /// Fixed-period MOM kernel for the public default (10 bars).
