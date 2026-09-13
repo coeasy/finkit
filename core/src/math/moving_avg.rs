@@ -725,6 +725,17 @@ pub fn wma_into_simd(input: &[f64], period: usize, output: &mut [f64]) -> Result
 #[cfg_attr(feature = "tracing", tracing::instrument(skip_all, fields(period, len = input.len())))]
 #[inline]
 pub fn dema(input: &[f64], period: usize) -> Result<Array1<f64>> {
+    let mut output = init_output(input.len());
+    dema_into(input, period, output.as_slice_mut().unwrap())?;
+    Ok(output)
+}
+
+/// Compute DEMA directly into a caller-owned buffer.
+///
+/// The first EMA still needs one scratch buffer, but the final DEMA values are
+/// written directly to `output`, avoiding the result allocation and copy at
+/// native language-binding boundaries.
+pub fn dema_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> {
     if period == 0 {
         return Err(TaError::InvalidParameter {
             name: "period".to_string(),
@@ -733,6 +744,12 @@ pub fn dema(input: &[f64], period: usize) -> Result<Array1<f64>> {
     }
     reject_if_non_finite("dema", input)?;
     validate_input(input.len(), period)?;
+    if output.len() != input.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
 
     let len = input.len();
     let s1 = period - 1;
@@ -740,10 +757,10 @@ pub fn dema(input: &[f64], period: usize) -> Result<Array1<f64>> {
     let one_k = 1.0 - k;
     let inv_p = 1.0 / period as f64;
 
-    let mut output = init_output(len);
+    output.fill(f64::NAN);
 
     if len <= s1 {
-        return Ok(output);
+        return Ok(());
     }
 
     // Single-buffer approach: compute EMA1 into a temp vec, then do EMA2
@@ -761,7 +778,7 @@ pub fn dema(input: &[f64], period: usize) -> Result<Array1<f64>> {
 
     let ema2_start = 2 * s1;
     if ema2_start >= len || len - s1 < period {
-        return Ok(output);
+        return Ok(());
     }
 
     // SIMD-accelerated second SMA seed.
@@ -774,7 +791,7 @@ pub fn dema(input: &[f64], period: usize) -> Result<Array1<f64>> {
         output[i] = 2.0 * ema1_buf[i] - e2;
     }
 
-    Ok(output)
+    Ok(())
 }
 
 /// Triple Exponential Moving Average (TEMA)
@@ -799,6 +816,13 @@ pub fn dema(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// assert_eq!(result.len(), 15);
 /// ```
 pub fn tema(input: &[f64], period: usize) -> Result<Array1<f64>> {
+    let mut output = init_output(input.len());
+    tema_into(input, period, output.as_slice_mut().unwrap())?;
+    Ok(output)
+}
+
+/// Compute TEMA directly into a caller-owned buffer.
+pub fn tema_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> {
     if period == 0 {
         return Err(TaError::InvalidParameter {
             name: "period".to_string(),
@@ -806,16 +830,22 @@ pub fn tema(input: &[f64], period: usize) -> Result<Array1<f64>> {
         });
     }
     validate_input(input.len(), period)?;
+    if output.len() != input.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
 
     let len = input.len();
     let s1 = period - 1;
     let k = smoothing_factor(period);
     let one_k = 1.0 - k;
     let inv_p = 1.0 / period as f64;
-    let mut output = init_output(len);
+    output.fill(f64::NAN);
 
     if len <= s1 {
-        return Ok(output);
+        return Ok(());
     }
 
     // EMA pass 1: input -> ema1_buf (single allocation)
@@ -832,7 +862,7 @@ pub fn tema(input: &[f64], period: usize) -> Result<Array1<f64>> {
     // EMA pass 2: ema1_buf -> scalar e2 accumulator (no allocation)
     let ema2_start = 2 * s1;
     if len - s1 < period {
-        return Ok(output);
+        return Ok(());
     }
     // SIMD-accelerated second SMA seed.
     let sma2: f64 = simd_horizontal_sum(&ema1_buf[s1..s1 + period]) * inv_p;
@@ -852,12 +882,11 @@ pub fn tema(input: &[f64], period: usize) -> Result<Array1<f64>> {
         for i in ema2_start..len {
             output[i] = f64::NAN;
         }
-        return Ok(output);
+        return Ok(());
     }
 
-    let out_slice = output.as_slice().unwrap();
     // SIMD-accelerated third SMA seed.
-    let sma3: f64 = simd_horizontal_sum(&out_slice[ema2_start..ema2_start + period]) * inv_p;
+    let sma3: f64 = simd_horizontal_sum(&output[ema2_start..ema2_start + period]) * inv_p;
     let mut e3 = sma3;
 
     // Clear positions before ema3_start
@@ -879,7 +908,7 @@ pub fn tema(input: &[f64], period: usize) -> Result<Array1<f64>> {
         output[i] = 3.0 * ema1_buf[i] - 3.0 * e2_re + e3;
     }
 
-    Ok(output)
+    Ok(())
 }
 
 /// Kaufman's Adaptive Moving Average (KAMA)

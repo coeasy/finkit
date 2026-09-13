@@ -433,38 +433,97 @@ fn fast_unary_period<'py>(
     timeperiod: usize,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let close = close.as_slice().map_err(value_error)?;
-    let output = match operation {
+    let len = close.len();
+
+    // Keep the public ndarray hot path caller-owned. These kernels already
+    // support writing into a slice, so avoid the intermediate Array1 -> Vec ->
+    // NumPy materialisation used by the compatibility path.
+    match operation {
         "midpoint" => {
-            let mut output = vec![0.0; close.len()];
-            py.detach(|| indicators::midpoint_into(close, timeperiod, &mut output))
-                .map_err(value_error)?;
-            output
+            let output = unsafe { PyArray1::new(py, [len], false) };
+            let output_addr = output.data() as usize;
+            py.detach(|| unsafe {
+                indicators::midpoint_into(
+                    close,
+                    timeperiod,
+                    std::slice::from_raw_parts_mut(output_addr as *mut f64, len),
+                )
+            })
+            .map_err(value_error)?;
+            return Ok(output);
         }
+        "dema" => {
+            let output = unsafe { PyArray1::new(py, [len], false) };
+            let output_addr = output.data() as usize;
+            py.detach(|| unsafe {
+                moving_avg::dema_into(
+                    close,
+                    timeperiod,
+                    std::slice::from_raw_parts_mut(output_addr as *mut f64, len),
+                )
+            })
+            .map_err(value_error)?;
+            return Ok(output);
+        }
+        "tema" => {
+            let output = unsafe { PyArray1::new(py, [len], false) };
+            let output_addr = output.data() as usize;
+            py.detach(|| unsafe {
+                moving_avg::tema_into(
+                    close,
+                    timeperiod,
+                    std::slice::from_raw_parts_mut(output_addr as *mut f64, len),
+                )
+            })
+            .map_err(value_error)?;
+            return Ok(output);
+        }
+        "rsi" => {
+            let output = unsafe { PyArray1::new(py, [len], false) };
+            let output_addr = output.data() as usize;
+            py.detach(|| unsafe {
+                indicators::rsi_into(
+                    close,
+                    timeperiod,
+                    std::slice::from_raw_parts_mut(output_addr as *mut f64, len),
+                )
+            })
+            .map_err(value_error)?;
+            return Ok(output);
+        }
+        "roc" => {
+            let output = unsafe { PyArray1::new(py, [len], false) };
+            let output_addr = output.data() as usize;
+            py.detach(|| unsafe {
+                indicators::roc_into(
+                    close,
+                    timeperiod,
+                    std::slice::from_raw_parts_mut(output_addr as *mut f64, len),
+                )
+            })
+            .map_err(value_error)?;
+            return Ok(output);
+        }
+        "cmo" => {
+            let output = unsafe { PyArray1::new(py, [len], false) };
+            let output_addr = output.data() as usize;
+            py.detach(|| unsafe {
+                indicators::cmo_fast_into(
+                    close,
+                    timeperiod,
+                    std::slice::from_raw_parts_mut(output_addr as *mut f64, len),
+                )
+            })
+            .map_err(value_error)?;
+            return Ok(output);
+        }
+        _ => {}
+    }
+
+    let output = match operation {
         "mom" => {
             validate_period(close.len(), timeperiod)?;
             py.detach(|| mom_vec(close, timeperiod))
-        }
-        "dema" => py
-            .detach(|| moving_avg::dema(close, timeperiod))
-            .map_err(value_error)?
-            .into_raw_vec(),
-        "tema" => py
-            .detach(|| moving_avg::tema(close, timeperiod))
-            .map_err(value_error)?
-            .into_raw_vec(),
-        "rsi" => py
-            .detach(|| indicators::rsi(close, timeperiod))
-            .map_err(value_error)?
-            .into_raw_vec(),
-        "roc" => py
-            .detach(|| indicators::roc(close, timeperiod))
-            .map_err(value_error)?
-            .into_raw_vec(),
-        "cmo" => {
-            let mut output = vec![0.0; close.len()];
-            py.detach(|| indicators::cmo_fast_into(close, timeperiod, &mut output))
-                .map_err(value_error)?;
-            output
         }
         _ => {
             return Err(value_error(format!(
