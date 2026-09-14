@@ -79,6 +79,22 @@ def test_architecture_v3_benchmark_surface_uses_direct_ndarrays():
         assert result.shape == close.shape
 
 
+def test_default_mom_dispatch_preserves_keyword_and_normalized_inputs():
+    close = np.linspace(10.0, 30.0, 128, dtype=np.float64)
+    expected = finkit.mom(close, 10)
+
+    np.testing.assert_allclose(finkit.mom(close), expected, equal_nan=True)
+    np.testing.assert_allclose(finkit.mom(close, timeperiod=10), expected, equal_nan=True)
+    np.testing.assert_allclose(finkit.mom(close.tolist(), 10), expected, equal_nan=True)
+
+    non_contiguous = np.arange(256.0, dtype=np.float64)[::2]
+    np.testing.assert_allclose(
+        finkit.mom(non_contiguous, timeperiod=10),
+        finkit.mom(np.ascontiguousarray(non_contiguous), timeperiod=10),
+        equal_nan=True,
+    )
+
+
 def test_fast_moving_averages_preserve_existing_numerical_contract():
     close = np.arange(1.0, 65.0, dtype=np.float64)
     sma = finkit.sma(close, 5)

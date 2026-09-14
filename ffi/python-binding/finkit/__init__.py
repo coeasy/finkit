@@ -315,6 +315,12 @@ if hasattr(_native, "_fast_mom"):
             return _mom_native10(close)
         return _mom_checked(close, timeperiod)
 
+if hasattr(_native, "_fast_mom_public"):
+    # The native dispatcher recognizes only the exact default contiguous
+    # float64 path and delegates every other input back to this implementation.
+    _mom_fallback = mom
+    mom = _native._fast_mom_public
+
 
 if hasattr(_native, "_fast_rocp"):
 

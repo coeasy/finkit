@@ -10,6 +10,7 @@ use ::finkit::math::{
 };
 use numpy::{PyArray1, PyArrayMethods, PyReadonlyArray1, PyReadwriteArray1, PyUntypedArrayMethods};
 use pyo3::prelude::*;
+use pyo3::types::PyInt;
 use std::mem::{forget, MaybeUninit};
 use std::slice;
 
@@ -519,6 +520,40 @@ fn fast_mom10<'py>(
         });
     }
     Ok(output)
+}
+
+/// Public MOM dispatcher for the default period.
+///
+/// The Python wrapper is intentionally bypassed only for the benchmark-critical
+/// `float64`, one-dimensional, contiguous NumPy input. Every other input is
+/// delegated back to that wrapper so its coercion and error semantics stay the
+/// public API contract.
+#[pyfunction(name = "_fast_mom_public")]
+#[pyo3(signature = (close, timeperiod = None))]
+fn fast_mom_public(
+    py: Python<'_>,
+    close: &Bound<'_, PyAny>,
+    timeperiod: Option<&Bound<'_, PyAny>>,
+) -> PyResult<Py<PyAny>> {
+    let default_period = PyInt::new(py, 10);
+    let timeperiod = timeperiod.unwrap_or(default_period.as_any());
+
+    if timeperiod.is_instance_of::<PyInt>() {
+        if let Ok(period) = timeperiod.extract::<usize>() {
+            if period == 10 {
+                if let Ok(close) = close.cast::<PyArray1<f64>>() {
+                    if close.is_c_contiguous() && close.len() >= 10 {
+                        return fast_mom10(py, close).map(|output| output.into_any().unbind());
+                    }
+                }
+            }
+        }
+    }
+
+    py.import("finkit")?
+        .getattr("_mom_fallback")?
+        .call1((close, timeperiod))
+        .map(|result| result.unbind())
 }
 
 #[pyfunction(name = "_fast_unary_period")]
@@ -1526,6 +1561,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(fast_vwap_into, m)?)?;
     m.add_function(wrap_pyfunction!(fast_mom, m)?)?;
     m.add_function(wrap_pyfunction!(fast_mom10, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_mom_public, m)?)?;
     m.add_function(wrap_pyfunction!(fast_rocp, m)?)?;
     m.add_function(wrap_pyfunction!(fast_rocr, m)?)?;
     m.add_function(wrap_pyfunction!(fast_rocr100, m)?)?;
