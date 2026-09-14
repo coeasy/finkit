@@ -3513,65 +3513,68 @@ unsafe fn mom10_avx2(input: &[f64], result: &mut [f64]) {
         *r = f64::NAN;
     }
 
-    let current_ptr = input.as_ptr().add(PERIOD);
-    let previous_ptr = input.as_ptr();
-    let out_ptr = result.as_mut_ptr().add(PERIOD);
-    let unrolled_end = PERIOD + ((len - PERIOD) / 32) * 32;
-    let mut i = PERIOD;
-    while i < unrolled_end {
-        let v0 = _mm256_sub_pd(
-            _mm256_loadu_pd(current_ptr.add(i - PERIOD)),
-            _mm256_loadu_pd(previous_ptr.add(i - PERIOD)),
-        );
+    let mut current_ptr = input.as_ptr().add(PERIOD);
+    let mut previous_ptr = input.as_ptr();
+    let mut out_ptr = result.as_mut_ptr().add(PERIOD);
+    let mut remaining = len - PERIOD;
+    while remaining >= 32 {
+        let v0 = _mm256_sub_pd(_mm256_loadu_pd(current_ptr), _mm256_loadu_pd(previous_ptr));
         let v1 = _mm256_sub_pd(
-            _mm256_loadu_pd(current_ptr.add(i + 4 - PERIOD)),
-            _mm256_loadu_pd(previous_ptr.add(i + 4 - PERIOD)),
+            _mm256_loadu_pd(current_ptr.add(4)),
+            _mm256_loadu_pd(previous_ptr.add(4)),
         );
         let v2 = _mm256_sub_pd(
-            _mm256_loadu_pd(current_ptr.add(i + 8 - PERIOD)),
-            _mm256_loadu_pd(previous_ptr.add(i + 8 - PERIOD)),
+            _mm256_loadu_pd(current_ptr.add(8)),
+            _mm256_loadu_pd(previous_ptr.add(8)),
         );
         let v3 = _mm256_sub_pd(
-            _mm256_loadu_pd(current_ptr.add(i + 12 - PERIOD)),
-            _mm256_loadu_pd(previous_ptr.add(i + 12 - PERIOD)),
+            _mm256_loadu_pd(current_ptr.add(12)),
+            _mm256_loadu_pd(previous_ptr.add(12)),
         );
         let v4 = _mm256_sub_pd(
-            _mm256_loadu_pd(current_ptr.add(i + 16 - PERIOD)),
-            _mm256_loadu_pd(previous_ptr.add(i + 16 - PERIOD)),
+            _mm256_loadu_pd(current_ptr.add(16)),
+            _mm256_loadu_pd(previous_ptr.add(16)),
         );
         let v5 = _mm256_sub_pd(
-            _mm256_loadu_pd(current_ptr.add(i + 20 - PERIOD)),
-            _mm256_loadu_pd(previous_ptr.add(i + 20 - PERIOD)),
+            _mm256_loadu_pd(current_ptr.add(20)),
+            _mm256_loadu_pd(previous_ptr.add(20)),
         );
         let v6 = _mm256_sub_pd(
-            _mm256_loadu_pd(current_ptr.add(i + 24 - PERIOD)),
-            _mm256_loadu_pd(previous_ptr.add(i + 24 - PERIOD)),
+            _mm256_loadu_pd(current_ptr.add(24)),
+            _mm256_loadu_pd(previous_ptr.add(24)),
         );
         let v7 = _mm256_sub_pd(
-            _mm256_loadu_pd(current_ptr.add(i + 28 - PERIOD)),
-            _mm256_loadu_pd(previous_ptr.add(i + 28 - PERIOD)),
+            _mm256_loadu_pd(current_ptr.add(28)),
+            _mm256_loadu_pd(previous_ptr.add(28)),
         );
-        _mm256_storeu_pd(out_ptr.add(i - PERIOD), v0);
-        _mm256_storeu_pd(out_ptr.add(i + 4 - PERIOD), v1);
-        _mm256_storeu_pd(out_ptr.add(i + 8 - PERIOD), v2);
-        _mm256_storeu_pd(out_ptr.add(i + 12 - PERIOD), v3);
-        _mm256_storeu_pd(out_ptr.add(i + 16 - PERIOD), v4);
-        _mm256_storeu_pd(out_ptr.add(i + 20 - PERIOD), v5);
-        _mm256_storeu_pd(out_ptr.add(i + 24 - PERIOD), v6);
-        _mm256_storeu_pd(out_ptr.add(i + 28 - PERIOD), v7);
-        i += 32;
+        _mm256_storeu_pd(out_ptr, v0);
+        _mm256_storeu_pd(out_ptr.add(4), v1);
+        _mm256_storeu_pd(out_ptr.add(8), v2);
+        _mm256_storeu_pd(out_ptr.add(12), v3);
+        _mm256_storeu_pd(out_ptr.add(16), v4);
+        _mm256_storeu_pd(out_ptr.add(20), v5);
+        _mm256_storeu_pd(out_ptr.add(24), v6);
+        _mm256_storeu_pd(out_ptr.add(28), v7);
+        current_ptr = current_ptr.add(32);
+        previous_ptr = previous_ptr.add(32);
+        out_ptr = out_ptr.add(32);
+        remaining -= 32;
     }
-    while i + 3 < len {
-        let offset = i - PERIOD;
-        let current = _mm256_loadu_pd(current_ptr.add(offset));
-        let previous = _mm256_loadu_pd(previous_ptr.add(offset));
-        _mm256_storeu_pd(out_ptr.add(offset), _mm256_sub_pd(current, previous));
-        i += 4;
+    while remaining >= 4 {
+        let current = _mm256_loadu_pd(current_ptr);
+        let previous = _mm256_loadu_pd(previous_ptr);
+        _mm256_storeu_pd(out_ptr, _mm256_sub_pd(current, previous));
+        current_ptr = current_ptr.add(4);
+        previous_ptr = previous_ptr.add(4);
+        out_ptr = out_ptr.add(4);
+        remaining -= 4;
     }
-    while i < len {
-        let offset = i - PERIOD;
-        *out_ptr.add(offset) = *current_ptr.add(offset) - *previous_ptr.add(offset);
-        i += 1;
+    while remaining != 0 {
+        *out_ptr = *current_ptr - *previous_ptr;
+        current_ptr = current_ptr.add(1);
+        previous_ptr = previous_ptr.add(1);
+        out_ptr = out_ptr.add(1);
+        remaining -= 1;
     }
 }
 
