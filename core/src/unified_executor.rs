@@ -246,6 +246,9 @@ impl<D: KernelDispatcher> UnifiedExecutor<D> {
         range: Range<usize>,
     ) -> Result<ExecutionOutput, ExecuteError> {
         let logical_len = range.end - range.start;
+        if let Some(slot) = self.plan.output_layout().duplicate_slot() {
+            return Err(ExecuteError::AliasedOutput(slot));
+        }
         let mut buffers = self
             .plan
             .buffer_layout()
@@ -277,13 +280,8 @@ impl<D: KernelDispatcher> UnifiedExecutor<D> {
                 )?;
             }
 
-            let mut seen = vec![false; buffers.len()];
             let mut values = Vec::with_capacity(self.plan.output_layout().len());
             for &(_, slot) in self.plan.output_layout().outputs() {
-                if seen[slot.0] {
-                    return Err(ExecuteError::AliasedOutput(slot));
-                }
-                seen[slot.0] = true;
                 values.push(std::mem::take(&mut buffers[slot.0]));
             }
             Ok(ExecutionOutput { values })

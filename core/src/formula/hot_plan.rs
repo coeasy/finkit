@@ -9,10 +9,10 @@ use super::ast::AstNode;
 use super::compute_ir::FormulaComputePlan;
 use crate::compute::{ComputeNode, ComputeNodeId, ComputePlan, ComputePlanError};
 use crate::execution_plan::{
-    HotExecutionPlan, HotPlanError, ParameterArena, ParameterRange, ParameterValue,
+    HotExecutionPlan, HotPlanError, InputSlot, ParameterArena, ParameterRange, ParameterValue,
 };
 use crate::registry::FunctionRegistry;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 /// Fully compiled Formula Architecture v3 plan.
@@ -20,6 +20,29 @@ use std::fmt;
 pub struct FormulaHotPlan {
     semantic: FormulaComputePlan,
     hot: HotExecutionPlan,
+    input_bindings: Vec<FormulaInputBinding>,
+}
+
+/// Compile-time binding from a formula variable to a numeric input slot.
+///
+/// Keeping this mapping in the hot plan avoids walking the semantic DAG and
+/// resolving BTreeMap-backed slots on every repeated formula evaluation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FormulaInputBinding {
+    name: String,
+    slot: InputSlot,
+}
+
+impl FormulaInputBinding {
+    /// Formula-context variable name, without the `VARIABLE:` operation prefix.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Numeric input slot consumed by the unified executor.
+    pub const fn slot(&self) -> InputSlot {
+        self.slot
+    }
 }
 
 impl FormulaHotPlan {
@@ -34,7 +57,12 @@ impl FormulaHotPlan {
             parameters,
             ranges,
         )?;
-        Ok(Self { semantic, hot })
+        let input_bindings = compile_input_bindings(&semantic, &hot);
+        Ok(Self {
+            semantic,
+            hot,
+            input_bindings,
+        })
     }
 
     /// Compile with an explicit registry while keeping the same hot-plan ABI.
@@ -51,7 +79,12 @@ impl FormulaHotPlan {
             parameters,
             ranges,
         )?;
-        Ok(Self { semantic, hot })
+        let input_bindings = compile_input_bindings(&semantic, &hot);
+        Ok(Self {
+            semantic,
+            hot,
+            input_bindings,
+        })
     }
 
     /// Logical DAG retained for diagnostics, optimizer passes and tooling.
@@ -63,6 +96,42 @@ impl FormulaHotPlan {
     pub const fn hot(&self) -> &HotExecutionPlan {
         &self.hot
     }
+
+    /// Pre-resolved formula-variable bindings used by repeated evaluations.
+    pub fn input_bindings(&self) -> &[FormulaInputBinding] {
+        &self.input_bindings
+    }
+}
+
+fn compile_input_bindings(
+    semantic: &FormulaComputePlan,
+    hot: &HotExecutionPlan,
+) -> Vec<FormulaInputBinding> {
+    let mut seen = BTreeSet::new();
+    let mut bindings = Vec::new();
+    for &node_id in semantic.plan().execution_order() {
+        let Some(node) = semantic.plan().node(node_id) else {
+            continue;
+        };
+        let Some(name) = node.operation.strip_prefix("VARIABLE:") else {
+            continue;
+        };
+        if !seen.insert(name.to_string()) {
+            continue;
+        }
+        let Some(slot) = hot
+            .input_layout()
+            .slot(node_id)
+            .or_else(|| hot.input_layout().slot_for_operation(&node.operation))
+        else {
+            continue;
+        };
+        bindings.push(FormulaInputBinding {
+            name: name.to_string(),
+            slot,
+        });
+    }
+    bindings
 }
 
 /// Compile-time common-subexpression elimination for the numeric hot plan.
@@ -288,7 +357,7 @@ impl std::error::Error for FormulaHotPlanError {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::execution_plan::ParameterSlot;
+    use crate::execution_plan::{InputSlot, ParameterSlot};
     use crate::formula::parse_formula;
 
     #[test]
@@ -391,5 +460,15 @@ mod tests {
         assert_eq!(number_nodes.len(), 2);
         assert_eq!(number_nodes[0].parameters.len, 1);
         assert_eq!(number_nodes[1].parameters.len, 1);
+    }
+
+    #[test]
+    fn input_bindings_are_precompiled_and_deduplicated() {
+        let ast = parse_formula("EMA(CLOSE, 12) + ROC(CLOSE, 10)").unwrap();
+        let compiled = FormulaHotPlan::compile(&ast).unwrap();
+
+        assert_eq!(compiled.input_bindings().len(), 1);
+        assert_eq!(compiled.input_bindings()[0].name(), "CLOSE");
+        assert_eq!(compiled.input_bindings()[0].slot(), InputSlot(0));
     }
 }

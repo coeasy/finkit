@@ -243,23 +243,15 @@ impl FormulaEngine {
             return None;
         }
 
-        let mut inputs: Vec<Option<&[f64]>> = vec![None; plan.hot().input_layout().len()];
-        for &node_id in plan.semantic().plan().execution_order() {
-            let node = plan.semantic().plan().node(node_id)?;
-            let Some(name) = node.operation.strip_prefix("VARIABLE:") else {
-                // NUMBER and other compile-time nodes are represented by the
-                // immutable parameter arena, not by runtime input slots.
-                continue;
-            };
-            let slot = plan.hot().input_layout().slot(node_id).or_else(|| {
-                plan.hot()
-                    .input_layout()
-                    .slot_for_operation(&node.operation)
-            })?;
-            let values = ctx.get_data(name)?;
-            inputs[slot.0] = Some(values);
+        let input_count = plan.hot().input_layout().len();
+        if plan.input_bindings().len() != input_count {
+            return None;
         }
-        let inputs: Vec<&[f64]> = inputs.into_iter().collect::<Option<_>>()?;
+        let mut inputs: Vec<&[f64]> = vec![&[]; input_count];
+        for binding in plan.input_bindings() {
+            let values = ctx.get_data(binding.name())?;
+            *inputs.get_mut(binding.slot().0)? = values;
+        }
         let mut executors = self.hot_executor_cache.borrow_mut();
         let executor = executors.get_mut(&formula.source)?;
         let output = match executor.execute(&inputs) {

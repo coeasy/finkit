@@ -232,6 +232,7 @@ impl InputLayout {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct OutputLayout {
     outputs: Vec<(ComputeNodeId, BufferSlot)>,
+    duplicate_slot: Option<BufferSlot>,
 }
 
 impl OutputLayout {
@@ -249,7 +250,20 @@ impl OutputLayout {
                     .ok_or(HotPlanError::MissingBufferSlot(node))
             })
             .collect::<Result<Vec<_>, _>>()?;
-        Ok(Self { outputs })
+        let mut duplicate_slot = None;
+        'outer: for (index, &(_, slot)) in outputs.iter().enumerate() {
+            if outputs[..index]
+                .iter()
+                .any(|&(_, previous)| previous == slot)
+            {
+                duplicate_slot = Some(slot);
+                break 'outer;
+            }
+        }
+        Ok(Self {
+            outputs,
+            duplicate_slot,
+        })
     }
 
     /// Retained outputs in frontend-requested order.
@@ -265,6 +279,11 @@ impl OutputLayout {
     /// Whether no outputs were retained.
     pub fn is_empty(&self) -> bool {
         self.outputs.is_empty()
+    }
+
+    /// Return a duplicate physical output slot, if the retained layout aliases.
+    pub const fn duplicate_slot(&self) -> Option<BufferSlot> {
+        self.duplicate_slot
     }
 }
 
