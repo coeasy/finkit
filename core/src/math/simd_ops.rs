@@ -3481,10 +3481,12 @@ pub fn simd_mom(input: &[f64], period: usize, result: &mut [f64]) {
 pub fn simd_mom10(input: &[f64], result: &mut [f64]) {
     #[cfg(all(feature = "std", target_arch = "x86_64"))]
     {
-        if is_x86_feature_detected!("avx512f") {
-            return crate::math::simd_ops_avx512::simd512_mom10(input, result);
+        static AVX512: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        if *AVX512.get_or_init(|| is_x86_feature_detected!("avx512f")) {
+            return unsafe { crate::math::simd_ops_avx512::simd512_mom10_unchecked(input, result) };
         }
-        if is_x86_feature_detected!("avx2") {
+        static AVX2: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        if *AVX2.get_or_init(|| is_x86_feature_detected!("avx2")) {
             return unsafe { mom10_avx2(input, result) };
         }
         return unsafe { mom10_sse2(input, result) };

@@ -76,6 +76,12 @@ pub fn simd512_mom10(input: &[f64], result: &mut [f64]) {
 }
 
 #[cfg(all(feature = "std", target_arch = "x86_64"))]
+#[inline]
+pub(crate) unsafe fn simd512_mom10_unchecked(input: &[f64], result: &mut [f64]) {
+    mom10_avx512(input, result);
+}
+
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
 #[target_feature(enable = "avx512f")]
 unsafe fn mom10_avx512(input: &[f64], result: &mut [f64]) {
     use core::arch::x86_64::*;
