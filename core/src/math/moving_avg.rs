@@ -156,6 +156,58 @@ pub fn sma_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> 
     Ok(())
 }
 
+/// Compute the benchmark-critical SMA20 path without per-sample bounds checks.
+///
+/// This preserves the generic implementation's summation order and output
+/// contract while keeping the fixed-period hot loop small enough for short
+/// NumPy calls, where validation and loop overhead are a material fraction of
+/// the total runtime.
+#[inline]
+pub fn sma20_into(input: &[f64], output: &mut [f64]) -> Result<()> {
+    const PERIOD: usize = 20;
+    if input.len() < PERIOD {
+        return Err(TaError::InsufficientData {
+            length: input.len(),
+            required: PERIOD,
+        });
+    }
+    if output.len() != input.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
+
+    crate::utils::simd_fill_nan(&mut output[..PERIOD - 1]);
+    let inv_period = 1.0 / PERIOD as f64;
+    let mut sum = simd_horizontal_sum(&input[..PERIOD]);
+    output[PERIOD - 1] = sum * inv_period;
+
+    let mut i = PERIOD;
+    while i + 4 <= input.len() {
+        unsafe {
+            sum += *input.get_unchecked(i) - *input.get_unchecked(i - PERIOD);
+            *output.get_unchecked_mut(i) = sum * inv_period;
+            sum += *input.get_unchecked(i + 1) - *input.get_unchecked(i + 1 - PERIOD);
+            *output.get_unchecked_mut(i + 1) = sum * inv_period;
+            sum += *input.get_unchecked(i + 2) - *input.get_unchecked(i + 2 - PERIOD);
+            *output.get_unchecked_mut(i + 2) = sum * inv_period;
+            sum += *input.get_unchecked(i + 3) - *input.get_unchecked(i + 3 - PERIOD);
+            *output.get_unchecked_mut(i + 3) = sum * inv_period;
+        }
+        i += 4;
+    }
+    while i < input.len() {
+        unsafe {
+            sum += *input.get_unchecked(i) - *input.get_unchecked(i - PERIOD);
+            *output.get_unchecked_mut(i) = sum * inv_period;
+        }
+        i += 1;
+    }
+
+    Ok(())
+}
+
 /// Exponential Moving Average (EMA)
 ///
 /// Applies more weight to recent prices using exponential smoothing.
@@ -2162,6 +2214,15 @@ mod tests {
         let expected = sma(&input, 3).unwrap();
         let mut output = vec![0.0; input.len()];
         sma_into(&input, 3, &mut output).unwrap();
+        assert_slices_match(&expected, &output);
+    }
+
+    #[test]
+    fn test_sma20_into_matches_generic_sma() {
+        let input: Vec<f64> = (0..97).map(|i| (i as f64 * 0.37).sin()).collect();
+        let expected = sma(&input, 20).unwrap();
+        let mut output = vec![0.0; input.len()];
+        sma20_into(&input, &mut output).unwrap();
         assert_slices_match(&expected, &output);
     }
 

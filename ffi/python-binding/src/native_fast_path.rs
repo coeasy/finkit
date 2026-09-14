@@ -213,11 +213,12 @@ fn fast_sma<'py>(
     let output = unsafe { PyArray1::new(py, [len], false) };
     let output_addr = output.data() as usize;
     let compute = || unsafe {
-        moving_avg::sma_into(
-            close,
-            timeperiod,
-            std::slice::from_raw_parts_mut(output_addr as *mut f64, len),
-        )
+        let output = std::slice::from_raw_parts_mut(output_addr as *mut f64, len);
+        if timeperiod == 20 {
+            moving_avg::sma20_into(close, output)
+        } else {
+            moving_avg::sma_into(close, timeperiod, output)
+        }
     };
     let result = if len <= 16_384 {
         compute()
@@ -238,7 +239,13 @@ fn fast_sma_into(
 ) -> PyResult<()> {
     let close = close.as_slice().map_err(value_error)?;
     let output = output.as_slice_mut().map_err(value_error)?;
-    let mut compute = || moving_avg::sma_into(close, timeperiod, output);
+    let mut compute = || {
+        if timeperiod == 20 {
+            moving_avg::sma20_into(close, output)
+        } else {
+            moving_avg::sma_into(close, timeperiod, output)
+        }
+    };
     if close.len() <= 16_384 {
         compute().map_err(value_error)
     } else {
