@@ -13,6 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 LIB = ROOT / "ffi" / "python-binding" / "src" / "lib.rs"
+GENERATED = ROOT / "ffi" / "python-binding" / "src" / "generated.rs"
 MARKER = "// ============================================================================\n// Formula System\n// ============================================================================"
 
 WRAPPERS = r'''
@@ -73,6 +74,12 @@ def main() -> int:
     text = LIB.read_text(encoding="utf-8")
     have_cfo = "fn chande_forecast_oscillator(" in text
     have_tmf = "fn twiggs_money_flow(" in text
+    generated = GENERATED.read_text(encoding="utf-8") if GENERATED.exists() else ""
+    generated_cfo = "fn chande_forecast_oscillator(" in generated
+    generated_tmf = "fn twiggs_money_flow(" in generated
+    if not have_cfo and not have_tmf and generated_cfo and generated_tmf:
+        print("Python CFO/TMF wrappers already owned by generated.rs")
+        return 0
     if have_cfo and have_tmf:
         print("Python CFO/TMF lib.rs wrappers already present")
         return 0
