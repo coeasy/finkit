@@ -3470,6 +3470,26 @@ pub fn simd_mom(input: &[f64], period: usize, result: &mut [f64]) {
     mom_scalar(input, period, result)
 }
 
+/// Fixed-period MOM dispatcher for the public default period.
+///
+/// The Python binding already validates the default period before entering
+/// native code. Keeping this entry point period-free removes one branch and
+/// the generic dispatcher call from the short-input release-gate path while
+/// preserving the same SIMD/scalar fallback hierarchy as [`simd_mom`].
+#[cfg(feature = "std")]
+#[inline(always)]
+pub fn simd_mom10(input: &[f64], result: &mut [f64]) {
+    #[cfg(all(feature = "std", target_arch = "x86_64"))]
+    {
+        if is_x86_feature_detected!("avx2") {
+            return unsafe { mom10_avx2(input, result) };
+        }
+        return unsafe { mom_sse2(input, 10, result) };
+    }
+    #[cfg(not(all(feature = "std", target_arch = "x86_64")))]
+    mom_scalar(input, 10, result)
+}
+
 /// Fixed-period MOM kernel for the public default (10 bars).
 ///
 /// The general AVX2 kernel must subtract a runtime period for every vector.
@@ -4571,6 +4591,30 @@ mod tests {
         let mut result = [0.0; 2];
         simd_typical_price(&high, &low, &close, &mut result);
         assert!((result[0] - 50.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn fixed_mom10_matches_generic_dispatch() {
+        let input: Vec<f64> = (0..128)
+            .map(|index| (index as f64 * 0.37).sin() * 10.0 + index as f64)
+            .collect();
+        let mut fixed = vec![0.0; input.len()];
+        let mut generic = vec![0.0; input.len()];
+
+        simd_mom10(&input, &mut fixed);
+        simd_mom(&input, 10, &mut generic);
+
+        for (index, (&fixed_value, &generic_value)) in fixed.iter().zip(&generic).enumerate() {
+            if index < 10 {
+                assert!(fixed_value.is_nan(), "fixed index={index}");
+                assert!(generic_value.is_nan(), "generic index={index}");
+            } else {
+                assert!(
+                    (fixed_value - generic_value).abs() < 1e-12,
+                    "index={index} fixed={fixed_value} generic={generic_value}"
+                );
+            }
+        }
     }
 
     #[test]

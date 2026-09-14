@@ -496,9 +496,8 @@ fn fast_mom10<'py>(
     let output = unsafe { PyArray1::new(py, [close.len()], false) };
     let output_addr = output.data() as usize;
     let compute = || unsafe {
-        ::finkit::math::simd_ops::simd_mom(
+        ::finkit::math::simd_ops::simd_mom10(
             close,
-            PERIOD,
             std::slice::from_raw_parts_mut(output_addr as *mut f64, close.len()),
         )
     };
