@@ -286,6 +286,25 @@ if hasattr(_native, "_fast_mom"):
     _mom_checked = _translate_native_errors("mom", _mom_checked)
 
     def mom(close, timeperiod=10):
+        # Keep the common installed-wheel benchmark path at the native
+        # boundary. Non-contiguous arrays, alternate dtypes, Python
+        # sequences, and non-integer periods retain the normalization and
+        # validation behavior below.
+        if (
+            type(timeperiod) is int
+            and isinstance(close, np.ndarray)
+            and close.ndim == 1
+            and close.dtype == np.float64
+            and close.flags.c_contiguous
+        ):
+            if timeperiod == 10 and hasattr(_native, "_fast_mom10"):
+                if close.size < 10:
+                    raise InsufficientDataError(
+                        "input data length is less than required minimum"
+                    )
+                return _native._fast_mom10(close)
+            return _mom_checked(close, timeperiod)
+
         close = _as_contiguous_float64(close)
         if type(timeperiod) is int and timeperiod == 10 and hasattr(
             _native, "_fast_mom10"
