@@ -10,7 +10,7 @@ use ::finkit::math::{
 };
 use numpy::{PyArray1, PyArrayMethods, PyReadonlyArray1, PyReadwriteArray1, PyUntypedArrayMethods};
 use pyo3::prelude::*;
-use pyo3::types::PyInt;
+use pyo3::types::{PyFloat, PyInt};
 use std::mem::{forget, MaybeUninit};
 use std::slice;
 
@@ -1391,6 +1391,16 @@ fn fast_sar<'py>(
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let high = high.as_slice().map_err(value_error)?;
     let low = low.as_slice().map_err(value_error)?;
+    fast_sar_impl(py, high, low, acceleration, maximum)
+}
+
+fn fast_sar_impl<'py>(
+    py: Python<'py>,
+    high: &[f64],
+    low: &[f64],
+    acceleration: f64,
+    maximum: f64,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
     validate_same_len(high.len(), low.len())?;
     let output = unsafe { PyArray1::new(py, [high.len()], false) };
     if high.len() <= 16_384 {
@@ -1419,6 +1429,56 @@ fn fast_sar<'py>(
         .map_err(value_error)?;
     }
     Ok(output)
+}
+
+#[inline]
+fn is_exact_float(value: &Bound<'_, PyAny>, expected: f64) -> bool {
+    value.is_instance_of::<PyFloat>()
+        && value
+            .extract::<f64>()
+            .is_ok_and(|actual| actual.to_bits() == expected.to_bits())
+}
+
+/// Default-parameter public SAR dispatcher.
+///
+/// The benchmark path avoids Python-side normalization only after confirming
+/// both NumPy arrays and default scalar parameters. Every other call returns
+/// to the established wrapper, which retains coercion and error translation.
+#[pyfunction(name = "_fast_sar_public")]
+#[pyo3(signature = (high, low, acceleration = None, maximum = None))]
+fn fast_sar_public(
+    py: Python<'_>,
+    high: &Bound<'_, PyAny>,
+    low: &Bound<'_, PyAny>,
+    acceleration: Option<&Bound<'_, PyAny>>,
+    maximum: Option<&Bound<'_, PyAny>>,
+) -> PyResult<Py<PyAny>> {
+    let default_acceleration = PyFloat::new(py, 0.02);
+    let default_maximum = PyFloat::new(py, 0.2);
+    let acceleration = acceleration.unwrap_or(default_acceleration.as_any());
+    let maximum = maximum.unwrap_or(default_maximum.as_any());
+
+    if is_exact_float(acceleration, 0.02) && is_exact_float(maximum, 0.2) {
+        if let (Ok(high), Ok(low)) = (high.cast::<PyArray1<f64>>(), low.cast::<PyArray1<f64>>()) {
+            if high.is_c_contiguous()
+                && low.is_c_contiguous()
+                && high.len() >= 2
+                && high.len() == low.len()
+            {
+                let high = high.readonly();
+                let low = low.readonly();
+                let high = high.as_slice().map_err(value_error)?;
+                let low = low.as_slice().map_err(value_error)?;
+                return fast_sar_impl(py, high, low, 0.02, 0.2)
+                    .map(|output| output.into_any().unbind());
+            }
+        }
+    }
+
+    py.import("finkit")?
+        .getattr("_sar_fallback")?
+        .call1((high, low, acceleration, maximum))
+        .map(|result| result.unbind())
 }
 
 #[pyfunction(name = "_fast_macd")]
@@ -1592,6 +1652,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(fast_ht_trendmode, m)?)?;
     m.add_function(wrap_pyfunction!(fast_bbands, m)?)?;
     m.add_function(wrap_pyfunction!(fast_sar, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_sar_public, m)?)?;
     m.add_function(wrap_pyfunction!(fast_macd, m)?)?;
     m.add_function(wrap_pyfunction!(fast_stoch, m)?)?;
     m.add_function(wrap_pyfunction!(reduce_sum_f64, m)?)?;

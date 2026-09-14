@@ -689,6 +689,10 @@ elif "sar" in globals():
             return result[0]
         return result
 
+if hasattr(_native, "_fast_sar_public"):
+    _sar_fallback = sar
+    sar = _native._fast_sar_public
+
 if hasattr(_native, "_fast_macd"):
 
     def macd(close, fastperiod=12, slowperiod=26, signalperiod=9):
