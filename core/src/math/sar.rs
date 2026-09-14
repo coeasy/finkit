@@ -335,10 +335,14 @@ pub fn sar_into(
         // million-row path avoids a mutable field reference on every clamp.
         let mut previous_high = state.prev_high;
         let mut previous_low = state.prev_low;
+        let mut high_cursor = high_ptr.add(2);
+        let mut low_cursor = low_ptr.add(2);
+        let mut output_cursor = output_ptr.add(2);
+        let mut remaining = len - 2;
 
-        for index in 2..len {
-            let current_high = *high_ptr.add(index);
-            let current_low = *low_ptr.add(index);
+        while remaining != 0 {
+            let current_high = *high_cursor;
+            let current_low = *low_cursor;
             let output_sar;
 
             if is_long {
@@ -413,7 +417,11 @@ pub fn sar_into(
 
             previous_high = current_high;
             previous_low = current_low;
-            output_ptr.add(index).write(output_sar);
+            output_cursor.write(output_sar);
+            high_cursor = high_cursor.add(1);
+            low_cursor = low_cursor.add(1);
+            output_cursor = output_cursor.add(1);
+            remaining -= 1;
         }
     }
 
