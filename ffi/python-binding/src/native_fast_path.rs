@@ -8,9 +8,10 @@ use ::finkit::indicators;
 use ::finkit::math::{
     moving_avg, reduction, rolling_stats, sar as sar_kernel, typed_moving_avg, volume_kernels,
 };
-use numpy::{PyArray1, PyArrayMethods, PyReadonlyArray1, PyReadwriteArray1};
+use numpy::{PyArray1, PyArrayMethods, PyReadonlyArray1, PyReadwriteArray1, PyUntypedArrayMethods};
 use pyo3::prelude::*;
 use std::mem::{forget, MaybeUninit};
+use std::slice;
 
 #[inline]
 fn value_error(error: impl std::fmt::Display) -> PyErr {
@@ -488,20 +489,24 @@ fn fast_mom<'py>(
 #[pyfunction(name = "_fast_mom10")]
 fn fast_mom10<'py>(
     py: Python<'py>,
-    close: PyReadonlyArray1<'py, f64>,
+    close: &Bound<'py, PyArray1<f64>>,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     const PERIOD: usize = 10;
-    let close = close.as_slice().map_err(value_error)?;
-    validate_period(close.len(), PERIOD)?;
-    let output = unsafe { PyArray1::new(py, [close.len()], false) };
-    if close.len() <= 16_384 {
+    if !close.is_c_contiguous() {
+        return Err(value_error("input array must be C-contiguous"));
+    }
+    let len = close.len();
+    validate_period(len, PERIOD)?;
+    let close = unsafe { slice::from_raw_parts(close.data(), len) };
+    let output = unsafe { PyArray1::new(py, [len], false) };
+    if len <= 16_384 {
         // This is the release-gate short-input path. Calling the kernel
         // directly avoids constructing and invoking a closure, and lets the
         // compiler keep the output pointer in the caller's hot path.
         unsafe {
             ::finkit::math::simd_ops::simd_mom10(
                 close,
-                std::slice::from_raw_parts_mut(output.data(), close.len()),
+                slice::from_raw_parts_mut(output.data(), len),
             )
         };
     } else {
