@@ -439,6 +439,37 @@ pub fn sar_into(
 /// bootstrap, reversal, and clamp ordering of [`sar_into`].
 #[inline(always)]
 fn sar_default_into(high: &[f64], low: &[f64], output: &mut [f64]) -> Result<()> {
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    if is_x86_feature_detected!("fma") {
+        // SAFETY: the runtime feature check immediately above guarantees that
+        // the target feature required by this specialized kernel is present.
+        return unsafe { sar_default_into_fma(high, low, output) };
+    }
+
+    sar_default_into_impl::<false>(high, low, output)
+}
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[target_feature(enable = "fma")]
+unsafe fn sar_default_into_fma(high: &[f64], low: &[f64], output: &mut [f64]) -> Result<()> {
+    sar_default_into_impl::<true>(high, low, output)
+}
+
+#[inline(always)]
+fn sar_default_into_impl<const USE_FMA: bool>(
+    high: &[f64],
+    low: &[f64],
+    output: &mut [f64],
+) -> Result<()> {
+    #[inline(always)]
+    fn update<const USE_FMA: bool>(af: f64, ep: f64, sar: f64) -> f64 {
+        if USE_FMA {
+            af.mul_add(ep - sar, sar)
+        } else {
+            sar + af * (ep - sar)
+        }
+    }
+
     unsafe {
         let high_ptr = high.as_ptr();
         let low_ptr = low.as_ptr();
@@ -480,7 +511,7 @@ fn sar_default_into(high: &[f64], low: &[f64], output: &mut [f64]) -> Result<()>
 
                 af = 0.02;
                 ep = second_low;
-                sar = af.mul_add(ep - sar, sar);
+                sar = update::<USE_FMA>(af, ep, sar);
                 if sar < previous_high {
                     sar = previous_high;
                 }
@@ -493,7 +524,7 @@ fn sar_default_into(high: &[f64], low: &[f64], output: &mut [f64]) -> Result<()>
                     ep = second_high;
                     af = (af + 0.02).min(0.2);
                 }
-                sar = af.mul_add(ep - sar, sar);
+                sar = update::<USE_FMA>(af, ep, sar);
                 if sar > previous_low {
                     sar = previous_low;
                 }
@@ -514,7 +545,7 @@ fn sar_default_into(high: &[f64], low: &[f64], output: &mut [f64]) -> Result<()>
 
             af = 0.02;
             ep = second_high;
-            sar = af.mul_add(ep - sar, sar);
+            sar = update::<USE_FMA>(af, ep, sar);
             if sar > previous_low {
                 sar = previous_low;
             }
@@ -527,7 +558,7 @@ fn sar_default_into(high: &[f64], low: &[f64], output: &mut [f64]) -> Result<()>
                 ep = second_low;
                 af = (af + 0.02).min(0.2);
             }
-            sar = af.mul_add(ep - sar, sar);
+            sar = update::<USE_FMA>(af, ep, sar);
             if sar < previous_high {
                 sar = previous_high;
             }
@@ -563,7 +594,7 @@ fn sar_default_into(high: &[f64], low: &[f64], output: &mut [f64]) -> Result<()>
 
                     af = 0.02;
                     ep = current_low;
-                    sar = af.mul_add(ep - sar, sar);
+                    sar = update::<USE_FMA>(af, ep, sar);
                     if sar < previous_high {
                         sar = previous_high;
                     }
@@ -576,7 +607,7 @@ fn sar_default_into(high: &[f64], low: &[f64], output: &mut [f64]) -> Result<()>
                         ep = current_high;
                         af = (af + 0.02).min(0.2);
                     }
-                    sar = af.mul_add(ep - sar, sar);
+                    sar = update::<USE_FMA>(af, ep, sar);
                     if sar > previous_low {
                         sar = previous_low;
                     }
@@ -597,7 +628,7 @@ fn sar_default_into(high: &[f64], low: &[f64], output: &mut [f64]) -> Result<()>
 
                 af = 0.02;
                 ep = current_high;
-                sar = af.mul_add(ep - sar, sar);
+                sar = update::<USE_FMA>(af, ep, sar);
                 if sar > previous_low {
                     sar = previous_low;
                 }
@@ -610,7 +641,7 @@ fn sar_default_into(high: &[f64], low: &[f64], output: &mut [f64]) -> Result<()>
                     ep = current_low;
                     af = (af + 0.02).min(0.2);
                 }
-                sar = af.mul_add(ep - sar, sar);
+                sar = update::<USE_FMA>(af, ep, sar);
                 if sar < previous_high {
                     sar = previous_high;
                 }
