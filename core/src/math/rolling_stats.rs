@@ -217,68 +217,28 @@ pub fn stddev_rolling_into(
 
     let lookback = period - 1;
     output[..lookback].fill(f64::NAN);
-    let input_ptr = input.as_ptr();
     let output_ptr = output.as_mut_ptr();
-
-    // Keep the TA-Lib update order explicit in this hot path: add the current
-    // sample, observe the window, then remove the trailing sample. The generic
-    // RollingMoments state is ideal for shared kernels, but this fixed output
-    // only needs two scalar accumulators and direct pointer addressing.
-    let mut total = 0.0;
-    let mut total2 = 0.0;
-    for index in 0..period {
-        let value = unsafe { *input_ptr.add(index) };
-        total += value;
-        total2 += value * value;
-    }
+    let mut moments = RollingMoments::new(input, period);
 
     if nb_dev == 1.0 {
-        let period_f = period as f64;
-        let mut index = lookback;
-        loop {
-            let mean = total / period_f;
-            let variance = total2 / period_f - mean * mean;
+        for index in lookback..input.len() {
+            let (_, variance) = moments.next(index);
             let value = if !is_zero_or_negative(variance) {
                 variance.sqrt()
             } else {
                 0.0
             };
             unsafe { *output_ptr.add(index) = value };
-
-            index += 1;
-            if index == input.len() {
-                break;
-            }
-            let current = unsafe { *input_ptr.add(index) };
-            total += current;
-            total2 += current * current;
-            let trailing = unsafe { *input_ptr.add(index - period) };
-            total -= trailing;
-            total2 -= trailing * trailing;
         }
     } else {
-        let period_f = period as f64;
-        let mut index = lookback;
-        loop {
-            let mean = total / period_f;
-            let variance = total2 / period_f - mean * mean;
+        for index in lookback..input.len() {
+            let (_, variance) = moments.next(index);
             let value = if !is_zero_or_negative(variance) {
                 variance.sqrt() * nb_dev
             } else {
                 0.0
             };
             unsafe { *output_ptr.add(index) = value };
-
-            index += 1;
-            if index == input.len() {
-                break;
-            }
-            let current = unsafe { *input_ptr.add(index) };
-            total += current;
-            total2 += current * current;
-            let trailing = unsafe { *input_ptr.add(index - period) };
-            total -= trailing;
-            total2 -= trailing * trailing;
         }
     }
 

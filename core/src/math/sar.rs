@@ -306,6 +306,9 @@ pub fn sar_into(
             constraint: "must have the same length as input".to_string(),
         });
     }
+    if acceleration.to_bits() == 0.02_f64.to_bits() && maximum.to_bits() == 0.2_f64.to_bits() {
+        return sar_default_into(high, low, output);
+    }
     let mut state = SarState::try_new(acceleration, maximum)?;
     let len = high.len();
 
@@ -405,6 +408,207 @@ pub fn sar_into(
                 if current_low < ep {
                     ep = current_low;
                     af = (af + effective_acceleration).min(maximum);
+                }
+                sar += af * (ep - sar);
+                if sar < previous_high {
+                    sar = previous_high;
+                }
+                if sar < current_high {
+                    sar = current_high;
+                }
+            }
+
+            previous_high = current_high;
+            previous_low = current_low;
+            output_cursor.write(output_sar);
+            high_cursor = high_cursor.add(1);
+            low_cursor = low_cursor.add(1);
+            output_cursor = output_cursor.add(1);
+            remaining -= 1;
+        }
+    }
+
+    Ok(())
+}
+
+/// Default-parameter SAR kernel used by the public TA-Lib-compatible path.
+///
+/// The benchmark and the common Python API both use TA-Lib's default
+/// acceleration parameters. Keeping those constants in the transition loop
+/// lets LLVM remove the parameter/state plumbing while retaining the exact
+/// bootstrap, reversal, and clamp ordering of [`sar_into`].
+#[inline(always)]
+fn sar_default_into(high: &[f64], low: &[f64], output: &mut [f64]) -> Result<()> {
+    unsafe {
+        let high_ptr = high.as_ptr();
+        let low_ptr = low.as_ptr();
+        let output_ptr = output.as_mut_ptr();
+        let first_high = *high_ptr;
+        let first_low = *low_ptr;
+        let second_high = *high_ptr.add(1);
+        let second_low = *low_ptr.add(1);
+        output_ptr.write(f64::NAN);
+
+        let diff_p = second_high - first_high;
+        let diff_m = first_low - second_low;
+        let mut is_long = !(diff_m > 0.0 && diff_p < diff_m);
+        let mut af = 0.02;
+        let mut sar;
+        let mut ep;
+        if is_long {
+            ep = second_high;
+            sar = first_low;
+        } else {
+            ep = second_low;
+            sar = first_high;
+        }
+
+        let previous_high = second_high;
+        let previous_low = second_low;
+        let output_sar;
+        if is_long {
+            if second_low <= sar {
+                is_long = false;
+                sar = ep;
+                if sar < previous_high {
+                    sar = previous_high;
+                }
+                if sar < second_high {
+                    sar = second_high;
+                }
+                output_sar = sar;
+
+                af = 0.02;
+                ep = second_low;
+                sar += af * (ep - sar);
+                if sar < previous_high {
+                    sar = previous_high;
+                }
+                if sar < second_high {
+                    sar = second_high;
+                }
+            } else {
+                output_sar = sar;
+                if second_high > ep {
+                    ep = second_high;
+                    af = (af + 0.02).min(0.2);
+                }
+                sar += af * (ep - sar);
+                if sar > previous_low {
+                    sar = previous_low;
+                }
+                if sar > second_low {
+                    sar = second_low;
+                }
+            }
+        } else if second_high >= sar {
+            is_long = true;
+            sar = ep;
+            if sar > previous_low {
+                sar = previous_low;
+            }
+            if sar > second_low {
+                sar = second_low;
+            }
+            output_sar = sar;
+
+            af = 0.02;
+            ep = second_high;
+            sar += af * (ep - sar);
+            if sar > previous_low {
+                sar = previous_low;
+            }
+            if sar > second_low {
+                sar = second_low;
+            }
+        } else {
+            output_sar = sar;
+            if second_low < ep {
+                ep = second_low;
+                af = (af + 0.02).min(0.2);
+            }
+            sar += af * (ep - sar);
+            if sar < previous_high {
+                sar = previous_high;
+            }
+            if sar < second_high {
+                sar = second_high;
+            }
+        }
+        output_ptr.add(1).write(output_sar);
+
+        let mut previous_high = second_high;
+        let mut previous_low = second_low;
+        let mut high_cursor = high_ptr.add(2);
+        let mut low_cursor = low_ptr.add(2);
+        let mut output_cursor = output_ptr.add(2);
+        let mut remaining = high.len() - 2;
+
+        while remaining != 0 {
+            let current_high = *high_cursor;
+            let current_low = *low_cursor;
+            let output_sar;
+
+            if is_long {
+                if current_low <= sar {
+                    is_long = false;
+                    sar = ep;
+                    if sar < previous_high {
+                        sar = previous_high;
+                    }
+                    if sar < current_high {
+                        sar = current_high;
+                    }
+                    output_sar = sar;
+
+                    af = 0.02;
+                    ep = current_low;
+                    sar += af * (ep - sar);
+                    if sar < previous_high {
+                        sar = previous_high;
+                    }
+                    if sar < current_high {
+                        sar = current_high;
+                    }
+                } else {
+                    output_sar = sar;
+                    if current_high > ep {
+                        ep = current_high;
+                        af = (af + 0.02).min(0.2);
+                    }
+                    sar += af * (ep - sar);
+                    if sar > previous_low {
+                        sar = previous_low;
+                    }
+                    if sar > current_low {
+                        sar = current_low;
+                    }
+                }
+            } else if current_high >= sar {
+                is_long = true;
+                sar = ep;
+                if sar > previous_low {
+                    sar = previous_low;
+                }
+                if sar > current_low {
+                    sar = current_low;
+                }
+                output_sar = sar;
+
+                af = 0.02;
+                ep = current_high;
+                sar += af * (ep - sar);
+                if sar > previous_low {
+                    sar = previous_low;
+                }
+                if sar > current_low {
+                    sar = current_low;
+                }
+            } else {
+                output_sar = sar;
+                if current_low < ep {
+                    ep = current_low;
+                    af = (af + 0.02).min(0.2);
                 }
                 sar += af * (ep - sar);
                 if sar < previous_high {
