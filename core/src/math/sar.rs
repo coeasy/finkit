@@ -708,4 +708,27 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn default_batch_kernel_matches_state_across_reversals() {
+        let high = [
+            10.0, 11.0, 12.5, 13.0, 11.5, 10.0, 9.0, 8.5, 9.5, 11.0, 12.0, 10.5, 9.0, 7.5, 8.5,
+            10.0, 11.5, 10.0, 8.5, 7.0, 8.0, 9.5, 11.0, 12.0,
+        ];
+        let low = [
+            9.0, 10.0, 11.2, 12.0, 10.5, 9.0, 8.0, 7.5, 8.5, 10.0, 11.0, 9.5, 8.0, 6.5, 7.5, 9.0,
+            10.5, 9.0, 7.5, 6.0, 7.0, 8.5, 10.0, 11.0,
+        ];
+
+        let batch = sar(&high, &low, 0.02, 0.2).unwrap();
+        let mut state = SarState::try_new(0.02, 0.2).unwrap();
+        for (index, (&bar_high, &bar_low)) in high.iter().zip(low.iter()).enumerate() {
+            let expected = state.next(bar_high, bar_low).sar;
+            if expected.is_nan() {
+                assert!(batch[index].is_nan());
+            } else {
+                assert_eq!(batch[index], expected);
+            }
+        }
+    }
 }
