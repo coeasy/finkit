@@ -500,7 +500,10 @@ fn fast_mom10<'py>(
     validate_period(len, PERIOD)?;
     let close = unsafe { slice::from_raw_parts(close.data(), len) };
     let output = unsafe { PyArray1::new(py, [len], false) };
-    if len <= 16_384 {
+    // MOM10 is a very small, bandwidth-bound kernel.  For medium arrays the
+    // GIL hand-off costs more than the subtraction loop, so keep the GIL for
+    // the release-gate's 100K path and detach only for genuinely large work.
+    if len <= 262_144 {
         // This is the release-gate short-input path. Calling the kernel
         // directly avoids constructing and invoking a closure, and lets the
         // compiler keep the output pointer in the caller's hot path.
