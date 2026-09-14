@@ -93,6 +93,7 @@ For exact supported functions and Pine mappings, prefer the generated catalogs o
 | [architecture/overview.md](architecture/overview.md) | Crate/binding architecture |
 | [architecture/dataflow.md](architecture/dataflow.md) | Batch, streaming, formula and binding data flow |
 | [architecture/formula-engine.md](architecture/formula-engine.md) | Formula parser/compiler/runtime internals |
+| [factor-research-architecture.md](factor-research-architecture.md) | Canonical reuse-first Factor Research / Alphalens / multi-factor / validation / portfolio architecture and implementation sequence |
 | [ffi/memory-contract.md](ffi/memory-contract.md) | C ABI ownership/lifetime contract |
 | [ffi/error-codes.md](ffi/error-codes.md) | Cross-language/native error codes |
 

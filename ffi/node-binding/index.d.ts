@@ -67,6 +67,48 @@ export declare function transformZscore(data: Array<number>): Array<number>
 export declare function transformRank(data: Array<number>): Array<number>
 export declare function transformDiff(data: Array<number>): Array<number>
 export declare function transformRollingMean(data: Array<number>, window: number): Array<number>
+export interface CalendarSessionNapi {
+  sessionDay: number
+  sessionIndex: number
+  openTimestamp: number
+  closeTimestamp: number
+  source?: string
+  revision?: string
+}
+export interface CalendarSessionOverrideNapi {
+  date: string
+  sessions: Array<CalendarSessionWindowNapi>
+}
+export interface CalendarSessionWindowNapi {
+  openSeconds: number
+  closeSeconds: number
+}
+/** One node in a dependency-aware custom composite-indicator graph. */
+export interface CompositeDefinitionNapi {
+  name: string
+  function: string
+  inputs: Array<string>
+  params: Array<number>
+}
+/**
+ * Resolve an exchange session for a Unix timestamp using a configurable
+ * market preset, timezone, holiday list and session overrides.
+ */
+export declare function resolveMarketSession(market: string, timestamp: number, timezone?: string | undefined | null, holidays?: Array<string> | undefined | null, sessions?: Array<CalendarSessionWindowNapi> | undefined | null, specialSessions?: Array<CalendarSessionOverrideNapi> | undefined | null): CalendarSessionNapi | null
+/** Resolve a session from a versioned JSON calendar definition. */
+export declare function resolveMarketSessionConfig(configJson: string, timestamp: number): CalendarSessionNapi | null
+/** Resolve a session from an exchange-published annual CSV calendar. */
+export declare function resolveMarketSessionCsv(csv: string, market: string, timestamp: number, timezone?: string | undefined | null): CalendarSessionNapi | null
+/**
+ * Evaluate a dependency-aware graph of custom composite indicators.
+ *
+ * Inputs may reference `open`, `high`, `low`, `close`, `volume`, another
+ * definition name, or `const:<number>`. Built-in functions include SMA, EMA,
+ * RSI, ATR, MACD, Bollinger bands, VWMA, returns, z-score, rolling statistics,
+ * threshold/clip predicates and cross signals; element-wise arithmetic
+ * functions are also accepted.
+ */
+export declare function computeComposite(close: Array<number>, definitions: Array<CompositeDefinitionNapi>, outputs?: Array<string> | undefined | null, open?: Array<number> | undefined | null, high?: Array<number> | undefined | null, low?: Array<number> | undefined | null, volume?: Array<number> | undefined | null): Record<string, Array<number>>
 /**
  * Simple Moving Average (SMA)
  *
@@ -1255,13 +1297,23 @@ export interface FibonacciResult {
 export declare function fibonacciRetracement(high: Array<number>, low: Array<number>, startIndex: number, endIndex: number): FibonacciResult
 export interface KlineDataNapi {
   dates: Array<string>
+  timestamps?: Array<number>
   opens: Array<number>
   highs: Array<number>
   lows: Array<number>
   closes: Array<number>
   volumes: Array<number>
 }
-export declare function klineDataNew(dates: Array<string>, opens: Array<number>, highs: Array<number>, lows: Array<number>, closes: Array<number>, volumes: Array<number>): KlineDataNapi
+export interface KlineQuoteNapi {
+  date: string
+  timestamp?: number
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+}
+export declare function klineDataNew(dates: Array<string>, opens: Array<number>, highs: Array<number>, lows: Array<number>, closes: Array<number>, volumes: Array<number>, timestamps?: Array<number> | undefined | null): KlineDataNapi
 export declare function klineDataValidate(data: KlineDataNapi): boolean
 /**
  * Execute a trading formula
@@ -1316,6 +1368,43 @@ export declare function formulaListCategories(): Array<string>
  * @returns `true` if the formula is syntactically valid, `false` otherwise.
  */
 export declare function formulaValidate(source: string): boolean
+/** Static dependency and execution analysis for a formula. */
+export interface FormulaAnalysisResult {
+  inputVariables: Array<string>
+  assignedVariables: Array<string>
+  calledFunctions: Array<string>
+  unknownFunctions: Array<string>
+  requiredLookback?: number
+  estimatedNodes: number
+  estimatedCost: number
+  hasFutureData: boolean
+  hasStatefulFunctions: boolean
+  hasObservableEffects: boolean
+  hasControlFlow: boolean
+  supportsStreaming: boolean
+  diagnostics: Array<string>
+}
+/** Stable result shape and validity metadata for chart and binding clients. */
+export interface FormulaMetadataResult {
+  schemaVersion: string
+  length: number
+  dtype: string
+  outputNames: Array<string>
+  nullPolicy: string
+  requiredLookback?: number
+  warmup: number
+  validStart?: number
+  hasFutureData: boolean
+  supportsStreaming: boolean
+  hasObservableEffects: boolean
+}
+export declare function formulaAnalyze(source: string): FormulaAnalysisResult
+/** Return the stable result shape, warm-up and null-value contract. */
+export declare function formulaMetadata(source: string, dataLen?: number | undefined | null): FormulaMetadataResult
+/** Return the complete TA-Lib public function catalog used by compatibility reports. */
+export declare function formulaTalibCatalog(): string
+/** Return a JSON compatibility report for a terminal dialect. */
+export declare function formulaCompatibilityReport(source: string, terminal?: string | undefined | null): string
 /**
  * Execute a trading formula with JIT compilation
  *
@@ -1449,6 +1538,21 @@ export declare class NapiStreamingRoc {
 export declare class NapiStreamingMacd {
   constructor(fastPeriod?: number | undefined | null, slowPeriod?: number | undefined | null, signalPeriod?: number | undefined | null)
   update(value: number): MacdResult
+  reset(): void
+  get isReady(): boolean
+  get count(): number
+}
+/**
+ * Streaming MACD with independently configurable scalar MA types.
+ *
+ * The constructor accepts case-insensitive names (`sma`, `ema`, `wma`,
+ * `dema`, `tema`, `kama`, `t3`, `trima`, `hma`, `alma`, `vidya`). MAMA and
+ * FRAMA remain batch-only because their streaming contracts are different.
+ */
+export declare class NapiStreamingMacdExt {
+  constructor(fastPeriod?: number | undefined | null, fastMaType?: string | undefined | null, slowPeriod?: number | undefined | null, slowMaType?: string | undefined | null, signalPeriod?: number | undefined | null, signalMaType?: string | undefined | null)
+  update(value: number): MacdResult
+  updateBatch(values: Array<number>): Array<MacdResult>
   reset(): void
   get isReady(): boolean
   get count(): number
@@ -1587,6 +1691,59 @@ export declare class KlineChartNapi {
   addMacd(fast: number, slow: number, signal: number): void
   addRsi(period: number): void
   addBoll(period: number, nbDev: number): void
+  addCustomIndicator(name: string, values: Array<number>): void
+  /**
+   * Replaces or registers a custom indicator series without duplicating its
+   * chart definition. This is intended for real-time recalculation after a
+   * new bar is appended or the current bar is revised.
+   */
+  setCustomIndicator(name: string, values: Array<number>): void
+  addEventMarker(index: number, label: string, value?: number | undefined | null, color?: string | undefined | null): void
+  setViewport(start: number, end: number, pixelWidth: number, pixelHeight: number, overscanBars: number, followLatest: boolean): void
+  setLodPolicy(level: string): void
+  setLayerVisible(layer: string, visible: boolean): boolean
+  setInteraction(enabled: boolean, showCrosshair: boolean, showDataWindow: boolean, enablePanZoom: boolean, enableKeyboard: boolean): void
+  setReplayWindow(window: number, cursor?: number | undefined | null): Array<number>
+  replayNext(): Array<number> | null
+  addChan(minStrokeBars: number, showLabels: boolean, variant: string, strokePolicy: string, centerPolicy: string, signalMinStrength: number, showMultiTimeframeAnnotations: boolean): void
+  addChanMulti(factors: Array<number>, variant: string): void
+  /** Update Chan signal/structure thresholds and reanalyze the active chart. */
+  setChanThresholds(minStrokeChangeRatio: number, minFractalRangeRatio: number, signalMinStrength: number, centerBreakRatio: number): void
+  appendKline(date: string, open: number, high: number, low: number, close: number, volume: number): void
+  updateLastKline(close: number, high?: number | undefined | null, low?: number | undefined | null, volume?: number | undefined | null): void
+  upsertKline(date: string, open: number, high: number, low: number, close: number, volume: number, timestamp?: number | undefined | null): string
+  /** Apply many live quotes and rebuild the chart once at the end. */
+  upsertKlines(updates: Array<KlineQuoteNapi>): Array<string>
   saveAsSvg(path: string): void
   toSvg(): string
+  saveAsCanvasHtml(path: string): void
+  toCanvasHtml(): string
+  saveAsWebglHtml(path: string): void
+  saveAsWebgpuHtml(path: string): void
+  toWebglHtml(): string
+  /** Return an explicitly WebGPU-preferred HTML document with WebGL2/Canvas fallback. */
+  toWebgpuHtml(): string
+  saveAsHtml(path: string): void
+  toHtml(): string
+  toJson(): string
+}
+/**
+ * Persistent registry for parameterized expression components.
+ *
+ * This keeps custom formulas in the native FormulaEngine, so Node callers
+ * can compose the same case-insensitive, cache-invalidating components as
+ * Rust and Python callers without rewriting formula source text.
+ */
+export declare class FormulaRegistryNapi {
+  constructor()
+  /** Register an expression-only component such as `ZMA(X, N) = MA(X, N) + EMA(X, N)`. */
+  register(name: string, parameters: Array<string>, source: string): void
+  /** Remove one registered component and return whether it existed. */
+  unregister(name: string): boolean
+  /** Remove all registered components. */
+  clear(): void
+  /** Return names in deterministic uppercase order. */
+  names(): Array<string>
+  /** Evaluate a formula using the persistent custom-component registry. */
+  eval(source: string, open: Array<number>, high: Array<number>, low: Array<number>, close: Array<number>, volume: Array<number>): Record<string, Array<number>>
 }

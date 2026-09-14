@@ -69,6 +69,16 @@ result = plan.eval(open_, high, low, close, volume)
 ma20 = result["__result__"]
 ```
 
+Register reusable parameterized combinations once and compile them through the
+same optimized runtime:
+
+```python
+registry = ta.FormulaRegistry()
+registry.register("ZMA", ["X", "N"], "MA(X, N) + EMA(X, N)")
+plan = registry.compile("ZMA(CLOSE, 20)")
+ma_combo = plan.eval(open_, high, low, close, volume)["__result__"]
+```
+
 Available reusable-plan operations include:
 
 - `eval(...)` — owned context, suitable before incremental append;

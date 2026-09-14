@@ -653,7 +653,7 @@ static INDICATORS: &[IndicatorInfo] = &[
                 name: "fast_ma",
                 param_type: "usize",
                 default: "1",
-                description: "Fast MA type (0=SMA, 1=EMA)",
+                description: "Fast scalar MA type (SMA, EMA, WMA, DEMA, TEMA, KAMA, T3, TRIMA, HMA, ALMA, VIDYA)",
             },
             ParamInfo {
                 name: "slow_period",
@@ -665,7 +665,7 @@ static INDICATORS: &[IndicatorInfo] = &[
                 name: "slow_ma",
                 param_type: "usize",
                 default: "1",
-                description: "Slow MA type (0=SMA, 1=EMA)",
+                description: "Slow scalar MA type (SMA, EMA, WMA, DEMA, TEMA, KAMA, T3, TRIMA, HMA, ALMA, VIDYA)",
             },
             ParamInfo {
                 name: "signal_period",
@@ -677,7 +677,7 @@ static INDICATORS: &[IndicatorInfo] = &[
                 name: "signal_ma",
                 param_type: "usize",
                 default: "1",
-                description: "Signal MA type (0=SMA, 1=EMA)",
+                description: "Signal scalar MA type; use StreamingMacdExt::new_with_signal_ma",
             },
         ],
         convergence: 35,

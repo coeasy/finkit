@@ -1,5 +1,92 @@
 # Changelog
 
+## [0.1.15] - 2026-09-11
+
+- Add forming-bar repaint rollback to streaming MACDEXT.
+- Support scalar WMA, DEMA, TEMA, KAMA, T3, TRIMA, HMA, ALMA, and VIDYA
+  variants for streaming MACDEXT fast, slow, and signal lines.
+- Expose configurable streaming MACDEXT through the Python binding.
+- Make close-stream parsing injectable for deterministic CLI tests.
+
+## [0.1.14] - 2026-09-11
+
+- Add registered, parameterized custom formula components with nested
+  expansion, built-in shadowing protection and bounded expansion limits.
+- Expose the same custom formula registry through the Python binding.
+- Add explicit custom-edge PSI calculation with finite-value filtering and
+  stable outlier handling.
+- Add a shared crosshair data-window snapshot and visible-range-aware cursor
+  mapping for native/WASM chart frontends.
+
+## [0.1.13] - 2026-09-11
+
+- Correct the Rust CDLDOJI public wrapper to use TA-Lib's default 0.1
+  BodyDoji factor, matching the Python binding and compatibility contract.
+
+## [0.1.12] - 2026-09-11
+
+- Complete the maintained TA-Lib 0.6.x compatibility matrix at 161/161 on
+  multiple long-input lengths and seeds, including SAR/SAREXT bootstrap
+  semantics, T3 warm-up/coefficient behavior and extended candlestick rules.
+- Add shared CandleSettings-based thresholds for candlestick compatibility,
+  while preserving native full-length and short-input API behavior.
+- Correct streaming T3 coefficients and align cycle/trendline compatibility
+  paths with the batch implementation.
+
+## [0.1.11] - 2026-09-11
+
+- Add exact TA-Lib compatibility implementations for STOCHRSI, MACDFIX and
+  BETA, including their multi-output, lookback and secondary-input contracts.
+- Correct the shared Hilbert recursive warm-up and radian/degree period
+  conversion; HT_DCPERIOD, HT_DCPHASE, HT_PHASOR, HT_SINE, MAMA and the
+  trend-mode path now match TA-Lib on the maintained comparison matrix.
+- Add the TA-Lib dominant-cycle phase projection and raw-price trendline
+  calculation, plus regression coverage for the extended compatibility paths.
+- Align CDLDOJI with TA-Lib's preceding real-body average candle setting.
+
+## [0.1.10] - 2026-09-11
+
+- Correct TA-Lib MACDEXT lookback selection for its `slowperiod` and
+  `signalperiod` parameter positions in the compatibility adapter.
+
+## [0.1.9] - 2026-09-11
+
+- Add opt-in Python `compute_indicators(..., talib_compat=True)` semantics for
+  TA-Lib lookback/NaN conventions, absolute MAX/MININDEX results and compatible
+  multi-output ordering without changing native formula behavior.
+- Align ADXR, AROONOSC, SAR, PLUS_DM/MINUS_DM and PPO compatibility paths with
+  TA-Lib's window, smoothing, output and moving-average-type contracts.
+- Correct the full Python comparison harness for TA-Lib 0.6.x multi-output
+  finite-ratio accounting and explicit parameter signatures; the maintained
+  smoke matrix now calls all 161 public functions and reports 124 exact rows.
+- Add Python regression coverage for native-vs-TA-Lib compatibility semantics.
+
+## [0.1.8] - 2026-09-11
+
+- Add a shared formula result metadata contract for dtype, output names,
+  NaN/null policy, lookback, warm-up and valid-start semantics across Rust,
+  Python, Node and WASM.
+- Add a complete 161-function public TA-Lib catalog with explicit runtime
+  coverage, category, output-count and compatibility-report fields; unsupported
+  and host-required functions are no longer ambiguous.
+- Add O(1) append/eval-last formula paths for direct MA, RSI and formula-SMA
+  ATR, with exact fallback on mutation or discontinuity.
+- Add binding APIs for formula metadata and TA-Lib catalog discovery.
+- Preserve separate Wilder/RMA streaming ATR semantics from the formula-layer
+  rolling-SMA true-range contract, with differential regression coverage.
+
+## [0.1.7] - 2026-09-11
+
+- Add formula static analysis for dependencies, lookback, future-data risks,
+  side effects, stateful nodes and streaming suitability.
+- Add terminal semantic profiles and function-level compatibility reports for
+  Finkit, TongDaXin, TongHuaShun, EastMoney and Pine.
+- Add borrowed range evaluation and Python `eval_range_zero_copy` for chart
+  window refreshes without copying complete OHLCV history.
+- Add conservative O(1) EMA updates for continuous append/eval-last streams,
+  with exact fallback when continuity cannot be proven.
+- Expose formula analysis and compatibility APIs through Python, Node and WASM.
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),

@@ -1,6 +1,7 @@
 use crate::data::KlineData;
 use crate::language::LanguageResource;
 use crate::layout::ChartLayout;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CrosshairInfo {
@@ -10,7 +11,40 @@ pub struct CrosshairInfo {
     pub ohlcv: (f64, f64, f64, f64, f64),
 }
 
+/// Backend-neutral snapshot for a TDX-style floating data window.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CrosshairDataWindow {
+    pub index: usize,
+    pub date: String,
+    pub timestamp: Option<i64>,
+    pub open: f64,
+    pub high: f64,
+    pub low: f64,
+    pub close: f64,
+    pub volume: f64,
+    pub previous_close: Option<f64>,
+    pub change: Option<f64>,
+    pub change_pct: Option<f64>,
+    pub amplitude_pct: Option<f64>,
+}
+
 pub fn find_nearest_kline(cursor_x: f64, layout: &ChartLayout, data_len: usize) -> usize {
+    find_nearest_kline_in_range(cursor_x, layout, data_len, 0, data_len)
+}
+
+/// Find the nearest bar using the currently visible source-index range.
+///
+/// The old full-series helper remains available for compatibility. This
+/// range-aware variant is the one native/WASM frontends should use after
+/// pan/zoom, because each visible candle is positioned in the plot rather
+/// than each historical candle.
+pub fn find_nearest_kline_in_range(
+    cursor_x: f64,
+    layout: &ChartLayout,
+    data_len: usize,
+    visible_start: usize,
+    visible_end: usize,
+) -> usize {
     if data_len == 0 {
         return 0;
     }
@@ -19,14 +53,47 @@ pub fn find_nearest_kline(cursor_x: f64, layout: &ChartLayout, data_len: usize) 
     if plot_width <= 0.0 || data_len == 0 {
         return 0;
     }
-    let bar_width = plot_width / data_len as f64;
+    let start = visible_start.min(data_len.saturating_sub(1));
+    let end = visible_end.clamp(start.saturating_add(1), data_len);
+    let visible_len = end.saturating_sub(start).max(1);
+    let bar_width = plot_width / visible_len as f64;
     let relative_x = cursor_x - plot_area.x;
     let index = if bar_width > 0.0 {
-        (relative_x / bar_width).floor() as usize
+        ((relative_x / bar_width) - 0.5)
+            .round()
+            .clamp(0.0, (visible_len - 1) as f64) as usize
     } else {
         0
     };
-    index.min(data_len - 1)
+    start.saturating_add(index).min(data_len - 1)
+}
+
+/// Build the complete floating data window for one source bar.
+pub fn data_window(index: usize, data: &KlineData) -> Option<CrosshairDataWindow> {
+    if index >= data.len() {
+        return None;
+    }
+    let previous_close = (index > 0).then(|| data.closes[index - 1]);
+    let change = previous_close.map(|previous| data.closes[index] - previous);
+    let change_pct = previous_close.and_then(|previous| {
+        (previous.abs() > f64::EPSILON).then(|| change.unwrap_or_default() / previous * 100.0)
+    });
+    let amplitude_pct = (data.lows[index].abs() > f64::EPSILON)
+        .then(|| (data.highs[index] - data.lows[index]).abs() / data.lows[index].abs() * 100.0);
+    Some(CrosshairDataWindow {
+        index,
+        date: data.dates[index].clone(),
+        timestamp: data.timestamps.get(index).copied(),
+        open: data.opens[index],
+        high: data.highs[index],
+        low: data.lows[index],
+        close: data.closes[index],
+        volume: data.volumes[index],
+        previous_close,
+        change,
+        change_pct,
+        amplitude_pct,
+    })
 }
 
 pub fn format_tooltip(index: usize, data: &KlineData, resource: &LanguageResource) -> String {
@@ -123,7 +190,35 @@ mod tests {
         let plot_x = layout.main_panel.plot_area.x;
         let plot_w = layout.main_panel.plot_area.width;
         let index = find_nearest_kline(plot_x + plot_w * 0.5, &layout, 5);
-        assert!(index <= 3);
+        assert_eq!(index, 2);
+    }
+
+    #[test]
+    fn test_find_nearest_kline_respects_visible_range() {
+        let layout = make_test_layout();
+        let plot = &layout.main_panel.plot_area;
+        let bar_width = plot.width / 2.0;
+        assert_eq!(
+            find_nearest_kline_in_range(plot.x + bar_width * 0.5, &layout, 5, 2, 4),
+            2
+        );
+        assert_eq!(
+            find_nearest_kline_in_range(plot.x + bar_width * 1.5, &layout, 5, 2, 4),
+            3
+        );
+    }
+
+    #[test]
+    fn test_data_window_contains_change_and_timestamp() {
+        let mut data = make_test_data();
+        data.timestamps = vec![1, 2, 3, 4, 5];
+        let window = data_window(1, &data).expect("data window should exist");
+        assert_eq!(window.timestamp, Some(2));
+        assert_eq!(window.previous_close, Some(103.0));
+        assert_eq!(window.change, Some(1.0));
+        assert!((window.change_pct.unwrap() - 100.0 / 103.0).abs() < 1e-12);
+        assert!((window.amplitude_pct.unwrap() - 6.0).abs() < 1e-12);
+        assert!(data_window(data.len(), &data).is_none());
     }
 
     #[test]

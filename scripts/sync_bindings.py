@@ -8,9 +8,10 @@ the C binding:
 
     For every FFI binding it extracts the **indicator** function bodies
     verbatim from ``ffi/<lang>-binding/src/lib.rs`` and stores them in the
-    single-source-of-truth ``docs/indicator_registry.json`` under
+    binding metadata source ``docs/ffi_registry.json`` under
     ``ffi.bodies.<lang>`` (and ``ffi.names.<lang>`` when the public name
-    differs from the core name).  It can then regenerate
+    differs from the core name).  The core-only ``docs/indicator_registry.json``
+    remains the strict registry snapshot used by the Rust core. It can then regenerate
     ``ffi/<lang>-binding/src/generated.rs`` from the registry and rewrite
     ``lib.rs`` to ``include!`` it, dropping the hand-written indicator
     functions.  Because the bodies are replayed verbatim, the regenerated
@@ -32,9 +33,9 @@ Modes
         bodies to detect drift (hand edits that were not pushed to the
         registry).  Exits non-zero on drift.
 
-The registry is the SSOT: adding an indicator becomes "add its body to
-``ffi.bodies.<lang>`` for every language (or run --discover on the canonical
-binding)" + regenerate.  CI should run ``--check`` for every language to keep
+    The binding registry is the SSOT for wrappers: adding an indicator becomes
+    "add its body to ``ffi.bodies.<lang>`` for every language (or run --discover
+    on the canonical binding)" + regenerate.  CI should run ``--check`` for every language to keep
 the bindings in sync.
 """
 from __future__ import annotations
@@ -48,6 +49,7 @@ from optimize_python_bindings import optimize_source as optimize_python_source
 
 ROOT = Path(__file__).resolve().parents[1]
 REG = ROOT / "docs" / "indicator_registry.json"
+FFI_REG = ROOT / "docs" / "ffi_registry.json"
 
 # Per-language configuration.  ``sig`` matches the function *signature* line;
 # the extractor then walks backward over doc/attribute lines and forward over
@@ -113,6 +115,9 @@ LANG_CFG = {
 NAME_ALIASES = {
     "bbands": "bollinger_bands",
     "inertia": "inertia_indicator",
+    "chande_forecast": "chande_forecast_oscillator",
+    "twiggs_mf": "twiggs_money_flow",
+    "stddev": "std_dev",
 }
 
 KNOWN_INFRA = {
@@ -131,14 +136,28 @@ def load_registry() -> dict:
 
 
 def save_registry(reg: dict) -> None:
-    REG.write_text(json.dumps(reg, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    core = dict(reg)
+    core["indicators"] = []
+    ffi_items = []
+    for item in reg.get("indicators", []):
+        clean = {k: v for k, v in item.items() if k not in ("ffi", "_ffi_only")}
+        if not item.get("_ffi_only"):
+            core["indicators"].append(clean)
+        if item.get("ffi", {}).get("c_name"):
+            ffi_items.append({"name": item["name"], "ffi": item["ffi"]})
+    REG.write_text(json.dumps(core, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    FFI_REG.write_text(
+        json.dumps({"version": core.get("version"), "indicators": ffi_items}, indent=2, ensure_ascii=False)
+        + "\n",
+        encoding="utf-8",
+    )
 
 
 def indicators_with_ffi(reg: dict) -> list[dict]:
     out = [i for i in reg.get("indicators", []) if i.get("ffi", {}).get("c_name")]
     if not out:
         raise SystemExit(
-            "docs/indicator_registry.json has no ffi metadata; refusing to generate or "
+            "docs/ffi_registry.json has no ffi metadata; refusing to generate or "
             "validate empty binding files. Run scripts/enrich_registry_ffi.py only as an "
             "intentional registry migration, then review the resulting diff before using "
             "sync_bindings.py."
@@ -301,6 +320,12 @@ def do_discover(langs: list[str]) -> int:
         cfg = LANG_CFG[lang]
         src = (ROOT / cfg["lib"]).read_text(encoding="utf-8")
         extracted = extract_functions(src, lang)
+        # Rewritten bindings keep registry-matched functions in the generated
+        # companion file. Include that file during discovery so regeneration
+        # remains genuinely round-trippable after `--rewrite`.
+        gen_path = ROOT / cfg["gen"]
+        if gen_path.exists():
+            extracted.update(extract_functions(gen_path.read_text(encoding="utf-8"), lang))
         matched = 0
         unmatched = []
         for ind in inds:
@@ -392,12 +417,54 @@ def wrap_body(lang: str, body: str) -> str:
     return sig + "\n    " + guard + "(|| {\n" + inner + "\n    })\n}"
 
 
+def transform_python_numpy_body(body: str) -> str:
+    """Make generated float64 Python indicators return NumPy directly.
+
+    The registry stores the language-level implementation bodies, while the
+    generated Python module owns the host-object boundary.  Float64 indicator
+    results are calculated while the GIL is detached and converted to
+    ``PyArray1`` only after it is reacquired.  This avoids the expensive
+    ``Rust Vec -> Python list -> NumPy array`` round trip without changing the
+    public function names or numerical contracts.
+
+    Integer candlestick results intentionally remain unchanged because their
+    existing list/array conversion is not a hot numeric-series path.
+    """
+    body = body.strip()
+    if "-> PyResult<(Vec<f64>, Vec<f64>, Vec<f64>)>" in body:
+        body = body.replace(
+            "-> PyResult<(Vec<f64>, Vec<f64>, Vec<f64>)>",
+            "-> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>, Py<PyArray1<f64>>)>",
+        )
+        return body.replace("py.detach(||", "py_arrays3_f64(py, ||", 1)
+    if "-> PyResult<(Vec<f64>, Vec<f64>)>" in body:
+        body = body.replace(
+            "-> PyResult<(Vec<f64>, Vec<f64>)>",
+            "-> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>)>",
+        )
+        return body.replace("py.detach(||", "py_arrays2_f64(py, ||", 1)
+    if "-> PyResult<Vec<f64>>" in body:
+        body = body.replace(
+            "-> PyResult<Vec<f64>>",
+            "-> PyResult<Py<PyArray1<f64>>>"
+        )
+        return body.replace("py.detach(||", "py_array_f64(py, ||", 1)
+    return body
+
+
+def normalize_body_for_check(lang: str, body: str) -> str:
+    """Compare source-of-truth bodies with their generated host boundary."""
+    if lang == "python":
+        return transform_python_numpy_body(body)
+    return body
+
+
 def emit_generated(lang: str, inds: list[dict]) -> str:
     cfg = LANG_CFG[lang]
     header = (
         "// ─────────────────────────────────────────────────────────────────────\n"
         "// GENERATED FILE — do not edit by hand.\n"
-        "// Source of truth: docs/indicator_registry.json (ffi.bodies.<lang>).\n"
+        "// Source of truth: docs/ffi_registry.json (ffi.bodies.<lang>).\n"
         f"// Regenerate with: python3 scripts/sync_bindings.py --lang {lang} --generate --rewrite\n"
         "// ─────────────────────────────────────────────────────────────────────\n\n"
     )
@@ -405,6 +472,8 @@ def emit_generated(lang: str, inds: list[dict]) -> str:
     for ind in inds:
         body = ind.get("ffi", {}).get("bodies", {}).get(lang)
         if body:
+            if lang == "python":
+                body = transform_python_numpy_body(body)
             # Wrap each generated function in catch_unwind so a panic inside
             # the core call cannot unwind across the FFI boundary.
             bodies.append(wrap_body(lang, body).rstrip("\n") + "\n")
@@ -508,7 +577,10 @@ def do_check(langs: list[str]) -> int:
             # Compare through the same panic-wrapper normalisation so a
             # regenerated (wrapped) function is not flagged as drift against
             # the unwrapped source-of-truth body.
-            if wrap_body(lang, body_now).strip() != wrap_body(lang, body_stored).strip():
+            if (
+                normalize_body_for_check(lang, wrap_body(lang, body_now)).strip()
+                != normalize_body_for_check(lang, wrap_body(lang, body_stored)).strip()
+            ):
                 drift.append(f"changed:{c_name}")
         # also: hand-written fns present that the registry dropped?
         print(f"[check/{lang}] registry={len(inds)} extracted={len(extracted)} "

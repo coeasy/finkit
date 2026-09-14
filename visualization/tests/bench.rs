@@ -52,6 +52,44 @@ fn bench_svg_render(n: usize) -> std::time::Duration {
     start.elapsed()
 }
 
+fn bench_canvas_render(n: usize) -> std::time::Duration {
+    let data = make_test_data(n);
+    let config = ChartConfigBuilder::new()
+        .with_chart_type(ChartType::Candlestick)
+        .with_dimensions(1200, 600)
+        .build();
+    let indicators = vec![IndicatorConfig::new(
+        IndicatorType::MA,
+        vec![5.0, 10.0, 20.0],
+    )];
+
+    let start = Instant::now();
+    let mut chart = KlineChart::new(config);
+    chart.build_draw_list(&data, &indicators).unwrap();
+    let _canvas = chart.to_canvas_html_string().unwrap();
+    start.elapsed()
+}
+
+#[cfg(feature = "html")]
+fn bench_gpu_html_render(n: usize) -> std::time::Duration {
+    let data = make_test_data(n);
+    let config = ChartConfigBuilder::new()
+        .with_chart_type(ChartType::Candlestick)
+        .with_dimensions(1200, 600)
+        .build();
+    let indicators = vec![IndicatorConfig::new(
+        IndicatorType::MA,
+        vec![5.0, 10.0, 20.0],
+    )];
+
+    let start = Instant::now();
+    let mut chart = KlineChart::new(config);
+    chart.build_draw_list(&data, &indicators).unwrap();
+    let html = chart.to_webgpu_html_string().unwrap();
+    assert!(html.contains("navigator.gpu"));
+    start.elapsed()
+}
+
 fn bench_decimate(n: usize, target: u32) -> std::time::Duration {
     let data = make_test_data(n);
     let start = Instant::now();
@@ -90,6 +128,33 @@ fn bench_100000_klines() {
 }
 
 #[test]
+fn bench_canvas_100000_klines() {
+    let duration = bench_canvas_render(100_000);
+    println!(
+        "100000 K线 Canvas命令流渲染时间: {:.2}ms",
+        duration.as_secs_f64() * 1000.0
+    );
+    assert!(
+        duration.as_secs() < 60,
+        "100000 K线 Canvas渲染应在60秒内完成"
+    );
+}
+
+#[cfg(feature = "html")]
+#[test]
+fn bench_webgpu_payload_100000_klines() {
+    let duration = bench_gpu_html_render(100_000);
+    println!(
+        "100000 K线 WebGPU/WebGL2 HTML负载生成时间: {:.2}ms",
+        duration.as_secs_f64() * 1000.0
+    );
+    assert!(
+        duration.as_secs() < 60,
+        "100000 K线 GPU HTML负载生成应在60秒内完成"
+    );
+}
+
+#[test]
 fn bench_decimate_1m_klines() {
     let duration = bench_decimate(1_000_000, 1200);
     println!(
@@ -105,11 +170,20 @@ fn bench_summary() {
     let d2 = bench_svg_render(10000);
     let d3 = bench_svg_render(100000);
     let d4 = bench_decimate(1_000_000, 1200);
+    let d5 = bench_canvas_render(100000);
+    #[cfg(feature = "html")]
+    let d6 = bench_gpu_html_render(100000);
 
     println!("\n========== 性能基准测试结果 ==========");
     println!("1000 K线 SVG渲染:      {:.2}ms", d1.as_secs_f64() * 1000.0);
     println!("10000 K线 SVG渲染:     {:.2}ms", d2.as_secs_f64() * 1000.0);
     println!("100000 K线 SVG渲染:    {:.2}ms", d3.as_secs_f64() * 1000.0);
     println!("1000000 K线降采样:     {:.2}ms", d4.as_secs_f64() * 1000.0);
+    println!("100000 K线 Canvas渲染:  {:.2}ms", d5.as_secs_f64() * 1000.0);
+    #[cfg(feature = "html")]
+    println!(
+        "100000 K线 GPU HTML负载:   {:.2}ms",
+        d6.as_secs_f64() * 1000.0
+    );
     println!("=========================================\n");
 }

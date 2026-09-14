@@ -23,12 +23,26 @@ Finkit 当前存在明显的“核心计算性能”和“最终 Python 用户�
 2. `ffi/python-binding/finkit/__init__.py` 又对 list 执行 `np.asarray()`，形成 `Rust Vec -> Python list/float objects -> NumPy ndarray` 的二次物化链路。
 3. 多输出指标会把这个成本按输出数量放大。MACD 三数组输出在 1M bars 的耗时接近单输出指标的约 3 倍，与该模型高度一致。
 4. `CompiledFormula.eval_zero_copy()` 已经能够直接借用 NumPy 输入并直接返回 `PyArray1`，说明仓库已有正确技术基础；但普通指标绑定还没有统一走这条路径。
-5. `CompiledFormula.eval()` 与 `eval_range()` 仍会通过 `slice.to_vec()` 复制全部 OHLCV 输入；`result_dict()` 对上下文变量还存在 clone，复杂公式会产生额外内存流量。
+5. `CompiledFormula.eval()` 仍会复制到可追加的 owned context；core `eval_range()` 已改为借用 OHLCV range，复杂公式仍可能产生中间数组。
 6. 当前 CI 的 `performance_regression` 主要验证 Rust 内部相对性能，不会发现 Python wheel 公共 API 的这种数量级回归。
 
 因此，下一阶段优化顺序必须是：
 
 **Python NumPy ABI 直出 -> Formula 输入/输出复制收敛 -> TA-Lib 语义/暖机对齐 -> 中间缓冲复用与 DAG 融合 -> SIMD/算法级热点优化 -> 多资产批处理并行。**
+
+### 本轮已落地：Python float64 直接 NumPy 返回
+
+生成式 Python 指标绑定已统一使用 `PyArray1` 所有权转移：核心计算在释放
+GIL 的闭包中完成，重新持有 GIL 后直接把 `Vec<f64>` 交给 NumPy，不再经过
+Python `list`。多输出 float64 指标（例如 MACD、BOLL、STOCH）也使用同一条
+路径；整数蜡烛形态保持原有返回语义。
+
+在 Windows 隔离 wheel 验证中，1,000,000 根连续 `float64` 输入的 `sma` 返回
+类型为 `numpy.ndarray`、`float64`、长度 1,000,000；单次 sanity 计时约
+`1.98 ms`。该数字不是跨机器 TA-Lib 结论，正式对标仍应使用本文件的固定
+环境、多轮中位数和同一输入协议；它只证明此前的 Python list 物化瓶颈已经
+从公共 API 路径移除。对应生成改写工具为
+`scripts/optimize_python_numpy_bindings.py`。
 
 ---
 
@@ -239,9 +253,9 @@ PyResult<(
 
 ---
 
-## 3.4 Formula `eval_range()` 仍复制完整 OHLCV
+## 3.4 Formula `eval_range()` borrowed range（core 已实现）
 
-当前 `eval_range()` 进入 Rust 后先把完整数组 `to_vec()`，之后 core 才根据 `[start,end)` 和 lookback 处理范围。
+core `eval_range()` 现在根据 `[start,end)` 和 lookback 创建 borrowed OHLCV 子窗口；Python `CompiledFormula.eval_range()` 仍因 retained context 生命周期而复制输入，这是安全的 owned-stream API 约束。
 
 这会让“只计算尾部 100 bars”仍支付整个 1M OHLCV 的 Python->Rust复制成本。
 
@@ -255,7 +269,7 @@ NumPy full input
  -> output requested [start,end)
 ```
 
-验收要求：当输入从 100K 扩到 1M、但请求 range 长度固定为 1K 时，`eval_range()` 延迟不应近似 10x 增长。
+验收要求：core borrowed range 在输入从 100K 扩到 1M、请求 range 长度固定为 1K 时，不应因为 OHLCV 拷贝而近似 10x 增长；Python owned-stream API 单独记录复制成本。
 
 ---
 

@@ -4,6 +4,7 @@ use crate::{impl_indicator_meta, impl_standard_methods};
 /// Streaming ALMA (Arnaud Legoux Moving Average).
 ///
 /// Uses a precomputed Gaussian kernel over a ring buffer of prices.
+#[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamingAlma {
     period: usize,

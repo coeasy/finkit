@@ -11,7 +11,7 @@
 //! optional columns are filled with `f64::NAN` (volume defaults to `0.0`).
 
 use std::fs::File;
-use std::io::{self, BufRead, Read};
+use std::io::{self, Read};
 use std::path::Path;
 
 /// In-memory OHLCV dataset.
@@ -104,13 +104,17 @@ pub fn read_close_csv<P: AsRef<Path>>(path: P) -> io::Result<Vec<f64>> {
 /// Read a single column (close-style) CSV from stdin (pipe support).
 pub fn read_close_stdin() -> io::Result<Vec<f64>> {
     let stdin = io::stdin();
-    let mut buf = String::new();
-    for line in stdin.lock().lines() {
-        let line = line?;
-        buf.push_str(&line);
-        buf.push('\n');
-    }
-    parse_close_lines(&buf)
+    read_close_reader(stdin.lock())
+}
+
+/// Read a single close column from any reader.
+///
+/// This is the injectable core used by [`read_close_stdin`], allowing callers
+/// and tests to use pipes, files, sockets, or in-memory streams consistently.
+pub fn read_close_reader<R: Read>(mut reader: R) -> io::Result<Vec<f64>> {
+    let mut content = String::new();
+    reader.read_to_string(&mut content)?;
+    parse_close_lines(&content)
 }
 
 /// Read a single column (close-style) CSV from `Some(path)` or stdin if `None`.
@@ -198,10 +202,15 @@ mod tests {
     }
 
     #[test]
-    fn test_read_close_stdin_mocked() {
-        // read_close_stdin reads from actual stdin; we cannot mock it
-        // without external crate. This is a placeholder documenting the gap.
-        // In practice, users pipe data: `echo "1.0\n2.0" | finkit sma 3`
+    fn test_read_close_reader_in_memory() {
+        let result = read_close_reader("1.0\n2.0\n3.0\n".as_bytes()).unwrap();
+        assert_eq!(result, vec![1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn test_read_close_reader_invalid_utf8() {
+        let result = read_close_reader([0xff, 0xfe].as_slice());
+        assert!(result.is_err());
     }
 
     #[test]

@@ -2,6 +2,7 @@ use crate::impl_standard_methods;
 use crate::streaming::overlap::ema::StreamingEma;
 use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 
+#[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamingT3 {
     emas: [StreamingEma; 6],
@@ -21,8 +22,8 @@ impl StreamingT3 {
 
     pub fn with_vfactor(period: usize, v: f64) -> Self {
         let c1 = -(v * v * v);
-        let c2 = 3.0 * v * v + 3.0 * v * v * v;
-        let c3 = -6.0 * v * v - 3.0 * v - 3.0 * v * v * v;
+        let c2 = 3.0 * (v * v - c1);
+        let c3 = -6.0 * v * v - 3.0 * (v - c1);
         let c4 = 1.0 + 3.0 * v + v * v * v + 3.0 * v * v;
         Self {
             emas: std::array::from_fn(|_| StreamingEma::new(period)),

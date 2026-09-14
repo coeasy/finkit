@@ -4,16 +4,23 @@
 
 use wasm_bindgen::prelude::*;
 
+use finkit::composite::{CompositeDefinition, CompositeEngine, CompositeExpr, CompositeOp};
+use finkit::factors::FactorContext;
 use finkit::formula::{
-    parse_formula, DrawCommand, FormulaContext, FormulaEngine, FormulaTemplates,
+    inspect_formula_compatibility, parse_formula, DrawCommand, FormulaContext, FormulaEngine,
+    FormulaTemplates, FormulaTerminal,
 };
 use finkit::indicators;
 use finkit::math::moving_avg;
 use finkit::patterns::{candlestick, chart};
 use ndarray::Array1;
+use serde::Deserialize;
+use std::collections::HashSet;
 
 mod streaming;
 mod transforms;
+#[path = "chart.rs"]
+mod wasm_chart;
 
 #[wasm_bindgen(start)]
 pub fn _start() {
@@ -23,6 +30,125 @@ pub fn _start() {
 
 fn to_js(e: impl std::fmt::Display) -> JsError {
     JsError::new(&format!("{}", e))
+}
+
+#[derive(Debug, Deserialize)]
+struct CompositeDefinitionWasm {
+    name: String,
+    function: String,
+    inputs: Vec<String>,
+    params: Vec<f64>,
+}
+
+/// Evaluate a dependency-aware custom composite-indicator graph.
+///
+/// `definitions` is an array of `{name, function, inputs, params}` objects.
+/// Inputs can reference OHLCV names, another definition, or `const:<number>`.
+/// Undefined optional arguments should be passed as `undefined`.
+#[wasm_bindgen(js_name = computeComposite)]
+pub fn compute_composite(
+    close: Vec<f64>,
+    definitions: JsValue,
+    outputs: JsValue,
+    open: JsValue,
+    high: JsValue,
+    low: JsValue,
+    volume: JsValue,
+) -> Result<JsValue, JsError> {
+    let definitions: Vec<CompositeDefinitionWasm> =
+        serde_wasm_bindgen::from_value(definitions).map_err(to_js)?;
+    let names: HashSet<String> = definitions.iter().map(|item| item.name.clone()).collect();
+    if names.len() != definitions.len() {
+        return Err(to_js("composite definition names must be unique"));
+    }
+    let definitions = definitions
+        .into_iter()
+        .map(|item| {
+            let inputs = item
+                .inputs
+                .into_iter()
+                .map(|input| composite_input_expression_wasm(&input, &names))
+                .collect::<Result<Vec<_>, JsError>>()?;
+            let expression = match item.function.to_ascii_lowercase().as_str() {
+                "add" => CompositeExpr::Op {
+                    op: CompositeOp::Add,
+                    inputs,
+                },
+                "sub" => CompositeExpr::Op {
+                    op: CompositeOp::Sub,
+                    inputs,
+                },
+                "mul" => CompositeExpr::Op {
+                    op: CompositeOp::Mul,
+                    inputs,
+                },
+                "div" => CompositeExpr::Op {
+                    op: CompositeOp::Div,
+                    inputs,
+                },
+                "min" => CompositeExpr::Op {
+                    op: CompositeOp::Min,
+                    inputs,
+                },
+                "max" => CompositeExpr::Op {
+                    op: CompositeOp::Max,
+                    inputs,
+                },
+                "weighted_average" | "weightedaverage" => {
+                    CompositeExpr::call("weighted_average", inputs, item.params)
+                }
+                _ => CompositeExpr::call(item.function, inputs, item.params),
+            };
+            Ok(CompositeDefinition::new(item.name, expression))
+        })
+        .collect::<Result<Vec<_>, JsError>>()?;
+    let outputs: Option<Vec<String>> = if outputs.is_undefined() || outputs.is_null() {
+        None
+    } else {
+        Some(serde_wasm_bindgen::from_value(outputs).map_err(to_js)?)
+    };
+    let output_names = outputs.unwrap_or_else(|| {
+        definitions
+            .iter()
+            .map(|definition| definition.name.clone())
+            .collect()
+    });
+    let output_refs: Vec<&str> = output_names.iter().map(String::as_str).collect();
+    let mut context = FactorContext::new();
+    context.insert("close", close).map_err(to_js)?;
+    for (name, value) in [
+        ("open", open),
+        ("high", high),
+        ("low", low),
+        ("volume", volume),
+    ] {
+        if !value.is_undefined() && !value.is_null() {
+            context
+                .insert(name, serde_wasm_bindgen::from_value(value).map_err(to_js)?)
+                .map_err(to_js)?;
+        }
+    }
+    let result = CompositeEngine::new()
+        .evaluate(&definitions, &output_refs, &context)
+        .map_err(to_js)?;
+    serde_wasm_bindgen::to_value(&result).map_err(to_js)
+}
+
+fn composite_input_expression_wasm(
+    input: &str,
+    definition_names: &HashSet<String>,
+) -> Result<CompositeExpr, JsError> {
+    if let Some(value) = input.strip_prefix("const:") {
+        let value = value
+            .parse::<f64>()
+            .map_err(|_| to_js(format!("invalid composite constant: {input}")))?;
+        return Ok(CompositeExpr::Constant(value));
+    }
+    if definition_names.contains(input) {
+        Ok(CompositeExpr::reference(input))
+    } else {
+        Ok(CompositeExpr::series(input))
+    }
 }
 
 // ───────────────────── Moving Averages ─────────────────────
@@ -1146,6 +1272,40 @@ pub fn formula_eval_multi(
 #[wasm_bindgen]
 pub fn formula_validate(source: &str) -> bool {
     parse_formula(source).is_ok()
+}
+
+#[wasm_bindgen]
+pub fn formula_analyze(source: &str) -> Result<JsValue, JsError> {
+    let mut engine = FormulaEngine::new();
+    let formula = engine.compile(source).map_err(to_js)?;
+    let analysis = engine.analyze_ast(&formula.ast);
+    serde_wasm_bindgen::to_value(&analysis).map_err(to_js)
+}
+
+#[wasm_bindgen]
+pub fn formula_metadata(source: &str, data_len: Option<u32>) -> Result<JsValue, JsError> {
+    let mut engine = FormulaEngine::new();
+    let metadata = engine
+        .metadata(source, data_len.unwrap_or(0) as usize)
+        .map_err(to_js)?;
+    serde_wasm_bindgen::to_value(&metadata).map_err(to_js)
+}
+
+#[wasm_bindgen]
+pub fn formula_talib_catalog() -> Result<JsValue, JsError> {
+    serde_wasm_bindgen::to_value(&finkit::formula::ta_lib_function_contracts()).map_err(to_js)
+}
+
+#[wasm_bindgen]
+pub fn formula_compatibility_report(
+    source: &str,
+    terminal: Option<String>,
+) -> Result<JsValue, JsError> {
+    let terminal_name = terminal.as_deref().unwrap_or("finkit");
+    let terminal = FormulaTerminal::from_str(terminal_name)
+        .ok_or_else(|| JsError::new("unknown formula terminal"))?;
+    let report = inspect_formula_compatibility(source, terminal).map_err(to_js)?;
+    serde_wasm_bindgen::to_value(&report).map_err(to_js)
 }
 
 #[wasm_bindgen(getter_with_clone)]

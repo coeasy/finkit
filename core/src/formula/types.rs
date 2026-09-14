@@ -1,4 +1,4 @@
-use ndarray::{Array1, ArrayView1};
+use ndarray::{arr0, Array1, ArrayView1, Axis};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
@@ -679,6 +679,50 @@ impl FormulaContext {
         }
     }
 
+    /// Create a zero-copy sub-context for a synchronous range evaluation.
+    ///
+    /// OHLCV remains borrowed; optional per-bar arrays are copied because they
+    /// are currently owned by `ndarray` and may be non-contiguous.  This keeps
+    /// the hot market-data path allocation-free while preserving the complete
+    /// terminal context for functions such as `CAPITAL`, `FINANCE` and
+    /// multi-period lookups.
+    pub(crate) fn borrowed_window(&self, start: usize, end: usize) -> Result<Self, FormulaError> {
+        if start > end || end > self.data_len {
+            return Err(FormulaError::InvalidParameter(format!(
+                "invalid borrowed formula window [{start}, {end}) for data_len {}",
+                self.data_len
+            )));
+        }
+        let mut result = Self::from_borrowed_ohlcv(
+            &self.open[start..end],
+            &self.high[start..end],
+            &self.low[start..end],
+            &self.close[start..end],
+            &self.volume[start..end],
+            self.amount
+                .as_ref()
+                .map(|a| a.slice(ndarray::s![start..end]).to_owned()),
+        );
+        result.datetime = self
+            .datetime
+            .as_ref()
+            .map(|a| a.slice(ndarray::s![start..end]).to_owned());
+        result.index_data = self.index_data.clone();
+        result.finance_data = self.finance_data.clone();
+        result.chip_data = self.chip_data.clone();
+        result.dynainfo = self.dynainfo.clone();
+        result.capital = self.capital;
+        result.block_data = self.block_data.clone();
+        result.money_flow_data = self.money_flow_data.clone();
+        result.em_data = self.em_data.clone();
+        result.string_table = self.string_table.clone();
+        result.period_data = self.period_data.clone();
+        result.period_type = self.period_type;
+        result.sandbox = self.sandbox;
+        result.sandbox_state = RefCell::new(self.sandbox_state.borrow().clone());
+        Ok(result)
+    }
+
     /// Reset sandbox runtime counters before a new top-level evaluation.
     pub fn reset_sandbox(&mut self) {
         sandbox_reset(&self.sandbox_state);
@@ -770,6 +814,33 @@ impl FormulaContext {
         self.close.push(close);
         self.volume.push(volume);
         self.data_len = self.close.len();
+    }
+
+    /// Append a bar and keep the optional amount series aligned.
+    pub fn append_bar_with_amount(
+        &mut self,
+        open: f64,
+        high: f64,
+        low: f64,
+        close: f64,
+        volume: f64,
+        amount: Option<f64>,
+    ) {
+        self.append_bar(open, high, low, close, volume);
+        match (&mut self.amount, amount) {
+            (Some(values), Some(value)) => values
+                .push(Axis(0), arr0(value).view())
+                .expect("amount series is one-dimensional"),
+            (Some(values), None) => values
+                .push(Axis(0), arr0(f64::NAN).view())
+                .expect("amount series is one-dimensional"),
+            (None, Some(value)) => {
+                let mut values = Array1::from_elem(self.data_len, f64::NAN);
+                values[self.data_len - 1] = value;
+                self.amount = Some(values);
+            }
+            (None, None) => {}
+        }
     }
 
     /// 获取数据数组

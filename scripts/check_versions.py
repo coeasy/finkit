@@ -35,6 +35,7 @@ DOC_VERSION_FILES = (
     ROOT / "ffi" / "python-binding" / "README.md",
     ROOT / "examples" / "README.md",
     ROOT / "docs" / "indicator_registry.json",
+    ROOT / "docs" / "ffi_registry.json",
 )
 
 
@@ -182,7 +183,7 @@ def collect_errors(canonical: str) -> list[str]:
             errors.append(f"missing release-facing document: {path.relative_to(ROOT)}")
             continue
         text = path.read_text(encoding="utf-8")
-        if path.name == "indicator_registry.json":
+        if path.name in ("indicator_registry.json", "ffi_registry.json"):
             version = json.loads(text).get("version")
             if version != canonical:
                 errors.append(f"{path.relative_to(ROOT)}: {version} != {canonical}")

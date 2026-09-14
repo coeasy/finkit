@@ -813,6 +813,7 @@ dependencies = [
 name = "finkit-visualization"
 version = "0.1.5"
 dependencies = [
+ "base64",
  "finkit",
  "fontdue",
  "png",
@@ -827,6 +828,7 @@ version = "0.1.5"
 dependencies = [
  "console_error_panic_hook",
  "finkit",
+ "finkit-visualization",
  "getrandom 0.3.4",
  "ndarray 0.16.1",
  "serde",

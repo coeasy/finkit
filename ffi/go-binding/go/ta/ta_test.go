@@ -608,6 +608,26 @@ func TestStreamingMacd(t *testing.T) {
 	}
 }
 
+func TestStreamingMacdExtVariants(t *testing.T) {
+	macd := NewStreamingMacdExt(5, MaSMA, 10, MaWMA, 3, MaTEMA)
+	if macd == nil {
+		t.Fatal("NewStreamingMacdExt returned nil")
+	}
+	defer macd.Free()
+	ready := 0
+	for i := 0; i < 50; i++ {
+		if _, ok := macd.Update(50 + math.Sin(float64(i)/3)); ok {
+			ready++
+		}
+	}
+	if ready == 0 {
+		t.Fatal("MACDEXT never became ready")
+	}
+	if NewStreamingMacdExt(12, MaType(99), 26, MaEMA, 9, MaEMA) != nil {
+		t.Fatal("unsupported MA type must return nil")
+	}
+}
+
 func TestStreamingBbands(t *testing.T) {
 	bbands := NewStreamingBbands(5, 2.0, 2.0)
 	defer bbands.Free()

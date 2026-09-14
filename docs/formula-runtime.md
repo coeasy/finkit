@@ -30,6 +30,15 @@ the existing built-in function ABI is array-based. This does not copy the origin
 NumPy OHLCV input into a second history buffer, and the borrowed context cannot
 escape the synchronous call.
 
+Before evaluation, `CompiledFormula.analyze()` exposes input dependencies,
+lookback, future-data warnings, stateful nodes and streaming suitability.
+`CompiledFormula.compatibility_report(terminal)` exposes terminal semantic
+policies and per-function exact/near/approximate/host-required status.
+`CompiledFormula.metadata(data_len)` exposes the shared result contract:
+output names, `float64` dtype, NaN null policy, conservative warm-up and the
+first potentially valid row. Compatibility reports also expose the complete
+TA-Lib public catalog revision and registered-runtime coverage.
+
 ## Range and last-bar evaluation
 
 eval_range(open, high, low, close, volume, start, end) uses a half-open range
@@ -51,6 +60,10 @@ plan.append_bar(o, h, l, c, v)
 last = plan.eval_last()
 ~~~
 
+For repeated chart windows without retaining a stream context, use
+`eval_range_zero_copy(...)`; it borrows contiguous NumPy input and returns only
+the requested range.
+
 ## Execution reuse
 
 The plan keeps one FormulaEngine alive. Its pooled executor buffers, compiled
@@ -64,7 +77,11 @@ the complete history.
 - eval_range uses end as an exclusive index and returns a new NumPy array.
 - eval_last() without arrays requires a previous eval, eval_range, or appended
   stream context.
-- append_bar currently appends OHLCV; append amount through a new full-context
-  evaluation when an amount series is required.
+- append_bar appends OHLCV; the core `FormulaContext.append_bar_with_amount()`
+  keeps an optional amount series aligned and uses NaN when amount is missing.
 - CSE only merges pure expression subtrees. Drawing, alert, selection, and other
   side-effecting nodes are not merged.
+- Direct `eval_last` append updates for `MA`, `RSI`, and formula-semantic
+  `ATR(HIGH, LOW, CLOSE, N)` use dedicated O(1) state; the general streaming
+  `ATR` indicator uses Wilder/RMA semantics and is intentionally not reused for
+  the formula SMA-TR contract.

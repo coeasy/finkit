@@ -14,6 +14,10 @@ pub mod interaction;
 pub mod layout;
 pub mod primitive;
 pub mod render;
+pub mod scene;
 pub mod text;
+pub mod viewport;
+
+pub use interaction::{CrosshairDataWindow, CrosshairInfo};
 
 pub use error::{Result, VisualizationError};

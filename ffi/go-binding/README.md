@@ -86,6 +86,11 @@ The Go binding exposes formula validation/evaluation in addition to indicator wr
 - `FormulaEvalZeroCopy`;
 - formula template helpers.
 
+Streaming MACD also has a configurable `NewStreamingMacdExt` constructor.
+Its `MaType` selectors cover SMA, EMA, WMA, DEMA, TEMA, KAMA, T3, TRIMA,
+HMA, ALMA and VIDYA; MAMA and FRAMA remain batch-only because their streaming
+contracts require different output/state models.
+
 `FormulaEvalDebugJSON` is backed by the native `ta_formula_eval_debug` entry point and returns the current formula debugger event payload as JSON. This debugger surface is binding-specific; do not assume every other language binding exposes the same method name or payload.
 
 ## Standalone Linux candidate

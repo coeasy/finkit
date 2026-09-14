@@ -10,8 +10,19 @@ pub fn render_line(
     layout: &ChartLayout,
     config: &ChartConfig,
 ) {
+    let indices: Vec<usize> = (0..data.len()).collect();
+    render_line_indices(draw_list, data, layout, config, &indices);
+}
+
+pub fn render_line_indices(
+    draw_list: &mut DrawList,
+    data: &KlineData,
+    layout: &ChartLayout,
+    config: &ChartConfig,
+    indices: &[usize],
+) {
     let n = data.len();
-    if n == 0 {
+    if n == 0 || indices.is_empty() {
         return;
     }
 
@@ -23,8 +34,8 @@ pub fn render_line(
 
     let line_color = Color::from_hex(config.color_scheme.up_color());
 
-    let mut points = Vec::with_capacity(n);
-    for i in 0..n {
+    let mut points = Vec::with_capacity(indices.len());
+    for &i in indices {
         let x = plot_area.x + i as f64 * bar_width + bar_width / 2.0;
         let y = y_scale.data_to_pixel(data.closes[i]);
         points.push(Point::new(x, y));

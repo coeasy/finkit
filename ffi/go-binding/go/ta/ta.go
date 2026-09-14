@@ -96,6 +96,10 @@ extern void* ta_streaming_macd_new(int fast, int slow, int signal);
 extern int ta_streaming_macd_update(void *handle, double value, double *macd_out, double *signal_out, double *hist_out);
 extern void ta_streaming_macd_reset(void *handle);
 extern void ta_streaming_macd_free(void *handle);
+extern void* ta_streaming_macd_ext_new(int fast, int fast_ma_type, int slow, int slow_ma_type, int signal, int signal_ma_type);
+extern int ta_streaming_macd_ext_update(void *handle, double value, double *macd_out, double *signal_out, double *hist_out);
+extern void ta_streaming_macd_ext_reset(void *handle);
+extern void ta_streaming_macd_ext_free(void *handle);
 
 extern void* ta_streaming_bbands_new(int period, double nb_dev_up, double nb_dev_dn);
 extern int ta_streaming_bbands_update(void *handle, double value, double *upper_out, double *middle_out, double *lower_out);
@@ -1410,6 +1414,67 @@ type MacdOutput struct {
 
 type StreamingMacd struct {
 	handle unsafe.Pointer
+}
+
+// MaType identifies one of the scalar moving-average variants supported by
+// the streaming MACDEXT implementation. The numeric values are part of the
+// C ABI and intentionally mirror the Rust selector order.
+type MaType int
+
+const (
+	MaSMA MaType = iota
+	MaEMA
+	MaWMA
+	MaDEMA
+	MaTEMA
+	MaKAMA
+	MaT3
+	MaTRIMA
+	MaHMA
+	MaALMA
+	MaVIDYA
+)
+
+type StreamingMacdExt struct {
+	handle unsafe.Pointer
+}
+
+// NewStreamingMacdExt creates a streaming MACDEXT with independent MA types
+// for the fast, slow, and signal lines. It returns nil for invalid periods or
+// unsupported selector values. MAMA and FRAMA are intentionally batch-only.
+func NewStreamingMacdExt(fastPeriod int, fastMa MaType, slowPeriod int, slowMa MaType, signalPeriod int, signalMa MaType) *StreamingMacdExt {
+	h := C.ta_streaming_macd_ext_new(
+		cInt(fastPeriod), cInt(fastMa), cInt(slowPeriod), cInt(slowMa), cInt(signalPeriod), cInt(signalMa),
+	)
+	if h == nil {
+		return nil
+	}
+	return &StreamingMacdExt{handle: unsafe.Pointer(h)}
+}
+
+func (s *StreamingMacdExt) Update(value float64) (MacdOutput, bool) {
+	if s == nil || s.handle == nil {
+		return MacdOutput{}, false
+	}
+	var macd, sig, hist C.double
+	ready := C.ta_streaming_macd_ext_update(s.handle, cDouble(value), &macd, &sig, &hist)
+	if ready == 0 {
+		return MacdOutput{}, false
+	}
+	return MacdOutput{Macd: float64(macd), Signal: float64(sig), Hist: float64(hist)}, true
+}
+
+func (s *StreamingMacdExt) Reset() {
+	if s != nil && s.handle != nil {
+		C.ta_streaming_macd_ext_reset(s.handle)
+	}
+}
+
+func (s *StreamingMacdExt) Free() {
+	if s != nil && s.handle != nil {
+		C.ta_streaming_macd_ext_free(s.handle)
+		s.handle = nil
+	}
 }
 
 func NewStreamingMacd(fastPeriod, slowPeriod, signalPeriod int) *StreamingMacd {

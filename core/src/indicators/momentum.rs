@@ -2685,7 +2685,12 @@ pub fn adxr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<A
     let len = adx_vals.len();
     let mut output = vec![f64::NAN; len];
 
-    for i in period..len {
+    // TA-Lib's ADXR pairs today's ADX with the value at `today - period + 1`
+    // and therefore becomes valid at 3 * period - 2. Using `today - period`
+    // shifts the result one bar late and leaves a spurious NaN at the first
+    // valid position.
+    let first = 3 * period.saturating_sub(1);
+    for i in first..len {
         let cur = adx_vals[i];
         // TA-Lib's ADXR consumes the internal ADX value one bar after the
         // public ADX lookback.  This is why the first ADXR value appears at

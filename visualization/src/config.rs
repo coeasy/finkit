@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::language::Language;
+use crate::viewport::LodPolicy;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ThemeConfig {
@@ -119,7 +120,7 @@ pub enum LineStyle {
     DashDot,
 }
 
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub enum DecimateStrategy {
     LTTB,
     MinMax,
@@ -134,6 +135,33 @@ pub struct Margin {
     pub right: u32,
     pub bottom: u32,
     pub left: u32,
+}
+
+/// Runtime interaction policy for HTML/native chart frontends.
+///
+/// The flags are intentionally independent so an embedding application can
+/// keep zoom/pan while hiding the data window, or keep a lightweight
+/// crosshair while disabling all pointer gestures.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct InteractionConfig {
+    pub enabled: bool,
+    pub show_crosshair: bool,
+    pub show_data_window: bool,
+    pub enable_pan_zoom: bool,
+    pub enable_keyboard: bool,
+}
+
+impl Default for InteractionConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            show_crosshair: true,
+            show_data_window: true,
+            enable_pan_zoom: true,
+            enable_keyboard: true,
+        }
+    }
 }
 
 impl Default for Margin {
@@ -168,6 +196,7 @@ impl Margin {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
 pub struct ChartConfig {
     pub title: String,
     pub show_legend: bool,
@@ -181,7 +210,99 @@ pub struct ChartConfig {
     pub height: u32,
     pub dpi: u32,
     pub decimate_strategy: DecimateStrategy,
+    pub lod_policy: LodPolicy,
     pub margins: Margin,
+    pub interaction: InteractionConfig,
+    pub chan: ChanRenderConfig,
+}
+
+/// Configuration for the optional Chanlun overlay on the main price panel.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct ChanRenderConfig {
+    /// Enables structure analysis and rendering.
+    pub enabled: bool,
+    /// Draws top and bottom fractal markers.
+    pub show_fractals: bool,
+    /// Draws strokes connecting fractals.
+    pub show_strokes: bool,
+    /// Draws conservative three-stroke segments.
+    pub show_segments: bool,
+    /// Draws center ranges as translucent bands.
+    pub show_centers: bool,
+    /// Adds compact top/bottom labels.
+    pub show_labels: bool,
+    /// Minimum horizontal pixel distance between adjacent labels.
+    pub label_min_pixel_gap: f64,
+    /// Draws conservative buy/sell signal candidates.
+    pub show_signals: bool,
+    /// Draws confirmed and developing divergence candidates.
+    pub show_divergences: bool,
+    /// Draws the last unconfirmed fractal candidate.
+    pub show_developing: bool,
+    /// Enables fractals, signals, divergences and labels for higher MTF
+    /// frames. Disabled by default to keep dense overlays readable.
+    pub show_multi_timeframe_annotations: bool,
+    /// Minimum raw-bar distance between stroke endpoints.
+    pub min_stroke_bars: usize,
+    /// Rule preset: `conservative`, `standard`, or `aggressive`.
+    pub variant: String,
+    /// Fractal policy name.
+    pub fractal_policy: String,
+    /// Stroke policy name.
+    pub stroke_policy: String,
+    /// Center policy name.
+    pub center_policy: String,
+    /// Minimum stroke change ratio.
+    pub min_stroke_change_ratio: f64,
+    /// Minimum fractal range ratio.
+    pub min_fractal_range_ratio: f64,
+    /// Minimum signal strength.
+    pub signal_min_strength: f64,
+    /// Relative center-break threshold.
+    pub center_break_ratio: f64,
+    /// Fractal marker color.
+    pub fractal_color: String,
+    /// Stroke color.
+    pub stroke_color: String,
+    /// Segment color.
+    pub segment_color: String,
+    /// Center band color.
+    pub center_color: String,
+    /// Width used by structural lines.
+    pub line_width: f32,
+}
+
+impl Default for ChanRenderConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            show_fractals: true,
+            show_strokes: true,
+            show_segments: true,
+            show_centers: true,
+            show_labels: false,
+            label_min_pixel_gap: 24.0,
+            show_signals: true,
+            show_divergences: true,
+            show_developing: true,
+            show_multi_timeframe_annotations: false,
+            min_stroke_bars: 6,
+            variant: "standard".to_string(),
+            fractal_policy: "strict".to_string(),
+            stroke_policy: "configurable".to_string(),
+            center_policy: "dynamic".to_string(),
+            min_stroke_change_ratio: 0.0,
+            min_fractal_range_ratio: 0.0,
+            signal_min_strength: 0.0,
+            center_break_ratio: 0.0,
+            fractal_color: "#f59e0b".to_string(),
+            stroke_color: "#2563eb".to_string(),
+            segment_color: "#7c3aed".to_string(),
+            center_color: "#0ea5e9".to_string(),
+            line_width: 1.5,
+        }
+    }
 }
 
 impl Default for ChartConfig {
@@ -202,7 +323,10 @@ impl Default for ChartConfig {
             height: 600,
             dpi: 144,
             decimate_strategy: DecimateStrategy::default(),
+            lod_policy: LodPolicy::default(),
             margins: Margin::default(),
+            interaction: InteractionConfig::default(),
+            chan: ChanRenderConfig::default(),
         }
     }
 }
@@ -294,8 +418,37 @@ impl ChartConfigBuilder {
         self
     }
 
+    pub fn with_lod_policy(mut self, policy: LodPolicy) -> Self {
+        self.config.lod_policy = policy;
+        self
+    }
+
     pub fn with_margins(mut self, margins: Margin) -> Self {
         self.config.margins = margins;
+        self
+    }
+
+    /// Replaces the pointer, keyboard and floating-data interaction policy.
+    pub fn with_interaction(mut self, interaction: InteractionConfig) -> Self {
+        self.config.interaction = interaction;
+        self
+    }
+
+    /// Enables or disables all chart interactions.
+    pub fn interactive(mut self, enabled: bool) -> Self {
+        self.config.interaction.enabled = enabled;
+        self
+    }
+
+    /// Enables or disables the Chanlun overlay.
+    pub fn show_chan(mut self, show: bool) -> Self {
+        self.config.chan.enabled = show;
+        self
+    }
+
+    /// Replaces the Chanlun overlay configuration.
+    pub fn with_chan_config(mut self, chan: ChanRenderConfig) -> Self {
+        self.config.chan = chan;
         self
     }
 
@@ -530,6 +683,15 @@ mod tests {
         assert_eq!(m.right, 20);
         assert_eq!(m.bottom, 30);
         assert_eq!(m.left, 40);
+    }
+
+    #[test]
+    fn test_interaction_config_defaults_and_builder() {
+        let config = ChartConfigBuilder::new().interactive(false).build();
+        assert!(!config.interaction.enabled);
+        assert!(config.interaction.show_crosshair);
+        assert!(config.interaction.show_data_window);
+        assert!(InteractionConfig::default().enable_keyboard);
     }
 
     #[test]

@@ -33,8 +33,19 @@ impl Renderer for SvgRenderer {
             config.theme_config.background_color
         ));
 
-        for prim in &draw_list.primitives {
-            svg.push_str(&Self::render_primitive(prim, 0));
+        let mut index = 0;
+        while index < draw_list.primitives.len() {
+            let batch_end = Self::same_style_line_batch_end(&draw_list.primitives, index);
+            if batch_end.saturating_sub(index) >= 2 {
+                svg.push_str(&Self::render_line_batch(
+                    &draw_list.primitives[index..batch_end],
+                    0,
+                ));
+                index = batch_end;
+            } else {
+                svg.push_str(&Self::render_primitive(&draw_list.primitives[index], 0));
+                index += 1;
+            }
         }
 
         svg.push_str("</svg>");
@@ -43,6 +54,44 @@ impl Renderer for SvgRenderer {
 }
 
 impl SvgRenderer {
+    fn same_style_line_batch_end(primitives: &[Primitive], start: usize) -> usize {
+        let Some(Primitive::Line { style, .. }) = primitives.get(start) else {
+            return start;
+        };
+        let mut end = start + 1;
+        while let Some(Primitive::Line {
+            style: next_style, ..
+        }) = primitives.get(end)
+        {
+            if next_style != style {
+                break;
+            }
+            end += 1;
+        }
+        end
+    }
+
+    fn render_line_batch(primitives: &[Primitive], indent: usize) -> String {
+        let Some(Primitive::Line { style, .. }) = primitives.first() else {
+            return String::new();
+        };
+        let mut path = String::new();
+        for primitive in primitives {
+            if let Primitive::Line { p1, p2, .. } = primitive {
+                path.push_str(&format!(
+                    "M{:.2} {:.2} L{:.2} {:.2} ",
+                    p1.x, p1.y, p2.x, p2.y
+                ));
+            }
+        }
+        format!(
+            "{}<path d=\"{}\" style=\"{}\"/>\n",
+            "  ".repeat(indent + 1),
+            path.trim_end(),
+            Self::style_to_svg(style)
+        )
+    }
+
     fn render_primitive(prim: &Primitive, indent: usize) -> String {
         let pad = "  ".repeat(indent + 1);
         match prim {
@@ -666,6 +715,29 @@ mod tests {
         assert!(result.contains("<line"));
         assert!(result.contains("<circle"));
         assert!(result.contains("<text"));
+    }
+
+    #[test]
+    fn test_svg_batches_adjacent_lines_with_same_style() {
+        let renderer = SvgRenderer::new();
+        let config = default_config();
+        let style = Style::new().with_stroke(Color::BLUE);
+        let mut draw_list = DrawList::new();
+        draw_list.push(Primitive::Line {
+            p1: Point::new(0.0, 0.0),
+            p2: Point::new(10.0, 10.0),
+            style: style.clone(),
+        });
+        draw_list.push(Primitive::Line {
+            p1: Point::new(20.0, 20.0),
+            p2: Point::new(30.0, 30.0),
+            style,
+        });
+        let result = renderer
+            .render(&draw_list, &config)
+            .expect("batched SVG should render");
+        assert_eq!(result.matches("<path ").count(), 1);
+        assert!(!result.contains("<line"));
     }
 
     #[test]

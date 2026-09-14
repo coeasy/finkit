@@ -423,6 +423,76 @@ pub struct PyCompiledFormula {
     canonical: Option<CanonicalFormula>,
 }
 
+/// Reusable registry for parameterized expression components.
+///
+/// Components are expanded and validated by the Rust engine before a plan is
+/// returned, so Python callers can build the same nested custom indicators as
+/// native Rust callers without textual source rewriting.
+#[pyclass(name = "FormulaRegistry", unsendable)]
+pub struct PyFormulaRegistry {
+    engine: Option<FormulaEngine>,
+}
+
+#[pymethods]
+impl PyFormulaRegistry {
+    #[new]
+    fn new() -> Self {
+        Self {
+            engine: Some(FormulaEngine::new()),
+        }
+    }
+
+    /// Register an expression-only component, e.g. `MA(X, N) + EMA(X, N)`.
+    fn register(&mut self, name: String, parameters: Vec<String>, source: String) -> PyResult<()> {
+        let refs: Vec<&str> = parameters.iter().map(String::as_str).collect();
+        self.engine
+            .as_mut()
+            .expect("formula registry engine is available")
+            .register_custom_formula(&name, &refs, &source)
+            .map_err(formula_runtime_error)
+    }
+
+    /// Remove one component and return whether it existed.
+    fn unregister(&mut self, name: &str) -> PyResult<bool> {
+        self.engine
+            .as_mut()
+            .expect("formula registry engine is available")
+            .unregister_custom_formula(name)
+            .map_err(formula_runtime_error)
+    }
+
+    /// Return registered component names in deterministic order.
+    fn names(&self) -> Vec<String> {
+        self.engine
+            .as_ref()
+            .expect("formula registry engine is available")
+            .custom_formula_names()
+    }
+
+    /// Compile a source formula using this registry.
+    fn compile(&mut self, source: String) -> PyResult<PyCompiledFormula> {
+        let mut engine = self
+            .engine
+            .take()
+            .expect("formula registry engine is available");
+        let compiled = match engine.compile(&source) {
+            Ok(compiled) => compiled,
+            Err(error) => {
+                self.engine = Some(engine);
+                return Err(PyErr::new::<pyo3::exceptions::PySyntaxError, _>(
+                    error.to_string(),
+                ));
+            }
+        };
+        Ok(PyCompiledFormula {
+            source,
+            engine: Some(engine),
+            compiled: Arc::new(compiled),
+            stream_context: None,
+        })
+    }
+}
+
 #[pymethods]
 impl PyCompiledFormula {
     #[new]
@@ -444,6 +514,133 @@ impl PyCompiledFormula {
     #[getter]
     fn source(&self) -> &str {
         &self.source
+    }
+
+    /// Return dependency, lookback, future-data and streaming diagnostics.
+    fn analyze<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let analysis = self
+            .engine
+            .as_ref()
+            .expect("compiled formula engine is available")
+            .analyze_ast(&self.compiled.ast);
+        let output = PyDict::new(py);
+        output.set_item("input_variables", analysis.input_variables)?;
+        output.set_item("assigned_variables", analysis.assigned_variables)?;
+        output.set_item("called_functions", analysis.called_functions)?;
+        output.set_item("unknown_functions", analysis.unknown_functions)?;
+        output.set_item("required_lookback", analysis.required_lookback)?;
+        output.set_item("estimated_nodes", analysis.estimated_nodes)?;
+        output.set_item("estimated_cost", analysis.estimated_cost)?;
+        output.set_item("has_future_data", analysis.has_future_data)?;
+        output.set_item("has_stateful_functions", analysis.has_stateful_functions)?;
+        output.set_item("has_observable_effects", analysis.has_observable_effects)?;
+        output.set_item("has_control_flow", analysis.has_control_flow)?;
+        output.set_item("supports_streaming", analysis.supports_streaming)?;
+        let diagnostics: Vec<_> = analysis
+            .diagnostics
+            .iter()
+            .map(|item| {
+                let dict = PyDict::new(py);
+                dict.set_item("code", &item.code)?;
+                dict.set_item("level", format!("{:?}", item.level))?;
+                dict.set_item("message", &item.message)?;
+                Ok::<_, PyErr>(dict.into_any())
+            })
+            .collect::<PyResult<_>>()?;
+        output.set_item("diagnostics", diagnostics)?;
+        Ok(output)
+    }
+
+    /// Return the stable result shape, warm-up and null-value contract.
+    #[pyo3(signature = (data_len = 0))]
+    fn metadata<'py>(&self, py: Python<'py>, data_len: usize) -> PyResult<Bound<'py, PyDict>> {
+        let metadata = self
+            .engine
+            .as_ref()
+            .expect("compiled formula engine is available")
+            .metadata_for_formula(&self.compiled, data_len);
+        let output = PyDict::new(py);
+        output.set_item("schema_version", metadata.schema_version)?;
+        output.set_item("length", metadata.length)?;
+        output.set_item("dtype", metadata.dtype)?;
+        output.set_item("output_names", metadata.output_names)?;
+        output.set_item("null_policy", metadata.null_policy)?;
+        output.set_item("required_lookback", metadata.required_lookback)?;
+        output.set_item("warmup", metadata.warmup)?;
+        output.set_item("valid_start", metadata.valid_start)?;
+        output.set_item("has_future_data", metadata.has_future_data)?;
+        output.set_item("supports_streaming", metadata.supports_streaming)?;
+        output.set_item("has_observable_effects", metadata.has_observable_effects)?;
+        Ok(output)
+    }
+
+    /// Return the complete TA-Lib public function catalog used by compatibility reports.
+    fn talib_catalog<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyDict>>> {
+        ::finkit::formula::ta_lib_function_contracts()
+            .into_iter()
+            .map(|item| {
+                let dict = PyDict::new(py);
+                dict.set_item("name", item.name)?;
+                dict.set_item("category", item.category)?;
+                dict.set_item("input_shape", item.input_shape)?;
+                dict.set_item("outputs", item.outputs)?;
+                dict.set_item("lookback", item.lookback)?;
+                dict.set_item("warmup_policy", item.warmup_policy)?;
+                dict.set_item("nan_policy", item.nan_policy)?;
+                dict.set_item("runtime_registered", item.runtime_registered)?;
+                Ok(dict)
+            })
+            .collect()
+    }
+
+    /// Inspect terminal-specific semantic compatibility without evaluation.
+    #[pyo3(signature = (terminal = "finkit"))]
+    fn compatibility_report<'py>(
+        &self,
+        py: Python<'py>,
+        terminal: &str,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let terminal = ::finkit::formula::FormulaTerminal::from_str(terminal).ok_or_else(|| {
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                "unknown formula terminal: {terminal}"
+            ))
+        })?;
+        let report = inspect_formula_compatibility(&self.source, terminal)
+            .map_err(|error| PyErr::new::<pyo3::exceptions::PyValueError, _>(error))?;
+        let output = PyDict::new(py);
+        output.set_item("terminal", terminal.as_str())?;
+        output.set_item("normalized_source", report.normalized_source)?;
+        output.set_item("profile_id", report.profile.id)?;
+        output.set_item("null_policy", report.profile.null_policy)?;
+        output.set_item("sma_policy", report.profile.sma_policy)?;
+        output.set_item("lookahead_policy", report.profile.lookahead_policy)?;
+        output.set_item(
+            "requires_session_metadata",
+            report.profile.requires_session_metadata,
+        )?;
+        let functions: Vec<_> = report
+            .functions
+            .iter()
+            .map(|item| {
+                let dict = PyDict::new(py);
+                dict.set_item("name", &item.name)?;
+                dict.set_item("status", item.status.as_str())?;
+                dict.set_item("message", &item.message)?;
+                dict.set_item("cataloged", item.cataloged)?;
+                dict.set_item("runtime_registered", item.runtime_registered)?;
+                dict.set_item("category", &item.category)?;
+                dict.set_item("outputs", item.outputs)?;
+                Ok::<_, PyErr>(dict.into_any())
+            })
+            .collect::<PyResult<_>>()?;
+        output.set_item("functions", functions)?;
+        output.set_item("ta_lib_catalog_version", report.ta_lib_catalog_version)?;
+        output.set_item("ta_lib_function_count", report.ta_lib_function_count)?;
+        output.set_item(
+            "ta_lib_runtime_registered_count",
+            report.ta_lib_runtime_registered_count,
+        )?;
+        Ok(output)
     }
 
     /// Evaluate using the pooled engine. Inputs are copied into the owned
@@ -620,6 +817,77 @@ impl PyCompiledFormula {
         let output = PyDict::new(py);
         output.set_item("__result__", PyArray1::from_vec(py, result.into_raw_vec()))?;
         self.stream_context = Some(context);
+        Ok(output)
+    }
+
+    /// Evaluate a half-open range while borrowing contiguous NumPy inputs.
+    /// Unlike `eval_range`, this method does not establish an owned retained
+    /// stream context and is intended for repeated chart-window refreshes.
+    #[pyo3(signature = (open, high, low, close, volume, start, end, amount=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn eval_range_zero_copy<'py>(
+        &mut self,
+        py: Python<'py>,
+        open: PyReadonlyArray1<'py, f64>,
+        high: PyReadonlyArray1<'py, f64>,
+        low: PyReadonlyArray1<'py, f64>,
+        close: PyReadonlyArray1<'py, f64>,
+        volume: PyReadonlyArray1<'py, f64>,
+        start: usize,
+        end: usize,
+        amount: Option<PyReadonlyArray1<'py, f64>>,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let open = open.as_slice().map_err(|error| {
+            PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!("open: {error}"))
+        })?;
+        let high = high.as_slice().map_err(|error| {
+            PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!("high: {error}"))
+        })?;
+        let low = low.as_slice().map_err(|error| {
+            PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!("low: {error}"))
+        })?;
+        let close = close.as_slice().map_err(|error| {
+            PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!("close: {error}"))
+        })?;
+        let volume = volume.as_slice().map_err(|error| {
+            PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!("volume: {error}"))
+        })?;
+        let amount = amount
+            .as_ref()
+            .map(|array| {
+                array.as_slice().map_err(|error| {
+                    PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!("amount: {error}"))
+                })
+            })
+            .transpose()?;
+        let data_len = validate_lengths(open, high, low, close, volume, amount)?;
+        if start > end || end > data_len {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "eval_range_zero_copy expects 0 <= start <= end <= input length",
+            ));
+        }
+        let engine = self.engine.take().ok_or_else(|| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "compiled formula is already being evaluated",
+            )
+        })?;
+        let result = engine
+            .eval_range_zero_copy_inputs(
+                &self.compiled,
+                open,
+                high,
+                low,
+                close,
+                volume,
+                amount,
+                start,
+                end,
+            )
+            .map_err(formula_runtime_error);
+        self.engine = Some(engine);
+        let result = result?;
+        let output = PyDict::new(py);
+        output.set_item("__result__", PyArray1::from_vec(py, result.into_raw_vec()))?;
         Ok(output)
     }
 

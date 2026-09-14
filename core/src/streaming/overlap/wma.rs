@@ -1,6 +1,7 @@
 use crate::streaming::traits::StreamingIndicator;
 use crate::{impl_indicator_meta, impl_standard_methods};
 
+#[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamingWma {
     period: usize,

@@ -13,6 +13,8 @@ on:
       - "scripts/check_versions.py"
       - "scripts/check_warning_contracts.py"
       - "scripts/sync_bindings.py"
+      - "scripts/enrich_registry_ffi.py"
+      - "docs/ffi_registry.json"
       - ".github/workflows/multilang-cross-platform.yml"
   push:
     branches:
@@ -42,6 +44,7 @@ jobs:
         run: |
           python scripts/check_versions.py
           python scripts/check_warning_contracts.py
+          python scripts/sync_bindings.py --lang python --check
       - id: version
         shell: bash
         run: |

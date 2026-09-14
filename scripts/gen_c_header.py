@@ -28,6 +28,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 REGISTRY = ROOT / "docs/indicator_registry.json"
+FFI_REGISTRY = ROOT / "docs/ffi_registry.json"
 DEFAULT_HEADER = ROOT / "ffi/c-binding/include/finkit.h"
 
 # Canonical section order (mirrors finkit.h).
@@ -140,7 +141,20 @@ TA_API char *finkit_kline_chart_to_svg(finkit_kline_chart_t handle);
 
 
 def load_registry() -> dict:
-    return json.loads(REGISTRY.read_text(encoding="utf-8"))
+    reg = json.loads(REGISTRY.read_text(encoding="utf-8"))
+    if not FFI_REGISTRY.exists():
+        return reg
+    ffi = json.loads(FFI_REGISTRY.read_text(encoding="utf-8"))
+    for item in ffi.get("indicators", []):
+        name = item.get("name")
+        if not name:
+            continue
+        target = next((x for x in reg["indicators"] if x.get("name") == name), None)
+        if target is None:
+            target = {"name": name}
+            reg.setdefault("indicators", []).append(target)
+        target["ffi"] = item.get("ffi", {})
+    return reg
 
 
 def emit_decl(ffi: dict) -> str:
@@ -204,7 +218,7 @@ def check(header_path: Path) -> bool:
     a = signatures_of(generated)
     b = signatures_of(current)
     if a == b:
-        print(f"[check] OK: {len(a)} indicator signatures match ✅")
+        print(f"[check] OK: {len(a)} indicator signatures match (ok)")
         return True
     missing = set(a) - set(b)
     extra = set(b) - set(a)

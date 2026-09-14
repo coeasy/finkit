@@ -35,6 +35,18 @@ extern crate alloc;
 /// Bounded reusable scratch-buffer arena shared by compute backends.
 pub mod buffer_arena;
 #[cfg(feature = "std")]
+/// Configurable weekdays, holidays and intraday exchange sessions.
+pub mod calendar;
+#[cfg(feature = "std")]
+/// Chanlun structure analysis: inclusion-free bars, fractals, strokes, segments, and centers.
+pub mod chan;
+#[cfg(feature = "std")]
+/// Automatic factor-based multi-timeframe Chanlun analysis.
+pub mod chan_mtf;
+#[cfg(feature = "std")]
+/// Declarative, dependency-aware composite indicator graphs.
+pub mod composite;
+#[cfg(feature = "std")]
 /// Unified semantic compute plans, factor plans, and runtime execution policies.
 pub mod compute;
 #[cfg(all(feature = "std", not(feature = "no_std")))]

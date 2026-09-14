@@ -1,7 +1,9 @@
 use crate::config::ChartConfig;
+use crate::data::KlineData;
 use crate::error::{Result, VisualizationError};
 use crate::geometry::Transform;
 use crate::primitive::{Color, DrawList, LineStyle, Primitive, Style};
+use crate::scene::{ChartScene, HitTarget, PanelId};
 use serde_json::{json, Value};
 
 pub struct JsonRenderer;
@@ -9,6 +11,155 @@ pub struct JsonRenderer;
 impl JsonRenderer {
     pub fn new() -> Self {
         Self
+    }
+
+    /// Export draw primitives together with the semantic scene schema.
+    pub fn render_scene(
+        &self,
+        draw_list: &DrawList,
+        config: &ChartConfig,
+        scene: &ChartScene,
+    ) -> Result<String> {
+        let config_value =
+            serde_json::to_value(config).map_err(|e| VisualizationError::SerializationError {
+                message: e.to_string(),
+            })?;
+        let primitives: Vec<Value> = draw_list.primitives.iter().map(primitive_to_json).collect();
+        let panels = scene
+            .panels
+            .iter()
+            .map(|panel| {
+                json!({
+                    "id": panel_id_to_json(panel.id),
+                    "rect": rect_to_json(&panel.rect),
+                    "visible": panel.visible,
+                })
+            })
+            .collect::<Vec<_>>();
+        let layers = scene
+            .layers
+            .iter()
+            .map(|layer| {
+                json!({
+                    "id": layer.id,
+                    "panel": panel_id_to_json(layer.panel),
+                    "z_index": layer.z_index,
+                    "visible": layer.visible,
+                    "opacity": layer.opacity,
+                })
+            })
+            .collect::<Vec<_>>();
+        let hit_regions = scene
+            .hit_regions
+            .iter()
+            .map(|region| {
+                json!({
+                    "rect": rect_to_json(&region.rect),
+                    "target": hit_target_to_json(&region.target),
+                    "priority": region.priority,
+                    "tooltip": region.tooltip,
+                })
+            })
+            .collect::<Vec<_>>();
+        let result = json!({
+            "schema_version": 1,
+            "config": config_value,
+            "primitives": primitives,
+            "scene": {
+                "panels": panels,
+                "layers": layers,
+                "hit_regions": hit_regions,
+                "metadata": {
+                    "data_revision": scene.metadata.data_revision,
+                    "source_start": scene.metadata.source_start,
+                    "source_end": scene.metadata.source_end,
+                    "timeframe_labels": scene.metadata.timeframe_labels,
+                },
+            },
+        });
+        serde_json::to_string(&result).map_err(|e| VisualizationError::SerializationError {
+            message: e.to_string(),
+        })
+    }
+
+    /// Export the scene plus the exact display-window OHLCV rows used by the
+    /// renderer. `source_ranges` keeps aggregated rows traceable to source
+    /// bars for native and WASM data windows.
+    pub fn render_scene_with_data(
+        &self,
+        draw_list: &DrawList,
+        config: &ChartConfig,
+        scene: &ChartScene,
+        data: &KlineData,
+        source_offset: usize,
+        source_ranges: &[(usize, usize)],
+    ) -> Result<String> {
+        let mut result: Value = serde_json::from_str(&self.render_scene(draw_list, config, scene)?)
+            .map_err(|error| VisualizationError::SerializationError {
+                message: format!("Failed to compose JSON chart payload: {error}"),
+            })?;
+        result["data"] = json!({
+            "revision": data.revision(),
+            "source_offset": source_offset,
+            "source_ranges": source_ranges,
+            "dates": &data.dates,
+            "timestamps": &data.timestamps,
+            "opens": &data.opens,
+            "highs": &data.highs,
+            "lows": &data.lows,
+            "closes": &data.closes,
+            "volumes": &data.volumes,
+        });
+        serde_json::to_string(&result).map_err(|error| VisualizationError::SerializationError {
+            message: format!("Failed to serialize JSON chart payload: {error}"),
+        })
+    }
+}
+
+fn panel_id_to_json(panel: PanelId) -> Value {
+    match panel {
+        PanelId::Main => json!("main"),
+        PanelId::Volume => json!("volume"),
+        PanelId::Indicator(index) => json!({"indicator": index}),
+    }
+}
+
+fn hit_target_to_json(target: &HitTarget) -> Value {
+    match target {
+        HitTarget::Kline { index } => json!({"type":"kline", "index":index}),
+        HitTarget::Volume { index } => json!({"type":"volume", "index":index}),
+        HitTarget::Indicator { name, index } => {
+            json!({"type":"indicator", "name":name, "index":index})
+        }
+        HitTarget::ChanFractal { index } => json!({"type":"chan_fractal", "index":index}),
+        HitTarget::ChanStroke {
+            start_index,
+            end_index,
+        } => {
+            json!({"type":"chan_stroke", "start_index":start_index, "end_index":end_index})
+        }
+        HitTarget::ChanSegment {
+            start_index,
+            end_index,
+        } => {
+            json!({"type":"chan_segment", "start_index":start_index, "end_index":end_index})
+        }
+        HitTarget::ChanCenter {
+            start_index,
+            end_index,
+            level,
+        } => {
+            json!({"type":"chan_center", "start_index":start_index, "end_index":end_index, "level":level})
+        }
+        HitTarget::ChanSignal { index, kind } => {
+            json!({"type":"chan_signal", "index":index, "kind":kind})
+        }
+        HitTarget::ChanDivergence { index, kind } => {
+            json!({"type":"chan_divergence", "index":index, "kind":kind})
+        }
+        HitTarget::Event { index, kind } => {
+            json!({"type":"event", "index":index, "kind":kind})
+        }
     }
 }
 
@@ -175,6 +326,65 @@ mod tests {
         assert!(parsed["config"].is_object());
         assert!(parsed["primitives"].is_array());
         assert_eq!(parsed["primitives"].as_array().expect("finkit-visualization: unexpected None/Err in visualization/src/render/json.rs (A5 governance)").len(), 0);
+    }
+
+    #[test]
+    fn test_json_renderer_scene_schema() {
+        let renderer = JsonRenderer::new();
+        let mut scene = ChartScene::default();
+        scene.add_panel(crate::scene::PanelDescriptor {
+            id: PanelId::Main,
+            rect: Rect::new(0.0, 0.0, 100.0, 80.0),
+            visible: true,
+        });
+        scene.add_layer(crate::scene::LayerDescriptor::new(
+            "price",
+            PanelId::Main,
+            1,
+        ));
+        scene.add_hit_region(crate::scene::HitRegion {
+            rect: Rect::new(0.0, 0.0, 10.0, 10.0),
+            target: HitTarget::Kline { index: 4 },
+            priority: 1,
+            tooltip: Some("bar".into()),
+        });
+        let json_str = renderer
+            .render_scene(&DrawList::new(), &ChartConfig::default(), &scene)
+            .expect("scene schema should serialize");
+        let parsed: Value = serde_json::from_str(&json_str).expect("valid scene JSON");
+        assert_eq!(parsed["schema_version"], 1);
+        assert_eq!(
+            parsed["scene"]["panels"].as_array().expect("panels").len(),
+            1
+        );
+        assert_eq!(parsed["scene"]["hit_regions"][0]["target"]["index"], 4);
+    }
+
+    #[test]
+    fn test_json_renderer_data_window_payload() {
+        let renderer = JsonRenderer::new();
+        let data = KlineData::new(
+            vec!["2024-01-01".into(), "2024-01-02".into()],
+            vec![10.0, 11.0],
+            vec![12.0, 13.0],
+            vec![9.0, 10.0],
+            vec![11.0, 12.0],
+            vec![100.0, 120.0],
+        );
+        let json_str = renderer
+            .render_scene_with_data(
+                &DrawList::new(),
+                &ChartConfig::default(),
+                &ChartScene::default(),
+                &data,
+                4,
+                &[(4, 5), (5, 6)],
+            )
+            .expect("data payload should serialize");
+        let parsed: Value = serde_json::from_str(&json_str).expect("valid data JSON");
+        assert_eq!(parsed["data"]["revision"], 0);
+        assert_eq!(parsed["data"]["source_offset"], 4);
+        assert_eq!(parsed["data"]["closes"][1], 12.0);
     }
 
     #[test]

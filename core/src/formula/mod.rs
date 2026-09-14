@@ -13,11 +13,14 @@
 //! - Template library with 100+ pre-built formulas
 //! - Memory pool for zero-copy evaluation
 
+pub mod analysis;
 pub mod ast;
 pub mod bytecode;
 pub mod compat;
 pub mod compiler;
 pub mod compute_ir;
+pub mod contracts;
+pub mod custom;
 pub mod debugger;
 pub mod drawing;
 pub mod engine;
@@ -47,11 +50,24 @@ pub mod templates;
 pub mod types;
 pub mod unified_dispatch;
 
+pub use analysis::{
+    analyze_formula, FormulaAnalysis, FormulaDiagnostic, FormulaDiagnosticLevel,
+    FormulaSeriesMetadata,
+};
 pub use ast::*;
 pub use bytecode::{compile_to_bytecode, Bytecode, BytecodeVM, ExecResult, OpCode};
-pub use compat::{normalize_terminal_source, CompatibilityLevel, FormulaTerminal};
+pub use compat::{
+    inspect_formula_compatibility, normalize_terminal_source, CompatibilityLevel,
+    CompatibilityStatus, FormulaCompatibilityReport, FormulaTerminal, FunctionCompatibility,
+    SemanticProfile,
+};
 pub use compiler::{CompiledFormula, FormulaCache, FormulaCompiler};
 pub use compute_ir::{lower_formula_ast, lower_formula_ast_with_registry, FormulaComputePlan};
+pub use contracts::{
+    ta_lib_function_contract, ta_lib_function_contracts, FormulaFunctionContract,
+    TA_LIB_CATALOG_VERSION,
+};
+pub use custom::{CustomFormula, FormulaRegistry};
 pub use debugger::{DebugEvent, FormulaDebugger, FormulaErrorWithLocation};
 pub use drawing::{DrawCommand, DrawResult};
 pub use engine::{FormulaEngine, FormulaResult};

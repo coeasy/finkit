@@ -9,7 +9,8 @@ pub enum BinningMethod {
     EqualWidth,
     /// Quantile-based bins from the expected sample.
     EqualFrequency,
-    /// Placeholder for user-defined edges; currently uses equal-width on expected.
+    /// Use explicit edges through [`psi_with_edges`]. The legacy [`psi`]
+    /// entry point falls back to equal-width edges when no edges are supplied.
     Custom,
 }
 
@@ -18,12 +19,38 @@ pub enum BinningMethod {
 /// Compares histograms of `expected` (baseline) and `actual` using bins derived from
 /// `expected` according to `method`. Values above 0.2 typically indicate significant drift.
 pub fn psi(expected: &[f64], actual: &[f64], bins: usize, method: BinningMethod) -> f64 {
+    let expected = finite_values(expected);
+    let actual = finite_values(actual);
     if bins == 0 || expected.is_empty() || actual.is_empty() {
         return f64::NAN;
     }
-    let edges = bin_edges(expected, bins, method);
-    let expected_pct = histogram_proportions(expected, &edges, bins);
-    let actual_pct = histogram_proportions(actual, &edges, bins);
+    let edges = bin_edges(&expected, bins, method);
+    let expected_pct = histogram_proportions(&expected, &edges, bins);
+    let actual_pct = histogram_proportions(&actual, &edges, bins);
+    stability_index(&expected_pct, &actual_pct)
+}
+
+/// Population Stability Index using caller-provided bin edges.
+///
+/// `edges` must contain at least two finite, strictly increasing values. Values
+/// below the first edge are counted in the first bin and values at/above the
+/// last edge are counted in the last bin, which makes the metric stable when a
+/// live distribution drifts outside the baseline range.
+pub fn psi_with_edges(expected: &[f64], actual: &[f64], edges: &[f64]) -> f64 {
+    if edges.len() < 2
+        || edges.iter().any(|edge| !edge.is_finite())
+        || edges.windows(2).any(|window| window[0] >= window[1])
+    {
+        return f64::NAN;
+    }
+    let expected = finite_values(expected);
+    let actual = finite_values(actual);
+    if expected.is_empty() || actual.is_empty() {
+        return f64::NAN;
+    }
+    let bins = edges.len() - 1;
+    let expected_pct = histogram_proportions(&expected, edges, bins);
+    let actual_pct = histogram_proportions(&actual, edges, bins);
     stability_index(&expected_pct, &actual_pct)
 }
 
@@ -55,6 +82,13 @@ fn stability_index(expected_pct: &[f64], actual_pct: &[f64]) -> f64 {
             (a - e) * (a / e).ln()
         })
         .sum()
+}
+
+fn finite_values(data: &[f64]) -> Vec<f64> {
+    data.iter()
+        .copied()
+        .filter(|value| value.is_finite())
+        .collect()
 }
 
 fn bin_edges(expected: &[f64], bins: usize, method: BinningMethod) -> Vec<f64> {
@@ -216,6 +250,15 @@ mod tests {
         let data: Vec<f64> = (0..500).map(|i| i as f64 * 0.01).collect();
         let psi_val = psi(&data, &data, 10, BinningMethod::EqualWidth);
         assert_relative_eq!(psi_val, 0.0, epsilon = 0.01);
+    }
+
+    #[test]
+    fn test_psi_with_custom_edges_and_outliers() {
+        let expected = [0.1, 0.2, 0.3, f64::NAN];
+        let actual = [-10.0, 0.15, 0.25, 2.0, f64::INFINITY];
+        let value = psi_with_edges(&expected, &actual, &[0.0, 0.2, 0.4, 1.0]);
+        assert!(value.is_finite() && value > 0.0);
+        assert!(psi_with_edges(&expected, &actual, &[0.0, 0.0, 1.0]).is_nan());
     }
 
     #[test]
