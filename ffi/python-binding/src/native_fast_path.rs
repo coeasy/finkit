@@ -1353,18 +1353,31 @@ fn fast_sar<'py>(
     let low = low.as_slice().map_err(value_error)?;
     validate_same_len(high.len(), low.len())?;
     let output = unsafe { PyArray1::new(py, [high.len()], false) };
-    let output_addr = output.data() as usize;
-    py.detach(|| unsafe {
-        let output_ptr = output_addr as *mut f64;
-        sar_kernel::sar_into(
-            high,
-            low,
-            acceleration,
-            maximum,
-            std::slice::from_raw_parts_mut(output_ptr, high.len()),
-        )
-    })
-    .map_err(value_error)?;
+    if high.len() <= 16_384 {
+        unsafe {
+            sar_kernel::sar_into(
+                high,
+                low,
+                acceleration,
+                maximum,
+                std::slice::from_raw_parts_mut(output.data(), high.len()),
+            )
+        }
+        .map_err(value_error)?;
+    } else {
+        let output_addr = output.data() as usize;
+        py.detach(|| unsafe {
+            let output_ptr = output_addr as *mut f64;
+            sar_kernel::sar_into(
+                high,
+                low,
+                acceleration,
+                maximum,
+                std::slice::from_raw_parts_mut(output_ptr, high.len()),
+            )
+        })
+        .map_err(value_error)?;
+    }
     Ok(output)
 }
 
