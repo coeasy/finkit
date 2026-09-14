@@ -511,6 +511,8 @@ fn stoch_default_5_3_3_into(
 
     let mut max_queue = [0usize; 8];
     let mut min_queue = [0usize; 8];
+    let mut max_values = [0.0_f64; 8];
+    let mut min_values = [0.0_f64; 8];
     let mut max_head = 0usize;
     let mut max_tail = 0usize;
     let mut min_head = 0usize;
@@ -531,22 +533,30 @@ fn stoch_default_5_3_3_into(
     // pointer form.  The queue counters are monotonic and the masks prove
     // that every queue/ring access stays within its fixed-size storage.
     unsafe {
+        let mut high_cursor = high_ptr;
+        let mut low_cursor = low_ptr;
+        let mut close_cursor = close_ptr;
+        let mut k_out_cursor = k_out_ptr;
+        let mut d_out_cursor = d_out_ptr;
         for i in 0..len {
-            let new_high = *high_ptr.add(i);
-            let new_low = *low_ptr.add(i);
+            let new_high = *high_cursor;
+            let new_low = *low_cursor;
             while max_tail > max_head
-                && *high_ptr.add(*max_queue.get_unchecked((max_tail - 1) & MASK)) <= new_high
+                && *max_values.get_unchecked((max_tail - 1) & MASK) <= new_high
             {
                 max_tail -= 1;
             }
-            *max_queue.get_unchecked_mut(max_tail & MASK) = i;
+            let max_slot = max_tail & MASK;
+            *max_queue.get_unchecked_mut(max_slot) = i;
+            *max_values.get_unchecked_mut(max_slot) = new_high;
             max_tail += 1;
-            while min_tail > min_head
-                && *low_ptr.add(*min_queue.get_unchecked((min_tail - 1) & MASK)) >= new_low
+            while min_tail > min_head && *min_values.get_unchecked((min_tail - 1) & MASK) >= new_low
             {
                 min_tail -= 1;
             }
-            *min_queue.get_unchecked_mut(min_tail & MASK) = i;
+            let min_slot = min_tail & MASK;
+            *min_queue.get_unchecked_mut(min_slot) = i;
+            *min_values.get_unchecked_mut(min_slot) = new_low;
             min_tail += 1;
 
             let window_start = i.saturating_sub(4);
@@ -558,11 +568,11 @@ fn stoch_default_5_3_3_into(
             }
 
             let fast_k = if i >= 4 {
-                let highest = *high_ptr.add(*max_queue.get_unchecked(max_head & MASK));
-                let lowest = *low_ptr.add(*min_queue.get_unchecked(min_head & MASK));
+                let highest = *max_values.get_unchecked(max_head & MASK);
+                let lowest = *min_values.get_unchecked(min_head & MASK);
                 let denom = highest - lowest;
                 if denom > 1e-15 {
-                    (*close_ptr.add(i) - lowest) / denom * 100.0
+                    (*close_cursor - lowest) / denom * 100.0
                 } else {
                     50.0
                 }
@@ -576,13 +586,18 @@ fn stoch_default_5_3_3_into(
             };
             let d_sum = slow_k + slow_k_prev1 + slow_k_prev2;
             if i >= LOOKBACK {
-                *k_out_ptr.add(i) = slow_k;
-                *d_out_ptr.add(i) = d_sum / 3.0;
+                *k_out_cursor = slow_k;
+                *d_out_cursor = d_sum / 3.0;
             }
             fast_k_prev2 = fast_k_prev1;
             fast_k_prev1 = fast_k;
             slow_k_prev2 = slow_k_prev1;
             slow_k_prev1 = slow_k;
+            high_cursor = high_cursor.add(1);
+            low_cursor = low_cursor.add(1);
+            close_cursor = close_cursor.add(1);
+            k_out_cursor = k_out_cursor.add(1);
+            d_out_cursor = d_out_cursor.add(1);
         }
     }
 }
