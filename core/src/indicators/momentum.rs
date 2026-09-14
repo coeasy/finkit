@@ -503,20 +503,11 @@ fn stoch_default_5_3_3_into(
     k_out: &mut [f64],
     d_out: &mut [f64],
 ) {
-    const MASK: usize = 7;
     const LOOKBACK: usize = 8;
     let warmup = LOOKBACK.min(k_out.len());
     k_out[..warmup].fill(f64::NAN);
     d_out[..warmup].fill(f64::NAN);
 
-    let mut max_queue = [0usize; 8];
-    let mut min_queue = [0usize; 8];
-    let mut max_values = [0.0_f64; 8];
-    let mut min_values = [0.0_f64; 8];
-    let mut max_head = 0usize;
-    let mut max_tail = 0usize;
-    let mut min_head = 0usize;
-    let mut min_tail = 0usize;
     let mut fast_k_prev1 = 0.0;
     let mut fast_k_prev2 = 0.0;
     let mut slow_k_prev1 = 0.0;
@@ -529,9 +520,10 @@ fn stoch_default_5_3_3_into(
     let d_out_ptr = d_out.as_mut_ptr();
     let len = close.len();
 
-    // This is the public default configuration, so keep the entire loop in
-    // pointer form.  The queue counters are monotonic and the masks prove
-    // that every queue/ring access stays within its fixed-size storage.
+    // The public default is a fixed five-bar window.  Scanning those five
+    // values directly is cheaper than maintaining two monotonic queues for
+    // this hot path, while retaining the same smoothing state and warm-up
+    // contract as TA-Lib.
     unsafe {
         let mut high_cursor = high_ptr;
         let mut low_cursor = low_ptr;
@@ -541,35 +533,39 @@ fn stoch_default_5_3_3_into(
         for i in 0..len {
             let new_high = *high_cursor;
             let new_low = *low_cursor;
-            while max_tail > max_head
-                && *max_values.get_unchecked((max_tail - 1) & MASK) <= new_high
-            {
-                max_tail -= 1;
-            }
-            let max_slot = max_tail & MASK;
-            *max_queue.get_unchecked_mut(max_slot) = i;
-            *max_values.get_unchecked_mut(max_slot) = new_high;
-            max_tail += 1;
-            while min_tail > min_head && *min_values.get_unchecked((min_tail - 1) & MASK) >= new_low
-            {
-                min_tail -= 1;
-            }
-            let min_slot = min_tail & MASK;
-            *min_queue.get_unchecked_mut(min_slot) = i;
-            *min_values.get_unchecked_mut(min_slot) = new_low;
-            min_tail += 1;
-
-            let window_start = i.saturating_sub(4);
-            while *max_queue.get_unchecked(max_head & MASK) < window_start {
-                max_head += 1;
-            }
-            while *min_queue.get_unchecked(min_head & MASK) < window_start {
-                min_head += 1;
-            }
-
             let fast_k = if i >= 4 {
-                let highest = *max_values.get_unchecked(max_head & MASK);
-                let lowest = *min_values.get_unchecked(min_head & MASK);
+                let mut highest = *high_ptr.add(i - 4);
+                let mut lowest = *low_ptr.add(i - 4);
+                let high_1 = *high_ptr.add(i - 3);
+                let low_1 = *low_ptr.add(i - 3);
+                let high_2 = *high_ptr.add(i - 2);
+                let low_2 = *low_ptr.add(i - 2);
+                let high_3 = *high_ptr.add(i - 1);
+                let low_3 = *low_ptr.add(i - 1);
+                if high_1 > highest {
+                    highest = high_1;
+                }
+                if high_2 > highest {
+                    highest = high_2;
+                }
+                if high_3 > highest {
+                    highest = high_3;
+                }
+                if new_high > highest {
+                    highest = new_high;
+                }
+                if low_1 < lowest {
+                    lowest = low_1;
+                }
+                if low_2 < lowest {
+                    lowest = low_2;
+                }
+                if low_3 < lowest {
+                    lowest = low_3;
+                }
+                if new_low < lowest {
+                    lowest = new_low;
+                }
                 let denom = highest - lowest;
                 if denom > 1e-15 {
                     (*close_cursor - lowest) / denom * 100.0
