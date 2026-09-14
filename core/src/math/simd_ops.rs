@@ -3481,6 +3481,9 @@ pub fn simd_mom(input: &[f64], period: usize, result: &mut [f64]) {
 pub fn simd_mom10(input: &[f64], result: &mut [f64]) {
     #[cfg(all(feature = "std", target_arch = "x86_64"))]
     {
+        if is_x86_feature_detected!("avx512f") {
+            return crate::math::simd_ops_avx512::simd512_mom10(input, result);
+        }
         if is_x86_feature_detected!("avx2") {
             return unsafe { mom10_avx2(input, result) };
         }
