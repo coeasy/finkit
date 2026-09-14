@@ -494,17 +494,24 @@ fn fast_mom10<'py>(
     let close = close.as_slice().map_err(value_error)?;
     validate_period(close.len(), PERIOD)?;
     let output = unsafe { PyArray1::new(py, [close.len()], false) };
-    let output_addr = output.data() as usize;
-    let compute = || unsafe {
-        ::finkit::math::simd_ops::simd_mom10(
-            close,
-            std::slice::from_raw_parts_mut(output_addr as *mut f64, close.len()),
-        )
-    };
     if close.len() <= 16_384 {
-        compute();
+        // This is the release-gate short-input path. Calling the kernel
+        // directly avoids constructing and invoking a closure, and lets the
+        // compiler keep the output pointer in the caller's hot path.
+        unsafe {
+            ::finkit::math::simd_ops::simd_mom10(
+                close,
+                std::slice::from_raw_parts_mut(output.data(), close.len()),
+            )
+        };
     } else {
-        py.detach(compute);
+        let output_addr = output.data() as usize;
+        py.detach(|| unsafe {
+            ::finkit::math::simd_ops::simd_mom10(
+                close,
+                std::slice::from_raw_parts_mut(output_addr as *mut f64, close.len()),
+            )
+        });
     }
     Ok(output)
 }
