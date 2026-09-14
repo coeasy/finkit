@@ -86,7 +86,7 @@ else
 fi
 
 echo "[build-usage-dotnet] dotnet pack -c Release"
-( cd "${BINDING_DIR}/src/Finkit" && dotnet pack -c Release -o "$(to_win "${OUT_DIR}")" -p:Version=1.0.0 )
+( cd "${BINDING_DIR}/src/Finkit" && dotnet pack -c Release -o "$(to_win "${OUT_DIR}")" -p:Version="${VERSION}" )
 
 # Drop the staging tree
 rm -rf "${LINK_TARGET}"

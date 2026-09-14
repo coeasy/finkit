@@ -1,5 +1,10 @@
 # Finkit vs TA-Lib 性能对标与优化改进方案
 
+> 本文保留为历史优化方案。当前发布评测以
+> [BENCHMARK_REPORT.md](BENCHMARK_REPORT.md) 为准：v0.1.5 wheel 在 155 个
+> TA-Lib 兼容函数、310 个观测点上有 307 个更快，几何平均 2.03x；本文中的
+> v0.1.4/TA-Lib 0.7.1 早期结果不应作为当前版本性能结论。
+
 > 基线版本：Finkit `v0.1.4` vs TA-Lib Python/Core `0.7.1`  
 > 对标层级：Rust Core、Python 已发布 wheel 公共 API、CompiledFormula、增量 Runtime、精度/暖机语义  
 > 目标：让 Finkit 的核心计算优势真正传递到最终用户 API，并建立长期、可重复、可阻断回归的性能门禁。

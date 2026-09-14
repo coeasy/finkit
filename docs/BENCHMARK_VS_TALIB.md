@@ -1,4 +1,4 @@
-# Finkit vs TA-Lib C — Benchmark & Precision Report
+# Finkit vs TA-Lib — Benchmark & Precision Report
 
 > Companion to the one-click build setup (see the repo root `README.md`
 > for the bootstrap command). This document explains how to read the
@@ -10,18 +10,15 @@
 `scripts/bench-vs-talib.sh` is the single command that runs the entire
 head-to-head:
 
-1. **`cargo bench --bench talib_c_comparison --features talib-c`** — runs
-   Criterion benchmarks for ~30 indicators. Each indicator gets a `Finkit_X`
-   and a `talib_X` entry, plus a `_vs_talib` group suffix.
+1. **`python scripts/benchmark_talib_all_current_gate.py`** — runs the
+   release-wheel gate across the complete TA-Lib-compatible matrix at 100K and
+   1M values. The current v0.1.5 snapshot covers 155 cases and 310 observations.
 
-2. **`scripts/bench_report.py --json-out dist/bench/results.json`** —
-   parses Criterion's `target/criterion/**/new/estimates.json` and writes:
-   * `docs/BENCHMARK_REPORT.md` — long-form report (multi-scale tables,
-     per-category breakdowns).
-   * `dist/bench/results.json` — per-indicator `speedup`, `status`
-     (`✅ / ⚠️ / ❌`), and (later) `delta_pp`.
+2. The JSON output records per-function timings, geometric mean, parity masks,
+   and errors. `docs/BENCHMARK_REPORT.md` is the human-readable release
+   snapshot; it is not a claim about every CPU or every individual function.
 
-3. **`scripts/bench_vs_talib_precision.py`** *(only with `--precision`)* —
+3. **`scripts/bench_vs_talib_precision.py`** *(optional)* —
    for each indicator, generates 100 000 random OHLCV samples, calls
    Finkit and TA-Lib on the same input, then writes
    `dist/bench/precision.{md,json}` and merges `delta_pp` back into
@@ -43,16 +40,13 @@ head-to-head:
 | `Finkit (us)` / `TA-Lib C (us)` | Wall-clock per call (microseconds, smaller = better) |
 | `Speedup`   | `TA-Lib C / Finkit` (higher = Finkit is faster). `>1.0x` is good |
 | `Δ (pp)`    | Max relative diff vs TA-Lib output (precision SLA: < 1e-12)   |
-| `Status`    | `✅` within gate, `⚠️` within 25%, `❌` exceeded the gate       |
+| `Status`    | `✅` within gate, `⚠️` borderline/noisy, `❌` needs optimization |
 
 Bottom of the file summarizes:
 
-```
-- Total: 30
-- Finkit faster: 24
-- Finkit within 25%: 4
-- Finkit >25% slower: 2
-```
+The current release-wheel snapshot is **307 / 310 faster**, with geometric
+mean **2.03x**. The three slower observations are documented in
+[BENCHMARK_REPORT.md](BENCHMARK_REPORT.md).
 
 ## SLA gates
 
@@ -84,9 +78,10 @@ Bottom of the file summarizes:
 ## Reproducing the numbers
 
 ```bash
-# Same hardware, same commit
-git checkout <commit-sha>
-./scripts/bench-vs-talib.sh --precision
+# Same hardware, same commit and wheel
+python scripts/benchmark_talib_all_current_gate.py \
+  --sizes 100000 1000000 \
+  --output dist/bench/talib-all-current-gate.json
 
 # Cross-machine comparison
 ./scripts/bench-vs-talib.sh --precision 2>&1 | tee /tmp/$(hostname).log

@@ -37,11 +37,14 @@ enum StreamingFormulaIndicator {
     Atr(StreamingSmaAtr),
 }
 
-/// Formula ATR uses a rolling SMA of true range.  The general streaming ATR
-/// indicator intentionally implements Wilder/RMA, so it cannot be reused for
-/// this formula path without changing one of the two public contracts.
+/// Formula ATR follows the canonical batch Wilder seed: the first bar is used
+/// only to establish the previous close, then TR[1..=period] seeds the RMA.
+/// Keeping this state local avoids rebuilding the complete formula range while
+/// preserving the public ATR warm-up and recurrence exactly.
 struct StreamingSmaAtr {
-    tr_sma: StreamingSma,
+    period: usize,
+    atr_value: f64,
+    tr_sum: f64,
     previous_close: f64,
     count: usize,
 }
@@ -49,23 +52,37 @@ struct StreamingSmaAtr {
 impl StreamingSmaAtr {
     fn new(period: usize) -> Self {
         Self {
-            tr_sma: StreamingSma::new(period),
+            period,
+            atr_value: f64::NAN,
+            tr_sum: 0.0,
             previous_close: f64::NAN,
             count: 0,
         }
     }
 
     fn next(&mut self, high: f64, low: f64, close: f64) -> Option<f64> {
-        let true_range = if self.count == 0 {
-            high - low
-        } else {
-            (high - low)
-                .max((high - self.previous_close).abs())
-                .max((low - self.previous_close).abs())
-        };
         self.count += 1;
+        if self.count == 1 {
+            self.previous_close = close;
+            return None;
+        }
+
+        let true_range = (high - low)
+            .max((high - self.previous_close).abs())
+            .max((low - self.previous_close).abs());
         self.previous_close = close;
-        self.tr_sma.next(true_range)
+
+        if self.count <= self.period {
+            self.tr_sum += true_range;
+            None
+        } else if self.count == self.period + 1 {
+            self.tr_sum += true_range;
+            self.atr_value = self.tr_sum / self.period as f64;
+            Some(self.atr_value)
+        } else {
+            self.atr_value += (true_range - self.atr_value) / self.period as f64;
+            Some(self.atr_value)
+        }
     }
 }
 
@@ -497,9 +514,9 @@ impl FormulaEngine {
         low: &[f64],
         close: &[f64],
         volume: &[f64],
-        amount: Option<&[f64]>,
         start: usize,
         end: usize,
+        amount: Option<&[f64]>,
     ) -> Result<Array1<f64>, FormulaError> {
         if close.is_empty()
             || [open, high, low, close, volume]
@@ -1071,7 +1088,7 @@ impl FormulaEngine {
                                 .par_iter()
                                 .zip(local_ctxs.into_par_iter())
                                 .map(|(stmt, mut local_ctx)| {
-                                    let mut local_exec = FormulaExecutor::new();
+                                    let local_exec = FormulaExecutor::new();
                                     let result = local_exec.execute(stmt, &mut local_ctx);
                                     (
                                         result,
@@ -2258,9 +2275,9 @@ mod tests {
                 &ctx.low,
                 &ctx.close,
                 &ctx.volume,
-                None,
                 17,
                 41,
+                None,
             )
             .unwrap();
         assert_eq!(range.len(), 24);

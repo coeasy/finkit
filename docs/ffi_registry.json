@@ -1,5 +1,5 @@
 {
-  "version": "0.1.15",
+  "version": "0.1.5",
   "indicators": [
     {
       "name": "SMA",
@@ -1332,6 +1332,9 @@
         "order": 32,
         "bodies": {
           "python": "#[pyfunction]\n#[pyo3(signature = (open, high, low, close, rvi_period=10, linreg_period=14))]\nfn inertia(\n    py: Python<'_>,\n    open: PyReadonlyArray1<'_, f64>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n    rvi_period: usize,\n    linreg_period: usize,\n) -> PyResult<Py<PyArray1<f64>>> {\n    let open = open.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let high = high.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py_array_f64(py, || {\n        indicators::inertia(open, high, low, close, rvi_period, linreg_period)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+        },
+        "names": {
+          "python": "inertia"
         }
       }
     },
@@ -2464,7 +2467,7 @@
         "params": [],
         "order": 61,
         "bodies": {
-          "python": "/// Inverted Hammer (倒锤子线)\n#[pyfunction]\n#[pyo3(signature = (open, high, low, close))]\nfn cdl_inverted_hammer(\n    py: Python<'_>,\n    open: PyReadonlyArray1<'_, f64>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n) -> PyResult<Vec<i32>> {\n    let open = open\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py.detach(|| {\n        candlestick::inverted_hammer(open, high, low, close)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+          "python": "/// Inverted Hammer (倒锤子线)\n#[pyfunction]\n#[pyo3(signature = (open, high, low, close))]\nfn cdl_inverted_hammer<'py>(\n    py: Python<'py>,\n    open: PyReadonlyArray1<'py, f64>,\n    high: PyReadonlyArray1<'py, f64>,\n    low: PyReadonlyArray1<'py, f64>,\n    close: PyReadonlyArray1<'py, f64>,\n) -> PyResult<Bound<'py, PyArray1<i32>>> {\n    let open = open\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let values = py.detach(|| {\n        candlestick::inverted_hammer(open, high, low, close)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })?;\n    Ok(PyArray1::from_vec(py, values))\n}"
         }
       }
     },
@@ -2824,7 +2827,7 @@
         "params": [],
         "order": 69,
         "bodies": {
-          "python": "/// Three Black Crows (三乌鸦)\n#[pyfunction]\n#[pyo3(signature = (open, high, low, close))]\nfn cdl_three_black_crows(\n    py: Python<'_>,\n    open: PyReadonlyArray1<'_, f64>,\n    high: PyReadonlyArray1<'_, f64>,\n    low: PyReadonlyArray1<'_, f64>,\n    close: PyReadonlyArray1<'_, f64>,\n) -> PyResult<Vec<i32>> {\n    let open = open\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    py.detach(|| {\n        candlestick::three_black_crows(open, high, low, close)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })\n}"
+          "python": "/// Three Black Crows (三乌鸦)\n#[pyfunction]\n#[pyo3(signature = (open, high, low, close))]\nfn cdl_three_black_crows<'py>(\n    py: Python<'py>,\n    open: PyReadonlyArray1<'py, f64>,\n    high: PyReadonlyArray1<'py, f64>,\n    low: PyReadonlyArray1<'py, f64>,\n    close: PyReadonlyArray1<'py, f64>,\n) -> PyResult<Bound<'py, PyArray1<i32>>> {\n    let open = open\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let high = high\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let low = low\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let close = close\n        .as_slice()\n        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))?;\n    let values = py.detach(|| {\n        candlestick::three_black_crows(open, high, low, close)\n            .map(|arr| arr.into_raw_vec())\n            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(\"{}\", e)))\n    })?;\n    Ok(PyArray1::from_vec(py, values))\n}"
         }
       }
     },

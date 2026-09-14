@@ -39,6 +39,7 @@ pub struct VwapBandsResult {
 /// let result = indicators::ad(&high, &low, &close, &volume).unwrap();
 /// assert_eq!(result.len(), 10);
 /// ```
+#[allow(clippy::uninit_vec)]
 pub fn ad(high: &[f64], low: &[f64], close: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
     if high.len() != low.len() || high.len() != close.len() || high.len() != volume.len() {
         return Err(crate::error::TaError::InvalidParameter {
@@ -49,14 +50,16 @@ pub fn ad(high: &[f64], low: &[f64], close: &[f64], volume: &[f64]) -> Result<Ar
     validate_input(high.len(), 1)?;
 
     let len = high.len();
-    // 直接分配 Array1 并写入，避免中间 Vec 分配
-    let mut output = Array1::<f64>::zeros(len);
+    // The SIMD kernel writes every row; avoid zero-initializing a second full
+    // million-element buffer before handing ownership to ndarray.
+    let mut output = Vec::with_capacity(len);
+    unsafe { output.set_len(len) };
     // SIMD-accelerated money-flow vectorisation + cumulative sum.
     // Replaces the per-bar scalar loop with an AVX2 block-wise kernel
     // (typically 1.5-2x speedup on 10K+ bars).
-    crate::math::simd_ops::simd_ad_line(high, low, close, volume, output.as_slice_mut().unwrap());
+    crate::math::simd_ops::simd_ad_line(high, low, close, volume, &mut output);
 
-    Ok(output)
+    Ok(Array1::from_vec(output))
 }
 
 /// AD zero-copy variant: writes result into pre-allocated slice.
@@ -163,6 +166,78 @@ pub fn adosc(
     Ok(output)
 }
 
+/// ADOSC caller-owned hot path.
+///
+/// The public allocating implementation keeps a complete AD scratch series so
+/// it can reuse the generic SIMD helper.  The FFI path only needs the final
+/// oscillator, so fuse the AD recurrence and the two EMA recurrences into one
+/// pass and write directly into the caller's buffer.
+pub fn adosc_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    volume: &[f64],
+    fast_period: usize,
+    slow_period: usize,
+    output: &mut [f64],
+) -> Result<()> {
+    if high.len() != low.len() || high.len() != close.len() || high.len() != volume.len() {
+        return Err(crate::error::TaError::InvalidParameter {
+            name: "high, low, close, volume".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    validate_input(high.len(), slow_period)?;
+    if output.len() != high.len() {
+        return Err(crate::error::TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as high".to_string(),
+        });
+    }
+
+    let len = high.len();
+    let fast_k = 2.0 / (fast_period as f64 + 1.0);
+    let fast_one_k = 1.0 - fast_k;
+    let slow_k = 2.0 / (slow_period as f64 + 1.0);
+    let slow_one_k = 1.0 - slow_k;
+    output[..slow_period.saturating_sub(1).min(len)].fill(0.0);
+
+    unsafe {
+        let high_ptr = high.as_ptr();
+        let low_ptr = low.as_ptr();
+        let close_ptr = close.as_ptr();
+        let volume_ptr = volume.as_ptr();
+        let output_ptr = output.as_mut_ptr();
+        let mut cumulative = 0.0;
+        let mut fast_ema = 0.0;
+        let mut slow_ema = 0.0;
+
+        for i in 0..len {
+            let h = *high_ptr.add(i);
+            let l = *low_ptr.add(i);
+            let c = *close_ptr.add(i);
+            let range = h - l;
+            if range > 0.0 {
+                cumulative += (((c - l) - (h - c)) / range) * *volume_ptr.add(i);
+            }
+
+            if i == 0 {
+                fast_ema = cumulative;
+                slow_ema = cumulative;
+            } else {
+                // Match TA-Lib's fused EMA recurrence while avoiding the
+                // second multiply in the common scalar form.
+                fast_ema = fast_ema.mul_add(fast_one_k, cumulative * fast_k);
+                slow_ema = slow_ema.mul_add(slow_one_k, cumulative * slow_k);
+            }
+            if i >= slow_period - 1 {
+                *output_ptr.add(i) = fast_ema - slow_ema;
+            }
+        }
+    }
+    Ok(())
+}
+
 /// On Balance Volume (OBV)
 ///
 /// A cumulative indicator that uses volume flow to predict price changes.
@@ -184,6 +259,7 @@ pub fn adosc(
 /// let result = indicators::obv(&close, &volume).unwrap();
 /// assert_eq!(result.len(), 10);
 /// ```
+#[allow(clippy::uninit_vec)]
 pub fn obv(close: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
     if close.len() != volume.len() {
         return Err(crate::error::TaError::InvalidParameter {
@@ -194,7 +270,8 @@ pub fn obv(close: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
     validate_input(close.len(), 1)?;
 
     let len = close.len();
-    let mut out = vec![0.0_f64; len];
+    let mut out = Vec::with_capacity(len);
+    unsafe { out.set_len(len) };
     // SIMD-accelerated OBV: AVX2 kernel vectorises the diff/signum/mul chain.
     // Scalar fallback path is identical to the legacy implementation.
     crate::math::simd_ops::simd_obv(close, volume, &mut out);
@@ -669,6 +746,22 @@ mod tests {
         let volume = vec![100.0, 200.0, 300.0, 400.0, 500.0, 600.0, 700.0, 800.0];
         let result = adosc(&high, &low, &close, &volume, 3, 6).unwrap();
         assert!(result[0].is_nan() || result[7].is_finite());
+    }
+
+    #[test]
+    fn test_adosc_into_matches_allocating_path() {
+        let high = vec![10.0, 12.0, 11.0, 14.0, 15.0, 13.0, 16.0, 17.0, 18.0];
+        let low = vec![8.0, 10.0, 9.0, 12.0, 13.0, 11.0, 14.0, 15.0, 16.0];
+        let close = vec![9.0, 11.0, 10.0, 13.0, 14.0, 12.0, 15.0, 16.0, 17.0];
+        let volume = vec![
+            100.0, 120.0, 110.0, 130.0, 140.0, 125.0, 150.0, 160.0, 170.0,
+        ];
+        let expected = adosc(&high, &low, &close, &volume, 3, 5).unwrap();
+        let mut actual = vec![0.0; close.len()];
+        adosc_into(&high, &low, &close, &volume, 3, 5, &mut actual).unwrap();
+        for (lhs, rhs) in actual.iter().zip(expected.iter()) {
+            assert!((lhs - rhs).abs() <= 1e-12, "{lhs} != {rhs}");
+        }
     }
 
     #[test]

@@ -1,0 +1,65 @@
+name: TA-Lib installed-wheel release gate
+
+on:
+  push:
+    branches:
+      - perf/outperform-talib-v3-20260904
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'core/**'
+      - 'ffi/python-binding/**'
+      - 'scripts/prepare_python_hot_bindings.py'
+      - 'scripts/prepare_python_registry_ssot.py'
+      - 'scripts/optimize_python_bindings.py'
+      - 'scripts/sync_bindings.py'
+      - 'scripts/benchmark_talib_release_gate.py'
+      - 'scripts/benchmark_talib_arch_v3_gate.py'
+      - '.github/workflows/talib-release-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  installed-wheel-gate:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install benchmark toolchain
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'maturin>=1.7,<2' 'numpy==2.3.3' 'TA-Lib==0.7.1' pytest
+      - name: Prepare canonical NumPy-direct Python bindings
+        run: |
+          python scripts/prepare_python_hot_bindings.py
+          git diff --check
+      - name: Build current Finkit wheel
+        run: |
+          mkdir -p dist/wheel
+          maturin build --manifest-path ffi/python-binding/Cargo.toml --release --features abi3 --out dist/wheel
+          ls -lh dist/wheel
+      - name: Install current wheel
+        run: python -m pip install --force-reinstall --no-deps dist/wheel/*.whl
+      - name: Public Python and Architecture v3 fast-path contracts
+        run: |
+          pytest -q \
+            ffi/python-binding/tests/test_talib_public_contract.py \
+            ffi/python-binding/tests/test_architecture_v3_fast_path.py
+      - name: Installed-wheel Architecture v3 parity and speedup gate
+        run: python scripts/benchmark_talib_arch_v3_gate.py
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: talib-installed-wheel-release-gate
+          path: |
+            dist/bench/talib-release-gate.json
+            dist/bench/talib-release-gate.md
+            dist/bench/talib-architecture-v3-gate.json
+          if-no-files-found: warn

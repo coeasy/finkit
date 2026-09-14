@@ -2,10 +2,10 @@
 # ----------------------------------------------------------------------------
 # Finkit Node.js usage-package builder.
 #
-# Produces `finkit-1.0.0.tgz` (npm packed from the ffi/node-binding
+# Produces a versioned `finkit-<workspace-version>.tgz` (npm packed from the ffi/node-binding
 # manifest) plus the per-triple `.node` files, in
 # dist/node/<platform>/.  The .tgz name is **finkit** so
-# consumers can `npm install finkit@1.0.0`.
+# consumers can install the matching workspace version.
 # ----------------------------------------------------------------------------
 
 set -euo pipefail

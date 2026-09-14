@@ -45,6 +45,8 @@ import re
 import sys
 from pathlib import Path
 
+from optimize_python_bindings import optimize_source as optimize_python_source
+
 ROOT = Path(__file__).resolve().parents[1]
 REG = ROOT / "docs" / "indicator_registry.json"
 FFI_REG = ROOT / "docs" / "ffi_registry.json"
@@ -125,22 +127,21 @@ KNOWN_INFRA = {
 }
 
 
+PYTHON_REGISTRY_OVERLAY = ROOT / "target" / "python_registry_ssot.json"
+
+
 def load_registry() -> dict:
-    reg = json.loads(REG.read_text(encoding="utf-8"))
-    if not FFI_REG.exists():
-        return reg
-    ffi = json.loads(FFI_REG.read_text(encoding="utf-8"))
-    core_names = {item.get("name") for item in reg.get("indicators", [])}
-    for item in ffi.get("indicators", []):
-        name = item.get("name")
-        if not name:
-            continue
-        target = next((x for x in reg["indicators"] if x.get("name") == name), None)
-        if target is None:
-            target = {"name": name, "_ffi_only": True}
-            reg["indicators"].append(target)
-        target["ffi"] = item.get("ffi", {})
-    return reg
+    # The core registry intentionally has no FFI blocks.  Prefer the
+    # transient enriched Python overlay when a preparation workflow created
+    # it; otherwise validate directly against the checked-in FFI SSOT so a
+    # clean checkout does not depend on ignored build artifacts.
+    if PYTHON_REGISTRY_OVERLAY.exists():
+        registry_path = PYTHON_REGISTRY_OVERLAY
+    elif FFI_REG.exists():
+        registry_path = FFI_REG
+    else:
+        registry_path = REG
+    return json.loads(registry_path.read_text(encoding="utf-8"))
 
 
 def save_registry(reg: dict) -> None:
@@ -306,7 +307,10 @@ def match_indicator(ind: dict, lang: str, extracted: dict[str, dict]) -> str | N
             return cand
     # android: match by core name appearing as the 2nd macro arg
     if lang == "android":
-        core = ind["ffi"].get("core_call", ind["ffi"]["c_name"][3:]).split("::")[-1]
+        ff = ind["ffi"]
+        c_name = ff["c_name"]
+        pub = c_name[3:] if c_name.startswith("ta_") else c_name
+        core = ff.get("core_call", pub).split("::")[-1]
         alias = NAME_ALIASES.get(core, core)
         for nm, info in extracted.items():
             if (f", {core}," in info["body"]) or (f", {alias}," in info["body"]):
@@ -482,7 +486,9 @@ def emit_generated(lang: str, inds: list[dict]) -> str:
             # Wrap each generated function in catch_unwind so a panic inside
             # the core call cannot unwind across the FFI boundary.
             bodies.append(wrap_body(lang, body).rstrip("\n") + "\n")
-    return header + "\n".join(bodies) + "\n"
+    # Keep generated files POSIX-clean so the wheel workflow's `git diff
+    # --check` does not reject a second blank line at EOF.
+    return (header + "\n".join(bodies)).rstrip("\n") + "\n"
 
 
 def do_generate(langs: list[str], rewrite: bool) -> int:
@@ -493,6 +499,9 @@ def do_generate(langs: list[str], rewrite: bool) -> int:
         cfg = LANG_CFG[lang]
         gen_path = ROOT / cfg["gen"]
         text = emit_generated(lang, inds)
+        if lang == "python":
+            text, optimized_count = optimize_python_source(text)
+            print(f"[gen/python] NumPy-direct wrappers: {optimized_count}")
         if rewrite:
             lib_path = ROOT / cfg["lib"]
             src = lib_path.read_text(encoding="utf-8")
@@ -568,6 +577,12 @@ def do_check(langs: list[str]) -> int:
                 drift.append(f"missing:{c_name}")
                 continue
             body_now = extracted[nm]["body"]
+            if lang == "python":
+                impl_name = f"vec_{nm}_impl"
+                if impl_name in extracted:
+                    body_now = extracted[impl_name]["body"].replace(
+                        f"fn {impl_name}", f"fn {nm}", 1
+                    )
             # Compare through the same panic-wrapper normalisation so a
             # regenerated (wrapped) function is not flagged as drift against
             # the unwrapped source-of-truth body.

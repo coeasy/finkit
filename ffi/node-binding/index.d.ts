@@ -1315,8 +1315,6 @@ export interface KlineQuoteNapi {
 }
 export declare function klineDataNew(dates: Array<string>, opens: Array<number>, highs: Array<number>, lows: Array<number>, closes: Array<number>, volumes: Array<number>, timestamps?: Array<number> | undefined | null): KlineDataNapi
 export declare function klineDataValidate(data: KlineDataNapi): boolean
-export declare function klineDataValidateOhlcv(data: KlineDataNapi): boolean
-export declare function klineDataValidationErrors(data: KlineDataNapi): Array<string>
 /**
  * Execute a trading formula
  *

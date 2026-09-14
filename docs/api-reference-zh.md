@@ -16,8 +16,27 @@
 10. [经典形态指标](#经典形态指标)
 11. [流式指标](#流式指标)
 12. [公式引擎](#公式引擎)
+13. [跨市场选股公式](#跨市场选股公式)
 
 ---
+
+## 跨市场选股公式
+
+`finkit::indicators` 提供不绑定交易所规则的选股基础函数，可用于 A 股、港股、美股、ETF、期货和 7×24 加密货币 K 线。输入序列按从旧到新排列，多序列必须等长；滚动计算的预热区为 `NaN`。
+
+| 函数 | 含义 |
+| --- | --- |
+| `golden_cross(fast, slow)` | 金叉，首次上穿返回 `1` |
+| `dead_cross(fast, slow)` | 死叉，首次下穿返回 `1` |
+| `breakout_up(close, high, period)` | 突破前 `period` 根最高价 |
+| `breakout_down(close, low, period)` | 跌破前 `period` 根最低价 |
+| `volume_surge(volume, period, multiplier)` | 当前量达到前窗均量的倍数 |
+| `ma_alignment(close, fast, mid, slow)` | 均线多头 `1`、空头 `-1`、混合 `0` |
+| `relative_strength(close, benchmark, period)` | 相对基准的超额收益百分点 |
+| `gap_signal(open, close, threshold)` | 跳空方向：`1/-1/0` |
+| `trend_breakout_signal(...)` | 均线、价格突破和放量确认的组合信号 |
+
+公式引擎对应名称为 `GOLDEN_CROSS`、`DEAD_CROSS`、`BREAKOUT`、`BREAKDOWN`、`VOLUME_SURGE`、`MA_ALIGN`、`RELATIVE_STRENGTH`、`GAP_SIGNAL` 和 `TREND_BREAKOUT`，并提供兼容别名。完整签名及选股示例见[跨市场选股公式](screening-formulas.md)。
 
 ## 重叠研究指标
 

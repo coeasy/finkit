@@ -190,8 +190,15 @@ impl ComputePlan {
             if node.operation.trim().is_empty() {
                 return Err(ComputePlanError::EmptyOperation(node.id));
             }
-            node.dependencies.sort_unstable();
-            node.dependencies.dedup();
+            // Function-call dependencies are an ordered argument ABI.  Do
+            // not collapse repeated literals such as KDJ(H, L, C, 9, 3, 3),
+            // otherwise the hot executor cannot distinguish omitted optional
+            // arguments from two equal arguments.  Generic graph nodes still
+            // retain the historical sorted/deduplicated dependency contract.
+            if !node.operation.starts_with("CALL:") && node.operation != "STATEMENTS" {
+                node.dependencies.sort_unstable();
+                node.dependencies.dedup();
+            }
             let id = node.id;
             if by_id.insert(id, node).is_some() {
                 return Err(ComputePlanError::DuplicateNode(id));
@@ -203,7 +210,11 @@ impl ComputePlan {
         let mut outgoing: BTreeMap<ComputeNodeId, Vec<ComputeNodeId>> = BTreeMap::new();
 
         for node in by_id.values() {
+            let mut unique_dependencies = BTreeSet::new();
             for &dependency in &node.dependencies {
+                if !unique_dependencies.insert(dependency) {
+                    continue;
+                }
                 if !by_id.contains_key(&dependency) {
                     return Err(ComputePlanError::UnknownDependency {
                         node: node.id,
@@ -610,6 +621,28 @@ mod tests {
             &[ComputeNodeId(1), ComputeNodeId(2)]
         );
         assert_eq!(plan.node(ComputeNodeId(2)).unwrap().dependencies.len(), 1);
+    }
+
+    #[test]
+    fn compute_plan_preserves_ordered_call_arguments_and_duplicates() {
+        let plan = ComputePlan::compile([
+            ComputeNode::new(ComputeNodeId(1), "NUMBER", vec![], pure_capabilities(true)),
+            ComputeNode::new(
+                ComputeNodeId(2),
+                "CALL:KDJ",
+                vec![ComputeNodeId(1), ComputeNodeId(1)],
+                pure_capabilities(true),
+            ),
+        ])
+        .unwrap();
+        assert_eq!(
+            plan.node(ComputeNodeId(2)).unwrap().dependencies,
+            vec![ComputeNodeId(1), ComputeNodeId(1)]
+        );
+        assert_eq!(
+            plan.execution_order(),
+            &[ComputeNodeId(1), ComputeNodeId(2)]
+        );
     }
 
     #[test]

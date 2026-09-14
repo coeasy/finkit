@@ -59,6 +59,71 @@ pub fn simd512_available() -> bool {
 }
 
 // ============================================================================
+// AVX-512 fixed-period MOM kernel
+// ============================================================================
+
+/// Public AVX-512 MOM10 dispatcher.  The fallback is the established AVX2 /
+/// SSE2 implementation, so this wider path is selected only after the same
+/// runtime feature check used by the other AVX-512 kernels.
+pub fn simd512_mom10(input: &[f64], result: &mut [f64]) {
+    #[cfg(all(feature = "std", target_arch = "x86_64"))]
+    {
+        if has_avx512f() {
+            return unsafe { mom10_avx512(input, result) };
+        }
+    }
+    crate::math::simd_ops::simd_mom10(input, result)
+}
+
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
+#[inline]
+pub(crate) unsafe fn simd512_mom10_unchecked(input: &[f64], result: &mut [f64]) {
+    mom10_avx512(input, result);
+}
+
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
+#[target_feature(enable = "avx512f")]
+unsafe fn mom10_avx512(input: &[f64], result: &mut [f64]) {
+    use core::arch::x86_64::*;
+
+    const PERIOD: usize = 10;
+    let len = input.len().min(result.len());
+    if len <= PERIOD {
+        for value in result.iter_mut().take(len) {
+            *value = f64::NAN;
+        }
+        return;
+    }
+
+    for value in result.iter_mut().take(PERIOD) {
+        *value = f64::NAN;
+    }
+
+    let mut current = input.as_ptr().add(PERIOD);
+    let mut previous = input.as_ptr();
+    let mut output = result.as_mut_ptr().add(PERIOD);
+    let mut remaining = len - PERIOD;
+
+    while remaining >= 8 {
+        let current_values = _mm512_loadu_pd(current);
+        let previous_values = _mm512_loadu_pd(previous);
+        _mm512_storeu_pd(output, _mm512_sub_pd(current_values, previous_values));
+        current = current.add(8);
+        previous = previous.add(8);
+        output = output.add(8);
+        remaining -= 8;
+    }
+
+    while remaining != 0 {
+        *output = *current - *previous;
+        current = current.add(1);
+        previous = previous.add(1);
+        output = output.add(1);
+        remaining -= 1;
+    }
+}
+
+// ============================================================================
 // AVX-512 horizontal sum — 8-wide reduction
 // ============================================================================
 

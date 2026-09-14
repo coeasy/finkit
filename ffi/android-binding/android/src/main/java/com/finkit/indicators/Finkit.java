@@ -25,7 +25,7 @@ public final class Finkit {
 
     private Finkit() { /* no instances */ }
 
-    /** Returns the bundled native library version, for example {@code "0.1.3"}. */
+    /** Returns the bundled native library version, for example {@code "0.1.5"}. */
     public static native String version();
 
     /** Returns the JNI ABI version, used by the wrapper to refuse mismatched builds. */

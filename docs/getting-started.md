@@ -1,4 +1,4 @@
-# Getting Started with Finkit v0.1.3
+# Getting Started with Finkit v0.1.5
 
 This guide is the shortest path from a fresh machine to a verified Finkit calculation. For the full documentation map, see [README.md](README.md).
 
@@ -6,16 +6,16 @@ This guide is the shortest path from a fresh machine to a verified Finkit calcul
 
 Finkit is a high-performance financial indicator, formula, factor, and streaming-computation library. It is not a broker, order-routing system, or full research platform.
 
-The current public release is **v0.1.3**.
+The current release target is **v0.1.5**.
 
 The GitHub Release currently publishes:
 
 - Python ABI3 wheels for Linux x86_64, Windows x86_64, macOS x86_64, and macOS arm64;
-- `finkit-0.1.3.crate`;
+- `finkit-0.1.5.crate`;
 - `finkit-cli-linux-x86_64`;
 - `SHA256SUMS`.
 
-Node.js, Java/JNI, and C/C++ are validated from source by CI but are not claimed as public registry packages in v0.1.3.
+Node.js, Java/JNI, and C/C++ are validated from source by CI but are not claimed as public registry packages in v0.1.5.
 
 ## 2. Core data rules
 
@@ -30,11 +30,11 @@ Before using any API, keep these rules consistent across languages:
 
 ## 3. Fastest start: Python
 
-Download the wheel matching your platform from the GitHub `v0.1.3` Release, then install it locally:
+Download the wheel matching your platform from the GitHub `v0.1.5` Release, then install it locally:
 
 ```bash
 python -m pip install --upgrade pip
-python -m pip install ./finkit-0.1.3-<platform>.whl
+python -m pip install ./finkit-0.1.5-<platform>.whl
 ```
 
 Verify the installation:
@@ -117,7 +117,7 @@ Until a registry package is independently verified, use the release tag or a loc
 
 ```toml
 [dependencies]
-finkit = { git = "https://github.com/coeasy/finkit", tag = "v0.1.3" }
+finkit = { git = "https://github.com/coeasy/finkit", tag = "v0.1.5" }
 ```
 
 Example:

@@ -4,7 +4,7 @@ The CLI package is `finkit-cli`. The command-line application name exposed by Cl
 
 ## Build or install
 
-Linux x86_64 can download the `v0.1.3` Release binary. All supported Rust hosts can build from source:
+Linux x86_64 can download the `v0.1.5` Release binary. All supported Rust hosts can build from source:
 
 ```bash
 cargo build -p finkit-cli --release --locked

@@ -726,9 +726,11 @@ unsafe fn obv_core_avx2(close: &[f64], volume: &[f64], result: &mut [f64]) {
         return;
     }
 
-    let mut delta = vec![0.0f64; len];
-    delta[0] = volume[0];
-    let delta_ptr = delta.as_mut_ptr();
+    // Reuse the caller-owned result as the delta scratch buffer. The prefix
+    // scan below is alias-safe because it loads one complete SIMD block before
+    // storing that same block, then advances monotonically.
+    result[0] = volume[0];
+    let result_ptr = result.as_mut_ptr();
     let zero = _mm256_setzero_pd();
 
     // Process 4 close deltas per iteration. Each lane compares close[i] vs
@@ -752,13 +754,13 @@ unsafe fn obv_core_avx2(close: &[f64], volume: &[f64], result: &mut [f64]) {
             let plus = _mm256_and_pd(vol, pos);
             let minus = _mm256_and_pd(vol, neg);
             let signed = _mm256_sub_pd(plus, minus);
-            _mm256_storeu_pd(delta_ptr.add(off + 1), signed);
+            _mm256_storeu_pd(result_ptr.add(off + 1), signed);
         }
     }
     // Scalar tail for the very last partial chunk.
     for i in ((((len.saturating_sub(1)) / 4) * 4 + 1).max(1))..len {
         let diff = close[i] - close[i - 1];
-        delta[i] = if diff > 0.0 {
+        result[i] = if diff > 0.0 {
             volume[i]
         } else if diff < 0.0 {
             -volume[i]
@@ -767,7 +769,8 @@ unsafe fn obv_core_avx2(close: &[f64], volume: &[f64], result: &mut [f64]) {
         };
     }
 
-    prefix_sum_avx2_kernel(&delta, result);
+    let deltas = core::slice::from_raw_parts(result.as_ptr(), len);
+    prefix_sum_avx2_kernel(deltas, result);
 }
 
 // Scalar fallback (no SIMD intrinsics)
@@ -792,10 +795,10 @@ unsafe fn ad_line_fallback(
     let mut acc = 0.0;
     for i in 0..len {
         let hl = high[i] - low[i];
-        let mfm = if hl.abs() < 1e-15 {
-            0.0
-        } else {
+        let mfm = if hl > 0.0 {
             ((close[i] - low[i]) - (high[i] - close[i])) / hl
+        } else {
+            0.0
         };
         acc += mfm * volume[i];
         result[i] = acc;
@@ -808,6 +811,7 @@ unsafe fn ad_line_fallback(
 // computed via the same block-level SIMD scan used elsewhere.
 #[cfg(all(feature = "std", target_arch = "x86_64"))]
 #[target_feature(enable = "avx2")]
+#[allow(dead_code)]
 unsafe fn ad_line_avx2(
     high: &[f64],
     low: &[f64],
@@ -828,9 +832,8 @@ unsafe fn ad_line_avx2(
 
     let result_ptr = result.as_mut_ptr();
     let chunks = len / 4;
-    let eps = _mm256_set1_pd(1e-15);
     let zero = _mm256_setzero_pd();
-    let sign_mask = _mm256_set1_pd(f64::from_bits(0x7FFF_FFFF_FFFF_FFFFu64));
+    let mut acc = 0.0;
 
     // SIMD 计算 money flow volume
     for c in 0..chunks {
@@ -845,47 +848,29 @@ unsafe fn ad_line_avx2(
         let hc = _mm256_sub_pd(vh, vc);
         let clv = _mm256_sub_pd(cl, hc);
 
-        // 优化：使用更高效的除法和条件选择
-        let abs_hl = _mm256_and_pd(sign_mask, hl);
-        let valid = _mm256_cmp_pd(abs_hl, eps, _CMP_GT_OS);
+        // Match the scalar contract exactly: only a strictly positive range
+        // contributes money flow. The vector division is masked afterward.
+        let valid = _mm256_cmp_pd(hl, zero, _CMP_GT_OS);
         let div = _mm256_div_pd(clv, hl);
         let mfm = _mm256_blendv_pd(zero, div, valid);
         let mfv_v = _mm256_mul_pd(mfm, vvol);
-        _mm256_storeu_pd(result_ptr.add(off), mfv_v);
+        let values: [f64; 4] = core::mem::transmute(mfv_v);
+        for (lane, value) in values.into_iter().enumerate() {
+            acc += value;
+            *result_ptr.add(off + lane) = acc;
+        }
     }
 
     // 处理剩余元素
     for i in (chunks * 4)..len {
         let hl = high[i] - low[i];
-        let mfm = if hl.abs() < 1e-15 {
-            0.0
-        } else {
+        let mfm = if hl > 0.0 {
             ((close[i] - low[i]) - (high[i] - close[i])) / hl
+        } else {
+            0.0
         };
-        result[i] = mfm * volume[i];
-    }
-
-    // 优化的 prefix sum：使用 4-way 展开减少循环开销
-    let mut acc = result[0];
-    let mut i = 1;
-    let unroll_end = len.saturating_sub(3);
-
-    while i < unroll_end {
-        acc += result[i];
+        acc += mfm * volume[i];
         result[i] = acc;
-        acc += result[i + 1];
-        result[i + 1] = acc;
-        acc += result[i + 2];
-        result[i + 2] = acc;
-        acc += result[i + 3];
-        result[i + 3] = acc;
-        i += 4;
-    }
-
-    while i < len {
-        acc += result[i];
-        result[i] = acc;
-        i += 1;
     }
 }
 
@@ -1086,15 +1071,25 @@ fn ad_line_scalar(high: &[f64], low: &[f64], close: &[f64], volume: &[f64], resu
         return;
     }
     let mut acc = 0.0;
+    let high_ptr = high.as_ptr();
+    let low_ptr = low.as_ptr();
+    let close_ptr = close.as_ptr();
+    let volume_ptr = volume.as_ptr();
+    let result_ptr = result.as_mut_ptr();
     for i in 0..len {
-        let hl = high[i] - low[i];
-        let mfm = if hl.abs() < 1e-15 {
-            0.0
-        } else {
-            ((close[i] - low[i]) - (high[i] - close[i])) / hl
-        };
-        acc += mfm * volume[i];
-        result[i] = acc;
+        unsafe {
+            let h = *high_ptr.add(i);
+            let l = *low_ptr.add(i);
+            let c = *close_ptr.add(i);
+            let hl = h - l;
+            let mfm = if hl > 0.0 {
+                ((c - l) - (h - c)) / hl
+            } else {
+                0.0
+            };
+            acc += mfm * *volume_ptr.add(i);
+            *result_ptr.add(i) = acc;
+        }
     }
 }
 
@@ -1315,6 +1310,105 @@ pub fn simd_sin_cos(input: &[f64], sin_out: &mut [f64], cos_out: &mut [f64]) {
         }
     }
     simd_sin_cos_scalar(input, sin_out, cos_out)
+}
+
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2")]
+unsafe fn simd_sqrt_avx2(input: &[f64], output: &mut [f64]) {
+    use core::arch::x86_64::*;
+    let n = input.len().min(output.len());
+    let input_ptr = input.as_ptr();
+    let output_ptr = output.as_mut_ptr();
+    let mut i = 0usize;
+    while i + 4 <= n {
+        let values = _mm256_loadu_pd(input_ptr.add(i));
+        let roots = _mm256_sqrt_pd(values);
+        _mm256_storeu_pd(output_ptr.add(i), roots);
+        i += 4;
+    }
+    while i < n {
+        *output_ptr.add(i) = f64_sqrt(*input_ptr.add(i));
+        i += 1;
+    }
+}
+
+#[inline]
+fn simd_sqrt_scalar(input: &[f64], output: &mut [f64]) {
+    for (source, destination) in input.iter().zip(output.iter_mut()) {
+        *destination = f64_sqrt(*source);
+    }
+}
+
+/// Computes square roots with runtime AVX2 dispatch and a scalar fallback.
+pub fn simd_sqrt(input: &[f64], output: &mut [f64]) {
+    #[cfg(all(feature = "std", target_arch = "x86_64"))]
+    {
+        if is_x86_feature_detected!("avx2") {
+            return unsafe { simd_sqrt_avx2(input, output) };
+        }
+    }
+    simd_sqrt_scalar(input, output)
+}
+
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2")]
+unsafe fn simd_sqrt_avx2_checked(input: &[f64], output: &mut [f64]) -> Option<usize> {
+    use core::arch::x86_64::*;
+
+    let n = input.len().min(output.len());
+    let input_ptr = input.as_ptr();
+    let output_ptr = output.as_mut_ptr();
+    let zero = _mm256_setzero_pd();
+    let exponent_mask = _mm256_set1_epi64x(0x7ff0_0000_0000_0000u64 as i64);
+    let mut i = 0usize;
+    while i + 4 <= n {
+        let values = _mm256_loadu_pd(input_ptr.add(i));
+        let bits = _mm256_castpd_si256(values);
+        let negative = _mm256_castpd_si256(_mm256_cmp_pd(values, zero, _CMP_LT_OQ));
+        let non_finite = _mm256_cmpeq_epi64(_mm256_and_si256(bits, exponent_mask), exponent_mask);
+        let invalid = _mm256_or_si256(negative, non_finite);
+        let invalid_mask = _mm256_movemask_pd(_mm256_castsi256_pd(invalid));
+        if invalid_mask != 0 {
+            for lane in 0..4 {
+                let value = *input_ptr.add(i + lane);
+                if !value.is_finite() || value < 0.0 {
+                    return Some(i + lane);
+                }
+            }
+        }
+        _mm256_storeu_pd(output_ptr.add(i), _mm256_sqrt_pd(values));
+        i += 4;
+    }
+    while i < n {
+        let value = *input_ptr.add(i);
+        if !value.is_finite() || value < 0.0 {
+            return Some(i);
+        }
+        *output_ptr.add(i) = value.sqrt();
+        i += 1;
+    }
+    None
+}
+
+fn simd_sqrt_checked_scalar(input: &[f64], output: &mut [f64]) -> Option<usize> {
+    for (i, (source, destination)) in input.iter().zip(output.iter_mut()).enumerate() {
+        if !source.is_finite() || *source < 0.0 {
+            return Some(i);
+        }
+        *destination = f64_sqrt(*source);
+    }
+    None
+}
+
+/// Computes square roots and validates the domain in the same pass.
+pub fn simd_sqrt_checked(input: &[f64], output: &mut [f64]) -> Option<usize> {
+    #[cfg(all(feature = "std", target_arch = "x86_64"))]
+    {
+        if is_x86_feature_detected!("avx2") {
+            return unsafe { simd_sqrt_avx2_checked(input, output) };
+        }
+    }
+    simd_sqrt_checked_scalar(input, output)
 }
 
 // ============================================================================
@@ -1919,6 +2013,7 @@ unsafe fn correl_avx2(x: &[f64], y: &[f64], period: usize, result: &mut [f64]) {
     }
 }
 
+#[allow(clippy::similar_names)]
 fn correl_scalar(x: &[f64], y: &[f64], period: usize, result: &mut [f64]) {
     let len = x.len().min(y.len()).min(result.len());
     if period < 2 || len == 0 || len < period {
@@ -2065,6 +2160,7 @@ unsafe fn beta_avx2(asset: &[f64], benchmark: &[f64], period: usize, result: &mu
     }
 }
 
+#[allow(clippy::similar_names)]
 fn beta_scalar(asset: &[f64], benchmark: &[f64], period: usize, result: &mut [f64]) {
     let len = asset.len().min(benchmark.len()).min(result.len());
     if period < 2 || len == 0 || len < period {
@@ -2280,6 +2376,7 @@ unsafe fn linreg_avx2(data: &[f64], period: usize, result: &mut [f64]) {
     }
 }
 
+#[allow(clippy::similar_names)]
 fn linreg_scalar(data: &[f64], period: usize, result: &mut [f64]) {
     let len = data.len().min(result.len());
     if period < 2 || len == 0 || len < period {
@@ -2520,7 +2617,7 @@ pub fn simd_kama(
 /// AVX2 路径批处理 4 步递推，使用 `_mm256_fmadd_pd`；非 x86_64 / 缺 AVX2 走标量。
 #[cfg(feature = "std")]
 pub fn simd_ema_next(prev: f64, sample: f64, k: f64) -> f64 {
-    #[cfg(all(target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2") {
             return unsafe { ema_next_avx2(prev, sample, k) };
@@ -2560,7 +2657,7 @@ pub fn simd_cmo(src: &[f64], period: usize, out: &mut [f64]) {
     for r in out.iter_mut().take(period) {
         *r = f64::NAN;
     }
-    #[cfg(all(target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2") {
             unsafe { cmo_avx2(src, period, out, len) };
@@ -2855,7 +2952,7 @@ pub fn simd_ht_smooth(input: &[f64], out: &mut [f64]) {
     out[0] = 0.0;
     out[1] = 0.0;
     out[2] = 0.0;
-    #[cfg(all(target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2") {
             unsafe { ht_smooth_avx2(input, out, len) };
@@ -2923,7 +3020,7 @@ pub fn simd_ht_detrender(smooth: &[f64], out: &mut [f64]) {
     for o in out.iter_mut().take(10) {
         *o = 0.0;
     }
-    #[cfg(all(target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2") {
             unsafe { ht_detrender_avx2(smooth, out, len) };
@@ -3015,7 +3112,7 @@ pub fn simd_ht_components(detrender: &[f64], phase_out: &mut [f64]) {
     for o in phase_out.iter_mut().take(16) {
         *o = 0.0;
     }
-    #[cfg(all(target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2") {
             unsafe { ht_components_avx2(detrender, phase_out, len) };
@@ -3143,7 +3240,7 @@ unsafe fn ht_components_avx2(detrender: &[f64], phase_out: &mut [f64], len: usiz
 #[cfg(feature = "std")]
 pub fn simd_diff_sum(a: &[f64], b: &[f64], period: usize) -> f64 {
     debug_assert!(period <= a.len() && period <= b.len());
-    #[cfg(all(target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2") {
             return unsafe { diff_sum_avx2(a, b, period) };
@@ -3180,7 +3277,7 @@ unsafe fn diff_sum_avx2(a: &[f64], b: &[f64], period: usize) -> f64 {
 #[cfg(feature = "std")]
 pub fn simd_max_diff_sum(a: &[f64], b: &[f64], period: usize) -> f64 {
     debug_assert!(period <= a.len() && period <= b.len());
-    #[cfg(all(target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2") {
             return unsafe { max_diff_sum_avx2(a, b, period) };
@@ -3233,7 +3330,7 @@ unsafe fn max_diff_sum_avx2(a: &[f64], b: &[f64], period: usize) -> f64 {
 #[cfg(feature = "std")]
 pub fn simd_dual_diff_init(high: &[f64], open: &[f64], low: &[f64], period: usize) -> (f64, f64) {
     debug_assert!(period <= high.len() && period <= open.len() && period <= low.len());
-    #[cfg(all(target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2") {
             return unsafe { dual_diff_init_avx2(high, open, low, period) };
@@ -3288,7 +3385,7 @@ unsafe fn dual_diff_init_avx2(
 #[cfg(feature = "std")]
 pub fn simd_dual_max_init(high: &[f64], close: &[f64], low: &[f64], period: usize) -> (f64, f64) {
     debug_assert!(period + 1 <= high.len() && period + 1 <= close.len() && period + 1 <= low.len());
-    #[cfg(all(target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2") {
             return unsafe { dual_max_init_avx2(high, close, low, period) };
@@ -3362,10 +3459,229 @@ pub fn simd_mom(input: &[f64], period: usize, result: &mut [f64]) {
     #[cfg(all(feature = "std", target_arch = "x86_64"))]
     {
         if is_x86_feature_detected!("avx2") {
+            if period == 10 {
+                return unsafe { mom10_avx2(input, result) };
+            }
             return unsafe { mom_avx2(input, period, result) };
         }
+        return unsafe { mom_sse2(input, period, result) };
     }
+    #[cfg(not(all(feature = "std", target_arch = "x86_64")))]
     mom_scalar(input, period, result)
+}
+
+/// Fixed-period MOM dispatcher for the public default period.
+///
+/// The Python binding already validates the default period before entering
+/// native code. Keeping this entry point period-free removes one branch and
+/// the generic dispatcher call from the short-input release-gate path while
+/// preserving the same SIMD/scalar fallback hierarchy as [`simd_mom`].
+#[cfg(feature = "std")]
+#[inline(always)]
+pub fn simd_mom10(input: &[f64], result: &mut [f64]) {
+    #[cfg(all(feature = "std", target_arch = "x86_64"))]
+    {
+        static AVX512: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        if *AVX512.get_or_init(|| is_x86_feature_detected!("avx512f")) {
+            return unsafe { crate::math::simd_ops_avx512::simd512_mom10_unchecked(input, result) };
+        }
+        static AVX2: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        if *AVX2.get_or_init(|| is_x86_feature_detected!("avx2")) {
+            return unsafe { mom10_avx2(input, result) };
+        }
+        return unsafe { mom10_sse2(input, result) };
+    }
+    #[cfg(not(all(feature = "std", target_arch = "x86_64")))]
+    mom_scalar(input, 10, result)
+}
+
+/// Fixed-period MOM kernel for the public default (10 bars).
+///
+/// The general AVX2 kernel must subtract a runtime period for every vector.
+/// MOM10 is the hot path used by the Python release gate, so keeping the
+/// offset constant lets LLVM fold those address calculations into the load
+/// addressing mode while retaining the same output and warm-up semantics.
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2")]
+unsafe fn mom10_avx2(input: &[f64], result: &mut [f64]) {
+    use core::arch::x86_64::*;
+    const PERIOD: usize = 10;
+    let len = input.len().min(result.len());
+    if len <= PERIOD {
+        for r in result.iter_mut().take(len) {
+            *r = f64::NAN;
+        }
+        return;
+    }
+
+    for r in result.iter_mut().take(PERIOD) {
+        *r = f64::NAN;
+    }
+
+    let mut current_ptr = input.as_ptr().add(PERIOD);
+    let mut previous_ptr = input.as_ptr();
+    let mut out_ptr = result.as_mut_ptr().add(PERIOD);
+    let mut remaining = len - PERIOD;
+    while remaining >= 32 {
+        let v0 = _mm256_sub_pd(_mm256_loadu_pd(current_ptr), _mm256_loadu_pd(previous_ptr));
+        let v1 = _mm256_sub_pd(
+            _mm256_loadu_pd(current_ptr.add(4)),
+            _mm256_loadu_pd(previous_ptr.add(4)),
+        );
+        let v2 = _mm256_sub_pd(
+            _mm256_loadu_pd(current_ptr.add(8)),
+            _mm256_loadu_pd(previous_ptr.add(8)),
+        );
+        let v3 = _mm256_sub_pd(
+            _mm256_loadu_pd(current_ptr.add(12)),
+            _mm256_loadu_pd(previous_ptr.add(12)),
+        );
+        let v4 = _mm256_sub_pd(
+            _mm256_loadu_pd(current_ptr.add(16)),
+            _mm256_loadu_pd(previous_ptr.add(16)),
+        );
+        let v5 = _mm256_sub_pd(
+            _mm256_loadu_pd(current_ptr.add(20)),
+            _mm256_loadu_pd(previous_ptr.add(20)),
+        );
+        let v6 = _mm256_sub_pd(
+            _mm256_loadu_pd(current_ptr.add(24)),
+            _mm256_loadu_pd(previous_ptr.add(24)),
+        );
+        let v7 = _mm256_sub_pd(
+            _mm256_loadu_pd(current_ptr.add(28)),
+            _mm256_loadu_pd(previous_ptr.add(28)),
+        );
+        _mm256_storeu_pd(out_ptr, v0);
+        _mm256_storeu_pd(out_ptr.add(4), v1);
+        _mm256_storeu_pd(out_ptr.add(8), v2);
+        _mm256_storeu_pd(out_ptr.add(12), v3);
+        _mm256_storeu_pd(out_ptr.add(16), v4);
+        _mm256_storeu_pd(out_ptr.add(20), v5);
+        _mm256_storeu_pd(out_ptr.add(24), v6);
+        _mm256_storeu_pd(out_ptr.add(28), v7);
+        current_ptr = current_ptr.add(32);
+        previous_ptr = previous_ptr.add(32);
+        out_ptr = out_ptr.add(32);
+        remaining -= 32;
+    }
+    while remaining >= 4 {
+        let current = _mm256_loadu_pd(current_ptr);
+        let previous = _mm256_loadu_pd(previous_ptr);
+        _mm256_storeu_pd(out_ptr, _mm256_sub_pd(current, previous));
+        current_ptr = current_ptr.add(4);
+        previous_ptr = previous_ptr.add(4);
+        out_ptr = out_ptr.add(4);
+        remaining -= 4;
+    }
+    while remaining != 0 {
+        *out_ptr = *current_ptr - *previous_ptr;
+        current_ptr = current_ptr.add(1);
+        previous_ptr = previous_ptr.add(1);
+        out_ptr = out_ptr.add(1);
+        remaining -= 1;
+    }
+}
+
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
+#[target_feature(enable = "sse2")]
+unsafe fn mom_sse2(input: &[f64], period: usize, result: &mut [f64]) {
+    use core::arch::x86_64::*;
+    let len = input.len().min(result.len());
+    if period == 0 || len <= period {
+        for r in result.iter_mut().take(len) {
+            *r = f64::NAN;
+        }
+        return;
+    }
+
+    for r in result.iter_mut().take(period) {
+        *r = f64::NAN;
+    }
+
+    let input_ptr = input.as_ptr();
+    let result_ptr = result.as_mut_ptr();
+    let mut i = period;
+    let unrolled_end = period + ((len - period) / 16) * 16;
+    while i < unrolled_end {
+        macro_rules! mom_sse2_pair {
+            ($offset:expr) => {
+                let current = _mm_loadu_pd(input_ptr.add(i + $offset));
+                let previous = _mm_loadu_pd(input_ptr.add(i + $offset - period));
+                _mm_storeu_pd(result_ptr.add(i + $offset), _mm_sub_pd(current, previous));
+            };
+        }
+        mom_sse2_pair!(0);
+        mom_sse2_pair!(2);
+        mom_sse2_pair!(4);
+        mom_sse2_pair!(6);
+        mom_sse2_pair!(8);
+        mom_sse2_pair!(10);
+        mom_sse2_pair!(12);
+        mom_sse2_pair!(14);
+        i += 16;
+    }
+    while i + 1 < len {
+        let current = _mm_loadu_pd(input_ptr.add(i));
+        let previous = _mm_loadu_pd(input_ptr.add(i - period));
+        _mm_storeu_pd(result_ptr.add(i), _mm_sub_pd(current, previous));
+        i += 2;
+    }
+    while i < len {
+        *result_ptr.add(i) = *input_ptr.add(i) - *input_ptr.add(i - period);
+        i += 1;
+    }
+}
+
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
+#[target_feature(enable = "sse2")]
+unsafe fn mom10_sse2(input: &[f64], result: &mut [f64]) {
+    use core::arch::x86_64::*;
+    const PERIOD: usize = 10;
+    let len = input.len().min(result.len());
+    if len <= PERIOD {
+        for r in result.iter_mut().take(len) {
+            *r = f64::NAN;
+        }
+        return;
+    }
+
+    for r in result.iter_mut().take(PERIOD) {
+        *r = f64::NAN;
+    }
+
+    let input_ptr = input.as_ptr();
+    let result_ptr = result.as_mut_ptr();
+    let unrolled_end = PERIOD + ((len - PERIOD) / 16) * 16;
+    let mut i = PERIOD;
+    while i < unrolled_end {
+        macro_rules! mom10_sse2_pair {
+            ($offset:expr) => {
+                let current = _mm_loadu_pd(input_ptr.add(i + $offset));
+                let previous = _mm_loadu_pd(input_ptr.add(i + $offset - PERIOD));
+                _mm_storeu_pd(result_ptr.add(i + $offset), _mm_sub_pd(current, previous));
+            };
+        }
+        mom10_sse2_pair!(0);
+        mom10_sse2_pair!(2);
+        mom10_sse2_pair!(4);
+        mom10_sse2_pair!(6);
+        mom10_sse2_pair!(8);
+        mom10_sse2_pair!(10);
+        mom10_sse2_pair!(12);
+        mom10_sse2_pair!(14);
+        i += 16;
+    }
+    while i + 1 < len {
+        let current = _mm_loadu_pd(input_ptr.add(i));
+        let previous = _mm_loadu_pd(input_ptr.add(i - PERIOD));
+        _mm_storeu_pd(result_ptr.add(i), _mm_sub_pd(current, previous));
+        i += 2;
+    }
+    while i < len {
+        *result_ptr.add(i) = *input_ptr.add(i) - *input_ptr.add(i - PERIOD);
+        i += 1;
+    }
 }
 
 #[cfg(all(feature = "std", target_arch = "x86_64"))]
@@ -3388,19 +3704,67 @@ unsafe fn mom_avx2(input: &[f64], period: usize, result: &mut [f64]) {
     let ptr = input.as_ptr();
     let out_ptr = result.as_mut_ptr();
 
-    // Process 4 elements at a time using AVX2
+    // Process eight AVX2 vectors per iteration. The wider unroll keeps the
+    // tiny bandwidth-bound kernel out of the loop-control bottleneck on the
+    // installed-wheel benchmark sizes.
     let chunks = (len - period) / 4;
-    for c in 0..chunks {
-        let i = period + c * 4;
+    let unrolled_end = period + (chunks / 8) * 32;
+    let mut i = period;
+    while i < unrolled_end {
+        let v0 = _mm256_sub_pd(
+            _mm256_loadu_pd(ptr.add(i)),
+            _mm256_loadu_pd(ptr.add(i - period)),
+        );
+        let v1 = _mm256_sub_pd(
+            _mm256_loadu_pd(ptr.add(i + 4)),
+            _mm256_loadu_pd(ptr.add(i + 4 - period)),
+        );
+        let v2 = _mm256_sub_pd(
+            _mm256_loadu_pd(ptr.add(i + 8)),
+            _mm256_loadu_pd(ptr.add(i + 8 - period)),
+        );
+        let v3 = _mm256_sub_pd(
+            _mm256_loadu_pd(ptr.add(i + 12)),
+            _mm256_loadu_pd(ptr.add(i + 12 - period)),
+        );
+        let v4 = _mm256_sub_pd(
+            _mm256_loadu_pd(ptr.add(i + 16)),
+            _mm256_loadu_pd(ptr.add(i + 16 - period)),
+        );
+        let v5 = _mm256_sub_pd(
+            _mm256_loadu_pd(ptr.add(i + 20)),
+            _mm256_loadu_pd(ptr.add(i + 20 - period)),
+        );
+        let v6 = _mm256_sub_pd(
+            _mm256_loadu_pd(ptr.add(i + 24)),
+            _mm256_loadu_pd(ptr.add(i + 24 - period)),
+        );
+        let v7 = _mm256_sub_pd(
+            _mm256_loadu_pd(ptr.add(i + 28)),
+            _mm256_loadu_pd(ptr.add(i + 28 - period)),
+        );
+        _mm256_storeu_pd(out_ptr.add(i), v0);
+        _mm256_storeu_pd(out_ptr.add(i + 4), v1);
+        _mm256_storeu_pd(out_ptr.add(i + 8), v2);
+        _mm256_storeu_pd(out_ptr.add(i + 12), v3);
+        _mm256_storeu_pd(out_ptr.add(i + 16), v4);
+        _mm256_storeu_pd(out_ptr.add(i + 20), v5);
+        _mm256_storeu_pd(out_ptr.add(i + 24), v6);
+        _mm256_storeu_pd(out_ptr.add(i + 28), v7);
+        i += 32;
+    }
+    let vector_end = period + chunks * 4;
+    while i < vector_end {
         let v_curr = _mm256_loadu_pd(ptr.add(i));
         let v_prev = _mm256_loadu_pd(ptr.add(i - period));
-        let v_diff = _mm256_sub_pd(v_curr, v_prev);
-        _mm256_storeu_pd(out_ptr.add(i), v_diff);
+        _mm256_storeu_pd(out_ptr.add(i), _mm256_sub_pd(v_curr, v_prev));
+        i += 4;
     }
 
     // Handle remaining elements
-    for i in (period + chunks * 4)..len {
+    while i < len {
         result[i] = input[i] - input[i - period];
+        i += 1;
     }
 }
 
@@ -3418,8 +3782,31 @@ fn mom_scalar(input: &[f64], period: usize, result: &mut [f64]) {
         *r = f64::NAN;
     }
 
-    for i in period..len {
-        result[i] = input[i] - input[i - period];
+    // Keep the portable fallback allocation-free and bounds-check-light for
+    // x86 runners without AVX2. The fixed unroll mirrors the SIMD path while
+    // remaining valid on every supported target.
+    let input_ptr = input.as_ptr();
+    let result_ptr = result.as_mut_ptr();
+    let mut i = period;
+    let unrolled_end = period + ((len - period) / 8) * 8;
+    while i < unrolled_end {
+        unsafe {
+            *result_ptr.add(i) = *input_ptr.add(i) - *input_ptr.add(i - period);
+            *result_ptr.add(i + 1) = *input_ptr.add(i + 1) - *input_ptr.add(i + 1 - period);
+            *result_ptr.add(i + 2) = *input_ptr.add(i + 2) - *input_ptr.add(i + 2 - period);
+            *result_ptr.add(i + 3) = *input_ptr.add(i + 3) - *input_ptr.add(i + 3 - period);
+            *result_ptr.add(i + 4) = *input_ptr.add(i + 4) - *input_ptr.add(i + 4 - period);
+            *result_ptr.add(i + 5) = *input_ptr.add(i + 5) - *input_ptr.add(i + 5 - period);
+            *result_ptr.add(i + 6) = *input_ptr.add(i + 6) - *input_ptr.add(i + 6 - period);
+            *result_ptr.add(i + 7) = *input_ptr.add(i + 7) - *input_ptr.add(i + 7 - period);
+        }
+        i += 8;
+    }
+    while i < len {
+        unsafe {
+            *result_ptr.add(i) = *input_ptr.add(i) - *input_ptr.add(i - period);
+        }
+        i += 1;
     }
 }
 
@@ -4266,6 +4653,30 @@ mod tests {
         let mut result = [0.0; 2];
         simd_typical_price(&high, &low, &close, &mut result);
         assert!((result[0] - 50.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn fixed_mom10_matches_generic_dispatch() {
+        let input: Vec<f64> = (0..128)
+            .map(|index| (index as f64 * 0.37).sin() * 10.0 + index as f64)
+            .collect();
+        let mut fixed = vec![0.0; input.len()];
+        let mut generic = vec![0.0; input.len()];
+
+        simd_mom10(&input, &mut fixed);
+        simd_mom(&input, 10, &mut generic);
+
+        for (index, (&fixed_value, &generic_value)) in fixed.iter().zip(&generic).enumerate() {
+            if index < 10 {
+                assert!(fixed_value.is_nan(), "fixed index={index}");
+                assert!(generic_value.is_nan(), "generic index={index}");
+            } else {
+                assert!(
+                    (fixed_value - generic_value).abs() < 1e-12,
+                    "index={index} fixed={fixed_value} generic={generic_value}"
+                );
+            }
+        }
     }
 
     #[test]

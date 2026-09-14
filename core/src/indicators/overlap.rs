@@ -1,6 +1,6 @@
 use crate::error::{Result, TaError};
 use crate::math::moving_avg;
-use crate::math::statistics::{rolling_max, rolling_min};
+use crate::math::statistics::rolling_minmax_visit;
 use crate::utils::{init_output, validate_input};
 use ndarray::Array1;
 
@@ -73,6 +73,58 @@ pub struct BbandsResult {
     pub lower: Array1<f64>,
 }
 
+#[inline]
+fn bbands_sma_into(
+    input: &[f64],
+    period: usize,
+    nb_dev_up: f64,
+    nb_dev_dn: f64,
+    middle: &mut [f64],
+    upper: &mut [f64],
+    lower: &mut [f64],
+) {
+    let len = input.len();
+    // The caller-owned FFI buffers are uninitialized. Only the warm-up prefix
+    // needs an explicit NaN fill; every later slot is written by the fused
+    // rolling scan below. This avoids three full-length initialization passes
+    // on the benchmark-critical path.
+    middle[..period - 1].fill(f64::NAN);
+    upper[..period - 1].fill(f64::NAN);
+    lower[..period - 1].fill(f64::NAN);
+
+    let inv_period = 1.0 / period as f64;
+    let mut ma_total = 0.0;
+    let mut square_total = 0.0;
+    for &value in &input[..period - 1] {
+        ma_total += value;
+        square_total += value * value;
+    }
+
+    let mut trailing_idx = 0usize;
+    unsafe {
+        let input_ptr = input.as_ptr();
+        let middle_ptr = middle.as_mut_ptr();
+        let upper_ptr = upper.as_mut_ptr();
+        let lower_ptr = lower.as_mut_ptr();
+        for i in period - 1..len {
+            let value = *input_ptr.add(i);
+            ma_total += value;
+            let mean = ma_total * inv_period;
+            square_total += value * value;
+            let variance = square_total * inv_period - mean * mean;
+            let std = if variance > 0.0 { variance.sqrt() } else { 0.0 };
+            *middle_ptr.add(i) = mean;
+            *upper_ptr.add(i) = mean + std * nb_dev_up;
+            *lower_ptr.add(i) = mean - std * nb_dev_dn;
+
+            let trailing = *input_ptr.add(trailing_idx);
+            ma_total -= trailing;
+            square_total -= trailing * trailing;
+            trailing_idx += 1;
+        }
+    }
+}
+
 /// Bollinger Bands (BBANDS)
 ///
 /// Upper = SMA + (std_dev * nb_dev_up)
@@ -120,51 +172,23 @@ pub fn bbands(
     validate_input(input.len(), period)?;
 
     let len = input.len();
-    let mut upper = init_output(len);
-    let mut middle = init_output(len);
-    let mut lower = init_output(len);
-    let inv_p = 1.0 / period as f64;
-    let period_f = period as f64;
-
-    // Welford online algorithm: O(1) per step for mean + population variance (TA-Lib compatible).
-    let mut mean = 0.0;
-    let mut m2 = 0.0;
-    for (j, &x) in input.iter().enumerate().take(period) {
-        let n = (j + 1) as f64;
-        let delta = x - mean;
-        mean += delta / n;
-        m2 += delta * (x - mean);
-    }
-
-    let std = (m2 * inv_p).max(0.0).sqrt();
-    middle[period - 1] = mean;
-    upper[period - 1] = mean + std * nb_dev_up;
-    lower[period - 1] = mean - std * nb_dev_dn;
-
-    // Pointer-based loop to eliminate bounds checking
-    let input_ptr = input.as_ptr();
-    let upper_ptr = upper.as_mut_ptr();
-    let middle_ptr = middle.as_mut_ptr();
-    let lower_ptr = lower.as_mut_ptr();
-
-    for i in period..len {
-        let old = unsafe { *input_ptr.add(i - period) };
-        let new = unsafe { *input_ptr.add(i) };
-        let old_mean = mean;
-        mean += (new - old) / period_f;
-        m2 += (new - mean) * (new - old_mean) - (old - mean) * (old - old_mean);
-        let std = (m2 * inv_p).sqrt();
-        unsafe {
-            *middle_ptr.add(i) = mean;
-            *upper_ptr.add(i) = mean + std * nb_dev_up;
-            *lower_ptr.add(i) = mean - std * nb_dev_dn;
-        }
-    }
+    let mut upper = vec![f64::NAN; len];
+    let mut middle = vec![f64::NAN; len];
+    let mut lower = vec![f64::NAN; len];
+    bbands_sma_into(
+        input,
+        period,
+        nb_dev_up,
+        nb_dev_dn,
+        &mut middle,
+        &mut upper,
+        &mut lower,
+    );
 
     Ok(BbandsResult {
-        upper,
-        middle,
-        lower,
+        upper: Array1::from_vec(upper),
+        middle: Array1::from_vec(middle),
+        lower: Array1::from_vec(lower),
     })
 }
 
@@ -230,6 +254,13 @@ pub fn accbands(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Resu
 /// assert_eq!(result.len(), 10);
 /// ```
 pub fn midpoint(input: &[f64], period: usize) -> Result<Array1<f64>> {
+    let mut output = Array1::<f64>::zeros(input.len());
+    midpoint_into(input, period, output.as_slice_mut().unwrap())?;
+    Ok(output)
+}
+
+/// Caller-owned MIDPOINT kernel used by runtime and language bindings.
+pub fn midpoint_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> {
     if period == 0 {
         return Err(TaError::InvalidParameter {
             name: "period".to_string(),
@@ -237,20 +268,18 @@ pub fn midpoint(input: &[f64], period: usize) -> Result<Array1<f64>> {
         });
     }
     validate_input(input.len(), period)?;
-
-    let max = rolling_max(input, period)?;
-    let min = rolling_min(input, period)?;
-
-    let len = input.len();
-    let mut output = init_output(len);
-
-    for i in 0..len {
-        if !max[i].is_nan() && !min[i].is_nan() {
-            output[i] = (max[i] + min[i]) / 2.0;
-        }
+    if output.len() != input.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
     }
 
-    Ok(output)
+    crate::utils::simd_fill_nan(&mut output[..period - 1]);
+    rolling_minmax_visit(input, input, period, |i, highest, lowest| {
+        output[i] = (highest + lowest) * 0.5;
+    });
+    Ok(())
 }
 
 /// Midprice (MIDPRICE)
@@ -277,27 +306,88 @@ pub fn midpoint(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// assert_eq!(result.len(), 10);
 /// ```
 pub fn midprice(high: &[f64], low: &[f64], period: usize) -> Result<Array1<f64>> {
+    let mut output = Array1::<f64>::zeros(high.len());
+    midprice_into(high, low, period, output.as_slice_mut().unwrap())?;
+    Ok(output)
+}
+
+/// Caller-owned MIDPRICE kernel used by runtime and language bindings.
+pub fn midprice_into(high: &[f64], low: &[f64], period: usize, output: &mut [f64]) -> Result<()> {
     if high.len() != low.len() {
         return Err(TaError::InvalidParameter {
             name: "high and low".to_string(),
             constraint: "must have the same length".to_string(),
         });
     }
+    if period == 0 {
+        return Err(TaError::InvalidParameter {
+            name: "period".to_string(),
+            constraint: "greater than 0".to_string(),
+        });
+    }
     validate_input(high.len(), period)?;
-
-    let max = rolling_max(high, period)?;
-    let min = rolling_min(low, period)?;
-
-    let len = high.len();
-    let mut output = init_output(len);
-
-    for i in 0..len {
-        if !max[i].is_nan() && !min[i].is_nan() {
-            output[i] = (max[i] + min[i]) / 2.0;
-        }
+    if output.len() != high.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
     }
 
-    Ok(output)
+    crate::utils::simd_fill_nan(&mut output[..period - 1]);
+    rolling_minmax_visit(high, low, period, |i, highest, lowest| {
+        output[i] = (highest + lowest) * 0.5;
+    });
+    Ok(())
+}
+
+/// Fixed-period MIDPRICE kernel for the benchmark-critical 14-bar path.
+///
+/// The general implementation uses a monotonic queue so arbitrary periods
+/// remain efficient.  For a short, fixed period the queue bookkeeping costs
+/// more than the fourteen comparisons; this direct scan keeps the hot loop
+/// allocation-free and lets LLVM fully unroll the bounded window.
+pub fn midprice14_into(high: &[f64], low: &[f64], output: &mut [f64]) -> Result<()> {
+    const PERIOD: usize = 14;
+
+    if high.len() != low.len() {
+        return Err(TaError::InvalidParameter {
+            name: "high and low".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    validate_input(high.len(), PERIOD)?;
+    if output.len() != high.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
+
+    crate::utils::simd_fill_nan(&mut output[..PERIOD - 1]);
+    let high_ptr = high.as_ptr();
+    let low_ptr = low.as_ptr();
+    let output_ptr = output.as_mut_ptr();
+    unsafe {
+        for index in (PERIOD - 1)..high.len() {
+            let start = index + 1 - PERIOD;
+            let mut highest = *high_ptr.add(start);
+            let mut lowest = *low_ptr.add(start);
+            let mut cursor = start + 1;
+            while cursor <= index {
+                let high_value = *high_ptr.add(cursor);
+                let low_value = *low_ptr.add(cursor);
+                if high_value > highest {
+                    highest = high_value;
+                }
+                if low_value < lowest {
+                    lowest = low_value;
+                }
+                cursor += 1;
+            }
+            *output_ptr.add(index) = (highest + lowest) * 0.5;
+        }
+    }
+    Ok(())
 }
 
 /// Parabolic SAR (SAR) Result
@@ -331,94 +421,10 @@ pub struct SarResult {
 /// assert_eq!(result.sar.len(), 10);
 /// ```
 pub fn sar(high: &[f64], low: &[f64], acceleration: f64, maximum: f64) -> Result<SarResult> {
-    if high.len() != low.len() {
-        return Err(TaError::InvalidParameter {
-            name: "high and low".to_string(),
-            constraint: "must have the same length".to_string(),
-        });
-    }
-    if high.len() < 2 {
-        return Err(TaError::InsufficientData {
-            length: high.len(),
-            required: 2,
-        });
-    }
-    if acceleration <= 0.0 || maximum <= 0.0 || acceleration >= maximum {
-        return Err(TaError::InvalidParameter {
-            name: "acceleration/maximum".to_string(),
-            constraint: "0 < acceleration < maximum".to_string(),
-        });
-    }
-
-    let len = high.len();
-    let mut sar_values = init_output(len);
-    let mut af_values = init_output(len);
-
-    // TA-Lib consumes the first bar to establish the initial extreme point
-    // and emits the first value at index 1. Direction is inferred from the
-    // first +DM/-DM pair; ties default to long.
-    let up_move = high[1] - high[0];
-    let down_move = low[0] - low[1];
-    let mut is_long = !(down_move > up_move && down_move > 0.0);
-    let mut af = acceleration.min(maximum);
-    let mut ep = if is_long { high[1] } else { low[1] };
-    let mut current_sar = if is_long { low[0] } else { high[0] };
-    // Keep the library's historical full-length contract at index 0. The
-    // TA-Lib compatibility adapter masks this bootstrap slot using lookback=1.
-    sar_values[0] = current_sar;
-    af_values[0] = af;
-
-    for i in 1..len {
-        let current_high = high[i];
-        let current_low = low[i];
-        let prev_high = if i == 1 { current_high } else { high[i - 1] };
-        let prev_low = if i == 1 { current_low } else { low[i - 1] };
-
-        if is_long {
-            if current_low <= current_sar {
-                is_long = false;
-                current_sar = ep.max(prev_high).max(current_high);
-                sar_values[i] = current_sar;
-                af = acceleration.min(maximum);
-                ep = current_low;
-                current_sar = af.mul_add(ep - current_sar, current_sar);
-                current_sar = current_sar.max(prev_high).max(current_high);
-                af_values[i] = af;
-                continue;
-            }
-
-            sar_values[i] = current_sar;
-            if current_high > ep {
-                ep = current_high;
-                af = (af + acceleration).min(maximum);
-            }
-            current_sar = af.mul_add(ep - current_sar, current_sar);
-            current_sar = current_sar.min(prev_low).min(current_low);
-        } else if current_high >= current_sar {
-            is_long = true;
-            current_sar = ep.min(prev_low).min(current_low);
-            sar_values[i] = current_sar;
-            af = acceleration.min(maximum);
-            ep = current_high;
-            current_sar = af.mul_add(ep - current_sar, current_sar);
-            current_sar = current_sar.min(prev_low).min(current_low);
-            af_values[i] = af;
-            continue;
-        } else {
-            sar_values[i] = current_sar;
-            if current_low < ep {
-                ep = current_low;
-                af = (af + acceleration).min(maximum);
-            }
-            current_sar = af.mul_add(ep - current_sar, current_sar);
-            current_sar = current_sar.max(prev_high).max(current_high);
-        }
-        af_values[i] = af;
-    }
-
+    let (sar, af) = crate::math::sar::sar_with_af(high, low, acceleration, maximum)?;
     Ok(SarResult {
-        sar: sar_values,
-        af: af_values,
+        sar: Array1::from_vec(sar),
+        af: Array1::from_vec(af),
     })
 }
 
@@ -477,94 +483,91 @@ pub fn sarext(
     let len = high.len();
     let mut sar_values = init_output(len);
     let mut af_values = init_output(len);
+    let mut long_af = af_init_long.min(af_max_long);
+    let mut short_af = af_init_short.min(af_max_short);
+    let long_step = af_long.min(af_max_long);
+    let short_step = af_short.min(af_max_short);
 
+    // TA-Lib consumes the first bar and emits the first value at index 1.
+    // With no forced start value, the first directional movement decides the
+    // initial side; ties default to long.
+    let up_move = high[1] - high[0];
+    let down_move = low[0] - low[1];
     let mut is_long = if start_value == 0.0 {
-        let up_move = high[1] - high[0];
-        let down_move = low[0] - low[1];
         !(down_move > up_move && down_move > 0.0)
     } else {
         start_value > 0.0
     };
-    let long_step = af_long.min(af_max_long);
-    let short_step = af_short.min(af_max_short);
-    let mut current_af_long = af_init_long.min(af_max_long);
-    let mut current_af_short = af_init_short.min(af_max_short);
-    let mut ep = if start_value == 0.0 {
+    let mut ep;
+    let mut sar;
+    if start_value == 0.0 {
         if is_long {
-            high[1]
+            ep = high[1];
+            sar = low[0];
         } else {
-            low[1]
+            ep = low[1];
+            sar = high[0];
         }
-    } else if is_long {
-        high[1]
+    } else if start_value > 0.0 {
+        ep = high[1];
+        sar = start_value;
     } else {
-        low[1]
-    };
-    let mut current_sar = if start_value == 0.0 {
-        if is_long {
-            low[0]
-        } else {
-            high[0]
-        }
-    } else {
-        start_value.abs()
-    };
-    sar_values[0] = if is_long { current_sar } else { -current_sar };
-    af_values[0] = if is_long {
-        current_af_long
-    } else {
-        current_af_short
-    };
+        ep = low[1];
+        sar = start_value.abs();
+    }
 
-    for i in 1..len {
-        let current_high = high[i];
-        let current_low = low[i];
-        let prev_high = if i == 1 { current_high } else { high[i - 1] };
-        let prev_low = if i == 1 { current_low } else { low[i - 1] };
+    sar_values[0] = if is_long { sar } else { -sar };
+    af_values[0] = if is_long { long_af } else { short_af };
+
+    let mut new_low = low[1];
+    let mut new_high = high[1];
+    let mut today = 1usize;
+    while today < len {
+        let prev_low = new_low;
+        let prev_high = new_high;
+        new_low = low[today];
+        new_high = high[today];
+        today += 1;
 
         if is_long {
-            if current_low <= current_sar {
+            if new_low <= sar {
                 is_long = false;
-                current_sar = ep.max(prev_high).max(current_high);
+                sar = ep.max(prev_high).max(new_high);
                 if offset_on_reverse != 0.0 {
-                    current_sar += current_sar * offset_on_reverse;
+                    sar += sar * offset_on_reverse;
                 }
-                sar_values[i] = -current_sar;
-                current_af_short = af_init_short.min(af_max_short);
-                ep = current_low;
-                current_sar = current_af_short.mul_add(ep - current_sar, current_sar);
-                current_sar = current_sar.max(prev_high).max(current_high);
+                sar_values[today - 1] = -sar;
+                short_af = af_init_short;
+                ep = new_low;
+                sar = (short_af * (ep - sar) + sar).max(prev_high).max(new_high);
             } else {
-                sar_values[i] = current_sar;
-                if current_high > ep {
-                    ep = current_high;
-                    current_af_long = (current_af_long + long_step).min(af_max_long);
+                sar_values[today - 1] = sar;
+                if new_high > ep {
+                    ep = new_high;
+                    long_af = (long_af + long_step).min(af_max_long);
                 }
-                current_sar = current_af_long.mul_add(ep - current_sar, current_sar);
-                current_sar = current_sar.min(prev_low).min(current_low);
+                sar = (long_af * (ep - sar) + sar).min(prev_low).min(new_low);
             }
-            af_values[i] = current_af_long;
-        } else if current_high >= current_sar {
+            af_values[today - 1] = long_af;
+        } else if new_high >= sar {
             is_long = true;
-            current_sar = ep.min(prev_low).min(current_low);
+            sar = ep.min(prev_low).min(new_low);
             if offset_on_reverse != 0.0 {
-                current_sar -= current_sar * offset_on_reverse;
+                sar -= sar * offset_on_reverse;
             }
-            sar_values[i] = current_sar;
-            current_af_long = af_init_long.min(af_max_long);
-            ep = current_high;
-            current_sar = current_af_long.mul_add(ep - current_sar, current_sar);
-            current_sar = current_sar.min(prev_low).min(current_low);
-            af_values[i] = current_af_long;
+            sar_values[today - 1] = sar;
+            long_af = af_init_long;
+            ep = new_high;
+            sar = (long_af * (ep - sar) + sar).min(prev_low).min(new_low);
+            af_values[today - 1] = long_af;
         } else {
-            sar_values[i] = -current_sar;
-            if current_low < ep {
-                ep = current_low;
-                current_af_short = (current_af_short + short_step).min(af_max_short);
+            sar_values[today - 1] = -sar;
+            if new_low < ep {
+                ep = new_low;
+                short_af = (short_af + short_step).min(af_max_short);
             }
-            current_sar = current_af_short.mul_add(ep - current_sar, current_sar);
-            current_sar = current_sar.max(prev_high).max(current_high);
-            af_values[i] = current_af_short;
+            sar = (short_af * (ep - sar) + sar).max(prev_high).max(new_high);
+            af_values[today - 1] = short_af;
         }
     }
 
@@ -572,6 +575,255 @@ pub fn sarext(
         sar: sar_values,
         af: af_values,
     })
+}
+
+/// Zero-copy SAR-only SAREXT kernel for compatibility bindings.
+///
+/// The public [`sarext`] API also returns the acceleration-factor trace for
+/// Rust callers.  TA-Lib's Python SAREXT wrapper exposes only SAR, so keeping
+/// that trace out of this path avoids one full allocation and a write on every
+/// bar without changing the public result type.
+#[allow(clippy::too_many_arguments)]
+pub fn sarext_sar_into(
+    high: &[f64],
+    low: &[f64],
+    start_value: f64,
+    offset_on_reverse: f64,
+    af_init_long: f64,
+    af_long: f64,
+    af_max_long: f64,
+    af_init_short: f64,
+    af_short: f64,
+    af_max_short: f64,
+    output: &mut [f64],
+) -> Result<()> {
+    if high.len() != low.len() {
+        return Err(TaError::InvalidParameter {
+            name: "high and low".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    if high.len() < 2 {
+        return Err(TaError::InsufficientData {
+            length: high.len(),
+            required: 2,
+        });
+    }
+    if output.len() != high.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
+
+    // SAREXT's public/default Python call uses the canonical Wilder
+    // parameters.  Keep a branch-free hot loop for that overwhelmingly common
+    // configuration; the general path below still handles every custom
+    // acceleration/offset combination.
+    if start_value == 0.0
+        && offset_on_reverse == 0.0
+        && af_init_long == 0.02
+        && af_long == 0.02
+        && af_max_long == 0.2
+        && af_init_short == 0.02
+        && af_short == 0.02
+        && af_max_short == 0.2
+    {
+        return sarext_default_sar_into(high, low, output);
+    }
+
+    let len = high.len();
+    let high_ptr = high.as_ptr();
+    let low_ptr = low.as_ptr();
+    let output_ptr = output.as_mut_ptr();
+    unsafe {
+        *output_ptr = f64::NAN;
+    }
+    let mut long_af = af_init_long.min(af_max_long);
+    let mut short_af = af_init_short.min(af_max_short);
+    let long_step = af_long.min(af_max_long);
+    let short_step = af_short.min(af_max_short);
+
+    let up_move = unsafe { *high_ptr.add(1) - *high_ptr };
+    let down_move = unsafe { *low_ptr - *low_ptr.add(1) };
+    let mut is_long = if start_value == 0.0 {
+        !(down_move > up_move && down_move > 0.0)
+    } else {
+        start_value > 0.0
+    };
+    let mut ep;
+    let mut sar;
+    if start_value == 0.0 {
+        if is_long {
+            ep = unsafe { *high_ptr.add(1) };
+            sar = unsafe { *low_ptr };
+        } else {
+            ep = unsafe { *low_ptr.add(1) };
+            sar = unsafe { *high_ptr };
+        }
+    } else if start_value > 0.0 {
+        ep = unsafe { *high_ptr.add(1) };
+        sar = start_value;
+    } else {
+        ep = unsafe { *low_ptr.add(1) };
+        sar = start_value.abs();
+    }
+
+    // The Python compatibility layer masks bar 0 to TA-Lib's lookback NaN.
+    // Keep the same contract directly in the zero-copy kernel.
+    let mut new_low = unsafe { *low_ptr.add(1) };
+    let mut new_high = unsafe { *high_ptr.add(1) };
+    let mut today = 1usize;
+    while today < len {
+        let prev_low = new_low;
+        let prev_high = new_high;
+        new_low = unsafe { *low_ptr.add(today) };
+        new_high = unsafe { *high_ptr.add(today) };
+        today += 1;
+
+        if is_long {
+            if new_low <= sar {
+                is_long = false;
+                sar = ep.max(prev_high).max(new_high);
+                if offset_on_reverse != 0.0 {
+                    sar += sar * offset_on_reverse;
+                }
+                unsafe {
+                    *output_ptr.add(today - 1) = -sar;
+                }
+                short_af = af_init_short;
+                ep = new_low;
+                sar = (short_af * (ep - sar) + sar).max(prev_high).max(new_high);
+            } else {
+                unsafe {
+                    *output_ptr.add(today - 1) = sar;
+                }
+                if new_high > ep {
+                    ep = new_high;
+                    long_af = (long_af + long_step).min(af_max_long);
+                }
+                sar = (long_af * (ep - sar) + sar).min(prev_low).min(new_low);
+            }
+        } else if new_high >= sar {
+            is_long = true;
+            sar = ep.min(prev_low).min(new_low);
+            if offset_on_reverse != 0.0 {
+                sar -= sar * offset_on_reverse;
+            }
+            unsafe {
+                *output_ptr.add(today - 1) = sar;
+            }
+            long_af = af_init_long;
+            ep = new_high;
+            sar = (long_af * (ep - sar) + sar).min(prev_low).min(new_low);
+        } else {
+            unsafe {
+                *output_ptr.add(today - 1) = -sar;
+            }
+            if new_low < ep {
+                ep = new_low;
+                short_af = (short_af + short_step).min(af_max_short);
+            }
+            sar = (short_af * (ep - sar) + sar).max(prev_high).max(new_high);
+        }
+    }
+    Ok(())
+}
+
+#[inline(always)]
+fn sarext_default_sar_into(high: &[f64], low: &[f64], output: &mut [f64]) -> Result<()> {
+    let high_ptr = high.as_ptr();
+    let low_ptr = low.as_ptr();
+    let output_ptr = output.as_mut_ptr();
+    unsafe { *output_ptr = f64::NAN };
+
+    let first_high = unsafe { *high_ptr };
+    let first_low = unsafe { *low_ptr };
+    let second_high = unsafe { *high_ptr.add(1) };
+    let second_low = unsafe { *low_ptr.add(1) };
+    let up_move = second_high - first_high;
+    let down_move = first_low - second_low;
+    let mut is_long = !(down_move > up_move && down_move > 0.0);
+    let mut af = 0.02_f64;
+    let mut ep = if is_long { second_high } else { second_low };
+    let mut sar = if is_long { first_low } else { first_high };
+    let mut prev_low = second_low;
+    let mut prev_high = second_high;
+
+    for i in 1..high.len() {
+        let new_low = unsafe { *low_ptr.add(i) };
+        let new_high = unsafe { *high_ptr.add(i) };
+        if is_long {
+            if new_low <= sar {
+                is_long = false;
+                sar = ep;
+                if sar < prev_high {
+                    sar = prev_high;
+                }
+                if sar < new_high {
+                    sar = new_high;
+                }
+                unsafe { *output_ptr.add(i) = -sar };
+                af = 0.02;
+                ep = new_low;
+                sar += af * (ep - sar);
+                if sar < prev_high {
+                    sar = prev_high;
+                }
+                if sar < new_high {
+                    sar = new_high;
+                }
+            } else {
+                unsafe { *output_ptr.add(i) = sar };
+                if new_high > ep {
+                    ep = new_high;
+                    af = (af + 0.02).min(0.2);
+                }
+                sar += af * (ep - sar);
+                if sar > prev_low {
+                    sar = prev_low;
+                }
+                if sar > new_low {
+                    sar = new_low;
+                }
+            }
+        } else if new_high >= sar {
+            is_long = true;
+            sar = ep;
+            if sar > prev_low {
+                sar = prev_low;
+            }
+            if sar > new_low {
+                sar = new_low;
+            }
+            unsafe { *output_ptr.add(i) = sar };
+            af = 0.02;
+            ep = new_high;
+            sar += af * (ep - sar);
+            if sar > prev_low {
+                sar = prev_low;
+            }
+            if sar > new_low {
+                sar = new_low;
+            }
+        } else {
+            unsafe { *output_ptr.add(i) = -sar };
+            if new_low < ep {
+                ep = new_low;
+                af = (af + 0.02).min(0.2);
+            }
+            sar += af * (ep - sar);
+            if sar < prev_high {
+                sar = prev_high;
+            }
+            if sar < new_high {
+                sar = new_high;
+            }
+        }
+        prev_low = new_low;
+        prev_high = new_high;
+    }
+    Ok(())
 }
 
 /// MAMA (MESA Adaptive Moving Average) Result
@@ -706,9 +958,7 @@ pub fn mama(input: &[f64], fast_limit: f64, slow_limit: f64) -> Result<MamaResul
     period_wma_sub += input[2];
     period_wma_sum += input[2] * 3.0;
 
-    // Match TA-Lib's nine WMA warm-up updates (bars 3..11). The recursive
-    // Hilbert state starts at bar 12; processing bars 10/11 here would make
-    // MAMA diverge even though the public lookback is 32.
+    // Process from bar 3 (after WMA init) through bar 9 to warm up
     for i in 3..12 {
         let today_value = input[i];
         period_wma_sub += today_value;
@@ -720,7 +970,7 @@ pub fn mama(input: &[f64], fast_limit: f64, slow_limit: f64) -> Result<MamaResul
         period_wma_sum -= period_wma_sub;
     }
 
-    // Main processing loop from bar 12 onward (lookback = 32, output starts at 32)
+    // Main processing loop from bar 10 onward (lookback = 32, output starts at 32)
     for i in 12..len {
         let adjusted_prev_period = 0.075 * period + 0.54;
         let today_value = input[i];
@@ -790,15 +1040,15 @@ pub fn mama(input: &[f64], fast_limit: f64, slow_limit: f64) -> Result<MamaResul
             i1_for_odd_prev2 = detrender_val;
 
             // Phase: atan(Q1 / I1ForEvenPrev3) in degrees
-            phase_degrees = if i1_for_even_prev3.abs() > 1e-15 {
+            phase_degrees = if i1_for_even_prev3 != 0.0 {
                 (q1_val / i1_for_even_prev3).atan() * rad2deg
             } else {
                 0.0
             };
 
             // Re/Im use OLD prevQ2/prevI2 (before update), matching TA-Lib
-            re = 0.2 * (i2 * prev_i2 + q2 * prev_q2) + 0.8 * re;
-            im = 0.2 * (i2 * prev_q2 - q2 * prev_i2) + 0.8 * im;
+            re = 0.8 * re + 0.2 * (i2 * prev_i2 + q2 * prev_q2);
+            im = 0.8 * im + 0.2 * (i2 * prev_q2 - q2 * prev_i2);
             prev_q2 = q2;
             prev_i2 = i2;
         } else {
@@ -852,15 +1102,15 @@ pub fn mama(input: &[f64], fast_limit: f64, slow_limit: f64) -> Result<MamaResul
             i1_for_even_prev2 = detrender_val;
 
             // Phase: atan(Q1 / I1ForOddPrev3) in degrees
-            phase_degrees = if i1_for_odd_prev3.abs() > 1e-15 {
+            phase_degrees = if i1_for_odd_prev3 != 0.0 {
                 (q1_val / i1_for_odd_prev3).atan() * rad2deg
             } else {
                 0.0
             };
 
             // Re/Im use OLD prevQ2/prevI2 (before update), matching TA-Lib
-            re = 0.2 * (i2 * prev_i2 + q2 * prev_q2) + 0.8 * re;
-            im = 0.2 * (i2 * prev_q2 - q2 * prev_i2) + 0.8 * im;
+            re = 0.8 * re + 0.2 * (i2 * prev_i2 + q2 * prev_q2);
+            im = 0.8 * im + 0.2 * (i2 * prev_q2 - q2 * prev_i2);
             prev_q2 = q2;
             prev_i2 = i2;
         }
@@ -887,9 +1137,9 @@ pub fn mama(input: &[f64], fast_limit: f64, slow_limit: f64) -> Result<MamaResul
         };
 
         // Update MAMA and FAMA
-        mama_val = alpha * today_value + (1.0 - alpha) * mama_val;
+        mama_val = (1.0 - alpha) * mama_val + alpha * today_value;
         let half_alpha = alpha * 0.5;
-        fama_val = half_alpha * mama_val + (1.0 - half_alpha) * fama_val;
+        fama_val = (1.0 - half_alpha) * fama_val + half_alpha * mama_val;
 
         // Store output (valid from bar 32 onward)
         if i >= 32 {
@@ -899,8 +1149,8 @@ pub fn mama(input: &[f64], fast_limit: f64, slow_limit: f64) -> Result<MamaResul
 
         // Adjust period for next bar (same as HT_DCPERIOD)
         let temp_period = period;
-        if im.abs() > 1e-10 && re.abs() > 1e-10 {
-            period = 360.0 / ((im / re).atan() * 180.0 / std::f64::consts::PI);
+        if im != 0.0 && re != 0.0 {
+            period = 360.0 / ((im / re).atan() * rad2deg);
         }
 
         let temp15 = 1.5 * temp_period;
@@ -1037,7 +1287,7 @@ pub fn mama_into(
     period_wma_sub += input[2];
     period_wma_sum += input[2] * 3.0;
 
-    // Match TA-Lib's nine WMA warm-up updates (bars 3..11).
+    // Process from bar 3 (after WMA init) through bar 9 to warm up
     for i in 3..12 {
         let today_value = input[i];
         period_wma_sub += today_value;
@@ -1119,15 +1369,15 @@ pub fn mama_into(
             i1_for_odd_prev2 = detrender_val;
 
             // Phase: atan(Q1 / I1ForEvenPrev3) in degrees
-            phase_degrees = if i1_for_even_prev3.abs() > 1e-15 {
+            phase_degrees = if i1_for_even_prev3 != 0.0 {
                 (q1_val / i1_for_even_prev3).atan() * rad2deg
             } else {
                 0.0
             };
 
             // Re/Im use OLD prevQ2/prevI2 (before update), matching TA-Lib
-            re = 0.2 * (i2 * prev_i2 + q2 * prev_q2) + 0.8 * re;
-            im = 0.2 * (i2 * prev_q2 - q2 * prev_i2) + 0.8 * im;
+            re = 0.8 * re + 0.2 * (i2 * prev_i2 + q2 * prev_q2);
+            im = 0.8 * im + 0.2 * (i2 * prev_q2 - q2 * prev_i2);
             prev_q2 = q2;
             prev_i2 = i2;
         } else {
@@ -1181,15 +1431,15 @@ pub fn mama_into(
             i1_for_even_prev2 = detrender_val;
 
             // Phase: atan(Q1 / I1ForOddPrev3) in degrees
-            phase_degrees = if i1_for_odd_prev3.abs() > 1e-15 {
+            phase_degrees = if i1_for_odd_prev3 != 0.0 {
                 (q1_val / i1_for_odd_prev3).atan() * rad2deg
             } else {
                 0.0
             };
 
             // Re/Im use OLD prevQ2/prevI2 (before update), matching TA-Lib
-            re = 0.2 * (i2 * prev_i2 + q2 * prev_q2) + 0.8 * re;
-            im = 0.2 * (i2 * prev_q2 - q2 * prev_i2) + 0.8 * im;
+            re = 0.8 * re + 0.2 * (i2 * prev_i2 + q2 * prev_q2);
+            im = 0.8 * im + 0.2 * (i2 * prev_q2 - q2 * prev_i2);
             prev_q2 = q2;
             prev_i2 = i2;
         }
@@ -1216,9 +1466,9 @@ pub fn mama_into(
         };
 
         // Update MAMA and FAMA
-        mama_val = alpha * today_value + (1.0 - alpha) * mama_val;
+        mama_val = (1.0 - alpha) * mama_val + alpha * today_value;
         let half_alpha = alpha * 0.5;
-        fama_val = half_alpha * mama_val + (1.0 - half_alpha) * fama_val;
+        fama_val = (1.0 - half_alpha) * fama_val + half_alpha * mama_val;
 
         // Store output (valid from bar 32 onward)
         if i >= 32 {
@@ -1228,8 +1478,8 @@ pub fn mama_into(
 
         // Adjust period for next bar (same as HT_DCPERIOD)
         let temp_period = period;
-        if im.abs() > 1e-10 && re.abs() > 1e-10 {
-            period = 360.0 / ((im / re).atan() * 180.0 / std::f64::consts::PI);
+        if im != 0.0 && re != 0.0 {
+            period = 360.0 / ((im / re).atan() * rad2deg);
         }
 
         let temp15 = 1.5 * temp_period;
@@ -1281,11 +1531,28 @@ pub fn mama_into(
 /// ```
 /// use finkit::indicators;
 ///
-/// let close: Vec<f64> = (1..=20).map(|x| x as f64).collect();
+/// let close: Vec<f64> = (1..=30).map(|x| x as f64).collect();
 /// let result = indicators::t3(&close, 5, 0.7).unwrap();
-/// assert_eq!(result.len(), 20);
+/// assert_eq!(result.len(), 30);
 /// ```
 pub fn t3(input: &[f64], period: usize, vfactor: f64) -> Result<Array1<f64>> {
+    let mut output = vec![0.0; input.len()];
+    t3_into(input, period, vfactor, &mut output)?;
+    Ok(Array1::from_vec(output))
+}
+
+/// Compute T3 directly into a caller-owned buffer.
+///
+/// The Python hot path uses this form with uninitialized storage so the
+/// warm-up prefix is written once without first clearing the full output.
+#[inline(always)]
+pub fn t3_into(input: &[f64], period: usize, vfactor: f64, output: &mut [f64]) -> Result<()> {
+    if period == 0 {
+        return Err(TaError::InvalidParameter {
+            name: "period".to_string(),
+            constraint: "greater than 0".to_string(),
+        });
+    }
     if !(0.0..=1.0).contains(&vfactor) {
         return Err(TaError::InvalidParameter {
             name: "vfactor".to_string(),
@@ -1293,58 +1560,71 @@ pub fn t3(input: &[f64], period: usize, vfactor: f64) -> Result<Array1<f64>> {
         });
     }
 
-    validate_input(input.len(), period)?;
+    let lookback = 6 * period.saturating_sub(1);
+    validate_input(input.len(), lookback + 1)?;
+    if output.len() != input.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
 
     // T3 coefficients matching TA-Lib ta_T3.c
     let c1 = -vfactor * vfactor * vfactor;
-    let c2 = 3.0 * (vfactor * vfactor - c1);
-    let c3 = -6.0 * vfactor * vfactor - 3.0 * (vfactor - c1);
+    let c2 = 3.0 * vfactor * vfactor + 3.0 * vfactor * vfactor * vfactor;
+    let c3 = -6.0 * vfactor * vfactor - 3.0 * vfactor - 3.0 * vfactor * vfactor * vfactor;
     let c4 = 1.0 + 3.0 * vfactor + vfactor * vfactor * vfactor + 3.0 * vfactor * vfactor;
 
     let len = input.len();
-    let mut output = init_output(len);
-
-    // Zero-allocation T3: 6 cascaded EMA layers with SMA seeding (matching
-    // TA-Lib's EMA warm-up). Each layer is updated in-place per bar, avoiding
-    // the 6 intermediate `Array1` allocations of a naive 6x `ema()` approach.
+    output[..lookback].fill(f64::NAN);
     let k = crate::utils::smoothing_factor(period);
     let one_minus_k = 1.0 - k;
-    let inv_period = 1.0 / period as f64;
 
-    let mut counts = [0usize; 6];
-    let mut sums = [0.0f64; 6];
-    let mut prevs = [0.0f64; 6];
-
-    for i in 0..len {
-        let mut val = Some(input[i]);
-        for layer in 0..6 {
-            let Some(current) = val else { break };
-            counts[layer] += 1;
-            if counts[layer] < period {
-                sums[layer] += current;
-                val = None;
-            } else if counts[layer] == period {
-                sums[layer] += current;
-                prevs[layer] = sums[layer] * inv_period;
-                val = Some(prevs[layer]);
-            } else {
-                prevs[layer] = current * k + prevs[layer] * one_minus_k;
-                val = Some(prevs[layer]);
+    // Each EMA stage is seeded from the first `period` valid values of the
+    // preceding stage. Keep only the six recursive states and seed sums: the
+    // stage-start guard prevents the zero-filled warm-up bug of the old fused
+    // loop without allocating six full intermediate arrays.
+    let mut ema = [0.0; 6];
+    let mut sums = [0.0; 6];
+    for i in 0..=lookback {
+        let mut value = input[i];
+        for stage in 0..6 {
+            let stage_start = stage * (period - 1);
+            if i < stage_start {
+                break;
             }
+            if i < stage_start + period - 1 {
+                sums[stage] += value;
+                break;
+            }
+            if i == stage_start + period - 1 {
+                sums[stage] += value;
+                ema[stage] = sums[stage] / period as f64;
+            } else {
+                ema[stage] = value * k + ema[stage] * one_minus_k;
+            }
+            value = ema[stage];
         }
-
-        if counts[0] >= period
-            && counts[1] >= period
-            && counts[2] >= period
-            && counts[3] >= period
-            && counts[4] >= period
-            && counts[5] >= period
-        {
-            output[i] = c1 * prevs[5] + c2 * prevs[4] + c3 * prevs[3] + c4 * prevs[2];
+        if i >= lookback {
+            output[i] = c1 * ema[5] + c2 * ema[4] + c3 * ema[3] + c4 * ema[2];
         }
     }
 
-    Ok(output)
+    let (mut ema0, mut ema1, mut ema2, mut ema3, mut ema4, mut ema5) =
+        (ema[0], ema[1], ema[2], ema[3], ema[4], ema[5]);
+    // Once all six stages are seeded, the hot tail is a fixed dependency
+    // chain. Keep it branch-free and unrolled instead of rechecking six
+    // warm-up conditions for every bar.
+    for i in (lookback + 1)..len {
+        ema0 = input[i] * k + ema0 * one_minus_k;
+        ema1 = ema0 * k + ema1 * one_minus_k;
+        ema2 = ema1 * k + ema2 * one_minus_k;
+        ema3 = ema2 * k + ema3 * one_minus_k;
+        ema4 = ema3 * k + ema4 * one_minus_k;
+        ema5 = ema4 * k + ema5 * one_minus_k;
+        output[i] = c1 * ema5 + c2 * ema4 + c3 * ema3 + c4 * ema2;
+    }
+    Ok(())
 }
 
 /// Hull Moving Average (HMA)
@@ -1649,43 +1929,7 @@ pub fn bbands_into(
     }
     validate_input(len, period)?;
 
-    let inv_p = 1.0 / period as f64;
-    let period_f = period as f64;
-
-    // Welford online algorithm: O(1) per step for mean + population variance (TA-Lib compatible).
-    let mut mean = 0.0;
-    let mut m2 = 0.0;
-    for (j, &x) in input.iter().enumerate().take(period) {
-        let n = (j + 1) as f64;
-        let delta = x - mean;
-        mean += delta / n;
-        m2 += delta * (x - mean);
-    }
-
-    let std = (m2 * inv_p).max(0.0).sqrt();
-    middle[period - 1] = mean;
-    upper[period - 1] = mean + std * nb_dev_up;
-    lower[period - 1] = mean - std * nb_dev_dn;
-
-    // Pointer-based loop to eliminate bounds checking
-    let input_ptr = input.as_ptr();
-    let upper_ptr = upper.as_mut_ptr();
-    let middle_ptr = middle.as_mut_ptr();
-    let lower_ptr = lower.as_mut_ptr();
-
-    for i in period..len {
-        let old = unsafe { *input_ptr.add(i - period) };
-        let new = unsafe { *input_ptr.add(i) };
-        let old_mean = mean;
-        mean += (new - old) / period_f;
-        m2 += (new - mean) * (new - old_mean) - (old - mean) * (old - old_mean);
-        let std = (m2 * inv_p).sqrt();
-        unsafe {
-            *middle_ptr.add(i) = mean;
-            *upper_ptr.add(i) = mean + std * nb_dev_up;
-            *lower_ptr.add(i) = mean - std * nb_dev_dn;
-        }
-    }
+    bbands_sma_into(input, period, nb_dev_up, nb_dev_dn, middle, upper, lower);
 
     Ok(())
 }
@@ -1753,12 +1997,35 @@ mod tests {
     }
 
     #[test]
+    fn test_midprice14_into_matches_generic() {
+        let high: Vec<f64> = (0..64)
+            .map(|index| 100.0 + ((index * 17) % 23) as f64)
+            .collect();
+        let low: Vec<f64> = high
+            .iter()
+            .enumerate()
+            .map(|(index, value)| value - 1.0 - (index % 5) as f64)
+            .collect();
+        let expected = midprice(&high, &low, 14).unwrap();
+        let mut actual = vec![0.0; high.len()];
+        midprice14_into(&high, &low, &mut actual).unwrap();
+        for (expected, actual) in expected.iter().zip(actual.iter()) {
+            if expected.is_nan() {
+                assert!(actual.is_nan());
+            } else {
+                assert_relative_eq!(*actual, *expected, epsilon = 1e-12);
+            }
+        }
+    }
+
+    #[test]
     fn test_sar() {
         let high = vec![10.0, 11.0, 12.0, 13.0, 14.0];
         let low = vec![9.0, 10.0, 11.0, 12.0, 13.0];
         let result = sar(&high, &low, 0.02, 0.2).unwrap();
 
-        assert!(!result.sar[0].is_nan());
+        assert!(result.sar[0].is_nan());
+        assert!(!result.sar[1].is_nan());
         assert!(!result.sar[4].is_nan());
     }
 

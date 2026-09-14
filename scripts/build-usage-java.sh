@@ -2,7 +2,8 @@
 # ----------------------------------------------------------------------------
 # Finkit Java usage-package builder.
 #
-# Produces `finkit-1.0.0.jar` and the native `.dll`/`.so`/`.dylib` for
+# Produces a versioned `finkit-<workspace-version>.jar` and the native
+# `.dll`/`.so`/`.dylib` for
 # the current platform, in dist/java/<platform>/.  The native lib is
 # staged under `natives/` inside the JAR so consumers do not need to set
 # `java.library.path`.

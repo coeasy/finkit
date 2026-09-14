@@ -169,9 +169,10 @@ mod tests {
         let input = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         let result = moving_avg::sma(&input, 3).unwrap();
         let vals = result.into_raw_vec_and_offset().0;
-        assert!(vals[0].is_nan());
-        assert!(vals[1].is_nan());
+        assert!(vals[..2].iter().all(|value| value.is_nan()));
         assert!((vals[2] - 2.0).abs() < 1e-10);
+        assert!((vals[3] - 3.0).abs() < 1e-10);
+        assert!((vals[4] - 4.0).abs() < 1e-10);
     }
 
     #[test]
@@ -179,8 +180,8 @@ mod tests {
         let input = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         let result = moving_avg::ema(&input, 3).unwrap();
         assert!(result.len() == input.len());
-        // EMA uses an SMA seed at the end of the warm-up window.
-        assert!(result[0].is_nan());
+        // TA-Lib-compatible warm-up precedes the SMA seed at index 2.
+        assert!(result.iter().take(2).all(|value| value.is_nan()));
         assert!((result[2] - 2.0).abs() < 1e-10);
     }
 

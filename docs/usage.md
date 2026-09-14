@@ -1,6 +1,6 @@
 # Complete Usage Guide
 
-This guide is the practical entry point for using Finkit `v0.1.3`. It focuses on public, currently implemented behavior and distinguishes release artifacts from source-only bindings.
+This guide is the practical entry point for using Finkit `v0.1.5`. It focuses on public, currently implemented behavior and distinguishes release artifacts from source-only bindings.
 
 ## 1. Data conventions
 
@@ -25,7 +25,7 @@ open,high,low,close,volume
 
 ## 2. Python: basic indicators
 
-Install a matching wheel from the GitHub `v0.1.3` Release first; see [installation.md](installation.md).
+Install a matching wheel from the GitHub `v0.1.5` Release first; see [installation.md](installation.md).
 
 ```python
 import numpy as np
@@ -255,7 +255,7 @@ Until a crates.io entry is independently published, use the Git tag or a local p
 
 ```toml
 [dependencies]
-finkit = { git = "https://github.com/coeasy/finkit", tag = "v0.1.3" }
+finkit = { git = "https://github.com/coeasy/finkit", tag = "v0.1.5" }
 ```
 
 ### Batch indicators
@@ -305,7 +305,7 @@ If minimizing a build, disable defaults only after checking transitive indicator
 [dependencies]
 finkit = {
   git = "https://github.com/coeasy/finkit",
-  tag = "v0.1.3",
+  tag = "v0.1.5",
   default-features = false,
   features = ["std", "indicators-overlap"]
 }
@@ -530,7 +530,7 @@ A downstream CMake project should point `CMAKE_PREFIX_PATH` to that install pref
 
 ## 14. Go/.NET/mobile/WASM
 
-These source bindings are useful for development, but the current v0.1.3 release does not promise package-manager/binary distribution for them. Treat their in-repository READMEs as developer integration notes, verify their native dependencies locally, and do not use registry installation snippets until those packages are actually published.
+These source bindings are useful for development, but a GitHub Release asset does not by itself promise package-manager/binary distribution for them. Treat their in-repository READMEs as developer integration notes, verify their native dependencies locally, and do not use registry installation snippets until those packages are actually published.
 
 ## 15. Function and indicator discovery
 
