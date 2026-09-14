@@ -697,12 +697,12 @@ fn fast_unary_period_scale<'py>(
             let output_addr = output.data() as usize;
             py.detach(|| unsafe {
                 let output_ptr = output_addr as *mut f64;
-                rolling_stats::stddev_rolling_into(
-                    close,
-                    timeperiod,
-                    scale,
-                    std::slice::from_raw_parts_mut(output_ptr, close.len()),
-                )
+                let output = std::slice::from_raw_parts_mut(output_ptr, close.len());
+                if timeperiod == 20 && scale == 1.0 {
+                    rolling_stats::stddev20_into(close, output)
+                } else {
+                    rolling_stats::stddev_rolling_into(close, timeperiod, scale, output)
+                }
             })
             .map_err(value_error)?;
             return Ok(output);
@@ -729,10 +729,33 @@ fn fast_kama<'py>(
     slowperiod: usize,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let close = close.as_slice().map_err(value_error)?;
-    let output = py
-        .detach(|| moving_avg::kama(close, timeperiod, fastperiod, slowperiod))
+    let len = close.len();
+    let output = unsafe { PyArray1::new(py, [len], false) };
+    if len <= 262_144 {
+        unsafe {
+            moving_avg::kama_into(
+                close,
+                timeperiod,
+                fastperiod,
+                slowperiod,
+                slice::from_raw_parts_mut(output.data(), len),
+            )
+        }
         .map_err(value_error)?;
-    Ok(PyArray1::from_vec(py, output.into_raw_vec()))
+    } else {
+        let output_addr = output.data() as usize;
+        py.detach(|| unsafe {
+            moving_avg::kama_into(
+                close,
+                timeperiod,
+                fastperiod,
+                slowperiod,
+                slice::from_raw_parts_mut(output_addr as *mut f64, len),
+            )
+        })
+        .map_err(value_error)?;
+    }
+    Ok(output)
 }
 
 #[pyfunction(name = "_fast_binary_period")]
@@ -751,6 +774,17 @@ fn fast_binary_period<'py>(
             let len = input_a.len();
             let output = unsafe { PyArray1::new(py, [len], false) };
             let output_addr = output.data() as usize;
+            if timeperiod == 14 && len <= 16_384 {
+                unsafe {
+                    indicators::midprice14_into(
+                        input_a,
+                        input_b,
+                        slice::from_raw_parts_mut(output.data(), len),
+                    )
+                }
+                .map_err(value_error)?;
+                return Ok(output);
+            }
             let compute = || unsafe {
                 indicators::midprice_into(
                     input_a,

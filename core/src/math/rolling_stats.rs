@@ -245,6 +245,57 @@ pub fn stddev_rolling_into(
     Ok(())
 }
 
+/// Fixed-period STDDEV20 kernel for the public TA-Lib compatibility hot path.
+///
+/// The release gate uses period 20 and `nb_dev=1.0` repeatedly.  Keeping the
+/// period and reciprocal local to this kernel removes the rolling-state field
+/// loads and method dispatch from the tight loop while preserving the same
+/// add-current, observe, remove-trailing ordering as [`stddev_rolling_into`].
+pub fn stddev20_into(input: &[f64], output: &mut [f64]) -> Result<()> {
+    const PERIOD: usize = 20;
+    validate_period(input.len(), PERIOD, 2)?;
+    if output.len() != input.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
+
+    let lookback = PERIOD - 1;
+    output[..lookback].fill(f64::NAN);
+    let period_f = PERIOD as f64;
+    let input_ptr = input.as_ptr();
+    let output_ptr = output.as_mut_ptr();
+    let mut total = 0.0;
+    let mut total2 = 0.0;
+    for index in 0..lookback {
+        let value = unsafe { *input_ptr.add(index) };
+        total += value;
+        total2 += value * value;
+    }
+
+    for index in lookback..input.len() {
+        let current = unsafe { *input_ptr.add(index) };
+        total += current;
+        total2 += current * current;
+        let mean = total / period_f;
+        let mean2 = total2 / period_f;
+        let variance = mean2 - mean * mean;
+        unsafe {
+            *output_ptr.add(index) = if variance >= TA_EPSILON {
+                variance.sqrt()
+            } else {
+                0.0
+            };
+        }
+
+        let trailing = unsafe { *input_ptr.add(index - lookback) };
+        total -= trailing;
+        total2 -= trailing * trailing;
+    }
+    Ok(())
+}
+
 /// Upper Bollinger band written directly into a caller-owned output slice.
 ///
 /// Formula `BOLL` historically returns the upper band only. Keeping that
@@ -494,6 +545,24 @@ mod tests {
                 0.0
             };
             assert_eq!(stddev[index], expected);
+        }
+    }
+
+    #[test]
+    fn stddev20_matches_generic_rolling_kernel() {
+        let input: Vec<f64> = (0..256)
+            .map(|index| 100.0 + index as f64 * 0.03 + (index as f64 * 0.07).sin())
+            .collect();
+        let mut specialized = vec![0.0; input.len()];
+        let mut generic = vec![0.0; input.len()];
+        stddev20_into(&input, &mut specialized).unwrap();
+        stddev_rolling_into(&input, 20, 1.0, &mut generic).unwrap();
+        for (index, (&actual, &expected)) in specialized.iter().zip(&generic).enumerate() {
+            if index < 19 {
+                assert!(actual.is_nan() && expected.is_nan());
+            } else {
+                assert!((actual - expected).abs() <= 1e-12, "index={index}");
+            }
         }
     }
 

@@ -340,6 +340,56 @@ pub fn midprice_into(high: &[f64], low: &[f64], period: usize, output: &mut [f64
     Ok(())
 }
 
+/// Fixed-period MIDPRICE kernel for the benchmark-critical 14-bar path.
+///
+/// The general implementation uses a monotonic queue so arbitrary periods
+/// remain efficient.  For a short, fixed period the queue bookkeeping costs
+/// more than the fourteen comparisons; this direct scan keeps the hot loop
+/// allocation-free and lets LLVM fully unroll the bounded window.
+pub fn midprice14_into(high: &[f64], low: &[f64], output: &mut [f64]) -> Result<()> {
+    const PERIOD: usize = 14;
+
+    if high.len() != low.len() {
+        return Err(TaError::InvalidParameter {
+            name: "high and low".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    validate_input(high.len(), PERIOD)?;
+    if output.len() != high.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
+
+    crate::utils::simd_fill_nan(&mut output[..PERIOD - 1]);
+    let high_ptr = high.as_ptr();
+    let low_ptr = low.as_ptr();
+    let output_ptr = output.as_mut_ptr();
+    unsafe {
+        for index in (PERIOD - 1)..high.len() {
+            let start = index + 1 - PERIOD;
+            let mut highest = *high_ptr.add(start);
+            let mut lowest = *low_ptr.add(start);
+            let mut cursor = start + 1;
+            while cursor <= index {
+                let high_value = *high_ptr.add(cursor);
+                let low_value = *low_ptr.add(cursor);
+                if high_value > highest {
+                    highest = high_value;
+                }
+                if low_value < lowest {
+                    lowest = low_value;
+                }
+                cursor += 1;
+            }
+            *output_ptr.add(index) = (highest + lowest) * 0.5;
+        }
+    }
+    Ok(())
+}
+
 /// Parabolic SAR (SAR) Result
 #[derive(Debug, Clone)]
 pub struct SarResult {
@@ -1944,6 +1994,28 @@ mod tests {
         assert!(result[1].is_nan());
         // (max(10,12,14) + min(8,10,12)) / 2 = (14 + 8) / 2 = 11.0
         assert_relative_eq!(result[2], 11.0, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn test_midprice14_into_matches_generic() {
+        let high: Vec<f64> = (0..64)
+            .map(|index| 100.0 + ((index * 17) % 23) as f64)
+            .collect();
+        let low: Vec<f64> = high
+            .iter()
+            .enumerate()
+            .map(|(index, value)| value - 1.0 - (index % 5) as f64)
+            .collect();
+        let expected = midprice(&high, &low, 14).unwrap();
+        let mut actual = vec![0.0; high.len()];
+        midprice14_into(&high, &low, &mut actual).unwrap();
+        for (expected, actual) in expected.iter().zip(actual.iter()) {
+            if expected.is_nan() {
+                assert!(actual.is_nan());
+            } else {
+                assert_relative_eq!(*actual, *expected, epsilon = 1e-12);
+            }
+        }
     }
 
     #[test]
