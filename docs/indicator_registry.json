@@ -692,7 +692,7 @@
           "name": "fast_ma",
           "param_type": "usize",
           "default": "1",
-          "description": "Fast scalar MA type (SMA, EMA, WMA, DEMA, TEMA, KAMA, T3, TRIMA, HMA, ALMA, VIDYA)"
+          "description": "Fast MA type (0=SMA, 1=EMA)"
         },
         {
           "name": "slow_period",
@@ -704,7 +704,7 @@
           "name": "slow_ma",
           "param_type": "usize",
           "default": "1",
-          "description": "Slow scalar MA type (SMA, EMA, WMA, DEMA, TEMA, KAMA, T3, TRIMA, HMA, ALMA, VIDYA)"
+          "description": "Slow MA type (0=SMA, 1=EMA)"
         },
         {
           "name": "signal_period",
@@ -716,7 +716,7 @@
           "name": "signal_ma",
           "param_type": "usize",
           "default": "1",
-          "description": "Signal scalar MA type; use StreamingMacdExt::new_with_signal_ma"
+          "description": "Signal MA type (0=SMA, 1=EMA)"
         }
       ],
       "convergence": 35,
@@ -3203,6 +3203,124 @@
       "description": "On-Neck Pattern",
       "params": [],
       "convergence": 2,
+      "streaming": false
+    },
+    {
+      "name": "CHANDE_FORECAST",
+      "category": "momentum",
+      "description": "Chande Forecast",
+      "params": [
+        {
+          "name": "period",
+          "param_type": "usize",
+          "default": "0",
+          "description": "period"
+        }
+      ],
+      "convergence": 0,
+      "streaming": false
+    },
+    {
+      "name": "DARVAS_BOX",
+      "category": "chart",
+      "description": "Darvas Box",
+      "params": [
+        {
+          "name": "lookback",
+          "param_type": "usize",
+          "default": "0",
+          "description": "lookback"
+        },
+        {
+          "name": "confirmation",
+          "param_type": "usize",
+          "default": "0",
+          "description": "confirmation"
+        }
+      ],
+      "convergence": 0,
+      "streaming": false
+    },
+    {
+      "name": "RENKO",
+      "category": "chart",
+      "description": "Renko",
+      "params": [
+        {
+          "name": "box_size",
+          "param_type": "f64",
+          "default": "0",
+          "description": "box size"
+        }
+      ],
+      "convergence": 0,
+      "streaming": false
+    },
+    {
+      "name": "KAGI",
+      "category": "chart",
+      "description": "Kagi",
+      "params": [
+        {
+          "name": "reversal",
+          "param_type": "f64",
+          "default": "0",
+          "description": "reversal"
+        }
+      ],
+      "convergence": 0,
+      "streaming": false
+    },
+    {
+      "name": "POINT_AND_FIGURE",
+      "category": "chart",
+      "description": "Point And Figure",
+      "params": [
+        {
+          "name": "box_size",
+          "param_type": "f64",
+          "default": "0",
+          "description": "box size"
+        },
+        {
+          "name": "reversal",
+          "param_type": "usize",
+          "default": "0",
+          "description": "reversal"
+        }
+      ],
+      "convergence": 0,
+      "streaming": false
+    },
+    {
+      "name": "THREE_LINE_BREAK",
+      "category": "chart",
+      "description": "Three Line Break",
+      "params": [
+        {
+          "name": "lines",
+          "param_type": "usize",
+          "default": "0",
+          "description": "lines"
+        }
+      ],
+      "convergence": 0,
+      "streaming": false
+    },
+    {
+      "name": "WILLIAMS_ALLIGATOR",
+      "category": "chart",
+      "description": "Williams Alligator",
+      "params": [],
+      "convergence": 0,
+      "streaming": false
+    },
+    {
+      "name": "HEIKIN_ASHI",
+      "category": "chart",
+      "description": "Heikin Ashi",
+      "params": [],
+      "convergence": 0,
       "streaming": false
     }
   ]

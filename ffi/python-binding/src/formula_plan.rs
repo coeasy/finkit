@@ -5,7 +5,9 @@
 //! The NumPy zero-copy entry point requires contiguous float64 arrays and keeps
 //! the evaluation under the GIL while borrowing their memory.
 
-use ::finkit::formula::{CompiledFormula, FormulaContext, FormulaEngine};
+use ::finkit::formula::{
+    inspect_formula_compatibility, CompiledFormula, FormulaContext, FormulaEngine,
+};
 use ::finkit::math::rolling_stats;
 use ndarray::Array1;
 use numpy::{PyArray1, PyReadonlyArray1};
@@ -484,11 +486,13 @@ impl PyFormulaRegistry {
                 ));
             }
         };
+        let canonical = canonical_formula(&source);
         Ok(PyCompiledFormula {
             source,
             engine: Some(engine),
             compiled: Arc::new(compiled),
             stream_context: None,
+            canonical,
         })
     }
 }
@@ -879,9 +883,9 @@ impl PyCompiledFormula {
                 low,
                 close,
                 volume,
-                amount,
                 start,
                 end,
+                amount,
             )
             .map_err(formula_runtime_error);
         self.engine = Some(engine);

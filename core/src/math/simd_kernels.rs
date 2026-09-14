@@ -999,6 +999,7 @@ mod x86_dispatch {
 
 #[cfg(feature = "std")]
 #[inline]
+#[allow(dead_code)]
 pub(crate) fn avx2_fma_available() -> bool {
     #[cfg(all(feature = "std", target_arch = "x86_64"))]
     {

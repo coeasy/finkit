@@ -4,7 +4,8 @@ use std::collections::HashMap;
 use crate::formula::types::{FormulaContext, FormulaError};
 use crate::indicators::screening as lib_screening;
 
-type FormulaFn = fn(&FormulaContext, &[Array1<f64>]) -> Result<Array1<f64>, FormulaError>;
+pub(crate) type FormulaFn =
+    fn(&FormulaContext, &[Array1<f64>]) -> Result<Array1<f64>, FormulaError>;
 
 #[inline]
 fn nan_vec(len: usize) -> Array1<f64> {

@@ -6,95 +6,100 @@ use crate::formula::compute_ir::FormulaComputePlan;
 use crate::formula::custom::FormulaRegistry;
 use crate::formula::debugger::FormulaDebugger;
 use crate::formula::executor::FormulaExecutor;
-use crate::formula::hot_plan::FormulaHotPlan;
-use crate::formula::jit::{JitCompiler, OptimizedBytecode};
+use crate::formula::jit::JitCompiler;
+#[cfg(feature = "formula-jit")]
+use crate::formula::jit::OptimizedBytecode;
 use crate::formula::optimizer::{DependencyAnalyzer, FormulaOptimizer};
 use crate::formula::params::{apply_params, parse_params, validate_params, ParamDef, ParamValues};
 use crate::formula::parser::parse_formula;
 use crate::formula::templates::{FormulaTemplate, FormulaTemplates};
 use crate::formula::types::*;
-use crate::formula::unified_dispatch::{unified_formula_executor, FormulaKernelDispatcher};
-use crate::unified_executor::UnifiedExecutor;
-use lru::LruCache;
+use crate::streaming::indicators::{StreamingRsi, StreamingSma};
+use crate::streaming::StreamingIndicator;
 use ndarray::Array1;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::num::NonZeroUsize;
 use std::sync::Arc;
 
-type HotFormulaExecutor = UnifiedExecutor<FormulaKernelDispatcher>;
+#[derive(Debug, Clone)]
+struct StreamingEmaState {
+    period: usize,
+    len: usize,
+    seed_sum: f64,
+    value: f64,
+    valid: bool,
+    previous_input: f64,
+}
 
-fn contains_implicit_kdj(ast: &AstNode) -> bool {
-    match ast {
-        AstNode::FunctionCall { name, args } => {
-            if name.eq_ignore_ascii_case("KDJ")
-                && (args.len() < 3
-                    || !args
-                        .iter()
-                        .take(3)
-                        .all(|arg| matches!(arg, AstNode::Variable(_))))
-            {
-                return true;
-            }
-            args.iter().any(contains_implicit_kdj)
+enum StreamingFormulaIndicator {
+    Sma(StreamingSma),
+    Rsi(StreamingRsi),
+    Atr(StreamingSmaAtr),
+}
+
+/// Formula ATR follows the canonical batch Wilder seed: the first bar is used
+/// only to establish the previous close, then TR[1..=period] seeds the RMA.
+/// Keeping this state local avoids rebuilding the complete formula range while
+/// preserving the public ATR warm-up and recurrence exactly.
+struct StreamingSmaAtr {
+    period: usize,
+    atr_value: f64,
+    tr_sum: f64,
+    previous_close: f64,
+    count: usize,
+}
+
+impl StreamingSmaAtr {
+    fn new(period: usize) -> Self {
+        Self {
+            period,
+            atr_value: f64::NAN,
+            tr_sum: 0.0,
+            previous_close: f64::NAN,
+            count: 0,
         }
-        AstNode::BinaryOp { left, right, .. } => {
-            contains_implicit_kdj(left) || contains_implicit_kdj(right)
-        }
-        AstNode::UnaryOp { expr, .. }
-        | AstNode::Assignment { expr, .. }
-        | AstNode::CompoundAssignment { expr, .. }
-        | AstNode::Output { expr, .. } => contains_implicit_kdj(expr),
-        AstNode::IndexAccess { array, index } => {
-            contains_implicit_kdj(array) || contains_implicit_kdj(index)
-        }
-        AstNode::Statements(nodes) | AstNode::DrawGeneric { args: nodes, .. } => {
-            nodes.iter().any(contains_implicit_kdj)
-        }
-        AstNode::DrawText { cond, price, .. } => {
-            contains_implicit_kdj(cond) || contains_implicit_kdj(price)
-        }
-        AstNode::DrawIcon {
-            cond, price, icon, ..
-        } => {
-            contains_implicit_kdj(cond)
-                || contains_implicit_kdj(price)
-                || contains_implicit_kdj(icon)
-        }
-        AstNode::StickLine {
-            cond,
-            price1,
-            price2,
-            width,
-            ..
-        } => {
-            contains_implicit_kdj(cond)
-                || contains_implicit_kdj(price1)
-                || contains_implicit_kdj(price2)
-                || contains_implicit_kdj(width)
-        }
-        AstNode::IfThenElse {
-            cond,
-            then_branch,
-            else_branch,
-        } => {
-            contains_implicit_kdj(cond)
-                || contains_implicit_kdj(then_branch)
-                || contains_implicit_kdj(else_branch)
-        }
-        AstNode::ForLoop {
-            start, end, body, ..
-        } => {
-            contains_implicit_kdj(start)
-                || contains_implicit_kdj(end)
-                || body.iter().any(contains_implicit_kdj)
-        }
-        AstNode::WhileLoop { cond, .. } => contains_implicit_kdj(cond),
-        AstNode::Number(_)
-        | AstNode::StringLit(_)
-        | AstNode::Variable(_)
-        | AstNode::ParamDecl { .. } => false,
     }
+
+    fn next(&mut self, high: f64, low: f64, close: f64) -> Option<f64> {
+        self.count += 1;
+        if self.count == 1 {
+            self.previous_close = close;
+            return None;
+        }
+
+        let true_range = (high - low)
+            .max((high - self.previous_close).abs())
+            .max((low - self.previous_close).abs());
+        self.previous_close = close;
+
+        if self.count <= self.period {
+            self.tr_sum += true_range;
+            None
+        } else if self.count == self.period + 1 {
+            self.tr_sum += true_range;
+            self.atr_value = self.tr_sum / self.period as f64;
+            Some(self.atr_value)
+        } else {
+            self.atr_value += (true_range - self.atr_value) / self.period as f64;
+            Some(self.atr_value)
+        }
+    }
+}
+
+impl StreamingFormulaIndicator {
+    fn next(&mut self, input: [f64; 3]) -> Option<f64> {
+        match self {
+            Self::Sma(indicator) => indicator.next(input[0]),
+            Self::Rsi(indicator) => indicator.next(input[0]),
+            Self::Atr(indicator) => indicator.next(input[0], input[1], input[2]),
+        }
+    }
+}
+
+struct StreamingFormulaState {
+    len: usize,
+    last_input: [f64; 3],
+    indicator: StreamingFormulaIndicator,
 }
 
 /// 公式引擎主入口
@@ -103,13 +108,6 @@ pub struct FormulaEngine {
     cache: FormulaCache,
     /// Semantic Compute IR plans keyed by the exact formula source.
     semantic_plan_cache: RefCell<HashMap<String, FormulaComputePlan>>,
-    /// Numeric Architecture v3 plans keyed by the exact formula source.
-    ///
-    /// Effectful formulas are still executed by the compatibility executor;
-    /// pure plans are eligible for the unified kernel path below.
-    hot_plan_cache: RefCell<LruCache<String, Arc<FormulaHotPlan>>>,
-    /// Reusable numeric executors whose arenas retain the hot-plan layout.
-    hot_executor_cache: RefCell<LruCache<String, HotFormulaExecutor>>,
     templates: FormulaTemplates,
     jit_compiler: RefCell<JitCompiler>,
     /// Persistent bytecode cache and VM scratch buffers.
@@ -133,13 +131,10 @@ impl Default for FormulaEngine {
 
 impl FormulaEngine {
     pub fn new() -> Self {
-        let hot_capacity = NonZeroUsize::new(100).expect("constant cache capacity is non-zero");
         Self {
             executor: FormulaExecutor::new(),
             cache: FormulaCache::new(100),
             semantic_plan_cache: RefCell::new(HashMap::new()),
-            hot_plan_cache: RefCell::new(LruCache::new(hot_capacity)),
-            hot_executor_cache: RefCell::new(LruCache::new(hot_capacity)),
             templates: FormulaTemplates::new(),
             jit_compiler: RefCell::new(JitCompiler::new()),
             bytecode_cache: RefCell::new(HashMap::new()),
@@ -151,13 +146,10 @@ impl FormulaEngine {
     }
 
     pub fn with_cache_size(cache_size: usize) -> Self {
-        let hot_capacity = NonZeroUsize::new(cache_size.max(1)).expect("cache_size.max(1) > 0");
         Self {
             executor: FormulaExecutor::new(),
             cache: FormulaCache::new(cache_size),
             semantic_plan_cache: RefCell::new(HashMap::new()),
-            hot_plan_cache: RefCell::new(LruCache::new(hot_capacity)),
-            hot_executor_cache: RefCell::new(LruCache::new(hot_capacity)),
             templates: FormulaTemplates::new(),
             jit_compiler: RefCell::new(JitCompiler::new()),
             bytecode_cache: RefCell::new(HashMap::new()),
@@ -186,22 +178,6 @@ impl FormulaEngine {
         let semantic_plan = FormulaComputePlan::compile(&ast).map_err(|error| {
             FormulaError::InvalidOperation(format!("formula compute planning failed: {error}"))
         })?;
-        // Compile the numeric plan once so repeated evaluations share the
-        // same slot layout and canonical kernel dispatch. A plan may be
-        // unavailable for compatibility-only syntax; that syntax keeps the
-        // existing executor path.
-        if !contains_implicit_kdj(&ast) {
-            if let Ok(hot_plan) = FormulaHotPlan::compile(&ast) {
-                let hot_plan = Arc::new(hot_plan);
-                let hot_executor = unified_formula_executor(&hot_plan);
-                self.hot_plan_cache
-                    .borrow_mut()
-                    .put(source.to_string(), hot_plan);
-                self.hot_executor_cache
-                    .borrow_mut()
-                    .put(source.to_string(), hot_executor);
-            }
-        }
         // Compile the optimized AST once so repeated evaluations share the
         // same CSE and constant-folding decisions while preserving assignment
         // side effects exposed through FormulaContext::variables.
@@ -301,49 +277,8 @@ impl FormulaEngine {
             if let Some(result) = self.try_execute_simple_formula(&formula.ast, ctx) {
                 return Ok(result);
             }
-            if let Some(result) = self.try_execute_hot_formula(formula, ctx) {
-                return result;
-            }
         }
         self.executor.execute(&formula.ast, ctx)
-    }
-
-    /// Execute a pure formula through the cached numeric plan.
-    ///
-    /// The plan binds each compile-time `VARIABLE:*` node to the corresponding
-    /// context series and then runs only numeric slots. Unsupported kernels
-    /// return `None`, which deliberately preserves the legacy compatibility
-    /// executor as a safe fallback for effectful or newly added functions.
-    fn try_execute_hot_formula(
-        &self,
-        formula: &CompiledFormula,
-        ctx: &FormulaContext,
-    ) -> Option<Result<Array1<f64>, FormulaError>> {
-        let plan = self
-            .hot_plan_cache
-            .borrow_mut()
-            .get(&formula.source)
-            .cloned()?;
-        if plan.semantic().plan().has_observable_effects() {
-            return None;
-        }
-
-        let input_count = plan.hot().input_layout().len();
-        if plan.input_bindings().len() != input_count {
-            return None;
-        }
-        let mut inputs: Vec<&[f64]> = vec![&[]; input_count];
-        for binding in plan.input_bindings() {
-            let values = ctx.get_data(binding.name())?;
-            *inputs.get_mut(binding.slot().0)? = values;
-        }
-        let mut executors = self.hot_executor_cache.borrow_mut();
-        let executor = executors.get_mut(&formula.source)?;
-        let output = match executor.execute(&inputs) {
-            Ok(output) => output.values.into_iter().next()?,
-            Err(_) => return None,
-        };
-        Some(Ok(Array1::from_vec(output)))
     }
 
     /// Execute a simple built-in formula directly into a caller-owned buffer.
@@ -389,68 +324,16 @@ impl FormulaEngine {
                 period,
                 output.as_slice_mut().expect("Array1 is contiguous"),
             ),
-            "EMA" => {
-                if crate::math::moving_avg::ema_fast_into(
-                    input,
-                    period,
-                    output.as_slice_mut().expect("Array1 is contiguous"),
-                )
-                .is_err()
-                {
-                    return false;
-                }
-            }
-            "WMA" => {
-                if crate::math::moving_avg::wma_into(
-                    input,
-                    period,
-                    output.as_slice_mut().expect("Array1 is contiguous"),
-                )
-                .is_err()
-                {
-                    return false;
-                }
-            }
-            "KAMA" => {
-                if crate::math::moving_avg::kama_into(
-                    input,
-                    period,
-                    2,
-                    30,
-                    output.as_slice_mut().expect("Array1 is contiguous"),
-                )
-                .is_err()
-                {
-                    return false;
-                }
-            }
+            "EMA" => crate::math::simd_kernels::ema_simd_into(
+                input,
+                period,
+                output.as_slice_mut().expect("Array1 is contiguous"),
+            ),
             "RSI" => crate::math::simd_kernels::rsi_simd_into(
                 input,
                 period,
                 output.as_slice_mut().expect("Array1 is contiguous"),
             ),
-            "MOM" => {
-                if crate::indicators::mom_into(
-                    input,
-                    period,
-                    output.as_slice_mut().expect("Array1 is contiguous"),
-                )
-                .is_err()
-                {
-                    return false;
-                }
-            }
-            "ROC" => {
-                if crate::indicators::roc_into(
-                    input,
-                    period,
-                    output.as_slice_mut().expect("Array1 is contiguous"),
-                )
-                .is_err()
-                {
-                    return false;
-                }
-            }
             _ => return false,
         }
         true
@@ -502,30 +385,11 @@ impl FormulaEngine {
                 );
             }
             "EMA" => {
-                crate::math::moving_avg::ema_fast_into(
+                crate::math::simd_kernels::ema_simd_into(
                     input,
                     period,
                     output.as_slice_mut().expect("Array1 is contiguous"),
-                )
-                .ok()?;
-            }
-            "WMA" => {
-                crate::math::moving_avg::wma_into(
-                    input,
-                    period,
-                    output.as_slice_mut().expect("Array1 is contiguous"),
-                )
-                .ok()?;
-            }
-            "KAMA" => {
-                crate::math::moving_avg::kama_into(
-                    input,
-                    period,
-                    2,
-                    30,
-                    output.as_slice_mut().expect("Array1 is contiguous"),
-                )
-                .ok()?;
+                );
             }
             "RSI" => {
                 crate::math::simd_kernels::rsi_simd_into(
@@ -533,22 +397,6 @@ impl FormulaEngine {
                     period,
                     output.as_slice_mut().expect("Array1 is contiguous"),
                 );
-            }
-            "MOM" => {
-                crate::indicators::mom_into(
-                    input,
-                    period,
-                    output.as_slice_mut().expect("Array1 is contiguous"),
-                )
-                .ok()?;
-            }
-            "ROC" => {
-                crate::indicators::roc_into(
-                    input,
-                    period,
-                    output.as_slice_mut().expect("Array1 is contiguous"),
-                )
-                .ok()?;
             }
             _ => return None,
         }
@@ -583,10 +431,6 @@ impl FormulaEngine {
             return Ok(());
         }
         if self.try_execute_simple_formula_into(&formula.ast, ctx, output) {
-            return Ok(());
-        }
-        if let Some(result) = self.try_execute_hot_formula(formula, ctx) {
-            output.assign(&result?);
             return Ok(());
         }
         self.executor.eval_into(&formula.ast, ctx, output)
@@ -670,9 +514,9 @@ impl FormulaEngine {
         low: &[f64],
         close: &[f64],
         volume: &[f64],
-        amount: Option<&[f64]>,
         start: usize,
         end: usize,
+        amount: Option<&[f64]>,
     ) -> Result<Array1<f64>, FormulaError> {
         if close.is_empty()
             || [open, high, low, close, volume]
@@ -1086,66 +930,26 @@ impl FormulaEngine {
         if input.iter().any(|value| !value.is_finite()) {
             return Some(Array1::from_elem(input.len(), f64::NAN));
         }
-        let function_name = name.to_ascii_uppercase();
-        if !matches!(
-            function_name.as_str(),
-            "MA" | "BOLLMID" | "EMA" | "WMA" | "KAMA" | "RSI" | "MOM" | "ROC"
-        ) {
-            return None;
+        let mut output = Array1::from_elem(input.len(), f64::NAN);
+        match name.to_ascii_uppercase().as_str() {
+            "MA" | "BOLLMID" => crate::math::simd_kernels::sma_simd_into(
+                input,
+                period,
+                output.as_slice_mut().expect("Array1 is contiguous"),
+            ),
+            "EMA" => crate::math::simd_kernels::ema_simd_into(
+                input,
+                period,
+                output.as_slice_mut().expect("Array1 is contiguous"),
+            ),
+            "RSI" => crate::math::simd_kernels::rsi_simd_into(
+                input,
+                period,
+                output.as_slice_mut().expect("Array1 is contiguous"),
+            ),
+            _ => return None,
         }
-        // EMA/WMA validate that the lookback fits the input. Preserve the
-        // existing fallback for short inputs; the other kernels intentionally
-        // return an all-NaN warm-up result in that case.
-        if period > input.len() && matches!(function_name.as_str(), "EMA" | "WMA") {
-            return None;
-        }
-        if period > input.len() {
-            return Some(Array1::from_elem(input.len(), f64::NAN));
-        }
-        if function_name == "KAMA" && period >= input.len() {
-            return Some(Array1::from_elem(input.len(), f64::NAN));
-        }
-
-        // Every supported kernel below writes the complete output when the
-        // lookback fits the input. Avoid constructing and then overwriting a
-        // million-element NaN buffer on the zero-copy formula path.
-        let mut raw_output = Vec::<std::mem::MaybeUninit<f64>>::with_capacity(input.len());
-        unsafe { raw_output.set_len(input.len()) };
-        let output = unsafe {
-            std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<f64>(), input.len())
-        };
-        let completed = match function_name.as_str() {
-            "MA" | "BOLLMID" => {
-                crate::math::simd_kernels::sma_simd_into(input, period, output);
-                true
-            }
-            "EMA" => crate::math::moving_avg::ema_fast_into(input, period, output).is_ok(),
-            "WMA" => crate::math::moving_avg::wma_into(input, period, output).is_ok(),
-            "KAMA" => crate::math::moving_avg::kama_into(input, period, 2, 30, output).is_ok(),
-            "RSI" => {
-                crate::math::simd_kernels::rsi_simd_into(input, period, output);
-                true
-            }
-            "MOM" => {
-                crate::math::simd_ops::simd_mom(input, period, output);
-                true
-            }
-            "ROC" => {
-                crate::math::simd_ops::simd_roc(input, period, output);
-                true
-            }
-            _ => false,
-        };
-        if !completed {
-            return None;
-        }
-
-        let ptr = raw_output.as_mut_ptr().cast::<f64>();
-        let len = raw_output.len();
-        let capacity = raw_output.capacity();
-        std::mem::forget(raw_output);
-        let output = unsafe { Vec::from_raw_parts(ptr, len, capacity) };
-        Some(Array1::from_vec(output))
+        Some(output)
     }
 
     /// 便捷方法：编译并执行
@@ -1688,11 +1492,7 @@ mod tests {
         for source in [
             "MA(CLOSE, 20)",
             "EMA(CLOSE, 12)",
-            "WMA(CLOSE, 12)",
-            "KAMA(CLOSE, 20)",
             "RSI(CLOSE, 14)",
-            "MOM(CLOSE, 10)",
-            "ROC(CLOSE, 10)",
             "BOLLMID(CLOSE, 20)",
         ] {
             let mut fast_engine = FormulaEngine::new();
@@ -1742,60 +1542,6 @@ mod tests {
         let mut ctx = make_ctx(32);
         let result = engine.eval("MA(CLOSE, 20) + 1", &mut ctx).unwrap();
         assert!(result.iter().skip(19).all(|value| value.is_finite()));
-    }
-
-    #[test]
-    fn test_hot_plan_indicator_chain_matches_compatibility_executor() {
-        let source = "EMA(CLOSE, 5) + ROC(CLOSE, 2)";
-        let mut engine = FormulaEngine::new();
-        let formula = engine.compile(source).unwrap();
-        let mut hot_ctx = make_ctx(64);
-        assert!(
-            engine.try_execute_hot_formula(&formula, &hot_ctx).is_some(),
-            "numeric formula with literal periods must use the hot plan"
-        );
-        let actual = engine.execute(&formula, &mut hot_ctx).unwrap();
-
-        let ast = parse_formula(source).unwrap();
-        let executor = FormulaExecutor::new();
-        let mut reference_ctx = make_ctx(64);
-        let expected = executor.execute(&ast, &mut reference_ctx).unwrap();
-
-        for (actual, expected) in actual.iter().zip(expected.iter()) {
-            assert!(
-                (actual.is_nan() && expected.is_nan()) || (actual - expected).abs() < 1e-12,
-                "hot formula result {actual} != compatibility result {expected}"
-            );
-        }
-    }
-
-    #[test]
-    fn common_ohlcv_formulas_use_the_numeric_hot_plan() {
-        for source in [
-            "ATR(HIGH, LOW, CLOSE, 5)",
-            "STD(CLOSE, 5)",
-            "BOLL(CLOSE, 5, 2)",
-            "MACD(CLOSE, 3, 7, 2)",
-        ] {
-            let mut engine = FormulaEngine::new();
-            let formula = engine.compile(source).unwrap();
-            let hot_ctx = make_ctx(64);
-            assert!(
-                engine.try_execute_hot_formula(&formula, &hot_ctx).is_some(),
-                "{source} should compile to a supported numeric hot plan"
-            );
-            let mut actual_ctx = make_ctx(64);
-            let actual = engine.execute(&formula, &mut actual_ctx).unwrap();
-            let expected = FormulaExecutor::new()
-                .execute(&parse_formula(source).unwrap(), &mut make_ctx(64))
-                .unwrap();
-            for (actual, expected) in actual.iter().zip(expected.iter()) {
-                assert!(
-                    (actual.is_nan() && expected.is_nan()) || (actual - expected).abs() < 1e-10,
-                    "{source} hot result {actual} != compatibility result {expected}"
-                );
-            }
-        }
     }
 
     #[test]
@@ -2529,9 +2275,9 @@ mod tests {
                 &ctx.low,
                 &ctx.close,
                 &ctx.volume,
-                None,
                 17,
                 41,
+                None,
             )
             .unwrap();
         assert_eq!(range.len(), 24);

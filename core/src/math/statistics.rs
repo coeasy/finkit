@@ -404,6 +404,7 @@ pub fn kurtosis(data: &[f64]) -> Result<f64> {
 /// only when an extrema leaves the window avoids the branch and container cost
 /// of maintaining two `VecDeque`s on every bar.
 #[inline]
+#[allow(dead_code)]
 pub(crate) fn rolling_minmax_visit(
     high: &[f64],
     low: &[f64],
