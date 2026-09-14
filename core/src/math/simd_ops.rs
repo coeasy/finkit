@@ -3484,7 +3484,7 @@ pub fn simd_mom10(input: &[f64], result: &mut [f64]) {
         if is_x86_feature_detected!("avx2") {
             return unsafe { mom10_avx2(input, result) };
         }
-        return unsafe { mom_sse2(input, 10, result) };
+        return unsafe { mom10_sse2(input, result) };
     }
     #[cfg(not(all(feature = "std", target_arch = "x86_64")))]
     mom_scalar(input, 10, result)
@@ -3618,6 +3618,57 @@ unsafe fn mom_sse2(input: &[f64], period: usize, result: &mut [f64]) {
     }
     while i < len {
         *result_ptr.add(i) = *input_ptr.add(i) - *input_ptr.add(i - period);
+        i += 1;
+    }
+}
+
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
+#[target_feature(enable = "sse2")]
+unsafe fn mom10_sse2(input: &[f64], result: &mut [f64]) {
+    use core::arch::x86_64::*;
+    const PERIOD: usize = 10;
+    let len = input.len().min(result.len());
+    if len <= PERIOD {
+        for r in result.iter_mut().take(len) {
+            *r = f64::NAN;
+        }
+        return;
+    }
+
+    for r in result.iter_mut().take(PERIOD) {
+        *r = f64::NAN;
+    }
+
+    let input_ptr = input.as_ptr();
+    let result_ptr = result.as_mut_ptr();
+    let unrolled_end = PERIOD + ((len - PERIOD) / 16) * 16;
+    let mut i = PERIOD;
+    while i < unrolled_end {
+        macro_rules! mom10_sse2_pair {
+            ($offset:expr) => {
+                let current = _mm_loadu_pd(input_ptr.add(i + $offset));
+                let previous = _mm_loadu_pd(input_ptr.add(i + $offset - PERIOD));
+                _mm_storeu_pd(result_ptr.add(i + $offset), _mm_sub_pd(current, previous));
+            };
+        }
+        mom10_sse2_pair!(0);
+        mom10_sse2_pair!(2);
+        mom10_sse2_pair!(4);
+        mom10_sse2_pair!(6);
+        mom10_sse2_pair!(8);
+        mom10_sse2_pair!(10);
+        mom10_sse2_pair!(12);
+        mom10_sse2_pair!(14);
+        i += 16;
+    }
+    while i + 1 < len {
+        let current = _mm_loadu_pd(input_ptr.add(i));
+        let previous = _mm_loadu_pd(input_ptr.add(i - PERIOD));
+        _mm_storeu_pd(result_ptr.add(i), _mm_sub_pd(current, previous));
+        i += 2;
+    }
+    while i < len {
+        *result_ptr.add(i) = *input_ptr.add(i) - *input_ptr.add(i - PERIOD);
         i += 1;
     }
 }
