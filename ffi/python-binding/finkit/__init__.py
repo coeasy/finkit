@@ -344,12 +344,18 @@ if hasattr(_native, "_fast_rocp"):
 if hasattr(_native, "_fast_unary_period_scale"):
 
     def stddev(close, timeperiod=20, nbdev=1.0):
-        close = _as_contiguous_float64(close)
-        return _native._fast_unary_period_scale("stddev", close, timeperiod, nbdev)
+        try:
+            return _native._fast_unary_period_scale("stddev", close, timeperiod, nbdev)
+        except (TypeError, ValueError, OverflowError):
+            close = _as_contiguous_float64(close)
+            return _native._fast_unary_period_scale("stddev", close, timeperiod, nbdev)
 
     def var(close, timeperiod=5, nbdev=1.0):
-        close = _as_contiguous_float64(close)
-        return _native._fast_unary_period_scale("var", close, timeperiod, nbdev)
+        try:
+            return _native._fast_unary_period_scale("var", close, timeperiod, nbdev)
+        except (TypeError, ValueError, OverflowError):
+            close = _as_contiguous_float64(close)
+            return _native._fast_unary_period_scale("var", close, timeperiod, nbdev)
 
     stddev = _translate_native_errors("stddev", stddev)
     var = _translate_native_errors("var", var)
@@ -368,14 +374,20 @@ if hasattr(_native, "_fast_kama"):
 if hasattr(_native, "_fast_binary_period"):
 
     def midprice(high, low, timeperiod=14):
-        high = _as_contiguous_float64(high)
-        low = _as_contiguous_float64(low)
-        return _native._fast_binary_period("midprice", high, low, timeperiod)
+        try:
+            return _native._fast_binary_period("midprice", high, low, timeperiod)
+        except (TypeError, ValueError, OverflowError):
+            high = _as_contiguous_float64(high)
+            low = _as_contiguous_float64(low)
+            return _native._fast_binary_period("midprice", high, low, timeperiod)
 
     def correlation(input_a, input_b, timeperiod=14):
-        input_a = _as_contiguous_float64(input_a)
-        input_b = _as_contiguous_float64(input_b)
-        return _native._fast_binary_period("correl", input_a, input_b, timeperiod)
+        try:
+            return _native._fast_binary_period("correl", input_a, input_b, timeperiod)
+        except (TypeError, ValueError, OverflowError):
+            input_a = _as_contiguous_float64(input_a)
+            input_b = _as_contiguous_float64(input_b)
+            return _native._fast_binary_period("correl", input_a, input_b, timeperiod)
 
     def correl(input_a, input_b, timeperiod=30):
         return correlation(input_a, input_b, timeperiod=timeperiod)
@@ -387,10 +399,13 @@ if hasattr(_native, "_fast_binary_period"):
 if hasattr(_native, "_fast_hlc_period"):
 
     def _hlc_period(operation, high, low, close, timeperiod):
-        high = _as_contiguous_float64(high)
-        low = _as_contiguous_float64(low)
-        close = _as_contiguous_float64(close)
-        return _native._fast_hlc_period(operation, high, low, close, timeperiod)
+        try:
+            return _native._fast_hlc_period(operation, high, low, close, timeperiod)
+        except (TypeError, ValueError, OverflowError):
+            high = _as_contiguous_float64(high)
+            low = _as_contiguous_float64(low)
+            close = _as_contiguous_float64(close)
+            return _native._fast_hlc_period(operation, high, low, close, timeperiod)
 
     def adx(high, low, close, timeperiod=14):
         return _hlc_period("adx", high, low, close, timeperiod)
@@ -433,10 +448,13 @@ if hasattr(_native, "_fast_hlc_period"):
 if hasattr(_native, "_fast_trange"):
 
     def trange(high, low, close):
-        high = _as_contiguous_float64(high)
-        low = _as_contiguous_float64(low)
-        close = _as_contiguous_float64(close)
-        return _native._fast_trange(high, low, close)
+        try:
+            return _native._fast_trange(high, low, close)
+        except (TypeError, ValueError, OverflowError):
+            high = _as_contiguous_float64(high)
+            low = _as_contiguous_float64(low)
+            close = _as_contiguous_float64(close)
+            return _native._fast_trange(high, low, close)
 
     trange = _translate_native_errors("trange", trange)
 
