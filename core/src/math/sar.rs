@@ -179,7 +179,7 @@ impl SarState {
 
                 self.af = self.effective_acceleration;
                 self.ep = low;
-                self.sar += self.af * (self.ep - self.sar);
+                self.sar = self.af.mul_add(self.ep - self.sar, self.sar);
                 if self.sar < prev_high {
                     self.sar = prev_high;
                 }
@@ -192,7 +192,7 @@ impl SarState {
                     self.ep = high;
                     self.af = (self.af + self.effective_acceleration).min(self.maximum);
                 }
-                self.sar += self.af * (self.ep - self.sar);
+                self.sar = self.af.mul_add(self.ep - self.sar, self.sar);
                 if self.sar > prev_low {
                     self.sar = prev_low;
                 }
@@ -213,7 +213,7 @@ impl SarState {
 
             self.af = self.effective_acceleration;
             self.ep = high;
-            self.sar += self.af * (self.ep - self.sar);
+            self.sar = self.af.mul_add(self.ep - self.sar, self.sar);
             if self.sar > prev_low {
                 self.sar = prev_low;
             }
@@ -226,7 +226,7 @@ impl SarState {
                 self.ep = low;
                 self.af = (self.af + self.effective_acceleration).min(self.maximum);
             }
-            self.sar += self.af * (self.ep - self.sar);
+            self.sar = self.af.mul_add(self.ep - self.sar, self.sar);
             if self.sar < prev_high {
                 self.sar = prev_high;
             }
@@ -362,7 +362,7 @@ pub fn sar_into(
 
                     af = effective_acceleration;
                     ep = current_low;
-                    sar += af * (ep - sar);
+                    sar = af.mul_add(ep - sar, sar);
                     if sar < previous_high {
                         sar = previous_high;
                     }
@@ -375,7 +375,7 @@ pub fn sar_into(
                         ep = current_high;
                         af = (af + effective_acceleration).min(maximum);
                     }
-                    sar += af * (ep - sar);
+                    sar = af.mul_add(ep - sar, sar);
                     if sar > previous_low {
                         sar = previous_low;
                     }
@@ -396,7 +396,7 @@ pub fn sar_into(
 
                 af = effective_acceleration;
                 ep = current_high;
-                sar += af * (ep - sar);
+                sar = af.mul_add(ep - sar, sar);
                 if sar > previous_low {
                     sar = previous_low;
                 }
@@ -409,7 +409,7 @@ pub fn sar_into(
                     ep = current_low;
                     af = (af + effective_acceleration).min(maximum);
                 }
-                sar += af * (ep - sar);
+                sar = af.mul_add(ep - sar, sar);
                 if sar < previous_high {
                     sar = previous_high;
                 }
@@ -452,7 +452,7 @@ fn sar_default_into(high: &[f64], low: &[f64], output: &mut [f64]) -> Result<()>
         let diff_p = second_high - first_high;
         let diff_m = first_low - second_low;
         let mut is_long = !(diff_m > 0.0 && diff_p < diff_m);
-        let mut af = 0.02;
+        let mut af: f64 = 0.02;
         let mut sar;
         let mut ep;
         if is_long {
@@ -480,7 +480,7 @@ fn sar_default_into(high: &[f64], low: &[f64], output: &mut [f64]) -> Result<()>
 
                 af = 0.02;
                 ep = second_low;
-                sar += af * (ep - sar);
+                sar = af.mul_add(ep - sar, sar);
                 if sar < previous_high {
                     sar = previous_high;
                 }
@@ -493,7 +493,7 @@ fn sar_default_into(high: &[f64], low: &[f64], output: &mut [f64]) -> Result<()>
                     ep = second_high;
                     af = (af + 0.02).min(0.2);
                 }
-                sar += af * (ep - sar);
+                sar = af.mul_add(ep - sar, sar);
                 if sar > previous_low {
                     sar = previous_low;
                 }
@@ -514,7 +514,7 @@ fn sar_default_into(high: &[f64], low: &[f64], output: &mut [f64]) -> Result<()>
 
             af = 0.02;
             ep = second_high;
-            sar += af * (ep - sar);
+            sar = af.mul_add(ep - sar, sar);
             if sar > previous_low {
                 sar = previous_low;
             }
@@ -527,7 +527,7 @@ fn sar_default_into(high: &[f64], low: &[f64], output: &mut [f64]) -> Result<()>
                 ep = second_low;
                 af = (af + 0.02).min(0.2);
             }
-            sar += af * (ep - sar);
+            sar = af.mul_add(ep - sar, sar);
             if sar < previous_high {
                 sar = previous_high;
             }
@@ -563,7 +563,7 @@ fn sar_default_into(high: &[f64], low: &[f64], output: &mut [f64]) -> Result<()>
 
                     af = 0.02;
                     ep = current_low;
-                    sar += af * (ep - sar);
+                    sar = af.mul_add(ep - sar, sar);
                     if sar < previous_high {
                         sar = previous_high;
                     }
@@ -576,7 +576,7 @@ fn sar_default_into(high: &[f64], low: &[f64], output: &mut [f64]) -> Result<()>
                         ep = current_high;
                         af = (af + 0.02).min(0.2);
                     }
-                    sar += af * (ep - sar);
+                    sar = af.mul_add(ep - sar, sar);
                     if sar > previous_low {
                         sar = previous_low;
                     }
@@ -597,7 +597,7 @@ fn sar_default_into(high: &[f64], low: &[f64], output: &mut [f64]) -> Result<()>
 
                 af = 0.02;
                 ep = current_high;
-                sar += af * (ep - sar);
+                sar = af.mul_add(ep - sar, sar);
                 if sar > previous_low {
                     sar = previous_low;
                 }
@@ -610,7 +610,7 @@ fn sar_default_into(high: &[f64], low: &[f64], output: &mut [f64]) -> Result<()>
                     ep = current_low;
                     af = (af + 0.02).min(0.2);
                 }
-                sar += af * (ep - sar);
+                sar = af.mul_add(ep - sar, sar);
                 if sar < previous_high {
                     sar = previous_high;
                 }
