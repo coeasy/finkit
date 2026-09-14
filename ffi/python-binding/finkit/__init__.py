@@ -279,6 +279,7 @@ if hasattr(_native, "_fast_unary_period"):
         )
 
 if hasattr(_native, "_fast_mom"):
+    _mom_native10 = getattr(_native, "_fast_mom10", None)
 
     def _mom_checked(close, timeperiod):
         return _native._fast_mom(close, timeperiod)
@@ -297,23 +298,21 @@ if hasattr(_native, "_fast_mom"):
             and close.dtype == np.float64
             and close.flags.c_contiguous
         ):
-            if timeperiod == 10 and hasattr(_native, "_fast_mom10"):
+            if timeperiod == 10 and _mom_native10 is not None:
                 if close.size < 10:
                     raise InsufficientDataError(
                         "input data length is less than required minimum"
                     )
-                return _native._fast_mom10(close)
+                return _mom_native10(close)
             return _mom_checked(close, timeperiod)
 
         close = _as_contiguous_float64(close)
-        if type(timeperiod) is int and timeperiod == 10 and hasattr(
-            _native, "_fast_mom10"
-        ):
+        if type(timeperiod) is int and timeperiod == 10 and _mom_native10 is not None:
             if close.size < 10:
                 raise InsufficientDataError(
                     "input data length is less than required minimum"
                 )
-            return _native._fast_mom10(close)
+            return _mom_native10(close)
         return _mom_checked(close, timeperiod)
 
 
