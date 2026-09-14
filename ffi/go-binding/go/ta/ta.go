@@ -1444,7 +1444,7 @@ type StreamingMacdExt struct {
 // unsupported selector values. MAMA and FRAMA are intentionally batch-only.
 func NewStreamingMacdExt(fastPeriod int, fastMa MaType, slowPeriod int, slowMa MaType, signalPeriod int, signalMa MaType) *StreamingMacdExt {
 	h := C.ta_streaming_macd_ext_new(
-		cInt(fastPeriod), cInt(fastMa), cInt(slowPeriod), cInt(slowMa), cInt(signalPeriod), cInt(signalMa),
+		cInt(fastPeriod), cInt(int(fastMa)), cInt(slowPeriod), cInt(int(slowMa)), cInt(signalPeriod), cInt(int(signalMa)),
 	)
 	if h == nil {
 		return nil
