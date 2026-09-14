@@ -342,17 +342,18 @@ if hasattr(_native, "_fast_rocp"):
         )
 
 if hasattr(_native, "_fast_unary_period_scale"):
+    _unary_period_scale_native = _native._fast_unary_period_scale
 
     def stddev(close, timeperiod=20, nbdev=1.0):
         try:
-            return _native._fast_unary_period_scale("stddev", close, timeperiod, nbdev)
+            return _unary_period_scale_native("stddev", close, timeperiod, nbdev)
         except (TypeError, ValueError, OverflowError):
             close = _as_contiguous_float64(close)
             return _native._fast_unary_period_scale("stddev", close, timeperiod, nbdev)
 
     def var(close, timeperiod=5, nbdev=1.0):
         try:
-            return _native._fast_unary_period_scale("var", close, timeperiod, nbdev)
+            return _unary_period_scale_native("var", close, timeperiod, nbdev)
         except (TypeError, ValueError, OverflowError):
             close = _as_contiguous_float64(close)
             return _native._fast_unary_period_scale("var", close, timeperiod, nbdev)
@@ -372,10 +373,11 @@ if hasattr(_native, "_fast_kama"):
     kama = _translate_native_errors("kama", kama)
 
 if hasattr(_native, "_fast_binary_period"):
+    _binary_period_native = _native._fast_binary_period
 
     def midprice(high, low, timeperiod=14):
         try:
-            return _native._fast_binary_period("midprice", high, low, timeperiod)
+            return _binary_period_native("midprice", high, low, timeperiod)
         except (TypeError, ValueError, OverflowError):
             high = _as_contiguous_float64(high)
             low = _as_contiguous_float64(low)
@@ -383,7 +385,7 @@ if hasattr(_native, "_fast_binary_period"):
 
     def correlation(input_a, input_b, timeperiod=14):
         try:
-            return _native._fast_binary_period("correl", input_a, input_b, timeperiod)
+            return _binary_period_native("correl", input_a, input_b, timeperiod)
         except (TypeError, ValueError, OverflowError):
             input_a = _as_contiguous_float64(input_a)
             input_b = _as_contiguous_float64(input_b)
@@ -446,10 +448,11 @@ if hasattr(_native, "_fast_hlc_period"):
         )
 
 if hasattr(_native, "_fast_trange"):
+    _trange_native = _native._fast_trange
 
     def trange(high, low, close):
         try:
-            return _native._fast_trange(high, low, close)
+            return _trange_native(high, low, close)
         except (TypeError, ValueError, OverflowError):
             high = _as_contiguous_float64(high)
             low = _as_contiguous_float64(low)
