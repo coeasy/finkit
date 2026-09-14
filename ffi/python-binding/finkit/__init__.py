@@ -168,6 +168,26 @@ if hasattr(_native, "_fast_sma"):
 
     sma = _translate_native_errors("sma", sma)
 
+    # Keep the exact contiguous float64 ndarray path at the native boundary.
+    # The public normalizer is still used for every other input and for
+    # caller-owned output buffers, while the release-gate path avoids a second
+    # Python-level dtype/contiguity dispatch before entering the same kernel.
+    _sma_fallback = sma
+
+    def sma(close, timeperiod=14, out=None):
+        if (
+            out is None
+            and type(timeperiod) is int
+            and isinstance(close, np.ndarray)
+            and close.ndim == 1
+            and close.dtype == np.float64
+            and close.flags.c_contiguous
+        ):
+            return _native._fast_sma(close, timeperiod)
+        return _sma_fallback(close, timeperiod=timeperiod, out=out)
+
+    sma = _translate_native_errors("sma", sma)
+
     def ma(close, timeperiod=30, matype=0):
         """Use the zero-copy SMA kernel for TA-Lib's default MA mode."""
 
