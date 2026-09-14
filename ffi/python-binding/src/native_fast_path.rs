@@ -538,25 +538,40 @@ fn fast_mom_public(
     close: &Bound<'_, PyAny>,
     timeperiod: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<Py<PyAny>> {
-    let default_period = PyInt::new(py, 10);
-    let timeperiod = timeperiod.unwrap_or(default_period.as_any());
-
-    if timeperiod.is_instance_of::<PyInt>() {
-        if let Ok(period) = timeperiod.extract::<usize>() {
-            if period == 10 {
-                if let Ok(close) = close.cast::<PyArray1<f64>>() {
-                    if close.is_c_contiguous() && close.len() >= 10 {
-                        return fast_mom10(py, close).map(|output| output.into_any().unbind());
+    // The public Python facade passes the default period explicitly. Avoid
+    // constructing a temporary Python integer on that hot path; the previous
+    // `unwrap_or(PyInt::new(...))` allocated one even when `timeperiod` was
+    // already present.
+    if let Some(timeperiod) = timeperiod {
+        if timeperiod.is_instance_of::<PyInt>() {
+            if let Ok(period) = timeperiod.extract::<usize>() {
+                if period == 10 {
+                    if let Ok(close) = close.cast::<PyArray1<f64>>() {
+                        if close.is_c_contiguous() && close.len() >= 10 {
+                            return fast_mom10(py, close).map(|output| output.into_any().unbind());
+                        }
                     }
                 }
             }
         }
+    } else if let Ok(close) = close.cast::<PyArray1<f64>>() {
+        if close.is_c_contiguous() && close.len() >= 10 {
+            return fast_mom10(py, close).map(|output| output.into_any().unbind());
+        }
     }
 
-    py.import("finkit")?
-        .getattr("_mom_fallback")?
-        .call1((close, timeperiod))
-        .map(|result| result.unbind())
+    let fallback = py.import("finkit")?.getattr("_mom_fallback")?;
+    match timeperiod {
+        Some(timeperiod) => fallback
+            .call1((close, timeperiod))
+            .map(|result| result.unbind()),
+        None => {
+            let default_period = PyInt::new(py, 10);
+            fallback
+                .call1((close, default_period.as_any()))
+                .map(|result| result.unbind())
+        }
+    }
 }
 
 #[pyfunction(name = "_fast_unary_period")]
