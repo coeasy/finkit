@@ -131,7 +131,16 @@ PYTHON_REGISTRY_OVERLAY = ROOT / "target" / "python_registry_ssot.json"
 
 
 def load_registry() -> dict:
-    registry_path = PYTHON_REGISTRY_OVERLAY if PYTHON_REGISTRY_OVERLAY.exists() else REG
+    # The core registry intentionally has no FFI blocks.  Prefer the
+    # transient enriched Python overlay when a preparation workflow created
+    # it; otherwise validate directly against the checked-in FFI SSOT so a
+    # clean checkout does not depend on ignored build artifacts.
+    if PYTHON_REGISTRY_OVERLAY.exists():
+        registry_path = PYTHON_REGISTRY_OVERLAY
+    elif FFI_REG.exists():
+        registry_path = FFI_REG
+    else:
+        registry_path = REG
     return json.loads(registry_path.read_text(encoding="utf-8"))
 
 

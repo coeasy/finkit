@@ -19,6 +19,7 @@ import sync_bindings as sb
 
 ROOT = Path(__file__).resolve().parents[1]
 CANONICAL_REGISTRY = ROOT / "docs" / "indicator_registry.json"
+FFI_REGISTRY = ROOT / "docs" / "ffi_registry.json"
 PYTHON_REGISTRY_OVERLAY = ROOT / "target" / "python_registry_ssot.json"
 
 
@@ -95,9 +96,11 @@ def main() -> int:
             check=True,
         )
 
-        # This process imported sync_bindings before hardening it, intentionally:
-        # read the just-enriched canonical file once, then persist only the overlay.
-        reg = sb.load_registry()
+        # FFI enrichment updates docs/ffi_registry.json, while the core
+        # indicator registry intentionally remains FFI-free.  Read the
+        # enriched FFI registry directly here and persist it only as the
+        # transient Python overlay consumed by sync_bindings.
+        reg = json.loads(FFI_REGISTRY.read_text(encoding="utf-8"))
         inds = sb.indicators_with_ffi(reg)
         cfg = sb.LANG_CFG["python"]
         extracted = sb.extract_functions(
