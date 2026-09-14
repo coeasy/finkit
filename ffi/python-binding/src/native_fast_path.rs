@@ -543,13 +543,11 @@ fn fast_mom_public(
     // `unwrap_or(PyInt::new(...))` allocated one even when `timeperiod` was
     // already present.
     if let Some(timeperiod) = timeperiod {
-        if timeperiod.is_instance_of::<PyInt>() {
-            if let Ok(period) = timeperiod.extract::<usize>() {
-                if period == 10 {
-                    if let Ok(close) = close.cast::<PyArray1<f64>>() {
-                        if close.is_c_contiguous() && close.len() >= 10 {
-                            return fast_mom10(py, close).map(|output| output.into_any().unbind());
-                        }
+        if let Ok(period) = timeperiod.extract::<usize>() {
+            if period == 10 {
+                if let Ok(close) = close.cast::<PyArray1<f64>>() {
+                    if close.is_c_contiguous() && close.len() >= 10 {
+                        return fast_mom10(py, close).map(|output| output.into_any().unbind());
                     }
                 }
             }
