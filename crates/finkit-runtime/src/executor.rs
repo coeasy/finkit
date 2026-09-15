@@ -1,6 +1,8 @@
 //! Factor execution engine.
 
-use crate::{ExecutionPlan, FactorCache, FactorConfig, FactorFactoryRequest, FactorRegistry};
+use std::sync::Arc;
+
+use crate::{ExecutionPlan, FactorCache, FactorConfig, FactorFactory, FactorFactoryRequest, FactorRegistry};
 
 #[derive(Clone, Debug)]
 pub struct Executor {
@@ -24,6 +26,13 @@ impl Executor {
 
     pub fn resolve_factor(&self, request: &FactorFactoryRequest) -> Option<String> {
         self.registry.create_factor(request)
+    }
+
+    pub fn resolve_factory(
+        &self,
+        name: &str,
+    ) -> Option<Arc<dyn FactorFactory + Send + Sync>> {
+        self.registry.get_factory(name)
     }
 
     pub fn resolve_config(&self, request: &FactorFactoryRequest) -> Option<FactorConfig> {
