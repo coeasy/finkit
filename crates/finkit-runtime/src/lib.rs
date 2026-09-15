@@ -1,16 +1,18 @@
 //! Execution runtime foundation for factor graphs.
 
 mod cache;
+mod cache_key;
 mod executor;
 mod graph;
-mod scheduler;
 mod registry;
+mod scheduler;
 
 pub use cache::FactorCache;
+pub use cache_key::FactorCacheKey;
 pub use executor::Executor;
 pub use graph::{FactorGraph, FactorNode};
-pub use scheduler::Scheduler;
 pub use registry::{FactorDescriptor, FactorRegistry};
+pub use scheduler::Scheduler;
 
 #[derive(Clone, Debug)]
 pub struct ExecutionPlan {
