@@ -23,6 +23,10 @@ impl FactorCache {
         self.entries.get(key)
     }
 
+    pub fn contains(&self, key: &FactorCacheKey) -> bool {
+        self.entries.contains_key(key)
+    }
+
     pub fn len(&self) -> usize {
         self.entries.len()
     }
