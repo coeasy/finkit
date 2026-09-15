@@ -18,6 +18,18 @@ impl QuantSeries {
         }
     }
 
+    pub fn symbol(&self) -> &str {
+        &self.symbol
+    }
+
+    pub fn timestamps(&self) -> &[i64] {
+        &self.timestamps
+    }
+
+    pub fn values(&self) -> &[f64] {
+        self.values.as_slice()
+    }
+
     pub fn len(&self) -> usize {
         self.values.len()
     }
