@@ -1,6 +1,7 @@
 //! Runtime factor registry foundation.
 
 use std::collections::HashMap;
+use crate::factory::FactorFactoryRequest;
 
 #[derive(Clone, Debug)]
 pub struct FactorDescriptor {
@@ -34,6 +35,10 @@ impl FactorRegistry {
             name: name.into(),
             params,
         });
+    }
+
+    pub fn create_request(&self, request: &FactorFactoryRequest) -> bool {
+        self.contains(&request.name)
     }
 
     pub fn contains(&self, name: &str) -> bool {
