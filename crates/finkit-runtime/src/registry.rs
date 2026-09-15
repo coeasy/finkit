@@ -1,17 +1,29 @@
-//! Runtime factor registry foundation.
+//! Runtime factor registry.
 
 use std::collections::HashMap;
-use crate::factory::FactorFactoryRequest;
+use std::sync::Arc;
 
-#[derive(Clone, Debug)]
-pub struct FactorDescriptor {
-    pub name: String,
-    pub params: HashMap<String, String>,
+use crate::factory::{FactorFactory, FactorFactoryRequest};
+
+#[derive(Clone)]
+pub struct FactorRegistry {
+    factories: HashMap<String, Arc<dyn FactorFactory + Send + Sync>>,
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct FactorRegistry {
-    factors: Vec<FactorDescriptor>,
+impl std::fmt::Debug for FactorRegistry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FactorRegistry")
+            .field("factory_count", &self.factories.len())
+            .finish()
+    }
+}
+
+impl Default for FactorRegistry {
+    fn default() -> Self {
+        Self {
+            factories: HashMap::new(),
+        }
+    }
 }
 
 impl FactorRegistry {
@@ -19,33 +31,24 @@ impl FactorRegistry {
         Self::default()
     }
 
-    pub fn register(&mut self, name: impl Into<String>) {
-        self.factors.push(FactorDescriptor {
-            name: name.into(),
-            params: HashMap::new(),
-        });
+    pub fn register_factory<F>(&mut self, factory: F)
+    where
+        F: FactorFactory + Send + Sync + 'static,
+    {
+        self.factories
+            .insert(factory.name().to_string(), Arc::new(factory));
     }
 
-    pub fn register_with_params(
-        &mut self,
-        name: impl Into<String>,
-        params: HashMap<String, String>,
-    ) {
-        self.factors.push(FactorDescriptor {
-            name: name.into(),
-            params,
-        });
-    }
-
-    pub fn create_request(&self, request: &FactorFactoryRequest) -> bool {
-        self.contains(&request.name)
+    pub fn create_factor(&self, request: &FactorFactoryRequest) -> Option<String> {
+        let factory = self.factories.get(&request.name)?;
+        Some(factory.create(&request.params_map()))
     }
 
     pub fn contains(&self, name: &str) -> bool {
-        self.factors.iter().any(|item| item.name == name)
+        self.factories.contains_key(name)
     }
 
     pub fn len(&self) -> usize {
-        self.factors.len()
+        self.factories.len()
     }
 }
