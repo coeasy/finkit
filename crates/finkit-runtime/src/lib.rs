@@ -3,10 +3,12 @@
 mod cache;
 mod executor;
 mod graph;
+mod scheduler;
 
 pub use cache::FactorCache;
 pub use executor::Executor;
 pub use graph::{FactorGraph, FactorNode};
+pub use scheduler::Scheduler;
 
 #[derive(Clone, Debug)]
 pub struct ExecutionPlan {
