@@ -49,6 +49,10 @@ impl FactorRegistry {
             .insert(factory.name().to_string(), Arc::new(factory));
     }
 
+    pub fn get_factory(&self, name: &str) -> Option<Arc<dyn FactorFactory + Send + Sync>> {
+        self.factories.get(name).cloned()
+    }
+
     pub fn create_factor(&self, request: &FactorFactoryRequest) -> Option<String> {
         let factory = self.factories.get(&request.name)?;
         Some(factory.create(&request.params_map()))
