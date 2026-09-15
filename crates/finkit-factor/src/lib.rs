@@ -5,10 +5,12 @@ use finkit_series::QuantSeries;
 mod ema;
 mod sma;
 mod result;
+mod rsi;
 
 pub use ema::Ema;
 pub use sma::Sma;
 pub use result::FactorResult;
+pub use rsi::Rsi;
 
 pub trait Factor {
     fn name(&self) -> &str;
