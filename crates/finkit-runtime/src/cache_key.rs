@@ -5,6 +5,7 @@ pub struct FactorCacheKey {
     pub symbol: String,
     pub factor_name: String,
     pub params: String,
+    pub time_range: Option<String>,
 }
 
 impl FactorCacheKey {
@@ -13,6 +14,12 @@ impl FactorCacheKey {
             symbol: symbol.into(),
             factor_name: factor_name.into(),
             params: params.into(),
+            time_range: None,
         }
+    }
+
+    pub fn with_time_range(mut self, range: impl Into<String>) -> Self {
+        self.time_range = Some(range.into());
+        self
     }
 }
