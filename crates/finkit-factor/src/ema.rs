@@ -19,6 +19,11 @@ impl Factor for Ema {
 
     fn compute(&self, input: &QuantSeries) -> QuantSeries {
         let values = finkit_math::ema(input.values(), self.period);
-        QuantSeries::new(input.symbol().to_string(), Vec::new(), finkit_array::FloatArray::new(values))
+        let timestamps = input.timestamps()[self.period.saturating_sub(1)..].to_vec();
+        QuantSeries::new(
+            input.symbol().to_string(),
+            timestamps,
+            finkit_array::FloatArray::new(values),
+        )
     }
 }
