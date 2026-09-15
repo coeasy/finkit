@@ -1,6 +1,6 @@
 //! Factor execution engine.
 
-use crate::{ExecutionPlan, FactorCache, FactorRegistry};
+use crate::{ExecutionPlan, FactorCache, FactorFactoryRequest, FactorRegistry};
 
 #[derive(Clone, Debug)]
 pub struct Executor {
@@ -20,5 +20,9 @@ impl Executor {
 
     pub fn node_count(&self) -> usize {
         self.plan.nodes.len()
+    }
+
+    pub fn resolve_factor(&self, request: &FactorFactoryRequest) -> Option<String> {
+        self.registry.create_factor(request)
     }
 }
