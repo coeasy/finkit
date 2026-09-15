@@ -1,10 +1,12 @@
 //! Execution runtime foundation for factor graphs.
 
-mod graph;
 mod cache;
+mod executor;
+mod graph;
 
-pub use graph::{FactorGraph, FactorNode};
 pub use cache::FactorCache;
+pub use executor::Executor;
+pub use graph::{FactorGraph, FactorNode};
 
 #[derive(Clone, Debug)]
 pub struct ExecutionPlan {
