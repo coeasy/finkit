@@ -3,6 +3,7 @@
 mod cache;
 mod cache_key;
 mod executor;
+mod factory;
 mod graph;
 mod registry;
 mod scheduler;
@@ -10,6 +11,7 @@ mod scheduler;
 pub use cache::FactorCache;
 pub use cache_key::FactorCacheKey;
 pub use executor::Executor;
+pub use factory::FactorFactoryRequest;
 pub use graph::{FactorGraph, FactorNode};
 pub use registry::{FactorDescriptor, FactorRegistry};
 pub use scheduler::Scheduler;
