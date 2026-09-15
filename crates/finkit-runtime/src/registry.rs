@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::factory::{FactorFactory, FactorFactoryRequest};
+use crate::factories::{EmaFactory, MacdFactory, RsiFactory, SmaFactory};
 
 #[derive(Clone)]
 pub struct FactorRegistry {
@@ -29,6 +30,15 @@ impl Default for FactorRegistry {
 impl FactorRegistry {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn with_builtin() -> Self {
+        let mut registry = Self::new();
+        registry.register_factory(EmaFactory);
+        registry.register_factory(SmaFactory);
+        registry.register_factory(RsiFactory);
+        registry.register_factory(MacdFactory);
+        registry
     }
 
     pub fn register_factory<F>(&mut self, factory: F)
