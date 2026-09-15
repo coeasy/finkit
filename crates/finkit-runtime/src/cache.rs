@@ -1,11 +1,11 @@
 //! Runtime cache primitives.
 
 use std::collections::HashMap;
-use crate::FactorCacheKey;
+use crate::{FactorCacheKey, FactorOutput};
 
 #[derive(Clone, Debug, Default)]
 pub struct FactorCache {
-    entries: HashMap<FactorCacheKey, String>,
+    entries: HashMap<FactorCacheKey, FactorOutput>,
 }
 
 impl FactorCache {
@@ -15,11 +15,11 @@ impl FactorCache {
         }
     }
 
-    pub fn insert(&mut self, key: FactorCacheKey, value: impl Into<String>) {
-        self.entries.insert(key, value.into());
+    pub fn insert(&mut self, key: FactorCacheKey, value: FactorOutput) {
+        self.entries.insert(key, value);
     }
 
-    pub fn get(&self, key: &FactorCacheKey) -> Option<&String> {
+    pub fn get(&self, key: &FactorCacheKey) -> Option<&FactorOutput> {
         self.entries.get(key)
     }
 
