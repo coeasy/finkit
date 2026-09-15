@@ -2,8 +2,10 @@
 
 use finkit_series::QuantSeries;
 
+mod ema;
 mod sma;
 
+pub use ema::Ema;
 pub use sma::Sma;
 
 pub trait Factor {
