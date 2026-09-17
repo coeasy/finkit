@@ -12,6 +12,8 @@ pub mod decimate;
 pub mod geometry;
 pub mod interaction;
 pub mod layout;
+/// Lightweight Charts web payload adapter.
+pub mod lightweight;
 pub mod primitive;
 pub mod render;
 pub mod scene;
