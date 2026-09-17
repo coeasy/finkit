@@ -7,7 +7,7 @@
 //! verified dispatcher and golden vectors before it is marked fully complete.
 
 use crate::composite::{CompositeDefinition, CompositeEngine};
-use crate::data_contract::{CrossSectionView, DataContractError, MarketPanel};
+use crate::data_contract::{CrossSectionView, DataContractError, FundamentalSeries, MarketPanel};
 use crate::factors::{
     BorrowedFactorContext, FactorDefinition, FactorEngine, FactorKind, FactorRegistry,
 };
@@ -816,6 +816,105 @@ impl UnifiedOperationEngine {
         Ok(PanelOperationResult { values })
     }
 
+    /// Execute one registered indicator independently for every panel frame.
+    ///
+    /// A panel is a collection of independent symbol/timeframe series. This
+    /// method preserves that boundary and never concatenates bars from unlike
+    /// frames before dispatching to the indicator kernel.
+    pub fn execute_panel_indicator(
+        &mut self,
+        name: &str,
+        inputs: &[&str],
+        params: &[f64],
+        panel: &MarketPanel<'_>,
+    ) -> Result<PanelOperationResult, OperationExecutionError> {
+        let mut values = BTreeMap::new();
+        for (key, frame) in panel.iter() {
+            frame
+                .validate()
+                .map_err(|error| DataContractError::InvalidMarketFrame(error))?;
+            let amount = frame.amount.map(|series| Array1::from_vec(series.to_vec()));
+            let mut context = FormulaContext::from_borrowed_ohlcv(
+                frame.open,
+                frame.high,
+                frame.low,
+                frame.close,
+                frame.volume,
+                amount,
+            );
+            context.datetime = frame
+                .timestamp
+                .map(|timestamps| Array1::from_vec(timestamps.to_vec()));
+            values.insert(
+                key.clone(),
+                self.execute_indicator(name, inputs, params, &mut context)?,
+            );
+        }
+        Ok(PanelOperationResult { values })
+    }
+
+    /// Execute a formula on one frame with point-in-time fundamental inputs.
+    ///
+    /// Each fundamental field is expanded to the frame's timestamps using its
+    /// publication-time `as_of` rule. No future revision can enter an earlier
+    /// market bar, and callers remain responsible for selecting the correct
+    /// symbol before invoking this method.
+    pub fn execute_formula_with_fundamentals(
+        &mut self,
+        source: &str,
+        dialect: FormulaDialect,
+        frame: &crate::runtime::MarketFrame<'_>,
+        fundamentals: &[FundamentalSeries<'_>],
+    ) -> Result<OperationResult, OperationExecutionError> {
+        frame
+            .validate()
+            .map_err(|error| DataContractError::InvalidMarketFrame(error))?;
+        let timestamps = frame.timestamp.ok_or_else(|| {
+            OperationExecutionError::InvalidRequest(
+                "point-in-time fundamentals require frame timestamps".to_string(),
+            )
+        })?;
+        let amount = frame.amount.map(|series| Array1::from_vec(series.to_vec()));
+        let mut context = FormulaContext::from_borrowed_ohlcv(
+            frame.open,
+            frame.high,
+            frame.low,
+            frame.close,
+            frame.volume,
+            amount,
+        );
+        context.datetime = Some(Array1::from_vec(timestamps.to_vec()));
+        for fundamental in fundamentals {
+            let fundamental = FundamentalSeries::new(
+                fundamental.name,
+                fundamental.timestamps,
+                fundamental.values,
+            )
+            .map_err(OperationExecutionError::DataContract)?;
+            let values = timestamps
+                .iter()
+                .map(|&timestamp| fundamental.as_of(timestamp).unwrap_or(f64::NAN))
+                .collect::<Vec<_>>();
+            context.variables.insert(
+                std::sync::Arc::from(normalize_name(fundamental.name)),
+                Array1::from_vec(values),
+            );
+        }
+
+        let (values, draw) = self.execute_formula(source, dialect, &mut context)?;
+        let shape = if values.len() > 1 {
+            ValueShape::MultiSeries
+        } else {
+            ValueShape::Series
+        };
+        Ok(OperationResult {
+            values,
+            shape,
+            primary: Some(PRIMARY_OUTPUT_NAME.to_string()),
+            draw,
+        })
+    }
+
     fn execute_formula(
         &mut self,
         source: &str,
@@ -1093,6 +1192,65 @@ mod tests {
         let values_b = result.get(&key_b).unwrap().primary_values().unwrap();
         assert_eq!(values_a, &[2.0, 2.5, 3.25]);
         assert_eq!(values_b, &[11.0, 12.0, 13.5]);
+
+        let inputs = ["CLOSE"];
+        let params = [2.0];
+        let indicator = engine
+            .execute_panel_indicator("EMA", &inputs, &params, &panel)
+            .unwrap();
+        assert_eq!(indicator.len(), 2);
+        let indicator_a = indicator.get(&key_a).unwrap().primary_values().unwrap();
+        let indicator_b = indicator.get(&key_b).unwrap().primary_values().unwrap();
+        assert!(indicator_a[0].is_nan());
+        assert!(indicator_b[0].is_nan());
+        assert_eq!(&indicator_a[1..], &[2.5, 3.5]);
+        assert_eq!(&indicator_b[1..], &[12.0, 14.0]);
+    }
+
+    #[test]
+    fn formula_expands_fundamentals_using_point_in_time_as_of() {
+        let open = [1.0, 2.0, 3.0];
+        let timestamps = [100, 200, 300];
+        let frame = MarketFrame::new(&open, &open, &open, &open, &open)
+            .unwrap()
+            .with_timestamp(&timestamps)
+            .unwrap();
+        let fundamental_timestamps = [150, 280];
+        let fundamental_values = [10.0, 20.0];
+        let fundamental =
+            FundamentalSeries::new("earnings_ttm", &fundamental_timestamps, &fundamental_values)
+                .unwrap();
+
+        let mut engine = UnifiedOperationEngine::new(FactorRegistry::new());
+        let result = engine
+            .execute_formula_with_fundamentals(
+                "EARNINGS_TTM",
+                FormulaDialect::AlphaTA,
+                &frame,
+                &[fundamental],
+            )
+            .unwrap();
+        let actual = result.primary_values().unwrap();
+        assert!(actual[0].is_nan());
+        assert_eq!(&actual[1..], &[10.0, 20.0]);
+    }
+
+    #[test]
+    fn formula_fundamentals_require_frame_timestamps() {
+        let values = [1.0, 2.0];
+        let frame = MarketFrame::new(&values, &values, &values, &values, &values).unwrap();
+        let fundamental = FundamentalSeries::new("book_value", &[10], &[3.0]).unwrap();
+        let mut engine = UnifiedOperationEngine::new(FactorRegistry::new());
+        assert!(matches!(
+            engine.execute_formula_with_fundamentals(
+                "BOOK_VALUE",
+                FormulaDialect::AlphaTA,
+                &frame,
+                &[fundamental],
+            ),
+            Err(OperationExecutionError::InvalidRequest(message))
+                if message.contains("timestamps")
+        ));
     }
 
     #[test]
