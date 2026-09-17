@@ -212,6 +212,22 @@ pub unsafe extern "C" fn ta_version() -> *mut c_char {
     })
 }
 
+/// Return the canonical operation catalog as an owned UTF-8 JSON string.
+///
+/// The caller must release the returned pointer with `finkit_free_string`.
+/// The envelope is shared by the C, C++, Go, Java, .NET and other binding
+/// layers; it is generated from the Rust core operation registry.
+#[no_mangle]
+pub extern "C" fn ta_operation_catalog_json() -> *mut c_char {
+    ffi_catch_ptr(|| {
+        let json = finkit_ffi_common::operation::operation_catalog_json()
+            .unwrap_or_else(|error| format!("{{\"error\":{}}}", serde_json::json!(error.to_string())));
+        CString::new(json)
+            .map(CString::into_raw)
+            .unwrap_or_else(|_| std::ptr::null_mut())
+    })
+}
+
 /// Return the last FFI error code for the calling thread.
 #[no_mangle]
 pub extern "C" fn ta_last_error_code() -> i32 {
@@ -279,6 +295,21 @@ mod tests {
     fn code_ok_after_init() {
         // The thread-local starts at 0. Just confirm the getter works.
         assert_eq!(ta_last_error_code(), 0);
+    }
+
+    #[test]
+    fn operation_catalog_json_is_owned_and_contains_core_metadata() {
+        let ptr = ta_operation_catalog_json();
+        assert!(!ptr.is_null());
+        let json = unsafe { CStr::from_ptr(ptr) }.to_str().unwrap();
+        let value: serde_json::Value = serde_json::from_str(json).unwrap();
+        assert_eq!(value["schema_version"], 1);
+        assert!(value["operations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|operation| operation["name"] == "EMA"));
+        unsafe { finkit_free_string(ptr) };
     }
 
     #[test]

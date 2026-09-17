@@ -26,6 +26,16 @@ inline std::string version() {
     return std::string(ta_version());
 }
 
+inline std::string operation_catalog_json() {
+    char* raw = ta_operation_catalog_json();
+    if (raw == nullptr) {
+        throw TaLibException("operation catalog returned null");
+    }
+    std::string result(raw);
+    finkit_free_string(raw);
+    return result;
+}
+
 namespace detail {
 
 inline void check_result(int32_t result, const std::string& func_name) {

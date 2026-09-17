@@ -36,6 +36,7 @@ typedef enum FfiStatus {
 /* ── Version & error reporting ─────────────────────────────────────────── */
 
 TA_API char *ta_version(void);
+TA_API char *ta_operation_catalog_json(void);
 TA_API char *ta_last_error(void);
 TA_API int32_t ta_last_error_code(void);
 TA_API void finkit_free_string(char *s);

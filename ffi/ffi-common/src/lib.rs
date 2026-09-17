@@ -14,11 +14,13 @@
 pub mod error;
 pub mod golden;
 pub mod leak;
+pub mod operation;
 pub mod panic;
 pub mod registry;
 pub mod research;
 pub mod types;
 
+pub use operation::{operation_catalog, operation_catalog_json, OperationCatalogEnvelope};
 pub use research::{
     factor_study_error_json, factor_study_json, quant_evaluation_error_json, quant_evaluation_json,
     FactorStudyRequest, FactorStudyResponse, QuantEvaluationApiError, QuantEvaluationApiReport,
