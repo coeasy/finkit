@@ -93,7 +93,7 @@ pub use unified_dispatch::{unified_formula_executor, FormulaKernelDispatcher};
 /// Formula language dialect selector.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FormulaDialect {
-    /// Finkit / AlphaTA / TDX-style formula language (default).
+    /// Finkit / AlphaTA formula language (default).
     #[default]
     AlphaTA,
     /// TongDaXin (通达信) formula profile.
