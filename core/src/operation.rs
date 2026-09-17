@@ -1,15 +1,26 @@
 //! Canonical operation contracts shared by indicators, formulas, factors,
 //! composites, and drawing adapters.
 //!
-//! This module is deliberately metadata-only. It is the stable discovery and
-//! planning layer; execution remains in the existing indicator/formula/factor
-//! engines until each operation has a verified dispatcher and golden vectors.
+//! The registry is the stable discovery and planning layer. The unified façade
+//! below routes the currently executable Formula, Factor, and Composite paths
+//! through one request/result/error contract; each new operation still needs a
+//! verified dispatcher and golden vectors before it is marked fully complete.
 
+use crate::composite::{CompositeDefinition, CompositeEngine};
+use crate::factors::{BorrowedFactorContext, FactorEngine, FactorRegistry};
+use crate::formula::{
+    parse_formula_with_dialect, DrawResult, FormulaContext, FormulaDialect, FormulaEngine,
+    FormulaError,
+};
 use crate::registry::{
     builtin_function_registry, FunctionCategory, FunctionSpec, InputKind, LookbackSpec, ParamSpec,
 };
 use std::collections::BTreeMap;
+use std::collections::HashSet;
 use std::fmt;
+
+/// Reserved name used for the primary value returned by a formula.
+pub const PRIMARY_OUTPUT_NAME: &str = "__PRIMARY__";
 
 /// Top-level kind of a public operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -322,6 +333,239 @@ pub fn builtin_operation_registry() -> OperationRegistry {
         .expect("built-in operation names and aliases are unique")
 }
 
+/// A request routed through the unified Formula/Factor/Composite façade.
+///
+/// The request borrows caller-owned contexts. No raw market data is copied at
+/// dispatch time; ownership is transferred only in the returned result.
+pub enum OperationRequest<'a> {
+    /// Compile and execute a formula against a mutable formula context.
+    Formula {
+        /// Formula source in the selected dialect's canonical syntax.
+        source: &'a str,
+        /// Parser/semantic dialect used for the source.
+        dialect: FormulaDialect,
+        /// Mutable context, because formulas may assign variables or emit draw commands.
+        context: &'a mut FormulaContext,
+    },
+    /// Evaluate one registered factor from a borrowed named-series context.
+    Factor {
+        /// Registered factor name.
+        name: &'a str,
+        /// Borrowed factor input context.
+        context: &'a BorrowedFactorContext<'a>,
+    },
+    /// Evaluate selected composite outputs from a borrowed named-series context.
+    Composite {
+        /// Named composite definitions.
+        definitions: &'a [CompositeDefinition],
+        /// Requested output names.
+        outputs: &'a [&'a str],
+        /// Borrowed composite input context.
+        context: &'a BorrowedFactorContext<'a>,
+        /// Optional caller-owned revision used by the composite cache.
+        data_revision: Option<u64>,
+    },
+}
+
+/// Unified named-series result returned by Formula, Factor, and Composite execution.
+#[derive(Debug, Clone)]
+pub struct OperationResult {
+    /// Named aligned output series. Keys are deterministic and operation-defined.
+    pub values: BTreeMap<String, Vec<f64>>,
+    /// Name of the primary output, if the operation has one.
+    pub primary: Option<String>,
+    /// Formula drawing commands, when the execution emitted any.
+    pub draw: Option<DrawResult>,
+}
+
+impl OperationResult {
+    /// Return the primary output without copying it.
+    pub fn primary_values(&self) -> Option<&[f64]> {
+        self.primary
+            .as_deref()
+            .and_then(|name| self.values.get(name).map(Vec::as_slice))
+    }
+
+    /// Return a named output without copying it.
+    pub fn get(&self, name: &str) -> Option<&[f64]> {
+        self.values.get(name).map(Vec::as_slice)
+    }
+
+    /// Number of named output series.
+    pub fn len(&self) -> usize {
+        self.values.len()
+    }
+
+    /// Whether the result contains no output series.
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+}
+
+/// Errors surfaced by the unified operation façade.
+#[derive(Debug, Clone, PartialEq)]
+pub enum OperationExecutionError {
+    /// Formula parsing, planning, or evaluation failed.
+    Formula(FormulaError),
+    /// Factor registration, dependency resolution, or evaluation failed.
+    Factor(crate::factors::FactorError),
+    /// Composite graph validation or evaluation failed.
+    Composite(crate::factors::FactorError),
+}
+
+impl fmt::Display for OperationExecutionError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Formula(error) => write!(formatter, "formula operation failed: {error}"),
+            Self::Factor(error) => write!(formatter, "factor operation failed: {error}"),
+            Self::Composite(error) => write!(formatter, "composite operation failed: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for OperationExecutionError {}
+
+impl From<FormulaError> for OperationExecutionError {
+    fn from(value: FormulaError) -> Self {
+        Self::Formula(value)
+    }
+}
+
+/// Runtime façade that routes the three currently executable high-level
+/// operation families through one request/result/error contract.
+pub struct UnifiedOperationEngine {
+    catalog: OperationRegistry,
+    formula: FormulaEngine,
+    factor: FactorEngine,
+    composite: CompositeEngine,
+}
+
+impl UnifiedOperationEngine {
+    /// Create an engine with the built-in operation catalog and caller factors.
+    pub fn new(factors: FactorRegistry) -> Self {
+        Self {
+            catalog: builtin_operation_registry(),
+            formula: FormulaEngine::new(),
+            factor: FactorEngine::new(factors),
+            composite: CompositeEngine::new(),
+        }
+    }
+
+    /// Read the canonical metadata catalog used by this engine.
+    pub fn catalog(&self) -> &OperationRegistry {
+        &self.catalog
+    }
+
+    /// Access the factor engine for registration and precompiled workflows.
+    pub fn factor_engine(&self) -> &FactorEngine {
+        &self.factor
+    }
+
+    /// Access the composite engine for custom function registration and cache control.
+    pub fn composite_engine(&self) -> &CompositeEngine {
+        &self.composite
+    }
+
+    /// Mutably access the composite engine for custom function registration and cache control.
+    pub fn composite_engine_mut(&mut self) -> &mut CompositeEngine {
+        &mut self.composite
+    }
+
+    /// Execute a Formula, Factor, or Composite request using one result contract.
+    pub fn execute<'a>(
+        &mut self,
+        request: OperationRequest<'a>,
+    ) -> Result<OperationResult, OperationExecutionError> {
+        match request {
+            OperationRequest::Formula {
+                source,
+                dialect,
+                context,
+            } => {
+                let (values, draw) = self.execute_formula(source, dialect, context)?;
+                Ok(OperationResult {
+                    values,
+                    primary: Some(PRIMARY_OUTPUT_NAME.to_string()),
+                    draw,
+                })
+            }
+            OperationRequest::Factor { name, context } => {
+                let result = self
+                    .factor
+                    .evaluate_borrowed(name, context)
+                    .map_err(OperationExecutionError::Factor)?;
+                let mut values = BTreeMap::new();
+                values.insert(name.to_string(), result);
+                Ok(OperationResult {
+                    values,
+                    primary: Some(name.to_string()),
+                    draw: None,
+                })
+            }
+            OperationRequest::Composite {
+                definitions,
+                outputs,
+                context,
+                data_revision,
+            } => {
+                let values = match data_revision {
+                    Some(revision) => {
+                        self.composite
+                            .evaluate_cached(definitions, outputs, context, revision)
+                    }
+                    None => self
+                        .composite
+                        .evaluate_borrowed(definitions, outputs, context),
+                }
+                .map_err(OperationExecutionError::Composite)?;
+                let primary = (outputs.len() == 1).then(|| outputs[0].to_string());
+                Ok(OperationResult {
+                    values,
+                    primary,
+                    draw: None,
+                })
+            }
+        }
+    }
+
+    fn execute_formula(
+        &mut self,
+        source: &str,
+        dialect: FormulaDialect,
+        context: &mut FormulaContext,
+    ) -> Result<(BTreeMap<String, Vec<f64>>, Option<DrawResult>), FormulaError> {
+        let mut values = BTreeMap::new();
+        match dialect {
+            FormulaDialect::AlphaTA => {
+                let result = self.formula.eval_multi(source, context)?;
+                for (name, value) in result.outputs {
+                    values.insert(name, value.to_vec());
+                }
+                values.insert(PRIMARY_OUTPUT_NAME.to_string(), result.final_value.to_vec());
+            }
+            FormulaDialect::Pine => {
+                let ast = parse_formula_with_dialect(source, dialect)
+                    .map_err(FormulaError::ParseError)?;
+                let variables_before: HashSet<String> =
+                    context.variables.keys().map(ToString::to_string).collect();
+                let final_value = self.formula.eval_ast(&ast, context)?;
+                for (name, value) in &context.variables {
+                    let name = name.to_string();
+                    if !variables_before.contains(&name) {
+                        values.insert(name, value.to_vec());
+                    }
+                }
+                values.insert(PRIMARY_OUTPUT_NAME.to_string(), final_value.to_vec());
+            }
+        }
+        let draw = {
+            let draw = context.draw_commands.borrow();
+            (!draw.commands.is_empty()).then(|| draw.clone())
+        };
+        Ok((values, draw))
+    }
+}
+
 fn normalize_name(name: &str) -> String {
     name.trim().to_ascii_uppercase()
 }
@@ -329,6 +573,10 @@ fn normalize_name(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::composite::{CompositeExpr, CompositeOp};
+    use crate::factors::{FactorDefinition, FactorDirection, FactorKind};
+    use ndarray::Array1;
+    use std::sync::Arc;
 
     #[test]
     fn builtins_project_without_losing_function_contracts() {
@@ -394,5 +642,102 @@ mod tests {
         assert_eq!(operations.len(), 1);
         assert!(operations.get("SECOND").is_none());
         assert!(operations.get("TWO").is_none());
+    }
+
+    fn formula_context() -> FormulaContext {
+        let values = |start| Array1::from_vec((0..6).map(|index| start + index as f64).collect());
+        FormulaContext::new(
+            values(1.0),
+            values(2.0),
+            values(0.0),
+            values(10.0),
+            values(100.0),
+            None,
+        )
+    }
+
+    #[test]
+    fn unified_engine_executes_formula_and_preserves_primary_result() {
+        let mut engine = UnifiedOperationEngine::new(FactorRegistry::new());
+        let mut context = formula_context();
+        let result = engine
+            .execute(OperationRequest::Formula {
+                source: "SMA(CLOSE, 3)",
+                dialect: FormulaDialect::AlphaTA,
+                context: &mut context,
+            })
+            .unwrap();
+
+        assert_eq!(result.primary.as_deref(), Some(PRIMARY_OUTPUT_NAME));
+        assert_eq!(result.primary_values().unwrap().len(), 6);
+        assert!(result.draw.is_none());
+    }
+
+    #[test]
+    fn unified_engine_routes_pine_subset_to_the_same_result_contract() {
+        let mut engine = UnifiedOperationEngine::new(FactorRegistry::new());
+        let mut context = formula_context();
+        let result = engine
+            .execute(OperationRequest::Formula {
+                source: "//@version=5\nindicator(\"M\")\nr = ta.sma(close, 3)\nplot(r)\n",
+                dialect: FormulaDialect::Pine,
+                context: &mut context,
+            })
+            .unwrap();
+
+        assert!(result.primary_values().is_some());
+        assert!(result.get("PLOT").is_some());
+        assert!(result.draw.is_none());
+    }
+
+    #[test]
+    fn unified_engine_routes_factor_and_composite_through_existing_engines() {
+        let mut factors = FactorRegistry::new();
+        factors
+            .register(FactorDefinition::new(
+                "DOUBLE_CLOSE",
+                ["close"],
+                FactorKind::TimeSeries,
+                FactorDirection::Neutral,
+                Arc::new(|inputs| {
+                    Ok(inputs
+                        .get("close")?
+                        .iter()
+                        .map(|value| value * 2.0)
+                        .collect())
+                }),
+            ))
+            .unwrap();
+        let mut engine = UnifiedOperationEngine::new(factors);
+        let close = [1.0, 2.0, 3.0];
+        let context = BorrowedFactorContext::new()
+            .with_series("close", &close)
+            .unwrap();
+
+        let factor = engine
+            .execute(OperationRequest::Factor {
+                name: "DOUBLE_CLOSE",
+                context: &context,
+            })
+            .unwrap();
+        assert_eq!(factor.primary_values().unwrap(), &[2.0, 4.0, 6.0]);
+
+        let definitions = [CompositeDefinition::new(
+            "SUM_CLOSE",
+            CompositeExpr::Op {
+                op: CompositeOp::Add,
+                inputs: vec![CompositeExpr::series("close"), CompositeExpr::Constant(1.0)],
+            },
+        )];
+        let outputs = ["SUM_CLOSE"];
+        let composite = engine
+            .execute(OperationRequest::Composite {
+                definitions: &definitions,
+                outputs: &outputs,
+                context: &context,
+                data_revision: Some(1),
+            })
+            .unwrap();
+        assert_eq!(composite.primary_values().unwrap(), &[2.0, 3.0, 4.0]);
     }
 }

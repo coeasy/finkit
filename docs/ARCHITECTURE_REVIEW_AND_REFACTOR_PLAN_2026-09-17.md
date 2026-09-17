@@ -363,7 +363,7 @@ Core `lib.rs` 暴露大量模块，并同时支持 std/no_std、formula、JIT、
 
 Registry、Rust dispatch、FFI 声明、Python stubs、C++ 头文件/RAII wrapper、Go bindings、Java/.NET metadata、文档和测试清单从该源生成。
 
-当前实现状态：`core/src/operation.rs` 已落地 `OperationKind`、`ValueShape`、`OperationCapabilities`、稳定 `OperationId`、别名解析、冲突校验和从现有 `FunctionRegistry` 的原子投影，且已有 3 个单元测试。它现在是统一元数据契约，不代表 Formula/Factor/Composite/Draw 已全部接入同一执行 dispatcher；后续必须逐项补齐 dispatcher、golden 和六语言暴露后，才可将对应 operation 标记为 `implemented`。
+当前实现状态：`core/src/operation.rs` 已落地 `OperationKind`、`ValueShape`、`OperationCapabilities`、稳定 `OperationId`、别名解析、冲突校验和从现有 `FunctionRegistry` 的原子投影；`UnifiedOperationEngine` 已将 Formula、Factor、Composite 接入统一 Request/Result/Error façade，并覆盖 AlphaTA 与现有 Pine 子集路由测试。它仍不代表所有指标、公式、Factor、Composite、Draw 已接入同一 dispatcher；逐项 dispatcher、golden、跨语言暴露和 Lightweight Charts scene 转换完成后，才能将对应 operation 标记为 `implemented`。
 
 ### 5.3 Formula 和兼容层
 
