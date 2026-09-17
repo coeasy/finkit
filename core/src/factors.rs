@@ -7,6 +7,7 @@
 //! or borrowed (`BorrowedFactorContext`) without changing custom factor
 //! callbacks.
 
+use crate::data_contract::CrossSectionView;
 use crate::runtime::MarketFrame;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -84,6 +85,17 @@ pub enum FactorDirection {
     LowerBetter,
     /// The factor has no ranking direction and is used as-is.
     Neutral,
+}
+
+/// Owned row-major result of a cross-sectional factor evaluation.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CrossSectionalFactorResult {
+    /// Ordered timestamps copied from the input view.
+    pub timestamps: Vec<i64>,
+    /// Ordered symbols copied from the input view.
+    pub symbols: Vec<String>,
+    /// One factor value per timestamp and symbol, row-major.
+    pub values: Vec<f64>,
 }
 
 /// Internal abstraction shared by owned and borrowed raw factor contexts.
@@ -412,6 +424,89 @@ impl FactorEngine {
         self.evaluate_one_raw(name, context)
     }
 
+    /// Evaluate a cross-sectional factor independently at every timestamp.
+    ///
+    /// `inputs` contains named row-major views with identical timestamps and
+    /// symbol columns. The factor callback receives one borrowed vector per
+    /// input for the current timestamp, so a custom factor can use existing
+    /// `FactorInputs` functions such as rank, z-score, or winsorization without
+    /// changing the time-series callback ABI.
+    pub fn evaluate_cross_sectional(
+        &self,
+        name: &str,
+        inputs: &[(&str, &CrossSectionView<'_>)],
+    ) -> FactorResult<CrossSectionalFactorResult> {
+        let factor = self
+            .registry
+            .get(name)
+            .ok_or_else(|| FactorError::UnknownFactor(name.to_string()))?;
+        if factor.kind != FactorKind::CrossSectional {
+            return Err(FactorError::InvalidParameter(format!(
+                "factor {name} is not cross-sectional"
+            )));
+        }
+        let first = inputs.first().ok_or_else(|| {
+            FactorError::InvalidParameter("cross-sectional factor needs an input view".to_string())
+        })?;
+        let mut input_names = BTreeSet::new();
+        for (input_name, view) in inputs {
+            if input_name.trim().is_empty() {
+                return Err(FactorError::InvalidParameter(
+                    "cross-sectional input name must not be empty".to_string(),
+                ));
+            }
+            if !input_names.insert(*input_name) {
+                return Err(FactorError::InvalidParameter(format!(
+                    "duplicate cross-sectional input: {input_name}"
+                )));
+            }
+            CrossSectionView::new(view.timestamps, view.symbols, view.values).map_err(|error| {
+                FactorError::InvalidParameter(format!(
+                    "invalid cross-sectional input {input_name}: {error}"
+                ))
+            })?;
+            if view.timestamps != first.1.timestamps || view.symbols != first.1.symbols {
+                return Err(FactorError::InvalidParameter(format!(
+                    "cross-sectional input {input_name} has mismatched dimensions"
+                )));
+            }
+        }
+
+        let mut values = Vec::with_capacity(first.1.values.len());
+        for row in 0..first.1.row_count() {
+            let row_series: BTreeMap<String, &[f64]> = inputs
+                .iter()
+                .map(|(input_name, view)| {
+                    (
+                        (*input_name).to_string(),
+                        view.row(row).expect("validated cross-sectional row"),
+                    )
+                })
+                .collect();
+            let context = CrossSectionRowContext { series: row_series };
+            let row_result = self.evaluate_one_raw(name, &context)?;
+            if row_result.len() != first.1.symbol_count() {
+                return Err(FactorError::LengthMismatch {
+                    name: name.to_string(),
+                    expected: first.1.symbol_count(),
+                    actual: row_result.len(),
+                });
+            }
+            values.extend(row_result);
+        }
+
+        Ok(CrossSectionalFactorResult {
+            timestamps: first.1.timestamps.to_vec(),
+            symbols: first
+                .1
+                .symbols
+                .iter()
+                .map(|symbol| (*symbol).to_string())
+                .collect(),
+            values,
+        })
+    }
+
     /// Evaluate multiple factors while sharing a dependency cache.
     pub fn evaluate_many(
         &self,
@@ -628,6 +723,21 @@ impl FactorEngine {
             self.compute_factor(factor, context, &mut cache)?;
         }
         Ok(cache)
+    }
+}
+
+/// One timestamp row exposed through the existing factor callback ABI.
+struct CrossSectionRowContext<'a> {
+    series: BTreeMap<String, &'a [f64]>,
+}
+
+impl RawFactorContext for CrossSectionRowContext<'_> {
+    fn raw_get(&self, name: &str) -> Option<&[f64]> {
+        self.series.get(name).copied()
+    }
+
+    fn row_count(&self) -> usize {
+        self.series.values().next().map_or(0, |values| values.len())
     }
 }
 
@@ -870,6 +980,62 @@ mod tests {
             ))
             .unwrap_err();
         assert!(error.to_string().contains("factor name must not be empty"));
+    }
+
+    #[test]
+    fn cross_sectional_factor_runs_once_per_timestamp_row() {
+        let timestamps = [10, 20];
+        let symbols = ["AAA", "BBB", "CCC"];
+        let scores = [1.0, 3.0, 2.0, 5.0, 4.0, 6.0];
+        let view = CrossSectionView::new(&timestamps, &symbols, &scores).unwrap();
+        let mut registry = FactorRegistry::new();
+        registry
+            .register(FactorDefinition::new(
+                "ROW_SHIFT",
+                ["score"],
+                FactorKind::CrossSectional,
+                FactorDirection::HigherBetter,
+                Arc::new(|inputs| {
+                    Ok(inputs
+                        .get("score")?
+                        .iter()
+                        .map(|value| value + 1.0)
+                        .collect())
+                }),
+            ))
+            .unwrap();
+
+        let result = FactorEngine::new(registry)
+            .evaluate_cross_sectional("ROW_SHIFT", &[("score", &view)])
+            .unwrap();
+        assert_eq!(result.timestamps, timestamps);
+        assert_eq!(result.symbols, ["AAA", "BBB", "CCC"]);
+        assert_eq!(result.values, [2.0, 4.0, 3.0, 6.0, 5.0, 7.0]);
+    }
+
+    #[test]
+    fn cross_sectional_factor_rejects_unvalidated_view_shape() {
+        let timestamps = [10, 20];
+        let symbols = ["AAA", "BBB"];
+        let malformed = CrossSectionView {
+            timestamps: &timestamps,
+            symbols: &symbols,
+            values: &[1.0, 2.0, 3.0],
+        };
+        let mut registry = FactorRegistry::new();
+        registry
+            .register(FactorDefinition::new(
+                "IDENTITY",
+                ["score"],
+                FactorKind::CrossSectional,
+                FactorDirection::Neutral,
+                Arc::new(|inputs| Ok(inputs.get("score")?.to_vec())),
+            ))
+            .unwrap();
+
+        let result = FactorEngine::new(registry)
+            .evaluate_cross_sectional("IDENTITY", &[("score", &malformed)]);
+        assert!(matches!(result, Err(FactorError::InvalidParameter(_))));
     }
 
     #[test]

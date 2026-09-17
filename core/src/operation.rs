@@ -7,6 +7,7 @@
 //! verified dispatcher and golden vectors before it is marked fully complete.
 
 use crate::composite::{CompositeDefinition, CompositeEngine};
+use crate::data_contract::CrossSectionView;
 use crate::factors::{BorrowedFactorContext, FactorEngine, FactorRegistry};
 use crate::formula::{
     parse_formula_with_dialect, DrawResult, FormulaContext, FormulaDialect, FormulaEngine,
@@ -365,6 +366,13 @@ pub enum OperationRequest<'a> {
         /// Optional caller-owned revision used by the composite cache.
         data_revision: Option<u64>,
     },
+    /// Evaluate one cross-sectional factor at every timestamp row.
+    CrossSectionalFactor {
+        /// Registered factor name.
+        name: &'a str,
+        /// Named cross-sectional input views with identical dimensions.
+        inputs: &'a [(&'a str, &'a CrossSectionView<'a>)],
+    },
 }
 
 /// Unified named-series result returned by Formula, Factor, and Composite execution.
@@ -372,6 +380,8 @@ pub enum OperationRequest<'a> {
 pub struct OperationResult {
     /// Named aligned output series. Keys are deterministic and operation-defined.
     pub values: BTreeMap<String, Vec<f64>>,
+    /// Shape of the returned values.
+    pub shape: ValueShape,
     /// Name of the primary output, if the operation has one.
     pub primary: Option<String>,
     /// Formula drawing commands, when the execution emitted any.
@@ -483,8 +493,14 @@ impl UnifiedOperationEngine {
                 context,
             } => {
                 let (values, draw) = self.execute_formula(source, dialect, context)?;
+                let shape = if values.len() > 1 {
+                    ValueShape::MultiSeries
+                } else {
+                    ValueShape::Series
+                };
                 Ok(OperationResult {
                     values,
+                    shape,
                     primary: Some(PRIMARY_OUTPUT_NAME.to_string()),
                     draw,
                 })
@@ -498,6 +514,7 @@ impl UnifiedOperationEngine {
                 values.insert(name.to_string(), result);
                 Ok(OperationResult {
                     values,
+                    shape: ValueShape::Series,
                     primary: Some(name.to_string()),
                     draw: None,
                 })
@@ -521,7 +538,25 @@ impl UnifiedOperationEngine {
                 let primary = (outputs.len() == 1).then(|| outputs[0].to_string());
                 Ok(OperationResult {
                     values,
+                    shape: if outputs.len() > 1 {
+                        ValueShape::MultiSeries
+                    } else {
+                        ValueShape::Series
+                    },
                     primary,
+                    draw: None,
+                })
+            }
+            OperationRequest::CrossSectionalFactor { name, inputs } => {
+                let result = self
+                    .factor
+                    .evaluate_cross_sectional(name, inputs)
+                    .map_err(OperationExecutionError::Factor)?;
+                let values = std::iter::once((name.to_string(), result.values)).collect();
+                Ok(OperationResult {
+                    values,
+                    shape: ValueShape::CrossSection,
+                    primary: Some(name.to_string()),
                     draw: None,
                 })
             }
@@ -708,6 +743,21 @@ mod tests {
                 }),
             ))
             .unwrap();
+        factors
+            .register(FactorDefinition::new(
+                "ROW_SHIFT",
+                ["score"],
+                FactorKind::CrossSectional,
+                FactorDirection::HigherBetter,
+                Arc::new(|inputs| {
+                    Ok(inputs
+                        .get("score")?
+                        .iter()
+                        .map(|value| value + 1.0)
+                        .collect())
+                }),
+            ))
+            .unwrap();
         let mut engine = UnifiedOperationEngine::new(factors);
         let close = [1.0, 2.0, 3.0];
         let context = BorrowedFactorContext::new()
@@ -721,6 +771,23 @@ mod tests {
             })
             .unwrap();
         assert_eq!(factor.primary_values().unwrap(), &[2.0, 4.0, 6.0]);
+
+        let timestamps = [10, 20];
+        let symbols = ["AAA", "BBB", "CCC"];
+        let scores = [1.0, 3.0, 2.0, 5.0, 4.0, 6.0];
+        let view = CrossSectionView::new(&timestamps, &symbols, &scores).unwrap();
+        let cross_inputs = [("score", &view)];
+        let cross = engine
+            .execute(OperationRequest::CrossSectionalFactor {
+                name: "ROW_SHIFT",
+                inputs: &cross_inputs,
+            })
+            .unwrap();
+        assert_eq!(cross.shape, ValueShape::CrossSection);
+        assert_eq!(
+            cross.primary_values().unwrap(),
+            &[2.0, 4.0, 3.0, 6.0, 5.0, 7.0]
+        );
 
         let definitions = [CompositeDefinition::new(
             "SUM_CLOSE",
