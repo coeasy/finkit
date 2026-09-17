@@ -662,7 +662,7 @@ fn parse_multiplication(pair: Pair<Rule>) -> Result<AstNode, String> {
         let op = match op_pair.as_str() {
             "*" => BinaryOperator::Mul,
             "/" => BinaryOperator::Div,
-            "%" => BinaryOperator::Mod,
+            "%" | "MOD" | "mod" => BinaryOperator::Mod,
             _ => {
                 return Err(format!(
                     "Unknown multiplication operator: {}",
@@ -1016,6 +1016,49 @@ mod tests {
         } else {
             panic!("Expected BinaryOp with Or");
         }
+    }
+
+    #[test]
+    fn test_parse_symbolic_and_or_and_mod_keywords() {
+        assert!(matches!(
+            parse_formula("CLOSE > OPEN && VOLUME > 0"),
+            Ok(AstNode::BinaryOp {
+                op: BinaryOperator::And,
+                ..
+            })
+        ));
+        assert!(matches!(
+            parse_formula("CLOSE > OPEN || HIGH > CLOSE"),
+            Ok(AstNode::BinaryOp {
+                op: BinaryOperator::Or,
+                ..
+            })
+        ));
+        assert!(matches!(
+            parse_formula("CLOSE MOD 2"),
+            Ok(AstNode::BinaryOp {
+                op: BinaryOperator::Mod,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn test_parse_symbolic_not_and_lowercase_logical_keywords() {
+        assert!(matches!(
+            parse_formula("! (CLOSE > OPEN)"),
+            Ok(AstNode::UnaryOp {
+                op: UnaryOperator::Not,
+                ..
+            })
+        ));
+        assert!(matches!(
+            parse_formula("close > open and volume > 0"),
+            Ok(AstNode::BinaryOp {
+                op: BinaryOperator::And,
+                ..
+            })
+        ));
     }
 
     #[test]

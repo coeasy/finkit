@@ -72,9 +72,9 @@ output_modifier = { line_style | draw_modifier | point_style }
 // 表达式 - 所有规则都非silent，便于解析
 expression = { logical_or }
 
-logical_or = { logical_xor ~ ("OR" ~ logical_xor)* }
-logical_xor = { logical_and ~ ("XOR" ~ logical_and)* }
-logical_and = { comparison ~ ("AND" ~ comparison)* }
+logical_or = { logical_xor ~ (("OR" | "or" | "||") ~ logical_xor)* }
+logical_xor = { logical_and ~ (("XOR" | "xor") ~ logical_and)* }
+logical_and = { comparison ~ (("AND" | "and" | "&&") ~ comparison)* }
 comparison = { addition ~ (comp_op ~ addition)? }
 comp_op = { ">=" | "<=" | "==" | "!=" | "<>" | ">" | "<" }
 
@@ -82,9 +82,9 @@ addition = { multiplication ~ (add_op ~ multiplication)* }
 add_op = { "+" | "-" | "&" }
 
 multiplication = { unary ~ (mul_op ~ unary)* }
-mul_op = { "*" | "/" | "%" }
+mul_op = { "*" | "/" | "%" | "MOD" | "mod" }
 
-unary = { ("NOT" ~ unary) | ("-" ~ power) | power }
+unary = { (("NOT" | "not" | "!") ~ unary) | ("-" ~ power) | power }
 power = { postfix ~ ("^" ~ postfix)? }
 
 postfix = { primary ~ (index_access)* }
@@ -104,7 +104,7 @@ identifier = @{ !builtin_keyword ~ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
 // 内置关键字 - 不能用作标识符（IF 允许作为函数名）
 // 必须后跟非标识符字符，避免前缀匹配（如 DO 匹配 DOWN）
 builtin_keyword = @{
-    ("THEN" | "ELSE" | "AND" | "OR" | "XOR" | "NOT" |
+    ("THEN" | "ELSE" | "AND" | "and" | "OR" | "or" | "XOR" | "xor" | "NOT" | "not" | "MOD" | "mod" |
     "TRUE" | "FALSE" | "PARAMS" |
     "DRAWTEXT_FIX" | "DRAWTEXT" | "DRAWICON" | "STICKLINE" | "DRAWLINE" | "DRAWBAND" |
     "DRAWKLINE" | "DRAWRECTREL" | "FILLRGN" | "PARTLINE" | "POLYLINE" | "DRAWGBK" |

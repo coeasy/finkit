@@ -388,6 +388,8 @@ Pine subset parser     ->       +-> semantic profile -> planner/runtime
 
 Pine 只承诺明确的固定子集。控制流必须有静态/运行时预算：最大循环次数、最大指令数、最大状态、最大输出对象数量和最大递归深度；网络 `request.*`、账户/订单语义和交易执行不属于本产品范围，必须在编译阶段明确拒绝或标记为 unsupported，不得伪装成普通数值函数。
 
+AlphaTA/TDX 解析层已补齐常见符号逻辑运算 `&&`、`||`、`!`，大小写逻辑关键字以及 `MOD`，并与既有 `AND`、`OR`、`NOT`、`%` 映射到同一 `BinaryOperator`/`UnaryOperator`。这只是语法入口统一；每个兼容终端仍须通过独立语义 golden 验证，不能仅凭可解析宣称数值等价。
+
 ### 5.4 Factor、Composite 与高吞吐执行
 
 Factor 和 Composite 统一视为 `SemanticOperator`，区别只在元数据和输入输出：
