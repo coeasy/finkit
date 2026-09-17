@@ -36,7 +36,7 @@ V1 数据边界已冻结：
 - **横截面：纳入正式链路。** 作为同一时间点的 symbol 列集合，服务 rank、z-score、winsorize、行业/市值中性化等因子操作；它与单标的时间序列计算是两种不同的执行方向。
 - **基本面：纳入输入契约，不纳入数据供应商。** V1 支持带 publication/availability timestamp 的 point-in-time 字段和 as-of 查询，防止使用未来财报修订值；数据抓取、清洗、供应商适配和授权数据管道不属于计算内核范围。
 
-当前已具备 `FrameKey`/`MarketPanel`/`CrossSectionView`/`FundamentalSeries` 契约，且 `FactorEngine::evaluate_cross_sectional` 已按每个时间点逐行调用横截面 Factor，统一入口也可返回 `ValueShape::CrossSection`。但多标的批量调度、多周期安全对齐、point-in-time 基本面接入统一 Planner/cache 及六语言 API 仍未完成，不能据此宣称多维能力全部生产化。
+当前已具备 `FrameKey`/`MarketPanel`/`CrossSectionView`/`FundamentalSeries` 契约，`FactorEngine::evaluate_cross_sectional` 已按每个时间点逐行调用横截面 Factor，统一入口也可返回 `ValueShape::CrossSection`；`UnifiedOperationEngine::execute_panel_formula` 已按显式 symbol/timeframe 分离执行并保留每个 frame 的结果。多标的批量调度、多周期安全对齐、point-in-time 基本面接入统一 Planner/cache 及六语言 API 仍未完成，不能据此宣称多维能力全部生产化。
 
 ### 2.2 指标、形态与市场结构
 

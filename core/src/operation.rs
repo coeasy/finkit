@@ -7,7 +7,7 @@
 //! verified dispatcher and golden vectors before it is marked fully complete.
 
 use crate::composite::{CompositeDefinition, CompositeEngine};
-use crate::data_contract::CrossSectionView;
+use crate::data_contract::{CrossSectionView, DataContractError, MarketPanel};
 use crate::factors::{BorrowedFactorContext, FactorEngine, FactorRegistry};
 use crate::formula::{
     parse_formula_with_dialect, DrawResult, FormulaContext, FormulaDialect, FormulaEngine,
@@ -16,6 +16,7 @@ use crate::formula::{
 use crate::registry::{
     builtin_function_registry, FunctionCategory, FunctionSpec, InputKind, LookbackSpec, ParamSpec,
 };
+use ndarray::Array1;
 use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::fmt;
@@ -388,6 +389,30 @@ pub struct OperationResult {
     pub draw: Option<DrawResult>,
 }
 
+/// Results keyed by the explicit symbol/timeframe frame that produced them.
+#[derive(Debug, Clone)]
+pub struct PanelOperationResult {
+    /// Deterministically ordered results keyed by `FrameKey`.
+    pub values: BTreeMap<crate::data_contract::FrameKey, OperationResult>,
+}
+
+impl PanelOperationResult {
+    /// Number of symbol/timeframe frames evaluated.
+    pub fn len(&self) -> usize {
+        self.values.len()
+    }
+
+    /// Whether the panel produced no frame results.
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+
+    /// Return one frame result without copying it.
+    pub fn get(&self, key: &crate::data_contract::FrameKey) -> Option<&OperationResult> {
+        self.values.get(key)
+    }
+}
+
 impl OperationResult {
     /// Return the primary output without copying it.
     pub fn primary_values(&self) -> Option<&[f64]> {
@@ -421,6 +446,8 @@ pub enum OperationExecutionError {
     Factor(crate::factors::FactorError),
     /// Composite graph validation or evaluation failed.
     Composite(crate::factors::FactorError),
+    /// Market-panel data violated the canonical dimension contract.
+    DataContract(DataContractError),
 }
 
 impl fmt::Display for OperationExecutionError {
@@ -429,6 +456,9 @@ impl fmt::Display for OperationExecutionError {
             Self::Formula(error) => write!(formatter, "formula operation failed: {error}"),
             Self::Factor(error) => write!(formatter, "factor operation failed: {error}"),
             Self::Composite(error) => write!(formatter, "composite operation failed: {error}"),
+            Self::DataContract(error) => {
+                write!(formatter, "operation data contract failed: {error}")
+            }
         }
     }
 }
@@ -438,6 +468,12 @@ impl std::error::Error for OperationExecutionError {}
 impl From<FormulaError> for OperationExecutionError {
     fn from(value: FormulaError) -> Self {
         Self::Formula(value)
+    }
+}
+
+impl From<DataContractError> for OperationExecutionError {
+    fn from(value: DataContractError) -> Self {
+        Self::DataContract(value)
     }
 }
 
@@ -563,6 +599,52 @@ impl UnifiedOperationEngine {
         }
     }
 
+    /// Execute one formula independently for every explicit symbol/timeframe frame.
+    ///
+    /// This method intentionally returns a panel result rather than forcing
+    /// multi-dimensional data into the single-operation result map.
+    pub fn execute_panel_formula(
+        &mut self,
+        source: &str,
+        dialect: FormulaDialect,
+        panel: &MarketPanel<'_>,
+    ) -> Result<PanelOperationResult, OperationExecutionError> {
+        let mut values = BTreeMap::new();
+        for (key, frame) in panel.iter() {
+            frame
+                .validate()
+                .map_err(|error| DataContractError::InvalidMarketFrame(error))?;
+            let amount = frame.amount.map(|series| Array1::from_vec(series.to_vec()));
+            let mut context = FormulaContext::from_borrowed_ohlcv(
+                frame.open,
+                frame.high,
+                frame.low,
+                frame.close,
+                frame.volume,
+                amount,
+            );
+            context.datetime = frame
+                .timestamp
+                .map(|timestamps| Array1::from_vec(timestamps.to_vec()));
+            let (frame_values, draw) = self.execute_formula(source, dialect, &mut context)?;
+            let shape = if frame_values.len() > 1 {
+                ValueShape::MultiSeries
+            } else {
+                ValueShape::Series
+            };
+            values.insert(
+                key.clone(),
+                OperationResult {
+                    values: frame_values,
+                    shape,
+                    primary: Some(PRIMARY_OUTPUT_NAME.to_string()),
+                    draw,
+                },
+            );
+        }
+        Ok(PanelOperationResult { values })
+    }
+
     fn execute_formula(
         &mut self,
         source: &str,
@@ -609,7 +691,9 @@ fn normalize_name(name: &str) -> String {
 mod tests {
     use super::*;
     use crate::composite::{CompositeExpr, CompositeOp};
+    use crate::data_contract::FrameKey;
     use crate::factors::{FactorDefinition, FactorDirection, FactorKind};
+    use crate::runtime::MarketFrame;
     use ndarray::Array1;
     use std::sync::Arc;
 
@@ -723,6 +807,41 @@ mod tests {
         assert!(result.primary_values().is_some());
         assert!(result.get("PLOT").is_some());
         assert!(result.draw.is_none());
+    }
+
+    #[test]
+    fn panel_formula_keeps_symbol_and_timeframe_results_separate() {
+        let open_a = [1.0, 2.0, 3.0];
+        let close_a = [2.0, 3.0, 4.0];
+        let open_b = [10.0, 12.0, 14.0];
+        let close_b = [11.0, 13.0, 15.0];
+        let timestamps = [100, 200, 300];
+        let frame_a = MarketFrame::new(&open_a, &close_a, &open_a, &close_a, &open_a)
+            .unwrap()
+            .with_timestamp(&timestamps)
+            .unwrap();
+        let frame_b = MarketFrame::new(&open_b, &close_b, &open_b, &close_b, &open_b)
+            .unwrap()
+            .with_timestamp(&timestamps)
+            .unwrap();
+        let mut panel = MarketPanel::new();
+        let key_a = FrameKey::new("AAA", "1d").unwrap();
+        let key_b = FrameKey::new("BBB", "5m").unwrap();
+        panel.insert(key_a.clone(), frame_a).unwrap();
+        panel.insert(key_b.clone(), frame_b).unwrap();
+
+        let mut engine = UnifiedOperationEngine::new(FactorRegistry::new());
+        let result = engine
+            .execute_panel_formula("SMA(CLOSE, 2)", FormulaDialect::AlphaTA, &panel)
+            .unwrap();
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(result.get(&key_a).unwrap().shape, ValueShape::Series);
+        assert_eq!(result.get(&key_b).unwrap().shape, ValueShape::Series);
+        let values_a = result.get(&key_a).unwrap().primary_values().unwrap();
+        let values_b = result.get(&key_b).unwrap().primary_values().unwrap();
+        assert_eq!(values_a, &[2.0, 2.5, 3.25]);
+        assert_eq!(values_b, &[11.0, 12.0, 13.5]);
     }
 
     #[test]
