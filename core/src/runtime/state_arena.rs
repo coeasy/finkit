@@ -7,39 +7,49 @@
 use std::any::Any;
 use std::fmt;
 
-trait ErasedState: Any + Send + Sync {
-    fn clone_box(&self) -> Box<dyn ErasedState>;
-    fn as_any(&self) -> &dyn Any;
-    fn as_any_mut(&mut self) -> &mut dyn Any;
-}
+type CloneStateFn = fn(&dyn Any) -> Box<dyn Any + Send + Sync>;
 
-impl<T> ErasedState for T
+fn clone_state<T>(value: &dyn Any) -> Box<dyn Any + Send + Sync>
 where
     T: Any + Clone + Send + Sync,
 {
-    fn clone_box(&self) -> Box<dyn ErasedState> {
-        Box::new(self.clone())
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
+    let concrete = value
+        .downcast_ref::<T>()
+        .expect("state clone function received an unexpected concrete type")
+        .clone();
+    let concrete: Box<T> = Box::new(concrete);
+    concrete
 }
 
-impl Clone for Box<dyn ErasedState> {
-    fn clone(&self) -> Self {
-        self.clone_box()
-    }
+fn erase_any<T>(value: T) -> Box<dyn Any + Send + Sync>
+where
+    T: Any + Clone + Send + Sync,
+{
+    let concrete: Box<T> = Box::new(value);
+    concrete
 }
 
-#[derive(Clone)]
 struct SlotEntry {
     generation: u64,
-    value: Option<Box<dyn ErasedState>>,
+    value: Option<Box<dyn Any + Send + Sync>>,
+    clone_fn: Option<CloneStateFn>,
+    type_name: &'static str,
+}
+
+impl Clone for SlotEntry {
+    fn clone(&self) -> Self {
+        let value = match (&self.value, self.clone_fn) {
+            (Some(value), Some(clone_fn)) => Some(clone_fn(value.as_ref())),
+            (None, None) => None,
+            _ => unreachable!("state slot value and clone function must agree"),
+        };
+        Self {
+            generation: self.generation,
+            value,
+            clone_fn: self.clone_fn,
+            type_name: self.type_name,
+        }
+    }
 }
 
 /// Stable generational handle to one state slot.
@@ -73,6 +83,8 @@ pub enum StateArenaError {
     TypeMismatch {
         /// Requested Rust type name.
         expected: &'static str,
+        /// Concrete Rust type stored in the slot.
+        actual: &'static str,
     },
 }
 
@@ -84,8 +96,11 @@ impl fmt::Display for StateArenaError {
                 "invalid or stale state handle {}:{}",
                 handle.index, handle.generation
             ),
-            Self::TypeMismatch { expected } => {
-                write!(f, "state slot type mismatch; expected {expected}")
+            Self::TypeMismatch { expected, actual } => {
+                write!(
+                    f,
+                    "state slot type mismatch; expected {expected}, got {actual}"
+                )
             }
         }
     }
@@ -160,7 +175,9 @@ impl StateArena {
         if let Some(index) = self.free.pop() {
             let entry = &mut self.slots[index];
             entry.generation = entry.generation.wrapping_add(1).max(1);
-            entry.value = Some(Box::new(value));
+            entry.value = Some(erase_any(value));
+            entry.clone_fn = Some(clone_state::<T>);
+            entry.type_name = std::any::type_name::<T>();
             StateHandle {
                 index,
                 generation: entry.generation,
@@ -170,7 +187,9 @@ impl StateArena {
             let generation = 1;
             self.slots.push(SlotEntry {
                 generation,
-                value: Some(Box::new(value)),
+                value: Some(erase_any(value)),
+                clone_fn: Some(clone_state::<T>),
+                type_name: std::any::type_name::<T>(),
             });
             StateHandle { index, generation }
         }
@@ -185,9 +204,10 @@ impl StateArena {
         entry
             .value
             .as_ref()
-            .and_then(|value| value.as_any().downcast_ref::<T>())
-            .ok_or(StateArenaError::TypeMismatch {
+            .and_then(|value| value.downcast_ref::<T>())
+            .ok_or_else(|| StateArenaError::TypeMismatch {
                 expected: std::any::type_name::<T>(),
+                actual: entry.type_name,
             })
     }
 
@@ -197,13 +217,18 @@ impl StateArena {
         T: Any + Clone + Send + Sync,
     {
         let entry = self.entry_mut(handle)?;
-        entry
+        let actual = entry.type_name;
+        if let Some(value) = entry
             .value
             .as_mut()
-            .and_then(|value| value.as_any_mut().downcast_mut::<T>())
-            .ok_or(StateArenaError::TypeMismatch {
-                expected: std::any::type_name::<T>(),
-            })
+            .and_then(|value| value.downcast_mut::<T>())
+        {
+            return Ok(value);
+        }
+        Err(StateArenaError::TypeMismatch {
+            expected: std::any::type_name::<T>(),
+            actual,
+        })
     }
 
     /// Remove a state. Reusing the slot later increments its generation, so
@@ -211,6 +236,8 @@ impl StateArena {
     pub fn remove(&mut self, handle: StateHandle) -> Result<(), StateArenaError> {
         let entry = self.entry_mut(handle)?;
         entry.value = None;
+        entry.clone_fn = None;
+        entry.type_name = "<vacant>";
         self.free.push(handle.index);
         self.live -= 1;
         Ok(())

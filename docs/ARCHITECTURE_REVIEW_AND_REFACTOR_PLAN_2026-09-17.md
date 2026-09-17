@@ -16,7 +16,7 @@ Finkit 已经具备一个功能面很宽的量化计算内核，但当前状态�
 4. **Factor 和 Composite 目前不能证明都满足高吞吐生产要求。** Core 的 borrowed、range、缓存和执行计划是正确方向，但 Factor 注册表使用 `Arc<dyn Fn>`，Composite 使用 `BTreeMap` 和独立缓存，仍有动态分发、重复物化和多套缓存身份的问题；没有统一的 compiled operator/typed state/kernel dispatch 作为唯一热路径。
 5. **多语言已有大量绑定，但“语义同 API”尚未完成。** Python、C++、Go、Rust、Java、.NET 都存在绑定或源码入口，但目前是多套手写/半生成 façade。返回类型、错误模型、数组所有权、公式计划句柄、Streaming 状态和研究 API 仍存在语言间差异；版本检查也实际失败。Node、Swift、Android/iOS 专用入口不纳入本产品第一阶段正式公开语言范围。
 6. **绘图当前是 Rust 自有渲染器，不是 Lightweight Charts 适配器。** 已有 SVG、Canvas、WebGL/WebGPU、PNG、JSON/HTML 输出，适合 native/headless/export；但 Web 前端要采用 Lightweight Charts，应让它成为 Web adapter，不能把 Lightweight Charts 代码塞进 Core 或继续让每个绑定生成一套独立 HTML。
-7. **当前基线不能称为全量生产验证通过。** 已验证 `cargo fmt --all -- --check` 和 `cargo check --workspace --locked` 通过；全工作区测试实际为 `2882 passed, 5 failed, 1 ignored`。失败涉及 ADX 对齐、Runtime 检查点/状态恢复和注册表文档快照。`python scripts/check_versions.py` 也失败，存在 0.1.5 与工作区 0.1.15 混用。
+7. **当前基线不能称为全量生产验证通过。** 审计初始验证为 `2882 passed, 5 failed, 1 ignored`，失败涉及 ADX 对齐、Runtime 检查点/状态恢复和注册表文档快照。后续在 V1 开发分支已修复并验证这 5 项：当前 `finkit` Core 测试为 `2887 passed, 0 failed, 1 ignored`；但 `python scripts/check_versions.py` 仍失败，存在 0.1.5 与工作区 0.1.15 混用。
 
 因此，下一步不是继续增加零散接口，而是先建立一个 canonical compute contract，把 Formula、Factor、Composite、Streaming 和兼容层收敛到同一编译计划与 Runtime，再由各语言和绘图适配器消费这个契约。
 
@@ -174,7 +174,7 @@ Factor 和 Composite 都必须使用同一个 `CompiledPlan`、同一个 buffer/
 
 ### P0：状态检查点实现不满足自身契约
 
-当前测试实际失败：
+初始基线测试实际失败（已在 V1 分支修复并回归）：
 
 - `runtime_engine::session::tests::node_state_survives_checkpoint_restore`：恢复后出现 `MovingAverageState` 类型不匹配；
 - `runtime_engine::state_arena::tests::reused_slot_rejects_stale_handle`：复用 slot 的测试得到 `expected: u64` 类型错误；
@@ -184,7 +184,7 @@ Factor 和 Composite 都必须使用同一个 `CompiledPlan`、同一个 buffer/
 
 ### P0：数值语义和文档/版本门禁尚未全绿
 
-当前测试实际失败：
+初始基线测试实际失败（已在 V1 分支修复并回归）：
 
 - `math::kernels::compat::tests::canonical_adx_matches_legacy_public_api`：canonical ADX 与 legacy API 在第 27 行数值不一致；
 - `streaming::registry::tests::test_docs_json_matches_registry`：生成注册表与 `docs/indicator_registry.json` 不一致。
@@ -198,6 +198,8 @@ Factor 和 Composite 都必须使用同一个 `CompiledPlan`、同一个 buffer/
 另外，`cargo +1.98.1 check --workspace --all-features --locked` 不能作为当前版本的有效全功能门禁：该组合同时启用了互斥的 `std` 与 `no_std`，并进一步产生 77 个编译错误（还暴露出部分 feature 组合下的类型/依赖问题）。重构后必须改为一组明确且可支持的构建 profile，分别验证 `std`、`no_std`、公式、SIMD/JIT、并行、绑定等组合；不能用“all-features 通过”作为不成立的生产化结论。
 
 在生产发布前，版本、注册表、函数目录、绑定声明和文档必须由一个生成流程产生，并在 clean checkout 上执行。
+
+V1 分支跟进结果：StateArena 的具体类型恢复、Runtime session checkpoint、canonical ADX 对齐和指标注册表快照已经通过专项及 Core 全量测试；剩余版本/SSOT 门禁问题仍属于发布阻断项，尚未标记为完成。
 
 ### P1：兼容层命名已覆盖，但语义覆盖不足
 

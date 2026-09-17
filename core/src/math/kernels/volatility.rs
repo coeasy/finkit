@@ -181,18 +181,29 @@ impl DmiState {
         let movement = self.raw.update(high, low, close)?;
         let period = self.period as f64;
 
-        if self.seed_count < self.period {
+        // The first bar has no directional movement. The public ADX contract
+        // seeds the Wilder accumulators from `period - 1` movements, then
+        // applies the first smoothing recurrence to the movement at index
+        // `period`. This is also the initialization used by the TA-Lib
+        // compatibility path; summing `period` movements directly produces a
+        // different first DX and therefore a different ADX series.
+        let seed_period = self.period.saturating_sub(1);
+        if self.seed_count < seed_period {
             self.seed_count += 1;
             self.tr_sum += movement.true_range;
             self.plus_dm_sum += movement.plus_dm;
             self.minus_dm_sum += movement.minus_dm;
-            if self.seed_count < self.period {
-                return None;
-            }
-            self.smoothed_tr = self.tr_sum;
-            self.smoothed_plus_dm = self.plus_dm_sum;
-            self.smoothed_minus_dm = self.minus_dm_sum;
+            return None;
+        }
+
+        if self.seed_count == seed_period {
+            self.seed_count += 1;
+            self.smoothed_tr = self.tr_sum - self.tr_sum / period + movement.true_range;
+            self.smoothed_plus_dm = self.plus_dm_sum - self.plus_dm_sum / period + movement.plus_dm;
+            self.smoothed_minus_dm =
+                self.minus_dm_sum - self.minus_dm_sum / period + movement.minus_dm;
         } else {
+            self.seed_count += 1;
             self.smoothed_tr = self.smoothed_tr - self.smoothed_tr / period + movement.true_range;
             self.smoothed_plus_dm =
                 self.smoothed_plus_dm - self.smoothed_plus_dm / period + movement.plus_dm;
@@ -299,7 +310,7 @@ fn directional_index(
     period: f64,
 ) -> DirectionalIndex {
     let atr = smoothed_tr / period;
-    if smoothed_tr.abs() <= f64::EPSILON {
+    if smoothed_tr.abs() <= 1e-15 {
         return DirectionalIndex {
             atr,
             plus_di: 0.0,
@@ -310,7 +321,7 @@ fn directional_index(
     let plus_di = 100.0 * smoothed_plus_dm / smoothed_tr;
     let minus_di = 100.0 * smoothed_minus_dm / smoothed_tr;
     let denominator = plus_di + minus_di;
-    let dx = if denominator.abs() <= f64::EPSILON {
+    let dx = if denominator.abs() <= 1e-15 {
         0.0
     } else {
         100.0 * (plus_di - minus_di).abs() / denominator
