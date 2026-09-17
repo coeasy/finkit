@@ -1,83 +1,83 @@
-# Finkit v0.1.5 vs TA-Lib benchmark report
+# Finkit Historical Benchmark Snapshot
 
-> This report records the release-wheel validation run on 2026-09-09. The
-> result is a local machine snapshot, not a universal latency guarantee.
+> **快照日期**: 2026-06-24  
+> **记录环境**: Windows 10, x86_64 AVX2, Rust 2021 edition  
+> **构建**: `--release` via Criterion.rs
+>
+> 本文件保留一组历史实测数据，便于追溯和复现；它不是当前 head 的“权威性能承诺”。任何当前竞品结论都应使用 `scripts/bench-vs-talib.sh` 或定期 `competitive-benchmark.yml` 生成的 commit-bound 证据，并同时记录 CPU、编译器、数据规模和 TA-Lib 版本。
 
-## Executive summary
+---
 
-The current Python ABI3 wheel was compared with TA-Lib Python `0.6.8` across
-155 TA-Lib-compatible functions, two input sizes, and 310 observations:
+## 1. 核心指标性能（10K bars，历史快照）
 
-| Measure | Result |
-| --- | ---: |
-| Input sizes | 100,000 and 1,000,000 values |
-| Compatible function cases | 155 |
-| Total observations | 310 |
-| Finkit faster | 307 / 310 |
-| Geometric-mean speedup | **2.03x** |
-| Runtime errors | 0 |
-| Known parity exceptions | 2 (`HT_TRENDMODE`, existing) |
+| 指标 | Finkit (µs) | TA-Lib C (µs) | 当次性能比 | 状态 |
+| --- | ---: | ---: | ---: | :---: |
+| SMA(20) | 12.75 | 20.19 | **1.58x faster** | ✅ |
+| EMA(12) | 20.73 | 29.66 | **1.43x faster** | ✅ |
+| RSI(14) | 26.60 | 55.12 | **2.07x faster** | ✅ |
+| MACD(12,26,9) | 97.53 | 101.07 | **1.04x faster** | ✅ |
+| BBANDS(20,2) | 41.74 | 56.53 | **1.35x faster** | ✅ |
+| ATR(14) | 39.78 | 61.28 | **1.54x faster** | ✅ |
 
-The current run supports the release goal that most compatible functions
-outperform TA-Lib on this host. It does not support claiming that every
-individual observation is faster. The three slower observations were `TRANGE`
-at 1M bars (`0.985x`), `CDLLONGLINE` at 1M (`0.954x`), and `CDLSHORTLINE`
-at 1M (`0.857x`).
+**历史结论**：在这一次 Windows x86_64 AVX2 快照中，上述 6 个配对指标的 Finkit point estimate 均快于当时的 TA-Lib C 对照，其中 RSI 为 2.07x。该结论只适用于这次记录，不应扩展为所有机器、所有版本或所有指标均更快。
 
-## Parity status
+---
 
-All functions completed without runtime errors. The only parity flags were the
-two existing `HT_TRENDMODE` observations at 100K and 1M bars. The reported
-absolute and relative differences were both zero; the flag is caused by the
-boolean/valid-mask contract rather than a numerical value difference. This is
-the same known issue tracked by the existing Hilbert tests and is independent
-of the v0.1.5 documentation, packaging, and screening changes.
+## 2. 流式指标性能（历史快照）
 
-## Representative speedups
+| 指标 | 10K (µs) | 100K (µs) | 500K (µs) | ns/val (500K) |
+| --- | ---: | ---: | ---: | ---: |
+| SMA(20) | 22 | 220 | 2,200 | **0.44** |
+| EMA(12) | 29 | 290 | 2,900 | **0.58** |
+| RSI(14) | 93 | 930 | 9,300 | **1.86** |
 
-The following values are from the same 100K/1M run and show the intended
-performance profile:
+这些数据用于观察当时的线性扩展特征；当前 Streaming 性能应重新在目标硬件上执行现行 benchmark。
 
-| Function family | Representative result |
-| --- | ---: |
-| `EMA` | about 2.29x at 100K; 1.52x at 1M |
-| `ATR` | about 2.30x at 100K; 2.45x at 1M |
-| `MACD` | about 1.63x at 100K; 1.97x at 1M |
-| `HT_SINE` | about 3.77x at 100K; 3.78x at 1M |
-| `LINEARREG` | about 3.47x at 100K; 2.85x at 1M |
-| `COSH` / `EXP` | about 4.34x / 2.56x at 100K; 9.93x / 9.95x at 1M |
+---
 
-## Scope of the new screening layer
+## 3. 公式引擎性能（历史快照）
 
-`GOLDEN_CROSS`, `DEAD_CROSS`, `BREAKOUT`, `BREAKDOWN`, `VOLUME_SURGE`,
-`MA_ALIGN`, `RELATIVE_STRENGTH`, `GAP_SIGNAL`, and `TREND_BREAKOUT` are
-Finkit-native selection primitives. TA-Lib has no equivalent unified
-cross-market screening API, so they are not included in the 155-function parity
-denominator. Their validation contract covers warm-up, NaN, equal-length,
-look-ahead exclusion, and parameter checks; see
-[screening-formulas.md](screening-formulas.md).
+| 指标 | 原生 (µs) | 公式引擎 (µs) | 当次开销 |
+| --- | ---: | ---: | ---: |
+| SMA(20) | 12.75 | 16.58 | 1.30x |
+| EMA(12) | 20.73 | 55.14 | 2.66x |
+| RSI(14) | 26.60 | 42.82 | 1.61x |
 
-## Reproduce
+这组数据只反映当时版本的一次测量。当前 Formula 性能重点应继续比较 parse+execute 与 compile-once/eval-many，并把计划复用、scratch reuse 和 end-to-end binding 成本纳入同一证据链。
 
-Build the wheel and run the complete current gate:
+---
+
+## 4. 当前性能门禁应看哪里
+
+现行性能合同不再由这份历史 Markdown 数字决定，而由代码和 CI 门禁决定：
+
+- `core/tests/memory_regression.rs` — caller-owned hot path allocation；
+- `core/tests/performance_regression.rs` — O(n) 相对复杂度、HT_SINE release throughput、DirtyRange 行级效率与 full-equivalence；
+- `core/benches/talib_c_comparison.rs` — Finkit vs TA-Lib C 配对基准；
+- `scripts/bench_report.py` — schema、paired-row 校验与 competitor gate；
+- `.github/workflows/competitive-benchmark.yml` — 定期 TA-Lib 0.7.1 head-to-head 证据。
+
+---
+
+## 5. 当前推荐复现方法
 
 ```bash
-maturin build --release --features abi3 --strip --out dist/python/current
-python -m pip install --force-reinstall --no-deps dist/python/current/finkit-*.whl
-python scripts/benchmark_talib_all_current_gate.py \
-  --sizes 100000 1000000 \
-  --output dist/bench/talib-all-current-gate.json
+# 正确性与性能回归
+cargo test -p finkit --test memory_regression --release --locked -- --test-threads=1
+cargo test -p finkit --test performance_regression --release --locked -- --test-threads=1
+
+# TA-Lib C 同机配对 + 环境记录 + 可选 precision
+./scripts/bench-vs-talib.sh --precision
 ```
 
-The JSON output contains every function, size, timing, parity mask, and error.
-Use the geometric mean and the per-observation rows together; a single noisy
-short function should not be presented as the overall result.
+有效竞品报告至少应同时保留：commit SHA、working-tree 状态、CPU/平台、Rust/Cargo、TA-Lib 版本、数据规模、参数和 paired benchmark rows。
 
-## Interpretation rules
+---
 
-1. Compare Finkit and TA-Lib in the same process, Python runtime, input data,
-   and warm-up policy.
-2. Report parity separately from speed. A faster result with different
-   warm-up semantics is not an equivalent implementation.
-3. Repeat borderline ratios near `1.0x` before treating them as a regression.
-4. Keep public-wheel results separate from Rust in-process microbenchmarks.
+## 6. 进一步阅读
+
+- [Benchmark results](benchmark-results.md) — 当前性能合同与证据入口；
+- [Finkit vs TA-Lib C](BENCHMARK_VS_TALIB.md) — 竞品基准方法与 claim rules；
+- [竞品对比与超越路线](competitive-positioning-zh.md) — TA-Lib / VectorBT / Pandas TA Classic / ta-rs 的系统级对比。
+
+**结论**：这份文件的价值是“保留原始历史事实”，而不是“把历史数字当作永久结论”。Finkit 的性能优势必须持续由当前 commit 上的可复现证据证明。

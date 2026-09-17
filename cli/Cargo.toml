@@ -13,6 +13,7 @@ workspace = true
 
 [dependencies]
 finkit = { path = "../core", features = ["formula"] }
+finkit-factor-analysis = { path = "../factor-analysis" }
 finkit-visualization = { path = "../visualization" }
 clap = { version = "4", features = ["derive"] }
 csv = "1.3"

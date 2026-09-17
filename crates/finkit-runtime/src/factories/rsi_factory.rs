@@ -1,7 +1,7 @@
 //! RSI factor factory.
 
-use std::collections::HashMap;
 use crate::factory::FactorFactory;
+use std::collections::HashMap;
 
 #[derive(Clone, Debug, Default)]
 pub struct RsiFactory;

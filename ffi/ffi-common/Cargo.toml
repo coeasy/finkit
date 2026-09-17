@@ -9,5 +9,6 @@ description = "Shared FFI utilities, error mapping and indicator registry for Fi
 workspace = true
 
 [dependencies]
+finkit-factor-analysis = { path = "../../factor-analysis" }
 serde = { workspace = true }
 serde_json = { workspace = true }

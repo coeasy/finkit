@@ -163,3 +163,44 @@ mod tests {
         assert!(out.is_empty());
     }
 }
+
+/// Android JNI bridge for the canonical factor research JSON contract.
+#[no_mangle]
+pub extern "system" fn Java_com_finkit_indicators_Finkit_factorStudyJson(
+    mut env: jni::JNIEnv<'_>,
+    _class: jni::objects::JClass<'_>,
+    request: jni::objects::JString<'_>,
+) -> jni::sys::jstring {
+    let response = match env.get_string(&request) {
+        Ok(value) => {
+            let request: String = value.into();
+            finkit_ffi_common::factor_study_json(&request)
+        }
+        Err(error) => {
+            finkit_ffi_common::factor_study_error_json("invalid_utf8", &error.to_string())
+        }
+    };
+    env.new_string(response)
+        .map(|value| value.into_raw())
+        .unwrap_or(std::ptr::null_mut())
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_finkit_indicators_Finkit_quantEvaluationJson(
+    mut env: jni::JNIEnv<'_>,
+    _class: jni::objects::JClass<'_>,
+    request: jni::objects::JString<'_>,
+) -> jni::sys::jstring {
+    let response = match env.get_string(&request) {
+        Ok(value) => {
+            let request: String = value.into();
+            finkit_ffi_common::quant_evaluation_json(&request)
+        }
+        Err(error) => {
+            finkit_ffi_common::quant_evaluation_error_json("invalid_utf8", &error.to_string())
+        }
+    };
+    env.new_string(response)
+        .map(|value| value.into_raw())
+        .unwrap_or(std::ptr::null_mut())
+}

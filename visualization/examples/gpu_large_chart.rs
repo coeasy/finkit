@@ -43,11 +43,18 @@ fn main() {
     chart
         .build_draw_list(&data, &[])
         .expect("large GPU chart should render");
+
     #[cfg(feature = "html")]
-    chart
-        .save_as_webgpu_html("gpu_large_chart.html")
-        .expect("GPU HTML should save");
+    {
+        chart
+            .save_as_webgpu_html("gpu_large_chart.html")
+            .expect("GPU HTML should save");
+        println!("generated gpu_large_chart.html with {count} source bars");
+    }
+
     #[cfg(not(feature = "html"))]
-    let _ = chart;
-    println!("generated gpu_large_chart.html with {count} source bars");
+    {
+        let _ = chart;
+        println!("gpu_large_chart requires the html feature to write GPU HTML");
+    }
 }

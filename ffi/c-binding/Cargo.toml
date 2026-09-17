@@ -10,9 +10,11 @@ workspace = true
 
 [lib]
 crate-type = ["cdylib", "staticlib"]
+path = "src/root.rs"
 
 [dependencies]
 finkit = { path = "../../core" }
+finkit-ffi-common = { path = "../ffi-common" }
 libc = "0.2"
 serde_json = { workspace = true }
 ndarray = { workspace = true }

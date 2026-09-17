@@ -3,8 +3,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::factory::{FactorFactory, FactorFactoryRequest};
 use crate::factories::{EmaFactory, MacdFactory, RsiFactory, SmaFactory};
+use crate::factory::{FactorFactory, FactorFactoryRequest};
 
 #[derive(Clone)]
 pub struct FactorRegistry {

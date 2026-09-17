@@ -7,6 +7,7 @@ use ndarray::Array1;
 
 use super::{Feature, FeatureEngine, FeatureMatrix};
 use crate::math::statistics::rolling_std_dev;
+use crate::returns::{one_period_returns, ReturnKind};
 
 /// Detected regime change event.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -229,14 +230,13 @@ impl FeatureEngine for RegimeFeature {
 }
 
 fn log_returns(data: &[f64]) -> Array1<f64> {
-    let len = data.len();
-    let mut out = Array1::from_elem(len, 0.0);
-    for i in 1..len {
-        if data[i - 1] > 0.0 && data[i] > 0.0 {
-            out[i] = (data[i] / data[i - 1]).ln();
+    let mut values = one_period_returns(data, ReturnKind::Log);
+    for value in &mut values {
+        if !value.is_finite() {
+            *value = 0.0;
         }
     }
-    out
+    Array1::from(values)
 }
 
 fn percentile(values: &[f64], pct: f64) -> f64 {

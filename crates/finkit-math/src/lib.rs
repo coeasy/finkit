@@ -1,5 +1,9 @@
 //! Mathematical kernels for Quant Factor Computing Engine.
 
+mod ema;
+
+pub use ema::ema;
+
 pub fn rolling_mean(values: &[f64], period: usize) -> Vec<f64> {
     if period == 0 || values.len() < period {
         return Vec::new();

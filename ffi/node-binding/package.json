@@ -1,7 +1,7 @@
 {
   "name": "finkit",
-  "version": "0.1.5",
-  "description": "High-performance financial technical analysis library for Node.js, powered by Rust and NAPI-RS. 150+ indicators, 60+ candlestick patterns, and chart pattern recognition.",
+  "version": "0.1.15",
+  "description": "Rust-powered quantitative finance engine for indicators, formulas, factors, streaming analytics, and research workflows.",
   "main": "index.js",
   "types": "index.d.ts",
   "repository": {
@@ -16,14 +16,13 @@
   "license": "MIT OR Apache-2.0",
   "author": "Finkit Contributors",
   "keywords": [
-    "technical-analysis",
-    "trading",
     "quantitative-finance",
-    "finkit",
+    "technical-analysis",
+    "factor-research",
+    "streaming",
+    "financial-data",
     "indicators",
-    "candlestick",
-    "stock",
-    "crypto",
+    "formula-engine",
     "napi-rs",
     "rust",
     "performance",
@@ -71,14 +70,14 @@
     "typescript": "^5.0.0"
   },
   "optionalDependencies": {
-    "finkit-darwin-arm64": "0.1.5",
-    "finkit-darwin-x64": "0.1.5",
-    "finkit-linux-arm64-gnu": "0.1.5",
-    "finkit-linux-arm64-musl": "0.1.5",
-    "finkit-linux-x64-gnu": "0.1.5",
-    "finkit-linux-x64-musl": "0.1.5",
-    "finkit-win32-x64-msvc": "0.1.5",
-    "finkit-win32-arm64-msvc": "0.1.5"
+    "finkit-darwin-arm64": "0.1.15",
+    "finkit-darwin-x64": "0.1.15",
+    "finkit-linux-arm64-gnu": "0.1.15",
+    "finkit-linux-arm64-musl": "0.1.15",
+    "finkit-linux-x64-gnu": "0.1.15",
+    "finkit-linux-x64-musl": "0.1.15",
+    "finkit-win32-x64-msvc": "0.1.15",
+    "finkit-win32-arm64-msvc": "0.1.15"
   },
   "files": [
     "index.js",

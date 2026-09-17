@@ -2,6 +2,9 @@
 
 use finkit::features;
 use finkit::indicators;
+use finkit_factor_analysis::{
+    AssetId, FactorStudy, GroupId, PanelIndex, QuantizeConfig, ResearchFrame,
+};
 use numpy::PyReadonlyArray1;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -986,6 +989,78 @@ fn hmm_regime<'py>(
     Ok(dict)
 }
 
+/// Run a complete panel-aware factor study and return its serializable JSON report.
+///
+/// Rows must be sorted by `(timestamp, asset)` or at least grouped by ascending timestamp.
+/// `groups` is optional and enables date-local group quantization.
+#[pyfunction]
+#[pyo3(signature = (timestamps, assets, factor, prices, periods, quantiles=5, groups=None))]
+fn factor_study_json(
+    py: Python<'_>,
+    timestamps: PyReadonlyArray1<'_, i64>,
+    assets: PyReadonlyArray1<'_, u32>,
+    factor: PyReadonlyArray1<'_, f64>,
+    prices: PyReadonlyArray1<'_, f64>,
+    periods: Vec<usize>,
+    quantiles: u16,
+    groups: Option<PyReadonlyArray1<'_, u32>>,
+) -> PyResult<String> {
+    let timestamps = timestamps
+        .as_slice()
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{e}")))?
+        .to_vec();
+    let assets: Vec<AssetId> = assets
+        .as_slice()
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{e}")))?
+        .iter()
+        .copied()
+        .map(AssetId)
+        .collect();
+    let factor = factor
+        .as_slice()
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{e}")))?
+        .to_vec();
+    let prices = prices
+        .as_slice()
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{e}")))?
+        .to_vec();
+    let groups: Option<Vec<GroupId>> = groups
+        .map(|values| {
+            values
+                .as_slice()
+                .map(|slice| slice.iter().copied().map(GroupId).collect())
+                .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{e}")))
+        })
+        .transpose()?;
+
+    py.detach(|| -> Result<String, String> {
+        let index = PanelIndex::new(timestamps, assets).map_err(|e| e.to_string())?;
+        let mut frame = ResearchFrame::new(index);
+        frame
+            .add_numeric("factor", "factor", factor)
+            .map_err(|e| e.to_string())?;
+        frame
+            .add_numeric("price", "market", prices)
+            .map_err(|e| e.to_string())?;
+        if let Some(groups) = groups {
+            frame
+                .add_group("group", groups)
+                .map_err(|e| e.to_string())?;
+        }
+        let by_group = frame.has_group("group").then(|| "group".to_string());
+        let report = FactorStudy::new(&frame, "factor", "price", periods)
+            .quantize_config(QuantizeConfig {
+                quantiles,
+                by_group,
+                zero_aware: false,
+            })
+            .full_report()
+            .map_err(|e| e.to_string())?;
+        report.to_json_pretty().map_err(|e| e.to_string())
+    })
+    .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e))
+}
+
 /// Register the features submodule.
 pub fn register_features_module(parent: &Bound<'_, PyModule>) -> PyResult<()> {
     let m = PyModule::new(parent.py(), "features")?;
@@ -1041,6 +1116,7 @@ pub fn register_features_module(parent: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(roll_spread, &m)?)?;
     m.add_function(wrap_pyfunction!(threshold_regime, &m)?)?;
     m.add_function(wrap_pyfunction!(hmm_regime, &m)?)?;
+    m.add_function(wrap_pyfunction!(factor_study_json, &m)?)?;
     parent.add_submodule(&m)?;
     Ok(())
 }

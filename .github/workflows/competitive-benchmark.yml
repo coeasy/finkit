@@ -1,0 +1,89 @@
+name: Competitive benchmark
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 4 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: competitive-benchmark-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  talib-head-to-head:
+    name: TA-Lib C head-to-head
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install TA-Lib 0.7.1
+        uses: TA-Lib/setup-ta-lib@v1
+        with:
+          version: "0.7.1"
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Run paired Criterion benchmarks
+        run: cargo bench -p finkit --bench talib_c_comparison --features talib-c --locked
+      - name: Render report and reject incomplete discovery
+        run: |
+          mkdir -p dist/bench
+          python scripts/bench_report.py \
+            --criterion-dir target/criterion \
+            --output dist/bench/finkit-vs-talib.md \
+            --json-out dist/bench/results.json \
+            --require-pairs 6
+      - name: Enforce competitive guardrail
+        run: |
+          python scripts/bench_report.py \
+            --criterion-dir target/criterion \
+            --output dist/bench/finkit-vs-talib.md \
+            --json-out dist/bench/results.json \
+            --require-pairs 6 \
+            --gate \
+            --threshold 25
+      - name: Record environment
+        run: |
+          python - <<'PY'
+          import json
+          import platform
+          import subprocess
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          def cmd(*args):
+              try:
+                  return subprocess.check_output(args, text=True, stderr=subprocess.STDOUT).strip()
+              except Exception:
+                  return None
+
+          payload = {
+              "generated_at": datetime.now(timezone.utc).isoformat(),
+              "commit": cmd("git", "rev-parse", "HEAD"),
+              "platform": platform.platform(),
+              "machine": platform.machine(),
+              "processor": platform.processor(),
+              "rustc": cmd("rustc", "--version", "--verbose"),
+              "cargo": cmd("cargo", "--version"),
+              "talib": cmd("pkg-config", "--modversion", "ta-lib"),
+          }
+          Path("dist/bench/environment.json").write_text(json.dumps(payload, indent=2) + "\n")
+          PY
+      - name: Upload benchmark evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: finkit-vs-talib-${{ github.sha }}
+          path: dist/bench
+          if-no-files-found: error
+          retention-days: 30

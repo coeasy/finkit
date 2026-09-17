@@ -42,6 +42,7 @@ mod compat_api;
 mod features;
 #[cfg(feature = "formula")]
 mod formula_plan;
+mod research_api;
 mod streaming;
 mod sweep;
 mod transforms;
@@ -6456,6 +6457,9 @@ fn finkit(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.add_function(wrap_pyfunction!(formula_search_templates, m)?)?;
         m.add_function(wrap_pyfunction!(formula_list_categories, m)?)?;
     }
+
+    // Factor research and generic quantitative evaluation
+    research_api::register_research_api(m)?;
 
     // Streaming Indicators
     streaming::register_streaming_classes(m)?;

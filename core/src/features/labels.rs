@@ -7,32 +7,43 @@
 //! - Binary classification labels
 
 use super::BarrierLabel;
+use crate::returns::{forward_return as core_forward_return, ReturnKind};
 use ndarray::Array1;
 
 /// Compute n-period forward log return: ln(close[i+n] / close[i]).
 ///
 /// Last n values will be NaN (no future data available).
 pub fn forward_return(close: &[f64], n: usize) -> Array1<f64> {
-    let len = close.len();
-    let mut out = Array1::from_elem(len, f64::NAN);
-    for i in 0..len.saturating_sub(n) {
-        if close[i] > 0.0 && close[i + n] > 0.0 {
-            out[i] = (close[i + n] / close[i]).ln();
-        }
+    if n == 0 {
+        return Array1::from_iter(close.iter().map(|&value| {
+            if value.is_finite() && value > 0.0 {
+                0.0
+            } else {
+                f64::NAN
+            }
+        }));
     }
-    out
+    Array1::from(
+        core_forward_return(close, n, ReturnKind::Log)
+            .unwrap_or_else(|_| vec![f64::NAN; close.len()]),
+    )
 }
 
 /// Compute n-period forward arithmetic return: (close[i+n] - close[i]) / close[i].
 pub fn forward_return_arithmetic(close: &[f64], n: usize) -> Array1<f64> {
-    let len = close.len();
-    let mut out = Array1::from_elem(len, f64::NAN);
-    for i in 0..len.saturating_sub(n) {
-        if close[i].abs() > 1e-15 {
-            out[i] = (close[i + n] - close[i]) / close[i];
-        }
+    if n == 0 {
+        return Array1::from_iter(close.iter().map(|&value| {
+            if value.is_finite() && value.abs() > 1e-15 {
+                0.0
+            } else {
+                f64::NAN
+            }
+        }));
     }
-    out
+    Array1::from(
+        core_forward_return(close, n, ReturnKind::Arithmetic)
+            .unwrap_or_else(|_| vec![f64::NAN; close.len()]),
+    )
 }
 
 /// Triple barrier method for label generation.

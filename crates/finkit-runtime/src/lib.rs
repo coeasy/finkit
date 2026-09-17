@@ -2,19 +2,23 @@
 
 mod cache;
 mod cache_key;
+mod config;
 mod executor;
-mod factory;
 mod factories;
+mod factory;
 mod graph;
+mod output;
 mod registry;
 mod scheduler;
 
 pub use cache::FactorCache;
 pub use cache_key::FactorCacheKey;
+pub use config::FactorConfig;
 pub use executor::Executor;
 pub use factories::EmaFactory;
 pub use factory::{FactorFactory, FactorFactoryRequest, SimpleFactorFactory};
 pub use graph::{FactorGraph, FactorNode};
+pub use output::FactorOutput;
 pub use registry::FactorRegistry;
 pub use scheduler::Scheduler;
 

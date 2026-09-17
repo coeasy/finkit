@@ -1,5 +1,5 @@
-use finkit_series::QuantSeries;
 use crate::Factor;
+use finkit_series::QuantSeries;
 
 #[derive(Debug, Clone)]
 pub struct Ema {

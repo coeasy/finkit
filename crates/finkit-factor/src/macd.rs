@@ -1,5 +1,5 @@
-use finkit_series::QuantSeries;
 use crate::{Ema, Factor};
+use finkit_series::QuantSeries;
 
 #[derive(Debug, Clone)]
 pub struct Macd {
@@ -15,16 +15,23 @@ impl Macd {
 }
 
 impl Factor for Macd {
-    fn name(&self) -> &str { "MACD" }
+    fn name(&self) -> &str {
+        "MACD"
+    }
 
     fn compute(&self, input: &QuantSeries) -> QuantSeries {
         let fast = Ema::new(self.fast).compute(input);
         let slow = Ema::new(self.slow).compute(input);
-        let values = fast.values()
+        let values = fast
+            .values()
             .iter()
             .zip(slow.values().iter())
             .map(|(a, b)| a - b)
             .collect();
-        QuantSeries::new(input.symbol(), fast.timestamps().to_vec(), finkit_array::FloatArray::new(values))
+        QuantSeries::new(
+            input.symbol(),
+            fast.timestamps().to_vec(),
+            finkit_array::FloatArray::new(values),
+        )
     }
 }

@@ -1,7 +1,7 @@
 //! Runtime cache primitives.
 
-use std::collections::HashMap;
 use crate::{FactorCacheKey, FactorOutput};
+use std::collections::HashMap;
 
 #[derive(Clone, Debug, Default)]
 pub struct CacheStats {

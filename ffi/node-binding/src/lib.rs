@@ -2576,3 +2576,15 @@ pub fn formula_eval_zero_copy(
 
     Ok(output)
 }
+
+/// Run the versioned Rust factor-research contract from Node.js.
+#[napi_derive::napi]
+pub fn factor_study_json(request_json: String) -> String {
+    finkit_ffi_common::factor_study_json(&request_json)
+}
+
+/// Evaluate strategy/benchmark/trade/portfolio metrics through the canonical Rust engine.
+#[napi_derive::napi]
+pub fn quant_evaluation_json(request_json: String) -> String {
+    finkit_ffi_common::quant_evaluation_json(&request_json)
+}

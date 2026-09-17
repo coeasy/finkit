@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────────────────
 // GENERATED FILE — do not edit by hand.
-// Source of truth: docs/indicator_registry.json (ffi.bodies.<lang>).
+// Source of truth: docs/ffi_registry.json (ffi.bodies.<lang>).
 // Regenerate with: python3 scripts/sync_bindings.py --lang python --generate --rewrite
 // ─────────────────────────────────────────────────────────────────────
 

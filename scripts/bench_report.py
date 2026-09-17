@@ -39,8 +39,12 @@ def collect_pairs(criterion_dir: Path) -> dict[str, dict[str, Any]]:
         point_ns = load_point(estimate)
         if point_ns is None:
             continue
-        if bench_name.startswith("FTA_"):
-            role, key = "fta_us", bench_name[4:]
+        if bench_name.startswith("Finkit_"):
+            role, key = "finkit_us", bench_name[7:]
+        elif bench_name.startswith("FTA_"):
+            # Legacy benchmark ids are still accepted so historical Criterion
+            # directories remain readable while the suite migrates to Finkit_.
+            role, key = "finkit_us", bench_name[4:]
         elif bench_name.startswith("TALib_"):
             role, key = "talib_us", bench_name[6:]
         else:
@@ -50,16 +54,19 @@ def collect_pairs(criterion_dir: Path) -> dict[str, dict[str, Any]]:
 
     result: dict[str, dict[str, Any]] = {}
     for (group, scale, key), entry in sorted(pairs.items()):
-        if "fta_us" not in entry or "talib_us" not in entry:
+        if "finkit_us" not in entry or "talib_us" not in entry:
             continue
         result_key = key if not group.startswith("scaled_") else f"{key}@{scale or group}"
-        fta_us = float(entry["fta_us"])
+        finkit_us = float(entry["finkit_us"])
         talib_us = float(entry["talib_us"])
-        ratio = talib_us / fta_us if fta_us > 0 else 0.0
-        status = "✅" if fta_us <= talib_us else ("⚠️" if fta_us <= talib_us * 1.25 else "❌")
+        ratio = talib_us / finkit_us if finkit_us > 0 else 0.0
+        status = "✅" if finkit_us <= talib_us else ("⚠️" if finkit_us <= talib_us * 1.25 else "❌")
         result[result_key] = {
             "category": group.removesuffix("_vs_talib"),
-            "fta_us": fta_us,
+            "finkit_us": finkit_us,
+            # Backward-compatible key for existing consumers. New code should
+            # use finkit_us; this alias can be removed in a future schema bump.
+            "fta_us": finkit_us,
             "talib_us": talib_us,
             "speedup": ratio,
             "status": status,
@@ -72,16 +79,27 @@ def render_markdown(benchmarks: dict[str, dict[str, Any]]) -> str:
         "# Finkit vs TA-Lib C Benchmark Report",
         "",
         "> Auto-generated from Criterion JSON by scripts/bench_report.py.",
+        "> Results are valid only for the recorded commit, CPU, compiler, build flags, dataset, and TA-Lib version.",
         "",
         "| Indicator | Category | Finkit (µs) | TA-Lib C (µs) | Speedup | Status |",
         "|---|---|---:|---:|---:|:---:|",
     ]
     for key, row in sorted(benchmarks.items()):
         lines.append(
-            f"| {key} | {row['category']} | {row['fta_us']:.2f} | "
+            f"| {key} | {row['category']} | {row['finkit_us']:.2f} | "
             f"{row['talib_us']:.2f} | {row['speedup']:.2f}x | {row['status']} |"
         )
-    lines.extend(["", f"- **Total paired benchmarks**: {len(benchmarks)}", ""])
+    faster = sum(1 for row in benchmarks.values() if row["finkit_us"] <= row["talib_us"])
+    lines.extend(
+        [
+            "",
+            f"- **Total paired benchmarks**: {len(benchmarks)}",
+            f"- **Finkit faster or equal on this run**: {faster}",
+            "",
+            "Do not convert one machine snapshot into a universal performance claim. Re-run the suite on the target deployment hardware.",
+            "",
+        ]
+    )
     return "\n".join(lines)
 
 
@@ -94,9 +112,9 @@ def load_baseline(path: Path) -> dict[str, dict[str, float]]:
 
 def gate_vs_talib(benchmarks: dict[str, dict[str, Any]], threshold: float) -> list[str]:
     return [
-        f"{key}: {row['fta_us']:.2f}µs vs {row['talib_us']:.2f}µs (>{threshold:.1f}% slower)"
+        f"{key}: {row['finkit_us']:.2f}µs vs {row['talib_us']:.2f}µs (>{threshold:.1f}% slower)"
         for key, row in benchmarks.items()
-        if row["fta_us"] > row["talib_us"] * (1.0 + threshold / 100.0)
+        if row["finkit_us"] > row["talib_us"] * (1.0 + threshold / 100.0)
     ]
 
 
@@ -112,8 +130,8 @@ def gate_vs_baseline(criterion_dir: Path, baseline_path: Path, scale: str, thres
             failures.append(f"{key}@{scale}: no current Criterion data")
         elif base is None:
             failures.append(f"{key}@{scale}: no baseline value")
-        elif row["fta_us"] > float(base) * (1.0 + threshold / 100.0):
-            failures.append(f"{key}@{scale}: {row['fta_us']:.2f}µs vs baseline {float(base):.2f}µs")
+        elif row["finkit_us"] > float(base) * (1.0 + threshold / 100.0):
+            failures.append(f"{key}@{scale}: {row['finkit_us']:.2f}µs vs baseline {float(base):.2f}µs")
     return failures
 
 
@@ -137,24 +155,58 @@ def main() -> int:
     parser.add_argument("--gate", action="store_true")
     parser.add_argument("--regression-gate", action="store_true")
     parser.add_argument("--sla-1m", action="store_true")
+    parser.add_argument(
+        "--require-pairs",
+        type=int,
+        default=0,
+        metavar="N",
+        help="fail unless at least N Finkit/TA-Lib benchmark pairs were discovered",
+    )
     args = parser.parse_args()
 
     criterion_dir = Path(args.criterion_dir)
     benchmarks = collect_pairs(criterion_dir)
+    if len(benchmarks) < args.require_pairs:
+        print(
+            f"benchmark discovery FAILED: found {len(benchmarks)} paired rows, require at least {args.require_pairs}",
+            file=sys.stderr,
+        )
+        return 2
+
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(render_markdown(benchmarks), encoding="utf-8")
     if args.json_out:
         json_path = Path(args.json_out)
         json_path.parent.mkdir(parents=True, exist_ok=True)
-        json_path.write_text(json.dumps({"name": "finkit-vs-talib", "benchmarks": benchmarks}, indent=2) + "\n", encoding="utf-8")
+        json_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "name": "finkit-vs-talib",
+                    "benchmarks": benchmarks,
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
     print(f"Report written to {output}")
     if args.gate:
-        return run_gate(f"TA-Lib comparison gate ({args.threshold:.1f}%)", gate_vs_talib(benchmarks, args.threshold))
+        return run_gate(
+            f"TA-Lib comparison gate ({args.threshold:.1f}%)",
+            gate_vs_talib(benchmarks, args.threshold),
+        )
     if args.regression_gate:
-        return run_gate("Benchmark regression gate (5.0%)", gate_vs_baseline(criterion_dir, Path(args.baseline), "10K", 5.0))
+        return run_gate(
+            "Benchmark regression gate (5.0%)",
+            gate_vs_baseline(criterion_dir, Path(args.baseline), "10K", 5.0),
+        )
     if args.sla_1m:
-        return run_gate("1M SLA gate (10.0%)", gate_vs_baseline(criterion_dir, Path(args.baseline), "1M", 10.0))
+        return run_gate(
+            "1M SLA gate (10.0%)",
+            gate_vs_baseline(criterion_dir, Path(args.baseline), "1M", 10.0),
+        )
     return 0
 
 

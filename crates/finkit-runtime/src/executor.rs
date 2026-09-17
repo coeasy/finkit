@@ -2,7 +2,9 @@
 
 use std::sync::Arc;
 
-use crate::{ExecutionPlan, FactorCache, FactorConfig, FactorFactory, FactorFactoryRequest, FactorRegistry};
+use crate::{
+    ExecutionPlan, FactorCache, FactorConfig, FactorFactory, FactorFactoryRequest, FactorRegistry,
+};
 
 #[derive(Clone, Debug)]
 pub struct Executor {
@@ -28,10 +30,7 @@ impl Executor {
         self.registry.create_factor(request)
     }
 
-    pub fn resolve_factory(
-        &self,
-        name: &str,
-    ) -> Option<Arc<dyn FactorFactory + Send + Sync>> {
+    pub fn resolve_factory(&self, name: &str) -> Option<Arc<dyn FactorFactory + Send + Sync>> {
         self.registry.get_factory(name)
     }
 

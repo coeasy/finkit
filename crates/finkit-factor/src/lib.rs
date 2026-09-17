@@ -3,16 +3,16 @@
 use finkit_series::QuantSeries;
 
 mod ema;
-mod sma;
-mod rsi;
 mod macd;
 mod result;
+mod rsi;
+mod sma;
 
 pub use ema::Ema;
-pub use sma::Sma;
-pub use rsi::Rsi;
 pub use macd::Macd;
 pub use result::FactorResult;
+pub use rsi::Rsi;
+pub use sma::Sma;
 
 pub trait Factor {
     fn name(&self) -> &str;

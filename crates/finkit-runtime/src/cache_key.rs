@@ -9,7 +9,11 @@ pub struct FactorCacheKey {
 }
 
 impl FactorCacheKey {
-    pub fn new(symbol: impl Into<String>, factor_name: impl Into<String>, params: impl Into<String>) -> Self {
+    pub fn new(
+        symbol: impl Into<String>,
+        factor_name: impl Into<String>,
+        params: impl Into<String>,
+    ) -> Self {
         Self {
             symbol: symbol.into(),
             factor_name: factor_name.into(),

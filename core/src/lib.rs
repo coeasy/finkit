@@ -77,10 +77,14 @@ pub mod unified_executor;
 #[cfg(feature = "std")]
 /// Lightweight vectorized backtest engine.
 pub mod backtest;
+#[cfg(feature = "std")]
+pub mod backtest_evaluation;
 #[cfg(feature = "rayon")]
 /// Parallel batch API: run multiple independent indicator jobs in parallel
 /// over the same input slice. Disabled in no_std builds.
 pub mod batch;
+#[cfg(feature = "std")]
+pub mod factor_system;
 #[cfg(feature = "std")]
 /// Dependency-aware production factor engine and factor transforms.
 pub mod factors;
@@ -90,6 +94,8 @@ pub mod features;
 #[cfg(feature = "std")]
 /// Multi-timeframe pattern resonance: 5m/30m/日线 联动信号.
 pub mod multi_period_resonance;
+#[cfg(feature = "std")]
+pub mod performance;
 #[cfg(feature = "finkit-polars")]
 /// Polars DataFrame zero-copy integration for technical analysis.
 pub mod polars_ext;
@@ -97,11 +103,15 @@ pub mod polars_ext;
 /// Canonical indicator/formula metadata registry for bindings and introspection.
 pub mod registry;
 #[cfg(feature = "std")]
+pub mod returns;
+#[cfg(feature = "std")]
 /// Portfolio risk metrics: VaR / CVaR / MDD / Sharpe / Sortino / Calmar.
 pub mod risk;
 #[cfg(feature = "std")]
 /// Zero-copy aligned market-frame and warm-up/NaN runtime contracts.
 pub mod runtime;
+#[cfg(feature = "std")]
+pub mod runtime_engine;
 #[cfg(feature = "std")]
 /// Owned machine-readable API schema derived from the canonical registry.
 pub mod schema;
@@ -125,6 +135,8 @@ pub mod traits;
 #[cfg(feature = "std")]
 /// Data transformation pipelines: rolling windows, normalization, and feature scaling.
 pub mod transforms;
+#[cfg(feature = "std")]
+pub mod unified_runtime;
 #[cfg(feature = "std")]
 /// Utility functions: input validation, smoothing factors, and array helpers.
 pub mod utils;

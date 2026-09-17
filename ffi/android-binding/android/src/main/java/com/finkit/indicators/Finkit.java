@@ -83,4 +83,10 @@ public final class Finkit {
     public static double[] linearReg(double[] input, int period) { return linearRegNative(input, period); }
     /** Rolling percentile rank. */
     public static double[] percentRank(double[] input, int period) { return percentRankNative(input, period); }
+
+    /** Run schema-versioned panel factor research and return its JSON envelope. */
+    public static native String factorStudyJson(String requestJson);
+
+    /** Evaluate returns, risk, benchmark, trade, portfolio and costs. */
+    public static native String quantEvaluationJson(String requestJson);
 }

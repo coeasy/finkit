@@ -13,6 +13,7 @@ workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
+finkit-ffi-common = { path = "../ffi-common" }
 # The Android Java API currently exposes indicators only. Keep the mobile
 # native library on the smallest core feature set that implements that public
 # surface instead of pulling formula/JIT/metrics/tracing into every ABI.

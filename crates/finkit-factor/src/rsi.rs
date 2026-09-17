@@ -1,5 +1,5 @@
-use finkit_series::QuantSeries;
 use crate::Factor;
+use finkit_series::QuantSeries;
 
 #[derive(Debug, Clone)]
 pub struct Rsi {
@@ -20,7 +20,11 @@ impl Factor for Rsi {
     fn compute(&self, input: &QuantSeries) -> QuantSeries {
         let values = input.values();
         if self.period == 0 || values.len() <= self.period {
-            return QuantSeries::new(input.symbol(), Vec::new(), finkit_array::FloatArray::new(Vec::new()));
+            return QuantSeries::new(
+                input.symbol(),
+                Vec::new(),
+                finkit_array::FloatArray::new(Vec::new()),
+            );
         }
 
         let mut result = Vec::new();
@@ -29,13 +33,21 @@ impl Factor for Rsi {
             let mut loss = 0.0;
             for pair in window.windows(2) {
                 let diff = pair[1] - pair[0];
-                if diff > 0.0 { gain += diff; } else { loss -= diff; }
+                if diff > 0.0 {
+                    gain += diff;
+                } else {
+                    loss -= diff;
+                }
             }
             let rs = if loss == 0.0 { 100.0 } else { gain / loss };
             result.push(100.0 - (100.0 / (1.0 + rs)));
         }
 
         let timestamps = input.timestamps()[self.period..].to_vec();
-        QuantSeries::new(input.symbol(), timestamps, finkit_array::FloatArray::new(result))
+        QuantSeries::new(
+            input.symbol(),
+            timestamps,
+            finkit_array::FloatArray::new(result),
+        )
     }
 }
