@@ -11,7 +11,7 @@ Finkit 已经具备一个功能面很宽的量化计算内核，但当前状态�
 主要结论如下：
 
 1. **指标批量计算能力较完整。** Core 中已有 TA-Lib 风格指标、扩展指标、技术形态、统计、风险和特征工程；按源码统计，`core/src/indicators` 中有 354 个公开函数，`core/src/streaming` 中有 168 个 `Streaming*` 类型。数量不是完成证明，仍需逐函数确认数值语义、预热长度、NaN、输出形状、流式一致性和跨语言暴露情况。
-2. **公式引擎已形成完整雏形，但兼容层仍是“共同子集 + 报告”，不是各终端的完整兼容运行时。** TDX、同花顺、东方财富目前共享 AlphaTA 风格的 canonical parser；`normalize_terminal_source` 主要处理 BOM/换行，没有完成终端专属语义转换。Pine AST 已覆盖声明、`if`、`for`、`while`、`plot`、`fill` 等节点，但这仍是 Pine 子集，不能等价宣称支持 TradingView 全部语言、绘图对象和重绘语义。
+2. **公式引擎已形成完整雏形，但兼容层仍是“共同子集 + 报告”，不是各终端的完整兼容运行时。** TDX、同花顺、东方财富现在在公开 `FormulaDialect` 中可被明确区分，同时共享 AlphaTA 风格的 canonical parser；`normalize_terminal_source` 主要处理 BOM/换行，尚未完成终端专属语义转换。Pine AST 已覆盖声明、`if`、`for`、`while`、`plot`、`fill` 等节点，但这仍是 Pine 子集，不能等价宣称支持 TradingView 全部语言、绘图对象和重绘语义。
 3. **主体链路没有完全贯通。** Core 内已有 Formula、Factor、Composite、Streaming、V3/V4 Runtime 多条可运行链路，但它们没有全部落到同一个计划、Kernel、状态、缓存和输出契约上。工作区还存在 `crates/finkit-factor` 与 `crates/finkit-runtime` 两个重复的早期骨架；其中 `finkit-runtime` 的 `FactorFactory::create()` 返回描述字符串而不是可执行 Factor，不能作为生产执行链。
 4. **Factor 和 Composite 目前不能证明都满足高吞吐生产要求。** Core 的 borrowed、range、缓存和执行计划是正确方向，但 Factor 注册表使用 `Arc<dyn Fn>`，Composite 使用 `BTreeMap` 和独立缓存，仍有动态分发、重复物化和多套缓存身份的问题；没有统一的 compiled operator/typed state/kernel dispatch 作为唯一热路径。
 5. **多语言已有大量绑定，但“语义同 API”尚未完成。** Python、C++、Go、Rust、Java、.NET 都存在绑定或源码入口，但目前是多套手写/半生成 façade。返回类型、错误模型、数组所有权、公式计划句柄、Streaming 状态和研究 API 仍存在语言间差异。Node、Swift、Android/iOS 专用入口不纳入本产品第一阶段正式公开语言范围。最新增量已将版本化 Operation Catalog 接入六个正式入口，但执行、结果、状态和错误 contract tests 尚未全覆盖。
@@ -264,7 +264,7 @@ Core `lib.rs` 暴露大量模块，并同时支持 std/no_std、formula、JIT、
 | 批量指标 | 已有较大覆盖，未完成最终核验 | 大量函数、TA-Lib golden、兼容测试存在；ADX parity 失败 | 每个函数的输入/输出/NaN/lookback/数值 golden 与跨语言测试全绿 |
 | Streaming 指标 | 部分贯通 | 大量 Streaming 类型和 Builder；不同指标状态模型并存 | 与 batch 共享 kernel/语义，逐指标 batch-stream differential |
 | TA-Lib 对标 | 部分实现 | 合同、golden、benchmark 存在；当前 ADX parity 失败，历史 Python benchmark 也显示需谨慎解释 | 固定 TA-Lib 版本、编译器、数据、warm-up、指标列表和误差预算 |
-| TDX/同花顺/东方财富 | 共同子集已实现，完整兼容未实现 | 终端枚举和测试存在，但共享 parser、normalize 不做语义翻译 | 分终端 lexer/parser/semantic profile、语义 golden、unsupported matrix |
+| TDX/同花顺/东方财富 | 方言身份与共同子集已实现，完整兼容未实现 | `FormulaDialect` 已分别暴露 TDX/THS/EastMoney，仍共享 parser，尚未做终端语义翻译 | 分终端 lexer/parser/semantic profile、语义 golden、unsupported matrix |
 | Pine 子集 | parser/runtime 已有，非完整 Pine | AST 含控制流/plot/fill，存在 Pine corpus；不能代表完整 TradingView | 固定支持版本/子集，控制流配额、重绘/未来数据声明和 corpus gate |
 | Formula 批量执行 | 基本贯通 | parser → AST → bytecode/IR → engine/executor → FFI | 与 Factor/Composite 使用同一 compiled plan、cache、trace |
 | Formula incremental/range | 部分贯通 | Engine 有 range/latest/append/zero-copy；能力依赖 state/lookback | 由 Planner 证明 range-safe，checkpoint/state 恢复测试全绿 |
@@ -370,10 +370,10 @@ Registry、Rust dispatch、FFI 声明、Python stubs、C++ 头文件/RAII wrappe
 采用“每个 dialect 独立前端、统一后端”的模式：
 
 ```text
-TDX lexer/parser       ->
-THS lexer/parser       -> Canonical Formula IR
-EastMoney lexer/parser ->       |
-Pine subset parser     ->       +-> semantic profile -> planner/runtime
+TDX lexer/parser       -> TDX semantic profile       ->
+THS lexer/parser       -> THS semantic profile       -> Canonical Formula IR
+EastMoney lexer/parser -> EastMoney semantic profile ->       |
+Pine subset parser     -> Pine semantic profile      ->       +-> planner/runtime
 ```
 
 每个 dialect 需要：

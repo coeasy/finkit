@@ -96,6 +96,12 @@ pub enum FormulaDialect {
     /// Finkit / AlphaTA / TDX-style formula language (default).
     #[default]
     AlphaTA,
+    /// TongDaXin (通达信) formula profile.
+    TongDaXin,
+    /// TongHuaShun (同花顺) formula profile.
+    TongHuaShun,
+    /// EastMoney (东方财富) formula profile.
+    EastMoney,
     /// TradingView Pine Script v5 subset.
     Pine,
 }
@@ -104,9 +110,10 @@ impl FormulaDialect {
     /// Parse a dialect name from CLI / FFI / Python bindings.
     pub fn from_str(s: &str) -> Option<Self> {
         match s.trim().to_ascii_lowercase().as_str() {
-            "alpha_ta" | "alphata" | "finkit" | "tdx" | "tongdaxin" | "通达信" | "ths"
-            | "tonghuashun" | "同花顺" | "eastmoney" | "em" | "dfcf" | "东方财富" | "default"
-            | "" => Some(Self::AlphaTA),
+            "alpha_ta" | "alphata" | "finkit" | "default" | "" => Some(Self::AlphaTA),
+            "tdx" | "tongdaxin" | "通达信" => Some(Self::TongDaXin),
+            "ths" | "tonghuashun" | "同花顺" => Some(Self::TongHuaShun),
+            "eastmoney" | "em" | "dfcf" | "东方财富" => Some(Self::EastMoney),
             "pine" | "tradingview" | "tv" => Some(Self::Pine),
             _ => None,
         }
@@ -115,6 +122,9 @@ impl FormulaDialect {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::AlphaTA => "alpha_ta",
+            Self::TongDaXin => "tdx",
+            Self::TongHuaShun => "ths",
+            Self::EastMoney => "eastmoney",
             Self::Pine => "pine",
         }
     }
@@ -129,7 +139,10 @@ pub fn parse_formula_with_dialect(
     dialect: FormulaDialect,
 ) -> Result<AstNode, String> {
     match dialect {
-        FormulaDialect::AlphaTA => parse_formula(source),
+        FormulaDialect::AlphaTA
+        | FormulaDialect::TongDaXin
+        | FormulaDialect::TongHuaShun
+        | FormulaDialect::EastMoney => parse_formula(source),
         FormulaDialect::Pine => {
             let pine = parse_pine(source).map_err(|e| format!("Pine parse error: {}", e))?;
             map_pine_to_alphata(&pine).map_err(|e| format!("Pine map error: {}", e.message))
@@ -179,6 +192,29 @@ plot(rsi)
             ast,
             AstNode::Statements(_) | AstNode::Assignment { .. }
         ));
+    }
+
+    #[test]
+    fn domestic_dialects_remain_distinguishable_while_sharing_parser() {
+        assert_eq!(
+            FormulaDialect::from_str("tdx"),
+            Some(FormulaDialect::TongDaXin)
+        );
+        assert_eq!(
+            FormulaDialect::from_str("ths"),
+            Some(FormulaDialect::TongHuaShun)
+        );
+        assert_eq!(
+            FormulaDialect::from_str("eastmoney"),
+            Some(FormulaDialect::EastMoney)
+        );
+        for dialect in [
+            FormulaDialect::TongDaXin,
+            FormulaDialect::TongHuaShun,
+            FormulaDialect::EastMoney,
+        ] {
+            assert!(parse_formula_with_dialect("CLOSE && VOLUME > 0", dialect).is_ok());
+        }
     }
 
     #[test]

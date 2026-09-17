@@ -923,7 +923,10 @@ impl UnifiedOperationEngine {
     ) -> Result<(BTreeMap<String, Vec<f64>>, Option<DrawResult>), FormulaError> {
         let mut values = BTreeMap::new();
         match dialect {
-            FormulaDialect::AlphaTA => {
+            FormulaDialect::AlphaTA
+            | FormulaDialect::TongDaXin
+            | FormulaDialect::TongHuaShun
+            | FormulaDialect::EastMoney => {
                 let result = self.formula.eval_multi(source, context)?;
                 for (name, value) in result.outputs {
                     values.insert(name, value.to_vec());

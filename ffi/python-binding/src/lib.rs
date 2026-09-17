@@ -1909,7 +1909,10 @@ pub fn formula_eval_dialect(
     let dialect = FormulaDialect::from_str(dialect).unwrap_or(FormulaDialect::AlphaTA);
     let result = py.detach(|| -> PyResult<Array1<f64>> {
         let ast = match dialect {
-            FormulaDialect::AlphaTA => {
+            FormulaDialect::AlphaTA
+            | FormulaDialect::TongDaXin
+            | FormulaDialect::TongHuaShun
+            | FormulaDialect::EastMoney => {
                 return engine
                     .eval(source, &mut ctx)
                     .map_err(formula_error_to_pyerr);

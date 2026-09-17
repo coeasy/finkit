@@ -144,9 +144,10 @@ impl FormulaTerminal {
     pub const fn canonical_dialect(self) -> FormulaDialect {
         match self {
             Self::TradingView => FormulaDialect::Pine,
-            Self::Finkit | Self::TongDaXin | Self::TongHuaShun | Self::EastMoney => {
-                FormulaDialect::AlphaTA
-            }
+            Self::Finkit => FormulaDialect::AlphaTA,
+            Self::TongDaXin => FormulaDialect::TongDaXin,
+            Self::TongHuaShun => FormulaDialect::TongHuaShun,
+            Self::EastMoney => FormulaDialect::EastMoney,
         }
     }
 
@@ -388,15 +389,23 @@ mod tests {
     }
 
     #[test]
-    fn china_terminals_share_canonical_tdx_style_parser() {
-        for terminal in [
-            FormulaTerminal::Finkit,
-            FormulaTerminal::TongDaXin,
-            FormulaTerminal::TongHuaShun,
-            FormulaTerminal::EastMoney,
-        ] {
-            assert_eq!(terminal.canonical_dialect(), FormulaDialect::AlphaTA);
-        }
+    fn china_terminals_have_distinct_profiles_over_shared_parser() {
+        assert_eq!(
+            FormulaTerminal::Finkit.canonical_dialect(),
+            FormulaDialect::AlphaTA
+        );
+        assert_eq!(
+            FormulaTerminal::TongDaXin.canonical_dialect(),
+            FormulaDialect::TongDaXin
+        );
+        assert_eq!(
+            FormulaTerminal::TongHuaShun.canonical_dialect(),
+            FormulaDialect::TongHuaShun
+        );
+        assert_eq!(
+            FormulaTerminal::EastMoney.canonical_dialect(),
+            FormulaDialect::EastMoney
+        );
     }
 
     #[test]
