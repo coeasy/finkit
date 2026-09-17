@@ -14,9 +14,9 @@ Finkit 已经具备一个功能面很宽的量化计算内核，但当前状态�
 2. **公式引擎已形成完整雏形，但兼容层仍是“共同子集 + 报告”，不是各终端的完整兼容运行时。** TDX、同花顺、东方财富目前共享 AlphaTA 风格的 canonical parser；`normalize_terminal_source` 主要处理 BOM/换行，没有完成终端专属语义转换。Pine AST 已覆盖声明、`if`、`for`、`while`、`plot`、`fill` 等节点，但这仍是 Pine 子集，不能等价宣称支持 TradingView 全部语言、绘图对象和重绘语义。
 3. **主体链路没有完全贯通。** Core 内已有 Formula、Factor、Composite、Streaming、V3/V4 Runtime 多条可运行链路，但它们没有全部落到同一个计划、Kernel、状态、缓存和输出契约上。工作区还存在 `crates/finkit-factor` 与 `crates/finkit-runtime` 两个重复的早期骨架；其中 `finkit-runtime` 的 `FactorFactory::create()` 返回描述字符串而不是可执行 Factor，不能作为生产执行链。
 4. **Factor 和 Composite 目前不能证明都满足高吞吐生产要求。** Core 的 borrowed、range、缓存和执行计划是正确方向，但 Factor 注册表使用 `Arc<dyn Fn>`，Composite 使用 `BTreeMap` 和独立缓存，仍有动态分发、重复物化和多套缓存身份的问题；没有统一的 compiled operator/typed state/kernel dispatch 作为唯一热路径。
-5. **多语言已有大量绑定，但“语义同 API”尚未完成。** Python、C++、Go、Rust、Java、.NET 都存在绑定或源码入口，但目前是多套手写/半生成 façade。返回类型、错误模型、数组所有权、公式计划句柄、Streaming 状态和研究 API 仍存在语言间差异；版本检查也实际失败。Node、Swift、Android/iOS 专用入口不纳入本产品第一阶段正式公开语言范围。
+5. **多语言已有大量绑定，但“语义同 API”尚未完成。** Python、C++、Go、Rust、Java、.NET 都存在绑定或源码入口，但目前是多套手写/半生成 façade。返回类型、错误模型、数组所有权、公式计划句柄、Streaming 状态和研究 API 仍存在语言间差异。Node、Swift、Android/iOS 专用入口不纳入本产品第一阶段正式公开语言范围。
 6. **绘图当前是 Rust 自有渲染器，不是 Lightweight Charts 适配器。** 已有 SVG、Canvas、WebGL/WebGPU、PNG、JSON/HTML 输出，适合 native/headless/export；但 Web 前端要采用 Lightweight Charts，应让它成为 Web adapter，不能把 Lightweight Charts 代码塞进 Core 或继续让每个绑定生成一套独立 HTML。
-7. **当前基线不能称为全量生产验证通过。** 审计初始验证为 `2882 passed, 5 failed, 1 ignored`，失败涉及 ADX 对齐、Runtime 检查点/状态恢复和注册表文档快照。后续在 V1 开发分支已修复并验证这 5 项：当前 `finkit` Core 测试为 `2887 passed, 0 failed, 1 ignored`；但 `python scripts/check_versions.py` 仍失败，存在 0.1.5 与工作区 0.1.15 混用。
+7. **基础门禁已恢复全绿，但仍不能据此宣称全量生产化。** 审计初始验证为 `2882 passed, 5 failed, 1 ignored`；后续已修复 ADX 对齐、Runtime 检查点/状态恢复、注册表快照和版本/SSOT 漂移。当前 `finkit` Core 测试为 `2890 passed, 0 failed, 1 ignored`，版本、SSOT、文档链接检查已通过；公式完整语义、六语言 contract tests、跨语言 golden、性能 SLO 和持久化 typed state 仍未完成。
 
 因此，下一步不是继续增加零散接口，而是先建立一个 canonical compute contract，把 Formula、Factor、Composite、Streaming 和兼容层收敛到同一编译计划与 Runtime，再由各语言和绘图适配器消费这个契约。
 
@@ -189,17 +189,17 @@ Factor 和 Composite 都必须使用同一个 `CompiledPlan`、同一个 buffer/
 - `math::kernels::compat::tests::canonical_adx_matches_legacy_public_api`：canonical ADX 与 legacy API 在第 27 行数值不一致；
 - `streaming::registry::tests::test_docs_json_matches_registry`：生成注册表与 `docs/indicator_registry.json` 不一致。
 
-当前版本门禁实际失败：
+当前版本门禁已通过：
 
 - Workspace canonical version 为 `0.1.15`；
-- `fuzz/Cargo.toml`、Node platform package、Node `package-lock.json`、.NET csproj、Java pom、CMake、多个文档/JSON 仍有 `0.1.5`；
-- `docs/generated/version-matrix.md` 也被 SSOT 检查判定为过期。
+- 统一版本源为 workspace `0.1.15`；
+- `check_versions.py`、`gen_ssot_docs.py --check`、`check_research_ssot.py` 和 `check_docs_links.py` 已通过。
 
 另外，`cargo +1.98.1 check --workspace --all-features --locked` 不能作为当前版本的有效全功能门禁：该组合同时启用了互斥的 `std` 与 `no_std`，并进一步产生 77 个编译错误（还暴露出部分 feature 组合下的类型/依赖问题）。重构后必须改为一组明确且可支持的构建 profile，分别验证 `std`、`no_std`、公式、SIMD/JIT、并行、绑定等组合；不能用“all-features 通过”作为不成立的生产化结论。
 
 在生产发布前，版本、注册表、函数目录、绑定声明和文档必须由一个生成流程产生，并在 clean checkout 上执行。
 
-V1 分支跟进结果：StateArena 的具体类型恢复、Runtime session checkpoint、canonical ADX 对齐和指标注册表快照已经通过专项及 Core 全量测试；剩余版本/SSOT 门禁问题仍属于发布阻断项，尚未标记为完成。
+V1 分支跟进结果：StateArena 的具体类型恢复、Runtime session checkpoint、canonical ADX 对齐、指标注册表快照和版本/SSOT 同步已经通过专项及 Core 全量测试；这些基础问题已关闭。持久化/跨语言状态 codec 和更高层执行链仍属于未完成项。
 
 ### P1：兼容层命名已覆盖，但语义覆盖不足
 
@@ -362,6 +362,8 @@ Core `lib.rs` 暴露大量模块，并同时支持 std/no_std、formula、JIT、
 - language exposure status。
 
 Registry、Rust dispatch、FFI 声明、Python stubs、C++ 头文件/RAII wrapper、Go bindings、Java/.NET metadata、文档和测试清单从该源生成。
+
+当前实现状态：`core/src/operation.rs` 已落地 `OperationKind`、`ValueShape`、`OperationCapabilities`、稳定 `OperationId`、别名解析、冲突校验和从现有 `FunctionRegistry` 的原子投影，且已有 3 个单元测试。它现在是统一元数据契约，不代表 Formula/Factor/Composite/Draw 已全部接入同一执行 dispatcher；后续必须逐项补齐 dispatcher、golden 和六语言暴露后，才可将对应 operation 标记为 `implemented`。
 
 ### 5.3 Formula 和兼容层
 

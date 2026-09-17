@@ -98,6 +98,10 @@ pub mod features;
 /// Multi-timeframe pattern resonance: 5m/30m/日线 联动信号.
 pub mod multi_period_resonance;
 #[cfg(feature = "std")]
+/// Unified operation metadata for indicators, formulas, factors, composites,
+/// and drawing adapters.
+pub mod operation;
+#[cfg(feature = "std")]
 pub mod performance;
 #[cfg(feature = "finkit-polars")]
 /// Polars DataFrame zero-copy integration for technical analysis.
