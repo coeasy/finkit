@@ -1,0 +1,103 @@
+name: Publish v0.1.4
+
+on:
+  push:
+    branches:
+      - release/v0.1.4
+    paths:
+      - .github/workflows/release-v014-orchestrator.yml
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    steps:
+      - name: Check out merged main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 1
+      - name: Validate merged release version
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/check_versions.py
+          VERSION="$(python -c 'import pathlib,re; text=pathlib.Path("Cargo.toml").read_text(); print(re.search(r"(?ms)^\[workspace\.package\].*?^version\s*=\s*\"([^\"]+)\"", text).group(1))')"
+          test "$VERSION" = "0.1.4"
+          test "$(git rev-parse HEAD)" = "6887c90552b58b2cb33c57ba3e433aab50a99355"
+      - name: Wait for validated multi-language build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MULTILANG_RUN: "33851456214"
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Reusing four already-successful ABI3 wheel artifacts from Python wheels run 33851456190"
+          echo "Waiting for v0.1.4 Multilang release run $MULTILANG_RUN"
+          gh run watch "$MULTILANG_RUN" --repo "$GITHUB_REPOSITORY" --exit-status
+      - name: Download validated release artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHON_RUN: "33851456190"
+          MULTILANG_RUN: "33851456214"
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf python-artifacts multi-artifacts primary-assets supplemental-assets
+          mkdir -p python-artifacts multi-artifacts primary-assets supplemental-assets
+          gh run download "$PYTHON_RUN" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'wheel-*' \
+            --dir python-artifacts
+          gh run download "$MULTILANG_RUN" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'release-*' \
+            --dir multi-artifacts
+          while IFS= read -r -d '' file; do
+            cp "$file" primary-assets/
+          done < <(find python-artifacts -type f -name '*.whl' -print0)
+          while IFS= read -r -d '' file; do
+            cp "$file" primary-assets/
+          done < <(find multi-artifacts -type f \( -name 'finkit-*.crate' -o -name 'finkit-cli-linux-x86_64' \) -print0)
+          test "$(find primary-assets -maxdepth 1 -type f -name '*.whl' | wc -l)" -eq 4
+          test "$(find primary-assets -maxdepth 1 -type f -name 'finkit-*.crate' | wc -l)" -eq 1
+          test -f primary-assets/finkit-cli-linux-x86_64
+          (cd primary-assets && sha256sum * | sort -k2 > SHA256SUMS)
+          while IFS= read -r -d '' file; do
+            base="$(basename "$file")"
+            case "$base" in
+              finkit-*.crate|finkit-cli-linux-x86_64) ;;
+              *) cp "$file" supplemental-assets/ ;;
+            esac
+          done < <(find multi-artifacts -type f -print0)
+          test -n "$(find supplemental-assets -maxdepth 1 -type f -print -quit)"
+          (cd supplemental-assets && sha256sum * | sort -k2 > SHA256SUMS.multilang)
+          echo "Primary assets:"
+          find primary-assets -maxdepth 1 -type f -printf '%f\n' | sort
+          echo "Supplemental assets:"
+          find supplemental-assets -maxdepth 1 -type f -printf '%f\n' | sort
+      - name: Create and complete GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! gh release view v0.1.4 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create v0.1.4 \
+              --repo "$GITHUB_REPOSITORY" \
+              --target 6887c90552b58b2cb33c57ba3e433aab50a99355 \
+              --title "v0.1.4" \
+              --generate-notes
+          fi
+          gh release upload v0.1.4 \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber \
+            primary-assets/* \
+            supplemental-assets/*
+          gh release view v0.1.4 \
+            --repo "$GITHUB_REPOSITORY" \
+            --json tagName,isDraft,isPrerelease,targetCommitish,url
