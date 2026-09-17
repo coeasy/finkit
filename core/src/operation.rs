@@ -10,7 +10,7 @@ use crate::composite::{CompositeDefinition, CompositeEngine};
 use crate::data_contract::{CrossSectionView, DataContractError, MarketPanel};
 use crate::factors::{BorrowedFactorContext, FactorEngine, FactorRegistry};
 use crate::formula::{
-    parse_formula_with_dialect, DrawResult, FormulaContext, FormulaDialect, FormulaEngine,
+    parse_formula_with_dialect, AstNode, DrawResult, FormulaContext, FormulaDialect, FormulaEngine,
     FormulaError,
 };
 use crate::registry::{
@@ -340,6 +340,17 @@ pub fn builtin_operation_registry() -> OperationRegistry {
 /// The request borrows caller-owned contexts. No raw market data is copied at
 /// dispatch time; ownership is transferred only in the returned result.
 pub enum OperationRequest<'a> {
+    /// Invoke one registered indicator directly without parsing a source string.
+    Indicator {
+        /// Canonical name or registered alias.
+        name: &'a str,
+        /// Named input series resolved by the formula context.
+        inputs: &'a [&'a str],
+        /// Numeric parameters in the operation's declared order.
+        params: &'a [f64],
+        /// Mutable input context.
+        context: &'a mut FormulaContext,
+    },
     /// Compile and execute a formula against a mutable formula context.
     Formula {
         /// Formula source in the selected dialect's canonical syntax.
@@ -440,6 +451,10 @@ impl OperationResult {
 /// Errors surfaced by the unified operation façade.
 #[derive(Debug, Clone, PartialEq)]
 pub enum OperationExecutionError {
+    /// The requested operation is absent from the canonical catalog.
+    UnknownOperation(String),
+    /// The request shape or numeric arguments are invalid before execution.
+    InvalidRequest(String),
     /// Formula parsing, planning, or evaluation failed.
     Formula(FormulaError),
     /// Factor registration, dependency resolution, or evaluation failed.
@@ -453,6 +468,10 @@ pub enum OperationExecutionError {
 impl fmt::Display for OperationExecutionError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::UnknownOperation(name) => write!(formatter, "unknown operation: {name}"),
+            Self::InvalidRequest(message) => {
+                write!(formatter, "invalid operation request: {message}")
+            }
             Self::Formula(error) => write!(formatter, "formula operation failed: {error}"),
             Self::Factor(error) => write!(formatter, "factor operation failed: {error}"),
             Self::Composite(error) => write!(formatter, "composite operation failed: {error}"),
@@ -523,6 +542,12 @@ impl UnifiedOperationEngine {
         request: OperationRequest<'a>,
     ) -> Result<OperationResult, OperationExecutionError> {
         match request {
+            OperationRequest::Indicator {
+                name,
+                inputs,
+                params,
+                context,
+            } => self.execute_indicator(name, inputs, params, context),
             OperationRequest::Formula {
                 source,
                 dialect,
@@ -597,6 +622,54 @@ impl UnifiedOperationEngine {
                 })
             }
         }
+    }
+
+    fn execute_indicator(
+        &mut self,
+        name: &str,
+        inputs: &[&str],
+        params: &[f64],
+        context: &mut FormulaContext,
+    ) -> Result<OperationResult, OperationExecutionError> {
+        let spec = self
+            .catalog
+            .get(name)
+            .ok_or_else(|| OperationExecutionError::UnknownOperation(name.to_string()))?;
+        if inputs.iter().any(|input| input.trim().is_empty()) {
+            return Err(OperationExecutionError::InvalidRequest(
+                "indicator input names must not be empty".to_string(),
+            ));
+        }
+        if params.iter().any(|value| !value.is_finite()) {
+            return Err(OperationExecutionError::InvalidRequest(
+                "indicator parameters must be finite".to_string(),
+            ));
+        }
+
+        let mut args = Vec::with_capacity(inputs.len() + params.len());
+        args.extend(
+            inputs
+                .iter()
+                .map(|input| AstNode::Variable((*input).to_string())),
+        );
+        args.extend(params.iter().copied().map(AstNode::Number));
+        let ast = AstNode::FunctionCall {
+            name: spec.name.clone(),
+            args,
+        };
+        let result = self.formula.eval_ast(&ast, context)?;
+        let mut values = BTreeMap::new();
+        values.insert(PRIMARY_OUTPUT_NAME.to_string(), result.to_vec());
+        Ok(OperationResult {
+            values,
+            shape: if spec.outputs > 1 {
+                ValueShape::MultiSeries
+            } else {
+                ValueShape::Series
+            },
+            primary: Some(PRIMARY_OUTPUT_NAME.to_string()),
+            draw: None,
+        })
     }
 
     /// Execute one formula independently for every explicit symbol/timeframe frame.
@@ -790,6 +863,45 @@ mod tests {
         assert_eq!(result.primary.as_deref(), Some(PRIMARY_OUTPUT_NAME));
         assert_eq!(result.primary_values().unwrap().len(), 6);
         assert!(result.draw.is_none());
+    }
+
+    #[test]
+    fn unified_engine_dispatches_registered_indicator_without_source_parsing() {
+        let mut engine = UnifiedOperationEngine::new(FactorRegistry::new());
+        let mut context = formula_context();
+        let inputs = ["CLOSE"];
+        let params = [2.0];
+        let result = engine
+            .execute(OperationRequest::Indicator {
+                name: "ema",
+                inputs: &inputs,
+                params: &params,
+                context: &mut context,
+            })
+            .unwrap();
+
+        assert_eq!(result.shape, ValueShape::Series);
+        assert_eq!(result.primary_values().unwrap().len(), 6);
+        assert!(result
+            .primary_values()
+            .unwrap()
+            .iter()
+            .any(|value| value.is_finite()));
+        let direct = result.primary_values().unwrap().to_vec();
+        let mut formula_context = formula_context();
+        let formula = engine
+            .execute(OperationRequest::Formula {
+                source: "EMA(CLOSE, 2)",
+                dialect: FormulaDialect::AlphaTA,
+                context: &mut formula_context,
+            })
+            .unwrap();
+        for (actual, expected) in direct.iter().zip(formula.primary_values().unwrap()) {
+            assert!(
+                (actual.is_nan() && expected.is_nan()) || (actual - expected).abs() <= 1e-12,
+                "direct and formula dispatch differ: {actual} vs {expected}"
+            );
+        }
     }
 
     #[test]
