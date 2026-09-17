@@ -29,6 +29,15 @@ Finkit 已经具备一个功能面很宽的量化计算内核，但当前状态�
 - `core/src/math`：移动平均、统计、回归、分位数、排序、信息量和 V3/V4 kernel 目录。
 - `crates/finkit-array`、`finkit-series`、`finkit-math`：新加入工作区的基础包，但目前是轻量独立实现，尚未成为 Core 的唯一数据/Kernel 基础。
 
+V1 数据边界已冻结：
+
+- **多标的：纳入正式链路。** 作为并行批处理维度，例如同时计算一组股票/期货/加密资产的 EMA、公式和因子；每个标的保留独立时间序列、缓存身份和状态，禁止跨标的隐式串行拼接。
+- **多周期：纳入正式链路。** 作为明确的 timeframe/frame 维度，支持 1m/5m/1d 等数据源的显式选择、对齐和跨周期引用；不允许未声明的自动重采样或把未收盘的高周期值提前泄漏到低周期。
+- **横截面：纳入正式链路。** 作为同一时间点的 symbol 列集合，服务 rank、z-score、winsorize、行业/市值中性化等因子操作；它与单标的时间序列计算是两种不同的执行方向。
+- **基本面：纳入输入契约，不纳入数据供应商。** V1 支持带 publication/availability timestamp 的 point-in-time 字段和 as-of 查询，防止使用未来财报修订值；数据抓取、清洗、供应商适配和授权数据管道不属于计算内核范围。
+
+此前代码已经零散存在 Chan 多周期、CrossSectional 因子枚举和 Pine `request.security` 描述，但没有统一的 panel/cross-section/point-in-time 容器，也没有全部接入同一 Planner、cache 和跨语言 API，因此只能计为部分实现。
+
 ### 2.2 指标、形态与市场结构
 
 - 批量指标：overlap、momentum、trend、volatility、volume、cycle、statistics、price transform、market 等。
@@ -323,6 +332,9 @@ Core `lib.rs` 暴露大量模块，并同时支持 std/no_std、formula、JIT、
 统一定义：
 
 - `MarketFrame`: symbol、timestamps、OHLCV、amount、timezone/session、revision；
+- `FrameKey`/`MarketPanel`: 明确的 symbol + timeframe 地址和零拷贝多帧集合；
+- `CrossSectionView`: timestamp × symbol 的行主序矩阵，用于横截面因子；
+- `FundamentalSeries`: 按可用时间排序、支持 as-of 的基本面序列；
 - `SeriesRef`/`ColumnRef`: 原始列、派生列、数据类型、长度和有效性；
 - `WarmupPolicy`、`NanPolicy`、`AlignmentPolicy`；
 - `ValueShape`: scalar series、multi-series、event/marker、table/report；
@@ -433,6 +445,12 @@ State record 至少包含：`plan_hash`、`operation_id`、`state_type_id`、`st
 Catalog
   list_operations / get_operation_spec
 
+Data dimensions
+  frame(symbol, timeframe)
+  panel.insert(frame_key, market_frame)
+  cross_section(timestamps, symbols, values)
+  fundamental(name, publication_timestamps, values)
+
 Numeric indicator
   compute(operation, inputs, params, execution_options)
 
@@ -471,6 +489,7 @@ Streaming / persistence / drawing
 3. 修复 ADX parity、StateArena checkpoint、Runtime session restore、registry snapshot。
 4. 建立 `cargo fmt/check/test/clippy`、版本、SSOT、链接、FFI memory、跨语言 golden 的统一 release gate。
 5. 对每个公开 operation 标注 `implemented / partial / planned / unsupported`。
+6. 将 `FrameKey`、`MarketPanel`、`CrossSectionView`、`FundamentalSeries` 纳入 canonical data contract，并为六种语言生成一致的数据维度 API。
 
 **Gate：** 核心测试全绿、版本/SSOT 全绿、失败项不能以修改断言或降低误差预算解决。
 
@@ -577,6 +596,7 @@ Streaming / persistence / drawing
 - 正式公开语言固定为 Rust、Python、C++、Go、Java、.NET；Node、Swift、Kotlin、WASM 等不进入第一阶段正式 API 一致性承诺。
 - 产品核心固定为公式系统、TA-Lib 对标、经典公式兼容、Factor/Composite 因子计算器和量化计算能力。
 - Web 绘图优先采用 Lightweight Charts；Rust renderer 保留为 native/headless/export 后端，不能反向成为 Web 业务层。
+- V1 正式支持多标的、多周期和横截面计算；基本面先支持 point-in-time 输入契约与 as-of 语义，不建设数据抓取和供应商适配。
 - 不建设订单、撮合、交易执行、回测、滑点/交易成本模拟或实时交易风控 Runtime。因子分析中的 look-ahead/repaint 检测仍保留，因为它属于计算语义正确性。
 - 目标是全面超越 TA-Lib，但“超越”必须用可复现的函数覆盖率、数值一致性、吞吐、延迟、内存和跨语言一致性基准证明，不能作为未经验证的宣传结论。
 
@@ -587,7 +607,7 @@ Streaming / persistence / drawing
 3. **终端兼容等级：** TDX、同花顺、东方财富是按各自常见公开函数追求数值等价，还是先冻结 common subset？同名不同义函数是否必须由源码显式指定终端 profile？
 4. **Pine 边界：** 目标 Pine 语言版本和首批子集是什么？对 repaint、lookahead、`request.security` 是默认拒绝、显式 opt-in，还是允许 approximate 并强制输出警告？
 5. **Factor/Composite SLO：** 目标吞吐（bars/sec）、p95/p99 延迟、内存上限、并发任务数、最大图节点数、最大历史长度和可接受编译延迟是多少？
-6. **数据模型：** 是否以 OHLCV + timestamp 为最低公共输入，并在第一版 canonical schema 中同时纳入 amount、open interest、fundamental、cross-sectional panel、multi-symbol/timeframe？
+6. **数据模型补充确认：** V1 已按多标的、多周期、横截面进入正式链路，基本面采用 point-in-time 输入契约；仍需确认第一版是否同时纳入 open interest、fundamental vendor adapters，以及 cross-sectional 的行业/市值中性化等高级字段。
 7. **发布形态：** 六种语言是否都要求同步发布公共包，还是先统一源码/CI/golden 验证，再按语言分阶段发布？这会决定 ABI、构建矩阵和版本门禁的严格程度。
 
 ## 9. 推荐的决策顺序

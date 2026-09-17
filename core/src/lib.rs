@@ -49,6 +49,9 @@ pub mod composite;
 #[cfg(feature = "std")]
 /// Unified semantic compute plans, factor plans, and runtime execution policies.
 pub mod compute;
+#[cfg(feature = "std")]
+/// Canonical multi-symbol, multi-timeframe, cross-sectional, and point-in-time data contracts.
+pub mod data_contract;
 #[cfg(all(feature = "std", not(feature = "no_std")))]
 /// Domain error types for indicator computations and the formula engine.
 pub mod error;
