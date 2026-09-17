@@ -382,6 +382,11 @@ impl FactorRegistry {
         self.factors.keys().map(String::as_str)
     }
 
+    /// Iterate over registered factor definitions in deterministic name order.
+    pub fn iter(&self) -> impl Iterator<Item = &FactorDefinition> {
+        self.factors.values()
+    }
+
     /// Number of registered factors.
     pub fn len(&self) -> usize {
         self.factors.len()

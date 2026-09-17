@@ -55,6 +55,7 @@ extern TaResult* ta_linear_reg(const double *input, int length, int period);
 extern TaResult* ta_tsf(const double *input, int length, int period);
 
 extern const char* ta_version();
+extern char* ta_operation_catalog_json();
 extern void ta_free_result(TaResult *result);
 
 extern char* ta_formula_eval(const char *source, const double *open, const double *high, const double *low, const double *close, const double *volume, int length);
@@ -121,6 +122,17 @@ import (
 // Version returns the library version string.
 func Version() string {
 	return C.GoString(C.ta_version())
+}
+
+// OperationCatalogJSON returns the versioned, language-neutral operation
+// metadata used by all official Finkit bindings.
+func OperationCatalogJSON() (string, error) {
+	result := C.ta_operation_catalog_json()
+	if result == nil {
+		return "", errors.New("operation catalog returned null")
+	}
+	defer C.ta_free_string(result)
+	return C.GoString(result), nil
 }
 
 // convertResult converts a C TaResult to a Go slice and frees the C memory.

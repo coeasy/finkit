@@ -52,6 +52,9 @@ close = np.arange(1.0, 101.0, dtype=np.float64)
 sma20 = ta.sma(close, timeperiod=20)
 rsi14 = ta.rsi(close, timeperiod=14)
 macd, signal, hist = ta.macd(close, 12, 26, 9)
+
+# The same versioned metadata is available to every official binding.
+catalog_json = ta.operation_catalog_json()
 ```
 
 Rolling indicators normally contain leading warm-up `NaN` values.

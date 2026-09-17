@@ -6281,8 +6281,15 @@ fn compute_single_indicator(
 /// - Candlestick Patterns (60+ patterns)
 /// - Chart Patterns (Head & Shoulders, Double Top/Bottom, etc.)
 /// - Advanced Indicators (Ichimoku, Donchian, Elder-Ray, Pivot Points, Fibonacci)
+#[pyfunction]
+fn operation_catalog_json() -> PyResult<String> {
+    finkit_ffi_common::operation::operation_catalog_json()
+        .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
+}
+
 #[pymodule]
 fn finkit(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(operation_catalog_json, m)?)?;
     m.add_class::<PyKlineData>()?;
     m.add_class::<PyKlineChart>()?;
     m.add_function(wrap_pyfunction!(chan_analyze, m)?)?;

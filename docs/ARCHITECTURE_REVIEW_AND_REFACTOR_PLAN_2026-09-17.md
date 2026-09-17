@@ -1,6 +1,6 @@
 # Finkit 项目功能、架构与生产化重构方案
 
-> 审计日期：2026-09-17
+> 审计日期：2026-09-18（持续更新）
 > 审计基线：`perf/outperform-talib-v3-20260904`，提交 `6f6171b`；审计开始时工作区干净，且已与远程目标分支同步。
 > 本文是代码审计和重构决策文档，不把目录、类型或测试名称当作“已完成能力”。只有实现、链路和验证同时成立，才计入完成度。
 
@@ -14,9 +14,9 @@ Finkit 已经具备一个功能面很宽的量化计算内核，但当前状态�
 2. **公式引擎已形成完整雏形，但兼容层仍是“共同子集 + 报告”，不是各终端的完整兼容运行时。** TDX、同花顺、东方财富目前共享 AlphaTA 风格的 canonical parser；`normalize_terminal_source` 主要处理 BOM/换行，没有完成终端专属语义转换。Pine AST 已覆盖声明、`if`、`for`、`while`、`plot`、`fill` 等节点，但这仍是 Pine 子集，不能等价宣称支持 TradingView 全部语言、绘图对象和重绘语义。
 3. **主体链路没有完全贯通。** Core 内已有 Formula、Factor、Composite、Streaming、V3/V4 Runtime 多条可运行链路，但它们没有全部落到同一个计划、Kernel、状态、缓存和输出契约上。工作区还存在 `crates/finkit-factor` 与 `crates/finkit-runtime` 两个重复的早期骨架；其中 `finkit-runtime` 的 `FactorFactory::create()` 返回描述字符串而不是可执行 Factor，不能作为生产执行链。
 4. **Factor 和 Composite 目前不能证明都满足高吞吐生产要求。** Core 的 borrowed、range、缓存和执行计划是正确方向，但 Factor 注册表使用 `Arc<dyn Fn>`，Composite 使用 `BTreeMap` 和独立缓存，仍有动态分发、重复物化和多套缓存身份的问题；没有统一的 compiled operator/typed state/kernel dispatch 作为唯一热路径。
-5. **多语言已有大量绑定，但“语义同 API”尚未完成。** Python、C++、Go、Rust、Java、.NET 都存在绑定或源码入口，但目前是多套手写/半生成 façade。返回类型、错误模型、数组所有权、公式计划句柄、Streaming 状态和研究 API 仍存在语言间差异。Node、Swift、Android/iOS 专用入口不纳入本产品第一阶段正式公开语言范围。
+5. **多语言已有大量绑定，但“语义同 API”尚未完成。** Python、C++、Go、Rust、Java、.NET 都存在绑定或源码入口，但目前是多套手写/半生成 façade。返回类型、错误模型、数组所有权、公式计划句柄、Streaming 状态和研究 API 仍存在语言间差异。Node、Swift、Android/iOS 专用入口不纳入本产品第一阶段正式公开语言范围。最新增量已将版本化 Operation Catalog 接入六个正式入口，但执行、结果、状态和错误 contract tests 尚未全覆盖。
 6. **绘图已开始收敛为 Lightweight Charts Web adapter。** 已有 SVG、Canvas、WebGL/WebGPU、PNG、JSON/HTML 输出，适合 native/headless/export；当前新增了版本化 Lightweight Charts payload 和浏览器 adapter，已覆盖 OHLC、volume、line、null/warm-up、完整更新和最后一条增量更新。ChartScene 的 markers、pane、tooltip/viewport 全量映射仍需继续完成，不能把当前 adapter 宣称为最终绘图实现。
-7. **基础门禁已恢复全绿，但仍不能据此宣称全量生产化。** 审计初始验证为 `2882 passed, 5 failed, 1 ignored`；后续已修复 ADX 对齐、Runtime 检查点/状态恢复、注册表快照和版本/SSOT 漂移。当前 `finkit` Core 测试为 `2890 passed, 0 failed, 1 ignored`，版本、SSOT、文档链接检查已通过；公式完整语义、六语言 contract tests、跨语言 golden、性能 SLO 和持久化 typed state 仍未完成。
+7. **基础门禁已恢复全绿，但仍不能据此宣称全量生产化。** 审计初始验证为 `2882 passed, 5 failed, 1 ignored`；后续已修复 ADX 对齐、Runtime 检查点/状态恢复、注册表快照和版本/SSOT 漂移。当前 Core 专项 operation 测试为 `10 passed, 0 failed`，此前 Core 全量为 `2897 passed, 0 failed, 1 ignored`；本轮还通过了 Python/Go/Java/.NET binding 的 Rust 编译检查。公式完整语义、六语言执行 contract tests、跨语言 golden、性能 SLO 和持久化 typed state 仍未完成。
 
 因此，下一步不是继续增加零散接口，而是先建立一个 canonical compute contract，把 Formula、Factor、Composite、Streaming 和兼容层收敛到同一编译计划与 Runtime，再由各语言和绘图适配器消费这个契约。
 
@@ -36,7 +36,7 @@ V1 数据边界已冻结：
 - **横截面：纳入正式链路。** 作为同一时间点的 symbol 列集合，服务 rank、z-score、winsorize、行业/市值中性化等因子操作；它与单标的时间序列计算是两种不同的执行方向。
 - **基本面：纳入输入契约，不纳入数据供应商。** V1 支持带 publication/availability timestamp 的 point-in-time 字段和 as-of 查询，防止使用未来财报修订值；数据抓取、清洗、供应商适配和授权数据管道不属于计算内核范围。
 
-当前已具备 `FrameKey`/`MarketPanel`/`CrossSectionView`/`FundamentalSeries` 契约，`FactorEngine::evaluate_cross_sectional` 已按每个时间点逐行调用横截面 Factor，统一入口也可返回 `ValueShape::CrossSection`；`UnifiedOperationEngine::execute_panel_formula` 已按显式 symbol/timeframe 分离执行并保留每个 frame 的结果。多标的批量调度、多周期安全对齐、point-in-time 基本面接入统一 Planner/cache 及六语言 API 仍未完成，不能据此宣称多维能力全部生产化。
+当前已具备 `FrameKey`/`MarketPanel`/`CrossSectionView`/`FundamentalSeries` 契约，`FactorEngine::evaluate_cross_sectional` 已按每个时间点逐行调用横截面 Factor，统一入口也可返回 `ValueShape::CrossSection`；`UnifiedOperationEngine::execute_panel_formula` 已按显式 symbol/timeframe 分离执行并保留每个 frame 的结果。多标的批量调度、多周期安全对齐、point-in-time 基本面接入统一 Planner/cache 及六语言完整执行 API 仍未完成，不能据此宣称多维能力全部生产化。
 
 ### 2.2 指标、形态与市场结构
 
@@ -273,7 +273,7 @@ Core `lib.rs` 暴露大量模块，并同时支持 std/no_std、formula、JIT、
 | Composite | 可执行，性能/缓存未统一 | dependency、cycle、borrowed、cached 测试存在 | compiled graph、CSE、arena、统一 cache identity、parallel plan |
 | 量化研究分析 | 功能面已存在，发布契约未完全证明 | factor-analysis、ffi-common 和 JSON 入口存在 | 因子研究 request/report/error schema、跨语言 golden、artifact gate；不包含订单/回测/交易风控 |
 | Visualization | Rust 后端较完整，Lightweight Charts payload/基础 adapter 已落地 | SVG/Canvas/WebGL/WebGPU/JSON/HTML 以及 `visualization/src/lightweight.rs`、`frontend/lightweight-charts-adapter.js` | 完成 ChartScene 的 markers/pane/tooltip/viewport/incremental 全量映射与前端集成测试 |
-| 多语言 | 绑定广，但语义一致未完成 | 8 个 reviewed façade，版本门禁失败 | 统一 schema/错误/生命周期/能力矩阵和各语言 contract tests |
+| 多语言 | 目录元数据已开始统一，执行语义一致未完成 | Rust/Python/C++/Go/Java/.NET 均已接入版本化 Operation Catalog；Rust binding 编译通过 | 统一 schema/错误/生命周期/能力矩阵和六语言执行 contract tests |
 | 版本/文档 SSOT | 未完成 | `check_versions.py` 和 `gen_ssot_docs.py --check` 失败 | clean checkout release gate 全绿 |
 
 补充说明：Python 侧已有 accessor/strategy 相关测试以 `pytest.skip` 标记为尚未实现。这类入口应在公开 API 清单中明确标为 `planned` 或补齐实现与契约测试，不能仅因模块或测试文件存在就计入完成度。
@@ -363,7 +363,7 @@ Core `lib.rs` 暴露大量模块，并同时支持 std/no_std、formula、JIT、
 
 Registry、Rust dispatch、FFI 声明、Python stubs、C++ 头文件/RAII wrapper、Go bindings、Java/.NET metadata、文档和测试清单从该源生成。
 
-当前实现状态：`core/src/operation.rs` 已落地 `OperationKind`、`ValueShape`、`OperationCapabilities`、稳定 `OperationId`、别名解析、冲突校验和从现有 `FunctionRegistry` 的原子投影；`UnifiedOperationEngine` 已将已存在的指标直接 AST dispatch、Formula、Factor、Composite 接入统一 Request/Result/Error façade，并覆盖 AlphaTA、现有 Pine 子集、多标的/多周期 Formula 和横截面 Factor 路由测试。它仍不代表所有指标、公式、Factor、Composite、Draw 已接入同一 dispatcher；逐项 dispatcher、golden、跨语言暴露和 Lightweight Charts scene 转换完成后，才能将对应 operation 标记为 `implemented`。
+当前实现状态：`core/src/operation.rs` 已落地 `OperationKind`、`ValueShape`、`OperationCapabilities`、稳定 `OperationId`、别名解析、冲突校验、从 `FunctionRegistry` 的原子投影，以及从 `FactorRegistry` 投影 Factor 元数据；横截面 Factor 会正确标记 `cross_sectional/multi_symbol` 能力，名称冲突会在 `try_new` 阶段拒绝。`UnifiedOperationEngine` 已将已存在的指标直接 AST dispatch、Formula、Factor、Composite 接入统一 Request/Result/Error façade，并覆盖 AlphaTA、现有 Pine 子集、多标的/多周期 Formula 和横截面 Factor 路由测试。六个正式语言入口已提供同一版本化 `operation_catalog_json` 元数据读取，但这仍不代表所有指标、公式、Factor、Composite、Draw 已接入同一 dispatcher；逐项 dispatcher、golden、跨语言执行暴露和 Lightweight Charts scene 转换完成后，才能将对应 operation 标记为 `implemented`。
 
 ### 5.3 Formula 和兼容层
 
@@ -604,19 +604,19 @@ Streaming / persistence / drawing
 - 不建设订单、撮合、交易执行、回测、滑点/交易成本模拟或实时交易风控 Runtime。因子分析中的 look-ahead/repaint 检测仍保留，因为它属于计算语义正确性。
 - 目标是全面超越 TA-Lib，但“超越”必须用可复现的函数覆盖率、数值一致性、吞吐、延迟、内存和跨语言一致性基准证明，不能作为未经验证的宣传结论。
 
-仍需确认、且会影响公开 API 或兼容语义的问题如下：
+产品边界已经确认；以下是按确认结果冻结的工程决策，不再作为开发阻塞问题：
 
-1. **版本策略：** 是继续以 workspace `0.1.15` 为起点，还是直接切换新的产品版本/协议版本？算法版本、schema 版本、binding package 版本是否允许独立递增？
-2. **TA-Lib 对标范围：** 是否要求覆盖 TA-Lib 全部公开函数，还是以常见指标、candlestick、math/statistics 全 catalog 为第一阶段范围？NaN、warm-up 和误差预算是否以指定 TA-Lib 版本为绝对基准？
-3. **终端兼容等级：** TDX、同花顺、东方财富是按各自常见公开函数追求数值等价，还是先冻结 common subset？同名不同义函数是否必须由源码显式指定终端 profile？
-4. **Pine 边界：** 目标 Pine 语言版本和首批子集是什么？对 repaint、lookahead、`request.security` 是默认拒绝、显式 opt-in，还是允许 approximate 并强制输出警告？
-5. **Factor/Composite SLO：** 目标吞吐（bars/sec）、p95/p99 延迟、内存上限、并发任务数、最大图节点数、最大历史长度和可接受编译延迟是多少？
-6. **数据模型补充确认：** V1 已按多标的、多周期、横截面进入正式链路，基本面采用 point-in-time 输入契约；仍需确认第一版是否同时纳入 open interest、fundamental vendor adapters，以及 cross-sectional 的行业/市值中性化等高级字段。
-7. **发布形态：** 六种语言是否都要求同步发布公共包，还是先统一源码/CI/golden 验证，再按语言分阶段发布？这会决定 ABI、构建矩阵和版本门禁的严格程度。
+1. **版本策略：** 以当前 workspace `0.1.15` 作为实现基线；产品版本、算法版本、schema 版本和 binding package 版本分离管理，公开 contract 以 schema/algorithm version 判定兼容性。
+2. **TA-Lib 对标范围：** 目标覆盖 TA-Lib 全部公开 catalog，并优先完成常见指标、candlestick、math/statistics；指定对标版本、warm-up、NaN 和误差预算必须写入每个 golden case。
+3. **终端兼容等级：** TDX、同花顺、东方财富按各自常见公开函数和运算符逐步追求数值等价；源码显式指定 terminal profile，同名不同义禁止静默选择。
+4. **Pine 边界：** 以 Pine v5 常见可计算子集为第一执行目标，持续扩展；`repaint/lookahead/request.security` 必须显式分类，订单/策略执行不纳入 Runtime。
+5. **Factor/Composite SLO：** 在产品方提供固定数据规模和延迟目标前，先建立可复现 bars/sec、p95/p99、分配量、RSS、并发扩展基线，禁止无基准宣称“高吞吐生产化”。
+6. **数据模型：** V1 纳入多标的、多周期、横截面；基本面只纳入 point-in-time/as-of 输入契约，不纳入 vendor ingestion；open interest、行业/市值中性化作为按同一数据契约扩展的计算能力。
+7. **发布形态：** 六种语言都进入同一 schema、golden 和 ABI/生命周期门禁；实现可分批合并，但不能发布语义不一致的语言包。
 
 ## 9. 推荐的决策顺序
 
-在收到上述确认前，不继续扩大指标数量或重复迁移旧接口。推荐顺序是：
+不再重复迁移旧接口；按以下冻结顺序推进：
 
 ```text
 确认公开边界

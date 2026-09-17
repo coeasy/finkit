@@ -26,6 +26,8 @@ pub struct OperationCatalogEnvelope {
 /// Serializable representation of one canonical operation.
 #[derive(Debug, Clone, Serialize)]
 pub struct OperationCatalogEntry {
+    /// Stable numeric operation identity.
+    pub operation_id: u32,
     /// Canonical uppercase operation name.
     pub name: String,
     /// Normalized aliases.
@@ -102,6 +104,7 @@ impl From<OperationCapabilities> for OperationCapabilitiesJson {
 impl OperationCatalogEntry {
     fn from_spec(spec: &OperationSpec) -> Self {
         Self {
+            operation_id: spec.id().0,
             name: spec.name.clone(),
             aliases: spec.aliases.clone(),
             kind: operation_kind_name(spec.kind),
@@ -203,6 +206,7 @@ mod tests {
         let json = operation_catalog_json().unwrap();
         assert!(json.contains("\"schema_version\":1"));
         assert!(json.contains("\"name\":\"EMA\""));
+        assert!(json.contains("\"operation_id\":"));
         assert!(json.contains("\"multi_symbol\":false"));
         assert!(json.contains("\"value_shape\":\"series\""));
     }

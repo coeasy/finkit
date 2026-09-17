@@ -838,6 +838,7 @@ version = "0.1.15"
 dependencies = [
  "finkit",
  "finkit-factor-analysis",
+ "finkit-ffi-common",
  "finkit-visualization",
  "ndarray 0.16.1",
  "numpy",

@@ -664,6 +664,10 @@ def tanh(close: ArrayLike) -> Array1D:
 # Formula Engine
 # ============================================================================
 
+def operation_catalog_json() -> str:
+    """Return the versioned language-neutral operation catalog as JSON."""
+    ...
+
 class CompiledFormula:
     """Reusable formula compilation plan for repeated evaluations."""
 
@@ -1119,6 +1123,7 @@ __all__ = [
     "log10", "sin", "sinh", "sqrt", "tan", "tanh",
     # Formula Engine
     "CompiledFormula", "formula_eval", "formula_eval_dialect",
+    "operation_catalog_json",
     # Visualization
     "KlineChart", "KlineData",
     # Streaming Indicators

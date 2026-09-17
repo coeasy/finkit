@@ -167,6 +167,9 @@ public static class Indicators
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern void ta_free_string(IntPtr s);
 
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern IntPtr ta_operation_catalog_json();
+
     // ========================================================================
     // Helper Methods
     // ========================================================================
@@ -182,6 +185,24 @@ public static class Indicators
     private static double[] AllocateAndInitialize(int length)
     {
         return new double[length];
+    }
+
+    /// <summary>
+    /// Returns the versioned, language-neutral operation metadata catalog.
+    /// </summary>
+    public static string OperationCatalogJson()
+    {
+        IntPtr resultPtr = ta_operation_catalog_json();
+        if (resultPtr == IntPtr.Zero)
+            throw new InvalidOperationException("Operation catalog returned null");
+        try
+        {
+            return Marshal.PtrToStringUTF8(resultPtr) ?? "";
+        }
+        finally
+        {
+            ta_free_string(resultPtr);
+        }
     }
 
     private static void EnsureSameLength(params double[][] arrays)

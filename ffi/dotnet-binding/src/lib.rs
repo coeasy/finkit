@@ -340,6 +340,18 @@ pub extern "C" fn ta_version() -> *const c_char {
     VERSION.as_ptr().cast()
 }
 
+/// Return the canonical operation catalog as an owned UTF-8 JSON string.
+#[no_mangle]
+pub extern "C" fn ta_operation_catalog_json() -> *mut c_char {
+    ffi_catch_ptr(|| {
+        finkit_ffi_common::operation::operation_catalog_json()
+            .ok()
+            .and_then(|json| CString::new(json).ok())
+            .map(CString::into_raw)
+            .unwrap_or(std::ptr::null_mut())
+    })
+}
+
 // ============================================================================
 // Formula Engine
 // ============================================================================

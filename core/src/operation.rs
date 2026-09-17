@@ -8,7 +8,9 @@
 
 use crate::composite::{CompositeDefinition, CompositeEngine};
 use crate::data_contract::{CrossSectionView, DataContractError, MarketPanel};
-use crate::factors::{BorrowedFactorContext, FactorEngine, FactorRegistry};
+use crate::factors::{
+    BorrowedFactorContext, FactorDefinition, FactorEngine, FactorKind, FactorRegistry,
+};
 use crate::formula::{
     parse_formula_with_dialect, AstNode, DrawResult, FormulaContext, FormulaDialect, FormulaEngine,
     FormulaError,
@@ -105,6 +107,42 @@ impl OperationCapabilities {
             drawable: false,
         }
     }
+
+    /// Capabilities for a formula primitive invoked inside a formula plan.
+    pub const fn formula_function(streaming: bool, deterministic: bool) -> Self {
+        Self {
+            batch: true,
+            streaming,
+            cross_sectional: false,
+            multi_symbol: false,
+            multi_timeframe: false,
+            parallel: false,
+            deterministic,
+            causal: true,
+            lookahead: false,
+            repaint: false,
+            stateful: streaming,
+            drawable: false,
+        }
+    }
+
+    /// Conservative capabilities for a user or built-in factor definition.
+    pub const fn factor(kind: FactorKind) -> Self {
+        Self {
+            batch: true,
+            streaming: false,
+            cross_sectional: matches!(kind, FactorKind::CrossSectional),
+            multi_symbol: matches!(kind, FactorKind::CrossSectional),
+            multi_timeframe: false,
+            parallel: false,
+            deterministic: true,
+            causal: true,
+            lookahead: false,
+            repaint: false,
+            stateful: false,
+            drawable: false,
+        }
+    }
 }
 
 /// Stable identifier derived from the canonical normalized operation name.
@@ -156,6 +194,11 @@ pub struct OperationSpec {
 }
 
 impl OperationSpec {
+    /// Return the stable numeric identity used by planners and bindings.
+    pub fn id(&self) -> OperationId {
+        OperationId::from_name(&self.name)
+    }
+
     /// Project an existing public function description into the canonical
     /// operation contract without claiming capabilities it did not declare.
     pub fn from_function(spec: &FunctionSpec) -> Self {
@@ -183,7 +226,38 @@ impl OperationSpec {
             params: spec.params.to_vec(),
             outputs: spec.outputs,
             lookback: spec.lookback,
-            capabilities: OperationCapabilities::indicator(spec.streaming, spec.deterministic),
+            capabilities: match kind {
+                OperationKind::Indicator => {
+                    OperationCapabilities::indicator(spec.streaming, spec.deterministic)
+                }
+                OperationKind::FormulaFunction => {
+                    OperationCapabilities::formula_function(spec.streaming, spec.deterministic)
+                }
+                OperationKind::Factor => OperationCapabilities::factor(FactorKind::TimeSeries),
+                OperationKind::Composite | OperationKind::Draw => {
+                    OperationCapabilities::indicator(false, spec.deterministic)
+                }
+            },
+            schema_version: 1,
+        }
+    }
+
+    /// Project a registered Factor into the canonical operation catalog.
+    pub fn from_factor(factor: &FactorDefinition) -> Self {
+        Self {
+            name: normalize_name(&factor.name),
+            aliases: Vec::new(),
+            kind: OperationKind::Factor,
+            value_shape: match factor.kind {
+                FactorKind::TimeSeries => ValueShape::Series,
+                FactorKind::CrossSectional => ValueShape::CrossSection,
+            },
+            category: Some(FunctionCategory::Factor),
+            input: Some(InputKind::Dynamic),
+            params: Vec::new(),
+            outputs: 1,
+            lookback: LookbackSpec::Dynamic,
+            capabilities: OperationCapabilities::factor(factor.kind),
             schema_version: 1,
         }
     }
@@ -296,6 +370,17 @@ impl OperationRegistry {
         Ok(registry)
     }
 
+    /// Register all factors from a caller-owned factor registry.
+    pub fn register_factor_registry(
+        &mut self,
+        factors: &FactorRegistry,
+    ) -> Result<(), OperationRegistryError> {
+        for factor in factors.iter() {
+            self.register(OperationSpec::from_factor(factor))?;
+        }
+        Ok(())
+    }
+
     /// Resolve a canonical name or alias case-insensitively.
     pub fn get(&self, name: &str) -> Option<&OperationSpec> {
         let normalized = normalize_name(name);
@@ -327,9 +412,7 @@ impl OperationRegistry {
     }
 }
 
-/// Build the canonical catalog from all currently registered public
-/// functions. Formula-language, factor, composite, and drawing entries will
-/// be added through the same registry as their verified dispatchers land.
+/// Build the canonical catalog from all built-in public functions.
 pub fn builtin_operation_registry() -> OperationRegistry {
     OperationRegistry::from_function_registry(&builtin_function_registry())
         .expect("built-in operation names and aliases are unique")
@@ -508,12 +591,19 @@ pub struct UnifiedOperationEngine {
 impl UnifiedOperationEngine {
     /// Create an engine with the built-in operation catalog and caller factors.
     pub fn new(factors: FactorRegistry) -> Self {
-        Self {
-            catalog: builtin_operation_registry(),
+        Self::try_new(factors).expect("factor names must not collide with built-in operations")
+    }
+
+    /// Create an engine and return configuration errors instead of panicking.
+    pub fn try_new(factors: FactorRegistry) -> Result<Self, OperationRegistryError> {
+        let mut catalog = builtin_operation_registry();
+        catalog.register_factor_registry(&factors)?;
+        Ok(Self {
+            catalog,
             formula: FormulaEngine::new(),
             factor: FactorEngine::new(factors),
             composite: CompositeEngine::new(),
-        }
+        })
     }
 
     /// Read the canonical metadata catalog used by this engine.
@@ -635,6 +725,14 @@ impl UnifiedOperationEngine {
             .catalog
             .get(name)
             .ok_or_else(|| OperationExecutionError::UnknownOperation(name.to_string()))?;
+        if !matches!(
+            spec.kind,
+            OperationKind::Indicator | OperationKind::FormulaFunction
+        ) {
+            return Err(OperationExecutionError::InvalidRequest(format!(
+                "operation {name} is not directly invokable as an indicator"
+            )));
+        }
         if inputs.iter().any(|input| input.trim().is_empty()) {
             return Err(OperationExecutionError::InvalidRequest(
                 "indicator input names must not be empty".to_string(),
@@ -793,6 +891,47 @@ mod tests {
 
         assert_eq!(operations.get_by_id(id), Some(ema));
         assert_eq!(id, OperationId::from_name(" EMA "));
+    }
+
+    #[test]
+    fn registered_factor_is_projected_with_cross_sectional_capabilities() {
+        let mut factors = FactorRegistry::new();
+        factors
+            .register(FactorDefinition::new(
+                "cs_rank",
+                ["close"],
+                FactorKind::CrossSectional,
+                FactorDirection::HigherBetter,
+                Arc::new(|inputs| Ok(inputs.get("close")?.to_vec())),
+            ))
+            .unwrap();
+
+        let mut operations = builtin_operation_registry();
+        operations.register_factor_registry(&factors).unwrap();
+        let spec = operations.get("CS_RANK").unwrap();
+        assert_eq!(spec.kind, OperationKind::Factor);
+        assert_eq!(spec.value_shape, ValueShape::CrossSection);
+        assert!(spec.capabilities.cross_sectional);
+        assert!(spec.capabilities.multi_symbol);
+        assert!(!spec.capabilities.streaming);
+    }
+
+    #[test]
+    fn try_new_rejects_factor_name_collisions_before_engine_creation() {
+        let mut factors = FactorRegistry::new();
+        factors
+            .register(FactorDefinition::new(
+                "EMA",
+                ["close"],
+                FactorKind::TimeSeries,
+                FactorDirection::Neutral,
+                Arc::new(|inputs| Ok(inputs.get("close")?.to_vec())),
+            ))
+            .unwrap();
+        assert!(matches!(
+            UnifiedOperationEngine::try_new(factors),
+            Err(OperationRegistryError::DuplicateName(name)) if name == "EMA"
+        ));
     }
 
     #[test]

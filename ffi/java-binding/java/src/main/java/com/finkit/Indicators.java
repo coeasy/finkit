@@ -840,6 +840,13 @@ public final class Indicators {
         String source, double[] open, double[] high, double[] low, double[] close, double[] volume);
 
     /**
+     * Returns the versioned, language-neutral operation metadata catalog.
+     *
+     * @return JSON catalog shared by the official Finkit bindings
+     */
+    public static native String operationCatalogJson();
+
+    /**
      * Validates a formula source string for syntactic correctness.
      *
      * @param source formula source code to validate

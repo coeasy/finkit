@@ -51,6 +51,22 @@ pub extern "system" fn Java_com_finkit_Indicators_freeJString(
     })
 }
 
+#[no_mangle]
+pub extern "system" fn Java_com_finkit_Indicators_operationCatalogJson(
+    env: JNIEnv,
+    _class: JClass,
+) -> jni::sys::jstring {
+    ffi_catch_ptr(|| {
+        match finkit_ffi_common::operation::operation_catalog_json()
+            .ok()
+            .and_then(|json| env.new_string(json).ok())
+        {
+            Some(value) => value.into_raw(),
+            None => std::ptr::null_mut(),
+        }
+    })
+}
+
 fn get_double_array(env: &mut JNIEnv, arr: JDoubleArray) -> Vec<f64> {
     let len = env.get_array_length(&arr).unwrap() as usize;
     let mut buf = vec![0.0f64; len];
