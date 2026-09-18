@@ -19,6 +19,20 @@ public class IndicatorTests
         throw new FileNotFoundException("Shared engine contract fixture was not found");
     }
 
+    private static string TalibCoverageMatrixPath()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory != null)
+        {
+            var candidate = Path.Combine(directory.FullName, "tests", "contracts", "talib_coverage_matrix_v1.json");
+            if (File.Exists(candidate))
+                return candidate;
+            directory = directory.Parent;
+        }
+
+        throw new FileNotFoundException("TA-Lib coverage matrix was not found");
+    }
+
     private static void AssertContractSeries(JsonElement actual, JsonElement expected)
     {
         Assert.Equal(JsonValueKind.Array, actual.ValueKind);
@@ -78,6 +92,35 @@ public class IndicatorTests
         AssertContractSeries(
             compositeResult.RootElement.GetProperty("values").GetProperty("sma3"),
             composite.GetProperty("expected_primary"));
+    }
+
+    [Fact]
+    public void CurrentTalibCatalog_MatchesSharedCoverageMatrix()
+    {
+        using var matrix = JsonDocument.Parse(File.ReadAllText(TalibCoverageMatrixPath()));
+        var profile = matrix.RootElement.GetProperty("semantic_profile").GetString();
+        Assert.Equal("talib_0_8_0", profile);
+
+        var expected = matrix.RootElement
+            .GetProperty("surfaces")
+            .GetProperty("numeric_reference")
+            .GetProperty("indicators")
+            .EnumerateArray()
+            .Select(value => value.GetString()!)
+            .ToHashSet(StringComparer.Ordinal);
+
+        using var catalog = JsonDocument.Parse(Indicators.OperationCatalogJson());
+        var actual = catalog.RootElement
+            .GetProperty("operations")
+            .EnumerateArray()
+            .Where(operation => operation.GetProperty("semantic_profiles").EnumerateArray()
+                .Any(value => value.GetString() == profile))
+            .Select(operation => operation.GetProperty("name").GetString()!)
+            .ToHashSet(StringComparer.Ordinal);
+
+        Assert.Equal(expected.Count, actual.Count);
+        Assert.True(expected.SetEquals(actual), "TA-Lib catalog names drifted from the shared coverage matrix");
+        Assert.DoesNotContain("talib_0_7_1", Indicators.OperationCatalogJson());
     }
 
     [Fact]

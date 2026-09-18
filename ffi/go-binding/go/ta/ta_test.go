@@ -33,6 +33,31 @@ func loadEngineContract(t *testing.T) map[string]interface{} {
 	return fixture
 }
 
+func loadTalibCoverageMatrix(t *testing.T) map[string]interface{} {
+	t.Helper()
+	paths := []string{
+		filepath.Join("..", "..", "..", "..", "tests", "contracts", "talib_coverage_matrix_v1.json"),
+		filepath.Join("..", "..", "..", "tests", "contracts", "talib_coverage_matrix_v1.json"),
+		filepath.Join("tests", "contracts", "talib_coverage_matrix_v1.json"),
+	}
+	var data []byte
+	var err error
+	for _, path := range paths {
+		data, err = os.ReadFile(path)
+		if err == nil {
+			break
+		}
+	}
+	if err != nil {
+		t.Fatalf("read TA-Lib coverage matrix: %v", err)
+	}
+	var fixture map[string]interface{}
+	if err := json.Unmarshal(data, &fixture); err != nil {
+		t.Fatalf("decode TA-Lib coverage matrix: %v", err)
+	}
+	return fixture
+}
+
 func asFloatSlice(t *testing.T, value interface{}) []float64 {
 	t.Helper()
 	values, ok := value.([]interface{})
@@ -131,6 +156,43 @@ func TestSharedEngineContractV1(t *testing.T) {
 		t.Fatalf("composite execution failed: %v", err)
 	}
 	assertContractSeries(t, decodeContractResult(t, compositeResult)["values"].(map[string]interface{})["sma3"], composite["expected_primary"])
+}
+
+func TestCurrentTalibCatalogContract(t *testing.T) {
+	matrix := loadTalibCoverageMatrix(t)
+	catalogJSON, err := OperationCatalogJSON()
+	if err != nil {
+		t.Fatalf("operation catalog failed: %v", err)
+	}
+	var catalog map[string]interface{}
+	if err := json.Unmarshal([]byte(catalogJSON), &catalog); err != nil {
+		t.Fatalf("decode operation catalog: %v", err)
+	}
+	profile := matrix["semantic_profile"].(string)
+	if profile != "talib_0_8_0" {
+		t.Fatalf("unexpected TA-Lib profile: %s", profile)
+	}
+	expected := make(map[string]bool)
+	for _, item := range matrix["surfaces"].(map[string]interface{})["numeric_reference"].(map[string]interface{})["indicators"].([]interface{}) {
+		expected[item.(string)] = true
+	}
+	seen := make(map[string]bool)
+	for _, item := range catalog["operations"].([]interface{}) {
+		operation := item.(map[string]interface{})
+		for _, value := range operation["semantic_profiles"].([]interface{}) {
+			if value.(string) == profile {
+				seen[operation["name"].(string)] = true
+			}
+		}
+	}
+	if len(seen) != int(matrix["surfaces"].(map[string]interface{})["dispatcher_smoke"].(map[string]interface{})["expected_count"].(float64)) {
+		t.Fatalf("TA-Lib catalog count: got %d want %d", len(seen), len(expected))
+	}
+	for name := range expected {
+		if !seen[name] {
+			t.Fatalf("TA-Lib catalog is missing %s", name)
+		}
+	}
 }
 
 func TestVersion(t *testing.T) {

@@ -52,6 +52,20 @@ test('executes the shared engine contract vector', () => {
   assert.deepEqual(compositeResult.values.sma3, composite.expected_primary)
 })
 
+test('publishes the current TA-Lib catalog contract', () => {
+  const matrix = JSON.parse(readFileSync(new URL('../../../tests/contracts/talib_coverage_matrix_v1.json', import.meta.url), 'utf8'))
+  const catalog = JSON.parse(finkit.operationCatalogJson())
+  const talibNames = catalog.operations
+    .filter((operation) => operation.semantic_profiles.includes(matrix.semantic_profile))
+    .map((operation) => operation.name)
+    .sort()
+
+  assert.equal(matrix.semantic_profile, 'talib_0_8_0')
+  assert.equal(talibNames.length, matrix.surfaces.dispatcher_smoke.expected_count)
+  assert.deepEqual(talibNames, [...matrix.surfaces.numeric_reference.indicators].sort())
+  assert.equal(catalog.operations.find((operation) => operation.name === 'SMA').semantic_profiles.includes('talib_0_7_1'), false)
+})
+
 test('executes Pine request.security through explicit temporal provider data', () => {
   const payload = JSON.parse(finkit.formulaEvalTemporalContractJson(JSON.stringify({
     schema_version: 1,

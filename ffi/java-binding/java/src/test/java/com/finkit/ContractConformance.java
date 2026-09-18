@@ -17,6 +17,16 @@ public final class ContractConformance {
         }
     }
 
+    private static int countOccurrences(String payload, String fragment) {
+        int count = 0;
+        int offset = 0;
+        while ((offset = payload.indexOf(fragment, offset)) >= 0) {
+            count++;
+            offset += fragment.length();
+        }
+        return count;
+    }
+
     public static void main(String[] args) {
         String operation = Indicators.operationExecuteJson(
                 "{\"operation\":\"SMA\",\"input_order\":[\"CLOSE\"],"
@@ -45,5 +55,15 @@ public final class ContractConformance {
                         + "\"definitions\":[{\"name\":\"sma3\",\"function\":\"sma\","
                         + "\"inputs\":[\"close\"],\"params\":[3]}],\"outputs\":[\"sma3\"]}");
         requireContains(composite, "\"sma3\":[null,null,2.0,3.0,4.0]");
+
+        String catalog = Indicators.operationCatalogJson();
+        requireContains(catalog, "\"schema_version\":1");
+        requireContains(catalog, "\"name\":\"SMA\"");
+        requireContains(catalog, "talib_0_8_0");
+        int currentProfileCount = countOccurrences(
+                catalog, "\"profile_output_contracts\":{\"talib_0_8_0\"");
+        if (catalog.contains("talib_0_7_1") || currentProfileCount != 201) {
+            throw new AssertionError("TA-Lib catalog must expose exactly 201 current-profile operations");
+        }
     }
 }

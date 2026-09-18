@@ -452,6 +452,28 @@ void test_shared_engine_contract() {
     PASS();
 }
 
+void test_current_talib_catalog() {
+    TEST("Current TA-Lib catalog contract")
+    const auto catalog = operation_catalog_json();
+    ASSERT(catalog.find("\"schema_version\":1") != std::string::npos,
+           "Catalog schema version is missing");
+    ASSERT(catalog.find("\"name\":\"SMA\"") != std::string::npos,
+           "Catalog does not contain SMA");
+    ASSERT(catalog.find("talib_0_8_0") != std::string::npos,
+           "Catalog does not contain the current TA-Lib profile");
+    ASSERT(catalog.find("talib_0_7_1") == std::string::npos,
+           "Catalog contains the retired TA-Lib profile");
+    size_t count = 0;
+    size_t position = 0;
+    const std::string profile_marker = "\"profile_output_contracts\":{\"talib_0_8_0\"";
+    while ((position = catalog.find(profile_marker, position)) != std::string::npos) {
+        ++count;
+        position += profile_marker.size();
+    }
+    ASSERT_EQ(count, static_cast<size_t>(201), "TA-Lib catalog profile count mismatch");
+    PASS();
+}
+
 int main() {
     std::cout << "========================================" << std::endl;
     std::cout << "  finkit C++ Binding Tests" << std::endl;
@@ -501,6 +523,7 @@ int main() {
     test_moving_averages_comparison();
     test_benchmark();
     test_shared_engine_contract();
+    test_current_talib_catalog();
     
     std::cout << std::endl;
     std::cout << "========================================" << std::endl;

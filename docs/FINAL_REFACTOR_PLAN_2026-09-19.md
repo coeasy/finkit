@@ -154,6 +154,12 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
   `profile_output_contracts`；顶层字段保留 Core registry 语义，TA-Lib profile
   使用独立输出 schema，并通过 201 项 dispatcher smoke 逐项校验实际返回字段，
   防止 discovery 与执行结果在 KDJ、AROON、DONCHIAN 及扩展多输出指标上漂移。
+- 多语言目录门禁现在直接读取同一份
+  `tests/contracts/talib_coverage_matrix_v1.json`：Node、Python、Go 和 .NET
+  对照 201 个名称集合；C、C++ 和 Java 校验当前 profile 的 201 个 catalog
+  contract entries；全部入口都拒绝已淘汰的 `talib_0_7_1`。这防止旧 native
+  artifact 被误当作最新源码验证；完整目录当前还包含 Core-only operation，
+  因此不把总 operation 数误写成 201。
 - 内置 operation catalog 现在由进程级 `OnceLock` 缓存，并作为 TA-Lib dispatcher
   的运行时执行契约：请求中的参数数量不得超出 profile schema，返回字段、输出数量、
   shape 和序列长度必须与 schema 对齐；不一致统一返回结构化
@@ -186,6 +192,9 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
 
 - Rust：`cargo +1.98.1 test -p finkit-ffi-common contract_conformance --offline`，10 passed。
 - Node：`npm test`，12 passed。
-- Python：从 workspace 根目录运行 `python -m pytest ffi/python-binding/tests/test_engine_contract_v1.py -q`，1 passed。
-- Java：使用 `finkit_java.dll` 编译并运行 `com.finkit.ContractConformance`，exit code 0。
+- Node：重建当前 Rust native module 后 `npm test`，13 passed（含 TA-Lib 目录集合门禁）。
+- Python：从 workspace 根目录运行
+  `python -m pytest ffi/python-binding/tests/test_engine_contract_v1.py -q`，2 passed。
+- Java：重新构建当前 `finkit_java.dll`，编译并运行
+  `com.finkit.ContractConformance`，exit code 0（含 TA-Lib 目录门禁）。
 - Go：未运行，工作机 `CGO_ENABLED=0` 且没有 `gcc`；C/C++：未运行，工作机没有 CMake/C++ 编译器；.NET：未运行，工作机没有 `dotnet`。这些是未验证项，不视为通过。
