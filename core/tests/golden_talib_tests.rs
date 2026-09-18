@@ -155,6 +155,75 @@ fn pattern_to_vec(arr: ndarray::Array1<i32>) -> Vec<f64> {
     arr.iter().map(|value| *value as f64).collect()
 }
 
+fn compute_candlestick_output(
+    indicator: &str,
+    open: &[f64],
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+) -> Vec<f64> {
+    use finkit::patterns::candlestick as cdl;
+
+    let result = match indicator {
+        "CDLABANDONEDBABY" => cdl::cdl_abandoned_baby(open, high, low, close),
+        "CDLADVANCEBLOCK" => cdl::cdl_advanceblock(open, high, low, close),
+        "CDLBELTHOLD" => cdl::cdl_belthold(open, high, low, close),
+        "CDLBREAKAWAY" => cdl::cdl_breakaway(open, high, low, close),
+        "CDLCLOSINGMARUBOZU" => cdl::cdl_closingmarubozu(open, high, low, close),
+        "CDLCONCEALBABYSWALL" => cdl::cdl_concealbabyswall(open, high, low, close),
+        "CDLCOUNTERATTACK" => cdl::cdl_counterattack(open, high, low, close),
+        "CDLDARKCLOUDCOVER" => cdl::cdl_darkcloudcover(open, high, low, close),
+        "CDLDOJI" => cdl::cdl_doji(open, high, low, close),
+        "CDLDOJISTAR" => cdl::cdl_doji_star(open, high, low, close),
+        "CDLDRAGONFLYDOJI" => cdl::cdl_dragonflydoji(open, high, low, close),
+        "CDLENGULFING" => cdl::cdl_engulfing(open, high, low, close),
+        "CDLEVENINGDOJISTAR" => cdl::cdl_eveningdojistar(open, high, low, close),
+        "CDLEVENINGSTAR" => cdl::cdl_eveningstar(open, high, low, close),
+        "CDLGAPSIDESIDEWHITE" => cdl::cdl_gap_side_white(open, high, low, close),
+        "CDLGRAVESTONEDOJI" => cdl::cdl_gravestonedoji(open, high, low, close),
+        "CDLHAMMER" => cdl::cdl_hammer(open, high, low, close),
+        "CDLHANGINGMAN" => cdl::cdl_hangingman(open, high, low, close),
+        "CDLHARAMI" => cdl::cdl_harami(open, high, low, close),
+        "CDLHARAMICROSS" => cdl::cdl_haramicross(open, high, low, close),
+        "CDLHIGHWAVE" => cdl::cdl_highwave(open, high, low, close),
+        "CDLHIKKAKE" => cdl::cdl_hikkake(open, high, low, close),
+        "CDLHIKKAKEMOD" => cdl::cdl_hikkake_mod(open, high, low, close),
+        "CDLHOMINGPIGEON" => cdl::cdl_homing_pigeon(open, high, low, close),
+        "CDLIDENTICAL3CROWS" => cdl::cdl_identical3crows(open, high, low, close),
+        "CDLINNECK" => cdl::cdl_inneck(open, high, low, close),
+        "CDLINVERTEDHAMMER" => cdl::cdl_invertedhammer(open, high, low, close),
+        "CDLKICKING" => cdl::cdl_kicking(open, high, low, close),
+        "CDLKICKINGBYLENGTH" => cdl::cdl_kickingbylength(open, high, low, close),
+        "CDLLADDERBOTTOM" => cdl::cdl_ladder_bottom(open, high, low, close),
+        "CDLLONGLEGGEDDOJI" => cdl::cdl_longleggeddoji(open, high, low, close),
+        "CDLLONGLINE" => cdl::cdl_longline(open, high, low, close),
+        "CDLMARUBOZU" => cdl::cdl_marubozu(open, high, low, close),
+        "CDLMATCHINGLOW" => cdl::cdl_matchinglow(open, high, low, close),
+        "CDLMATHOLD" => cdl::cdl_mathold(open, high, low, close),
+        "CDLMORNINGDOJISTAR" => cdl::cdl_morningdojistar(open, high, low, close),
+        "CDLMORNINGSTAR" => cdl::cdl_morningstar(open, high, low, close),
+        "CDLONNECK" => cdl::cdl_onneck(open, high, low, close),
+        "CDLPIERCING" => cdl::cdl_piercing(open, high, low, close),
+        "CDLRICKSHAWMAN" => cdl::cdl_rickshawman(open, high, low, close),
+        "CDLRISEFALL3METHODS" => cdl::cdl_rise_fall_3methods(open, high, low, close),
+        "CDLSEPARATINGLINES" => cdl::cdl_separatinglines(open, high, low, close),
+        "CDLSHOOTINGSTAR" => cdl::cdl_shootingstar(open, high, low, close),
+        "CDLSHORTLINE" => cdl::cdl_shortline(open, high, low, close),
+        "CDLSPINNINGTOP" => cdl::cdl_spinningtop(open, high, low, close),
+        "CDLSTALLEDPATTERN" => cdl::cdl_stalledpattern(open, high, low, close),
+        "CDLSTICKSANDWICH" => cdl::cdl_sticksandwich(open, high, low, close),
+        "CDLTAKURI" => cdl::cdl_takuri(open, high, low, close),
+        "CDLTASUKIGAP" => cdl::cdl_tasukigap(open, high, low, close),
+        "CDLTHRUSTING" => cdl::cdl_thrusting(open, high, low, close),
+        "CDLTRISTAR" => cdl::cdl_tristar(open, high, low, close),
+        "CDLUNIQUE3RIVER" => cdl::cdl_unique3river(open, high, low, close),
+        "CDLUPSIDEGAP2CROWS" => cdl::cdl_upsidegap2crows(open, high, low, close),
+        "CDLXSIDEGAP3METHODS" => cdl::cdl_xsidegap3methods(open, high, low, close),
+        other => panic!("unsupported candlestick indicator for golden tests: {other}"),
+    };
+    pattern_to_vec(result.unwrap())
+}
+
 fn read_fixture_csv(path: &Path) -> Ohlcv {
     let content = fs::read_to_string(path).expect("read fixture csv");
     let mut lines = content
@@ -510,42 +579,63 @@ fn compute_alpha_ta_outputs(
             "trendline".to_string(),
             array_to_vec(finkit::indicators::cycle::ht_trendline(close).unwrap()),
         )]),
-        "CDLDOJI" | "CDLDRAGONFLYDOJI" | "CDLGRAVESTONEDOJI" | "CDLENGULFING" | "CDLHAMMER"
-        | "CDLHANGINGMAN" | "CDLHARAMI" | "CDLMARUBOZU" | "CDLPIERCING" | "CDLSHOOTINGSTAR"
-        | "CDLSPINNINGTOP" => {
-            let result = match indicator {
-                "CDLDOJI" => finkit::patterns::candlestick::cdl_doji(open, high, low, close),
-                "CDLDRAGONFLYDOJI" => {
-                    finkit::patterns::candlestick::cdl_dragonflydoji(open, high, low, close)
-                }
-                "CDLGRAVESTONEDOJI" => {
-                    finkit::patterns::candlestick::cdl_gravestonedoji(open, high, low, close)
-                }
-                "CDLENGULFING" => {
-                    finkit::patterns::candlestick::cdl_engulfing(open, high, low, close)
-                }
-                "CDLHAMMER" => finkit::patterns::candlestick::cdl_hammer(open, high, low, close),
-                "CDLHANGINGMAN" => {
-                    finkit::patterns::candlestick::cdl_hangingman(open, high, low, close)
-                }
-                "CDLHARAMI" => finkit::patterns::candlestick::cdl_harami(open, high, low, close),
-                "CDLMARUBOZU" => {
-                    finkit::patterns::candlestick::cdl_marubozu(open, high, low, close)
-                }
-                "CDLPIERCING" => {
-                    finkit::patterns::candlestick::cdl_piercing(open, high, low, close)
-                }
-                "CDLSHOOTINGSTAR" => {
-                    finkit::patterns::candlestick::cdl_shootingstar(open, high, low, close)
-                }
-                "CDLSPINNINGTOP" => {
-                    finkit::patterns::candlestick::cdl_spinningtop(open, high, low, close)
-                }
-                _ => unreachable!(),
-            }
-            .unwrap();
-            HashMap::from([(indicator.to_ascii_lowercase(), pattern_to_vec(result))])
-        }
+        "CDLABANDONEDBABY"
+        | "CDLADVANCEBLOCK"
+        | "CDLBELTHOLD"
+        | "CDLBREAKAWAY"
+        | "CDLCLOSINGMARUBOZU"
+        | "CDLCONCEALBABYSWALL"
+        | "CDLCOUNTERATTACK"
+        | "CDLDARKCLOUDCOVER"
+        | "CDLDOJI"
+        | "CDLDOJISTAR"
+        | "CDLDRAGONFLYDOJI"
+        | "CDLENGULFING"
+        | "CDLEVENINGDOJISTAR"
+        | "CDLEVENINGSTAR"
+        | "CDLGAPSIDESIDEWHITE"
+        | "CDLGRAVESTONEDOJI"
+        | "CDLHAMMER"
+        | "CDLHANGINGMAN"
+        | "CDLHARAMI"
+        | "CDLHARAMICROSS"
+        | "CDLHIGHWAVE"
+        | "CDLHIKKAKE"
+        | "CDLHIKKAKEMOD"
+        | "CDLHOMINGPIGEON"
+        | "CDLIDENTICAL3CROWS"
+        | "CDLINNECK"
+        | "CDLINVERTEDHAMMER"
+        | "CDLKICKING"
+        | "CDLKICKINGBYLENGTH"
+        | "CDLLADDERBOTTOM"
+        | "CDLLONGLEGGEDDOJI"
+        | "CDLLONGLINE"
+        | "CDLMARUBOZU"
+        | "CDLMATCHINGLOW"
+        | "CDLMATHOLD"
+        | "CDLMORNINGDOJISTAR"
+        | "CDLMORNINGSTAR"
+        | "CDLONNECK"
+        | "CDLPIERCING"
+        | "CDLRICKSHAWMAN"
+        | "CDLRISEFALL3METHODS"
+        | "CDLSEPARATINGLINES"
+        | "CDLSHOOTINGSTAR"
+        | "CDLSHORTLINE"
+        | "CDLSPINNINGTOP"
+        | "CDLSTALLEDPATTERN"
+        | "CDLSTICKSANDWICH"
+        | "CDLTAKURI"
+        | "CDLTASUKIGAP"
+        | "CDLTHRUSTING"
+        | "CDLTRISTAR"
+        | "CDLUNIQUE3RIVER"
+        | "CDLUPSIDEGAP2CROWS"
+        | "CDLXSIDEGAP3METHODS" => HashMap::from([(
+            indicator.to_ascii_lowercase(),
+            compute_candlestick_output(indicator, open, high, low, close),
+        )]),
         "OBV" => HashMap::from([("obv".to_string(), array_to_vec(obv(close, volume).unwrap()))]),
         "MFI" => {
             let p = param_usize(params, "timeperiod", 14);

@@ -726,6 +726,78 @@ INDICATORS: dict[str, dict[str, Any]] = {
     },
 }
 
+# These patterns are implemented by the core candlestick module and use the
+# same four OHLC inputs and one integer output as TA-Lib.  Keep this list
+# explicit so a newly added core pattern cannot silently become a numeric
+# parity claim without a checked-in reference file.
+SUPPORTED_CANDLESTICK_INDICATORS = (
+    "CDLDOJI",
+    "CDLDOJISTAR",
+    "CDLDRAGONFLYDOJI",
+    "CDLENGULFING",
+    "CDLEVENINGDOJISTAR",
+    "CDLEVENINGSTAR",
+    "CDLGRAVESTONEDOJI",
+    "CDLHAMMER",
+    "CDLHANGINGMAN",
+    "CDLHARAMI",
+    "CDLHARAMICROSS",
+    "CDLHIGHWAVE",
+    "CDLHIKKAKE",
+    "CDLHIKKAKEMOD",
+    "CDLHOMINGPIGEON",
+    "CDLIDENTICAL3CROWS",
+    "CDLINNECK",
+    "CDLINVERTEDHAMMER",
+    "CDLKICKING",
+    "CDLKICKINGBYLENGTH",
+    "CDLLADDERBOTTOM",
+    "CDLLONGLEGGEDDOJI",
+    "CDLLONGLINE",
+    "CDLMARUBOZU",
+    "CDLMATCHINGLOW",
+    "CDLMATHOLD",
+    "CDLMORNINGDOJISTAR",
+    "CDLMORNINGSTAR",
+    "CDLONNECK",
+    "CDLPIERCING",
+    "CDLRICKSHAWMAN",
+    "CDLRISEFALL3METHODS",
+    "CDLSEPARATINGLINES",
+    "CDLSHOOTINGSTAR",
+    "CDLSHORTLINE",
+    "CDLSPINNINGTOP",
+    "CDLSTALLEDPATTERN",
+    "CDLSTICKSANDWICH",
+    "CDLTAKURI",
+    "CDLTASUKIGAP",
+    "CDLTHRUSTING",
+    "CDLTRISTAR",
+    "CDLUNIQUE3RIVER",
+    "CDLUPSIDEGAP2CROWS",
+    "CDLXSIDEGAP3METHODS",
+    "CDLABANDONEDBABY",
+    "CDLADVANCEBLOCK",
+    "CDLBELTHOLD",
+    "CDLBREAKAWAY",
+    "CDLCLOSINGMARUBOZU",
+    "CDLCONCEALBABYSWALL",
+    "CDLCOUNTERATTACK",
+    "CDLDARKCLOUDCOVER",
+    "CDLGAPSIDESIDEWHITE",
+)
+
+for _indicator in SUPPORTED_CANDLESTICK_INDICATORS:
+    INDICATORS.setdefault(
+        _indicator,
+        {
+            "params": {},
+            "fn_name": _indicator,
+            "inputs": ("open", "high", "low", "close"),
+            "outputs": (_indicator.lower(),),
+        },
+    )
+
 INSTALL_HINT = """
 TA-Lib is not installed or could not be imported.
 

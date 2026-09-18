@@ -14,7 +14,7 @@
     },
     "numeric_reference": {
       "status": "fixed_golden",
-      "expected_count": 107,
+      "expected_count": 145,
       "indicators": [
         "ACCBANDS",
         "ACOS",
@@ -45,6 +45,44 @@
         "CDLPIERCING",
         "CDLSHOOTINGSTAR",
         "CDLSPINNINGTOP",
+        "CDLABANDONEDBABY",
+        "CDLADVANCEBLOCK",
+        "CDLBELTHOLD",
+        "CDLBREAKAWAY",
+        "CDLCLOSINGMARUBOZU",
+        "CDLCONCEALBABYSWALL",
+        "CDLCOUNTERATTACK",
+        "CDLDARKCLOUDCOVER",
+        "CDLEVENINGSTAR",
+        "CDLGAPSIDESIDEWHITE",
+        "CDLHARAMICROSS",
+        "CDLHIGHWAVE",
+        "CDLHIKKAKE",
+        "CDLHIKKAKEMOD",
+        "CDLHOMINGPIGEON",
+        "CDLIDENTICAL3CROWS",
+        "CDLINVERTEDHAMMER",
+        "CDLKICKING",
+        "CDLKICKINGBYLENGTH",
+        "CDLLADDERBOTTOM",
+        "CDLLONGLEGGEDDOJI",
+        "CDLLONGLINE",
+        "CDLMATCHINGLOW",
+        "CDLMATHOLD",
+        "CDLMORNINGSTAR",
+        "CDLONNECK",
+        "CDLRICKSHAWMAN",
+        "CDLRISEFALL3METHODS",
+        "CDLSEPARATINGLINES",
+        "CDLSHORTLINE",
+        "CDLSTALLEDPATTERN",
+        "CDLTAKURI",
+        "CDLTASUKIGAP",
+        "CDLTHRUSTING",
+        "CDLTRISTAR",
+        "CDLUNIQUE3RIVER",
+        "CDLUPSIDEGAP2CROWS",
+        "CDLXSIDEGAP3METHODS",
         "CCI",
         "CMO",
         "CORREL",
@@ -123,6 +161,28 @@
         "WCLPRICE",
         "WILLR",
         "WMA"
+      ],
+      "excluded_numeric": [
+        {
+          "indicator": "CDLDOJISTAR",
+          "reason": "native implementation uses simplified true-range/body thresholds and is not TA-Lib 0.8.0 equivalent"
+        },
+        {
+          "indicator": "CDLEVENINGDOJISTAR",
+          "reason": "native implementation is not TA-Lib 0.8.0 equivalent on the shared fixture corpus"
+        },
+        {
+          "indicator": "CDLINNECK",
+          "reason": "native implementation is not TA-Lib 0.8.0 equivalent on the shared fixture corpus"
+        },
+        {
+          "indicator": "CDLMORNINGDOJISTAR",
+          "reason": "native implementation is not TA-Lib 0.8.0 equivalent on the shared fixture corpus"
+        },
+        {
+          "indicator": "CDLSTICKSANDWICH",
+          "reason": "native implementation is not TA-Lib 0.8.0 equivalent on the shared fixture corpus"
+        }
       ]
     }
   }

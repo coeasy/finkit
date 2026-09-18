@@ -39,6 +39,13 @@ pub struct TalibNumericReference {
     pub status: String,
     pub expected_count: usize,
     pub indicators: Vec<String>,
+    pub excluded_numeric: Vec<TalibNumericExclusion>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TalibNumericExclusion {
+    pub indicator: String,
+    pub reason: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -129,6 +136,14 @@ pub fn assert_catalog_matches_matrix(matrix: &TalibCoverageMatrix) {
         matrix.surfaces.numeric_reference.indicators.len(),
         matrix.surfaces.numeric_reference.expected_count
     );
+    for exclusion in &matrix.surfaces.numeric_reference.excluded_numeric {
+        assert!(!matrix
+            .surfaces
+            .numeric_reference
+            .indicators
+            .contains(&exclusion.indicator));
+        assert!(!exclusion.reason.trim().is_empty());
+    }
 
     let catalog = TALIB_PROFILE_CATALOG_NAMES
         .iter()
