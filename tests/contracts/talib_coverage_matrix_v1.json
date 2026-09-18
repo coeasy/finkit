@@ -14,7 +14,7 @@
     },
     "numeric_reference": {
       "status": "fixed_golden",
-      "expected_count": 145,
+      "expected_count": 150,
       "indicators": [
         "ACCBANDS",
         "ACOS",
@@ -35,8 +35,10 @@
         "BETA",
         "BOP",
         "CDLDOJI",
+        "CDLDOJISTAR",
         "CDLDRAGONFLYDOJI",
         "CDLENGULFING",
+        "CDLEVENINGDOJISTAR",
         "CDLGRAVESTONEDOJI",
         "CDLHAMMER",
         "CDLHANGINGMAN",
@@ -61,6 +63,7 @@
         "CDLHIKKAKEMOD",
         "CDLHOMINGPIGEON",
         "CDLIDENTICAL3CROWS",
+        "CDLINNECK",
         "CDLINVERTEDHAMMER",
         "CDLKICKING",
         "CDLKICKINGBYLENGTH",
@@ -69,6 +72,7 @@
         "CDLLONGLINE",
         "CDLMATCHINGLOW",
         "CDLMATHOLD",
+        "CDLMORNINGDOJISTAR",
         "CDLMORNINGSTAR",
         "CDLONNECK",
         "CDLRICKSHAWMAN",
@@ -76,6 +80,7 @@
         "CDLSEPARATINGLINES",
         "CDLSHORTLINE",
         "CDLSTALLEDPATTERN",
+        "CDLSTICKSANDWICH",
         "CDLTAKURI",
         "CDLTASUKIGAP",
         "CDLTHRUSTING",
@@ -161,28 +166,6 @@
         "WCLPRICE",
         "WILLR",
         "WMA"
-      ],
-      "excluded_numeric": [
-        {
-          "indicator": "CDLDOJISTAR",
-          "reason": "native implementation uses simplified true-range/body thresholds and is not TA-Lib 0.8.0 equivalent"
-        },
-        {
-          "indicator": "CDLEVENINGDOJISTAR",
-          "reason": "native implementation is not TA-Lib 0.8.0 equivalent on the shared fixture corpus"
-        },
-        {
-          "indicator": "CDLINNECK",
-          "reason": "native implementation is not TA-Lib 0.8.0 equivalent on the shared fixture corpus"
-        },
-        {
-          "indicator": "CDLMORNINGDOJISTAR",
-          "reason": "native implementation is not TA-Lib 0.8.0 equivalent on the shared fixture corpus"
-        },
-        {
-          "indicator": "CDLSTICKSANDWICH",
-          "reason": "native implementation is not TA-Lib 0.8.0 equivalent on the shared fixture corpus"
-        }
       ]
     }
   }

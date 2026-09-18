@@ -63,14 +63,10 @@ All outputs are computed on three shared fixtures from `tests/fixtures/`:
 
 ## Output Files
 
-One generated JSON file per indicator (145 numeric-parity indicators), plus a checked-in profile
-variant fixture for official `matype` contracts:
-
-The following implemented candlestick functions are intentionally not in the
-numeric-parity corpus until their simplified native semantics are replaced by
-TA-Lib-equivalent kernels: `CDLDOJISTAR`, `CDLEVENINGDOJISTAR`, `CDLINNECK`,
-`CDLMORNINGDOJISTAR`, and `CDLSTICKSANDWICH`. They remain explicit exclusions
-in `tests/contracts/talib_coverage_matrix_v1.json`.
+One generated JSON file per indicator (150 numeric-parity indicators), plus a checked-in profile
+variant fixture for official `matype` contracts. The five previously excluded candlestick
+functions now use TA-Lib candle-setting, gap, penetration, and warm-up semantics and are included
+in the fixed corpus.
 
 | File | Purpose |
 |------|---------|

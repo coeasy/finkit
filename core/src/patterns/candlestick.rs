@@ -806,42 +806,42 @@ pub fn morning_doji_star(
             constraint: "must have the same length".to_string(),
         });
     }
-    validate_input(open.len(), 10)?;
+    validate_input(open.len(), 12)?;
 
     let len = open.len();
     let mut output = Array1::zeros(len);
-    let period = 10;
-    let mut ranges = [0.0; 10];
-    let mut rolling_sum = 0.0;
+    let mut body_long = RollingAverage::<10>::new();
+    let mut body_doji = RollingAverage::<10>::new();
+    let mut body_short = RollingAverage::<10>::new();
 
-    for i in 0..10 {
-        let true_range = if i == 0 {
-            high[i] - low[i]
-        } else {
-            (high[i] - low[i])
-                .max((high[i] - close[i - 1]).abs())
-                .max((low[i] - close[i - 1]).abs())
-        };
-        ranges[i] = true_range;
-        rolling_sum += true_range;
-    }
-    for i in period..len {
-        let slot = i % 10;
-        rolling_sum -= ranges[slot];
-        let true_range = (high[i] - low[i])
-            .max((high[i] - close[i - 1]).abs())
-            .max((low[i] - close[i - 1]).abs());
-        ranges[slot] = true_range;
-        rolling_sum += true_range;
+    for i in 0..len {
+        if i >= 3 {
+            body_long.push(body(open[i - 3], close[i - 3]));
+        }
+        if i >= 2 {
+            body_doji.push(high[i - 2] - low[i - 2]);
+        }
+        if i >= 3 {
+            body_short.push(body(open[i - 1], close[i - 1]));
+        }
+        if i < 12 {
+            continue;
+        }
+
         let first_body = body(open[i - 2], close[i - 2]);
         let second_body = body(open[i - 1], close[i - 1]);
         let third_body = body(open[i], close[i]);
-        let avg_range = rolling_sum / 10.0;
+        let first_black = close[i - 2] < open[i - 2];
+        let current_white = close[i] >= open[i];
+        let gap_down = open[i - 1].max(close[i - 1]) < open[i - 2].min(close[i - 2]);
 
-        if is_bearish(open[i - 2], close[i - 2])
-            && second_body < avg_range * doji_pct
-            && is_bullish(open[i], close[i])
-            && third_body > first_body * 0.5
+        if first_black
+            && gap_down
+            && current_white
+            && first_body > body_long.average()
+            && second_body <= body_doji.average() * doji_pct
+            && third_body > body_short.average()
+            && close[i] > close[i - 2] + first_body * 0.3
         {
             output[i] = 100;
         }
@@ -866,34 +866,42 @@ pub fn evening_doji_star(
             constraint: "must have the same length".to_string(),
         });
     }
-    validate_input(open.len(), 10)?;
+    validate_input(open.len(), 12)?;
 
     let len = open.len();
     let mut output = Array1::zeros(len);
-    let period = 10;
-    let mut avg_ranges = RollingAverage::<10>::new();
+    let mut body_long = RollingAverage::<10>::new();
+    let mut body_doji = RollingAverage::<10>::new();
+    let mut body_short = RollingAverage::<10>::new();
 
     for i in 0..len {
-        let true_range = if i == 0 {
-            high[i] - low[i]
-        } else {
-            (high[i] - low[i])
-                .max((high[i] - close[i - 1]).abs())
-                .max((low[i] - close[i - 1]).abs())
-        };
-        avg_ranges.push(true_range);
-        if i < period || i < 2 {
+        if i >= 3 {
+            body_long.push(body(open[i - 3], close[i - 3]));
+        }
+        if i >= 2 {
+            body_doji.push(high[i - 2] - low[i - 2]);
+        }
+        if i >= 3 {
+            body_short.push(body(open[i - 1], close[i - 1]));
+        }
+        if i < 12 {
             continue;
         }
+
         let first_body = body(open[i - 2], close[i - 2]);
         let second_body = body(open[i - 1], close[i - 1]);
         let third_body = body(open[i], close[i]);
-        let avg_range = avg_ranges.average();
+        let first_white = close[i - 2] >= open[i - 2];
+        let current_black = close[i] < open[i];
+        let gap_up = open[i - 1].min(close[i - 1]) > open[i - 2].max(close[i - 2]);
 
-        if is_bullish(open[i - 2], close[i - 2])
-            && second_body < avg_range * doji_pct
-            && is_bearish(open[i], close[i])
-            && third_body > first_body * 0.5
+        if first_white
+            && gap_up
+            && current_black
+            && first_body > body_long.average()
+            && second_body <= body_doji.average() * doji_pct
+            && third_body > body_short.average()
+            && close[i] < close[i - 2] - first_body * 0.3
         {
             output[i] = -100;
         }
@@ -1270,19 +1278,28 @@ pub fn stick_sandwich(
             constraint: "must have the same length".to_string(),
         });
     }
-    validate_input(open.len(), 3)?;
+    validate_input(open.len(), 7)?;
 
     let len = open.len();
     let mut output = Array1::zeros(len);
 
-    for i in 2..len {
-        if is_bullish(open[i - 2], close[i - 2])
-            && is_bearish(open[i - 1], close[i - 1])
-            && is_bullish(open[i], close[i])
-            && (close[i - 2] - close[i]).abs() < (close[i - 2] * 0.01)
+    let mut equal = RollingAverage::<5>::new();
+    for i in 0..len {
+        if i >= 2 && i < 7 {
+            equal.push(high[i - 2] - low[i - 2]);
+        }
+        if i < 7 {
+            continue;
+        }
+        if close[i - 2] < open[i - 2]
+            && close[i - 1] >= open[i - 1]
+            && close[i] < open[i]
+            && low[i - 1] > close[i - 2]
+            && (close[i] - close[i - 2]).abs() <= equal.average() * 0.05
         {
             output[i] = 100;
         }
+        equal.push(high[i - 2] - low[i - 2]);
     }
 
     Ok(output)
@@ -2437,16 +2454,29 @@ pub fn in_neck(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result
             constraint: "must have the same length".to_string(),
         });
     }
-    validate_input(open.len(), 2)?;
+    validate_input(open.len(), 11)?;
 
     let len = open.len();
     let mut output = Array1::zeros(len);
 
-    for i in 1..len {
-        if is_bearish(open[i - 1], close[i - 1])
-            && is_bullish(open[i], close[i])
-            && open[i] < close[i - 1]
-            && (close[i] - close[i - 1]).abs() < (close[i - 1] * 0.01)
+    let mut equal = RollingAverage::<5>::new();
+    let mut body_long = RollingAverage::<10>::new();
+    for i in 0..len {
+        if i >= 2 {
+            equal.push(high[i - 2] - low[i - 2]);
+        }
+        if i >= 2 {
+            body_long.push(body(open[i - 2], close[i - 2]));
+        }
+        if i < 11 {
+            continue;
+        }
+        if close[i - 1] < open[i - 1]
+            && close[i] >= open[i]
+            && body(open[i - 1], close[i - 1]) > body_long.average()
+            && open[i] < low[i - 1]
+            && close[i] >= close[i - 1]
+            && close[i] <= close[i - 1] + equal.average()
         {
             output[i] = -100;
         }
@@ -2546,61 +2576,30 @@ pub fn cdl_doji_star_into(
     }
 
     let len = open.len();
-    let mut ranges = [0.0_f64; 10];
-    let mut rolling_sum = 0.0;
-    let mut next = 0usize;
-    let mut count = 0usize;
-    let open_ptr = open.as_ptr();
-    let high_ptr = high.as_ptr();
-    let low_ptr = low.as_ptr();
-    let close_ptr = close.as_ptr();
-    let output_ptr = output.as_mut_ptr();
-    unsafe {
-        for i in 0..len {
-            let h = *high_ptr.add(i);
-            let l = *low_ptr.add(i);
-            let true_range = if i == 0 {
-                h - l
-            } else {
-                let previous_close = *close_ptr.add(i - 1);
-                (h - l)
-                    .max((h - previous_close).abs())
-                    .max((l - previous_close).abs())
-            };
-            if count == 10 {
-                rolling_sum -= *ranges.get_unchecked(next);
-            } else {
-                count += 1;
-            }
-            *ranges.get_unchecked_mut(next) = true_range;
-            rolling_sum += true_range;
-            next += 1;
-            if next == 10 {
-                next = 0;
-            }
+    let mut body_long = RollingAverage::<10>::new();
+    let mut body_doji = RollingAverage::<10>::new();
+    for i in 0..len {
+        if i >= 2 {
+            body_long.push(body(open[i - 2], close[i - 2]));
+        }
+        if i >= 1 {
+            body_doji.push(high[i - 1] - low[i - 1]);
+        }
+        output[i] = 0;
+        if i < 11 {
+            continue;
+        }
 
-            let mut value = 0;
-            if i > 0 {
-                let avg = rolling_sum / count as f64;
-                let previous_open = *open_ptr.add(i - 1);
-                let previous_close = *close_ptr.add(i - 1);
-                let current_open = *open_ptr.add(i);
-                let current_close = *close_ptr.add(i);
-                let body_prev = (previous_close - previous_open).abs();
-                let body_curr = (current_close - current_open).abs();
-                if body_curr < avg * 0.1 && body_prev > avg * 0.6 {
-                    if previous_open < previous_close
-                        && current_open.min(current_close) > previous_close
-                    {
-                        value = -100;
-                    } else if previous_open > previous_close
-                        && current_open.max(current_close) < previous_close
-                    {
-                        value = 100;
-                    }
-                }
+        let first_body = body(open[i - 1], close[i - 1]);
+        let current_body = body(open[i], close[i]);
+        let first_white = close[i - 1] >= open[i - 1];
+        let current_doji = current_body <= body_doji.average() * 0.1;
+        if first_body > body_long.average() && current_doji {
+            if first_white && open[i].min(close[i]) > open[i - 1].max(close[i - 1]) {
+                output[i] = -100;
+            } else if !first_white && open[i].max(close[i]) < open[i - 1].min(close[i - 1]) {
+                output[i] = 100;
             }
-            *output_ptr.add(i) = value;
         }
     }
     Ok(())
@@ -4073,9 +4072,9 @@ mod tests {
 
     #[test]
     fn test_cdl_inneck() {
-        let (open, high, low, close) = make_ohlc(5, 10.0, 1.0);
+        let (open, high, low, close) = make_ohlc(11, 10.0, 1.0);
         let result = cdl_inneck(&open, &high, &low, &close).unwrap();
-        assert_eq!(result.len(), 5);
+        assert_eq!(result.len(), 11);
     }
 
     #[test]
@@ -4213,9 +4212,9 @@ mod tests {
 
     #[test]
     fn test_cdl_sticksandwich() {
-        let (open, high, low, close) = make_ohlc(5, 10.0, 1.0);
+        let (open, high, low, close) = make_ohlc(7, 10.0, 1.0);
         let result = cdl_sticksandwich(&open, &high, &low, &close).unwrap();
-        assert_eq!(result.len(), 5);
+        assert_eq!(result.len(), 7);
     }
 
     #[test]

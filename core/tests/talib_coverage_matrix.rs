@@ -25,14 +25,6 @@ fn talib_coverage_surfaces_are_explicit_and_consistent() {
     assert_eq!(numeric, golden);
     let dispatchable = dispatcher_names();
 
-    for exclusion in &matrix.surfaces.numeric_reference.excluded_numeric {
-        assert!(
-            !golden.contains(&exclusion.indicator),
-            "excluded indicator {} must not be promoted to numeric golden",
-            exclusion.indicator
-        );
-    }
-
     for name in TALIB_PROFILE_CATALOG_NAMES {
         assert!(is_profile_catalog_name(name));
         assert!(
