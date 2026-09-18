@@ -12,6 +12,7 @@ use crate::formula::jit::OptimizedBytecode;
 use crate::formula::optimizer::{DependencyAnalyzer, FormulaOptimizer};
 use crate::formula::params::{apply_params, parse_params, validate_params, ParamDef, ParamValues};
 use crate::formula::parser::parse_formula;
+use crate::formula::pine::{map_pine_to_alphata_with_security, parse_pine, PineSecurityResolver};
 use crate::formula::templates::{FormulaTemplate, FormulaTemplates};
 use crate::formula::types::*;
 use crate::formula::{normalize_formula_source, parse_formula_with_dialect, FormulaDialect};
@@ -1086,6 +1087,33 @@ impl FormulaEngine {
                 Ok(multi)
             }
         }
+    }
+
+    /// Evaluate Pine with an explicit host/provider-backed
+    /// `request.security` resolver. The resolver must return an already
+    /// timestamp-aligned series variable; this method does not resample or
+    /// infer higher-timeframe values.
+    pub fn eval_multi_with_pine_security(
+        &mut self,
+        source: &str,
+        ctx: &mut FormulaContext,
+        resolver: &dyn PineSecurityResolver,
+    ) -> Result<MultiOutput, FormulaError> {
+        let normalized = normalize_formula_source(source, FormulaDialect::Pine);
+        let pine = parse_pine(&normalized)
+            .map_err(|error| FormulaError::ParseError(format!("Pine parse error: {error}")))?;
+        let ast = map_pine_to_alphata_with_security(&pine, Some(resolver))
+            .map_err(|error| FormulaError::ParseError(format!("Pine map error: {error}")))?;
+        let vars_before: std::collections::HashSet<Arc<str>> =
+            ctx.variables.keys().cloned().collect();
+        let final_value = self.eval_ast(&ast, ctx)?;
+        let mut multi = MultiOutput::new(final_value);
+        for (name, value) in &ctx.variables {
+            if !vars_before.contains(name) {
+                multi.outputs.insert(name.to_string(), value.clone());
+            }
+        }
+        Ok(multi)
     }
 
     /// 惰性求值：通过依赖分析只计算最终输出所需的变量

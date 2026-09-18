@@ -83,7 +83,10 @@ pub use params::{
     apply_params, get_param_value, parse_params, validate_params, ParamDef, ParamValues,
 };
 pub use parser::parse_formula;
-pub use pine::{map_pine_to_alphata, parse_pine, PineBuiltinTable, PineError, PineMapperError};
+pub use pine::{
+    map_pine_to_alphata, map_pine_to_alphata_with_security, parse_pine, PineAstNode,
+    PineBuiltinTable, PineError, PineMapperError, PineSecurityResolver,
+};
 pub use sandbox::{ExecSandboxConfig, ExecSandboxState};
 pub use simd::SimdOps;
 pub use stateful::{FormulaStateInput, FormulaStatefulCheckpoint, FormulaStatefulStream};

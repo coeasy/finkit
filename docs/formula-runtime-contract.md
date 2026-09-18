@@ -30,6 +30,16 @@
 - 输入数组在 borrowed 同步求值完成前必须保持存活；运行时不得把 borrowed context 保存到下一次调用。
 - append_bar 当前只追加 OHLCV；依赖 amount 的流式调用应使用 append_bar_with_amount，缺失 amount 按 NaN 处理。
 
+### 2.1 Temporal/Pine `request.security`
+
+`formula.temporal.v1` 可通过 `security` 数组提供已经带有
+`symbol/timeframe/timestamps` 的外部序列。当前跨语言执行边界支持 Pine
+`request.security(symbol, timeframe, open|high|low|close|volume|hl2|hlc3|ohlc4)`；
+每个 provider 必须显式声明 `exact` 或 `as_of_closed` 对齐策略，缺少 provider
+或使用动态/嵌套表达式会返回明确错误。运行时不会把请求静默改成当前周期数据，
+也不会自动重采样或传播未收盘值。Rust、Python、Go、Java、.NET、C、C++、Node
+均转发同一 JSON contract。
+
 ## 3. 输出契约
 
 - Python 结果字典使用 __result__ 作为主结果键。

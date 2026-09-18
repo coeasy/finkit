@@ -10,6 +10,17 @@ pub struct PineMapperError {
     pub message: String,
 }
 
+/// Resolves a Pine `request.security(symbol, timeframe, expression)` call to
+/// an already aligned host-provided series. The resolver is deliberately an
+/// explicit boundary: the mapper never invents higher-timeframe data or
+/// silently evaluates the expression on the chart timeframe.
+pub trait PineSecurityResolver {
+    fn resolve_security(
+        &self,
+        args: &[(Option<String>, PineAstNode)],
+    ) -> Result<AstNode, PineMapperError>;
+}
+
 impl std::fmt::Display for PineMapperError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Pine mapper error: {}", self.message)
@@ -20,8 +31,19 @@ impl std::error::Error for PineMapperError {}
 
 /// Map a complete Pine AST to AlphaTA `AstNode::Statements`.
 pub fn map_pine_to_alphata(pine: &PineAst) -> Result<AstNode, PineMapperError> {
+    map_pine_to_alphata_with_security(pine, None)
+}
+
+/// Map Pine with an explicit host/provider resolver for `request.security`.
+///
+/// The resolver owns timestamp alignment and data-leakage policy; this
+/// function only provides the AST mapping hook shared by temporal callers.
+pub fn map_pine_to_alphata_with_security(
+    pine: &PineAst,
+    resolver: Option<&dyn PineSecurityResolver>,
+) -> Result<AstNode, PineMapperError> {
     let table = PineBuiltinTable::new();
-    let mapper = PineAstMapper::new(&table);
+    let mapper = PineAstMapper::new(&table, resolver);
     let stmts = mapper.map_items(&pine.items)?;
     if stmts.len() == 1 {
         Ok(stmts[0].clone())
@@ -32,11 +54,18 @@ pub fn map_pine_to_alphata(pine: &PineAst) -> Result<AstNode, PineMapperError> {
 
 struct PineAstMapper<'a> {
     table: &'a PineBuiltinTable,
+    security_resolver: Option<&'a dyn PineSecurityResolver>,
 }
 
 impl<'a> PineAstMapper<'a> {
-    fn new(table: &'a PineBuiltinTable) -> Self {
-        Self { table }
+    fn new(
+        table: &'a PineBuiltinTable,
+        security_resolver: Option<&'a dyn PineSecurityResolver>,
+    ) -> Self {
+        Self {
+            table,
+            security_resolver,
+        }
     }
 
     fn map_items(&self, items: &[PineAstNode]) -> Result<Vec<AstNode>, PineMapperError> {
@@ -403,6 +432,9 @@ impl<'a> PineAstMapper<'a> {
         // timeframe. The temporal JSON contract is the explicit host-data
         // boundary until a provider-aware mapper is available.
         if namespace == Some("request") && name == "security" {
+            if let Some(resolver) = self.security_resolver {
+                return resolver.resolve_security(args);
+            }
             return Err(PineMapperError {
                 message: "request.security requires explicit host timeframe alignment; use the formula.temporal.v1 contract with a provider-aligned input".to_string(),
             });

@@ -6,8 +6,9 @@
 
 use finkit::data_contract::{FrameKey, FundamentalSeries, TemporalAlignment, TemporalSeries};
 use finkit::formula::{
-    inspect_formula_compatibility, DrawCommand, DrawResult, FormulaContext, FormulaDialect,
-    FormulaEngine, FormulaTerminal,
+    inspect_formula_compatibility, AstNode, DrawCommand, DrawResult, FormulaContext,
+    FormulaDialect, FormulaEngine, FormulaTerminal, PineAstNode, PineMapperError,
+    PineSecurityResolver,
 };
 use ndarray::Array1;
 use serde::{Deserialize, Serialize};
@@ -123,6 +124,9 @@ struct TemporalFormulaRequest {
     inputs: Vec<TemporalInputRequest>,
     #[serde(default)]
     fundamentals: Vec<TemporalInputRequest>,
+    /// Explicitly aligned data providers for Pine `request.security` calls.
+    #[serde(default, alias = "security_inputs")]
+    security: Vec<TemporalSecurityInputRequest>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -163,6 +167,88 @@ struct TemporalInputRequest {
     timestamps: Vec<i64>,
     values: Vec<f64>,
     alignment: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct TemporalSecurityInputRequest {
+    symbol: String,
+    timeframe: String,
+    expression: String,
+    timestamps: Vec<i64>,
+    values: Vec<f64>,
+    alignment: String,
+}
+
+struct TemporalSecurityResolver<'a> {
+    frame_symbol: &'a str,
+    providers: &'a BTreeMap<String, String>,
+}
+
+impl PineSecurityResolver for TemporalSecurityResolver<'_> {
+    fn resolve_security(
+        &self,
+        args: &[(Option<String>, PineAstNode)],
+    ) -> Result<AstNode, PineMapperError> {
+        if args.len() != 3 {
+            return Err(PineMapperError {
+                message: format!(
+                    "request.security requires exactly 3 arguments, got {}",
+                    args.len()
+                ),
+            });
+        }
+        let symbol = pine_security_text(&args[0].1).ok_or_else(|| PineMapperError {
+            message: "request.security symbol must be a literal or syminfo.tickerid".to_string(),
+        })?;
+        let symbol = if symbol.eq_ignore_ascii_case("syminfo.tickerid") {
+            self.frame_symbol.to_string()
+        } else {
+            symbol
+        };
+        let timeframe = pine_security_text(&args[1].1).ok_or_else(|| PineMapperError {
+            message: "request.security timeframe must be a literal string".to_string(),
+        })?;
+        let expression = pine_security_expression(&args[2].1).ok_or_else(|| PineMapperError {
+            message: "request.security provider currently requires a named OHLCV expression"
+                .to_string(),
+        })?;
+        let key = temporal_security_key(&symbol, &timeframe, &expression);
+        let alias = self.providers.get(&key).ok_or_else(|| PineMapperError {
+            message: format!(
+                "request.security provider data is missing for {symbol}@{timeframe}:{expression}"
+            ),
+        })?;
+        Ok(AstNode::Variable(alias.clone()))
+    }
+}
+
+fn pine_security_text(node: &PineAstNode) -> Option<String> {
+    match node {
+        PineAstNode::Identifier(value) | PineAstNode::StringLit(value) => Some(value.clone()),
+        _ => None,
+    }
+}
+
+fn pine_security_expression(node: &PineAstNode) -> Option<String> {
+    let value = match node {
+        PineAstNode::Identifier(value) => value,
+        _ => return None,
+    };
+    let value = value.trim().to_ascii_lowercase();
+    matches!(
+        value.as_str(),
+        "open" | "high" | "low" | "close" | "volume" | "hl2" | "hlc3" | "ohlc4"
+    )
+    .then_some(value)
+}
+
+fn temporal_security_key(symbol: &str, timeframe: &str, expression: &str) -> String {
+    format!(
+        "{}|{}|{}",
+        symbol.trim().to_ascii_uppercase(),
+        timeframe.trim().to_ascii_uppercase(),
+        expression.trim().to_ascii_lowercase()
+    )
 }
 
 /// Execute a Formula against an explicitly timestamped frame and external
@@ -212,6 +298,9 @@ pub fn evaluate_formula_temporal_json(request: &str) -> Result<String, String> {
     }
     TemporalSeries::new("__FRAME__", &frame.timestamps, &frame.close)
         .map_err(|error| error.to_string())?;
+    if !request.security.is_empty() && dialect != FormulaDialect::Pine {
+        return Err("temporal security providers currently require the pine dialect".to_string());
+    }
 
     let mut names = HashSet::new();
     let mut context = FormulaContext::new(
@@ -223,6 +312,64 @@ pub fn evaluate_formula_temporal_json(request: &str) -> Result<String, String> {
         frame.amount.clone().map(Array1::from_vec),
     );
     context.datetime = Some(Array1::from_vec(frame.timestamps.clone()));
+    let mut security_providers = BTreeMap::new();
+    let mut security_metadata = Vec::with_capacity(request.security.len());
+    for (index, provider) in request.security.iter().enumerate() {
+        if provider.symbol.trim().is_empty()
+            || provider.timeframe.trim().is_empty()
+            || provider.expression.trim().is_empty()
+        {
+            return Err(
+                "security provider symbol, timeframe and expression must not be empty".to_string(),
+            );
+        }
+        if provider.timestamps.len() != provider.values.len() {
+            return Err(format!(
+                "security provider {} length mismatch: timestamps={}, values={}",
+                provider.expression,
+                provider.timestamps.len(),
+                provider.values.len()
+            ));
+        }
+        let expression = provider.expression.trim().to_ascii_lowercase();
+        if !matches!(
+            expression.as_str(),
+            "open" | "high" | "low" | "close" | "volume" | "hl2" | "hlc3" | "ohlc4"
+        ) {
+            return Err(format!(
+                "unsupported security provider expression `{}`",
+                provider.expression
+            ));
+        }
+        let alignment = parse_temporal_alignment(&provider.alignment)?;
+        let source_name = format!("__SECURITY_SOURCE_{index}");
+        let series = TemporalSeries::new(&source_name, &provider.timestamps, &provider.values)
+            .map_err(|error| error.to_string())?;
+        let values = series
+            .align_to(&frame.timestamps, alignment)
+            .map_err(|error| error.to_string())?;
+        let alias = format!("__FINKIT_SECURITY_{index}");
+        if !names.insert(alias.clone()) {
+            return Err(format!("duplicate security provider alias: {alias}"));
+        }
+        context.variables.insert(
+            std::sync::Arc::from(alias.clone()),
+            Array1::from_vec(values),
+        );
+        let key = temporal_security_key(&provider.symbol, &provider.timeframe, &expression);
+        if security_providers.insert(key, alias).is_some() {
+            return Err(format!(
+                "duplicate security provider: {}@{}:{}",
+                provider.symbol, provider.timeframe, provider.expression
+            ));
+        }
+        security_metadata.push(json!({
+            "symbol": provider.symbol,
+            "timeframe": provider.timeframe,
+            "expression": expression,
+            "alignment": provider.alignment.trim().to_ascii_lowercase(),
+        }));
+    }
     let mut input_metadata = Vec::with_capacity(request.inputs.len());
     let mut fundamental_metadata = Vec::with_capacity(request.fundamentals.len());
 
@@ -273,9 +420,16 @@ pub fn evaluate_formula_temporal_json(request: &str) -> Result<String, String> {
     }
 
     let mut engine = FormulaEngine::new();
-    let result = engine
-        .eval_multi_with_dialect(&request.source, dialect, &mut context)
-        .map_err(|error| error.to_string())?;
+    let result = if dialect == FormulaDialect::Pine {
+        let resolver = TemporalSecurityResolver {
+            frame_symbol: &frame.symbol,
+            providers: &security_providers,
+        };
+        engine.eval_multi_with_pine_security(&request.source, &mut context, &resolver)
+    } else {
+        engine.eval_multi_with_dialect(&request.source, dialect, &mut context)
+    }
+    .map_err(|error| error.to_string())?;
     let draw = {
         let draw = context.draw_commands.borrow();
         json!({
@@ -305,6 +459,7 @@ pub fn evaluate_formula_temporal_json(request: &str) -> Result<String, String> {
         },
         "inputs": input_metadata,
         "fundamentals": fundamental_metadata,
+        "security": security_metadata,
         "values": serialized_values,
         "draw": draw,
     }))
@@ -855,6 +1010,62 @@ mod tests {
             json["values"]["__PRIMARY__"],
             serde_json::json!([null, 103.0, 304.0, 306.0])
         );
+    }
+
+    #[test]
+    fn temporal_contract_executes_pine_security_from_explicit_provider_data() {
+        let request = serde_json::json!({
+            "schema_version": FORMULA_TEMPORAL_CONTRACT_SCHEMA_VERSION,
+            "source": "//@version=5\nindicator(\"HTF\")\nhtf = request.security(syminfo.tickerid, \"D\", close)\nhtf",
+            "dialect": "pine",
+            "frame": {
+                "symbol": "AAA",
+                "timeframe": "1m",
+                "timestamps": [10, 20, 30, 40],
+                "open": [1.0, 2.0, 3.0, 4.0],
+                "high": [1.0, 2.0, 3.0, 4.0],
+                "low": [1.0, 2.0, 3.0, 4.0],
+                "close": [1.0, 2.0, 3.0, 4.0],
+                "volume": [10.0, 20.0, 30.0, 40.0]
+            },
+            "security": [{
+                "symbol": "AAA",
+                "timeframe": "D",
+                "expression": "close",
+                "timestamps": [10, 30],
+                "values": [100.0, 300.0],
+                "alignment": "as_of_closed"
+            }]
+        });
+        let payload = evaluate_formula_temporal_json(&request.to_string()).unwrap();
+        let json: Value = serde_json::from_str(&payload).unwrap();
+        assert_eq!(json["dialect"], "pine");
+        assert_eq!(json["security"][0]["timeframe"], "D");
+        assert_eq!(
+            json["values"]["__PRIMARY__"],
+            serde_json::json!([100.0, 100.0, 300.0, 300.0])
+        );
+    }
+
+    #[test]
+    fn temporal_contract_rejects_pine_security_without_provider_data() {
+        let request = serde_json::json!({
+            "schema_version": FORMULA_TEMPORAL_CONTRACT_SCHEMA_VERSION,
+            "source": "//@version=5\nindicator(\"HTF\")\nrequest.security(syminfo.tickerid, \"D\", close)",
+            "dialect": "pine",
+            "frame": {
+                "symbol": "AAA",
+                "timeframe": "1m",
+                "timestamps": [10, 20],
+                "open": [1.0, 2.0],
+                "high": [1.0, 2.0],
+                "low": [1.0, 2.0],
+                "close": [1.0, 2.0],
+                "volume": [10.0, 20.0]
+            }
+        });
+        let error = evaluate_formula_temporal_json(&request.to_string()).unwrap_err();
+        assert!(error.contains("provider data is missing"));
     }
 
     #[test]

@@ -24,6 +24,34 @@ test('keeps ESM and CommonJS export surfaces identical', () => {
   assert.deepEqual(Object.keys(finkit).sort(), Object.keys(commonjs).sort())
 })
 
+test('executes Pine request.security through explicit temporal provider data', () => {
+  const payload = JSON.parse(finkit.formulaEvalTemporalContractJson(JSON.stringify({
+    schema_version: 1,
+    source: '//@version=5\nindicator("HTF")\nhtf = request.security(syminfo.tickerid, "D", close)\nhtf',
+    dialect: 'pine',
+    frame: {
+      symbol: 'AAA',
+      timeframe: '1m',
+      timestamps: [10, 20, 30, 40],
+      open: [1, 2, 3, 4],
+      high: [1, 2, 3, 4],
+      low: [1, 2, 3, 4],
+      close: [1, 2, 3, 4],
+      volume: [10, 20, 30, 40],
+    },
+    security: [{
+      symbol: 'AAA',
+      timeframe: 'D',
+      expression: 'close',
+      timestamps: [10, 30],
+      values: [100, 300],
+      alignment: 'as_of_closed',
+    }],
+  })))
+  assert.deepEqual(payload.values.__PRIMARY__, [100, 100, 300, 300])
+  assert.equal(payload.security[0].timeframe, 'D')
+})
+
 test('supports configurable streaming MACDEXT MA variants', () => {
   const macd = new finkit.NapiStreamingMacdExt(5, 'sma', 10, 'wma', 3, 'tema')
   const values = macd.updateBatch(Array.from({ length: 40 }, (_, i) => 50 + Math.sin(i / 3)))

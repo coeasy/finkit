@@ -8,7 +8,9 @@ pub mod builtin_table;
 pub mod parser;
 pub mod runtime;
 
-pub use ast_mapper::{map_pine_to_alphata, PineMapperError};
+pub use ast_mapper::{
+    map_pine_to_alphata, map_pine_to_alphata_with_security, PineMapperError, PineSecurityResolver,
+};
 pub use builtin_table::{BuiltinMapping, PineBuiltinTable};
 pub use parser::{parse_pine, PineAst, PineAstNode, PineError, PineType};
 pub use runtime::{PineRuntime, PineRuntimeError, SeriesValue};

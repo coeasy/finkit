@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "request": {
+    "schema_version": 1,
+    "source": "//@version=5\nindicator(\"HTF\")\nhtf = request.security(syminfo.tickerid, \"D\", close)\nhtf",
+    "dialect": "pine",
+    "frame": {
+      "symbol": "AAA",
+      "timeframe": "1m",
+      "timestamps": [10, 20, 30, 40],
+      "open": [1.0, 2.0, 3.0, 4.0],
+      "high": [1.0, 2.0, 3.0, 4.0],
+      "low": [1.0, 2.0, 3.0, 4.0],
+      "close": [1.0, 2.0, 3.0, 4.0],
+      "volume": [10.0, 20.0, 30.0, 40.0]
+    },
+    "security": [
+      {
+        "symbol": "AAA",
+        "timeframe": "D",
+        "expression": "close",
+        "timestamps": [10, 30],
+        "values": [100.0, 300.0],
+        "alignment": "as_of_closed"
+      }
+    ]
+  },
+  "expected": {
+    "contract": "formula.temporal.v1",
+    "dialect": "pine",
+    "primary": [100.0, 100.0, 300.0, 300.0]
+  }
+}
