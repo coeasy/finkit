@@ -19,12 +19,18 @@ pub const OPERATION_RESULT_SCHEMA_VERSION: u16 = 1;
 #[derive(Debug, Deserialize)]
 struct OperationRequestJson {
     operation: String,
+    #[serde(default = "default_semantic_profile")]
+    semantic_profile: String,
     #[serde(default)]
     inputs: BTreeMap<String, Vec<f64>>,
     #[serde(default)]
     input_order: Vec<String>,
     #[serde(default)]
     params: Vec<f64>,
+}
+
+fn default_semantic_profile() -> String {
+    "core_registry".to_string()
 }
 
 /// Execute one registered built-in operation and return its named result JSON.
@@ -138,6 +144,17 @@ fn execute_operation(request: &str) -> Result<Value, (&'static str, String)> {
         ));
     }
 
+    let semantic_profile = normalize_profile(&request.semantic_profile);
+    if semantic_profile == "talib" || semantic_profile == "talib_0_7_1" {
+        return execute_talib_profile(&request.operation, &input_order, &inputs, &request.params);
+    }
+    if semantic_profile != "core_registry" {
+        return Err((
+            "unsupported_profile",
+            format!("unsupported semantic_profile: {}", request.semantic_profile),
+        ));
+    }
+
     let fallback = inputs
         .values()
         .next()
@@ -219,6 +236,298 @@ fn normalize_name(value: &str) -> String {
     value.trim().to_ascii_uppercase()
 }
 
+fn normalize_profile(value: &str) -> String {
+    value.trim().to_ascii_lowercase()
+}
+
+fn execute_talib_profile(
+    operation: &str,
+    input_order: &[String],
+    inputs: &BTreeMap<String, Vec<f64>>,
+    params: &[f64],
+) -> Result<Value, (&'static str, String)> {
+    let name = normalize_name(operation);
+    let mut values = BTreeMap::new();
+    let primary = match name.as_str() {
+        "SMA" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let period = parameter_usize(params, 0, 30, &name)?;
+            values.insert(
+                "SMA".to_string(),
+                indicator_values(finkit::math::moving_avg::sma(input, period), &name)?,
+            );
+            "SMA"
+        }
+        "EMA" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let period = parameter_usize(params, 0, 30, &name)?;
+            values.insert(
+                "EMA".to_string(),
+                indicator_values(finkit::math::moving_avg::ema(input, period), &name)?,
+            );
+            "EMA"
+        }
+        "WMA" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let period = parameter_usize(params, 0, 30, &name)?;
+            values.insert(
+                "WMA".to_string(),
+                indicator_values(finkit::math::moving_avg::wma(input, period), &name)?,
+            );
+            "WMA"
+        }
+        "RSI" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let period = parameter_usize(params, 0, 14, &name)?;
+            values.insert(
+                "RSI".to_string(),
+                indicator_values(finkit::indicators::momentum::rsi(input, period), &name)?,
+            );
+            "RSI"
+        }
+        "MACD" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let fast = parameter_usize(params, 0, 12, &name)?;
+            let slow = parameter_usize(params, 1, 26, &name)?;
+            let signal = parameter_usize(params, 2, 9, &name)?;
+            let output = finkit::indicators::momentum::macd(input, fast, slow, signal)
+                .map_err(|error| ("execution_error", format!("{name}: {error}")))?;
+            values.insert("MACD".to_string(), output.macd.to_vec());
+            values.insert("MACD_SIGNAL".to_string(), output.signal.to_vec());
+            values.insert("MACD_HIST".to_string(), output.hist.to_vec());
+            "MACD"
+        }
+        "BBANDS" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let period = parameter_usize(params, 0, 5, &name)?;
+            let deviation = parameter_f64(params, 1, 2.0, &name)?;
+            let output = finkit::indicators::overlap::bbands(input, period, deviation, deviation)
+                .map_err(|error| ("execution_error", format!("{name}: {error}")))?;
+            values.insert("UPPERBAND".to_string(), output.upper.to_vec());
+            values.insert("MIDDLEBAND".to_string(), output.middle.to_vec());
+            values.insert("LOWERBAND".to_string(), output.lower.to_vec());
+            "MIDDLEBAND"
+        }
+        "ATR" => {
+            let (high, low, close) = hlc(inputs, &name)?;
+            let period = parameter_usize(params, 0, 14, &name)?;
+            values.insert(
+                "ATR".to_string(),
+                indicator_values(
+                    finkit::indicators::volatility::atr(high, low, close, period),
+                    &name,
+                )?,
+            );
+            "ATR"
+        }
+        "NATR" => {
+            let (high, low, close) = hlc(inputs, &name)?;
+            let period = parameter_usize(params, 0, 14, &name)?;
+            values.insert(
+                "NATR".to_string(),
+                indicator_values(
+                    finkit::indicators::volatility::natr(high, low, close, period),
+                    &name,
+                )?,
+            );
+            "NATR"
+        }
+        "TRANGE" => {
+            let (high, low, close) = hlc(inputs, &name)?;
+            values.insert(
+                "TRANGE".to_string(),
+                indicator_values(
+                    finkit::indicators::volatility::trange(high, low, close),
+                    &name,
+                )?,
+            );
+            "TRANGE"
+        }
+        "ADX" => {
+            let (high, low, close) = hlc(inputs, &name)?;
+            let period = parameter_usize(params, 0, 14, &name)?;
+            values.insert(
+                "ADX".to_string(),
+                indicator_values(
+                    finkit::indicators::momentum::adx(high, low, close, period),
+                    &name,
+                )?,
+            );
+            "ADX"
+        }
+        "CCI" => {
+            let (high, low, close) = hlc(inputs, &name)?;
+            let period = parameter_usize(params, 0, 14, &name)?;
+            values.insert(
+                "CCI".to_string(),
+                indicator_values(
+                    finkit::indicators::momentum::cci(high, low, close, period),
+                    &name,
+                )?,
+            );
+            "CCI"
+        }
+        "STOCH" => {
+            let (high, low, close) = hlc(inputs, &name)?;
+            let k_period = parameter_usize(params, 0, 5, &name)?;
+            let k_slow = parameter_usize(params, 1, 3, &name)?;
+            let d_period = parameter_usize(params, 2, 3, &name)?;
+            let output =
+                finkit::indicators::momentum::stoch(high, low, close, k_period, k_slow, d_period)
+                    .map_err(|error| ("execution_error", format!("{name}: {error}")))?;
+            values.insert("SLOWK".to_string(), output.k.to_vec());
+            values.insert("SLOWD".to_string(), output.d.to_vec());
+            "SLOWK"
+        }
+        "WILLR" => {
+            let (high, low, close) = hlc(inputs, &name)?;
+            let period = parameter_usize(params, 0, 14, &name)?;
+            values.insert(
+                "WILLR".to_string(),
+                indicator_values(
+                    finkit::indicators::momentum::willr(high, low, close, period),
+                    &name,
+                )?,
+            );
+            "WILLR"
+        }
+        "MOM" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let period = parameter_usize(params, 0, 10, &name)?;
+            values.insert(
+                "MOM".to_string(),
+                indicator_values(finkit::indicators::momentum::mom(input, period), &name)?,
+            );
+            "MOM"
+        }
+        "ROC" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let period = parameter_usize(params, 0, 10, &name)?;
+            values.insert(
+                "ROC".to_string(),
+                indicator_values(finkit::indicators::momentum::roc(input, period), &name)?,
+            );
+            "ROC"
+        }
+        "OBV" => {
+            let close = named_series(inputs, "CLOSE", &name)?;
+            let volume = named_series(inputs, "VOLUME", &name)?;
+            values.insert(
+                "OBV".to_string(),
+                indicator_values(finkit::indicators::volume::obv(close, volume), &name)?,
+            );
+            "OBV"
+        }
+        "MFI" => {
+            let (high, low, close) = hlc(inputs, &name)?;
+            let volume = named_series(inputs, "VOLUME", &name)?;
+            let period = parameter_usize(params, 0, 14, &name)?;
+            values.insert(
+                "MFI".to_string(),
+                indicator_values(
+                    finkit::indicators::momentum::mfi(high, low, close, volume, period),
+                    &name,
+                )?,
+            );
+            "MFI"
+        }
+        _ => {
+            return Err((
+                "unsupported_operation",
+                format!("TA-Lib profile does not yet dispatch {name}"),
+            ))
+        }
+    };
+
+    let serialized_values = values
+        .iter()
+        .map(|(name, series)| (name.clone(), nullable_series(series)))
+        .collect::<BTreeMap<_, _>>();
+    Ok(json!({
+        "schema_version": OPERATION_RESULT_SCHEMA_VERSION,
+        "semantic_profile": "talib_0_7_1",
+        "operation": name.clone(),
+        "operation_id": finkit::operation::OperationId::from_name(&name).0,
+        "primary": primary,
+        "shape": if values.len() > 1 { "multi_series" } else { "series" },
+        "values": serialized_values,
+    }))
+}
+
+fn ordered_series<'a>(
+    inputs: &'a BTreeMap<String, Vec<f64>>,
+    order: &[String],
+    index: usize,
+    fallback: &str,
+    operation: &str,
+) -> Result<&'a [f64], (&'static str, String)> {
+    let name = order.get(index).map(String::as_str).unwrap_or(fallback);
+    named_series(inputs, name, operation)
+}
+
+fn named_series<'a>(
+    inputs: &'a BTreeMap<String, Vec<f64>>,
+    name: &str,
+    operation: &str,
+) -> Result<&'a [f64], (&'static str, String)> {
+    inputs.get(name).map(Vec::as_slice).ok_or((
+        "invalid_request",
+        format!("{operation} requires input series {name}"),
+    ))
+}
+
+fn hlc<'a>(
+    inputs: &'a BTreeMap<String, Vec<f64>>,
+    operation: &str,
+) -> Result<(&'a [f64], &'a [f64], &'a [f64]), (&'static str, String)> {
+    Ok((
+        named_series(inputs, "HIGH", operation)?,
+        named_series(inputs, "LOW", operation)?,
+        named_series(inputs, "CLOSE", operation)?,
+    ))
+}
+
+fn parameter_usize(
+    params: &[f64],
+    index: usize,
+    default: usize,
+    operation: &str,
+) -> Result<usize, (&'static str, String)> {
+    let value = params.get(index).copied().unwrap_or(default as f64);
+    if !value.is_finite() || value < 1.0 || value.fract() != 0.0 {
+        return Err((
+            "invalid_request",
+            format!("{operation} parameter {index} must be a positive integer"),
+        ));
+    }
+    Ok(value as usize)
+}
+
+fn parameter_f64(
+    params: &[f64],
+    index: usize,
+    default: f64,
+    operation: &str,
+) -> Result<f64, (&'static str, String)> {
+    let value = params.get(index).copied().unwrap_or(default);
+    if !value.is_finite() {
+        return Err((
+            "invalid_request",
+            format!("{operation} parameter {index} must be finite"),
+        ));
+    }
+    Ok(value)
+}
+
+fn indicator_values<T: std::fmt::Display>(
+    result: Result<Array1<f64>, T>,
+    operation: &str,
+) -> Result<Vec<f64>, (&'static str, String)> {
+    result
+        .map(|values| values.to_vec())
+        .map_err(|error| ("execution_error", format!("{operation}: {error}")))
+}
+
 fn value_shape_name(shape: finkit::operation::ValueShape) -> &'static str {
     match shape {
         finkit::operation::ValueShape::Series => "series",
@@ -278,6 +587,21 @@ mod tests {
         assert!(payload["values"].get("MACD").is_some());
         assert!(payload["values"].get("MACD_SIGNAL").is_some());
         assert!(payload["values"].get("MACD_HIST").is_some());
+    }
+
+    #[test]
+    fn talib_profile_is_explicit_and_uses_talib_sma_warmup() {
+        let request = r#"{
+            "operation":"SMA",
+            "semantic_profile":"talib_0_7_1",
+            "input_order":["CLOSE"],
+            "inputs":{"CLOSE":[1.0,2.0,3.0]},
+            "params":[2]
+        }"#;
+        let payload: Value = serde_json::from_str(&execute_operation_json(request)).unwrap();
+        assert_eq!(payload["semantic_profile"], "talib_0_7_1");
+        assert_eq!(payload["values"]["SMA"][0], Value::Null);
+        assert_eq!(payload["values"]["SMA"][2], 2.5);
     }
 
     #[test]
