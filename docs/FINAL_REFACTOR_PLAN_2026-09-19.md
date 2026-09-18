@@ -91,13 +91,20 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
 - profile catalog：138 个 profile-only 名称；
 - 合并 Core registry 后 dispatcher：201 个名称；
 - checked-in numeric golden：201 个；
+- shared numeric contract：201 个向量、160 行合成输入，直接从 checked-in TA-Lib
+  0.8.0 golden 生成，并由 Node 与 Python binding 实际执行；
 - 审计差集：0；
 - 21 个新增函数的独立 adapter、参数目录、输出字段和 warm-up：已接入；
 - Core golden suite：已通过；
 - `finkit-ffi-common`：已通过 80 个测试，包含全目录 dispatcher smoke 和三类
   streaming checkpoint provenance 校验。
 
-这只证明当前 workspace 和参考环境的目录/数值对照，不等于所有操作系统、编译器、CPU、Node 宿主和发布包均已完成验证；发布前仍需运行完整 binding/ABI 矩阵。
+这只证明当前 workspace 和已执行 binding 的目录/数值对照，不等于所有操作系统、编译器、CPU、Node 宿主和发布包均已完成验证；发布前仍需运行完整 binding/ABI 矩阵。
+
+`tests/contracts/talib_numeric_contract_v1.json` 不作为手工维护的第二份
+truth source。`scripts/gen_talib_numeric_contract.py --check` 会重新读取
+`tests/golden/talib/*.json`、覆盖矩阵和合成输入，并拒绝生成结果漂移；数值比较同时
+检查 warm-up 的 `null`、输出长度和逐元素绝对/相对误差。
 
 ## 5. 生产化门禁
 
@@ -160,6 +167,13 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
   contract entries；全部入口都拒绝已淘汰的 `talib_0_7_1`。这防止旧 native
   artifact 被误当作最新源码验证；完整目录当前还包含 Core-only operation，
   因此不把总 operation 数误写成 201。
+- 201 个 TA-Lib 数值向量现在进入 Node 的默认 `npm test`，并进入 Python 发布
+  wheel gate；两者都使用同一份 JSON 请求、输入、参数、输出名、null 和容差，
+  不再只验证“能发现 201 个名字”。
+- 对照官方 CandleSettings 语义修正了 10 个此前只用固定比例近似的 candlestick
+  adapter（Harami、Morning/Evening Star、Piercing、Three Stars in the South、
+  Homing Pigeon、Matching Low、Mat Hold、Tasuki Gap、Unique Three River）；完整
+  201 向量审计从 10 个差异收敛为 0 个差异。
 - 内置 operation catalog 现在由进程级 `OnceLock` 缓存，并作为 TA-Lib dispatcher
   的运行时执行契约：请求中的参数数量不得超出 profile schema，返回字段、输出数量、
   shape 和序列长度必须与 schema 对齐；不一致统一返回结构化
@@ -177,9 +191,9 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
 1. 完成当前改动的 fmt、workspace、ABI 和 binding 回归并提交；Lightweight HTML
    页面生成已纳入 visualization 回归，但真实浏览器宿主仍需单独纳入 CI。
 2. 将剩余 TA-Lib profile 参数/输出 metadata 从手写 match 逐步生成化，但保留 profile adapter 的显式语义代码。
-3. 将本轮已接入的 `engine_contract_v1.json` 扩展为八语言同一份 201 函数
-   typed-buffer/JSON conformance vector，尤其覆盖新增 21 个函数的多输出和 warm-up；
-   当前仍需在 CI 的 C/C++、Go、.NET 和发布环境 Java 矩阵中完成宿主运行证明。
+3. 将本轮已接入的 `engine_contract_v1.json` 与 `talib_numeric_contract_v1.json`
+   扩展到 C/C++、Go、Java、.NET 的实际宿主运行证明；当前 Node 与 Python 已完成
+   201/201 数值执行，其他语言仍需在其 CI/toolchain 矩阵中完成逐元素数值门禁。
 4. 将 Formula dialect registry、TA-Lib catalog、Factor catalog 和 Draw schema 统一纳入版本发布清单。
 5. 为生产部署增加 benchmark workload、内存/分配、并发、checkpoint 恢复和错误可观测性门禁；性能结论按硬件和数据规模分别报告。
 6. 继续扩展 TDX/同花顺/东方财富通用函数与 Pine 子集，但每次扩展必须先增加语义矩阵和参考向量，再进入 production catalog。
@@ -193,8 +207,13 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
 - Rust：`cargo +1.98.1 test -p finkit-ffi-common contract_conformance --offline`，10 passed。
 - Node：`npm test`，12 passed。
 - Node：重建当前 Rust native module 后 `npm test`，13 passed（含 TA-Lib 目录集合门禁）。
+- Node：重建当前 Rust native module 后 `npm test`，14 passed（含 201/201 数值向量）。
 - Python：从 workspace 根目录运行
   `python -m pytest ffi/python-binding/tests/test_engine_contract_v1.py -q`，2 passed。
+- Python：重新构建并安装当前 wheel 后
+  `python -m pytest ffi/python-binding/tests/test_talib_numeric_contract.py -q`，1 passed。
+- 生成校验：`python scripts/gen_talib_numeric_contract.py --check` 通过；Node 独立
+  审计报告为 `201 vectors / 0 failures`。
 - Java：重新构建当前 `finkit_java.dll`，编译并运行
   `com.finkit.ContractConformance`，exit code 0（含 TA-Lib 目录门禁）。
 - Go：未运行，工作机 `CGO_ENABLED=0` 且没有 `gcc`；C/C++：未运行，工作机没有 CMake/C++ 编译器；.NET：未运行，工作机没有 `dotnet`。这些是未验证项，不视为通过。

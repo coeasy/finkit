@@ -589,8 +589,24 @@ fn execute_talib_profile(
                 parameter_usize(params, 1, 2, &name)?,
             )
             .map_err(|e| ("execution_error", format!("{name}: {e}")))?;
-            values.insert("SWINGHIGH".to_string(), r.swinghigh.to_vec());
-            values.insert("SWINGLOW".to_string(), r.swinglow.to_vec());
+            // TA-Lib pattern-style outputs use zero for bars before a
+            // confirmed pivot. The extension kernel uses NaN for those
+            // undefined rows, so normalize only at this compatibility
+            // boundary rather than changing the Core API.
+            values.insert(
+                "SWINGHIGH".to_string(),
+                r.swinghigh
+                    .iter()
+                    .map(|value| if value.is_finite() { *value } else { 0.0 })
+                    .collect(),
+            );
+            values.insert(
+                "SWINGLOW".to_string(),
+                r.swinglow
+                    .iter()
+                    .map(|value| if value.is_finite() { *value } else { 0.0 })
+                    .collect(),
+            );
             "SWINGHIGH"
         }
         "KC" => {
@@ -744,7 +760,12 @@ fn execute_talib_profile(
             let c = named_series(inputs, "CLOSE", &name)?;
             let r = finkit::indicators::talib_ext::wad(h, l, c)
                 .map_err(|e| ("execution_error", format!("{name}: {e}")))?;
-            values.insert("REAL".to_string(), r.to_vec());
+            values.insert(
+                "REAL".to_string(),
+                r.iter()
+                    .map(|value| if value.is_finite() { *value } else { 0.0 })
+                    .collect(),
+            );
             "REAL"
         }
         "MA" => {
@@ -1116,7 +1137,15 @@ fn execute_talib_profile(
                 af_max_short,
             )
             .map_err(|error| ("execution_error", format!("{name}: {error}")))?;
-            values.insert("SAREXT".to_string(), output.sar.to_vec());
+            values.insert(
+                "SAREXT".to_string(),
+                output
+                    .sar
+                    .iter()
+                    .enumerate()
+                    .map(|(index, value)| if index == 0 { f64::NAN } else { *value })
+                    .collect(),
+            );
             "SAREXT"
         }
         "HT_DCPERIOD" | "HT_DCPHASE" | "HT_TRENDMODE" | "HT_TRENDLINE" => {
@@ -1678,13 +1707,17 @@ fn execute_talib_profile(
             let (high, low, close, volume) = ohlcv(inputs, &name)?;
             let fast = parameter_usize(params, 0, 3, &name)?;
             let slow = parameter_usize(params, 1, 10, &name)?;
-            values.insert(
-                "ADOSC".to_string(),
-                indicator_values(
-                    finkit::indicators::volume::adosc(high, low, close, volume, fast, slow),
-                    &name,
-                )?,
-            );
+            let mut output = indicator_values(
+                finkit::indicators::volume::adosc(high, low, close, volume, fast, slow),
+                &name,
+            )?;
+            // TA-Lib ADOSC has no value until the slow EMA window closes;
+            // the Core helper intentionally returns a neutral zero during
+            // that phase for general-purpose composition.
+            for value in output.iter_mut().take(slow.saturating_sub(1)) {
+                *value = f64::NAN;
+            }
+            values.insert("ADOSC".to_string(), output);
             "ADOSC"
         }
         "PLUS_DM" => {

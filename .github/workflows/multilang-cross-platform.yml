@@ -15,6 +15,7 @@ on:
       - "ffi/go-binding/**"
       - "ffi/java-binding/**"
       - "tests/contracts/**"
+      - "scripts/gen_talib_numeric_contract.py"
       - "scripts/check_versions.py"
       - "scripts/check_warning_contracts.py"
       - "scripts/sync_bindings.py"

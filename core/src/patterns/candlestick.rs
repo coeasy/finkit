@@ -105,6 +105,34 @@ fn lower_shadow(low: f64, open: f64, close: f64) -> f64 {
     open.min(close) - low
 }
 
+/// Average a candle range over the preceding `period` bars.
+///
+/// TA-Lib candle settings deliberately exclude the current bar from the
+/// average. Returning `None` during warm-up makes the caller keep the same
+/// lookback boundary instead of silently classifying partial history.
+#[inline]
+fn previous_average(values: &[f64], index: usize, period: usize) -> Option<f64> {
+    if index < period {
+        return None;
+    }
+    Some(values[index - period..index].iter().sum::<f64>() / period as f64)
+}
+
+#[inline]
+fn real_body_values(open: &[f64], close: &[f64]) -> Vec<f64> {
+    open.iter().zip(close).map(|(&o, &c)| body(o, c)).collect()
+}
+
+#[inline]
+fn high_low_values(high: &[f64], low: &[f64]) -> Vec<f64> {
+    high.iter().zip(low).map(|(&h, &l)| h - l).collect()
+}
+
+#[inline]
+fn bodies_diff(open_a: f64, close_a: f64, open_b: f64, close_b: f64) -> f64 {
+    (body(open_a, close_a) - body(open_b, close_b)).abs()
+}
+
 /// Whether candle is bullish (white)
 #[inline(always)]
 fn is_bullish(open: f64, close: f64) -> bool {
@@ -627,23 +655,34 @@ pub fn harami(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result<
 
     let len = open.len();
     let mut output = Array1::zeros(len);
+    let bodies = real_body_values(open, close);
 
-    for i in 1..len {
-        let prev_body = body(open[i - 1], close[i - 1]);
-        let curr_body = body(open[i], close[i]);
-
-        if curr_body < prev_body * 0.5 {
+    for i in 11..len {
+        let Some(long_avg) = previous_average(&bodies, i - 1, 10) else {
+            continue;
+        };
+        let Some(short_avg) = previous_average(&bodies, i, 10) else {
+            continue;
+        };
+        if bodies[i - 1] > long_avg && bodies[i] <= short_avg {
             let prev_high = open[i - 1].max(close[i - 1]);
             let prev_low = open[i - 1].min(close[i - 1]);
             let curr_high = open[i].max(close[i]);
             let curr_low = open[i].min(close[i]);
 
-            if curr_high < prev_high && curr_low > prev_low {
-                if is_bearish(open[i - 1], close[i - 1]) && is_bullish(open[i], close[i]) {
-                    output[i] = 100;
-                } else if is_bullish(open[i - 1], close[i - 1]) && is_bearish(open[i], close[i]) {
-                    output[i] = -100;
-                }
+            let value = if curr_high < prev_high && curr_low > prev_low {
+                100
+            } else if curr_high <= prev_high && curr_low >= prev_low {
+                80
+            } else {
+                0
+            };
+            if value != 0 {
+                output[i] = if close[i - 1] >= open[i - 1] {
+                    -value
+                } else {
+                    value
+                };
             }
         }
     }
@@ -730,17 +769,26 @@ pub fn morning_star(
 
     let len = open.len();
     let mut output = Array1::zeros(len);
+    let bodies = real_body_values(open, close);
 
-    for i in 2..len {
-        let first_body = body(open[i - 2], close[i - 2]);
-        let second_body = body(open[i - 1], close[i - 1]);
-        let third_body = body(open[i], close[i]);
-
+    for i in 12..len {
+        let Some(long_avg) = previous_average(&bodies, i - 2, 10) else {
+            continue;
+        };
+        let Some(short_avg_star) = previous_average(&bodies, i - 1, 10) else {
+            continue;
+        };
+        let Some(short_avg_last) = previous_average(&bodies, i, 10) else {
+            continue;
+        };
+        let first_body = bodies[i - 2];
         if is_bearish(open[i - 2], close[i - 2])
-            && second_body < first_body * 0.3
             && is_bullish(open[i], close[i])
-            && third_body > first_body * 0.5
-            && close[i] > (open[i - 2] + close[i - 2]) / 2.0
+            && open[i - 1].max(close[i - 1]) < open[i - 2].min(close[i - 2])
+            && close[i] > close[i - 2]
+            && first_body > long_avg
+            && bodies[i - 1] <= short_avg_star
+            && bodies[i] > short_avg_last
         {
             output[i] = 100;
         }
@@ -771,17 +819,26 @@ pub fn evening_star(
 
     let len = open.len();
     let mut output = Array1::zeros(len);
+    let bodies = real_body_values(open, close);
 
-    for i in 2..len {
-        let first_body = body(open[i - 2], close[i - 2]);
-        let second_body = body(open[i - 1], close[i - 1]);
-        let third_body = body(open[i], close[i]);
-
+    for i in 12..len {
+        let Some(long_avg) = previous_average(&bodies, i - 2, 10) else {
+            continue;
+        };
+        let Some(short_avg_star) = previous_average(&bodies, i - 1, 10) else {
+            continue;
+        };
+        let Some(short_avg_last) = previous_average(&bodies, i, 10) else {
+            continue;
+        };
+        let first_body = bodies[i - 2];
         if is_bullish(open[i - 2], close[i - 2])
-            && second_body < first_body * 0.3
             && is_bearish(open[i], close[i])
-            && third_body > first_body * 0.5
-            && close[i] < (open[i - 2] + close[i - 2]) / 2.0
+            && open[i - 1].min(close[i - 1]) > open[i - 2].max(close[i - 2])
+            && close[i] < close[i - 2]
+            && first_body > long_avg
+            && bodies[i - 1] <= short_avg_star
+            && bodies[i] > short_avg_last
         {
             output[i] = -100;
         }
@@ -1189,22 +1246,46 @@ pub fn three_stars_in_south(
             constraint: "must have the same length".to_string(),
         });
     }
-    validate_input(open.len(), 4)?;
+    validate_input(open.len(), 3)?;
 
     let len = open.len();
     let mut output = Array1::zeros(len);
+    let bodies = real_body_values(open, close);
+    let ranges = high_low_values(high, low);
 
-    for i in 3..len {
-        // First: long black candle
-        if is_bearish(open[i - 3], close[i - 3])
-            // Second: black candle with lower low and gap down
-            && is_bearish(open[i - 2], close[i - 2])
-            && low[i - 2] < low[i - 3]
-            // Third: small-bodied candle (spinning top or doji)
-            && body(open[i - 1], close[i - 1]) < body(open[i - 2], close[i - 2])
-            // Fourth: white candle that closes within first candle's body
-            && is_bullish(open[i], close[i])
-            && close[i] > close[i - 3]
+    for i in 11..len {
+        let Some(long_avg) = previous_average(&bodies, i - 2, 10) else {
+            continue;
+        };
+        let Some(short_avg) = previous_average(&bodies, i, 10) else {
+            continue;
+        };
+        let Some(shadow_avg_second) = previous_average(&ranges, i - 1, 10) else {
+            continue;
+        };
+        let Some(shadow_avg_third) = previous_average(&ranges, i, 10) else {
+            continue;
+        };
+        let first_lower = lower_shadow(low[i - 2], open[i - 2], close[i - 2]);
+        let second_lower = lower_shadow(low[i - 1], open[i - 1], close[i - 1]);
+        let third_lower = lower_shadow(low[i], open[i], close[i]);
+        let third_upper = upper_shadow(high[i], open[i], close[i]);
+        if is_bearish(open[i - 2], close[i - 2])
+            && is_bearish(open[i - 1], close[i - 1])
+            && is_bearish(open[i], close[i])
+            && bodies[i - 2] > long_avg
+            && first_lower > bodies[i - 2]
+            && bodies[i - 1] < bodies[i - 2]
+            && open[i - 1] > close[i - 2]
+            && open[i - 1] <= high[i - 2]
+            && low[i - 1] < close[i - 2]
+            && low[i - 1] >= low[i - 2]
+            && second_lower > shadow_avg_second * 0.1
+            && bodies[i] < short_avg
+            && third_lower < shadow_avg_third * 0.1
+            && third_upper < shadow_avg_third * 0.1
+            && low[i] > low[i - 1]
+            && high[i] < high[i - 1]
         {
             output[i] = 100;
         }
@@ -1601,12 +1682,21 @@ pub fn piercing(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Resul
 
     let len = open.len();
     let mut output = Array1::zeros(len);
+    let bodies = real_body_values(open, close);
 
-    for i in 1..len {
+    for i in 10..len {
+        let Some(prev_avg) = previous_average(&bodies, i - 1, 10) else {
+            continue;
+        };
+        let Some(curr_avg) = previous_average(&bodies, i, 10) else {
+            continue;
+        };
         if is_bearish(open[i - 1], close[i - 1])
             && is_bullish(open[i], close[i])
-            && open[i] < close[i - 1]
-            && close[i] > (open[i - 1] + close[i - 1]) / 2.0
+            && bodies[i - 1] > prev_avg
+            && bodies[i] > curr_avg
+            && open[i] < low[i - 1]
+            && close[i] > close[i - 1] + bodies[i - 1] * 0.5
             && close[i] < open[i - 1]
         {
             output[i] = 100;
@@ -1849,16 +1939,37 @@ pub fn mat_hold(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Resul
 
     let len = open.len();
     let mut output = Array1::zeros(len);
+    let bodies = real_body_values(open, close);
 
-    for i in 4..len {
+    for i in 14..len {
+        let Some(long_avg) = previous_average(&bodies, i - 4, 10) else {
+            continue;
+        };
+        let Some(short_avg_3) = previous_average(&bodies, i - 3, 10) else {
+            continue;
+        };
+        let Some(short_avg_2) = previous_average(&bodies, i - 2, 10) else {
+            continue;
+        };
+        let Some(short_avg_1) = previous_average(&bodies, i - 1, 10) else {
+            continue;
+        };
         if is_bullish(open[i - 4], close[i - 4])
             && is_bearish(open[i - 3], close[i - 3])
-            && open[i - 3] > close[i - 4]
-            && is_bearish(open[i - 2], close[i - 2])
-            && is_bearish(open[i - 1], close[i - 1])
-            && close[i - 2] > close[i - 4] * 0.9
+            && open[i - 3].min(close[i - 3]) > open[i - 4].max(close[i - 4])
+            && open[i - 2].min(close[i - 2]) < close[i - 4]
+            && open[i - 1].min(close[i - 1]) < close[i - 4]
+            && open[i - 2].min(close[i - 2]) > close[i - 4] - bodies[i - 4] * 0.5
+            && open[i - 1].min(close[i - 1]) > close[i - 4] - bodies[i - 4] * 0.5
+            && open[i - 2].max(close[i - 2]) < open[i - 3]
+            && open[i - 1].max(close[i - 1]) < open[i - 2].max(close[i - 2])
             && is_bullish(open[i], close[i])
-            && close[i] > close[i - 4]
+            && open[i] > close[i - 1]
+            && close[i] > high[i - 3].max(high[i - 2]).max(high[i - 1])
+            && bodies[i - 4] > long_avg
+            && bodies[i - 3] < short_avg_3
+            && bodies[i - 2] < short_avg_2
+            && bodies[i - 1] < short_avg_1
         {
             output[i] = 100;
         }
@@ -1881,18 +1992,34 @@ pub fn tasuki_gap(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Res
 
     let len = open.len();
     let mut output = Array1::zeros(len);
+    let ranges = high_low_values(high, low);
 
-    for i in 2..len {
-        // Bullish tasuki gap
-        if is_bullish(open[i - 2], close[i - 2])
+    for i in 6..len {
+        let Some(near_avg) = previous_average(&ranges, i - 1, 5) else {
+            continue;
+        };
+        let gap_up = open[i - 1].min(close[i - 1]) > open[i - 2].max(close[i - 2]);
+        let gap_down = open[i - 1].max(close[i - 1]) < open[i - 2].min(close[i - 2]);
+        let bullish = gap_up
             && is_bullish(open[i - 1], close[i - 1])
-            && low[i - 1] > high[i - 2]
             && is_bearish(open[i], close[i])
-            && close[i] > close[i - 2]
             && open[i] < close[i - 1]
+            && open[i] > open[i - 1]
+            && close[i] < open[i - 1]
+            && close[i] > open[i - 2].max(close[i - 2])
+            && (bodies_diff(open[i - 1], close[i - 1], open[i], close[i]) < near_avg * 0.2);
+        let bearish = gap_down
+            && is_bearish(open[i - 1], close[i - 1])
+            && is_bullish(open[i], close[i])
+            && open[i] < open[i - 1]
+            && open[i] > close[i - 1]
             && close[i] > open[i - 1]
-        {
+            && close[i] < open[i - 2].min(close[i - 2])
+            && (bodies_diff(open[i - 1], close[i - 1], open[i], close[i]) < near_avg * 0.2);
+        if bullish {
             output[i] = 100;
+        } else if bearish {
+            output[i] = -100;
         }
     }
 
@@ -1984,11 +2111,15 @@ pub fn matching_low(
 
     let len = open.len();
     let mut output = Array1::zeros(len);
+    let ranges = high_low_values(high, low);
 
-    for i in 1..len {
+    for i in 5..len {
+        let Some(equal_avg) = previous_average(&ranges, i - 1, 5) else {
+            continue;
+        };
         if is_bearish(open[i - 1], close[i - 1])
             && is_bearish(open[i], close[i])
-            && (close[i] - close[i - 1]).abs() < 1e-10
+            && (close[i] - close[i - 1]).abs() <= equal_avg * 0.05
         {
             output[i] = 100;
         }
@@ -2064,20 +2195,28 @@ pub fn unique_3_river(
             constraint: "must have the same length".to_string(),
         });
     }
-    validate_input(open.len(), 4)?;
+    validate_input(open.len(), 3)?;
 
     let len = open.len();
     let mut output = Array1::zeros(len);
+    let bodies = real_body_values(open, close);
 
-    for i in 3..len {
-        if is_bearish(open[i - 3], close[i - 3])
-            && is_bearish(open[i - 2], close[i - 2])
-            && low[i - 2] < low[i - 3]
-            && is_bullish(open[i - 1], close[i - 1])
-            && open[i - 1] < close[i - 2]
-            && close[i - 1] > close[i - 2]
+    for i in 11..len {
+        let Some(long_avg) = previous_average(&bodies, i - 2, 10) else {
+            continue;
+        };
+        let Some(short_avg) = previous_average(&bodies, i, 10) else {
+            continue;
+        };
+        if is_bearish(open[i - 2], close[i - 2])
+            && is_bearish(open[i - 1], close[i - 1])
             && is_bullish(open[i], close[i])
-            && open[i] < close[i - 1]
+            && close[i - 1] > close[i - 2]
+            && open[i - 1] <= open[i - 2]
+            && low[i - 1] < low[i - 2]
+            && open[i] > low[i - 1]
+            && bodies[i - 2] > long_avg
+            && bodies[i] < short_avg
         {
             output[i] = 100;
         }
@@ -2757,11 +2896,30 @@ pub fn cdl_homing_pigeon(
     validate_input(open.len(), 2)?;
     let len = open.len();
     let mut output = PatternResult::zeros(len);
-    for i in 1..len {
+    if len < 12 {
+        for i in 1..len {
+            if is_bearish(open[i - 1], close[i - 1])
+                && is_bearish(open[i], close[i])
+                && open[i] < open[i - 1]
+                && close[i] > close[i - 1]
+            {
+                output[i] = 100;
+            }
+        }
+        return Ok(output);
+    }
+    let bodies = real_body_values(open, close);
+    for i in 11..len {
+        let Some(long_avg) = previous_average(&bodies, i - 1, 10) else {
+            continue;
+        };
+        let Some(short_avg) = previous_average(&bodies, i, 10) else {
+            continue;
+        };
         let bear1 = is_bearish(open[i - 1], close[i - 1]);
         let bear2 = is_bearish(open[i], close[i]);
         let contained = open[i] < open[i - 1] && close[i] > close[i - 1];
-        if bear1 && bear2 && contained {
+        if bear1 && bear2 && bodies[i - 1] > long_avg && bodies[i] <= short_avg && contained {
             output[i] = 100;
         }
     }

@@ -294,11 +294,30 @@ fn profile_only_talib_entry(name: &str) -> OperationCatalogEntry {
         Some("ohlcv")
     } else if matches!(
         name,
-        "AO" | "DONCHIAN" | "VORTEX" | "SUPERTREND" | "MEDPRICE" | "MIDPRICE" | "SAR"
+        "AC" | "ADR"
+            | "AO"
+            | "DONCHIAN"
+            | "ERI"
+            | "FRACTAL"
+            | "KC"
+            | "MASSI"
+            | "MEDPRICE"
+            | "MIDPRICE"
+            | "SAR"
+            | "SUPERTREND"
+            | "VORTEX"
+            | "WAD"
     ) {
         Some("hlc")
     } else if matches!(name, "CMF") {
         Some("hlcv")
+    } else if matches!(name, "MARKETFI") {
+        Some("dynamic")
+    } else if matches!(
+        name,
+        "EFI" | "NVI" | "PVI" | "PVO" | "PVT" | "QSTICK" | "RVOL"
+    ) {
+        Some("dynamic")
     } else {
         Some("series")
     };
@@ -467,7 +486,7 @@ fn talib_profile_params(name: &str) -> Vec<OperationParameter> {
             talib_parameter("afshort", "number", Some("0.02"), Some("finite")),
             talib_parameter("afmaxshort", "number", Some("0.2"), Some("finite")),
         ],
-        "MIDPRICE" => vec![period_parameter("14")],
+        "MIDPOINT" | "MIDPRICE" => vec![period_parameter("14")],
         "STDDEV" | "VAR" => vec![
             period_parameter("30"),
             talib_parameter("nbdev", "number", Some("1.0"), Some("finite")),
