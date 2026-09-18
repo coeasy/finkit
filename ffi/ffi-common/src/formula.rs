@@ -419,30 +419,44 @@ pub fn evaluate_formula_temporal_json(request: &str) -> Result<String, String> {
         }));
     }
 
-    let mut engine = FormulaEngine::new();
-    let result = if dialect == FormulaDialect::Pine {
+    let (values, draw_result) = if dialect == FormulaDialect::Pine {
+        // `request.security` needs a host/provider resolver that is more
+        // specific than the ordinary Formula operation contract. Keep that
+        // explicit path rather than pretending provider lookup is a regular
+        // variable dispatch.
+        let mut engine = FormulaEngine::new();
         let resolver = TemporalSecurityResolver {
             frame_symbol: &frame.symbol,
             providers: &security_providers,
         };
-        engine.eval_multi_with_pine_security(&request.source, &mut context, &resolver)
+        let result = engine
+            .eval_multi_with_pine_security(&request.source, &mut context, &resolver)
+            .map_err(|error| error.to_string())?;
+        let mut values = result
+            .outputs
+            .into_iter()
+            .map(|(name, value)| (name, value.to_vec()))
+            .collect::<BTreeMap<_, _>>();
+        values.insert("__PRIMARY__".to_string(), result.final_value.to_vec());
+        let draw = context.draw_commands.borrow().clone();
+        (values, draw)
     } else {
-        engine.eval_multi_with_dialect(&request.source, dialect, &mut context)
-    }
-    .map_err(|error| error.to_string())?;
+        let mut unified = UnifiedOperationEngine::new(FactorRegistry::new());
+        let result = unified
+            .execute(OperationRequest::Formula {
+                source: &request.source,
+                dialect,
+                context: &mut context,
+            })
+            .map_err(|error| error.to_string())?;
+        (result.values, result.draw.unwrap_or_default())
+    };
     let draw = {
-        let draw = context.draw_commands.borrow();
         json!({
             "schema_version": FORMULA_DRAW_CONTRACT_SCHEMA_VERSION,
-            "commands": draw_commands_json(&draw),
+            "commands": draw_commands_json(&draw_result),
         })
     };
-    let mut values = result
-        .outputs
-        .into_iter()
-        .map(|(name, value)| (name, value.to_vec()))
-        .collect::<BTreeMap<_, _>>();
-    values.insert("__PRIMARY__".to_string(), result.final_value.to_vec());
     let serialized_values = values
         .into_iter()
         .map(|(name, series)| (name, nullable_series(&series)))

@@ -136,6 +136,9 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
 - 基础 Formula JSON 入口也已改走 `UnifiedOperationEngine::Formula`，因此普通
   公式、Factor、Composite 和横截面 Factor 的公开批处理入口共享同一 Runtime
   dispatcher；Temporal/Panel/Streaming 仍保留其显式时间对齐与状态执行路径。
+- Temporal Formula 的非 Pine 请求现在也复用统一 Formula dispatcher；Pine 请求
+  保留显式 security resolver，以维持 provider 缺失、时间对齐和 host-required
+  错误语义，不将 provider 访问伪装成普通变量。
 
 ## 6. 后续实施顺序
 
