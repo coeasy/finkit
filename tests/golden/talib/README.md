@@ -58,7 +58,7 @@ All outputs are computed on three shared fixtures from `tests/fixtures/`:
 
 ## Output Files
 
-One JSON file per indicator (22 total):
+One JSON file per indicator (44 total):
 
 | File | TA-Lib function | Key parameters |
 |------|-----------------|----------------|
@@ -84,8 +84,31 @@ One JSON file per indicator (22 total):
 | `apo.json` | APO | 12, 26 |
 | `cmo.json` | CMO | timeperiod=14 |
 | `aroon.json` | AROON | timeperiod=14 |
+| `trange.json` | TRANGE | — |
+| `dx.json` | DX | timeperiod=14 |
+| `plus_di.json` | PLUS_DI | timeperiod=14 |
+| `minus_di.json` | MINUS_DI | timeperiod=14 |
+| `plus_dm.json` | PLUS_DM | timeperiod=14 |
+| `minus_dm.json` | MINUS_DM | timeperiod=14 |
+| `bop.json` | BOP | — |
+| `ppo.json` | PPO | 12, 26, matype=0 (SMA) |
+| `ultosc.json` | ULTOSC | 7, 14, 28 |
+| `avgprice.json` | AVGPRICE | — |
+| `medprice.json` | MEDPRICE | — |
+| `typprice.json` | TYPPRICE | — |
+| `wclprice.json` | WCLPRICE | — |
+| `midpoint.json` | MIDPOINT | timeperiod=14 |
+| `midprice.json` | MIDPRICE | timeperiod=14 |
+| `stddev.json` | STDDEV | timeperiod=14, nbdev=1 |
+| `var.json` | VAR | timeperiod=14, nbdev=1 |
+| `linearreg.json` | LINEARREG | timeperiod=14 |
+| `linearreg_angle.json` | LINEARREG_ANGLE | timeperiod=14 |
+| `linearreg_intercept.json` | LINEARREG_INTERCEPT | timeperiod=14 |
+| `linearreg_slope.json` | LINEARREG_SLOPE | timeperiod=14 |
+| `tsf.json` | TSF | timeperiod=14 |
 
-Parameters align with the legacy CSV golden files in `tests/golden/`.
+Parameters are recorded in each file's metadata and are intentionally pinned
+to the TA-Lib Python `0.6.8` reference used for this corpus.
 
 ## JSON Schema
 
@@ -128,9 +151,10 @@ Per-dataset entries keyed by `ashare`, `crypto`, `synthetic`:
 
 ## Usage in Tests
 
-Rust integration tests can load these JSON files to compare AlphaTA outputs
-against TA-Lib C at `1e-9` absolute tolerance (see
-`core/tests/common/golden_loader.rs`). Python parity scripts such as
+Rust integration tests load these JSON files to compare Finkit outputs against
+TA-Lib C using the indicator-specific tolerance policy in
+`core/tests/golden_talib_tests.rs` (including a documented relative tolerance
+for the scale-sensitive STDDEV/VAR accumulators). Python parity scripts such as
 `scripts/bench_vs_talib_precision.py` use the same TA-Lib bindings on
 independent random input; these golden files use fixed fixture datasets for
 regression stability.

@@ -215,7 +215,14 @@ const ADOSC_PARAMS: &[ParamSpec] = &[
 const PPO_PARAMS: &[ParamSpec] = &[
     ParamSpec::new("fast_period", "usize", Some("12"), Some("> 0")),
     ParamSpec::new("slow_period", "usize", Some("26"), Some("> fast_period")),
+    ParamSpec::new("matype", "usize", Some("0"), Some("0..8")),
 ];
+const DM_PARAMS: &[ParamSpec] = &[ParamSpec::new(
+    "timeperiod",
+    "usize",
+    Some("14"),
+    Some("> 1"),
+)];
 const ULTOSC_PARAMS: &[ParamSpec] = &[
     ParamSpec::new("short_period", "usize", Some("7"), Some("> 0")),
     ParamSpec::new("medium_period", "usize", Some("14"), Some("> 0")),
@@ -1242,9 +1249,9 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             aliases: &[],
             category: FunctionCategory::Momentum,
             input: InputKind::Hlc,
-            params: &[],
+            params: DM_PARAMS,
             outputs: 1,
-            lookback: LookbackSpec::None,
+            lookback: LookbackSpec::PeriodMinusOne,
             streaming: true,
             deterministic: true,
         },
@@ -1253,9 +1260,9 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             aliases: &[],
             category: FunctionCategory::Momentum,
             input: InputKind::Hlc,
-            params: &[],
+            params: DM_PARAMS,
             outputs: 1,
-            lookback: LookbackSpec::None,
+            lookback: LookbackSpec::PeriodMinusOne,
             streaming: true,
             deterministic: true,
         },

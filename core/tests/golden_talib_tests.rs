@@ -30,8 +30,50 @@ const REPORT_PATH: &str = "target/talib_compat_report.json";
 
 /// All indicators covered by `scripts/gen_talib_golden.py`.
 const KNOWN_INDICATORS: &[&str] = &[
-    "SMA", "EMA", "RSI", "MACD", "BBANDS", "ATR", "ADX", "STOCH", "CCI", "WILLR", "MOM", "ROC",
-    "TRIX", "OBV", "AD", "DEMA", "TEMA", "WMA", "NATR", "APO", "CMO", "AROON",
+    "SMA",
+    "EMA",
+    "RSI",
+    "MACD",
+    "BBANDS",
+    "ATR",
+    "ADX",
+    "STOCH",
+    "CCI",
+    "WILLR",
+    "MOM",
+    "ROC",
+    "TRIX",
+    "OBV",
+    "AD",
+    "DEMA",
+    "TEMA",
+    "WMA",
+    "NATR",
+    "APO",
+    "CMO",
+    "AROON",
+    "TRANGE",
+    "DX",
+    "PLUS_DI",
+    "MINUS_DI",
+    "PLUS_DM",
+    "MINUS_DM",
+    "BOP",
+    "PPO",
+    "ULTOSC",
+    "AVGPRICE",
+    "MEDPRICE",
+    "TYPPRICE",
+    "WCLPRICE",
+    "MIDPOINT",
+    "MIDPRICE",
+    "STDDEV",
+    "VAR",
+    "LINEARREG",
+    "LINEARREG_ANGLE",
+    "LINEARREG_INTERCEPT",
+    "LINEARREG_SLOPE",
+    "TSF",
 ];
 
 #[derive(Debug, Deserialize)]
@@ -55,6 +97,7 @@ struct DatasetResult {
 
 #[derive(Debug, Clone)]
 struct Ohlcv {
+    open: Vec<f64>,
     high: Vec<f64>,
     low: Vec<f64>,
     close: Vec<f64>,
@@ -104,6 +147,11 @@ fn tolerance_for_indicator(indicator: &str) -> f64 {
         // fixture. The implementation and TA-Lib agree in relative terms;
         // allow the sub-micro-unit absolute rounding difference at that scale.
         "AD" => 1e-6,
+        // TA-Lib's rolling first/second-moment accumulators and the Rust
+        // implementation can differ by a few ulps after subtracting large
+        // close-price squares. Compare these two scale-sensitive outputs with
+        // a relative tolerance in addition to the absolute floor.
+        "STDDEV" | "VAR" => 2e-7,
         "EMA" | "DEMA" | "TEMA" => 1e-8,
         _ => 1e-8,
     }
@@ -152,10 +200,11 @@ fn read_fixture_csv(path: &Path) -> Ohlcv {
     let mut low = Vec::new();
     let mut close = Vec::new();
     let mut volume = Vec::new();
+    let mut open = Vec::new();
 
     for line in lines {
         let parts: Vec<&str> = line.split(',').collect();
-        let _: f64 = parts[col_index["open"]].trim().parse().expect("open");
+        open.push(parts[col_index["open"]].trim().parse().expect("open"));
         high.push(parts[col_index["high"]].trim().parse().expect("high"));
         low.push(parts[col_index["low"]].trim().parse().expect("low"));
         close.push(parts[col_index["close"]].trim().parse().expect("close"));
@@ -163,6 +212,7 @@ fn read_fixture_csv(path: &Path) -> Ohlcv {
     }
 
     Ohlcv {
+        open,
         high,
         low,
         close,
@@ -176,6 +226,7 @@ fn compute_alpha_ta_outputs(
     ohlcv: &Ohlcv,
 ) -> HashMap<String, Vec<f64>> {
     let close = &ohlcv.close;
+    let open = &ohlcv.open;
     let high = &ohlcv.high;
     let low = &ohlcv.low;
     let volume = &ohlcv.volume;
@@ -309,6 +360,173 @@ fn compute_alpha_ta_outputs(
                 ("aroonup".to_string(), array_to_vec(r.aroon_up)),
             ])
         }
+        "TRANGE" => HashMap::from([(
+            "trange".to_string(),
+            array_to_vec(finkit::indicators::volatility::trange(high, low, close).unwrap()),
+        )]),
+        "DX" => {
+            let p = param_usize(params, "timeperiod", 14);
+            HashMap::from([(
+                "dx".to_string(),
+                array_to_vec(finkit::indicators::momentum::dx(high, low, close, p).unwrap()),
+            )])
+        }
+        "PLUS_DI" => {
+            let p = param_usize(params, "timeperiod", 14);
+            HashMap::from([(
+                "plus_di".to_string(),
+                array_to_vec(finkit::indicators::momentum::plus_di(high, low, close, p).unwrap()),
+            )])
+        }
+        "MINUS_DI" => {
+            let p = param_usize(params, "timeperiod", 14);
+            HashMap::from([(
+                "minus_di".to_string(),
+                array_to_vec(finkit::indicators::momentum::minus_di(high, low, close, p).unwrap()),
+            )])
+        }
+        "PLUS_DM" => {
+            let p = param_usize(params, "timeperiod", 14);
+            HashMap::from([(
+                "plus_dm".to_string(),
+                array_to_vec(
+                    finkit::indicators::momentum::plus_dm_with_period(high, low, p).unwrap(),
+                ),
+            )])
+        }
+        "MINUS_DM" => {
+            let p = param_usize(params, "timeperiod", 14);
+            HashMap::from([(
+                "minus_dm".to_string(),
+                array_to_vec(
+                    finkit::indicators::momentum::minus_dm_with_period(high, low, p).unwrap(),
+                ),
+            )])
+        }
+        "BOP" => HashMap::from([(
+            "bop".to_string(),
+            array_to_vec(finkit::indicators::momentum::bop(open, high, low, close).unwrap()),
+        )]),
+        "PPO" => {
+            let fast = param_usize(params, "fastperiod", 12);
+            let slow = param_usize(params, "slowperiod", 26);
+            let ma_type = match param_usize(params, "matype", 0) {
+                0 => finkit::indicators::overlap::MaType::Sma,
+                1 => finkit::indicators::overlap::MaType::Ema,
+                2 => finkit::indicators::overlap::MaType::Wma,
+                3 => finkit::indicators::overlap::MaType::Dema,
+                4 => finkit::indicators::overlap::MaType::Tema,
+                5 => finkit::indicators::overlap::MaType::Trima,
+                6 => finkit::indicators::overlap::MaType::Kama,
+                7 => finkit::indicators::overlap::MaType::Mama,
+                8 => finkit::indicators::overlap::MaType::T3,
+                other => panic!("unsupported golden PPO matype {other}"),
+            };
+            HashMap::from([(
+                "ppo".to_string(),
+                array_to_vec(
+                    finkit::indicators::momentum::ppo_with_ma_type(close, fast, slow, ma_type)
+                        .unwrap(),
+                ),
+            )])
+        }
+        "ULTOSC" => {
+            let first = param_usize(params, "timeperiod1", 7);
+            let second = param_usize(params, "timeperiod2", 14);
+            let third = param_usize(params, "timeperiod3", 28);
+            HashMap::from([(
+                "ultosc".to_string(),
+                array_to_vec(
+                    finkit::indicators::momentum::ultosc(high, low, close, first, second, third)
+                        .unwrap(),
+                ),
+            )])
+        }
+        "AVGPRICE" => HashMap::from([(
+            "avgprice".to_string(),
+            array_to_vec(
+                finkit::indicators::price_transform::avgprice(open, high, low, close).unwrap(),
+            ),
+        )]),
+        "MEDPRICE" => HashMap::from([(
+            "medprice".to_string(),
+            array_to_vec(finkit::indicators::price_transform::medprice(high, low).unwrap()),
+        )]),
+        "TYPPRICE" => HashMap::from([(
+            "typprice".to_string(),
+            array_to_vec(finkit::indicators::price_transform::typprice(high, low, close).unwrap()),
+        )]),
+        "WCLPRICE" => HashMap::from([(
+            "wclprice".to_string(),
+            array_to_vec(finkit::indicators::price_transform::wclprice(high, low, close).unwrap()),
+        )]),
+        "MIDPOINT" => {
+            let p = param_usize(params, "timeperiod", 14);
+            HashMap::from([(
+                "midpoint".to_string(),
+                array_to_vec(finkit::indicators::overlap::midpoint(close, p).unwrap()),
+            )])
+        }
+        "MIDPRICE" => {
+            let p = param_usize(params, "timeperiod", 14);
+            HashMap::from([(
+                "midprice".to_string(),
+                array_to_vec(finkit::indicators::overlap::midprice(high, low, p).unwrap()),
+            )])
+        }
+        "STDDEV" => {
+            let p = param_usize(params, "timeperiod", 14);
+            let nb_dev = param_f64(params, "nbdev", 1.0);
+            HashMap::from([(
+                "stddev".to_string(),
+                array_to_vec(finkit::indicators::statistics::std_dev(close, p, nb_dev).unwrap()),
+            )])
+        }
+        "VAR" => {
+            let p = param_usize(params, "timeperiod", 14);
+            let nb_dev = param_f64(params, "nbdev", 1.0);
+            HashMap::from([(
+                "var".to_string(),
+                array_to_vec(finkit::indicators::statistics::var(close, p, nb_dev).unwrap()),
+            )])
+        }
+        "LINEARREG" => {
+            let p = param_usize(params, "timeperiod", 14);
+            HashMap::from([(
+                "linearreg".to_string(),
+                array_to_vec(finkit::indicators::statistics::linearreg(close, p).unwrap()),
+            )])
+        }
+        "LINEARREG_ANGLE" => {
+            let p = param_usize(params, "timeperiod", 14);
+            HashMap::from([(
+                "linearreg_angle".to_string(),
+                array_to_vec(finkit::indicators::statistics::linearreg_angle(close, p).unwrap()),
+            )])
+        }
+        "LINEARREG_INTERCEPT" => {
+            let p = param_usize(params, "timeperiod", 14);
+            HashMap::from([(
+                "linearreg_intercept".to_string(),
+                array_to_vec(
+                    finkit::indicators::statistics::linearreg_intercept(close, p).unwrap(),
+                ),
+            )])
+        }
+        "LINEARREG_SLOPE" => {
+            let p = param_usize(params, "timeperiod", 14);
+            HashMap::from([(
+                "linearreg_slope".to_string(),
+                array_to_vec(finkit::indicators::statistics::linearreg_slope(close, p).unwrap()),
+            )])
+        }
+        "TSF" => {
+            let p = param_usize(params, "timeperiod", 14);
+            HashMap::from([(
+                "tsf".to_string(),
+                array_to_vec(finkit::indicators::statistics::tsf(close, p).unwrap()),
+            )])
+        }
         other => panic!("unsupported indicator for golden talib tests: {other}"),
     }
 }
@@ -351,7 +569,7 @@ fn unstable_period_hint(
     }
 }
 
-fn values_match(expected: f64, actual: f64, tol: f64, exact: bool) -> bool {
+fn values_match(expected: f64, actual: f64, tol: f64, exact: bool, relative: bool) -> bool {
     if expected.is_nan() && actual.is_nan() {
         return true;
     }
@@ -361,7 +579,11 @@ fn values_match(expected: f64, actual: f64, tol: f64, exact: bool) -> bool {
     if exact {
         expected == actual
     } else {
-        (expected - actual).abs() <= tol
+        if relative {
+            (expected - actual).abs() <= tol * expected.abs().max(actual.abs()).max(1.0)
+        } else {
+            (expected - actual).abs() <= tol
+        }
     }
 }
 
@@ -437,6 +659,7 @@ fn compare_series(
     actual: &[f64],
     tol: f64,
     exact: bool,
+    relative: bool,
     label: &str,
 ) -> SeriesCompare {
     let mut matched = 0usize;
@@ -467,7 +690,7 @@ fn compare_series(
             }
             Some(exp) => {
                 compared += 1;
-                if values_match(*exp, *act, tol, exact) {
+                if values_match(*exp, *act, tol, exact, relative) {
                     matched += 1;
                 } else if first_diff.is_none() {
                     first_diff = Some(i);
@@ -539,7 +762,14 @@ fn run_indicator_compat(indicator: &str) -> IndicatorReport {
                 alignment_errors.push(err);
             }
 
-            let cmp = compare_series(expected, actual, tol, exact, &label);
+            let cmp = compare_series(
+                expected,
+                actual,
+                tol,
+                exact,
+                matches!(indicator, "STDDEV" | "VAR"),
+                &label,
+            );
             alignment_errors.extend(cmp.errors);
             total_matched += cmp.matched;
             total_compared += cmp.compared;

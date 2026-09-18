@@ -2517,6 +2517,17 @@ pub fn minus_dm(high: &[f64], low: &[f64]) -> Result<Array1<f64>> {
     Ok(Array1::from_vec(output))
 }
 
+/// TA-Lib-compatible smoothed Minus Directional Movement (MINUS_DM).
+///
+/// The two-argument [`minus_dm`] function remains the raw one-bar movement
+/// primitive used by formula expressions.  TA-Lib's public MINUS_DM
+/// operation takes a period and returns a Wilder-smoothed series; this
+/// explicit variant keeps both semantics available without hiding the
+/// difference in a binding-specific adapter.
+pub fn minus_dm_with_period(high: &[f64], low: &[f64], period: usize) -> Result<Array1<f64>> {
+    directional_movement_with_period::<false>(high, low, period)
+}
+
 /// Plus Directional Indicator (PLUS_DI)
 ///
 /// # Examples
@@ -2576,6 +2587,69 @@ pub fn plus_dm(high: &[f64], low: &[f64]) -> Result<Array1<f64>> {
     }
 
     Ok(Array1::from_vec(output))
+}
+
+/// TA-Lib-compatible smoothed Plus Directional Movement (PLUS_DM).
+pub fn plus_dm_with_period(high: &[f64], low: &[f64], period: usize) -> Result<Array1<f64>> {
+    directional_movement_with_period::<true>(high, low, period)
+}
+
+fn directional_movement_with_period<const PLUS: bool>(
+    high: &[f64],
+    low: &[f64],
+    period: usize,
+) -> Result<Array1<f64>> {
+    if period < 2 {
+        return Err(TaError::InvalidParameter {
+            name: "period".to_string(),
+            constraint: "at least 2".to_string(),
+        });
+    }
+    if high.len() != low.len() {
+        return Err(TaError::InvalidParameter {
+            name: "high, low".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    validate_input(high.len(), period)?;
+
+    let len = high.len();
+    let mut output = init_output(len);
+    let lookback = period - 1;
+    let mut smoothed = 0.0;
+
+    // TA-Lib seeds the Wilder accumulator with the period-1 movement values
+    // at bars 1..=period-1 and publishes the first result at period-1.
+    for i in 1..=lookback {
+        smoothed += directional_movement_value::<PLUS>(high, low, i);
+    }
+    output[lookback] = smoothed;
+
+    let p = period as f64;
+    for i in period..len {
+        let movement = directional_movement_value::<PLUS>(high, low, i);
+        smoothed = smoothed - smoothed / p + movement;
+        output[i] = smoothed;
+    }
+
+    Ok(output)
+}
+
+#[inline]
+fn directional_movement_value<const PLUS: bool>(high: &[f64], low: &[f64], index: usize) -> f64 {
+    let up_move = high[index] - high[index - 1];
+    let down_move = low[index - 1] - low[index];
+    if PLUS {
+        if up_move > 0.0 && up_move > down_move {
+            up_move
+        } else {
+            0.0
+        }
+    } else if down_move > 0.0 && down_move > up_move {
+        down_move
+    } else {
+        0.0
+    }
 }
 
 /// Triple Exponential Average (TRIX)
@@ -3202,14 +3276,36 @@ pub fn macdfix_into(
 /// assert_eq!(result.len(), 30);
 /// ```
 pub fn ppo(input: &[f64], fast_period: usize, slow_period: usize) -> Result<Array1<f64>> {
-    let fast_ema = ema(input, fast_period)?;
-    let slow_ema = ema(input, slow_period)?;
-    let len = input.len();
-    let mut output = init_output(len);
-    for i in 0..len {
-        if !fast_ema[i].is_nan() && !slow_ema[i].is_nan() {
-            output[i] = if slow_ema[i].abs() > 1e-15 {
-                (fast_ema[i] - slow_ema[i]) / slow_ema[i] * 100.0
+    ppo_with_ma_type(input, fast_period, slow_period, MaType::Ema)
+}
+
+/// Percentage Price Oscillator with an explicit TA-Lib moving-average type.
+///
+/// TA-Lib's PPO defaults to `matype=0` (SMA), while the formula-oriented
+/// [`ppo`] convenience API historically used EMA semantics.  Keeping the
+/// selector explicit lets the compatibility operation match TA-Lib exactly
+/// and preserves the useful EMA shorthand for formula users.
+pub fn ppo_with_ma_type(
+    input: &[f64],
+    fast_period: usize,
+    slow_period: usize,
+    ma_type: MaType,
+) -> Result<Array1<f64>> {
+    if fast_period == 0 || slow_period == 0 || fast_period >= slow_period {
+        return Err(TaError::InvalidParameter {
+            name: "fast_period, slow_period".to_string(),
+            constraint: "must be positive and fast_period < slow_period".to_string(),
+        });
+    }
+    validate_input(input.len(), slow_period)?;
+
+    let fast_ma = crate::indicators::overlap::ma(input, fast_period, ma_type)?;
+    let slow_ma = crate::indicators::overlap::ma(input, slow_period, ma_type)?;
+    let mut output = init_output(input.len());
+    for i in slow_period - 1..input.len() {
+        if fast_ma[i].is_finite() && slow_ma[i].is_finite() {
+            output[i] = if slow_ma[i].abs() > 1e-15 {
+                (fast_ma[i] - slow_ma[i]) / slow_ma[i] * 100.0
             } else {
                 0.0
             };
@@ -3217,7 +3313,6 @@ pub fn ppo(input: &[f64], fast_period: usize, slow_period: usize) -> Result<Arra
     }
     Ok(output)
 }
-
 /// Rate of Change Percentage (ROCP)
 ///
 /// ROCP = (close - close_n) / close_n

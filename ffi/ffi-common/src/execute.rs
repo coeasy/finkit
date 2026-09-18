@@ -1127,18 +1127,26 @@ fn execute_talib_profile(
         "PLUS_DM" => {
             let high = named_series(inputs, "HIGH", &name)?;
             let low = named_series(inputs, "LOW", &name)?;
+            let period = parameter_usize(params, 0, 14, &name)?;
             values.insert(
                 "PLUS_DM".to_string(),
-                indicator_values(finkit::indicators::momentum::plus_dm(high, low), &name)?,
+                indicator_values(
+                    finkit::indicators::momentum::plus_dm_with_period(high, low, period),
+                    &name,
+                )?,
             );
             "PLUS_DM"
         }
         "MINUS_DM" => {
             let high = named_series(inputs, "HIGH", &name)?;
             let low = named_series(inputs, "LOW", &name)?;
+            let period = parameter_usize(params, 0, 14, &name)?;
             values.insert(
                 "MINUS_DM".to_string(),
-                indicator_values(finkit::indicators::momentum::minus_dm(high, low), &name)?,
+                indicator_values(
+                    finkit::indicators::momentum::minus_dm_with_period(high, low, period),
+                    &name,
+                )?,
             );
             "MINUS_DM"
         }
@@ -1146,9 +1154,13 @@ fn execute_talib_profile(
             let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
             let fast = parameter_usize(params, 0, 12, &name)?;
             let slow = parameter_usize(params, 1, 26, &name)?;
+            let ma_type = talib_ma_type(params, 2, 0, &name)?;
             values.insert(
                 "PPO".to_string(),
-                indicator_values(finkit::indicators::momentum::ppo(input, fast, slow), &name)?,
+                indicator_values(
+                    finkit::indicators::momentum::ppo_with_ma_type(input, fast, slow, ma_type),
+                    &name,
+                )?,
             );
             "PPO"
         }

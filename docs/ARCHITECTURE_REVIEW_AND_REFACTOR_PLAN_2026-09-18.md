@@ -265,7 +265,7 @@ talib_0_7_1
 - Lightweight Charts adapter 已修复增量 payload 中动态新增 line 不创建 series 的问题；`visualization/frontend/lightweight-charts-adapter.test.mjs` 已覆盖 null/warm-up 空白点、markers、viewport、增量更新、完整替换和 schema 拒绝。
 - TA-Lib `MINMAX` 与 `MINMAXINDEX` 已加入 registry、core multi-output dispatcher、TA-Lib FFI profile 和 operation catalog；输出名固定为 `MIN/MAX` 与 `MININDEX/MAXINDEX`，并有 JSON execution tests。
 - 修复 DZH `MOD(...)` 函数调用与中缀 `MOD` 运算符的 grammar 冲突，国内公式集成测试重新通过。
-- TA-Lib parity corpus 已生成并纳入版本控制：22 个声明指标、3 组固定 OHLCV fixture，参考版本固定为 Python `0.6.8`；golden 缺失现在是失败，不再静默 skip。AD 的公开路径保留 TA-Lib 标量运算顺序，避免 AVX2 累计 ULP 偏差；CLI OHLCV CSV 读取也支持 fixture 的 `#` 元数据行。
+- TA-Lib parity corpus 已生成并纳入版本控制：44 个声明指标、3 组固定 OHLCV fixture，参考版本固定为 Python `0.6.8`；golden 缺失现在是失败，不再静默 skip。PLUS_DM/MINUS_DM 已接入带 period 的 Wilder 平滑，PPO 已接入 TA-Lib `matype`（默认 SMA）语义；STDDEV/VAR 使用文档化的相对浮点容差。AD 的公开路径保留 TA-Lib 标量运算顺序，避免 AVX2 累计 ULP 偏差；CLI OHLCV CSV 读取也支持 fixture 的 `#` 元数据行。
 
 ## 7. 当前实际验证状态
 
@@ -278,7 +278,7 @@ talib_0_7_1
 - 61 个 candlestick operation 在 `talib_0_7_1` profile 下逐项真实分派并返回等长结果。
 - `cargo +1.98.1 fmt --all` 已执行。
 - `node --test visualization/frontend/lightweight-charts-adapter.test.mjs`：`2 passed, 0 failed`；这是 adapter contract test，不等同于真实浏览器版本兼容或完整交互集成。
-- TA-Lib golden：`24 passed, 0 failed`，22 个指标均有固定 reference 文件；当前集合不是 TA-Lib 全目录证明。
+- TA-Lib golden：`24 passed, 0 failed`，44 个指标均有固定 reference 文件；当前集合不是 TA-Lib 全目录证明。
 
 本轮没有宣称完成：
 
