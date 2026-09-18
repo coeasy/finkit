@@ -220,3 +220,14 @@ truth source。`scripts/gen_talib_numeric_contract.py --check` 会重新读取
 - Java：重新构建当前 `finkit_java.dll`，编译并运行
   `com.finkit.ContractConformance`，exit code 0（含 TA-Lib 目录门禁）。
 - Go：未运行，工作机 `CGO_ENABLED=0` 且没有 `gcc`；C/C++：未运行，工作机没有 CMake/C++ 编译器；.NET：未运行，工作机没有 `dotnet`。这些是未验证项，不视为通过。
+
+### 当前基线与门禁状态（2026-09-19）
+
+- 当前基线分支：`feature/finkit-v1-unified-engine-20260917`。
+- 当前已推送提交：`6ad4aa8`（固定周期 rolling kernel 优化）；本地工作区无未提交修改，远端同名分支已指向该提交。
+- Rust 格式检查、`finkit` library 测试（2945 passed、1 ignored）、`finkit-ffi-common` 测试（80 passed、1 ignored doc）以及 Python ABI3 release check 已实际通过。
+- 当前 TA-Lib 0.8.0 对照门禁已实际覆盖 96 个指标和 24 个公式，`parity_failures=[]`、`errors=[]`；三档规模的指标几何平均加速比为约 `1.61x`，但性能门禁仍未通过：top-20 最小加速比约 `0.64x`，持续低于 `0.95x` 的指标包括 `MIDPRICE14`、`VAR20`、`WILLR14`。因此不能宣称“全面超过 TA-Lib”，后续必须按指标和数据规模继续优化或调整门禁定义并保留证据。
+- 已实际通过的 binding 验证包括 Node 全部 14 项默认测试，以及 Python 当前 wheel 的 TA-Lib 数值合同；Go 因本机 `CGO_ENABLED=0` 且缺少 `gcc` 未运行，Java 因缺少 Maven 未运行，C/C++ 因缺少 CMake/编译器未运行，.NET 因缺少 `dotnet` 未运行。这些语言仍需由对应 CI 宿主提供真实运行证据。
+- GitHub Actions 页面目前没有显示该最新提交的可核验运行结果；在出现对应 workflow run 前，不能把 GitHub CI 说成已通过。工作流文件已配置 `feature/finkit-v1-unified-engine-*` 分支触发规则。
+
+本节是实施状态记录，不是完成声明。下一阶段仍以多语言实际宿主验证、公式方言覆盖、Lightweight Charts 浏览器宿主验证、剩余性能瓶颈和生产发布门禁为主线。
