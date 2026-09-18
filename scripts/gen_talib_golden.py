@@ -334,6 +334,12 @@ INDICATORS: dict[str, dict[str, Any]] = {
         "inputs": ("close",),
         "outputs": ("sum",),
     },
+    "MINMAX": {
+        "params": {"timeperiod": 30},
+        "fn_name": "MINMAX",
+        "inputs": ("close",),
+        "outputs": ("min", "max"),
+    },
     "STOCHF": {
         "params": {
             "fastk_period": 14,
@@ -378,6 +384,21 @@ INDICATORS: dict[str, dict[str, Any]] = {
         "fn_name": "SAR",
         "inputs": ("high", "low"),
         "outputs": ("sar",),
+    },
+    "SAREXT": {
+        "params": {
+            "startvalue": 0.0,
+            "offsetonreverse": 0.0,
+            "accelerationinitlong": 0.02,
+            "accelerationlong": 0.02,
+            "accelerationmaxlong": 0.2,
+            "accelerationinitshort": 0.02,
+            "accelerationshort": 0.02,
+            "accelerationmaxshort": 0.2,
+        },
+        "fn_name": "SAREXT",
+        "inputs": ("high", "low"),
+        "outputs": ("sarext",),
     },
     "BETA": {
         "params": {"timeperiod": 30},

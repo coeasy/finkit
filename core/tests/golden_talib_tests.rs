@@ -536,6 +536,15 @@ fn compute_alpha_ta_outputs(
             };
             HashMap::from([(indicator.to_ascii_lowercase(), array_to_vec(values))])
         }
+        "MINMAX" => {
+            let period = param_usize(params, "timeperiod", 30);
+            let (minimum, maximum) =
+                finkit::indicators::math_operators::minmax(close, period).unwrap();
+            HashMap::from([
+                ("min".to_string(), array_to_vec(minimum)),
+                ("max".to_string(), array_to_vec(maximum)),
+            ])
+        }
         "BETA" => {
             let period = param_usize(params, "timeperiod", 30);
             HashMap::from([(
@@ -582,6 +591,22 @@ fn compute_alpha_ta_outputs(
             let maximum = param_f64(params, "maximum", 0.2);
             let r = finkit::indicators::overlap::sar(high, low, acceleration, maximum).unwrap();
             HashMap::from([("sar".to_string(), array_to_vec(r.sar))])
+        }
+        "SAREXT" => {
+            let r = finkit::indicators::overlap::sarext(
+                high,
+                low,
+                param_f64(params, "startvalue", 0.0),
+                param_f64(params, "offsetonreverse", 0.0),
+                param_f64(params, "accelerationinitlong", 0.02),
+                param_f64(params, "accelerationlong", 0.02),
+                param_f64(params, "accelerationmaxlong", 0.2),
+                param_f64(params, "accelerationinitshort", 0.02),
+                param_f64(params, "accelerationshort", 0.02),
+                param_f64(params, "accelerationmaxshort", 0.2),
+            )
+            .unwrap();
+            HashMap::from([("sarext".to_string(), array_to_vec(r.sar))])
         }
         "TRANGE" => HashMap::from([(
             "trange".to_string(),

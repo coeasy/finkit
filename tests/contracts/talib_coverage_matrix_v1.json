@@ -14,7 +14,7 @@
     },
     "numeric_reference": {
       "status": "fixed_golden",
-      "expected_count": 87,
+      "expected_count": 89,
       "indicators": [
         "ACCBANDS",
         "ACOS",
@@ -64,6 +64,7 @@
         "MIDPOINT",
         "MIDPRICE",
         "MIN",
+        "MINMAX",
         "MULT",
         "MINUS_DI",
         "MINUS_DM",
@@ -79,6 +80,7 @@
         "ROCR100",
         "RSI",
         "SAR",
+        "SAREXT",
         "SMA",
         "SIN",
         "SINH",

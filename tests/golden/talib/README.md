@@ -63,7 +63,7 @@ All outputs are computed on three shared fixtures from `tests/fixtures/`:
 
 ## Output Files
 
-One generated JSON file per indicator (87 total), plus a checked-in profile
+One generated JSON file per indicator (89 total), plus a checked-in profile
 variant fixture for official `matype` contracts:
 
 | File | Purpose |
@@ -159,6 +159,8 @@ Generated indicator files:
 | `max.json` | MAX | timeperiod=30 |
 | `min.json` | MIN | timeperiod=30 |
 | `sum.json` | SUM | timeperiod=30 |
+| `minmax.json` | MINMAX | timeperiod=30 |
+| `sarext.json` | SAREXT | official extended SAR defaults |
 | `beta.json` | BETA | timeperiod=30, close/benchmark |
 | `correl.json` | CORREL | timeperiod=30, close/benchmark |
 
