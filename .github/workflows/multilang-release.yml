@@ -123,6 +123,12 @@ jobs:
           JAR="ffi/java-binding/target/finkit-${VERSION}.jar"
           test -f "$JAR"
           jar tf "$JAR" | grep -q 'natives/linux-x86_64/libfinkit_java.so'
+          mkdir -p "$RUNNER_TEMP/finkit-java-contract"
+          javac -encoding UTF-8 -cp "$JAR" \
+            -d "$RUNNER_TEMP/finkit-java-contract" \
+            ffi/java-binding/java/src/test/java/com/finkit/ContractConformance.java
+          java -cp "$JAR:$RUNNER_TEMP/finkit-java-contract" \
+            com.finkit.ContractConformance
           printf '%s\n' 'import com.finkit.Indicators;' 'public final class FinkitSmoke { public static void main(String[] args) { double[] out = Indicators.sma(new double[]{1,2,3,4,5}, 3); if (out.length != 5 || Math.abs(out[4] - 4.0) > 1e-9) throw new RuntimeException("bad SMA"); } }' > "$RUNNER_TEMP/FinkitSmoke.java"
           javac -cp "$JAR" "$RUNNER_TEMP/FinkitSmoke.java"
           java -cp "$JAR:$RUNNER_TEMP" FinkitSmoke
