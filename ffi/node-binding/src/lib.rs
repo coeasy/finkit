@@ -2433,6 +2433,13 @@ pub fn formula_eval_contract_json(
         .map_err(|error| Error::new(Status::InvalidArg, error))
 }
 
+/// Return the versioned, language-neutral operation catalog.
+#[napi]
+pub fn operation_catalog_json() -> Result<String> {
+    finkit_ffi_common::operation::operation_catalog_json()
+        .map_err(|error| Error::new(Status::GenericFailure, error.to_string()))
+}
+
 /// Execute one registered operation through the shared JSON result contract.
 #[napi]
 pub fn operation_execute_json(request_json: String) -> String {

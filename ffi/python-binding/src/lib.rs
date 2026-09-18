@@ -49,8 +49,7 @@ mod transforms;
 
 #[cfg(feature = "formula")]
 use ::finkit::formula::{
-    parse_formula, FormulaContext, FormulaDialect, FormulaEngine,
-    FormulaError,
+    parse_formula, FormulaContext, FormulaDialect, FormulaEngine, FormulaError,
 };
 #[cfg(feature = "formula")]
 use ndarray::Array1;
