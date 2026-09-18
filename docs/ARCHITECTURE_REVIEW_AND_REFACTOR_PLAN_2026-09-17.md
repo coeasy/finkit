@@ -368,6 +368,7 @@ Core `lib.rs` 暴露大量模块，并同时支持 std/no_std、formula、JIT、
 - lookback/convergence；
 - batch/streaming/range/parallel capability；
 - causal/lookahead/repaint/stateful/draw effect；
+- semantic profiles and per-profile implementation status；
 - numeric reference/accuracy budget；
 - algorithm/schema version；
 - language exposure status。

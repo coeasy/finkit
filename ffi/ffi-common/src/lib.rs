@@ -22,7 +22,9 @@ pub mod registry;
 pub mod research;
 pub mod types;
 
-pub use execute::{execute_operation_json, OPERATION_RESULT_SCHEMA_VERSION};
+pub use execute::{
+    execute_operation_json, talib_profile_supported, OPERATION_RESULT_SCHEMA_VERSION,
+};
 pub use formula::{evaluate_formula_json, FORMULA_CONTRACT_SCHEMA_VERSION};
 pub use operation::{operation_catalog, operation_catalog_json, OperationCatalogEnvelope};
 pub use research::{

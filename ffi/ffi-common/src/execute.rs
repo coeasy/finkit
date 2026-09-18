@@ -236,6 +236,31 @@ fn normalize_name(value: &str) -> String {
     value.trim().to_ascii_uppercase()
 }
 
+/// Whether the explicit TA-Lib execution profile has a typed dispatcher for
+/// this operation. This is also used when projecting binding metadata.
+pub fn talib_profile_supported(operation: &str) -> bool {
+    matches!(
+        normalize_name(operation).as_str(),
+        "SMA"
+            | "EMA"
+            | "WMA"
+            | "RSI"
+            | "MACD"
+            | "BBANDS"
+            | "ATR"
+            | "NATR"
+            | "TRANGE"
+            | "ADX"
+            | "CCI"
+            | "STOCH"
+            | "WILLR"
+            | "MOM"
+            | "ROC"
+            | "OBV"
+            | "MFI"
+    )
+}
+
 fn normalize_profile(value: &str) -> String {
     value.trim().to_ascii_lowercase()
 }
@@ -247,6 +272,12 @@ fn execute_talib_profile(
     params: &[f64],
 ) -> Result<Value, (&'static str, String)> {
     let name = normalize_name(operation);
+    if !talib_profile_supported(&name) {
+        return Err((
+            "unsupported_operation",
+            format!("TA-Lib profile does not yet dispatch {name}"),
+        ));
+    }
     let mut values = BTreeMap::new();
     let primary = match name.as_str() {
         "SMA" => {

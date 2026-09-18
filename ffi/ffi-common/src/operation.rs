@@ -5,6 +5,7 @@
 //! exact metadata without maintaining language-specific copies of parameter,
 //! shape, or capability declarations.
 
+use crate::execute::talib_profile_supported;
 use finkit::operation::{
     builtin_operation_registry, OperationCapabilities, OperationKind, OperationRegistry,
     OperationSpec,
@@ -52,6 +53,8 @@ pub struct OperationCatalogEntry {
     pub capabilities: OperationCapabilitiesJson,
     /// Operation metadata schema version.
     pub schema_version: u16,
+    /// Explicit semantic profiles available to the dispatcher.
+    pub semantic_profiles: Vec<String>,
 }
 
 /// Serializable parameter declaration.
@@ -128,6 +131,13 @@ impl OperationCatalogEntry {
             lookback: lookback_name(spec.lookback),
             capabilities: spec.capabilities.into(),
             schema_version: spec.schema_version,
+            semantic_profiles: {
+                let mut profiles = vec!["core_registry".to_string()];
+                if talib_profile_supported(&spec.name) {
+                    profiles.push("talib_0_7_1".to_string());
+                }
+                profiles
+            },
         }
     }
 }
@@ -212,6 +222,7 @@ mod tests {
         assert!(json.contains("\"operation_id\":"));
         assert!(json.contains("\"multi_symbol\":false"));
         assert!(json.contains("\"value_shape\":\"series\""));
+        assert!(json.contains("\"semantic_profiles\":[\"core_registry\",\"talib_0_7_1\"]"));
     }
 
     #[test]
