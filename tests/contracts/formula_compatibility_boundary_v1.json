@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "contract": "formula.compatibility-boundary.v1",
+  "description": "Versioned diagnostics for host-required, drawing, control-flow, and Pine-subset boundaries.",
+  "cases": [
+    {
+      "id": "tdx_security_requires_host_alignment",
+      "terminal": "tdx",
+      "source": "X:=MA(CLOSE,5); X + SECURITY(CLOSE, 'WEEK')",
+      "expected_capabilities": [
+        {"name": "batch_execution", "status": "host_required", "supported": false, "observed": true},
+        {"name": "cross_timeframe", "status": "host_required", "supported": false, "observed": true},
+        {"name": "host_data", "status": "host_required", "supported": false, "observed": true}
+      ]
+    },
+    {
+      "id": "tdx_drawing_and_control_flow_are_not_streaming_claims",
+      "terminal": "tdx",
+      "source": "DRAWICON(CLOSE > OPEN, CLOSE, 1); IF CLOSE > OPEN THEN CLOSE ELSE OPEN",
+      "expected_capabilities": [
+        {"name": "drawing", "status": "near", "supported": true, "observed": true},
+        {"name": "control_flow", "status": "near", "supported": true, "observed": true},
+        {"name": "streaming_execution", "status": "unsupported", "supported": false, "observed": false}
+      ]
+    },
+    {
+      "id": "pine_plot_is_reported_as_drawing",
+      "terminal": "pine",
+      "source": "plot(ta.sma(close, 3))",
+      "expected_capabilities": [
+        {"name": "drawing", "status": "near", "supported": true, "observed": true},
+        {"name": "batch_execution", "status": "near", "supported": true, "observed": true}
+      ]
+    }
+  ]
+}

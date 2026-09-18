@@ -268,6 +268,8 @@ talib_0_7_1
 - Factor 与 Composite 的 v1 请求现在强制要求 `schema_version`，并拒绝重复 Factor target；新增 `tests/contracts/engine_contract_v1.json` 将 Formula/Factor/Composite 的请求与期望输出固定为同一份跨语言 conformance vector，避免各 binding 分叉维护示例和数值语义。
 - Formula compatibility report 已提升为 `formula.compatibility.v1` 共享 JSON contract：Rust、Python、Go、Java、.NET、C、C++、Node 均通过同一报告结构输出 parser、batch/streaming、control flow、drawing、cross-timeframe、lookahead、host data；各绑定只负责转发、生命周期和错误映射。能力矩阵只报告已验证的执行边界，不把 parser 识别或函数登记误报为完整兼容。
 - 新增 `tests/contracts/formula_terminal_contract_v1.json` 与 `core/tests/formula_terminal_contract.rs`：通过 `eval_multi_with_dialect` 对 TDX、同花顺、东方财富和 Pine 的赋值、别名、窗口、前值引用及 Pine lowering 做固定数值断言；这是一条真实执行门禁，不等同于全部终端语义已完成。
+- 新增 `tests/contracts/formula_compatibility_boundary_v1.json` 与 `core/tests/formula_compatibility_boundary.rs`：固定跨周期 host-required、TDX 绘图/控制流的 streaming 限制和 Pine `plot` 子集的 capability 状态，确保“可解析”不会被误报成“完整兼容”。
+- 修正 Pine `plot`/`hline` 的 capability 识别：Pine mapper 使用 `AstNode::Output` 表示视觉输出，compatibility report 现在会将其纳入绘图能力，而不是只识别 TDX `Draw*` 节点。
 - Formula grammar 的 identifier 已改为 Unicode XID 规则，中文变量名可进入同一 AST/执行器；新增 `core/tests/formula_corpus.rs` 执行全部已登记国内公式语料并校验声明输出列和长度，避免“语料存在但未运行”。
 - Lightweight Charts adapter 已修复增量 payload 中动态新增 line 不创建 series 的问题；`visualization/frontend/lightweight-charts-adapter.test.mjs` 已覆盖 null/warm-up 空白点、markers、viewport、增量更新、完整替换和 schema 拒绝。
 - TA-Lib `MINMAX` 与 `MINMAXINDEX` 已加入 registry、core multi-output dispatcher、TA-Lib FFI profile 和 operation catalog；输出名固定为 `MIN/MAX` 与 `MININDEX/MAXINDEX`，并有 JSON execution tests。
@@ -285,6 +287,7 @@ talib_0_7_1
 截至 2026-09-18，本工作树已实际验证：
 
 - `cargo +1.98.1 test --workspace --offline --quiet`：全 workspace 测试通过；其中核心库为 `2923 passed, 0 failed, 1 ignored`，新增 Formula terminal contract 为 `1 passed, 0 failed`，DZH compatibility 为 `43 passed, 0 failed`，CLI schema 为 `3 passed, 0 failed`，其余 workspace test targets 也无失败。
+- `cargo +1.98.1 test -p finkit --test formula_compatibility_boundary --offline --quiet`：`1 passed, 0 failed`，确认 host-required、drawing、control-flow/streaming 和 Pine plot 边界状态。
 - 定向验证：`finkit` operation tests `19 passed`、Composite tests `11 passed`、`finkit-ffi-common` library tests `28 passed`、C ABI library tests `23 passed`。
 - 最新定向验证：`finkit-ffi-common` library tests `39 passed`，包含 161 个 TA-Lib profile 名称的 dispatcher smoke、参数目录、非默认 `matype` 数值测试、无版本 profile 拒绝测试、Formula/Factor/Composite 共用 conformance vector 和 `formula.compatibility.v1` capability report；C ABI tests `26 passed`，并确认 catalog 参数和 Formula compatibility report 通过 ABI 导出。
 - `cargo +1.98.1 check -p finkit-python -p finkit-node -p finkit-go -p finkit-java -p finkit-dotnet -p finkit-ffi --offline`：通过。

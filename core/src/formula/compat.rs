@@ -360,7 +360,8 @@ fn compatibility_capabilities(
     let has_unsupported = functions
         .iter()
         .any(|item| item.status == CompatibilityStatus::Unsupported);
-    let drawing = ast_has_draw_commands(ast);
+    let drawing = ast_has_draw_commands(ast)
+        || (terminal == FormulaTerminal::TradingView && ast_has_plot_outputs(ast));
     let cross_timeframe = analysis
         .called_functions
         .iter()
@@ -443,7 +444,10 @@ fn compatibility_capabilities(
             status: mapped_status,
             supported: true,
             observed: drawing,
-            message: if drawing {
+            message: if drawing && terminal == FormulaTerminal::TradingView {
+                "Pine plot/hline/fill outputs are exposed through canonical visual channels"
+                    .to_string()
+            } else if drawing {
                 "draw commands are lowered to the canonical DrawResult".to_string()
             } else {
                 "formula does not emit drawing commands".to_string()
@@ -535,6 +539,51 @@ fn ast_has_draw_commands(node: &AstNode) -> bool {
             ast_has_draw_commands(cond) || body.iter().any(ast_has_draw_commands)
         }
         AstNode::Number(_)
+        | AstNode::StringLit(_)
+        | AstNode::Variable(_)
+        | AstNode::ParamDecl { .. } => false,
+    }
+}
+
+fn ast_has_plot_outputs(node: &AstNode) -> bool {
+    match node {
+        AstNode::Output { .. } => true,
+        AstNode::FunctionCall { args, .. } => args.iter().any(ast_has_plot_outputs),
+        AstNode::BinaryOp { left, right, .. } => {
+            ast_has_plot_outputs(left) || ast_has_plot_outputs(right)
+        }
+        AstNode::UnaryOp { expr, .. } => ast_has_plot_outputs(expr),
+        AstNode::IndexAccess { array, index } => {
+            ast_has_plot_outputs(array) || ast_has_plot_outputs(index)
+        }
+        AstNode::Assignment { expr, .. } | AstNode::CompoundAssignment { expr, .. } => {
+            ast_has_plot_outputs(expr)
+        }
+        AstNode::Statements(statements) => statements.iter().any(ast_has_plot_outputs),
+        AstNode::IfThenElse {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            ast_has_plot_outputs(cond)
+                || ast_has_plot_outputs(then_branch)
+                || ast_has_plot_outputs(else_branch)
+        }
+        AstNode::ForLoop {
+            start, end, body, ..
+        } => {
+            ast_has_plot_outputs(start)
+                || ast_has_plot_outputs(end)
+                || body.iter().any(ast_has_plot_outputs)
+        }
+        AstNode::WhileLoop { cond, body } => {
+            ast_has_plot_outputs(cond) || body.iter().any(ast_has_plot_outputs)
+        }
+        AstNode::DrawText { .. }
+        | AstNode::DrawIcon { .. }
+        | AstNode::StickLine { .. }
+        | AstNode::DrawGeneric { .. }
+        | AstNode::Number(_)
         | AstNode::StringLit(_)
         | AstNode::Variable(_)
         | AstNode::ParamDecl { .. } => false,
