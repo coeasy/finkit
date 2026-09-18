@@ -14,7 +14,7 @@
     },
     "numeric_reference": {
       "status": "fixed_golden",
-      "expected_count": 75,
+      "expected_count": 77,
       "indicators": [
         "ACOS",
         "AD",
@@ -30,9 +30,11 @@
         "ATAN",
         "AVGPRICE",
         "BBANDS",
+        "BETA",
         "BOP",
         "CCI",
         "CMO",
+        "CORREL",
         "CEIL",
         "COS",
         "COSH",

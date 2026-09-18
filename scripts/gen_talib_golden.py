@@ -303,6 +303,18 @@ INDICATORS: dict[str, dict[str, Any]] = {
         "inputs": ("close",),
         "outputs": ("sum",),
     },
+    "BETA": {
+        "params": {"timeperiod": 30},
+        "fn_name": "BETA",
+        "inputs": ("close", "benchmark"),
+        "outputs": ("beta",),
+    },
+    "CORREL": {
+        "params": {"timeperiod": 30},
+        "fn_name": "CORREL",
+        "inputs": ("close", "benchmark"),
+        "outputs": ("correl",),
+    },
     "OBV": {
         "params": {},
         "fn_name": "OBV",
@@ -602,6 +614,8 @@ def read_ohlcv_csv(path: Path) -> dict[str, list[float]]:
         # separate from OHLCV avoids domain errors for ACOS/ASIN and overflow
         # for EXP/COSH while preserving the shared fixture row alignment.
         "math": [0.25 + math.sin(index * 0.11) * 0.2 for index in range(len(rows_close))],
+        # Deterministic second price series for cross-series TA-Lib statistics.
+        "benchmark": [close * 0.97 + index * 0.02 for index, close in enumerate(rows_close)],
     }
 
 

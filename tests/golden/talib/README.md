@@ -63,7 +63,7 @@ All outputs are computed on three shared fixtures from `tests/fixtures/`:
 
 ## Output Files
 
-One generated JSON file per indicator (75 total), plus a checked-in profile
+One generated JSON file per indicator (77 total), plus a checked-in profile
 variant fixture for official `matype` contracts:
 
 | File | Purpose |
@@ -149,6 +149,8 @@ Generated indicator files:
 | `max.json` | MAX | timeperiod=30 |
 | `min.json` | MIN | timeperiod=30 |
 | `sum.json` | SUM | timeperiod=30 |
+| `beta.json` | BETA | timeperiod=30, close/benchmark |
+| `correl.json` | CORREL | timeperiod=30, close/benchmark |
 
 Parameters are recorded in each file's metadata and are intentionally pinned
 to the TA-Lib Python `0.8.0` reference used for this corpus.

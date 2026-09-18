@@ -74,6 +74,7 @@ struct Ohlcv {
     close: Vec<f64>,
     volume: Vec<f64>,
     math: Vec<f64>,
+    benchmark: Vec<f64>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -123,7 +124,7 @@ fn tolerance_for_indicator(indicator: &str) -> f64 {
         // oscillator paths can differ by a few ulps at large magnitudes.
         // Compare these scale-sensitive outputs with a relative tolerance in
         // addition to the absolute floor.
-        "ADOSC" | "STDDEV" | "VAR" => 2e-7,
+        "ADOSC" | "CORREL" | "STDDEV" | "VAR" => 2e-7,
         "EMA" | "DEMA" | "TEMA" => 1e-8,
         _ => 1e-8,
     }
@@ -186,6 +187,11 @@ fn read_fixture_csv(path: &Path) -> Ohlcv {
     let math = (0..close.len())
         .map(|index| 0.25 + (index as f64 * 0.11).sin() * 0.2)
         .collect();
+    let benchmark = close
+        .iter()
+        .enumerate()
+        .map(|(index, value)| value * 0.97 + index as f64 * 0.02)
+        .collect();
 
     Ohlcv {
         open,
@@ -194,6 +200,7 @@ fn read_fixture_csv(path: &Path) -> Ohlcv {
         close,
         volume,
         math,
+        benchmark,
     }
 }
 
@@ -208,6 +215,7 @@ fn compute_alpha_ta_outputs(
     let low = &ohlcv.low;
     let volume = &ohlcv.volume;
     let math = &ohlcv.math;
+    let benchmark = &ohlcv.benchmark;
 
     match indicator {
         "SMA" => {
@@ -448,6 +456,24 @@ fn compute_alpha_ta_outputs(
                 _ => unreachable!(),
             };
             HashMap::from([(indicator.to_ascii_lowercase(), array_to_vec(values))])
+        }
+        "BETA" => {
+            let period = param_usize(params, "timeperiod", 30);
+            HashMap::from([(
+                "beta".to_string(),
+                array_to_vec(
+                    finkit::indicators::statistics::beta(close, benchmark, period).unwrap(),
+                ),
+            )])
+        }
+        "CORREL" => {
+            let period = param_usize(params, "timeperiod", 30);
+            HashMap::from([(
+                "correl".to_string(),
+                array_to_vec(
+                    finkit::indicators::statistics::correlation(close, benchmark, period).unwrap(),
+                ),
+            )])
         }
         "TRANGE" => HashMap::from([(
             "trange".to_string(),
@@ -856,7 +882,7 @@ fn run_indicator_compat(indicator: &str) -> IndicatorReport {
                 actual,
                 tol,
                 exact,
-                matches!(indicator, "ADOSC" | "STDDEV" | "VAR"),
+                matches!(indicator, "ADOSC" | "CORREL" | "STDDEV" | "VAR"),
                 &label,
             );
             alignment_errors.extend(cmp.errors);
