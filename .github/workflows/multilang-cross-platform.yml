@@ -48,12 +48,14 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - name: Verify version and warning contracts
-        run: |
-          python scripts/check_versions.py
-          python scripts/check_warning_contracts.py
-          python scripts/sync_bindings.py --lang python --check
-          python scripts/gen_talib_numeric_contract.py --check
+      - name: Verify version contract
+        run: python scripts/check_versions.py
+      - name: Verify warning contract
+        run: python scripts/check_warning_contracts.py
+      - name: Verify generated Python binding surface
+        run: python scripts/sync_bindings.py --lang python --check
+      - name: Verify generated TA-Lib numeric fixtures
+        run: python scripts/gen_talib_numeric_contract.py --check
       - id: version
         shell: bash
         run: |
