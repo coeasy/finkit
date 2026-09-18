@@ -239,6 +239,7 @@ const MAMA_PARAMS: &[ParamSpec] = &[
 const MAVP_PARAMS: &[ParamSpec] = &[
     ParamSpec::new("min_period", "usize", Some("2"), Some("> 0")),
     ParamSpec::new("max_period", "usize", Some("30"), Some(">= min_period")),
+    ParamSpec::new("matype", "usize", Some("0"), Some("0..8")),
 ];
 const SAREXT_PARAMS: &[ParamSpec] = &[
     ParamSpec::new("start_value", "f64", Some("0"), Some("finite")),
@@ -288,7 +289,9 @@ const TENKAN_PARAMS: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("9"
 const KIJUN_PARAMS: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("26"), Some("> 0"))];
 const BBANDS_PARAMS: &[ParamSpec] = &[
     ParamSpec::new("period", "usize", Some("20"), Some("> 1")),
-    ParamSpec::new("stddev", "f64", Some("2.0"), Some(">= 0")),
+    ParamSpec::new("nbdevup", "f64", Some("2.0"), Some("finite")),
+    ParamSpec::new("nbdevdn", "f64", Some("2.0"), Some("finite")),
+    ParamSpec::new("matype", "usize", Some("0"), Some("0..8")),
 ];
 const CROSS_SIGNAL_PARAMS: &[ParamSpec] = &[];
 const BREAKOUT_PARAMS: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("20"), Some("> 0"))];

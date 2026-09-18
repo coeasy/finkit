@@ -192,6 +192,119 @@ pub fn bbands(
     })
 }
 
+/// Bollinger Bands with an explicit TA-Lib moving-average type.
+///
+/// TA-Lib uses the selected MA for the middle band, while the deviation is
+/// the population standard deviation of the raw input window around that
+/// window's SMA. The SMA fast path remains delegated to [`bbands`] so its
+/// established numerical behavior is unchanged.
+pub fn bbands_with_ma_type(
+    input: &[f64],
+    period: usize,
+    nb_dev_up: f64,
+    nb_dev_dn: f64,
+    ma_type: MaType,
+) -> Result<BbandsResult> {
+    if ma_type == MaType::Sma {
+        return bbands(input, period, nb_dev_up, nb_dev_dn);
+    }
+    if period < 2 {
+        return Err(TaError::InvalidParameter {
+            name: "period".to_string(),
+            constraint: "at least 2".to_string(),
+        });
+    }
+    if !nb_dev_up.is_finite() || !nb_dev_dn.is_finite() {
+        return Err(TaError::InvalidParameter {
+            name: "nb_dev_up, nb_dev_dn".to_string(),
+            constraint: "must be finite".to_string(),
+        });
+    }
+    validate_input(input.len(), period)?;
+
+    let middle = ma(input, period, ma_type)?;
+    let middle_slice = middle.as_slice().unwrap();
+    let len = input.len();
+    let mut upper = vec![f64::NAN; len];
+    let mut lower = vec![f64::NAN; len];
+    let mut sum = input[..period - 1].iter().sum::<f64>();
+    let mut square_sum = input[..period - 1]
+        .iter()
+        .map(|value| value * value)
+        .sum::<f64>();
+    let inv_period = 1.0 / period as f64;
+    for i in period - 1..len {
+        sum += input[i];
+        square_sum += input[i] * input[i];
+        let mean = sum * inv_period;
+        let variance = (square_sum * inv_period - mean * mean).max(0.0);
+        if middle_slice[i].is_finite() {
+            let deviation = variance.sqrt();
+            upper[i] = middle_slice[i] + deviation * nb_dev_up;
+            lower[i] = middle_slice[i] - deviation * nb_dev_dn;
+        }
+        let trailing = input[i + 1 - period];
+        sum -= trailing;
+        square_sum -= trailing * trailing;
+    }
+
+    Ok(BbandsResult {
+        upper: Array1::from_vec(upper),
+        middle,
+        lower: Array1::from_vec(lower),
+    })
+}
+
+/// Moving average with variable periods and an explicit TA-Lib MA type.
+///
+/// The SMA path uses the O(n) prefix-sum kernel. Other MA types reuse one
+/// batch series per distinct period, so repeated period values do not trigger
+/// a per-row recomputation while the public result remains deterministic.
+pub fn mavp_with_ma_type(
+    input: &[f64],
+    periods: &[f64],
+    min_period: usize,
+    max_period: usize,
+    ma_type: MaType,
+) -> Result<Array1<f64>> {
+    if ma_type == MaType::Sma {
+        return moving_avg::mavp(input, periods, min_period, max_period);
+    }
+    if input.len() != periods.len() {
+        return Err(TaError::InvalidParameter {
+            name: "periods".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
+    if min_period == 0 || max_period == 0 || min_period > max_period {
+        return Err(TaError::InvalidParameter {
+            name: "min_period/max_period".to_string(),
+            constraint: "0 < min_period <= max_period".to_string(),
+        });
+    }
+    validate_input(input.len(), min_period)?;
+
+    let mut output = Array1::from_elem(input.len(), f64::NAN);
+    let mut cached: Vec<(usize, Array1<f64>)> = Vec::new();
+    for i in min_period - 1..input.len() {
+        let period = periods[i]
+            .round()
+            .clamp(min_period as f64, max_period as f64) as usize;
+        if period > input.len() {
+            continue;
+        }
+        let cache_index = if let Some(index) = cached.iter().position(|(p, _)| *p == period) {
+            index
+        } else {
+            let values = ma(input, period, ma_type)?;
+            cached.push((period, values));
+            cached.len() - 1
+        };
+        output[i] = cached[cache_index].1[i];
+    }
+    Ok(output)
+}
+
 /// Acceleration Bands (ACCBANDS)
 ///
 /// Builds upper/lower price bands from the high/low range and smooths all

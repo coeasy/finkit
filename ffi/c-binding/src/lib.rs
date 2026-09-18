@@ -476,6 +476,32 @@ mod tests {
     }
 
     #[test]
+    fn operation_catalog_json_exposes_talib_parameter_contract() {
+        let ptr = ta_operation_catalog_json();
+        assert!(!ptr.is_null());
+        let json = unsafe { CStr::from_ptr(ptr) }.to_str().unwrap();
+        let value: serde_json::Value = serde_json::from_str(json).unwrap();
+        let operations = value["operations"].as_array().unwrap();
+        let find = |name: &str| {
+            operations
+                .iter()
+                .find(|operation| operation["name"] == name)
+                .unwrap_or_else(|| panic!("missing operation {name}"))
+        };
+        let stoch = find("STOCH");
+        assert!(stoch["semantic_profiles"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|profile| profile == "talib_0_7_1"));
+        assert_eq!(stoch["params"].as_array().unwrap().len(), 5);
+        assert_eq!(stoch["params"][2]["name"], "slowk_matype");
+        let bbands = find("BBANDS");
+        assert_eq!(bbands["params"][3]["name"], "matype");
+        unsafe { finkit_free_string(ptr) };
+    }
+
+    #[test]
     fn factor_catalog_json_is_owned_and_contains_dependency_metadata() {
         let ptr = ta_factor_catalog_json();
         assert!(!ptr.is_null());

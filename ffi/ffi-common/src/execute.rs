@@ -525,10 +525,13 @@ fn execute_talib_profile(
             let periods = ordered_series(inputs, input_order, 1, "PERIODS", &name)?;
             let min_period = parameter_usize(params, 0, 2, &name)?;
             let max_period = parameter_usize(params, 1, 30, &name)?;
+            let ma_type = talib_ma_type(params, 2, 0, &name)?;
             values.insert(
                 "MAVP".to_string(),
                 indicator_values(
-                    finkit::math::moving_avg::mavp(input, periods, min_period, max_period),
+                    finkit::indicators::overlap::mavp_with_ma_type(
+                        input, periods, min_period, max_period, ma_type,
+                    ),
                     &name,
                 )?,
             );
@@ -728,10 +731,18 @@ fn execute_talib_profile(
         }
         "BBANDS" => {
             let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
-            let period = parameter_usize(params, 0, 5, &name)?;
-            let deviation = parameter_f64(params, 1, 2.0, &name)?;
-            let output = finkit::indicators::overlap::bbands(input, period, deviation, deviation)
-                .map_err(|error| ("execution_error", format!("{name}: {error}")))?;
+            let period = parameter_usize(params, 0, 20, &name)?;
+            let deviation_up = parameter_f64(params, 1, 2.0, &name)?;
+            let deviation_dn = parameter_f64(params, 2, 2.0, &name)?;
+            let ma_type = talib_ma_type(params, 3, 0, &name)?;
+            let output = finkit::indicators::overlap::bbands_with_ma_type(
+                input,
+                period,
+                deviation_up,
+                deviation_dn,
+                ma_type,
+            )
+            .map_err(|error| ("execution_error", format!("{name}: {error}")))?;
             values.insert("UPPERBAND".to_string(), output.upper.to_vec());
             values.insert("MIDDLEBAND".to_string(), output.middle.to_vec());
             values.insert("LOWERBAND".to_string(), output.lower.to_vec());
@@ -869,9 +880,13 @@ fn execute_talib_profile(
             let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
             let fast = parameter_usize(params, 0, 12, &name)?;
             let slow = parameter_usize(params, 1, 26, &name)?;
+            let ma_type = talib_ma_type(params, 2, 0, &name)?;
             values.insert(
                 "APO".to_string(),
-                indicator_values(finkit::indicators::momentum::apo(input, fast, slow), &name)?,
+                indicator_values(
+                    finkit::indicators::momentum::apo_with_ma_type(input, fast, slow, ma_type),
+                    &name,
+                )?,
             );
             "APO"
         }
@@ -906,12 +921,22 @@ fn execute_talib_profile(
         }
         "STOCH" => {
             let (high, low, close) = hlc(inputs, &name)?;
-            let k_period = parameter_usize(params, 0, 5, &name)?;
-            let k_slow = parameter_usize(params, 1, 3, &name)?;
-            let d_period = parameter_usize(params, 2, 3, &name)?;
-            let output =
-                finkit::indicators::momentum::stoch(high, low, close, k_period, k_slow, d_period)
-                    .map_err(|error| ("execution_error", format!("{name}: {error}")))?;
+            let fastk_period = parameter_usize(params, 0, 5, &name)?;
+            let slowk_period = parameter_usize(params, 1, 3, &name)?;
+            let slowk_ma_type = talib_ma_type(params, 2, 0, &name)?;
+            let slowd_period = parameter_usize(params, 3, 3, &name)?;
+            let slowd_ma_type = talib_ma_type(params, 4, 0, &name)?;
+            let output = finkit::indicators::momentum::stoch_with_ma_types(
+                high,
+                low,
+                close,
+                fastk_period,
+                slowk_period,
+                slowk_ma_type,
+                slowd_period,
+                slowd_ma_type,
+            )
+            .map_err(|error| ("execution_error", format!("{name}: {error}")))?;
             values.insert("SLOWK".to_string(), output.k.to_vec());
             values.insert("SLOWD".to_string(), output.d.to_vec());
             "SLOWK"
@@ -920,24 +945,32 @@ fn execute_talib_profile(
             let (high, low, close) = hlc(inputs, &name)?;
             let fast_k = parameter_usize(params, 0, 5, &name)?;
             let fast_d = parameter_usize(params, 1, 3, &name)?;
-            let output = finkit::indicators::momentum::stochf(high, low, close, fast_k, fast_d)
-                .map_err(|error| ("execution_error", format!("{name}: {error}")))?;
+            let fast_d_ma_type = talib_ma_type(params, 2, 0, &name)?;
+            let output = finkit::indicators::momentum::stochf_with_ma_type(
+                high,
+                low,
+                close,
+                fast_k,
+                fast_d,
+                fast_d_ma_type,
+            )
+            .map_err(|error| ("execution_error", format!("{name}: {error}")))?;
             values.insert("FASTK".to_string(), output.k.to_vec());
             values.insert("FASTD".to_string(), output.d.to_vec());
             "FASTK"
         }
         "STOCHRSI" => {
             let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
-            let rsi_period = parameter_usize(params, 0, 14, &name)?;
-            let stoch_period = parameter_usize(params, 1, 14, &name)?;
-            let fast_k = parameter_usize(params, 2, 3, &name)?;
-            let fast_d = parameter_usize(params, 3, 3, &name)?;
-            let output = finkit::indicators::momentum::stochrsi(
+            let timeperiod = parameter_usize(params, 0, 14, &name)?;
+            let fast_k = parameter_usize(params, 1, 5, &name)?;
+            let fast_d = parameter_usize(params, 2, 3, &name)?;
+            let fast_d_ma_type = talib_ma_type(params, 3, 0, &name)?;
+            let output = finkit::indicators::momentum::stochrsi_with_ma_type(
                 input,
-                rsi_period,
-                stoch_period,
+                timeperiod,
                 fast_k,
                 fast_d,
+                fast_d_ma_type,
             )
             .map_err(|error| ("execution_error", format!("{name}: {error}")))?;
             values.insert("FASTK".to_string(), output.k.to_vec());
@@ -1840,9 +1873,9 @@ mod tests {
                 ) {
                     let params = match name {
                         "ADOSC" => vec![3.0, 10.0],
-                        "STOCH" => vec![14.0, 3.0, 3.0],
-                        "STOCHF" => vec![14.0, 3.0],
-                        "STOCHRSI" => vec![14.0, 5.0, 3.0, 3.0],
+                        "STOCH" => vec![14.0, 3.0, 0.0, 3.0, 0.0],
+                        "STOCHF" => vec![14.0, 3.0, 0.0],
+                        "STOCHRSI" => vec![14.0, 5.0, 3.0, 0.0],
                         "ULTOSC" => vec![7.0, 14.0, 28.0],
                         "TRANGE" | "AD" | "MFI" => vec![],
                         _ => vec![14.0],
@@ -1978,6 +2011,138 @@ mod tests {
         .to_string();
         let cmo_payload: Value = serde_json::from_str(&execute_operation_json(&cmo)).unwrap();
         assert_eq!(cmo_payload["values"]["CMO"][4], 100.0);
+    }
+
+    #[test]
+    fn talib_profile_honors_stochastic_and_apo_ma_types() {
+        let length = 256usize;
+        let open: Vec<f64> = (0..length)
+            .map(|i| 100.0 + 0.17 * i as f64 + (i as f64 * 0.17).sin())
+            .collect();
+        let high: Vec<f64> = open
+            .iter()
+            .enumerate()
+            .map(|(i, value)| value + 1.0 + (i as f64 * 0.13).cos() * 0.1)
+            .collect();
+        let low: Vec<f64> = open
+            .iter()
+            .enumerate()
+            .map(|(i, value)| value - 1.0 - (i as f64 * 0.13).cos() * 0.1)
+            .collect();
+        let close: Vec<f64> = open
+            .iter()
+            .enumerate()
+            .map(|(i, value)| value + (i as f64 * 0.07).sin() * 0.25)
+            .collect();
+        let periods: Vec<f64> = (0..length).map(|i| 2.0 + (i % 29) as f64).collect();
+
+        let execute = |operation: &str, params: &[f64]| -> Value {
+            let input_order = if matches!(operation, "APO" | "BBANDS") {
+                vec!["CLOSE"]
+            } else if operation == "MAVP" {
+                vec!["CLOSE", "PERIODS"]
+            } else {
+                vec!["HIGH", "LOW", "CLOSE"]
+            };
+            let request = serde_json::json!({
+                "operation": operation,
+                "semantic_profile": "talib_0_7_1",
+                "input_order": input_order,
+                "inputs": {
+                    "HIGH": high,
+                    "LOW": low,
+                    "CLOSE": close,
+                    "PERIODS": periods
+                },
+                "params": params,
+            })
+            .to_string();
+            serde_json::from_str(&execute_operation_json(&request)).unwrap()
+        };
+        let last = |payload: &Value, output: &str| {
+            payload["values"][output]
+                .as_array()
+                .unwrap()
+                .last()
+                .and_then(Value::as_f64)
+                .unwrap()
+        };
+        let first_finite = |payload: &Value, output: &str| {
+            payload["values"][output]
+                .as_array()
+                .unwrap()
+                .iter()
+                .position(Value::is_number)
+                .unwrap()
+        };
+
+        let apo = execute("APO", &[12.0, 26.0, 1.0]);
+        assert_eq!(first_finite(&apo, "APO"), 25);
+        assert!(
+            (last(&apo, "APO") - 0.8737746107200621).abs() < 1e-10,
+            "APO actual {}",
+            last(&apo, "APO")
+        );
+
+        let bbands = execute("BBANDS", &[20.0, 2.0, 2.0, 1.0]);
+        assert_eq!(first_finite(&bbands, "MIDDLEBAND"), 19);
+        assert!((last(&bbands, "UPPERBAND") - 142.21338944498189).abs() < 1e-10);
+        assert!((last(&bbands, "MIDDLEBAND") - 141.0222209723241).abs() < 1e-10);
+        assert!((last(&bbands, "LOWERBAND") - 139.83105249966633).abs() < 1e-10);
+
+        let mavp = execute("MAVP", &[2.0, 30.0, 1.0]);
+        assert!(
+            (last(&mavp, "MAVP") - 140.6989761555491).abs() < 1e-8,
+            "MAVP actual {}",
+            last(&mavp, "MAVP")
+        );
+
+        let stoch_sma = execute("STOCH", &[14.0, 3.0, 0.0, 3.0, 0.0]);
+        assert!((last(&stoch_sma, "SLOWK") - 67.19470511372855).abs() < 1e-10);
+        assert!((last(&stoch_sma, "SLOWD") - 64.049258295922).abs() < 1e-10);
+
+        let stochf_sma = execute("STOCHF", &[14.0, 3.0, 0.0]);
+        assert!((last(&stochf_sma, "FASTK") - 70.12998468945).abs() < 1e-10);
+        assert!((last(&stochf_sma, "FASTD") - 67.19470511372855).abs() < 1e-10);
+
+        let stoch = execute("STOCH", &[14.0, 3.0, 1.0, 3.0, 1.0]);
+        assert_eq!(first_finite(&stoch, "SLOWK"), 17);
+        assert!((last(&stoch, "SLOWK") - 67.14015311257774).abs() < 1e-10);
+        assert!((last(&stoch, "SLOWD") - 64.16266215771915).abs() < 1e-10);
+
+        let stochf = execute("STOCHF", &[14.0, 3.0, 1.0]);
+        assert_eq!(first_finite(&stochf, "FASTK"), 15);
+        assert!((last(&stochf, "FASTK") - 70.12998468945).abs() < 1e-10);
+        assert!((last(&stochf, "FASTD") - 67.14015311257774).abs() < 1e-10);
+
+        let stochrsi = {
+            let request = serde_json::json!({
+                "operation": "STOCHRSI",
+                "semantic_profile": "talib_0_7_1",
+                "input_order": ["CLOSE"],
+                "inputs": {"CLOSE": close},
+                "params": [14.0, 5.0, 3.0, 1.0],
+            })
+            .to_string();
+            serde_json::from_str(&execute_operation_json(&request)).unwrap()
+        };
+        assert_eq!(first_finite(&stochrsi, "FASTK"), 20);
+        assert!((last(&stochrsi, "FASTK") - 100.0).abs() < 1e-10);
+        assert!((last(&stochrsi, "FASTD") - 99.92141282317856).abs() < 1e-10);
+
+        let stochrsi_sma = {
+            let request = serde_json::json!({
+                "operation": "STOCHRSI",
+                "semantic_profile": "talib_0_7_1",
+                "input_order": ["CLOSE"],
+                "inputs": {"CLOSE": close},
+                "params": [14.0, 5.0, 3.0, 0.0],
+            })
+            .to_string();
+            serde_json::from_str(&execute_operation_json(&request)).unwrap()
+        };
+        assert!((last(&stochrsi_sma, "FASTK") - 100.0).abs() < 1e-10);
+        assert!((last(&stochrsi_sma, "FASTD") - 100.0).abs() < 1e-10);
     }
 
     #[test]

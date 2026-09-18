@@ -293,6 +293,76 @@ pub fn stoch(
     })
 }
 
+/// TA-Lib stochastic oscillator with explicit slow-K and slow-D MA types.
+///
+/// The existing [`stoch`] function remains the optimized SMA/SMA convenience
+/// path. This entry point follows TA-Lib's parameter order and applies the
+/// selected moving-average kernels to the fast-K series.
+#[allow(clippy::too_many_arguments)]
+pub fn stoch_with_ma_types(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    fastk_period: usize,
+    slowk_period: usize,
+    slowk_ma_type: MaType,
+    slowd_period: usize,
+    slowd_ma_type: MaType,
+) -> Result<StochResult> {
+    if high.len() != low.len() || high.len() != close.len() {
+        return Err(TaError::InvalidParameter {
+            name: "high, low, close".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    if slowk_period == 0 || slowd_period == 0 {
+        return Err(TaError::InvalidParameter {
+            name: "slowk_period, slowd_period".to_string(),
+            constraint: "must be greater than 0".to_string(),
+        });
+    }
+    validate_input(high.len(), fastk_period)?;
+
+    let mut fastk = vec![f64::NAN; close.len()];
+    rolling_minmax_visit(high, low, fastk_period, |i, highest, lowest| {
+        let range = highest - lowest;
+        fastk[i] = if range > 1e-15 {
+            (close[i] - lowest) / range * 100.0
+        } else {
+            50.0
+        };
+    });
+
+    let fastk_start = fastk_period - 1;
+    let slowk_values =
+        crate::indicators::overlap::ma(&fastk[fastk_start..], slowk_period, slowk_ma_type)?;
+    let slowk_slice = slowk_values.as_slice().unwrap();
+    let mut slowk = vec![f64::NAN; close.len()];
+    for (offset, value) in slowk_slice.iter().enumerate() {
+        slowk[fastk_start + offset] = *value;
+    }
+
+    let slowk_start = slowk_period - 1;
+    let slowd_values =
+        crate::indicators::overlap::ma(&slowk_slice[slowk_start..], slowd_period, slowd_ma_type)?;
+    let slowd_slice = slowd_values.as_slice().unwrap();
+    let slowd_base = fastk_start + slowk_start;
+    let mut slowd = vec![f64::NAN; close.len()];
+    for (offset, value) in slowd_slice.iter().enumerate() {
+        slowd[slowd_base + offset] = *value;
+    }
+
+    // TA-Lib exposes SlowK only once SlowD's lookback has elapsed.
+    let output_start = slowd_base + slowd_period - 1;
+    for i in fastk_start..output_start.min(close.len()) {
+        slowk[i] = f64::NAN;
+    }
+    Ok(StochResult {
+        k: Array1::from(slowk),
+        d: Array1::from(slowd),
+    })
+}
+
 /// Single-pass fused pipeline: computes fast %K via incremental max/min tracking, then applies
 /// WMA for %K (slow) and %D simultaneously without intermediate allocation.
 /// Matches TA-Lib C behavior where NaN fast_k values are treated as 0.
@@ -2099,6 +2169,40 @@ pub fn apo(input: &[f64], fast_period: usize, slow_period: usize) -> Result<Arra
     Ok(output)
 }
 
+/// Absolute Price Oscillator with an explicit moving-average type.
+///
+/// This is the TA-Lib profile form of [`apo`].  The convenience function
+/// keeps its SMA implementation and this selector preserves that path for
+/// `MaType::Sma`, while allowing the public compatibility dispatcher to honor
+/// TA-Lib's `matype` parameter for the other supported selectors.
+pub fn apo_with_ma_type(
+    input: &[f64],
+    fast_period: usize,
+    slow_period: usize,
+    ma_type: MaType,
+) -> Result<Array1<f64>> {
+    if ma_type == MaType::Sma {
+        return apo(input, fast_period, slow_period);
+    }
+    if fast_period == 0 || slow_period == 0 || fast_period >= slow_period {
+        return Err(TaError::InvalidParameter {
+            name: "fast_period, slow_period".to_string(),
+            constraint: "must be positive and fast_period < slow_period".to_string(),
+        });
+    }
+    validate_input(input.len(), slow_period)?;
+
+    let fast = crate::indicators::overlap::ma(input, fast_period, ma_type)?;
+    let slow = crate::indicators::overlap::ma(input, slow_period, ma_type)?;
+    let mut output = init_output(input.len());
+    for i in slow_period - 1..input.len() {
+        if fast[i].is_finite() && slow[i].is_finite() {
+            output[i] = fast[i] - slow[i];
+        }
+    }
+    Ok(output)
+}
+
 /// Balance of Power (BOP)
 ///
 /// Measures the strength of buyers vs sellers in the market.
@@ -3509,6 +3613,61 @@ pub fn stochf(
     })
 }
 
+/// TA-Lib stochastic fast oscillator with an explicit Fast-D MA type.
+#[allow(clippy::too_many_arguments)]
+pub fn stochf_with_ma_type(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    fastk_period: usize,
+    fastd_period: usize,
+    fastd_ma_type: MaType,
+) -> Result<StochResult> {
+    if fastd_ma_type == MaType::Sma {
+        return stochf(high, low, close, fastk_period, fastd_period);
+    }
+    if high.len() != low.len() || high.len() != close.len() {
+        return Err(TaError::InvalidParameter {
+            name: "high, low, close".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    if fastd_period == 0 {
+        return Err(TaError::InvalidParameter {
+            name: "fastd_period".to_string(),
+            constraint: "must be greater than 0".to_string(),
+        });
+    }
+    validate_input(high.len(), fastk_period)?;
+
+    let mut fastk_raw = vec![f64::NAN; close.len()];
+    rolling_minmax_visit(high, low, fastk_period, |i, highest, lowest| {
+        let range = highest - lowest;
+        fastk_raw[i] = if range > 1e-15 {
+            (close[i] - lowest) / range * 100.0
+        } else {
+            0.0
+        };
+    });
+    let fastk_start = fastk_period - 1;
+    let fastd_values =
+        crate::indicators::overlap::ma(&fastk_raw[fastk_start..], fastd_period, fastd_ma_type)?;
+    let fastd_slice = fastd_values.as_slice().unwrap();
+    let fastd_start = fastk_start + fastd_period - 1;
+    let mut fastk = vec![f64::NAN; close.len()];
+    let mut fastd = vec![f64::NAN; close.len()];
+    for i in fastd_start..close.len() {
+        fastk[i] = fastk_raw[i];
+    }
+    for (offset, value) in fastd_slice.iter().enumerate() {
+        fastd[fastk_start + offset] = *value;
+    }
+    Ok(StochResult {
+        k: Array1::from(fastk),
+        d: Array1::from(fastd),
+    })
+}
+
 /// Zero-copy STOCHF variant used by the Python compatibility layer.
 pub fn stochf_into(
     high: &[f64],
@@ -3734,6 +3893,68 @@ pub fn stochrsi(
     }
 
     Ok(StochResult { k: out_k, d: out_d })
+}
+
+/// TA-Lib STOCHRSI with the official parameter contract.
+///
+/// `fastk_period` is the stochastic lookback over RSI values and
+/// `fastd_period` smooths the resulting Fast-K series with the selected MA.
+/// TA-Lib exposes both outputs only after the Fast-D lookback has elapsed.
+pub fn stochrsi_with_ma_type(
+    input: &[f64],
+    timeperiod: usize,
+    fastk_period: usize,
+    fastd_period: usize,
+    fastd_ma_type: MaType,
+) -> Result<StochResult> {
+    if fastk_period == 0 || fastd_period == 0 {
+        return Err(TaError::InvalidParameter {
+            name: "fastk_period, fastd_period".to_string(),
+            constraint: "must be greater than 0".to_string(),
+        });
+    }
+    let rsi_values = rsi(input, timeperiod)?;
+    let rsi_slice = rsi_values.as_slice().unwrap();
+    let rsi_start = timeperiod;
+    if rsi_start >= rsi_slice.len() {
+        return Err(TaError::InsufficientData {
+            length: input.len(),
+            required: timeperiod + fastk_period + fastd_period - 1,
+        });
+    }
+
+    let valid_rsi = &rsi_slice[rsi_start..];
+    validate_input(valid_rsi.len(), fastk_period)?;
+    let mut raw_fastk = vec![f64::NAN; valid_rsi.len()];
+    rolling_minmax_visit(valid_rsi, valid_rsi, fastk_period, |i, highest, lowest| {
+        let range = highest - lowest;
+        raw_fastk[i] = if range > 1e-15 {
+            (valid_rsi[i] - lowest) / range * 100.0
+        } else {
+            0.0
+        };
+    });
+
+    let raw_start = rsi_start + fastk_period - 1;
+    let fastd_values = crate::indicators::overlap::ma(
+        &raw_fastk[fastk_period - 1..],
+        fastd_period,
+        fastd_ma_type,
+    )?;
+    let fastd_slice = fastd_values.as_slice().unwrap();
+    let output_start = raw_start + fastd_period - 1;
+    let mut fastk = vec![f64::NAN; input.len()];
+    let mut fastd = vec![f64::NAN; input.len()];
+    for i in output_start..input.len() {
+        fastk[i] = raw_fastk[i - rsi_start];
+    }
+    for (offset, value) in fastd_slice.iter().enumerate() {
+        fastd[raw_start + offset] = *value;
+    }
+    Ok(StochResult {
+        k: Array1::from(fastk),
+        d: Array1::from(fastd),
+    })
 }
 
 /// Zero-copy STOCHRSI path.  RSI remains a small scratch series, while the

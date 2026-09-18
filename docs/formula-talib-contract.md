@@ -19,11 +19,11 @@ lookback/NaN conventions, absolute index outputs, directional-movement
 smoothing, AROON output order and PPO moving-average type without changing the
 default native finkit behavior.
 
-The differential matrix must be read as two independent gates: callable
-coverage (`161/161` in the maintained Python environment) and numerical parity
-(reported per function; the current release matrix is `161/161` across the
-maintained long-input seed/length checks). A catalog entry is not promoted to
-exact parity until its
+The differential matrix must be read as two independent gates. The shared Rust
+JSON dispatcher currently executes all `161/161` catalog names in its checked-in
+smoke contract; that is callable/shape coverage only. Numerical parity is
+currently pinned by the checked-in 44-indicator golden corpus, not by a claimed
+161-function pass. A catalog entry is not promoted to exact parity until its
 parameter, warm-up, NaN, output-count and differential golden contract is
 complete.
 

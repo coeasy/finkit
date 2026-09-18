@@ -235,11 +235,10 @@ fn period_parameter(default: &'static str) -> OperationParameter {
 
 /// Parameters for names that are not projected from the Core registry.
 ///
-/// These describe the currently executable shared-dispatcher contract.  The
-/// full TA-Lib matype variants remain an explicit follow-up because the
-/// underlying Core kernels must first expose the corresponding MA selector;
-/// silently advertising parameters that the executor ignores would be worse
-/// than making that boundary visible.
+/// These describe the currently executable shared-dispatcher contract. The
+/// TA-Lib MA type range is intentionally exposed only where the underlying
+/// Core kernel consumes it; a catalog entry must never advertise a parameter
+/// that the executor silently ignores.
 fn talib_profile_params(name: &str) -> Vec<OperationParameter> {
     let period = || period_parameter("14");
     match name {
@@ -250,25 +249,44 @@ fn talib_profile_params(name: &str) -> Vec<OperationParameter> {
         "APO" | "PPO" => vec![
             talib_parameter("fastperiod", "integer", Some("12"), Some("integer >= 1")),
             talib_parameter("slowperiod", "integer", Some("26"), Some("integer >= 1")),
+            talib_parameter("matype", "integer", Some("0"), Some("integer in 0..8")),
         ],
         "STOCH" => vec![
             talib_parameter("fastk_period", "integer", Some("5"), Some("integer >= 1")),
             talib_parameter("slowk_period", "integer", Some("3"), Some("integer >= 1")),
+            talib_parameter(
+                "slowk_matype",
+                "integer",
+                Some("0"),
+                Some("integer in 0..8"),
+            ),
             talib_parameter("slowd_period", "integer", Some("3"), Some("integer >= 1")),
+            talib_parameter(
+                "slowd_matype",
+                "integer",
+                Some("0"),
+                Some("integer in 0..8"),
+            ),
         ],
         "STOCHF" => vec![
             talib_parameter("fastk_period", "integer", Some("5"), Some("integer >= 1")),
             talib_parameter("fastd_period", "integer", Some("3"), Some("integer >= 1")),
+            talib_parameter(
+                "fastd_matype",
+                "integer",
+                Some("0"),
+                Some("integer in 0..8"),
+            ),
         ],
         "STOCHRSI" => vec![
             talib_parameter("timeperiod", "integer", Some("14"), Some("integer >= 1")),
-            talib_parameter("fastk_period", "integer", Some("14"), Some("integer >= 1")),
+            talib_parameter("fastk_period", "integer", Some("5"), Some("integer >= 1")),
             talib_parameter("fastd_period", "integer", Some("3"), Some("integer >= 1")),
             talib_parameter(
-                "fastd_smoothing",
+                "fastd_matype",
                 "integer",
-                Some("3"),
-                Some("integer >= 1"),
+                Some("0"),
+                Some("integer in 0..8"),
             ),
         ],
         "MAVP" => vec![
@@ -279,6 +297,7 @@ fn talib_profile_params(name: &str) -> Vec<OperationParameter> {
                 Some("30"),
                 Some("integer >= minperiod"),
             ),
+            talib_parameter("matype", "integer", Some("0"), Some("integer in 0..8")),
         ],
         "BETA" | "CORREL" => vec![period()],
         "MAX"
@@ -547,14 +566,20 @@ mod tests {
                 .iter()
                 .map(|param| param.name.as_str())
                 .collect::<Vec<_>>(),
-            vec!["fastk_period", "slowk_period", "slowd_period"]
+            vec![
+                "fastk_period",
+                "slowk_period",
+                "slowk_matype",
+                "slowd_period",
+                "slowd_matype",
+            ]
         );
         assert_eq!(stoch.params[0].default.as_deref(), Some("5"));
 
         let apo = find("APO");
-        assert_eq!(apo.params.len(), 2);
-        assert_eq!(apo.params[1].name, "slowperiod");
-        assert_eq!(apo.params[1].constraint.as_deref(), Some("integer >= 1"));
+        assert_eq!(apo.params.len(), 3);
+        assert_eq!(apo.params[2].name, "matype");
+        assert_eq!(apo.params[2].constraint.as_deref(), Some("integer in 0..8"));
 
         let candle = find("CDLDOJI");
         assert!(candle.params.is_empty());
