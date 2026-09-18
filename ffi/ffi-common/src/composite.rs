@@ -11,7 +11,6 @@ pub const COMPOSITE_CONTRACT_SCHEMA_VERSION: u16 = 1;
 
 #[derive(Debug, Deserialize)]
 struct CompositeRequest {
-    #[serde(default)]
     schema_version: Option<u16>,
     inputs: std::collections::BTreeMap<String, Vec<f64>>,
     definitions: Vec<CompositeDefinitionRequest>,
@@ -34,6 +33,7 @@ struct CompositeDefinitionRequest {
 ///
 /// ```json
 /// {
+///   "schema_version": 1,
 ///   "inputs": {"close": [1, 2, 3]},
 ///   "definitions": [{"name":"sma3","function":"sma","inputs":["close"],"params":[3]}],
 ///   "outputs": ["sma3"]
@@ -42,12 +42,13 @@ struct CompositeDefinitionRequest {
 pub fn evaluate_composite_json(request: &str) -> Result<String, String> {
     let request: CompositeRequest =
         serde_json::from_str(request).map_err(|error| error.to_string())?;
-    if let Some(version) = request.schema_version {
-        if version != COMPOSITE_CONTRACT_SCHEMA_VERSION {
-            return Err(format!(
-                "unsupported composite contract schema_version: {version}"
-            ));
-        }
+    let version = request
+        .schema_version
+        .ok_or_else(|| "composite contract schema_version is required".to_string())?;
+    if version != COMPOSITE_CONTRACT_SCHEMA_VERSION {
+        return Err(format!(
+            "unsupported composite contract schema_version: {version}"
+        ));
     }
     if request.inputs.is_empty() {
         return Err("composite inputs must not be empty".to_string());
@@ -180,6 +181,7 @@ mod tests {
     #[test]
     fn contract_executes_composite_and_serializes_warmup_as_null() {
         let request = r#"{
+            "schema_version":1,
             "inputs":{"close":[1.0,2.0,3.0,4.0]},
             "definitions":[{"name":"sma3","function":"sma","inputs":["close"],"params":[3]}],
             "outputs":["sma3"]
@@ -191,5 +193,18 @@ mod tests {
         assert_eq!(payload["primary"], "sma3");
         assert_eq!(payload["values"]["sma3"][0], Value::Null);
         assert_eq!(payload["values"]["sma3"][3], 3.0);
+    }
+
+    #[test]
+    fn contract_requires_version() {
+        let request = r#"{
+            "inputs":{"close":[1.0,2.0,3.0]},
+            "definitions":[{"name":"sma3","function":"sma","inputs":["close"],"params":[3]}],
+            "outputs":["sma3"]
+        }"#;
+        assert_eq!(
+            evaluate_composite_json(request).unwrap_err(),
+            "composite contract schema_version is required"
+        );
     }
 }

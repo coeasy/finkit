@@ -535,7 +535,7 @@ mod tests {
     #[test]
     fn composite_execute_json_dispatches_shared_contract() {
         let request = std::ffi::CString::new(
-            r#"{"inputs":{"close":[1.0,2.0,3.0]},"definitions":[{"name":"sum","function":"add","inputs":["close","const:1"],"params":[]}],"outputs":["sum"]}"#,
+            r#"{"schema_version":1,"inputs":{"close":[1.0,2.0,3.0]},"definitions":[{"name":"sum","function":"add","inputs":["close","const:1"],"params":[]}],"outputs":["sum"]}"#,
         )
         .unwrap();
         let ptr = unsafe { ta_composite_execute_json(request.as_ptr()) };
@@ -551,7 +551,7 @@ mod tests {
     #[test]
     fn factor_execute_json_dispatches_compiled_builtin_factor() {
         let request = std::ffi::CString::new(
-            r#"{"targets":["momentum_5"],"inputs":{"close":[1.0,2.0,3.0,4.0,5.0,6.0]}}"#,
+            r#"{"schema_version":1,"targets":["momentum_5"],"inputs":{"close":[1.0,2.0,3.0,4.0,5.0,6.0]}}"#,
         )
         .unwrap();
         let ptr = unsafe { ta_factor_execute_json(request.as_ptr()) };

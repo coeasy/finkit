@@ -12,6 +12,8 @@
 //!   evaluation JSON contracts. Statistical logic remains in Rust.
 
 pub mod composite;
+#[cfg(test)]
+mod contract_conformance;
 pub mod error;
 pub mod execute;
 pub mod factor;

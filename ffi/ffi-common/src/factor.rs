@@ -11,13 +11,14 @@ pub const FACTOR_CONTRACT_SCHEMA_VERSION: u16 = 1;
 
 #[derive(Debug, Deserialize)]
 struct FactorRequest {
-    #[serde(default)]
     schema_version: Option<u16>,
     targets: Vec<String>,
     inputs: BTreeMap<String, Vec<f64>>,
 }
 
 /// Execute built-in factors through the compiled Factor plan contract.
+/// Requests must include `schema_version: 1`; omitted versions are rejected
+/// so language bindings cannot silently fall back to an older request shape.
 ///
 /// The initial cross-language catalog intentionally exposes only the stable
 /// built-in factors. User-defined Rust closures remain available through the
@@ -25,15 +26,23 @@ struct FactorRequest {
 pub fn evaluate_factor_json(request: &str) -> Result<String, String> {
     let request: FactorRequest =
         serde_json::from_str(request).map_err(|error| error.to_string())?;
-    if let Some(version) = request.schema_version {
-        if version != FACTOR_CONTRACT_SCHEMA_VERSION {
-            return Err(format!(
-                "unsupported factor contract schema_version: {version}"
-            ));
-        }
+    let version = request
+        .schema_version
+        .ok_or_else(|| "factor contract schema_version is required".to_string())?;
+    if version != FACTOR_CONTRACT_SCHEMA_VERSION {
+        return Err(format!(
+            "unsupported factor contract schema_version: {version}"
+        ));
     }
     if request.targets.is_empty() {
         return Err("factor targets must not be empty".to_string());
+    }
+    let unique_targets = request
+        .targets
+        .iter()
+        .collect::<std::collections::BTreeSet<_>>();
+    if unique_targets.len() != request.targets.len() {
+        return Err("factor targets must be unique".to_string());
     }
     if request.inputs.is_empty() {
         return Err("factor inputs must not be empty".to_string());
@@ -100,6 +109,7 @@ mod tests {
     #[test]
     fn contract_executes_compiled_builtin_factor() {
         let request = r#"{
+            "schema_version":1,
             "targets":["momentum_5"],
             "inputs":{"close":[1.0,2.0,3.0,4.0,5.0,6.0]}
         }"#;
@@ -110,5 +120,27 @@ mod tests {
         assert_eq!(payload["values"]["momentum_5"][0], Value::Null);
         assert_eq!(payload["values"]["momentum_5"][5], 5.0);
         assert!(payload["semantic_identity"].as_array().is_some());
+    }
+
+    #[test]
+    fn contract_requires_version_and_rejects_duplicate_targets() {
+        let missing_version = r#"{
+            "targets":["momentum_5"],
+            "inputs":{"close":[1.0,2.0,3.0,4.0,5.0,6.0]}
+        }"#;
+        assert_eq!(
+            evaluate_factor_json(missing_version).unwrap_err(),
+            "factor contract schema_version is required"
+        );
+
+        let duplicate_targets = r#"{
+            "schema_version":1,
+            "targets":["momentum_5","momentum_5"],
+            "inputs":{"close":[1.0,2.0,3.0,4.0,5.0,6.0]}
+        }"#;
+        assert_eq!(
+            evaluate_factor_json(duplicate_targets).unwrap_err(),
+            "factor targets must be unique"
+        );
     }
 }
