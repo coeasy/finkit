@@ -8,3 +8,4 @@
 //! - [`golden_loader`] — 黄金 CSV 加载与容差断言 helper
 
 pub mod golden_loader;
+pub mod talib_coverage;

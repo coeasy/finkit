@@ -45,4 +45,7 @@ pub use research::{
     QuantEvaluationRequest, QuantEvaluationResponse, ResearchApiError,
     FACTOR_STUDY_MIN_SCHEMA_VERSION, FACTOR_STUDY_SCHEMA_VERSION, QUANT_EVALUATION_SCHEMA_VERSION,
 };
-pub use talib_catalog::{is_profile_catalog_name, TALIB_PROFILE_CATALOG_NAMES};
+pub use talib_catalog::{
+    is_profile_catalog_name, TALIB_CORE_VERSION, TALIB_PROFILE_CATALOG_NAMES,
+    TALIB_SEMANTIC_PROFILE,
+};

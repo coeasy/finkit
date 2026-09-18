@@ -14,6 +14,8 @@
 //! Warmup / unstable-period bars must align (golden `null` ↔ AlphaTA `NaN`).
 //! Missing required golden JSON files fail the test instead of being silently skipped.
 
+mod common;
+
 use finkit::indicators::{
     adx, apo, aroon, bbands, cci, cmo, macd, mom, roc, rsi, stoch, trix,
     volatility::{atr, natr},
@@ -28,53 +30,22 @@ use std::path::{Path, PathBuf};
 
 const REPORT_PATH: &str = "target/talib_compat_report.json";
 
-/// All indicators covered by `scripts/gen_talib_golden.py`.
-const KNOWN_INDICATORS: &[&str] = &[
-    "SMA",
-    "EMA",
-    "RSI",
-    "MACD",
-    "BBANDS",
-    "ATR",
-    "ADX",
-    "STOCH",
-    "CCI",
-    "WILLR",
-    "MOM",
-    "ROC",
-    "TRIX",
-    "OBV",
-    "AD",
-    "DEMA",
-    "TEMA",
-    "WMA",
-    "NATR",
-    "APO",
-    "CMO",
-    "AROON",
-    "TRANGE",
-    "DX",
-    "PLUS_DI",
-    "MINUS_DI",
-    "PLUS_DM",
-    "MINUS_DM",
-    "BOP",
-    "PPO",
-    "ULTOSC",
-    "AVGPRICE",
-    "MEDPRICE",
-    "TYPPRICE",
-    "WCLPRICE",
-    "MIDPOINT",
-    "MIDPRICE",
-    "STDDEV",
-    "VAR",
-    "LINEARREG",
-    "LINEARREG_ANGLE",
-    "LINEARREG_INTERCEPT",
-    "LINEARREG_SLOPE",
-    "TSF",
-];
+fn known_indicators() -> Vec<String> {
+    let matrix = common::talib_coverage::load_matrix();
+    common::talib_coverage::assert_catalog_matches_matrix(&matrix);
+    let matrix_names = matrix
+        .surfaces
+        .numeric_reference
+        .indicators
+        .into_iter()
+        .collect::<std::collections::BTreeSet<_>>();
+    let golden_names = common::talib_coverage::golden_indicator_names();
+    assert_eq!(
+        matrix_names, golden_names,
+        "matrix and golden files must match"
+    );
+    matrix_names.into_iter().collect()
+}
 
 #[derive(Debug, Deserialize)]
 struct GoldenFile {
@@ -840,9 +811,9 @@ mod golden_talib_suite {
 
     #[test]
     fn golden_talib_write_compat_report() {
-        let reports: Vec<IndicatorReport> = KNOWN_INDICATORS
+        let reports: Vec<IndicatorReport> = known_indicators()
             .iter()
-            .map(|name| run_indicator_compat(*name))
+            .map(|name| run_indicator_compat(name))
             .collect();
         write_compat_report(&reports);
     }
@@ -850,8 +821,8 @@ mod golden_talib_suite {
     #[test]
     fn golden_talib_all_indicators() {
         let mut failures: Vec<String> = Vec::new();
-        for name in KNOWN_INDICATORS {
-            let report = run_indicator_compat(name);
+        for name in known_indicators() {
+            let report = run_indicator_compat(&name);
             if report.status == "fail" {
                 failures.push(format!("{name}: {}", report.notes));
             }

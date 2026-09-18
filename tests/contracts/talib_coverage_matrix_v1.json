@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "semantic_profile": "talib_0_7_1",
+  "talib_core_version": "0.7.1",
+  "python_reference_version": "0.8.0",
+  "surfaces": {
+    "profile_catalog": {
+      "status": "registered",
+      "expected_count": 101
+    },
+    "dispatcher_smoke": {
+      "status": "executable_smoke",
+      "expected_count": 161
+    },
+    "numeric_reference": {
+      "status": "fixed_golden",
+      "expected_count": 44,
+      "indicators": [
+        "AD",
+        "ADX",
+        "APO",
+        "AROON",
+        "ATR",
+        "AVGPRICE",
+        "BBANDS",
+        "BOP",
+        "CCI",
+        "CMO",
+        "DEMA",
+        "DX",
+        "EMA",
+        "LINEARREG",
+        "LINEARREG_ANGLE",
+        "LINEARREG_INTERCEPT",
+        "LINEARREG_SLOPE",
+        "MACD",
+        "MEDPRICE",
+        "MIDPOINT",
+        "MIDPRICE",
+        "MINUS_DI",
+        "MINUS_DM",
+        "MOM",
+        "NATR",
+        "OBV",
+        "PLUS_DI",
+        "PLUS_DM",
+        "PPO",
+        "ROC",
+        "RSI",
+        "SMA",
+        "STDDEV",
+        "STOCH",
+        "TEMA",
+        "TRANGE",
+        "TRIX",
+        "TSF",
+        "TYPPRICE",
+        "ULTOSC",
+        "VAR",
+        "WCLPRICE",
+        "WILLR",
+        "WMA"
+      ]
+    }
+  }
+}
