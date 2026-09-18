@@ -1,5 +1,6 @@
 using Xunit;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Finkit.Tests;
 
@@ -31,6 +32,20 @@ public class IndicatorTests
         }
 
         throw new FileNotFoundException("TA-Lib coverage matrix was not found");
+    }
+
+    private static string TalibNumericContractPath()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory != null)
+        {
+            var candidate = Path.Combine(directory.FullName, "tests", "contracts", "talib_numeric_contract_v1.json");
+            if (File.Exists(candidate))
+                return candidate;
+            directory = directory.Parent;
+        }
+
+        throw new FileNotFoundException("TA-Lib numeric contract was not found");
     }
 
     private static void AssertContractSeries(JsonElement actual, JsonElement expected)
@@ -121,6 +136,55 @@ public class IndicatorTests
         Assert.Equal(expected.Count, actual.Count);
         Assert.True(expected.SetEquals(actual), "TA-Lib catalog names drifted from the shared coverage matrix");
         Assert.DoesNotContain("talib_0_7_1", Indicators.OperationCatalogJson());
+    }
+
+    [Fact]
+    public void TalibNumericContractV1_IsExecutedByDotnetBinding()
+    {
+        using var fixture = JsonDocument.Parse(File.ReadAllText(TalibNumericContractPath()));
+        var root = fixture.RootElement;
+        Assert.Equal("talib_0_8_0", root.GetProperty("semantic_profile").GetString());
+        var vectors = root.GetProperty("vectors").EnumerateArray().ToArray();
+        Assert.Equal(201, vectors.Length);
+
+        foreach (var vector in vectors)
+        {
+            var request = new JsonObject
+            {
+                ["operation"] = vector.GetProperty("operation").GetString()!,
+                ["semantic_profile"] = root.GetProperty("semantic_profile").GetString()!,
+                ["input_order"] = JsonNode.Parse(vector.GetProperty("input_order").GetRawText())!,
+                ["inputs"] = JsonNode.Parse(root.GetProperty("inputs").GetRawText())!,
+                ["params"] = JsonNode.Parse(vector.GetProperty("params").GetRawText())!,
+            };
+            using var payload = JsonDocument.Parse(Indicators.OperationExecuteJson(request.ToJsonString()));
+            var payloadRoot = payload.RootElement;
+            Assert.False(payloadRoot.TryGetProperty("error", out _), vector.GetProperty("operation").GetString());
+            var values = payloadRoot.GetProperty("values");
+            var tolerance = vector.GetProperty("tolerance");
+            var atol = tolerance.GetProperty("atol").GetDouble();
+            var rtol = tolerance.GetProperty("rtol").GetDouble();
+
+            foreach (var output in vector.GetProperty("expected").EnumerateObject())
+            {
+                var actual = values.GetProperty(output.Name).EnumerateArray().ToArray();
+                var expected = output.Value.EnumerateArray().ToArray();
+                Assert.Equal(expected.Length, actual.Length);
+                for (var index = 0; index < expected.Length; index++)
+                {
+                    if (expected[index].ValueKind == JsonValueKind.Null)
+                    {
+                        Assert.Equal(JsonValueKind.Null, actual[index].ValueKind);
+                        continue;
+                    }
+                    Assert.NotEqual(JsonValueKind.Null, actual[index].ValueKind);
+                    var error = Math.Abs(actual[index].GetDouble() - expected[index].GetDouble());
+                    var limit = atol + rtol * Math.Abs(expected[index].GetDouble());
+                    Assert.True(error <= limit,
+                        $"{vector.GetProperty("operation").GetString()}/{output.Name}[{index}]: error {error} > {limit}");
+                }
+            }
+        }
     }
 
     [Fact]

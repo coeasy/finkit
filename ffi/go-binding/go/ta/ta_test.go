@@ -58,6 +58,31 @@ func loadTalibCoverageMatrix(t *testing.T) map[string]interface{} {
 	return fixture
 }
 
+func loadTalibNumericContract(t *testing.T) map[string]interface{} {
+	t.Helper()
+	paths := []string{
+		filepath.Join("..", "..", "..", "..", "tests", "contracts", "talib_numeric_contract_v1.json"),
+		filepath.Join("..", "..", "..", "tests", "contracts", "talib_numeric_contract_v1.json"),
+		filepath.Join("tests", "contracts", "talib_numeric_contract_v1.json"),
+	}
+	var data []byte
+	var err error
+	for _, path := range paths {
+		data, err = os.ReadFile(path)
+		if err == nil {
+			break
+		}
+	}
+	if err != nil {
+		t.Fatalf("read TA-Lib numeric contract: %v", err)
+	}
+	var fixture map[string]interface{}
+	if err := json.Unmarshal(data, &fixture); err != nil {
+		t.Fatalf("decode TA-Lib numeric contract: %v", err)
+	}
+	return fixture
+}
+
 func asFloatSlice(t *testing.T, value interface{}) []float64 {
 	t.Helper()
 	values, ok := value.([]interface{})
@@ -191,6 +216,71 @@ func TestCurrentTalibCatalogContract(t *testing.T) {
 	for name := range expected {
 		if !seen[name] {
 			t.Fatalf("TA-Lib catalog is missing %s", name)
+		}
+	}
+}
+
+func TestTalibNumericContractV1(t *testing.T) {
+	fixture := loadTalibNumericContract(t)
+	profile := fixture["semantic_profile"].(string)
+	if profile != "talib_0_8_0" {
+		t.Fatalf("unexpected TA-Lib profile: %s", profile)
+	}
+	vectors := fixture["vectors"].([]interface{})
+	if len(vectors) != 201 {
+		t.Fatalf("numeric contract vector count: got %d want 201", len(vectors))
+	}
+
+	for _, rawVector := range vectors {
+		vector := rawVector.(map[string]interface{})
+		request := map[string]interface{}{
+			"operation":        vector["operation"],
+			"semantic_profile": profile,
+			"input_order":      vector["input_order"],
+			"inputs":           fixture["inputs"],
+			"params":           vector["params"],
+		}
+		requestJSON, err := json.Marshal(request)
+		if err != nil {
+			t.Fatalf("marshal %s request: %v", vector["operation"], err)
+		}
+		result, err := OperationExecuteJSON(string(requestJSON))
+		if err != nil {
+			t.Fatalf("execute %s: %v", vector["operation"], err)
+		}
+		payload := decodeContractResult(t, result)
+		values := payload["values"].(map[string]interface{})
+		expectedOutputs := vector["expected"].(map[string]interface{})
+		tolerance := vector["tolerance"].(map[string]interface{})
+		atol := tolerance["atol"].(float64)
+		rtol := tolerance["rtol"].(float64)
+		for output, expectedRaw := range expectedOutputs {
+			actual, ok := values[output]
+			if !ok {
+				t.Fatalf("%s/%s: missing output", vector["operation"], output)
+			}
+			actualValues := actual.([]interface{})
+			expectedValues := expectedRaw.([]interface{})
+			if len(actualValues) != len(expectedValues) {
+				t.Fatalf("%s/%s: length got %d want %d", vector["operation"], output, len(actualValues), len(expectedValues))
+			}
+			for index, expectedValue := range expectedValues {
+				if expectedValue == nil {
+					if actualValues[index] != nil {
+						t.Fatalf("%s/%s[%d]: got %v want null", vector["operation"], output, index, actualValues[index])
+					}
+					continue
+				}
+				if actualValues[index] == nil {
+					t.Fatalf("%s/%s[%d]: unexpected null", vector["operation"], output, index)
+				}
+				got := actualValues[index].(float64)
+				want := expectedValue.(float64)
+				limit := atol + rtol*math.Abs(want)
+				if math.Abs(got-want) > limit {
+					t.Fatalf("%s/%s[%d]: got %.17g want %.17g (limit %.3g)", vector["operation"], output, index, got, want, limit)
+				}
+			}
 		}
 	}
 }
