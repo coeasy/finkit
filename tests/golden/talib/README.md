@@ -63,7 +63,7 @@ All outputs are computed on three shared fixtures from `tests/fixtures/`:
 
 ## Output Files
 
-One generated JSON file per indicator (77 total), plus a checked-in profile
+One generated JSON file per indicator (87 total), plus a checked-in profile
 variant fixture for official `matype` contracts:
 
 | File | Purpose |
@@ -78,11 +78,15 @@ Generated indicator files:
 | `ema.json` | EMA | timeperiod=10 |
 | `rsi.json` | RSI | timeperiod=14 |
 | `macd.json` | MACD | 12, 26, 9 |
+| `macdext.json` | MACDEXT | 12, 26, 9, matype=0 (SMA) |
+| `macdfix.json` | MACDFIX | signalperiod=9 |
 | `bbands.json` | BBANDS | 20, nbdev=2 |
 | `atr.json` | ATR | timeperiod=14 |
 | `adx.json` | ADX | timeperiod=14 |
 | `adxr.json` | ADXR | timeperiod=14 |
 | `stoch.json` | STOCH | fastk=14, slowk/d=3 |
+| `stochf.json` | STOCHF | fastk=14, fastd=3, matype=0 (SMA) |
+| `stochrsi.json` | STOCHRSI | timeperiod=14, fastk=5, fastd=3 |
 | `cci.json` | CCI | timeperiod=14 |
 | `willr.json` | WILLR | timeperiod=14 |
 | `mom.json` | MOM | timeperiod=10 |
@@ -93,10 +97,16 @@ Generated indicator files:
 | `trix.json` | TRIX | timeperiod=14 |
 | `trima.json` | TRIMA | timeperiod=14 |
 | `t3.json` | T3 | timeperiod=5, vfactor=0.7 |
+| `kama.json` | KAMA | timeperiod=14 |
+| `mama.json` | MAMA | fastlimit=0.5, slowlimit=0.05 |
 | `obv.json` | OBV | — |
 | `mfi.json` | MFI | timeperiod=14 |
 | `ad.json` | AD | — |
 | `adosc.json` | ADOSC | fast=3, slow=10 |
+| `accbands.json` | ACCBANDS | timeperiod=20 |
+| `avgdev.json` | AVGDEV | timeperiod=14 |
+| `imi.json` | IMI | timeperiod=14 |
+| `sar.json` | SAR | acceleration=0.02, maximum=0.2 |
 | `dema.json` | DEMA | timeperiod=10 |
 | `tema.json` | TEMA | timeperiod=10 |
 | `wma.json` | WMA | timeperiod=10 |

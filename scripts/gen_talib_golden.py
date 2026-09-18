@@ -261,6 +261,18 @@ INDICATORS: dict[str, dict[str, Any]] = {
         "inputs": ("math",),
         "outputs": ("tanh",),
     },
+    "KAMA": {
+        "params": {"timeperiod": 14},
+        "fn_name": "KAMA",
+        "inputs": ("close",),
+        "outputs": ("kama",),
+    },
+    "MAMA": {
+        "params": {"fastlimit": 0.5, "slowlimit": 0.05},
+        "fn_name": "MAMA",
+        "inputs": ("close",),
+        "outputs": ("mama", "fama"),
+    },
     "ADD": {
         "params": {},
         "fn_name": "ADD",
@@ -285,6 +297,25 @@ INDICATORS: dict[str, dict[str, Any]] = {
         "inputs": ("close", "open"),
         "outputs": ("div",),
     },
+    "MACDEXT": {
+        "params": {
+            "fastperiod": 12,
+            "fastmatype": 0,
+            "slowperiod": 26,
+            "slowmatype": 0,
+            "signalperiod": 9,
+            "signalmatype": 0,
+        },
+        "fn_name": "MACDEXT",
+        "inputs": ("close",),
+        "outputs": ("macd", "macdsignal", "macdhist"),
+    },
+    "MACDFIX": {
+        "params": {"signalperiod": 9},
+        "fn_name": "MACDFIX",
+        "inputs": ("close",),
+        "outputs": ("macd", "macdsignal", "macdhist"),
+    },
     "MAX": {
         "params": {"timeperiod": 30},
         "fn_name": "MAX",
@@ -302,6 +333,51 @@ INDICATORS: dict[str, dict[str, Any]] = {
         "fn_name": "SUM",
         "inputs": ("close",),
         "outputs": ("sum",),
+    },
+    "STOCHF": {
+        "params": {
+            "fastk_period": 14,
+            "fastd_period": 3,
+            "fastd_matype": 0,
+        },
+        "fn_name": "STOCHF",
+        "inputs": ("high", "low", "close"),
+        "outputs": ("fastk", "fastd"),
+    },
+    "STOCHRSI": {
+        "params": {
+            "timeperiod": 14,
+            "fastk_period": 5,
+            "fastd_period": 3,
+            "fastd_matype": 0,
+        },
+        "fn_name": "STOCHRSI",
+        "inputs": ("close",),
+        "outputs": ("fastk", "fastd"),
+    },
+    "ACCBANDS": {
+        "params": {"timeperiod": 20},
+        "fn_name": "ACCBANDS",
+        "inputs": ("high", "low", "close"),
+        "outputs": ("upperband", "middleband", "lowerband"),
+    },
+    "AVGDEV": {
+        "params": {"timeperiod": 14},
+        "fn_name": "AVGDEV",
+        "inputs": ("close",),
+        "outputs": ("avgdev",),
+    },
+    "IMI": {
+        "params": {"timeperiod": 14},
+        "fn_name": "IMI",
+        "inputs": ("open", "close"),
+        "outputs": ("imi",),
+    },
+    "SAR": {
+        "params": {"acceleration": 0.02, "maximum": 0.2},
+        "fn_name": "SAR",
+        "inputs": ("high", "low"),
+        "outputs": ("sar",),
     },
     "BETA": {
         "params": {"timeperiod": 30},

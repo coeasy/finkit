@@ -253,6 +253,35 @@ fn compute_alpha_ta_outputs(
                 ("macdhist".to_string(), array_to_vec(r.hist)),
             ])
         }
+        "MACDEXT" => {
+            let fast = param_usize(params, "fastperiod", 12);
+            let slow = param_usize(params, "slowperiod", 26);
+            let signal = param_usize(params, "signalperiod", 9);
+            let r = finkit::indicators::momentum::macdext(
+                close,
+                fast,
+                finkit::indicators::overlap::MaType::Sma,
+                slow,
+                finkit::indicators::overlap::MaType::Sma,
+                signal,
+                finkit::indicators::overlap::MaType::Sma,
+            )
+            .unwrap();
+            HashMap::from([
+                ("macd".to_string(), array_to_vec(r.macd)),
+                ("macdsignal".to_string(), array_to_vec(r.signal)),
+                ("macdhist".to_string(), array_to_vec(r.hist)),
+            ])
+        }
+        "MACDFIX" => {
+            let signal = param_usize(params, "signalperiod", 9);
+            let r = finkit::indicators::momentum::macdfix_with_signal(close, signal).unwrap();
+            HashMap::from([
+                ("macd".to_string(), array_to_vec(r.macd)),
+                ("macdsignal".to_string(), array_to_vec(r.signal)),
+                ("macdhist".to_string(), array_to_vec(r.hist)),
+            ])
+        }
         "BBANDS" => {
             let p = param_usize(params, "timeperiod", 20);
             let nb_up = param_f64(params, "nbdevup", 2.0);
@@ -300,6 +329,40 @@ fn compute_alpha_ta_outputs(
             HashMap::from([
                 ("slowk".to_string(), array_to_vec(r.k)),
                 ("slowd".to_string(), array_to_vec(r.d)),
+            ])
+        }
+        "STOCHF" => {
+            let fastk = param_usize(params, "fastk_period", 14);
+            let fastd = param_usize(params, "fastd_period", 3);
+            let r = finkit::indicators::momentum::stochf_with_ma_type(
+                high,
+                low,
+                close,
+                fastk,
+                fastd,
+                finkit::indicators::overlap::MaType::Sma,
+            )
+            .unwrap();
+            HashMap::from([
+                ("fastk".to_string(), array_to_vec(r.k)),
+                ("fastd".to_string(), array_to_vec(r.d)),
+            ])
+        }
+        "STOCHRSI" => {
+            let timeperiod = param_usize(params, "timeperiod", 14);
+            let fastk = param_usize(params, "fastk_period", 5);
+            let fastd = param_usize(params, "fastd_period", 3);
+            let r = finkit::indicators::momentum::stochrsi_with_ma_type(
+                close,
+                timeperiod,
+                fastk,
+                fastd,
+                finkit::indicators::overlap::MaType::Sma,
+            )
+            .unwrap();
+            HashMap::from([
+                ("fastk".to_string(), array_to_vec(r.k)),
+                ("fastd".to_string(), array_to_vec(r.d)),
             ])
         }
         "CCI" => {
@@ -363,6 +426,22 @@ fn compute_alpha_ta_outputs(
                 "t3".to_string(),
                 array_to_vec(finkit::indicators::overlap::t3(close, p, vfactor).unwrap()),
             )])
+        }
+        "KAMA" => {
+            let p = param_usize(params, "timeperiod", 14);
+            HashMap::from([(
+                "kama".to_string(),
+                array_to_vec(finkit::math::moving_avg::kama(close, p, 2, 30).unwrap()),
+            )])
+        }
+        "MAMA" => {
+            let fast_limit = param_f64(params, "fastlimit", 0.5);
+            let slow_limit = param_f64(params, "slowlimit", 0.05);
+            let r = finkit::indicators::overlap::mama(close, fast_limit, slow_limit).unwrap();
+            HashMap::from([
+                ("mama".to_string(), array_to_vec(r.mama)),
+                ("fama".to_string(), array_to_vec(r.fama)),
+            ])
         }
         "OBV" => HashMap::from([("obv".to_string(), array_to_vec(obv(close, volume).unwrap()))]),
         "MFI" => {
@@ -474,6 +553,35 @@ fn compute_alpha_ta_outputs(
                     finkit::indicators::statistics::correlation(close, benchmark, period).unwrap(),
                 ),
             )])
+        }
+        "ACCBANDS" => {
+            let period = param_usize(params, "timeperiod", 20);
+            let r = finkit::indicators::overlap::accbands(high, low, close, period).unwrap();
+            HashMap::from([
+                ("upperband".to_string(), array_to_vec(r.upper)),
+                ("middleband".to_string(), array_to_vec(r.middle)),
+                ("lowerband".to_string(), array_to_vec(r.lower)),
+            ])
+        }
+        "AVGDEV" => {
+            let period = param_usize(params, "timeperiod", 14);
+            HashMap::from([(
+                "avgdev".to_string(),
+                array_to_vec(finkit::indicators::statistics::avgdev(close, period).unwrap()),
+            )])
+        }
+        "IMI" => {
+            let period = param_usize(params, "timeperiod", 14);
+            HashMap::from([(
+                "imi".to_string(),
+                array_to_vec(finkit::indicators::momentum_ext::imi(open, close, period).unwrap()),
+            )])
+        }
+        "SAR" => {
+            let acceleration = param_f64(params, "acceleration", 0.02);
+            let maximum = param_f64(params, "maximum", 0.2);
+            let r = finkit::indicators::overlap::sar(high, low, acceleration, maximum).unwrap();
+            HashMap::from([("sar".to_string(), array_to_vec(r.sar))])
         }
         "TRANGE" => HashMap::from([(
             "trange".to_string(),
