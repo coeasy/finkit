@@ -1348,6 +1348,8 @@ export declare function formulaEvalContractJson(source: string, dialect: string,
 export declare function operationCatalogJson(): string
 /** Execute a dependency-aware Composite using the shared JSON contract. */
 export declare function compositeExecuteJson(requestJson: string): string
+/** Execute built-in factors using the shared compiled-plan JSON contract. */
+export declare function factorExecuteJson(requestJson: string): string
 /** Execute one registered operation using the shared JSON request/result contract. */
 export declare function operationExecuteJson(requestJson: string): string
 export interface FormulaMultiResult {

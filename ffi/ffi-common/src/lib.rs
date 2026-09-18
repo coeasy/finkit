@@ -14,6 +14,7 @@
 pub mod composite;
 pub mod error;
 pub mod execute;
+pub mod factor;
 pub mod formula;
 pub mod golden;
 pub mod leak;
@@ -27,6 +28,7 @@ pub use composite::{evaluate_composite_json, COMPOSITE_CONTRACT_SCHEMA_VERSION};
 pub use execute::{
     execute_operation_json, talib_profile_supported, OPERATION_RESULT_SCHEMA_VERSION,
 };
+pub use factor::{evaluate_factor_json, FACTOR_CONTRACT_SCHEMA_VERSION};
 pub use formula::{evaluate_formula_json, FORMULA_CONTRACT_SCHEMA_VERSION};
 pub use operation::{operation_catalog, operation_catalog_json, OperationCatalogEnvelope};
 pub use research::{

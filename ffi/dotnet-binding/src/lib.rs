@@ -445,6 +445,40 @@ pub unsafe extern "C" fn ta_operation_execute_json(request: *const c_char) -> *m
     })
 }
 
+/// Execute built-in factors through the shared JSON contract.
+#[no_mangle]
+pub unsafe extern "C" fn ta_factor_execute_json(request: *const c_char) -> *mut c_char {
+    ffi_catch_ptr(|| {
+        let payload = if request.is_null() {
+            serde_json::json!({
+                "schema_version": finkit_ffi_common::FACTOR_CONTRACT_SCHEMA_VERSION,
+                "error": "request is null",
+            })
+            .to_string()
+        } else {
+            match unsafe { CStr::from_ptr(request) }.to_str() {
+                Ok(request) => {
+                    finkit_ffi_common::evaluate_factor_json(request).unwrap_or_else(|error| {
+                        serde_json::json!({
+                            "schema_version": finkit_ffi_common::FACTOR_CONTRACT_SCHEMA_VERSION,
+                            "error": error,
+                        })
+                        .to_string()
+                    })
+                }
+                Err(_) => serde_json::json!({
+                    "schema_version": finkit_ffi_common::FACTOR_CONTRACT_SCHEMA_VERSION,
+                    "error": "request is not valid UTF-8",
+                })
+                .to_string(),
+            }
+        };
+        CString::new(payload)
+            .expect("factor result payload contains no NUL")
+            .into_raw()
+    })
+}
+
 /// Execute a dependency-aware Composite through the shared JSON contract.
 #[no_mangle]
 pub unsafe extern "C" fn ta_composite_execute_json(request: *const c_char) -> *mut c_char {

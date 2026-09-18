@@ -179,6 +179,9 @@ public static class Indicators
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern IntPtr ta_composite_execute_json(string requestJson);
 
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern IntPtr ta_factor_execute_json(string requestJson);
+
     // ========================================================================
     // Helper Methods
     // ========================================================================
@@ -236,6 +239,22 @@ public static class Indicators
         IntPtr resultPtr = ta_composite_execute_json(requestJson);
         if (resultPtr == IntPtr.Zero)
             throw new InvalidOperationException("Composite execution returned null");
+        try
+        {
+            return Marshal.PtrToStringUTF8(resultPtr) ?? "";
+        }
+        finally
+        {
+            ta_free_string(resultPtr);
+        }
+    }
+
+    /// <summary>Executes built-in factors through the shared compiled-plan JSON contract.</summary>
+    public static string FactorExecuteJson(string requestJson)
+    {
+        IntPtr resultPtr = ta_factor_execute_json(requestJson);
+        if (resultPtr == IntPtr.Zero)
+            throw new InvalidOperationException("Factor execution returned null");
         try
         {
             return Marshal.PtrToStringUTF8(resultPtr) ?? "";

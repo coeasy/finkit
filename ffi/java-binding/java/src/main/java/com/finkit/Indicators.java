@@ -852,6 +852,9 @@ public final class Indicators {
     /** Executes a dependency-aware Composite through the shared JSON contract. */
     public static native String compositeExecuteJson(String requestJson);
 
+    /** Executes built-in factors through the shared compiled-plan JSON contract. */
+    public static native String factorExecuteJson(String requestJson);
+
     /**
      * Evaluates a formula through the language-neutral versioned JSON contract.
      * Non-finite warm-up values are represented as JSON {@code null}.

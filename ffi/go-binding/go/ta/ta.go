@@ -58,6 +58,7 @@ extern const char* ta_version();
 extern char* ta_operation_catalog_json();
 extern char* ta_operation_execute_json(const char *request_json);
 extern char* ta_composite_execute_json(const char *request_json);
+extern char* ta_factor_execute_json(const char *request_json);
 extern char* ta_formula_eval_contract_json(const char *source, const char *dialect, const double *open, const double *high, const double *low, const double *close, const double *volume, int length);
 extern void ta_free_result(TaResult *result);
 
@@ -152,6 +153,14 @@ func CompositeExecuteJSON(requestJSON string) (string, error) {
 	cRequest := C.CString(requestJSON)
 	defer C.free(unsafe.Pointer(cRequest))
 	return formulaJSONResult(C.ta_composite_execute_json(cRequest))
+}
+
+// FactorExecuteJSON evaluates built-in factors using the compiled plan
+// contract shared by the official bindings.
+func FactorExecuteJSON(requestJSON string) (string, error) {
+	cRequest := C.CString(requestJSON)
+	defer C.free(unsafe.Pointer(cRequest))
+	return formulaJSONResult(C.ta_factor_execute_json(cRequest))
 }
 
 // FormulaEvalContractJSON evaluates a formula using an explicit dialect and
