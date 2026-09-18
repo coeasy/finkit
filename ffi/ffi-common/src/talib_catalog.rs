@@ -12,14 +12,16 @@
 ///
 /// Keep this in one module so the dispatcher, operation catalog and bindings
 /// cannot silently drift to different version strings.
-pub const TALIB_SEMANTIC_PROFILE: &str = "talib_0_7_1";
+pub const TALIB_SEMANTIC_PROFILE: &str = "talib_0_8_0";
 
 /// Upstream TA-Lib core version represented by [`TALIB_SEMANTIC_PROFILE`].
-pub const TALIB_CORE_VERSION: &str = "0.7.1";
+pub const TALIB_CORE_VERSION: &str = "0.8.1";
 
-/// TA-Lib 0.7.1 profile-only names exposed by the versioned dispatcher.
+/// TA-Lib 0.8.0 profile-only names exposed by the versioned dispatcher.
 pub const TALIB_PROFILE_CATALOG_NAMES: &[&str] = &[
+    "AC",
     "ACOS",
+    "ADR",
     "ADX",
     "ADXR",
     "AO",
@@ -93,34 +95,51 @@ pub const TALIB_PROFILE_CATALOG_NAMES: &[&str] = &[
     "CDLXSIDEGAP3METHODS",
     "CEIL",
     "CMF",
+    "CMOU",
     "COPPOCK",
     "COS",
     "COSH",
     "CUMSUM",
+    "CVI",
     "DPO",
     "DX",
+    "EFI",
     "ER",
+    "ERI",
     "EXP",
     "FLOOR",
+    "FOSC",
+    "FRACTAL",
     "HA",
     "HMA",
+    "KC",
+    "KDJ",
     "LN",
     "LOG10",
+    "MARKETFI",
+    "MASSI",
     "MEDPRICE",
     "MIDPOINT",
     "MIDPRICE",
     "MINUS_DI",
     "NVI",
+    "PERCENTILE",
     "PERCENTRANK",
     "PLUS_DI",
     "PVI",
+    "PVO",
     "PVT",
+    "QSTICK",
+    "RMA",
     "ROCP",
     "ROCR",
     "ROCR100",
+    "RVI",
+    "RVOL",
     "SAR",
     "SIN",
     "SINH",
+    "SMI",
     "SQRT",
     "STOCH",
     "STOCHF",
@@ -131,8 +150,10 @@ pub const TALIB_PROFILE_CATALOG_NAMES: &[&str] = &[
     "TRIX",
     "TSI",
     "TYPPRICE",
+    "VHF",
     "VORTEX",
     "VWMA",
+    "WAD",
     "WCLPRICE",
     "WILLR",
     "ZLEMA",

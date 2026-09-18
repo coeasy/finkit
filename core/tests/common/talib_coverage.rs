@@ -103,7 +103,7 @@ pub fn golden_indicator_names() -> BTreeSet<String> {
 pub fn assert_catalog_matches_matrix(matrix: &TalibCoverageMatrix) {
     assert_eq!(matrix.schema_version, 1);
     assert_eq!(matrix.semantic_profile, TALIB_SEMANTIC_PROFILE);
-    assert_eq!(matrix.talib_core_version, "0.7.1");
+    assert_eq!(matrix.talib_core_version, "0.8.1");
     assert_eq!(matrix.python_reference_version, "0.8.0");
     assert_eq!(
         matrix.surfaces.profile_catalog.status, "registered",

@@ -111,6 +111,8 @@ pub mod sweep_engine;
 #[cfg(feature = "indicators-market")]
 pub mod sweepable;
 #[cfg(feature = "indicators-market")]
+pub mod talib_ext;
+#[cfg(feature = "indicators-market")]
 pub mod top_bottom;
 #[cfg(feature = "indicators-volatility")]
 pub mod volatility;
@@ -192,6 +194,12 @@ pub use sweep::*;
 pub use sweep_engine::*;
 #[cfg(feature = "indicators-market")]
 pub use sweepable::*;
+#[cfg(feature = "indicators-market")]
+pub use talib_ext::{
+    ac, cmou, cvi, efi, eri, fosc, fractal, kc, marketfi, massi, percentile, pvo, rma_profile,
+    rvi_profile, rvol, smi, vhf, wad, EriResult, FractalResult, KcResult,
+    KdjResult as TalibKdjResult, SmiResult,
+};
 #[cfg(feature = "indicators-market")]
 pub use top_bottom::*;
 #[cfg(feature = "indicators-volatility")]

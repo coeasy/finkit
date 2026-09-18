@@ -872,6 +872,175 @@ fn compute_alpha_ta_outputs(
                 array_to_vec(finkit::indicators::momentum_ext::ao(high, low, fast, slow).unwrap()),
             )])
         }
+        "AC" => {
+            let fast = param_usize(params, "fastperiod", 5);
+            let slow = param_usize(params, "slowperiod", 34);
+            let signal = param_usize(params, "signalperiod", 5);
+            HashMap::from([(
+                "real".to_string(),
+                array_to_vec(
+                    finkit::indicators::talib_ext::ac(high, low, fast, slow, signal).unwrap(),
+                ),
+            )])
+        }
+        "ADR" => {
+            let p = param_usize(params, "timeperiod", 14);
+            HashMap::from([(
+                "real".to_string(),
+                array_to_vec(finkit::indicators::talib_ext::adr(high, low, p).unwrap()),
+            )])
+        }
+        "CMOU" => {
+            let p = param_usize(params, "timeperiod", 14);
+            HashMap::from([(
+                "real".to_string(),
+                array_to_vec(finkit::indicators::talib_ext::cmou(close, p).unwrap()),
+            )])
+        }
+        "CVI" => {
+            let p = param_usize(params, "timeperiod", 10);
+            let r = param_usize(params, "rocperiod", 10);
+            HashMap::from([(
+                "real".to_string(),
+                array_to_vec(finkit::indicators::talib_ext::cvi(high, low, p, r).unwrap()),
+            )])
+        }
+        "EFI" => {
+            let p = param_usize(params, "timeperiod", 13);
+            HashMap::from([(
+                "real".to_string(),
+                array_to_vec(finkit::indicators::talib_ext::efi(close, volume, p).unwrap()),
+            )])
+        }
+        "ERI" => {
+            let p = param_usize(params, "timeperiod", 13);
+            let r = finkit::indicators::talib_ext::eri(high, low, close, p).unwrap();
+            HashMap::from([
+                ("bullpower".to_string(), array_to_vec(r.bullpower)),
+                ("bearpower".to_string(), array_to_vec(r.bearpower)),
+            ])
+        }
+        "FOSC" => {
+            let p = param_usize(params, "timeperiod", 5);
+            HashMap::from([(
+                "real".to_string(),
+                array_to_vec(finkit::indicators::talib_ext::fosc(close, p).unwrap()),
+            )])
+        }
+        "FRACTAL" => {
+            let left = param_usize(params, "leftbars", 2);
+            let right = param_usize(params, "rightbars", 2);
+            let r = finkit::indicators::talib_ext::fractal(high, low, left, right).unwrap();
+            HashMap::from([
+                ("swinghigh".to_string(), array_to_vec(r.swinghigh)),
+                ("swinglow".to_string(), array_to_vec(r.swinglow)),
+            ])
+        }
+        "KC" => {
+            let p = param_usize(params, "timeperiod", 20);
+            let ap = param_usize(params, "atrperiod", 10);
+            let dev = param_f64(params, "nbdev", 2.0);
+            let r = finkit::indicators::talib_ext::kc(high, low, close, p, ap, dev).unwrap();
+            HashMap::from([
+                ("upperband".to_string(), array_to_vec(r.upperband)),
+                ("middleband".to_string(), array_to_vec(r.middleband)),
+                ("lowerband".to_string(), array_to_vec(r.lowerband)),
+            ])
+        }
+        "KDJ" => {
+            let f = param_usize(params, "fastk_period", 9);
+            let sk = param_usize(params, "slowk_period", 3);
+            let sm = param_usize(params, "slowk_matype", 13);
+            let sd = param_usize(params, "slowd_period", 3);
+            let dm = param_usize(params, "slowd_matype", 13);
+            let r =
+                finkit::indicators::talib_ext::kdj(high, low, close, f, sk, sm, sd, dm).unwrap();
+            HashMap::from([
+                ("k".to_string(), array_to_vec(r.k)),
+                ("d".to_string(), array_to_vec(r.d)),
+                ("j".to_string(), array_to_vec(r.j)),
+            ])
+        }
+        "MARKETFI" => HashMap::from([(
+            "real".to_string(),
+            array_to_vec(finkit::indicators::talib_ext::marketfi(high, low, volume).unwrap()),
+        )]),
+        "MASSI" => {
+            let f = param_usize(params, "fastperiod", 9);
+            let s = param_usize(params, "slowperiod", 25);
+            HashMap::from([(
+                "real".to_string(),
+                array_to_vec(finkit::indicators::talib_ext::massi(high, low, f, s).unwrap()),
+            )])
+        }
+        "PERCENTILE" => {
+            let p = param_usize(params, "timeperiod", 30);
+            let pct = param_f64(params, "percentile", 50.0);
+            HashMap::from([(
+                "real".to_string(),
+                array_to_vec(finkit::indicators::talib_ext::percentile(close, p, pct).unwrap()),
+            )])
+        }
+        "PVO" => {
+            let f = param_usize(params, "fastperiod", 12);
+            let s = param_usize(params, "slowperiod", 26);
+            let mt = param_usize(params, "matype", 1);
+            HashMap::from([(
+                "real".to_string(),
+                array_to_vec(finkit::indicators::talib_ext::pvo(volume, f, s, mt).unwrap()),
+            )])
+        }
+        "QSTICK" => {
+            let p = param_usize(params, "timeperiod", 10);
+            HashMap::from([(
+                "real".to_string(),
+                array_to_vec(finkit::indicators::talib_ext::qstick(open, close, p).unwrap()),
+            )])
+        }
+        "RMA" => {
+            let p = param_usize(params, "timeperiod", 30);
+            HashMap::from([(
+                "real".to_string(),
+                array_to_vec(finkit::indicators::talib_ext::rma_profile(close, p).unwrap()),
+            )])
+        }
+        "RVI" => {
+            let p = param_usize(params, "timeperiod", 14);
+            let sp = param_usize(params, "stddevperiod", 10);
+            HashMap::from([(
+                "real".to_string(),
+                array_to_vec(finkit::indicators::talib_ext::rvi_profile(close, p, sp).unwrap()),
+            )])
+        }
+        "RVOL" => {
+            let p = param_usize(params, "timeperiod", 20);
+            HashMap::from([(
+                "real".to_string(),
+                array_to_vec(finkit::indicators::talib_ext::rvol(volume, p).unwrap()),
+            )])
+        }
+        "SMI" => {
+            let p = param_usize(params, "timeperiod", 13);
+            let f = param_usize(params, "fastperiod", 2);
+            let s = param_usize(params, "slowperiod", 25);
+            let sp = param_usize(params, "signalperiod", 9);
+            let r = finkit::indicators::talib_ext::smi(high, low, close, p, f, s, sp).unwrap();
+            HashMap::from([
+                ("smi".to_string(), array_to_vec(r.smi)),
+                ("smisignal".to_string(), array_to_vec(r.smisignal)),
+            ])
+        }
+        "VHF" => {
+            let p = param_usize(params, "timeperiod", 28);
+            HashMap::from([(
+                "real".to_string(),
+                array_to_vec(finkit::indicators::talib_ext::vhf(close, p).unwrap()),
+            )])
+        }
+        "WAD" => HashMap::from([(
+            "real".to_string(),
+            array_to_vec(finkit::indicators::talib_ext::wad(high, low, close).unwrap()),
+        )]),
         "CMF" => {
             let period = param_usize(params, "timeperiod", 20);
             HashMap::from([(

@@ -193,7 +193,7 @@ semantic_profile + operation/formula id + parameter hash
 
 ### 5.4 公式与 TA-Lib profile
 
-TA-Lib profile 使用显式版本化名称（当前代码 profile 仍为 `talib_0_7_1`，对应已发布的 TA-Lib C core 0.7.1），不把 Core warm-up 语义伪装成 TA-Lib 语义。当前 numeric corpus 的 metadata 使用 TA-Lib Python 0.8.0，已完成 180/201 的 dispatcher、catalog 与 numeric golden 对照，不能称为 Python 0.8.0 全目录兼容。每个公开 TA-Lib operation 仍必须有参数默认值、MA type、输出名、warm-up、NaN 和参考结果说明。当前 catalog 已补齐已登记 profile-only 条目的可执行参数元数据，APO、BBANDS、MAVP、MACDEXT、PPO、STOCH、STOCHF、STOCHRSI 的 `matype` 已由共享 dispatcher 实际消费；剩余 21 个 0.8.0 函数尚未进入 production profile，详见 [TA-Lib 0.8.0 覆盖审计](talib-0.8.0-coverage-audit-2026-09-19.md)。
+TA-Lib profile 使用显式版本化名称 `talib_0_8_0`，对应 Python 0.8.0 wheel 内置的 TA-Lib C core 0.8.1，不把 Core warm-up 语义伪装成 TA-Lib 语义。当前 numeric corpus 已完成 201/201 的 dispatcher、catalog 与 numeric golden 对照；每个公开 operation 均固定参数默认值、MA type、输出名、warm-up、NaN 和参考结果。ADR、KDJ、QSTICK、RVI 等同名冲突通过独立 profile adapter 隔离。
 
 版本依据：TA-Lib C core `0.7.1` 的官方 release 记录为 2026-07-03，Python 包 `0.8.0` 在 PyPI 的 release 记录为 2026-09-13；本仓库的 profile 和 golden reference 分别对应这两个版本。[TA-Lib core releases](https://github.com/TA-Lib/ta-lib/releases) · [TA-Lib Python 0.8.0](https://pypi.org/project/TA-Lib/0.8.0/)
 

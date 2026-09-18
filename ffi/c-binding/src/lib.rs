@@ -759,7 +759,7 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
-            .any(|profile| profile == "talib_0_7_1"));
+            .any(|profile| profile == "talib_0_8_0"));
         assert_eq!(stoch["params"].as_array().unwrap().len(), 5);
         assert_eq!(stoch["params"][2]["name"], "slowk_matype");
         let bbands = find("BBANDS");

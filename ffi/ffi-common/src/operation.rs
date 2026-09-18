@@ -262,6 +262,80 @@ fn period_parameter(default: &'static str) -> OperationParameter {
 fn talib_profile_params(name: &str) -> Vec<OperationParameter> {
     let period = || period_parameter("14");
     match name {
+        "AC" => vec![
+            talib_parameter("fastperiod", "integer", Some("5"), Some("integer >= 2")),
+            talib_parameter("slowperiod", "integer", Some("34"), Some("integer >= 2")),
+            talib_parameter("signalperiod", "integer", Some("5"), Some("integer >= 2")),
+        ],
+        "ADR" => vec![period_parameter("14")],
+        "CMOU" => vec![period_parameter("14")],
+        "CVI" => vec![
+            period_parameter("10"),
+            talib_parameter("rocperiod", "integer", Some("10"), Some("integer >= 1")),
+        ],
+        "EFI" => vec![period_parameter("13")],
+        "ERI" => vec![period_parameter("13")],
+        "FOSC" => vec![period_parameter("5")],
+        "FRACTAL" => vec![
+            talib_parameter("leftbars", "integer", Some("2"), Some("integer >= 1")),
+            talib_parameter("rightbars", "integer", Some("2"), Some("integer >= 1")),
+        ],
+        "KC" => vec![
+            talib_parameter("timeperiod", "integer", Some("20"), Some("integer >= 2")),
+            talib_parameter("atrperiod", "integer", Some("10"), Some("integer >= 1")),
+            talib_parameter("nbdev", "number", Some("2.0"), Some("finite number")),
+        ],
+        "KDJ" => vec![
+            talib_parameter("fastk_period", "integer", Some("9"), Some("integer >= 1")),
+            talib_parameter("slowk_period", "integer", Some("3"), Some("integer >= 1")),
+            talib_parameter(
+                "slowk_matype",
+                "integer",
+                Some("13"),
+                Some("TA-Lib MA type"),
+            ),
+            talib_parameter("slowd_period", "integer", Some("3"), Some("integer >= 1")),
+            talib_parameter(
+                "slowd_matype",
+                "integer",
+                Some("13"),
+                Some("TA-Lib MA type"),
+            ),
+        ],
+        "MARKETFI" => vec![],
+        "MASSI" => vec![
+            talib_parameter("fastperiod", "integer", Some("9"), Some("integer >= 1")),
+            talib_parameter("slowperiod", "integer", Some("25"), Some("integer >= 1")),
+        ],
+        "PERCENTILE" => vec![
+            talib_parameter("timeperiod", "integer", Some("30"), Some("integer >= 1")),
+            talib_parameter(
+                "percentile",
+                "number",
+                Some("50.0"),
+                Some("0 <= value <= 100"),
+            ),
+        ],
+        "PVO" => vec![
+            talib_parameter("fastperiod", "integer", Some("12"), Some("integer >= 1")),
+            talib_parameter("slowperiod", "integer", Some("26"), Some("integer >= 1")),
+            talib_parameter("matype", "integer", Some("1"), Some("TA-Lib MA type")),
+        ],
+        "QSTICK" => vec![period_parameter("10")],
+        "RMA" => vec![period_parameter("30")],
+        "RVI" => vec![
+            period_parameter("14"),
+            talib_parameter("stddevperiod", "integer", Some("10"), Some("integer >= 2")),
+        ],
+        "RVOL" => vec![period_parameter("20")],
+        "SMI" => vec![
+            talib_parameter("timeperiod", "integer", Some("13"), Some("integer >= 2")),
+            talib_parameter("fastperiod", "integer", Some("2"), Some("integer >= 2")),
+            talib_parameter("slowperiod", "integer", Some("25"), Some("integer >= 2")),
+            talib_parameter("signalperiod", "integer", Some("9"), Some("integer >= 2")),
+        ],
+        "VHF" => vec![period_parameter("28")],
+        "WAD" => vec![],
         "AO" => vec![
             talib_parameter("fastperiod", "integer", Some("5"), Some("integer >= 1")),
             talib_parameter("slowperiod", "integer", Some("34"), Some("integer >= 1")),
@@ -440,7 +514,7 @@ mod tests {
         assert!(json.contains("\"operation_id\":"));
         assert!(json.contains("\"multi_symbol\":false"));
         assert!(json.contains("\"value_shape\":\"series\""));
-        assert!(json.contains("\"semantic_profiles\":[\"core_registry\",\"talib_0_7_1\"]"));
+        assert!(json.contains("\"semantic_profiles\":[\"core_registry\",\"talib_0_8_0\"]"));
     }
 
     #[test]
@@ -566,7 +640,7 @@ mod tests {
             assert!(operation
                 .semantic_profiles
                 .iter()
-                .any(|profile| profile == "talib_0_7_1"));
+                .any(|profile| profile == "talib_0_8_0"));
         }
     }
 
@@ -583,10 +657,10 @@ mod tests {
             if registry.get(name).is_some() {
                 assert_eq!(
                     operation.semantic_profiles,
-                    vec!["core_registry", "talib_0_7_1"]
+                    vec!["core_registry", "talib_0_8_0"]
                 );
             } else {
-                assert_eq!(operation.semantic_profiles, vec!["talib_0_7_1"]);
+                assert_eq!(operation.semantic_profiles, vec!["talib_0_8_0"]);
             }
             assert!(talib_profile_supported(name));
         }
