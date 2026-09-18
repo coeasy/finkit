@@ -1,5 +1,6 @@
 //! Shared JSON contract for bounded Factor streaming and checkpoints.
 
+use crate::stream_contract::{annotate_checkpoint, validate_checkpoint_metadata};
 use finkit::factor_system::{FactorCatalog, FactorStreamCheckpoint, StatefulFactorCheckpoint};
 use finkit::factors::{builtin_factor_registry, FactorEngine};
 use serde::Deserialize;
@@ -17,6 +18,10 @@ struct FactorStreamRequest {
     targets: Vec<String>,
     /// New rows to append. Every series must have the same length.
     inputs: BTreeMap<String, Vec<f64>>,
+    #[serde(default)]
+    scope: String,
+    #[serde(default)]
+    data_revision: u64,
     #[serde(default)]
     checkpoint: Option<Value>,
 }
@@ -83,6 +88,9 @@ pub fn evaluate_factor_stream_json(request: &str) -> Result<String, String> {
         .as_deref()
         .unwrap_or("bounded")
         .to_ascii_lowercase();
+    if let Some(checkpoint) = request.checkpoint.as_ref() {
+        validate_checkpoint_metadata(checkpoint, &request.scope, request.data_revision)?;
+    }
     if mode == "stateful" {
         let mut stream = plan.stateful_stream().map_err(|error| error.to_string())?;
         if let Some(checkpoint) = request.checkpoint {
@@ -104,11 +112,15 @@ pub fn evaluate_factor_stream_json(request: &str) -> Result<String, String> {
                 .map_err(|error| error.to_string())?,
         )
         .map_err(|error| error.to_string())?;
+        let checkpoint_json =
+            annotate_checkpoint(checkpoint_json, &request.scope, request.data_revision)?;
         return serde_json::to_string(&json!({
             "schema_version": FACTOR_STREAM_CONTRACT_SCHEMA_VERSION,
             "shape": if request.targets.len() > 1 { "multi_series" } else { "series" },
             "primary": (request.targets.len() == 1).then(|| request.targets[0].clone()),
             "targets": request.targets,
+            "scope": request.scope,
+            "data_revision": request.data_revision,
             "semantic_identity": plan.semantic_identity(),
             "range_lookback": Value::Null,
             "execution": {
@@ -154,17 +166,23 @@ pub fn evaluate_factor_stream_json(request: &str) -> Result<String, String> {
         .map_err(|error| error.to_string())?;
 
     let checkpoint = stream.checkpoint();
-    let checkpoint_json = json!({
-        "semantic_identity": checkpoint.semantic_identity(),
-        "row_count": checkpoint.rows(),
-        "inputs": checkpoint.inputs(),
-        "outputs": nullable_map(checkpoint.outputs()),
-    });
+    let checkpoint_json = annotate_checkpoint(
+        json!({
+            "semantic_identity": checkpoint.semantic_identity(),
+            "row_count": checkpoint.rows(),
+            "inputs": checkpoint.inputs(),
+            "outputs": nullable_map(checkpoint.outputs()),
+        }),
+        &request.scope,
+        request.data_revision,
+    )?;
     serde_json::to_string(&json!({
         "schema_version": FACTOR_STREAM_CONTRACT_SCHEMA_VERSION,
         "shape": if request.targets.len() > 1 { "multi_series" } else { "series" },
         "primary": (request.targets.len() == 1).then(|| request.targets[0].clone()),
         "targets": request.targets,
+        "scope": request.scope,
+        "data_revision": request.data_revision,
         "semantic_identity": plan.semantic_identity(),
         "range_lookback": plan.range_lookback(),
         "execution": {
@@ -239,6 +257,8 @@ mod tests {
         assert_eq!(first_payload["schema_version"], 1);
         assert_eq!(first_payload["execution"]["mode"], "streaming");
         assert_eq!(first_payload["execution"]["total_rows"], 6);
+        assert_eq!(first_payload["checkpoint"]["scope"], "");
+        assert_eq!(first_payload["checkpoint"]["data_revision"], 0);
         assert_eq!(
             first_payload["values"]["momentum_5"]
                 .as_array()
@@ -259,6 +279,43 @@ mod tests {
         assert_eq!(second_payload["execution"]["total_rows"], 8);
         assert!(second_payload["values"]["momentum_5"][0].is_number());
         assert_eq!(second_payload["checkpoint"]["row_count"], 8);
+    }
+
+    #[test]
+    fn stream_contract_rejects_checkpoint_scope_mismatch() {
+        let first = serde_json::json!({
+            "schema_version": 1,
+            "targets": ["momentum_5"],
+            "scope": "AAA@1d",
+            "data_revision": 3,
+            "inputs": {"close": [10.0,11.0,12.0,15.0,14.0,16.0]}
+        });
+        let first: Value =
+            serde_json::from_str(&evaluate_factor_stream_json(&first.to_string()).unwrap())
+                .unwrap();
+        let second = serde_json::json!({
+            "schema_version": 1,
+            "targets": ["momentum_5"],
+            "scope": "BBB@1d",
+            "data_revision": 3,
+            "inputs": {"close": [17.0]},
+            "checkpoint": first["checkpoint"].clone()
+        });
+        assert!(evaluate_factor_stream_json(&second.to_string())
+            .unwrap_err()
+            .contains("scope mismatch"));
+
+        let second = serde_json::json!({
+            "schema_version": 1,
+            "targets": ["momentum_5"],
+            "scope": "AAA@1d",
+            "data_revision": 4,
+            "inputs": {"close": [17.0]},
+            "checkpoint": first["checkpoint"].clone()
+        });
+        assert!(evaluate_factor_stream_json(&second.to_string())
+            .unwrap_err()
+            .contains("data_revision mismatch"));
     }
 
     #[test]

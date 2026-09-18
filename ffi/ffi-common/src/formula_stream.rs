@@ -1,5 +1,6 @@
 //! Shared JSON contract for stateful Formula streaming.
 
+use crate::stream_contract::{annotate_checkpoint, validate_checkpoint_metadata};
 use finkit::formula::{FormulaDialect, FormulaStatefulCheckpoint, FormulaStatefulStream};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -14,7 +15,13 @@ struct FormulaStreamRequest {
     source: String,
     dialect: String,
     inputs: BTreeMap<String, Vec<f64>>,
+    #[serde(default)]
+    scope: String,
+    #[serde(default)]
+    data_revision: u64,
+    #[serde(default)]
     mode: Option<String>,
+    #[serde(default)]
     checkpoint: Option<Value>,
 }
 
@@ -40,6 +47,14 @@ pub fn evaluate_formula_stream_json(request: &str) -> Result<String, String> {
     if request.inputs.is_empty() {
         return Err("formula stream inputs must not be empty".to_string());
     }
+    if let Some(checkpoint) = request.checkpoint.as_ref() {
+        let checkpoint_value = match checkpoint {
+            Value::String(checkpoint) => serde_json::from_str(checkpoint)
+                .map_err(|error| format!("invalid formula stream checkpoint: {error}"))?,
+            checkpoint => checkpoint.clone(),
+        };
+        validate_checkpoint_metadata(&checkpoint_value, &request.scope, request.data_revision)?;
+    }
     let dialect = FormulaDialect::from_str(&request.dialect)
         .ok_or_else(|| format!("unsupported formula dialect: {}", request.dialect))?;
     let mut stream = FormulaStatefulStream::from_source(&request.source, dialect)
@@ -64,6 +79,7 @@ pub fn evaluate_formula_stream_json(request: &str) -> Result<String, String> {
         .map_err(|error| error.to_string())?;
     let checkpoint: Value =
         serde_json::from_str(&checkpoint_json).map_err(|error| error.to_string())?;
+    let checkpoint = annotate_checkpoint(checkpoint, &request.scope, request.data_revision)?;
     let nullable = values
         .into_iter()
         .map(|value| {
@@ -78,6 +94,8 @@ pub fn evaluate_formula_stream_json(request: &str) -> Result<String, String> {
         "schema_version": FORMULA_STREAM_CONTRACT_SCHEMA_VERSION,
         "dialect": dialect.as_str(),
         "primary": "__PRIMARY__",
+        "scope": request.scope,
+        "data_revision": request.data_revision,
         "values": {"__PRIMARY__": nullable},
         "checkpoint": checkpoint,
         "execution": {
@@ -111,6 +129,10 @@ mod tests {
             serde_json::json!([null, null, 11.0, 13.0])
         );
         assert_eq!(first["execution"]["mode"], "stateful_streaming");
+        assert_eq!(first["scope"], "");
+        assert_eq!(first["data_revision"], 0);
+        assert_eq!(first["checkpoint"]["scope"], "");
+        assert_eq!(first["checkpoint"]["data_revision"], 0);
 
         let second = serde_json::json!({
             "schema_version": 1,
@@ -126,6 +148,46 @@ mod tests {
             second["values"]["__PRIMARY__"],
             serde_json::json!([13.5, 14.75])
         );
+    }
+
+    #[test]
+    fn stateful_formula_stream_rejects_checkpoint_scope_mismatch() {
+        let first = serde_json::json!({
+            "schema_version": 1,
+            "source": "EMA(CLOSE, 3)",
+            "dialect": "tdx",
+            "scope": "AAA@1d",
+            "data_revision": 3,
+            "inputs": {"close": [10.0, 11.0, 12.0, 15.0]}
+        });
+        let first: Value =
+            serde_json::from_str(&evaluate_formula_stream_json(&first.to_string()).unwrap())
+                .unwrap();
+        let second = serde_json::json!({
+            "schema_version": 1,
+            "source": "EMA(CLOSE, 3)",
+            "dialect": "tdx",
+            "scope": "BBB@1d",
+            "data_revision": 3,
+            "inputs": {"close": [16.0]},
+            "checkpoint": first["checkpoint"].clone()
+        });
+        assert!(evaluate_formula_stream_json(&second.to_string())
+            .unwrap_err()
+            .contains("scope mismatch"));
+
+        let second = serde_json::json!({
+            "schema_version": 1,
+            "source": "EMA(CLOSE, 3)",
+            "dialect": "tdx",
+            "scope": "AAA@1d",
+            "data_revision": 4,
+            "inputs": {"close": [16.0]},
+            "checkpoint": first["checkpoint"].clone()
+        });
+        assert!(evaluate_formula_stream_json(&second.to_string())
+            .unwrap_err()
+            .contains("data_revision mismatch"));
     }
 
     #[test]

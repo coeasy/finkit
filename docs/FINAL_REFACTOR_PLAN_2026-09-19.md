@@ -81,6 +81,8 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
 - Composite：表达式图、依赖拓扑、cycle 检查、有限窗口证明、嵌套 stateful 节点。
 - 两者均支持 `scope=symbol/timeframe/panel` 与 `data_revision`，不把跨截面计算伪装成时间序列计算。
 - checkpoint 必须可序列化、带 plan signature 和 semantic profile，恢复时校验版本与输入槽位。
+- streaming checkpoint 还必须带 `scope` 与 `data_revision`；Factor、Composite、Formula
+  三类入口在恢复前统一拒绝 scope 或数据版本不匹配，避免跨标的、跨周期或跨数据快照串状态。
 
 ## 4. TA-Lib 0.8.0 当前收敛状态
 
@@ -92,7 +94,8 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
 - 审计差集：0；
 - 21 个新增函数的独立 adapter、参数目录、输出字段和 warm-up：已接入；
 - Core golden suite：已通过；
-- `finkit-ffi-common`：已通过 70 个测试，包含全目录 dispatcher smoke。
+- `finkit-ffi-common`：已通过 76 个测试，包含全目录 dispatcher smoke 和三类
+  streaming checkpoint provenance 校验。
 
 这只证明当前 workspace 和参考环境的目录/数值对照，不等于所有操作系统、编译器、CPU、Node 宿主和发布包均已完成验证；发布前仍需运行完整 binding/ABI 矩阵。
 
@@ -131,6 +134,9 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
 - Factor/Composite 的跨语言批处理 JSON contract 已补充显式 `scope` 与
   `data_revision`，完整执行路径现在通过 `UnifiedOperationEngine`；range/stream
   仍明确走各自的增量/checkpoint 专用执行器，不把不同能力误报为同一模式。
+- Factor、Composite、Formula 的 stream contract 现在统一写入 checkpoint 的
+  `scope`/`data_revision`，恢复前同时拒绝 scope mismatch 和 data revision mismatch；
+  本轮 `finkit-ffi-common` 76 个测试全部通过。
 - 横截面 Factor 批处理入口也已接入统一 dispatcher，并保留时间戳/标的轴与
   row-major null 语义；本轮 `finkit-ffi-common` 测试为 73 个通过。
 - 基础 Formula JSON 入口也已改走 `UnifiedOperationEngine::Formula`，因此普通

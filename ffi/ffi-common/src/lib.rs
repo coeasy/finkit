@@ -28,6 +28,7 @@ pub mod operation;
 pub mod panic;
 pub mod registry;
 pub mod research;
+mod stream_contract;
 pub mod talib_catalog;
 pub mod types;
 
