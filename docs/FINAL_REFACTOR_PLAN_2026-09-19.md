@@ -116,9 +116,23 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
 - 只通过某一 binding 的“八语言一致”；
 - 没有真实 Node 宿主加载或平台矩阵的“Node 全平台生产化”。
 
+### 本轮实际落地
+
+- `finkit-visualization::ChartRenderer::render_html` 已接入版本化
+  `LightweightChartsPayload` 和仓库内的 Lightweight Charts adapter，不再返回
+  “HTML rendering is not yet implemented”。
+- SMA/MA、EMA、BOLL、MACD、RSI、KDJ 和 SAR 的可见指标描述会在 payload 层调用
+  Core 的同一套计算函数；非有限 warm-up 值统一输出为 `null`。
+- HTML 页面使用固定的 Lightweight Charts 5.0.0 CDN 入口，adapter 仍支持当前和
+  旧版 `addSeries` 形态；这验证了页面契约生成，不等于已经完成所有浏览器、网络
+  策略和发布平台矩阵验证。
+- 已验证：`finkit-visualization` 默认特性 406 个测试、`html` 特性 426 个测试，
+  集成测试分别 26/27 个通过；前端 adapter Node 测试 2 个通过。
+
 ## 6. 后续实施顺序
 
-1. 完成当前改动的 fmt、workspace、ABI 和 binding 回归并提交。
+1. 完成当前改动的 fmt、workspace、ABI 和 binding 回归并提交；Lightweight HTML
+   页面生成已纳入 visualization 回归，但真实浏览器宿主仍需单独纳入 CI。
 2. 将 TA-Lib profile 参数/输出 metadata 从手写 match 逐步生成化，但保留 profile adapter 的显式语义代码。
 3. 为八语言补齐同一份 201 函数 typed-buffer/JSON conformance vector，尤其覆盖新增 21 个函数的多输出和 warm-up。
 4. 将 Formula dialect registry、TA-Lib catalog、Factor catalog 和 Draw schema 统一纳入版本发布清单。

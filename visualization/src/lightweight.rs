@@ -5,10 +5,13 @@
 //! Lightweight Charts instance. Existing SVG/Canvas/PNG renderers remain
 //! available for native and headless output.
 
+use crate::config::{IndicatorConfig, IndicatorType};
 use crate::data::KlineData;
 use crate::error::{Result, VisualizationError};
 use crate::scene::{ChartScene, HitTarget, PanelId};
 use crate::viewport::Viewport;
+use finkit::indicators;
+use finkit::math::moving_avg;
 use serde::{Deserialize, Serialize};
 
 /// Time value accepted by Lightweight Charts.
@@ -284,6 +287,114 @@ impl LightweightChartsPayload {
             })
             .collect();
         self.lines.push(LightweightLine { name, data });
+        Ok(())
+    }
+
+    /// Add the built-in visualization indicators using the same core
+    /// calculation functions as the native renderers.
+    ///
+    /// Keeping this mapping next to the versioned payload prevents the HTML
+    /// and native adapters from drifting into different indicator semantics.
+    pub fn add_indicator_lines(
+        &mut self,
+        data: &KlineData,
+        configs: &[IndicatorConfig],
+    ) -> Result<()> {
+        for config in configs.iter().filter(|config| config.visible) {
+            match &config.indicator_type {
+                IndicatorType::MA | IndicatorType::SMA => {
+                    for period in config.params.iter().copied() {
+                        let period = period.max(0.0) as usize;
+                        if let Ok(values) = moving_avg::sma(data.closes(), period) {
+                            self.add_line(
+                                format!("{}{}", config.name, period.max(1)),
+                                values.as_slice().unwrap_or(&[]),
+                            )?;
+                        }
+                    }
+                }
+                IndicatorType::EMA => {
+                    for period in config.params.iter().copied() {
+                        let period = period.max(0.0) as usize;
+                        if let Ok(values) = moving_avg::ema(data.closes(), period) {
+                            self.add_line(
+                                format!("{}{}", config.name, period.max(1)),
+                                values.as_slice().unwrap_or(&[]),
+                            )?;
+                        }
+                    }
+                }
+                IndicatorType::BOLL => {
+                    let period = config.params.first().copied().unwrap_or(20.0).max(0.0) as usize;
+                    let deviation = config.params.get(1).copied().unwrap_or(2.0);
+                    if let Ok(values) =
+                        indicators::bbands(data.closes(), period, deviation, deviation)
+                    {
+                        self.add_line("BOLL.UPPER", values.upper.as_slice().unwrap_or(&[]))?;
+                        self.add_line("BOLL.MIDDLE", values.middle.as_slice().unwrap_or(&[]))?;
+                        self.add_line("BOLL.LOWER", values.lower.as_slice().unwrap_or(&[]))?;
+                    }
+                }
+                IndicatorType::MACD => {
+                    let fast = config.params.first().copied().unwrap_or(12.0).max(0.0) as usize;
+                    let slow = config.params.get(1).copied().unwrap_or(26.0).max(0.0) as usize;
+                    let signal = config.params.get(2).copied().unwrap_or(9.0).max(0.0) as usize;
+                    if let Ok(values) = indicators::macd(data.closes(), fast, slow, signal) {
+                        self.add_line("MACD.DIF", values.macd.as_slice().unwrap_or(&[]))?;
+                        self.add_line("MACD.DEA", values.signal.as_slice().unwrap_or(&[]))?;
+                        self.add_line("MACD.HIST", values.hist.as_slice().unwrap_or(&[]))?;
+                    }
+                }
+                IndicatorType::RSI => {
+                    let period = config.params.first().copied().unwrap_or(14.0).max(0.0) as usize;
+                    if let Ok(values) = indicators::rsi(data.closes(), period) {
+                        self.add_line("RSI", values.as_slice().unwrap_or(&[]))?;
+                    }
+                }
+                IndicatorType::KDJ => {
+                    let fast = config.params.first().copied().unwrap_or(9.0).max(0.0) as usize;
+                    let slow = config.params.get(1).copied().unwrap_or(3.0).max(0.0) as usize;
+                    let signal = config.params.get(2).copied().unwrap_or(3.0).max(0.0) as usize;
+                    if let Ok(values) = indicators::stoch(
+                        data.highs(),
+                        data.lows(),
+                        data.closes(),
+                        fast,
+                        slow,
+                        signal,
+                    ) {
+                        let k = values.k.to_vec();
+                        let d = values.d.to_vec();
+                        let j = k
+                            .iter()
+                            .zip(d.iter())
+                            .map(|(k, d)| {
+                                if k.is_finite() && d.is_finite() {
+                                    3.0 * k - 2.0 * d
+                                } else {
+                                    f64::NAN
+                                }
+                            })
+                            .collect::<Vec<_>>();
+                        self.add_line("KDJ.K", &k)?;
+                        self.add_line("KDJ.D", &d)?;
+                        self.add_line("KDJ.J", &j)?;
+                    }
+                }
+                IndicatorType::Custom(name) if name.eq_ignore_ascii_case("sar") => {
+                    let acceleration = config.params.first().copied().unwrap_or(0.02);
+                    let maximum = config.params.get(1).copied().unwrap_or(0.2);
+                    if let Ok(values) =
+                        indicators::sar(data.highs(), data.lows(), acceleration, maximum)
+                    {
+                        self.add_line("SAR", values.sar.as_slice().unwrap_or(&[]))?;
+                    }
+                }
+                // Custom runtime series require a value provider and are not
+                // silently invented by this descriptor-only API.
+                IndicatorType::Custom(_) => {}
+            }
+        }
         Ok(())
     }
 
