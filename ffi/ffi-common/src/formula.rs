@@ -569,7 +569,7 @@ pub fn evaluate_formula_cross_sectional_json(request: &str) -> Result<String, St
     }
 
     let symbols_per_row = request.symbols.len();
-    let mut engine = FormulaEngine::new();
+    let mut unified = UnifiedOperationEngine::new(FactorRegistry::new());
     let mut output_values: BTreeMap<String, Vec<f64>> = BTreeMap::new();
     let mut draw_rows = Vec::with_capacity(request.timestamps.len());
     for (row, timestamp) in request.timestamps.iter().copied().enumerate() {
@@ -611,10 +611,26 @@ pub fn evaluate_formula_cross_sectional_json(request: &str) -> Result<String, St
             );
         }
 
-        let result = engine
-            .eval_multi_with_dialect(&request.source, dialect, &mut context)
+        let result = unified
+            .execute(OperationRequest::Formula {
+                source: &request.source,
+                dialect,
+                context: &mut context,
+            })
             .map_err(|error| format!("formula cross-sectional row {timestamp}: {error}"))?;
-        for (name, value) in result.outputs {
+        let primary =
+            result.values.get("__PRIMARY__").cloned().ok_or_else(|| {
+                format!("formula primary output missing at timestamp {timestamp}")
+            })?;
+        if primary.len() != symbols_per_row {
+            return Err(format!(
+                "formula primary output length mismatch at timestamp {timestamp}"
+            ));
+        }
+        for (name, value) in result.values {
+            if name == "__PRIMARY__" {
+                continue;
+            }
             if value.len() != symbols_per_row {
                 return Err(format!(
                     "formula output {name} length mismatch at timestamp {timestamp}"
@@ -625,16 +641,11 @@ pub fn evaluate_formula_cross_sectional_json(request: &str) -> Result<String, St
                 .or_default()
                 .extend(value.iter().copied());
         }
-        if result.final_value.len() != symbols_per_row {
-            return Err(format!(
-                "formula primary output length mismatch at timestamp {timestamp}"
-            ));
-        }
         output_values
             .entry("__PRIMARY__".to_string())
             .or_default()
-            .extend(result.final_value.iter().copied());
-        let draw = context.draw_commands.borrow();
+            .extend(primary.iter().copied());
+        let draw = result.draw.unwrap_or_default();
         draw_rows.push(json!({
             "timestamp": timestamp,
             "commands": draw_commands_json(&draw),
