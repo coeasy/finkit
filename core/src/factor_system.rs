@@ -11,7 +11,7 @@ use crate::factors::{
     FactorRegistry, FactorResult,
 };
 use crate::unified_runtime::{DirtyRange, RuntimeExecution, RuntimeExecutionTrace, UnifiedRuntime};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 /// Stable metadata attached to a registered factor independently of its
 /// computation closure.
@@ -260,6 +260,7 @@ fn builtin_factor_metadata(name: &str) -> Option<FactorMetadata> {
         return Some(FactorMetadata {
             version: "1".to_string(),
             description: format!("Arithmetic return over {period} bars"),
+            streaming: true,
             incremental: true,
             fixed_lookback: Some(period),
             ..FactorMetadata::default()
@@ -269,6 +270,7 @@ fn builtin_factor_metadata(name: &str) -> Option<FactorMetadata> {
         "volatility_20" => Some(FactorMetadata {
             version: "1".to_string(),
             description: "Rolling population volatility of one-bar returns".to_string(),
+            streaming: true,
             incremental: true,
             fixed_lookback: Some(20),
             ..FactorMetadata::default()
@@ -276,6 +278,7 @@ fn builtin_factor_metadata(name: &str) -> Option<FactorMetadata> {
         "reversal_5" => Some(FactorMetadata {
             version: "1".to_string(),
             description: "Sign-inverted five-bar arithmetic return".to_string(),
+            streaming: true,
             incremental: true,
             fixed_lookback: Some(0),
             ..FactorMetadata::default()
@@ -424,6 +427,15 @@ impl CompiledFactorPlan {
             inputs: BTreeMap::new(),
             output: BTreeMap::new(),
         })
+    }
+
+    /// Create an O(1)-per-row stateful stream for supported built-in factors.
+    ///
+    /// Custom closure factors are rejected because their state cannot be
+    /// inferred or serialized safely from the legacy batch callback. They must
+    /// register an explicit state kernel before using this path.
+    pub fn stateful_stream(&self) -> FactorResult<StatefulFactorStream> {
+        StatefulFactorStream::from_plan(self)
     }
 }
 
@@ -771,6 +783,330 @@ impl FactorStream {
     }
 }
 
+/// O(1)-per-row stateful executor for the portable built-in Factor DAG.
+#[derive(Clone)]
+pub struct StatefulFactorStream {
+    semantic_identity: Vec<String>,
+    targets: Vec<(String, usize)>,
+    nodes: Vec<StatefulFactorNode>,
+    values: Vec<f64>,
+    output_scratch: Vec<f64>,
+    row_count: usize,
+}
+
+/// Persistable state image for [`StatefulFactorStream`].
+#[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct StatefulFactorCheckpoint {
+    semantic_identity: Vec<String>,
+    row_count: usize,
+    nodes: Vec<StatefulFactorNode>,
+}
+
+impl StatefulFactorCheckpoint {
+    /// Stable factor identities associated with this state image.
+    #[must_use]
+    pub fn semantic_identity(&self) -> &[String] {
+        &self.semantic_identity
+    }
+
+    /// Number of rows already consumed by the state image.
+    #[must_use]
+    pub const fn rows(&self) -> usize {
+        self.row_count
+    }
+
+    /// Serialize this state image for a language adapter when serde support is
+    /// enabled.
+    #[cfg(feature = "serde")]
+    pub fn to_json(&self) -> Result<String, String> {
+        serde_json::to_string(self).map_err(|error| error.to_string())
+    }
+
+    /// Restore a state image received from a language adapter.
+    #[cfg(feature = "serde")]
+    pub fn from_json(value: &str) -> Result<Self, String> {
+        serde_json::from_str(value).map_err(|error| error.to_string())
+    }
+}
+
+impl StatefulFactorStream {
+    fn from_plan(plan: &CompiledFactorPlan) -> FactorResult<Self> {
+        if plan.required_raw_inputs() != ["close".to_string()] {
+            return Err(FactorError::InvalidParameter(
+                "stateful built-in Factor streaming currently requires the close input only"
+                    .to_string(),
+            ));
+        }
+        let mut nodes = Vec::with_capacity(plan.execution_order().len());
+        let mut indexes = BTreeMap::new();
+        for name in plan.execution_order() {
+            let node = if let Some(period) = name
+                .strip_prefix("momentum_")
+                .and_then(|value| value.parse::<usize>().ok())
+                .filter(|period| *period > 0)
+            {
+                StatefulFactorNode::Momentum(LaggedReturnState::new(period))
+            } else if name == "volatility_20" {
+                StatefulFactorNode::Volatility(VolatilityState::new(20))
+            } else if name == "reversal_5" {
+                let dependency = indexes.get("momentum_5").copied().ok_or_else(|| {
+                    FactorError::InvalidParameter(
+                        "stateful reversal_5 requires momentum_5 in the compiled plan".to_string(),
+                    )
+                })?;
+                StatefulFactorNode::Negate { dependency }
+            } else {
+                return Err(FactorError::InvalidParameter(format!(
+                    "stateful Factor function is unsupported: {name}"
+                )));
+            };
+            indexes.insert(name.clone(), nodes.len());
+            nodes.push(node);
+        }
+        let targets = plan
+            .targets()
+            .iter()
+            .map(|name| {
+                indexes
+                    .get(name)
+                    .copied()
+                    .map(|index| (name.clone(), index))
+                    .ok_or_else(|| FactorError::UnknownFactor(name.clone()))
+            })
+            .collect::<FactorResult<Vec<_>>>()?;
+        Ok(Self {
+            semantic_identity: plan.semantic_identity.clone(),
+            targets,
+            values: vec![f64::NAN; nodes.len()],
+            output_scratch: vec![f64::NAN; plan.targets().len()],
+            nodes,
+            row_count: 0,
+        })
+    }
+
+    /// Stable identities of all stateful factor nodes.
+    #[must_use]
+    pub fn semantic_identity(&self) -> &[String] {
+        &self.semantic_identity
+    }
+
+    /// Requested output names in deterministic order.
+    #[must_use]
+    pub fn targets(&self) -> impl Iterator<Item = &str> {
+        self.targets.iter().map(|(name, _)| name.as_str())
+    }
+
+    /// Number of rows consumed by this executor.
+    #[must_use]
+    pub const fn rows(&self) -> usize {
+        self.row_count
+    }
+
+    /// Advance one row in the plan's raw-input order and write target values.
+    pub fn push_values_into(&mut self, values: &[f64], outputs: &mut [f64]) -> FactorResult<()> {
+        if values.len() != 1 {
+            return Err(FactorError::LengthMismatch {
+                name: "stateful_factor_row".to_string(),
+                expected: 1,
+                actual: values.len(),
+            });
+        }
+        if outputs.len() != self.output_scratch.len() {
+            return Err(FactorError::LengthMismatch {
+                name: "stateful_factor_output".to_string(),
+                expected: self.output_scratch.len(),
+                actual: outputs.len(),
+            });
+        }
+        self.advance(values[0]);
+        outputs.copy_from_slice(&self.output_scratch);
+        Ok(())
+    }
+
+    /// Append a close batch into reusable output vectors.
+    pub fn push_batch_into(
+        &mut self,
+        values: &BTreeMap<String, Vec<f64>>,
+        emitted: &mut BTreeMap<String, Vec<f64>>,
+    ) -> FactorResult<()> {
+        let close = values
+            .get("close")
+            .ok_or_else(|| FactorError::MissingInput("close".to_string()))?;
+        for name in self.targets() {
+            let output = emitted.entry(name.to_string()).or_default();
+            output.clear();
+            output.reserve(close.len());
+        }
+        for value in close {
+            self.advance(*value);
+            for (index, (name, _)) in self.targets.iter().enumerate() {
+                emitted
+                    .get_mut(name)
+                    .expect("stateful factor output initialized")
+                    .push(self.output_scratch[index]);
+            }
+        }
+        Ok(())
+    }
+
+    /// Capture a state-only checkpoint without retaining input history.
+    #[must_use]
+    pub fn checkpoint(&self) -> StatefulFactorCheckpoint {
+        StatefulFactorCheckpoint {
+            semantic_identity: self.semantic_identity.clone(),
+            row_count: self.row_count,
+            nodes: self.nodes.clone(),
+        }
+    }
+
+    /// Restore a checkpoint created by the same compiled Factor plan.
+    pub fn restore(&mut self, checkpoint: &StatefulFactorCheckpoint) -> FactorResult<()> {
+        if checkpoint.semantic_identity != self.semantic_identity {
+            return Err(FactorError::InvalidParameter(
+                "stateful factor checkpoint belongs to a different semantic plan".to_string(),
+            ));
+        }
+        if checkpoint.nodes.len() != self.nodes.len() {
+            return Err(FactorError::InvalidParameter(
+                "stateful factor checkpoint node layout does not match plan".to_string(),
+            ));
+        }
+        self.nodes.clone_from(&checkpoint.nodes);
+        self.values.fill(f64::NAN);
+        self.output_scratch.fill(f64::NAN);
+        self.row_count = checkpoint.row_count;
+        Ok(())
+    }
+
+    fn advance(&mut self, close: f64) {
+        for (index, node) in self.nodes.iter_mut().enumerate() {
+            self.values[index] = node.next(close, &self.values);
+        }
+        for (index, (_, node)) in self.targets.iter().enumerate() {
+            self.output_scratch[index] = self.values[*node];
+        }
+        self.row_count = self.row_count.saturating_add(1);
+    }
+}
+
+#[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+enum StatefulFactorNode {
+    Momentum(LaggedReturnState),
+    Volatility(VolatilityState),
+    Negate { dependency: usize },
+}
+
+impl StatefulFactorNode {
+    fn next(&mut self, close: f64, values: &[f64]) -> f64 {
+        match self {
+            Self::Momentum(state) => state.next(close),
+            Self::Volatility(state) => state.next(close),
+            Self::Negate { dependency } => {
+                let value = values[*dependency];
+                if value.is_finite() {
+                    -value
+                } else {
+                    f64::NAN
+                }
+            }
+        }
+    }
+}
+
+#[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+struct LaggedReturnState {
+    period: usize,
+    values: VecDeque<f64>,
+}
+
+impl LaggedReturnState {
+    fn new(period: usize) -> Self {
+        Self {
+            period,
+            values: VecDeque::with_capacity(period),
+        }
+    }
+
+    fn next(&mut self, value: f64) -> f64 {
+        if !value.is_finite() {
+            self.values.clear();
+            return f64::NAN;
+        }
+        let result = self.values.front().map_or(f64::NAN, |start| {
+            if self.values.len() == self.period {
+                crate::returns::return_between(
+                    *start,
+                    value,
+                    crate::returns::ReturnKind::Arithmetic,
+                )
+            } else {
+                f64::NAN
+            }
+        });
+        self.values.push_back(value);
+        if self.values.len() > self.period {
+            self.values.pop_front();
+        }
+        result
+    }
+}
+
+#[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+struct VolatilityState {
+    period: usize,
+    previous: Option<f64>,
+    returns: VecDeque<f64>,
+    sum: f64,
+    sum_sq: f64,
+}
+
+impl VolatilityState {
+    fn new(period: usize) -> Self {
+        Self {
+            period,
+            previous: None,
+            returns: VecDeque::with_capacity(period),
+            sum: 0.0,
+            sum_sq: 0.0,
+        }
+    }
+
+    fn next(&mut self, value: f64) -> f64 {
+        if !value.is_finite() {
+            self.previous = None;
+            self.returns.clear();
+            self.sum = 0.0;
+            self.sum_sq = 0.0;
+            return f64::NAN;
+        }
+        let Some(previous) = self.previous.replace(value) else {
+            return f64::NAN;
+        };
+        let current =
+            crate::returns::return_between(previous, value, crate::returns::ReturnKind::Arithmetic);
+        self.returns.push_back(current);
+        self.sum += current;
+        self.sum_sq += current * current;
+        if self.returns.len() > self.period {
+            let old = self.returns.pop_front().expect("factor volatility state");
+            self.sum -= old;
+            self.sum_sq -= old * old;
+        }
+        if self.returns.len() == self.period {
+            let mean = self.sum / self.period as f64;
+            ((self.sum_sq - self.sum * mean) / self.period as f64)
+                .max(0.0)
+                .sqrt()
+        } else {
+            f64::NAN
+        }
+    }
+}
+
 fn borrowed_context(
     inputs: &BTreeMap<String, Vec<f64>>,
 ) -> FactorResult<BorrowedFactorContext<'_>> {
@@ -909,7 +1245,7 @@ mod tests {
         let descriptor = catalog.descriptor("volatility_20").unwrap();
         assert!(descriptor.metadata.incremental);
         assert_eq!(descriptor.metadata.fixed_lookback, Some(20));
-        assert!(!descriptor.metadata.streaming);
+        assert!(descriptor.metadata.streaming);
     }
 
     #[test]
@@ -970,6 +1306,39 @@ mod tests {
             (value.is_nan() && expected_value.is_nan()) || (value - expected_value).abs() < 1e-12
         }));
         assert_eq!(stream.rows(), 9);
+    }
+
+    #[test]
+    fn stateful_builtin_factor_stream_matches_batch_and_restores_checkpoint() {
+        let catalog = FactorCatalog::from_registry(crate::factors::builtin_factor_registry());
+        let close: Vec<f64> = (0..120)
+            .map(|index| 100.0 + index as f64 * 0.2 + (index as f64 * 0.09).sin())
+            .collect();
+        for target in ["momentum_5", "volatility_20", "reversal_5"] {
+            let plan = catalog.compile(&[target]).unwrap();
+            let engine = FactorEngine::new(catalog.registry().clone());
+            let context = BorrowedFactorContext::new()
+                .with_series("close", &close)
+                .unwrap();
+            let batch = plan.execute_borrowed(&engine, &context).unwrap();
+            let mut stream = plan.stateful_stream().unwrap();
+            let mut actual = Vec::with_capacity(close.len());
+            let mut output = [f64::NAN];
+            for value in &close {
+                stream.push_values_into(&[*value], &mut output).unwrap();
+                actual.push(output[0]);
+            }
+            assert!(actual.iter().zip(&batch[target]).all(|(left, right)| {
+                (left.is_nan() && right.is_nan()) || (left - right).abs() < 1e-10
+            }));
+
+            let checkpoint = stream.checkpoint();
+            stream.push_values_into(&[close[0]], &mut output).unwrap();
+            stream.restore(&checkpoint).unwrap();
+            let mut restored = [f64::NAN];
+            stream.push_values_into(&[close[0]], &mut restored).unwrap();
+            assert_eq!(output[0], restored[0]);
+        }
     }
 
     #[test]

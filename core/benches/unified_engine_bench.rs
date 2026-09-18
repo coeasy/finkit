@@ -256,11 +256,113 @@ fn bench_bounded_composite_stream(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_stateful_stream(c: &mut Criterion) {
+    let close = close_series();
+    let batch = BTreeMap::from([(String::from("close"), close.clone())]);
+    let catalog = FactorCatalog::from_registry(builtin_factor_registry());
+    let factor_plan = catalog
+        .compile(&["momentum_5"])
+        .expect("compile stateful factor plan");
+    let definitions = [CompositeDefinition::new(
+        "ema",
+        CompositeExpr::call("ema", vec![CompositeExpr::series("close")], vec![20.0]),
+    )];
+    let composite_engine = finkit::composite::CompositeEngine::new();
+    let composite_plan = composite_engine
+        .compile(&definitions, &["ema"])
+        .expect("compile stateful composite plan");
+
+    let mut group = c.benchmark_group("stateful_stream");
+    group.throughput(Throughput::Elements(DATA_LEN as u64));
+    group.bench_function("factor_momentum_5_push_values_into_100k", |b| {
+        b.iter_batched(
+            || {
+                (
+                    factor_plan
+                        .stateful_stream()
+                        .expect("create stateful factor stream"),
+                    [f64::NAN; 1],
+                )
+            },
+            |(mut stream, mut output)| {
+                for value in &close {
+                    stream
+                        .push_values_into(&[*value], &mut output)
+                        .expect("stateful factor row");
+                }
+                black_box(output);
+            },
+            criterion::BatchSize::SmallInput,
+        )
+    });
+    group.bench_function("factor_momentum_5_push_batch_into_100k", |b| {
+        b.iter_batched(
+            || {
+                (
+                    factor_plan
+                        .stateful_stream()
+                        .expect("create stateful factor stream"),
+                    BTreeMap::new(),
+                )
+            },
+            |(mut stream, mut emitted)| {
+                stream
+                    .push_batch_into(&batch, &mut emitted)
+                    .expect("stateful factor batch");
+                black_box(emitted);
+            },
+            criterion::BatchSize::SmallInput,
+        )
+    });
+    group.bench_function("composite_ema_push_values_into_100k", |b| {
+        b.iter_batched(
+            || {
+                (
+                    composite_plan
+                        .stateful_stream()
+                        .expect("create stateful composite stream"),
+                    [f64::NAN; 1],
+                )
+            },
+            |(mut stream, mut output)| {
+                for value in &close {
+                    stream
+                        .push_values_into(&[*value], &mut output)
+                        .expect("stateful composite row");
+                }
+                black_box(output);
+            },
+            criterion::BatchSize::SmallInput,
+        )
+    });
+    group.bench_function("composite_ema_push_batch_into_100k", |b| {
+        b.iter_batched(
+            || {
+                (
+                    composite_plan
+                        .stateful_stream()
+                        .expect("create stateful composite stream"),
+                    BTreeMap::new(),
+                )
+            },
+            |(mut stream, mut emitted)| {
+                stream
+                    .push_batch_into(&batch, &mut emitted)
+                    .expect("stateful composite batch");
+                black_box(emitted);
+            },
+            criterion::BatchSize::SmallInput,
+        )
+    });
+    group.finish();
+}
+
 criterion_group!(
     unified_engine_benches,
     bench_factor_plan_reuse,
     bench_composite_plan_reuse,
     bench_bounded_factor_stream,
-    bench_bounded_composite_stream
+    bench_bounded_composite_stream,
+    bench_stateful_stream
 );
 criterion_main!(unified_engine_benches);

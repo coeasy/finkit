@@ -3,6 +3,7 @@
 use finkit::composite::{
     CompositeDefinition, CompositeEngine, CompositeExpr, CompositeOp, CompositeStreamCheckpoint,
 };
+use finkit::stateful_composite::StatefulCompositeCheckpoint;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
@@ -13,11 +14,13 @@ pub const COMPOSITE_STREAM_CONTRACT_SCHEMA_VERSION: u16 = 1;
 #[derive(Debug, Deserialize)]
 struct CompositeStreamRequest {
     schema_version: Option<u16>,
+    #[serde(default)]
+    mode: Option<String>,
     inputs: BTreeMap<String, Vec<f64>>,
     definitions: Vec<CompositeDefinitionRequest>,
     outputs: Option<Vec<String>>,
     #[serde(default)]
-    checkpoint: Option<CompositeStreamCheckpointRequest>,
+    checkpoint: Option<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -38,7 +41,9 @@ struct CompositeStreamCheckpointRequest {
     outputs: BTreeMap<String, Vec<Option<f64>>>,
 }
 
-/// Execute finite-lookback Composite rows and return the next portable checkpoint.
+/// Execute bounded or stateful Composite rows and return the next portable
+/// checkpoint. The default `mode` is `bounded`; `stateful` selects the O(1)
+/// state DAG for supported built-in functions such as EMA, RSI, ATR and MACD.
 pub fn evaluate_composite_stream_json(request: &str) -> Result<String, String> {
     let request: CompositeStreamRequest =
         serde_json::from_str(request).map_err(|error| error.to_string())?;
@@ -122,9 +127,58 @@ pub fn evaluate_composite_stream_json(request: &str) -> Result<String, String> {
     let plan = engine
         .compile(&definitions, &output_refs)
         .map_err(|error| error.to_string())?;
+
+    let mode = request
+        .mode
+        .as_deref()
+        .unwrap_or("bounded")
+        .to_ascii_lowercase();
+    if mode == "stateful" {
+        let mut stream = plan.stateful_stream().map_err(|error| error.to_string())?;
+        if let Some(checkpoint) = request.checkpoint {
+            let checkpoint = StatefulCompositeCheckpoint::from_json(
+                &serde_json::to_string(&checkpoint).map_err(|error| error.to_string())?,
+            )?;
+            stream
+                .restore(&checkpoint)
+                .map_err(|error| error.to_string())?;
+        }
+        let mut emitted = BTreeMap::new();
+        stream
+            .push_batch_into(&request.inputs, &mut emitted)
+            .map_err(|error| error.to_string())?;
+        let checkpoint_json: Value = serde_json::from_str(
+            &stream
+                .checkpoint()
+                .to_json()
+                .map_err(|error| error.to_string())?,
+        )
+        .map_err(|error| error.to_string())?;
+        return serde_json::to_string(&json!({
+            "schema_version": COMPOSITE_STREAM_CONTRACT_SCHEMA_VERSION,
+            "shape": if output_names.len() > 1 { "multi_series" } else { "series" },
+            "primary": (output_names.len() == 1).then(|| output_names[0].clone()),
+            "outputs": output_names,
+            "range_lookback": Value::Null,
+            "execution": {
+                "mode": "stateful_streaming",
+                "input_rows": input_rows,
+                "total_rows": stream.rows(),
+            },
+            "values": nullable_map(&emitted),
+            "checkpoint": checkpoint_json,
+        }))
+        .map_err(|error| error.to_string());
+    }
+    if mode != "bounded" {
+        return Err(format!("unsupported composite stream mode: {mode}"));
+    }
+
     let mut stream = plan.stream(engine).map_err(|error| error.to_string())?;
 
     if let Some(checkpoint) = request.checkpoint {
+        let checkpoint: CompositeStreamCheckpointRequest =
+            serde_json::from_value(checkpoint).map_err(|error| error.to_string())?;
         let outputs = checkpoint
             .outputs
             .into_iter()
@@ -277,5 +331,49 @@ mod tests {
         assert!(evaluate_composite_stream_json(request)
             .unwrap_err()
             .contains("not range-safe"));
+    }
+
+    #[test]
+    fn stateful_stream_contract_executes_recursive_graph_and_resumes() {
+        let first = r#"{
+            "schema_version":1,
+            "mode":"stateful",
+            "inputs":{"close":[10.0,11.0,12.0,15.0,14.0]},
+            "definitions":[{"name":"ema","function":"ema","inputs":["close"],"params":[3]}],
+            "outputs":["ema"]
+        }"#;
+        let first_payload: Value =
+            serde_json::from_str(&evaluate_composite_stream_json(first).unwrap()).unwrap();
+        assert_eq!(first_payload["execution"]["mode"], "stateful_streaming");
+        assert_eq!(first_payload["execution"]["total_rows"], 5);
+        assert!(first_payload["checkpoint"]["nodes"].is_array());
+
+        let second = json!({
+            "schema_version": 1,
+            "mode": "stateful",
+            "inputs": {"close": [16.0, 18.0]},
+            "definitions": [{"name": "ema", "function": "ema", "inputs": ["close"], "params": [3]}],
+            "outputs": ["ema"],
+            "checkpoint": first_payload["checkpoint"].clone(),
+        });
+        let second_payload: Value =
+            serde_json::from_str(&evaluate_composite_stream_json(&second.to_string()).unwrap())
+                .unwrap();
+        assert_eq!(second_payload["execution"]["total_rows"], 7);
+        assert!(second_payload["values"]["ema"][0].is_number());
+    }
+
+    #[test]
+    fn stateful_stream_contract_rejects_unknown_mode() {
+        let request = r#"{
+            "schema_version":1,
+            "mode":"full_recompute",
+            "inputs":{"close":[1.0]},
+            "definitions":[{"name":"x","function":"abs","inputs":["close"]}],
+            "outputs":["x"]
+        }"#;
+        assert!(evaluate_composite_stream_json(request)
+            .unwrap_err()
+            .contains("unsupported composite stream mode"));
     }
 }

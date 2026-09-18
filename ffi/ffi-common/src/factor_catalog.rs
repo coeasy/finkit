@@ -104,7 +104,7 @@ mod tests {
         assert_eq!(momentum["kind"], "time_series");
         assert_eq!(momentum["direction"], "higher_better");
         assert_eq!(momentum["bounded_streaming"], true);
-        assert_eq!(momentum["streaming"], false);
+        assert_eq!(momentum["streaming"], true);
         let reversal = factors
             .iter()
             .find(|factor| factor["name"] == "reversal_5")

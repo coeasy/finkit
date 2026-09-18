@@ -144,6 +144,39 @@ mod tests {
             factor["expected_total_rows"]
         );
 
+        let stateful_factor = &fixture["factor_stateful_stream"];
+        let stateful_factor_first: Value = serde_json::from_str(
+            &evaluate_factor_stream_json(&stateful_factor["request"].to_string()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            stateful_factor_first["values"]["momentum_5"],
+            stateful_factor["expected_primary"]
+        );
+        assert_eq!(
+            stateful_factor_first["execution"]["mode"],
+            "stateful_streaming"
+        );
+        let stateful_factor_second_request = serde_json::json!({
+            "schema_version": 1,
+            "mode": "stateful",
+            "targets": ["momentum_5"],
+            "inputs": stateful_factor["next_inputs"].clone(),
+            "checkpoint": stateful_factor_first["checkpoint"].clone(),
+        });
+        let stateful_factor_second: Value = serde_json::from_str(
+            &evaluate_factor_stream_json(&stateful_factor_second_request.to_string()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            stateful_factor_second["values"]["momentum_5"],
+            stateful_factor["expected_next"]
+        );
+        assert_eq!(
+            stateful_factor_second["execution"]["total_rows"],
+            stateful_factor["expected_total_rows"]
+        );
+
         let composite = &fixture["composite_stream"];
         let composite_first: Value = serde_json::from_str(
             &evaluate_composite_stream_json(&composite["request"].to_string()).unwrap(),
@@ -171,6 +204,34 @@ mod tests {
         assert_eq!(
             composite_second["execution"]["total_rows"],
             composite["expected_total_rows"]
+        );
+
+        let stateful = &fixture["composite_stateful_stream"];
+        let stateful_first: Value = serde_json::from_str(
+            &evaluate_composite_stream_json(&stateful["request"].to_string()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            stateful_first["values"]["ema"],
+            stateful["expected_primary"]
+        );
+        assert_eq!(stateful_first["execution"]["mode"], "stateful_streaming");
+        let stateful_second_request = serde_json::json!({
+            "schema_version": 1,
+            "mode": "stateful",
+            "inputs": stateful["next_inputs"].clone(),
+            "definitions": stateful["request"]["definitions"].clone(),
+            "outputs": ["ema"],
+            "checkpoint": stateful_first["checkpoint"].clone(),
+        });
+        let stateful_second: Value = serde_json::from_str(
+            &evaluate_composite_stream_json(&stateful_second_request.to_string()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(stateful_second["values"]["ema"], stateful["expected_next"]);
+        assert_eq!(
+            stateful_second["execution"]["total_rows"],
+            stateful["expected_total_rows"]
         );
     }
 

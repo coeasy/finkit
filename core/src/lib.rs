@@ -69,6 +69,9 @@ pub mod math;
 #[cfg(feature = "std")]
 /// Candlestick and chart pattern recognition (60+ patterns).
 pub mod patterns;
+#[cfg(all(feature = "std", feature = "indicators-all"))]
+/// O(1)-per-row stateful execution for supported Composite graphs.
+pub mod stateful_composite;
 #[cfg(feature = "std")]
 /// Numeric Architecture v3 executor shared by batch, formula, factor and streaming frontends.
 pub mod unified_executor;

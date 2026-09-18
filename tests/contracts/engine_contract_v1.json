@@ -73,6 +73,18 @@
     "expected_next": [2.5, 1.6666666666666663],
     "expected_total_rows": 8
   },
+  "factor_stateful_stream": {
+    "request": {
+      "schema_version": 1,
+      "mode": "stateful",
+      "targets": ["momentum_5"],
+      "inputs": {"close": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]}
+    },
+    "next_inputs": {"close": [7.0, 8.0]},
+    "expected_primary": [null, null, null, null, null, 5.0],
+    "expected_next": [2.5, 1.6666666666666663],
+    "expected_total_rows": 8
+  },
   "composite_stream": {
     "request": {
       "schema_version": 1,
@@ -86,5 +98,20 @@
     "expected_primary": [null, null, 2.0, 3.0],
     "expected_next": [4.0, 5.0],
     "expected_total_rows": 6
+  },
+  "composite_stateful_stream": {
+    "request": {
+      "schema_version": 1,
+      "mode": "stateful",
+      "inputs": {"close": [10.0, 11.0, 12.0, 15.0, 14.0]},
+      "definitions": [
+        {"name": "ema", "function": "ema", "inputs": ["close"], "params": [3]}
+      ],
+      "outputs": ["ema"]
+    },
+    "next_inputs": {"close": [16.0, 18.0]},
+    "expected_primary": [null, null, 11.0, 13.0, 13.5],
+    "expected_next": [14.75, 16.375],
+    "expected_total_rows": 7
   }
 }

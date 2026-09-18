@@ -74,6 +74,7 @@ impl CompositeExpr {
 
 /// Element-wise operations available in a composite graph.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum CompositeOp {
     /// Sum all operands.
     Add,
@@ -118,11 +119,11 @@ impl CompositeDefinition {
 /// every batch, range, or streaming request.
 #[derive(Debug, Clone)]
 pub struct CompiledCompositePlan {
-    definitions: Vec<CompositeDefinition>,
-    outputs: Vec<String>,
-    required_raw_inputs: Vec<String>,
+    pub(crate) definitions: Vec<CompositeDefinition>,
+    pub(crate) outputs: Vec<String>,
+    pub(crate) required_raw_inputs: Vec<String>,
     range_lookback: Option<usize>,
-    signature: u64,
+    pub(crate) signature: u64,
 }
 
 impl CompiledCompositePlan {
@@ -183,6 +184,18 @@ impl CompiledCompositePlan {
             inputs: BTreeMap::new(),
             output: BTreeMap::new(),
         })
+    }
+
+    /// Create an O(1)-per-row stateful stream for supported built-in calls.
+    ///
+    /// Unlike [`Self::stream`], this path does not require a finite replay
+    /// lookback. Unsupported custom or whole-series functions fail explicitly
+    /// during compilation instead of silently changing their semantics.
+    #[cfg(feature = "indicators-all")]
+    pub fn stateful_stream(
+        &self,
+    ) -> FactorResult<crate::stateful_composite::StatefulCompositeStream> {
+        crate::stateful_composite::StatefulCompositeStream::from_plan(self)
     }
 }
 

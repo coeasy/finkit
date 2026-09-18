@@ -1,6 +1,6 @@
 //! Shared JSON contract for bounded Factor streaming and checkpoints.
 
-use finkit::factor_system::{FactorCatalog, FactorStreamCheckpoint};
+use finkit::factor_system::{FactorCatalog, FactorStreamCheckpoint, StatefulFactorCheckpoint};
 use finkit::factors::{builtin_factor_registry, FactorEngine};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -12,11 +12,13 @@ pub const FACTOR_STREAM_CONTRACT_SCHEMA_VERSION: u16 = 1;
 #[derive(Debug, Deserialize)]
 struct FactorStreamRequest {
     schema_version: Option<u16>,
+    #[serde(default)]
+    mode: Option<String>,
     targets: Vec<String>,
     /// New rows to append. Every series must have the same length.
     inputs: BTreeMap<String, Vec<f64>>,
     #[serde(default)]
-    checkpoint: Option<FactorStreamCheckpointRequest>,
+    checkpoint: Option<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -27,7 +29,9 @@ struct FactorStreamCheckpointRequest {
     outputs: BTreeMap<String, Vec<Option<f64>>>,
 }
 
-/// Execute finite-lookback Factor rows and return the next portable checkpoint.
+/// Execute bounded or stateful Factor rows and return the next portable
+/// checkpoint. The default `mode` is `bounded`; `stateful` selects the O(1)
+/// state DAG for supported built-in factors.
 ///
 /// The request's `inputs` are appended to the optional checkpoint. The
 /// checkpoint contains only the proven lookback window plus the semantic plan
@@ -73,10 +77,60 @@ pub fn evaluate_factor_stream_json(request: &str) -> Result<String, String> {
     let plan = catalog
         .compile(&target_refs)
         .map_err(|error| error.to_string())?;
+
+    let mode = request
+        .mode
+        .as_deref()
+        .unwrap_or("bounded")
+        .to_ascii_lowercase();
+    if mode == "stateful" {
+        let mut stream = plan.stateful_stream().map_err(|error| error.to_string())?;
+        if let Some(checkpoint) = request.checkpoint {
+            let checkpoint = StatefulFactorCheckpoint::from_json(
+                &serde_json::to_string(&checkpoint).map_err(|error| error.to_string())?,
+            )?;
+            stream
+                .restore(&checkpoint)
+                .map_err(|error| error.to_string())?;
+        }
+        let mut emitted = BTreeMap::new();
+        stream
+            .push_batch_into(&request.inputs, &mut emitted)
+            .map_err(|error| error.to_string())?;
+        let checkpoint_json: Value = serde_json::from_str(
+            &stream
+                .checkpoint()
+                .to_json()
+                .map_err(|error| error.to_string())?,
+        )
+        .map_err(|error| error.to_string())?;
+        return serde_json::to_string(&json!({
+            "schema_version": FACTOR_STREAM_CONTRACT_SCHEMA_VERSION,
+            "shape": if request.targets.len() > 1 { "multi_series" } else { "series" },
+            "primary": (request.targets.len() == 1).then(|| request.targets[0].clone()),
+            "targets": request.targets,
+            "semantic_identity": plan.semantic_identity(),
+            "range_lookback": Value::Null,
+            "execution": {
+                "mode": "stateful_streaming",
+                "input_rows": input_rows,
+                "total_rows": stream.rows(),
+            },
+            "values": nullable_map(&emitted),
+            "checkpoint": checkpoint_json,
+        }))
+        .map_err(|error| error.to_string());
+    }
+    if mode != "bounded" {
+        return Err(format!("unsupported factor stream mode: {mode}"));
+    }
+
     let engine = FactorEngine::new(registry);
     let mut stream = plan.stream(engine).map_err(|error| error.to_string())?;
 
     if let Some(checkpoint) = request.checkpoint {
+        let checkpoint: FactorStreamCheckpointRequest =
+            serde_json::from_value(checkpoint).map_err(|error| error.to_string())?;
         let outputs = checkpoint
             .outputs
             .into_iter()
@@ -217,5 +271,46 @@ mod tests {
         assert!(evaluate_factor_stream_json(request)
             .unwrap_err()
             .contains("equal lengths"));
+    }
+
+    #[test]
+    fn stateful_stream_contract_executes_builtin_factor_and_resumes() {
+        let first = r#"{
+            "schema_version":1,
+            "mode":"stateful",
+            "targets":["momentum_5"],
+            "inputs":{"close":[10.0,11.0,12.0,15.0,14.0,16.0]}
+        }"#;
+        let first_payload: Value =
+            serde_json::from_str(&evaluate_factor_stream_json(first).unwrap()).unwrap();
+        assert_eq!(first_payload["execution"]["mode"], "stateful_streaming");
+        assert_eq!(first_payload["execution"]["total_rows"], 6);
+        assert!(first_payload["checkpoint"]["nodes"].is_array());
+
+        let second = json!({
+            "schema_version": 1,
+            "mode": "stateful",
+            "targets": ["momentum_5"],
+            "inputs": {"close": [17.0, 18.0]},
+            "checkpoint": first_payload["checkpoint"].clone(),
+        });
+        let second_payload: Value =
+            serde_json::from_str(&evaluate_factor_stream_json(&second.to_string()).unwrap())
+                .unwrap();
+        assert_eq!(second_payload["execution"]["total_rows"], 8);
+        assert!(second_payload["values"]["momentum_5"][0].is_number());
+    }
+
+    #[test]
+    fn stateful_stream_contract_rejects_unknown_mode() {
+        let request = r#"{
+            "schema_version":1,
+            "mode":"full_recompute",
+            "targets":["momentum_5"],
+            "inputs":{"close":[1.0]}
+        }"#;
+        assert!(evaluate_factor_stream_json(request)
+            .unwrap_err()
+            .contains("unsupported factor stream mode"));
     }
 }
