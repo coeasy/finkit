@@ -73,6 +73,14 @@ includes frame identity, timestamps, named values, the versioned `draw`
 payload, and JSON `null` for non-finite values. This is explicit alignment,
 not an implicit resampler or a complete Pine `request.security` implementation.
 
+Multi-symbol and multi-timeframe Formula evaluation uses the
+`formula.panel.v1` contract and the corresponding
+`formula_eval_panel_contract_json` language-specific entry points. Its
+`frames` array contains the same explicit timestamped OHLCV frame shape. Each
+frame is evaluated independently and the response is sorted by
+`symbol@timeframe`; duplicate frame identities are rejected. No recursive
+indicator state, cache, or drawing command is shared between frames.
+
 Formula compatibility discovery uses the same versioned report in every
 official binding: `formula_compatibility_report_json` (Python),
 `FormulaCompatibilityReportJSON`, `formulaCompatibilityReportJson`, and their

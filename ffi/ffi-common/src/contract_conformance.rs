@@ -8,8 +8,8 @@
 mod tests {
     use crate::{
         evaluate_composite_json, evaluate_composite_stream_json, evaluate_factor_json,
-        evaluate_factor_stream_json, evaluate_formula_json, evaluate_formula_stream_json,
-        evaluate_formula_temporal_json,
+        evaluate_factor_stream_json, evaluate_formula_json, evaluate_formula_panel_json,
+        evaluate_formula_stream_json, evaluate_formula_temporal_json,
     };
     use serde_json::Value;
     use std::fs;
@@ -143,6 +143,28 @@ mod tests {
             payload["values"]["__PRIMARY__"],
             fixture["expected"]["primary"]
         );
+    }
+
+    #[test]
+    fn formula_panel_contract_matches_shared_fixture() {
+        let fixture: Value = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../tests/contracts/formula_panel_contract_v1.json"
+        )))
+        .expect("formula panel contract fixture must be valid JSON");
+        let payload: Value = serde_json::from_str(
+            &evaluate_formula_panel_json(&fixture["request"].to_string()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(payload["contract"], fixture["expected"]["contract"]);
+        let actual = payload["frames"].as_array().unwrap();
+        let expected = fixture["expected"]["frames"].as_array().unwrap();
+        assert_eq!(actual.len(), expected.len());
+        for (actual, expected) in actual.iter().zip(expected) {
+            assert_eq!(actual["symbol"], expected["symbol"]);
+            assert_eq!(actual["timeframe"], expected["timeframe"]);
+            assert_eq!(actual["values"]["__PRIMARY__"], expected["primary"]);
+        }
     }
 
     #[test]

@@ -64,6 +64,7 @@ extern char* ta_composite_stream_execute_json(const char *request_json);
 extern char* ta_factor_stream_execute_json(const char *request_json);
 extern char* ta_formula_eval_contract_json(const char *source, const char *dialect, const double *open, const double *high, const double *low, const double *close, const double *volume, int length);
 extern char* ta_formula_eval_temporal_contract_json(const char *request_json);
+extern char* ta_formula_eval_panel_contract_json(const char *request_json);
 extern char* ta_formula_stream_execute_json(const char *request_json);
 extern char* ta_formula_compatibility_report_json(const char *source, const char *terminal);
 extern void ta_free_result(TaResult *result);
@@ -218,6 +219,14 @@ func FormulaEvalTemporalContractJSON(requestJSON string) (string, error) {
 	cRequest := C.CString(requestJSON)
 	defer C.free(unsafe.Pointer(cRequest))
 	return formulaJSONResult(C.ta_formula_eval_temporal_contract_json(cRequest))
+}
+
+// FormulaEvalPanelContractJSON evaluates a Formula independently for each
+// explicit symbol/timeframe frame.
+func FormulaEvalPanelContractJSON(requestJSON string) (string, error) {
+	cRequest := C.CString(requestJSON)
+	defer C.free(unsafe.Pointer(cRequest))
+	return formulaJSONResult(C.ta_formula_eval_panel_contract_json(cRequest))
 }
 
 // FormulaCompatibilityReportJSON returns the shared versioned compatibility

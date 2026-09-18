@@ -1346,6 +1346,8 @@ export declare function formulaEval(source: string, open: Array<number>, high: A
 export declare function formulaEvalContractJson(source: string, dialect: string, open: Array<number>, high: Array<number>, low: Array<number>, close: Array<number>, volume: Array<number>): string
 /** Execute an explicit timestamped Formula request through the shared temporal contract. */
 export declare function formulaEvalTemporalContractJson(requestJson: string): string
+/** Execute a Formula independently for each symbol/timeframe frame. */
+export declare function formulaEvalPanelContractJson(requestJson: string): string
 /** Execute a stateful Formula stream through the shared JSON contract. */
 export declare function formulaStreamExecuteJson(requestJson: string): string
 /** Return the versioned, language-neutral operation catalog. */

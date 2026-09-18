@@ -875,6 +875,9 @@ public final class Indicators {
     /** Executes an explicit timestamped Formula request through the shared temporal contract. */
     public static native String formulaEvalTemporalContractJson(String requestJson);
 
+    /** Executes a Formula independently for each symbol/timeframe frame. */
+    public static native String formulaEvalPanelContractJson(String requestJson);
+
     /** Executes a stateful Formula stream through the shared JSON contract. */
     public static native String formulaStreamExecuteJson(String requestJson);
 

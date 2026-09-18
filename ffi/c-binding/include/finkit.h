@@ -47,6 +47,7 @@ TA_API char *ta_formula_eval_contract_json(const char *source, const char *diale
     const double *open, const double *high, const double *low, const double *close,
     const double *volume, int32_t length);
 TA_API char *ta_formula_eval_temporal_contract_json(const char *request_json);
+TA_API char *ta_formula_eval_panel_contract_json(const char *request_json);
 TA_API char *ta_formula_stream_execute_json(const char *request_json);
 TA_API char *ta_formula_compatibility_report_json(const char *source, const char *terminal);
 TA_API char *ta_last_error(void);

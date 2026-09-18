@@ -16,6 +16,11 @@
 该入口已经打通显式跨周期/外部时序的批量 Formula 链路，但不等同于自动重采样，也不宣称
 Pine `request.security` 全语义、跨截面批量调度或 stateful 跨周期续算已完成。
 
+多标的、多周期 Formula 使用 `formula.panel.v1` 契约及对应的
+`formula_eval_panel_contract_json` 入口。`frames` 中每个元素都是一个带明确标的、周期、
+时间戳和 OHLCV 的独立 frame；引擎按 `symbol@timeframe` 隔离执行，响应按该 key 稳定排序，
+重复 frame 会被拒绝。不同 frame 不共享递归状态、缓存或绘图命令。
+
 ## 目录
 
 1. [重叠研究指标](#重叠研究指标)

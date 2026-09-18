@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "request": {
+    "schema_version": 1,
+    "source": "CLOSE + 1",
+    "dialect": "tdx",
+    "frames": [
+      {
+        "symbol": "BBB",
+        "timeframe": "1d",
+        "timestamps": [10, 20],
+        "open": [10.0, 20.0],
+        "high": [10.0, 20.0],
+        "low": [10.0, 20.0],
+        "close": [10.0, 20.0],
+        "volume": [10.0, 20.0]
+      },
+      {
+        "symbol": "AAA",
+        "timeframe": "1m",
+        "timestamps": [10, 20],
+        "open": [1.0, 2.0],
+        "high": [1.0, 2.0],
+        "low": [1.0, 2.0],
+        "close": [1.0, 2.0],
+        "volume": [10.0, 20.0]
+      }
+    ]
+  },
+  "expected": {
+    "contract": "formula.panel.v1",
+    "frames": [
+      {"symbol": "AAA", "timeframe": "1m", "primary": [2.0, 3.0]},
+      {"symbol": "BBB", "timeframe": "1d", "primary": [11.0, 21.0]}
+    ]
+  }
+}

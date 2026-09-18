@@ -4,13 +4,13 @@
 //! need dialect selection and named outputs. Numeric hot paths can continue
 //! to use typed indicator functions or zero-copy formula APIs.
 
-use finkit::data_contract::{FundamentalSeries, TemporalAlignment, TemporalSeries};
+use finkit::data_contract::{FrameKey, FundamentalSeries, TemporalAlignment, TemporalSeries};
 use finkit::formula::{
     inspect_formula_compatibility, DrawCommand, DrawResult, FormulaContext, FormulaDialect,
     FormulaEngine, FormulaTerminal,
 };
 use ndarray::Array1;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashSet};
 
@@ -22,6 +22,9 @@ pub const FORMULA_DRAW_CONTRACT_SCHEMA_VERSION: u16 = 1;
 
 /// Version of the explicit multi-timeframe / point-in-time Formula contract.
 pub const FORMULA_TEMPORAL_CONTRACT_SCHEMA_VERSION: u16 = 1;
+
+/// Version of the explicit multi-symbol / multi-timeframe Formula contract.
+pub const FORMULA_PANEL_CONTRACT_SCHEMA_VERSION: u16 = 1;
 
 /// Version of the language-neutral formula compatibility report envelope.
 pub const FORMULA_COMPATIBILITY_SCHEMA_VERSION: u16 = 1;
@@ -119,7 +122,7 @@ struct TemporalFormulaRequest {
     fundamentals: Vec<TemporalInputRequest>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct TemporalFrameRequest {
     symbol: String,
     timeframe: String,
@@ -131,6 +134,14 @@ struct TemporalFrameRequest {
     volume: Vec<f64>,
     #[serde(default)]
     amount: Option<Vec<f64>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct FormulaPanelRequest {
+    schema_version: u16,
+    source: String,
+    dialect: String,
+    frames: Vec<TemporalFrameRequest>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -283,6 +294,63 @@ pub fn evaluate_formula_temporal_json(request: &str) -> Result<String, String> {
         "fundamentals": fundamental_metadata,
         "values": serialized_values,
         "draw": draw,
+    }))
+    .map_err(|error| error.to_string())
+}
+
+/// Execute one Formula independently for every explicit symbol/timeframe
+/// frame. Frames are never concatenated and no state or drawing command is
+/// shared between them. Each frame reuses the `formula.temporal.v1` execution
+/// and result semantics, keeping null handling and dialect behavior identical
+/// across single-frame and panel requests.
+pub fn evaluate_formula_panel_json(request: &str) -> Result<String, String> {
+    let request: FormulaPanelRequest =
+        serde_json::from_str(request).map_err(|error| error.to_string())?;
+    if request.schema_version != FORMULA_PANEL_CONTRACT_SCHEMA_VERSION {
+        return Err(format!(
+            "unsupported formula panel contract schema: {}",
+            request.schema_version
+        ));
+    }
+    if request.frames.is_empty() {
+        return Err("formula panel must contain at least one frame".to_string());
+    }
+    let mut seen = HashSet::new();
+    let mut frames = BTreeMap::new();
+    for frame in request.frames {
+        let key =
+            FrameKey::new(&frame.symbol, &frame.timeframe).map_err(|error| error.to_string())?;
+        let key_name = format!("{}@{}", key.symbol, key.timeframe);
+        if !seen.insert(key_name.clone()) {
+            return Err(format!("duplicate formula panel frame: {key_name}"));
+        }
+        let frame_value = serde_json::to_value(&frame).map_err(|error| error.to_string())?;
+        let child_request = json!({
+            "schema_version": FORMULA_TEMPORAL_CONTRACT_SCHEMA_VERSION,
+            "source": &request.source,
+            "dialect": &request.dialect,
+            "frame": frame_value,
+        });
+        let child: Value =
+            serde_json::from_str(&evaluate_formula_temporal_json(&child_request.to_string())?)
+                .map_err(|error| error.to_string())?;
+        frames.insert(
+            key_name,
+            json!({
+                "symbol": key.symbol,
+                "timeframe": key.timeframe,
+                "timestamps": child["frame"]["timestamps"],
+                "primary": child["primary"],
+                "values": child["values"],
+                "draw": child["draw"],
+            }),
+        );
+    }
+    serde_json::to_string(&json!({
+        "schema_version": FORMULA_PANEL_CONTRACT_SCHEMA_VERSION,
+        "contract": "formula.panel.v1",
+        "dialect": request.dialect,
+        "frames": frames.into_values().collect::<Vec<_>>(),
     }))
     .map_err(|error| error.to_string())
 }
@@ -670,6 +738,58 @@ mod tests {
         }]);
         let error = evaluate_formula_temporal_json(&request.to_string()).unwrap_err();
         assert!(error.contains("must use `as_of_closed`"));
+    }
+
+    #[test]
+    fn panel_contract_keeps_symbol_and_timeframe_results_isolated() {
+        let frame = |symbol: &str, timeframe: &str, close: &[f64]| {
+            serde_json::json!({
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "timestamps": [10, 20],
+                "open": close,
+                "high": close,
+                "low": close,
+                "close": close,
+                "volume": [10.0, 20.0]
+            })
+        };
+        let request = serde_json::json!({
+            "schema_version": FORMULA_PANEL_CONTRACT_SCHEMA_VERSION,
+            "source": "CLOSE + 1",
+            "dialect": "tdx",
+            "frames": [
+                frame("BBB", "1d", &[10.0, 20.0]),
+                frame("AAA", "1m", &[1.0, 2.0])
+            ]
+        });
+        let payload: Value =
+            serde_json::from_str(&evaluate_formula_panel_json(&request.to_string()).unwrap())
+                .unwrap();
+        assert_eq!(payload["contract"], "formula.panel.v1");
+        assert_eq!(payload["frames"].as_array().unwrap().len(), 2);
+        assert_eq!(payload["frames"][0]["symbol"], "AAA");
+        assert_eq!(
+            payload["frames"][0]["values"]["__PRIMARY__"],
+            serde_json::json!([2.0, 3.0])
+        );
+        assert_eq!(payload["frames"][1]["symbol"], "BBB");
+        assert_eq!(
+            payload["frames"][1]["values"]["__PRIMARY__"],
+            serde_json::json!([11.0, 21.0])
+        );
+
+        let duplicate = serde_json::json!({
+            "schema_version": FORMULA_PANEL_CONTRACT_SCHEMA_VERSION,
+            "source": "CLOSE",
+            "dialect": "tdx",
+            "frames": [
+                frame("AAA", "1m", &[1.0, 1.0]),
+                frame("AAA", "1m", &[2.0, 2.0])
+            ]
+        });
+        let error = evaluate_formula_panel_json(&duplicate.to_string()).unwrap_err();
+        assert!(error.contains("duplicate formula panel frame"));
     }
 
     #[test]

@@ -943,6 +943,44 @@ pub unsafe extern "C" fn ta_formula_eval_temporal_contract_json(
     })
 }
 
+/// Execute one Formula independently for every explicit symbol/timeframe frame.
+#[no_mangle]
+pub unsafe extern "C" fn ta_formula_eval_panel_contract_json(
+    request: *const c_char,
+) -> *mut c_char {
+    ffi_catch_ptr(|| {
+        let error = |message: &str| {
+            CString::new(
+                serde_json::json!({
+                    "schema_version": finkit_ffi_common::FORMULA_PANEL_CONTRACT_SCHEMA_VERSION,
+                    "error": message,
+                })
+                .to_string(),
+            )
+            .expect("formula panel contract error contains no NUL")
+            .into_raw()
+        };
+        if request.is_null() {
+            return error("formula panel contract request is null");
+        }
+        let request = match unsafe { CStr::from_ptr(request) }.to_str() {
+            Ok(value) => value,
+            Err(_) => return error("formula panel contract request is not valid UTF-8"),
+        };
+        let payload =
+            finkit_ffi_common::evaluate_formula_panel_json(request).unwrap_or_else(|message| {
+                serde_json::json!({
+                    "schema_version": finkit_ffi_common::FORMULA_PANEL_CONTRACT_SCHEMA_VERSION,
+                    "error": message,
+                })
+                .to_string()
+            });
+        CString::new(payload)
+            .expect("formula panel contract payload contains no NUL")
+            .into_raw()
+    })
+}
+
 /// Execute the shared stateful Formula stream JSON contract.
 #[no_mangle]
 pub unsafe extern "C" fn ta_formula_stream_execute_json(request: *const c_char) -> *mut c_char {
