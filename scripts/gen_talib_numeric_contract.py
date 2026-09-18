@@ -288,6 +288,28 @@ def normalized_text(path: Path) -> str:
     return path.read_text(encoding="utf-8").replace("\r\n", "\n")
 
 
+def assert_generated(path: Path, expected: str) -> None:
+    """Fail with an actionable CI annotation when a generated file drifts."""
+
+    try:
+        actual = normalized_text(path)
+    except OSError as error:
+        print(f"::error file={path}::cannot read generated contract: {error}")
+        raise SystemExit(f"missing generated file: {path}") from error
+    if actual == expected:
+        return
+    limit = min(len(actual), len(expected))
+    first_difference = next(
+        (index for index in range(limit) if actual[index] != expected[index]), limit
+    )
+    detail = (
+        f"out of date (checked_length={len(actual)}, generated_length={len(expected)}, "
+        f"first_difference={first_difference})"
+    )
+    print(f"::error file={path}::{detail}")
+    raise SystemExit(f"out of date: {path}; {detail}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -301,15 +323,9 @@ def main() -> None:
     generated_cpp = render_cpp_contract(payload)
     generated_c = render_c_contract(payload)
     if args.check:
-        checked_in = normalized_text(OUTPUT_PATH)
-        if checked_in != generated:
-            raise SystemExit(f"out of date: {OUTPUT_PATH}")
-        checked_in_cpp = normalized_text(CPP_OUTPUT_PATH)
-        if checked_in_cpp != generated_cpp:
-            raise SystemExit(f"out of date: {CPP_OUTPUT_PATH}")
-        checked_in_c = normalized_text(C_OUTPUT_PATH)
-        if checked_in_c != generated_c:
-            raise SystemExit(f"out of date: {C_OUTPUT_PATH}")
+        assert_generated(OUTPUT_PATH, generated)
+        assert_generated(CPP_OUTPUT_PATH, generated_cpp)
+        assert_generated(C_OUTPUT_PATH, generated_c)
         print(f"checked {OUTPUT_PATH}")
         print(f"checked {CPP_OUTPUT_PATH}")
         print(f"checked {C_OUTPUT_PATH}")
