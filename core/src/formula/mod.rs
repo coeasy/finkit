@@ -56,9 +56,9 @@ pub use analysis::{
 pub use ast::*;
 pub use bytecode::{compile_to_bytecode, Bytecode, BytecodeVM, ExecResult, OpCode};
 pub use compat::{
-    inspect_formula_compatibility, normalize_terminal_source, CompatibilityLevel,
-    CompatibilityStatus, FormulaCompatibilityReport, FormulaTerminal, FunctionCompatibility,
-    SemanticProfile,
+    inspect_formula_compatibility, normalize_terminal_source, CapabilityCompatibility,
+    CompatibilityLevel, CompatibilityStatus, FormulaCompatibilityReport, FormulaTerminal,
+    FunctionCompatibility, SemanticProfile,
 };
 pub use compiler::{CompiledFormula, FormulaCache, FormulaCompiler};
 pub use compute_ir::{lower_formula_ast, lower_formula_ast_with_registry, FormulaComputePlan};

@@ -8,6 +8,7 @@
 
 use super::FormulaDialect;
 use crate::formula::analysis::{analyze_formula, FormulaAnalysis};
+use crate::formula::ast::AstNode;
 use crate::formula::contracts::{ta_lib_function_contracts, TA_LIB_CATALOG_VERSION};
 use std::collections::HashMap;
 
@@ -19,14 +20,19 @@ pub const FORMULA_TERMINAL_SCHEMA_VERSION: &str = "finkit.formula-terminal.v1";
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum FormulaTerminal {
     /// Native Finkit / AlphaTA-compatible formula syntax.
+    #[cfg_attr(feature = "serde", serde(rename = "finkit"))]
     Finkit,
     /// 通达信 common formula subset.
+    #[cfg_attr(feature = "serde", serde(rename = "tdx"))]
     TongDaXin,
     /// 同花顺 common formula subset.
+    #[cfg_attr(feature = "serde", serde(rename = "ths"))]
     TongHuaShun,
     /// 东方财富 common formula subset.
+    #[cfg_attr(feature = "serde", serde(rename = "eastmoney"))]
     EastMoney,
     /// TradingView Pine Script subset.
+    #[cfg_attr(feature = "serde", serde(rename = "pine"))]
     TradingView,
 }
 
@@ -51,6 +57,7 @@ pub enum CompatibilityLevel {
 /// Result of checking one formula feature against a terminal contract.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum CompatibilityStatus {
     Exact,
     Near,
@@ -97,6 +104,26 @@ pub struct FunctionCompatibility {
     pub outputs: Option<usize>,
 }
 
+/// Capability-level compatibility result for one complete formula feature.
+///
+/// Function-level status answers whether a called name can be routed. This
+/// separate matrix answers whether the complete source can use a capability
+/// such as drawing, control flow, streaming, or host-provided timeframes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct CapabilityCompatibility {
+    /// Stable capability identifier used by bindings and CI gates.
+    pub name: String,
+    /// Compatibility level for the selected terminal profile.
+    pub status: CompatibilityStatus,
+    /// Whether the canonical runtime supports the capability in this profile.
+    pub supported: bool,
+    /// Whether this particular source uses the capability.
+    pub observed: bool,
+    /// Actionable explanation when the capability is partial or host-bound.
+    pub message: String,
+}
+
 /// Complete source compatibility report.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -106,6 +133,8 @@ pub struct FormulaCompatibilityReport {
     pub profile: SemanticProfile,
     pub analysis: FormulaAnalysis,
     pub functions: Vec<FunctionCompatibility>,
+    /// Source-level capability matrix used by production admission checks.
+    pub capabilities: Vec<CapabilityCompatibility>,
     /// Catalog revision used when classifying TA-Lib names.
     pub ta_lib_catalog_version: String,
     pub ta_lib_function_count: usize,
@@ -299,17 +328,217 @@ pub fn inspect_formula_compatibility(
                 outputs: contract.as_ref().map(|item| item.outputs),
             }
         })
-        .collect();
+        .collect::<Vec<_>>();
+    let capabilities = compatibility_capabilities(&ast, &analysis, terminal, &functions);
     Ok(FormulaCompatibilityReport {
         terminal,
         normalized_source,
         profile: terminal.semantic_profile(),
         analysis,
         functions,
+        capabilities,
         ta_lib_catalog_version: TA_LIB_CATALOG_VERSION.to_string(),
         ta_lib_function_count: catalog.len(),
         ta_lib_runtime_registered_count,
     })
+}
+
+fn compatibility_capabilities(
+    ast: &AstNode,
+    analysis: &FormulaAnalysis,
+    terminal: FormulaTerminal,
+    functions: &[FunctionCompatibility],
+) -> Vec<CapabilityCompatibility> {
+    let mapped_status = if terminal == FormulaTerminal::Finkit {
+        CompatibilityStatus::Exact
+    } else {
+        CompatibilityStatus::Near
+    };
+    let has_host_requirement = functions
+        .iter()
+        .any(|item| item.status == CompatibilityStatus::HostRequired);
+    let has_unsupported = functions
+        .iter()
+        .any(|item| item.status == CompatibilityStatus::Unsupported);
+    let drawing = ast_has_draw_commands(ast);
+    let cross_timeframe = analysis
+        .called_functions
+        .iter()
+        .any(|name| matches!(name.as_str(), "SECURITY" | "REQUEST.SECURITY"));
+    let host_data = has_host_requirement;
+
+    let batch_supported = !has_host_requirement && !has_unsupported;
+    let batch_status = if has_unsupported {
+        CompatibilityStatus::Unsupported
+    } else if has_host_requirement {
+        CompatibilityStatus::HostRequired
+    } else {
+        mapped_status
+    };
+    let batch_message = if has_unsupported {
+        "one or more called functions are unsupported".to_string()
+    } else if has_host_requirement {
+        "host-provided market or timeframe metadata is required".to_string()
+    } else {
+        "canonical batch executor is available".to_string()
+    };
+
+    let streaming_supported = analysis.supports_streaming && batch_supported;
+    let streaming_status = if has_unsupported {
+        CompatibilityStatus::Unsupported
+    } else if has_host_requirement {
+        CompatibilityStatus::HostRequired
+    } else if analysis.has_future_data {
+        CompatibilityStatus::Approximate
+    } else if streaming_supported {
+        mapped_status
+    } else {
+        CompatibilityStatus::Unsupported
+    };
+    let streaming_message = if streaming_supported {
+        "formula has a causal, registered streaming path".to_string()
+    } else if analysis.has_future_data {
+        "future-data semantics prevent causal streaming".to_string()
+    } else if analysis.has_control_flow {
+        "control flow requires conservative full-prefix evaluation".to_string()
+    } else {
+        "no complete streaming implementation is registered".to_string()
+    };
+
+    vec![
+        CapabilityCompatibility {
+            name: "parser".to_string(),
+            status: mapped_status,
+            supported: true,
+            observed: true,
+            message: "source parsed through the selected canonical dialect".to_string(),
+        },
+        CapabilityCompatibility {
+            name: "batch_execution".to_string(),
+            status: batch_status,
+            supported: batch_supported,
+            observed: true,
+            message: batch_message,
+        },
+        CapabilityCompatibility {
+            name: "streaming_execution".to_string(),
+            status: streaming_status,
+            supported: streaming_supported,
+            observed: analysis.supports_streaming,
+            message: streaming_message,
+        },
+        CapabilityCompatibility {
+            name: "control_flow".to_string(),
+            status: mapped_status,
+            supported: true,
+            observed: analysis.has_control_flow,
+            message: if analysis.has_control_flow {
+                "IF/loop control flow is evaluated by the canonical VM".to_string()
+            } else {
+                "formula does not use control flow".to_string()
+            },
+        },
+        CapabilityCompatibility {
+            name: "drawing".to_string(),
+            status: mapped_status,
+            supported: true,
+            observed: drawing,
+            message: if drawing {
+                "draw commands are lowered to the canonical DrawResult".to_string()
+            } else {
+                "formula does not emit drawing commands".to_string()
+            },
+        },
+        CapabilityCompatibility {
+            name: "cross_timeframe".to_string(),
+            status: if cross_timeframe {
+                CompatibilityStatus::HostRequired
+            } else {
+                mapped_status
+            },
+            supported: !cross_timeframe,
+            observed: cross_timeframe,
+            message: if cross_timeframe {
+                "request.security/SECURITY requires explicit host timeframe alignment".to_string()
+            } else {
+                "formula does not request another timeframe".to_string()
+            },
+        },
+        CapabilityCompatibility {
+            name: "lookahead".to_string(),
+            status: if analysis.has_future_data {
+                CompatibilityStatus::Approximate
+            } else {
+                mapped_status
+            },
+            supported: !analysis.has_future_data,
+            observed: analysis.has_future_data,
+            message: if analysis.has_future_data {
+                "future-data or repaint semantics require explicit review".to_string()
+            } else {
+                "formula is causal and does not use future rows".to_string()
+            },
+        },
+        CapabilityCompatibility {
+            name: "host_data".to_string(),
+            status: if host_data {
+                CompatibilityStatus::HostRequired
+            } else {
+                mapped_status
+            },
+            supported: !host_data,
+            observed: host_data,
+            message: if host_data {
+                "formula references data that must be supplied by the host".to_string()
+            } else {
+                "formula uses only canonical frame inputs".to_string()
+            },
+        },
+    ]
+}
+
+fn ast_has_draw_commands(node: &AstNode) -> bool {
+    match node {
+        AstNode::DrawText { .. }
+        | AstNode::DrawIcon { .. }
+        | AstNode::StickLine { .. }
+        | AstNode::DrawGeneric { .. } => true,
+        AstNode::FunctionCall { args, .. } => args.iter().any(ast_has_draw_commands),
+        AstNode::BinaryOp { left, right, .. } => {
+            ast_has_draw_commands(left) || ast_has_draw_commands(right)
+        }
+        AstNode::UnaryOp { expr, .. } => ast_has_draw_commands(expr),
+        AstNode::IndexAccess { array, index } => {
+            ast_has_draw_commands(array) || ast_has_draw_commands(index)
+        }
+        AstNode::Assignment { expr, .. }
+        | AstNode::CompoundAssignment { expr, .. }
+        | AstNode::Output { expr, .. } => ast_has_draw_commands(expr),
+        AstNode::Statements(statements) => statements.iter().any(ast_has_draw_commands),
+        AstNode::IfThenElse {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            ast_has_draw_commands(cond)
+                || ast_has_draw_commands(then_branch)
+                || ast_has_draw_commands(else_branch)
+        }
+        AstNode::ForLoop {
+            start, end, body, ..
+        } => {
+            ast_has_draw_commands(start)
+                || ast_has_draw_commands(end)
+                || body.iter().any(ast_has_draw_commands)
+        }
+        AstNode::WhileLoop { cond, body } => {
+            ast_has_draw_commands(cond) || body.iter().any(ast_has_draw_commands)
+        }
+        AstNode::Number(_)
+        | AstNode::StringLit(_)
+        | AstNode::Variable(_)
+        | AstNode::ParamDecl { .. } => false,
+    }
 }
 
 /// Normalize transport-level source differences before parsing.
@@ -430,5 +659,41 @@ mod tests {
         assert!(report.functions.iter().any(|item| {
             item.name == "SECURITY" && item.status == CompatibilityStatus::HostRequired
         }));
+        let timeframe = report
+            .capabilities
+            .iter()
+            .find(|item| item.name == "cross_timeframe")
+            .unwrap();
+        assert!(timeframe.observed);
+        assert!(!timeframe.supported);
+        assert_eq!(timeframe.status, CompatibilityStatus::HostRequired);
+    }
+
+    #[test]
+    fn capability_matrix_distinguishes_drawing_control_flow_and_streaming() {
+        let report = inspect_formula_compatibility(
+            "DRAWICON(CLOSE > OPEN, CLOSE, 1); IF CLOSE > OPEN THEN CLOSE ELSE OPEN",
+            FormulaTerminal::TongDaXin,
+        )
+        .unwrap();
+        let capability = |name: &str| report.capabilities.iter().find(|item| item.name == name);
+        assert!(capability("drawing").unwrap().observed);
+        assert!(capability("control_flow").unwrap().observed);
+        assert!(!capability("streaming_execution").unwrap().supported);
+        assert_eq!(
+            capability("streaming_execution").unwrap().status,
+            CompatibilityStatus::Unsupported
+        );
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn compatibility_report_serializes_stable_wire_names() {
+        let report =
+            inspect_formula_compatibility("MA(CLOSE,5)", FormulaTerminal::TongDaXin).unwrap();
+        let value = serde_json::to_value(report).unwrap();
+        assert_eq!(value["terminal"], "tdx");
+        assert_eq!(value["functions"][0]["status"], "near");
+        assert_eq!(value["capabilities"][0]["status"], "near");
     }
 }

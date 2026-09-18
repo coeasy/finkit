@@ -13,6 +13,7 @@ use std::collections::BTreeSet;
 /// Severity of a static formula diagnostic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum FormulaDiagnosticLevel {
     Info,
     Warning,

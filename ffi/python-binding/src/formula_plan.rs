@@ -638,6 +638,20 @@ impl PyCompiledFormula {
             })
             .collect::<PyResult<_>>()?;
         output.set_item("functions", functions)?;
+        let capabilities: Vec<_> = report
+            .capabilities
+            .iter()
+            .map(|item| {
+                let dict = PyDict::new(py);
+                dict.set_item("name", &item.name)?;
+                dict.set_item("status", item.status.as_str())?;
+                dict.set_item("supported", item.supported)?;
+                dict.set_item("observed", item.observed)?;
+                dict.set_item("message", &item.message)?;
+                Ok::<_, PyErr>(dict.into_any())
+            })
+            .collect::<PyResult<_>>()?;
+        output.set_item("capabilities", capabilities)?;
         output.set_item("ta_lib_catalog_version", report.ta_lib_catalog_version)?;
         output.set_item("ta_lib_function_count", report.ta_lib_function_count)?;
         output.set_item(
