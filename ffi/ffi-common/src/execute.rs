@@ -251,13 +251,34 @@ pub fn talib_profile_supported(operation: &str) -> bool {
             | "NATR"
             | "TRANGE"
             | "ADX"
+            | "ADXR"
+            | "DX"
+            | "PLUS_DI"
+            | "MINUS_DI"
             | "CCI"
+            | "AROON"
+            | "AROONOSC"
+            | "APO"
+            | "BOP"
+            | "TRIX"
             | "STOCH"
+            | "STOCHF"
+            | "STOCHRSI"
             | "WILLR"
             | "MOM"
             | "ROC"
+            | "ROCP"
+            | "ROCR"
+            | "ROCR100"
             | "OBV"
             | "MFI"
+            | "AVGPRICE"
+            | "MEDPRICE"
+            | "TYPPRICE"
+            | "WCLPRICE"
+            | "MIDPOINT"
+            | "MIDPRICE"
+            | "SAR"
     )
 }
 
@@ -386,6 +407,54 @@ fn execute_talib_profile(
             );
             "ADX"
         }
+        "ADXR" => {
+            let (high, low, close) = hlc(inputs, &name)?;
+            let period = parameter_usize(params, 0, 14, &name)?;
+            values.insert(
+                "ADXR".to_string(),
+                indicator_values(
+                    finkit::indicators::momentum::adxr(high, low, close, period),
+                    &name,
+                )?,
+            );
+            "ADXR"
+        }
+        "DX" => {
+            let (high, low, close) = hlc(inputs, &name)?;
+            let period = parameter_usize(params, 0, 14, &name)?;
+            values.insert(
+                "DX".to_string(),
+                indicator_values(
+                    finkit::indicators::momentum::dx(high, low, close, period),
+                    &name,
+                )?,
+            );
+            "DX"
+        }
+        "PLUS_DI" => {
+            let (high, low, close) = hlc(inputs, &name)?;
+            let period = parameter_usize(params, 0, 14, &name)?;
+            values.insert(
+                "PLUS_DI".to_string(),
+                indicator_values(
+                    finkit::indicators::momentum::plus_di(high, low, close, period),
+                    &name,
+                )?,
+            );
+            "PLUS_DI"
+        }
+        "MINUS_DI" => {
+            let (high, low, close) = hlc(inputs, &name)?;
+            let period = parameter_usize(params, 0, 14, &name)?;
+            values.insert(
+                "MINUS_DI".to_string(),
+                indicator_values(
+                    finkit::indicators::momentum::minus_di(high, low, close, period),
+                    &name,
+                )?,
+            );
+            "MINUS_DI"
+        }
         "CCI" => {
             let (high, low, close) = hlc(inputs, &name)?;
             let period = parameter_usize(params, 0, 14, &name)?;
@@ -398,6 +467,57 @@ fn execute_talib_profile(
             );
             "CCI"
         }
+        "AROON" => {
+            let (high, low, _) = hlc(inputs, &name)?;
+            let period = parameter_usize(params, 0, 14, &name)?;
+            let output = finkit::indicators::momentum::aroon(high, low, period)
+                .map_err(|error| ("execution_error", format!("{name}: {error}")))?;
+            values.insert("AROON_UP".to_string(), output.aroon_up.to_vec());
+            values.insert("AROON_DOWN".to_string(), output.aroon_down.to_vec());
+            "AROON_UP"
+        }
+        "AROONOSC" => {
+            let (high, low, _) = hlc(inputs, &name)?;
+            let period = parameter_usize(params, 0, 14, &name)?;
+            values.insert(
+                "AROONOSC".to_string(),
+                indicator_values(
+                    finkit::indicators::momentum::aroonosc(high, low, period),
+                    &name,
+                )?,
+            );
+            "AROONOSC"
+        }
+        "APO" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let fast = parameter_usize(params, 0, 12, &name)?;
+            let slow = parameter_usize(params, 1, 26, &name)?;
+            values.insert(
+                "APO".to_string(),
+                indicator_values(finkit::indicators::momentum::apo(input, fast, slow), &name)?,
+            );
+            "APO"
+        }
+        "BOP" => {
+            let (open, high, low, close) = ohlc(inputs, &name)?;
+            values.insert(
+                "BOP".to_string(),
+                indicator_values(
+                    finkit::indicators::momentum::bop(open, high, low, close),
+                    &name,
+                )?,
+            );
+            "BOP"
+        }
+        "TRIX" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let period = parameter_usize(params, 0, 30, &name)?;
+            values.insert(
+                "TRIX".to_string(),
+                indicator_values(finkit::indicators::momentum::trix(input, period), &name)?,
+            );
+            "TRIX"
+        }
         "STOCH" => {
             let (high, low, close) = hlc(inputs, &name)?;
             let k_period = parameter_usize(params, 0, 5, &name)?;
@@ -409,6 +529,34 @@ fn execute_talib_profile(
             values.insert("SLOWK".to_string(), output.k.to_vec());
             values.insert("SLOWD".to_string(), output.d.to_vec());
             "SLOWK"
+        }
+        "STOCHF" => {
+            let (high, low, close) = hlc(inputs, &name)?;
+            let fast_k = parameter_usize(params, 0, 5, &name)?;
+            let fast_d = parameter_usize(params, 1, 3, &name)?;
+            let output = finkit::indicators::momentum::stochf(high, low, close, fast_k, fast_d)
+                .map_err(|error| ("execution_error", format!("{name}: {error}")))?;
+            values.insert("FASTK".to_string(), output.k.to_vec());
+            values.insert("FASTD".to_string(), output.d.to_vec());
+            "FASTK"
+        }
+        "STOCHRSI" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let rsi_period = parameter_usize(params, 0, 14, &name)?;
+            let stoch_period = parameter_usize(params, 1, 14, &name)?;
+            let fast_k = parameter_usize(params, 2, 3, &name)?;
+            let fast_d = parameter_usize(params, 3, 3, &name)?;
+            let output = finkit::indicators::momentum::stochrsi(
+                input,
+                rsi_period,
+                stoch_period,
+                fast_k,
+                fast_d,
+            )
+            .map_err(|error| ("execution_error", format!("{name}: {error}")))?;
+            values.insert("FASTK".to_string(), output.k.to_vec());
+            values.insert("FASTD".to_string(), output.d.to_vec());
+            "FASTK"
         }
         "WILLR" => {
             let (high, low, close) = hlc(inputs, &name)?;
@@ -440,6 +588,33 @@ fn execute_talib_profile(
             );
             "ROC"
         }
+        "ROCP" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let period = parameter_usize(params, 0, 10, &name)?;
+            values.insert(
+                "ROCP".to_string(),
+                indicator_values(finkit::indicators::momentum::rocp(input, period), &name)?,
+            );
+            "ROCP"
+        }
+        "ROCR" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let period = parameter_usize(params, 0, 10, &name)?;
+            values.insert(
+                "ROCR".to_string(),
+                indicator_values(finkit::indicators::momentum::rocr(input, period), &name)?,
+            );
+            "ROCR"
+        }
+        "ROCR100" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let period = parameter_usize(params, 0, 10, &name)?;
+            values.insert(
+                "ROCR100".to_string(),
+                indicator_values(finkit::indicators::momentum::rocr100(input, period), &name)?,
+            );
+            "ROCR100"
+        }
         "OBV" => {
             let close = named_series(inputs, "CLOSE", &name)?;
             let volume = named_series(inputs, "VOLUME", &name)?;
@@ -461,6 +636,83 @@ fn execute_talib_profile(
                 )?,
             );
             "MFI"
+        }
+        "AVGPRICE" => {
+            let (open, high, low, close) = ohlc(inputs, &name)?;
+            values.insert(
+                "AVGPRICE".to_string(),
+                indicator_values(
+                    finkit::indicators::price_transform::avgprice(open, high, low, close),
+                    &name,
+                )?,
+            );
+            "AVGPRICE"
+        }
+        "MEDPRICE" => {
+            let high = named_series(inputs, "HIGH", &name)?;
+            let low = named_series(inputs, "LOW", &name)?;
+            values.insert(
+                "MEDPRICE".to_string(),
+                indicator_values(
+                    finkit::indicators::price_transform::medprice(high, low),
+                    &name,
+                )?,
+            );
+            "MEDPRICE"
+        }
+        "TYPPRICE" => {
+            let (high, low, close) = hlc(inputs, &name)?;
+            values.insert(
+                "TYPPRICE".to_string(),
+                indicator_values(
+                    finkit::indicators::price_transform::typprice(high, low, close),
+                    &name,
+                )?,
+            );
+            "TYPPRICE"
+        }
+        "WCLPRICE" => {
+            let (high, low, close) = hlc(inputs, &name)?;
+            values.insert(
+                "WCLPRICE".to_string(),
+                indicator_values(
+                    finkit::indicators::price_transform::wclprice(high, low, close),
+                    &name,
+                )?,
+            );
+            "WCLPRICE"
+        }
+        "MIDPOINT" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let period = parameter_usize(params, 0, 14, &name)?;
+            values.insert(
+                "MIDPOINT".to_string(),
+                indicator_values(finkit::indicators::overlap::midpoint(input, period), &name)?,
+            );
+            "MIDPOINT"
+        }
+        "MIDPRICE" => {
+            let high = named_series(inputs, "HIGH", &name)?;
+            let low = named_series(inputs, "LOW", &name)?;
+            let period = parameter_usize(params, 0, 14, &name)?;
+            values.insert(
+                "MIDPRICE".to_string(),
+                indicator_values(
+                    finkit::indicators::overlap::midprice(high, low, period),
+                    &name,
+                )?,
+            );
+            "MIDPRICE"
+        }
+        "SAR" => {
+            let high = named_series(inputs, "HIGH", &name)?;
+            let low = named_series(inputs, "LOW", &name)?;
+            let acceleration = parameter_f64(params, 0, 0.02, &name)?;
+            let maximum = parameter_f64(params, 1, 0.2, &name)?;
+            let output = finkit::indicators::overlap::sar(high, low, acceleration, maximum)
+                .map_err(|error| ("execution_error", format!("{name}: {error}")))?;
+            values.insert("SAR".to_string(), output.sar.to_vec());
+            "SAR"
         }
         _ => {
             return Err((
@@ -512,6 +764,18 @@ fn hlc<'a>(
     operation: &str,
 ) -> Result<(&'a [f64], &'a [f64], &'a [f64]), (&'static str, String)> {
     Ok((
+        named_series(inputs, "HIGH", operation)?,
+        named_series(inputs, "LOW", operation)?,
+        named_series(inputs, "CLOSE", operation)?,
+    ))
+}
+
+fn ohlc<'a>(
+    inputs: &'a BTreeMap<String, Vec<f64>>,
+    operation: &str,
+) -> Result<(&'a [f64], &'a [f64], &'a [f64], &'a [f64]), (&'static str, String)> {
+    Ok((
+        named_series(inputs, "OPEN", operation)?,
         named_series(inputs, "HIGH", operation)?,
         named_series(inputs, "LOW", operation)?,
         named_series(inputs, "CLOSE", operation)?,
@@ -633,6 +897,22 @@ mod tests {
         assert_eq!(payload["semantic_profile"], "talib_0_7_1");
         assert_eq!(payload["values"]["SMA"][0], Value::Null);
         assert_eq!(payload["values"]["SMA"][2], 2.5);
+    }
+
+    #[test]
+    fn talib_profile_dispatches_price_transform_with_named_output() {
+        let request = r#"{
+            "operation":"AVGPRICE",
+            "semantic_profile":"talib_0_7_1",
+            "input_order":["OPEN","HIGH","LOW","CLOSE"],
+            "inputs":{
+                "OPEN":[1.0,2.0],"HIGH":[3.0,4.0],
+                "LOW":[0.0,1.0],"CLOSE":[2.0,3.0]
+            }
+        }"#;
+        let payload: Value = serde_json::from_str(&execute_operation_json(request)).unwrap();
+        assert_eq!(payload["values"]["AVGPRICE"][0], 1.5);
+        assert_eq!(payload["values"]["AVGPRICE"][1], 2.5);
     }
 
     #[test]
