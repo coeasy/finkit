@@ -11,7 +11,7 @@ Finkit 已经拥有较宽的指标、公式、因子、流式和多语言代码�
 当前最重要的判断：
 
 1. Core 指标计算链已经可运行，公式函数与 Operation Catalog 已接入统一执行入口。
-2. TA-Lib 显式 profile 已有版本化的 JSON Operation Contract；本轮已将完整 61 项 candlestick 目录接入 Registry、Formula 和运行时分派，并以逐项真实调用测试验证。
+2. TA-Lib 显式 profile 已有版本化的 JSON Operation Contract；本轮已将 161 个 profile 名称接入共享 catalog/dispatcher，其中完整 61 项 candlestick 目录已逐项真实调用验证。
 3. Rust、Python、Go、Java、.NET、C、C++、Node 的目标应当是同一份 Rust Core + FFI Contract，而不是八套各自定义语义的 API。当前共享入口已经存在，但各语言高层类型、发布流程和跨语言 golden 仍需要继续统一。
 4. Formula 的 TDX、同花顺、东方财富兼容语义、Pine 子集、绘图和控制流都是长期核心范围；它们必须进入同一个编译计划和能力矩阵，不能仅停留在 parser 或函数名登记层。
 5. Factor 和 Composite 都必须支持高吞吐生产运行，但不得通过继续复制 Factory/Registry/Executor 接口解决。应统一为 typed IR、compiled plan、kernel dispatch、状态和缓存身份。
@@ -193,7 +193,7 @@ semantic_profile + operation/formula id + parameter hash
 
 ### 5.4 公式与 TA-Lib profile
 
-TA-Lib profile 使用显式版本化名称（当前代码为 `talib_0_7_1`），不把 Core warm-up 语义伪装成 TA-Lib 语义。每个公开 TA-Lib operation 要有参数默认值、MA type、输出名、warm-up、NaN 和参考结果说明。
+TA-Lib profile 使用显式版本化名称（当前代码为 `talib_0_7_1`），不把 Core warm-up 语义伪装成 TA-Lib 语义。每个公开 TA-Lib operation 要有参数默认值、MA type、输出名、warm-up、NaN 和参考结果说明。当前 catalog 已补齐 profile-only 条目的可执行参数元数据；STOCH/APO 等尚未实现的完整 MA type 变体必须继续作为显式缺口处理，不能只在目录中声明而让执行器忽略。
 
 Formula profile 也必须版本化：
 
@@ -264,6 +264,8 @@ talib_0_7_1
 - Factor 已补齐 `factor.catalog.v1` JSON discovery contract：C/C++、Go、Java、.NET、Python、Node 与 Rust FFI common 共用同一份内置因子目录，公开名称、类型、方向、依赖、版本及 streaming/incremental 能力，执行入口与发现入口不再断开。
 - Lightweight Charts adapter 已修复增量 payload 中动态新增 line 不创建 series 的问题；`visualization/frontend/lightweight-charts-adapter.test.mjs` 已覆盖 null/warm-up 空白点、markers、viewport、增量更新、完整替换和 schema 拒绝。
 - TA-Lib `MINMAX` 与 `MINMAXINDEX` 已加入 registry、core multi-output dispatcher、TA-Lib FFI profile 和 operation catalog；输出名固定为 `MIN/MAX` 与 `MININDEX/MAXINDEX`，并有 JSON execution tests。
+- TA-Lib profile catalog 已集中维护 161 个名称，所有绑定从同一目录发现；profile-only 条目现在公开输入形状、输出名、默认参数和约束，避免跨语言各自维护名称/参数表。
+- 新增 161 个 TA-Lib profile 名称的 JSON dispatcher smoke test：逐项经过统一请求、分派和结果 envelope，确认返回结构及等长输出；这属于执行链覆盖验证，不等同于 161 项数值等价验证。
 - 修复 DZH `MOD(...)` 函数调用与中缀 `MOD` 运算符的 grammar 冲突，国内公式集成测试重新通过。
 - TA-Lib parity corpus 已生成并纳入版本控制：44 个声明指标、3 组固定 OHLCV fixture，参考版本固定为 Python `0.6.8`；golden 缺失现在是失败，不再静默 skip。PLUS_DM/MINUS_DM 已接入带 period 的 Wilder 平滑，PPO 已接入 TA-Lib `matype`（默认 SMA）语义；STDDEV/VAR 使用文档化的相对浮点容差。AD 的公开路径保留 TA-Lib 标量运算顺序，避免 AVX2 累计 ULP 偏差；CLI OHLCV CSV 读取也支持 fixture 的 `#` 元数据行。
 
@@ -273,7 +275,7 @@ talib_0_7_1
 
 - `cargo +1.98.1 test --workspace --offline --quiet`：全 workspace 测试通过；其中核心库为 `2920 passed, 0 failed, 1 ignored`，DZH compatibility 为 `43 passed, 0 failed`，CLI schema 为 `3 passed, 0 failed`，其余 workspace test targets 也无失败。
 - 定向验证：`finkit` operation tests `19 passed`、Composite tests `8 passed`、`finkit-ffi-common` library tests `28 passed`、C ABI library tests `23 passed`。
-- 最新定向验证：`finkit-ffi-common` library tests `29 passed`，C ABI catalog/execution tests已包含 `factor.catalog.v1`。
+- 最新定向验证：`finkit-ffi-common` library tests `31 passed`，包含 161 个 TA-Lib profile 名称的 dispatcher smoke 和 profile-only 参数目录测试；C ABI catalog/execution tests 已包含 `factor.catalog.v1`。
 - `cargo +1.98.1 check -p finkit-python -p finkit-node -p finkit-go -p finkit-java -p finkit-dotnet -p finkit-ffi --offline`：通过。
 - 61 个 candlestick operation 在 `talib_0_7_1` profile 下逐项真实分派并返回等长结果。
 - `cargo +1.98.1 fmt --all` 已执行。

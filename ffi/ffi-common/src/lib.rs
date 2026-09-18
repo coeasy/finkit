@@ -23,6 +23,7 @@ pub mod operation;
 pub mod panic;
 pub mod registry;
 pub mod research;
+pub mod talib_catalog;
 pub mod types;
 
 pub use composite::{evaluate_composite_json, COMPOSITE_CONTRACT_SCHEMA_VERSION};
@@ -39,3 +40,4 @@ pub use research::{
     QuantEvaluationRequest, QuantEvaluationResponse, ResearchApiError,
     FACTOR_STUDY_MIN_SCHEMA_VERSION, FACTOR_STUDY_SCHEMA_VERSION, QUANT_EVALUATION_SCHEMA_VERSION,
 };
+pub use talib_catalog::{is_profile_catalog_name, TALIB_PROFILE_CATALOG_NAMES};

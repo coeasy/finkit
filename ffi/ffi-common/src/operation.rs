@@ -6,6 +6,7 @@
 //! shape, or capability declarations.
 
 use crate::execute::talib_profile_supported;
+use crate::talib_catalog::TALIB_PROFILE_CATALOG_NAMES;
 use finkit::operation::{
     builtin_operation_registry, OperationCapabilities, OperationKind, OperationRegistry,
     OperationSpec,
@@ -144,13 +145,167 @@ impl OperationCatalogEntry {
 
 /// Build the shared operation catalog from a supplied registry.
 pub fn operation_catalog(registry: &OperationRegistry) -> OperationCatalogEnvelope {
+    let mut operations: Vec<OperationCatalogEntry> = registry
+        .iter()
+        .map(OperationCatalogEntry::from_spec)
+        .collect();
+
+    // The native Core registry intentionally contains only the canonical Core
+    // surface.  TA-Lib has additional profile-only names (notably its full
+    // candlestick directory and math transforms), but they are still public
+    // executable operations through the versioned dispatcher.  Keep them in
+    // the same catalog so language bindings do not have to maintain a second
+    // hand-written TA-Lib name list.
+    for name in TALIB_PROFILE_CATALOG_NAMES {
+        if registry.get(name).is_none() {
+            operations.push(profile_only_talib_entry(name));
+        }
+    }
+    operations.sort_by(|left, right| left.name.cmp(&right.name));
+
     OperationCatalogEnvelope {
         schema_version: 1,
         engine_version: env!("CARGO_PKG_VERSION"),
-        operations: registry
-            .iter()
-            .map(OperationCatalogEntry::from_spec)
-            .collect(),
+        operations,
+    }
+}
+
+fn profile_only_talib_entry(name: &str) -> OperationCatalogEntry {
+    let is_pattern = name.starts_with("CDL");
+    let (value_shape, outputs, output_names) = match name {
+        "STOCH" => (
+            "multi_series",
+            2,
+            vec!["SLOWK".to_string(), "SLOWD".to_string()],
+        ),
+        "STOCHF" => (
+            "multi_series",
+            2,
+            vec!["FASTK".to_string(), "FASTD".to_string()],
+        ),
+        "STOCHRSI" => (
+            "multi_series",
+            2,
+            vec!["FASTK".to_string(), "FASTD".to_string()],
+        ),
+        _ => ("series", 1, vec![name.to_string()]),
+    };
+    let input = if is_pattern || matches!(name, "AVGPRICE" | "BOP") {
+        Some("ohlcv")
+    } else if matches!(name, "MEDPRICE" | "MIDPRICE" | "SAR") {
+        Some("hlc")
+    } else {
+        Some("series")
+    };
+    OperationCatalogEntry {
+        operation_id: finkit::operation::OperationId::from_name(name).0,
+        name: name.to_string(),
+        aliases: Vec::new(),
+        kind: "indicator",
+        value_shape,
+        category: Some("talib"),
+        input,
+        params: talib_profile_params(name),
+        outputs,
+        output_names,
+        lookback: "dynamic",
+        capabilities: OperationCapabilities::indicator(false, true).into(),
+        schema_version: 1,
+        semantic_profiles: vec!["talib_0_7_1".to_string()],
+    }
+}
+
+fn talib_parameter(
+    name: &str,
+    value_type: &str,
+    default: Option<&str>,
+    constraint: Option<&str>,
+) -> OperationParameter {
+    OperationParameter {
+        name: name.to_string(),
+        value_type: value_type.to_string(),
+        default: default.map(str::to_string),
+        constraint: constraint.map(str::to_string),
+    }
+}
+
+fn period_parameter(default: &'static str) -> OperationParameter {
+    talib_parameter("timeperiod", "integer", Some(default), Some("integer >= 1"))
+}
+
+/// Parameters for names that are not projected from the Core registry.
+///
+/// These describe the currently executable shared-dispatcher contract.  The
+/// full TA-Lib matype variants remain an explicit follow-up because the
+/// underlying Core kernels must first expose the corresponding MA selector;
+/// silently advertising parameters that the executor ignores would be worse
+/// than making that boundary visible.
+fn talib_profile_params(name: &str) -> Vec<OperationParameter> {
+    let period = || period_parameter("14");
+    match name {
+        "ADX" | "ADXR" | "AROON" | "AROONOSC" | "CCI" | "CMO" | "DX" | "MFI" | "MINUS_DI"
+        | "MINUS_DM" | "PLUS_DI" | "PLUS_DM" | "RSI" | "WILLR" | "ROCP" | "ROCR" | "ROCR100" => {
+            vec![period()]
+        }
+        "APO" | "PPO" => vec![
+            talib_parameter("fastperiod", "integer", Some("12"), Some("integer >= 1")),
+            talib_parameter("slowperiod", "integer", Some("26"), Some("integer >= 1")),
+        ],
+        "STOCH" => vec![
+            talib_parameter("fastk_period", "integer", Some("5"), Some("integer >= 1")),
+            talib_parameter("slowk_period", "integer", Some("3"), Some("integer >= 1")),
+            talib_parameter("slowd_period", "integer", Some("3"), Some("integer >= 1")),
+        ],
+        "STOCHF" => vec![
+            talib_parameter("fastk_period", "integer", Some("5"), Some("integer >= 1")),
+            talib_parameter("fastd_period", "integer", Some("3"), Some("integer >= 1")),
+        ],
+        "STOCHRSI" => vec![
+            talib_parameter("timeperiod", "integer", Some("14"), Some("integer >= 1")),
+            talib_parameter("fastk_period", "integer", Some("14"), Some("integer >= 1")),
+            talib_parameter("fastd_period", "integer", Some("3"), Some("integer >= 1")),
+            talib_parameter(
+                "fastd_smoothing",
+                "integer",
+                Some("3"),
+                Some("integer >= 1"),
+            ),
+        ],
+        "MAVP" => vec![
+            talib_parameter("minperiod", "integer", Some("2"), Some("integer >= 2")),
+            talib_parameter(
+                "maxperiod",
+                "integer",
+                Some("30"),
+                Some("integer >= minperiod"),
+            ),
+        ],
+        "BETA" | "CORREL" => vec![period()],
+        "MAX"
+        | "MIN"
+        | "MAXINDEX"
+        | "MININDEX"
+        | "MINMAX"
+        | "MINMAXINDEX"
+        | "SUM"
+        | "LINEARREG"
+        | "LINEARREG_ANGLE"
+        | "LINEARREG_INTERCEPT"
+        | "LINEARREG_SLOPE"
+        | "STDDEV"
+        | "TSF"
+        | "VAR" => vec![period_parameter("30")],
+        "T3" => vec![
+            talib_parameter("timeperiod", "integer", Some("5"), Some("integer >= 1")),
+            talib_parameter(
+                "vfactor",
+                "number",
+                Some("0.7"),
+                Some("0.0 <= value <= 1.0"),
+            ),
+        ],
+        "TRIX" => vec![period_parameter("30")],
+        _ => Vec::new(),
     }
 }
 
@@ -226,10 +381,17 @@ mod tests {
     }
 
     #[test]
-    fn catalog_projection_preserves_registry_order_and_count() {
+    fn catalog_is_deterministic_and_includes_registry_entries() {
         let registry = builtin_operation_registry();
         let catalog = operation_catalog(&registry);
-        assert_eq!(catalog.operations.len(), registry.len());
+        assert_eq!(
+            catalog.operations.len(),
+            registry.len()
+                + TALIB_PROFILE_CATALOG_NAMES
+                    .iter()
+                    .filter(|name| registry.get(name).is_none())
+                    .count()
+        );
         let names: Vec<_> = catalog
             .operations
             .iter()
@@ -343,5 +505,58 @@ mod tests {
                 .iter()
                 .any(|profile| profile == "talib_0_7_1"));
         }
+    }
+
+    #[test]
+    fn catalog_exposes_every_profile_only_talib_name() {
+        let registry = builtin_operation_registry();
+        let catalog = operation_catalog(&registry);
+        for name in TALIB_PROFILE_CATALOG_NAMES {
+            let operation = catalog
+                .operations
+                .iter()
+                .find(|operation| operation.name == *name)
+                .unwrap_or_else(|| panic!("missing TA-Lib profile operation {name}"));
+            if registry.get(name).is_some() {
+                assert_eq!(
+                    operation.semantic_profiles,
+                    vec!["core_registry", "talib_0_7_1"]
+                );
+            } else {
+                assert_eq!(operation.semantic_profiles, vec!["talib_0_7_1"]);
+            }
+            assert!(talib_profile_supported(name));
+        }
+    }
+
+    #[test]
+    fn profile_only_entries_publish_executable_parameter_contracts() {
+        let catalog = operation_catalog(&builtin_operation_registry());
+        let find = |name: &str| {
+            catalog
+                .operations
+                .iter()
+                .find(|operation| operation.name == name)
+                .unwrap_or_else(|| panic!("missing operation {name}"))
+        };
+
+        let stoch = find("STOCH");
+        assert_eq!(
+            stoch
+                .params
+                .iter()
+                .map(|param| param.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["fastk_period", "slowk_period", "slowd_period"]
+        );
+        assert_eq!(stoch.params[0].default.as_deref(), Some("5"));
+
+        let apo = find("APO");
+        assert_eq!(apo.params.len(), 2);
+        assert_eq!(apo.params[1].name, "slowperiod");
+        assert_eq!(apo.params[1].constraint.as_deref(), Some("integer >= 1"));
+
+        let candle = find("CDLDOJI");
+        assert!(candle.params.is_empty());
     }
 }

@@ -1745,6 +1745,205 @@ mod tests {
     }
 
     #[test]
+    fn talib_profile_executes_every_catalog_name_through_json_contract() {
+        use std::collections::BTreeSet;
+
+        let mut names = BTreeSet::new();
+        names.extend(
+            crate::talib_catalog::TALIB_PROFILE_CATALOG_NAMES
+                .iter()
+                .copied(),
+        );
+        let registry = finkit::operation::builtin_operation_registry();
+        for spec in registry.iter() {
+            if talib_profile_supported(&spec.name) {
+                names.insert(spec.name.as_str());
+            }
+        }
+        assert_eq!(names.len(), 161, "TA-Lib catalog must contain 161 names");
+
+        let length = 256;
+        let close = (0..length)
+            .map(|index| 100.0 + (index as f64 * 0.17).sin() * 3.0 + index as f64 * 0.01)
+            .collect::<Vec<_>>();
+        let open = close
+            .iter()
+            .enumerate()
+            .map(|(index, value)| value + if index % 2 == 0 { 0.2 } else { -0.15 })
+            .collect::<Vec<_>>();
+        let high = open
+            .iter()
+            .zip(close.iter())
+            .map(|(open, close)| open.max(*close) + 0.8)
+            .collect::<Vec<_>>();
+        let low = open
+            .iter()
+            .zip(close.iter())
+            .map(|(open, close)| open.min(*close) - 0.8)
+            .collect::<Vec<_>>();
+        let volume = (0..length)
+            .map(|index| 1_000.0 + (index % 17) as f64 * 13.0)
+            .collect::<Vec<_>>();
+        let benchmark = close
+            .iter()
+            .enumerate()
+            .map(|(index, value)| value * 0.97 + index as f64 * 0.02)
+            .collect::<Vec<_>>();
+        let math = (0..length)
+            .map(|index| 0.25 + (index as f64 * 0.11).sin() * 0.2)
+            .collect::<Vec<_>>();
+        let periods = (0..length)
+            .map(|index| 5.0 + (index % 10) as f64)
+            .collect::<Vec<_>>();
+
+        for name in names {
+            let (input_order, params): (Vec<&str>, Vec<f64>) =
+                if name.starts_with("CDL") || matches!(name, "AVGPRICE" | "BOP") {
+                    (vec!["OPEN", "HIGH", "LOW", "CLOSE"], vec![])
+                } else if matches!(name, "MEDPRICE" | "MIDPRICE" | "SAR" | "SAREXT" | "AROON") {
+                    let params = if name == "SAREXT" {
+                        vec![0.0, 0.0, 0.02, 0.02, 0.2, 0.02, 0.02, 0.2]
+                    } else if name == "SAR" {
+                        vec![0.02, 0.2]
+                    } else if name == "AROON" {
+                        vec![14.0]
+                    } else {
+                        vec![14.0]
+                    };
+                    (vec!["HIGH", "LOW"], params)
+                } else if name == "MAVP" {
+                    (vec!["CLOSE", "PERIODS"], vec![2.0, 30.0, 0.0])
+                } else if matches!(name, "BETA" | "CORREL") {
+                    (vec!["CLOSE", "BENCHMARK"], vec![30.0])
+                } else if matches!(name, "ADD" | "DIV" | "MULT" | "SUB") {
+                    (vec!["CLOSE", "OPEN"], vec![])
+                } else if matches!(
+                    name,
+                    "AD" | "ADOSC"
+                        | "ATR"
+                        | "ADX"
+                        | "ADXR"
+                        | "CCI"
+                        | "DX"
+                        | "MFI"
+                        | "MINUS_DI"
+                        | "MINUS_DM"
+                        | "NATR"
+                        | "PLUS_DI"
+                        | "PLUS_DM"
+                        | "STOCH"
+                        | "STOCHF"
+                        | "STOCHRSI"
+                        | "TRANGE"
+                        | "ULTOSC"
+                        | "WILLR"
+                ) {
+                    let params = match name {
+                        "ADOSC" => vec![3.0, 10.0],
+                        "STOCH" => vec![14.0, 3.0, 3.0],
+                        "STOCHF" => vec![14.0, 3.0],
+                        "STOCHRSI" => vec![14.0, 5.0, 3.0, 3.0],
+                        "ULTOSC" => vec![7.0, 14.0, 28.0],
+                        "TRANGE" | "AD" | "MFI" => vec![],
+                        _ => vec![14.0],
+                    };
+                    let order = if matches!(name, "AD" | "ADOSC" | "MFI") {
+                        vec!["HIGH", "LOW", "CLOSE", "VOLUME"]
+                    } else {
+                        vec!["HIGH", "LOW", "CLOSE"]
+                    };
+                    (order, params)
+                } else if matches!(name, "MACD" | "MACDEXT" | "MACDFIX") {
+                    let params = match name {
+                        "MACD" => vec![12.0, 26.0, 9.0],
+                        "MACDEXT" => vec![12.0, 0.0, 26.0, 0.0, 9.0, 0.0],
+                        _ => vec![9.0],
+                    };
+                    (vec!["CLOSE"], params)
+                } else if name == "BBANDS" {
+                    (vec!["CLOSE"], vec![20.0, 2.0, 2.0, 0.0])
+                } else if name == "T3" {
+                    (vec!["CLOSE"], vec![5.0, 0.7])
+                } else if name == "MAMA" {
+                    (vec!["CLOSE"], vec![0.5, 0.05])
+                } else if name == "PPO" {
+                    (vec!["CLOSE"], vec![12.0, 26.0])
+                } else if matches!(
+                    name,
+                    "MAX" | "MIN" | "MAXINDEX" | "MININDEX" | "MINMAX" | "MINMAXINDEX" | "SUM"
+                ) {
+                    (vec!["CLOSE"], vec![30.0])
+                } else if matches!(
+                    name,
+                    "LINEARREG"
+                        | "LINEARREG_ANGLE"
+                        | "LINEARREG_INTERCEPT"
+                        | "LINEARREG_SLOPE"
+                        | "STDDEV"
+                        | "TSF"
+                        | "VAR"
+                ) {
+                    (vec!["CLOSE"], vec![30.0])
+                } else if name == "APO" {
+                    (vec!["CLOSE"], vec![12.0, 26.0])
+                } else if matches!(name, "ROCP" | "ROCR" | "ROCR100") {
+                    (vec!["CLOSE"], vec![14.0])
+                } else if matches!(name, "MOM" | "ROC" | "RSI" | "CMO" | "TRIX") {
+                    (vec!["CLOSE"], vec![14.0])
+                } else if matches!(
+                    name,
+                    "ACOS"
+                        | "ASIN"
+                        | "ATAN"
+                        | "CEIL"
+                        | "COS"
+                        | "COSH"
+                        | "EXP"
+                        | "FLOOR"
+                        | "LN"
+                        | "LOG10"
+                        | "SIN"
+                        | "SINH"
+                        | "SQRT"
+                        | "TAN"
+                        | "TANH"
+                ) {
+                    (vec!["MATH"], vec![])
+                } else {
+                    (vec!["CLOSE"], vec![])
+                };
+
+            let request = serde_json::json!({
+                "operation": name,
+                "semantic_profile": "talib_0_7_1",
+                "input_order": input_order,
+                "inputs": {
+                    "OPEN": open,
+                    "HIGH": high,
+                    "LOW": low,
+                    "CLOSE": close,
+                    "VOLUME": volume,
+                    "BENCHMARK": benchmark,
+                    "PERIODS": periods,
+                    "MATH": math
+                },
+                "params": params
+            })
+            .to_string();
+            let payload: Value = serde_json::from_str(&execute_operation_json(&request)).unwrap();
+            assert!(payload.get("error").is_none(), "{name}: {payload}");
+            assert!(payload["values"].as_object().is_some(), "{name}: {payload}");
+            for (output_name, values) in payload["values"].as_object().unwrap() {
+                assert_eq!(
+                    values.as_array().map(Vec::len),
+                    Some(length),
+                    "{name}/{output_name}: {payload}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn talib_profile_dispatches_generic_ma_macd_variants_and_cmo() {
         let request = serde_json::json!({
             "operation": "MA",
