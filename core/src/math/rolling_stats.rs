@@ -226,19 +226,21 @@ pub fn stddev20_into(input: &[f64], output: &mut [f64]) -> Result<()> {
 
     let mut trailing_idx = 0usize;
     let mut bars_since_reseed = RESEED_INTERVAL;
+    let input_ptr = input.as_ptr();
+    let output_ptr = output.as_mut_ptr();
     for index in PERIOD - 1..input.len() {
-        let delta = input[index] - shift;
+        let delta = unsafe { *input_ptr.add(index) } - shift;
         total1 += delta;
         total2 += delta * delta;
         let mean = total1 * INV_PERIOD;
         let mut variance = total2 * INV_PERIOD - mean * mean;
 
-        let trailing_delta = input[trailing_idx] - shift;
+        let trailing_delta = unsafe { *input_ptr.add(trailing_idx) } - shift;
         let trailing_square = trailing_delta * trailing_delta;
         total1 -= trailing_delta;
         total2 -= trailing_square;
         trailing_idx += 1;
-        bars_since_reseed = bars_since_reseed.saturating_sub(1);
+        bars_since_reseed -= 1;
 
         if variance < 1e-6 * (total2 * INV_PERIOD)
             || trailing_square > 1e6 * total2
@@ -247,93 +249,39 @@ pub fn stddev20_into(input: &[f64], output: &mut [f64]) -> Result<()> {
             bars_since_reseed = RESEED_INTERVAL;
             let window_start = index + 1 - PERIOD;
             let mut sum = 0.0;
-            for &value in &input[window_start..=index] {
-                sum += value;
+            let mut cursor = window_start;
+            while cursor <= index {
+                sum += unsafe { *input_ptr.add(cursor) };
+                cursor += 1;
             }
             shift = sum * INV_PERIOD;
             total1 = 0.0;
             total2 = 0.0;
-            for &value in &input[window_start..=index] {
-                let delta = value - shift;
+            cursor = window_start;
+            while cursor <= index {
+                let delta = unsafe { *input_ptr.add(cursor) } - shift;
                 total1 += delta;
                 total2 += delta * delta;
+                cursor += 1;
             }
             let mean = total1 * INV_PERIOD;
             variance = total2 * INV_PERIOD - mean * mean;
             if variance < 1e-12 * (total2 * INV_PERIOD) {
                 variance = 0.0;
             }
-            let delta = input[window_start] - shift;
+            let delta = unsafe { *input_ptr.add(window_start) } - shift;
             total1 -= delta;
             total2 -= delta * delta;
         }
-        output[index] = variance.sqrt();
+        unsafe { *output_ptr.add(index) = variance.sqrt() };
     }
     Ok(())
 }
 
 /// Fixed-period VAR20 kernel sharing the STDDEV20 TA-Lib state machine.
 pub fn variance20(input: &[f64]) -> Result<Vec<f64>> {
-    const PERIOD: usize = 20;
-    const INV_PERIOD: f64 = 1.0 / PERIOD as f64;
-    const RESEED_INTERVAL: usize = 32 * PERIOD;
-
-    validate_period(input.len(), PERIOD, 1)?;
     let mut output = vec![f64::NAN; input.len()];
-    let mut shift = input[0];
-    let mut total1 = 0.0;
-    let mut total2 = 0.0;
-    for &value in &input[..PERIOD - 1] {
-        let delta = value - shift;
-        total1 += delta;
-        total2 += delta * delta;
-    }
-
-    let mut trailing_idx = 0usize;
-    let mut bars_since_reseed = RESEED_INTERVAL;
-    for index in PERIOD - 1..input.len() {
-        let delta = input[index] - shift;
-        total1 += delta;
-        total2 += delta * delta;
-        let mean = total1 * INV_PERIOD;
-        let mut variance = total2 * INV_PERIOD - mean * mean;
-
-        let trailing_delta = input[trailing_idx] - shift;
-        let trailing_square = trailing_delta * trailing_delta;
-        total1 -= trailing_delta;
-        total2 -= trailing_square;
-        trailing_idx += 1;
-        bars_since_reseed = bars_since_reseed.saturating_sub(1);
-
-        if variance < 1e-6 * (total2 * INV_PERIOD)
-            || trailing_square > 1e6 * total2
-            || bars_since_reseed == 0
-        {
-            bars_since_reseed = RESEED_INTERVAL;
-            let window_start = index + 1 - PERIOD;
-            let mut sum = 0.0;
-            for &value in &input[window_start..=index] {
-                sum += value;
-            }
-            shift = sum * INV_PERIOD;
-            total1 = 0.0;
-            total2 = 0.0;
-            for &value in &input[window_start..=index] {
-                let delta = value - shift;
-                total1 += delta;
-                total2 += delta * delta;
-            }
-            let mean = total1 * INV_PERIOD;
-            variance = total2 * INV_PERIOD - mean * mean;
-            if variance < 1e-12 * (total2 * INV_PERIOD) {
-                variance = 0.0;
-            }
-            let delta = input[window_start] - shift;
-            total1 -= delta;
-            total2 -= delta * delta;
-        }
-        output[index] = variance;
-    }
+    variance20_into(input, &mut output)?;
     Ok(output)
 }
 
@@ -363,19 +311,21 @@ pub fn variance20_into(input: &[f64], output: &mut [f64]) -> Result<()> {
 
     let mut trailing_idx = 0usize;
     let mut bars_since_reseed = RESEED_INTERVAL;
+    let input_ptr = input.as_ptr();
+    let output_ptr = output.as_mut_ptr();
     for index in PERIOD - 1..input.len() {
-        let delta = input[index] - shift;
+        let delta = unsafe { *input_ptr.add(index) } - shift;
         total1 += delta;
         total2 += delta * delta;
         let mean = total1 * INV_PERIOD;
         let mut variance = total2 * INV_PERIOD - mean * mean;
 
-        let trailing_delta = input[trailing_idx] - shift;
+        let trailing_delta = unsafe { *input_ptr.add(trailing_idx) } - shift;
         let trailing_square = trailing_delta * trailing_delta;
         total1 -= trailing_delta;
         total2 -= trailing_square;
         trailing_idx += 1;
-        bars_since_reseed = bars_since_reseed.saturating_sub(1);
+        bars_since_reseed -= 1;
 
         if variance < 1e-6 * (total2 * INV_PERIOD)
             || trailing_square > 1e6 * total2
@@ -384,27 +334,31 @@ pub fn variance20_into(input: &[f64], output: &mut [f64]) -> Result<()> {
             bars_since_reseed = RESEED_INTERVAL;
             let window_start = index + 1 - PERIOD;
             let mut sum = 0.0;
-            for &value in &input[window_start..=index] {
-                sum += value;
+            let mut cursor = window_start;
+            while cursor <= index {
+                sum += unsafe { *input_ptr.add(cursor) };
+                cursor += 1;
             }
             shift = sum * INV_PERIOD;
             total1 = 0.0;
             total2 = 0.0;
-            for &value in &input[window_start..=index] {
-                let delta = value - shift;
+            cursor = window_start;
+            while cursor <= index {
+                let delta = unsafe { *input_ptr.add(cursor) } - shift;
                 total1 += delta;
                 total2 += delta * delta;
+                cursor += 1;
             }
             let mean = total1 * INV_PERIOD;
             variance = total2 * INV_PERIOD - mean * mean;
             if variance < 1e-12 * (total2 * INV_PERIOD) {
                 variance = 0.0;
             }
-            let delta = input[window_start] - shift;
+            let delta = unsafe { *input_ptr.add(window_start) } - shift;
             total1 -= delta;
             total2 -= delta * delta;
         }
-        output[index] = variance;
+        unsafe { *output_ptr.add(index) = variance };
     }
     Ok(())
 }
@@ -717,6 +671,21 @@ mod tests {
             let sigma = variance[index].sqrt();
             assert_eq!(upper[index], middle[index] + 2.0 * sigma);
             assert_eq!(lower[index], middle[index] - 2.0 * sigma);
+        }
+    }
+
+    #[test]
+    fn variance20_matches_generic_rolling_variance() {
+        let input: Vec<f64> = (0..256)
+            .map(|index| 100.0 + index as f64 * 0.03 + (index as f64 * 0.07).sin())
+            .collect();
+        let expected = variance(&input, 20).unwrap();
+        let actual = variance20(&input).unwrap();
+        for (expected, actual) in expected.iter().zip(actual.iter()) {
+            assert_eq!(expected.is_nan(), actual.is_nan());
+            if expected.is_finite() {
+                assert_eq!(expected, actual);
+            }
         }
     }
 }

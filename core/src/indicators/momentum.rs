@@ -2026,7 +2026,9 @@ pub fn willr14_into(high: &[f64], low: &[f64], close: &[f64], output: &mut [f64]
 
     crate::utils::simd_fill_nan(&mut output[..PERIOD - 1]);
     let mut high_queue = [0usize; 16];
+    let mut high_values = [0.0f64; 16];
     let mut low_queue = [0usize; 16];
+    let mut low_values = [0.0f64; 16];
     let mut high_head = 0usize;
     let mut high_tail = 0usize;
     let mut low_head = 0usize;
@@ -2039,28 +2041,32 @@ pub fn willr14_into(high: &[f64], low: &[f64], close: &[f64], output: &mut [f64]
             low_head += 1;
         }
         while high_head < high_tail {
-            let back = high_queue[(high_tail - 1) & 15];
-            if high[back] <= high[index] {
+            let back_slot = (high_tail - 1) & 15;
+            if high_values[back_slot] <= high[index] {
                 high_tail -= 1;
             } else {
                 break;
             }
         }
-        high_queue[high_tail & 15] = index;
+        let high_slot = high_tail & 15;
+        high_queue[high_slot] = index;
+        high_values[high_slot] = high[index];
         high_tail += 1;
         while low_head < low_tail {
-            let back = low_queue[(low_tail - 1) & 15];
-            if low[back] >= low[index] {
+            let back_slot = (low_tail - 1) & 15;
+            if low_values[back_slot] >= low[index] {
                 low_tail -= 1;
             } else {
                 break;
             }
         }
-        low_queue[low_tail & 15] = index;
+        let low_slot = low_tail & 15;
+        low_queue[low_slot] = index;
+        low_values[low_slot] = low[index];
         low_tail += 1;
         if index >= PERIOD - 1 {
-            let highest = high[high_queue[high_head & 15]];
-            let lowest = low[low_queue[low_head & 15]];
+            let highest = high_values[high_head & 15];
+            let lowest = low_values[low_head & 15];
             let range = highest - lowest;
             output[index] = if range > 1e-15 {
                 (highest - close[index]) / range * -100.0
@@ -4967,6 +4973,28 @@ mod tests {
         let close = vec![9.0, 11.0, 13.0, 15.0, 17.0];
         let result = willr(&high, &low, &close, 3).unwrap();
         assert!(!result[2].is_nan());
+    }
+
+    #[test]
+    fn test_willr14_fixed_kernel_matches_generic() {
+        let high: Vec<f64> = (0..96)
+            .map(|index| 100.0 + (index % 17) as f64 + (index / 17) as f64 * 0.25)
+            .collect();
+        let low: Vec<f64> = high
+            .iter()
+            .enumerate()
+            .map(|(index, value)| value - 2.0 - (index % 5) as f64 * 0.1)
+            .collect();
+        let close: Vec<f64> = high
+            .iter()
+            .zip(&low)
+            .enumerate()
+            .map(|(index, (&high, &low))| low + (high - low) * (0.2 + (index % 7) as f64 * 0.1))
+            .collect();
+        let expected = willr(&high, &low, &close, 14).unwrap();
+        let mut actual = vec![0.0; close.len()];
+        willr14_into(&high, &low, &close, &mut actual).unwrap();
+        assert_array_matches_slice(&expected, &actual);
     }
 
     #[test]
