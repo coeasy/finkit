@@ -277,7 +277,7 @@ talib_0_7_1
 - TDX/同花顺/东方财富全部市场函数和 Pine 全语言兼容；
 - Factor/Composite 所有路径都已达到生产吞吐 SLO；
 - CMake/CTest 下的 C++ 原生编译与安装（当前验证环境没有 CMake/CTest）；
-- 八语言真实宿主运行时 golden、发布包和 ABI 稳定性；workspace 中 Node binding 的测试出现 Node-API 宿主符号加载告警，不能替代真实 Node 宿主 smoke test；
+- 八语言真实宿主运行时 golden、发布包和 ABI 稳定性；workspace 中 Node binding 的 Rust 测试出现 Node-API 宿主符号加载告警，且 `ffi/node-binding npm test` 在当前环境因缺少 `finkit-win32-x64-msvc` native addon 包而未进入用例，不能替代真实 Node 宿主 smoke test；
 - Lightweight Charts 完整浏览器交互集成；
 - 订单、回测或风控能力（明确不在本项目范围）。
 
