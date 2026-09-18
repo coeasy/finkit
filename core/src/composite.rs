@@ -134,6 +134,14 @@ impl CompiledCompositePlan {
     }
 }
 
+const COMPILED_PLAN_CACHE_CAPACITY: usize = 64;
+
+#[derive(Clone)]
+struct CompiledPlanCacheEntry {
+    plan: CompiledCompositePlan,
+    last_used: u64,
+}
+
 /// Dependency-aware composite-indicator evaluator.
 #[derive(Clone)]
 pub struct CompositeEngine {
@@ -141,9 +149,10 @@ pub struct CompositeEngine {
     /// Compiled graph plans are reused across cache revisions and scopes.
     /// Keeping them separate from result snapshots prevents repeated cached
     /// evaluations from rebuilding dependency maps and cycle checks.
-    compiled_plans: BTreeMap<u64, CompiledCompositePlan>,
+    compiled_plans: BTreeMap<u64, CompiledPlanCacheEntry>,
     compiled_plan_cache_hits: u64,
     compiled_plan_cache_misses: u64,
+    compiled_plan_cache_clock: u64,
     cache: BTreeMap<CompositeCacheKey, CompositeCacheEntry>,
     cache_capacity: usize,
     cache_clock: u64,
@@ -210,6 +219,7 @@ impl CompositeEngine {
         self.compiled_plans.clear();
         self.compiled_plan_cache_hits = 0;
         self.compiled_plan_cache_misses = 0;
+        self.compiled_plan_cache_clock = 0;
         self.cache.clear();
         self.cache_clock = 0;
         Ok(())
@@ -237,6 +247,12 @@ impl CompositeEngine {
     pub fn clear_cache(&mut self) {
         self.cache.clear();
         self.cache_clock = 0;
+    }
+
+    /// Return the number of compiled graph plans currently retained.
+    #[must_use]
+    pub fn compiled_plan_count(&self) -> usize {
+        self.compiled_plans.len()
     }
 
     /// Compile and validate a reusable composite graph plan.
@@ -275,6 +291,45 @@ impl CompositeEngine {
         })
     }
 
+    /// Compile a graph through the engine-owned bounded plan cache.
+    ///
+    /// This is the single cache owner for Composite plans. Higher-level
+    /// façades should call this method instead of keeping a second cache.
+    pub fn compile_cached(
+        &mut self,
+        definitions: &[CompositeDefinition],
+        outputs: &[&str],
+    ) -> FactorResult<CompiledCompositePlan> {
+        let signature = graph_signature(definitions, outputs);
+        let tick = self.next_compiled_plan_tick();
+        if let Some(entry) = self.compiled_plans.get_mut(&signature) {
+            self.compiled_plan_cache_hits = self.compiled_plan_cache_hits.saturating_add(1);
+            entry.last_used = tick;
+            return Ok(entry.plan.clone());
+        }
+
+        self.compiled_plan_cache_misses = self.compiled_plan_cache_misses.saturating_add(1);
+        let plan = self.compile(definitions, outputs)?;
+        if self.compiled_plans.len() >= COMPILED_PLAN_CACHE_CAPACITY {
+            if let Some(oldest) = self
+                .compiled_plans
+                .iter()
+                .min_by_key(|(_, entry)| entry.last_used)
+                .map(|(signature, _)| *signature)
+            {
+                self.compiled_plans.remove(&oldest);
+            }
+        }
+        self.compiled_plans.insert(
+            signature,
+            CompiledPlanCacheEntry {
+                plan: plan.clone(),
+                last_used: tick,
+            },
+        );
+        Ok(plan)
+    }
+
     /// Evaluate and cache a graph snapshot for an explicit data revision.
     ///
     /// The caller owns revision management. Reusing a revision for changed
@@ -302,17 +357,13 @@ impl CompositeEngine {
         context: &BorrowedFactorContext<'_>,
         data_revision: u64,
     ) -> FactorResult<BTreeMap<String, Vec<f64>>> {
-        let signature = graph_signature(definitions, outputs);
-        let plan = if let Some(plan) = self.compiled_plans.get(&signature) {
-            self.compiled_plan_cache_hits = self.compiled_plan_cache_hits.saturating_add(1);
-            plan.clone()
-        } else {
-            self.compiled_plan_cache_misses = self.compiled_plan_cache_misses.saturating_add(1);
-            let plan = self.compile(definitions, outputs)?;
-            self.compiled_plans.insert(signature, plan.clone());
-            plan
-        };
+        let plan = self.compile_cached(definitions, outputs)?;
         self.evaluate_cached_scoped_compiled(scope, &plan, context, data_revision)
+    }
+
+    fn next_compiled_plan_tick(&mut self) -> u64 {
+        self.compiled_plan_cache_clock = self.compiled_plan_cache_clock.wrapping_add(1);
+        self.compiled_plan_cache_clock
     }
 
     /// Evaluate and cache a previously compiled graph plan.
@@ -753,6 +804,7 @@ impl Default for CompositeEngine {
             compiled_plans: BTreeMap::new(),
             compiled_plan_cache_hits: 0,
             compiled_plan_cache_misses: 0,
+            compiled_plan_cache_clock: 0,
             cache: BTreeMap::new(),
             cache_capacity: 64,
             cache_clock: 0,
@@ -1129,6 +1181,29 @@ mod tests {
         assert_eq!(engine.compiled_plans.len(), 1);
         assert_eq!(engine.compiled_plan_cache_hits, 2);
         assert_eq!(engine.compiled_plan_cache_misses, 1);
+    }
+
+    #[test]
+    fn compiled_plan_cache_is_bounded() {
+        let mut engine = CompositeEngine::new();
+        for index in 0..=COMPILED_PLAN_CACHE_CAPACITY {
+            let name = format!("value_{index}");
+            let definitions = [CompositeDefinition::new(
+                name.clone(),
+                CompositeExpr::Constant(index as f64),
+            )];
+            let outputs = [name.as_str()];
+            engine
+                .compile_cached(&definitions, &outputs)
+                .expect("compile cached graph");
+        }
+
+        assert_eq!(engine.compiled_plan_count(), COMPILED_PLAN_CACHE_CAPACITY);
+        assert_eq!(engine.compiled_plan_cache_hits, 0);
+        assert_eq!(
+            engine.compiled_plan_cache_misses,
+            (COMPILED_PLAN_CACHE_CAPACITY + 1) as u64
+        );
     }
 
     #[test]

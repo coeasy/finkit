@@ -259,7 +259,7 @@ talib_0_7_1
 - Operation panel cache 已改为带访问时钟的 LRU 淘汰；Composite cache 纳入 `scope`、`data_revision` 和 graph signature，增加 scoped evaluation，防止不同标的/周期在相同 revision 下串缓存。
 - Unified Operation Engine 的 Factor 默认路径已改为 `FactorCatalog -> CompiledFactorPlan -> borrowed execution`，并缓存编译计划；这只证明主路径已接入 compiled plan，不代表所有 Factor/Composite、streaming 和跨语言高吞吐门禁已经完成。
 - Composite 默认路径已增加 `CompiledCompositePlan`：定义校验、引用/cycle 检查和 graph signature 在计划阶段完成，Operation Engine 按 graph signature 复用计划；结果缓存仍额外受 scope/data revision 约束。
-- Composite cached evaluation 已将 compiled-plan cache 与结果快照 cache 分离：相同 graph 会跨 scope/data revision 复用依赖图和 cycle 校验结果，注册新函数会清理计划与结果；专项测试同时断言计划 cache 的命中/未命中计数，避免重复构建重新进入执行热路径。
+- Composite cached evaluation 已将 compiled-plan cache 与结果快照 cache 分离，并收敛为 `CompositeEngine` 的唯一 bounded LRU owner：相同 graph 会跨 scope/data revision 复用依赖图和 cycle 校验结果，注册新函数会清理计划与结果；专项测试同时断言计划 cache 的命中/未命中计数和容量上限，避免重复构建或无界增长重新进入执行热路径。
 - Python 的公开 `formula_eval_dialect` 已与其他绑定统一调用 Core 的 `eval_with_dialect`；不能再让 Python 自己把国内 dialect 静默降级为 AlphaTA。
 - Node 绑定已补齐 `operationCatalogJson`，与 C/C++、Go、Java、.NET、Python 共用同一 operation catalog 和 `operationExecuteJson` contract；Node 的宿主级加载仍需在真实 Node addon 环境中验证。
 - Composite 已补齐 `composite.contract.v1` JSON contract：输入为 named series + graph definitions + outputs，结果统一返回 `shape/primary/values/schema_version`；C/C++、Go、Java、.NET、Python、Node 都有对应入口，避免 Composite 只在单一语言高层 API 中存在。
