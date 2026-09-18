@@ -148,12 +148,20 @@ pub fn evaluate_composite_stream_json(request: &str) -> Result<String, String> {
         .map(|output| (output.clone(), Vec::with_capacity(input_rows)))
         .collect::<BTreeMap<_, _>>();
     for row_index in 0..input_rows {
-        let row = request
-            .inputs
+        let row = plan
+            .required_raw_inputs()
             .iter()
-            .map(|(name, values)| (name.clone(), values[row_index]))
-            .collect::<BTreeMap<_, _>>();
-        let values = stream.push_row(&row).map_err(|error| error.to_string())?;
+            .map(|name| {
+                request
+                    .inputs
+                    .get(name)
+                    .map(|values| values[row_index])
+                    .ok_or_else(|| format!("composite stream missing input {name}"))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let values = stream
+            .push_values(&row)
+            .map_err(|error| error.to_string())?;
         for output in &output_names {
             let value = values
                 .get(output)

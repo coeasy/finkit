@@ -1069,18 +1069,41 @@ impl CompositeStream {
         &mut self,
         values: &BTreeMap<String, f64>,
     ) -> FactorResult<BTreeMap<String, f64>> {
-        for input in &self.plan.required_raw_inputs {
-            if !values.contains_key(input) {
-                return Err(FactorError::MissingInput(input.clone()));
-            }
+        let ordered = self
+            .plan
+            .required_raw_inputs
+            .iter()
+            .map(|input| {
+                values
+                    .get(input)
+                    .copied()
+                    .ok_or_else(|| FactorError::MissingInput(input.clone()))
+            })
+            .collect::<FactorResult<Vec<_>>>()?;
+        self.push_values(&ordered)
+    }
+
+    /// Append one row in the plan's sorted raw-input order.
+    ///
+    /// This avoids constructing a string-keyed map in hot loops. The order is
+    /// exactly [`CompiledCompositePlan::required_raw_inputs`].
+    pub fn push_values(&mut self, values: &[f64]) -> FactorResult<BTreeMap<String, f64>> {
+        if values.len() != self.plan.required_raw_inputs.len() {
+            return Err(FactorError::LengthMismatch {
+                name: "composite_stream_row".to_string(),
+                expected: self.plan.required_raw_inputs.len(),
+                actual: values.len(),
+            });
         }
 
         let row = self.inputs.values().next().map_or(0, Vec::len);
-        for input in &self.plan.required_raw_inputs {
-            self.inputs
-                .entry(input.clone())
-                .or_default()
-                .push(values[input]);
+        for (input, value) in self
+            .plan
+            .required_raw_inputs
+            .iter()
+            .zip(values.iter().copied())
+        {
+            self.inputs.entry(input.clone()).or_default().push(value);
         }
         for output in &self.plan.outputs {
             self.output

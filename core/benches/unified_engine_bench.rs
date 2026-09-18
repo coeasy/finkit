@@ -7,8 +7,10 @@
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use finkit::composite::{CompositeDefinition, CompositeExpr, CompositeOp};
+use finkit::factor_system::FactorCatalog;
 use finkit::factors::{
-    BorrowedFactorContext, FactorDefinition, FactorDirection, FactorKind, FactorRegistry,
+    builtin_factor_registry, BorrowedFactorContext, FactorDefinition, FactorDirection,
+    FactorEngine, FactorKind, FactorRegistry,
 };
 use finkit::operation::{OperationRequest, UnifiedOperationEngine};
 use std::sync::Arc;
@@ -132,9 +134,61 @@ fn bench_composite_plan_reuse(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_bounded_factor_stream(c: &mut Criterion) {
+    let close = close_series();
+    let catalog = FactorCatalog::from_registry(builtin_factor_registry());
+    let plan = catalog
+        .compile(&["momentum_5"])
+        .expect("compile stream plan");
+    let engine = FactorEngine::new(catalog.into_registry());
+    let mut group = c.benchmark_group("bounded_factor_stream");
+    group.throughput(Throughput::Elements(DATA_LEN as u64));
+    group.bench_function("momentum_5_push_values_100k", |b| {
+        b.iter_batched(
+            || plan.stream(engine.clone()).expect("create factor stream"),
+            |mut stream| {
+                for value in &close {
+                    black_box(stream.push_values(&[*value]).expect("factor stream row"));
+                }
+            },
+            criterion::BatchSize::SmallInput,
+        )
+    });
+    group.finish();
+}
+
+fn bench_bounded_composite_stream(c: &mut Criterion) {
+    let close = close_series();
+    let definitions = composite_definitions();
+    let outputs = ["SUM_CLOSE"];
+    let engine = finkit::composite::CompositeEngine::new();
+    let plan = engine
+        .compile(&definitions, &outputs)
+        .expect("compile composite stream plan");
+    let mut group = c.benchmark_group("bounded_composite_stream");
+    group.throughput(Throughput::Elements(DATA_LEN as u64));
+    group.bench_function("sum_close_push_values_100k", |b| {
+        b.iter_batched(
+            || {
+                plan.stream(engine.clone())
+                    .expect("create composite stream")
+            },
+            |mut stream| {
+                for value in &close {
+                    black_box(stream.push_values(&[*value]).expect("composite stream row"));
+                }
+            },
+            criterion::BatchSize::SmallInput,
+        )
+    });
+    group.finish();
+}
+
 criterion_group!(
     unified_engine_benches,
     bench_factor_plan_reuse,
-    bench_composite_plan_reuse
+    bench_composite_plan_reuse,
+    bench_bounded_factor_stream,
+    bench_bounded_composite_stream
 );
 criterion_main!(unified_engine_benches);
