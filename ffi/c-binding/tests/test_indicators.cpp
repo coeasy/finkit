@@ -6,7 +6,10 @@
 #include <string>
 #include <algorithm>
 #include <numeric>
+#include <cstdlib>
+#include <utility>
 #include "finkit.hpp"
+#include "talib_numeric_contract_generated.hpp"
 
 using namespace finkit;
 
@@ -474,6 +477,169 @@ void test_current_talib_catalog() {
     PASS();
 }
 
+struct NumericContractValue {
+    bool is_null;
+    double value;
+};
+
+static void skip_json_space(const std::string& text, size_t& position) {
+    while (position < text.size() &&
+           (text[position] == ' ' || text[position] == '\n' ||
+            text[position] == '\r' || text[position] == '\t')) {
+        ++position;
+    }
+}
+
+static bool parse_json_array(const std::string& text, size_t& position,
+                             std::vector<NumericContractValue>& values) {
+    skip_json_space(text, position);
+    if (position >= text.size() || text[position] != '[') {
+        return false;
+    }
+    ++position;
+    skip_json_space(text, position);
+    if (position < text.size() && text[position] == ']') {
+        ++position;
+        return true;
+    }
+    while (position < text.size()) {
+        skip_json_space(text, position);
+        if (text.compare(position, 4, "null") == 0) {
+            values.push_back({true, 0.0});
+            position += 4;
+        } else {
+            const char* begin = text.c_str() + position;
+            char* end = nullptr;
+            const double value = std::strtod(begin, &end);
+            if (end == begin) {
+                return false;
+            }
+            position = static_cast<size_t>(end - text.c_str());
+            values.push_back({false, value});
+        }
+        skip_json_space(text, position);
+        if (position >= text.size()) {
+            return false;
+        }
+        if (text[position] == ']') {
+            ++position;
+            return true;
+        }
+        if (text[position] != ',') {
+            return false;
+        }
+        ++position;
+    }
+    return false;
+}
+
+static bool parse_json_object_arrays(
+    const std::string& text,
+    std::vector<std::pair<std::string, std::vector<NumericContractValue>>>& outputs) {
+    size_t position = 0;
+    skip_json_space(text, position);
+    if (position >= text.size() || text[position] != '{') {
+        return false;
+    }
+    ++position;
+    skip_json_space(text, position);
+    if (position < text.size() && text[position] == '}') {
+        return true;
+    }
+    while (position < text.size()) {
+        skip_json_space(text, position);
+        if (position >= text.size() || text[position] != '"') {
+            return false;
+        }
+        ++position;
+        const size_t key_start = position;
+        while (position < text.size() && text[position] != '"') {
+            ++position;
+        }
+        if (position >= text.size()) {
+            return false;
+        }
+        const std::string key = text.substr(key_start, position - key_start);
+        ++position;
+        skip_json_space(text, position);
+        if (position >= text.size() || text[position] != ':') {
+            return false;
+        }
+        ++position;
+        std::vector<NumericContractValue> values;
+        if (!parse_json_array(text, position, values)) {
+            return false;
+        }
+        outputs.emplace_back(key, std::move(values));
+        skip_json_space(text, position);
+        if (position >= text.size() || text[position] == '}') {
+            return position < text.size();
+        }
+        if (text[position] != ',') {
+            return false;
+        }
+        ++position;
+    }
+    return false;
+}
+
+void test_talib_numeric_contract() {
+    TEST("TA-Lib numeric contract across C++ ABI")
+    ASSERT_EQ(finkit_test_contract::kVectorCount, static_cast<size_t>(201),
+              "Generated TA-Lib numeric contract vector count mismatch");
+    for (size_t index = 0; index < finkit_test_contract::kVectorCount; ++index) {
+        const auto& vector = finkit_test_contract::kVectors[index];
+        const std::string request =
+            std::string("{\"operation\":") + vector.operation +
+            ",\"semantic_profile\":" + finkit_test_contract::kSemanticProfile +
+            ",\"input_order\":" + vector.input_order_json +
+            ",\"inputs\":" + finkit_test_contract::kInputsJson +
+            ",\"params\":" + vector.params_json + "}";
+        const std::string response = operation_execute_json(request);
+        ASSERT(response.find("\"error\"") == std::string::npos,
+               std::string("TA-Lib operation returned an error: ") + vector.operation);
+
+        const size_t values_marker = response.find("\"values\":");
+        ASSERT(values_marker != std::string::npos,
+               std::string("missing values envelope: ") + vector.operation);
+        const size_t values_start = response.find('{', values_marker);
+        ASSERT(values_start != std::string::npos,
+               std::string("missing values object: ") + vector.operation);
+        const std::string values_json = response.substr(values_start);
+        std::vector<std::pair<std::string, std::vector<NumericContractValue>>> actual;
+        ASSERT(parse_json_object_arrays(values_json, actual),
+               std::string("invalid values JSON: ") + vector.operation);
+
+        std::vector<std::pair<std::string, std::vector<NumericContractValue>>> expected;
+        ASSERT(parse_json_object_arrays(vector.expected_json, expected),
+               std::string("invalid generated expected JSON: ") + vector.operation);
+        ASSERT_EQ(actual.size(), expected.size(),
+                  std::string("output count mismatch: ") + vector.operation);
+        for (const auto& expected_output : expected) {
+            const auto actual_output = std::find_if(
+                actual.begin(), actual.end(), [&](const auto& candidate) {
+                    return candidate.first == expected_output.first;
+                });
+            ASSERT(actual_output != actual.end(),
+                   std::string("missing output ") + expected_output.first + " for " + vector.operation);
+            ASSERT_EQ(actual_output->second.size(), expected_output.second.size(),
+                      std::string("length mismatch for ") + expected_output.first + " in " + vector.operation);
+            for (size_t point = 0; point < expected_output.second.size(); ++point) {
+                const auto& want = expected_output.second[point];
+                const auto& got = actual_output->second[point];
+                ASSERT(got.is_null == want.is_null,
+                       std::string("null mismatch for ") + expected_output.first + " in " + vector.operation);
+                if (!want.is_null) {
+                    const double limit = vector.atol + vector.rtol * std::abs(want.value);
+                    ASSERT(std::abs(got.value - want.value) <= limit,
+                           std::string("numeric mismatch for ") + expected_output.first + " in " + vector.operation);
+                }
+            }
+        }
+    }
+    PASS();
+}
+
 int main() {
     std::cout << "========================================" << std::endl;
     std::cout << "  finkit C++ Binding Tests" << std::endl;
@@ -524,6 +690,7 @@ int main() {
     test_benchmark();
     test_shared_engine_contract();
     test_current_talib_catalog();
+    test_talib_numeric_contract();
     
     std::cout << std::endl;
     std::cout << "========================================" << std::endl;

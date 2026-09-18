@@ -92,7 +92,9 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
 - 合并 Core registry 后 dispatcher：201 个名称；
 - checked-in numeric golden：201 个；
 - shared numeric contract：201 个向量、160 行合成输入，直接从 checked-in TA-Lib
-  0.8.0 golden 生成，并由 Node 与 Python binding 实际执行；
+  0.8.0 golden 生成；Node、Python 已实际执行，Go、Java、.NET 已接入相同逐元素
+  执行入口，C/C++ 已接入由同一生成器产生的 201 向量测试 fixture；各平台仍以 CI
+  宿主结果作为最终发布证据；
 - 审计差集：0；
 - 21 个新增函数的独立 adapter、参数目录、输出字段和 warm-up：已接入；
 - Core golden suite：已通过；
@@ -167,9 +169,10 @@ truth source。`scripts/gen_talib_numeric_contract.py --check` 会重新读取
   contract entries；全部入口都拒绝已淘汰的 `talib_0_7_1`。这防止旧 native
   artifact 被误当作最新源码验证；完整目录当前还包含 Core-only operation，
   因此不把总 operation 数误写成 201。
-- 201 个 TA-Lib 数值向量现在进入 Node 的默认 `npm test`，并进入 Python 发布
-  wheel gate；两者都使用同一份 JSON 请求、输入、参数、输出名、null 和容差，
-  不再只验证“能发现 201 个名字”。
+- 201 个 TA-Lib 数值向量现在进入 Node 的默认 `npm test`、Python 发布 wheel gate
+  和 C/C++ CTest；Go、Java、.NET 测试也读取同一份 JSON contract。C/C++ 的测试
+  头文件由 `scripts/gen_talib_numeric_contract.py` 生成并由 `--check` 校验，避免
+  为 native 测试维护第二份数值真源。
 - 对照官方 CandleSettings 语义修正了 10 个此前只用固定比例近似的 candlestick
   adapter（Harami、Morning/Evening Star、Piercing、Three Stars in the South、
   Homing Pigeon、Matching Low、Mat Hold、Tasuki Gap、Unique Three River）；完整
@@ -192,8 +195,8 @@ truth source。`scripts/gen_talib_numeric_contract.py --check` 会重新读取
    页面生成已纳入 visualization 回归，但真实浏览器宿主仍需单独纳入 CI。
 2. 将剩余 TA-Lib profile 参数/输出 metadata 从手写 match 逐步生成化，但保留 profile adapter 的显式语义代码。
 3. 将本轮已接入的 `engine_contract_v1.json` 与 `talib_numeric_contract_v1.json`
-   扩展到 C/C++、Go、Java、.NET 的实际宿主运行证明；当前 Node 与 Python 已完成
-   201/201 数值执行，其他语言仍需在其 CI/toolchain 矩阵中完成逐元素数值门禁。
+   扩展到 C/C++、Go、Java、.NET 的实际宿主运行证明；C/C++ 已完成测试接入，Go、
+   Java、.NET 仍需在其 CI/toolchain 矩阵中完成逐元素运行证据。
 4. 将 Formula dialect registry、TA-Lib catalog、Factor catalog 和 Draw schema 统一纳入版本发布清单。
 5. 为生产部署增加 benchmark workload、内存/分配、并发、checkpoint 恢复和错误可观测性门禁；性能结论按硬件和数据规模分别报告。
 6. 继续扩展 TDX/同花顺/东方财富通用函数与 Pine 子集，但每次扩展必须先增加语义矩阵和参考向量，再进入 production catalog。

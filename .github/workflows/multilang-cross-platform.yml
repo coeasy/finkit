@@ -51,6 +51,7 @@ jobs:
           python scripts/check_versions.py
           python scripts/check_warning_contracts.py
           python scripts/sync_bindings.py --lang python --check
+          python scripts/gen_talib_numeric_contract.py --check
       - id: version
         shell: bash
         run: |

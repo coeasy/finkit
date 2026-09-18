@@ -21,3 +21,8 @@ add_executable(test_c_api test_c_api.c)
 target_link_libraries(test_c_api finkit finkit_headers)
 
 add_test(NAME test_c_api COMMAND test_c_api)
+
+add_executable(test_c_numeric_contract test_c_numeric_contract.c)
+target_link_libraries(test_c_numeric_contract finkit finkit_headers)
+
+add_test(NAME test_c_numeric_contract COMMAND test_c_numeric_contract)
