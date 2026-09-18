@@ -248,7 +248,7 @@ talib_0_7_1
 
 - 计算层输出 OHLC、volume、line、markers、panels、layers、viewport 和增量更新 envelope。
 - Web adapter 负责 series、pane、tooltip、crosshair、resize 和 update；不承担公式计算。
-- 增加浏览器集成测试、数据点顺序测试、null/warm-up 测试和大数据量更新基准。
+- 增加浏览器集成测试、数据点顺序测试、null/warm-up 测试和大数据量更新基准；其中 adapter 的 Node fake-chart contract test 先作为无浏览器依赖的确定性门禁。
 
 ### 本轮已落地的架构收敛增量
 
@@ -261,6 +261,7 @@ talib_0_7_1
 - Node 绑定已补齐 `operationCatalogJson`，与 C/C++、Go、Java、.NET、Python 共用同一 operation catalog 和 `operationExecuteJson` contract；Node 的宿主级加载仍需在真实 Node addon 环境中验证。
 - Composite 已补齐 `composite.contract.v1` JSON contract：输入为 named series + graph definitions + outputs，结果统一返回 `shape/primary/values/schema_version`；C/C++、Go、Java、.NET、Python、Node 都有对应入口，避免 Composite 只在单一语言高层 API 中存在。
 - Factor 已补齐 `factor.contract.v1` JSON contract：所有正式绑定都可以执行稳定的内置因子并获得 compiled-plan 的 `semantic_identity/range_lookback`；Rust typed API 仍保留自定义闭包因子，跨语言 contract 不把不可序列化闭包伪装成可移植定义。
+- Lightweight Charts adapter 已修复增量 payload 中动态新增 line 不创建 series 的问题；`visualization/frontend/lightweight-charts-adapter.test.mjs` 已覆盖 null/warm-up 空白点、markers、viewport、增量更新、完整替换和 schema 拒绝。
 - TA-Lib `MINMAX` 与 `MINMAXINDEX` 已加入 registry、core multi-output dispatcher、TA-Lib FFI profile 和 operation catalog；输出名固定为 `MIN/MAX` 与 `MININDEX/MAXINDEX`，并有 JSON execution tests。
 - 修复 DZH `MOD(...)` 函数调用与中缀 `MOD` 运算符的 grammar 冲突，国内公式集成测试重新通过。
 
@@ -273,6 +274,7 @@ talib_0_7_1
 - `cargo +1.98.1 check -p finkit-python -p finkit-node -p finkit-go -p finkit-java -p finkit-dotnet -p finkit-ffi --offline`：通过。
 - 61 个 candlestick operation 在 `talib_0_7_1` profile 下逐项真实分派并返回等长结果。
 - `cargo +1.98.1 fmt --all` 已执行。
+- `node --test visualization/frontend/lightweight-charts-adapter.test.mjs`：`2 passed, 0 failed`；这是 adapter contract test，不等同于真实浏览器版本兼容或完整交互集成。
 
 本轮没有宣称完成：
 

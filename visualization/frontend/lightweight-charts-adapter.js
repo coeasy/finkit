@@ -131,7 +131,11 @@ export function createFinkitLightweightChart(container, payload, lightweightChar
       if (next.candles?.length) candle.update(next.candles[next.candles.length - 1]);
       if (next.volume?.length) volume.update(next.volume[next.volume.length - 1]);
       for (const line of next.lines || []) {
-        const series = lines.get(line.name);
+        let series = lines.get(line.name);
+        if (!series) {
+          series = addSeries(chart, lightweightCharts, 'LineSeries', options.lines?.[line.name]);
+          lines.set(line.name, series);
+        }
         const point = line.data?.[line.data.length - 1];
         if (series && point) series.update(lineData([point])[0]);
       }
