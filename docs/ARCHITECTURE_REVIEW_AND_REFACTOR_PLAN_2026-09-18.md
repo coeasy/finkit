@@ -195,6 +195,8 @@ semantic_profile + operation/formula id + parameter hash
 
 TA-Lib profile 使用显式版本化名称（当前代码为 `talib_0_7_1`，对应 TA-Lib C core 0.7.1），不把 Core warm-up 语义伪装成 TA-Lib 语义。当前 parity corpus 已升级到 TA-Lib Python 0.8.0；每个公开 TA-Lib operation 仍必须有参数默认值、MA type、输出名、warm-up、NaN 和参考结果说明。当前 catalog 已补齐 profile-only 条目的可执行参数元数据，APO、BBANDS、MAVP、MACDEXT、PPO、STOCH、STOCHF、STOCHRSI 的 `matype` 已由共享 dispatcher 实际消费；剩余指标仍必须逐项完成同等数值验证，不能只在目录中声明。
 
+版本依据：TA-Lib C core `0.7.1` 的官方 release 记录为 2026-07-03，Python 包 `0.8.0` 在 PyPI 的 release 记录为 2026-09-13；本仓库的 profile 和 golden reference 分别对应这两个版本。[TA-Lib core releases](https://github.com/TA-Lib/ta-lib/releases) · [TA-Lib Python 0.8.0](https://pypi.org/project/TA-Lib/0.8.0/)
+
 Formula profile 也必须版本化：
 
 ```text
