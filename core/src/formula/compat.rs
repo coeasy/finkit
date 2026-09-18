@@ -6,6 +6,7 @@
 //! subsets; terminal-specific extensions can be added without changing the
 //! execution engine.
 
+use super::stateful::FormulaStatefulStream;
 use super::FormulaDialect;
 use crate::formula::analysis::{analyze_formula, FormulaAnalysis};
 use crate::formula::ast::AstNode;
@@ -329,7 +330,8 @@ pub fn inspect_formula_compatibility(
             }
         })
         .collect::<Vec<_>>();
-    let capabilities = compatibility_capabilities(&ast, &analysis, terminal, &functions);
+    let capabilities =
+        compatibility_capabilities(&normalized_source, &ast, &analysis, terminal, &functions);
     Ok(FormulaCompatibilityReport {
         terminal,
         normalized_source,
@@ -344,6 +346,7 @@ pub fn inspect_formula_compatibility(
 }
 
 fn compatibility_capabilities(
+    source: &str,
     ast: &AstNode,
     analysis: &FormulaAnalysis,
     terminal: FormulaTerminal,
@@ -367,6 +370,13 @@ fn compatibility_capabilities(
         .iter()
         .any(|name| matches!(name.as_str(), "SECURITY" | "REQUEST.SECURITY"));
     let host_data = has_host_requirement;
+    // Static analysis is useful for diagnostics, but the public capability
+    // report must be gated by the same serializable state compiler used by the
+    // Formula stream contract. This keeps assignments and nested expressions
+    // from being advertised as executable merely because their AST looks
+    // causal.
+    let stateful_stream_supported =
+        FormulaStatefulStream::from_source(source, terminal.canonical_dialect()).is_ok();
 
     let batch_supported = !has_host_requirement && !has_unsupported;
     let batch_status = if has_unsupported {
@@ -384,7 +394,7 @@ fn compatibility_capabilities(
         "canonical batch executor is available".to_string()
     };
 
-    let streaming_supported = analysis.supports_streaming && batch_supported;
+    let streaming_supported = stateful_stream_supported && batch_supported;
     let streaming_status = if has_unsupported {
         CompatibilityStatus::Unsupported
     } else if has_host_requirement {
@@ -400,6 +410,8 @@ fn compatibility_capabilities(
         "formula has a causal, registered streaming path".to_string()
     } else if analysis.has_future_data {
         "future-data semantics prevent causal streaming".to_string()
+    } else if !stateful_stream_supported {
+        "formula is outside the portable serialized stateful stream subset".to_string()
     } else if analysis.has_control_flow {
         "control flow requires conservative full-prefix evaluation".to_string()
     } else {
@@ -425,7 +437,7 @@ fn compatibility_capabilities(
             name: "streaming_execution".to_string(),
             status: streaming_status,
             supported: streaming_supported,
-            observed: analysis.supports_streaming,
+            observed: stateful_stream_supported,
             message: streaming_message,
         },
         CapabilityCompatibility {
@@ -733,6 +745,23 @@ mod tests {
             capability("streaming_execution").unwrap().status,
             CompatibilityStatus::Unsupported
         );
+    }
+
+    #[test]
+    fn capability_matrix_uses_the_real_stateful_program_admission_check() {
+        let report = inspect_formula_compatibility(
+            "MA3:MA(CLOSE,3); SIGNAL:=MA3+1; SIGNAL",
+            FormulaTerminal::TongDaXin,
+        )
+        .unwrap();
+        let capability = report
+            .capabilities
+            .iter()
+            .find(|item| item.name == "streaming_execution")
+            .unwrap();
+        assert!(capability.observed);
+        assert!(capability.supported);
+        assert_eq!(capability.status, CompatibilityStatus::Near);
     }
 
     #[cfg(feature = "serde")]
