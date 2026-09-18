@@ -42,7 +42,7 @@ Formula results use the corresponding versioned contract functions:
 `formulaEvalContractJson`, and their language-specific casing equivalents.
 
 Formula compatibility discovery uses the same versioned report in every
-official binding: `formula_compatibility_report_json`,
+official binding: `formula_compatibility_report_json` (Python),
 `FormulaCompatibilityReportJSON`, `formulaCompatibilityReportJson`, and their
 language-specific casing equivalents. The report includes a
 `schema_version` and source-level capability matrix; it does not claim full

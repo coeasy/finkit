@@ -743,6 +743,10 @@ def formula_eval_contract_json(
     """Execute a formula using the language-neutral versioned JSON contract."""
     ...
 
+def formula_compatibility_report_json(source: str, terminal: str = "finkit") -> str:
+    """Return the shared versioned Formula compatibility report as JSON."""
+    ...
+
 # ============================================================================
 # Visualization
 # ============================================================================
@@ -1151,7 +1155,7 @@ __all__ = [
     "log10", "sin", "sinh", "sqrt", "tan", "tanh",
     # Formula Engine
     "CompiledFormula", "formula_eval", "formula_eval_dialect",
-    "operation_catalog_json", "factor_catalog_json", "operation_execute_json", "composite_execute_json", "factor_execute_json", "formula_eval_contract_json",
+    "operation_catalog_json", "factor_catalog_json", "operation_execute_json", "composite_execute_json", "factor_execute_json", "formula_eval_contract_json", "formula_compatibility_report_json",
     # Visualization
     "KlineChart", "KlineData",
     # Streaming Indicators

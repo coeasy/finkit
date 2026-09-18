@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "capabilities": [
+    "operation_catalog_json",
+    "factor_catalog_json",
+    "operation_execute_json",
+    "composite_execute_json",
+    "factor_execute_json",
+    "formula_eval_contract_json",
+    "formula_compatibility_report_json"
+  ],
+  "languages": {
+    "rust": {
+      "surfaces": [
+        {"path": "ffi/ffi-common/src/operation.rs", "marker": "pub fn operation_catalog_json"},
+        {"path": "ffi/ffi-common/src/factor_catalog.rs", "marker": "pub fn factor_catalog_json"},
+        {"path": "ffi/ffi-common/src/execute.rs", "marker": "pub fn execute_operation_json"},
+        {"path": "ffi/ffi-common/src/composite.rs", "marker": "pub fn evaluate_composite_json"},
+        {"path": "ffi/ffi-common/src/factor.rs", "marker": "pub fn evaluate_factor_json"},
+        {"path": "ffi/ffi-common/src/formula.rs", "marker": "pub fn evaluate_formula_json"},
+        {"path": "ffi/ffi-common/src/formula.rs", "marker": "pub fn formula_compatibility_report_json"}
+      ]
+    },
+    "python": {
+      "surfaces": [
+        {"path": "ffi/python-binding/src/lib.rs", "marker": "fn operation_catalog_json"},
+        {"path": "ffi/python-binding/src/lib.rs", "marker": "fn factor_catalog_json"},
+        {"path": "ffi/python-binding/src/lib.rs", "marker": "fn operation_execute_json"},
+        {"path": "ffi/python-binding/src/lib.rs", "marker": "fn composite_execute_json"},
+        {"path": "ffi/python-binding/src/lib.rs", "marker": "fn factor_execute_json"},
+        {"path": "ffi/python-binding/src/lib.rs", "marker": "pub fn formula_eval_contract_json"},
+        {"path": "ffi/python-binding/src/lib.rs", "marker": "pub fn formula_compatibility_report_json"}
+      ]
+    },
+    "go": {
+      "surfaces": [
+        {"path": "ffi/go-binding/go/ta/ta.go", "marker": "func OperationCatalogJSON"},
+        {"path": "ffi/go-binding/go/ta/ta.go", "marker": "func FactorCatalogJSON"},
+        {"path": "ffi/go-binding/go/ta/ta.go", "marker": "func OperationExecuteJSON"},
+        {"path": "ffi/go-binding/go/ta/ta.go", "marker": "func CompositeExecuteJSON"},
+        {"path": "ffi/go-binding/go/ta/ta.go", "marker": "func FactorExecuteJSON"},
+        {"path": "ffi/go-binding/go/ta/ta.go", "marker": "func FormulaEvalContractJSON"},
+        {"path": "ffi/go-binding/go/ta/ta.go", "marker": "func FormulaCompatibilityReportJSON"}
+      ]
+    },
+    "java": {
+      "surfaces": [
+        {"path": "ffi/java-binding/java/src/main/java/com/finkit/Indicators.java", "marker": "operationCatalogJson"},
+        {"path": "ffi/java-binding/java/src/main/java/com/finkit/Indicators.java", "marker": "factorCatalogJson"},
+        {"path": "ffi/java-binding/java/src/main/java/com/finkit/Indicators.java", "marker": "operationExecuteJson"},
+        {"path": "ffi/java-binding/java/src/main/java/com/finkit/Indicators.java", "marker": "compositeExecuteJson"},
+        {"path": "ffi/java-binding/java/src/main/java/com/finkit/Indicators.java", "marker": "factorExecuteJson"},
+        {"path": "ffi/java-binding/java/src/main/java/com/finkit/Indicators.java", "marker": "formulaEvalContractJson"},
+        {"path": "ffi/java-binding/java/src/main/java/com/finkit/Indicators.java", "marker": "formulaCompatibilityReportJson"}
+      ]
+    },
+    "dotnet": {
+      "surfaces": [
+        {"path": "ffi/dotnet-binding/src/Finkit/Indicators.cs", "marker": "OperationCatalogJson"},
+        {"path": "ffi/dotnet-binding/src/Finkit/Indicators.cs", "marker": "FactorCatalogJson"},
+        {"path": "ffi/dotnet-binding/src/Finkit/Indicators.cs", "marker": "OperationExecuteJson"},
+        {"path": "ffi/dotnet-binding/src/Finkit/Indicators.cs", "marker": "CompositeExecuteJson"},
+        {"path": "ffi/dotnet-binding/src/Finkit/Indicators.cs", "marker": "FactorExecuteJson"},
+        {"path": "ffi/dotnet-binding/src/Finkit/Indicators.cs", "marker": "FormulaEvalContractJson"},
+        {"path": "ffi/dotnet-binding/src/Finkit/Indicators.cs", "marker": "FormulaCompatibilityReportJson"}
+      ]
+    },
+    "c": {
+      "surfaces": [
+        {"path": "ffi/c-binding/include/finkit.h", "marker": "ta_operation_catalog_json"},
+        {"path": "ffi/c-binding/include/finkit.h", "marker": "ta_factor_catalog_json"},
+        {"path": "ffi/c-binding/include/finkit.h", "marker": "ta_operation_execute_json"},
+        {"path": "ffi/c-binding/include/finkit.h", "marker": "ta_composite_execute_json"},
+        {"path": "ffi/c-binding/include/finkit.h", "marker": "ta_factor_execute_json"},
+        {"path": "ffi/c-binding/include/finkit.h", "marker": "ta_formula_eval_contract_json"},
+        {"path": "ffi/c-binding/include/finkit.h", "marker": "ta_formula_compatibility_report_json"}
+      ]
+    },
+    "cpp": {
+      "surfaces": [
+        {"path": "ffi/c-binding/include/finkit.hpp", "marker": "operation_catalog_json"},
+        {"path": "ffi/c-binding/include/finkit.hpp", "marker": "factor_catalog_json"},
+        {"path": "ffi/c-binding/include/finkit.hpp", "marker": "operation_execute_json"},
+        {"path": "ffi/c-binding/include/finkit.hpp", "marker": "composite_execute_json"},
+        {"path": "ffi/c-binding/include/finkit.hpp", "marker": "factor_execute_json"},
+        {"path": "ffi/c-binding/include/finkit.hpp", "marker": "formula_eval_contract_json"},
+        {"path": "ffi/c-binding/include/finkit.hpp", "marker": "formula_compatibility_report_json"}
+      ]
+    },
+    "node": {
+      "surfaces": [
+        {"path": "ffi/node-binding/index.d.ts", "marker": "operationCatalogJson"},
+        {"path": "ffi/node-binding/index.d.ts", "marker": "factorCatalogJson"},
+        {"path": "ffi/node-binding/index.d.ts", "marker": "operationExecuteJson"},
+        {"path": "ffi/node-binding/index.d.ts", "marker": "compositeExecuteJson"},
+        {"path": "ffi/node-binding/index.d.ts", "marker": "factorExecuteJson"},
+        {"path": "ffi/node-binding/index.d.ts", "marker": "formulaEvalContractJson"},
+        {"path": "ffi/node-binding/index.d.ts", "marker": "formulaCompatibilityReport"}
+      ]
+    }
+  }
+}

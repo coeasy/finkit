@@ -1947,6 +1947,15 @@ pub fn formula_eval_contract_json(
         .map_err(pyo3::exceptions::PyValueError::new_err)
 }
 
+/// Return the shared versioned Formula compatibility report for a terminal.
+#[pyfunction]
+#[pyo3(signature = (source, terminal = "finkit"))]
+#[cfg(feature = "formula")]
+pub fn formula_compatibility_report_json(source: &str, terminal: &str) -> PyResult<String> {
+    finkit_ffi_common::formula_compatibility_report_json(source, terminal)
+        .map_err(pyo3::exceptions::PyValueError::new_err)
+}
+
 /// Validate a formula without executing
 ///
 /// Checks if the formula syntax is valid without actually running it.
@@ -6495,6 +6504,7 @@ fn finkit(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.add_function(wrap_pyfunction!(formula_eval, m)?)?;
         m.add_function(wrap_pyfunction!(formula_eval_dialect, m)?)?;
         m.add_function(wrap_pyfunction!(formula_eval_contract_json, m)?)?;
+        m.add_function(wrap_pyfunction!(formula_compatibility_report_json, m)?)?;
         m.add_function(wrap_pyfunction!(formula_eval_bytecode, m)?)?;
         m.add_function(wrap_pyfunction!(formula_eval_optimized, m)?)?;
         m.add_function(wrap_pyfunction!(formula_eval_jit, m)?)?;

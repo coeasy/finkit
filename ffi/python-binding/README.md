@@ -55,6 +55,9 @@ macd, signal, hist = ta.macd(close, 12, 26, 9)
 
 # The same versioned metadata is available to every official binding.
 catalog_json = ta.operation_catalog_json()
+compatibility_json = ta.formula_compatibility_report_json(
+    "MA(CLOSE, 20)", "tdx"
+)
 ```
 
 Rolling indicators normally contain leading warm-up `NaN` values.
