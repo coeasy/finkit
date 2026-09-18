@@ -310,10 +310,7 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { NapiStreamingSma, NapiStreamingEma, NapiStreamingWma, NapiStreamingDema, NapiStreamingTema, NapiStreamingKama, NapiStreamingT3, NapiStreamingRsi, NapiStreamingMom, NapiStreamingRoc, NapiStreamingMacd, NapiStreamingMacdExt, NapiStreamingBoll, NapiStreamingAtr, NapiStreamingAdx, NapiStreamingCci, NapiStreamingStoch, NapiStreamingAroon, NapiStreamingObv, NapiStreamingVwap, NapiStreamingWillr, NapiStreamingMfi, NapiStreamingNatr, NapiStreamingTrange, NapiStreamingDonchian, NapiStreamingIchimoku, NapiStreamingSupertrend, NapiStreamingKeltner, sweepSma, sweepEma, sweepRsi, sweepEngineRun, Pipeline, transformLogReturn, transformZscore, transformRank, transformDiff, transformRollingMean, resolveMarketSession, resolveMarketSessionConfig, resolveMarketSessionCsv, computeComposite, sma, ema, wma, dema, tema, kama, mama, t3, bollingerBands, sar, rsi, macd, stoch, adx, aroon, cci, mom, roc, willr, apo, bop, cmo, mfi, trix, vortex, vzo, volumeMomentum, volumeRoc, chandeForecastOscillator, twiggsMoneyFlow, inertiaIndicator, atr, natr, trange, obv, ad, adosc, htDcperiod, htDcphase, htPhasor, htSine, htTrendmode, htTrendline, zscore, beta, correlation, stdDev, tsf, linearReg, percentRank, avgprice, medprice, typprice, wclprice, cdlDoji, cdlDragonflyDoji, cdlGravestoneDoji, cdlLongLeggedDoji, cdlHammer, cdlInvertedHammer, cdlHangingMan, cdlShootingStar, cdlEngulfing, cdlHarami, cdlMorningStar, cdlEveningStar, cdlThreeWhiteSoldiers, cdlThreeBlackCrows, cdlMarubozu, darvasBox, renko, kagi, pointAndFigure, threeLineBreak, williamsAlligator, heikinAshi, macdAsync, dx, minusDi, plusDi, cdlHaramiCross, cdlMorningDojiStar, cdlEveningDojiStar, cdlPiercing, cdlDarkCloudCover, cdlBeltHold, cdlSpinningTop, cdlHighWave, cdlRickshawMan, cdlTweezerTop, cdlTweezerBot, cdlKicking, detectHeadShoulders, detectDoubleTop, detectDoubleBottom, detectHeadShouldersBottom, detectTripleTop, detectTripleBottom, ichimoku, supertrend, vwap, anchoredVwap, vwapBands, elderRay, donchian, PivotMethod, pivotPoints, volumeProfile, fibonacciRetracement, klineDataNew, klineDataValidate, klineDataValidateOhlcv, klineDataValidationErrors, KlineChartNapi, formulaEval, formulaEvalContractJson, formulaEvalTemporalContractJson, formulaEvalPanelContractJson, formulaStreamExecuteJson, operationCatalogJson, factorCatalogJson, compositeExecuteJson, factorExecuteJson, operationExecuteJson, FormulaRegistryNapi, formulaEvalMulti, formulaEvalDraw, formulaEvalDebug, formulaGetTemplate, formulaSearchTemplates, formulaListCategories, formulaValidate, formulaAnalyze, formulaMetadata, formulaTalibCatalog, formulaCompatibilityReport, formulaEvalJit, formulaEvalSimd, formulaEvalZeroCopy } = nativeBinding
-
-const factorCrossSectionalExecuteJson = nativeBinding.factorCrossSectionalExecuteJson
-const formulaEvalCrossSectionalContractJson = nativeBinding.formulaEvalCrossSectionalContractJson
+const { NapiStreamingSma, NapiStreamingEma, NapiStreamingWma, NapiStreamingDema, NapiStreamingTema, NapiStreamingKama, NapiStreamingT3, NapiStreamingRsi, NapiStreamingMom, NapiStreamingRoc, NapiStreamingMacd, NapiStreamingMacdExt, NapiStreamingBoll, NapiStreamingAtr, NapiStreamingAdx, NapiStreamingCci, NapiStreamingStoch, NapiStreamingAroon, NapiStreamingObv, NapiStreamingVwap, NapiStreamingWillr, NapiStreamingMfi, NapiStreamingNatr, NapiStreamingTrange, NapiStreamingDonchian, NapiStreamingIchimoku, NapiStreamingSupertrend, NapiStreamingKeltner, sweepSma, sweepEma, sweepRsi, sweepEngineRun, Pipeline, transformLogReturn, transformZscore, transformRank, transformDiff, transformRollingMean, resolveMarketSession, resolveMarketSessionConfig, resolveMarketSessionCsv, computeComposite, sma, ema, wma, dema, tema, kama, mama, t3, bollingerBands, sar, rsi, macd, stoch, adx, aroon, cci, mom, roc, willr, apo, bop, cmo, mfi, trix, vortex, vzo, volumeMomentum, volumeRoc, chandeForecastOscillator, twiggsMoneyFlow, inertiaIndicator, atr, natr, trange, obv, ad, adosc, htDcperiod, htDcphase, htPhasor, htSine, htTrendmode, htTrendline, zscore, beta, correlation, stdDev, tsf, linearReg, percentRank, avgprice, medprice, typprice, wclprice, cdlDoji, cdlDragonflyDoji, cdlGravestoneDoji, cdlLongLeggedDoji, cdlHammer, cdlInvertedHammer, cdlHangingMan, cdlShootingStar, cdlEngulfing, cdlHarami, cdlMorningStar, cdlEveningStar, cdlThreeWhiteSoldiers, cdlThreeBlackCrows, cdlMarubozu, darvasBox, renko, kagi, pointAndFigure, threeLineBreak, williamsAlligator, heikinAshi, macdAsync, dx, minusDi, plusDi, cdlHaramiCross, cdlMorningDojiStar, cdlEveningDojiStar, cdlPiercing, cdlDarkCloudCover, cdlBeltHold, cdlSpinningTop, cdlHighWave, cdlRickshawMan, cdlTweezerTop, cdlTweezerBot, cdlKicking, detectHeadShoulders, detectDoubleTop, detectDoubleBottom, detectHeadShouldersBottom, detectTripleTop, detectTripleBottom, ichimoku, supertrend, vwap, anchoredVwap, vwapBands, elderRay, donchian, PivotMethod, pivotPoints, volumeProfile, fibonacciRetracement, klineDataNew, klineDataValidate, klineDataValidateOhlcv, klineDataValidationErrors, KlineChartNapi, formulaEval, FormulaRegistryNapi, formulaEvalMulti, formulaEvalDraw, formulaEvalDebug, formulaGetTemplate, formulaSearchTemplates, formulaListCategories, formulaValidate, formulaAnalyze, formulaMetadata, formulaTalibCatalog, formulaCompatibilityReport, formulaEvalContractJson, formulaEvalTemporalContractJson, formulaEvalPanelContractJson, formulaEvalCrossSectionalContractJson, formulaStreamExecuteJson, operationCatalogJson, factorCatalogJson, compositeExecuteJson, compositeStreamExecuteJson, factorExecuteJson, factorCrossSectionalExecuteJson, factorStreamExecuteJson, operationExecuteJson, formulaEvalJit, formulaEvalSimd, formulaEvalZeroCopy, factorStudyJson, quantEvaluationJson } = nativeBinding
 
 module.exports.NapiStreamingSma = NapiStreamingSma
 module.exports.NapiStreamingEma = NapiStreamingEma
@@ -472,17 +469,6 @@ module.exports.klineDataValidateOhlcv = klineDataValidateOhlcv
 module.exports.klineDataValidationErrors = klineDataValidationErrors
 module.exports.KlineChartNapi = KlineChartNapi
 module.exports.formulaEval = formulaEval
-module.exports.formulaEvalContractJson = formulaEvalContractJson
-module.exports.formulaEvalTemporalContractJson = formulaEvalTemporalContractJson
-module.exports.formulaEvalPanelContractJson = formulaEvalPanelContractJson
-module.exports.formulaStreamExecuteJson = formulaStreamExecuteJson
-module.exports.operationCatalogJson = operationCatalogJson
-module.exports.factorCatalogJson = factorCatalogJson
-module.exports.compositeExecuteJson = compositeExecuteJson
-module.exports.factorExecuteJson = factorExecuteJson
-module.exports.factorCrossSectionalExecuteJson = factorCrossSectionalExecuteJson
-module.exports.formulaEvalCrossSectionalContractJson = formulaEvalCrossSectionalContractJson
-module.exports.operationExecuteJson = operationExecuteJson
 module.exports.FormulaRegistryNapi = FormulaRegistryNapi
 module.exports.formulaEvalMulti = formulaEvalMulti
 module.exports.formulaEvalDraw = formulaEvalDraw
@@ -495,6 +481,21 @@ module.exports.formulaAnalyze = formulaAnalyze
 module.exports.formulaMetadata = formulaMetadata
 module.exports.formulaTalibCatalog = formulaTalibCatalog
 module.exports.formulaCompatibilityReport = formulaCompatibilityReport
+module.exports.formulaEvalContractJson = formulaEvalContractJson
+module.exports.formulaEvalTemporalContractJson = formulaEvalTemporalContractJson
+module.exports.formulaEvalPanelContractJson = formulaEvalPanelContractJson
+module.exports.formulaEvalCrossSectionalContractJson = formulaEvalCrossSectionalContractJson
+module.exports.formulaStreamExecuteJson = formulaStreamExecuteJson
+module.exports.operationCatalogJson = operationCatalogJson
+module.exports.factorCatalogJson = factorCatalogJson
+module.exports.compositeExecuteJson = compositeExecuteJson
+module.exports.compositeStreamExecuteJson = compositeStreamExecuteJson
+module.exports.factorExecuteJson = factorExecuteJson
+module.exports.factorCrossSectionalExecuteJson = factorCrossSectionalExecuteJson
+module.exports.factorStreamExecuteJson = factorStreamExecuteJson
+module.exports.operationExecuteJson = operationExecuteJson
 module.exports.formulaEvalJit = formulaEvalJit
 module.exports.formulaEvalSimd = formulaEvalSimd
 module.exports.formulaEvalZeroCopy = formulaEvalZeroCopy
+module.exports.factorStudyJson = factorStudyJson
+module.exports.quantEvaluationJson = quantEvaluationJson

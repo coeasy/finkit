@@ -1315,6 +1315,8 @@ export interface KlineQuoteNapi {
 }
 export declare function klineDataNew(dates: Array<string>, opens: Array<number>, highs: Array<number>, lows: Array<number>, closes: Array<number>, volumes: Array<number>, timestamps?: Array<number> | undefined | null): KlineDataNapi
 export declare function klineDataValidate(data: KlineDataNapi): boolean
+export declare function klineDataValidateOhlcv(data: KlineDataNapi): boolean
+export declare function klineDataValidationErrors(data: KlineDataNapi): Array<string>
 /**
  * Execute a trading formula
  *
@@ -1342,32 +1344,6 @@ export declare function klineDataValidate(data: KlineDataNapi): boolean
  * ```
  */
 export declare function formulaEval(source: string, open: Array<number>, high: Array<number>, low: Array<number>, close: Array<number>, volume: Array<number>): Record<string, Array<number>>
-/** Evaluate a formula using the shared versioned JSON result contract. */
-export declare function formulaEvalContractJson(source: string, dialect: string, open: Array<number>, high: Array<number>, low: Array<number>, close: Array<number>, volume: Array<number>): string
-/** Execute an explicit timestamped Formula request through the shared temporal contract. */
-export declare function formulaEvalTemporalContractJson(requestJson: string): string
-/** Execute a Formula independently for each symbol/timeframe frame. */
-export declare function formulaEvalPanelContractJson(requestJson: string): string
-/** Execute explicit CS_* Formula functions across each symbol row. */
-export declare function formulaEvalCrossSectionalContractJson(requestJson: string): string
-/** Execute a stateful Formula stream through the shared JSON contract. */
-export declare function formulaStreamExecuteJson(requestJson: string): string
-/** Return the versioned, language-neutral operation catalog. */
-export declare function operationCatalogJson(): string
-
-export declare function factorCatalogJson(): string
-/** Execute a dependency-aware Composite using the shared JSON contract. */
-export declare function compositeExecuteJson(requestJson: string): string
-/** Execute built-in factors using the shared compiled-plan JSON contract. */
-export declare function factorExecuteJson(requestJson: string): string
-/** Execute one cross-sectional Factor using row-major symbol panels. */
-export declare function factorCrossSectionalExecuteJson(requestJson: string): string
-/** Execute bounded Composite rows and return a portable checkpoint. */
-export declare function compositeStreamExecuteJson(requestJson: string): string
-/** Execute bounded Factor rows and return a portable checkpoint. */
-export declare function factorStreamExecuteJson(requestJson: string): string
-/** Execute one registered operation using the shared JSON request/result contract. */
-export declare function operationExecuteJson(requestJson: string): string
 export interface FormulaMultiResult {
   names: Array<string>
   values: Array<Array<number>>
@@ -1432,6 +1408,41 @@ export declare function formulaTalibCatalog(): string
 /** Return a JSON compatibility report for a terminal dialect. */
 export declare function formulaCompatibilityReport(source: string, terminal?: string | undefined | null): string
 /**
+ * Evaluate a formula through the language-neutral, versioned JSON contract.
+ *
+ * The contract preserves named outputs and represents non-finite warm-up
+ * values as JSON `null`, so Node callers observe the same result envelope as
+ * the C, C++, Go, Java, .NET, Python and Rust entry points.
+ */
+export declare function formulaEvalContractJson(source: string, dialect: string, open: Array<number>, high: Array<number>, low: Array<number>, close: Array<number>, volume: Array<number>): string
+/**
+ * Evaluate an explicit timestamped Formula request through the shared
+ * multi-timeframe and point-in-time contract.
+ */
+export declare function formulaEvalTemporalContractJson(requestJson: string): string
+/** Evaluate one Formula independently for every explicit symbol/timeframe frame. */
+export declare function formulaEvalPanelContractJson(requestJson: string): string
+/** Execute a Formula across every timestamp row of a symbol panel. */
+export declare function formulaEvalCrossSectionalContractJson(requestJson: string): string
+/** Execute a stateful Formula stream through the shared JSON contract. */
+export declare function formulaStreamExecuteJson(requestJson: string): string
+/** Return the versioned, language-neutral operation catalog. */
+export declare function operationCatalogJson(): string
+/** Return the versioned built-in Factor metadata catalog. */
+export declare function factorCatalogJson(): string
+/** Execute a dependency-aware Composite through the shared JSON contract. */
+export declare function compositeExecuteJson(requestJson: string): string
+/** Execute bounded Composite rows and return a portable checkpoint. */
+export declare function compositeStreamExecuteJson(requestJson: string): string
+/** Execute built-in factors through the shared compiled-plan JSON contract. */
+export declare function factorExecuteJson(requestJson: string): string
+/** Execute one cross-sectional Factor through the shared JSON contract. */
+export declare function factorCrossSectionalExecuteJson(requestJson: string): string
+/** Execute bounded Factor rows and return a portable checkpoint. */
+export declare function factorStreamExecuteJson(requestJson: string): string
+/** Execute one registered operation through the shared JSON result contract. */
+export declare function operationExecuteJson(requestJson: string): string
+/**
  * Execute a trading formula with JIT compilation
  *
  * Compiles the formula using Just-In-Time compilation for maximum execution speed.
@@ -1481,6 +1492,10 @@ export declare function formulaEvalSimd(source: string, open: Array<number>, hig
  *          The special key "__result__" contains the final expression result.
  */
 export declare function formulaEvalZeroCopy(source: string, open: Array<number>, high: Array<number>, low: Array<number>, close: Array<number>, volume: Array<number>): Record<string, Array<number>>
+/** Run the versioned Rust factor-research contract from Node.js. */
+export declare function factorStudyJson(requestJson: string): string
+/** Evaluate strategy/benchmark/trade/portfolio metrics through the canonical Rust engine. */
+export declare function quantEvaluationJson(requestJson: string): string
 export declare class NapiStreamingSma {
   constructor(period: number)
   update(value: number): number

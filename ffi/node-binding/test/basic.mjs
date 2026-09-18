@@ -9,8 +9,8 @@ test('loads the native binding and computes SMA', () => {
   assert.ok(Math.abs(result[4] - 4) < 1e-12)
 })
 
-test('exports core indicator and formula entry points', () => {
-  for (const name of ['sma', 'ema', 'rsi', 'macd', 'formulaEval', 'formulaEvalContractJson', 'formulaStreamExecuteJson', 'operationCatalogJson', 'factorCatalogJson', 'compositeExecuteJson', 'factorExecuteJson', 'operationExecuteJson', 'formulaValidate', 'formulaAnalyze', 'formulaMetadata', 'formulaCompatibilityReport']) {
+test('exports the complete public runtime contract', () => {
+  for (const name of ['sma', 'ema', 'rsi', 'macd', 'formulaEval', 'formulaEvalContractJson', 'formulaEvalTemporalContractJson', 'formulaEvalPanelContractJson', 'formulaEvalCrossSectionalContractJson', 'formulaStreamExecuteJson', 'operationCatalogJson', 'factorCatalogJson', 'compositeExecuteJson', 'compositeStreamExecuteJson', 'factorExecuteJson', 'factorCrossSectionalExecuteJson', 'factorStreamExecuteJson', 'operationExecuteJson', 'factorStudyJson', 'quantEvaluationJson', 'formulaValidate', 'formulaAnalyze', 'formulaMetadata', 'formulaCompatibilityReport']) {
     assert.equal(typeof finkit[name], 'function', `${name} must be exported`)
   }
   assert.equal(typeof finkit.computeComposite, 'function')

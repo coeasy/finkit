@@ -296,7 +296,7 @@ talib_0_7_1
 
 ## 7. 当前实际验证状态
 
-截至 2026-09-18，本工作树已实际验证：
+截至 2026-09-19，本工作树已实际验证：
 
 - `cargo +1.98.1 test --workspace --offline --quiet`：本轮全 workspace 测试通过，所有 test targets 均无失败；Node binding 测试期间仍出现宿主 Node-API 符号加载告警，因此这不等同于真实 Node 宿主加载验证。
 - `cargo +1.98.1 test -p finkit --test formula_compatibility_boundary --offline --quiet`：`1 passed, 0 failed`，确认 host-required、drawing、control-flow/streaming 和 Pine plot 边界状态。
@@ -308,6 +308,8 @@ talib_0_7_1
 - `cargo +1.98.1 bench -p finkit --bench unified_engine_bench --offline -- --sample-size 10 --measurement-time 1 --warm-up-time 1 --noplot` 已实际运行：100k borrowed Factor 计划命中约 `13.84–14.13 µs`，Composite 计划命中但结果重算约 `2.90–2.97 ms`，结果缓存命中约 `15.34–15.53 µs`；这些是当前主机基线，不是跨硬件生产 SLO。
 - 同一 benchmark 新增 bounded stream：Factor `momentum_5_push_values_100k` 为 `52.896–53.147 ms`，Composite `sum_close_push_values_100k` 为 `75.687–75.967 ms`；批量 append 基线分别为 Factor `218.00–229.99 µs`、Composite `2.9697–3.0325 ms`。分块复用输出缓冲的实测为 Factor `177.08–177.98 µs`、Composite `2.8750–2.9269 ms`，相对同一轮批量基线约降低 16% 和 3%；这只证明结果 vector 容量可以复用，输入扩展、窗口执行和 JSON 序列化仍有分配，跨硬件生产阈值仍待下一阶段。
 - `node --test visualization/frontend/lightweight-charts-adapter.test.mjs`：`2 passed, 0 failed`；这是 adapter contract test，不等同于真实浏览器版本兼容或完整交互集成。
+- Node 宿主真实 smoke：使用 `1.98.1-x86_64-pc-windows-msvc` 构建 `ffi/node-binding/finkit.win32-x64-msvc.node`，`npm test` 为 `9 passed, 0 failed`；同时检查 ESM `index.mjs` 与 CommonJS `index.js` 的公开导出集合一致。该结果证明当前 Windows 宿主构建与加载链路，不等同于所有 Node 发布平台均已通过。
+- `python scripts/check_versions.py`：通过，workspace、Node、Java、.NET、Python、CMake 及生成版本矩阵均为 `0.1.15`。
 - TA-Lib golden：定向全指标 suite `1 passed, 0 failed`，161 个指标均有固定 reference 文件；当前集合不是 TA-Lib 全目录证明。
 - TA-Lib coverage matrix：profile-only catalog `101`、dispatcher smoke `161`、fixed numeric golden `161`；矩阵与 golden 文件、公共 catalog、dispatcher 支持集合已通过一致性测试。
 
@@ -319,7 +321,7 @@ talib_0_7_1
 - Factor/Composite 所有路径都已达到生产吞吐 SLO；
 - 递归 Factor/Composite 不是全部完成：当前只对文档列明的内置 Factor 和 Composite 节点提供跨语言 O(1)-per-row stateful streaming，并已通过 batch/stream/checkpoint 向量；任意用户闭包、自定义/未知函数、跨截面与全序列语义仍不支持 stateful mode，必须分别设计可序列化状态工厂或显式拒绝，不能静默降级为近似结果；
 - CMake/CTest 下的 C++ 原生编译与安装（当前验证环境没有 CMake/CTest）；
-- 八语言真实宿主运行时 golden、发布包和 ABI 稳定性；workspace 中 Node binding 的 Rust 测试出现 Node-API 宿主符号加载告警，且 `ffi/node-binding npm test` 在当前环境因缺少 `finkit-win32-x64-msvc` native addon 包而未进入用例，不能替代真实 Node 宿主 smoke test；
+- 八语言真实宿主运行时 golden、发布包和 ABI 稳定性；Node 当前只完成 Windows x64 宿主 smoke，Linux/macOS/其他声明平台及正式 npm 发布包仍需各自 runner 验证；
 - Lightweight Charts 完整浏览器交互集成；
 - 订单、回测或风控能力（明确不在本项目范围）。
 

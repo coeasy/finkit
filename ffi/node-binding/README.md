@@ -1,12 +1,12 @@
 # Finkit Node.js Binding
 
-This directory contains the NAPI-RS binding for Finkit `v0.1.5`.
+This directory contains the NAPI-RS binding for Finkit `v0.1.15`.
 
 ## Status
 
-The Node binding is **source-build and CI-packaging validated**. The multi-language workflow builds the native module, runs the real `node:test` smoke suite, stages the platform native file, and validates `npm pack` on the currently exercised CI target.
+The Node binding has a source-build path and a real `node:test` smoke suite. The multi-language workflow defines the CI packaging gate: it must build the native module, run the smoke suite, stage the platform native file, and validate `npm pack` for each published target.
 
-The `v0.1.5` release workflow builds Node packages, but this documentation does not assume that the root `finkit` package or all optional native platform packages have been published to npm.
+The `v0.1.15` release workflow builds Node packages, but this documentation does not assume that the root `finkit` package or all optional native platform packages have been published to npm.
 
 ## Requirements
 
@@ -20,7 +20,7 @@ The `v0.1.5` release workflow builds Node packages, but this documentation does 
 ```bash
 git clone https://github.com/coeasy/finkit.git
 cd finkit
-git checkout v0.1.5
+git checkout v0.1.15
 cd ffi/node-binding
 
 npm install
@@ -116,7 +116,7 @@ compute/chart layer and does not own a market-data source or trading session.
 
 ## Package layout
 
-`package.json` declares the root package `finkit` version `0.1.5`, ESM/CommonJS entry points, TypeScript definitions, and optional platform-native packages.
+`package.json` declares the root package `finkit` version `0.1.15`, ESM/CommonJS entry points, TypeScript definitions, and optional platform-native packages.
 
 The declared platform package set currently includes:
 
@@ -183,7 +183,7 @@ The exact supported indicator registry can change as the Rust core evolves. Use 
 
 ## Distribution note
 
-Do not use `npm install finkit` as a guaranteed public installation instruction until the npm registry and all required native dependency packages have been verified. For v0.1.5, the release artifact or source build is the documented Node path.
+Do not use `npm install finkit` as a guaranteed public installation instruction until the npm registry and all required native dependency packages have been verified. For v0.1.15, the release artifact or source build is the documented Node path.
 
 ## License
 
