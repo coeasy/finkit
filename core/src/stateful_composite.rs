@@ -6,7 +6,9 @@
 //! input row. The hot path uses fixed node ids and caller-owned output buffers;
 //! it does not rebuild a string-keyed context or replay historical rows.
 
-use crate::composite::{CompiledCompositePlan, CompositeDefinition, CompositeExpr, CompositeOp};
+use crate::composite::{
+    CompiledCompositePlan, CompositeDefinition, CompositeExpr, CompositeOp, StatefulCompositeSpec,
+};
 use crate::factors::{FactorError, FactorResult};
 use crate::returns::{return_between, ReturnKind};
 use crate::streaming::indicators::{
@@ -93,6 +95,7 @@ impl StatefulCompositeStream {
         let mut builder = StatefulBuilder {
             definitions,
             raw_indexes,
+            stateful_specs: &plan.stateful_specs,
             named: BTreeMap::new(),
             visiting: Vec::new(),
             nodes: Vec::new(),
@@ -294,6 +297,7 @@ impl StatefulCompositeStream {
 struct StatefulBuilder<'a> {
     definitions: BTreeMap<&'a str, &'a CompositeDefinition>,
     raw_indexes: BTreeMap<&'a str, usize>,
+    stateful_specs: &'a BTreeMap<String, StatefulCompositeSpec>,
     named: BTreeMap<String, usize>,
     visiting: Vec<String>,
     nodes: Vec<StatefulNode>,
@@ -348,7 +352,8 @@ impl StatefulBuilder<'_> {
                     .iter()
                     .map(|input| self.expression_node(input))
                     .collect::<FactorResult<Vec<_>>>()?;
-                let state = StatefulCall::new(name, params)?;
+                let spec = self.stateful_specs.get(&name.to_ascii_lowercase()).copied();
+                let state = StatefulCall::new(name, spec, params)?;
                 state.validate_arity(input_nodes.len())?;
                 StatefulNode::Call {
                     inputs: input_nodes,
@@ -458,24 +463,28 @@ enum BollField {
 }
 
 impl StatefulCall {
-    fn new(name: &str, params: &[f64]) -> FactorResult<Self> {
-        let normalized = name.to_ascii_lowercase();
-        let state = match normalized.as_str() {
-            "sma" => Self::Sma(StreamingSma::new(period(params, 14)?)),
-            "wma" => Self::Wma(StreamingWma::new(period(params, 14)?)),
-            "ema" => Self::Ema(StreamingEma::new(period(params, 14)?)),
-            "rsi" => Self::Rsi(StreamingRsi::new(period(params, 14)?)),
-            "atr" => Self::Atr(AtrState::new(period(params, 14)?)),
-            "macd" => Self::Macd(StreamingMacd::new(
+    fn new(name: &str, spec: Option<StatefulCompositeSpec>, params: &[f64]) -> FactorResult<Self> {
+        let spec = spec.ok_or_else(|| {
+            FactorError::InvalidParameter(format!(
+                "stateful composite function has no registered state spec: {name}"
+            ))
+        })?;
+        let state = match spec {
+            StatefulCompositeSpec::Sma => Self::Sma(StreamingSma::new(period(params, 14)?)),
+            StatefulCompositeSpec::Wma => Self::Wma(StreamingWma::new(period(params, 14)?)),
+            StatefulCompositeSpec::Ema => Self::Ema(StreamingEma::new(period(params, 14)?)),
+            StatefulCompositeSpec::Rsi => Self::Rsi(StreamingRsi::new(period(params, 14)?)),
+            StatefulCompositeSpec::Atr => Self::Atr(AtrState::new(period(params, 14)?)),
+            StatefulCompositeSpec::Macd => Self::Macd(StreamingMacd::new(
                 period_at(params, 0, 12)?,
                 period_at(params, 1, 26)?,
                 period_at(params, 2, 9)?,
             )),
-            "boll_mid" => Self::Boll {
+            StatefulCompositeSpec::BollMid => Self::Boll {
                 indicator: StreamingBoll::new(period(params, 20)?, 2.0, 2.0),
                 field: BollField::Middle,
             },
-            "boll_upper" => Self::Boll {
+            StatefulCompositeSpec::BollUpper => Self::Boll {
                 indicator: StreamingBoll::new(
                     period(params, 20)?,
                     params.get(1).copied().unwrap_or(2.0),
@@ -483,7 +492,7 @@ impl StatefulCall {
                 ),
                 field: BollField::Upper,
             },
-            "boll_lower" => Self::Boll {
+            StatefulCompositeSpec::BollLower => Self::Boll {
                 indicator: StreamingBoll::new(
                     period(params, 20)?,
                     params.get(1).copied().unwrap_or(2.0),
@@ -491,17 +500,21 @@ impl StatefulCall {
                 ),
                 field: BollField::Lower,
             },
-            "rolling_std" => Self::StdDev(StreamingStdDev::new(period(params, 20)?)),
-            "rolling_min" => Self::Min(StreamingMin::new(period(params, 20)?)),
-            "rolling_max" => Self::Max(StreamingMax::new(period(params, 20)?)),
-            "return" => Self::Return(LaggedState::new(period(params, 1)?)),
-            "vwma" => Self::Vwma(VwmaState::new(period(params, 14)?)),
-            "volatility" => Self::Volatility(VolatilityState::new(period(params, 20)?)),
-            "threshold" => Self::Threshold(finite_param(
+            StatefulCompositeSpec::RollingStd => {
+                Self::StdDev(StreamingStdDev::new(period(params, 20)?))
+            }
+            StatefulCompositeSpec::RollingMin => Self::Min(StreamingMin::new(period(params, 20)?)),
+            StatefulCompositeSpec::RollingMax => Self::Max(StreamingMax::new(period(params, 20)?)),
+            StatefulCompositeSpec::Return => Self::Return(LaggedState::new(period(params, 1)?)),
+            StatefulCompositeSpec::Vwma => Self::Vwma(VwmaState::new(period(params, 14)?)),
+            StatefulCompositeSpec::Volatility => {
+                Self::Volatility(VolatilityState::new(period(params, 20)?))
+            }
+            StatefulCompositeSpec::Threshold => Self::Threshold(finite_param(
                 params.first().copied().unwrap_or(0.0),
                 "threshold",
             )?),
-            "between" => {
+            StatefulCompositeSpec::Between => {
                 let lower = finite_param(params.first().copied().unwrap_or(0.0), "between lower")?;
                 let upper = finite_param(params.get(1).copied().unwrap_or(1.0), "between upper")?;
                 if lower > upper {
@@ -511,7 +524,7 @@ impl StatefulCall {
                 }
                 Self::Between { lower, upper }
             }
-            "clip" => {
+            StatefulCompositeSpec::Clip => {
                 let lower =
                     finite_param(params.first().copied().unwrap_or(-f64::MAX), "clip lower")?;
                 let upper = finite_param(params.get(1).copied().unwrap_or(f64::MAX), "clip upper")?;
@@ -522,10 +535,10 @@ impl StatefulCall {
                 }
                 Self::Clip { lower, upper }
             }
-            "abs" => Self::Abs,
-            "neg" => Self::Neg,
-            "sign" => Self::Sign,
-            "weighted_average" => {
+            StatefulCompositeSpec::Abs => Self::Abs,
+            StatefulCompositeSpec::Neg => Self::Neg,
+            StatefulCompositeSpec::Sign => Self::Sign,
+            StatefulCompositeSpec::WeightedAverage => {
                 if params.iter().any(|weight| !weight.is_finite()) {
                     return Err(FactorError::InvalidParameter(
                         "weights must be finite".to_string(),
@@ -535,19 +548,14 @@ impl StatefulCall {
                     weights: params.to_vec(),
                 }
             }
-            "cross_up" => Self::Cross {
+            StatefulCompositeSpec::CrossUp => Self::Cross {
                 upward: true,
                 previous: None,
             },
-            "cross_down" => Self::Cross {
+            StatefulCompositeSpec::CrossDown => Self::Cross {
                 upward: false,
                 previous: None,
             },
-            _ => {
-                return Err(FactorError::InvalidParameter(format!(
-                    "stateful composite function is unsupported: {name}"
-                )))
-            }
         };
         Ok(state)
     }
@@ -1013,8 +1021,9 @@ fn period(params: &[f64], default: usize) -> FactorResult<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::composite::{CompositeDefinition, CompositeEngine};
+    use crate::composite::{CompositeDefinition, CompositeEngine, StatefulCompositeSpec};
     use crate::factors::FactorContext;
+    use std::sync::Arc;
 
     fn assert_same(actual: &[f64], expected: &[f64]) {
         assert_eq!(actual.len(), expected.len());
@@ -1157,5 +1166,49 @@ mod tests {
         let mut restored = [f64::NAN];
         stream.push_values_into(&[6.0], &mut restored).unwrap();
         assert_eq!(expected[0], restored[0]);
+    }
+
+    #[test]
+    fn custom_composite_uses_registered_state_spec_instead_of_name_dispatch() {
+        let mut engine = CompositeEngine::new();
+        engine
+            .register(
+                "custom_ema",
+                Arc::new(|inputs, params| {
+                    let period = params.first().copied().unwrap_or(3.0) as usize;
+                    crate::math::moving_avg::ema(inputs[0], period)
+                        .map(|values| values.into_raw_vec())
+                        .map_err(|error| FactorError::Compute(error.to_string()))
+                }),
+            )
+            .unwrap();
+        engine
+            .register_stateful_spec("custom_ema", StatefulCompositeSpec::Ema)
+            .unwrap();
+
+        let definitions = vec![CompositeDefinition::new(
+            "result",
+            CompositeExpr::call(
+                "custom_ema",
+                vec![CompositeExpr::series("close")],
+                vec![3.0],
+            ),
+        )];
+        let close = vec![10.0, 11.0, 12.0, 15.0, 14.0, 16.0];
+        let plan = engine.compile(&definitions, &["result"]).unwrap();
+        let context = FactorContext::new()
+            .with_series("close", close.clone())
+            .unwrap();
+        let batch = engine
+            .evaluate_compiled(&plan, &context.as_borrowed())
+            .unwrap();
+        let mut stream = plan.stateful_stream().unwrap();
+        let mut actual = Vec::with_capacity(close.len());
+        let mut output = [f64::NAN];
+        for value in close {
+            stream.push_values_into(&[value], &mut output).unwrap();
+            actual.push(output[0]);
+        }
+        assert_same(&actual, &batch["result"]);
     }
 }

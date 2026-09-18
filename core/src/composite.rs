@@ -93,6 +93,41 @@ pub enum CompositeOp {
     WeightedAverage,
 }
 
+/// Explicit state kernel used by a Composite call in a stateful plan.
+///
+/// The batch Composite function remains a vector callback, while this
+/// declaration selects the independent row-state implementation. Keeping the
+/// capability in the registry avoids making the stateful executor infer
+/// semantics from arbitrary function names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum StatefulCompositeSpec {
+    Sma,
+    Wma,
+    Ema,
+    Rsi,
+    Atr,
+    Macd,
+    BollMid,
+    BollUpper,
+    BollLower,
+    RollingStd,
+    RollingMin,
+    RollingMax,
+    Return,
+    Vwma,
+    Volatility,
+    Threshold,
+    Between,
+    Clip,
+    Abs,
+    Neg,
+    Sign,
+    WeightedAverage,
+    CrossUp,
+    CrossDown,
+}
+
 /// One named output in a composite graph.
 #[derive(Debug, Clone)]
 pub struct CompositeDefinition {
@@ -124,6 +159,7 @@ pub struct CompiledCompositePlan {
     pub(crate) required_raw_inputs: Vec<String>,
     range_lookback: Option<usize>,
     pub(crate) signature: u64,
+    pub(crate) stateful_specs: BTreeMap<String, StatefulCompositeSpec>,
 }
 
 impl CompiledCompositePlan {
@@ -212,6 +248,7 @@ struct CompiledPlanCacheEntry {
 pub struct CompositeEngine {
     functions: BTreeMap<String, CompositeFn>,
     builtin_functions: BTreeSet<String>,
+    stateful_specs: BTreeMap<String, StatefulCompositeSpec>,
     /// Compiled graph plans are reused across cache revisions and scopes.
     /// Keeping them separate from result snapshots prevents repeated cached
     /// evaluations from rebuilding dependency maps and cycle checks.
@@ -271,6 +308,7 @@ impl CompositeEngine {
         let mut engine = Self::default();
         engine.register_builtins();
         engine.builtin_functions = builtin_function_names();
+        engine.stateful_specs = builtin_stateful_specs();
         engine
     }
 
@@ -284,6 +322,7 @@ impl CompositeEngine {
         }
         let normalized = name.to_ascii_lowercase();
         self.builtin_functions.remove(&normalized);
+        self.stateful_specs.remove(&normalized);
         self.functions.insert(normalized, function);
         self.compiled_plans.clear();
         self.compiled_plan_cache_hits = 0;
@@ -292,6 +331,34 @@ impl CompositeEngine {
         self.cache.clear();
         self.cache_clock = 0;
         Ok(())
+    }
+
+    /// Register the explicit row-state kernel for an existing Composite
+    /// function. The function's batch implementation remains authoritative for
+    /// full recomputation and must be verified against the state kernel.
+    pub fn register_stateful_spec(
+        &mut self,
+        name: impl Into<String>,
+        spec: StatefulCompositeSpec,
+    ) -> FactorResult<()> {
+        let normalized = name.into().to_ascii_lowercase();
+        if !self.functions.contains_key(&normalized) {
+            return Err(FactorError::UnknownFactor(normalized));
+        }
+        self.stateful_specs.insert(normalized, spec);
+        self.compiled_plans.clear();
+        self.compiled_plan_cache_hits = 0;
+        self.compiled_plan_cache_misses = 0;
+        self.compiled_plan_cache_clock = 0;
+        self.cache.clear();
+        self.cache_clock = 0;
+        Ok(())
+    }
+
+    /// Return the registered state kernel for a function name.
+    #[must_use]
+    pub fn stateful_spec(&self, name: &str) -> Option<StatefulCompositeSpec> {
+        self.stateful_specs.get(&name.to_ascii_lowercase()).copied()
     }
 
     /// Set the maximum number of cached graph snapshots retained by this engine.
@@ -383,6 +450,7 @@ impl CompositeEngine {
                         .all(|output| lookback_memo.get(*output).is_some_and(Option::is_some))
                 }),
             signature: graph_signature(definitions, outputs),
+            stateful_specs: self.stateful_specs.clone(),
         })
     }
 
@@ -1398,6 +1466,7 @@ impl Default for CompositeEngine {
         Self {
             functions: BTreeMap::new(),
             builtin_functions: BTreeSet::new(),
+            stateful_specs: BTreeMap::new(),
             compiled_plans: BTreeMap::new(),
             compiled_plan_cache_hits: 0,
             compiled_plan_cache_misses: 0,
@@ -1616,6 +1685,38 @@ fn builtin_function_names() -> BTreeSet<String> {
     ]
     .into_iter()
     .map(str::to_string)
+    .collect()
+}
+
+fn builtin_stateful_specs() -> BTreeMap<String, StatefulCompositeSpec> {
+    [
+        ("sma", StatefulCompositeSpec::Sma),
+        ("wma", StatefulCompositeSpec::Wma),
+        ("ema", StatefulCompositeSpec::Ema),
+        ("rsi", StatefulCompositeSpec::Rsi),
+        ("atr", StatefulCompositeSpec::Atr),
+        ("macd", StatefulCompositeSpec::Macd),
+        ("boll_mid", StatefulCompositeSpec::BollMid),
+        ("boll_upper", StatefulCompositeSpec::BollUpper),
+        ("boll_lower", StatefulCompositeSpec::BollLower),
+        ("rolling_std", StatefulCompositeSpec::RollingStd),
+        ("rolling_min", StatefulCompositeSpec::RollingMin),
+        ("rolling_max", StatefulCompositeSpec::RollingMax),
+        ("return", StatefulCompositeSpec::Return),
+        ("vwma", StatefulCompositeSpec::Vwma),
+        ("volatility", StatefulCompositeSpec::Volatility),
+        ("threshold", StatefulCompositeSpec::Threshold),
+        ("between", StatefulCompositeSpec::Between),
+        ("clip", StatefulCompositeSpec::Clip),
+        ("abs", StatefulCompositeSpec::Abs),
+        ("neg", StatefulCompositeSpec::Neg),
+        ("sign", StatefulCompositeSpec::Sign),
+        ("weighted_average", StatefulCompositeSpec::WeightedAverage),
+        ("cross_up", StatefulCompositeSpec::CrossUp),
+        ("cross_down", StatefulCompositeSpec::CrossDown),
+    ]
+    .into_iter()
+    .map(|(name, spec)| (name.to_string(), spec))
     .collect()
 }
 
