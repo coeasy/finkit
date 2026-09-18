@@ -94,7 +94,7 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
 - 审计差集：0；
 - 21 个新增函数的独立 adapter、参数目录、输出字段和 warm-up：已接入；
 - Core golden suite：已通过；
-- `finkit-ffi-common`：已通过 76 个测试，包含全目录 dispatcher smoke 和三类
+- `finkit-ffi-common`：已通过 78 个测试，包含全目录 dispatcher smoke 和三类
   streaming checkpoint provenance 校验。
 
 这只证明当前 workspace 和参考环境的目录/数值对照，不等于所有操作系统、编译器、CPU、Node 宿主和发布包均已完成验证；发布前仍需运行完整 binding/ABI 矩阵。
@@ -136,9 +136,9 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
   仍明确走各自的增量/checkpoint 专用执行器，不把不同能力误报为同一模式。
 - Factor、Composite、Formula 的 stream contract 现在统一写入 checkpoint 的
   `scope`/`data_revision`，恢复前同时拒绝 scope mismatch 和 data revision mismatch；
-  本轮 `finkit-ffi-common` 76 个测试全部通过。
+  本轮 `finkit-ffi-common` 78 个测试全部通过。
 - 横截面 Factor 批处理入口也已接入统一 dispatcher，并保留时间戳/标的轴与
-  row-major null 语义；本轮 `finkit-ffi-common` 测试为 73 个通过。
+  row-major null 语义；本轮 `finkit-ffi-common` 测试为 78 个通过。
 - 基础 Formula JSON 入口也已改走 `UnifiedOperationEngine::Formula`，因此普通
   公式、Factor、Composite 和横截面 Factor 的公开批处理入口共享同一 Runtime
   dispatcher；Temporal/Panel/Streaming 仍保留其显式时间对齐与状态执行路径。

@@ -15,6 +15,7 @@ use std::fmt;
 pub enum KernelCompatError {
     InvalidWindow(usize),
     LengthMismatch { input: usize, output: usize },
+    PairLengthMismatch { left: usize, right: usize },
     OhlcLengthMismatch,
 }
 
@@ -26,6 +27,12 @@ impl fmt::Display for KernelCompatError {
                 f,
                 "kernel compatibility output length mismatch: input={input}, output={output}"
             ),
+            Self::PairLengthMismatch { left, right } => {
+                write!(
+                    f,
+                    "kernel compatibility pair length mismatch: left={left}, right={right}"
+                )
+            }
             Self::OhlcLengthMismatch => write!(f, "OHLC inputs must have identical lengths"),
         }
     }
@@ -187,6 +194,172 @@ pub fn rolling_min_into(
     output: &mut [f64],
 ) -> Result<(), KernelCompatError> {
     rolling_extrema_into(input, window, output, false)
+}
+
+fn validate_pair(
+    left: &[f64],
+    right: &[f64],
+    window: usize,
+    output: &[f64],
+) -> Result<(), KernelCompatError> {
+    if window < 2 {
+        return Err(KernelCompatError::InvalidWindow(window));
+    }
+    if left.len() != right.len() {
+        return Err(KernelCompatError::PairLengthMismatch {
+            left: left.len(),
+            right: right.len(),
+        });
+    }
+    if left.len() != output.len() {
+        return Err(KernelCompatError::LengthMismatch {
+            input: left.len(),
+            output: output.len(),
+        });
+    }
+    Ok(())
+}
+
+/// Compute a rolling Pearson correlation with O(1) amortized updates.
+///
+/// Windows containing a non-finite pair remain `NaN`, matching the formula
+/// compatibility path. The sums are retained in a ring buffer so callers do
+/// not allocate or copy a temporary window for every output row.
+pub fn rolling_correlation_into(
+    left: &[f64],
+    right: &[f64],
+    window: usize,
+    output: &mut [f64],
+) -> Result<(), KernelCompatError> {
+    validate_pair(left, right, window, output)?;
+    output.fill(f64::NAN);
+    if window > left.len() {
+        return Ok(());
+    }
+
+    let mut ring = vec![(0.0, 0.0, false); window];
+    let mut cursor = 0usize;
+    let mut count = 0usize;
+    let mut invalid = 0usize;
+    let mut sum_left = 0.0;
+    let mut sum_right = 0.0;
+    let mut sum_left_sq = 0.0;
+    let mut sum_right_sq = 0.0;
+    let mut sum_product = 0.0;
+
+    for index in 0..left.len() {
+        if count == window {
+            let (old_left, old_right, old_valid) = ring[cursor];
+            if old_valid {
+                sum_left -= old_left;
+                sum_right -= old_right;
+                sum_left_sq -= old_left * old_left;
+                sum_right_sq -= old_right * old_right;
+                sum_product -= old_left * old_right;
+            } else {
+                invalid -= 1;
+            }
+        } else {
+            count += 1;
+        }
+
+        let current_left = left[index];
+        let current_right = right[index];
+        let valid = current_left.is_finite() && current_right.is_finite();
+        ring[cursor] = (current_left, current_right, valid);
+        if valid {
+            sum_left += current_left;
+            sum_right += current_right;
+            sum_left_sq += current_left * current_left;
+            sum_right_sq += current_right * current_right;
+            sum_product += current_left * current_right;
+        } else {
+            invalid += 1;
+        }
+        cursor += 1;
+        if cursor == window {
+            cursor = 0;
+        }
+
+        if count == window && invalid == 0 {
+            let size = window as f64;
+            let var_left = sum_left_sq - sum_left * sum_left / size;
+            let var_right = sum_right_sq - sum_right * sum_right / size;
+            if var_left.abs() >= 1e-15 && var_right.abs() >= 1e-15 {
+                let covariance = sum_product - sum_left * sum_right / size;
+                output[index] = covariance / (var_left * var_right).sqrt();
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Compute a rolling beta (`cov(left, right) / var(right)`) with O(1)
+/// amortized updates. The common divisor cancels, so the population sums are
+/// numerically equivalent to the sample covariance/sample variance pair.
+pub fn rolling_beta_into(
+    left: &[f64],
+    right: &[f64],
+    window: usize,
+    output: &mut [f64],
+) -> Result<(), KernelCompatError> {
+    validate_pair(left, right, window, output)?;
+    output.fill(f64::NAN);
+    if window > left.len() {
+        return Ok(());
+    }
+
+    let mut ring = vec![(0.0, 0.0, false); window];
+    let mut cursor = 0usize;
+    let mut count = 0usize;
+    let mut invalid = 0usize;
+    let mut sum_left = 0.0;
+    let mut sum_right = 0.0;
+    let mut sum_right_sq = 0.0;
+    let mut sum_product = 0.0;
+
+    for index in 0..left.len() {
+        if count == window {
+            let (old_left, old_right, old_valid) = ring[cursor];
+            if old_valid {
+                sum_left -= old_left;
+                sum_right -= old_right;
+                sum_right_sq -= old_right * old_right;
+                sum_product -= old_left * old_right;
+            } else {
+                invalid -= 1;
+            }
+        } else {
+            count += 1;
+        }
+
+        let current_left = left[index];
+        let current_right = right[index];
+        let valid = current_left.is_finite() && current_right.is_finite();
+        ring[cursor] = (current_left, current_right, valid);
+        if valid {
+            sum_left += current_left;
+            sum_right += current_right;
+            sum_right_sq += current_right * current_right;
+            sum_product += current_left * current_right;
+        } else {
+            invalid += 1;
+        }
+        cursor += 1;
+        if cursor == window {
+            cursor = 0;
+        }
+
+        if count == window && invalid == 0 {
+            let size = window as f64;
+            let variance_right = sum_right_sq - sum_right * sum_right / size;
+            if variance_right.abs() >= 1e-15 {
+                let covariance = sum_product - sum_left * sum_right / size;
+                output[index] = covariance / variance_right;
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Legacy-aligned MIDPOINT from one input series.
@@ -368,6 +541,38 @@ mod tests {
         rolling_min_into(&input, 17, &mut canonical_min).unwrap();
         assert_series_eq(legacy_max.as_slice().unwrap(), &canonical_max, 1e-12);
         assert_series_eq(legacy_min.as_slice().unwrap(), &canonical_min, 1e-12);
+    }
+
+    #[test]
+    fn rolling_pair_kernels_match_legacy_formula_windows() {
+        let left: Vec<f64> = (0..160)
+            .map(|i| 10.0 + (i as f64 * 0.17).sin() + i as f64 * 0.03)
+            .collect();
+        let right: Vec<f64> = (0..160)
+            .map(|i| 20.0 + (i as f64 * 0.11).cos() + i as f64 * 0.05)
+            .collect();
+        let window = 19;
+        let mut canonical_corr = vec![f64::NAN; left.len()];
+        let mut canonical_beta = vec![f64::NAN; left.len()];
+        rolling_correlation_into(&left, &right, window, &mut canonical_corr).unwrap();
+        rolling_beta_into(&left, &right, window, &mut canonical_beta).unwrap();
+
+        for index in (window - 1)..left.len() {
+            let start = index + 1 - window;
+            let x = &left[start..=index];
+            let y = &right[start..=index];
+            let expected_corr = statistics::correlation(x, y).unwrap();
+            let expected_beta =
+                statistics::covariance(x, y).unwrap() / statistics::variance(y).unwrap();
+            assert!((canonical_corr[index] - expected_corr).abs() < 1e-9);
+            assert!(
+                (canonical_beta[index] - expected_beta).abs() < 1e-9,
+                "beta mismatch at {index}: {} vs {} (diff {})",
+                canonical_beta[index],
+                expected_beta,
+                (canonical_beta[index] - expected_beta).abs()
+            );
+        }
     }
 
     #[test]

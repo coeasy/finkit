@@ -3,7 +3,7 @@
 > **SSOT** — auto-generated from the legacy formula table and routed formula functions.
 > Do not edit manually. Regenerate: `python scripts/gen_ssot_docs.py --generate`
 
-Built-in formula functions: **245**
+Built-in formula functions: **305**
 
 These functions are available in the formula DSL for expressions like `SMA(CLOSE, 20)`.
 
@@ -52,6 +52,55 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `BREAKDOWN` |
 | `BREAKOUT` |
 | `CCI` |
+| `CDLABANDONEDBABY` |
+| `CDLADVANCEBLOCK` |
+| `CDLBELTHOLD` |
+| `CDLBREAKAWAY` |
+| `CDLCLOSINGMARUBOZU` |
+| `CDLCONCEALBABYSWALL` |
+| `CDLCOUNTERATTACK` |
+| `CDLDARKCLOUDCOVER` |
+| `CDLDOJI` |
+| `CDLDOJISTAR` |
+| `CDLDRAGONFLYDOJI` |
+| `CDLENGULFING` |
+| `CDLEVENINGDOJISTAR` |
+| `CDLEVENINGSTAR` |
+| `CDLGAPSIDESIDEWHITE` |
+| `CDLGRAVESTONEDOJI` |
+| `CDLHAMMER` |
+| `CDLHANGINGMAN` |
+| `CDLHARAMI` |
+| `CDLHARAMICROSS` |
+| `CDLHIGHWAVE` |
+| `CDLHIKKAKE` |
+| `CDLHIKKAKEMOD` |
+| `CDLHOMINGPIGEON` |
+| `CDLINNECK` |
+| `CDLINVERTEDHAMMER` |
+| `CDLKICKING` |
+| `CDLKICKINGBYLENGTH` |
+| `CDLLADDERBOTTOM` |
+| `CDLLONGLEGGEDDOJI` |
+| `CDLLONGLINE` |
+| `CDLMARUBOZU` |
+| `CDLMATCHINGLOW` |
+| `CDLMATHOLD` |
+| `CDLMORNINGDOJISTAR` |
+| `CDLMORNINGSTAR` |
+| `CDLONNECK` |
+| `CDLPIERCING` |
+| `CDLRICKSHAWMAN` |
+| `CDLSEPARATINGLINES` |
+| `CDLSHOOTINGSTAR` |
+| `CDLSHORTLINE` |
+| `CDLSPINNINGTOP` |
+| `CDLSTALLEDPATTERN` |
+| `CDLSTICKSANDWICH` |
+| `CDLTAKURI` |
+| `CDLTASUKIGAP` |
+| `CDLTHRUSTING` |
+| `CDLTRISTAR` |
 | `CEIL` |
 | `CEILING` |
 | `CHECKSIG` |
@@ -68,6 +117,11 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `CROSS` |
 | `CROSSBELOW` |
 | `CROSSUP` |
+| `CS_INDNEUTRALIZE` |
+| `CS_RANK` |
+| `CS_SCALE` |
+| `CS_SIGNED_POWER` |
+| `CS_ZSCORE` |
 | `CUMMAX` |
 | `CUMMIN` |
 | `CUMSUM` |
@@ -138,6 +192,7 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `ICHIMOKU_TENKAN` |
 | `IF` |
 | `IFTHEN` |
+| `IMI` |
 | `INTPART` |
 | `KAGI` |
 | `KAMA` |
@@ -146,6 +201,9 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `LAST` |
 | `LIMIT_DOWN` |
 | `LIMIT_UP` |
+| `LINEARREG_ANGLE` |
+| `LINEARREG_INTERCEPT` |
+| `LINEARREG_SLOPE` |
 | `LINEAR_REG` |
 | `LLV` |
 | `LLVBARS` |
@@ -169,6 +227,8 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `MIDPRICE` |
 | `MIN` |
 | `MININDEX` |
+| `MINMAX` |
+| `MINMAXINDEX` |
 | `MINPRICE` |
 | `MINUS` |
 | `MINUS_DI` |

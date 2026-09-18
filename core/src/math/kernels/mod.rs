@@ -9,9 +9,9 @@ mod statistics;
 mod volatility;
 
 pub use compat::{
-    adx_into, atr_into, midpoint_into, midprice_into, rolling_max_into, rolling_mean_into,
-    rolling_min_into, rolling_sample_stddev_into, rolling_sample_variance_into, sma_into,
-    willr_into, wma_into, KernelCompatError,
+    adx_into, atr_into, midpoint_into, midprice_into, rolling_beta_into, rolling_correlation_into,
+    rolling_max_into, rolling_mean_into, rolling_min_into, rolling_sample_stddev_into,
+    rolling_sample_variance_into, sma_into, willr_into, wma_into, KernelCompatError,
 };
 pub use extrema::{MonotonicExtrema, RollingExtremaPair};
 pub use moving_average::{MovingAverageKind, MovingAverageState};

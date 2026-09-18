@@ -15,9 +15,11 @@ use crate::indicators::momentum_ext::{chop as lib_chop, fisher as lib_fisher, ts
 use crate::indicators::overlap::sarext as lib_sarext;
 use crate::indicators::statistics::avgdev as lib_avgdev;
 use crate::indicators::volume_ext::cmf as lib_cmf;
+use crate::math::kernels::{rolling_beta_into, rolling_correlation_into};
 use crate::math::linear as lib_linear;
 use crate::math::moving_avg as lib_ma;
 use crate::math::statistics as lib_stat;
+use crate::math::statistics::rolling_minmax_visit;
 use crate::patterns::candlestick as lib_candlestick;
 
 pub(crate) type FormulaFn =
@@ -2282,14 +2284,18 @@ fn fn_correl(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, 
 
     let data_len = ctx.data_len;
     let mut result = nan_vec(data_len);
-
-    for i in (n - 1)..data_len {
-        let window_start = (i + 1).saturating_sub(n);
-        let x_window: Vec<f64> = (window_start..=i).map(|j| x[j]).collect();
-        let y_window: Vec<f64> = (window_start..=i).map(|j| y[j]).collect();
-        if let Ok(corr) = lib_stat::correlation(&x_window, &y_window) {
-            result[i] = corr;
-        }
+    if x.len() != data_len || y.len() != data_len {
+        return Ok(result);
+    }
+    if rolling_correlation_into(
+        x.as_slice().unwrap(),
+        y.as_slice().unwrap(),
+        n,
+        result.as_slice_mut().unwrap(),
+    )
+    .is_err()
+    {
+        return Ok(nan_vec(data_len));
     }
 
     Ok(result)
@@ -2303,19 +2309,18 @@ fn fn_beta(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, Fo
 
     let data_len = ctx.data_len;
     let mut result = nan_vec(data_len);
-
-    for i in (n - 1)..data_len {
-        let window_start = (i + 1).saturating_sub(n);
-        let x_window: Vec<f64> = (window_start..=i).map(|j| x[j]).collect();
-        let y_window: Vec<f64> = (window_start..=i).map(|j| y[j]).collect();
-        if let (Ok(cov), Ok(var)) = (
-            lib_stat::covariance(&x_window, &y_window),
-            lib_stat::variance(&y_window),
-        ) {
-            if var.abs() > 1e-15 {
-                result[i] = cov / var;
-            }
-        }
+    if x.len() != data_len || y.len() != data_len {
+        return Ok(result);
+    }
+    if rolling_beta_into(
+        x.as_slice().unwrap(),
+        y.as_slice().unwrap(),
+        n,
+        result.as_slice_mut().unwrap(),
+    )
+    .is_err()
+    {
+        return Ok(nan_vec(data_len));
     }
 
     Ok(result)
@@ -2349,22 +2354,12 @@ fn fn_midpoint(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
 
     let data_len = ctx.data_len;
     let values = input.as_slice().unwrap();
-
-    let max_vals = match lib_stat::rolling_max(values, n) {
-        Ok(r) => r,
-        Err(_) => return Ok(nan_vec(data_len)),
-    };
-    let min_vals = match lib_stat::rolling_min(values, n) {
-        Ok(r) => r,
-        Err(_) => return Ok(nan_vec(data_len)),
-    };
-
     let mut result = nan_vec(data_len);
-    for i in 0..data_len {
-        if !max_vals[i].is_nan() && !min_vals[i].is_nan() {
-            result[i] = (max_vals[i] + min_vals[i]) / 2.0;
+    rolling_minmax_visit(values, values, n, |index, maximum, minimum| {
+        if !maximum.is_nan() && !minimum.is_nan() {
+            result[index] = (maximum + minimum) / 2.0;
         }
-    }
+    });
 
     Ok(result)
 }
@@ -2378,22 +2373,12 @@ fn fn_midprice(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
     let data_len = ctx.data_len;
     let high_values = high.as_slice().unwrap();
     let low_values = low.as_slice().unwrap();
-
-    let max_vals = match lib_stat::rolling_max(high_values, n) {
-        Ok(r) => r,
-        Err(_) => return Ok(nan_vec(data_len)),
-    };
-    let min_vals = match lib_stat::rolling_min(low_values, n) {
-        Ok(r) => r,
-        Err(_) => return Ok(nan_vec(data_len)),
-    };
-
     let mut result = nan_vec(data_len);
-    for i in 0..data_len {
-        if !max_vals[i].is_nan() && !min_vals[i].is_nan() {
-            result[i] = (max_vals[i] + min_vals[i]) / 2.0;
+    rolling_minmax_visit(high_values, low_values, n, |index, maximum, minimum| {
+        if !maximum.is_nan() && !minimum.is_nan() {
+            result[index] = (maximum + minimum) / 2.0;
         }
-    }
+    });
 
     Ok(result)
 }

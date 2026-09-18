@@ -3,7 +3,7 @@
 > **SSOT** — auto-generated from `core/src/indicators/mod.rs` and submodule `pub fn` exports.
 > Do not edit manually. Regenerate: `python scripts/gen_ssot_docs.py --generate`
 
-Modules exported from `indicators/mod.rs`: **35** | Public indicator functions: **353**
+Modules exported from `indicators/mod.rs`: **36** | Public indicator functions: **383**
 
 ## astock
 
@@ -194,6 +194,7 @@ Modules exported from `indicators/mod.rs`: **35** | Public indicator functions: 
 | `adxr` |
 | `adxr_into` |
 | `apo` |
+| `apo_with_ma_type` |
 | `aroon` |
 | `aroon_into` |
 | `aroonosc` |
@@ -217,12 +218,15 @@ Modules exported from `indicators/mod.rs`: **35** | Public indicator functions: 
 | `minus_di` |
 | `minus_di_fast_into` |
 | `minus_dm` |
+| `minus_dm_with_period` |
 | `mom` |
 | `mom_into` |
 | `plus_di` |
 | `plus_di_fast_into` |
 | `plus_dm` |
+| `plus_dm_with_period` |
 | `ppo` |
+| `ppo_with_ma_type` |
 | `roc` |
 | `roc_into` |
 | `rocp` |
@@ -232,10 +236,13 @@ Modules exported from `indicators/mod.rs`: **35** | Public indicator functions: 
 | `rsi_into` |
 | `stoch` |
 | `stoch_into` |
+| `stoch_with_ma_types` |
 | `stochf` |
 | `stochf_into` |
+| `stochf_with_ma_type` |
 | `stochrsi` |
 | `stochrsi_into` |
+| `stochrsi_with_ma_type` |
 | `trix` |
 | `trix_into` |
 | `ultosc` |
@@ -275,6 +282,7 @@ Modules exported from `indicators/mod.rs`: **35** | Public indicator functions: 
 | `alma` |
 | `bbands` |
 | `bbands_into` |
+| `bbands_with_ma_type` |
 | `dema_into` |
 | `efficiency_ratio` |
 | `frama` |
@@ -283,6 +291,7 @@ Modules exported from `indicators/mod.rs`: **35** | Public indicator functions: 
 | `ma` |
 | `mama` |
 | `mama_into` |
+| `mavp_with_ma_type` |
 | `midpoint` |
 | `midpoint_into` |
 | `midprice` |
@@ -443,6 +452,32 @@ Modules exported from `indicators/mod.rs`: **35** | Public indicator functions: 
 ## sweepable
 
 _No `pub fn` exports in this module file._
+
+## talib_ext
+
+| Function |
+|----------|
+| `ac` |
+| `adr` |
+| `cmou` |
+| `cvi` |
+| `efi` |
+| `eri` |
+| `fosc` |
+| `fractal` |
+| `kc` |
+| `kdj` |
+| `marketfi` |
+| `massi` |
+| `percentile` |
+| `pvo` |
+| `qstick` |
+| `rma_profile` |
+| `rvi_profile` |
+| `rvol` |
+| `smi` |
+| `vhf` |
+| `wad` |
 
 ## top_bottom
 

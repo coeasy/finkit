@@ -12,6 +12,9 @@ fn map_kernel_error(error: KernelCompatError) -> TaError {
         KernelCompatError::LengthMismatch { input, output } => TaError::ComputationError {
             message: format!("rolling kernel length mismatch: input={input}, output={output}"),
         },
+        KernelCompatError::PairLengthMismatch { left, right } => TaError::ComputationError {
+            message: format!("rolling pair kernel length mismatch: left={left}, right={right}"),
+        },
         KernelCompatError::OhlcLengthMismatch => TaError::ComputationError {
             message: "rolling statistics received mismatched OHLC lengths".to_string(),
         },
