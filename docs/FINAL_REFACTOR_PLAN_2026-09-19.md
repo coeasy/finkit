@@ -160,13 +160,20 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
   `internal_contract_error`，避免仅依赖测试发现生产环境的 catalog/执行器漂移。
 - 主 CI 已加入 `finkit-ffi-common` 统一契约测试，多语言工作流的触发路径已覆盖
   共享 FFI 契约、C/Go/Java binding 和 `tests/contracts` fixtures。
+- `tests/contracts/engine_contract_v1.json` 现在同时包含 direct Operation、Formula、
+  Factor 和 Composite 的共享请求/结果向量。该向量已由 Rust
+  `finkit-ffi-common`、Node、Python 和 Java JNI host 实际执行并通过；Go、C/C++、
+  .NET 已接入同一 fixture 的测试入口，但本次工作机没有 C 编译器/CMake、dotnet
+  或 CGO 工具链，因此未将它们标记为本机运行通过。
 
 ## 6. 后续实施顺序
 
 1. 完成当前改动的 fmt、workspace、ABI 和 binding 回归并提交；Lightweight HTML
    页面生成已纳入 visualization 回归，但真实浏览器宿主仍需单独纳入 CI。
 2. 将剩余 TA-Lib profile 参数/输出 metadata 从手写 match 逐步生成化，但保留 profile adapter 的显式语义代码。
-3. 为八语言补齐同一份 201 函数 typed-buffer/JSON conformance vector，尤其覆盖新增 21 个函数的多输出和 warm-up。
+3. 将本轮已接入的 `engine_contract_v1.json` 扩展为八语言同一份 201 函数
+   typed-buffer/JSON conformance vector，尤其覆盖新增 21 个函数的多输出和 warm-up；
+   当前仍需在 CI 的 C/C++、Go、.NET 和发布环境 Java 矩阵中完成宿主运行证明。
 4. 将 Formula dialect registry、TA-Lib catalog、Factor catalog 和 Draw schema 统一纳入版本发布清单。
 5. 为生产部署增加 benchmark workload、内存/分配、并发、checkpoint 恢复和错误可观测性门禁；性能结论按硬件和数据规模分别报告。
 6. 继续扩展 TDX/同花顺/东方财富通用函数与 Pine 子集，但每次扩展必须先增加语义矩阵和参考向量，再进入 production catalog。
@@ -174,3 +181,11 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
 ## 7. 本文档的验证原则
 
 本文档只引用已在仓库或参考环境中实际运行的结果。任何后续数字、版本和“已支持”表述，都必须由脚本、测试报告或绑定矩阵重新生成；手工修改文档不得替代验证。
+
+### 本轮共享向量验证记录
+
+- Rust：`cargo +1.98.1 test -p finkit-ffi-common contract_conformance --offline`，10 passed。
+- Node：`npm test`，12 passed。
+- Python：从 workspace 根目录运行 `python -m pytest ffi/python-binding/tests/test_engine_contract_v1.py -q`，1 passed。
+- Java：使用 `finkit_java.dll` 编译并运行 `com.finkit.ContractConformance`，exit code 0。
+- Go：未运行，工作机 `CGO_ENABLED=0` 且没有 `gcc`；C/C++：未运行，工作机没有 CMake/C++ 编译器；.NET：未运行，工作机没有 `dotnet`。这些是未验证项，不视为通过。

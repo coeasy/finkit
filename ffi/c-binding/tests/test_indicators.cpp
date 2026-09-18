@@ -441,6 +441,17 @@ void test_benchmark() {
     PASS();
 }
 
+void test_shared_engine_contract() {
+    TEST("Shared engine contract vector")
+    const auto result = operation_execute_json(
+        R"({"operation":"SMA","input_order":["CLOSE"],"inputs":{"CLOSE":[1.0,2.0,3.0,4.0]},"params":[2.0]})");
+    ASSERT(result.find(R"("operation":"SMA")") != std::string::npos,
+           "Operation result must identify SMA");
+    ASSERT(result.find(R"("SMA":[1.0,1.5,2.25,3.125])") != std::string::npos,
+           "Operation result must match the shared engine vector");
+    PASS();
+}
+
 int main() {
     std::cout << "========================================" << std::endl;
     std::cout << "  finkit C++ Binding Tests" << std::endl;
@@ -489,6 +500,7 @@ int main() {
     test_error_handling();
     test_moving_averages_comparison();
     test_benchmark();
+    test_shared_engine_contract();
     
     std::cout << std::endl;
     std::cout << "========================================" << std::endl;

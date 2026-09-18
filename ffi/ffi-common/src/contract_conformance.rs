@@ -10,7 +10,7 @@ mod tests {
         evaluate_composite_json, evaluate_composite_stream_json,
         evaluate_factor_cross_sectional_json, evaluate_factor_json, evaluate_factor_stream_json,
         evaluate_formula_cross_sectional_json, evaluate_formula_json, evaluate_formula_panel_json,
-        evaluate_formula_stream_json, evaluate_formula_temporal_json,
+        evaluate_formula_stream_json, evaluate_formula_temporal_json, execute_operation_json,
     };
     use serde_json::Value;
     use std::fs;
@@ -28,6 +28,16 @@ mod tests {
     fn formula_factor_and_composite_share_one_contract_vector() {
         let fixture = fixture();
         assert_eq!(fixture["schema_version"], 1);
+
+        let operation = &fixture["operation"];
+        let operation_payload: Value =
+            serde_json::from_str(&execute_operation_json(&operation["request"].to_string()))
+                .unwrap();
+        assert_eq!(operation_payload["operation"], "SMA");
+        assert_eq!(
+            operation_payload["values"]["SMA"],
+            operation["expected_primary"]
+        );
 
         let formula = &fixture["formula"];
         let series = |name: &str| {

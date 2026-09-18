@@ -1,5 +1,14 @@
 {
   "schema_version": 1,
+  "operation": {
+    "request": {
+      "operation": "SMA",
+      "input_order": ["CLOSE"],
+      "inputs": {"CLOSE": [1.0, 2.0, 3.0, 4.0]},
+      "params": [2.0]
+    },
+    "expected_primary": [1.0, 1.5, 2.25, 3.125]
+  },
   "formula": {
     "source": "CLOSE + 1",
     "dialect": "tdx",

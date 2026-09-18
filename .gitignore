@@ -35,6 +35,7 @@ ffi/node-binding/dist/
 ffi/node-binding/npm/*/dist/
 ffi/node-binding/npm/*/*.node
 ffi/python-binding/dist/
+ffi/python-binding/target/
 ffi/dotnet-binding/src/*/bin/
 ffi/dotnet-binding/src/*/obj/
 ffi/java-binding/natives/

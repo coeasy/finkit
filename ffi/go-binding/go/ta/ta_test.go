@@ -1,9 +1,137 @@
 package ta
 
 import (
+	"encoding/json"
 	"math"
+	"os"
+	"path/filepath"
 	"testing"
 )
+
+func loadEngineContract(t *testing.T) map[string]interface{} {
+	t.Helper()
+	paths := []string{
+		filepath.Join("..", "..", "..", "..", "tests", "contracts", "engine_contract_v1.json"),
+		filepath.Join("..", "..", "..", "tests", "contracts", "engine_contract_v1.json"),
+		filepath.Join("tests", "contracts", "engine_contract_v1.json"),
+	}
+	var data []byte
+	var err error
+	for _, path := range paths {
+		data, err = os.ReadFile(path)
+		if err == nil {
+			break
+		}
+	}
+	if err != nil {
+		t.Fatalf("read shared engine contract: %v", err)
+	}
+	var fixture map[string]interface{}
+	if err := json.Unmarshal(data, &fixture); err != nil {
+		t.Fatalf("decode shared engine contract: %v", err)
+	}
+	return fixture
+}
+
+func asFloatSlice(t *testing.T, value interface{}) []float64 {
+	t.Helper()
+	values, ok := value.([]interface{})
+	if !ok {
+		t.Fatalf("expected JSON array, got %T", value)
+	}
+	result := make([]float64, len(values))
+	for i, item := range values {
+		number, ok := item.(float64)
+		if !ok {
+			t.Fatalf("expected numeric JSON value at %d, got %T", i, item)
+		}
+		result[i] = number
+	}
+	return result
+}
+
+func assertContractSeries(t *testing.T, actual interface{}, expected interface{}) {
+	t.Helper()
+	actualValues, ok := actual.([]interface{})
+	if !ok {
+		t.Fatalf("expected actual JSON series, got %T", actual)
+	}
+	expectedValues, ok := expected.([]interface{})
+	if !ok {
+		t.Fatalf("expected fixture JSON series, got %T", expected)
+	}
+	if len(actualValues) != len(expectedValues) {
+		t.Fatalf("series length mismatch: got %d want %d", len(actualValues), len(expectedValues))
+	}
+	for i := range expectedValues {
+		if expectedValues[i] == nil {
+			if actualValues[i] != nil {
+				t.Fatalf("series[%d]: got %v want null", i, actualValues[i])
+			}
+			continue
+		}
+		got, ok := actualValues[i].(float64)
+		want, wantOK := expectedValues[i].(float64)
+		if !ok || !wantOK || math.Abs(got-want) > 1e-12 {
+			t.Fatalf("series[%d]: got %v want %v", i, actualValues[i], expectedValues[i])
+		}
+	}
+}
+
+func decodeContractResult(t *testing.T, result string) map[string]interface{} {
+	t.Helper()
+	var payload map[string]interface{}
+	if err := json.Unmarshal([]byte(result), &payload); err != nil {
+		t.Fatalf("decode binding result: %v", err)
+	}
+	if payload["error"] != nil {
+		t.Fatalf("binding returned error: %s", result)
+	}
+	return payload
+}
+
+func TestSharedEngineContractV1(t *testing.T) {
+	fixture := loadEngineContract(t)
+
+	operation := fixture["operation"].(map[string]interface{})
+	operationRequest, err := json.Marshal(operation["request"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	operationResult, err := OperationExecuteJSON(string(operationRequest))
+	if err != nil {
+		t.Fatalf("operation execution failed: %v", err)
+	}
+	assertContractSeries(t, decodeContractResult(t, operationResult)["values"].(map[string]interface{})["SMA"], operation["expected_primary"])
+
+	formula := fixture["formula"].(map[string]interface{})
+	formulaResult, err := FormulaEvalContractJSON(
+		formula["source"].(string), formula["dialect"].(string),
+		asFloatSlice(t, formula["open"]), asFloatSlice(t, formula["high"]),
+		asFloatSlice(t, formula["low"]), asFloatSlice(t, formula["close"]),
+		asFloatSlice(t, formula["volume"]),
+	)
+	if err != nil {
+		t.Fatalf("formula execution failed: %v", err)
+	}
+	assertContractSeries(t, decodeContractResult(t, formulaResult)["values"].(map[string]interface{})["__PRIMARY__"], formula["expected_primary"])
+
+	factor := fixture["factor"].(map[string]interface{})
+	factorRequest, _ := json.Marshal(factor["request"])
+	factorResult, err := FactorExecuteJSON(string(factorRequest))
+	if err != nil {
+		t.Fatalf("factor execution failed: %v", err)
+	}
+	assertContractSeries(t, decodeContractResult(t, factorResult)["values"].(map[string]interface{})["momentum_5"], factor["expected_primary"])
+
+	composite := fixture["composite"].(map[string]interface{})
+	compositeRequest, _ := json.Marshal(composite["request"])
+	compositeResult, err := CompositeExecuteJSON(string(compositeRequest))
+	if err != nil {
+		t.Fatalf("composite execution failed: %v", err)
+	}
+	assertContractSeries(t, decodeContractResult(t, compositeResult)["values"].(map[string]interface{})["sma3"], composite["expected_primary"])
+}
 
 func TestVersion(t *testing.T) {
 	v := Version()

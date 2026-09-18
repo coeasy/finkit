@@ -1,10 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import * as finkit from '../index.mjs'
 
 const require = createRequire(import.meta.url)
 const commonjs = require('../index.js')
+const engineContract = JSON.parse(readFileSync(new URL('../../../tests/contracts/engine_contract_v1.json', import.meta.url), 'utf8'))
 
 test('loads the native binding and computes SMA', () => {
   const result = finkit.sma([1, 2, 3, 4, 5], 3)
@@ -22,6 +24,32 @@ test('exports the complete public runtime contract', () => {
 
 test('keeps ESM and CommonJS export surfaces identical', () => {
   assert.deepEqual(Object.keys(finkit).sort(), Object.keys(commonjs).sort())
+})
+
+test('executes the shared engine contract vector', () => {
+  const operation = engineContract.operation
+  const operationResult = JSON.parse(finkit.operationExecuteJson(JSON.stringify(operation.request)))
+  assert.deepEqual(operationResult.values.SMA, operation.expected_primary)
+
+  const formula = engineContract.formula
+  const formulaResult = JSON.parse(finkit.formulaEvalContractJson(
+    formula.source,
+    formula.dialect,
+    formula.open,
+    formula.high,
+    formula.low,
+    formula.close,
+    formula.volume,
+  ))
+  assert.deepEqual(formulaResult.values.__PRIMARY__, formula.expected_primary)
+
+  const factor = engineContract.factor
+  const factorResult = JSON.parse(finkit.factorExecuteJson(JSON.stringify(factor.request)))
+  assert.deepEqual(factorResult.values.momentum_5, factor.expected_primary)
+
+  const composite = engineContract.composite
+  const compositeResult = JSON.parse(finkit.compositeExecuteJson(JSON.stringify(composite.request)))
+  assert.deepEqual(compositeResult.values.sma3, composite.expected_primary)
 })
 
 test('executes Pine request.security through explicit temporal provider data', () => {

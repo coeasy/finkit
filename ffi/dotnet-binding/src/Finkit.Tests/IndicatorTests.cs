@@ -1,9 +1,85 @@
 using Xunit;
+using System.Text.Json;
 
 namespace Finkit.Tests;
 
 public class IndicatorTests
 {
+    private static string SharedEngineFixturePath()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory != null)
+        {
+            var candidate = Path.Combine(directory.FullName, "tests", "contracts", "engine_contract_v1.json");
+            if (File.Exists(candidate))
+                return candidate;
+            directory = directory.Parent;
+        }
+
+        throw new FileNotFoundException("Shared engine contract fixture was not found");
+    }
+
+    private static void AssertContractSeries(JsonElement actual, JsonElement expected)
+    {
+        Assert.Equal(JsonValueKind.Array, actual.ValueKind);
+        Assert.Equal(JsonValueKind.Array, expected.ValueKind);
+        var actualValues = actual.EnumerateArray().ToArray();
+        var expectedValues = expected.EnumerateArray().ToArray();
+        Assert.Equal(expectedValues.Length, actualValues.Length);
+        for (var index = 0; index < expectedValues.Length; index++)
+        {
+            if (expectedValues[index].ValueKind == JsonValueKind.Null)
+            {
+                Assert.Equal(JsonValueKind.Null, actualValues[index].ValueKind);
+            }
+            else
+            {
+                Assert.Equal(expectedValues[index].GetDouble(), actualValues[index].GetDouble(), 12);
+            }
+        }
+    }
+
+    [Fact]
+    public void SharedEngineContractV1_IsExecutedByDotnetBinding()
+    {
+        using var fixture = JsonDocument.Parse(File.ReadAllText(SharedEngineFixturePath()));
+        var root = fixture.RootElement;
+
+        var operation = root.GetProperty("operation");
+        using var operationResult = JsonDocument.Parse(
+            Indicators.OperationExecuteJson(operation.GetProperty("request").GetRawText()));
+        AssertContractSeries(
+            operationResult.RootElement.GetProperty("values").GetProperty("SMA"),
+            operation.GetProperty("expected_primary"));
+
+        var formula = root.GetProperty("formula");
+        using var formulaResult = JsonDocument.Parse(Indicators.FormulaEvalContractJson(
+            formula.GetProperty("source").GetString()!,
+            formula.GetProperty("dialect").GetString()!,
+            formula.GetProperty("open").EnumerateArray().Select(value => value.GetDouble()).ToArray(),
+            formula.GetProperty("high").EnumerateArray().Select(value => value.GetDouble()).ToArray(),
+            formula.GetProperty("low").EnumerateArray().Select(value => value.GetDouble()).ToArray(),
+            formula.GetProperty("close").EnumerateArray().Select(value => value.GetDouble()).ToArray(),
+            formula.GetProperty("volume").EnumerateArray().Select(value => value.GetDouble()).ToArray()));
+        AssertContractSeries(
+            formulaResult.RootElement.GetProperty("values").GetProperty("__PRIMARY__"),
+            formula.GetProperty("expected_primary"));
+
+        var factor = root.GetProperty("factor");
+        using var factorResult = JsonDocument.Parse(
+            Indicators.FactorExecuteJson(factor.GetProperty("request").GetRawText()));
+        AssertContractSeries(
+            factorResult.RootElement.GetProperty("values").GetProperty("momentum_5"),
+            factor.GetProperty("expected_primary"));
+
+        var composite = root.GetProperty("composite");
+        using var compositeResult = JsonDocument.Parse(
+            Indicators.CompositeExecuteJson(composite.GetProperty("request").GetRawText()));
+        AssertContractSeries(
+            compositeResult.RootElement.GetProperty("values").GetProperty("sma3"),
+            composite.GetProperty("expected_primary"));
+    }
+
     [Fact]
     public void Sma_ReturnsCorrectLength()
     {
