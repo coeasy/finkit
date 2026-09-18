@@ -244,6 +244,12 @@ pub fn talib_profile_supported(operation: &str) -> bool {
         "SMA"
             | "EMA"
             | "WMA"
+            | "DEMA"
+            | "TEMA"
+            | "TRIMA"
+            | "T3"
+            | "KAMA"
+            | "MAMA"
             | "RSI"
             | "MACD"
             | "BBANDS"
@@ -366,6 +372,42 @@ fn execute_talib_profile(
                 indicator_values(finkit::math::moving_avg::wma(input, period), &name)?,
             );
             "WMA"
+        }
+        "DEMA" | "TEMA" | "TRIMA" | "KAMA" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let period = parameter_usize(params, 0, 30, &name)?;
+            let series = match name.as_str() {
+                "DEMA" => finkit::math::moving_avg::dema(input, period),
+                "TEMA" => finkit::math::moving_avg::tema(input, period),
+                "TRIMA" => finkit::math::moving_avg::trima(input, period),
+                "KAMA" => finkit::math::moving_avg::kama(input, period, 2, 30),
+                _ => unreachable!(),
+            };
+            values.insert(name.clone(), indicator_values(series, &name)?);
+            name.as_str()
+        }
+        "T3" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let period = parameter_usize(params, 0, 5, &name)?;
+            let vfactor = parameter_f64(params, 1, 0.7, &name)?;
+            values.insert(
+                "T3".to_string(),
+                indicator_values(
+                    finkit::indicators::overlap::t3(input, period, vfactor),
+                    &name,
+                )?,
+            );
+            "T3"
+        }
+        "MAMA" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let fast_limit = parameter_f64(params, 0, 0.5, &name)?;
+            let slow_limit = parameter_f64(params, 1, 0.05, &name)?;
+            let output = finkit::indicators::overlap::mama(input, fast_limit, slow_limit)
+                .map_err(|error| ("execution_error", format!("{name}: {error}")))?;
+            values.insert("MAMA".to_string(), output.mama.to_vec());
+            values.insert("FAMA".to_string(), output.fama.to_vec());
+            "MAMA"
         }
         "RSI" => {
             let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
@@ -1132,6 +1174,55 @@ mod tests {
         assert_eq!(payload["semantic_profile"], "talib_0_7_1");
         assert_eq!(payload["values"]["SMA"][0], Value::Null);
         assert_eq!(payload["values"]["SMA"][2], 2.5);
+    }
+
+    #[test]
+    fn talib_profile_dispatches_extended_overlap_group() {
+        let request = r#"{
+            "operation":"T3",
+            "semantic_profile":"talib_0_7_1",
+            "input_order":["CLOSE"],
+            "inputs":{"CLOSE":[1.0,2.0,3.0,4.0,5.0,6.0,7.0,8.0,9.0,10.0,11.0,12.0,13.0,14.0]},
+            "params":[2,0.7]
+        }"#;
+        let payload: Value = serde_json::from_str(&execute_operation_json(request)).unwrap();
+        assert_eq!(payload["semantic_profile"], "talib_0_7_1");
+        assert_eq!(payload["operation"], "T3");
+        assert_eq!(payload["values"]["T3"].as_array().unwrap().len(), 14);
+        assert!(payload["values"]["T3"][13].as_f64().unwrap().is_finite());
+    }
+
+    #[test]
+    fn talib_profile_dispatches_mama_with_named_outputs() {
+        let close = (0..40)
+            .map(|index| 44.0 + (index as f64 * 0.2).sin())
+            .collect::<Vec<_>>();
+        let request = serde_json::json!({
+            "operation": "MAMA",
+            "semantic_profile": "talib_0_7_1",
+            "input_order": ["CLOSE"],
+            "inputs": {"CLOSE": close.clone()},
+            "params": [0.5, 0.05]
+        })
+        .to_string();
+        let payload: Value = serde_json::from_str(&execute_operation_json(&request)).unwrap();
+        assert_eq!(payload["shape"], "multi_series");
+        assert_eq!(payload["primary"], "MAMA");
+        assert!(payload["values"].get("MAMA").is_some());
+        assert!(payload["values"].get("FAMA").is_some());
+
+        let core_request = serde_json::json!({
+            "operation": "MAMA",
+            "input_order": ["CLOSE"],
+            "inputs": {"CLOSE": close},
+            "params": [0.5, 0.05]
+        })
+        .to_string();
+        let core_payload: Value =
+            serde_json::from_str(&execute_operation_json(&core_request)).unwrap();
+        assert_eq!(core_payload["semantic_profile"], "core_registry");
+        assert_eq!(core_payload["primary"], "MAMA");
+        assert_eq!(core_payload["values"].get("FAMA").is_some(), true);
     }
 
     #[test]

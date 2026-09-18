@@ -1179,6 +1179,7 @@ fn output_names_for(name: &str, outputs: usize) -> Vec<String> {
             "MIDDLEBAND".to_string(),
             "LOWERBAND".to_string(),
         ],
+        "MAMA" => vec!["MAMA".to_string(), "FAMA".to_string()],
         _ if outputs == 1 => vec![normalize_name(name)],
         _ => (0..outputs)
             .map(|index| format!("{}_{}", normalize_name(name), index + 1))
@@ -1224,6 +1225,21 @@ fn execute_multi_output_indicator(
                     ("LOWERBAND", output.lower.to_vec()),
                 ],
                 primary: "MIDDLEBAND",
+            }
+        }
+        "MAMA" => {
+            require_input_count(name, inputs, 1)?;
+            let close = resolve_indicator_input(name, context, inputs[0])?;
+            let fast_limit = parameter_f64(name, params, 0, 0.5)?;
+            let slow_limit = parameter_f64(name, params, 1, 0.05)?;
+            let output = crate::indicators::overlap::mama(close, fast_limit, slow_limit)
+                .map_err(|error| indicator_execution_error(name, error))?;
+            MultiIndicatorOutput {
+                values: vec![
+                    ("MAMA", output.mama.to_vec()),
+                    ("FAMA", output.fama.to_vec()),
+                ],
+                primary: "MAMA",
             }
         }
         _ => {

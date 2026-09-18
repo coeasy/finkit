@@ -258,12 +258,32 @@ mod tests {
             bbands.output_names,
             vec!["UPPERBAND", "MIDDLEBAND", "LOWERBAND"]
         );
+        let mama = catalog
+            .operations
+            .iter()
+            .find(|operation| operation.name == "MAMA")
+            .unwrap();
+        assert_eq!(mama.output_names, vec!["MAMA", "FAMA"]);
     }
 
     #[test]
     fn catalog_marks_new_talib_dispatch_groups() {
         let catalog = operation_catalog(&builtin_operation_registry());
-        for name in ["ADD", "STDDEV", "LINEARREG", "AD", "ADOSC", "SQRT"] {
+        for name in [
+            "ADD",
+            "STDDEV",
+            "LINEARREG",
+            "LINEARREG_ANGLE",
+            "LINEARREG_INTERCEPT",
+            "LINEARREG_SLOPE",
+            "AD",
+            "ADOSC",
+            "SQRT",
+            "DEMA",
+            "TEMA",
+            "T3",
+            "MAMA",
+        ] {
             let operation = catalog
                 .operations
                 .iter()

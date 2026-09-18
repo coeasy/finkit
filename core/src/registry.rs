@@ -221,6 +221,14 @@ const ULTOSC_PARAMS: &[ParamSpec] = &[
     ParamSpec::new("medium_period", "usize", Some("14"), Some("> 0")),
     ParamSpec::new("long_period", "usize", Some("28"), Some("> 0")),
 ];
+const T3_PARAMS: &[ParamSpec] = &[
+    ParamSpec::new("period", "usize", Some("5"), Some("> 0")),
+    ParamSpec::new("vfactor", "f64", Some("0.7"), Some("between 0 and 1")),
+];
+const MAMA_PARAMS: &[ParamSpec] = &[
+    ParamSpec::new("fast_limit", "f64", Some("0.5"), Some("between 0 and 1")),
+    ParamSpec::new("slow_limit", "f64", Some("0.05"), Some("between 0 and 1")),
+];
 const VWMA_PARAMS: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("20"), Some("> 0"))];
 const ZSCORE_PARAMS: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("20"), Some("> 1"))];
 const CMF_PARAMS: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("20"), Some("> 0"))];
@@ -882,6 +890,50 @@ pub fn builtin_function_registry() -> FunctionRegistry {
 
     let additional_specs = [
         FunctionSpec {
+            name: "DEMA",
+            aliases: &[],
+            category: FunctionCategory::Overlap,
+            input: InputKind::Series,
+            params: PERIOD_REQUIRED,
+            outputs: 1,
+            lookback: LookbackSpec::Dynamic,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "TEMA",
+            aliases: &[],
+            category: FunctionCategory::Overlap,
+            input: InputKind::Series,
+            params: PERIOD_REQUIRED,
+            outputs: 1,
+            lookback: LookbackSpec::Dynamic,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "T3",
+            aliases: &[],
+            category: FunctionCategory::Overlap,
+            input: InputKind::Series,
+            params: T3_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::Dynamic,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "MAMA",
+            aliases: &[],
+            category: FunctionCategory::Overlap,
+            input: InputKind::Series,
+            params: MAMA_PARAMS,
+            outputs: 2,
+            lookback: LookbackSpec::Dynamic,
+            streaming: false,
+            deterministic: true,
+        },
+        FunctionSpec {
             name: "STDDEV",
             aliases: &[],
             category: FunctionCategory::Statistics,
@@ -927,6 +979,39 @@ pub fn builtin_function_registry() -> FunctionRegistry {
         },
         FunctionSpec {
             name: "LINEARREG",
+            aliases: &[],
+            category: FunctionCategory::Statistics,
+            input: InputKind::Series,
+            params: PERIOD_REQUIRED,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "LINEARREG_ANGLE",
+            aliases: &[],
+            category: FunctionCategory::Statistics,
+            input: InputKind::Series,
+            params: PERIOD_REQUIRED,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "LINEARREG_INTERCEPT",
+            aliases: &[],
+            category: FunctionCategory::Statistics,
+            input: InputKind::Series,
+            params: PERIOD_REQUIRED,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "LINEARREG_SLOPE",
             aliases: &[],
             category: FunctionCategory::Statistics,
             input: InputKind::Series,

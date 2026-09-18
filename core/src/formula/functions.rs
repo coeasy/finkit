@@ -2182,6 +2182,45 @@ fn fn_linear_reg(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f6
     }
 }
 
+fn fn_linear_reg_angle(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
+    ensure_args_len("LINEARREG_ANGLE", args, 2)?;
+    let input = &args[0];
+    let n = extract_n(args, 1, "LINEARREG_ANGLE")?;
+    match lib_linear::linreg_angle(input.as_slice().unwrap(), n) {
+        Ok(result) => Ok(result),
+        Err(_) => Ok(nan_vec(ctx.data_len)),
+    }
+}
+
+fn fn_linear_reg_intercept(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
+    ensure_args_len("LINEARREG_INTERCEPT", args, 2)?;
+    let input = &args[0];
+    let n = extract_n(args, 1, "LINEARREG_INTERCEPT")?;
+    match lib_linear::linreg_intercept(input.as_slice().unwrap(), n) {
+        Ok(result) => Ok(result),
+        Err(_) => Ok(nan_vec(ctx.data_len)),
+    }
+}
+
+fn fn_linear_reg_slope(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
+    ensure_args_len("LINEARREG_SLOPE", args, 2)?;
+    let input = &args[0];
+    let n = extract_n(args, 1, "LINEARREG_SLOPE")?;
+    match lib_linear::linreg_slope(input.as_slice().unwrap(), n) {
+        Ok(result) => Ok(result),
+        Err(_) => Ok(nan_vec(ctx.data_len)),
+    }
+}
+
 fn fn_tsf(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("TSF", args, 2)?;
     let input = &args[0];
@@ -5378,6 +5417,9 @@ pub fn get_builtin_functions() -> HashMap<String, FormulaFn> {
     map.insert("LINEAR_REG".to_string(), fn_linear_reg);
     // TA-Lib spelling compatibility: LINEARREG is the public function name.
     map.insert("LINEARREG".to_string(), fn_linear_reg);
+    map.insert("LINEARREG_ANGLE".to_string(), fn_linear_reg_angle);
+    map.insert("LINEARREG_INTERCEPT".to_string(), fn_linear_reg_intercept);
+    map.insert("LINEARREG_SLOPE".to_string(), fn_linear_reg_slope);
     map.insert("TSF".to_string(), fn_tsf);
     map.insert("PERCENT_RANK".to_string(), fn_percent_rank);
     map.insert("MIDPOINT".to_string(), fn_midpoint);
