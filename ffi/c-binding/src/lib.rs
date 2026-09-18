@@ -228,6 +228,18 @@ pub extern "C" fn ta_operation_catalog_json() -> *mut c_char {
     })
 }
 
+/// Return the canonical built-in Factor catalog as an owned UTF-8 JSON string.
+#[no_mangle]
+pub extern "C" fn ta_factor_catalog_json() -> *mut c_char {
+    ffi_catch_ptr(|| {
+        let json = finkit_ffi_common::factor_catalog::factor_catalog_json()
+            .unwrap_or_else(|error| format!("{{\"error\":{}}}", serde_json::json!(error.to_string())));
+        CString::new(json)
+            .map(CString::into_raw)
+            .unwrap_or_else(|_| std::ptr::null_mut())
+    })
+}
+
 /// Execute one registered operation through the shared JSON result contract.
 #[no_mangle]
 pub unsafe extern "C" fn ta_operation_execute_json(
@@ -460,6 +472,21 @@ mod tests {
             .unwrap()
             .iter()
             .any(|operation| operation["name"] == "EMA"));
+        unsafe { finkit_free_string(ptr) };
+    }
+
+    #[test]
+    fn factor_catalog_json_is_owned_and_contains_dependency_metadata() {
+        let ptr = ta_factor_catalog_json();
+        assert!(!ptr.is_null());
+        let json = unsafe { CStr::from_ptr(ptr) }.to_str().unwrap();
+        let value: serde_json::Value = serde_json::from_str(json).unwrap();
+        assert_eq!(value["schema_version"], 1);
+        assert!(value["factors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|factor| factor["name"] == "reversal_5" && factor["dependencies"][0] == "momentum_5"));
         unsafe { finkit_free_string(ptr) };
     }
 

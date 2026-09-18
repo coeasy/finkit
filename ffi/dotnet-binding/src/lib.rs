@@ -352,6 +352,17 @@ pub extern "C" fn ta_operation_catalog_json() -> *mut c_char {
     })
 }
 
+#[no_mangle]
+pub extern "C" fn ta_factor_catalog_json() -> *mut c_char {
+    ffi_catch_ptr(|| {
+        finkit_ffi_common::factor_catalog::factor_catalog_json()
+            .ok()
+            .and_then(|json| CString::new(json).ok())
+            .map(CString::into_raw)
+            .unwrap_or(std::ptr::null_mut())
+    })
+}
+
 /// Execute a formula through the shared versioned JSON contract.
 #[no_mangle]
 pub unsafe extern "C" fn ta_formula_eval_contract_json(

@@ -846,6 +846,9 @@ public final class Indicators {
      */
     public static native String operationCatalogJson();
 
+    /** Returns the versioned built-in Factor metadata catalog. */
+    public static native String factorCatalogJson();
+
     /** Executes one registered operation through the shared JSON contract. */
     public static native String operationExecuteJson(String requestJson);
 

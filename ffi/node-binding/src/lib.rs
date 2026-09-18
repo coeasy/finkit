@@ -2440,6 +2440,13 @@ pub fn operation_catalog_json() -> Result<String> {
         .map_err(|error| Error::new(Status::GenericFailure, error.to_string()))
 }
 
+/// Return the versioned built-in Factor metadata catalog.
+#[napi]
+pub fn factor_catalog_json() -> Result<String> {
+    finkit_ffi_common::factor_catalog::factor_catalog_json()
+        .map_err(|error| Error::new(Status::GenericFailure, error.to_string()))
+}
+
 /// Execute a dependency-aware Composite through the shared JSON contract.
 #[napi]
 pub fn composite_execute_json(request_json: String) -> Result<String> {

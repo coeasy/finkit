@@ -261,6 +261,7 @@ talib_0_7_1
 - Node 绑定已补齐 `operationCatalogJson`，与 C/C++、Go、Java、.NET、Python 共用同一 operation catalog 和 `operationExecuteJson` contract；Node 的宿主级加载仍需在真实 Node addon 环境中验证。
 - Composite 已补齐 `composite.contract.v1` JSON contract：输入为 named series + graph definitions + outputs，结果统一返回 `shape/primary/values/schema_version`；C/C++、Go、Java、.NET、Python、Node 都有对应入口，避免 Composite 只在单一语言高层 API 中存在。
 - Factor 已补齐 `factor.contract.v1` JSON contract：所有正式绑定都可以执行稳定的内置因子并获得 compiled-plan 的 `semantic_identity/range_lookback`；Rust typed API 仍保留自定义闭包因子，跨语言 contract 不把不可序列化闭包伪装成可移植定义。
+- Factor 已补齐 `factor.catalog.v1` JSON discovery contract：C/C++、Go、Java、.NET、Python、Node 与 Rust FFI common 共用同一份内置因子目录，公开名称、类型、方向、依赖、版本及 streaming/incremental 能力，执行入口与发现入口不再断开。
 - Lightweight Charts adapter 已修复增量 payload 中动态新增 line 不创建 series 的问题；`visualization/frontend/lightweight-charts-adapter.test.mjs` 已覆盖 null/warm-up 空白点、markers、viewport、增量更新、完整替换和 schema 拒绝。
 - TA-Lib `MINMAX` 与 `MINMAXINDEX` 已加入 registry、core multi-output dispatcher、TA-Lib FFI profile 和 operation catalog；输出名固定为 `MIN/MAX` 与 `MININDEX/MAXINDEX`，并有 JSON execution tests。
 - 修复 DZH `MOD(...)` 函数调用与中缀 `MOD` 运算符的 grammar 冲突，国内公式集成测试重新通过。
@@ -271,6 +272,7 @@ talib_0_7_1
 
 - `cargo +1.98.1 test --workspace --offline --quiet`：全 workspace 测试通过；其中核心库为 `2920 passed, 0 failed, 1 ignored`，DZH compatibility 为 `43 passed, 0 failed`，CLI schema 为 `3 passed, 0 failed`，其余 workspace test targets 也无失败。
 - 定向验证：`finkit` operation tests `19 passed`、Composite tests `8 passed`、`finkit-ffi-common` library tests `28 passed`、C ABI library tests `23 passed`。
+- 最新定向验证：`finkit-ffi-common` library tests `29 passed`，C ABI catalog/execution tests已包含 `factor.catalog.v1`。
 - `cargo +1.98.1 check -p finkit-python -p finkit-node -p finkit-go -p finkit-java -p finkit-dotnet -p finkit-ffi --offline`：通过。
 - 61 个 candlestick operation 在 `talib_0_7_1` profile 下逐项真实分派并返回等长结果。
 - `cargo +1.98.1 fmt --all` 已执行。

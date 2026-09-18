@@ -56,6 +56,7 @@ extern TaResult* ta_tsf(const double *input, int length, int period);
 
 extern const char* ta_version();
 extern char* ta_operation_catalog_json();
+extern char* ta_factor_catalog_json();
 extern char* ta_operation_execute_json(const char *request_json);
 extern char* ta_composite_execute_json(const char *request_json);
 extern char* ta_factor_execute_json(const char *request_json);
@@ -134,6 +135,17 @@ func OperationCatalogJSON() (string, error) {
 	result := C.ta_operation_catalog_json()
 	if result == nil {
 		return "", errors.New("operation catalog returned null")
+	}
+	defer C.ta_free_string(result)
+	return C.GoString(result), nil
+}
+
+// FactorCatalogJSON returns the versioned built-in Factor metadata shared by
+// all official Finkit bindings.
+func FactorCatalogJSON() (string, error) {
+	result := C.ta_factor_catalog_json()
+	if result == nil {
+		return "", errors.New("factor catalog returned null")
 	}
 	defer C.ta_free_string(result)
 	return C.GoString(result), nil

@@ -174,6 +174,9 @@ public static class Indicators
     private static extern IntPtr ta_operation_catalog_json();
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern IntPtr ta_factor_catalog_json();
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern IntPtr ta_operation_execute_json(string requestJson);
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
@@ -207,6 +210,22 @@ public static class Indicators
         IntPtr resultPtr = ta_operation_catalog_json();
         if (resultPtr == IntPtr.Zero)
             throw new InvalidOperationException("Operation catalog returned null");
+        try
+        {
+            return Marshal.PtrToStringUTF8(resultPtr) ?? "";
+        }
+        finally
+        {
+            ta_free_string(resultPtr);
+        }
+    }
+
+    /// <summary>Returns the versioned built-in Factor metadata catalog.</summary>
+    public static string FactorCatalogJson()
+    {
+        IntPtr resultPtr = ta_factor_catalog_json();
+        if (resultPtr == IntPtr.Zero)
+            throw new InvalidOperationException("Factor catalog returned null");
         try
         {
             return Marshal.PtrToStringUTF8(resultPtr) ?? "";

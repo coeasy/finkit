@@ -36,6 +36,14 @@ inline std::string operation_catalog_json() {
     return result;
 }
 
+inline std::string factor_catalog_json() {
+    char* raw = ta_factor_catalog_json();
+    if (!raw) return {};
+    std::string result(raw);
+    finkit_free_string(raw);
+    return result;
+}
+
 inline std::string operation_execute_json(const std::string& request_json) {
     char* raw = ta_operation_execute_json(request_json.c_str());
     if (raw == nullptr) {

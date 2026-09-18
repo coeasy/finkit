@@ -6300,6 +6300,13 @@ fn operation_catalog_json() -> PyResult<String> {
         .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
 }
 
+/// Return the versioned built-in Factor metadata catalog.
+#[pyfunction]
+fn factor_catalog_json() -> PyResult<String> {
+    finkit_ffi_common::factor_catalog::factor_catalog_json()
+        .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
+}
+
 /// Execute one registered operation through the shared JSON result contract.
 #[pyfunction]
 fn operation_execute_json(request_json: &str) -> String {
@@ -6323,6 +6330,7 @@ fn factor_execute_json(request_json: &str) -> PyResult<String> {
 #[pymodule]
 fn finkit(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(operation_catalog_json, m)?)?;
+    m.add_function(wrap_pyfunction!(factor_catalog_json, m)?)?;
     m.add_function(wrap_pyfunction!(operation_execute_json, m)?)?;
     m.add_function(wrap_pyfunction!(composite_execute_json, m)?)?;
     m.add_function(wrap_pyfunction!(factor_execute_json, m)?)?;
