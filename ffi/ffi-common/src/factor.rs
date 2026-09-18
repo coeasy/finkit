@@ -339,6 +339,28 @@ mod tests {
     }
 
     #[test]
+    fn scope_less_batch_does_not_use_shared_result_cache() {
+        let first = r#"{
+            "schema_version":1,
+            "targets":["momentum_5"],
+            "inputs":{"close":[1.0,2.0,3.0,4.0,5.0,6.0]}
+        }"#;
+        let second = r#"{
+            "schema_version":1,
+            "targets":["momentum_5"],
+            "inputs":{"close":[1.0,2.0,3.0,4.0,5.0,12.0]}
+        }"#;
+        with_unified_engine(|engine| engine.clear_cache());
+        let first: Value = serde_json::from_str(&evaluate_factor_json(first).unwrap()).unwrap();
+        let second: Value = serde_json::from_str(&evaluate_factor_json(second).unwrap()).unwrap();
+        assert_ne!(first["values"], second["values"]);
+        let stats = with_unified_engine(|engine| engine.cache_stats());
+        assert_eq!(stats.hits, 0);
+        assert_eq!(stats.misses, 0);
+        assert_eq!(stats.entries, 0);
+    }
+
+    #[test]
     fn contract_executes_factor_dirty_range_with_shared_envelope() {
         let request = r#"{
             "schema_version":1,
