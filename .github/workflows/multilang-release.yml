@@ -22,8 +22,10 @@ on:
   push:
     branches:
       - "release/v*"
+      - "feature/finkit-v1-unified-engine-*"
     tags:
       - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: read

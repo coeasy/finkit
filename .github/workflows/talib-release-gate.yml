@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - perf/outperform-talib-v3-20260904
+      - feature/finkit-v1-unified-engine-*
   pull_request:
     branches:
       - main
