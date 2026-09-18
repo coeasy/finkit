@@ -282,6 +282,12 @@ def render_c_contract(payload: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def normalized_text(path: Path) -> str:
+    """Read generated text independent of checkout newline policy."""
+
+    return path.read_text(encoding="utf-8").replace("\r\n", "\n")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -295,13 +301,13 @@ def main() -> None:
     generated_cpp = render_cpp_contract(payload)
     generated_c = render_c_contract(payload)
     if args.check:
-        checked_in = OUTPUT_PATH.read_text(encoding="utf-8")
+        checked_in = normalized_text(OUTPUT_PATH)
         if checked_in != generated:
             raise SystemExit(f"out of date: {OUTPUT_PATH}")
-        checked_in_cpp = CPP_OUTPUT_PATH.read_text(encoding="utf-8")
+        checked_in_cpp = normalized_text(CPP_OUTPUT_PATH)
         if checked_in_cpp != generated_cpp:
             raise SystemExit(f"out of date: {CPP_OUTPUT_PATH}")
-        checked_in_c = C_OUTPUT_PATH.read_text(encoding="utf-8")
+        checked_in_c = normalized_text(C_OUTPUT_PATH)
         if checked_in_c != generated_c:
             raise SystemExit(f"out of date: {C_OUTPUT_PATH}")
         print(f"checked {OUTPUT_PATH}")
