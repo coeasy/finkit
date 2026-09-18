@@ -229,6 +229,34 @@ const MAMA_PARAMS: &[ParamSpec] = &[
     ParamSpec::new("fast_limit", "f64", Some("0.5"), Some("between 0 and 1")),
     ParamSpec::new("slow_limit", "f64", Some("0.05"), Some("between 0 and 1")),
 ];
+const MAVP_PARAMS: &[ParamSpec] = &[
+    ParamSpec::new("min_period", "usize", Some("2"), Some("> 0")),
+    ParamSpec::new("max_period", "usize", Some("30"), Some(">= min_period")),
+];
+const SAREXT_PARAMS: &[ParamSpec] = &[
+    ParamSpec::new("start_value", "f64", Some("0"), Some("finite")),
+    ParamSpec::new("offset_on_reverse", "f64", Some("0"), Some("finite")),
+    ParamSpec::new("af_init_long", "f64", Some("0.02"), Some("finite")),
+    ParamSpec::new("af_long", "f64", Some("0.02"), Some("finite")),
+    ParamSpec::new("af_max_long", "f64", Some("0.2"), Some("finite")),
+    ParamSpec::new("af_init_short", "f64", Some("0.02"), Some("finite")),
+    ParamSpec::new("af_short", "f64", Some("0.02"), Some("finite")),
+    ParamSpec::new("af_max_short", "f64", Some("0.2"), Some("finite")),
+];
+const MACDEXT_PARAMS: &[ParamSpec] = &[
+    ParamSpec::new("fast_period", "usize", Some("12"), Some("> 0")),
+    ParamSpec::new("fast_ma_type", "usize", Some("0"), Some("0..13")),
+    ParamSpec::new("slow_period", "usize", Some("26"), Some("> 0")),
+    ParamSpec::new("slow_ma_type", "usize", Some("0"), Some("0..13")),
+    ParamSpec::new("signal_period", "usize", Some("9"), Some("> 0")),
+    ParamSpec::new("signal_ma_type", "usize", Some("0"), Some("0..13")),
+];
+const MACDFIX_PARAMS: &[ParamSpec] = &[ParamSpec::new(
+    "signal_period",
+    "usize",
+    Some("9"),
+    Some("> 0"),
+)];
 const VWMA_PARAMS: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("20"), Some("> 0"))];
 const ZSCORE_PARAMS: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("20"), Some("> 1"))];
 const CMF_PARAMS: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("20"), Some("> 0"))];
@@ -929,6 +957,61 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             input: InputKind::Series,
             params: MAMA_PARAMS,
             outputs: 2,
+            lookback: LookbackSpec::Dynamic,
+            streaming: false,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "MAVP",
+            aliases: &[],
+            category: FunctionCategory::Overlap,
+            input: InputKind::Dynamic,
+            params: MAVP_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::Dynamic,
+            streaming: false,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "SAREXT",
+            aliases: &[],
+            category: FunctionCategory::Overlap,
+            input: InputKind::Dynamic,
+            params: SAREXT_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::Dynamic,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "CMO",
+            aliases: &[],
+            category: FunctionCategory::Momentum,
+            input: InputKind::Series,
+            params: PERIOD_14,
+            outputs: 1,
+            lookback: LookbackSpec::Period,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "MACDEXT",
+            aliases: &[],
+            category: FunctionCategory::Momentum,
+            input: InputKind::Series,
+            params: MACDEXT_PARAMS,
+            outputs: 3,
+            lookback: LookbackSpec::Dynamic,
+            streaming: false,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "MACDFIX",
+            aliases: &[],
+            category: FunctionCategory::Momentum,
+            input: InputKind::Series,
+            params: MACDFIX_PARAMS,
+            outputs: 3,
             lookback: LookbackSpec::Dynamic,
             streaming: false,
             deterministic: true,

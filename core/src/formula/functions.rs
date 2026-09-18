@@ -5841,6 +5841,7 @@ pub fn get_builtin_functions() -> HashMap<String, FormulaFn> {
 
     // TA-Lib C compatibility — additional momentum / statistics
     map.insert("MACDEXT".to_string(), fn_macdext);
+    map.insert("MACDFIX".to_string(), fn_macdfix);
     map.insert("PR".to_string(), fn_percent_rank);
 
     // Classic stock-trading chart patterns (FTA-native, not in TA-Lib)

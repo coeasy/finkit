@@ -1169,7 +1169,7 @@ fn normalize_name(name: &str) -> String {
 
 fn output_names_for(name: &str, outputs: usize) -> Vec<String> {
     match normalize_name(name).as_str() {
-        "MACD" => vec![
+        "MACD" | "MACDEXT" | "MACDFIX" => vec![
             "MACD".to_string(),
             "MACD_SIGNAL".to_string(),
             "MACD_HIST".to_string(),
@@ -1196,6 +1196,49 @@ fn execute_multi_output_indicator(
     context: &FormulaContext,
 ) -> Result<OperationResult, OperationExecutionError> {
     let result = match name {
+        "MACDEXT" => {
+            require_input_count(name, inputs, 1)?;
+            let close = resolve_indicator_input(name, context, inputs[0])?;
+            let fast = parameter_usize(name, params, 0, 12)?;
+            let fast_type = talib_ma_type(name, params, 1, 0)?;
+            let slow = parameter_usize(name, params, 2, 26)?;
+            let slow_type = talib_ma_type(name, params, 3, 0)?;
+            let signal = parameter_usize(name, params, 4, 9)?;
+            let signal_type = talib_ma_type(name, params, 5, 0)?;
+            let output = crate::indicators::momentum::macdext(
+                close,
+                fast,
+                fast_type,
+                slow,
+                slow_type,
+                signal,
+                signal_type,
+            )
+            .map_err(|error| indicator_execution_error(name, error))?;
+            MultiIndicatorOutput {
+                values: vec![
+                    ("MACD", output.macd.to_vec()),
+                    ("MACD_SIGNAL", output.signal.to_vec()),
+                    ("MACD_HIST", output.hist.to_vec()),
+                ],
+                primary: "MACD",
+            }
+        }
+        "MACDFIX" => {
+            require_input_count(name, inputs, 1)?;
+            let close = resolve_indicator_input(name, context, inputs[0])?;
+            let signal = parameter_usize(name, params, 0, 9)?;
+            let output = crate::indicators::momentum::macdfix_with_signal(close, signal)
+                .map_err(|error| indicator_execution_error(name, error))?;
+            MultiIndicatorOutput {
+                values: vec![
+                    ("MACD", output.macd.to_vec()),
+                    ("MACD_SIGNAL", output.signal.to_vec()),
+                    ("MACD_HIST", output.hist.to_vec()),
+                ],
+                primary: "MACD",
+            }
+        }
         "MACD" => {
             require_input_count(name, inputs, 1)?;
             let close = resolve_indicator_input(name, context, inputs[0])?;
@@ -1346,6 +1389,32 @@ fn parameter_f64(
         )));
     }
     Ok(value)
+}
+
+fn talib_ma_type(
+    name: &str,
+    params: &[f64],
+    index: usize,
+    default: usize,
+) -> Result<crate::indicators::overlap::MaType, OperationExecutionError> {
+    let value = params.get(index).copied().unwrap_or(default as f64);
+    if !value.is_finite() || value < 0.0 || value.fract() != 0.0 || value > 8.0 {
+        return Err(OperationExecutionError::InvalidRequest(format!(
+            "{name} MA type parameter {index} must be an integer in 0..8"
+        )));
+    }
+    Ok(match value as usize {
+        0 => crate::indicators::overlap::MaType::Sma,
+        1 => crate::indicators::overlap::MaType::Ema,
+        2 => crate::indicators::overlap::MaType::Wma,
+        3 => crate::indicators::overlap::MaType::Dema,
+        4 => crate::indicators::overlap::MaType::Tema,
+        5 => crate::indicators::overlap::MaType::Trima,
+        6 => crate::indicators::overlap::MaType::Kama,
+        7 => crate::indicators::overlap::MaType::Mama,
+        8 => crate::indicators::overlap::MaType::T3,
+        _ => unreachable!(),
+    })
 }
 
 fn indicator_execution_error(name: &str, error: impl fmt::Display) -> OperationExecutionError {

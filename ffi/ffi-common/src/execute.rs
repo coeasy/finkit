@@ -241,7 +241,7 @@ fn normalize_name(value: &str) -> String {
 pub fn talib_profile_supported(operation: &str) -> bool {
     matches!(
         normalize_name(operation).as_str(),
-        "SMA"
+        "MA" | "SMA"
             | "EMA"
             | "WMA"
             | "DEMA"
@@ -250,6 +250,8 @@ pub fn talib_profile_supported(operation: &str) -> bool {
             | "T3"
             | "KAMA"
             | "MAMA"
+            | "MAVP"
+            | "SAREXT"
             | "HT_DCPERIOD"
             | "HT_DCPHASE"
             | "HT_PHASOR"
@@ -269,6 +271,8 @@ pub fn talib_profile_supported(operation: &str) -> bool {
             | "CDLSPINNINGTOP"
             | "RSI"
             | "MACD"
+            | "MACDEXT"
+            | "MACDFIX"
             | "BBANDS"
             | "ATR"
             | "NATR"
@@ -317,6 +321,7 @@ pub fn talib_profile_supported(operation: &str) -> bool {
             | "TSF"
             | "STDDEV"
             | "VAR"
+            | "CMO"
             | "ADD"
             | "SUB"
             | "MULT"
@@ -363,6 +368,19 @@ fn execute_talib_profile(
     }
     let mut values = BTreeMap::new();
     let primary = match name.as_str() {
+        "MA" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let period = parameter_usize(params, 0, 30, &name)?;
+            let ma_type = talib_ma_type(params, 1, 0, &name)?;
+            values.insert(
+                "MA".to_string(),
+                indicator_values(
+                    finkit::indicators::overlap::ma(input, period, ma_type),
+                    &name,
+                )?,
+            );
+            "MA"
+        }
         "SMA" => {
             let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
             let period = parameter_usize(params, 0, 30, &name)?;
@@ -425,6 +443,47 @@ fn execute_talib_profile(
             values.insert("MAMA".to_string(), output.mama.to_vec());
             values.insert("FAMA".to_string(), output.fama.to_vec());
             "MAMA"
+        }
+        "MAVP" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let periods = ordered_series(inputs, input_order, 1, "PERIODS", &name)?;
+            let min_period = parameter_usize(params, 0, 2, &name)?;
+            let max_period = parameter_usize(params, 1, 30, &name)?;
+            values.insert(
+                "MAVP".to_string(),
+                indicator_values(
+                    finkit::math::moving_avg::mavp(input, periods, min_period, max_period),
+                    &name,
+                )?,
+            );
+            "MAVP"
+        }
+        "SAREXT" => {
+            let high = named_series(inputs, "HIGH", &name)?;
+            let low = named_series(inputs, "LOW", &name)?;
+            let start_value = parameter_f64(params, 0, 0.0, &name)?;
+            let offset_on_reverse = parameter_f64(params, 1, 0.0, &name)?;
+            let af_init_long = parameter_f64(params, 2, 0.02, &name)?;
+            let af_long = parameter_f64(params, 3, 0.02, &name)?;
+            let af_max_long = parameter_f64(params, 4, 0.2, &name)?;
+            let af_init_short = parameter_f64(params, 5, 0.02, &name)?;
+            let af_short = parameter_f64(params, 6, 0.02, &name)?;
+            let af_max_short = parameter_f64(params, 7, 0.2, &name)?;
+            let output = finkit::indicators::overlap::sarext(
+                high,
+                low,
+                start_value,
+                offset_on_reverse,
+                af_init_long,
+                af_long,
+                af_max_long,
+                af_init_short,
+                af_short,
+                af_max_short,
+            )
+            .map_err(|error| ("execution_error", format!("{name}: {error}")))?;
+            values.insert("SAREXT".to_string(), output.sar.to_vec());
+            "SAREXT"
         }
         "HT_DCPERIOD" | "HT_DCPHASE" | "HT_TRENDMODE" | "HT_TRENDLINE" => {
             let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
@@ -499,6 +558,39 @@ fn execute_talib_profile(
                 indicator_values(finkit::indicators::momentum::rsi(input, period), &name)?,
             );
             "RSI"
+        }
+        "MACDEXT" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let fast = parameter_usize(params, 0, 12, &name)?;
+            let fast_type = talib_ma_type(params, 1, 0, &name)?;
+            let slow = parameter_usize(params, 2, 26, &name)?;
+            let slow_type = talib_ma_type(params, 3, 0, &name)?;
+            let signal = parameter_usize(params, 4, 9, &name)?;
+            let signal_type = talib_ma_type(params, 5, 0, &name)?;
+            let output = finkit::indicators::momentum::macdext(
+                input,
+                fast,
+                fast_type,
+                slow,
+                slow_type,
+                signal,
+                signal_type,
+            )
+            .map_err(|error| ("execution_error", format!("{name}: {error}")))?;
+            values.insert("MACD".to_string(), output.macd.to_vec());
+            values.insert("MACD_SIGNAL".to_string(), output.signal.to_vec());
+            values.insert("MACD_HIST".to_string(), output.hist.to_vec());
+            "MACD"
+        }
+        "MACDFIX" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let signal = parameter_usize(params, 0, 9, &name)?;
+            let output = finkit::indicators::momentum::macdfix_with_signal(input, signal)
+                .map_err(|error| ("execution_error", format!("{name}: {error}")))?;
+            values.insert("MACD".to_string(), output.macd.to_vec());
+            values.insert("MACD_SIGNAL".to_string(), output.signal.to_vec());
+            values.insert("MACD_HIST".to_string(), output.hist.to_vec());
+            "MACD"
         }
         "MACD" => {
             let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
@@ -680,6 +772,15 @@ fn execute_talib_profile(
                 indicator_values(finkit::indicators::momentum::trix(input, period), &name)?,
             );
             "TRIX"
+        }
+        "CMO" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let period = parameter_usize(params, 0, 14, &name)?;
+            values.insert(
+                "CMO".to_string(),
+                indicator_values(finkit::indicators::momentum::cmo(input, period), &name)?,
+            );
+            "CMO"
         }
         "STOCH" => {
             let (high, low, close) = hlc(inputs, &name)?;
@@ -1173,6 +1274,36 @@ fn parameter_f64(
     Ok(value)
 }
 
+fn talib_ma_type(
+    params: &[f64],
+    index: usize,
+    default: usize,
+    operation: &str,
+) -> Result<finkit::indicators::overlap::MaType, (&'static str, String)> {
+    let value = params.get(index).copied().unwrap_or(default as f64);
+    if !value.is_finite() || value < 0.0 || value.fract() != 0.0 {
+        return Err((
+            "invalid_request",
+            format!("{operation} MA type parameter {index} must be a non-negative integer"),
+        ));
+    }
+    match value as usize {
+        0 => Ok(finkit::indicators::overlap::MaType::Sma),
+        1 => Ok(finkit::indicators::overlap::MaType::Ema),
+        2 => Ok(finkit::indicators::overlap::MaType::Wma),
+        3 => Ok(finkit::indicators::overlap::MaType::Dema),
+        4 => Ok(finkit::indicators::overlap::MaType::Tema),
+        5 => Ok(finkit::indicators::overlap::MaType::Trima),
+        6 => Ok(finkit::indicators::overlap::MaType::Kama),
+        7 => Ok(finkit::indicators::overlap::MaType::Mama),
+        8 => Ok(finkit::indicators::overlap::MaType::T3),
+        _ => Err((
+            "invalid_request",
+            format!("{operation} MA type parameter {index} is outside TA-Lib range 0..8"),
+        )),
+    }
+}
+
 fn indicator_values<T: std::fmt::Display>(
     result: Result<Array1<f64>, T>,
     operation: &str,
@@ -1353,6 +1484,43 @@ mod tests {
         assert_eq!(payload["shape"], "series", "payload: {payload}");
         assert_eq!(payload["primary"], "CDLDOJI");
         assert_eq!(payload["values"]["CDLDOJI"].as_array().unwrap().len(), 10);
+    }
+
+    #[test]
+    fn talib_profile_dispatches_generic_ma_macd_variants_and_cmo() {
+        let request = serde_json::json!({
+            "operation": "MA",
+            "semantic_profile": "talib_0_7_1",
+            "input_order": ["CLOSE"],
+            "inputs": {"CLOSE": [1.0,2.0,3.0,4.0,5.0,6.0,7.0,8.0,9.0,10.0]},
+            "params": [3, 1]
+        })
+        .to_string();
+        let payload: Value = serde_json::from_str(&execute_operation_json(&request)).unwrap();
+        assert_eq!(payload["values"]["MA"][9], 9.0);
+
+        let macdext = serde_json::json!({
+            "operation": "MACDEXT",
+            "semantic_profile": "talib_0_7_1",
+            "input_order": ["CLOSE"],
+            "inputs": {"CLOSE": [1.0,2.0,3.0,4.0,5.0,6.0,7.0,8.0,9.0,10.0]},
+            "params": [2, 0, 3, 0, 2, 0]
+        })
+        .to_string();
+        let macd_payload: Value = serde_json::from_str(&execute_operation_json(&macdext)).unwrap();
+        assert_eq!(macd_payload["shape"], "multi_series");
+        assert!(macd_payload["values"].get("MACD_HIST").is_some());
+
+        let cmo = serde_json::json!({
+            "operation": "CMO",
+            "semantic_profile": "talib_0_7_1",
+            "input_order": ["CLOSE"],
+            "inputs": {"CLOSE": [1.0,2.0,3.0,4.0,5.0]},
+            "params": [3]
+        })
+        .to_string();
+        let cmo_payload: Value = serde_json::from_str(&execute_operation_json(&cmo)).unwrap();
+        assert_eq!(cmo_payload["values"]["CMO"][4], 100.0);
     }
 
     #[test]

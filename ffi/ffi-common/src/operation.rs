@@ -297,6 +297,11 @@ mod tests {
             "CDLPIERCING",
             "CDLSHOOTINGSTAR",
             "CDLSPINNINGTOP",
+            "MAVP",
+            "SAREXT",
+            "CMO",
+            "MACDEXT",
+            "MACDFIX",
         ] {
             let operation = catalog
                 .operations
