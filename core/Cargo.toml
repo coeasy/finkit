@@ -100,6 +100,11 @@ name = "memory_profile"
 harness = false
 required-features = ["memory-profile"]
 
+# Production-path Factor/Composite plan and result-cache baselines.
+[[bench]]
+name = "unified_engine_bench"
+harness = false
+
 
 [dependencies]
 serde = { workspace = true, optional = true }
