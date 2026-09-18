@@ -63,7 +63,7 @@ All outputs are computed on three shared fixtures from `tests/fixtures/`:
 
 ## Output Files
 
-One generated JSON file per indicator (91 total), plus a checked-in profile
+One generated JSON file per indicator (96 total), plus a checked-in profile
 variant fixture for official `matype` contracts:
 
 | File | Purpose |
@@ -101,6 +101,11 @@ Generated indicator files:
 | `kama.json` | KAMA | timeperiod=14 |
 | `mama.json` | MAMA | fastlimit=0.5, slowlimit=0.05 |
 | `mavp.json` | MAVP | minperiod=2, maxperiod=30, matype=0 (SMA) |
+| `ht_dcperiod.json` | HT_DCPERIOD | default |
+| `ht_dcphase.json` | HT_DCPHASE | default |
+| `ht_phasor.json` | HT_PHASOR | default |
+| `ht_sine.json` | HT_SINE | default |
+| `ht_trendline.json` | HT_TRENDLINE | default |
 | `obv.json` | OBV | — |
 | `mfi.json` | MFI | timeperiod=14 |
 | `ad.json` | AD | — |

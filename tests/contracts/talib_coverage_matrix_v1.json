@@ -14,7 +14,7 @@
     },
     "numeric_reference": {
       "status": "fixed_golden",
-      "expected_count": 91,
+      "expected_count": 96,
       "indicators": [
         "ACCBANDS",
         "ACOS",
@@ -46,6 +46,11 @@
         "EXP",
         "FLOOR",
         "EMA",
+        "HT_DCPERIOD",
+        "HT_DCPHASE",
+        "HT_PHASOR",
+        "HT_SINE",
+        "HT_TRENDLINE",
         "IMI",
         "LINEARREG",
         "LINEARREG_ANGLE",

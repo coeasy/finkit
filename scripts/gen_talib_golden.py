@@ -285,6 +285,36 @@ INDICATORS: dict[str, dict[str, Any]] = {
         "inputs": ("close", "periods"),
         "outputs": ("mavp",),
     },
+    "HT_DCPERIOD": {
+        "params": {},
+        "fn_name": "HT_DCPERIOD",
+        "inputs": ("close",),
+        "outputs": ("dcperiod",),
+    },
+    "HT_DCPHASE": {
+        "params": {},
+        "fn_name": "HT_DCPHASE",
+        "inputs": ("close",),
+        "outputs": ("dcphase",),
+    },
+    "HT_PHASOR": {
+        "params": {},
+        "fn_name": "HT_PHASOR",
+        "inputs": ("close",),
+        "outputs": ("inphase", "quadrature"),
+    },
+    "HT_SINE": {
+        "params": {},
+        "fn_name": "HT_SINE",
+        "inputs": ("close",),
+        "outputs": ("sine", "leadsine"),
+    },
+    "HT_TRENDLINE": {
+        "params": {},
+        "fn_name": "HT_TRENDLINE",
+        "inputs": ("close",),
+        "outputs": ("trendline",),
+    },
     "ADD": {
         "params": {},
         "fn_name": "ADD",

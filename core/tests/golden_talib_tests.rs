@@ -480,6 +480,32 @@ fn compute_alpha_ta_outputs(
                 ),
             )])
         }
+        "HT_DCPERIOD" => HashMap::from([(
+            "dcperiod".to_string(),
+            array_to_vec(finkit::indicators::cycle::ht_dcperiod(close).unwrap()),
+        )]),
+        "HT_DCPHASE" => HashMap::from([(
+            "dcphase".to_string(),
+            array_to_vec(finkit::indicators::cycle::ht_dcphase(close).unwrap()),
+        )]),
+        "HT_PHASOR" => {
+            let (in_phase, quadrature) = finkit::indicators::cycle::ht_phasor(close).unwrap();
+            HashMap::from([
+                ("inphase".to_string(), array_to_vec(in_phase)),
+                ("quadrature".to_string(), array_to_vec(quadrature)),
+            ])
+        }
+        "HT_SINE" => {
+            let (sine, lead_sine) = finkit::indicators::cycle::ht_sine(close).unwrap();
+            HashMap::from([
+                ("sine".to_string(), array_to_vec(sine)),
+                ("leadsine".to_string(), array_to_vec(lead_sine)),
+            ])
+        }
+        "HT_TRENDLINE" => HashMap::from([(
+            "trendline".to_string(),
+            array_to_vec(finkit::indicators::cycle::ht_trendline(close).unwrap()),
+        )]),
         "OBV" => HashMap::from([("obv".to_string(), array_to_vec(obv(close, volume).unwrap()))]),
         "MFI" => {
             let p = param_usize(params, "timeperiod", 14);
