@@ -9,6 +9,7 @@ use crate::indicators::china::{bias as lib_bias, kdj as lib_kdj, psy as lib_psy}
 use crate::indicators::classic_patterns as lib_classic;
 use crate::indicators::cycle as lib_cycle;
 use crate::indicators::momentum as lib_momentum;
+use crate::indicators::momentum_ext::imi as lib_imi;
 use crate::indicators::momentum_ext::{chop as lib_chop, fisher as lib_fisher, tsi as lib_tsi};
 use crate::indicators::overlap::sarext as lib_sarext;
 use crate::indicators::statistics::avgdev as lib_avgdev;
@@ -3569,6 +3570,19 @@ fn fn_cdl_spinningtop(
     )
 }
 
+fn fn_imi(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+    ensure_args_len("IMI", args, 3)?;
+    let period = extract_n(args, 2, "IMI")?;
+    match lib_imi(
+        args[0].as_slice().unwrap(),
+        args[1].as_slice().unwrap(),
+        period,
+    ) {
+        Ok(result) => Ok(result),
+        Err(_) => Ok(nan_vec(ctx.data_len)),
+    }
+}
+
 fn fn_ht_measurement(
     ctx: &FormulaContext,
     args: &[Array1<f64>],
@@ -5838,6 +5852,7 @@ pub fn get_builtin_functions() -> HashMap<String, FormulaFn> {
         "CDLSPINNINGTOP".to_string(),
         fn_cdl_spinningtop as FormulaFn,
     );
+    map.insert("IMI".to_string(), fn_imi as FormulaFn);
 
     // TA-Lib C compatibility — additional momentum / statistics
     map.insert("MACDEXT".to_string(), fn_macdext);

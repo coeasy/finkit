@@ -1179,6 +1179,11 @@ fn output_names_for(name: &str, outputs: usize) -> Vec<String> {
             "MIDDLEBAND".to_string(),
             "LOWERBAND".to_string(),
         ],
+        "ACCBANDS" => vec![
+            "UPPERBAND".to_string(),
+            "MIDDLEBAND".to_string(),
+            "LOWERBAND".to_string(),
+        ],
         "MAMA" => vec!["MAMA".to_string(), "FAMA".to_string()],
         "HT_PHASOR" => vec!["INPHASE".to_string(), "QUADRATURE".to_string()],
         "HT_SINE" => vec!["SINE".to_string(), "LEADSINE".to_string()],
@@ -1262,6 +1267,23 @@ fn execute_multi_output_indicator(
             let period = parameter_usize(name, params, 0, 20)?;
             let deviation = parameter_f64(name, params, 1, 2.0)?;
             let output = crate::indicators::overlap::bbands(close, period, deviation, deviation)
+                .map_err(|error| indicator_execution_error(name, error))?;
+            MultiIndicatorOutput {
+                values: vec![
+                    ("UPPERBAND", output.upper.to_vec()),
+                    ("MIDDLEBAND", output.middle.to_vec()),
+                    ("LOWERBAND", output.lower.to_vec()),
+                ],
+                primary: "MIDDLEBAND",
+            }
+        }
+        "ACCBANDS" => {
+            require_input_count(name, inputs, 3)?;
+            let high = resolve_indicator_input(name, context, inputs[0])?;
+            let low = resolve_indicator_input(name, context, inputs[1])?;
+            let close = resolve_indicator_input(name, context, inputs[2])?;
+            let period = parameter_usize(name, params, 0, 20)?;
+            let output = crate::indicators::overlap::accbands(high, low, close, period)
                 .map_err(|error| indicator_execution_error(name, error))?;
             MultiIndicatorOutput {
                 values: vec![

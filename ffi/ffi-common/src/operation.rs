@@ -302,6 +302,9 @@ mod tests {
             "CMO",
             "MACDEXT",
             "MACDFIX",
+            "ACCBANDS",
+            "AVGDEV",
+            "IMI",
         ] {
             let operation = catalog
                 .operations

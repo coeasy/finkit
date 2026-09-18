@@ -273,6 +273,9 @@ pub fn talib_profile_supported(operation: &str) -> bool {
             | "MACD"
             | "MACDEXT"
             | "MACDFIX"
+            | "ACCBANDS"
+            | "AVGDEV"
+            | "IMI"
             | "BBANDS"
             | "ATR"
             | "NATR"
@@ -457,6 +460,40 @@ fn execute_talib_profile(
                 )?,
             );
             "MAVP"
+        }
+        "ACCBANDS" => {
+            let high = named_series(inputs, "HIGH", &name)?;
+            let low = named_series(inputs, "LOW", &name)?;
+            let close = named_series(inputs, "CLOSE", &name)?;
+            let period = parameter_usize(params, 0, 20, &name)?;
+            let output = finkit::indicators::overlap::accbands(high, low, close, period)
+                .map_err(|error| ("execution_error", format!("{name}: {error}")))?;
+            values.insert("UPPERBAND".to_string(), output.upper.to_vec());
+            values.insert("MIDDLEBAND".to_string(), output.middle.to_vec());
+            values.insert("LOWERBAND".to_string(), output.lower.to_vec());
+            "MIDDLEBAND"
+        }
+        "AVGDEV" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let period = parameter_usize(params, 0, 14, &name)?;
+            values.insert(
+                "AVGDEV".to_string(),
+                indicator_values(finkit::indicators::statistics::avgdev(input, period), &name)?,
+            );
+            "AVGDEV"
+        }
+        "IMI" => {
+            let open = named_series(inputs, "OPEN", &name)?;
+            let close = named_series(inputs, "CLOSE", &name)?;
+            let period = parameter_usize(params, 0, 14, &name)?;
+            values.insert(
+                "IMI".to_string(),
+                indicator_values(
+                    finkit::indicators::momentum_ext::imi(open, close, period),
+                    &name,
+                )?,
+            );
+            "IMI"
         }
         "SAREXT" => {
             let high = named_series(inputs, "HIGH", &name)?;
@@ -1521,6 +1558,46 @@ mod tests {
         .to_string();
         let cmo_payload: Value = serde_json::from_str(&execute_operation_json(&cmo)).unwrap();
         assert_eq!(cmo_payload["values"]["CMO"][4], 100.0);
+    }
+
+    #[test]
+    fn talib_profile_dispatches_accbands_avgdev_and_imi() {
+        let high = vec![10.0, 11.0, 12.0, 13.0, 14.0, 15.0];
+        let low = vec![8.0, 9.0, 10.0, 11.0, 12.0, 13.0];
+        let close = vec![9.0, 10.0, 11.0, 12.0, 13.0, 14.0];
+        let accbands = serde_json::json!({
+            "operation": "ACCBANDS",
+            "semantic_profile": "talib_0_7_1",
+            "input_order": ["HIGH", "LOW", "CLOSE"],
+            "inputs": {"HIGH": high, "LOW": low, "CLOSE": close},
+            "params": [3]
+        })
+        .to_string();
+        let acc_payload: Value = serde_json::from_str(&execute_operation_json(&accbands)).unwrap();
+        assert_eq!(acc_payload["shape"], "multi_series");
+        assert!(acc_payload["values"].get("UPPERBAND").is_some());
+
+        let avgdev = serde_json::json!({
+            "operation": "AVGDEV",
+            "semantic_profile": "talib_0_7_1",
+            "input_order": ["CLOSE"],
+            "inputs": {"CLOSE": [1.0,2.0,3.0,4.0,5.0]},
+            "params": [3]
+        })
+        .to_string();
+        let avg_payload: Value = serde_json::from_str(&execute_operation_json(&avgdev)).unwrap();
+        assert!(avg_payload["values"]["AVGDEV"][4].as_f64().unwrap() > 0.0);
+
+        let imi = serde_json::json!({
+            "operation": "IMI",
+            "semantic_profile": "talib_0_7_1",
+            "input_order": ["OPEN", "CLOSE"],
+            "inputs": {"OPEN": [1.0,2.0,3.0,4.0], "CLOSE": [2.0,3.0,4.0,5.0]},
+            "params": [2]
+        })
+        .to_string();
+        let imi_payload: Value = serde_json::from_str(&execute_operation_json(&imi)).unwrap();
+        assert_eq!(imi_payload["values"]["IMI"][3], 100.0);
     }
 
     #[test]

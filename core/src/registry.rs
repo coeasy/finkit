@@ -257,6 +257,7 @@ const MACDFIX_PARAMS: &[ParamSpec] = &[ParamSpec::new(
     Some("9"),
     Some("> 0"),
 )];
+const ACCBANDS_PARAMS: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("20"), Some("> 1"))];
 const VWMA_PARAMS: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("20"), Some("> 0"))];
 const ZSCORE_PARAMS: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("20"), Some("> 1"))];
 const CMF_PARAMS: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("20"), Some("> 0"))];
@@ -1014,6 +1015,39 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             outputs: 3,
             lookback: LookbackSpec::Dynamic,
             streaming: false,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "ACCBANDS",
+            aliases: &[],
+            category: FunctionCategory::Volatility,
+            input: InputKind::Hlc,
+            params: ACCBANDS_PARAMS,
+            outputs: 3,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: false,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "AVGDEV",
+            aliases: &[],
+            category: FunctionCategory::Statistics,
+            input: InputKind::Series,
+            params: PERIOD_14,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "IMI",
+            aliases: &[],
+            category: FunctionCategory::Momentum,
+            input: InputKind::Dynamic,
+            params: PERIOD_14,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
             deterministic: true,
         },
         FunctionSpec {
