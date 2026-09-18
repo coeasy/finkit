@@ -7,7 +7,7 @@
 //! control flow, future-data functions and host-dependent calls are rejected
 //! instead of being silently approximated.
 
-use super::ast::AstNode;
+use super::ast::{AstNode, BinaryOperator, UnaryOperator};
 use super::{normalize_formula_source, parse_formula_with_dialect, FormulaDialect};
 use crate::factors::{FactorError, FactorResult};
 use crate::formula::types::{classify_builtin_var, BuiltinVar};
@@ -116,8 +116,19 @@ impl FormulaStatefulStream {
         let normalized = normalize_formula_source(source, dialect);
         let ast = parse_formula_with_dialect(&normalized, dialect)
             .map_err(|error| FactorError::InvalidParameter(error.to_string()))?;
-        let expression = direct_expression(&ast)?;
-        let (state, required_inputs) = compile_state(expression)?;
+        let (state, required_inputs) = match direct_expression(&ast) {
+            Ok(expression) => match compile_state(expression) {
+                Ok((state, inputs)) => (state, inputs),
+                Err(_) => {
+                    let (expression, inputs) = compile_expression(&ast)?;
+                    (FormulaState::Expression { expression }, inputs)
+                }
+            },
+            Err(_) => {
+                let (expression, inputs) = compile_expression(&ast)?;
+                (FormulaState::Expression { expression }, inputs)
+            }
+        };
         Ok(Self {
             signature: formula_signature(&normalized, dialect),
             required_inputs,
@@ -254,6 +265,9 @@ impl FormulaStateInput {
 #[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 enum FormulaState {
+    Expression {
+        expression: FormulaExpressionState,
+    },
     Sma {
         input: FormulaStateInput,
         indicator: StreamingSma,
@@ -312,6 +326,7 @@ enum FormulaState {
 impl FormulaState {
     fn next(&mut self, row: &[f64; 6]) -> f64 {
         let value = match self {
+            Self::Expression { expression } => Some(expression.next(row)),
             Self::Sma { input, indicator } => indicator.next(row[input.slot()]),
             Self::Wma { input, indicator } => indicator.next(row[input.slot()]),
             Self::Ema { input, indicator } => indicator.next(row[input.slot()]),
@@ -367,6 +382,187 @@ impl FormulaState {
                 .map(|value| value.histogram),
         };
         value.unwrap_or(f64::NAN)
+    }
+}
+
+#[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+enum FormulaExpressionState {
+    Input(FormulaStateInput),
+    Constant(f64),
+    Direct(Box<FormulaState>),
+    Unary {
+        op: UnaryOperator,
+        expression: Box<FormulaExpressionState>,
+    },
+    Binary {
+        op: BinaryOperator,
+        left: Box<FormulaExpressionState>,
+        right: Box<FormulaExpressionState>,
+    },
+    Conditional {
+        condition: Box<FormulaExpressionState>,
+        then_branch: Box<FormulaExpressionState>,
+        else_branch: Box<FormulaExpressionState>,
+    },
+    UnaryFunction {
+        function: FormulaUnaryFunction,
+        expression: Box<FormulaExpressionState>,
+    },
+    Stateful {
+        function: FormulaExpressionFunction,
+        expression: Box<FormulaExpressionState>,
+    },
+    Reference {
+        state: FormulaReferenceState,
+        expression: Box<FormulaExpressionState>,
+    },
+    Cross {
+        direction: FormulaCrossDirection,
+        previous: Option<(f64, f64)>,
+        left: Box<FormulaExpressionState>,
+        right: Box<FormulaExpressionState>,
+    },
+}
+
+#[derive(Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+enum FormulaUnaryFunction {
+    Abs,
+    Sign,
+    Sqrt,
+    Exp,
+    Log,
+    Log10,
+    Floor,
+    Ceil,
+    Sin,
+    Cos,
+    Tan,
+    Sinh,
+    Cosh,
+    Tanh,
+    Asin,
+    Acos,
+    Atan,
+    Not,
+}
+
+#[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+enum FormulaExpressionFunction {
+    Sma(StreamingSma),
+    Wma(StreamingWma),
+    Ema(StreamingEma),
+    Rsi(StreamingRsi),
+    Max(StreamingMax),
+    Min(StreamingMin),
+    Sum(StreamingSum),
+    Variance {
+        indicator: FormulaRollingVariance,
+        square_root: bool,
+    },
+}
+
+impl FormulaExpressionFunction {
+    fn next(&mut self, input: f64) -> f64 {
+        let value = match self {
+            Self::Sma(indicator) => indicator.next(input),
+            Self::Wma(indicator) => indicator.next(input),
+            Self::Ema(indicator) => indicator.next(input),
+            Self::Rsi(indicator) => indicator.next(input),
+            Self::Max(indicator) => indicator.next(input),
+            Self::Min(indicator) => indicator.next(input),
+            Self::Sum(indicator) => indicator.next(input),
+            Self::Variance {
+                indicator,
+                square_root,
+            } => indicator
+                .next(input)
+                .map(|value| if *square_root { value.sqrt() } else { value }),
+        };
+        value.unwrap_or(f64::NAN)
+    }
+}
+
+impl FormulaExpressionState {
+    fn next(&mut self, row: &[f64; 6]) -> f64 {
+        match self {
+            Self::Input(input) => row[input.slot()],
+            Self::Constant(value) => *value,
+            Self::Direct(state) => state.next(row),
+            Self::Unary { op, expression } => {
+                let value = expression.next(row);
+                match op {
+                    UnaryOperator::Not => {
+                        if value > 0.0 {
+                            0.0
+                        } else {
+                            1.0
+                        }
+                    }
+                    UnaryOperator::Neg => -value,
+                }
+            }
+            Self::Binary { op, left, right } => {
+                let left = left.next(row);
+                let right = right.next(row);
+                apply_stateful_binary(op, left, right)
+            }
+            Self::Conditional {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                let condition = condition.next(row);
+                // Both branches advance every row so a stateful indicator in
+                // an unselected branch remains aligned with batch Formula
+                // evaluation before the result is selected.
+                let then_value = then_branch.next(row);
+                let else_value = else_branch.next(row);
+                if condition > 0.0 {
+                    then_value
+                } else {
+                    else_value
+                }
+            }
+            Self::UnaryFunction {
+                function,
+                expression,
+            } => apply_stateful_unary_function(*function, expression.next(row)),
+            Self::Stateful {
+                function,
+                expression,
+            } => function.next(expression.next(row)),
+            Self::Reference {
+                state, expression, ..
+            } => state.next(expression.next(row)).unwrap_or(f64::NAN),
+            Self::Cross {
+                direction,
+                previous,
+                left,
+                right,
+            } => {
+                let current = (left.next(row), right.next(row));
+                let result = previous.map_or(0.0, |(previous_left, previous_right)| {
+                    let crossed = match direction {
+                        FormulaCrossDirection::Above => {
+                            previous_left <= previous_right && current.0 > current.1
+                        }
+                        FormulaCrossDirection::Below => {
+                            previous_left >= previous_right && current.0 < current.1
+                        }
+                    };
+                    if crossed {
+                        1.0
+                    } else {
+                        0.0
+                    }
+                });
+                *previous = Some(current);
+                result
+            }
+        }
     }
 }
 
@@ -508,6 +704,349 @@ fn direct_expression(ast: &AstNode) -> FactorResult<&AstNode> {
             "stateful Formula requires one direct indicator expression; assignments, drawing, control flow and future-data calls are not supported"
                 .to_string(),
         )),
+    }
+}
+
+fn compile_expression(
+    ast: &AstNode,
+) -> FactorResult<(FormulaExpressionState, Vec<FormulaStateInput>)> {
+    match ast {
+        AstNode::Number(value) => Ok((FormulaExpressionState::Constant(*value), Vec::new())),
+        AstNode::Variable(_) => {
+            let input = FormulaStateInput::from_ast(ast)?;
+            Ok((FormulaExpressionState::Input(input), vec![input]))
+        }
+        AstNode::UnaryOp { op, expr } => {
+            let (expression, inputs) = compile_expression(expr)?;
+            Ok((
+                FormulaExpressionState::Unary {
+                    op: op.clone(),
+                    expression: Box::new(expression),
+                },
+                inputs,
+            ))
+        }
+        AstNode::BinaryOp { op, left, right } => {
+            if matches!(op, BinaryOperator::StringConcat) {
+                return Err(FactorError::InvalidParameter(
+                    "stateful Formula does not support string concatenation".to_string(),
+                ));
+            }
+            let (left, mut inputs) = compile_expression(left)?;
+            let (right, right_inputs) = compile_expression(right)?;
+            merge_required_inputs(&mut inputs, &right_inputs);
+            Ok((
+                FormulaExpressionState::Binary {
+                    op: op.clone(),
+                    left: Box::new(left),
+                    right: Box::new(right),
+                },
+                inputs,
+            ))
+        }
+        AstNode::IfThenElse {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            let (condition, mut inputs) = compile_expression(cond)?;
+            let (then_branch, then_inputs) = compile_expression(then_branch)?;
+            let (else_branch, else_inputs) = compile_expression(else_branch)?;
+            merge_required_inputs(&mut inputs, &then_inputs);
+            merge_required_inputs(&mut inputs, &else_inputs);
+            Ok((
+                FormulaExpressionState::Conditional {
+                    condition: Box::new(condition),
+                    then_branch: Box::new(then_branch),
+                    else_branch: Box::new(else_branch),
+                },
+                inputs,
+            ))
+        }
+        AstNode::FunctionCall { name, args } => {
+            let normalized = name.to_ascii_uppercase();
+            if normalized == "IF" {
+                if args.len() < 3 {
+                    return Err(FactorError::InvalidParameter(
+                        "IF requires condition, then and else expressions".to_string(),
+                    ));
+                }
+                let (condition, mut inputs) = compile_expression(&args[0])?;
+                let (then_branch, then_inputs) = compile_expression(&args[1])?;
+                let (else_branch, else_inputs) = compile_expression(&args[2])?;
+                merge_required_inputs(&mut inputs, &then_inputs);
+                merge_required_inputs(&mut inputs, &else_inputs);
+                return Ok((
+                    FormulaExpressionState::Conditional {
+                        condition: Box::new(condition),
+                        then_branch: Box::new(then_branch),
+                        else_branch: Box::new(else_branch),
+                    },
+                    inputs,
+                ));
+            }
+            if let Some((expression, inputs)) =
+                compile_expression_stateful_function(&normalized, args)?
+            {
+                return Ok((expression, inputs));
+            }
+            if let Some(function) = FormulaUnaryFunction::from_name(&normalized) {
+                if args.len() != 1 {
+                    return Err(FactorError::InvalidParameter(format!(
+                        "{name} requires exactly one expression"
+                    )));
+                }
+                let (expression, inputs) = compile_expression(&args[0])?;
+                return Ok((
+                    FormulaExpressionState::UnaryFunction {
+                        function,
+                        expression: Box::new(expression),
+                    },
+                    inputs,
+                ));
+            }
+            let (state, inputs) = compile_state(ast)?;
+            Ok((FormulaExpressionState::Direct(Box::new(state)), inputs))
+        }
+        AstNode::Output { expr, .. } => compile_expression(expr),
+        AstNode::Statements(nodes) if nodes.len() == 1 => compile_expression(&nodes[0]),
+        _ => Err(FactorError::InvalidParameter(
+            "stateful Formula expression contains assignments, multiple statements, drawing, control flow, indexing or unsupported values"
+                .to_string(),
+        )),
+    }
+}
+
+fn compile_expression_stateful_function(
+    name: &str,
+    args: &[AstNode],
+) -> FactorResult<Option<(FormulaExpressionState, Vec<FormulaStateInput>)>> {
+    let period = |minimum: usize| parse_stateful_period(args, 1, 14, name, minimum);
+    let unary = |function: FormulaExpressionFunction| -> FactorResult<
+        Option<(FormulaExpressionState, Vec<FormulaStateInput>)>,
+    > {
+        if args.is_empty() {
+            return Err(FactorError::InvalidParameter(format!(
+                "{name} requires an input"
+            )));
+        }
+        let (expression, inputs) = compile_expression(&args[0])?;
+        Ok(Some((
+            FormulaExpressionState::Stateful {
+                function,
+                expression: Box::new(expression),
+            },
+            inputs,
+        )))
+    };
+
+    match name {
+        "MA" | "SMA" => Ok(unary(FormulaExpressionFunction::Sma(StreamingSma::new(
+            period(1)?,
+        )))?),
+        "WMA" => Ok(unary(FormulaExpressionFunction::Wma(StreamingWma::new(
+            period(1)?,
+        )))?),
+        "EMA" => Ok(unary(FormulaExpressionFunction::Ema(StreamingEma::new(
+            period(1)?,
+        )))?),
+        "RSI" => Ok(unary(FormulaExpressionFunction::Rsi(StreamingRsi::new(
+            period(1)?,
+        )))?),
+        "HHV" => Ok(unary(FormulaExpressionFunction::Max(StreamingMax::new(
+            period(1)?,
+        )))?),
+        "LLV" => Ok(unary(FormulaExpressionFunction::Min(StreamingMin::new(
+            period(1)?,
+        )))?),
+        "SUM" => Ok(unary(FormulaExpressionFunction::Sum(StreamingSum::new(
+            period(1)?,
+        )))?),
+        "STD" | "STDDEV" => {
+            let period = period(2)?;
+            Ok(unary(FormulaExpressionFunction::Variance {
+                indicator: FormulaRollingVariance::new(period),
+                square_root: true,
+            })?)
+        }
+        "VAR" => Ok(unary(FormulaExpressionFunction::Variance {
+            indicator: FormulaRollingVariance::new(period(1)?),
+            square_root: false,
+        })?),
+        "REF" => {
+            if args.len() < 2 {
+                return Err(FactorError::InvalidParameter(
+                    "REF requires an input and period".to_string(),
+                ));
+            }
+            let period = parse_stateful_period(args, 1, 1, name, 1)?;
+            let (expression, inputs) = compile_expression(&args[0])?;
+            Ok(Some((
+                FormulaExpressionState::Reference {
+                    state: FormulaReferenceState::new(period),
+                    expression: Box::new(expression),
+                },
+                inputs,
+            )))
+        }
+        "CROSS" | "CROSSBELOW" => {
+            if args.len() < 2 {
+                return Err(FactorError::InvalidParameter(format!(
+                    "{name} requires two expressions"
+                )));
+            }
+            let (left, mut inputs) = compile_expression(&args[0])?;
+            let (right, right_inputs) = compile_expression(&args[1])?;
+            merge_required_inputs(&mut inputs, &right_inputs);
+            Ok(Some((
+                FormulaExpressionState::Cross {
+                    direction: if name == "CROSS" {
+                        FormulaCrossDirection::Above
+                    } else {
+                        FormulaCrossDirection::Below
+                    },
+                    previous: None,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                },
+                inputs,
+            )))
+        }
+        _ => Ok(None),
+    }
+}
+
+fn parse_stateful_period(
+    args: &[AstNode],
+    index: usize,
+    default: usize,
+    name: &str,
+    minimum: usize,
+) -> FactorResult<usize> {
+    match args.get(index) {
+        None => Ok(default),
+        Some(AstNode::Number(value))
+            if value.is_finite() && *value >= minimum as f64 && value.fract() == 0.0 =>
+        {
+            Ok(*value as usize)
+        }
+        _ => Err(FactorError::InvalidParameter(format!(
+            "{name} period must be an integer greater than or equal to {minimum}"
+        ))),
+    }
+}
+
+impl FormulaUnaryFunction {
+    fn from_name(name: &str) -> Option<Self> {
+        Some(match name {
+            "ABS" => Self::Abs,
+            "SIGN" => Self::Sign,
+            "SQRT" => Self::Sqrt,
+            "EXP" => Self::Exp,
+            "LOG" | "LN" => Self::Log,
+            "LOG10" => Self::Log10,
+            "FLOOR" => Self::Floor,
+            "CEIL" | "CEILING" => Self::Ceil,
+            "SIN" => Self::Sin,
+            "COS" => Self::Cos,
+            "TAN" => Self::Tan,
+            "SINH" => Self::Sinh,
+            "COSH" => Self::Cosh,
+            "TANH" => Self::Tanh,
+            "ASIN" => Self::Asin,
+            "ACOS" => Self::Acos,
+            "ATAN" => Self::Atan,
+            "NOT" => Self::Not,
+            _ => return None,
+        })
+    }
+}
+
+fn merge_required_inputs(target: &mut Vec<FormulaStateInput>, inputs: &[FormulaStateInput]) {
+    for input in inputs {
+        if !target.contains(input) {
+            target.push(*input);
+        }
+    }
+}
+
+fn apply_stateful_binary(op: &BinaryOperator, left: f64, right: f64) -> f64 {
+    match op {
+        BinaryOperator::Add => left + right,
+        BinaryOperator::Sub => left - right,
+        BinaryOperator::Mul => left * right,
+        BinaryOperator::Div => {
+            if right.abs() < 1e-15 {
+                f64::NAN
+            } else {
+                left / right
+            }
+        }
+        BinaryOperator::Mod => {
+            if right.abs() < 1e-15 {
+                f64::NAN
+            } else {
+                left - (left / right).floor() * right
+            }
+        }
+        BinaryOperator::Pow => left.powf(right),
+        BinaryOperator::Gt => (left > right) as u8 as f64,
+        BinaryOperator::Lt => (left < right) as u8 as f64,
+        BinaryOperator::Gte => (left >= right) as u8 as f64,
+        BinaryOperator::Lte => (left <= right) as u8 as f64,
+        BinaryOperator::Eq => ((left - right).abs() < 1e-10) as u8 as f64,
+        BinaryOperator::Neq => ((left - right).abs() >= 1e-10) as u8 as f64,
+        BinaryOperator::And => ((left > 0.0) && (right > 0.0)) as u8 as f64,
+        BinaryOperator::Or => ((left > 0.0) || (right > 0.0)) as u8 as f64,
+        BinaryOperator::Xor => ((left > 0.0) != (right > 0.0)) as u8 as f64,
+        BinaryOperator::StringConcat => f64::NAN,
+    }
+}
+
+fn apply_stateful_unary_function(function: FormulaUnaryFunction, value: f64) -> f64 {
+    match function {
+        FormulaUnaryFunction::Abs => value.abs(),
+        FormulaUnaryFunction::Sign => value.signum(),
+        FormulaUnaryFunction::Sqrt => {
+            if value < 0.0 {
+                f64::NAN
+            } else {
+                value.sqrt()
+            }
+        }
+        FormulaUnaryFunction::Exp => value.exp(),
+        FormulaUnaryFunction::Log => {
+            if value <= 0.0 {
+                f64::NAN
+            } else {
+                value.ln()
+            }
+        }
+        FormulaUnaryFunction::Log10 => {
+            if value <= 0.0 {
+                f64::NAN
+            } else {
+                value.log10()
+            }
+        }
+        FormulaUnaryFunction::Floor => value.floor(),
+        FormulaUnaryFunction::Ceil => value.ceil(),
+        FormulaUnaryFunction::Sin => value.sin(),
+        FormulaUnaryFunction::Cos => value.cos(),
+        FormulaUnaryFunction::Tan => value.tan(),
+        FormulaUnaryFunction::Sinh => value.sinh(),
+        FormulaUnaryFunction::Cosh => value.cosh(),
+        FormulaUnaryFunction::Tanh => value.tanh(),
+        FormulaUnaryFunction::Asin => value.asin(),
+        FormulaUnaryFunction::Acos => value.acos(),
+        FormulaUnaryFunction::Atan => value.atan(),
+        FormulaUnaryFunction::Not => {
+            if value > 0.0 {
+                0.0
+            } else {
+                1.0
+            }
+        }
     }
 }
 
@@ -841,6 +1380,48 @@ mod tests {
             "REF(CLOSE, 2)",
             "CROSS(CLOSE, OPEN)",
             "CROSSBELOW(CLOSE, OPEN)",
+        ] {
+            let mut stream =
+                FormulaStatefulStream::from_source(source, FormulaDialect::TongDaXin).unwrap();
+            let mut actual = Vec::new();
+            stream
+                .push_batch_into(
+                    &BTreeMap::from([
+                        (String::from("close"), close.clone()),
+                        (String::from("open"), open.clone()),
+                    ]),
+                    &mut actual,
+                )
+                .unwrap();
+
+            let mut context = crate::formula::FormulaContext::new(
+                ndarray::Array1::from_vec(open.clone()),
+                ndarray::Array1::from_vec(open.clone()),
+                ndarray::Array1::from_vec(open.clone()),
+                ndarray::Array1::from_vec(close.clone()),
+                ndarray::Array1::from_vec(close.clone()),
+                None,
+            );
+            let mut engine = crate::formula::FormulaEngine::new();
+            let expected = engine
+                .eval_with_dialect(source, FormulaDialect::TongDaXin, &mut context)
+                .unwrap();
+            assert_same(&actual, expected.as_slice().unwrap());
+        }
+    }
+
+    #[test]
+    fn expression_formula_state_matches_batch_for_common_operators() {
+        let close = vec![10.0, 11.0, 9.0, 13.0, 12.0, 15.0];
+        let open = vec![10.5, 10.0, 9.5, 11.0, 13.0, 14.0];
+        for source in [
+            "MA(CLOSE, 3) + 1",
+            "IF(CLOSE > OPEN, CLOSE, OPEN)",
+            "ABS(CLOSE - OPEN)",
+            "IF(CLOSE > MA(CLOSE, 3), 1, 0)",
+            "CROSS(MA(CLOSE, 2), MA(CLOSE, 3))",
+            "REF(MA(CLOSE, 3), 1)",
+            "HHV(MA(CLOSE, 2), 3)",
         ] {
             let mut stream =
                 FormulaStatefulStream::from_source(source, FormulaDialect::TongDaXin).unwrap();

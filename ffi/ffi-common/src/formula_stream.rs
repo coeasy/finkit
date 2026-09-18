@@ -204,5 +204,22 @@ mod tests {
             cross["values"]["__PRIMARY__"],
             serde_json::json!([0.0, 1.0, 0.0, 1.0])
         );
+
+        let expression = serde_json::json!({
+            "schema_version": 1,
+            "source": "IF(CLOSE > OPEN, CLOSE, OPEN)",
+            "dialect": "tdx",
+            "inputs": {
+                "close": [1.0, 2.0, 1.0, 3.0],
+                "open": [1.5, 1.5, 1.5, 2.0]
+            }
+        });
+        let expression: Value =
+            serde_json::from_str(&evaluate_formula_stream_json(&expression.to_string()).unwrap())
+                .unwrap();
+        assert_eq!(
+            expression["values"]["__PRIMARY__"],
+            serde_json::json!([1.5, 2.0, 1.5, 3.0])
+        );
     }
 }

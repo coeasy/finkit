@@ -269,7 +269,7 @@ talib_0_7_1
 - Factor/Composite bounded stream 增加按 compiled plan 输入槽位排列的 `push_values` 热路径、一次性 `push_batch` 路径和可复用输出缓冲的 `push_batch_into` 路径，跨语言 JSON 入口复用批量路径，避免逐行构造字符串键 map；`unified_engine_bench` 新增 100k 行 bounded stream 基线，实际测得当前主机逐行 Factor 约 `1.88–1.89M rows/s`、Composite 约 `1.32M rows/s`，批量 Factor 约 `435–459M rows/s`、Composite 约 `33.0–33.7M rows/s`；新增分块复用输出缓冲后，Factor 约 `177–181 µs`、Composite 约 `2.88–2.93 ms`。stateful 基线同时测得 Factor momentum 逐行约 `635–640 µs`、批量约 `1.21–1.28 ms`，Composite EMA 逐行约 `15.34–15.55 ms`、批量约 `16.25–16.42 ms`（均为 100k 行、当前主机、Criterion 10 samples）；这些均是待优化基线，不是跨硬件生产 SLO。
 - Factor 已补齐 `factor.catalog.v1` JSON discovery contract：C/C++、Go、Java、.NET、Python、Node 与 Rust FFI common 共用同一份内置因子目录，公开名称、类型、方向、依赖、版本、`bounded_streaming`、`stateful_streaming` 及 streaming/incremental 能力，执行入口与发现入口不再断开。
 - Factor 与 Composite 的 v1 请求现在强制要求 `schema_version`，并拒绝重复 Factor target；新增 `tests/contracts/engine_contract_v1.json` 的 Factor/Composite stream checkpoint vectors，将 Formula/Factor/Composite 的请求与期望输出固定为同一份跨语言 conformance vector，避免各 binding 分叉维护示例和数值语义。
-- Formula 已新增 `formula.stream.contract.v1`：以统一 JSON 请求执行可序列化的直接 `MA/SMA/WMA/EMA/RSI/ATR/MACD/HHV/LLV/SUM/STD/STDDEV/VAR/REF/CROSS/CROSSBELOW` 状态内核，返回 `__PRIMARY__`、null warm-up、rows、required inputs、稳定 signature 和对象形式 checkpoint；Rust、Python、Go、Java、.NET、C、C++、Node 均已补齐同一入口，并加入 Formula/Factor/Composite 共用的续算 conformance vector。`STD/VAR` 使用 Formula/TA-Lib 约定的总体方差语义，未复用样本方差的公共指标状态。该入口明确拒绝赋值、多语句、控制流、绘图、跨周期和未知变量等尚未具备可移植状态布局的语义，不把批量解释执行冒充 stateful streaming。
+- Formula 已新增 `formula.stream.contract.v1`：以统一 JSON 请求执行可序列化的 `MA/SMA/WMA/EMA/RSI/ATR/MACD/HHV/LLV/SUM/STD/STDDEV/VAR/REF/CROSS/CROSSBELOW` 状态内核，并支持单表达式的算术、比较、逻辑、`IF`、一元数学函数组合；返回 `__PRIMARY__`、null warm-up、rows、required inputs、稳定 signature 和对象形式 checkpoint。Rust、Python、Go、Java、.NET、C、C++、Node 均已补齐同一入口，并加入 Formula/Factor/Composite 共用的续算 conformance vector。`STD/VAR` 使用 Formula/TA-Lib 约定的总体方差语义，未复用样本方差的公共指标状态。该入口明确拒绝赋值、多语句、循环、绘图、跨周期和未知变量等尚未具备可移植状态布局的语义，不把批量解释执行冒充 stateful streaming。
 - Rolling variance 的 state kernel 已修正移窗 Welford 更新公式；公共 `StreamingVar` 继续保持 sample-variance 合约，而 Formula/TA-Lib `STD/VAR` 使用独立的 population-variance 状态，以确保 batch、stateful stream 与既有指标 API 的语义不会互相污染。
 - Formula compatibility report 已提升为 `formula.compatibility.v1` 共享 JSON contract：Rust、Python、Go、Java、.NET、C、C++、Node 均通过同一报告结构输出 parser、batch/streaming、control flow、drawing、cross-timeframe、lookahead、host data；各绑定只负责转发、生命周期和错误映射。能力矩阵只报告已验证的执行边界，不把 parser 识别或函数登记误报为完整兼容。
 - 新增 `tests/contracts/formula_terminal_contract_v1.json` 与 `core/tests/formula_terminal_contract.rs`：通过 `eval_multi_with_dialect` 对 TDX、同花顺、东方财富和 Pine 的赋值、别名、窗口、前值引用及 Pine lowering 做固定数值断言；这是一条真实执行门禁，不等同于全部终端语义已完成。
@@ -291,10 +291,10 @@ talib_0_7_1
 
 截至 2026-09-18，本工作树已实际验证：
 
-- `cargo +1.98.1 test --workspace --offline --quiet`：全 workspace 测试通过；其中核心库为 `2940 passed, 0 failed, 1 ignored`，Formula/Factor/Composite 共用 contract conformance 为 `1 passed, 0 failed`，DZH compatibility 为 `43 passed, 0 failed`，CLI schema 为 `3 passed, 0 failed`，其余 workspace test targets 也无失败。
+- `cargo +1.98.1 test --workspace --offline --quiet`：本轮全 workspace 测试通过，所有 test targets 均无失败；Node binding 测试期间仍出现宿主 Node-API 符号加载告警，因此这不等同于真实 Node 宿主加载验证。
 - `cargo +1.98.1 test -p finkit --test formula_compatibility_boundary --offline --quiet`：`1 passed, 0 failed`，确认 host-required、drawing、control-flow/streaming 和 Pine plot 边界状态。
 - 定向验证：`finkit` operation tests `19 passed`、Composite tests `11 passed`、`finkit-ffi-common` library tests `28 passed`、C ABI library tests `23 passed`。
-- 最新定向验证：`finkit` stateful Formula tests `4 passed`、stateful Composite tests `4 passed`、stateful Factor tests `9 passed`；`finkit-ffi-common` library tests `56 passed`，包含 161 个 TA-Lib profile 名称的 dispatcher smoke、参数目录、非默认 `matype` 数值测试、绝对下标与 `HT_TRENDMODE` warm-up 边界测试、Formula/Factor/Composite dirty-range 与 stream-checkpoint conformance vector、无版本 profile 拒绝测试和 `formula.compatibility.v1` capability report；C ABI tests `27 passed`，并确认 catalog 参数、Factor/Composite streaming checkpoint、Formula compatibility report 和 Formula stateful stream 通过 ABI 导出。stateful Formula/Factor/Composite 的跨语言 conformance vector 也已通过，包含续传与未知 mode 拒绝。
+- 最新定向验证：`finkit` stateful Formula tests `5 passed`、stateful Composite tests `4 passed`、stateful Factor tests `9 passed`；`finkit-ffi-common` library tests `56 passed`，包含 161 个 TA-Lib profile 名称的 dispatcher smoke、参数目录、非默认 `matype` 数值测试、绝对下标与 `HT_TRENDMODE` warm-up 边界测试、Formula/Factor/Composite dirty-range 与 stream-checkpoint conformance vector、无版本 profile 拒绝测试和 `formula.compatibility.v1` capability report；C ABI tests `27 passed`，并确认 catalog 参数、Factor/Composite streaming checkpoint、Formula compatibility report 和 Formula stateful stream 通过 ABI 导出。stateful Formula/Factor/Composite 的跨语言 conformance vector 也已通过，包含续传与未知 mode 拒绝。
 - `cargo +1.98.1 check -p finkit-python -p finkit-node -p finkit-go -p finkit-java -p finkit-dotnet -p finkit-ffi --offline`：通过。
 - 61 个 candlestick operation 在 `talib_0_7_1` profile 下逐项真实分派并返回等长结果。
 - `cargo +1.98.1 fmt --all` 已执行。
@@ -308,7 +308,7 @@ talib_0_7_1
 
 - TA-Lib 全目录数值等价、性能全面超过 TA-Lib；
 - TDX/同花顺/东方财富全部市场函数和 Pine 全语言兼容；
-- Formula stateful stream 已覆盖直接 MA/SMA/WMA/EMA/RSI/ATR/MACD/HHV/LLV/SUM/STD/STDDEV/VAR/REF/CROSS/CROSSBELOW 子集，但不代表完整 Formula 赋值、控制流、绘图、跨周期或 Pine/国内终端语义已经拥有可移植状态执行器；
+- Formula stateful stream 已覆盖上述指标和单表达式组合子集，但不代表完整 Formula 赋值、多语句/循环、绘图、跨周期或 Pine/国内终端语义已经拥有可移植状态执行器；
 - Factor/Composite 所有路径都已达到生产吞吐 SLO；
 - 递归 Factor/Composite 不是全部完成：当前只对文档列明的内置 Factor 和 Composite 节点提供跨语言 O(1)-per-row stateful streaming，并已通过 batch/stream/checkpoint 向量；任意用户闭包、自定义/未知函数、跨截面与全序列语义仍不支持 stateful mode，必须分别设计可序列化状态工厂或显式拒绝，不能静默降级为近似结果；
 - CMake/CTest 下的 C++ 原生编译与安装（当前验证环境没有 CMake/CTest）；
