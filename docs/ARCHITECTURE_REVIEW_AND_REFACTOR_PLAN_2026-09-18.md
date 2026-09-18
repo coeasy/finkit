@@ -277,7 +277,7 @@ talib_0_7_1
 
 - `cargo +1.98.1 test --workspace --offline --quiet`：全 workspace 测试通过；其中核心库为 `2920 passed, 0 failed, 1 ignored`，DZH compatibility 为 `43 passed, 0 failed`，CLI schema 为 `3 passed, 0 failed`，其余 workspace test targets 也无失败。
 - 定向验证：`finkit` operation tests `19 passed`、Composite tests `8 passed`、`finkit-ffi-common` library tests `28 passed`、C ABI library tests `23 passed`。
-- 最新定向验证：`finkit-ffi-common` library tests `33 passed`，包含 161 个 TA-Lib profile 名称的 dispatcher smoke、参数目录和非默认 `matype` 数值测试；C ABI tests `25 passed`，并确认 catalog 参数通过 ABI 导出。
+- 最新定向验证：`finkit-ffi-common` library tests `34 passed`，包含 161 个 TA-Lib profile 名称的 dispatcher smoke、参数目录、非默认 `matype` 数值测试和无版本 profile 拒绝测试；C ABI tests `25 passed`，并确认 catalog 参数通过 ABI 导出。
 - `cargo +1.98.1 check -p finkit-python -p finkit-node -p finkit-go -p finkit-java -p finkit-dotnet -p finkit-ffi --offline`：通过。
 - 61 个 candlestick operation 在 `talib_0_7_1` profile 下逐项真实分派并返回等长结果。
 - `cargo +1.98.1 fmt --all` 已执行。
