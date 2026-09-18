@@ -13,6 +13,7 @@ use finkit::factors::{
     FactorEngine, FactorKind, FactorRegistry,
 };
 use finkit::operation::{OperationRequest, UnifiedOperationEngine};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 const DATA_LEN: usize = 100_000;
@@ -136,6 +137,7 @@ fn bench_composite_plan_reuse(c: &mut Criterion) {
 
 fn bench_bounded_factor_stream(c: &mut Criterion) {
     let close = close_series();
+    let batch = BTreeMap::from([(String::from("close"), close.clone())]);
     let catalog = FactorCatalog::from_registry(builtin_factor_registry());
     let plan = catalog
         .compile(&["momentum_5"])
@@ -154,11 +156,21 @@ fn bench_bounded_factor_stream(c: &mut Criterion) {
             criterion::BatchSize::SmallInput,
         )
     });
+    group.bench_function("momentum_5_push_batch_100k", |b| {
+        b.iter_batched(
+            || plan.stream(engine.clone()).expect("create factor stream"),
+            |mut stream| {
+                black_box(stream.push_batch(&batch).expect("factor stream batch"));
+            },
+            criterion::BatchSize::SmallInput,
+        )
+    });
     group.finish();
 }
 
 fn bench_bounded_composite_stream(c: &mut Criterion) {
     let close = close_series();
+    let batch = BTreeMap::from([(String::from("close"), close.clone())]);
     let definitions = composite_definitions();
     let outputs = ["SUM_CLOSE"];
     let engine = finkit::composite::CompositeEngine::new();
@@ -177,6 +189,18 @@ fn bench_bounded_composite_stream(c: &mut Criterion) {
                 for value in &close {
                     black_box(stream.push_values(&[*value]).expect("composite stream row"));
                 }
+            },
+            criterion::BatchSize::SmallInput,
+        )
+    });
+    group.bench_function("sum_close_push_batch_100k", |b| {
+        b.iter_batched(
+            || {
+                plan.stream(engine.clone())
+                    .expect("create composite stream")
+            },
+            |mut stream| {
+                black_box(stream.push_batch(&batch).expect("composite stream batch"));
             },
             criterion::BatchSize::SmallInput,
         )

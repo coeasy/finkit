@@ -165,6 +165,11 @@ impl CompiledCompositePlan {
     /// need either a dedicated stateful kernel or full execution because a
     /// finite replay window cannot prove their numerical correctness.
     pub fn stream(&self, engine: CompositeEngine) -> FactorResult<CompositeStream> {
+        if self.required_raw_inputs.is_empty() {
+            return Err(FactorError::InvalidParameter(
+                "composite bounded streaming requires at least one raw input series".to_string(),
+            ));
+        }
         let _ = self.range_lookback.ok_or_else(|| {
             FactorError::InvalidParameter(
                 "composite plan is not range-safe: recursive, whole-series, or custom functions require full execution"
@@ -1171,6 +1176,120 @@ impl CompositeStream {
         result
     }
 
+    /// Append an aligned batch and execute one range evaluation for the batch.
+    ///
+    /// This is the preferred ingestion path for adapters and data feeds. The
+    /// input map may contain extra columns, but every raw input required by the
+    /// plan must be present and all required columns must have equal lengths.
+    pub fn push_batch(
+        &mut self,
+        values: &BTreeMap<String, Vec<f64>>,
+    ) -> FactorResult<BTreeMap<String, Vec<f64>>> {
+        let required = &self.plan.required_raw_inputs;
+        let rows = required
+            .first()
+            .and_then(|name| values.get(name))
+            .ok_or_else(|| {
+                FactorError::MissingInput(
+                    required
+                        .first()
+                        .cloned()
+                        .unwrap_or_else(|| "composite_stream_input".to_string()),
+                )
+            })?
+            .len();
+        for input in required {
+            let series = values
+                .get(input)
+                .ok_or_else(|| FactorError::MissingInput(input.clone()))?;
+            if series.len() != rows {
+                return Err(FactorError::LengthMismatch {
+                    name: input.clone(),
+                    expected: rows,
+                    actual: series.len(),
+                });
+            }
+        }
+        if rows == 0 {
+            return Ok(self
+                .plan
+                .outputs
+                .iter()
+                .map(|name| (name.clone(), Vec::new()))
+                .collect::<BTreeMap<_, _>>());
+        }
+
+        let previous_rows = self.inputs.values().next().map_or(0, Vec::len);
+        for input in required {
+            self.inputs
+                .entry(input.clone())
+                .or_default()
+                .extend_from_slice(&values[input]);
+        }
+        let total_rows = previous_rows + rows;
+        for output in &self.plan.outputs {
+            self.output
+                .entry(output.clone())
+                .or_default()
+                .resize(total_rows, f64::NAN);
+        }
+
+        let result = (|| {
+            let context = composite_borrowed_context(&self.inputs)?;
+            self.engine.execute_range_into_borrowed(
+                &self.plan,
+                &context,
+                &mut self.output,
+                DirtyRange::new(previous_rows, total_rows),
+            )?;
+            Ok(self
+                .plan
+                .outputs
+                .iter()
+                .map(|name| {
+                    (
+                        name.clone(),
+                        self.output
+                            .get(name)
+                            .map(|series| series[previous_rows..total_rows].to_vec())
+                            .unwrap_or_default(),
+                    )
+                })
+                .collect())
+        })();
+
+        if result.is_ok() {
+            self.row_count = self.row_count.saturating_add(rows);
+            let capacity = self.plan.range_lookback().unwrap_or(0).saturating_add(1);
+            let retained = self.inputs.values().next().map_or(0, Vec::len);
+            let excess = retained.saturating_sub(capacity);
+            if excess > 0 {
+                for input in required {
+                    if let Some(series) = self.inputs.get_mut(input) {
+                        series.drain(..excess);
+                    }
+                }
+                for output in &self.plan.outputs {
+                    if let Some(series) = self.output.get_mut(output) {
+                        series.drain(..excess);
+                    }
+                }
+            }
+        } else {
+            for input in required {
+                if let Some(series) = self.inputs.get_mut(input) {
+                    series.truncate(previous_rows);
+                }
+            }
+            for output in &self.plan.outputs {
+                if let Some(series) = self.output.get_mut(output) {
+                    series.truncate(previous_rows);
+                }
+            }
+        }
+        result
+    }
+
     /// Capture a portable checkpoint at the current append boundary.
     #[must_use]
     pub fn checkpoint(&self) -> CompositeStreamCheckpoint {
@@ -2057,6 +2176,16 @@ mod tests {
         assert!(values.iter().zip(&batch["sma3"]).all(|(left, right)| {
             (left.is_nan() && right.is_nan()) || (left - right).abs() < 1e-12
         }));
+
+        let mut batch_stream = plan.stream(engine.clone()).unwrap();
+        let batch_inputs = BTreeMap::from([(String::from("close"), close.to_vec())]);
+        let batch_values = batch_stream.push_batch(&batch_inputs).unwrap();
+        assert!(batch_values["sma3"]
+            .iter()
+            .zip(&batch["sma3"])
+            .all(|(left, right)| {
+                (left.is_nan() && right.is_nan()) || (left - right).abs() < 1e-12
+            }));
 
         let checkpoint = stream.checkpoint();
         let mut next = BTreeMap::new();

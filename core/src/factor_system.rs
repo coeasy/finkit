@@ -618,6 +618,120 @@ impl FactorStream {
         result
     }
 
+    /// Append an aligned batch and execute one range evaluation for the batch.
+    ///
+    /// This is the preferred ingestion path for adapters and data feeds. The
+    /// input map may contain extra columns, but every raw input required by the
+    /// plan must be present and all required columns must have equal lengths.
+    pub fn push_batch(
+        &mut self,
+        values: &BTreeMap<String, Vec<f64>>,
+    ) -> FactorResult<BTreeMap<String, Vec<f64>>> {
+        let required = self.plan.required_raw_inputs();
+        let rows = required
+            .first()
+            .and_then(|name| values.get(name))
+            .ok_or_else(|| {
+                FactorError::MissingInput(
+                    required
+                        .first()
+                        .cloned()
+                        .unwrap_or_else(|| "factor_stream_input".to_string()),
+                )
+            })?
+            .len();
+        for input in required {
+            let series = values
+                .get(input)
+                .ok_or_else(|| FactorError::MissingInput(input.clone()))?;
+            if series.len() != rows {
+                return Err(FactorError::LengthMismatch {
+                    name: input.clone(),
+                    expected: rows,
+                    actual: series.len(),
+                });
+            }
+        }
+        if rows == 0 {
+            return Ok(self
+                .plan
+                .targets()
+                .iter()
+                .map(|name| (name.clone(), Vec::new()))
+                .collect::<BTreeMap<_, _>>());
+        }
+
+        let previous_rows = self.inputs.values().next().map_or(0, Vec::len);
+        for input in required {
+            self.inputs
+                .entry(input.clone())
+                .or_default()
+                .extend_from_slice(&values[input]);
+        }
+        let total_rows = previous_rows + rows;
+        for name in self.plan.execution_order() {
+            self.output
+                .entry(name.clone())
+                .or_default()
+                .resize(total_rows, f64::NAN);
+        }
+
+        let result = (|| {
+            let context = borrowed_context(&self.inputs)?;
+            self.plan.execute_range_into_borrowed(
+                &self.engine,
+                &context,
+                &mut self.output,
+                DirtyRange::new(previous_rows, total_rows),
+            )?;
+            Ok(self
+                .plan
+                .targets()
+                .iter()
+                .map(|name| {
+                    (
+                        name.clone(),
+                        self.output
+                            .get(name)
+                            .map(|series| series[previous_rows..total_rows].to_vec())
+                            .unwrap_or_default(),
+                    )
+                })
+                .collect())
+        })();
+
+        if result.is_ok() {
+            self.row_count = self.row_count.saturating_add(rows);
+            let capacity = self.plan.range_lookback().unwrap_or(0).saturating_add(1);
+            let retained = self.inputs.values().next().map_or(0, Vec::len);
+            let excess = retained.saturating_sub(capacity);
+            if excess > 0 {
+                for input in required {
+                    if let Some(series) = self.inputs.get_mut(input) {
+                        series.drain(..excess);
+                    }
+                }
+                for name in self.plan.execution_order() {
+                    if let Some(series) = self.output.get_mut(name) {
+                        series.drain(..excess);
+                    }
+                }
+            }
+        } else {
+            for input in required {
+                if let Some(series) = self.inputs.get_mut(input) {
+                    series.truncate(previous_rows);
+                }
+            }
+            for name in self.plan.execution_order() {
+                if let Some(series) = self.output.get_mut(name) {
+                    series.truncate(previous_rows);
+                }
+            }
+        }
+        result
+    }
+
     /// Capture a portable checkpoint at the current append boundary.
     #[must_use]
     pub fn checkpoint(&self) -> FactorStreamCheckpoint {
@@ -811,6 +925,16 @@ mod tests {
         assert!(rows.iter().zip(&batch["momentum_5"]).all(|(left, right)| {
             (left.is_nan() && right.is_nan()) || (left - right).abs() < 1e-12
         }));
+
+        let mut batch_stream = plan.stream(engine.clone()).unwrap();
+        let batch_inputs = BTreeMap::from([(String::from("close"), close.to_vec())]);
+        let batch_values = batch_stream.push_batch(&batch_inputs).unwrap();
+        assert!(batch_values["momentum_5"]
+            .iter()
+            .zip(&batch["momentum_5"])
+            .all(|(left, right)| {
+                (left.is_nan() && right.is_nan()) || (left - right).abs() < 1e-12
+            }));
 
         let checkpoint = stream.checkpoint();
         let mut next = BTreeMap::new();

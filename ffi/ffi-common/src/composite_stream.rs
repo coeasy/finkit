@@ -143,35 +143,9 @@ pub fn evaluate_composite_stream_json(request: &str) -> Result<String, String> {
             .map_err(|error| error.to_string())?;
     }
 
-    let mut emitted = output_names
-        .iter()
-        .map(|output| (output.clone(), Vec::with_capacity(input_rows)))
-        .collect::<BTreeMap<_, _>>();
-    for row_index in 0..input_rows {
-        let row = plan
-            .required_raw_inputs()
-            .iter()
-            .map(|name| {
-                request
-                    .inputs
-                    .get(name)
-                    .map(|values| values[row_index])
-                    .ok_or_else(|| format!("composite stream missing input {name}"))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        let values = stream
-            .push_values(&row)
-            .map_err(|error| error.to_string())?;
-        for output in &output_names {
-            let value = values
-                .get(output)
-                .ok_or_else(|| format!("composite stream did not produce output {output}"))?;
-            emitted
-                .get_mut(output)
-                .expect("emitted output was initialized")
-                .push(*value);
-        }
-    }
+    let emitted = stream
+        .push_batch(&request.inputs)
+        .map_err(|error| error.to_string())?;
 
     let checkpoint = stream.checkpoint();
     let checkpoint_json = json!({

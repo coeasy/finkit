@@ -95,36 +95,9 @@ pub fn evaluate_factor_stream_json(request: &str) -> Result<String, String> {
             .map_err(|error| error.to_string())?;
     }
 
-    let mut emitted = request
-        .targets
-        .iter()
-        .map(|target| (target.clone(), Vec::with_capacity(input_rows)))
-        .collect::<BTreeMap<_, _>>();
-    for row_index in 0..input_rows {
-        let row = plan
-            .required_raw_inputs()
-            .iter()
-            .map(|name| {
-                request
-                    .inputs
-                    .get(name)
-                    .map(|values| values[row_index])
-                    .ok_or_else(|| format!("factor stream missing input {name}"))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        let values = stream
-            .push_values(&row)
-            .map_err(|error| error.to_string())?;
-        for target in &request.targets {
-            let value = values
-                .get(target)
-                .ok_or_else(|| format!("factor stream did not produce target {target}"))?;
-            emitted
-                .get_mut(target)
-                .expect("emitted target was initialized")
-                .push(*value);
-        }
-    }
+    let emitted = stream
+        .push_batch(&request.inputs)
+        .map_err(|error| error.to_string())?;
 
     let checkpoint = stream.checkpoint();
     let checkpoint_json = json!({
