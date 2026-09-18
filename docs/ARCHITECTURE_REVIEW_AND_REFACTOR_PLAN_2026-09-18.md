@@ -256,6 +256,7 @@ talib_0_7_1
 - CLI 不再自行维护 AlphaTA/Pine 的分支匹配，直接调用核心 dialect 执行入口；终端 schema 现在明确返回 `alpha_ta`、`tdx`、`ths`、`eastmoney`、`pine`，避免把不同兼容契约伪装成同一方言。
 - Operation panel cache 已改为带访问时钟的 LRU 淘汰；Composite cache 纳入 `scope`、`data_revision` 和 graph signature，增加 scoped evaluation，防止不同标的/周期在相同 revision 下串缓存。
 - Unified Operation Engine 的 Factor 默认路径已改为 `FactorCatalog -> CompiledFactorPlan -> borrowed execution`，并缓存编译计划；这只证明主路径已接入 compiled plan，不代表所有 Factor/Composite、streaming 和跨语言高吞吐门禁已经完成。
+- Composite 默认路径已增加 `CompiledCompositePlan`：定义校验、引用/cycle 检查和 graph signature 在计划阶段完成，Operation Engine 按 graph signature 复用计划；结果缓存仍额外受 scope/data revision 约束。
 - Python 的公开 `formula_eval_dialect` 已与其他绑定统一调用 Core 的 `eval_with_dialect`；不能再让 Python 自己把国内 dialect 静默降级为 AlphaTA。
 - Node 绑定已补齐 `operationCatalogJson`，与 C/C++、Go、Java、.NET、Python 共用同一 operation catalog 和 `operationExecuteJson` contract；Node 的宿主级加载仍需在真实 Node addon 环境中验证。
 - TA-Lib `MINMAX` 与 `MINMAXINDEX` 已加入 registry、core multi-output dispatcher、TA-Lib FFI profile 和 operation catalog；输出名固定为 `MIN/MAX` 与 `MININDEX/MAXINDEX`，并有 JSON execution tests。

@@ -6,7 +6,7 @@
 //! through one request/result/error contract; each new operation still needs a
 //! verified dispatcher and golden vectors before it is marked fully complete.
 
-use crate::composite::{CompositeDefinition, CompositeEngine};
+use crate::composite::{CompiledCompositePlan, CompositeDefinition, CompositeEngine};
 use crate::data_contract::{
     CrossSectionView, DataContractError, FrameKey, FundamentalSeries, MarketPanel,
     TemporalAlignment, TemporalSeries,
@@ -653,6 +653,7 @@ pub struct UnifiedOperationEngine {
     composite: CompositeEngine,
     factor_catalog: FactorCatalog,
     factor_plans: BTreeMap<String, CompiledFactorPlan>,
+    composite_plans: BTreeMap<u64, CompiledCompositePlan>,
     operation_cache: BTreeMap<OperationCacheKey, CachedOperationResult>,
     operation_cache_capacity: usize,
     operation_cache_hits: u64,
@@ -678,6 +679,7 @@ impl UnifiedOperationEngine {
             composite: CompositeEngine::new(),
             factor_catalog,
             factor_plans: BTreeMap::new(),
+            composite_plans: BTreeMap::new(),
             operation_cache: BTreeMap::new(),
             operation_cache_capacity: 64,
             operation_cache_hits: 0,
@@ -734,6 +736,7 @@ impl UnifiedOperationEngine {
 
     /// Mutably access the composite engine for custom function registration and cache control.
     pub fn composite_engine_mut(&mut self) -> &mut CompositeEngine {
+        self.composite_plans.clear();
         &mut self.composite
     }
 
@@ -771,33 +774,33 @@ impl UnifiedOperationEngine {
                 let canonical = self
                     .factor_catalog
                     .resolve_name(name)
+                    .map(str::to_owned)
                     .ok_or_else(|| OperationExecutionError::UnknownOperation(name.to_string()))?;
-                let plan = if let Some(plan) = self.factor_plans.get(canonical) {
-                    plan.clone()
-                } else {
+                if !self.factor_plans.contains_key(&canonical) {
                     let plan = self
                         .factor_catalog
-                        .compile(&[canonical])
+                        .compile(&[canonical.as_str()])
                         .map_err(OperationExecutionError::Factor)?;
-                    self.factor_plans
-                        .insert(canonical.to_string(), plan.clone());
-                    plan
-                };
-                let result = plan
+                    self.factor_plans.insert(canonical.clone(), plan);
+                }
+                let result = self
+                    .factor_plans
+                    .get(&canonical)
+                    .expect("factor plan inserted before execution")
                     .execute_borrowed(&self.factor, context)
                     .map_err(OperationExecutionError::Factor)?
-                    .remove(canonical)
+                    .remove(&canonical)
                     .ok_or_else(|| {
                         OperationExecutionError::InvalidRequest(format!(
                             "compiled factor plan did not produce {canonical}"
                         ))
                     })?;
                 let mut values = BTreeMap::new();
-                values.insert(canonical.to_string(), result);
+                values.insert(canonical.clone(), result);
                 Ok(OperationResult {
                     values,
                     shape: ValueShape::Series,
-                    primary: Some(canonical.to_string()),
+                    primary: Some(canonical),
                     draw: None,
                 })
             }
@@ -808,17 +811,26 @@ impl UnifiedOperationEngine {
                 data_revision,
                 cache_scope,
             } => {
+                let signature = crate::composite::graph_signature(definitions, outputs);
+                if !self.composite_plans.contains_key(&signature) {
+                    let plan = self
+                        .composite
+                        .compile(definitions, outputs)
+                        .map_err(OperationExecutionError::Composite)?;
+                    self.composite_plans.insert(signature, plan);
+                }
+                let plan = self
+                    .composite_plans
+                    .get(&signature)
+                    .expect("composite plan inserted before execution");
                 let values = match data_revision {
-                    Some(revision) => self.composite.evaluate_cached_scoped(
+                    Some(revision) => self.composite.evaluate_cached_scoped_compiled(
                         cache_scope.unwrap_or(""),
-                        definitions,
-                        outputs,
+                        plan,
                         context,
                         revision,
                     ),
-                    None => self
-                        .composite
-                        .evaluate_borrowed(definitions, outputs, context),
+                    None => self.composite.evaluate_compiled(plan, context),
                 }
                 .map_err(OperationExecutionError::Composite)?;
                 let primary = (outputs.len() == 1).then(|| outputs[0].to_string());
@@ -2139,5 +2151,16 @@ mod tests {
             })
             .unwrap();
         assert_eq!(composite.primary_values().unwrap(), &[2.0, 3.0, 4.0]);
+        let composite_again = engine
+            .execute(OperationRequest::Composite {
+                definitions: &definitions,
+                outputs: &outputs,
+                context: &context,
+                data_revision: Some(1),
+                cache_scope: Some("AAA@1d"),
+            })
+            .unwrap();
+        assert_eq!(composite_again.primary_values().unwrap(), &[2.0, 3.0, 4.0]);
+        assert_eq!(engine.composite_plans.len(), 1);
     }
 }

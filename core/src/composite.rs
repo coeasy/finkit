@@ -108,6 +108,32 @@ impl CompositeDefinition {
     }
 }
 
+/// Reusable, validated composite graph plan.
+///
+/// The plan owns the graph definition and requested outputs so callers can
+/// execute the same graph repeatedly without rebuilding the definition map on
+/// every batch, range, or streaming request.
+#[derive(Debug, Clone)]
+pub struct CompiledCompositePlan {
+    definitions: Vec<CompositeDefinition>,
+    outputs: Vec<String>,
+    signature: u64,
+}
+
+impl CompiledCompositePlan {
+    /// Stable graph identity used by result caches and provenance.
+    #[must_use]
+    pub const fn signature(&self) -> u64 {
+        self.signature
+    }
+
+    /// Requested output names in deterministic order.
+    #[must_use]
+    pub fn outputs(&self) -> &[String] {
+        &self.outputs
+    }
+}
+
 /// Dependency-aware composite-indicator evaluator.
 #[derive(Clone)]
 pub struct CompositeEngine {
@@ -204,6 +230,42 @@ impl CompositeEngine {
         self.cache_clock = 0;
     }
 
+    /// Compile and validate a reusable composite graph plan.
+    pub fn compile(
+        &self,
+        definitions: &[CompositeDefinition],
+        outputs: &[&str],
+    ) -> FactorResult<CompiledCompositePlan> {
+        let mut names = BTreeMap::new();
+        for definition in definitions {
+            if definition.name.trim().is_empty() {
+                return Err(FactorError::InvalidParameter(
+                    "composite definition name must not be empty".to_string(),
+                ));
+            }
+            if names.insert(definition.name.as_str(), definition).is_some() {
+                return Err(FactorError::InvalidParameter(format!(
+                    "duplicate composite definition: {}",
+                    definition.name
+                )));
+            }
+        }
+        for output in outputs {
+            if !names.contains_key(output) {
+                return Err(FactorError::UnknownFactor((*output).to_string()));
+            }
+        }
+        let mut visiting = Vec::new();
+        for output in outputs {
+            validate_named_graph(output, &names, &mut visiting)?;
+        }
+        Ok(CompiledCompositePlan {
+            definitions: definitions.to_vec(),
+            outputs: outputs.iter().map(|name| (*name).to_string()).collect(),
+            signature: graph_signature(definitions, outputs),
+        })
+    }
+
     /// Evaluate and cache a graph snapshot for an explicit data revision.
     ///
     /// The caller owns revision management. Reusing a revision for changed
@@ -231,15 +293,27 @@ impl CompositeEngine {
         context: &BorrowedFactorContext<'_>,
         data_revision: u64,
     ) -> FactorResult<BTreeMap<String, Vec<f64>>> {
+        let plan = self.compile(definitions, outputs)?;
+        self.evaluate_cached_scoped_compiled(scope, &plan, context, data_revision)
+    }
+
+    /// Evaluate and cache a previously compiled graph plan.
+    pub fn evaluate_cached_scoped_compiled(
+        &mut self,
+        scope: &str,
+        plan: &CompiledCompositePlan,
+        context: &BorrowedFactorContext<'_>,
+        data_revision: u64,
+    ) -> FactorResult<BTreeMap<String, Vec<f64>>> {
         let key = CompositeCacheKey {
             scope: scope.to_string(),
             data_revision,
-            graph_signature: graph_signature(definitions, outputs),
+            graph_signature: plan.signature,
         };
         if let Some(result) = self.get_cached_result(&key) {
             return Ok(result);
         }
-        let result = self.evaluate_borrowed(definitions, outputs, context)?;
+        let result = self.evaluate_compiled(plan, context)?;
         if self.cache.len() >= self.cache_capacity.max(1) {
             if let Some(oldest) = self
                 .cache
@@ -291,36 +365,30 @@ impl CompositeEngine {
         outputs: &[&str],
         context: &BorrowedFactorContext<'_>,
     ) -> FactorResult<BTreeMap<String, Vec<f64>>> {
-        let mut definitions_by_name = BTreeMap::new();
-        for definition in definitions {
-            if definition.name.trim().is_empty() {
-                return Err(FactorError::InvalidParameter(
-                    "composite definition name must not be empty".to_string(),
-                ));
-            }
-            if definitions_by_name
-                .insert(definition.name.as_str(), definition)
-                .is_some()
-            {
-                return Err(FactorError::InvalidParameter(format!(
-                    "duplicate composite definition: {}",
-                    definition.name
-                )));
-            }
-        }
-        let definitions = definitions_by_name;
+        let plan = self.compile(definitions, outputs)?;
+        self.evaluate_compiled(&plan, context)
+    }
+
+    /// Evaluate a previously compiled graph without rebuilding its definition map.
+    pub fn evaluate_compiled(
+        &self,
+        plan: &CompiledCompositePlan,
+        context: &BorrowedFactorContext<'_>,
+    ) -> FactorResult<BTreeMap<String, Vec<f64>>> {
+        let definitions = plan
+            .definitions
+            .iter()
+            .map(|definition| (definition.name.as_str(), definition))
+            .collect::<BTreeMap<_, _>>();
         let mut cache = BTreeMap::new();
         let mut visiting = Vec::new();
-        for &output in outputs {
+        for output in &plan.outputs {
             self.eval_named(output, &definitions, context, &mut cache, &mut visiting)?;
         }
-        Ok(outputs
+        Ok(plan
+            .outputs
             .iter()
-            .filter_map(|name| {
-                cache
-                    .get(*name)
-                    .map(|values| ((*name).to_string(), values.clone()))
-            })
+            .filter_map(|name| cache.get(name).map(|values| (name.clone(), values.clone())))
             .collect())
     }
 
@@ -671,7 +739,8 @@ impl Default for CompositeEngine {
     }
 }
 
-fn graph_signature(definitions: &[CompositeDefinition], outputs: &[&str]) -> u64 {
+/// Calculate the stable graph signature used by compiled plans and caches.
+pub fn graph_signature(definitions: &[CompositeDefinition], outputs: &[&str]) -> u64 {
     let signature = format!("{definitions:?}|{outputs:?}");
     let mut hash = 0xcbf29ce484222325u64;
     for byte in signature.as_bytes() {
@@ -679,6 +748,42 @@ fn graph_signature(definitions: &[CompositeDefinition], outputs: &[&str]) -> u64
         hash = hash.wrapping_mul(0x100000001b3);
     }
     hash
+}
+
+fn validate_named_graph<'a>(
+    name: &str,
+    definitions: &BTreeMap<&'a str, &'a CompositeDefinition>,
+    visiting: &mut Vec<String>,
+) -> FactorResult<()> {
+    if let Some(position) = visiting.iter().position(|current| current == name) {
+        let mut cycle = visiting[position..].to_vec();
+        cycle.push(name.to_string());
+        return Err(FactorError::DependencyCycle(cycle));
+    }
+    let definition = definitions
+        .get(name)
+        .ok_or_else(|| FactorError::UnknownFactor(name.to_string()))?;
+    visiting.push(name.to_string());
+    validate_expression_refs(&definition.expression, definitions, visiting)?;
+    visiting.pop();
+    Ok(())
+}
+
+fn validate_expression_refs<'a>(
+    expression: &CompositeExpr,
+    definitions: &BTreeMap<&'a str, &'a CompositeDefinition>,
+    visiting: &mut Vec<String>,
+) -> FactorResult<()> {
+    match expression {
+        CompositeExpr::Ref(name) => validate_named_graph(name, definitions, visiting),
+        CompositeExpr::Call { inputs, .. } | CompositeExpr::Op { inputs, .. } => {
+            for input in inputs {
+                validate_expression_refs(input, definitions, visiting)?;
+            }
+            Ok(())
+        }
+        CompositeExpr::Series(_) | CompositeExpr::Constant(_) => Ok(()),
+    }
 }
 
 fn period(params: &[f64], default: usize) -> FactorResult<usize> {
