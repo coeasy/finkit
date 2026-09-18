@@ -155,8 +155,8 @@ pub fn adosc(
             fast_ema = c;
             slow_ema = c;
         } else {
-            fast_ema = c * fast_k + fast_ema * fast_one_k;
-            slow_ema = c * slow_k + slow_ema * slow_one_k;
+            fast_ema = fast_ema.mul_add(fast_one_k, c * fast_k);
+            slow_ema = slow_ema.mul_add(slow_one_k, c * slow_k);
         }
         if i >= slow_period - 1 {
             output_slice[i] = fast_ema - slow_ema;

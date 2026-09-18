@@ -19,7 +19,11 @@ static int tests_failed = 0;
 
 #define TEST(name) std::cout << "[TEST] " << name << "... ";
 #define PASS() do { tests_passed++; std::cout << "PASSED" << std::endl; } while(0)
-#define FAIL(msg) do { tests_failed++; std::cout << "FAILED: " << msg << std::endl; } while(0)
+#define FAIL(msg) do { \
+    tests_failed++; \
+    std::cout << "FAILED: " << msg << std::endl; \
+    std::cerr << "::error title=C++ binding test::" << msg << std::endl; \
+} while(0)
 #define ASSERT(cond, msg) do { if (!(cond)) { FAIL(msg); return; } } while(0)
 #define ASSERT_EQ(a, b, msg) ASSERT((a) == (b), msg)
 #define ASSERT_NEAR(a, b, eps, msg) ASSERT(std::abs((a) - (b)) < (eps), msg)
@@ -627,6 +631,17 @@ void test_talib_numeric_contract() {
             for (size_t point = 0; point < expected_output.second.size(); ++point) {
                 const auto& want = expected_output.second[point];
                 const auto& got = actual_output->second[point];
+                if (got.is_null != want.is_null ||
+                    (!want.is_null && std::abs(got.value - want.value) >
+                        vector.atol + vector.rtol * std::abs(want.value))) {
+                    std::cerr << "::error title=C++ numeric contract::"
+                              << vector.operation << "/" << expected_output.first
+                              << "[" << point << "]: expected "
+                              << (want.is_null ? "null" : std::to_string(want.value))
+                              << " got "
+                              << (got.is_null ? "null" : std::to_string(got.value))
+                              << std::endl;
+                }
                 ASSERT(got.is_null == want.is_null,
                        std::string("null mismatch for ") + expected_output.first + " in " + vector.operation);
                 if (!want.is_null) {

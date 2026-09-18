@@ -1,8 +1,6 @@
 use crate::error::{Result, TaError};
 use crate::math::linear::{linreg, linreg_angle, linreg_intercept, linreg_slope};
 use crate::utils::{init_output, validate_input};
-use core::mem::MaybeUninit;
-use core::slice;
 use ndarray::Array1;
 
 /// Mean Absolute Deviation (AVGDEV)
@@ -425,58 +423,7 @@ pub fn correlation(input_a: &[f64], input_b: &[f64], timeperiod: usize) -> Resul
     }
     validate_input(input_a.len(), timeperiod)?;
 
-    let len = input_a.len();
-    let mut output = init_output(len);
-
-    let n = timeperiod as f64;
-
-    // Initialize accumulators with first window
-    let mut sum_a: f64 = 0.0;
-    let mut sum_b: f64 = 0.0;
-    let mut sum_ab: f64 = 0.0;
-    let mut sum_a2: f64 = 0.0;
-    let mut sum_b2: f64 = 0.0;
-    for j in 0..timeperiod {
-        let a = input_a[j];
-        let b = input_b[j];
-        sum_a += a;
-        sum_b += b;
-        sum_ab += a * b;
-        sum_a2 += a * a;
-        sum_b2 += b * b;
-    }
-
-    // correlation = (n*sum_ab - sum_a*sum_b) / sqrt((n*sum_a2 - sum_a^2)*(n*sum_b2 - sum_b^2))
-    let numerator = n * sum_ab - sum_a * sum_b;
-    let denom_a = n * sum_a2 - sum_a * sum_a;
-    let denom_b = n * sum_b2 - sum_b * sum_b;
-    if denom_a > 1e-15 && denom_b > 1e-15 {
-        let corr = numerator / (denom_a * denom_b).sqrt();
-        output[timeperiod - 1] = corr.clamp(-1.0, 1.0);
-    }
-
-    // Subsequent windows — incremental O(1) update per step
-    for i in timeperiod..len {
-        let old_a = input_a[i - timeperiod];
-        let old_b = input_b[i - timeperiod];
-        let new_a = input_a[i];
-        let new_b = input_b[i];
-        sum_a += new_a - old_a;
-        sum_b += new_b - old_b;
-        sum_ab += new_a * new_b - old_a * old_b;
-        sum_a2 += new_a * new_a - old_a * old_a;
-        sum_b2 += new_b * new_b - old_b * old_b;
-
-        let numerator = n * sum_ab - sum_a * sum_b;
-        let denom_a = n * sum_a2 - sum_a * sum_a;
-        let denom_b = n * sum_b2 - sum_b * sum_b;
-        if denom_a > 1e-15 && denom_b > 1e-15 {
-            let corr = numerator / (denom_a * denom_b).sqrt();
-            output[i] = corr.clamp(-1.0, 1.0);
-        }
-    }
-
-    Ok(output)
+    crate::math::rolling_stats::correlation(input_a, input_b, timeperiod).map(Array1::from_vec)
 }
 
 /// StdDev (标准差)
@@ -509,46 +456,7 @@ pub fn std_dev(input: &[f64], timeperiod: usize, nb_dev: f64) -> Result<Array1<f
     }
     validate_input(input.len(), timeperiod)?;
 
-    let len = input.len();
-    let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);
-    unsafe { raw_output.set_len(len) };
-    let output = unsafe { slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<f64>(), len) };
-    output[..timeperiod - 1].fill(f64::NAN);
-    let n = timeperiod as f64;
-    let inv_n = 1.0 / n;
-
-    // 总体标准差（÷n），匹配 TA-Lib TA_STDDEV.c
-    let mut sum: f64 = 0.0;
-    let mut sum_sq: f64 = 0.0;
-    for i in 0..timeperiod {
-        let x = input[i];
-        sum += x;
-        sum_sq += x * x;
-    }
-    unsafe {
-        let output_ptr = output.as_mut_ptr();
-        let input_ptr = input.as_ptr();
-        let mean = sum * inv_n;
-        let m2 = sum_sq - sum * mean;
-        *output_ptr.add(timeperiod - 1) = (m2 * inv_n).max(0.0).sqrt() * nb_dev;
-
-        for i in timeperiod..len {
-            let old = *input_ptr.add(i - timeperiod);
-            let new = *input_ptr.add(i);
-            sum += new - old;
-            sum_sq += new * new - old * old;
-            let m = sum * inv_n;
-            let m2 = sum_sq - sum * m;
-            *output_ptr.add(i) = (m2 * inv_n).max(0.0).sqrt() * nb_dev;
-        }
-    }
-
-    let ptr = raw_output.as_mut_ptr().cast::<f64>();
-    let capacity = raw_output.capacity();
-    core::mem::forget(raw_output);
-    Ok(Array1::from_vec(unsafe {
-        Vec::from_raw_parts(ptr, len, capacity)
-    }))
+    crate::math::rolling_stats::stddev(input, timeperiod, nb_dev).map(Array1::from_vec)
 }
 
 /// Var (方差)
@@ -581,38 +489,13 @@ pub fn var(input: &[f64], period: usize, nb_dev: f64) -> Result<Array1<f64>> {
     }
     validate_input(input.len(), period)?;
 
-    let len = input.len();
-    let mut output = init_output(len);
-
-    let n = period as f64;
-    // 总体方差（除以 n），匹配 TA-Lib TA_VAR.c: variance = m2 / n
-    // nb_dev 作为缩放因子作用于结果（与 TA-Lib 一致）。
-    let inv_n = 1.0 / n;
-
-    let mut sum: f64 = 0.0;
-    let mut sum_sq: f64 = 0.0;
-    for i in 0..period {
-        let x = input[i];
-        sum += x;
-        sum_sq += x * x;
+    let mut output = crate::math::rolling_stats::variance(input, period)?;
+    if nb_dev != 1.0 {
+        for value in &mut output[period - 1..] {
+            *value *= nb_dev;
+        }
     }
-    let mean = sum * inv_n;
-    // m2 = sum_sq - sum * mean 等价于 sum((x - mean)^2)
-    let m2 = sum_sq - sum * mean;
-    output[period - 1] = (m2 * inv_n * nb_dev).max(0.0);
-
-    // 滑动窗口：O(1) 增量更新
-    for i in period..len {
-        let old = input[i - period];
-        let new = input[i];
-        sum += new - old;
-        sum_sq += new * new - old * old;
-        let m = sum * inv_n;
-        let m2 = sum_sq - sum * m;
-        output[i] = (m2 * inv_n * nb_dev).max(0.0);
-    }
-
-    Ok(output)
+    Ok(Array1::from_vec(output))
 }
 
 /// 线性回归 (Linear Regression)

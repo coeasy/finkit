@@ -278,8 +278,8 @@ pub fn adosc_into(
                 fast_ema = cumulative;
                 slow_ema = cumulative;
             } else {
-                fast_ema = cumulative * fast_k + fast_ema * fast_one_k;
-                slow_ema = cumulative * slow_k + slow_ema * slow_one_k;
+                fast_ema = fast_ema.mul_add(fast_one_k, cumulative * fast_k);
+                slow_ema = slow_ema.mul_add(slow_one_k, cumulative * slow_k);
             }
             *output_ptr.add(i) = if i >= lookback {
                 fast_ema - slow_ema
@@ -299,11 +299,6 @@ fn adosc_default_3_10_into(
     volume: &[f64],
     output: &mut [f64],
 ) -> Result<()> {
-    #[cfg(all(feature = "std", target_arch = "x86_64"))]
-    if crate::math::simd_ops::has_avx2() {
-        return unsafe { adosc_default_3_10_avx2(high, low, close, volume, output) };
-    }
-
     unsafe {
         let high_ptr = high.as_ptr();
         let low_ptr = low.as_ptr();
@@ -330,8 +325,8 @@ fn adosc_default_3_10_into(
                 let multiplier = ((c - l) - (h - c)) / range;
                 cumulative += multiplier * *volume_ptr.add(i);
             }
-            fast_ema = cumulative * 0.5 + fast_ema * 0.5;
-            slow_ema = cumulative * (2.0 / 11.0) + slow_ema * (1.0 - 2.0 / 11.0);
+            fast_ema = fast_ema.mul_add(0.5, cumulative * 0.5);
+            slow_ema = slow_ema.mul_add(1.0 - 2.0 / 11.0, cumulative * (2.0 / 11.0));
         }
         *output_ptr.add(9) = fast_ema - slow_ema;
 
@@ -343,8 +338,8 @@ fn adosc_default_3_10_into(
                 let c = *close_ptr.add(i);
                 cumulative += (((c - l) - (h - c)) / range) * *volume_ptr.add(i);
             }
-            fast_ema = cumulative * 0.5 + fast_ema * 0.5;
-            slow_ema = cumulative * (2.0 / 11.0) + slow_ema * (1.0 - 2.0 / 11.0);
+            fast_ema = fast_ema.mul_add(0.5, cumulative * 0.5);
+            slow_ema = slow_ema.mul_add(1.0 - 2.0 / 11.0, cumulative * (2.0 / 11.0));
             *output_ptr.add(i) = fast_ema - slow_ema;
         }
     }
@@ -354,6 +349,7 @@ fn adosc_default_3_10_into(
 #[cfg(all(feature = "std", target_arch = "x86_64"))]
 #[target_feature(enable = "avx2")]
 #[allow(unsafe_op_in_unsafe_fn)]
+#[allow(dead_code)] // Kept as an opt-in kernel until the FMA parity path is dispatched.
 unsafe fn adosc_default_3_10_avx2(
     high: &[f64],
     low: &[f64],
@@ -395,8 +391,8 @@ unsafe fn adosc_default_3_10_avx2(
                 fast_ema = cumulative;
                 slow_ema = cumulative;
             } else {
-                fast_ema = cumulative * 0.5 + fast_ema * 0.5;
-                slow_ema = cumulative * (2.0 / 11.0) + slow_ema * (1.0 - 2.0 / 11.0);
+                fast_ema = fast_ema.mul_add(0.5, cumulative * 0.5);
+                slow_ema = slow_ema.mul_add(1.0 - 2.0 / 11.0, cumulative * (2.0 / 11.0));
             }
             if i >= 9 {
                 *output_ptr.add(i) = fast_ema - slow_ema;
@@ -416,8 +412,8 @@ unsafe fn adosc_default_3_10_avx2(
             fast_ema = cumulative;
             slow_ema = cumulative;
         } else {
-            fast_ema = cumulative * 0.5 + fast_ema * 0.5;
-            slow_ema = cumulative * (2.0 / 11.0) + slow_ema * (1.0 - 2.0 / 11.0);
+            fast_ema = fast_ema.mul_add(0.5, cumulative * 0.5);
+            slow_ema = slow_ema.mul_add(1.0 - 2.0 / 11.0, cumulative * (2.0 / 11.0));
         }
         if i >= 9 {
             *output_ptr.add(i) = fast_ema - slow_ema;
