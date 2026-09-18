@@ -289,10 +289,10 @@ talib_0_7_1
 
 截至 2026-09-18，本工作树已实际验证：
 
-- `cargo +1.98.1 test --workspace --offline --quiet`：全 workspace 测试通过；其中核心库为 `2934 passed, 0 failed, 1 ignored`，新增 Formula terminal contract 为 `1 passed, 0 failed`，DZH compatibility 为 `43 passed, 0 failed`，CLI schema 为 `3 passed, 0 failed`，其余 workspace test targets 也无失败。
+- `cargo +1.98.1 test --workspace --offline --quiet`：全 workspace 测试通过；其中核心库为 `2936 passed, 0 failed, 1 ignored`，新增 Formula terminal contract 为 `1 passed, 0 failed`，DZH compatibility 为 `43 passed, 0 failed`，CLI schema 为 `3 passed, 0 failed`，其余 workspace test targets 也无失败。
 - `cargo +1.98.1 test -p finkit --test formula_compatibility_boundary --offline --quiet`：`1 passed, 0 failed`，确认 host-required、drawing、control-flow/streaming 和 Pine plot 边界状态。
 - 定向验证：`finkit` operation tests `19 passed`、Composite tests `11 passed`、`finkit-ffi-common` library tests `28 passed`、C ABI library tests `23 passed`。
-- 最新定向验证：`finkit` stateful Composite tests `3 passed`、stateful Factor tests `8 passed`；`finkit-ffi-common` library tests `53 passed`，包含 161 个 TA-Lib profile 名称的 dispatcher smoke、参数目录、非默认 `matype` 数值测试、绝对下标与 `HT_TRENDMODE` warm-up 边界测试、Factor/Composite dirty-range 与 stream-checkpoint conformance vector、无版本 profile 拒绝测试、Formula/Factor/Composite 共用 conformance vector 和 `formula.compatibility.v1` capability report；C ABI tests `27 passed`，并确认 catalog 参数、Factor/Composite streaming checkpoint 和 Formula compatibility report 通过 ABI 导出。stateful Factor/Composite 的跨语言 conformance vector 也已通过，包含续传与未知 mode 拒绝。
+- 最新定向验证：`finkit` stateful Composite tests `4 passed`、stateful Factor tests `9 passed`；`finkit-ffi-common` library tests `53 passed`，包含 161 个 TA-Lib profile 名称的 dispatcher smoke、参数目录、非默认 `matype` 数值测试、绝对下标与 `HT_TRENDMODE` warm-up 边界测试、Factor/Composite dirty-range 与 stream-checkpoint conformance vector、无版本 profile 拒绝测试、Formula/Factor/Composite 共用 conformance vector 和 `formula.compatibility.v1` capability report；C ABI tests `27 passed`，并确认 catalog 参数、Factor/Composite streaming checkpoint 和 Formula compatibility report 通过 ABI 导出。stateful Factor/Composite 的跨语言 conformance vector 也已通过，包含续传与未知 mode 拒绝。
 - `cargo +1.98.1 check -p finkit-python -p finkit-node -p finkit-go -p finkit-java -p finkit-dotnet -p finkit-ffi --offline`：通过。
 - 61 个 candlestick operation 在 `talib_0_7_1` profile 下逐项真实分派并返回等长结果。
 - `cargo +1.98.1 fmt --all` 已执行。
