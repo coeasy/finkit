@@ -5,7 +5,8 @@
 //! to use typed indicator functions or zero-copy formula APIs.
 
 use finkit::formula::{
-    inspect_formula_compatibility, FormulaContext, FormulaDialect, FormulaEngine, FormulaTerminal,
+    inspect_formula_compatibility, DrawCommand, DrawResult, FormulaContext, FormulaDialect,
+    FormulaEngine, FormulaTerminal,
 };
 use ndarray::Array1;
 use serde_json::{json, Value};
@@ -13,6 +14,9 @@ use std::collections::BTreeMap;
 
 /// Version of the cross-language formula result envelope.
 pub const FORMULA_CONTRACT_SCHEMA_VERSION: u16 = 1;
+
+/// Version of the normalized drawing payload embedded in the Formula result.
+pub const FORMULA_DRAW_CONTRACT_SCHEMA_VERSION: u16 = 1;
 
 /// Version of the language-neutral formula compatibility report envelope.
 pub const FORMULA_COMPATIBILITY_SCHEMA_VERSION: u16 = 1;
@@ -69,6 +73,13 @@ pub fn evaluate_formula_json(
     let result = engine
         .eval_multi_with_dialect(source, dialect, &mut context)
         .map_err(|error| error.to_string())?;
+    let draw = {
+        let draw = context.draw_commands.borrow();
+        json!({
+            "schema_version": FORMULA_DRAW_CONTRACT_SCHEMA_VERSION,
+            "commands": draw_commands_json(&draw),
+        })
+    };
     let mut values = result
         .outputs
         .into_iter()
@@ -86,6 +97,7 @@ pub fn evaluate_formula_json(
         "dialect": dialect.as_str(),
         "primary": "__PRIMARY__",
         "values": serialized_values,
+        "draw": draw,
     }))
     .map_err(|error| error.to_string())
 }
@@ -105,6 +117,185 @@ fn nullable_series(values: &[f64]) -> Value {
     )
 }
 
+fn nullable_array(values: &ndarray::Array1<f64>) -> Value {
+    nullable_series(
+        values
+            .as_slice()
+            .expect("formula drawing arrays must be contiguous"),
+    )
+}
+
+fn draw_commands_json(draw: &DrawResult) -> Vec<Value> {
+    draw.commands
+        .iter()
+        .map(|command| match command {
+            DrawCommand::Text {
+                condition,
+                price,
+                text,
+                color,
+            } => json!({
+                "type": "Text",
+                "condition": nullable_array(condition),
+                "price": nullable_array(price),
+                "text": text,
+                "color": color,
+            }),
+            DrawCommand::Icon {
+                condition,
+                price,
+                icon_type,
+                color,
+            } => json!({
+                "type": "Icon",
+                "condition": nullable_array(condition),
+                "price": nullable_array(price),
+                "iconType": icon_type,
+                "color": color,
+            }),
+            DrawCommand::StickLine {
+                condition,
+                price1,
+                price2,
+                width,
+                empty,
+                color,
+            } => json!({
+                "type": "StickLine",
+                "condition": nullable_array(condition),
+                "price1": nullable_array(price1),
+                "price2": nullable_array(price2),
+                "width": width,
+                "empty": empty,
+                "color": color,
+            }),
+            DrawCommand::Line {
+                cond1,
+                price1,
+                cond2,
+                price2,
+                expand,
+                color,
+            } => json!({
+                "type": "Line",
+                "cond1": nullable_array(cond1),
+                "price1": nullable_array(price1),
+                "cond2": nullable_array(cond2),
+                "price2": nullable_array(price2),
+                "expand": expand,
+                "color": color,
+            }),
+            DrawCommand::Band {
+                val1,
+                color1,
+                val2,
+                color2,
+            } => json!({
+                "type": "Band",
+                "val1": nullable_array(val1),
+                "color1": color1,
+                "val2": nullable_array(val2),
+                "color2": color2,
+            }),
+            DrawCommand::KLine {
+                open,
+                high,
+                low,
+                close,
+            } => json!({
+                "type": "KLine",
+                "open": nullable_array(open),
+                "high": nullable_array(high),
+                "low": nullable_array(low),
+                "close": nullable_array(close),
+            }),
+            DrawCommand::Rect {
+                x1,
+                y1,
+                x2,
+                y2,
+                color,
+            } => json!({
+                "type": "Rect",
+                "x1": nullable_array(x1),
+                "y1": nullable_array(y1),
+                "x2": nullable_array(x2),
+                "y2": nullable_array(y2),
+                "color": color,
+            }),
+            DrawCommand::FillRgn {
+                cond,
+                price1,
+                price2,
+                color,
+            } => json!({
+                "type": "FillRgn",
+                "cond": nullable_array(cond),
+                "price1": nullable_array(price1),
+                "price2": nullable_array(price2),
+                "color": color,
+            }),
+            DrawCommand::PartLine { cond, price, color } => json!({
+                "type": "PartLine",
+                "cond": nullable_array(cond),
+                "price": nullable_array(price),
+                "color": color,
+            }),
+            DrawCommand::PolyLine { cond, price, color } => json!({
+                "type": "PolyLine",
+                "cond": nullable_array(cond),
+                "price": nullable_array(price),
+                "color": color,
+            }),
+            DrawCommand::Background { cond, color } => json!({
+                "type": "Background",
+                "cond": nullable_array(cond),
+                "color": color,
+            }),
+            DrawCommand::SlopeLine {
+                cond1,
+                price1,
+                cond2,
+                price2,
+                color,
+            } => json!({
+                "type": "SlopeLine",
+                "cond1": nullable_array(cond1),
+                "price1": nullable_array(price1),
+                "cond2": nullable_array(cond2),
+                "price2": nullable_array(price2),
+                "color": color,
+            }),
+            DrawCommand::TextFix { x, y, text, color } => json!({
+                "type": "TextFix",
+                "x": x,
+                "y": y,
+                "text": text,
+                "color": color,
+            }),
+            DrawCommand::Number {
+                condition,
+                price,
+                number,
+                precision,
+                color,
+            } => json!({
+                "type": "Number",
+                "condition": nullable_array(condition),
+                "price": nullable_array(price),
+                "number": nullable_array(number),
+                "precision": precision,
+                "color": color,
+            }),
+            DrawCommand::VertLine { condition, color } => json!({
+                "type": "VertLine",
+                "condition": nullable_array(condition),
+                "color": color,
+            }),
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -120,6 +311,8 @@ mod tests {
         assert_eq!(json["schema_version"], 1);
         assert_eq!(json["primary"], "__PRIMARY__");
         assert_eq!(json["values"]["__PRIMARY__"][1], Value::Null);
+        assert_eq!(json["draw"]["schema_version"], 1);
+        assert_eq!(json["draw"]["commands"], serde_json::json!([]));
     }
 
     #[test]
@@ -158,6 +351,32 @@ mod tests {
             json["values"]["__PRIMARY__"],
             serde_json::json!([1.0, 2.0, 3.0])
         );
+    }
+
+    #[test]
+    fn contract_serializes_numeric_drawing_payload_for_chart_adapters() {
+        let payload = evaluate_formula_json(
+            "DRAWICON(CLOSE > OPEN, CLOSE, 1)",
+            "tdx",
+            &[1.0, 1.0, 1.0],
+            &[2.0, 2.0, 2.0],
+            &[0.0, 0.0, 0.0],
+            &[1.0, 2.0, 1.0],
+            &[10.0, 20.0, 30.0],
+        )
+        .unwrap();
+        let json: Value = serde_json::from_str(&payload).unwrap();
+        assert_eq!(json["draw"]["schema_version"], 1);
+        assert_eq!(json["draw"]["commands"].as_array().unwrap().len(), 1);
+        assert_eq!(
+            json["draw"]["commands"][0]["condition"],
+            serde_json::json!([0.0, 1.0, 0.0])
+        );
+        assert_eq!(
+            json["draw"]["commands"][0]["price"],
+            serde_json::json!([1.0, 2.0, 1.0])
+        );
+        assert_eq!(json["draw"]["commands"][0]["iconType"], 1);
     }
 
     #[test]

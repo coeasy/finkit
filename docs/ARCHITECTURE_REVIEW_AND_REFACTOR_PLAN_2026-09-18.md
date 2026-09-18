@@ -278,6 +278,7 @@ talib_0_7_1
 - 修正 Pine `plot`/`hline` 的 capability 识别：Pine mapper 使用 `AstNode::Output` 表示视觉输出，compatibility report 现在会将其纳入绘图能力，而不是只识别 TDX `Draw*` 节点。
 - Formula grammar 的 identifier 已改为 Unicode XID 规则，中文变量名可进入同一 AST/执行器；新增 `core/tests/formula_corpus.rs` 执行全部已登记国内公式语料并校验声明输出列和长度，避免“语料存在但未运行”。
 - Lightweight Charts adapter 已修复增量 payload 中动态新增 line 不创建 series 的问题；`visualization/frontend/lightweight-charts-adapter.test.mjs` 已覆盖 null/warm-up 空白点、markers、viewport、增量更新、完整替换和 schema 拒绝。
+- 统一 `formulaEvalContractJson` 现在携带版本化的 `draw` payload：所有 `DrawCommand` 的数值序列、颜色、文本、图标和几何参数均转为跨语言 JSON；非有限数值统一为 `null`，避免绑定各自序列化造成差异，并为 Lightweight Charts 前端适配器提供唯一上游绘图契约。该改动打通了绘图数据出口，但不宣称已完成浏览器渲染器或全部终端绘图语义。
 - TA-Lib `MINMAX` 与 `MINMAXINDEX` 已加入 registry、core multi-output dispatcher、TA-Lib FFI profile 和 operation catalog；输出名固定为 `MIN/MAX` 与 `MININDEX/MAXINDEX`，并有 JSON execution tests。
 - TA-Lib profile-only catalog 集中维护 101 个名称；与 Core registry 合并后形成 161 个可执行 dispatcher 名称。两层边界均由 `tests/contracts/talib_coverage_matrix_v1.json` 声明，避免把注册、可执行 smoke 和数值参考混为一谈。profile-only 条目公开输入形状、输出名、默认参数和约束，避免跨语言各自维护名称/参数表。
 - TA-Lib golden 生成器现在默认拒绝 Python 包版本漂移：当前 corpus 要求 `0.8.0`，只有显式 `--allow-version-mismatch` 才能生成本地诊断文件，避免较旧或未验证的环境静默覆盖正式参考基线。
@@ -295,7 +296,7 @@ talib_0_7_1
 - `cargo +1.98.1 test --workspace --offline --quiet`：本轮全 workspace 测试通过，所有 test targets 均无失败；Node binding 测试期间仍出现宿主 Node-API 符号加载告警，因此这不等同于真实 Node 宿主加载验证。
 - `cargo +1.98.1 test -p finkit --test formula_compatibility_boundary --offline --quiet`：`1 passed, 0 failed`，确认 host-required、drawing、control-flow/streaming 和 Pine plot 边界状态。
 - 定向验证：`finkit` operation tests `19 passed`、Composite tests `11 passed`、`finkit-ffi-common` library tests `28 passed`、C ABI library tests `23 passed`。
-- 最新定向验证：`finkit` stateful Formula tests `5 passed`、stateful Composite tests `4 passed`、stateful Factor tests `9 passed`；`finkit-ffi-common` library tests `56 passed`，包含 161 个 TA-Lib profile 名称的 dispatcher smoke、参数目录、非默认 `matype` 数值测试、绝对下标与 `HT_TRENDMODE` warm-up 边界测试、Formula/Factor/Composite dirty-range 与 stream-checkpoint conformance vector、无版本 profile 拒绝测试和 `formula.compatibility.v1` capability report；C ABI tests `27 passed`，并确认 catalog 参数、Factor/Composite streaming checkpoint、Formula compatibility report 和 Formula stateful stream 通过 ABI 导出。stateful Formula/Factor/Composite 的跨语言 conformance vector 也已通过，包含续传与未知 mode 拒绝。
+- 最新定向验证：`finkit` stateful Formula tests `5 passed`、stateful Composite tests `4 passed`、stateful Factor tests `9 passed`；`finkit-ffi-common` library tests `57 passed`，包含 161 个 TA-Lib profile 名称的 dispatcher smoke、参数目录、非默认 `matype` 数值测试、绝对下标与 `HT_TRENDMODE` warm-up 边界测试、Formula/Factor/Composite dirty-range 与 stream-checkpoint conformance vector、无版本 profile 拒绝测试、`formula.compatibility.v1` capability report 和版本化绘图 JSON payload；C ABI tests `27 passed`，并确认 catalog 参数、Factor/Composite streaming checkpoint、Formula compatibility report 和 Formula stateful stream 通过 ABI 导出。stateful Formula/Factor/Composite 的跨语言 conformance vector 也已通过，包含续传与未知 mode 拒绝。
 - `cargo +1.98.1 check -p finkit-python -p finkit-node -p finkit-go -p finkit-java -p finkit-dotnet -p finkit-ffi --offline`：通过。
 - 61 个 candlestick operation 在 `talib_0_7_1` profile 下逐项真实分派并返回等长结果。
 - `cargo +1.98.1 fmt --all` 已执行。
