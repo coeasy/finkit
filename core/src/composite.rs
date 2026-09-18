@@ -138,6 +138,12 @@ impl CompiledCompositePlan {
 #[derive(Clone)]
 pub struct CompositeEngine {
     functions: BTreeMap<String, CompositeFn>,
+    /// Compiled graph plans are reused across cache revisions and scopes.
+    /// Keeping them separate from result snapshots prevents repeated cached
+    /// evaluations from rebuilding dependency maps and cycle checks.
+    compiled_plans: BTreeMap<u64, CompiledCompositePlan>,
+    compiled_plan_cache_hits: u64,
+    compiled_plan_cache_misses: u64,
     cache: BTreeMap<CompositeCacheKey, CompositeCacheEntry>,
     cache_capacity: usize,
     cache_clock: u64,
@@ -201,6 +207,9 @@ impl CompositeEngine {
             ));
         }
         self.functions.insert(name.to_ascii_lowercase(), function);
+        self.compiled_plans.clear();
+        self.compiled_plan_cache_hits = 0;
+        self.compiled_plan_cache_misses = 0;
         self.cache.clear();
         self.cache_clock = 0;
         Ok(())
@@ -293,7 +302,16 @@ impl CompositeEngine {
         context: &BorrowedFactorContext<'_>,
         data_revision: u64,
     ) -> FactorResult<BTreeMap<String, Vec<f64>>> {
-        let plan = self.compile(definitions, outputs)?;
+        let signature = graph_signature(definitions, outputs);
+        let plan = if let Some(plan) = self.compiled_plans.get(&signature) {
+            self.compiled_plan_cache_hits = self.compiled_plan_cache_hits.saturating_add(1);
+            plan.clone()
+        } else {
+            self.compiled_plan_cache_misses = self.compiled_plan_cache_misses.saturating_add(1);
+            let plan = self.compile(definitions, outputs)?;
+            self.compiled_plans.insert(signature, plan.clone());
+            plan
+        };
         self.evaluate_cached_scoped_compiled(scope, &plan, context, data_revision)
     }
 
@@ -732,6 +750,9 @@ impl Default for CompositeEngine {
     fn default() -> Self {
         Self {
             functions: BTreeMap::new(),
+            compiled_plans: BTreeMap::new(),
+            compiled_plan_cache_hits: 0,
+            compiled_plan_cache_misses: 0,
             cache: BTreeMap::new(),
             cache_capacity: 64,
             cache_clock: 0,
@@ -1091,14 +1112,23 @@ mod tests {
         engine
             .evaluate_cached(&definitions, &["value"], &borrowed, 7)
             .expect("first evaluation");
+        assert_eq!(engine.compiled_plans.len(), 1);
+        assert_eq!(engine.compiled_plan_cache_hits, 0);
+        assert_eq!(engine.compiled_plan_cache_misses, 1);
         engine
             .evaluate_cached(&definitions, &["value"], &borrowed, 7)
             .expect("cached evaluation");
         assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(engine.compiled_plans.len(), 1);
+        assert_eq!(engine.compiled_plan_cache_hits, 1);
+        assert_eq!(engine.compiled_plan_cache_misses, 1);
         engine
             .evaluate_cached(&definitions, &["value"], &borrowed, 8)
             .expect("new revision evaluation");
         assert_eq!(calls.load(Ordering::SeqCst), 2);
+        assert_eq!(engine.compiled_plans.len(), 1);
+        assert_eq!(engine.compiled_plan_cache_hits, 2);
+        assert_eq!(engine.compiled_plan_cache_misses, 1);
     }
 
     #[test]
