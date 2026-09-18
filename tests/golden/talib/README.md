@@ -1,8 +1,12 @@
 # TA-Lib C Reference Golden Files
 
 JSON reference outputs produced by `scripts/gen_talib_golden.py` using the
-official TA-Lib Python bindings (C library). These files anchor AlphaTA's
+official TA-Lib Python bindings (C library). These files anchor Finkit's
 numerical parity checks against TA-Lib C.
+
+The checked-in corpus is pinned to TA-Lib Python `0.6.8` for this release. A
+golden regeneration is a deliberate reference-version update and must be
+reviewed together with the generated metadata and parity report.
 
 ## Regenerating
 
@@ -31,7 +35,7 @@ absent (disable with `--no-auto-fixtures`).
 
 Non dry-run mode requires:
 
-1. **TA-Lib C library** (e.g. 0.6.4)
+1. **TA-Lib C library** matching the pinned Python package/reference build
 2. **Python packages**: `numpy`, `TA-Lib`
 
 | Platform | C library | Python |

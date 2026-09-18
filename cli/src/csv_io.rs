@@ -49,6 +49,7 @@ pub fn read_ohlcv_input<P: AsRef<Path>>(path: Option<P>) -> io::Result<OhlcvData
 fn parse_ohlcv_reader<R: Read>(reader: R) -> io::Result<OhlcvData> {
     let mut rdr = csv::ReaderBuilder::new()
         .flexible(true)
+        .comment(Some(b'#'))
         .has_headers(true)
         .from_reader(reader);
 
@@ -176,6 +177,13 @@ mod tests {
         assert_eq!(data.high, vec![105.0, 106.0]);
         assert_eq!(data.low, vec![99.0, 100.0]);
         assert_eq!(data.volume, vec![10000.0, 11000.0]);
+    }
+
+    #[test]
+    fn test_parse_ohlcv_reader_skips_metadata_comments() {
+        let csv = "# generated fixture\n# version=1\nopen,high,low,close,volume\n100.0,105.0,99.0,102.0,10000\n";
+        let data = parse_ohlcv_reader(csv.as_bytes()).unwrap();
+        assert_eq!(data.close, vec![102.0]);
     }
 
     #[test]

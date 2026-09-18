@@ -111,6 +111,10 @@ node_modules/
 tests/fixtures/*.csv
 tests/fixtures/*.parquet
 tests/golden/talib/*.json
+# Checked-in parity corpus: the generated fixtures above are reproducible and
+# required by the TA-Lib compatibility gate.
+!tests/fixtures/*.csv
+!tests/golden/talib/*.json
 # Benchmark output
 target/criterion/
 # Alternate target dirs used by verification/repair scripts

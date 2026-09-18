@@ -1605,12 +1605,12 @@ pub fn simd_obv(close: &[f64], volume: &[f64], result: &mut [f64]) {
 }
 
 pub fn simd_ad_line(high: &[f64], low: &[f64], close: &[f64], volume: &[f64], result: &mut [f64]) {
-    #[cfg(all(feature = "std", target_arch = "x86_64"))]
-    {
-        if is_x86_feature_detected!("avx2") {
-            return unsafe { ad_line_avx2(high, low, close, volume, result) };
-        }
-    }
+    // Keep TA-Lib parity by preserving the scalar operation order. On large
+    // cumulative volume series, AVX2 `vdivpd` followed by the vector path's
+    // accumulation can differ by a few ULPs from TA-Lib's scalar contract.
+    // The AVX2 kernel remains available for a future bit-level verified mode,
+    // but the public production path must not trade numerical equivalence for
+    // an unbounded speed claim.
     ad_line_scalar(high, low, close, volume, result)
 }
 

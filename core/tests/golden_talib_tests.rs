@@ -12,7 +12,7 @@
 //! | Pattern recognition (±100 / 0) | exact |
 //!
 //! Warmup / unstable-period bars must align (golden `null` ↔ AlphaTA `NaN`).
-//! Missing golden JSON files cause the indicator test to **skip** (not fail).
+//! Missing required golden JSON files fail the test instead of being silently skipped.
 
 use finkit::indicators::{
     adx, apo, aroon, bbands, cci, cmo, macd, mom, roc, rsi, stoch, trix,
@@ -100,6 +100,10 @@ fn tolerance_for_indicator(indicator: &str) -> f64 {
         // bounded well below 1e-6 and zero of our values differ by more than
         // 1e-6. Use 1e-6 so legit rounding-order differences don't false-fail.
         "SMA" | "WMA" | "BBANDS" => 1e-6,
+        // AD is cumulative and can reach billions on the fixed high-volume
+        // fixture. The implementation and TA-Lib agree in relative terms;
+        // allow the sub-micro-unit absolute rounding difference at that scale.
+        "AD" => 1e-6,
         "EMA" | "DEMA" | "TEMA" => 1e-8,
         _ => 1e-8,
     }
@@ -322,7 +326,7 @@ fn unstable_period_hint(
         "RSI" | "CMO" | "TRIX" | "CCI" | "WILLR" | "MOM" | "ROC" => {
             Some(param_usize(params, "timeperiod", 14).saturating_sub(1))
         }
-        "ATR" | "NATR" | "ADX" => {
+        "ADX" => {
             let p = param_usize(params, "timeperiod", 14);
             Some((2 * p).saturating_sub(1))
         }
@@ -493,17 +497,11 @@ fn run_indicator_compat(indicator: &str) -> IndicatorReport {
     let exact = is_pattern_indicator(indicator);
     let reproduce = reproduce_cmd(indicator);
 
-    if !golden_path.is_file() {
-        return IndicatorReport {
-            name: indicator.to_string(),
-            status: "skip".to_string(),
-            tolerance: tol,
-            pass_rate_pct: 0.0,
-            first_diff_index: None,
-            notes: format!("golden file missing: {}", golden_path.display()),
-            reproduce_cmd: reproduce,
-        };
-    }
+    assert!(
+        golden_path.is_file(),
+        "required TA-Lib golden file is missing: {}",
+        golden_path.display()
+    );
 
     let raw = fs::read_to_string(&golden_path).expect("read golden json");
     let golden: GoldenFile = serde_json::from_str(&raw).expect("parse golden json");
@@ -606,31 +604,12 @@ fn write_compat_report(reports: &[IndicatorReport]) {
     fs::write(&path, json).expect("write compat report");
 }
 
-fn skip_if_no_golden_files() -> bool {
-    let dir = talib_golden_dir();
-    if !dir.is_dir() {
-        return true;
-    }
-    dir.read_dir()
-        .map(|entries| {
-            entries
-                .filter_map(|e| e.ok())
-                .all(|e| !e.path().extension().is_some_and(|ext| ext == "json"))
-        })
-        .unwrap_or(true)
-}
-
 #[cfg(test)]
 mod golden_talib_suite {
     use super::*;
 
     #[test]
     fn golden_talib_write_compat_report() {
-        if skip_if_no_golden_files() {
-            eprintln!("golden_talib: no JSON golden files — skipping report generation");
-            return;
-        }
-
         let reports: Vec<IndicatorReport> = KNOWN_INDICATORS
             .iter()
             .map(|name| run_indicator_compat(*name))
@@ -640,18 +619,9 @@ mod golden_talib_suite {
 
     #[test]
     fn golden_talib_all_indicators() {
-        if skip_if_no_golden_files() {
-            eprintln!("golden_talib: no JSON golden files in tests/golden/talib/ — skipping");
-            return;
-        }
-
         let mut failures: Vec<String> = Vec::new();
         for name in KNOWN_INDICATORS {
             let report = run_indicator_compat(name);
-            if report.status == "skip" {
-                eprintln!("golden_talib: skip {name} ({})", report.notes);
-                continue;
-            }
             if report.status == "fail" {
                 failures.push(format!("{name}: {}", report.notes));
             }
@@ -664,17 +634,12 @@ mod golden_talib_suite {
     }
 }
 
-// Per-indicator tests — skip individually when golden JSON is absent.
+// Per-indicator tests — every declared golden file is required.
 #[cfg(test)]
 mod golden_talib_per_indicator {
     use super::*;
 
     fn run_or_skip(indicator: &str) {
-        let path = talib_golden_dir().join(format!("{}.json", indicator.to_lowercase()));
-        if !path.is_file() {
-            eprintln!("golden_talib: skip {indicator} — {}", path.display());
-            return;
-        }
         let report = run_indicator_compat(indicator);
         assert_ne!(report.status, "fail", "{indicator}: {}", report.notes);
         if report.status == "warn" {
