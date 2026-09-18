@@ -171,6 +171,138 @@ INDICATORS: dict[str, dict[str, Any]] = {
         "inputs": ("close",),
         "outputs": ("t3",),
     },
+    "ACOS": {
+        "params": {},
+        "fn_name": "ACOS",
+        "inputs": ("math",),
+        "outputs": ("acos",),
+    },
+    "ASIN": {
+        "params": {},
+        "fn_name": "ASIN",
+        "inputs": ("math",),
+        "outputs": ("asin",),
+    },
+    "ATAN": {
+        "params": {},
+        "fn_name": "ATAN",
+        "inputs": ("math",),
+        "outputs": ("atan",),
+    },
+    "CEIL": {
+        "params": {},
+        "fn_name": "CEIL",
+        "inputs": ("math",),
+        "outputs": ("ceil",),
+    },
+    "COS": {
+        "params": {},
+        "fn_name": "COS",
+        "inputs": ("math",),
+        "outputs": ("cos",),
+    },
+    "COSH": {
+        "params": {},
+        "fn_name": "COSH",
+        "inputs": ("math",),
+        "outputs": ("cosh",),
+    },
+    "EXP": {
+        "params": {},
+        "fn_name": "EXP",
+        "inputs": ("math",),
+        "outputs": ("exp",),
+    },
+    "FLOOR": {
+        "params": {},
+        "fn_name": "FLOOR",
+        "inputs": ("math",),
+        "outputs": ("floor",),
+    },
+    "LN": {
+        "params": {},
+        "fn_name": "LN",
+        "inputs": ("math",),
+        "outputs": ("ln",),
+    },
+    "LOG10": {
+        "params": {},
+        "fn_name": "LOG10",
+        "inputs": ("math",),
+        "outputs": ("log10",),
+    },
+    "SIN": {
+        "params": {},
+        "fn_name": "SIN",
+        "inputs": ("math",),
+        "outputs": ("sin",),
+    },
+    "SINH": {
+        "params": {},
+        "fn_name": "SINH",
+        "inputs": ("math",),
+        "outputs": ("sinh",),
+    },
+    "SQRT": {
+        "params": {},
+        "fn_name": "SQRT",
+        "inputs": ("math",),
+        "outputs": ("sqrt",),
+    },
+    "TAN": {
+        "params": {},
+        "fn_name": "TAN",
+        "inputs": ("math",),
+        "outputs": ("tan",),
+    },
+    "TANH": {
+        "params": {},
+        "fn_name": "TANH",
+        "inputs": ("math",),
+        "outputs": ("tanh",),
+    },
+    "ADD": {
+        "params": {},
+        "fn_name": "ADD",
+        "inputs": ("close", "open"),
+        "outputs": ("add",),
+    },
+    "SUB": {
+        "params": {},
+        "fn_name": "SUB",
+        "inputs": ("close", "open"),
+        "outputs": ("sub",),
+    },
+    "MULT": {
+        "params": {},
+        "fn_name": "MULT",
+        "inputs": ("close", "open"),
+        "outputs": ("mult",),
+    },
+    "DIV": {
+        "params": {},
+        "fn_name": "DIV",
+        "inputs": ("close", "open"),
+        "outputs": ("div",),
+    },
+    "MAX": {
+        "params": {"timeperiod": 30},
+        "fn_name": "MAX",
+        "inputs": ("close",),
+        "outputs": ("max",),
+    },
+    "MIN": {
+        "params": {"timeperiod": 30},
+        "fn_name": "MIN",
+        "inputs": ("close",),
+        "outputs": ("min",),
+    },
+    "SUM": {
+        "params": {"timeperiod": 30},
+        "fn_name": "SUM",
+        "inputs": ("close",),
+        "outputs": ("sum",),
+    },
     "OBV": {
         "params": {},
         "fn_name": "OBV",
@@ -466,6 +598,10 @@ def read_ohlcv_csv(path: Path) -> dict[str, list[float]]:
         "low": rows_low,
         "close": rows_close,
         "volume": rows_volume,
+        # Bounded deterministic input for TA-Lib math transforms.  Keeping it
+        # separate from OHLCV avoids domain errors for ACOS/ASIN and overflow
+        # for EXP/COSH while preserving the shared fixture row alignment.
+        "math": [0.25 + math.sin(index * 0.11) * 0.2 for index in range(len(rows_close))],
     }
 
 

@@ -63,7 +63,7 @@ All outputs are computed on three shared fixtures from `tests/fixtures/`:
 
 ## Output Files
 
-One generated JSON file per indicator (53 total), plus a checked-in profile
+One generated JSON file per indicator (75 total), plus a checked-in profile
 variant fixture for official `matype` contracts:
 
 | File | Purpose |
@@ -127,6 +127,28 @@ Generated indicator files:
 | `linearreg_intercept.json` | LINEARREG_INTERCEPT | timeperiod=14 |
 | `linearreg_slope.json` | LINEARREG_SLOPE | timeperiod=14 |
 | `tsf.json` | TSF | timeperiod=14 |
+| `acos.json` | ACOS | bounded `math` input |
+| `asin.json` | ASIN | bounded `math` input |
+| `atan.json` | ATAN | bounded `math` input |
+| `ceil.json` | CEIL | bounded `math` input |
+| `cos.json` | COS | bounded `math` input |
+| `cosh.json` | COSH | bounded `math` input |
+| `exp.json` | EXP | bounded `math` input |
+| `floor.json` | FLOOR | bounded `math` input |
+| `ln.json` | LN | bounded positive `math` input |
+| `log10.json` | LOG10 | bounded positive `math` input |
+| `sin.json` | SIN | bounded `math` input |
+| `sinh.json` | SINH | bounded `math` input |
+| `sqrt.json` | SQRT | bounded non-negative `math` input |
+| `tan.json` | TAN | bounded `math` input |
+| `tanh.json` | TANH | bounded `math` input |
+| `add.json` | ADD | close + open |
+| `sub.json` | SUB | close - open |
+| `mult.json` | MULT | close * open |
+| `div.json` | DIV | close / open |
+| `max.json` | MAX | timeperiod=30 |
+| `min.json` | MIN | timeperiod=30 |
+| `sum.json` | SUM | timeperiod=30 |
 
 Parameters are recorded in each file's metadata and are intentionally pinned
 to the TA-Lib Python `0.8.0` reference used for this corpus.

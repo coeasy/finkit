@@ -73,6 +73,7 @@ struct Ohlcv {
     low: Vec<f64>,
     close: Vec<f64>,
     volume: Vec<f64>,
+    math: Vec<f64>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -182,12 +183,17 @@ fn read_fixture_csv(path: &Path) -> Ohlcv {
         volume.push(parts[col_index["volume"]].trim().parse().expect("volume"));
     }
 
+    let math = (0..close.len())
+        .map(|index| 0.25 + (index as f64 * 0.11).sin() * 0.2)
+        .collect();
+
     Ohlcv {
         open,
         high,
         low,
         close,
         volume,
+        math,
     }
 }
 
@@ -201,6 +207,7 @@ fn compute_alpha_ta_outputs(
     let high = &ohlcv.high;
     let low = &ohlcv.low;
     let volume = &ohlcv.volume;
+    let math = &ohlcv.math;
 
     match indicator {
         "SMA" => {
@@ -399,6 +406,48 @@ fn compute_alpha_ta_outputs(
                 "aroonosc".to_string(),
                 array_to_vec(finkit::indicators::momentum::aroonosc(high, low, p).unwrap()),
             )])
+        }
+        "ACOS" | "ASIN" | "ATAN" | "CEIL" | "COS" | "COSH" | "EXP" | "FLOOR" | "LN" | "LOG10"
+        | "SIN" | "SINH" | "SQRT" | "TAN" | "TANH" => {
+            let values = match indicator {
+                "ACOS" => finkit::indicators::math_transform::acos(math).unwrap(),
+                "ASIN" => finkit::indicators::math_transform::asin(math).unwrap(),
+                "ATAN" => finkit::indicators::math_transform::atan(math).unwrap(),
+                "CEIL" => finkit::indicators::math_transform::ceil(math).unwrap(),
+                "COS" => finkit::indicators::math_transform::cos(math).unwrap(),
+                "COSH" => finkit::indicators::math_transform::cosh(math).unwrap(),
+                "EXP" => finkit::indicators::math_transform::exp(math).unwrap(),
+                "FLOOR" => finkit::indicators::math_transform::floor(math).unwrap(),
+                "LN" => finkit::indicators::math_transform::ln(math).unwrap(),
+                "LOG10" => finkit::indicators::math_transform::log10(math).unwrap(),
+                "SIN" => finkit::indicators::math_transform::sin(math).unwrap(),
+                "SINH" => finkit::indicators::math_transform::sinh(math).unwrap(),
+                "SQRT" => finkit::indicators::math_transform::sqrt(math).unwrap(),
+                "TAN" => finkit::indicators::math_transform::tan(math).unwrap(),
+                "TANH" => finkit::indicators::math_transform::tanh(math).unwrap(),
+                _ => unreachable!(),
+            };
+            HashMap::from([(indicator.to_ascii_lowercase(), array_to_vec(values))])
+        }
+        "ADD" | "SUB" | "MULT" | "DIV" => {
+            let values = match indicator {
+                "ADD" => finkit::indicators::math_operators::add(close, open).unwrap(),
+                "SUB" => finkit::indicators::math_operators::sub(close, open).unwrap(),
+                "MULT" => finkit::indicators::math_operators::mult(close, open).unwrap(),
+                "DIV" => finkit::indicators::math_operators::div(close, open).unwrap(),
+                _ => unreachable!(),
+            };
+            HashMap::from([(indicator.to_ascii_lowercase(), array_to_vec(values))])
+        }
+        "MAX" | "MIN" | "SUM" => {
+            let period = param_usize(params, "timeperiod", 30);
+            let values = match indicator {
+                "MAX" => finkit::indicators::math_operators::max(close, period).unwrap(),
+                "MIN" => finkit::indicators::math_operators::min(close, period).unwrap(),
+                "SUM" => finkit::indicators::math_operators::sum(close, period).unwrap(),
+                _ => unreachable!(),
+            };
+            HashMap::from([(indicator.to_ascii_lowercase(), array_to_vec(values))])
         }
         "TRANGE" => HashMap::from([(
             "trange".to_string(),
