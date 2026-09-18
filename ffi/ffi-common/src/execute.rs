@@ -270,6 +270,25 @@ pub fn talib_profile_supported(operation: &str) -> bool {
             | "ACCBANDS"
             | "AVGDEV"
             | "IMI"
+            | "AO"
+            | "CMF"
+            | "COPPOCK"
+            | "CUMSUM"
+            | "DONCHIAN"
+            | "DPO"
+            | "ER"
+            | "HA"
+            | "HMA"
+            | "NVI"
+            | "PERCENTRANK"
+            | "PVI"
+            | "PVT"
+            | "SUPERTREND"
+            | "TSI"
+            | "VORTEX"
+            | "VWAP"
+            | "VWMA"
+            | "ZLEMA"
             | "BBANDS"
             | "ATR"
             | "NATR"
@@ -571,6 +590,224 @@ fn execute_talib_profile(
                 )?,
             );
             "IMI"
+        }
+        "AO" => {
+            let high = named_series(inputs, "HIGH", &name)?;
+            let low = named_series(inputs, "LOW", &name)?;
+            let fast = parameter_usize(params, 0, 5, &name)?;
+            let slow = parameter_usize(params, 1, 34, &name)?;
+            values.insert(
+                "AO".to_string(),
+                indicator_values(
+                    finkit::indicators::momentum_ext::ao(high, low, fast, slow),
+                    &name,
+                )?,
+            );
+            "AO"
+        }
+        "CMF" => {
+            let high = named_series(inputs, "HIGH", &name)?;
+            let low = named_series(inputs, "LOW", &name)?;
+            let close = named_series(inputs, "CLOSE", &name)?;
+            let volume = named_series(inputs, "VOLUME", &name)?;
+            let period = parameter_usize(params, 0, 20, &name)?;
+            values.insert(
+                "CMF".to_string(),
+                indicator_values(
+                    finkit::indicators::volume_ext::cmf(high, low, close, volume, period),
+                    &name,
+                )?,
+            );
+            "CMF"
+        }
+        "COPPOCK" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let wma_period = parameter_usize(params, 0, 10, &name)?;
+            let roc1_period = parameter_usize(params, 1, 11, &name)?;
+            let roc2_period = parameter_usize(params, 2, 14, &name)?;
+            values.insert(
+                "COPPOCK".to_string(),
+                indicator_values(
+                    finkit::indicators::momentum_ext::coppock(
+                        input,
+                        wma_period,
+                        roc1_period,
+                        roc2_period,
+                    ),
+                    &name,
+                )?,
+            );
+            "COPPOCK"
+        }
+        "CUMSUM" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let mut output = Vec::with_capacity(input.len());
+            let mut sum = 0.0;
+            for value in input {
+                sum += *value;
+                output.push(sum);
+            }
+            values.insert("CUMSUM".to_string(), output);
+            "CUMSUM"
+        }
+        "DONCHIAN" => {
+            let high = named_series(inputs, "HIGH", &name)?;
+            let low = named_series(inputs, "LOW", &name)?;
+            let period = parameter_usize(params, 0, 20, &name)?;
+            let output = finkit::indicators::donchian::donchian(high, low, period)
+                .map_err(|error| ("execution_error", format!("{name}: {error}")))?;
+            values.insert("UPPERBAND".to_string(), output.upper.to_vec());
+            values.insert("MIDDLEBAND".to_string(), output.middle.to_vec());
+            values.insert("LOWERBAND".to_string(), output.lower.to_vec());
+            "MIDDLEBAND"
+        }
+        "DPO" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let period = parameter_usize(params, 0, 20, &name)?;
+            values.insert(
+                "DPO".to_string(),
+                indicator_values(finkit::indicators::china::dpo(input, period), &name)?,
+            );
+            "DPO"
+        }
+        "ER" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let period = parameter_usize(params, 0, 10, &name)?;
+            values.insert(
+                "ER".to_string(),
+                indicator_values(
+                    finkit::indicators::overlap::efficiency_ratio(input, period),
+                    &name,
+                )?,
+            );
+            "ER"
+        }
+        "HA" => {
+            let open = named_series(inputs, "OPEN", &name)?;
+            let high = named_series(inputs, "HIGH", &name)?;
+            let low = named_series(inputs, "LOW", &name)?;
+            let close = named_series(inputs, "CLOSE", &name)?;
+            let output = finkit::indicators::chart::heikin_ashi(open, high, low, close)
+                .map_err(|error| ("execution_error", format!("{name}: {error}")))?;
+            values.insert("HAOPEN".to_string(), output.ha_open.to_vec());
+            values.insert("HAHIGH".to_string(), output.ha_high.to_vec());
+            values.insert("HALOW".to_string(), output.ha_low.to_vec());
+            values.insert("HACLOSE".to_string(), output.ha_close.to_vec());
+            "HACLOSE"
+        }
+        "HMA" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let period = parameter_usize(params, 0, 20, &name)?;
+            values.insert(
+                "HMA".to_string(),
+                indicator_values(finkit::indicators::overlap::hma(input, period), &name)?,
+            );
+            "HMA"
+        }
+        "NVI" | "PVI" => {
+            let close = named_series(inputs, "CLOSE", &name)?;
+            let volume = named_series(inputs, "VOLUME", &name)?;
+            let result = if name == "NVI" {
+                finkit::indicators::volume_ext::nvi(close, volume)
+            } else {
+                finkit::indicators::volume_ext::pvi(close, volume)
+            };
+            values.insert(name.clone(), indicator_values(result, &name)?);
+            name.as_str()
+        }
+        "PERCENTRANK" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let period = parameter_usize(params, 0, 100, &name)?;
+            values.insert(
+                "PERCENTRANK".to_string(),
+                indicator_values(
+                    finkit::indicators::statistics::percent_rank(input, period),
+                    &name,
+                )?,
+            );
+            "PERCENTRANK"
+        }
+        "PVT" => {
+            let close = named_series(inputs, "CLOSE", &name)?;
+            let volume = named_series(inputs, "VOLUME", &name)?;
+            values.insert(
+                "PVT".to_string(),
+                indicator_values(finkit::indicators::volume_ext::pvt(close, volume), &name)?,
+            );
+            "PVT"
+        }
+        "SUPERTREND" => {
+            let high = named_series(inputs, "HIGH", &name)?;
+            let low = named_series(inputs, "LOW", &name)?;
+            let close = named_series(inputs, "CLOSE", &name)?;
+            let period = parameter_usize(params, 0, 10, &name)?;
+            let multiplier = parameter_f64(params, 1, 3.0, &name)?;
+            let output =
+                finkit::indicators::supertrend::supertrend(high, low, close, period, multiplier)
+                    .map_err(|error| ("execution_error", format!("{name}: {error}")))?;
+            values.insert("SUPERTREND".to_string(), output.trend_line.to_vec());
+            values.insert(
+                "TREND".to_string(),
+                output.direction.iter().map(|value| *value as f64).collect(),
+            );
+            "SUPERTREND"
+        }
+        "TSI" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let first = parameter_usize(params, 0, 25, &name)?;
+            let second = parameter_usize(params, 1, 13, &name)?;
+            values.insert(
+                "TSI".to_string(),
+                indicator_values(
+                    finkit::indicators::momentum_ext::tsi(input, first, second),
+                    &name,
+                )?,
+            );
+            "TSI"
+        }
+        "VORTEX" => {
+            let high = named_series(inputs, "HIGH", &name)?;
+            let low = named_series(inputs, "LOW", &name)?;
+            let close = named_series(inputs, "CLOSE", &name)?;
+            let period = parameter_usize(params, 0, 14, &name)?;
+            let output = finkit::indicators::momentum_ext::vortex(high, low, close, period)
+                .map_err(|error| ("execution_error", format!("{name}: {error}")))?;
+            values.insert("PLUSVI".to_string(), output.vi_plus.to_vec());
+            values.insert("MINUSVI".to_string(), output.vi_minus.to_vec());
+            "PLUSVI"
+        }
+        "VWAP" => {
+            let high = named_series(inputs, "HIGH", &name)?;
+            let low = named_series(inputs, "LOW", &name)?;
+            let close = named_series(inputs, "CLOSE", &name)?;
+            let volume = named_series(inputs, "VOLUME", &name)?;
+            values.insert(
+                "VWAP".to_string(),
+                indicator_values(
+                    finkit::indicators::volume::vwap(high, low, close, volume),
+                    &name,
+                )?,
+            );
+            "VWAP"
+        }
+        "VWMA" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let volume = named_series(inputs, "VOLUME", &name)?;
+            let period = parameter_usize(params, 0, 30, &name)?;
+            values.insert(
+                "VWMA".to_string(),
+                indicator_values(finkit::math::moving_avg::vwma(input, volume, period), &name)?,
+            );
+            "VWMA"
+        }
+        "ZLEMA" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let period = parameter_usize(params, 0, 30, &name)?;
+            values.insert(
+                "ZLEMA".to_string(),
+                indicator_values(finkit::math::moving_avg::zlema(input, period), &name)?,
+            );
+            "ZLEMA"
         }
         "SAREXT" => {
             let high = named_series(inputs, "HIGH", &name)?;
@@ -1835,7 +2072,7 @@ mod tests {
                 names.insert(spec.name.as_str());
             }
         }
-        assert_eq!(names.len(), 161, "TA-Lib catalog must contain 161 names");
+        assert_eq!(names.len(), 180, "TA-Lib catalog must contain 180 names");
 
         let length = 256;
         let close = (0..length)

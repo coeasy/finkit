@@ -864,6 +864,153 @@ fn compute_alpha_ta_outputs(
                 array_to_vec(finkit::indicators::momentum_ext::imi(open, close, period).unwrap()),
             )])
         }
+        "AO" => {
+            let fast = param_usize(params, "fastperiod", 5);
+            let slow = param_usize(params, "slowperiod", 34);
+            HashMap::from([(
+                "ao".to_string(),
+                array_to_vec(finkit::indicators::momentum_ext::ao(high, low, fast, slow).unwrap()),
+            )])
+        }
+        "CMF" => {
+            let period = param_usize(params, "timeperiod", 20);
+            HashMap::from([(
+                "cmf".to_string(),
+                array_to_vec(
+                    finkit::indicators::volume_ext::cmf(high, low, close, volume, period).unwrap(),
+                ),
+            )])
+        }
+        "COPPOCK" => {
+            let wma_period = param_usize(params, "wmaperiod", 10);
+            let roc1 = param_usize(params, "roc1period", 11);
+            let roc2 = param_usize(params, "roc2period", 14);
+            HashMap::from([(
+                "coppock".to_string(),
+                array_to_vec(
+                    finkit::indicators::momentum_ext::coppock(close, wma_period, roc1, roc2)
+                        .unwrap(),
+                ),
+            )])
+        }
+        "CUMSUM" => {
+            let mut total = 0.0;
+            let values = close
+                .iter()
+                .map(|value| {
+                    total += value;
+                    total
+                })
+                .collect();
+            HashMap::from([("cumsum".to_string(), values)])
+        }
+        "DONCHIAN" => {
+            let period = param_usize(params, "timeperiod", 20);
+            let result = finkit::indicators::donchian::donchian(high, low, period).unwrap();
+            HashMap::from([
+                ("upperband".to_string(), array_to_vec(result.upper)),
+                ("middleband".to_string(), array_to_vec(result.middle)),
+                ("lowerband".to_string(), array_to_vec(result.lower)),
+            ])
+        }
+        "DPO" => {
+            let period = param_usize(params, "timeperiod", 20);
+            HashMap::from([(
+                "dpo".to_string(),
+                array_to_vec(finkit::indicators::china::dpo(close, period).unwrap()),
+            )])
+        }
+        "ER" => {
+            let period = param_usize(params, "timeperiod", 10);
+            HashMap::from([(
+                "er".to_string(),
+                array_to_vec(finkit::indicators::overlap::efficiency_ratio(close, period).unwrap()),
+            )])
+        }
+        "HA" => {
+            let result = finkit::indicators::chart::heikin_ashi(open, high, low, close).unwrap();
+            HashMap::from([
+                ("haopen".to_string(), array_to_vec(result.ha_open)),
+                ("hahigh".to_string(), array_to_vec(result.ha_high)),
+                ("halow".to_string(), array_to_vec(result.ha_low)),
+                ("haclose".to_string(), array_to_vec(result.ha_close)),
+            ])
+        }
+        "HMA" => {
+            let period = param_usize(params, "timeperiod", 20);
+            HashMap::from([(
+                "hma".to_string(),
+                array_to_vec(finkit::indicators::overlap::hma(close, period).unwrap()),
+            )])
+        }
+        "NVI" | "PVI" => {
+            let values = if indicator == "NVI" {
+                finkit::indicators::volume_ext::nvi(close, volume).unwrap()
+            } else {
+                finkit::indicators::volume_ext::pvi(close, volume).unwrap()
+            };
+            HashMap::from([(indicator.to_ascii_lowercase(), array_to_vec(values))])
+        }
+        "PERCENTRANK" => {
+            let period = param_usize(params, "timeperiod", 100);
+            HashMap::from([(
+                "percentrank".to_string(),
+                array_to_vec(finkit::indicators::statistics::percent_rank(close, period).unwrap()),
+            )])
+        }
+        "PVT" => HashMap::from([(
+            "pvt".to_string(),
+            array_to_vec(finkit::indicators::volume_ext::pvt(close, volume).unwrap()),
+        )]),
+        "SUPERTREND" => {
+            let period = param_usize(params, "timeperiod", 10);
+            let multiplier = param_f64(params, "multiplier", 3.0);
+            let result =
+                finkit::indicators::supertrend::supertrend(high, low, close, period, multiplier)
+                    .unwrap();
+            HashMap::from([
+                ("supertrend".to_string(), array_to_vec(result.trend_line)),
+                (
+                    "trend".to_string(),
+                    result.direction.iter().map(|value| *value as f64).collect(),
+                ),
+            ])
+        }
+        "TSI" => {
+            let first = param_usize(params, "firstperiod", 25);
+            let second = param_usize(params, "secondperiod", 13);
+            HashMap::from([(
+                "tsi".to_string(),
+                array_to_vec(finkit::indicators::momentum_ext::tsi(close, first, second).unwrap()),
+            )])
+        }
+        "VORTEX" => {
+            let period = param_usize(params, "timeperiod", 14);
+            let result =
+                finkit::indicators::momentum_ext::vortex(high, low, close, period).unwrap();
+            HashMap::from([
+                ("plusvi".to_string(), array_to_vec(result.vi_plus)),
+                ("minusvi".to_string(), array_to_vec(result.vi_minus)),
+            ])
+        }
+        "VWAP" => HashMap::from([(
+            "vwap".to_string(),
+            array_to_vec(finkit::indicators::volume::vwap(high, low, close, volume).unwrap()),
+        )]),
+        "VWMA" => {
+            let period = param_usize(params, "timeperiod", 30);
+            HashMap::from([(
+                "vwma".to_string(),
+                array_to_vec(finkit::math::moving_avg::vwma(close, volume, period).unwrap()),
+            )])
+        }
+        "ZLEMA" => {
+            let period = param_usize(params, "timeperiod", 30);
+            HashMap::from([(
+                "zlema".to_string(),
+                array_to_vec(finkit::math::moving_avg::zlema(close, period).unwrap()),
+            )])
+        }
         "SAR" => {
             let acceleration = param_f64(params, "acceleration", 0.02);
             let maximum = param_f64(params, "maximum", 0.2);

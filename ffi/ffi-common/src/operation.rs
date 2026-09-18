@@ -173,6 +173,21 @@ pub fn operation_catalog(registry: &OperationRegistry) -> OperationCatalogEnvelo
 fn profile_only_talib_entry(name: &str) -> OperationCatalogEntry {
     let is_pattern = name.starts_with("CDL");
     let (value_shape, outputs, output_names) = match name {
+        "HA" => (
+            "multi_series",
+            4,
+            vec![
+                "HAOPEN".to_string(),
+                "HAHIGH".to_string(),
+                "HALOW".to_string(),
+                "HACLOSE".to_string(),
+            ],
+        ),
+        "VORTEX" => (
+            "multi_series",
+            2,
+            vec!["PLUSVI".to_string(), "MINUSVI".to_string()],
+        ),
         "STOCH" => (
             "multi_series",
             2,
@@ -190,10 +205,15 @@ fn profile_only_talib_entry(name: &str) -> OperationCatalogEntry {
         ),
         _ => ("series", 1, vec![name.to_string()]),
     };
-    let input = if is_pattern || matches!(name, "AVGPRICE" | "BOP") {
+    let input = if is_pattern || matches!(name, "AVGPRICE" | "BOP" | "HA") {
         Some("ohlcv")
-    } else if matches!(name, "MEDPRICE" | "MIDPRICE" | "SAR") {
+    } else if matches!(
+        name,
+        "AO" | "DONCHIAN" | "VORTEX" | "SUPERTREND" | "MEDPRICE" | "MIDPRICE" | "SAR"
+    ) {
         Some("hlc")
+    } else if matches!(name, "CMF") {
+        Some("hlcv")
     } else {
         Some("series")
     };
@@ -242,6 +262,30 @@ fn period_parameter(default: &'static str) -> OperationParameter {
 fn talib_profile_params(name: &str) -> Vec<OperationParameter> {
     let period = || period_parameter("14");
     match name {
+        "AO" => vec![
+            talib_parameter("fastperiod", "integer", Some("5"), Some("integer >= 1")),
+            talib_parameter("slowperiod", "integer", Some("34"), Some("integer >= 1")),
+        ],
+        "CMF" => vec![period_parameter("20")],
+        "COPPOCK" => vec![
+            talib_parameter("wmaperiod", "integer", Some("10"), Some("integer >= 1")),
+            talib_parameter("roc1period", "integer", Some("11"), Some("integer >= 1")),
+            talib_parameter("roc2period", "integer", Some("14"), Some("integer >= 1")),
+        ],
+        "DPO" => vec![period_parameter("20")],
+        "ER" => vec![period_parameter("10")],
+        "HMA" => vec![period_parameter("20")],
+        "PERCENTRANK" => vec![period_parameter("100")],
+        "TSI" => vec![
+            talib_parameter("firstperiod", "integer", Some("25"), Some("integer >= 1")),
+            talib_parameter("secondperiod", "integer", Some("13"), Some("integer >= 1")),
+        ],
+        "VORTEX" => vec![period_parameter("14")],
+        "VWMA" | "ZLEMA" => vec![period_parameter("30")],
+        "SUPERTREND" => vec![
+            period_parameter("10"),
+            talib_parameter("multiplier", "number", Some("3.0"), Some("value > 0")),
+        ],
         "ADX" | "ADXR" | "AROON" | "AROONOSC" | "CCI" | "CMO" | "DX" | "MFI" | "MINUS_DI"
         | "MINUS_DM" | "PLUS_DI" | "PLUS_DM" | "RSI" | "WILLR" | "ROCP" | "ROCR" | "ROCR100" => {
             vec![period()]

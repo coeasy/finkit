@@ -675,26 +675,41 @@ fn wma_kernel_into(input: &[f64], period: usize, output: &mut [f64]) {
     let len = input.len();
     let inv_weight_sum = 1.0 / (period * (period + 1) / 2) as f64;
     let p = period as f64;
-    let first = period - 1;
-
-    let mut window_sum = 0.0;
-    let mut wsum = 0.0;
-    for (j, &v) in input.iter().enumerate().take(period) {
-        window_sum += v;
-        wsum += (j + 1) as f64 * v;
+    let lookback = period - 1;
+    let mut period_sub = 0.0;
+    let mut period_sum = 0.0;
+    for (weight, &value) in input.iter().take(lookback).enumerate() {
+        period_sub += value;
+        period_sum += value * (weight + 1) as f64;
     }
-    output[first] = wsum * inv_weight_sum;
 
-    let input_ptr = input.as_ptr();
-    let output_ptr = output.as_mut_ptr();
-    unsafe {
-        for i in period..len {
-            let old = *input_ptr.add(i - period);
-            let new = *input_ptr.add(i);
-            wsum = p.mul_add(new, wsum - window_sum);
-            window_sum += new - old;
-            *output_ptr.add(i) = wsum * inv_weight_sum;
+    // Match TA-Lib's production WMA kernel: shift the weighted sum in O(1),
+    // then periodically re-anchor from the current window to bound floating
+    // point drift on long/high-magnitude series.
+    let mut bars_since_reseed = 8 * period;
+    let mut trailing_value = 0.0;
+    let mut trailing_index = 0usize;
+    for i in lookback..len {
+        let value = input[i];
+        period_sub += value;
+        period_sub -= trailing_value;
+        period_sum += value * p;
+
+        bars_since_reseed -= 1;
+        if bars_since_reseed == 0 {
+            bars_since_reseed = 8 * period;
+            period_sub = 0.0;
+            period_sum = 0.0;
+            for (weight, &window_value) in input[i + 1 - period..=i].iter().enumerate() {
+                period_sub += window_value;
+                period_sum += window_value * (weight + 1) as f64;
+            }
         }
+
+        trailing_value = input[trailing_index];
+        trailing_index += 1;
+        output[i] = period_sum * inv_weight_sum;
+        period_sum -= period_sub;
     }
 }
 

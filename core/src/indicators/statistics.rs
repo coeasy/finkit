@@ -227,30 +227,22 @@ pub fn percent_rank(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
     let len = input.len();
     let mut output = init_output(len);
 
-    // Maintain a sorted window for O(log n) rank lookup
+    // TA-Lib ranks the current value against the preceding `timeperiod`
+    // observations. The current value is not part of its own reference window.
     let mut sorted: Vec<f64> = input[..timeperiod].to_vec();
     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
-    // First window
-    let current = input[timeperiod - 1];
-    let count_less = sorted.partition_point(|&x| x < current);
-    output[timeperiod - 1] = (count_less as f64 / timeperiod as f64) * 100.0;
-
-    // Subsequent windows — incremental sorted-vec update
     for i in timeperiod..len {
-        // Remove the evicted value
+        let current = input[i];
+        let count_less = sorted.partition_point(|&x| x < current);
+        output[i] = (count_less as f64 / timeperiod as f64) * 100.0;
+
+        // Advance the preceding-value window after producing this bar.
         let evicted = input[i - timeperiod];
         let pos = sorted.partition_point(|&x| x < evicted);
         sorted.remove(pos);
-
-        // Insert the new value in sorted order
-        let new_val = input[i];
-        let insert_pos = sorted.partition_point(|&x| x < new_val);
-        sorted.insert(insert_pos, new_val);
-
-        // Compute rank via binary search
-        let count_less = sorted.partition_point(|&x| x < new_val);
-        output[i] = (count_less as f64 / timeperiod as f64) * 100.0;
+        let insert_pos = sorted.partition_point(|&x| x < current);
+        sorted.insert(insert_pos, current);
     }
 
     Ok(output)
@@ -1038,8 +1030,8 @@ mod tests {
         assert!(result[0].is_nan());
         assert!(result[1].is_nan());
 
-        assert_relative_eq!(result[2], 66.66666666666666, epsilon = 1e-6);
-        assert_relative_eq!(result[3], 66.66666666666666, epsilon = 1e-6);
+        assert!(result[2].is_nan());
+        assert_relative_eq!(result[3], 100.0, epsilon = 1e-6);
     }
 
     #[test]
@@ -1047,7 +1039,8 @@ mod tests {
         let data = vec![5.0, 4.0, 3.0, 2.0, 1.0];
         let result = percent_rank(&data, 3).unwrap();
 
-        assert_relative_eq!(result[2], 0.0, epsilon = 1e-6);
+        assert!(result[2].is_nan());
+        assert_relative_eq!(result[3], 0.0, epsilon = 1e-6);
     }
 
     #[test]
@@ -1055,8 +1048,8 @@ mod tests {
         let data = vec![1.0, 2.0, 3.0];
         let result = percent_rank(&data, 1).unwrap();
 
-        assert_relative_eq!(result[0], 0.0, epsilon = 1e-6);
-        assert_relative_eq!(result[1], 0.0, epsilon = 1e-6);
+        assert!(result[0].is_nan());
+        assert_relative_eq!(result[1], 100.0, epsilon = 1e-6);
     }
 
     #[test]

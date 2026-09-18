@@ -513,11 +513,8 @@ pub fn dpo(input: &[f64], period: usize) -> Result<Array1<f64>> {
         ma_buf[i] = sum * inv_period;
     }
 
-    for i in shift..len {
-        let ma_idx = i - shift;
-        if ma_idx >= period - 1 {
-            output[i] = input[i] - ma_buf[ma_idx];
-        }
+    for i in (period - 1).max(shift)..len {
+        output[i] = input[i - shift] - ma_buf[i];
     }
 
     Ok(output)
@@ -900,9 +897,9 @@ mod tests {
         let shift = period / 2 + 1; // 3
 
         let ma = sma(&input, period).unwrap();
-        for i in shift..input.len() {
-            if !ma[i - shift].is_nan() {
-                assert_relative_eq!(result[i], input[i] - ma[i - shift], epsilon = 1e-10);
+        for i in (period - 1).max(shift)..input.len() {
+            if !ma[i].is_nan() {
+                assert_relative_eq!(result[i], input[i - shift] - ma[i], epsilon = 1e-10);
             }
         }
     }

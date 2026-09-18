@@ -4,15 +4,15 @@ use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 
 /// Streaming DPO (Detrended Price Oscillator 去趋势价格振荡器).
 ///
-/// DPO = Close - SMA(Close, period) shifted back by (period / 2 + 1) bars.
+/// DPO = Close shifted back by (period / 2 + 1) bars - current SMA(Close, period).
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamingDpo {
     period: usize,
     shift: usize,
     sma: StreamingSma,
-    sma_buf: Vec<f64>,
-    sma_head: usize,
-    sma_len: usize,
+    price_buf: Vec<f64>,
+    price_head: usize,
+    price_len: usize,
     count: usize,
     last_value: Option<f64>,
 }
@@ -23,9 +23,9 @@ impl StreamingDpo {
             period,
             shift: period / 2 + 1,
             sma: StreamingSma::new(period),
-            sma_buf: vec![0.0; period / 2 + 1],
-            sma_head: 0,
-            sma_len: 0,
+            price_buf: vec![0.0; period / 2 + 1],
+            price_head: 0,
+            price_len: 0,
             count: 0,
             last_value: None,
         }
@@ -37,37 +37,41 @@ impl StreamingIndicator for StreamingDpo {
     fn next(&mut self, input: f64) -> Option<f64> {
         self.count += 1;
 
-        let lagged = if self.sma_len == self.shift {
-            Some(self.sma_buf[self.sma_head])
+        let displaced = if self.price_len == self.shift {
+            Some(self.price_buf[self.price_head])
         } else {
             None
         };
 
-        if let Some(sma_val) = self.sma.next(input) {
-            if self.sma_len == self.shift {
-                self.sma_head = (self.sma_head + 1) % self.shift;
+        if self.shift > 0 {
+            self.price_buf[self.price_head] = input;
+            self.price_head = (self.price_head + 1) % self.shift;
+            if self.price_len < self.shift {
+                self.price_len += 1;
             } else {
-                self.sma_len += 1;
+                self.price_len = self.shift;
             }
-            let idx = (self.sma_head + self.sma_len - 1) % self.shift;
-            self.sma_buf[idx] = sma_val;
         }
 
-        let result = lagged.map(|s| input - s);
+        let result = self
+            .sma
+            .next(input)
+            .zip(displaced)
+            .map(|(sma, price)| price - sma);
         self.last_value = result;
         result
     }
 
     fn reset(&mut self) {
         self.sma.reset();
-        self.sma_head = 0;
-        self.sma_len = 0;
+        self.price_head = 0;
+        self.price_len = 0;
         self.count = 0;
         self.last_value = None;
     }
 
     fn is_ready(&self) -> bool {
-        self.sma_len >= self.shift && self.sma.is_ready()
+        self.price_len >= self.shift && self.sma.is_ready()
     }
 
     impl_standard_methods!();
@@ -87,7 +91,7 @@ impl IndicatorMeta for StreamingDpo {
     }
 
     fn warm_up_period(&self) -> usize {
-        self.period + self.period / 2
+        (self.period - 1).max(self.shift)
     }
 }
 
@@ -123,7 +127,7 @@ mod tests {
         let dpo = StreamingDpo::new(20);
         assert_eq!(StreamingDpo::name(), "DPO");
         assert_eq!(StreamingDpo::category(), "momentum");
-        assert_eq!(dpo.warm_up_period(), 30);
+        assert_eq!(dpo.warm_up_period(), 19);
     }
 
     #[test]

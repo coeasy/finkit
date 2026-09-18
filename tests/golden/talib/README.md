@@ -63,7 +63,7 @@ All outputs are computed on three shared fixtures from `tests/fixtures/`:
 
 ## Output Files
 
-One generated JSON file per indicator (161 numeric-parity indicators), plus a checked-in profile
+One generated JSON file per indicator (180 numeric-parity indicators), plus a checked-in profile
 variant fixture for official `matype` contracts. The previously excluded candlestick functions
 now use TA-Lib candle-setting, gap, penetration, and warm-up semantics and are included in the
 fixed corpus.
@@ -183,6 +183,25 @@ Generated indicator files:
 | `sarext.json` | SAREXT | official extended SAR defaults |
 | `beta.json` | BETA | timeperiod=30, close/benchmark |
 | `correl.json` | CORREL | timeperiod=30, close/benchmark |
+| `ao.json` | AO | fastperiod=5, slowperiod=34 |
+| `cmf.json` | CMF | timeperiod=20 |
+| `coppock.json` | COPPOCK | wmaperiod=10, roc1period=11, roc2period=14 |
+| `cumsum.json` | CUMSUM | — |
+| `donchian.json` | DONCHIAN | timeperiod=20 |
+| `dpo.json` | DPO | timeperiod=20 |
+| `er.json` | ER | timeperiod=10 |
+| `ha.json` | HA | — |
+| `hma.json` | HMA | timeperiod=20 |
+| `nvi.json` | NVI | — |
+| `percentrank.json` | PERCENTRANK | timeperiod=100 |
+| `pvi.json` | PVI | — |
+| `pvt.json` | PVT | — |
+| `supertrend.json` | SUPERTREND | timeperiod=10, multiplier=3.0 |
+| `tsi.json` | TSI | firstperiod=25, secondperiod=13 |
+| `vortex.json` | VORTEX | timeperiod=14 |
+| `vwap.json` | VWAP | — |
+| `vwma.json` | VWMA | timeperiod=30 |
+| `zlema.json` | ZLEMA | timeperiod=30 |
 
 Parameters are recorded in each file's metadata and are intentionally pinned
 to the TA-Lib Python `0.8.0` reference used for this corpus.

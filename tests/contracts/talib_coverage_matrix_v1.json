@@ -6,15 +6,15 @@
   "surfaces": {
     "profile_catalog": {
       "status": "registered",
-      "expected_count": 101
+      "expected_count": 117
     },
     "dispatcher_smoke": {
       "status": "executable_smoke",
-      "expected_count": 161
+      "expected_count": 180
     },
     "numeric_reference": {
       "status": "fixed_golden",
-      "expected_count": 161,
+      "expected_count": 180,
       "indicators": [
         "ACCBANDS",
         "ACOS",
@@ -23,6 +23,7 @@
         "ADOSC",
         "ADX",
         "ADXR",
+        "AO",
         "APO",
         "AROON",
         "AROONOSC",
@@ -34,6 +35,7 @@
         "BBANDS",
         "BETA",
         "BOP",
+        "CMF",
         "CDL2CROWS",
         "CDL3BLACKCROWS",
         "CDL3INSIDE",
@@ -101,9 +103,14 @@
         "CEIL",
         "COS",
         "COSH",
+        "COPPOCK",
+        "CUMSUM",
         "DEMA",
         "DIV",
+        "DONCHIAN",
+        "DPO",
         "DX",
+        "ER",
         "EXP",
         "FLOOR",
         "EMA",
@@ -113,6 +120,8 @@
         "HT_SINE",
         "HT_TRENDLINE",
         "HT_TRENDMODE",
+        "HA",
+        "HMA",
         "IMI",
         "LINEARREG",
         "LINEARREG_ANGLE",
@@ -143,14 +152,18 @@
         "MOM",
         "NATR",
         "OBV",
+        "NVI",
         "PLUS_DI",
         "PLUS_DM",
+        "PERCENTRANK",
         "PPO",
         "ROC",
         "ROCP",
         "ROCR",
         "ROCR100",
         "RSI",
+        "PVI",
+        "PVT",
         "SAR",
         "SAREXT",
         "SMA",
@@ -171,12 +184,18 @@
         "TRIMA",
         "TRIX",
         "TSF",
+        "SUPERTREND",
+        "TSI",
         "TYPPRICE",
         "ULTOSC",
         "VAR",
+        "VORTEX",
+        "VWAP",
+        "VWMA",
         "WCLPRICE",
         "WILLR",
-        "WMA"
+        "WMA",
+        "ZLEMA"
       ]
     }
   }
