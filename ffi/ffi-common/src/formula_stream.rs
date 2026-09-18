@@ -221,5 +221,23 @@ mod tests {
             expression["values"]["__PRIMARY__"],
             serde_json::json!([1.5, 2.0, 1.5, 3.0])
         );
+
+        let program = serde_json::json!({
+            "schema_version": 1,
+            "source": "MA3:MA(CLOSE,3); SIGNAL:=MA3+1; SIGNAL",
+            "dialect": "tdx",
+            "inputs": {"close": [1.0, 2.0, 3.0, 4.0, 5.0]}
+        });
+        let program: Value =
+            serde_json::from_str(&evaluate_formula_stream_json(&program.to_string()).unwrap())
+                .unwrap();
+        assert_eq!(
+            program["values"]["__PRIMARY__"],
+            serde_json::json!([null, null, 3.0, 4.0, 5.0])
+        );
+        assert_eq!(
+            program["execution"]["required_inputs"],
+            serde_json::json!(["close"])
+        );
     }
 }

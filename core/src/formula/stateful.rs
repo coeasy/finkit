@@ -3,11 +3,12 @@
 //! Formula batch evaluation remains the source of truth for the complete
 //! language. This module provides a deliberately narrow, serializable state
 //! contract for direct recursive indicators whose row kernel is already
-//! verified against the batch implementation. Complex assignments, drawing,
-//! control flow, future-data functions and host-dependent calls are rejected
-//! instead of being silently approximated.
+//! verified against the batch implementation. Numeric assignments and
+//! multi-statement programs are supported when their dependencies can be
+//! represented by this state model; drawing, loops, future-data functions and
+//! host-dependent calls are rejected instead of being silently approximated.
 
-use super::ast::{AstNode, BinaryOperator, UnaryOperator};
+use super::ast::{AstNode, BinaryOperator, CompoundAssignOp, UnaryOperator};
 use super::{normalize_formula_source, parse_formula_with_dialect, FormulaDialect};
 use crate::factors::{FactorError, FactorResult};
 use crate::formula::types::{classify_builtin_var, BuiltinVar};
@@ -17,7 +18,7 @@ use crate::streaming::indicators::{
 };
 use crate::streaming::momentum::macd::StreamingMacd;
 use crate::streaming::traits::StreamingIndicator;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, HashSet, VecDeque};
 
 /// Direct raw OHLCV input consumed by a stateful Formula call.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,13 +66,14 @@ impl FormulaStateInput {
     }
 }
 
-/// O(1)-per-row stateful Formula executor for the verified direct subset.
+/// O(1)-per-row stateful Formula executor for the verified portable subset.
 #[derive(Clone)]
 pub struct FormulaStatefulStream {
     signature: u64,
     required_inputs: Vec<FormulaStateInput>,
     state: FormulaState,
     row_count: usize,
+    runtime_variables: BTreeMap<String, f64>,
 }
 
 /// Serializable checkpoint for [`FormulaStatefulStream`].
@@ -111,7 +113,7 @@ impl FormulaStatefulCheckpoint {
 }
 
 impl FormulaStatefulStream {
-    /// Compile a direct stateful Formula using an explicit dialect profile.
+    /// Compile a stateful Formula using an explicit dialect profile.
     pub fn from_source(source: &str, dialect: FormulaDialect) -> FactorResult<Self> {
         let normalized = normalize_formula_source(source, dialect);
         let ast = parse_formula_with_dialect(&normalized, dialect)
@@ -119,21 +121,16 @@ impl FormulaStatefulStream {
         let (state, required_inputs) = match direct_expression(&ast) {
             Ok(expression) => match compile_state(expression) {
                 Ok((state, inputs)) => (state, inputs),
-                Err(_) => {
-                    let (expression, inputs) = compile_expression(&ast)?;
-                    (FormulaState::Expression { expression }, inputs)
-                }
+                Err(_) => compile_expression_or_program(&ast)?,
             },
-            Err(_) => {
-                let (expression, inputs) = compile_expression(&ast)?;
-                (FormulaState::Expression { expression }, inputs)
-            }
+            Err(_) => compile_expression_or_program(&ast)?,
         };
         Ok(Self {
             signature: formula_signature(&normalized, dialect),
             required_inputs,
             state,
             row_count: 0,
+            runtime_variables: BTreeMap::new(),
         })
     }
 
@@ -239,11 +236,13 @@ impl FormulaStatefulStream {
         }
         self.state = checkpoint.state.clone();
         self.row_count = checkpoint.row_count;
+        self.runtime_variables.clear();
         Ok(())
     }
 
     fn next_row(&mut self, row: [f64; 6]) -> f64 {
-        let value = self.state.next(&row);
+        self.runtime_variables.clear();
+        let value = self.state.next(&row, &mut self.runtime_variables);
         self.row_count = self.row_count.saturating_add(1);
         value
     }
@@ -268,6 +267,7 @@ enum FormulaState {
     Expression {
         expression: FormulaExpressionState,
     },
+    Program(FormulaProgramState),
     Sma {
         input: FormulaStateInput,
         indicator: StreamingSma,
@@ -324,9 +324,10 @@ enum FormulaState {
 }
 
 impl FormulaState {
-    fn next(&mut self, row: &[f64; 6]) -> f64 {
+    fn next(&mut self, row: &[f64; 6], variables: &mut BTreeMap<String, f64>) -> f64 {
         let value = match self {
-            Self::Expression { expression } => Some(expression.next(row)),
+            Self::Expression { expression } => Some(expression.next(row, variables)),
+            Self::Program(program) => Some(program.next(row)),
             Self::Sma { input, indicator } => indicator.next(row[input.slot()]),
             Self::Wma { input, indicator } => indicator.next(row[input.slot()]),
             Self::Ema { input, indicator } => indicator.next(row[input.slot()]),
@@ -387,9 +388,38 @@ impl FormulaState {
 
 #[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+struct FormulaProgramState {
+    statements: Vec<FormulaStatementState>,
+    variables: BTreeMap<String, f64>,
+}
+
+impl FormulaProgramState {
+    fn next(&mut self, row: &[f64; 6]) -> f64 {
+        self.variables.clear();
+        let mut result = f64::NAN;
+        for statement in &mut self.statements {
+            result = statement.expression.next(row, &mut self.variables);
+            if let Some(name) = &statement.target {
+                self.variables.insert(name.clone(), result);
+            }
+        }
+        result
+    }
+}
+
+#[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+struct FormulaStatementState {
+    target: Option<String>,
+    expression: FormulaExpressionState,
+}
+
+#[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 enum FormulaExpressionState {
     Input(FormulaStateInput),
     Constant(f64),
+    Variable(String),
     Direct(Box<FormulaState>),
     Unary {
         op: UnaryOperator,
@@ -486,13 +516,14 @@ impl FormulaExpressionFunction {
 }
 
 impl FormulaExpressionState {
-    fn next(&mut self, row: &[f64; 6]) -> f64 {
+    fn next(&mut self, row: &[f64; 6], variables: &mut BTreeMap<String, f64>) -> f64 {
         match self {
             Self::Input(input) => row[input.slot()],
             Self::Constant(value) => *value,
-            Self::Direct(state) => state.next(row),
+            Self::Variable(name) => variables.get(name).copied().unwrap_or(f64::NAN),
+            Self::Direct(state) => state.next(row, variables),
             Self::Unary { op, expression } => {
-                let value = expression.next(row);
+                let value = expression.next(row, variables);
                 match op {
                     UnaryOperator::Not => {
                         if value > 0.0 {
@@ -505,8 +536,8 @@ impl FormulaExpressionState {
                 }
             }
             Self::Binary { op, left, right } => {
-                let left = left.next(row);
-                let right = right.next(row);
+                let left = left.next(row, variables);
+                let right = right.next(row, variables);
                 apply_stateful_binary(op, left, right)
             }
             Self::Conditional {
@@ -514,12 +545,12 @@ impl FormulaExpressionState {
                 then_branch,
                 else_branch,
             } => {
-                let condition = condition.next(row);
+                let condition = condition.next(row, variables);
                 // Both branches advance every row so a stateful indicator in
                 // an unselected branch remains aligned with batch Formula
                 // evaluation before the result is selected.
-                let then_value = then_branch.next(row);
-                let else_value = else_branch.next(row);
+                let then_value = then_branch.next(row, variables);
+                let else_value = else_branch.next(row, variables);
                 if condition > 0.0 {
                     then_value
                 } else {
@@ -529,21 +560,23 @@ impl FormulaExpressionState {
             Self::UnaryFunction {
                 function,
                 expression,
-            } => apply_stateful_unary_function(*function, expression.next(row)),
+            } => apply_stateful_unary_function(*function, expression.next(row, variables)),
             Self::Stateful {
                 function,
                 expression,
-            } => function.next(expression.next(row)),
+            } => function.next(expression.next(row, variables)),
             Self::Reference {
                 state, expression, ..
-            } => state.next(expression.next(row)).unwrap_or(f64::NAN),
+            } => state
+                .next(expression.next(row, variables))
+                .unwrap_or(f64::NAN),
             Self::Cross {
                 direction,
                 previous,
                 left,
                 right,
             } => {
-                let current = (left.next(row), right.next(row));
+                let current = (left.next(row, variables), right.next(row, variables));
                 let result = previous.map_or(0.0, |(previous_left, previous_right)| {
                     let crossed = match direction {
                         FormulaCrossDirection::Above => {
@@ -701,23 +734,123 @@ fn direct_expression(ast: &AstNode) -> FactorResult<&AstNode> {
         AstNode::Output { expr, .. } => direct_expression(expr),
         AstNode::Statements(nodes) if nodes.len() == 1 => direct_expression(&nodes[0]),
         _ => Err(FactorError::InvalidParameter(
-            "stateful Formula requires one direct indicator expression; assignments, drawing, control flow and future-data calls are not supported"
+            "stateful Formula requires one direct indicator expression or a supported numeric program"
                 .to_string(),
         )),
+    }
+}
+
+fn compile_expression_or_program(
+    ast: &AstNode,
+) -> FactorResult<(FormulaState, Vec<FormulaStateInput>)> {
+    match compile_expression(ast) {
+        Ok((expression, inputs)) => Ok((FormulaState::Expression { expression }, inputs)),
+        Err(expression_error) => match compile_program(ast) {
+            Ok((program, inputs)) => Ok((FormulaState::Program(program), inputs)),
+            Err(_) => Err(expression_error),
+        },
+    }
+}
+
+fn compile_program(ast: &AstNode) -> FactorResult<(FormulaProgramState, Vec<FormulaStateInput>)> {
+    let nodes: &[AstNode] = match ast {
+        AstNode::Statements(nodes) => nodes,
+        node => std::slice::from_ref(node),
+    };
+    if nodes.is_empty() {
+        return Err(FactorError::InvalidParameter(
+            "stateful Formula program cannot be empty".to_string(),
+        ));
+    }
+
+    let mut known_variables = HashSet::new();
+    let mut statements = Vec::with_capacity(nodes.len());
+    let mut required_inputs = Vec::new();
+    for node in nodes {
+        let (target, expression_ast) = match node {
+            AstNode::Assignment { name, expr } | AstNode::Output { name, expr, .. } => {
+                (Some(name.clone()), expr.as_ref())
+            }
+            AstNode::CompoundAssignment { name, op, expr } => {
+                if !known_variables.contains(name) {
+                    return Err(FactorError::InvalidParameter(format!(
+                        "stateful Formula compound assignment references undeclared variable: {name}"
+                    )));
+                }
+                let binary = AstNode::BinaryOp {
+                    op: compound_assignment_operator(op),
+                    left: Box::new(AstNode::Variable(name.clone())),
+                    right: expr.clone(),
+                };
+                let (expression, inputs) =
+                    compile_expression_with_variables(&binary, Some(&known_variables))?;
+                merge_required_inputs(&mut required_inputs, &inputs);
+                statements.push(FormulaStatementState {
+                    target: Some(name.clone()),
+                    expression,
+                });
+                continue;
+            }
+            AstNode::ParamDecl { .. } => {
+                return Err(FactorError::InvalidParameter(
+                    "stateful Formula programs do not support parameter declarations".to_string(),
+                ));
+            }
+            _ => (None, node),
+        };
+
+        let (expression, inputs) =
+            compile_expression_with_variables(expression_ast, Some(&known_variables))?;
+        merge_required_inputs(&mut required_inputs, &inputs);
+        if let Some(name) = &target {
+            known_variables.insert(name.clone());
+        }
+        statements.push(FormulaStatementState { target, expression });
+    }
+
+    Ok((
+        FormulaProgramState {
+            statements,
+            variables: BTreeMap::new(),
+        },
+        required_inputs,
+    ))
+}
+
+fn compound_assignment_operator(op: &CompoundAssignOp) -> BinaryOperator {
+    match op {
+        CompoundAssignOp::AddAssign => BinaryOperator::Add,
+        CompoundAssignOp::SubAssign => BinaryOperator::Sub,
+        CompoundAssignOp::MulAssign => BinaryOperator::Mul,
+        CompoundAssignOp::DivAssign => BinaryOperator::Div,
     }
 }
 
 fn compile_expression(
     ast: &AstNode,
 ) -> FactorResult<(FormulaExpressionState, Vec<FormulaStateInput>)> {
+    compile_expression_with_variables(ast, None)
+}
+
+fn compile_expression_with_variables(
+    ast: &AstNode,
+    known_variables: Option<&HashSet<String>>,
+) -> FactorResult<(FormulaExpressionState, Vec<FormulaStateInput>)> {
     match ast {
         AstNode::Number(value) => Ok((FormulaExpressionState::Constant(*value), Vec::new())),
-        AstNode::Variable(_) => {
-            let input = FormulaStateInput::from_ast(ast)?;
-            Ok((FormulaExpressionState::Input(input), vec![input]))
+        AstNode::Variable(name) => {
+            if let Ok(input) = FormulaStateInput::from_ast(ast) {
+                return Ok((FormulaExpressionState::Input(input), vec![input]));
+            }
+            if known_variables.is_some_and(|variables| variables.contains(name)) {
+                return Ok((FormulaExpressionState::Variable(name.clone()), Vec::new()));
+            }
+            Err(FactorError::InvalidParameter(format!(
+                "stateful Formula input is not a declared portable variable: {name}"
+            )))
         }
         AstNode::UnaryOp { op, expr } => {
-            let (expression, inputs) = compile_expression(expr)?;
+            let (expression, inputs) = compile_expression_with_variables(expr, known_variables)?;
             Ok((
                 FormulaExpressionState::Unary {
                     op: op.clone(),
@@ -732,8 +865,9 @@ fn compile_expression(
                     "stateful Formula does not support string concatenation".to_string(),
                 ));
             }
-            let (left, mut inputs) = compile_expression(left)?;
-            let (right, right_inputs) = compile_expression(right)?;
+            let (left, mut inputs) = compile_expression_with_variables(left, known_variables)?;
+            let (right, right_inputs) =
+                compile_expression_with_variables(right, known_variables)?;
             merge_required_inputs(&mut inputs, &right_inputs);
             Ok((
                 FormulaExpressionState::Binary {
@@ -749,9 +883,11 @@ fn compile_expression(
             then_branch,
             else_branch,
         } => {
-            let (condition, mut inputs) = compile_expression(cond)?;
-            let (then_branch, then_inputs) = compile_expression(then_branch)?;
-            let (else_branch, else_inputs) = compile_expression(else_branch)?;
+            let (condition, mut inputs) = compile_expression_with_variables(cond, known_variables)?;
+            let (then_branch, then_inputs) =
+                compile_expression_with_variables(then_branch, known_variables)?;
+            let (else_branch, else_inputs) =
+                compile_expression_with_variables(else_branch, known_variables)?;
             merge_required_inputs(&mut inputs, &then_inputs);
             merge_required_inputs(&mut inputs, &else_inputs);
             Ok((
@@ -771,9 +907,12 @@ fn compile_expression(
                         "IF requires condition, then and else expressions".to_string(),
                     ));
                 }
-                let (condition, mut inputs) = compile_expression(&args[0])?;
-                let (then_branch, then_inputs) = compile_expression(&args[1])?;
-                let (else_branch, else_inputs) = compile_expression(&args[2])?;
+                let (condition, mut inputs) =
+                    compile_expression_with_variables(&args[0], known_variables)?;
+                let (then_branch, then_inputs) =
+                    compile_expression_with_variables(&args[1], known_variables)?;
+                let (else_branch, else_inputs) =
+                    compile_expression_with_variables(&args[2], known_variables)?;
                 merge_required_inputs(&mut inputs, &then_inputs);
                 merge_required_inputs(&mut inputs, &else_inputs);
                 return Ok((
@@ -786,7 +925,7 @@ fn compile_expression(
                 ));
             }
             if let Some((expression, inputs)) =
-                compile_expression_stateful_function(&normalized, args)?
+                compile_expression_stateful_function(&normalized, args, known_variables)?
             {
                 return Ok((expression, inputs));
             }
@@ -796,7 +935,8 @@ fn compile_expression(
                         "{name} requires exactly one expression"
                     )));
                 }
-                let (expression, inputs) = compile_expression(&args[0])?;
+                let (expression, inputs) =
+                    compile_expression_with_variables(&args[0], known_variables)?;
                 return Ok((
                     FormulaExpressionState::UnaryFunction {
                         function,
@@ -808,10 +948,12 @@ fn compile_expression(
             let (state, inputs) = compile_state(ast)?;
             Ok((FormulaExpressionState::Direct(Box::new(state)), inputs))
         }
-        AstNode::Output { expr, .. } => compile_expression(expr),
-        AstNode::Statements(nodes) if nodes.len() == 1 => compile_expression(&nodes[0]),
+        AstNode::Output { expr, .. } => compile_expression_with_variables(expr, known_variables),
+        AstNode::Statements(nodes) if nodes.len() == 1 => {
+            compile_expression_with_variables(&nodes[0], known_variables)
+        }
         _ => Err(FactorError::InvalidParameter(
-            "stateful Formula expression contains assignments, multiple statements, drawing, control flow, indexing or unsupported values"
+            "stateful Formula expression contains drawing, control flow, indexing or unsupported values"
                 .to_string(),
         )),
     }
@@ -820,6 +962,7 @@ fn compile_expression(
 fn compile_expression_stateful_function(
     name: &str,
     args: &[AstNode],
+    known_variables: Option<&HashSet<String>>,
 ) -> FactorResult<Option<(FormulaExpressionState, Vec<FormulaStateInput>)>> {
     let period = |minimum: usize| parse_stateful_period(args, 1, 14, name, minimum);
     let unary = |function: FormulaExpressionFunction| -> FactorResult<
@@ -830,7 +973,8 @@ fn compile_expression_stateful_function(
                 "{name} requires an input"
             )));
         }
-        let (expression, inputs) = compile_expression(&args[0])?;
+        let (expression, inputs) =
+            compile_expression_with_variables(&args[0], known_variables)?;
         Ok(Some((
             FormulaExpressionState::Stateful {
                 function,
@@ -880,7 +1024,8 @@ fn compile_expression_stateful_function(
                 ));
             }
             let period = parse_stateful_period(args, 1, 1, name, 1)?;
-            let (expression, inputs) = compile_expression(&args[0])?;
+            let (expression, inputs) =
+                compile_expression_with_variables(&args[0], known_variables)?;
             Ok(Some((
                 FormulaExpressionState::Reference {
                     state: FormulaReferenceState::new(period),
@@ -895,8 +1040,9 @@ fn compile_expression_stateful_function(
                     "{name} requires two expressions"
                 )));
             }
-            let (left, mut inputs) = compile_expression(&args[0])?;
-            let (right, right_inputs) = compile_expression(&args[1])?;
+            let (left, mut inputs) = compile_expression_with_variables(&args[0], known_variables)?;
+            let (right, right_inputs) =
+                compile_expression_with_variables(&args[1], known_variables)?;
             merge_required_inputs(&mut inputs, &right_inputs);
             Ok(Some((
                 FormulaExpressionState::Cross {
@@ -1314,12 +1460,37 @@ mod tests {
     }
 
     #[test]
-    fn stateful_formula_rejects_assignments_and_unknown_inputs() {
-        assert!(FormulaStatefulStream::from_source(
+    fn stateful_formula_supports_serializable_programs_and_rejects_unknown_inputs() {
+        let close = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
+        for source in [
             "X:=EMA(CLOSE,5); X",
-            FormulaDialect::TongDaXin
-        )
-        .is_err());
+            "MA3:MA(CLOSE,3); MA3",
+            "PREV:=REF(CLOSE,1); PREV",
+            "X:=CLOSE; X+=1; X",
+        ] {
+            let mut stream =
+                FormulaStatefulStream::from_source(source, FormulaDialect::TongDaXin).unwrap();
+            let mut actual = Vec::new();
+            stream
+                .push_batch_into(
+                    &BTreeMap::from([(String::from("close"), close.clone())]),
+                    &mut actual,
+                )
+                .unwrap();
+            let mut context = crate::formula::FormulaContext::new(
+                ndarray::Array1::from_vec(close.clone()),
+                ndarray::Array1::from_vec(close.clone()),
+                ndarray::Array1::from_vec(close.clone()),
+                ndarray::Array1::from_vec(close.clone()),
+                ndarray::Array1::from_vec(close.clone()),
+                None,
+            );
+            let mut engine = crate::formula::FormulaEngine::new();
+            let expected = engine
+                .eval_with_dialect(source, FormulaDialect::TongDaXin, &mut context)
+                .unwrap();
+            assert_same(&actual, expected.as_slice().unwrap());
+        }
         assert!(
             FormulaStatefulStream::from_source("EMA(MY_SERIES,5)", FormulaDialect::AlphaTA)
                 .is_err()

@@ -102,6 +102,16 @@ mod tests {
             formula_second["execution"]["total_rows"],
             formula_stateful["expected_total_rows"]
         );
+
+        let formula_program = &fixture["formula_stateful_program"];
+        let formula_program_payload: Value = serde_json::from_str(
+            &evaluate_formula_stream_json(&formula_program["request"].to_string()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            formula_program_payload["values"]["__PRIMARY__"],
+            formula_program["expected_primary"]
+        );
     }
 
     #[test]

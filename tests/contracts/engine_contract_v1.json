@@ -22,6 +22,15 @@
     "expected_next": [13.5, 14.75],
     "expected_total_rows": 6
   },
+  "formula_stateful_program": {
+    "request": {
+      "schema_version": 1,
+      "source": "MA3:MA(CLOSE,3); SIGNAL:=MA3+1; SIGNAL",
+      "dialect": "tdx",
+      "inputs": {"close": [1.0, 2.0, 3.0, 4.0, 5.0]}
+    },
+    "expected_primary": [null, null, 3.0, 4.0, 5.0]
+  },
   "factor": {
     "request": {
       "schema_version": 1,
