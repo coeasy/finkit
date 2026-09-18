@@ -6306,10 +6306,18 @@ fn operation_execute_json(request_json: &str) -> String {
     finkit_ffi_common::execute_operation_json(request_json)
 }
 
+/// Execute a dependency-aware Composite through the shared JSON contract.
+#[pyfunction]
+fn composite_execute_json(request_json: &str) -> PyResult<String> {
+    finkit_ffi_common::evaluate_composite_json(request_json)
+        .map_err(pyo3::exceptions::PyValueError::new_err)
+}
+
 #[pymodule]
 fn finkit(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(operation_catalog_json, m)?)?;
     m.add_function(wrap_pyfunction!(operation_execute_json, m)?)?;
+    m.add_function(wrap_pyfunction!(composite_execute_json, m)?)?;
     m.add_class::<PyKlineData>()?;
     m.add_class::<PyKlineChart>()?;
     m.add_function(wrap_pyfunction!(chan_analyze, m)?)?;

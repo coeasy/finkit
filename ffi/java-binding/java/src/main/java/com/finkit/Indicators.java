@@ -849,6 +849,9 @@ public final class Indicators {
     /** Executes one registered operation through the shared JSON contract. */
     public static native String operationExecuteJson(String requestJson);
 
+    /** Executes a dependency-aware Composite through the shared JSON contract. */
+    public static native String compositeExecuteJson(String requestJson);
+
     /**
      * Evaluates a formula through the language-neutral versioned JSON contract.
      * Non-finite warm-up values are represented as JSON {@code null}.

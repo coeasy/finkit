@@ -2440,6 +2440,13 @@ pub fn operation_catalog_json() -> Result<String> {
         .map_err(|error| Error::new(Status::GenericFailure, error.to_string()))
 }
 
+/// Execute a dependency-aware Composite through the shared JSON contract.
+#[napi]
+pub fn composite_execute_json(request_json: String) -> Result<String> {
+    finkit_ffi_common::evaluate_composite_json(&request_json)
+        .map_err(|error| Error::new(Status::InvalidArg, error))
+}
+
 /// Execute one registered operation through the shared JSON result contract.
 #[napi]
 pub fn operation_execute_json(request_json: String) -> String {

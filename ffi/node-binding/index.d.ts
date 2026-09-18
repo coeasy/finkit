@@ -1346,6 +1346,8 @@ export declare function formulaEval(source: string, open: Array<number>, high: A
 export declare function formulaEvalContractJson(source: string, dialect: string, open: Array<number>, high: Array<number>, low: Array<number>, close: Array<number>, volume: Array<number>): string
 /** Return the versioned, language-neutral operation catalog. */
 export declare function operationCatalogJson(): string
+/** Execute a dependency-aware Composite using the shared JSON contract. */
+export declare function compositeExecuteJson(requestJson: string): string
 /** Execute one registered operation using the shared JSON request/result contract. */
 export declare function operationExecuteJson(requestJson: string): string
 export interface FormulaMultiResult {

@@ -11,6 +11,7 @@
 //! * [`research`] — versioned factor-research and generic quantitative
 //!   evaluation JSON contracts. Statistical logic remains in Rust.
 
+pub mod composite;
 pub mod error;
 pub mod execute;
 pub mod formula;
@@ -22,6 +23,7 @@ pub mod registry;
 pub mod research;
 pub mod types;
 
+pub use composite::{evaluate_composite_json, COMPOSITE_CONTRACT_SCHEMA_VERSION};
 pub use execute::{
     execute_operation_json, talib_profile_supported, OPERATION_RESULT_SCHEMA_VERSION,
 };

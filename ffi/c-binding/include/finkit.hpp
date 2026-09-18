@@ -46,6 +46,16 @@ inline std::string operation_execute_json(const std::string& request_json) {
     return result;
 }
 
+inline std::string composite_execute_json(const std::string& request_json) {
+    char* raw = ta_composite_execute_json(request_json.c_str());
+    if (raw == nullptr) {
+        throw TaLibException("composite execution returned null");
+    }
+    std::string result(raw);
+    finkit_free_string(raw);
+    return result;
+}
+
 inline std::string formula_eval_contract_json(
     const std::string& source,
     const std::string& dialect,

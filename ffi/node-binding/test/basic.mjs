@@ -10,7 +10,7 @@ test('loads the native binding and computes SMA', () => {
 })
 
 test('exports core indicator and formula entry points', () => {
-  for (const name of ['sma', 'ema', 'rsi', 'macd', 'formulaEval', 'formulaEvalContractJson', 'operationCatalogJson', 'operationExecuteJson', 'formulaValidate', 'formulaAnalyze', 'formulaMetadata', 'formulaCompatibilityReport']) {
+  for (const name of ['sma', 'ema', 'rsi', 'macd', 'formulaEval', 'formulaEvalContractJson', 'operationCatalogJson', 'compositeExecuteJson', 'operationExecuteJson', 'formulaValidate', 'formulaAnalyze', 'formulaMetadata', 'formulaCompatibilityReport']) {
     assert.equal(typeof finkit[name], 'function', `${name} must be exported`)
   }
   assert.equal(typeof finkit.computeComposite, 'function')

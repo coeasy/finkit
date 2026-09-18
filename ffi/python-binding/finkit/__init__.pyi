@@ -672,6 +672,10 @@ def operation_execute_json(request_json: str) -> str:
     """Execute one registered operation using the shared JSON contract."""
     ...
 
+def composite_execute_json(request_json: str) -> str:
+    """Execute a dependency-aware Composite using the shared JSON contract."""
+    ...
+
 class CompiledFormula:
     """Reusable formula compilation plan for repeated evaluations."""
 
@@ -1139,7 +1143,7 @@ __all__ = [
     "log10", "sin", "sinh", "sqrt", "tan", "tanh",
     # Formula Engine
     "CompiledFormula", "formula_eval", "formula_eval_dialect",
-    "operation_catalog_json", "operation_execute_json", "formula_eval_contract_json",
+    "operation_catalog_json", "operation_execute_json", "composite_execute_json", "formula_eval_contract_json",
     # Visualization
     "KlineChart", "KlineData",
     # Streaming Indicators

@@ -57,6 +57,7 @@ extern TaResult* ta_tsf(const double *input, int length, int period);
 extern const char* ta_version();
 extern char* ta_operation_catalog_json();
 extern char* ta_operation_execute_json(const char *request_json);
+extern char* ta_composite_execute_json(const char *request_json);
 extern char* ta_formula_eval_contract_json(const char *source, const char *dialect, const double *open, const double *high, const double *low, const double *close, const double *volume, int length);
 extern void ta_free_result(TaResult *result);
 
@@ -143,6 +144,14 @@ func OperationExecuteJSON(requestJSON string) (string, error) {
 	cRequest := C.CString(requestJSON)
 	defer C.free(unsafe.Pointer(cRequest))
 	return formulaJSONResult(C.ta_operation_execute_json(cRequest))
+}
+
+// CompositeExecuteJSON evaluates a dependency-aware Composite using the
+// versioned language-neutral request/result contract.
+func CompositeExecuteJSON(requestJSON string) (string, error) {
+	cRequest := C.CString(requestJSON)
+	defer C.free(unsafe.Pointer(cRequest))
+	return formulaJSONResult(C.ta_composite_execute_json(cRequest))
 }
 
 // FormulaEvalContractJSON evaluates a formula using an explicit dialect and
