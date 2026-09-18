@@ -28,6 +28,10 @@ pub struct FactorCatalogEntry {
     pub deterministic: bool,
     /// Whether the factor can use the finite-lookback streaming contract.
     pub bounded_streaming: bool,
+    /// Whether the factor has an explicit serializable O(1) state kernel.
+    pub stateful_streaming: bool,
+    /// Aggregate streaming capability; callers should inspect the specific
+    /// bounded/stateful fields when selecting an execution mode.
     pub streaming: bool,
     pub incremental: bool,
     pub fixed_lookback: Option<usize>,
@@ -53,6 +57,7 @@ pub fn factor_catalog() -> FactorCatalogEnvelope {
                 bounded_streaming: descriptor.metadata.incremental
                     && descriptor.metadata.fixed_lookback.is_some()
                     && definition.kind == FactorKind::TimeSeries,
+                stateful_streaming: catalog.stateful_spec(&definition.name).is_some(),
                 streaming: descriptor.metadata.streaming,
                 incremental: descriptor.metadata.incremental,
                 fixed_lookback: descriptor.metadata.fixed_lookback,
@@ -104,6 +109,7 @@ mod tests {
         assert_eq!(momentum["kind"], "time_series");
         assert_eq!(momentum["direction"], "higher_better");
         assert_eq!(momentum["bounded_streaming"], true);
+        assert_eq!(momentum["stateful_streaming"], true);
         assert_eq!(momentum["streaming"], true);
         let reversal = factors
             .iter()

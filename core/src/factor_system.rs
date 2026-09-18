@@ -13,6 +13,23 @@ use crate::factors::{
 use crate::unified_runtime::{DirtyRange, RuntimeExecution, RuntimeExecutionTrace, UnifiedRuntime};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
+/// Declarative state kernel selected at Factor plan-compile time.
+///
+/// The batch `FactorDefinition` remains a closure for compatibility with the
+/// numerical engine, but a production streaming path must declare its state
+/// shape explicitly. Keeping this separate from the factor name prevents the
+/// stateful executor from growing another string-dispatch table.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum StatefulFactorSpec {
+    /// Arithmetic return over a fixed number of prior close values.
+    Momentum { period: usize },
+    /// Population volatility over one-bar arithmetic returns.
+    Volatility { period: usize },
+    /// Negate a previously computed Factor node.
+    Negate { dependency: String },
+}
+
 /// Stable metadata attached to a registered factor independently of its
 /// computation closure.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -75,6 +92,7 @@ pub struct FactorCatalog {
     registry: FactorRegistry,
     metadata: BTreeMap<String, FactorMetadata>,
     aliases: BTreeMap<String, String>,
+    stateful_specs: BTreeMap<String, StatefulFactorSpec>,
 }
 
 impl FactorCatalog {
@@ -99,11 +117,23 @@ impl FactorCatalog {
                 )
             })
             .collect();
-        Self {
+        let mut catalog = Self {
             registry,
             metadata,
             aliases: BTreeMap::new(),
+            stateful_specs: BTreeMap::new(),
+        };
+        let builtin_specs = catalog
+            .registry
+            .names()
+            .filter_map(|name| {
+                builtin_factor_stateful_spec(name).map(|spec| (name.to_string(), spec))
+            })
+            .collect::<Vec<_>>();
+        for (name, spec) in builtin_specs {
+            catalog.stateful_specs.insert(name, spec);
         }
+        catalog
     }
 
     /// Register a canonical factor and its stable metadata.
@@ -145,6 +175,37 @@ impl FactorCatalog {
         }
         self.metadata.insert(name, metadata);
         Ok(())
+    }
+
+    /// Register the explicit state kernel used by a Factor's production
+    /// streaming plan. The batch closure remains the source of truth for
+    /// full recomputation; the caller must provide a matching state spec and
+    /// verify it with a batch/stream golden vector.
+    pub fn register_stateful_spec(
+        &mut self,
+        name: &str,
+        spec: StatefulFactorSpec,
+    ) -> FactorResult<()> {
+        let factor = self
+            .registry
+            .get(name)
+            .ok_or_else(|| FactorError::UnknownFactor(name.to_string()))?;
+        if factor.kind != FactorKind::TimeSeries {
+            return Err(FactorError::InvalidParameter(format!(
+                "stateful Factor specs require a time-series factor: {name}"
+            )));
+        }
+        validate_stateful_factor_spec(name, &spec, &self.registry)?;
+        self.stateful_specs.insert(name.to_string(), spec);
+        self.metadata.entry(name.to_string()).or_default().streaming = true;
+        Ok(())
+    }
+
+    /// Return the explicit state spec for a canonical name or alias.
+    #[must_use]
+    pub fn stateful_spec(&self, name: &str) -> Option<&StatefulFactorSpec> {
+        let canonical = self.resolve_name(name)?;
+        self.stateful_specs.get(canonical)
     }
 
     /// Access the canonical computation registry.
@@ -210,11 +271,22 @@ impl FactorCatalog {
             .collect();
 
         let range_lookback = self.range_lookback_for_plan(&plan);
+        let stateful_specs = plan
+            .execution_order()
+            .iter()
+            .filter_map(|name| {
+                self.stateful_specs
+                    .get(name)
+                    .cloned()
+                    .map(|spec| (name.clone(), spec))
+            })
+            .collect();
         Ok(CompiledFactorPlan {
             plan,
             targets: canonical,
             semantic_identity: identity,
             range_lookback,
+            stateful_specs,
         })
     }
 
@@ -287,6 +359,52 @@ fn builtin_factor_metadata(name: &str) -> Option<FactorMetadata> {
     }
 }
 
+fn builtin_factor_stateful_spec(name: &str) -> Option<StatefulFactorSpec> {
+    if let Some(period) = name
+        .strip_prefix("momentum_")
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|period| *period > 0)
+    {
+        return Some(StatefulFactorSpec::Momentum { period });
+    }
+    match name {
+        "volatility_20" => Some(StatefulFactorSpec::Volatility { period: 20 }),
+        "reversal_5" => Some(StatefulFactorSpec::Negate {
+            dependency: "momentum_5".to_string(),
+        }),
+        _ => None,
+    }
+}
+
+fn validate_stateful_factor_spec(
+    name: &str,
+    spec: &StatefulFactorSpec,
+    registry: &FactorRegistry,
+) -> FactorResult<()> {
+    match spec {
+        StatefulFactorSpec::Momentum { period } | StatefulFactorSpec::Volatility { period } => {
+            if *period == 0 {
+                return Err(FactorError::InvalidParameter(format!(
+                    "stateful Factor period must be positive: {name}"
+                )));
+            }
+        }
+        StatefulFactorSpec::Negate { dependency } => {
+            let dependency_factor = registry.get(dependency).ok_or_else(|| {
+                FactorError::UnknownFactor(format!(
+                    "stateful Factor dependency {dependency} for {name}"
+                ))
+            })?;
+            if dependency_factor.kind != FactorKind::TimeSeries {
+                return Err(FactorError::InvalidParameter(format!(
+                    "stateful Factor dependency must be time-series: {dependency}"
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Reusable compiled factor execution plan with stable semantic identity.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompiledFactorPlan {
@@ -296,6 +414,7 @@ pub struct CompiledFactorPlan {
     /// `Some` is a proof that every factor node can safely execute over a
     /// bounded time-series slice. The value is the dependency-chain lookback.
     range_lookback: Option<usize>,
+    stateful_specs: BTreeMap<String, StatefulFactorSpec>,
 }
 
 impl CompiledFactorPlan {
@@ -334,6 +453,12 @@ impl CompiledFactorPlan {
     #[must_use]
     pub const fn range_lookback(&self) -> Option<usize> {
         self.range_lookback
+    }
+
+    /// Whether every computed node has an explicit state kernel declaration.
+    #[must_use]
+    pub fn supports_stateful_streaming(&self) -> bool {
+        self.stateful_specs.len() == self.plan.execution_order().len()
     }
 
     /// Execute over owned aligned inputs through the unified runtime.
@@ -841,25 +966,26 @@ impl StatefulFactorStream {
         let mut nodes = Vec::with_capacity(plan.execution_order().len());
         let mut indexes = BTreeMap::new();
         for name in plan.execution_order() {
-            let node = if let Some(period) = name
-                .strip_prefix("momentum_")
-                .and_then(|value| value.parse::<usize>().ok())
-                .filter(|period| *period > 0)
-            {
-                StatefulFactorNode::Momentum(LaggedReturnState::new(period))
-            } else if name == "volatility_20" {
-                StatefulFactorNode::Volatility(VolatilityState::new(20))
-            } else if name == "reversal_5" {
-                let dependency = indexes.get("momentum_5").copied().ok_or_else(|| {
-                    FactorError::InvalidParameter(
-                        "stateful reversal_5 requires momentum_5 in the compiled plan".to_string(),
-                    )
-                })?;
-                StatefulFactorNode::Negate { dependency }
-            } else {
-                return Err(FactorError::InvalidParameter(format!(
-                    "stateful Factor function is unsupported: {name}"
-                )));
+            let spec = plan.stateful_specs.get(name).ok_or_else(|| {
+                FactorError::InvalidParameter(format!(
+                    "stateful Factor function has no registered state spec: {name}"
+                ))
+            })?;
+            let node = match spec {
+                StatefulFactorSpec::Momentum { period } => {
+                    StatefulFactorNode::Momentum(LaggedReturnState::new(*period))
+                }
+                StatefulFactorSpec::Volatility { period } => {
+                    StatefulFactorNode::Volatility(VolatilityState::new(*period))
+                }
+                StatefulFactorSpec::Negate { dependency } => {
+                    let dependency = indexes.get(dependency).copied().ok_or_else(|| {
+                        FactorError::InvalidParameter(format!(
+                            "stateful Factor dependency is not in the compiled plan: {dependency}"
+                        ))
+                    })?;
+                    StatefulFactorNode::Negate { dependency }
+                }
             };
             indexes.insert(name.clone(), nodes.len());
             nodes.push(node);
@@ -1237,6 +1363,7 @@ mod tests {
         let momentum = catalog.compile(&["momentum_5"]).unwrap();
         assert!(momentum.supports_range_incremental());
         assert_eq!(momentum.range_lookback(), Some(5));
+        assert!(momentum.supports_stateful_streaming());
 
         let reversal = catalog.compile(&["reversal_5"]).unwrap();
         assert!(reversal.supports_range_incremental());
@@ -1246,6 +1373,56 @@ mod tests {
         assert!(descriptor.metadata.incremental);
         assert_eq!(descriptor.metadata.fixed_lookback, Some(20));
         assert!(descriptor.metadata.streaming);
+    }
+
+    #[test]
+    fn custom_factor_uses_registered_state_spec_instead_of_name_dispatch() {
+        let period = 3usize;
+        let mut catalog = FactorCatalog::new();
+        catalog
+            .register(
+                FactorDefinition::new(
+                    "custom_return",
+                    ["close"],
+                    FactorKind::TimeSeries,
+                    FactorDirection::HigherBetter,
+                    Arc::new(move |inputs| {
+                        let close = inputs.get("close")?;
+                        let mut values = vec![f64::NAN; close.len()];
+                        for index in period..close.len() {
+                            values[index] = crate::returns::return_between(
+                                close[index - period],
+                                close[index],
+                                crate::returns::ReturnKind::Arithmetic,
+                            );
+                        }
+                        Ok(values)
+                    }),
+                ),
+                FactorMetadata {
+                    incremental: true,
+                    fixed_lookback: Some(period),
+                    ..FactorMetadata::default()
+                },
+            )
+            .unwrap();
+        catalog
+            .register_stateful_spec("custom_return", StatefulFactorSpec::Momentum { period })
+            .unwrap();
+
+        let plan = catalog.compile(&["custom_return"]).unwrap();
+        assert!(plan.supports_stateful_streaming());
+        let mut stream = plan.stateful_stream().unwrap();
+        let mut output = [f64::NAN];
+        let close = [10.0, 11.0, 12.0, 15.0, 14.0];
+        for value in close.iter().take(period) {
+            stream.push_values_into(&[*value], &mut output).unwrap();
+            assert!(output[0].is_nan());
+        }
+        stream
+            .push_values_into(&[close[period]], &mut output)
+            .unwrap();
+        assert!((output[0] - 0.5).abs() < 1e-12);
     }
 
     #[test]
