@@ -256,6 +256,17 @@ pub fn talib_profile_supported(operation: &str) -> bool {
             | "HT_SINE"
             | "HT_TRENDMODE"
             | "HT_TRENDLINE"
+            | "CDLDOJI"
+            | "CDLDRAGONFLYDOJI"
+            | "CDLGRAVESTONEDOJI"
+            | "CDLENGULFING"
+            | "CDLHAMMER"
+            | "CDLHANGINGMAN"
+            | "CDLHARAMI"
+            | "CDLMARUBOZU"
+            | "CDLPIERCING"
+            | "CDLSHOOTINGSTAR"
+            | "CDLSPINNINGTOP"
             | "RSI"
             | "MACD"
             | "BBANDS"
@@ -442,6 +453,43 @@ fn execute_talib_profile(
             values.insert("SINE".to_string(), output.0.to_vec());
             values.insert("LEADSINE".to_string(), output.1.to_vec());
             "SINE"
+        }
+        "CDLDOJI" | "CDLDRAGONFLYDOJI" | "CDLGRAVESTONEDOJI" | "CDLENGULFING" | "CDLHAMMER"
+        | "CDLHANGINGMAN" | "CDLHARAMI" | "CDLMARUBOZU" | "CDLPIERCING" | "CDLSHOOTINGSTAR"
+        | "CDLSPINNINGTOP" => {
+            let (open, high, low, close) = ohlc(inputs, &name)?;
+            let result = match name.as_str() {
+                "CDLDOJI" => finkit::patterns::candlestick::cdl_doji(open, high, low, close),
+                "CDLDRAGONFLYDOJI" => {
+                    finkit::patterns::candlestick::cdl_dragonflydoji(open, high, low, close)
+                }
+                "CDLGRAVESTONEDOJI" => {
+                    finkit::patterns::candlestick::cdl_gravestonedoji(open, high, low, close)
+                }
+                "CDLENGULFING" => {
+                    finkit::patterns::candlestick::cdl_engulfing(open, high, low, close)
+                }
+                "CDLHAMMER" => finkit::patterns::candlestick::cdl_hammer(open, high, low, close),
+                "CDLHANGINGMAN" => {
+                    finkit::patterns::candlestick::cdl_hangingman(open, high, low, close)
+                }
+                "CDLHARAMI" => finkit::patterns::candlestick::cdl_harami(open, high, low, close),
+                "CDLMARUBOZU" => {
+                    finkit::patterns::candlestick::cdl_marubozu(open, high, low, close)
+                }
+                "CDLPIERCING" => {
+                    finkit::patterns::candlestick::cdl_piercing(open, high, low, close)
+                }
+                "CDLSHOOTINGSTAR" => {
+                    finkit::patterns::candlestick::cdl_shootingstar(open, high, low, close)
+                }
+                "CDLSPINNINGTOP" => {
+                    finkit::patterns::candlestick::cdl_spinningtop(open, high, low, close)
+                }
+                _ => unreachable!(),
+            };
+            values.insert(name.clone(), pattern_values(result, &name)?);
+            name.as_str()
         }
         "RSI" => {
             let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
@@ -1134,6 +1182,15 @@ fn indicator_values<T: std::fmt::Display>(
         .map_err(|error| ("execution_error", format!("{operation}: {error}")))
 }
 
+fn pattern_values<T: std::fmt::Display>(
+    result: std::result::Result<Array1<i32>, T>,
+    operation: &str,
+) -> Result<Vec<f64>, (&'static str, String)> {
+    result
+        .map(|values| values.iter().map(|value| *value as f64).collect())
+        .map_err(|error| ("execution_error", format!("{operation}: {error}")))
+}
+
 fn value_shape_name(shape: finkit::operation::ValueShape) -> &'static str {
     match shape {
         finkit::operation::ValueShape::Series => "series",
@@ -1276,6 +1333,26 @@ mod tests {
         assert_eq!(payload["primary"], "SINE");
         assert!(payload["values"].get("SINE").is_some());
         assert!(payload["values"].get("LEADSINE").is_some());
+    }
+
+    #[test]
+    fn talib_profile_dispatches_candlestick_signal_series() {
+        let request = serde_json::json!({
+            "operation": "CDLDOJI",
+            "semantic_profile": "talib_0_7_1",
+            "input_order": ["OPEN", "HIGH", "LOW", "CLOSE"],
+            "inputs": {
+                "OPEN": [10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0],
+                "HIGH": [10.5, 10.4, 10.6, 10.5, 10.4, 10.6, 10.5, 10.4, 10.6, 10.5],
+                "LOW": [9.5, 9.6, 9.4, 9.5, 9.6, 9.4, 9.5, 9.6, 9.4, 9.5],
+                "CLOSE": [10.0, 10.01, 9.99, 10.0, 10.01, 9.99, 10.0, 10.01, 9.99, 10.0]
+            }
+        })
+        .to_string();
+        let payload: Value = serde_json::from_str(&execute_operation_json(&request)).unwrap();
+        assert_eq!(payload["shape"], "series", "payload: {payload}");
+        assert_eq!(payload["primary"], "CDLDOJI");
+        assert_eq!(payload["values"]["CDLDOJI"].as_array().unwrap().len(), 10);
     }
 
     #[test]

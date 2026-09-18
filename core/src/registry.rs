@@ -1260,10 +1260,37 @@ pub fn builtin_function_registry() -> FunctionRegistry {
         deterministic: true,
     });
 
+    let candlestick_specs = [
+        "CDLDOJI",
+        "CDLDRAGONFLYDOJI",
+        "CDLGRAVESTONEDOJI",
+        "CDLENGULFING",
+        "CDLHAMMER",
+        "CDLHANGINGMAN",
+        "CDLHARAMI",
+        "CDLMARUBOZU",
+        "CDLPIERCING",
+        "CDLSHOOTINGSTAR",
+        "CDLSPINNINGTOP",
+    ]
+    .into_iter()
+    .map(|name| FunctionSpec {
+        name,
+        aliases: &[],
+        category: FunctionCategory::Formula,
+        input: InputKind::Dynamic,
+        params: &[],
+        outputs: 1,
+        lookback: LookbackSpec::Dynamic,
+        streaming: false,
+        deterministic: true,
+    });
+
     for spec in specs
         .into_iter()
         .chain(additional_specs)
         .chain(math_transform_specs)
+        .chain(candlestick_specs)
     {
         registry
             .register(spec)

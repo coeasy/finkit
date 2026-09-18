@@ -289,6 +289,14 @@ mod tests {
             "HT_SINE",
             "HT_TRENDMODE",
             "HT_TRENDLINE",
+            "CDLDOJI",
+            "CDLENGULFING",
+            "CDLHAMMER",
+            "CDLHARAMI",
+            "CDLMARUBOZU",
+            "CDLPIERCING",
+            "CDLSHOOTINGSTAR",
+            "CDLSPINNINGTOP",
         ] {
             let operation = catalog
                 .operations

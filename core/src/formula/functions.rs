@@ -16,6 +16,7 @@ use crate::indicators::volume_ext::cmf as lib_cmf;
 use crate::math::linear as lib_linear;
 use crate::math::moving_avg as lib_ma;
 use crate::math::statistics as lib_stat;
+use crate::patterns::candlestick as lib_candlestick;
 
 pub(crate) type FormulaFn =
     fn(&FormulaContext, &[Array1<f64>]) -> Result<Array1<f64>, FormulaError>;
@@ -3460,6 +3461,114 @@ fn fn_ht_trendline(
     }
 }
 
+fn candlestick_values<F>(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+    name: &str,
+    detector: F,
+) -> Result<Array1<f64>, FormulaError>
+where
+    F: Fn(&[f64], &[f64], &[f64], &[f64]) -> crate::error::Result<Array1<i32>>,
+{
+    ensure_args_len(name, args, 4)?;
+    let open = args[0].as_slice().unwrap();
+    let high = args[1].as_slice().unwrap();
+    let low = args[2].as_slice().unwrap();
+    let close = args[3].as_slice().unwrap();
+    match detector(open, high, low, close) {
+        Ok(values) => Ok(values.mapv(|value| value as f64)),
+        Err(_) => Ok(nan_vec(ctx.data_len)),
+    }
+}
+
+fn fn_cdl_doji(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+    candlestick_values(ctx, args, "CDLDOJI", lib_candlestick::cdl_doji)
+}
+
+fn fn_cdl_dragonflydoji(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
+    candlestick_values(
+        ctx,
+        args,
+        "CDLDRAGONFLYDOJI",
+        lib_candlestick::cdl_dragonflydoji,
+    )
+}
+
+fn fn_cdl_gravestonedoji(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
+    candlestick_values(
+        ctx,
+        args,
+        "CDLGRAVESTONEDOJI",
+        lib_candlestick::cdl_gravestonedoji,
+    )
+}
+
+fn fn_cdl_engulfing(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
+    candlestick_values(ctx, args, "CDLENGULFING", lib_candlestick::cdl_engulfing)
+}
+
+fn fn_cdl_hammer(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+    candlestick_values(ctx, args, "CDLHAMMER", lib_candlestick::cdl_hammer)
+}
+
+fn fn_cdl_hangingman(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
+    candlestick_values(ctx, args, "CDLHANGINGMAN", lib_candlestick::cdl_hangingman)
+}
+
+fn fn_cdl_harami(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+    candlestick_values(ctx, args, "CDLHARAMI", lib_candlestick::cdl_harami)
+}
+
+fn fn_cdl_marubozu(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
+    candlestick_values(ctx, args, "CDLMARUBOZU", lib_candlestick::cdl_marubozu)
+}
+
+fn fn_cdl_piercing(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
+    candlestick_values(ctx, args, "CDLPIERCING", lib_candlestick::cdl_piercing)
+}
+
+fn fn_cdl_shootingstar(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
+    candlestick_values(
+        ctx,
+        args,
+        "CDLSHOOTINGSTAR",
+        lib_candlestick::cdl_shootingstar,
+    )
+}
+
+fn fn_cdl_spinningtop(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
+    candlestick_values(
+        ctx,
+        args,
+        "CDLSPINNINGTOP",
+        lib_candlestick::cdl_spinningtop,
+    )
+}
+
 fn fn_ht_measurement(
     ctx: &FormulaContext,
     args: &[Array1<f64>],
@@ -5704,6 +5813,31 @@ pub fn get_builtin_functions() -> HashMap<String, FormulaFn> {
     map.insert("HT_TRENDMODE".to_string(), fn_ht_trendmode as FormulaFn);
     map.insert("HT_TRENDLINE".to_string(), fn_ht_trendline as FormulaFn);
     map.insert("HT_MEASUREMENT".to_string(), fn_ht_measurement as FormulaFn);
+
+    // TA-Lib C compatibility — common candlestick pattern detectors.
+    map.insert("CDLDOJI".to_string(), fn_cdl_doji as FormulaFn);
+    map.insert(
+        "CDLDRAGONFLYDOJI".to_string(),
+        fn_cdl_dragonflydoji as FormulaFn,
+    );
+    map.insert(
+        "CDLGRAVESTONEDOJI".to_string(),
+        fn_cdl_gravestonedoji as FormulaFn,
+    );
+    map.insert("CDLENGULFING".to_string(), fn_cdl_engulfing as FormulaFn);
+    map.insert("CDLHAMMER".to_string(), fn_cdl_hammer as FormulaFn);
+    map.insert("CDLHANGINGMAN".to_string(), fn_cdl_hangingman as FormulaFn);
+    map.insert("CDLHARAMI".to_string(), fn_cdl_harami as FormulaFn);
+    map.insert("CDLMARUBOZU".to_string(), fn_cdl_marubozu as FormulaFn);
+    map.insert("CDLPIERCING".to_string(), fn_cdl_piercing as FormulaFn);
+    map.insert(
+        "CDLSHOOTINGSTAR".to_string(),
+        fn_cdl_shootingstar as FormulaFn,
+    );
+    map.insert(
+        "CDLSPINNINGTOP".to_string(),
+        fn_cdl_spinningtop as FormulaFn,
+    );
 
     // TA-Lib C compatibility — additional momentum / statistics
     map.insert("MACDEXT".to_string(), fn_macdext);
