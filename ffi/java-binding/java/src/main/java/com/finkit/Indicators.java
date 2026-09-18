@@ -872,6 +872,9 @@ public final class Indicators {
             String source, String dialect, double[] open, double[] high, double[] low,
             double[] close, double[] volume);
 
+    /** Executes an explicit timestamped Formula request through the shared temporal contract. */
+    public static native String formulaEvalTemporalContractJson(String requestJson);
+
     /** Executes a stateful Formula stream through the shared JSON contract. */
     public static native String formulaStreamExecuteJson(String requestJson);
 

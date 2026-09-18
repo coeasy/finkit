@@ -162,6 +162,7 @@ export const chandeForecastOscillator = binding.chandeForecastOscillator
 export const twiggsMoneyFlow = binding.twiggsMoneyFlow
 export const formulaEval = binding.formulaEval
 export const formulaEvalContractJson = binding.formulaEvalContractJson
+export const formulaEvalTemporalContractJson = binding.formulaEvalTemporalContractJson
 export const formulaStreamExecuteJson = binding.formulaStreamExecuteJson
 export const operationCatalogJson = binding.operationCatalogJson
 export const factorCatalogJson = binding.factorCatalogJson

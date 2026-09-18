@@ -42,8 +42,9 @@ pub use factor::{evaluate_factor_json, FACTOR_CONTRACT_SCHEMA_VERSION};
 pub use factor_catalog::{factor_catalog, factor_catalog_json, FACTOR_CATALOG_SCHEMA_VERSION};
 pub use factor_stream::{evaluate_factor_stream_json, FACTOR_STREAM_CONTRACT_SCHEMA_VERSION};
 pub use formula::{
-    evaluate_formula_json, formula_compatibility_report_json, FORMULA_COMPATIBILITY_SCHEMA_VERSION,
-    FORMULA_CONTRACT_SCHEMA_VERSION, FORMULA_DRAW_CONTRACT_SCHEMA_VERSION,
+    evaluate_formula_json, evaluate_formula_temporal_json, formula_compatibility_report_json,
+    FORMULA_COMPATIBILITY_SCHEMA_VERSION, FORMULA_CONTRACT_SCHEMA_VERSION,
+    FORMULA_DRAW_CONTRACT_SCHEMA_VERSION, FORMULA_TEMPORAL_CONTRACT_SCHEMA_VERSION,
 };
 pub use formula_stream::{evaluate_formula_stream_json, FORMULA_STREAM_CONTRACT_SCHEMA_VERSION};
 pub use operation::{operation_catalog, operation_catalog_json, OperationCatalogEnvelope};

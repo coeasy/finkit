@@ -2,6 +2,20 @@
 
 本文档详细列出所有可用的技术指标函数及其参数。
 
+## 统一多周期与时点基本面公式契约
+
+所有公开语言都提供同一 `formula.temporal.v1` JSON 入口（各语言按自身命名规则暴露
+`formula_eval_temporal_contract_json`）。请求必须显式提供 `schema_version`、标的、周期、
+单调时间戳和对齐的 OHLCV；外部时序通过 `inputs` 传入，基本面通过 `fundamentals` 传入。
+
+`alignment` 只允许 `exact` 和 `as_of_closed`。不支持隐式重采样、乱序时间戳、重复变量名或
+覆盖 `OPEN/HIGH/LOW/CLOSE/VOLUME/AMOUNT`。基本面时间戳按披露/可用时间执行 as-of 查询，
+因此未来修订不会进入更早的行情行。返回结果包含标的/周期/时间戳、命名输出、绘图 payload，
+非有限值统一为 JSON `null`。
+
+该入口已经打通显式跨周期/外部时序的批量 Formula 链路，但不等同于自动重采样，也不宣称
+Pine `request.security` 全语义、跨截面批量调度或 stateful 跨周期续算已完成。
+
 ## 目录
 
 1. [重叠研究指标](#重叠研究指标)

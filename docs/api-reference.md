@@ -41,6 +41,38 @@ Formula results use the corresponding versioned contract functions:
 `formula_eval_contract_json`, `FormulaEvalContractJSON`,
 `formulaEvalContractJson`, and their language-specific casing equivalents.
 
+Timestamped and multi-timeframe Formula evaluation uses the shared
+`formula.temporal.v1` request contract. Every official binding exposes the
+same `formula_eval_temporal_contract_json` capability with language-specific
+casing. The request includes a frame with `symbol`, `timeframe`, monotonic
+`timestamps`, aligned OHLCV arrays, and optional named `inputs` and
+`fundamentals`:
+
+```json
+{
+  "schema_version": 1,
+  "source": "HIGHER + EARNINGS + CLOSE",
+  "dialect": "tdx",
+  "frame": {
+    "symbol": "AAA", "timeframe": "1m", "timestamps": [10, 20, 30],
+    "open": [1, 2, 3], "high": [1, 2, 3], "low": [1, 2, 3],
+    "close": [1, 2, 3], "volume": [10, 20, 30]
+  },
+  "inputs": [{
+    "name": "HIGHER", "timestamps": [10, 30], "values": [100, 300],
+    "alignment": "as_of_closed"
+  }]
+}
+```
+
+`alignment` is explicitly `exact` or `as_of_closed`; unsupported policies,
+non-monotonic timestamps, duplicate names, and built-in-field shadowing are
+rejected. Fundamental timestamps are publication/availability times and use
+as-of lookup, so future revisions cannot enter an earlier row. The result
+includes frame identity, timestamps, named values, the versioned `draw`
+payload, and JSON `null` for non-finite values. This is explicit alignment,
+not an implicit resampler or a complete Pine `request.security` implementation.
+
 Formula compatibility discovery uses the same versioned report in every
 official binding: `formula_compatibility_report_json` (Python),
 `FormulaCompatibilityReportJSON`, `formulaCompatibilityReportJson`, and their

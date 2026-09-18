@@ -2425,6 +2425,15 @@ pub fn formula_eval_contract_json(
         .map_err(|error| Error::new(Status::InvalidArg, error))
 }
 
+/// Evaluate an explicit timestamped Formula request through the shared
+/// multi-timeframe and point-in-time contract.
+#[napi]
+#[cfg(feature = "formula")]
+pub fn formula_eval_temporal_contract_json(request_json: String) -> Result<String> {
+    finkit_ffi_common::evaluate_formula_temporal_json(&request_json)
+        .map_err(|error| Error::new(Status::InvalidArg, error))
+}
+
 /// Execute a stateful Formula stream through the shared JSON contract.
 #[napi]
 #[cfg(feature = "formula")]

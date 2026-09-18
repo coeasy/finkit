@@ -445,6 +445,41 @@ pub unsafe extern "C" fn ta_formula_eval_contract_json(
     })
 }
 
+/// Execute an explicit timestamped Formula request through the shared
+/// multi-timeframe and point-in-time contract.
+#[no_mangle]
+pub unsafe extern "C" fn ta_formula_eval_temporal_contract_json(
+    request: *const c_char,
+) -> *mut c_char {
+    ffi_catch_ptr(|| {
+        let error = |message: &str| {
+            CString::new(serde_json::json!({
+                "schema_version": finkit_ffi_common::FORMULA_TEMPORAL_CONTRACT_SCHEMA_VERSION,
+                "error": message,
+            }).to_string())
+            .expect("formula temporal contract error contains no NUL")
+            .into_raw()
+        };
+        if request.is_null() {
+            return error("formula temporal contract request is null");
+        }
+        let request = match unsafe { std::ffi::CStr::from_ptr(request) }.to_str() {
+            Ok(value) => value,
+            Err(_) => return error("formula temporal contract request is not valid UTF-8"),
+        };
+        let payload = finkit_ffi_common::evaluate_formula_temporal_json(request)
+            .unwrap_or_else(|message| {
+                serde_json::json!({
+                    "schema_version": finkit_ffi_common::FORMULA_TEMPORAL_CONTRACT_SCHEMA_VERSION,
+                    "error": message,
+                }).to_string()
+            });
+        CString::new(payload)
+            .expect("formula temporal contract payload contains no NUL")
+            .into_raw()
+    })
+}
+
 /// Execute the verified stateful Formula stream JSON contract.
 ///
 /// The request and checkpoint are transport-neutral JSON; the returned string
@@ -763,6 +798,27 @@ mod tests {
         assert_eq!(value["schema_version"], 1);
         assert_eq!(value["dialect"], "tdx");
         assert_eq!(value["primary"], "__PRIMARY__");
+        unsafe { finkit_free_string(ptr) };
+    }
+
+    #[test]
+    fn formula_temporal_contract_json_preserves_frame_and_asof_semantics() {
+        let request = std::ffi::CString::new(
+            include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../tests/contracts/formula_temporal_contract_v1.json"
+            )),
+        )
+        .unwrap();
+        let fixture: serde_json::Value = serde_json::from_str(request.to_str().unwrap()).unwrap();
+        let request = std::ffi::CString::new(fixture["request"].to_string()).unwrap();
+        let ptr = unsafe { ta_formula_eval_temporal_contract_json(request.as_ptr()) };
+        assert!(!ptr.is_null());
+        let json = unsafe { CStr::from_ptr(ptr) }.to_str().unwrap();
+        let value: serde_json::Value = serde_json::from_str(json).unwrap();
+        assert_eq!(value["contract"], "formula.temporal.v1");
+        assert_eq!(value["frame"]["symbol"], "AAA");
+        assert_eq!(value["values"]["__PRIMARY__"][2], 304.0);
         unsafe { finkit_free_string(ptr) };
     }
 
