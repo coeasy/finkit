@@ -250,6 +250,12 @@ pub fn talib_profile_supported(operation: &str) -> bool {
             | "T3"
             | "KAMA"
             | "MAMA"
+            | "HT_DCPERIOD"
+            | "HT_DCPHASE"
+            | "HT_PHASOR"
+            | "HT_SINE"
+            | "HT_TRENDMODE"
+            | "HT_TRENDLINE"
             | "RSI"
             | "MACD"
             | "BBANDS"
@@ -408,6 +414,34 @@ fn execute_talib_profile(
             values.insert("MAMA".to_string(), output.mama.to_vec());
             values.insert("FAMA".to_string(), output.fama.to_vec());
             "MAMA"
+        }
+        "HT_DCPERIOD" | "HT_DCPHASE" | "HT_TRENDMODE" | "HT_TRENDLINE" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let series = match name.as_str() {
+                "HT_DCPERIOD" => finkit::indicators::cycle::ht_dcperiod(input),
+                "HT_DCPHASE" => finkit::indicators::cycle::ht_dcphase(input),
+                "HT_TRENDMODE" => finkit::indicators::cycle::ht_trendmode(input),
+                "HT_TRENDLINE" => finkit::indicators::cycle::ht_trendline(input),
+                _ => unreachable!(),
+            };
+            values.insert(name.clone(), indicator_values(series, &name)?);
+            name.as_str()
+        }
+        "HT_PHASOR" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let output = finkit::indicators::cycle::ht_phasor(input)
+                .map_err(|error| ("execution_error", format!("{name}: {error}")))?;
+            values.insert("INPHASE".to_string(), output.0.to_vec());
+            values.insert("QUADRATURE".to_string(), output.1.to_vec());
+            "INPHASE"
+        }
+        "HT_SINE" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let output = finkit::indicators::cycle::ht_sine(input)
+                .map_err(|error| ("execution_error", format!("{name}: {error}")))?;
+            values.insert("SINE".to_string(), output.0.to_vec());
+            values.insert("LEADSINE".to_string(), output.1.to_vec());
+            "SINE"
         }
         "RSI" => {
             let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
@@ -1223,6 +1257,25 @@ mod tests {
         assert_eq!(core_payload["semantic_profile"], "core_registry");
         assert_eq!(core_payload["primary"], "MAMA");
         assert_eq!(core_payload["values"].get("FAMA").is_some(), true);
+    }
+
+    #[test]
+    fn talib_profile_dispatches_cycle_multi_output_contract() {
+        let close = (0..64)
+            .map(|index| 100.0 + (index as f64 / 5.0).sin())
+            .collect::<Vec<_>>();
+        let request = serde_json::json!({
+            "operation": "HT_SINE",
+            "semantic_profile": "talib_0_7_1",
+            "input_order": ["CLOSE"],
+            "inputs": {"CLOSE": close},
+        })
+        .to_string();
+        let payload: Value = serde_json::from_str(&execute_operation_json(&request)).unwrap();
+        assert_eq!(payload["shape"], "multi_series");
+        assert_eq!(payload["primary"], "SINE");
+        assert!(payload["values"].get("SINE").is_some());
+        assert!(payload["values"].get("LEADSINE").is_some());
     }
 
     #[test]

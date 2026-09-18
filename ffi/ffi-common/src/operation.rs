@@ -283,6 +283,12 @@ mod tests {
             "TEMA",
             "T3",
             "MAMA",
+            "HT_DCPERIOD",
+            "HT_DCPHASE",
+            "HT_PHASOR",
+            "HT_SINE",
+            "HT_TRENDMODE",
+            "HT_TRENDLINE",
         ] {
             let operation = catalog
                 .operations

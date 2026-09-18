@@ -1180,6 +1180,8 @@ fn output_names_for(name: &str, outputs: usize) -> Vec<String> {
             "LOWERBAND".to_string(),
         ],
         "MAMA" => vec!["MAMA".to_string(), "FAMA".to_string()],
+        "HT_PHASOR" => vec!["INPHASE".to_string(), "QUADRATURE".to_string()],
+        "HT_SINE" => vec!["SINE".to_string(), "LEADSINE".to_string()],
         _ if outputs == 1 => vec![normalize_name(name)],
         _ => (0..outputs)
             .map(|index| format!("{}_{}", normalize_name(name), index + 1))
@@ -1240,6 +1242,29 @@ fn execute_multi_output_indicator(
                     ("FAMA", output.fama.to_vec()),
                 ],
                 primary: "MAMA",
+            }
+        }
+        "HT_PHASOR" => {
+            require_input_count(name, inputs, 1)?;
+            let close = resolve_indicator_input(name, context, inputs[0])?;
+            let output = crate::indicators::cycle::ht_phasor(close)
+                .map_err(|error| indicator_execution_error(name, error))?;
+            MultiIndicatorOutput {
+                values: vec![
+                    ("INPHASE", output.0.to_vec()),
+                    ("QUADRATURE", output.1.to_vec()),
+                ],
+                primary: "INPHASE",
+            }
+        }
+        "HT_SINE" => {
+            require_input_count(name, inputs, 1)?;
+            let close = resolve_indicator_input(name, context, inputs[0])?;
+            let output = crate::indicators::cycle::ht_sine(close)
+                .map_err(|error| indicator_execution_error(name, error))?;
+            MultiIndicatorOutput {
+                values: vec![("SINE", output.0.to_vec()), ("LEADSINE", output.1.to_vec())],
+                primary: "SINE",
             }
         }
         _ => {
