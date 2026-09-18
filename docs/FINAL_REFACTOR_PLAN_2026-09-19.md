@@ -147,8 +147,9 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
   错误语义，不将 provider 访问伪装成普通变量。
 - FFI 的 Factor、Composite、Formula 和 direct operation 入口现在复用线程本地的
   `UnifiedOperationEngine`，每个线程保留有界 compiled-plan/result cache，避免跨语言
-  JSON 调用每次重新创建 Runtime；只有带非空 `scope` 的 Factor/Composite 批处理会
-  启用 revision cache，未命名请求不会进入共享缓存。
+  JSON 调用每次重新创建 Runtime。Factor/Composite 批处理与三类 streaming 请求现在
+  必须显式提供非空 `scope` 和 `data_revision`；`data_revision=0` 是合法的初始快照，
+  缺少元数据或使用空 scope 直接拒绝，避免无来源数据进入共享缓存或 checkpoint。
 - 主 CI 已加入 `finkit-ffi-common` 统一契约测试，多语言工作流的触发路径已覆盖
   共享 FFI 契约、C/Go/Java binding 和 `tests/contracts` fixtures。
 

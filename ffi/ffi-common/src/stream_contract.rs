@@ -2,6 +2,21 @@
 
 use serde_json::{Map, Value};
 
+/// Require provenance metadata for cacheable and stateful requests.
+pub(crate) fn require_scope_and_revision<'a>(
+    scope: Option<&'a str>,
+    data_revision: Option<u64>,
+    contract: &str,
+) -> Result<(&'a str, u64), String> {
+    let scope = scope.ok_or_else(|| format!("{contract} scope is required"))?;
+    if scope.trim().is_empty() {
+        return Err(format!("{contract} scope must not be empty"));
+    }
+    let data_revision =
+        data_revision.ok_or_else(|| format!("{contract} data_revision is required"))?;
+    Ok((scope, data_revision))
+}
+
 /// Validate that a checkpoint belongs to the requested logical stream.
 ///
 /// A numerical state signature proves the formula/plan identity, but it does

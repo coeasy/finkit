@@ -3,6 +3,8 @@
   "request": {
     "schema_version": 1,
     "target": "cross_rank",
+    "scope": "FIXTURE@1d",
+    "data_revision": 1,
     "timestamps": [10, 20],
     "symbols": ["AAA", "BBB", "CCC"],
     "inputs": {

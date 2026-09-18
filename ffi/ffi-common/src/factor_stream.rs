@@ -1,6 +1,8 @@
 //! Shared JSON contract for bounded Factor streaming and checkpoints.
 
-use crate::stream_contract::{annotate_checkpoint, validate_checkpoint_metadata};
+use crate::stream_contract::{
+    annotate_checkpoint, require_scope_and_revision, validate_checkpoint_metadata,
+};
 use finkit::factor_system::{FactorCatalog, FactorStreamCheckpoint, StatefulFactorCheckpoint};
 use finkit::factors::{builtin_factor_registry, FactorEngine};
 use serde::Deserialize;
@@ -18,10 +20,8 @@ struct FactorStreamRequest {
     targets: Vec<String>,
     /// New rows to append. Every series must have the same length.
     inputs: BTreeMap<String, Vec<f64>>,
-    #[serde(default)]
-    scope: String,
-    #[serde(default)]
-    data_revision: u64,
+    scope: Option<String>,
+    data_revision: Option<u64>,
     #[serde(default)]
     checkpoint: Option<Value>,
 }
@@ -52,6 +52,11 @@ pub fn evaluate_factor_stream_json(request: &str) -> Result<String, String> {
             "unsupported factor stream schema_version: {version}"
         ));
     }
+    let (scope, data_revision) = require_scope_and_revision(
+        request.scope.as_deref(),
+        request.data_revision,
+        "factor stream contract",
+    )?;
     if request.targets.is_empty() {
         return Err("factor stream targets must not be empty".to_string());
     }
@@ -89,7 +94,7 @@ pub fn evaluate_factor_stream_json(request: &str) -> Result<String, String> {
         .unwrap_or("bounded")
         .to_ascii_lowercase();
     if let Some(checkpoint) = request.checkpoint.as_ref() {
-        validate_checkpoint_metadata(checkpoint, &request.scope, request.data_revision)?;
+        validate_checkpoint_metadata(checkpoint, scope, data_revision)?;
     }
     if mode == "stateful" {
         let mut stream = plan.stateful_stream().map_err(|error| error.to_string())?;
@@ -112,15 +117,14 @@ pub fn evaluate_factor_stream_json(request: &str) -> Result<String, String> {
                 .map_err(|error| error.to_string())?,
         )
         .map_err(|error| error.to_string())?;
-        let checkpoint_json =
-            annotate_checkpoint(checkpoint_json, &request.scope, request.data_revision)?;
+        let checkpoint_json = annotate_checkpoint(checkpoint_json, scope, data_revision)?;
         return serde_json::to_string(&json!({
             "schema_version": FACTOR_STREAM_CONTRACT_SCHEMA_VERSION,
             "shape": if request.targets.len() > 1 { "multi_series" } else { "series" },
             "primary": (request.targets.len() == 1).then(|| request.targets[0].clone()),
             "targets": request.targets,
-            "scope": request.scope,
-            "data_revision": request.data_revision,
+            "scope": scope,
+            "data_revision": data_revision,
             "semantic_identity": plan.semantic_identity(),
             "range_lookback": Value::Null,
             "execution": {
@@ -173,16 +177,16 @@ pub fn evaluate_factor_stream_json(request: &str) -> Result<String, String> {
             "inputs": checkpoint.inputs(),
             "outputs": nullable_map(checkpoint.outputs()),
         }),
-        &request.scope,
-        request.data_revision,
+        scope,
+        data_revision,
     )?;
     serde_json::to_string(&json!({
         "schema_version": FACTOR_STREAM_CONTRACT_SCHEMA_VERSION,
         "shape": if request.targets.len() > 1 { "multi_series" } else { "series" },
         "primary": (request.targets.len() == 1).then(|| request.targets[0].clone()),
         "targets": request.targets,
-        "scope": request.scope,
-        "data_revision": request.data_revision,
+        "scope": scope,
+        "data_revision": data_revision,
         "semantic_identity": plan.semantic_identity(),
         "range_lookback": plan.range_lookback(),
         "execution": {
@@ -249,6 +253,8 @@ mod tests {
     fn stream_contract_returns_checkpoint_and_resumes() {
         let first = r#"{
             "schema_version":1,
+            "scope":"TEST@1d",
+            "data_revision":0,
             "targets":["momentum_5"],
             "inputs":{"close":[10.0,11.0,12.0,15.0,14.0,16.0]}
         }"#;
@@ -257,7 +263,7 @@ mod tests {
         assert_eq!(first_payload["schema_version"], 1);
         assert_eq!(first_payload["execution"]["mode"], "streaming");
         assert_eq!(first_payload["execution"]["total_rows"], 6);
-        assert_eq!(first_payload["checkpoint"]["scope"], "");
+        assert_eq!(first_payload["checkpoint"]["scope"], "TEST@1d");
         assert_eq!(first_payload["checkpoint"]["data_revision"], 0);
         assert_eq!(
             first_payload["values"]["momentum_5"]
@@ -269,6 +275,8 @@ mod tests {
 
         let second = json!({
             "schema_version": 1,
+            "scope":"TEST@1d",
+            "data_revision":0,
             "targets": ["momentum_5"],
             "inputs": {"close": [17.0, 18.0]},
             "checkpoint": first_payload["checkpoint"].clone(),
@@ -319,9 +327,24 @@ mod tests {
     }
 
     #[test]
+    fn stream_contract_requires_provenance_metadata() {
+        let request = r#"{
+            "schema_version":1,
+            "targets":["momentum_5"],
+            "inputs":{"close":[1.0,2.0,3.0,4.0,5.0,6.0]}
+        }"#;
+        assert_eq!(
+            evaluate_factor_stream_json(request).unwrap_err(),
+            "factor stream contract scope is required"
+        );
+    }
+
+    #[test]
     fn stream_contract_rejects_unaligned_rows() {
         let request = r#"{
             "schema_version":1,
+            "scope":"TEST@1d",
+            "data_revision":0,
             "targets":["momentum_5"],
             "inputs":{"close":[1.0,2.0],"other":[1.0]}
         }"#;
@@ -335,6 +358,8 @@ mod tests {
         let first = r#"{
             "schema_version":1,
             "mode":"stateful",
+            "scope":"TEST@1d",
+            "data_revision":0,
             "targets":["momentum_5"],
             "inputs":{"close":[10.0,11.0,12.0,15.0,14.0,16.0]}
         }"#;
@@ -347,6 +372,8 @@ mod tests {
         let second = json!({
             "schema_version": 1,
             "mode": "stateful",
+            "scope":"TEST@1d",
+            "data_revision":0,
             "targets": ["momentum_5"],
             "inputs": {"close": [17.0, 18.0]},
             "checkpoint": first_payload["checkpoint"].clone(),
@@ -363,6 +390,8 @@ mod tests {
         let request = r#"{
             "schema_version":1,
             "mode":"full_recompute",
+            "scope":"TEST@1d",
+            "data_revision":0,
             "targets":["momentum_5"],
             "inputs":{"close":[1.0]}
         }"#;

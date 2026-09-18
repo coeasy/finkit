@@ -89,6 +89,8 @@ mod tests {
             "schema_version": 1,
             "source": formula_stateful["request"]["source"].clone(),
             "dialect": formula_stateful["request"]["dialect"].clone(),
+            "scope": formula_stateful["request"]["scope"].clone(),
+            "data_revision": formula_stateful["request"]["data_revision"].clone(),
             "inputs": formula_stateful["next_inputs"].clone(),
             "checkpoint": formula_first["checkpoint"].clone(),
         });
@@ -280,6 +282,8 @@ mod tests {
         let factor_second_request = serde_json::json!({
             "schema_version": 1,
             "targets": ["momentum_5"],
+            "scope": factor["request"]["scope"].clone(),
+            "data_revision": factor["request"]["data_revision"].clone(),
             "inputs": factor["next_inputs"].clone(),
             "checkpoint": factor_first["checkpoint"].clone(),
         });
@@ -313,6 +317,8 @@ mod tests {
             "schema_version": 1,
             "mode": "stateful",
             "targets": ["momentum_5"],
+            "scope": stateful_factor["request"]["scope"].clone(),
+            "data_revision": stateful_factor["request"]["data_revision"].clone(),
             "inputs": stateful_factor["next_inputs"].clone(),
             "checkpoint": stateful_factor_first["checkpoint"].clone(),
         });
@@ -340,6 +346,8 @@ mod tests {
         );
         let composite_second_request = serde_json::json!({
             "schema_version": 1,
+            "scope": composite["request"]["scope"].clone(),
+            "data_revision": composite["request"]["data_revision"].clone(),
             "inputs": composite["next_inputs"].clone(),
             "definitions": composite["request"]["definitions"].clone(),
             "outputs": ["sma3"],
@@ -371,6 +379,8 @@ mod tests {
         let stateful_second_request = serde_json::json!({
             "schema_version": 1,
             "mode": "stateful",
+            "scope": stateful["request"]["scope"].clone(),
+            "data_revision": stateful["request"]["data_revision"].clone(),
             "inputs": stateful["next_inputs"].clone(),
             "definitions": stateful["request"]["definitions"].clone(),
             "outputs": ["ema"],

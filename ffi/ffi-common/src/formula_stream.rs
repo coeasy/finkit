@@ -1,6 +1,8 @@
 //! Shared JSON contract for stateful Formula streaming.
 
-use crate::stream_contract::{annotate_checkpoint, validate_checkpoint_metadata};
+use crate::stream_contract::{
+    annotate_checkpoint, require_scope_and_revision, validate_checkpoint_metadata,
+};
 use finkit::formula::{FormulaDialect, FormulaStatefulCheckpoint, FormulaStatefulStream};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -15,10 +17,8 @@ struct FormulaStreamRequest {
     source: String,
     dialect: String,
     inputs: BTreeMap<String, Vec<f64>>,
-    #[serde(default)]
-    scope: String,
-    #[serde(default)]
-    data_revision: u64,
+    scope: Option<String>,
+    data_revision: Option<u64>,
     #[serde(default)]
     mode: Option<String>,
     #[serde(default)]
@@ -37,6 +37,11 @@ pub fn evaluate_formula_stream_json(request: &str) -> Result<String, String> {
             "unsupported formula stream schema_version: {version}"
         ));
     }
+    let (scope, data_revision) = require_scope_and_revision(
+        request.scope.as_deref(),
+        request.data_revision,
+        "formula stream contract",
+    )?;
     let mode = request.mode.as_deref().unwrap_or("stateful");
     if mode != "stateful" {
         return Err(format!("unsupported formula stream mode: {mode}"));
@@ -53,7 +58,7 @@ pub fn evaluate_formula_stream_json(request: &str) -> Result<String, String> {
                 .map_err(|error| format!("invalid formula stream checkpoint: {error}"))?,
             checkpoint => checkpoint.clone(),
         };
-        validate_checkpoint_metadata(&checkpoint_value, &request.scope, request.data_revision)?;
+        validate_checkpoint_metadata(&checkpoint_value, scope, data_revision)?;
     }
     let dialect = FormulaDialect::from_str(&request.dialect)
         .ok_or_else(|| format!("unsupported formula dialect: {}", request.dialect))?;
@@ -79,7 +84,7 @@ pub fn evaluate_formula_stream_json(request: &str) -> Result<String, String> {
         .map_err(|error| error.to_string())?;
     let checkpoint: Value =
         serde_json::from_str(&checkpoint_json).map_err(|error| error.to_string())?;
-    let checkpoint = annotate_checkpoint(checkpoint, &request.scope, request.data_revision)?;
+    let checkpoint = annotate_checkpoint(checkpoint, scope, data_revision)?;
     let nullable = values
         .into_iter()
         .map(|value| {
@@ -94,8 +99,8 @@ pub fn evaluate_formula_stream_json(request: &str) -> Result<String, String> {
         "schema_version": FORMULA_STREAM_CONTRACT_SCHEMA_VERSION,
         "dialect": dialect.as_str(),
         "primary": "__PRIMARY__",
-        "scope": request.scope,
-        "data_revision": request.data_revision,
+        "scope": scope,
+        "data_revision": data_revision,
         "values": {"__PRIMARY__": nullable},
         "checkpoint": checkpoint,
         "execution": {
@@ -117,6 +122,8 @@ mod tests {
     fn stateful_formula_stream_executes_and_resumes() {
         let first = serde_json::json!({
             "schema_version": 1,
+            "scope":"TEST@1d",
+            "data_revision":0,
             "source": "EMA(CLOSE, 3)",
             "dialect": "tdx",
             "inputs": {"close": [10.0, 11.0, 12.0, 15.0]}
@@ -129,13 +136,15 @@ mod tests {
             serde_json::json!([null, null, 11.0, 13.0])
         );
         assert_eq!(first["execution"]["mode"], "stateful_streaming");
-        assert_eq!(first["scope"], "");
+        assert_eq!(first["scope"], "TEST@1d");
         assert_eq!(first["data_revision"], 0);
-        assert_eq!(first["checkpoint"]["scope"], "");
+        assert_eq!(first["checkpoint"]["scope"], "TEST@1d");
         assert_eq!(first["checkpoint"]["data_revision"], 0);
 
         let second = serde_json::json!({
             "schema_version": 1,
+            "scope":"TEST@1d",
+            "data_revision":0,
             "source": "EMA(CLOSE, 3)",
             "dialect": "tdx",
             "inputs": {"close": [14.0, 16.0]},
@@ -194,6 +203,8 @@ mod tests {
     fn stateful_formula_stream_rejects_unsupported_mode() {
         let request = serde_json::json!({
             "schema_version": 1,
+            "scope":"TEST@1d",
+            "data_revision":0,
             "source": "CLOSE",
             "dialect": "tdx",
             "mode": "bounded",
@@ -219,6 +230,8 @@ mod tests {
         for (source, expected) in cases {
             let request = serde_json::json!({
                 "schema_version": 1,
+                "scope":"TEST@1d",
+                "data_revision":0,
                 "source": source,
                 "dialect": "tdx",
                 "inputs": {"close": [1.0, 2.0, 3.0, 4.0]}
@@ -238,6 +251,8 @@ mod tests {
 
         let reference = serde_json::json!({
             "schema_version": 1,
+            "scope":"TEST@1d",
+            "data_revision":0,
             "source": "REF(CLOSE, 2)",
             "dialect": "tdx",
             "inputs": {"close": [1.0, 2.0, 3.0, 4.0]}
@@ -252,6 +267,8 @@ mod tests {
 
         let cross = serde_json::json!({
             "schema_version": 1,
+            "scope":"TEST@1d",
+            "data_revision":0,
             "source": "CROSS(CLOSE, OPEN)",
             "dialect": "tdx",
             "inputs": {
@@ -269,6 +286,8 @@ mod tests {
 
         let expression = serde_json::json!({
             "schema_version": 1,
+            "scope":"TEST@1d",
+            "data_revision":0,
             "source": "IF(CLOSE > OPEN, CLOSE, OPEN)",
             "dialect": "tdx",
             "inputs": {
@@ -286,6 +305,8 @@ mod tests {
 
         let program = serde_json::json!({
             "schema_version": 1,
+            "scope":"TEST@1d",
+            "data_revision":0,
             "source": "MA3:MA(CLOSE,3); SIGNAL:=MA3+1; SIGNAL",
             "dialect": "tdx",
             "inputs": {"close": [1.0, 2.0, 3.0, 4.0, 5.0]}
@@ -304,6 +325,8 @@ mod tests {
 
         let bounded_loop = serde_json::json!({
             "schema_version": 1,
+            "scope":"TEST@1d",
+            "data_revision":0,
             "source": "FOR I:=1 TO 3 DO X:=CLOSE+I END; X",
             "dialect": "tdx",
             "inputs": {"close": [1.0, 2.0, 3.0]}

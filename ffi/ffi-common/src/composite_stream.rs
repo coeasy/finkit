@@ -1,6 +1,8 @@
 //! Shared JSON contract for bounded Composite streaming and checkpoints.
 
-use crate::stream_contract::{annotate_checkpoint, validate_checkpoint_metadata};
+use crate::stream_contract::{
+    annotate_checkpoint, require_scope_and_revision, validate_checkpoint_metadata,
+};
 use finkit::composite::{
     CompositeDefinition, CompositeEngine, CompositeExpr, CompositeOp, CompositeStreamCheckpoint,
 };
@@ -20,10 +22,8 @@ struct CompositeStreamRequest {
     inputs: BTreeMap<String, Vec<f64>>,
     definitions: Vec<CompositeDefinitionRequest>,
     outputs: Option<Vec<String>>,
-    #[serde(default)]
-    scope: String,
-    #[serde(default)]
-    data_revision: u64,
+    scope: Option<String>,
+    data_revision: Option<u64>,
     #[serde(default)]
     checkpoint: Option<Value>,
 }
@@ -60,6 +60,11 @@ pub fn evaluate_composite_stream_json(request: &str) -> Result<String, String> {
             "unsupported composite stream schema_version: {version}"
         ));
     }
+    let (scope, data_revision) = require_scope_and_revision(
+        request.scope.as_deref(),
+        request.data_revision,
+        "composite stream contract",
+    )?;
     if request.inputs.is_empty() {
         return Err("composite stream inputs must not be empty".to_string());
     }
@@ -139,7 +144,7 @@ pub fn evaluate_composite_stream_json(request: &str) -> Result<String, String> {
         .unwrap_or("bounded")
         .to_ascii_lowercase();
     if let Some(checkpoint) = request.checkpoint.as_ref() {
-        validate_checkpoint_metadata(checkpoint, &request.scope, request.data_revision)?;
+        validate_checkpoint_metadata(checkpoint, scope, data_revision)?;
     }
     if mode == "stateful" {
         let mut stream = plan.stateful_stream().map_err(|error| error.to_string())?;
@@ -162,15 +167,14 @@ pub fn evaluate_composite_stream_json(request: &str) -> Result<String, String> {
                 .map_err(|error| error.to_string())?,
         )
         .map_err(|error| error.to_string())?;
-        let checkpoint_json =
-            annotate_checkpoint(checkpoint_json, &request.scope, request.data_revision)?;
+        let checkpoint_json = annotate_checkpoint(checkpoint_json, scope, data_revision)?;
         return serde_json::to_string(&json!({
             "schema_version": COMPOSITE_STREAM_CONTRACT_SCHEMA_VERSION,
             "shape": if output_names.len() > 1 { "multi_series" } else { "series" },
             "primary": (output_names.len() == 1).then(|| output_names[0].clone()),
             "outputs": output_names,
-            "scope": request.scope,
-            "data_revision": request.data_revision,
+            "scope": scope,
+            "data_revision": data_revision,
             "range_lookback": Value::Null,
             "execution": {
                 "mode": "stateful_streaming",
@@ -221,16 +225,16 @@ pub fn evaluate_composite_stream_json(request: &str) -> Result<String, String> {
             "inputs": checkpoint.inputs(),
             "outputs": nullable_map(checkpoint.outputs()),
         }),
-        &request.scope,
-        request.data_revision,
+        scope,
+        data_revision,
     )?;
     serde_json::to_string(&json!({
         "schema_version": COMPOSITE_STREAM_CONTRACT_SCHEMA_VERSION,
         "shape": if output_names.len() > 1 { "multi_series" } else { "series" },
         "primary": (output_names.len() == 1).then(|| output_names[0].clone()),
         "outputs": output_names,
-        "scope": request.scope,
-        "data_revision": request.data_revision,
+        "scope": scope,
+        "data_revision": data_revision,
         "range_lookback": plan.range_lookback(),
         "execution": {
             "mode": "streaming",
@@ -313,6 +317,8 @@ mod tests {
     fn stream_contract_returns_checkpoint_and_resumes() {
         let first = r#"{
             "schema_version":1,
+            "scope":"TEST@1d",
+            "data_revision":0,
             "inputs":{"close":[10.0,11.0,12.0,15.0]},
             "definitions":[{"name":"sma3","function":"sma","inputs":["close"],"params":[3]}],
             "outputs":["sma3"]
@@ -322,13 +328,15 @@ mod tests {
         assert_eq!(first_payload["schema_version"], 1);
         assert_eq!(first_payload["execution"]["mode"], "streaming");
         assert_eq!(first_payload["execution"]["total_rows"], 4);
-        assert_eq!(first_payload["scope"], "");
+        assert_eq!(first_payload["scope"], "TEST@1d");
         assert_eq!(first_payload["data_revision"], 0);
-        assert_eq!(first_payload["checkpoint"]["scope"], "");
+        assert_eq!(first_payload["checkpoint"]["scope"], "TEST@1d");
         assert_eq!(first_payload["checkpoint"]["data_revision"], 0);
 
         let second = json!({
             "schema_version": 1,
+            "scope":"TEST@1d",
+            "data_revision":0,
             "inputs": {"close": [14.0, 16.0]},
             "definitions":[{"name":"sma3","function":"sma","inputs":["close"],"params":[3]}],
             "outputs":["sma3"],
@@ -386,6 +394,8 @@ mod tests {
     fn stream_contract_rejects_recursive_graphs() {
         let request = r#"{
             "schema_version":1,
+            "scope":"TEST@1d",
+            "data_revision":0,
             "inputs":{"close":[1.0,2.0,3.0]},
             "definitions":[{"name":"ema","function":"ema","inputs":["close"],"params":[3]}],
             "outputs":["ema"]
@@ -400,6 +410,8 @@ mod tests {
         let first = r#"{
             "schema_version":1,
             "mode":"stateful",
+            "scope":"TEST@1d",
+            "data_revision":0,
             "inputs":{"close":[10.0,11.0,12.0,15.0,14.0]},
             "definitions":[{"name":"ema","function":"ema","inputs":["close"],"params":[3]}],
             "outputs":["ema"]
@@ -413,6 +425,8 @@ mod tests {
         let second = json!({
             "schema_version": 1,
             "mode": "stateful",
+            "scope":"TEST@1d",
+            "data_revision":0,
             "inputs": {"close": [16.0, 18.0]},
             "definitions": [{"name": "ema", "function": "ema", "inputs": ["close"], "params": [3]}],
             "outputs": ["ema"],
@@ -430,6 +444,8 @@ mod tests {
         let request = r#"{
             "schema_version":1,
             "mode":"full_recompute",
+            "scope":"TEST@1d",
+            "data_revision":0,
             "inputs":{"close":[1.0]},
             "definitions":[{"name":"x","function":"abs","inputs":["close"]}],
             "outputs":["x"]

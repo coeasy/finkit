@@ -1,6 +1,7 @@
 //! Shared JSON contract for dependency-aware Composite execution.
 
 use crate::shared_runtime::with_unified_engine;
+use crate::stream_contract::require_scope_and_revision;
 use finkit::composite::{CompositeDefinition, CompositeEngine, CompositeExpr, CompositeOp};
 use finkit::factors::FactorContext;
 use finkit::operation::OperationRequest;
@@ -19,11 +20,9 @@ struct CompositeRequest {
     definitions: Vec<CompositeDefinitionRequest>,
     outputs: Option<Vec<String>>,
     /// Explicit cache/provenance namespace, usually `SYMBOL@TIMEFRAME`.
-    #[serde(default)]
-    scope: String,
+    scope: Option<String>,
     /// Caller-owned monotonic revision. A changed input must advance it.
-    #[serde(default)]
-    data_revision: u64,
+    data_revision: Option<u64>,
     #[serde(default)]
     previous: Option<std::collections::BTreeMap<String, Vec<f64>>>,
     #[serde(default)]
@@ -63,6 +62,11 @@ pub fn evaluate_composite_json(request: &str) -> Result<String, String> {
             "unsupported composite contract schema_version: {version}"
         ));
     }
+    let (scope, data_revision) = require_scope_and_revision(
+        request.scope.as_deref(),
+        request.data_revision,
+        "composite contract",
+    )?;
     if request.inputs.is_empty() {
         return Err("composite inputs must not be empty".to_string());
     }
@@ -158,8 +162,8 @@ pub fn evaluate_composite_json(request: &str) -> Result<String, String> {
                         definitions: &definitions,
                         outputs: &output_refs,
                         context: &borrowed,
-                        data_revision: (!request.scope.is_empty()).then_some(request.data_revision),
-                        cache_scope: (!request.scope.is_empty()).then_some(request.scope.as_str()),
+                        data_revision: Some(data_revision),
+                        cache_scope: Some(scope),
                     })
                     .map_err(|error| error.to_string())
             })?;
@@ -186,8 +190,8 @@ pub fn evaluate_composite_json(request: &str) -> Result<String, String> {
         "shape": if output_names.len() > 1 { "multi_series" } else { "series" },
         "primary": (output_names.len() == 1).then(|| output_names[0].clone()),
         "range_lookback": plan.range_lookback(),
-        "scope": request.scope,
-        "data_revision": request.data_revision,
+        "scope": scope,
+        "data_revision": data_revision,
         "execution": execution_envelope(trace.mode),
         "values": Value::Object(serialized),
     }))
@@ -250,6 +254,8 @@ mod tests {
     fn contract_executes_composite_and_serializes_warmup_as_null() {
         let request = r#"{
             "schema_version":1,
+            "scope":"TEST@1d",
+            "data_revision":0,
             "inputs":{"close":[1.0,2.0,3.0,4.0]},
             "definitions":[{"name":"sma3","function":"sma","inputs":["close"],"params":[3]}],
             "outputs":["sma3"]
@@ -262,7 +268,7 @@ mod tests {
         assert_eq!(payload["values"]["sma3"][0], Value::Null);
         assert_eq!(payload["values"]["sma3"][3], 3.0);
         assert_eq!(payload["execution"]["mode"], "full");
-        assert_eq!(payload["scope"], "");
+        assert_eq!(payload["scope"], "TEST@1d");
         assert_eq!(payload["data_revision"], 0);
         assert_eq!(payload["range_lookback"], 2);
     }
@@ -288,6 +294,8 @@ mod tests {
     fn contract_executes_finite_composite_dirty_range() {
         let request = r#"{
             "schema_version":1,
+            "scope":"TEST@1d",
+            "data_revision":0,
             "inputs":{"close":[1.0,2.0,3.0,4.0,10.0,6.0]},
             "definitions":[{"name":"sma3","function":"sma","inputs":["close"],"params":[3]}],
             "outputs":["sma3"],

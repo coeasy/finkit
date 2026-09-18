@@ -1,6 +1,7 @@
 //! Shared JSON contract for compiled built-in Factor execution.
 
 use crate::shared_runtime::with_unified_engine;
+use crate::stream_contract::require_scope_and_revision;
 use finkit::data_contract::CrossSectionView;
 use finkit::factor_system::FactorCatalog;
 use finkit::factors::{builtin_factor_registry, FactorContext, FactorEngine, FactorKind};
@@ -22,11 +23,9 @@ struct FactorRequest {
     targets: Vec<String>,
     inputs: BTreeMap<String, Vec<f64>>,
     /// Explicit cache/provenance namespace, usually `SYMBOL@TIMEFRAME`.
-    #[serde(default)]
-    scope: String,
+    scope: Option<String>,
     /// Caller-owned monotonic revision. A changed input must advance it.
-    #[serde(default)]
-    data_revision: u64,
+    data_revision: Option<u64>,
     #[serde(default)]
     previous: Option<BTreeMap<String, Vec<f64>>>,
     #[serde(default)]
@@ -41,11 +40,9 @@ struct CrossSectionalFactorRequest {
     symbols: Vec<String>,
     inputs: BTreeMap<String, Vec<Option<f64>>>,
     /// Explicit cache/provenance namespace for the panel.
-    #[serde(default)]
-    scope: String,
+    scope: Option<String>,
     /// Caller-owned revision for the panel snapshot.
-    #[serde(default)]
-    data_revision: u64,
+    data_revision: Option<u64>,
 }
 
 /// Execute built-in factors through the compiled Factor plan contract.
@@ -66,6 +63,11 @@ pub fn evaluate_factor_json(request: &str) -> Result<String, String> {
             "unsupported factor contract schema_version: {version}"
         ));
     }
+    let (scope, data_revision) = require_scope_and_revision(
+        request.scope.as_deref(),
+        request.data_revision,
+        "factor contract",
+    )?;
     if request.targets.is_empty() {
         return Err("factor targets must not be empty".to_string());
     }
@@ -117,10 +119,8 @@ pub fn evaluate_factor_json(request: &str) -> Result<String, String> {
                         .execute(OperationRequest::Factor {
                             name: target,
                             context: &borrowed,
-                            data_revision: (!request.scope.is_empty())
-                                .then_some(request.data_revision),
-                            cache_scope: (!request.scope.is_empty())
-                                .then_some(request.scope.as_str()),
+                            data_revision: Some(data_revision),
+                            cache_scope: Some(scope),
                         })
                         .map_err(|error| error.to_string())
                 })?;
@@ -154,8 +154,8 @@ pub fn evaluate_factor_json(request: &str) -> Result<String, String> {
         "targets": request.targets,
         "semantic_identity": plan.semantic_identity(),
         "range_lookback": plan.range_lookback(),
-        "scope": request.scope,
-        "data_revision": request.data_revision,
+        "scope": scope,
+        "data_revision": data_revision,
         "execution": execution_envelope(trace.mode),
         "values": Value::Object(serialized),
     }))
@@ -179,6 +179,11 @@ pub fn evaluate_factor_cross_sectional_json(request: &str) -> Result<String, Str
             "unsupported cross-sectional factor schema_version: {version}"
         ));
     }
+    let (scope, data_revision) = require_scope_and_revision(
+        request.scope.as_deref(),
+        request.data_revision,
+        "cross-sectional factor contract",
+    )?;
     if request.target.trim().is_empty() {
         return Err("cross-sectional factor target must not be empty".to_string());
     }
@@ -248,8 +253,8 @@ pub fn evaluate_factor_cross_sectional_json(request: &str) -> Result<String, Str
         "shape": "cross_section",
         "primary": target,
         "target": target,
-        "scope": request.scope,
-        "data_revision": request.data_revision,
+        "scope": scope,
+        "data_revision": data_revision,
         "semantic_identity": [format!("{}@{}", target, descriptor.metadata.version)],
         "timestamps": request.timestamps,
         "symbols": request.symbols,
@@ -298,6 +303,8 @@ mod tests {
         let request = r#"{
             "schema_version":1,
             "targets":["momentum_5"],
+            "scope":"TEST@1d",
+            "data_revision":0,
             "inputs":{"close":[1.0,2.0,3.0,4.0,5.0,6.0]}
         }"#;
         let payload: Value = serde_json::from_str(&evaluate_factor_json(request).unwrap()).unwrap();
@@ -308,7 +315,7 @@ mod tests {
         assert_eq!(payload["values"]["momentum_5"][5], 5.0);
         assert!(payload["semantic_identity"].as_array().is_some());
         assert_eq!(payload["execution"]["mode"], "full");
-        assert_eq!(payload["scope"], "");
+        assert_eq!(payload["scope"], "TEST@1d");
         assert_eq!(payload["data_revision"], 0);
         assert_eq!(payload["range_lookback"], 5);
     }
@@ -339,25 +346,16 @@ mod tests {
     }
 
     #[test]
-    fn scope_less_batch_does_not_use_shared_result_cache() {
+    fn batch_contract_rejects_missing_scope_and_revision() {
         let first = r#"{
             "schema_version":1,
             "targets":["momentum_5"],
             "inputs":{"close":[1.0,2.0,3.0,4.0,5.0,6.0]}
         }"#;
-        let second = r#"{
-            "schema_version":1,
-            "targets":["momentum_5"],
-            "inputs":{"close":[1.0,2.0,3.0,4.0,5.0,12.0]}
-        }"#;
-        with_unified_engine(|engine| engine.clear_cache());
-        let first: Value = serde_json::from_str(&evaluate_factor_json(first).unwrap()).unwrap();
-        let second: Value = serde_json::from_str(&evaluate_factor_json(second).unwrap()).unwrap();
-        assert_ne!(first["values"], second["values"]);
-        let stats = with_unified_engine(|engine| engine.cache_stats());
-        assert_eq!(stats.hits, 0);
-        assert_eq!(stats.misses, 0);
-        assert_eq!(stats.entries, 0);
+        assert_eq!(
+            evaluate_factor_json(first).unwrap_err(),
+            "factor contract scope is required"
+        );
     }
 
     #[test]
@@ -365,6 +363,8 @@ mod tests {
         let request = r#"{
             "schema_version":1,
             "targets":["momentum_5"],
+            "scope":"TEST@1d",
+            "data_revision":0,
             "inputs":{"close":[10.0,11.0,12.0,13.0,14.0,20.0,16.0]},
             "previous":{"momentum_5":[0.0,0.0,0.0,0.0,0.0,0.5,0.5]},
             "dirty_range":[5,6]
@@ -391,6 +391,8 @@ mod tests {
         let duplicate_targets = r#"{
             "schema_version":1,
             "targets":["momentum_5","momentum_5"],
+            "scope":"TEST@1d",
+            "data_revision":0,
             "inputs":{"close":[1.0,2.0,3.0,4.0,5.0,6.0]}
         }"#;
         assert_eq!(
@@ -404,6 +406,8 @@ mod tests {
         let request = r#"{
             "schema_version":1,
             "target":"cross_rank",
+            "scope":"TEST@1d",
+            "data_revision":0,
             "timestamps":[10,20],
             "symbols":["AAA","BBB","CCC"],
             "inputs":{"score":[1.0,3.0,2.0,5.0,null,9.0]}
@@ -414,7 +418,7 @@ mod tests {
         assert_eq!(payload["shape"], "cross_section");
         assert_eq!(payload["timestamps"], json!([10, 20]));
         assert_eq!(payload["symbols"], json!(["AAA", "BBB", "CCC"]));
-        assert_eq!(payload["scope"], "");
+        assert_eq!(payload["scope"], "TEST@1d");
         assert_eq!(payload["data_revision"], 0);
         assert_eq!(
             payload["values"]["cross_rank"],
@@ -427,6 +431,8 @@ mod tests {
         let request = r#"{
             "schema_version":1,
             "target":"cross_zscore",
+            "scope":"TEST@1d",
+            "data_revision":0,
             "timestamps":[10,20],
             "symbols":["AAA","BBB"],
             "inputs":{"score":[1.0,2.0,3.0]}

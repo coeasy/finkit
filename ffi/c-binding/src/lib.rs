@@ -801,7 +801,7 @@ mod tests {
     #[test]
     fn composite_execute_json_dispatches_shared_contract() {
         let request = std::ffi::CString::new(
-            r#"{"schema_version":1,"inputs":{"close":[1.0,2.0,3.0]},"definitions":[{"name":"sum","function":"add","inputs":["close","const:1"],"params":[]}],"outputs":["sum"]}"#,
+            r#"{"schema_version":1,"scope":"C-BINDING@1d","data_revision":0,"inputs":{"close":[1.0,2.0,3.0]},"definitions":[{"name":"sum","function":"add","inputs":["close","const:1"],"params":[]}],"outputs":["sum"]}"#,
         )
         .unwrap();
         let ptr = unsafe { ta_composite_execute_json(request.as_ptr()) };
@@ -817,7 +817,7 @@ mod tests {
     #[test]
     fn factor_execute_json_dispatches_compiled_builtin_factor() {
         let request = std::ffi::CString::new(
-            r#"{"schema_version":1,"targets":["momentum_5"],"inputs":{"close":[1.0,2.0,3.0,4.0,5.0,6.0]}}"#,
+            r#"{"schema_version":1,"targets":["momentum_5"],"scope":"C-BINDING@1d","data_revision":0,"inputs":{"close":[1.0,2.0,3.0,4.0,5.0,6.0]}}"#,
         )
         .unwrap();
         let ptr = unsafe { ta_factor_execute_json(request.as_ptr()) };
@@ -852,7 +852,7 @@ mod tests {
     #[test]
     fn stream_json_exports_return_portable_checkpoints() {
         let factor_request = std::ffi::CString::new(
-            r#"{"schema_version":1,"targets":["momentum_5"],"inputs":{"close":[1.0,2.0,3.0,4.0,5.0,6.0]}}"#,
+            r#"{"schema_version":1,"targets":["momentum_5"],"scope":"C-BINDING@1d","data_revision":0,"inputs":{"close":[1.0,2.0,3.0,4.0,5.0,6.0]}}"#,
         )
         .unwrap();
         let factor_ptr = unsafe { ta_factor_stream_execute_json(factor_request.as_ptr()) };
@@ -864,7 +864,7 @@ mod tests {
         unsafe { finkit_free_string(factor_ptr) };
 
         let composite_request = std::ffi::CString::new(
-            r#"{"schema_version":1,"inputs":{"close":[1.0,2.0,3.0]},"definitions":[{"name":"sma3","function":"sma","inputs":["close"],"params":[3]}],"outputs":["sma3"]}"#,
+            r#"{"schema_version":1,"scope":"C-BINDING@1d","data_revision":0,"inputs":{"close":[1.0,2.0,3.0]},"definitions":[{"name":"sma3","function":"sma","inputs":["close"],"params":[3]}],"outputs":["sma3"]}"#,
         )
         .unwrap();
         let composite_ptr = unsafe {
@@ -878,7 +878,7 @@ mod tests {
         unsafe { finkit_free_string(composite_ptr) };
 
         let formula_request = std::ffi::CString::new(
-            r#"{"schema_version":1,"source":"EMA(CLOSE,3)","dialect":"tdx","inputs":{"close":[10.0,11.0,12.0,15.0]}}"#,
+            r#"{"schema_version":1,"source":"EMA(CLOSE,3)","dialect":"tdx","scope":"C-BINDING@1d","data_revision":0,"inputs":{"close":[10.0,11.0,12.0,15.0]}}"#,
         )
         .unwrap();
         let formula_ptr = unsafe { ta_formula_stream_execute_json(formula_request.as_ptr()) };
