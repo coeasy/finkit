@@ -33,7 +33,7 @@ tests/pine_corpus/
 |------|------|
 | `id` | 唯一标识 |
 | `file` | `.pine` 文件名 |
-| `status` | `partial` / `blocked` / `pass` |
+| `status` | `partial` / `blocked` / `host_required` / `pass` |
 | `parse_ok` | Pine 解析器是否通过 |
 | `map_ok` | Pine → AlphaTA AST 映射是否通过 |
 | `eval_ok` | 端到端求值是否通过 |

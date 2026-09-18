@@ -2,13 +2,14 @@
   "version": "1.0",
   "description": "公开 Pine Script indicator 语料回归集 — 覆盖常见技术指标场景",
   "corpus_dir": "tests/pine_corpus",
-  "last_updated": "2026-07-19",
+  "last_updated": "2026-09-19",
   "summary": {
     "total_scripts": 26,
     "parse_pass": 26,
-    "map_pass": 26,
-    "eval_pass": 26,
-    "overall_pass_rate": 1.0
+    "map_pass": 25,
+    "eval_pass": 25,
+    "host_required": 1,
+    "overall_pass_rate": 0.9615384615
   },
   "scripts": [
     {
@@ -438,16 +439,16 @@
       "title": "Higher Timeframe Close",
       "category": "cross_period",
       "source": "TradingView request.security example",
-      "status": "pass",
+      "status": "host_required",
       "parse_ok": true,
-      "map_ok": true,
-      "eval_ok": true,
+      "map_ok": false,
+      "eval_ok": false,
       "builtin_functions": [
         "request.security",
         "syminfo.tickerid"
       ],
       "pass_rate": 1.0,
-      "notes": "syminfo.* builtin var not in grammar"
+      "notes": "request.security is parsed but requires an explicit temporal host/provider alignment; it must not silently evaluate on the chart timeframe"
     }
   ]
 }

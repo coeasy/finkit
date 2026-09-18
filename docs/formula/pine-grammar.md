@@ -169,7 +169,7 @@ block_comment    = "/*" (!"*/" ANY)* "*/"
 | `var`/`varip` | 可解析；跨 bar 持久化语义不完整 |
 | Series 历史 `[n]` | 语法可解析；运行时覆盖有限 |
 | `plot` 样式参数 | `color=`, `style=` 等作为表达式解析，不执行 |
-| `request.security` | 映射为 SECURITY；不重绘语义未实现 |
+| `request.security` | 可解析并识别为跨周期请求；没有显式 host/provider 对齐时拒绝执行，不再静默透传当前周期；完整嵌套表达式对齐仍在后续 temporal provider 范围 |
 | `color.*` 命名空间 | 文法预留；颜色运算未完整实现 |
 
 ### ❌ 不支持

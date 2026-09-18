@@ -11,6 +11,7 @@
 use finkit::formula::pine::{map_pine_to_alphata, parse_pine};
 use finkit::formula::{FormulaContext, FormulaEngine};
 use ndarray::Array1;
+use serde_json::Value;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -75,6 +76,26 @@ fn pine_corpus_parse_map_eval() {
         "corpus dir not found at {:?}",
         corpus_dir
     );
+    let manifest: Value =
+        serde_json::from_str(&std::fs::read_to_string(corpus_dir.join("manifest.json")).unwrap())
+            .expect("Pine corpus manifest must be valid JSON");
+    let status_by_id: HashMap<String, String> = manifest["scripts"]
+        .as_array()
+        .expect("Pine corpus manifest scripts must be an array")
+        .iter()
+        .map(|entry| {
+            (
+                entry["id"]
+                    .as_str()
+                    .expect("Pine corpus entry id must be a string")
+                    .to_string(),
+                entry["status"]
+                    .as_str()
+                    .expect("Pine corpus entry status must be a string")
+                    .to_string(),
+            )
+        })
+        .collect();
 
     let mut entries: Vec<_> = std::fs::read_dir(&corpus_dir)
         .unwrap()
@@ -84,15 +105,26 @@ fn pine_corpus_parse_map_eval() {
         .collect();
     entries.sort();
     assert!(!entries.is_empty(), "no .pine files found");
+    assert_eq!(
+        status_by_id.len(),
+        entries.len(),
+        "Pine corpus manifest must describe every .pine script exactly once"
+    );
 
     let mut parse_pass = 0usize;
     let mut map_pass = 0usize;
     let mut eval_pass = 0usize;
+    let mut host_required = 0usize;
     let mut results: Vec<(String, bool, bool, bool)> = Vec::new();
 
     for path in &entries {
         let src = std::fs::read_to_string(path).unwrap();
         let name = path.file_stem().unwrap().to_string_lossy().to_string();
+        let expected_status = status_by_id
+            .get(&name)
+            .unwrap_or_else(|| panic!("Pine corpus manifest is missing {name}"));
+        let expected_status = expected_status.as_str();
+        let requires_host = expected_status == "host_required";
 
         let pine = match parse_pine(&src) {
             Ok(p) => {
@@ -112,7 +144,12 @@ fn pine_corpus_parse_map_eval() {
                 a
             }
             Err(e) => {
-                println!("MAP FAIL [{name}]: {e}");
+                if requires_host {
+                    host_required += 1;
+                    println!("HOST REQUIRED [{name}]: {e}");
+                } else {
+                    println!("MAP FAIL [{name}]: {e}");
+                }
                 results.push((name, true, false, false));
                 continue;
             }
@@ -134,8 +171,12 @@ fn pine_corpus_parse_map_eval() {
     }
 
     let total = entries.len();
+    let expected_executable = status_by_id
+        .values()
+        .filter(|status| status.as_str() != "host_required")
+        .count();
     println!("\n===== Pine Corpus Regression =====");
-    println!("total={total} parse_pass={parse_pass} map_pass={map_pass} eval_pass={eval_pass}");
+    println!("total={total} parse_pass={parse_pass} map_pass={map_pass} eval_pass={eval_pass} host_required={host_required}");
     println!(
         "overall_eval_pass_rate={:.3}",
         eval_pass as f64 / total as f64
@@ -151,13 +192,14 @@ fn pine_corpus_parse_map_eval() {
     }
     println!("==================================\n");
 
-    // Regression gate: the pipeline must not regress versus the recorded
-    // baseline (manifest 2026-07-19: parse 26, map 26, eval 26 — full corpus
-    // green after the E1 Pine v5 parse/map/eval work).
-    assert!(parse_pass >= 26, "parse regressed: {parse_pass} < 26");
-    assert!(map_pass >= 26, "map regressed: {map_pass} < 26");
-    assert!(eval_pass >= 26, "eval regressed: {eval_pass} < 26");
-
-    // Touch HashMap so the import is always used regardless of assertions above.
-    let _ = HashMap::<String, u8>::new();
+    // Regression gate: manifest-declared host-required scripts must fail
+    // before evaluation instead of being silently evaluated on the chart
+    // timeframe. All other scripts must keep their parse/map/eval coverage.
+    assert_eq!(parse_pass, total, "Pine parse coverage regressed");
+    assert_eq!(map_pass, expected_executable, "Pine map coverage regressed");
+    assert_eq!(
+        eval_pass, expected_executable,
+        "Pine eval coverage regressed"
+    );
+    assert_eq!(host_required, total - expected_executable);
 }

@@ -397,14 +397,15 @@ impl<'a> PineAstMapper<'a> {
         name: &str,
         args: &[(Option<String>, PineAstNode)],
     ) -> Result<AstNode, PineMapperError> {
-        // `request.security(sym, tf, expr)` — single-timeframe passthrough.
-        // Multi-timeframe data is not available, so we evaluate the requested
-        // expression on the current series (the third argument).
+        // `request.security(sym, tf, expr)` cannot be mapped to the current
+        // frame. Treating it as a passthrough would silently produce a
+        // numerically wrong result by evaluating `expr` at the chart
+        // timeframe. The temporal JSON contract is the explicit host-data
+        // boundary until a provider-aware mapper is available.
         if namespace == Some("request") && name == "security" {
-            if let Some((_, expr_arg)) = args.get(2) {
-                return self.map_node(expr_arg);
-            }
-            return Ok(AstNode::Variable("CLOSE".to_string()));
+            return Err(PineMapperError {
+                message: "request.security requires explicit host timeframe alignment; use the formula.temporal.v1 contract with a provider-aligned input".to_string(),
+            });
         }
 
         // `color.new(base, alpha)` — returns the base color; alpha is ignored in
@@ -727,6 +728,18 @@ mod pr14_semantic_mapper_v3_tests {
         assert!(debug.contains("AROON_DN"));
         assert!(debug.contains("Variable(\"HIGH\")"));
         assert!(debug.contains("Variable(\"LOW\")"));
+    }
+
+    #[test]
+    fn pine_request_security_is_rejected_instead_of_silent_passthrough() {
+        let pine = parse_pine(
+            "//@version=5\nindicator(\"HTF\")\nhtf = request.security(syminfo.tickerid, \"D\", close)\n",
+        )
+        .unwrap();
+        let error = map_pine_to_alphata(&pine).unwrap_err();
+        assert!(error
+            .message
+            .contains("requires explicit host timeframe alignment"));
     }
 }
 
