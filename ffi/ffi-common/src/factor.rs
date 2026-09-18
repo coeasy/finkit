@@ -1,9 +1,10 @@
 //! Shared JSON contract for compiled built-in Factor execution.
 
+use crate::shared_runtime::with_unified_engine;
 use finkit::data_contract::CrossSectionView;
 use finkit::factor_system::FactorCatalog;
 use finkit::factors::{builtin_factor_registry, FactorContext, FactorEngine, FactorKind};
-use finkit::operation::{OperationRequest, UnifiedOperationEngine};
+use finkit::operation::OperationRequest;
 use finkit::unified_runtime::{DirtyRange, RuntimeExecutionMode};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -109,17 +110,20 @@ pub fn evaluate_factor_json(request: &str) -> Result<String, String> {
             // façade used by the direct operation API. This keeps catalog
             // resolution, compiled-plan caching and result caching in one
             // Runtime path for every language binding.
-            let mut unified = UnifiedOperationEngine::new(registry);
             let mut output = BTreeMap::new();
             for target in &request.targets {
-                let result = unified
-                    .execute(OperationRequest::Factor {
-                        name: target,
-                        context: &borrowed,
-                        data_revision: Some(request.data_revision),
-                        cache_scope: Some(&request.scope),
-                    })
-                    .map_err(|error| error.to_string())?;
+                let result = with_unified_engine(|unified| {
+                    unified
+                        .execute(OperationRequest::Factor {
+                            name: target,
+                            context: &borrowed,
+                            data_revision: (!request.scope.is_empty())
+                                .then_some(request.data_revision),
+                            cache_scope: (!request.scope.is_empty())
+                                .then_some(request.scope.as_str()),
+                        })
+                        .map_err(|error| error.to_string())
+                })?;
                 output.extend(result.values);
             }
             finkit::unified_runtime::RuntimeExecution {
@@ -222,13 +226,14 @@ pub fn evaluate_factor_cross_sectional_json(request: &str) -> Result<String, Str
     }
     let input_views: Vec<(&str, &CrossSectionView<'_>)> =
         views.iter().map(|(name, view)| (*name, view)).collect();
-    let mut unified = UnifiedOperationEngine::new(registry);
-    let result = unified
-        .execute(OperationRequest::CrossSectionalFactor {
-            name: target,
-            inputs: &input_views,
-        })
-        .map_err(|error| error.to_string())?;
+    let result = with_unified_engine(|unified| {
+        unified
+            .execute(OperationRequest::CrossSectionalFactor {
+                name: target,
+                inputs: &input_views,
+            })
+            .map_err(|error| error.to_string())
+    })?;
     let values = result
         .values
         .get(target)
@@ -317,10 +322,20 @@ mod tests {
             "data_revision":42,
             "inputs":{"close":[1.0,2.0,3.0,4.0,5.0,6.0]}
         }"#;
+        with_unified_engine(|engine| engine.clear_cache());
         let payload: Value = serde_json::from_str(&evaluate_factor_json(request).unwrap()).unwrap();
         assert_eq!(payload["scope"], "AAA@1d");
         assert_eq!(payload["data_revision"], 42);
         assert_eq!(payload["execution"]["mode"], "full");
+        let after_first = with_unified_engine(|engine| engine.cache_stats());
+        assert_eq!(after_first.misses, 1);
+        assert_eq!(after_first.hits, 0);
+
+        let second: Value = serde_json::from_str(&evaluate_factor_json(request).unwrap()).unwrap();
+        assert_eq!(second["values"], payload["values"]);
+        let after_second = with_unified_engine(|engine| engine.cache_stats());
+        assert_eq!(after_second.misses, 1);
+        assert_eq!(after_second.hits, 1);
     }
 
     #[test]

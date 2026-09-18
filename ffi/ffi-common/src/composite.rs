@@ -1,9 +1,9 @@
 //! Shared JSON contract for dependency-aware Composite execution.
 
+use crate::shared_runtime::with_unified_engine;
 use finkit::composite::{CompositeDefinition, CompositeEngine, CompositeExpr, CompositeOp};
 use finkit::factors::FactorContext;
-use finkit::factors::FactorRegistry;
-use finkit::operation::{OperationRequest, UnifiedOperationEngine};
+use finkit::operation::OperationRequest;
 use finkit::unified_runtime::{DirtyRange, RuntimeExecutionMode};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -152,16 +152,17 @@ pub fn evaluate_composite_json(request: &str) -> Result<String, String> {
             // Route complete graph execution through the canonical operation
             // façade so the public Composite contract shares the same
             // revision-scoped cache and dispatcher as direct Runtime users.
-            let mut unified = UnifiedOperationEngine::new(FactorRegistry::new());
-            let result = unified
-                .execute(OperationRequest::Composite {
-                    definitions: &definitions,
-                    outputs: &output_refs,
-                    context: &borrowed,
-                    data_revision: Some(request.data_revision),
-                    cache_scope: Some(&request.scope),
-                })
-                .map_err(|error| error.to_string())?;
+            let result = with_unified_engine(|unified| {
+                unified
+                    .execute(OperationRequest::Composite {
+                        definitions: &definitions,
+                        outputs: &output_refs,
+                        context: &borrowed,
+                        data_revision: (!request.scope.is_empty()).then_some(request.data_revision),
+                        cache_scope: (!request.scope.is_empty()).then_some(request.scope.as_str()),
+                    })
+                    .map_err(|error| error.to_string())
+            })?;
             finkit::unified_runtime::RuntimeExecution {
                 output: result.values,
                 trace: finkit::unified_runtime::RuntimeExecutionTrace {

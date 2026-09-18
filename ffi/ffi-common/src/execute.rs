@@ -5,10 +5,10 @@
 //! name, ordered inputs, and numeric parameters while high-throughput callers
 //! keep using typed indicator APIs.
 
+use crate::shared_runtime::with_unified_engine;
 use crate::talib_catalog::TALIB_SEMANTIC_PROFILE;
-use finkit::factors::FactorRegistry;
 use finkit::formula::FormulaContext;
-use finkit::operation::{OperationRequest, UnifiedOperationEngine, PRIMARY_OUTPUT_NAME};
+use finkit::operation::{OperationRequest, PRIMARY_OUTPUT_NAME};
 use ndarray::Array1;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -185,22 +185,24 @@ fn execute_operation(request: &str) -> Result<Value, (&'static str, String)> {
     }
 
     let input_refs = input_order.iter().map(String::as_str).collect::<Vec<_>>();
-    let mut engine = UnifiedOperationEngine::new(FactorRegistry::new());
-    let (canonical_name, operation_id, output_names) = {
-        let spec = engine
-            .catalog()
-            .get(&request.operation)
-            .ok_or_else(|| ("unknown_operation", request.operation.clone()))?;
-        (spec.name.clone(), spec.id().0, spec.output_names.clone())
-    };
-    let result = engine
-        .execute(OperationRequest::Indicator {
-            name: &request.operation,
-            inputs: &input_refs,
-            params: &request.params,
-            context: &mut context,
-        })
-        .map_err(|error| ("execution_error", error.to_string()))?;
+    let (canonical_name, operation_id, output_names, result) = with_unified_engine(|engine| {
+        let (canonical_name, operation_id, output_names) = {
+            let spec = engine
+                .catalog()
+                .get(&request.operation)
+                .ok_or_else(|| ("unknown_operation", request.operation.clone()))?;
+            (spec.name.clone(), spec.id().0, spec.output_names.clone())
+        };
+        let result = engine
+            .execute(OperationRequest::Indicator {
+                name: &request.operation,
+                inputs: &input_refs,
+                params: &request.params,
+                context: &mut context,
+            })
+            .map_err(|error| ("execution_error", error.to_string()))?;
+        Ok::<_, (&'static str, String)>((canonical_name, operation_id, output_names, result))
+    })?;
 
     let single_output_name = output_names
         .first()

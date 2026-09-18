@@ -4,14 +4,14 @@
 //! need dialect selection and named outputs. Numeric hot paths can continue
 //! to use typed indicator functions or zero-copy formula APIs.
 
+use crate::shared_runtime::with_unified_engine;
 use finkit::data_contract::{FrameKey, FundamentalSeries, TemporalAlignment, TemporalSeries};
-use finkit::factors::FactorRegistry;
 use finkit::formula::{
     inspect_formula_compatibility, AstNode, DrawCommand, DrawResult, FormulaContext,
     FormulaDialect, FormulaEngine, FormulaTerminal, PineAstNode, PineMapperError,
     PineSecurityResolver,
 };
-use finkit::operation::{OperationRequest, UnifiedOperationEngine};
+use finkit::operation::OperationRequest;
 use ndarray::Array1;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -83,14 +83,15 @@ pub fn evaluate_formula_json(
         Array1::from_vec(volume.to_vec()),
         None,
     );
-    let mut unified = UnifiedOperationEngine::new(FactorRegistry::new());
-    let result = unified
-        .execute(OperationRequest::Formula {
-            source,
-            dialect,
-            context: &mut context,
-        })
-        .map_err(|error| error.to_string())?;
+    let result = with_unified_engine(|unified| {
+        unified
+            .execute(OperationRequest::Formula {
+                source,
+                dialect,
+                context: &mut context,
+            })
+            .map_err(|error| error.to_string())
+    })?;
     let draw = {
         let draw = result.draw.unwrap_or_default();
         json!({
@@ -441,14 +442,15 @@ pub fn evaluate_formula_temporal_json(request: &str) -> Result<String, String> {
         let draw = context.draw_commands.borrow().clone();
         (values, draw)
     } else {
-        let mut unified = UnifiedOperationEngine::new(FactorRegistry::new());
-        let result = unified
-            .execute(OperationRequest::Formula {
-                source: &request.source,
-                dialect,
-                context: &mut context,
-            })
-            .map_err(|error| error.to_string())?;
+        let result = with_unified_engine(|unified| {
+            unified
+                .execute(OperationRequest::Formula {
+                    source: &request.source,
+                    dialect,
+                    context: &mut context,
+                })
+                .map_err(|error| error.to_string())
+        })?;
         (result.values, result.draw.unwrap_or_default())
     };
     let draw = {
@@ -583,7 +585,6 @@ pub fn evaluate_formula_cross_sectional_json(request: &str) -> Result<String, St
     }
 
     let symbols_per_row = request.symbols.len();
-    let mut unified = UnifiedOperationEngine::new(FactorRegistry::new());
     let mut output_values: BTreeMap<String, Vec<f64>> = BTreeMap::new();
     let mut draw_rows = Vec::with_capacity(request.timestamps.len());
     for (row, timestamp) in request.timestamps.iter().copied().enumerate() {
@@ -625,13 +626,15 @@ pub fn evaluate_formula_cross_sectional_json(request: &str) -> Result<String, St
             );
         }
 
-        let result = unified
-            .execute(OperationRequest::Formula {
-                source: &request.source,
-                dialect,
-                context: &mut context,
-            })
-            .map_err(|error| format!("formula cross-sectional row {timestamp}: {error}"))?;
+        let result = with_unified_engine(|unified| {
+            unified
+                .execute(OperationRequest::Formula {
+                    source: &request.source,
+                    dialect,
+                    context: &mut context,
+                })
+                .map_err(|error| format!("formula cross-sectional row {timestamp}: {error}"))
+        })?;
         let primary =
             result.values.get("__PRIMARY__").cloned().ok_or_else(|| {
                 format!("formula primary output missing at timestamp {timestamp}")

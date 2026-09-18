@@ -145,6 +145,12 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
 - Temporal Formula 的非 Pine 请求现在也复用统一 Formula dispatcher；Pine 请求
   保留显式 security resolver，以维持 provider 缺失、时间对齐和 host-required
   错误语义，不将 provider 访问伪装成普通变量。
+- FFI 的 Factor、Composite、Formula 和 direct operation 入口现在复用线程本地的
+  `UnifiedOperationEngine`，每个线程保留有界 compiled-plan/result cache，避免跨语言
+  JSON 调用每次重新创建 Runtime；只有带非空 `scope` 的 Factor/Composite 批处理会
+  启用 revision cache，未命名请求不会进入共享缓存。
+- 主 CI 已加入 `finkit-ffi-common` 统一契约测试，多语言工作流的触发路径已覆盖
+  共享 FFI 契约、C/Go/Java binding 和 `tests/contracts` fixtures。
 
 ## 6. 后续实施顺序
 
