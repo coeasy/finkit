@@ -12,6 +12,7 @@
 //!   evaluation JSON contracts. Statistical logic remains in Rust.
 
 pub mod error;
+pub mod execute;
 pub mod formula;
 pub mod golden;
 pub mod leak;
@@ -21,6 +22,7 @@ pub mod registry;
 pub mod research;
 pub mod types;
 
+pub use execute::{execute_operation_json, OPERATION_RESULT_SCHEMA_VERSION};
 pub use formula::{evaluate_formula_json, FORMULA_CONTRACT_SCHEMA_VERSION};
 pub use operation::{operation_catalog, operation_catalog_json, OperationCatalogEnvelope};
 pub use research::{

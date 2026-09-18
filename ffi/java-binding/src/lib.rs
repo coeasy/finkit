@@ -68,6 +68,24 @@ pub extern "system" fn Java_com_finkit_Indicators_operationCatalogJson(
 }
 
 #[no_mangle]
+pub extern "system" fn Java_com_finkit_Indicators_operationExecuteJson(
+    mut env: JNIEnv,
+    _class: JClass,
+    request_json: JString,
+) -> jni::sys::jstring {
+    ffi_catch_ptr(|| {
+        let request_json: String = match env.get_string(&request_json) {
+            Ok(value) => value.into(),
+            Err(_) => return std::ptr::null_mut(),
+        };
+        let payload = finkit_ffi_common::execute_operation_json(&request_json);
+        env.new_string(payload)
+            .map(|value| value.into_raw())
+            .unwrap_or(std::ptr::null_mut())
+    })
+}
+
+#[no_mangle]
 pub extern "system" fn Java_com_finkit_Indicators_formulaEvalContractJson(
     mut env: JNIEnv,
     _class: JClass,

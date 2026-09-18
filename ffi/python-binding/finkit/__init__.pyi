@@ -668,6 +668,10 @@ def operation_catalog_json() -> str:
     """Return the versioned language-neutral operation catalog as JSON."""
     ...
 
+def operation_execute_json(request_json: str) -> str:
+    """Execute one registered operation using the shared JSON contract."""
+    ...
+
 class CompiledFormula:
     """Reusable formula compilation plan for repeated evaluations."""
 
@@ -713,6 +717,18 @@ def formula_eval_dialect(
     amount: Optional[ArrayLike] = ...,
 ) -> Dict[str, Array1D]:
     """Compile and execute a formula using a named dialect."""
+    ...
+
+def formula_eval_contract_json(
+    source: str,
+    dialect: str,
+    open: ArrayLike,
+    high: ArrayLike,
+    low: ArrayLike,
+    close: ArrayLike,
+    volume: ArrayLike,
+) -> str:
+    """Execute a formula using the language-neutral versioned JSON contract."""
     ...
 
 # ============================================================================
@@ -1123,7 +1139,7 @@ __all__ = [
     "log10", "sin", "sinh", "sqrt", "tan", "tanh",
     # Formula Engine
     "CompiledFormula", "formula_eval", "formula_eval_dialect",
-    "operation_catalog_json",
+    "operation_catalog_json", "operation_execute_json", "formula_eval_contract_json",
     # Visualization
     "KlineChart", "KlineData",
     # Streaming Indicators

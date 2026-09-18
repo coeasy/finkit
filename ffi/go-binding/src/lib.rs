@@ -674,6 +674,32 @@ pub extern "C" fn ta_operation_catalog_json() -> *mut c_char {
     })
 }
 
+/// Execute one registered operation through the shared JSON result contract.
+#[no_mangle]
+pub unsafe extern "C" fn ta_operation_execute_json(request: *const c_char) -> *mut c_char {
+    ffi_catch_ptr(|| {
+        let payload = if request.is_null() {
+            serde_json::json!({
+                "schema_version": finkit_ffi_common::OPERATION_RESULT_SCHEMA_VERSION,
+                "error": {"code": "invalid_request", "message": "request is null"},
+            })
+            .to_string()
+        } else {
+            match unsafe { std::ffi::CStr::from_ptr(request) }.to_str() {
+                Ok(request) => finkit_ffi_common::execute_operation_json(request),
+                Err(_) => serde_json::json!({
+                    "schema_version": finkit_ffi_common::OPERATION_RESULT_SCHEMA_VERSION,
+                    "error": {"code": "invalid_utf8", "message": "request is not valid UTF-8"},
+                })
+                .to_string(),
+            }
+        };
+        CString::new(payload)
+            .expect("operation result payload contains no NUL")
+            .into_raw()
+    })
+}
+
 /// Execute a formula through the shared versioned JSON contract.
 #[no_mangle]
 pub unsafe extern "C" fn ta_formula_eval_contract_json(

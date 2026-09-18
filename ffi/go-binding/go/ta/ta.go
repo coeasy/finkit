@@ -56,6 +56,7 @@ extern TaResult* ta_tsf(const double *input, int length, int period);
 
 extern const char* ta_version();
 extern char* ta_operation_catalog_json();
+extern char* ta_operation_execute_json(const char *request_json);
 extern char* ta_formula_eval_contract_json(const char *source, const char *dialect, const double *open, const double *high, const double *low, const double *close, const double *volume, int length);
 extern void ta_free_result(TaResult *result);
 
@@ -134,6 +135,14 @@ func OperationCatalogJSON() (string, error) {
 	}
 	defer C.ta_free_string(result)
 	return C.GoString(result), nil
+}
+
+// OperationExecuteJSON executes one registered operation using the shared
+// versioned request/result contract.
+func OperationExecuteJSON(requestJSON string) (string, error) {
+	cRequest := C.CString(requestJSON)
+	defer C.free(unsafe.Pointer(cRequest))
+	return formulaJSONResult(C.ta_operation_execute_json(cRequest))
 }
 
 // FormulaEvalContractJSON evaluates a formula using an explicit dialect and

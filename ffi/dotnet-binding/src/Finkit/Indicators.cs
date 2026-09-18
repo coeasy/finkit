@@ -173,6 +173,9 @@ public static class Indicators
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern IntPtr ta_operation_catalog_json();
 
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern IntPtr ta_operation_execute_json(string requestJson);
+
     // ========================================================================
     // Helper Methods
     // ========================================================================
@@ -198,6 +201,22 @@ public static class Indicators
         IntPtr resultPtr = ta_operation_catalog_json();
         if (resultPtr == IntPtr.Zero)
             throw new InvalidOperationException("Operation catalog returned null");
+        try
+        {
+            return Marshal.PtrToStringUTF8(resultPtr) ?? "";
+        }
+        finally
+        {
+            ta_free_string(resultPtr);
+        }
+    }
+
+    /// <summary>Executes one registered operation through the shared JSON contract.</summary>
+    public static string OperationExecuteJson(string requestJson)
+    {
+        IntPtr resultPtr = ta_operation_execute_json(requestJson);
+        if (resultPtr == IntPtr.Zero)
+            throw new InvalidOperationException("Operation execution returned null");
         try
         {
             return Marshal.PtrToStringUTF8(resultPtr) ?? "";

@@ -6313,9 +6313,16 @@ fn operation_catalog_json() -> PyResult<String> {
         .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
 }
 
+/// Execute one registered operation through the shared JSON result contract.
+#[pyfunction]
+fn operation_execute_json(request_json: &str) -> String {
+    finkit_ffi_common::execute_operation_json(request_json)
+}
+
 #[pymodule]
 fn finkit(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(operation_catalog_json, m)?)?;
+    m.add_function(wrap_pyfunction!(operation_execute_json, m)?)?;
     m.add_class::<PyKlineData>()?;
     m.add_class::<PyKlineChart>()?;
     m.add_function(wrap_pyfunction!(chan_analyze, m)?)?;

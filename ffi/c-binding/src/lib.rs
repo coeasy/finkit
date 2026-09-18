@@ -228,6 +228,34 @@ pub extern "C" fn ta_operation_catalog_json() -> *mut c_char {
     })
 }
 
+/// Execute one registered operation through the shared JSON result contract.
+#[no_mangle]
+pub unsafe extern "C" fn ta_operation_execute_json(
+    request: *const c_char,
+) -> *mut c_char {
+    ffi_catch_ptr(|| {
+        let payload = if request.is_null() {
+            serde_json::json!({
+                "schema_version": finkit_ffi_common::OPERATION_RESULT_SCHEMA_VERSION,
+                "error": {"code": "invalid_request", "message": "request is null"},
+            })
+            .to_string()
+        } else {
+            match unsafe { std::ffi::CStr::from_ptr(request) }.to_str() {
+                Ok(request) => finkit_ffi_common::execute_operation_json(request),
+                Err(_) => serde_json::json!({
+                    "schema_version": finkit_ffi_common::OPERATION_RESULT_SCHEMA_VERSION,
+                    "error": {"code": "invalid_utf8", "message": "request is not valid UTF-8"},
+                })
+                .to_string(),
+            }
+        };
+        CString::new(payload)
+            .expect("operation result payload contains no NUL")
+            .into_raw()
+    })
+}
+
 /// Execute a formula through the versioned cross-language result contract.
 ///
 /// The returned JSON owns the named output arrays and represents non-finite
@@ -378,6 +406,22 @@ mod tests {
             .unwrap()
             .iter()
             .any(|operation| operation["name"] == "EMA"));
+        unsafe { finkit_free_string(ptr) };
+    }
+
+    #[test]
+    fn operation_execute_json_dispatches_named_sma_output() {
+        let request = std::ffi::CString::new(
+            r#"{"operation":"SMA","input_order":["CLOSE"],"inputs":{"CLOSE":[1.0,2.0,3.0]},"params":[2]}"#,
+        )
+        .unwrap();
+        let ptr = unsafe { ta_operation_execute_json(request.as_ptr()) };
+        assert!(!ptr.is_null());
+        let json = unsafe { CStr::from_ptr(ptr) }.to_str().unwrap();
+        let value: serde_json::Value = serde_json::from_str(json).unwrap();
+        assert_eq!(value["operation"], "SMA");
+        assert_eq!(value["primary"], "SMA");
+        assert_eq!(value["values"]["SMA"][2], 2.25);
         unsafe { finkit_free_string(ptr) };
     }
 

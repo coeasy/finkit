@@ -374,7 +374,7 @@ Core `lib.rs` 暴露大量模块，并同时支持 std/no_std、formula、JIT、
 
 Registry、Rust dispatch、FFI 声明、Python stubs、C++ 头文件/RAII wrapper、Go bindings、Java/.NET/C/Node metadata、文档和测试清单从该源生成。
 
-当前实现状态：`core/src/operation.rs` 已落地 `OperationKind`、`ValueShape`、`OperationCapabilities`、稳定 `OperationId`、别名解析、冲突校验、从 `FunctionRegistry` 的原子投影，以及从 `FactorRegistry` 投影 Factor 元数据；横截面 Factor 会正确标记 `cross_sectional/multi_symbol` 能力，名称冲突会在 `try_new` 阶段拒绝。`UnifiedOperationEngine` 已将已存在的指标直接 AST dispatch、Formula、Factor、Composite 接入统一 Request/Result/Error façade，并覆盖 AlphaTA、现有 Pine 子集、多标的/多周期 Formula 和横截面 Factor 路由测试。`MACD` 与 `BBANDS` 已通过统一 dispatcher 返回命名多输出，且输出名已进入 `ffi-common` 的版本化 catalog；未实现的多输出 operation 会显式报错，不再只返回一个数组。八个正式语言入口已开始共享版本化 `operation_catalog_json`；C/C++/Go 已接入 Formula JSON 契约，Node/Python/Java/.NET 及 Rust 共享实现已接入，仍需完成各语言实际打包、运行时 golden 和生命周期门禁。这仍不代表所有指标、公式、Factor、Composite、Draw 已接入同一 dispatcher；逐项 dispatcher、golden、跨语言执行暴露和 Lightweight Charts scene 转换完成后，才能将对应 operation 标记为 `implemented`。
+当前实现状态：`core/src/operation.rs` 已落地 `OperationKind`、`ValueShape`、`OperationCapabilities`、稳定 `OperationId`、别名解析、冲突校验、从 `FunctionRegistry` 的原子投影，以及从 `FactorRegistry` 投影 Factor 元数据；横截面 Factor 会正确标记 `cross_sectional/multi_symbol` 能力，名称冲突会在 `try_new` 阶段拒绝。`UnifiedOperationEngine` 已将已存在的指标直接 AST dispatch、Formula、Factor、Composite 接入统一 Request/Result/Error façade，并覆盖 AlphaTA、现有 Pine 子集、多标的/多周期 Formula 和横截面 Factor 路由测试。`MACD` 与 `BBANDS` 已通过统一 dispatcher 返回命名多输出，且输出名已进入 `ffi-common` 的版本化 catalog；未实现的多输出 operation 会显式报错，不再只返回一个数组。八个正式语言入口已开始共享版本化 `operation_catalog_json`，并新增统一 `operation_execute_json` 批量执行入口；C/C++/Go 已接入 Formula JSON 契约，Node/Python/Java/.NET 及 Rust 共享实现已接入，仍需完成各语言实际打包、运行时 golden 和生命周期门禁。这仍不代表所有指标、公式、Factor、Composite、Draw 已接入同一 dispatcher；逐项 dispatcher、golden、跨语言执行暴露和 Lightweight Charts scene 转换完成后，才能将对应 operation 标记为 `implemented`。
 
 ### 5.3 Formula 和兼容层
 
@@ -463,6 +463,7 @@ State record 至少包含：`plan_hash`、`operation_id`、`state_type_id`、`st
 ```text
 Catalog
   list_operations / get_operation_spec
+  operation_execute_json(request_json)  # 控制面统一执行入口
 
 Data dimensions
   frame(symbol, timeframe)
@@ -495,6 +496,7 @@ Streaming / persistence / drawing
 - Rust 是 canonical implementation 和类型契约来源；C ABI 是跨语言边界，C++ 在其上提供 RAII、span/view 和异常安全的习惯化封装。
 - Python、C++、Go、Java、.NET、C、Node 的公共入口必须覆盖 batch、compiled plan、range/latest、streaming、checkpoint、结果读取和结构化错误；不能出现某语言只能 full evaluate 的降级版本。C ABI 作为跨语言底座，C++ 必须与其保持同语义；Node 的 N-API 层不得另造公式解释器。
 - `ResultEnvelope`、`ErrorEnvelope`、`OperationSpec`、`ChartSceneV1` 使用统一 schema；语言绑定只负责内存视图、对象生命周期和语言习惯包装。
+- `operation_execute_json` 当前明确返回 `semantic_profile=core_registry`；TA-Lib 与国内终端同名函数必须在 variant/profile registry 中显式区分，禁止把同名 `SMA` 等语义静默合并。
 - 数值结果默认支持命名列、validity mask、warm-up metadata、algorithm/schema version 和 warnings；不得以不同语言的空值、异常或 NaN 约定替代统一语义。
 - 编译句柄、流式句柄和 checkpoint 都必须显式拥有 owner、线程安全属性、释放方式和版本验证规则；跨语言不得暴露 Rust `TypeId` 或裸内部指针作为稳定契约。
 - 旧 `FactorFactory`、独立 `finkit-runtime`、重复的 Formula/Composite façade 只保留为迁移适配层，不能继续增加新的公开能力；完成迁移后删除或降为内部模块。

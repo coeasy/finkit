@@ -2433,6 +2433,12 @@ pub fn formula_eval_contract_json(
         .map_err(|error| Error::new(Status::InvalidArg, error))
 }
 
+/// Execute one registered operation through the shared JSON result contract.
+#[napi]
+pub fn operation_execute_json(request_json: String) -> String {
+    finkit_ffi_common::execute_operation_json(&request_json)
+}
+
 /// Execute a trading formula with JIT compilation
 ///
 /// Compiles the formula using Just-In-Time compilation for maximum execution speed.
