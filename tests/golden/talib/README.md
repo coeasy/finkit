@@ -63,7 +63,7 @@ All outputs are computed on three shared fixtures from `tests/fixtures/`:
 
 ## Output Files
 
-One generated JSON file per indicator (96 total), plus a checked-in profile
+One generated JSON file per indicator (107 total), plus a checked-in profile
 variant fixture for official `matype` contracts:
 
 | File | Purpose |
@@ -129,6 +129,17 @@ Generated indicator files:
 | `plus_dm.json` | PLUS_DM | timeperiod=14 |
 | `minus_dm.json` | MINUS_DM | timeperiod=14 |
 | `bop.json` | BOP | — |
+| `cdldoji.json` | CDLDOJI | default |
+| `cdldragonflydoji.json` | CDLDRAGONFLYDOJI | default |
+| `cdlgravestonedoji.json` | CDLGRAVESTONEDOJI | default |
+| `cdlengulfing.json` | CDLENGULFING | default |
+| `cdlhammer.json` | CDLHAMMER | default |
+| `cdlhangingman.json` | CDLHANGINGMAN | default |
+| `cdlharami.json` | CDLHARAMI | default |
+| `cdlmarubozu.json` | CDLMARUBOZU | default |
+| `cdlpiercing.json` | CDLPIERCING | default |
+| `cdlshootingstar.json` | CDLSHOOTINGSTAR | default |
+| `cdlspinningtop.json` | CDLSPINNINGTOP | default |
 | `ppo.json` | PPO | 12, 26, matype=0 (SMA) |
 | `ultosc.json` | ULTOSC | 7, 14, 28 |
 | `avgprice.json` | AVGPRICE | — |

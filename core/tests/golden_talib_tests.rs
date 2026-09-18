@@ -151,6 +151,10 @@ fn array_to_vec(arr: ndarray::Array1<f64>) -> Vec<f64> {
     arr.iter().copied().collect()
 }
 
+fn pattern_to_vec(arr: ndarray::Array1<i32>) -> Vec<f64> {
+    arr.iter().map(|value| *value as f64).collect()
+}
+
 fn read_fixture_csv(path: &Path) -> Ohlcv {
     let content = fs::read_to_string(path).expect("read fixture csv");
     let mut lines = content
@@ -506,6 +510,42 @@ fn compute_alpha_ta_outputs(
             "trendline".to_string(),
             array_to_vec(finkit::indicators::cycle::ht_trendline(close).unwrap()),
         )]),
+        "CDLDOJI" | "CDLDRAGONFLYDOJI" | "CDLGRAVESTONEDOJI" | "CDLENGULFING" | "CDLHAMMER"
+        | "CDLHANGINGMAN" | "CDLHARAMI" | "CDLMARUBOZU" | "CDLPIERCING" | "CDLSHOOTINGSTAR"
+        | "CDLSPINNINGTOP" => {
+            let result = match indicator {
+                "CDLDOJI" => finkit::patterns::candlestick::cdl_doji(open, high, low, close),
+                "CDLDRAGONFLYDOJI" => {
+                    finkit::patterns::candlestick::cdl_dragonflydoji(open, high, low, close)
+                }
+                "CDLGRAVESTONEDOJI" => {
+                    finkit::patterns::candlestick::cdl_gravestonedoji(open, high, low, close)
+                }
+                "CDLENGULFING" => {
+                    finkit::patterns::candlestick::cdl_engulfing(open, high, low, close)
+                }
+                "CDLHAMMER" => finkit::patterns::candlestick::cdl_hammer(open, high, low, close),
+                "CDLHANGINGMAN" => {
+                    finkit::patterns::candlestick::cdl_hangingman(open, high, low, close)
+                }
+                "CDLHARAMI" => finkit::patterns::candlestick::cdl_harami(open, high, low, close),
+                "CDLMARUBOZU" => {
+                    finkit::patterns::candlestick::cdl_marubozu(open, high, low, close)
+                }
+                "CDLPIERCING" => {
+                    finkit::patterns::candlestick::cdl_piercing(open, high, low, close)
+                }
+                "CDLSHOOTINGSTAR" => {
+                    finkit::patterns::candlestick::cdl_shootingstar(open, high, low, close)
+                }
+                "CDLSPINNINGTOP" => {
+                    finkit::patterns::candlestick::cdl_spinningtop(open, high, low, close)
+                }
+                _ => unreachable!(),
+            }
+            .unwrap();
+            HashMap::from([(indicator.to_ascii_lowercase(), pattern_to_vec(result))])
+        }
         "OBV" => HashMap::from([("obv".to_string(), array_to_vec(obv(close, volume).unwrap()))]),
         "MFI" => {
             let p = param_usize(params, "timeperiod", 14);
