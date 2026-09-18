@@ -276,11 +276,11 @@ talib_0_7_1
 - TA-Lib profile-only catalog 集中维护 101 个名称；与 Core registry 合并后形成 161 个可执行 dispatcher 名称。两层边界均由 `tests/contracts/talib_coverage_matrix_v1.json` 声明，避免把注册、可执行 smoke 和数值参考混为一谈。profile-only 条目公开输入形状、输出名、默认参数和约束，避免跨语言各自维护名称/参数表。
 - TA-Lib golden 生成器现在默认拒绝 Python 包版本漂移：当前 corpus 要求 `0.8.0`，只有显式 `--allow-version-mismatch` 才能生成本地诊断文件，避免较旧或未验证的环境静默覆盖正式参考基线。
 - 新增 `core/benches/unified_engine_bench.rs`，固定 100k 行 borrowed Factor/Composite 工作负载，分别测量计划命中、结果未命中和结果命中；它只产生可复现基线，不在没有目标硬件阈值时伪造生产 SLO。
-- 新增 161 个 TA-Lib dispatcher 名称的 JSON smoke test：逐项经过统一请求、分派和结果 envelope，确认返回结构及等长输出；这属于执行链覆盖验证，不等同于 161 项数值等价验证。矩阵同时明确 101 个 profile-only 注册项和 150 个固定 numeric golden 项。
+- 新增 161 个 TA-Lib dispatcher 名称的 JSON smoke test：逐项经过统一请求、分派和结果 envelope，确认返回结构及等长输出；这属于执行链覆盖验证，不等同于 161 项数值等价验证。矩阵同时明确 101 个 profile-only 注册项和 157 个固定 numeric golden 项。
 - TA-Lib 的 `APO`、`BBANDS`、`MAVP`、`STOCH`、`STOCHF`、`STOCHRSI` 已采用官方参数顺序并真实消费 `matype`；新增 Python TA-Lib 0.8.0 对照的非默认 MA type、输出暖机和末值断言。dispatcher 只接受显式 `talib_0_7_1` profile，不再接受无版本的 `talib` 别名。
 - `MAVP` profile 的 batch/非 SMA 路径已统一使用 TA-Lib 的 `maxperiod - 1` 暖机规则；新增 `tests/golden/talib/profile_matype_variants.json` 作为可复现的参数变体参考，而不是只在测试代码中硬编码末值。
 - 修复 DZH `MOD(...)` 函数调用与中缀 `MOD` 运算符的 grammar 冲突，国内公式集成测试重新通过。
-- TA-Lib parity corpus 已生成并纳入版本控制：150 个声明指标、3 组固定 OHLCV fixture，另有 `profile_matype_variants.json` 覆盖官方 MA type 变体，参考版本固定为 Python `0.8.0`；golden 缺失现在是失败，不再静默 skip。除原有 11 个 candlestick 外，又验证了 48 个已实现 candlestick；此前排除的 `CDLDOJISTAR`、`CDLEVENINGDOJISTAR`、`CDLINNECK`、`CDLMORNINGDOJISTAR`、`CDLSTICKSANDWICH` 已按 TA-Lib candle setting、gap、penetration 和 warm-up 语义修正并纳入逐值 parity。此前已覆盖的 ADXR、AROONOSC、ADOSC、MFI、ROCP/ROCR/ROCR100、TRIMA、T3、数学变换、逐元素运算和跨序列统计继续纳入。HT_TRENDMODE 保留为 native NaN warm-up 边界，不冒充 TA-Lib 0 值暖机等价。MAXINDEX/MININDEX/MINMAXINDEX 明确保留为原生相对窗口下标语义，未冒充 TA-Lib 绝对下标数值等价。数学变换与跨序列统计使用与 Rust loader 相同的受控 `MATH`/`benchmark` 序列，避免把域约束误当成 OHLCV 语义。PLUS_DM/MINUS_DM 已接入带 period 的 Wilder 平滑，PPO 已接入 TA-Lib `matype`（默认 SMA）语义；STDDEV/VAR/ADOSC/CORREL 使用文档化的相对浮点容差。AD 的公开路径保留 TA-Lib 标量运算顺序，避免 AVX2 累计 ULP 偏差；CLI OHLCV CSV 读取也支持 fixture 的 `#` 元数据行。
+- TA-Lib parity corpus 已生成并纳入版本控制：157 个声明指标、3 组固定 OHLCV fixture，另有 `profile_matype_variants.json` 覆盖官方 MA type 变体，参考版本固定为 Python `0.8.0`；golden 缺失现在是失败，不再静默 skip。除原有 11 个 candlestick 外，又验证了 55 个已实现 candlestick；三蜡烛形态 `CDL2CROWS`、`CDL3BLACKCROWS`、`CDL3INSIDE`、`CDL3LINESTRIKE`、`CDL3OUTSIDE`、`CDL3STARSINSOUTH`、`CDL3WHITESOLDIERS` 以及此前排除的五个形态均已纳入逐值 parity，并使用各自 TA-Lib candle setting、gap、penetration 和 warm-up 语义。此前已覆盖的 ADXR、AROONOSC、ADOSC、MFI、ROCP/ROCR/ROCR100、TRIMA、T3、数学变换、逐元素运算和跨序列统计继续纳入。HT_TRENDMODE 保留为 native NaN warm-up 边界，不冒充 TA-Lib 0 值暖机等价。MAXINDEX/MININDEX/MINMAXINDEX 明确保留为原生相对窗口下标语义，未冒充 TA-Lib 绝对下标数值等价。数学变换与跨序列统计使用与 Rust loader 相同的受控 `MATH`/`benchmark` 序列，避免把域约束误当成 OHLCV 语义。PLUS_DM/MINUS_DM 已接入带 period 的 Wilder 平滑，PPO 已接入 TA-Lib `matype`（默认 SMA）语义；STDDEV/VAR/ADOSC/CORREL 使用文档化的相对浮点容差。AD 的公开路径保留 TA-Lib 标量运算顺序，避免 AVX2 累计 ULP 偏差；CLI OHLCV CSV 读取也支持 fixture 的 `#` 元数据行。
 
 ## 7. 当前实际验证状态
 
@@ -295,8 +295,8 @@ talib_0_7_1
 - `cargo +1.98.1 fmt --all` 已执行。
 - `cargo +1.98.1 bench -p finkit --bench unified_engine_bench --offline -- --sample-size 10 --measurement-time 1 --warm-up-time 1 --noplot` 已实际运行：100k borrowed Factor 计划命中约 `13.84–14.13 µs`，Composite 计划命中但结果重算约 `2.90–2.97 ms`，结果缓存命中约 `15.34–15.53 µs`；这些是当前主机基线，不是跨硬件生产 SLO。
 - `node --test visualization/frontend/lightweight-charts-adapter.test.mjs`：`2 passed, 0 failed`；这是 adapter contract test，不等同于真实浏览器版本兼容或完整交互集成。
-- TA-Lib golden：定向全指标 suite `1 passed, 0 failed`，150 个指标均有固定 reference 文件；当前集合不是 TA-Lib 全目录证明。
-- TA-Lib coverage matrix：profile-only catalog `101`、dispatcher smoke `161`、fixed numeric golden `150`；矩阵与 golden 文件、公共 catalog、dispatcher 支持集合已通过一致性测试。
+- TA-Lib golden：定向全指标 suite `1 passed, 0 failed`，157 个指标均有固定 reference 文件；当前集合不是 TA-Lib 全目录证明。
+- TA-Lib coverage matrix：profile-only catalog `101`、dispatcher smoke `161`、fixed numeric golden `157`；矩阵与 golden 文件、公共 catalog、dispatcher 支持集合已通过一致性测试。
 
 本轮没有宣称完成：
 

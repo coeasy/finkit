@@ -14,7 +14,7 @@
     },
     "numeric_reference": {
       "status": "fixed_golden",
-      "expected_count": 150,
+      "expected_count": 157,
       "indicators": [
         "ACCBANDS",
         "ACOS",
@@ -34,6 +34,13 @@
         "BBANDS",
         "BETA",
         "BOP",
+        "CDL2CROWS",
+        "CDL3BLACKCROWS",
+        "CDL3INSIDE",
+        "CDL3LINESTRIKE",
+        "CDL3OUTSIDE",
+        "CDL3STARSINSOUTH",
+        "CDL3WHITESOLDIERS",
         "CDLDOJI",
         "CDLDOJISTAR",
         "CDLDRAGONFLYDOJI",

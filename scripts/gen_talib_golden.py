@@ -731,6 +731,13 @@ INDICATORS: dict[str, dict[str, Any]] = {
 # explicit so a newly added core pattern cannot silently become a numeric
 # parity claim without a checked-in reference file.
 SUPPORTED_CANDLESTICK_INDICATORS = (
+    "CDL2CROWS",
+    "CDL3BLACKCROWS",
+    "CDL3INSIDE",
+    "CDL3LINESTRIKE",
+    "CDL3OUTSIDE",
+    "CDL3STARSINSOUTH",
+    "CDL3WHITESOLDIERS",
     "CDLDOJI",
     "CDLDOJISTAR",
     "CDLDRAGONFLYDOJI",

@@ -165,6 +165,13 @@ fn compute_candlestick_output(
     use finkit::patterns::candlestick as cdl;
 
     let result = match indicator {
+        "CDL2CROWS" => cdl::cdl_2crows(open, high, low, close),
+        "CDL3BLACKCROWS" => cdl::cdl_3black_crows(open, high, low, close),
+        "CDL3INSIDE" => cdl::cdl_3inside(open, high, low, close),
+        "CDL3LINESTRIKE" => cdl::cdl_3linestrike(open, high, low, close),
+        "CDL3OUTSIDE" => cdl::cdl_3outside(open, high, low, close),
+        "CDL3STARSINSOUTH" => cdl::cdl_3starsinsouth(open, high, low, close),
+        "CDL3WHITESOLDIERS" => cdl::cdl_3white_soldiers(open, high, low, close),
         "CDLABANDONEDBABY" => cdl::cdl_abandoned_baby(open, high, low, close),
         "CDLADVANCEBLOCK" => cdl::cdl_advanceblock(open, high, low, close),
         "CDLBELTHOLD" => cdl::cdl_belthold(open, high, low, close),
@@ -579,7 +586,14 @@ fn compute_alpha_ta_outputs(
             "trendline".to_string(),
             array_to_vec(finkit::indicators::cycle::ht_trendline(close).unwrap()),
         )]),
-        "CDLABANDONEDBABY"
+        "CDL2CROWS"
+        | "CDL3BLACKCROWS"
+        | "CDL3INSIDE"
+        | "CDL3LINESTRIKE"
+        | "CDL3OUTSIDE"
+        | "CDL3STARSINSOUTH"
+        | "CDL3WHITESOLDIERS"
+        | "CDLABANDONEDBABY"
         | "CDLADVANCEBLOCK"
         | "CDLBELTHOLD"
         | "CDLBREAKAWAY"

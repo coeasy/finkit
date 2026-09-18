@@ -25,7 +25,7 @@ default native finkit behavior.
 The differential matrix must be read as three independent gates. The shared
 Rust JSON dispatcher currently executes all `161/161` dispatcher names in its
 checked-in smoke contract; that is callable/shape coverage only. Numerical parity is
-currently pinned by the checked-in 150-indicator golden corpus, not by a claimed
+currently pinned by the checked-in 157-indicator golden corpus, not by a claimed
 161-function pass. The versioned state is recorded in
 `tests/contracts/talib_coverage_matrix_v1.json`. An entry is not promoted to exact parity until its
 parameter, warm-up, NaN, output-count and differential golden contract is
