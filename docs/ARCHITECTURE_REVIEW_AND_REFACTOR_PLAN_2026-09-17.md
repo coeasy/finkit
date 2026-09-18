@@ -374,7 +374,7 @@ Core `lib.rs` 暴露大量模块，并同时支持 std/no_std、formula、JIT、
 
 Registry、Rust dispatch、FFI 声明、Python stubs、C++ 头文件/RAII wrapper、Go bindings、Java/.NET metadata、文档和测试清单从该源生成。
 
-当前实现状态：`core/src/operation.rs` 已落地 `OperationKind`、`ValueShape`、`OperationCapabilities`、稳定 `OperationId`、别名解析、冲突校验、从 `FunctionRegistry` 的原子投影，以及从 `FactorRegistry` 投影 Factor 元数据；横截面 Factor 会正确标记 `cross_sectional/multi_symbol` 能力，名称冲突会在 `try_new` 阶段拒绝。`UnifiedOperationEngine` 已将已存在的指标直接 AST dispatch、Formula、Factor、Composite 接入统一 Request/Result/Error façade，并覆盖 AlphaTA、现有 Pine 子集、多标的/多周期 Formula 和横截面 Factor 路由测试。六个正式语言入口已提供同一版本化 `operation_catalog_json` 元数据读取，但这仍不代表所有指标、公式、Factor、Composite、Draw 已接入同一 dispatcher；逐项 dispatcher、golden、跨语言执行暴露和 Lightweight Charts scene 转换完成后，才能将对应 operation 标记为 `implemented`。
+当前实现状态：`core/src/operation.rs` 已落地 `OperationKind`、`ValueShape`、`OperationCapabilities`、稳定 `OperationId`、别名解析、冲突校验、从 `FunctionRegistry` 的原子投影，以及从 `FactorRegistry` 投影 Factor 元数据；横截面 Factor 会正确标记 `cross_sectional/multi_symbol` 能力，名称冲突会在 `try_new` 阶段拒绝。`UnifiedOperationEngine` 已将已存在的指标直接 AST dispatch、Formula、Factor、Composite 接入统一 Request/Result/Error façade，并覆盖 AlphaTA、现有 Pine 子集、多标的/多周期 Formula 和横截面 Factor 路由测试。`MACD` 与 `BBANDS` 已通过统一 dispatcher 返回命名多输出，且输出名已进入 `ffi-common` 的版本化 catalog；未实现的多输出 operation 会显式报错，不再只返回一个数组。六个正式语言入口已提供同一版本化 `operation_catalog_json` 元数据读取，但这仍不代表所有指标、公式、Factor、Composite、Draw 已接入同一 dispatcher；逐项 dispatcher、golden、跨语言执行暴露和 Lightweight Charts scene 转换完成后，才能将对应 operation 标记为 `implemented`。
 
 ### 5.3 Formula 和兼容层
 

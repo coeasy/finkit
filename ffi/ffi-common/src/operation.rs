@@ -44,6 +44,8 @@ pub struct OperationCatalogEntry {
     pub params: Vec<OperationParameter>,
     /// Number of output series.
     pub outputs: usize,
+    /// Stable names for output series in result order.
+    pub output_names: Vec<String>,
     /// Lookback behavior.
     pub lookback: &'static str,
     /// Explicit execution and semantic capabilities.
@@ -122,6 +124,7 @@ impl OperationCatalogEntry {
                 })
                 .collect(),
             outputs: spec.outputs,
+            output_names: spec.output_names.clone(),
             lookback: lookback_name(spec.lookback),
             capabilities: spec.capabilities.into(),
             schema_version: spec.schema_version,
@@ -224,5 +227,25 @@ mod tests {
         let mut sorted = names.clone();
         sorted.sort_unstable();
         assert_eq!(names, sorted);
+    }
+
+    #[test]
+    fn catalog_exposes_named_multi_output_contracts() {
+        let catalog = operation_catalog(&builtin_operation_registry());
+        let macd = catalog
+            .operations
+            .iter()
+            .find(|operation| operation.name == "MACD")
+            .unwrap();
+        assert_eq!(macd.output_names, vec!["MACD", "MACD_SIGNAL", "MACD_HIST"]);
+        let bbands = catalog
+            .operations
+            .iter()
+            .find(|operation| operation.name == "BBANDS")
+            .unwrap();
+        assert_eq!(
+            bbands.output_names,
+            vec!["UPPERBAND", "MIDDLEBAND", "LOWERBAND"]
+        );
     }
 }

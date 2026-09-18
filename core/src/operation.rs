@@ -188,6 +188,8 @@ pub struct OperationSpec {
     pub params: Vec<ParamSpec>,
     /// Number of aligned output series.
     pub outputs: usize,
+    /// Stable names for the aligned output series, in result order.
+    pub output_names: Vec<String>,
     /// Warm-up/lookback behavior.
     pub lookback: LookbackSpec,
     /// Execution and semantic capabilities.
@@ -228,6 +230,7 @@ impl OperationSpec {
             input: Some(spec.input),
             params: spec.params.to_vec(),
             outputs: spec.outputs,
+            output_names: output_names_for(&spec.name, spec.outputs),
             lookback: spec.lookback,
             capabilities: match kind {
                 OperationKind::Indicator => {
@@ -259,6 +262,7 @@ impl OperationSpec {
             input: Some(InputKind::Dynamic),
             params: Vec::new(),
             outputs: 1,
+            output_names: vec![normalize_name(&factor.name)],
             lookback: LookbackSpec::Dynamic,
             capabilities: OperationCapabilities::factor(factor.kind),
             schema_version: 1,
@@ -836,6 +840,10 @@ impl UnifiedOperationEngine {
             ));
         }
 
+        if spec.outputs > 1 {
+            return execute_multi_output_indicator(spec.name.as_str(), inputs, params, context);
+        }
+
         let mut args = Vec::with_capacity(inputs.len() + params.len());
         args.extend(
             inputs
@@ -1159,6 +1167,152 @@ fn normalize_name(name: &str) -> String {
     name.trim().to_ascii_uppercase()
 }
 
+fn output_names_for(name: &str, outputs: usize) -> Vec<String> {
+    match normalize_name(name).as_str() {
+        "MACD" => vec![
+            "MACD".to_string(),
+            "MACD_SIGNAL".to_string(),
+            "MACD_HIST".to_string(),
+        ],
+        "BBANDS" => vec![
+            "UPPERBAND".to_string(),
+            "MIDDLEBAND".to_string(),
+            "LOWERBAND".to_string(),
+        ],
+        _ if outputs == 1 => vec![normalize_name(name)],
+        _ => (0..outputs)
+            .map(|index| format!("{}_{}", normalize_name(name), index + 1))
+            .collect(),
+    }
+}
+
+fn execute_multi_output_indicator(
+    name: &str,
+    inputs: &[&str],
+    params: &[f64],
+    context: &FormulaContext,
+) -> Result<OperationResult, OperationExecutionError> {
+    let result = match name {
+        "MACD" => {
+            require_input_count(name, inputs, 1)?;
+            let close = resolve_indicator_input(name, context, inputs[0])?;
+            let fast = parameter_usize(name, params, 0, 12)?;
+            let slow = parameter_usize(name, params, 1, 26)?;
+            let signal = parameter_usize(name, params, 2, 9)?;
+            let output = crate::indicators::momentum::macd(close, fast, slow, signal)
+                .map_err(|error| indicator_execution_error(name, error))?;
+            MultiIndicatorOutput {
+                values: vec![
+                    ("MACD", output.macd.to_vec()),
+                    ("MACD_SIGNAL", output.signal.to_vec()),
+                    ("MACD_HIST", output.hist.to_vec()),
+                ],
+                primary: "MACD",
+            }
+        }
+        "BBANDS" => {
+            require_input_count(name, inputs, 1)?;
+            let close = resolve_indicator_input(name, context, inputs[0])?;
+            let period = parameter_usize(name, params, 0, 20)?;
+            let deviation = parameter_f64(name, params, 1, 2.0)?;
+            let output = crate::indicators::overlap::bbands(close, period, deviation, deviation)
+                .map_err(|error| indicator_execution_error(name, error))?;
+            MultiIndicatorOutput {
+                values: vec![
+                    ("UPPERBAND", output.upper.to_vec()),
+                    ("MIDDLEBAND", output.middle.to_vec()),
+                    ("LOWERBAND", output.lower.to_vec()),
+                ],
+                primary: "MIDDLEBAND",
+            }
+        }
+        _ => {
+            return Err(OperationExecutionError::InvalidRequest(format!(
+                "multi-output operation {name} has no unified dispatcher yet"
+            )))
+        }
+    };
+
+    let values = result
+        .values
+        .into_iter()
+        .map(|(name, values)| (name.to_string(), values))
+        .collect::<BTreeMap<_, _>>();
+    Ok(OperationResult {
+        values,
+        shape: ValueShape::MultiSeries,
+        primary: Some(result.primary.to_string()),
+        draw: None,
+    })
+}
+
+struct MultiIndicatorOutput {
+    values: Vec<(&'static str, Vec<f64>)>,
+    primary: &'static str,
+}
+
+fn require_input_count(
+    name: &str,
+    inputs: &[&str],
+    expected: usize,
+) -> Result<(), OperationExecutionError> {
+    if inputs.len() != expected {
+        return Err(OperationExecutionError::InvalidRequest(format!(
+            "{name} expects {expected} input series, got {}",
+            inputs.len()
+        )));
+    }
+    Ok(())
+}
+
+fn resolve_indicator_input<'a>(
+    name: &str,
+    context: &'a FormulaContext,
+    input: &str,
+) -> Result<&'a [f64], OperationExecutionError> {
+    context.get_data(input).ok_or_else(|| {
+        OperationExecutionError::InvalidRequest(format!(
+            "{name} input series is not present in the formula context: {input}"
+        ))
+    })
+}
+
+fn parameter_usize(
+    name: &str,
+    params: &[f64],
+    index: usize,
+    default: usize,
+) -> Result<usize, OperationExecutionError> {
+    let value = params.get(index).copied().unwrap_or(default as f64);
+    if !value.is_finite() || value < 1.0 || value.fract() != 0.0 {
+        return Err(OperationExecutionError::InvalidRequest(format!(
+            "{name} parameter {index} must be a positive integer"
+        )));
+    }
+    Ok(value as usize)
+}
+
+fn parameter_f64(
+    name: &str,
+    params: &[f64],
+    index: usize,
+    default: f64,
+) -> Result<f64, OperationExecutionError> {
+    let value = params.get(index).copied().unwrap_or(default);
+    if !value.is_finite() || value < 0.0 {
+        return Err(OperationExecutionError::InvalidRequest(format!(
+            "{name} parameter {index} must be finite and non-negative"
+        )));
+    }
+    Ok(value)
+}
+
+fn indicator_execution_error(name: &str, error: impl fmt::Display) -> OperationExecutionError {
+    OperationExecutionError::Formula(FormulaError::RuntimeError(format!(
+        "{name} indicator execution failed: {error}"
+    )))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1247,6 +1401,7 @@ mod tests {
             input: None,
             params: Vec::new(),
             outputs: 1,
+            output_names: vec!["FIRST".to_string()],
             lookback: LookbackSpec::None,
             capabilities: OperationCapabilities::indicator(false, true),
             schema_version: 1,
@@ -1262,6 +1417,7 @@ mod tests {
             input: None,
             params: Vec::new(),
             outputs: 2,
+            output_names: vec!["SECOND_1".to_string(), "SECOND_2".to_string()],
             lookback: LookbackSpec::Dynamic,
             capabilities: OperationCapabilities::indicator(false, true),
             schema_version: 1,
@@ -1286,6 +1442,16 @@ mod tests {
             values(100.0),
             None,
         )
+    }
+
+    fn assert_series_equal(actual: &[f64], expected: &[f64]) {
+        assert_eq!(actual.len(), expected.len());
+        for (index, (&actual, &expected)) in actual.iter().zip(expected).enumerate() {
+            assert!(
+                (actual.is_nan() && expected.is_nan()) || (actual - expected).abs() <= 1e-12,
+                "series mismatch at {index}: {actual} vs {expected}"
+            );
+        }
     }
 
     #[test]
@@ -1342,6 +1508,69 @@ mod tests {
                 "direct and formula dispatch differ: {actual} vs {expected}"
             );
         }
+    }
+
+    #[test]
+    fn unified_engine_preserves_macd_named_multi_outputs() {
+        let mut engine = UnifiedOperationEngine::new(FactorRegistry::new());
+        let mut context = formula_context();
+        let inputs = ["CLOSE"];
+        let params = [2.0, 3.0, 2.0];
+        let result = engine
+            .execute(OperationRequest::Indicator {
+                name: "MACD",
+                inputs: &inputs,
+                params: &params,
+                context: &mut context,
+            })
+            .unwrap();
+
+        assert_eq!(result.shape, ValueShape::MultiSeries);
+        assert_eq!(result.primary.as_deref(), Some("MACD"));
+        assert_eq!(result.len(), 3);
+        assert!(result.get("MACD").is_some());
+        assert!(result.get("MACD_SIGNAL").is_some());
+        assert!(result.get("MACD_HIST").is_some());
+        let expected = crate::indicators::momentum::macd(&context.close, 2, 3, 2)
+            .unwrap()
+            .macd;
+        assert_series_equal(
+            result.primary_values().unwrap(),
+            expected.as_slice().unwrap(),
+        );
+    }
+
+    #[test]
+    fn unified_engine_preserves_bbands_named_multi_outputs() {
+        let mut engine = UnifiedOperationEngine::new(FactorRegistry::new());
+        let mut context = formula_context();
+        let inputs = ["CLOSE"];
+        let params = [3.0, 2.0];
+        let result = engine
+            .execute(OperationRequest::Indicator {
+                name: "BBANDS",
+                inputs: &inputs,
+                params: &params,
+                context: &mut context,
+            })
+            .unwrap();
+
+        assert_eq!(result.shape, ValueShape::MultiSeries);
+        assert_eq!(result.primary.as_deref(), Some("MIDDLEBAND"));
+        assert_eq!(result.len(), 3);
+        let expected = crate::indicators::overlap::bbands(&context.close, 3, 2.0, 2.0).unwrap();
+        assert_series_equal(
+            result.get("UPPERBAND").unwrap(),
+            expected.upper.as_slice().unwrap(),
+        );
+        assert_series_equal(
+            result.get("MIDDLEBAND").unwrap(),
+            expected.middle.as_slice().unwrap(),
+        );
+        assert_series_equal(
+            result.get("LOWERBAND").unwrap(),
+            expected.lower.as_slice().unwrap(),
+        );
     }
 
     #[test]
