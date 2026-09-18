@@ -38,7 +38,10 @@ pub use composite_stream::{
 pub use execute::{
     execute_operation_json, talib_profile_supported, OPERATION_RESULT_SCHEMA_VERSION,
 };
-pub use factor::{evaluate_factor_json, FACTOR_CONTRACT_SCHEMA_VERSION};
+pub use factor::{
+    evaluate_factor_cross_sectional_json, evaluate_factor_json, FACTOR_CONTRACT_SCHEMA_VERSION,
+    FACTOR_CROSS_SECTIONAL_CONTRACT_SCHEMA_VERSION,
+};
 pub use factor_catalog::{factor_catalog, factor_catalog_json, FACTOR_CATALOG_SCHEMA_VERSION};
 pub use factor_stream::{evaluate_factor_stream_json, FACTOR_STREAM_CONTRACT_SCHEMA_VERSION};
 pub use formula::{

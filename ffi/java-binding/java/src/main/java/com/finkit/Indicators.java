@@ -861,6 +861,9 @@ public final class Indicators {
     /** Executes built-in factors through the shared compiled-plan JSON contract. */
     public static native String factorExecuteJson(String requestJson);
 
+    /** Executes one cross-sectional Factor over row-major symbol panels. */
+    public static native String factorCrossSectionalExecuteJson(String requestJson);
+
     /** Executes bounded Factor rows and returns a portable checkpoint. */
     public static native String factorStreamExecuteJson(String requestJson);
 

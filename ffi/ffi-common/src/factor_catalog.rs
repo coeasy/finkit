@@ -101,7 +101,7 @@ mod tests {
         let payload: Value = serde_json::from_str(&factor_catalog_json().unwrap()).unwrap();
         assert_eq!(payload["schema_version"], FACTOR_CATALOG_SCHEMA_VERSION);
         let factors = payload["factors"].as_array().unwrap();
-        assert_eq!(factors.len(), 5);
+        assert_eq!(factors.len(), 9);
         let momentum = factors
             .iter()
             .find(|factor| factor["name"] == "momentum_5")

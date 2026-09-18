@@ -684,6 +684,10 @@ def factor_execute_json(request_json: str) -> str:
     """Execute built-in factors using the shared compiled-plan contract."""
     ...
 
+def factor_cross_sectional_execute_json(request_json: str) -> str:
+    """Execute one cross-sectional Factor using row-major symbol panels."""
+    ...
+
 class CompiledFormula:
     """Reusable formula compilation plan for repeated evaluations."""
 
@@ -1167,7 +1171,7 @@ __all__ = [
     "log10", "sin", "sinh", "sqrt", "tan", "tanh",
     # Formula Engine
     "CompiledFormula", "formula_eval", "formula_eval_dialect",
-    "operation_catalog_json", "factor_catalog_json", "operation_execute_json", "composite_execute_json", "factor_execute_json", "formula_eval_contract_json", "formula_eval_temporal_contract_json", "formula_eval_panel_contract_json", "formula_compatibility_report_json", "formula_stream_execute_json",
+    "operation_catalog_json", "factor_catalog_json", "operation_execute_json", "composite_execute_json", "factor_execute_json", "factor_cross_sectional_execute_json", "formula_eval_contract_json", "formula_eval_temporal_contract_json", "formula_eval_panel_contract_json", "formula_compatibility_report_json", "formula_stream_execute_json",
     # Visualization
     "KlineChart", "KlineData",
     # Streaming Indicators

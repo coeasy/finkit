@@ -907,6 +907,42 @@ pub fn builtin_factor_registry() -> FactorRegistry {
         ))
         .expect("built-in factor names are unique");
     registry
+        .register(FactorDefinition::new(
+            "cross_zscore",
+            ["score"],
+            FactorKind::CrossSectional,
+            FactorDirection::Neutral,
+            Arc::new(|inputs| Ok(zscore(inputs.get("score")?))),
+        ))
+        .expect("built-in factor names are unique");
+    registry
+        .register(FactorDefinition::new(
+            "cross_rank",
+            ["score"],
+            FactorKind::CrossSectional,
+            FactorDirection::HigherBetter,
+            Arc::new(|inputs| Ok(percentile_rank(inputs.get("score")?))),
+        ))
+        .expect("built-in factor names are unique");
+    registry
+        .register(FactorDefinition::new(
+            "cross_winsorize_05_95",
+            ["score"],
+            FactorKind::CrossSectional,
+            FactorDirection::Neutral,
+            Arc::new(|inputs| winsorize(inputs.get("score")?, 0.05, 0.95)),
+        ))
+        .expect("built-in factor names are unique");
+    registry
+        .register(FactorDefinition::new(
+            "cross_neutralize",
+            ["score", "exposure"],
+            FactorKind::CrossSectional,
+            FactorDirection::Neutral,
+            Arc::new(|inputs| neutralize(inputs.get("score")?, inputs.get("exposure")?)),
+        ))
+        .expect("built-in factor names are unique");
+    registry
 }
 
 fn quantile_sorted(sorted: &[f64], quantile: f64) -> f64 {
@@ -1168,6 +1204,53 @@ mod tests {
         let registry = builtin_factor_registry();
         let dependencies = dependency_set(&registry, "reversal_5").unwrap();
         assert!(dependencies.contains("momentum_5"));
+    }
+
+    #[test]
+    fn builtins_execute_cross_sectional_transforms_per_row() {
+        let timestamps = [10, 20];
+        let symbols = ["AAA", "BBB", "CCC"];
+        let scores = [1.0, 3.0, 2.0, 5.0, f64::NAN, 9.0];
+        let view = CrossSectionView::new(&timestamps, &symbols, &scores).unwrap();
+        let engine = FactorEngine::new(builtin_factor_registry());
+
+        let rank = engine
+            .evaluate_cross_sectional("cross_rank", &[("score", &view)])
+            .unwrap();
+        let expected_rank = [0.0, 1.0, 0.5, 0.0, f64::NAN, 1.0];
+        assert!(rank
+            .values
+            .iter()
+            .zip(expected_rank)
+            .all(|(actual, expected)| {
+                (actual.is_nan() && expected.is_nan()) || (actual - expected).abs() < 1e-12
+            }));
+
+        let zscore = engine
+            .evaluate_cross_sectional("cross_zscore", &[("score", &view)])
+            .unwrap();
+        let unit = (3.0_f64 / 2.0).sqrt();
+        assert!((zscore.values[0] + unit).abs() < 1e-12);
+        assert!((zscore.values[1] - unit).abs() < 1e-12);
+        assert!((zscore.values[2]).abs() < 1e-12);
+        assert!(zscore.values[4].is_nan());
+    }
+
+    #[test]
+    fn builtins_cross_sectional_neutralize_requires_aligned_exposure() {
+        let timestamps = [10];
+        let symbols = ["AAA", "BBB", "CCC", "DDD"];
+        let scores = [2.0, 4.0, 6.0, 8.0];
+        let exposure = [1.0, 2.0, 3.0, 4.0];
+        let score_view = CrossSectionView::new(&timestamps, &symbols, &scores).unwrap();
+        let exposure_view = CrossSectionView::new(&timestamps, &symbols, &exposure).unwrap();
+        let result = FactorEngine::new(builtin_factor_registry())
+            .evaluate_cross_sectional(
+                "cross_neutralize",
+                &[("score", &score_view), ("exposure", &exposure_view)],
+            )
+            .unwrap();
+        assert!(result.values.iter().all(|value| value.abs() < 1e-12));
     }
 
     #[test]

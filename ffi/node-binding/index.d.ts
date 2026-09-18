@@ -1358,6 +1358,8 @@ export declare function factorCatalogJson(): string
 export declare function compositeExecuteJson(requestJson: string): string
 /** Execute built-in factors using the shared compiled-plan JSON contract. */
 export declare function factorExecuteJson(requestJson: string): string
+/** Execute one cross-sectional Factor using row-major symbol panels. */
+export declare function factorCrossSectionalExecuteJson(requestJson: string): string
 /** Execute bounded Composite rows and return a portable checkpoint. */
 export declare function compositeStreamExecuteJson(requestJson: string): string
 /** Execute bounded Factor rows and return a portable checkpoint. */

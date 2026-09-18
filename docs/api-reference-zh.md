@@ -21,6 +21,14 @@ Pine `request.security` 全语义、跨截面批量调度或 stateful 跨周期�
 时间戳和 OHLCV 的独立 frame；引擎按 `symbol@timeframe` 隔离执行，响应按该 key 稳定排序，
 重复 frame 会被拒绝。不同 frame 不共享递归状态、缓存或绘图命令。
 
+跨截面 Factor 使用 `factor.cross_sectional.v1` 契约及对应的
+`factor_cross_sectional_execute_json` 入口。请求包含一个 Factor 目标、单调
+`timestamps`、有序且不重复的 `symbols`，以及按“时间戳行 × 标的列”排列的命名输入数组。
+每个时间戳独立在所有标的上计算，所有输入必须拥有相同维度；返回保留时间戳和标的轴，
+结果仍按行主序返回，缺失或非有限值统一为 JSON `null`。当前跨语言内置因子包括
+`cross_zscore`、`cross_rank`、`cross_winsorize_05_95` 和 `cross_neutralize`。
+该契约不等同于自动多周期重采样，也不替代 Pine `request.security` 全语义。
+
 ## 目录
 
 1. [重叠研究指标](#重叠研究指标)

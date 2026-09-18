@@ -201,6 +201,9 @@ public static class Indicators
     private static extern IntPtr ta_factor_execute_json(string requestJson);
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern IntPtr ta_factor_cross_sectional_execute_json(string requestJson);
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern IntPtr ta_factor_stream_execute_json(string requestJson);
 
     // ========================================================================
@@ -292,6 +295,22 @@ public static class Indicators
         IntPtr resultPtr = ta_factor_execute_json(requestJson);
         if (resultPtr == IntPtr.Zero)
             throw new InvalidOperationException("Factor execution returned null");
+        try
+        {
+            return Marshal.PtrToStringUTF8(resultPtr) ?? "";
+        }
+        finally
+        {
+            ta_free_string(resultPtr);
+        }
+    }
+
+    /// <summary>Executes one cross-sectional Factor over row-major symbol panels.</summary>
+    public static string FactorCrossSectionalExecuteJson(string requestJson)
+    {
+        IntPtr resultPtr = ta_factor_cross_sectional_execute_json(requestJson);
+        if (resultPtr == IntPtr.Zero)
+            throw new InvalidOperationException("Cross-sectional Factor execution returned null");
         try
         {
             return Marshal.PtrToStringUTF8(resultPtr) ?? "";

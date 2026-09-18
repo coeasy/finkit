@@ -40,6 +40,7 @@ TA_API char *ta_operation_catalog_json(void);
 TA_API char *ta_factor_catalog_json(void);
 TA_API char *ta_operation_execute_json(const char *request_json);
 TA_API char *ta_factor_execute_json(const char *request_json);
+TA_API char *ta_factor_cross_sectional_execute_json(const char *request_json);
 TA_API char *ta_factor_stream_execute_json(const char *request_json);
 TA_API char *ta_composite_execute_json(const char *request_json);
 TA_API char *ta_composite_stream_execute_json(const char *request_json);

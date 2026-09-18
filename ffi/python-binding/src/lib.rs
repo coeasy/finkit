@@ -6367,6 +6367,13 @@ fn factor_execute_json(request_json: &str) -> PyResult<String> {
         .map_err(pyo3::exceptions::PyValueError::new_err)
 }
 
+/// Execute one cross-sectional Factor through the shared JSON contract.
+#[pyfunction]
+fn factor_cross_sectional_execute_json(request_json: &str) -> PyResult<String> {
+    finkit_ffi_common::evaluate_factor_cross_sectional_json(request_json)
+        .map_err(pyo3::exceptions::PyValueError::new_err)
+}
+
 /// Execute bounded Factor rows and return a portable checkpoint.
 #[pyfunction]
 fn factor_stream_execute_json(request_json: &str) -> PyResult<String> {
@@ -6382,6 +6389,7 @@ fn finkit(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(composite_execute_json, m)?)?;
     m.add_function(wrap_pyfunction!(composite_stream_execute_json, m)?)?;
     m.add_function(wrap_pyfunction!(factor_execute_json, m)?)?;
+    m.add_function(wrap_pyfunction!(factor_cross_sectional_execute_json, m)?)?;
     m.add_function(wrap_pyfunction!(factor_stream_execute_json, m)?)?;
     m.add_class::<PyKlineData>()?;
     m.add_class::<PyKlineChart>()?;

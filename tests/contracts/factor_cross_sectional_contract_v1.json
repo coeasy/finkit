@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "request": {
+    "schema_version": 1,
+    "target": "cross_rank",
+    "timestamps": [10, 20],
+    "symbols": ["AAA", "BBB", "CCC"],
+    "inputs": {
+      "score": [1.0, 3.0, 2.0, 5.0, null, 9.0]
+    }
+  },
+  "expected": {
+    "contract": "factor.cross_sectional.v1",
+    "target": "cross_rank",
+    "timestamps": [10, 20],
+    "symbols": ["AAA", "BBB", "CCC"],
+    "primary": [0.0, 1.0, 0.5, 0.0, null, 1.0]
+  }
+}

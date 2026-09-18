@@ -3,7 +3,7 @@ use finkit::indicators;
 use finkit::math::moving_avg;
 use finkit::patterns::candlestick;
 use std::cell::RefCell;
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::slice;
@@ -292,6 +292,37 @@ pub unsafe extern "C" fn ta_factor_execute_json(request: *const c_char) -> *mut 
             }
         };
         CString::new(payload).expect("factor result payload contains no NUL").into_raw()
+    })
+}
+
+/// Execute one cross-sectional Factor through the shared JSON contract.
+#[no_mangle]
+pub unsafe extern "C" fn ta_factor_cross_sectional_execute_json(
+    request: *const c_char,
+) -> *mut c_char {
+    ffi_catch_ptr(|| {
+        let payload = if request.is_null() {
+            serde_json::json!({
+                "schema_version": finkit_ffi_common::FACTOR_CROSS_SECTIONAL_CONTRACT_SCHEMA_VERSION,
+                "error": "request is null",
+            })
+            .to_string()
+        } else {
+            match unsafe { CStr::from_ptr(request) }.to_str() {
+                Ok(request) => finkit_ffi_common::evaluate_factor_cross_sectional_json(request)
+                    .unwrap_or_else(|error| serde_json::json!({
+                        "schema_version": finkit_ffi_common::FACTOR_CROSS_SECTIONAL_CONTRACT_SCHEMA_VERSION,
+                        "error": error,
+                    }).to_string()),
+                Err(_) => serde_json::json!({
+                    "schema_version": finkit_ffi_common::FACTOR_CROSS_SECTIONAL_CONTRACT_SCHEMA_VERSION,
+                    "error": "request is not valid UTF-8",
+                }).to_string(),
+            }
+        };
+        CString::new(payload)
+            .expect("cross-sectional factor result payload contains no NUL")
+            .into_raw()
     })
 }
 
@@ -765,6 +796,25 @@ mod tests {
         assert_eq!(value["schema_version"], 1);
         assert_eq!(value["primary"], "momentum_5");
         assert_eq!(value["values"]["momentum_5"][5], 5.0);
+        unsafe { finkit_free_string(ptr) };
+    }
+
+    #[test]
+    fn factor_cross_sectional_execute_json_preserves_panel_axes() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../tests/contracts/factor_cross_sectional_contract_v1.json"
+        )))
+        .unwrap();
+        let request = std::ffi::CString::new(fixture["request"].to_string()).unwrap();
+        let ptr = unsafe { ta_factor_cross_sectional_execute_json(request.as_ptr()) };
+        assert!(!ptr.is_null());
+        let json = unsafe { CStr::from_ptr(ptr) }.to_str().unwrap();
+        let value: serde_json::Value = serde_json::from_str(json).unwrap();
+        assert_eq!(value["contract"], "factor.cross_sectional.v1");
+        assert_eq!(value["symbols"], serde_json::json!(["AAA", "BBB", "CCC"]));
+        assert_eq!(value["values"]["cross_rank"][1], 1.0);
+        assert!(value["values"]["cross_rank"][4].is_null());
         unsafe { finkit_free_string(ptr) };
     }
 

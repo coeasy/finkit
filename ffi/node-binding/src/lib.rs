@@ -2485,6 +2485,13 @@ pub fn factor_execute_json(request_json: String) -> Result<String> {
         .map_err(|error| Error::new(Status::InvalidArg, error))
 }
 
+/// Execute one cross-sectional Factor through the shared JSON contract.
+#[napi]
+pub fn factor_cross_sectional_execute_json(request_json: String) -> Result<String> {
+    finkit_ffi_common::evaluate_factor_cross_sectional_json(&request_json)
+        .map_err(|error| Error::new(Status::InvalidArg, error))
+}
+
 /// Execute bounded Factor rows and return a portable checkpoint.
 #[napi]
 pub fn factor_stream_execute_json(request_json: String) -> Result<String> {

@@ -81,6 +81,17 @@ frame is evaluated independently and the response is sorted by
 `symbol@timeframe`; duplicate frame identities are rejected. No recursive
 indicator state, cache, or drawing command is shared between frames.
 
+Cross-sectional Factor execution uses `factor.cross_sectional.v1` and the
+corresponding `factor_cross_sectional_execute_json` entry points. The request
+contains one Factor target, monotonic `timestamps`, an ordered unique
+`symbols` axis, and named row-major input panels. Each row is evaluated
+independently across symbols; all input panels must have the same dimensions.
+The response preserves both axes and returns row-major `values`, with JSON
+`null` for missing or non-finite values. The portable built-ins currently
+include `cross_zscore`, `cross_rank`, `cross_winsorize_05_95`, and
+`cross_neutralize`. This is a cross-sectional Factor contract, not an
+automatic multi-timeframe resampler or a Pine `request.security` replacement.
+
 Formula compatibility discovery uses the same versioned report in every
 official binding: `formula_compatibility_report_json` (Python),
 `FormulaCompatibilityReportJSON`, `formulaCompatibilityReportJson`, and their

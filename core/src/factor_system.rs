@@ -355,6 +355,23 @@ fn builtin_factor_metadata(name: &str) -> Option<FactorMetadata> {
             fixed_lookback: Some(0),
             ..FactorMetadata::default()
         }),
+        "cross_zscore" => Some(FactorMetadata {
+            description: "Cross-sectional population z-score by timestamp".to_string(),
+            ..FactorMetadata::default()
+        }),
+        "cross_rank" => Some(FactorMetadata {
+            description: "Cross-sectional percentile rank by timestamp".to_string(),
+            ..FactorMetadata::default()
+        }),
+        "cross_winsorize_05_95" => Some(FactorMetadata {
+            description: "Cross-sectional winsorization at the 5th and 95th percentiles"
+                .to_string(),
+            ..FactorMetadata::default()
+        }),
+        "cross_neutralize" => Some(FactorMetadata {
+            description: "Cross-sectional OLS residual after removing one exposure".to_string(),
+            ..FactorMetadata::default()
+        }),
         _ => None,
     }
 }
