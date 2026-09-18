@@ -268,7 +268,10 @@ pub fn mavp_with_ma_type(
     ma_type: MaType,
 ) -> Result<Array1<f64>> {
     if ma_type == MaType::Sma {
-        return moving_avg::mavp(input, periods, min_period, max_period);
+        let mut output = moving_avg::mavp(input, periods, min_period, max_period)?;
+        let warmup = max_period.saturating_sub(1).min(output.len());
+        output.slice_mut(ndarray::s![..warmup]).fill(f64::NAN);
+        return Ok(output);
     }
     if input.len() != periods.len() {
         return Err(TaError::InvalidParameter {
@@ -286,7 +289,8 @@ pub fn mavp_with_ma_type(
 
     let mut output = Array1::from_elem(input.len(), f64::NAN);
     let mut cached: Vec<(usize, Array1<f64>)> = Vec::new();
-    for i in min_period - 1..input.len() {
+    let warmup = max_period.saturating_sub(1).min(input.len());
+    for i in warmup..input.len() {
         let period = periods[i]
             .round()
             .clamp(min_period as f64, max_period as f64) as usize;

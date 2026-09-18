@@ -1,0 +1,55 @@
+{
+  "metadata": {
+    "generator": "checked-in differential fixture",
+    "reference": "TA-Lib Python 0.6.8",
+    "fixture": "synthetic_ohlcv_v1",
+    "length": 256,
+    "periods": "2 + (index % 29)",
+    "notes": "Non-default MA-type cases validate output names, warm-up masks and final values."
+  },
+  "cases": [
+    {
+      "operation": "APO",
+      "params": [12, 26, 1],
+      "expected": {"APO": {"first_finite": 25, "last": 0.8737746107200621}}
+    },
+    {
+      "operation": "BBANDS",
+      "params": [20, 2.0, 2.0, 1],
+      "expected": {
+        "UPPERBAND": {"first_finite": 19, "last": 142.21338944498189},
+        "MIDDLEBAND": {"first_finite": 19, "last": 141.0222209723241},
+        "LOWERBAND": {"first_finite": 19, "last": 139.83105249966633}
+      }
+    },
+    {
+      "operation": "MAVP",
+      "params": [2, 30, 1],
+      "expected": {"MAVP": {"first_finite": 29, "last": 140.6989761555491}}
+    },
+    {
+      "operation": "STOCH",
+      "params": [14, 3, 1, 3, 1],
+      "expected": {
+        "SLOWK": {"first_finite": 17, "last": 67.14015311257774},
+        "SLOWD": {"first_finite": 17, "last": 64.16266215771915}
+      }
+    },
+    {
+      "operation": "STOCHF",
+      "params": [14, 3, 1],
+      "expected": {
+        "FASTK": {"first_finite": 15, "last": 70.12998468945},
+        "FASTD": {"first_finite": 15, "last": 67.14015311257774}
+      }
+    },
+    {
+      "operation": "STOCHRSI",
+      "params": [14, 5, 3, 1],
+      "expected": {
+        "FASTK": {"first_finite": 20, "last": 100.0},
+        "FASTD": {"first_finite": 20, "last": 99.92141282317856}
+      }
+    }
+  ]
+}

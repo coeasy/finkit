@@ -2075,24 +2075,50 @@ mod tests {
                 .position(Value::is_number)
                 .unwrap()
         };
+        let fixture: Value = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../tests/golden/talib/profile_matype_variants.json"
+        )))
+        .unwrap();
+        let expected = |operation: &str, output: &str, field: &str| -> f64 {
+            fixture["cases"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|case| case["operation"] == operation)
+                .unwrap()["expected"][output][field]
+                .as_f64()
+                .unwrap()
+        };
+        let expected_first = |operation: &str, output: &str| -> usize {
+            expected(operation, output, "first_finite") as usize
+        };
 
         let apo = execute("APO", &[12.0, 26.0, 1.0]);
-        assert_eq!(first_finite(&apo, "APO"), 25);
+        assert_eq!(first_finite(&apo, "APO"), expected_first("APO", "APO"));
         assert!(
-            (last(&apo, "APO") - 0.8737746107200621).abs() < 1e-10,
+            (last(&apo, "APO") - expected("APO", "APO", "last")).abs() < 1e-10,
             "APO actual {}",
             last(&apo, "APO")
         );
 
         let bbands = execute("BBANDS", &[20.0, 2.0, 2.0, 1.0]);
-        assert_eq!(first_finite(&bbands, "MIDDLEBAND"), 19);
-        assert!((last(&bbands, "UPPERBAND") - 142.21338944498189).abs() < 1e-10);
-        assert!((last(&bbands, "MIDDLEBAND") - 141.0222209723241).abs() < 1e-10);
-        assert!((last(&bbands, "LOWERBAND") - 139.83105249966633).abs() < 1e-10);
+        for output in ["UPPERBAND", "MIDDLEBAND", "LOWERBAND"] {
+            assert_eq!(
+                first_finite(&bbands, output),
+                expected_first("BBANDS", output)
+            );
+            assert!(
+                (last(&bbands, output) - expected("BBANDS", output, "last")).abs() < 1e-10,
+                "BBANDS/{output} actual {}",
+                last(&bbands, output)
+            );
+        }
 
         let mavp = execute("MAVP", &[2.0, 30.0, 1.0]);
+        assert_eq!(first_finite(&mavp, "MAVP"), expected_first("MAVP", "MAVP"));
         assert!(
-            (last(&mavp, "MAVP") - 140.6989761555491).abs() < 1e-8,
+            (last(&mavp, "MAVP") - expected("MAVP", "MAVP", "last")).abs() < 1e-8,
             "MAVP actual {}",
             last(&mavp, "MAVP")
         );
@@ -2106,14 +2132,22 @@ mod tests {
         assert!((last(&stochf_sma, "FASTD") - 67.19470511372855).abs() < 1e-10);
 
         let stoch = execute("STOCH", &[14.0, 3.0, 1.0, 3.0, 1.0]);
-        assert_eq!(first_finite(&stoch, "SLOWK"), 17);
-        assert!((last(&stoch, "SLOWK") - 67.14015311257774).abs() < 1e-10);
-        assert!((last(&stoch, "SLOWD") - 64.16266215771915).abs() < 1e-10);
+        for output in ["SLOWK", "SLOWD"] {
+            assert_eq!(
+                first_finite(&stoch, output),
+                expected_first("STOCH", output)
+            );
+            assert!((last(&stoch, output) - expected("STOCH", output, "last")).abs() < 1e-10);
+        }
 
         let stochf = execute("STOCHF", &[14.0, 3.0, 1.0]);
-        assert_eq!(first_finite(&stochf, "FASTK"), 15);
-        assert!((last(&stochf, "FASTK") - 70.12998468945).abs() < 1e-10);
-        assert!((last(&stochf, "FASTD") - 67.14015311257774).abs() < 1e-10);
+        for output in ["FASTK", "FASTD"] {
+            assert_eq!(
+                first_finite(&stochf, output),
+                expected_first("STOCHF", output)
+            );
+            assert!((last(&stochf, output) - expected("STOCHF", output, "last")).abs() < 1e-10);
+        }
 
         let stochrsi = {
             let request = serde_json::json!({
@@ -2126,9 +2160,13 @@ mod tests {
             .to_string();
             serde_json::from_str(&execute_operation_json(&request)).unwrap()
         };
-        assert_eq!(first_finite(&stochrsi, "FASTK"), 20);
-        assert!((last(&stochrsi, "FASTK") - 100.0).abs() < 1e-10);
-        assert!((last(&stochrsi, "FASTD") - 99.92141282317856).abs() < 1e-10);
+        for output in ["FASTK", "FASTD"] {
+            assert_eq!(
+                first_finite(&stochrsi, output),
+                expected_first("STOCHRSI", output)
+            );
+            assert!((last(&stochrsi, output) - expected("STOCHRSI", output, "last")).abs() < 1e-10);
+        }
 
         let stochrsi_sma = {
             let request = serde_json::json!({

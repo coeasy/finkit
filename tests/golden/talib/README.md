@@ -58,7 +58,14 @@ All outputs are computed on three shared fixtures from `tests/fixtures/`:
 
 ## Output Files
 
-One JSON file per indicator (44 total):
+One generated JSON file per indicator (44 total), plus a checked-in profile
+variant fixture for official `matype` contracts:
+
+| File | Purpose |
+|------|---------|
+| `profile_matype_variants.json` | TA-Lib 0.6.8 `APO`, `BBANDS`, `MAVP`, `STOCH`, `STOCHF`, and `STOCHRSI` non-default MA-type warm-up/output references |
+
+Generated indicator files:
 
 | File | TA-Lib function | Key parameters |
 |------|-----------------|----------------|
