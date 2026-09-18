@@ -264,7 +264,8 @@ talib_0_7_1
 - Python 的公开 `formula_eval_dialect` 已与其他绑定统一调用 Core 的 `eval_with_dialect`；不能再让 Python 自己把国内 dialect 静默降级为 AlphaTA。
 - Node 绑定已补齐 `operationCatalogJson`，与 C/C++、Go、Java、.NET、Python 共用同一 operation catalog 和 `operationExecuteJson` contract；Node 的宿主级加载仍需在真实 Node addon 环境中验证。
 - Composite 已补齐 `composite.contract.v1` JSON contract：输入为 named series + graph definitions + outputs，结果统一返回 `shape/primary/values/schema_version`；C/C++、Go、Java、.NET、Python、Node 都有对应入口，避免 Composite 只在单一语言高层 API 中存在。现在同一 contract 可选接收 `previous + dirty_range`，并返回 `range_lookback` 与 `execution` trace；不具备有限 lookback 证明的图会显式失败。
-- Factor 已补齐 `factor.contract.v1` JSON contract：所有正式绑定都可以执行稳定的内置因子并获得 compiled-plan 的 `semantic_identity/range_lookback`；内置 `momentum/volatility/reversal` 已声明真实 incremental lookback，streaming 仍保持 false，直到有 checkpoint/stateful 实现；Rust typed API 仍保留自定义闭包因子，跨语言 contract 不把不可序列化闭包伪装成可移植定义。Factor JSON contract 现在可选接收 `previous + dirty_range`，返回与 Composite 相同的 range execution envelope。
+- Factor 已补齐 `factor.contract.v1` JSON contract：所有正式绑定都可以执行稳定的内置因子并获得 compiled-plan 的 `semantic_identity/range_lookback`；内置 `momentum/volatility/reversal` 已声明真实 incremental lookback。Rust typed API 新增有限窗口 `FactorStream`，复用同一 range executor，支持逐行追加和同语义 checkpoint/restore；递归、跨截面或未知 lookback 计划仍拒绝 bounded streaming。跨语言 contract 不把不可序列化闭包伪装成可移植定义。Factor JSON contract 现在可选接收 `previous + dirty_range`，返回与 Composite 相同的 range execution envelope；跨语言 streaming wire contract 仍待下一阶段补齐。
+- Composite compiled plan 的有限窗口能力已进一步落到 `CompositeStream`：SMA/WMA/VWMA/rolling statistics/return/volatility/cross 等可逐行追加，并以同一 graph signature checkpoint/restore；EMA、RSI、ATR、MACD、Z-score、未知自定义函数仍 full-only。这样 batch、range、bounded streaming 共用数值实现，不能据此宣称递归指标已有 O(1) stateful streaming。
 - Factor 已补齐 `factor.catalog.v1` JSON discovery contract：C/C++、Go、Java、.NET、Python、Node 与 Rust FFI common 共用同一份内置因子目录，公开名称、类型、方向、依赖、版本及 streaming/incremental 能力，执行入口与发现入口不再断开。
 - Factor 与 Composite 的 v1 请求现在强制要求 `schema_version`，并拒绝重复 Factor target；新增 `tests/contracts/engine_contract_v1.json` 将 Formula/Factor/Composite 的请求与期望输出固定为同一份跨语言 conformance vector，避免各 binding 分叉维护示例和数值语义。
 - Formula compatibility report 已提升为 `formula.compatibility.v1` 共享 JSON contract：Rust、Python、Go、Java、.NET、C、C++、Node 均通过同一报告结构输出 parser、batch/streaming、control flow、drawing、cross-timeframe、lookahead、host data；各绑定只负责转发、生命周期和错误映射。能力矩阵只报告已验证的执行边界，不把 parser 识别或函数登记误报为完整兼容。
@@ -287,7 +288,7 @@ talib_0_7_1
 
 截至 2026-09-18，本工作树已实际验证：
 
-- `cargo +1.98.1 test --workspace --offline --quiet`：全 workspace 测试通过；其中核心库为 `2926 passed, 0 failed, 1 ignored`，新增 Formula terminal contract 为 `1 passed, 0 failed`，DZH compatibility 为 `43 passed, 0 failed`，CLI schema 为 `3 passed, 0 failed`，其余 workspace test targets 也无失败。
+- `cargo +1.98.1 test --workspace --offline --quiet`：全 workspace 测试通过；其中核心库为 `2930 passed, 0 failed, 1 ignored`，新增 Formula terminal contract 为 `1 passed, 0 failed`，DZH compatibility 为 `43 passed, 0 failed`，CLI schema 为 `3 passed, 0 failed`，其余 workspace test targets 也无失败。
 - `cargo +1.98.1 test -p finkit --test formula_compatibility_boundary --offline --quiet`：`1 passed, 0 failed`，确认 host-required、drawing、control-flow/streaming 和 Pine plot 边界状态。
 - 定向验证：`finkit` operation tests `19 passed`、Composite tests `11 passed`、`finkit-ffi-common` library tests `28 passed`、C ABI library tests `23 passed`。
 - 最新定向验证：`finkit-ffi-common` library tests `44 passed`，包含 161 个 TA-Lib profile 名称的 dispatcher smoke、参数目录、非默认 `matype` 数值测试、绝对下标与 `HT_TRENDMODE` warm-up 边界测试、Factor/Composite dirty-range conformance vector、无版本 profile 拒绝测试、Formula/Factor/Composite 共用 conformance vector 和 `formula.compatibility.v1` capability report；C ABI tests `26 passed`，并确认 catalog 参数和 Formula compatibility report 通过 ABI 导出。
@@ -304,6 +305,7 @@ talib_0_7_1
 - TA-Lib 全目录数值等价、性能全面超过 TA-Lib；
 - TDX/同花顺/东方财富全部市场函数和 Pine 全语言兼容；
 - Factor/Composite 所有路径都已达到生产吞吐 SLO；
+- 所有递归 Factor/Composite 都已有跨语言 O(1) stateful streaming 与 checkpoint wire contract；当前仅完成有限窗口 Rust typed stream，FFI streaming contract 仍未实现；
 - CMake/CTest 下的 C++ 原生编译与安装（当前验证环境没有 CMake/CTest）；
 - 八语言真实宿主运行时 golden、发布包和 ABI 稳定性；workspace 中 Node binding 的 Rust 测试出现 Node-API 宿主符号加载告警，且 `ffi/node-binding npm test` 在当前环境因缺少 `finkit-win32-x64-msvc` native addon 包而未进入用例，不能替代真实 Node 宿主 smoke test；
 - Lightweight Charts 完整浏览器交互集成；

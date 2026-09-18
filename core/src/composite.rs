@@ -158,6 +158,27 @@ impl CompiledCompositePlan {
     pub const fn range_lookback(&self) -> Option<usize> {
         self.range_lookback
     }
+
+    /// Create a bounded-window append-only stream for this plan.
+    ///
+    /// Recursive, whole-series, and custom-function plans are rejected. They
+    /// need either a dedicated stateful kernel or full execution because a
+    /// finite replay window cannot prove their numerical correctness.
+    pub fn stream(&self, engine: CompositeEngine) -> FactorResult<CompositeStream> {
+        let _ = self.range_lookback.ok_or_else(|| {
+            FactorError::InvalidParameter(
+                "composite plan is not range-safe: recursive, whole-series, or custom functions require full execution"
+                    .to_string(),
+            )
+        })?;
+        Ok(CompositeStream {
+            plan: self.clone(),
+            engine,
+            row_count: 0,
+            inputs: BTreeMap::new(),
+            output: BTreeMap::new(),
+        })
+    }
 }
 
 const COMPILED_PLAN_CACHE_CAPACITY: usize = 64;
@@ -963,6 +984,218 @@ impl CompositeEngine {
     }
 }
 
+/// Persistable checkpoint for [`CompositeStream`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct CompositeStreamCheckpoint {
+    signature: u64,
+    row_count: usize,
+    inputs: BTreeMap<String, Vec<f64>>,
+    output: BTreeMap<String, Vec<f64>>,
+}
+
+impl CompositeStreamCheckpoint {
+    /// Number of rows represented by this checkpoint.
+    #[must_use]
+    pub fn rows(&self) -> usize {
+        self.row_count
+    }
+}
+
+/// Append-only bounded-window composite executor with checkpoint/restore.
+#[derive(Clone)]
+pub struct CompositeStream {
+    plan: CompiledCompositePlan,
+    engine: CompositeEngine,
+    row_count: usize,
+    inputs: BTreeMap<String, Vec<f64>>,
+    output: BTreeMap<String, Vec<f64>>,
+}
+
+impl CompositeStream {
+    /// Compiled plan used by this stream.
+    #[must_use]
+    pub fn plan(&self) -> &CompiledCompositePlan {
+        &self.plan
+    }
+
+    /// Number of rows accepted by the stream.
+    #[must_use]
+    pub fn rows(&self) -> usize {
+        self.row_count
+    }
+
+    /// Return the retained output series for all requested graph outputs.
+    #[must_use]
+    pub fn outputs(&self) -> &BTreeMap<String, Vec<f64>> {
+        &self.output
+    }
+
+    /// Append one aligned row and return the newly computed graph outputs.
+    pub fn push_row(
+        &mut self,
+        values: &BTreeMap<String, f64>,
+    ) -> FactorResult<BTreeMap<String, f64>> {
+        for input in &self.plan.required_raw_inputs {
+            if !values.contains_key(input) {
+                return Err(FactorError::MissingInput(input.clone()));
+            }
+        }
+
+        let row = self.inputs.values().next().map_or(0, Vec::len);
+        for input in &self.plan.required_raw_inputs {
+            self.inputs
+                .entry(input.clone())
+                .or_default()
+                .push(values[input]);
+        }
+        for output in &self.plan.outputs {
+            self.output
+                .entry(output.clone())
+                .or_default()
+                .push(f64::NAN);
+        }
+
+        let result = (|| {
+            let context = composite_borrowed_context(&self.inputs)?;
+            self.engine.execute_range_into_borrowed(
+                &self.plan,
+                &context,
+                &mut self.output,
+                DirtyRange::new(row, row + 1),
+            )?;
+            Ok(self
+                .plan
+                .outputs
+                .iter()
+                .map(|name| {
+                    (
+                        name.clone(),
+                        self.output
+                            .get(name)
+                            .and_then(|series| series.last().copied())
+                            .unwrap_or(f64::NAN),
+                    )
+                })
+                .collect())
+        })();
+
+        if result.is_ok() {
+            self.row_count = self.row_count.saturating_add(1);
+            let capacity = self.plan.range_lookback().unwrap_or(0).saturating_add(1);
+            if self
+                .inputs
+                .values()
+                .next()
+                .is_some_and(|series| series.len() > capacity)
+            {
+                for input in &self.plan.required_raw_inputs {
+                    if let Some(series) = self.inputs.get_mut(input) {
+                        series.remove(0);
+                    }
+                }
+                for output in &self.plan.outputs {
+                    if let Some(series) = self.output.get_mut(output) {
+                        series.remove(0);
+                    }
+                }
+            }
+        } else {
+            for input in &self.plan.required_raw_inputs {
+                if let Some(series) = self.inputs.get_mut(input) {
+                    series.pop();
+                }
+            }
+            for output in &self.plan.outputs {
+                if let Some(series) = self.output.get_mut(output) {
+                    series.pop();
+                }
+            }
+        }
+        result
+    }
+
+    /// Capture a portable checkpoint at the current append boundary.
+    #[must_use]
+    pub fn checkpoint(&self) -> CompositeStreamCheckpoint {
+        CompositeStreamCheckpoint {
+            signature: self.plan.signature,
+            row_count: self.row_count,
+            inputs: self.inputs.clone(),
+            output: self.output.clone(),
+        }
+    }
+
+    /// Restore a checkpoint produced by the same compiled graph.
+    pub fn restore(&mut self, checkpoint: &CompositeStreamCheckpoint) -> FactorResult<()> {
+        if checkpoint.signature != self.plan.signature {
+            return Err(FactorError::InvalidParameter(
+                "composite stream checkpoint belongs to a different graph".to_string(),
+            ));
+        }
+        validate_composite_stream_checkpoint(
+            &self.plan,
+            checkpoint.row_count,
+            &checkpoint.inputs,
+            &checkpoint.output,
+        )?;
+        self.row_count = checkpoint.row_count;
+        self.inputs = checkpoint.inputs.clone();
+        self.output = checkpoint.output.clone();
+        Ok(())
+    }
+}
+
+fn composite_borrowed_context(
+    inputs: &BTreeMap<String, Vec<f64>>,
+) -> FactorResult<BorrowedFactorContext<'_>> {
+    let mut context = BorrowedFactorContext::new();
+    for (name, values) in inputs {
+        context.insert(name.clone(), values.as_slice())?;
+    }
+    Ok(context)
+}
+
+fn validate_composite_stream_checkpoint(
+    plan: &CompiledCompositePlan,
+    row_count: usize,
+    inputs: &BTreeMap<String, Vec<f64>>,
+    output: &BTreeMap<String, Vec<f64>>,
+) -> FactorResult<()> {
+    let rows = inputs.values().next().map_or(0, Vec::len);
+    if rows > row_count {
+        return Err(FactorError::InvalidParameter(
+            "composite stream checkpoint buffer exceeds its logical row count".to_string(),
+        ));
+    }
+    for input in &plan.required_raw_inputs {
+        let values = inputs
+            .get(input)
+            .ok_or_else(|| FactorError::MissingInput(input.clone()))?;
+        if values.len() != rows {
+            return Err(FactorError::LengthMismatch {
+                name: input.clone(),
+                expected: rows,
+                actual: values.len(),
+            });
+        }
+    }
+    for name in &plan.outputs {
+        let values = output.get(name).ok_or_else(|| {
+            FactorError::InvalidParameter(format!(
+                "composite stream checkpoint is missing output {name}"
+            ))
+        })?;
+        if values.len() != rows {
+            return Err(FactorError::LengthMismatch {
+                name: name.clone(),
+                expected: rows,
+                actual: values.len(),
+            });
+        }
+    }
+    Ok(())
+}
+
 impl Default for CompositeEngine {
     fn default() -> Self {
         Self {
@@ -1739,6 +1972,57 @@ mod tests {
             .unwrap();
         assert!(!plan.supports_range_incremental());
         assert_eq!(plan.range_lookback(), None);
+    }
+
+    #[test]
+    fn finite_composite_stream_matches_batch_and_restores_checkpoint() {
+        let definitions = vec![CompositeDefinition::new(
+            "sma3",
+            CompositeExpr::call("sma", vec![CompositeExpr::series("close")], vec![3.0]),
+        )];
+        let engine = CompositeEngine::new();
+        let plan = engine.compile(&definitions, &["sma3"]).unwrap();
+        let mut stream = plan.stream(engine.clone()).unwrap();
+        let close = [10.0, 11.0, 12.0, 15.0, 14.0];
+        let mut values = Vec::new();
+        for value in close {
+            let mut row = BTreeMap::new();
+            row.insert("close".to_string(), value);
+            values.push(stream.push_row(&row).unwrap()["sma3"]);
+        }
+
+        let context = FactorContext::new()
+            .with_series("close", close.to_vec())
+            .unwrap();
+        let batch = engine
+            .evaluate_compiled(&plan, &context.as_borrowed())
+            .unwrap();
+        assert!(values.iter().zip(&batch["sma3"]).all(|(left, right)| {
+            (left.is_nan() && right.is_nan()) || (left - right).abs() < 1e-12
+        }));
+
+        let checkpoint = stream.checkpoint();
+        let mut next = BTreeMap::new();
+        next.insert("close".to_string(), 16.0);
+        let expected = stream.push_row(&next).unwrap();
+        stream.restore(&checkpoint).unwrap();
+        assert_eq!(stream.push_row(&next).unwrap(), expected);
+        assert_eq!(stream.rows(), 6);
+    }
+
+    #[test]
+    fn recursive_composite_plan_rejects_bounded_streaming() {
+        let definitions = vec![CompositeDefinition::new(
+            "ema",
+            CompositeExpr::call("ema", vec![CompositeExpr::series("close")], vec![3.0]),
+        )];
+        let plan = CompositeEngine::new()
+            .compile(&definitions, &["ema"])
+            .unwrap();
+        assert!(matches!(
+            plan.stream(CompositeEngine::new()),
+            Err(FactorError::InvalidParameter(_))
+        ));
     }
 
     #[test]

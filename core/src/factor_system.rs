@@ -406,6 +406,241 @@ impl CompiledFactorPlan {
             )
         })
     }
+
+    /// Create a bounded-window append-only stream for this plan.
+    ///
+    /// The stream retains only the proven lookback window of raw inputs and
+    /// materialized outputs, so each append can reuse the unified range
+    /// executor without replaying the full history. This is a production-safe
+    /// streaming path for finite-lookback plans; recursive or whole-series
+    /// plans are rejected and must use a stateful kernel implementation or
+    /// full execution instead.
+    pub fn stream(&self, engine: FactorEngine) -> FactorResult<FactorStream> {
+        let _ = self.require_range_lookback()?;
+        Ok(FactorStream {
+            plan: self.clone(),
+            engine,
+            row_count: 0,
+            inputs: BTreeMap::new(),
+            output: BTreeMap::new(),
+        })
+    }
+}
+
+/// Persistable checkpoint for [`FactorStream`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct FactorStreamCheckpoint {
+    semantic_identity: Vec<String>,
+    row_count: usize,
+    inputs: BTreeMap<String, Vec<f64>>,
+    output: BTreeMap<String, Vec<f64>>,
+}
+
+impl FactorStreamCheckpoint {
+    /// Number of rows represented by this checkpoint.
+    #[must_use]
+    pub fn rows(&self) -> usize {
+        self.row_count
+    }
+}
+
+/// Append-only bounded-window factor executor with checkpoint/restore.
+///
+/// This type is deliberately backed by the same compiled plan and range
+/// executor as batch and historical-edit execution. It therefore shares the
+/// exact numeric semantics while retaining only `lookback + 1` rows. The
+/// bounded buffer is also the portable checkpoint format; callers that need
+/// O(1) state for recursive indicators must register a dedicated stateful
+/// kernel.
+#[derive(Clone)]
+pub struct FactorStream {
+    plan: CompiledFactorPlan,
+    engine: FactorEngine,
+    row_count: usize,
+    inputs: BTreeMap<String, Vec<f64>>,
+    output: BTreeMap<String, Vec<f64>>,
+}
+
+impl FactorStream {
+    /// Compiled plan used by this stream.
+    #[must_use]
+    pub fn plan(&self) -> &CompiledFactorPlan {
+        &self.plan
+    }
+
+    /// Number of rows accepted by the stream.
+    #[must_use]
+    pub fn rows(&self) -> usize {
+        self.row_count
+    }
+
+    /// Return the retained output series for all planned factor nodes.
+    #[must_use]
+    pub fn outputs(&self) -> &BTreeMap<String, Vec<f64>> {
+        &self.output
+    }
+
+    /// Append one aligned row and return the newly computed target values.
+    pub fn push_row(
+        &mut self,
+        values: &BTreeMap<String, f64>,
+    ) -> FactorResult<BTreeMap<String, f64>> {
+        for input in self.plan.required_raw_inputs() {
+            if !values.contains_key(input) {
+                return Err(FactorError::MissingInput(input.clone()));
+            }
+        }
+
+        let row = self.inputs.values().next().map_or(0, Vec::len);
+        for input in self.plan.required_raw_inputs() {
+            self.inputs
+                .entry(input.clone())
+                .or_default()
+                .push(values[input]);
+        }
+        for name in self.plan.execution_order() {
+            self.output.entry(name.clone()).or_default().push(f64::NAN);
+        }
+
+        let result = (|| {
+            let context = borrowed_context(&self.inputs)?;
+            self.plan.execute_range_into_borrowed(
+                &self.engine,
+                &context,
+                &mut self.output,
+                DirtyRange::new(row, row + 1),
+            )?;
+            Ok(self
+                .plan
+                .targets()
+                .iter()
+                .map(|name| {
+                    (
+                        name.clone(),
+                        self.output
+                            .get(name)
+                            .and_then(|series| series.last().copied())
+                            .unwrap_or(f64::NAN),
+                    )
+                })
+                .collect())
+        })();
+
+        if result.is_ok() {
+            self.row_count = self.row_count.saturating_add(1);
+            let capacity = self.plan.range_lookback().unwrap_or(0).saturating_add(1);
+            if self
+                .inputs
+                .values()
+                .next()
+                .is_some_and(|series| series.len() > capacity)
+            {
+                for input in self.plan.required_raw_inputs() {
+                    if let Some(series) = self.inputs.get_mut(input) {
+                        series.remove(0);
+                    }
+                }
+                for name in self.plan.execution_order() {
+                    if let Some(series) = self.output.get_mut(name) {
+                        series.remove(0);
+                    }
+                }
+            }
+        } else {
+            for input in self.plan.required_raw_inputs() {
+                if let Some(series) = self.inputs.get_mut(input) {
+                    series.pop();
+                }
+            }
+            for name in self.plan.execution_order() {
+                if let Some(series) = self.output.get_mut(name) {
+                    series.pop();
+                }
+            }
+        }
+        result
+    }
+
+    /// Capture a portable checkpoint at the current append boundary.
+    #[must_use]
+    pub fn checkpoint(&self) -> FactorStreamCheckpoint {
+        FactorStreamCheckpoint {
+            semantic_identity: self.plan.semantic_identity.clone(),
+            row_count: self.row_count,
+            inputs: self.inputs.clone(),
+            output: self.output.clone(),
+        }
+    }
+
+    /// Restore a checkpoint produced by the same semantic plan.
+    pub fn restore(&mut self, checkpoint: &FactorStreamCheckpoint) -> FactorResult<()> {
+        if checkpoint.semantic_identity != self.plan.semantic_identity {
+            return Err(FactorError::InvalidParameter(
+                "factor stream checkpoint belongs to a different semantic plan".to_string(),
+            ));
+        }
+        validate_stream_checkpoint(
+            &self.plan,
+            checkpoint.row_count,
+            &checkpoint.inputs,
+            &checkpoint.output,
+        )?;
+        self.row_count = checkpoint.row_count;
+        self.inputs = checkpoint.inputs.clone();
+        self.output = checkpoint.output.clone();
+        Ok(())
+    }
+}
+
+fn borrowed_context(
+    inputs: &BTreeMap<String, Vec<f64>>,
+) -> FactorResult<BorrowedFactorContext<'_>> {
+    let mut context = BorrowedFactorContext::new();
+    for (name, values) in inputs {
+        context.insert(name.clone(), values.as_slice())?;
+    }
+    Ok(context)
+}
+
+fn validate_stream_checkpoint(
+    plan: &CompiledFactorPlan,
+    row_count: usize,
+    inputs: &BTreeMap<String, Vec<f64>>,
+    output: &BTreeMap<String, Vec<f64>>,
+) -> FactorResult<()> {
+    let rows = inputs.values().next().map_or(0, Vec::len);
+    if rows > row_count {
+        return Err(FactorError::InvalidParameter(
+            "factor stream checkpoint buffer exceeds its logical row count".to_string(),
+        ));
+    }
+    for input in plan.required_raw_inputs() {
+        let values = inputs
+            .get(input)
+            .ok_or_else(|| FactorError::MissingInput(input.clone()))?;
+        if values.len() != rows {
+            return Err(FactorError::LengthMismatch {
+                name: input.clone(),
+                expected: rows,
+                actual: values.len(),
+            });
+        }
+    }
+    for name in plan.execution_order() {
+        let values = output.get(name).ok_or_else(|| {
+            FactorError::InvalidParameter(format!(
+                "factor stream checkpoint is missing output {name}"
+            ))
+        })?;
+        if values.len() != rows {
+            return Err(FactorError::LengthMismatch {
+                name: name.clone(),
+                expected: rows,
+                actual: values.len(),
+            });
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -496,6 +731,55 @@ mod tests {
         assert!(descriptor.metadata.incremental);
         assert_eq!(descriptor.metadata.fixed_lookback, Some(20));
         assert!(!descriptor.metadata.streaming);
+    }
+
+    #[test]
+    fn finite_factor_stream_matches_batch_and_restores_checkpoint() {
+        let catalog = FactorCatalog::from_registry(crate::factors::builtin_factor_registry());
+        let plan = catalog.compile(&["momentum_5"]).unwrap();
+        let engine = FactorEngine::new(catalog.into_registry());
+        let mut stream = plan.stream(engine.clone()).unwrap();
+        let close = [10.0, 11.0, 12.0, 15.0, 14.0, 16.0, 17.0, 18.0];
+        let mut rows = Vec::new();
+        for value in close {
+            let mut row = BTreeMap::new();
+            row.insert("close".to_string(), value);
+            rows.push(stream.push_row(&row).unwrap()["momentum_5"]);
+        }
+
+        let context = BorrowedFactorContext::new()
+            .with_series("close", &close)
+            .unwrap();
+        let batch = plan.execute_borrowed(&engine, &context).unwrap();
+        assert!(rows.iter().zip(&batch["momentum_5"]).all(|(left, right)| {
+            (left.is_nan() && right.is_nan()) || (left - right).abs() < 1e-12
+        }));
+
+        let checkpoint = stream.checkpoint();
+        let mut next = BTreeMap::new();
+        next.insert("close".to_string(), 16.0);
+        let expected = stream.push_row(&next).unwrap();
+        stream.restore(&checkpoint).unwrap();
+        let restored = stream.push_row(&next).unwrap();
+        assert!(restored.iter().all(|(name, value)| {
+            let expected_value = expected[name];
+            (value.is_nan() && expected_value.is_nan()) || (value - expected_value).abs() < 1e-12
+        }));
+        assert_eq!(stream.rows(), 9);
+    }
+
+    #[test]
+    fn recursive_factor_plan_rejects_bounded_streaming() {
+        let mut catalog = FactorCatalog::new();
+        catalog
+            .register(identity("recursive", "close"), FactorMetadata::default())
+            .unwrap();
+        let plan = catalog.compile(&["recursive"]).unwrap();
+        let engine = FactorEngine::new(catalog.into_registry());
+        assert!(matches!(
+            plan.stream(engine),
+            Err(FactorError::InvalidParameter(_))
+        ));
     }
 
     #[test]
