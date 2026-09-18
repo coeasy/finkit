@@ -2,6 +2,7 @@
 
 use finkit::composite::{CompositeDefinition, CompositeEngine, CompositeExpr, CompositeOp};
 use finkit::factors::FactorContext;
+use finkit::unified_runtime::{DirtyRange, RuntimeExecutionMode};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
@@ -15,6 +16,10 @@ struct CompositeRequest {
     inputs: std::collections::BTreeMap<String, Vec<f64>>,
     definitions: Vec<CompositeDefinitionRequest>,
     outputs: Option<Vec<String>>,
+    #[serde(default)]
+    previous: Option<std::collections::BTreeMap<String, Vec<f64>>>,
+    #[serde(default)]
+    dirty_range: Option<[usize; 2]>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -62,6 +67,7 @@ pub fn evaluate_composite_json(request: &str) -> Result<String, String> {
     if names.len() != request.definitions.len() {
         return Err("composite definition names must be unique".to_string());
     }
+    let definition_count = request.definitions.len();
     let definitions = request
         .definitions
         .into_iter()
@@ -126,9 +132,32 @@ pub fn evaluate_composite_json(request: &str) -> Result<String, String> {
     let plan = engine
         .compile(&definitions, &output_refs)
         .map_err(|error| error.to_string())?;
-    let values = engine
-        .evaluate_compiled(&plan, &context.as_borrowed())
-        .map_err(|error| error.to_string())?;
+    if request.previous.is_some() != request.dirty_range.is_some() {
+        return Err("composite range execution requires both previous and dirty_range".to_string());
+    }
+    let borrowed = context.as_borrowed();
+    let runtime = match (request.previous.as_ref(), request.dirty_range) {
+        (Some(previous), Some([start, end])) => engine
+            .execute_range_borrowed(&plan, &borrowed, previous, DirtyRange::new(start, end))
+            .map_err(|error| error.to_string())?,
+        (None, None) => {
+            let output = engine
+                .evaluate_compiled(&plan, &borrowed)
+                .map_err(|error| error.to_string())?;
+            finkit::unified_runtime::RuntimeExecution {
+                output,
+                trace: finkit::unified_runtime::RuntimeExecutionTrace {
+                    mode: RuntimeExecutionMode::Full,
+                    rows: context.len(),
+                    executed_nodes: definition_count,
+                    recomputed_rows: context.len(),
+                },
+            }
+        }
+        _ => unreachable!("range pair was validated"),
+    };
+    let trace = runtime.trace;
+    let values = runtime.output;
     let serialized = values
         .into_iter()
         .map(|(name, series)| (name, nullable_series(&series)))
@@ -137,9 +166,27 @@ pub fn evaluate_composite_json(request: &str) -> Result<String, String> {
         "schema_version": COMPOSITE_CONTRACT_SCHEMA_VERSION,
         "shape": if output_names.len() > 1 { "multi_series" } else { "series" },
         "primary": (output_names.len() == 1).then(|| output_names[0].clone()),
+        "range_lookback": plan.range_lookback(),
+        "execution": execution_envelope(trace.mode),
         "values": Value::Object(serialized),
     }))
     .map_err(|error| error.to_string())
+}
+
+fn execution_envelope(mode: RuntimeExecutionMode) -> Value {
+    match mode {
+        RuntimeExecutionMode::Full => json!({"mode": "full"}),
+        RuntimeExecutionMode::Range {
+            input_dirty,
+            affected,
+            recompute,
+        } => json!({
+            "mode": "range",
+            "input_dirty": [input_dirty.start, input_dirty.end],
+            "affected": [affected.start, affected.end],
+            "recompute": [recompute.start, recompute.end],
+        }),
+    }
 }
 
 fn input_expression(
@@ -193,6 +240,26 @@ mod tests {
         assert_eq!(payload["primary"], "sma3");
         assert_eq!(payload["values"]["sma3"][0], Value::Null);
         assert_eq!(payload["values"]["sma3"][3], 3.0);
+        assert_eq!(payload["execution"]["mode"], "full");
+        assert_eq!(payload["range_lookback"], 2);
+    }
+
+    #[test]
+    fn contract_executes_finite_composite_dirty_range() {
+        let request = r#"{
+            "schema_version":1,
+            "inputs":{"close":[1.0,2.0,3.0,4.0,10.0,6.0]},
+            "definitions":[{"name":"sma3","function":"sma","inputs":["close"],"params":[3]}],
+            "outputs":["sma3"],
+            "previous":{"sma3":[0.0,0.0,2.0,3.0,5.666666666666667,6.666666666666667]},
+            "dirty_range":[4,5]
+        }"#;
+        let payload: Value =
+            serde_json::from_str(&evaluate_composite_json(request).unwrap()).unwrap();
+        assert_eq!(payload["execution"]["mode"], "range");
+        assert_eq!(payload["execution"]["affected"], json!([4, 6]));
+        assert_eq!(payload["values"]["sma3"][4], 17.0 / 3.0);
+        assert_eq!(payload["values"]["sma3"][5], 20.0 / 3.0);
     }
 
     #[test]

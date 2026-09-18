@@ -92,7 +92,12 @@ impl FactorCatalog {
     pub fn from_registry(registry: FactorRegistry) -> Self {
         let metadata = registry
             .names()
-            .map(|name| (name.to_string(), FactorMetadata::default()))
+            .map(|name| {
+                (
+                    name.to_string(),
+                    builtin_factor_metadata(name).unwrap_or_default(),
+                )
+            })
             .collect();
         Self {
             registry,
@@ -240,6 +245,42 @@ impl FactorCatalog {
             plan_max = plan_max.max(total);
         }
         Some(plan_max)
+    }
+}
+
+/// Metadata for the portable built-in factors. The computation closures live
+/// in `factors`; this table is the single planning-side declaration of their
+/// finite lookback contracts.
+fn builtin_factor_metadata(name: &str) -> Option<FactorMetadata> {
+    if let Some(period) = name
+        .strip_prefix("momentum_")
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|period| *period > 0)
+    {
+        return Some(FactorMetadata {
+            version: "1".to_string(),
+            description: format!("Arithmetic return over {period} bars"),
+            incremental: true,
+            fixed_lookback: Some(period),
+            ..FactorMetadata::default()
+        });
+    }
+    match name {
+        "volatility_20" => Some(FactorMetadata {
+            version: "1".to_string(),
+            description: "Rolling population volatility of one-bar returns".to_string(),
+            incremental: true,
+            fixed_lookback: Some(20),
+            ..FactorMetadata::default()
+        }),
+        "reversal_5" => Some(FactorMetadata {
+            version: "1".to_string(),
+            description: "Sign-inverted five-bar arithmetic return".to_string(),
+            incremental: true,
+            fixed_lookback: Some(0),
+            ..FactorMetadata::default()
+        }),
+        _ => None,
     }
 }
 
@@ -438,6 +479,23 @@ mod tests {
         let engine = FactorEngine::new(catalog.into_registry());
         let result = plan.execute_borrowed(&engine, &context).unwrap();
         assert_eq!(result["score"], close);
+    }
+
+    #[test]
+    fn built_in_factor_catalog_publishes_incremental_lookbacks() {
+        let catalog = FactorCatalog::from_registry(crate::factors::builtin_factor_registry());
+        let momentum = catalog.compile(&["momentum_5"]).unwrap();
+        assert!(momentum.supports_range_incremental());
+        assert_eq!(momentum.range_lookback(), Some(5));
+
+        let reversal = catalog.compile(&["reversal_5"]).unwrap();
+        assert!(reversal.supports_range_incremental());
+        assert_eq!(reversal.range_lookback(), Some(5));
+
+        let descriptor = catalog.descriptor("volatility_20").unwrap();
+        assert!(descriptor.metadata.incremental);
+        assert_eq!(descriptor.metadata.fixed_lookback, Some(20));
+        assert!(!descriptor.metadata.streaming);
     }
 
     #[test]

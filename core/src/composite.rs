@@ -9,7 +9,10 @@
 use crate::factors::{zscore, BorrowedFactorContext, FactorContext, FactorError, FactorResult};
 use crate::indicators::{self, momentum, volatility};
 use crate::math::{moving_avg, statistics};
-use std::collections::BTreeMap;
+use crate::unified_runtime::{
+    DirtyRange, RuntimeExecution, RuntimeExecutionMode, RuntimeExecutionTrace,
+};
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 /// A user-defined vector function used by [`CompositeExpr::Call`].
@@ -117,6 +120,8 @@ impl CompositeDefinition {
 pub struct CompiledCompositePlan {
     definitions: Vec<CompositeDefinition>,
     outputs: Vec<String>,
+    required_raw_inputs: Vec<String>,
+    range_lookback: Option<usize>,
     signature: u64,
 }
 
@@ -132,6 +137,27 @@ impl CompiledCompositePlan {
     pub fn outputs(&self) -> &[String] {
         &self.outputs
     }
+
+    /// Raw input names required by the selected graph outputs.
+    #[must_use]
+    pub fn required_raw_inputs(&self) -> &[String] {
+        &self.required_raw_inputs
+    }
+
+    /// Whether the selected graph has a finite, proven dirty-range contract.
+    ///
+    /// Recursive stateful indicators such as EMA, RSI, ATR and MACD return
+    /// `None`; a range executor must not guess a finite history for them.
+    #[must_use]
+    pub const fn supports_range_incremental(&self) -> bool {
+        self.range_lookback.is_some()
+    }
+
+    /// Historical rows required before an affected output interval.
+    #[must_use]
+    pub const fn range_lookback(&self) -> Option<usize> {
+        self.range_lookback
+    }
 }
 
 const COMPILED_PLAN_CACHE_CAPACITY: usize = 64;
@@ -146,6 +172,7 @@ struct CompiledPlanCacheEntry {
 #[derive(Clone)]
 pub struct CompositeEngine {
     functions: BTreeMap<String, CompositeFn>,
+    builtin_functions: BTreeSet<String>,
     /// Compiled graph plans are reused across cache revisions and scopes.
     /// Keeping them separate from result snapshots prevents repeated cached
     /// evaluations from rebuilding dependency maps and cycle checks.
@@ -204,6 +231,7 @@ impl CompositeEngine {
     pub fn new() -> Self {
         let mut engine = Self::default();
         engine.register_builtins();
+        engine.builtin_functions = builtin_function_names();
         engine
     }
 
@@ -215,7 +243,9 @@ impl CompositeEngine {
                 "composite function name must not be empty".to_string(),
             ));
         }
-        self.functions.insert(name.to_ascii_lowercase(), function);
+        let normalized = name.to_ascii_lowercase();
+        self.builtin_functions.remove(&normalized);
+        self.functions.insert(normalized, function);
         self.compiled_plans.clear();
         self.compiled_plan_cache_hits = 0;
         self.compiled_plan_cache_misses = 0;
@@ -284,9 +314,35 @@ impl CompositeEngine {
         for output in outputs {
             validate_named_graph(output, &names, &mut visiting)?;
         }
+        let mut raw_inputs = BTreeSet::new();
+        let mut lookback_memo = BTreeMap::new();
+        let mut lookback_visiting = Vec::new();
+        for output in outputs {
+            collect_raw_inputs(output, &names, &mut raw_inputs, &mut Vec::new())?;
+            let output_lookback = expression_lookback_for_named(
+                output,
+                &names,
+                &self.builtin_functions,
+                &mut lookback_memo,
+                &mut lookback_visiting,
+            )?;
+            if output_lookback.is_none() {
+                lookback_memo.insert((*output).to_string(), None);
+            }
+        }
         Ok(CompiledCompositePlan {
             definitions: definitions.to_vec(),
             outputs: outputs.iter().map(|name| (*name).to_string()).collect(),
+            required_raw_inputs: raw_inputs.into_iter().collect(),
+            range_lookback: outputs
+                .iter()
+                .filter_map(|output| lookback_memo.get(*output).copied().flatten())
+                .max()
+                .filter(|_| {
+                    outputs
+                        .iter()
+                        .all(|output| lookback_memo.get(*output).is_some_and(Option::is_some))
+                }),
             signature: graph_signature(definitions, outputs),
         })
     }
@@ -459,6 +515,116 @@ impl CompositeEngine {
             .iter()
             .filter_map(|name| cache.get(name).map(|values| (name.clone(), values.clone())))
             .collect())
+    }
+
+    /// Recompute only the affected rows of a finite-lookback graph.
+    ///
+    /// The plan is compiled with an explicit capability proof. Graphs that
+    /// contain recursive or whole-series functions return an error instead of
+    /// silently producing an incorrect partial result.
+    pub fn execute_range_borrowed(
+        &self,
+        plan: &CompiledCompositePlan,
+        context: &BorrowedFactorContext<'_>,
+        previous: &BTreeMap<String, Vec<f64>>,
+        dirty: DirtyRange,
+    ) -> FactorResult<RuntimeExecution<BTreeMap<String, Vec<f64>>>> {
+        let mut output = previous.clone();
+        let trace = self.execute_range_into_borrowed(plan, context, &mut output, dirty)?;
+        Ok(RuntimeExecution { output, trace })
+    }
+
+    /// In-place form of [`Self::execute_range_borrowed`].
+    pub fn execute_range_into_borrowed(
+        &self,
+        plan: &CompiledCompositePlan,
+        context: &BorrowedFactorContext<'_>,
+        output: &mut BTreeMap<String, Vec<f64>>,
+        dirty: DirtyRange,
+    ) -> FactorResult<RuntimeExecutionTrace> {
+        let rows = context.len();
+        if !dirty.is_within(rows) {
+            return Err(FactorError::InvalidParameter(format!(
+                "dirty range {}..{} exceeds composite input rows {rows}",
+                dirty.start, dirty.end
+            )));
+        }
+        let lookback = plan.range_lookback.ok_or_else(|| {
+            FactorError::InvalidParameter(
+                "composite plan is not range-safe: recursive, whole-series, or custom functions require full execution"
+                    .to_string(),
+            )
+        })?;
+        for name in &plan.outputs {
+            let values = output.get(name).ok_or_else(|| {
+                FactorError::InvalidParameter(format!(
+                    "dirty-range execution requires retained output for {name}"
+                ))
+            })?;
+            if values.len() != rows {
+                return Err(FactorError::LengthMismatch {
+                    name: name.clone(),
+                    expected: rows,
+                    actual: values.len(),
+                });
+            }
+        }
+        if dirty.is_empty() {
+            return Ok(RuntimeExecutionTrace {
+                mode: RuntimeExecutionMode::Range {
+                    input_dirty: dirty,
+                    affected: dirty,
+                    recompute: dirty,
+                },
+                rows,
+                executed_nodes: 0,
+                recomputed_rows: 0,
+            });
+        }
+
+        let affected = dirty.propagate_forward(lookback, rows);
+        let recompute = affected.with_lookback(lookback);
+        let mut sliced = BorrowedFactorContext::new();
+        for input in &plan.required_raw_inputs {
+            let values = context
+                .get(input)
+                .ok_or_else(|| FactorError::MissingInput(input.clone()))?;
+            sliced.insert(input.clone(), &values[recompute.as_range()])?;
+        }
+        let partial = self.evaluate_compiled(plan, &sliced)?;
+        let offset = affected.start - recompute.start;
+        let source_end = offset + affected.len();
+        for name in &plan.outputs {
+            let source = partial.get(name).ok_or_else(|| {
+                FactorError::InvalidParameter(format!(
+                    "composite runtime did not materialize planned output {name}"
+                ))
+            })?;
+            if source_end > source.len() {
+                return Err(FactorError::LengthMismatch {
+                    name: name.clone(),
+                    expected: source_end,
+                    actual: source.len(),
+                });
+            }
+            let target = output.get_mut(name).ok_or_else(|| {
+                FactorError::InvalidParameter(format!(
+                    "dirty-range execution requires retained output for {name}"
+                ))
+            })?;
+            target[affected.as_range()].copy_from_slice(&source[offset..source_end]);
+        }
+
+        Ok(RuntimeExecutionTrace {
+            mode: RuntimeExecutionMode::Range {
+                input_dirty: dirty,
+                affected,
+                recompute,
+            },
+            rows,
+            executed_nodes: plan.definitions.len(),
+            recomputed_rows: recompute.len(),
+        })
     }
 
     /// Register the standard functions used by daily indicator composition.
@@ -801,6 +967,7 @@ impl Default for CompositeEngine {
     fn default() -> Self {
         Self {
             functions: BTreeMap::new(),
+            builtin_functions: BTreeSet::new(),
             compiled_plans: BTreeMap::new(),
             compiled_plan_cache_hits: 0,
             compiled_plan_cache_misses: 0,
@@ -857,6 +1024,169 @@ fn validate_expression_refs<'a>(
         }
         CompositeExpr::Series(_) | CompositeExpr::Constant(_) => Ok(()),
     }
+}
+
+fn collect_raw_inputs<'a>(
+    name: &str,
+    definitions: &BTreeMap<&'a str, &'a CompositeDefinition>,
+    raw_inputs: &mut BTreeSet<String>,
+    visiting: &mut Vec<String>,
+) -> FactorResult<()> {
+    if visiting.iter().any(|current| current == name) {
+        return Ok(());
+    }
+    let definition = definitions
+        .get(name)
+        .ok_or_else(|| FactorError::UnknownFactor(name.to_string()))?;
+    visiting.push(name.to_string());
+    collect_expression_raw_inputs(&definition.expression, definitions, raw_inputs, visiting)?;
+    visiting.pop();
+    Ok(())
+}
+
+fn collect_expression_raw_inputs<'a>(
+    expression: &CompositeExpr,
+    definitions: &BTreeMap<&'a str, &'a CompositeDefinition>,
+    raw_inputs: &mut BTreeSet<String>,
+    visiting: &mut Vec<String>,
+) -> FactorResult<()> {
+    match expression {
+        CompositeExpr::Series(name) => {
+            raw_inputs.insert(name.clone());
+            Ok(())
+        }
+        CompositeExpr::Ref(name) => collect_raw_inputs(name, definitions, raw_inputs, visiting),
+        CompositeExpr::Call { inputs, .. } | CompositeExpr::Op { inputs, .. } => {
+            inputs.iter().try_for_each(|input| {
+                collect_expression_raw_inputs(input, definitions, raw_inputs, visiting)
+            })
+        }
+        CompositeExpr::Constant(_) => Ok(()),
+    }
+}
+
+fn expression_lookback_for_named<'a>(
+    name: &str,
+    definitions: &BTreeMap<&'a str, &'a CompositeDefinition>,
+    builtin_functions: &BTreeSet<String>,
+    memo: &mut BTreeMap<String, Option<usize>>,
+    visiting: &mut Vec<String>,
+) -> FactorResult<Option<usize>> {
+    if let Some(value) = memo.get(name) {
+        return Ok(*value);
+    }
+    if let Some(position) = visiting.iter().position(|current| current == name) {
+        let mut cycle = visiting[position..].to_vec();
+        cycle.push(name.to_string());
+        return Err(FactorError::DependencyCycle(cycle));
+    }
+    let definition = definitions
+        .get(name)
+        .ok_or_else(|| FactorError::UnknownFactor(name.to_string()))?;
+    visiting.push(name.to_string());
+    let value = expression_lookback(
+        &definition.expression,
+        definitions,
+        builtin_functions,
+        memo,
+        visiting,
+    )?;
+    visiting.pop();
+    memo.insert(name.to_string(), value);
+    Ok(value)
+}
+
+fn expression_lookback<'a>(
+    expression: &CompositeExpr,
+    definitions: &BTreeMap<&'a str, &'a CompositeDefinition>,
+    builtin_functions: &BTreeSet<String>,
+    memo: &mut BTreeMap<String, Option<usize>>,
+    visiting: &mut Vec<String>,
+) -> FactorResult<Option<usize>> {
+    match expression {
+        CompositeExpr::Series(_) | CompositeExpr::Constant(_) => Ok(Some(0)),
+        CompositeExpr::Ref(name) => {
+            expression_lookback_for_named(name, definitions, builtin_functions, memo, visiting)
+        }
+        CompositeExpr::Op { inputs, .. } => combine_lookbacks(inputs.iter().map(|input| {
+            expression_lookback(input, definitions, builtin_functions, memo, visiting)
+        })),
+        CompositeExpr::Call {
+            name,
+            inputs,
+            params,
+        } => {
+            let input_lookback = combine_lookbacks(inputs.iter().map(|input| {
+                expression_lookback(input, definitions, builtin_functions, memo, visiting)
+            }))?;
+            let normalized = name.to_ascii_lowercase();
+            if !builtin_functions.contains(&normalized) {
+                return Ok(None);
+            }
+            let own_lookback = match normalized.as_str() {
+                "sma" | "wma" | "vwma" => period(params, 14)?.saturating_sub(1),
+                "boll_mid" | "boll_upper" | "boll_lower" | "rolling_std" | "rolling_min"
+                | "rolling_max" => period(params, 20)?.saturating_sub(1),
+                "return" => period(params, 1)?,
+                "volatility" => period(params, 20)?,
+                "cross_up" | "cross_down" => 1,
+                "threshold" | "between" | "clip" | "abs" | "neg" | "sign" | "weighted_average" => 0,
+                // These functions carry recursive state. A changed input can
+                // affect every subsequent row, so range execution must fall
+                // back to a full pass until a checkpointed state API exists.
+                "ema" | "rsi" | "atr" | "macd" | "zscore" => return Ok(None),
+                _ => return Ok(None),
+            };
+            Ok(input_lookback.map(|value| value.saturating_add(own_lookback)))
+        }
+    }
+}
+
+fn combine_lookbacks<I>(values: I) -> FactorResult<Option<usize>>
+where
+    I: IntoIterator<Item = FactorResult<Option<usize>>>,
+{
+    let mut maximum = 0usize;
+    for value in values {
+        match value? {
+            Some(value) => maximum = maximum.max(value),
+            None => return Ok(None),
+        }
+    }
+    Ok(Some(maximum))
+}
+
+fn builtin_function_names() -> BTreeSet<String> {
+    [
+        "sma",
+        "ema",
+        "wma",
+        "rsi",
+        "atr",
+        "return",
+        "zscore",
+        "vwma",
+        "macd",
+        "boll_mid",
+        "boll_upper",
+        "boll_lower",
+        "threshold",
+        "between",
+        "clip",
+        "abs",
+        "neg",
+        "sign",
+        "rolling_std",
+        "rolling_min",
+        "rolling_max",
+        "volatility",
+        "cross_up",
+        "cross_down",
+        "weighted_average",
+    ]
+    .into_iter()
+    .map(str::to_string)
+    .collect()
 }
 
 fn period(params: &[f64], default: usize) -> FactorResult<usize> {
@@ -1344,6 +1674,71 @@ mod tests {
         assert_eq!(result["range"], vec![0.0, 1.0, 1.0, 1.0, 0.0]);
         assert_eq!(result["signal"][2], 1.0);
         assert!(result["vol"][2].is_finite());
+    }
+
+    #[test]
+    fn finite_lookback_composite_supports_dirty_range_execution() {
+        let definitions = vec![
+            CompositeDefinition::new(
+                "sma3",
+                CompositeExpr::call("sma", vec![CompositeExpr::series("close")], vec![3.0]),
+            ),
+            CompositeDefinition::new(
+                "signal",
+                CompositeExpr::call(
+                    "threshold",
+                    vec![CompositeExpr::reference("sma3")],
+                    vec![5.0],
+                ),
+            ),
+        ];
+        let engine = CompositeEngine::new();
+        let plan = engine.compile(&definitions, &["signal"]).unwrap();
+        assert_eq!(plan.required_raw_inputs(), &["close".to_string()]);
+        assert_eq!(plan.range_lookback(), Some(2));
+
+        let original = (1..=10).map(f64::from).collect::<Vec<_>>();
+        let original_context = FactorContext::new().with_series("close", original).unwrap();
+        let original_borrowed = original_context.as_borrowed();
+        let previous = engine.evaluate_compiled(&plan, &original_borrowed).unwrap();
+
+        let revised = [1.0, 2.0, 3.0, 4.0, 5.0, 20.0, 7.0, 8.0, 9.0, 10.0];
+        let revised_context = FactorContext::new()
+            .with_series("close", revised.to_vec())
+            .unwrap();
+        let revised_borrowed = revised_context.as_borrowed();
+        let expected = engine.evaluate_compiled(&plan, &revised_borrowed).unwrap();
+        let ranged = engine
+            .execute_range_borrowed(&plan, &revised_borrowed, &previous, DirtyRange::new(5, 6))
+            .unwrap();
+
+        let actual = &ranged.output["signal"];
+        let expected = &expected["signal"];
+        assert!(actual.iter().zip(expected).all(|(left, right)| {
+            (left.is_nan() && right.is_nan()) || (left - right).abs() < 1e-12
+        }));
+        assert_eq!(
+            ranged.trace.mode,
+            RuntimeExecutionMode::Range {
+                input_dirty: DirtyRange::new(5, 6),
+                affected: DirtyRange::new(5, 8),
+                recompute: DirtyRange::new(3, 8),
+            }
+        );
+        assert_eq!(ranged.trace.recomputed_rows, 5);
+    }
+
+    #[test]
+    fn recursive_composite_functions_require_full_execution() {
+        let definitions = vec![CompositeDefinition::new(
+            "ema",
+            CompositeExpr::call("ema", vec![CompositeExpr::series("close")], vec![3.0]),
+        )];
+        let plan = CompositeEngine::new()
+            .compile(&definitions, &["ema"])
+            .unwrap();
+        assert!(!plan.supports_range_incremental());
+        assert_eq!(plan.range_lookback(), None);
     }
 
     #[test]

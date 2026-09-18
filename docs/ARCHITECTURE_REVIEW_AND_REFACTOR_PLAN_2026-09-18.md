@@ -260,10 +260,11 @@ talib_0_7_1
 - Unified Operation Engine 的 Factor 默认路径已改为 `FactorCatalog -> CompiledFactorPlan -> borrowed execution`，并使用带命中计数和容量上限的计划 LRU；这只证明主路径已接入 bounded compiled plan，不代表所有 Factor/Composite、streaming 和跨语言高吞吐门禁已经完成。
 - Composite 默认路径已增加 `CompiledCompositePlan`：定义校验、引用/cycle 检查和 graph signature 在计划阶段完成，Operation Engine 按 graph signature 复用计划；结果缓存仍额外受 scope/data revision 约束。
 - Composite cached evaluation 已将 compiled-plan cache 与结果快照 cache 分离，并收敛为 `CompositeEngine` 的唯一 bounded LRU owner：相同 graph 会跨 scope/data revision 复用依赖图和 cycle 校验结果，注册新函数会清理计划与结果；专项测试同时断言计划 cache 的命中/未命中计数和容量上限，避免重复构建或无界增长重新进入执行热路径。
+- Composite compiled plan 现在同时保存 required raw inputs 和有限窗口能力证明：`SMA/WMA/VWMA/BBANDS/rolling statistics/return/volatility/cross` 等有限依赖可执行 `DirtyRange` 局部重算；EMA、RSI、ATR、MACD、Z-score、未知自定义函数等递归或全序列语义明确返回 full-only，不猜测固定 lookback。局部执行会返回统一 `RuntimeExecutionTrace`，并验证结果与完整重算逐值一致。
 - Python 的公开 `formula_eval_dialect` 已与其他绑定统一调用 Core 的 `eval_with_dialect`；不能再让 Python 自己把国内 dialect 静默降级为 AlphaTA。
 - Node 绑定已补齐 `operationCatalogJson`，与 C/C++、Go、Java、.NET、Python 共用同一 operation catalog 和 `operationExecuteJson` contract；Node 的宿主级加载仍需在真实 Node addon 环境中验证。
-- Composite 已补齐 `composite.contract.v1` JSON contract：输入为 named series + graph definitions + outputs，结果统一返回 `shape/primary/values/schema_version`；C/C++、Go、Java、.NET、Python、Node 都有对应入口，避免 Composite 只在单一语言高层 API 中存在。
-- Factor 已补齐 `factor.contract.v1` JSON contract：所有正式绑定都可以执行稳定的内置因子并获得 compiled-plan 的 `semantic_identity/range_lookback`；Rust typed API 仍保留自定义闭包因子，跨语言 contract 不把不可序列化闭包伪装成可移植定义。
+- Composite 已补齐 `composite.contract.v1` JSON contract：输入为 named series + graph definitions + outputs，结果统一返回 `shape/primary/values/schema_version`；C/C++、Go、Java、.NET、Python、Node 都有对应入口，避免 Composite 只在单一语言高层 API 中存在。现在同一 contract 可选接收 `previous + dirty_range`，并返回 `range_lookback` 与 `execution` trace；不具备有限 lookback 证明的图会显式失败。
+- Factor 已补齐 `factor.contract.v1` JSON contract：所有正式绑定都可以执行稳定的内置因子并获得 compiled-plan 的 `semantic_identity/range_lookback`；内置 `momentum/volatility/reversal` 已声明真实 incremental lookback，streaming 仍保持 false，直到有 checkpoint/stateful 实现；Rust typed API 仍保留自定义闭包因子，跨语言 contract 不把不可序列化闭包伪装成可移植定义。Factor JSON contract 现在可选接收 `previous + dirty_range`，返回与 Composite 相同的 range execution envelope。
 - Factor 已补齐 `factor.catalog.v1` JSON discovery contract：C/C++、Go、Java、.NET、Python、Node 与 Rust FFI common 共用同一份内置因子目录，公开名称、类型、方向、依赖、版本及 streaming/incremental 能力，执行入口与发现入口不再断开。
 - Factor 与 Composite 的 v1 请求现在强制要求 `schema_version`，并拒绝重复 Factor target；新增 `tests/contracts/engine_contract_v1.json` 将 Formula/Factor/Composite 的请求与期望输出固定为同一份跨语言 conformance vector，避免各 binding 分叉维护示例和数值语义。
 - Formula compatibility report 已提升为 `formula.compatibility.v1` 共享 JSON contract：Rust、Python、Go、Java、.NET、C、C++、Node 均通过同一报告结构输出 parser、batch/streaming、control flow、drawing、cross-timeframe、lookahead、host data；各绑定只负责转发、生命周期和错误映射。能力矩阵只报告已验证的执行边界，不把 parser 识别或函数登记误报为完整兼容。
@@ -286,10 +287,10 @@ talib_0_7_1
 
 截至 2026-09-18，本工作树已实际验证：
 
-- `cargo +1.98.1 test --workspace --offline --quiet`：全 workspace 测试通过；其中核心库为 `2923 passed, 0 failed, 1 ignored`，新增 Formula terminal contract 为 `1 passed, 0 failed`，DZH compatibility 为 `43 passed, 0 failed`，CLI schema 为 `3 passed, 0 failed`，其余 workspace test targets 也无失败。
+- `cargo +1.98.1 test --workspace --offline --quiet`：全 workspace 测试通过；其中核心库为 `2926 passed, 0 failed, 1 ignored`，新增 Formula terminal contract 为 `1 passed, 0 failed`，DZH compatibility 为 `43 passed, 0 failed`，CLI schema 为 `3 passed, 0 failed`，其余 workspace test targets 也无失败。
 - `cargo +1.98.1 test -p finkit --test formula_compatibility_boundary --offline --quiet`：`1 passed, 0 failed`，确认 host-required、drawing、control-flow/streaming 和 Pine plot 边界状态。
 - 定向验证：`finkit` operation tests `19 passed`、Composite tests `11 passed`、`finkit-ffi-common` library tests `28 passed`、C ABI library tests `23 passed`。
-- 最新定向验证：`finkit-ffi-common` library tests `41 passed`，包含 161 个 TA-Lib profile 名称的 dispatcher smoke、参数目录、非默认 `matype` 数值测试、绝对下标与 `HT_TRENDMODE` warm-up 边界测试、无版本 profile 拒绝测试、Formula/Factor/Composite 共用 conformance vector 和 `formula.compatibility.v1` capability report；C ABI tests `26 passed`，并确认 catalog 参数和 Formula compatibility report 通过 ABI 导出。
+- 最新定向验证：`finkit-ffi-common` library tests `44 passed`，包含 161 个 TA-Lib profile 名称的 dispatcher smoke、参数目录、非默认 `matype` 数值测试、绝对下标与 `HT_TRENDMODE` warm-up 边界测试、Factor/Composite dirty-range conformance vector、无版本 profile 拒绝测试、Formula/Factor/Composite 共用 conformance vector 和 `formula.compatibility.v1` capability report；C ABI tests `26 passed`，并确认 catalog 参数和 Formula compatibility report 通过 ABI 导出。
 - `cargo +1.98.1 check -p finkit-python -p finkit-node -p finkit-go -p finkit-java -p finkit-dotnet -p finkit-ffi --offline`：通过。
 - 61 个 candlestick operation 在 `talib_0_7_1` profile 下逐项真实分派并返回等长结果。
 - `cargo +1.98.1 fmt --all` 已执行。

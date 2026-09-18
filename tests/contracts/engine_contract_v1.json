@@ -18,6 +18,21 @@
     },
     "expected_primary": [null, null, null, null, null, 5.0]
   },
+  "factor_range": {
+    "request": {
+      "schema_version": 1,
+      "targets": ["momentum_5"],
+      "inputs": {"close": [10.0, 11.0, 12.0, 13.0, 14.0, 20.0, 16.0]},
+      "previous": {"momentum_5": [0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.5]},
+      "dirty_range": [5, 6]
+    },
+    "expected_primary": [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.45454545454545453],
+    "expected_execution": {
+      "mode": "range",
+      "input_dirty": [5, 6],
+      "affected": [5, 7]
+    }
+  },
   "composite": {
     "request": {
       "schema_version": 1,
@@ -28,5 +43,23 @@
       "outputs": ["sma3"]
     },
     "expected_primary": [null, null, 2.0, 3.0, 4.0]
+  },
+  "composite_range": {
+    "request": {
+      "schema_version": 1,
+      "inputs": {"close": [1.0, 2.0, 3.0, 4.0, 10.0, 6.0]},
+      "definitions": [
+        {"name": "sma3", "function": "sma", "inputs": ["close"], "params": [3]}
+      ],
+      "outputs": ["sma3"],
+      "previous": {"sma3": [0.0, 0.0, 2.0, 3.0, 5.666666666666667, 6.666666666666667]},
+      "dirty_range": [4, 5]
+    },
+    "expected_primary": [0.0, 0.0, 2.0, 3.0, 5.666666666666667, 6.666666666666667],
+    "expected_execution": {
+      "mode": "range",
+      "input_dirty": [4, 5],
+      "affected": [4, 6]
+    }
   }
 }

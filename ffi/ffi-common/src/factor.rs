@@ -2,6 +2,7 @@
 
 use finkit::factor_system::FactorCatalog;
 use finkit::factors::{builtin_factor_registry, FactorContext, FactorEngine};
+use finkit::unified_runtime::{DirtyRange, RuntimeExecutionMode};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -14,6 +15,10 @@ struct FactorRequest {
     schema_version: Option<u16>,
     targets: Vec<String>,
     inputs: BTreeMap<String, Vec<f64>>,
+    #[serde(default)]
+    previous: Option<BTreeMap<String, Vec<f64>>>,
+    #[serde(default)]
+    dirty_range: Option<[usize; 2]>,
 }
 
 /// Execute built-in factors through the compiled Factor plan contract.
@@ -65,9 +70,21 @@ pub fn evaluate_factor_json(request: &str) -> Result<String, String> {
             .map_err(|error| error.to_string())?;
     }
     let engine = FactorEngine::new(registry);
-    let values = plan
-        .execute_borrowed(&engine, &context.as_borrowed())
-        .map_err(|error| error.to_string())?;
+    if request.previous.is_some() != request.dirty_range.is_some() {
+        return Err("factor range execution requires both previous and dirty_range".to_string());
+    }
+    let borrowed = context.as_borrowed();
+    let runtime = match (request.previous.as_ref(), request.dirty_range) {
+        (Some(previous), Some([start, end])) => plan
+            .execute_range_borrowed(&engine, &borrowed, previous, DirtyRange::new(start, end))
+            .map_err(|error| error.to_string())?,
+        (None, None) => plan
+            .execute_runtime_borrowed(&engine, &borrowed)
+            .map_err(|error| error.to_string())?,
+        _ => unreachable!("range pair was validated"),
+    };
+    let trace = runtime.trace;
+    let values = runtime.output;
     let mut serialized = serde_json::Map::new();
     for target in &request.targets {
         let values = values
@@ -82,9 +99,26 @@ pub fn evaluate_factor_json(request: &str) -> Result<String, String> {
         "targets": request.targets,
         "semantic_identity": plan.semantic_identity(),
         "range_lookback": plan.range_lookback(),
+        "execution": execution_envelope(trace.mode),
         "values": Value::Object(serialized),
     }))
     .map_err(|error| error.to_string())
+}
+
+fn execution_envelope(mode: RuntimeExecutionMode) -> Value {
+    match mode {
+        RuntimeExecutionMode::Full => json!({"mode": "full"}),
+        RuntimeExecutionMode::Range {
+            input_dirty,
+            affected,
+            recompute,
+        } => json!({
+            "mode": "range",
+            "input_dirty": [input_dirty.start, input_dirty.end],
+            "affected": [affected.start, affected.end],
+            "recompute": [recompute.start, recompute.end],
+        }),
+    }
 }
 
 fn nullable_series(values: &[f64]) -> Value {
@@ -120,6 +154,25 @@ mod tests {
         assert_eq!(payload["values"]["momentum_5"][0], Value::Null);
         assert_eq!(payload["values"]["momentum_5"][5], 5.0);
         assert!(payload["semantic_identity"].as_array().is_some());
+        assert_eq!(payload["execution"]["mode"], "full");
+        assert_eq!(payload["range_lookback"], 5);
+    }
+
+    #[test]
+    fn contract_executes_factor_dirty_range_with_shared_envelope() {
+        let request = r#"{
+            "schema_version":1,
+            "targets":["momentum_5"],
+            "inputs":{"close":[10.0,11.0,12.0,13.0,14.0,20.0,16.0]},
+            "previous":{"momentum_5":[0.0,0.0,0.0,0.0,0.0,0.5,0.5]},
+            "dirty_range":[5,6]
+        }"#;
+        let payload: Value = serde_json::from_str(&evaluate_factor_json(request).unwrap()).unwrap();
+        assert_eq!(payload["execution"]["mode"], "range");
+        assert_eq!(payload["execution"]["input_dirty"], json!([5, 6]));
+        assert_eq!(payload["execution"]["affected"], json!([5, 7]));
+        assert_eq!(payload["values"]["momentum_5"][5], 1.0);
+        assert!((payload["values"]["momentum_5"][6].as_f64().unwrap() - 5.0 / 11.0).abs() < 1e-12);
     }
 
     #[test]

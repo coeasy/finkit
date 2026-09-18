@@ -73,6 +73,43 @@ mod tests {
     }
 
     #[test]
+    fn factor_and_composite_range_vectors_share_execution_contract() {
+        let fixture = fixture();
+        for (section, execute, output_name) in [
+            (
+                "factor_range",
+                evaluate_factor_json as fn(&str) -> Result<String, String>,
+                "momentum_5",
+            ),
+            (
+                "composite_range",
+                evaluate_composite_json as fn(&str) -> Result<String, String>,
+                "sma3",
+            ),
+        ] {
+            let request = serde_json::to_string(&fixture[section]["request"]).unwrap();
+            let payload: Value = serde_json::from_str(&execute(&request).unwrap()).unwrap();
+            assert_eq!(payload["execution"]["mode"], "range");
+            assert_eq!(
+                payload["execution"]["input_dirty"],
+                fixture[section]["expected_execution"]["input_dirty"]
+            );
+            assert_eq!(
+                payload["execution"]["affected"],
+                fixture[section]["expected_execution"]["affected"]
+            );
+            let actual = payload["values"][output_name].as_array().unwrap();
+            let expected = fixture[section]["expected_primary"].as_array().unwrap();
+            assert_eq!(actual.len(), expected.len());
+            for (actual, expected) in actual.iter().zip(expected) {
+                let actual = actual.as_f64().unwrap();
+                let expected = expected.as_f64().unwrap();
+                assert!((actual - expected).abs() < 1e-12);
+            }
+        }
+    }
+
+    #[test]
     fn fixture_is_transport_neutral() {
         let fixture = fixture();
         assert!(fixture["factor"]["request"]["inputs"].is_object());
