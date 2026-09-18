@@ -109,7 +109,7 @@ tests/formula_corpus/
 
 ## 运行回归
 
-跨终端最小数值语义门禁已经集成到 CI；完整公式语料仍按下面的扩展计划逐步补齐参考输出：
+跨终端最小数值语义门禁和完整语料执行门禁已经集成到 CI；完整语料的逐项外部平台数值参考仍按下面的扩展计划逐步补齐：
 
 ```bash
 # 运行全部语料回归
@@ -124,7 +124,8 @@ cargo test -p finkit formula_corpus_tdx
 和 Pine 的赋值、别名、窗口函数、前值引用及 Pine lowering。它验证的是实际
 `eval_multi_with_dialect` 数值，而不只是 parser/map 成功。
 
-当前语料作为回归基线定义；测试运行器将在后续 Story 中实现。
+`core/tests/formula_corpus.rs` 会执行目录内全部 JSON 语料，校验平台 dialect、
+输入 fixture、声明输出列和输出长度；它仍不把“能够执行”当作外部平台数值等价。
 
 ## 贡献新语料
 

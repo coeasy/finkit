@@ -267,6 +267,7 @@ talib_0_7_1
 - Factor 与 Composite 的 v1 请求现在强制要求 `schema_version`，并拒绝重复 Factor target；新增 `tests/contracts/engine_contract_v1.json` 将 Formula/Factor/Composite 的请求与期望输出固定为同一份跨语言 conformance vector，避免各 binding 分叉维护示例和数值语义。
 - Formula compatibility report 已提升为 `formula.compatibility.v1` 共享 JSON contract：Rust、Python、Go、Java、.NET、C、C++、Node 均通过同一报告结构输出 parser、batch/streaming、control flow、drawing、cross-timeframe、lookahead、host data；各绑定只负责转发、生命周期和错误映射。能力矩阵只报告已验证的执行边界，不把 parser 识别或函数登记误报为完整兼容。
 - 新增 `tests/contracts/formula_terminal_contract_v1.json` 与 `core/tests/formula_terminal_contract.rs`：通过 `eval_multi_with_dialect` 对 TDX、同花顺、东方财富和 Pine 的赋值、别名、窗口、前值引用及 Pine lowering 做固定数值断言；这是一条真实执行门禁，不等同于全部终端语义已完成。
+- Formula grammar 的 identifier 已改为 Unicode XID 规则，中文变量名可进入同一 AST/执行器；新增 `core/tests/formula_corpus.rs` 执行全部已登记国内公式语料并校验声明输出列和长度，避免“语料存在但未运行”。
 - Lightweight Charts adapter 已修复增量 payload 中动态新增 line 不创建 series 的问题；`visualization/frontend/lightweight-charts-adapter.test.mjs` 已覆盖 null/warm-up 空白点、markers、viewport、增量更新、完整替换和 schema 拒绝。
 - TA-Lib `MINMAX` 与 `MINMAXINDEX` 已加入 registry、core multi-output dispatcher、TA-Lib FFI profile 和 operation catalog；输出名固定为 `MIN/MAX` 与 `MININDEX/MAXINDEX`，并有 JSON execution tests。
 - TA-Lib profile catalog 已集中维护 161 个名称，所有绑定从同一目录发现；profile-only 条目现在公开输入形状、输出名、默认参数和约束，避免跨语言各自维护名称/参数表。

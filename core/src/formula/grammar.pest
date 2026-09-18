@@ -98,8 +98,9 @@ function_call = { identifier ~ "(" ~ (expression ~ ("," ~ expression)*)? ~ ")" }
 // 变量: 标识符（CLOSE, C, MA5等）
 variable = { identifier }
 
-// 标识符 - 排除关键字和颜色名
-identifier = @{ !builtin_keyword ~ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
+// 标识符 - 排除关键字和颜色名。XID_* 允许中文等 Unicode 标识符，
+// 同时保留 ASCII 公式的字母、数字和下划线规则。
+identifier = @{ !builtin_keyword ~ (ASCII_ALPHA | XID_START) ~ (ASCII_ALPHANUMERIC | "_" | XID_CONTINUE)* }
 
 // 内置关键字 - 不能用作标识符（IF 允许作为函数名）
 // 必须后跟非标识符字符，避免前缀匹配（如 DO 匹配 DOWN）

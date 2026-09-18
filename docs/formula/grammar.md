@@ -199,7 +199,7 @@ NOT CROSS(MA5,MA10)
 ```ebnf
 function_call    = identifier "(" [ expression { "," expression } ] ")"
 variable         = identifier
-identifier       = ALPHA { ALPHANUM | "_" }   (* 排除内置关键字 *)
+identifier       = XID_START { XID_CONTINUE | "_" }   (* 排除内置关键字；支持中文等 Unicode 标识符 *)
 number           = DIGIT+ [ "." DIGIT+ ]
 string           = '"' { CHAR } '"' | "'" { CHAR } "'"
 bool_val         = "TRUE" | "FALSE"
