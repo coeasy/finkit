@@ -239,8 +239,12 @@ fn normalize_name(value: &str) -> String {
 /// Whether the explicit TA-Lib execution profile has a typed dispatcher for
 /// this operation. This is also used when projecting binding metadata.
 pub fn talib_profile_supported(operation: &str) -> bool {
+    let name = normalize_name(operation);
+    if name.starts_with("CDL") {
+        return candlestick_detector(&name).is_some();
+    }
     matches!(
-        normalize_name(operation).as_str(),
+        name.as_str(),
         "MA" | "SMA"
             | "EMA"
             | "WMA"
@@ -258,17 +262,6 @@ pub fn talib_profile_supported(operation: &str) -> bool {
             | "HT_SINE"
             | "HT_TRENDMODE"
             | "HT_TRENDLINE"
-            | "CDLDOJI"
-            | "CDLDRAGONFLYDOJI"
-            | "CDLGRAVESTONEDOJI"
-            | "CDLENGULFING"
-            | "CDLHAMMER"
-            | "CDLHANGINGMAN"
-            | "CDLHARAMI"
-            | "CDLMARUBOZU"
-            | "CDLPIERCING"
-            | "CDLSHOOTINGSTAR"
-            | "CDLSPINNINGTOP"
             | "RSI"
             | "MACD"
             | "MACDEXT"
@@ -350,6 +343,84 @@ pub fn talib_profile_supported(operation: &str) -> bool {
             | "TAN"
             | "TANH"
     )
+}
+
+fn candlestick_detector(
+    name: &str,
+) -> Option<
+    fn(
+        &[f64],
+        &[f64],
+        &[f64],
+        &[f64],
+    ) -> std::result::Result<ndarray::Array1<i32>, finkit::error::TaError>,
+> {
+    use finkit::patterns::candlestick as c;
+
+    match name {
+        "CDL2CROWS" => Some(c::cdl_2crows),
+        "CDL3BLACKCROWS" => Some(c::cdl_3black_crows),
+        "CDL3INSIDE" => Some(c::cdl_3inside),
+        "CDL3LINESTRIKE" => Some(c::cdl_3linestrike),
+        "CDL3OUTSIDE" => Some(c::cdl_3outside),
+        "CDL3STARSINSOUTH" => Some(c::cdl_3starsinsouth),
+        "CDL3WHITESOLDIERS" => Some(c::cdl_3white_soldiers),
+        "CDLABANDONEDBABY" => Some(c::cdl_abandoned_baby),
+        "CDLADVANCEBLOCK" => Some(c::cdl_advanceblock),
+        "CDLBELTHOLD" => Some(c::cdl_belthold),
+        "CDLBREAKAWAY" => Some(c::cdl_breakaway),
+        "CDLCLOSINGMARUBOZU" => Some(c::cdl_closingmarubozu),
+        "CDLCONCEALBABYSWALL" => Some(c::cdl_concealbabyswall),
+        "CDLCOUNTERATTACK" => Some(c::cdl_counterattack),
+        "CDLDARKCLOUDCOVER" => Some(c::cdl_darkcloudcover),
+        "CDLDOJI" => Some(c::cdl_doji),
+        "CDLDOJISTAR" => Some(c::cdl_doji_star),
+        "CDLDRAGONFLYDOJI" => Some(c::cdl_dragonflydoji),
+        "CDLENGULFING" => Some(c::cdl_engulfing),
+        "CDLEVENINGDOJISTAR" => Some(c::cdl_eveningdojistar),
+        "CDLEVENINGSTAR" => Some(c::cdl_eveningstar),
+        "CDLGAPSIDESIDEWHITE" => Some(c::cdl_gap_side_white),
+        "CDLGRAVESTONEDOJI" => Some(c::cdl_gravestonedoji),
+        "CDLHAMMER" => Some(c::cdl_hammer),
+        "CDLHANGINGMAN" => Some(c::cdl_hangingman),
+        "CDLHARAMI" => Some(c::cdl_harami),
+        "CDLHARAMICROSS" => Some(c::cdl_haramicross),
+        "CDLHIGHWAVE" => Some(c::cdl_highwave),
+        "CDLHIKKAKE" => Some(c::cdl_hikkake),
+        "CDLHIKKAKEMOD" => Some(c::cdl_hikkake_mod),
+        "CDLHOMINGPIGEON" => Some(c::cdl_homing_pigeon),
+        "CDLIDENTICAL3CROWS" => Some(c::cdl_identical3crows),
+        "CDLINNECK" => Some(c::cdl_inneck),
+        "CDLINVERTEDHAMMER" => Some(c::cdl_invertedhammer),
+        "CDLKICKING" => Some(c::cdl_kicking),
+        "CDLKICKINGBYLENGTH" => Some(c::cdl_kickingbylength),
+        "CDLLADDERBOTTOM" => Some(c::cdl_ladder_bottom),
+        "CDLLONGLEGGEDDOJI" => Some(c::cdl_longleggeddoji),
+        "CDLLONGLINE" => Some(c::cdl_longline),
+        "CDLMARUBOZU" => Some(c::cdl_marubozu),
+        "CDLMATCHINGLOW" => Some(c::cdl_matchinglow),
+        "CDLMATHOLD" => Some(c::cdl_mathold),
+        "CDLMORNINGDOJISTAR" => Some(c::cdl_morningdojistar),
+        "CDLMORNINGSTAR" => Some(c::cdl_morningstar),
+        "CDLONNECK" => Some(c::cdl_onneck),
+        "CDLPIERCING" => Some(c::cdl_piercing),
+        "CDLRICKSHAWMAN" => Some(c::cdl_rickshawman),
+        "CDLRISEFALL3METHODS" => Some(c::cdl_rise_fall_3methods),
+        "CDLSEPARATINGLINES" => Some(c::cdl_separatinglines),
+        "CDLSHOOTINGSTAR" => Some(c::cdl_shootingstar),
+        "CDLSHORTLINE" => Some(c::cdl_shortline),
+        "CDLSPINNINGTOP" => Some(c::cdl_spinningtop),
+        "CDLSTALLEDPATTERN" => Some(c::cdl_stalledpattern),
+        "CDLSTICKSANDWICH" => Some(c::cdl_sticksandwich),
+        "CDLTAKURI" => Some(c::cdl_takuri),
+        "CDLTASUKIGAP" => Some(c::cdl_tasukigap),
+        "CDLTHRUSTING" => Some(c::cdl_thrusting),
+        "CDLTRISTAR" => Some(c::cdl_tristar),
+        "CDLUNIQUE3RIVER" => Some(c::cdl_unique3river),
+        "CDLUPSIDEGAP2CROWS" => Some(c::cdl_upsidegap2crows),
+        "CDLXSIDEGAP3METHODS" => Some(c::cdl_xsidegap3methods),
+        _ => None,
+    }
 }
 
 fn normalize_profile(value: &str) -> String {
@@ -585,6 +656,18 @@ fn execute_talib_profile(
                 _ => unreachable!(),
             };
             values.insert(name.clone(), pattern_values(result, &name)?);
+            name.as_str()
+        }
+        pattern if pattern.starts_with("CDL") => {
+            let detector = candlestick_detector(pattern).ok_or((
+                "unsupported_operation",
+                format!("TA-Lib profile does not yet dispatch {pattern}"),
+            ))?;
+            let (open, high, low, close) = ohlc(inputs, &name)?;
+            values.insert(
+                name.clone(),
+                pattern_values(detector(open, high, low, close), &name)?,
+            );
             name.as_str()
         }
         "RSI" => {
@@ -1521,6 +1604,106 @@ mod tests {
         assert_eq!(payload["shape"], "series", "payload: {payload}");
         assert_eq!(payload["primary"], "CDLDOJI");
         assert_eq!(payload["values"]["CDLDOJI"].as_array().unwrap().len(), 10);
+    }
+
+    #[test]
+    fn talib_profile_dispatches_the_complete_candlestick_catalog() {
+        let names = [
+            "CDL2CROWS",
+            "CDL3BLACKCROWS",
+            "CDL3INSIDE",
+            "CDL3LINESTRIKE",
+            "CDL3OUTSIDE",
+            "CDL3STARSINSOUTH",
+            "CDL3WHITESOLDIERS",
+            "CDLABANDONEDBABY",
+            "CDLADVANCEBLOCK",
+            "CDLBELTHOLD",
+            "CDLBREAKAWAY",
+            "CDLCLOSINGMARUBOZU",
+            "CDLCONCEALBABYSWALL",
+            "CDLCOUNTERATTACK",
+            "CDLDARKCLOUDCOVER",
+            "CDLDOJI",
+            "CDLDOJISTAR",
+            "CDLDRAGONFLYDOJI",
+            "CDLENGULFING",
+            "CDLEVENINGDOJISTAR",
+            "CDLEVENINGSTAR",
+            "CDLGAPSIDESIDEWHITE",
+            "CDLGRAVESTONEDOJI",
+            "CDLHAMMER",
+            "CDLHANGINGMAN",
+            "CDLHARAMI",
+            "CDLHARAMICROSS",
+            "CDLHIGHWAVE",
+            "CDLHIKKAKE",
+            "CDLHIKKAKEMOD",
+            "CDLHOMINGPIGEON",
+            "CDLIDENTICAL3CROWS",
+            "CDLINNECK",
+            "CDLINVERTEDHAMMER",
+            "CDLKICKING",
+            "CDLKICKINGBYLENGTH",
+            "CDLLADDERBOTTOM",
+            "CDLLONGLEGGEDDOJI",
+            "CDLLONGLINE",
+            "CDLMARUBOZU",
+            "CDLMATCHINGLOW",
+            "CDLMATHOLD",
+            "CDLMORNINGDOJISTAR",
+            "CDLMORNINGSTAR",
+            "CDLONNECK",
+            "CDLPIERCING",
+            "CDLRICKSHAWMAN",
+            "CDLRISEFALL3METHODS",
+            "CDLSEPARATINGLINES",
+            "CDLSHOOTINGSTAR",
+            "CDLSHORTLINE",
+            "CDLSPINNINGTOP",
+            "CDLSTALLEDPATTERN",
+            "CDLSTICKSANDWICH",
+            "CDLTAKURI",
+            "CDLTASUKIGAP",
+            "CDLTHRUSTING",
+            "CDLTRISTAR",
+            "CDLUNIQUE3RIVER",
+            "CDLUPSIDEGAP2CROWS",
+            "CDLXSIDEGAP3METHODS",
+        ];
+        let open = (0..80)
+            .map(|index| 100.0 + index as f64 * 0.1)
+            .collect::<Vec<_>>();
+        let high = open.iter().map(|value| value + 1.0).collect::<Vec<_>>();
+        let low = open.iter().map(|value| value - 1.0).collect::<Vec<_>>();
+        let close = open
+            .iter()
+            .enumerate()
+            .map(|(index, value)| value + if index % 2 == 0 { 0.4 } else { -0.4 })
+            .collect::<Vec<_>>();
+
+        for name in names {
+            assert!(
+                talib_profile_supported(name),
+                "unsupported catalog name {name}"
+            );
+            let request = serde_json::json!({
+                "operation": name,
+                "semantic_profile": "talib_0_7_1",
+                "input_order": ["OPEN", "HIGH", "LOW", "CLOSE"],
+                "inputs": {
+                    "OPEN": open,
+                    "HIGH": high,
+                    "LOW": low,
+                    "CLOSE": close
+                }
+            })
+            .to_string();
+            let payload: Value = serde_json::from_str(&execute_operation_json(&request)).unwrap();
+            assert!(payload.get("error").is_none(), "{name}: {payload}");
+            assert_eq!(payload["primary"], name);
+            assert_eq!(payload["values"][name].as_array().unwrap().len(), 80);
+        }
     }
 
     #[test]

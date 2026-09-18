@@ -3482,6 +3482,232 @@ where
     }
 }
 
+macro_rules! define_cdl_formula_function {
+    ($wrapper:ident, $name:literal, $detector:path) => {
+        fn $wrapper(
+            ctx: &FormulaContext,
+            args: &[Array1<f64>],
+        ) -> Result<Array1<f64>, FormulaError> {
+            candlestick_values(ctx, args, $name, $detector)
+        }
+    };
+}
+
+define_cdl_formula_function!(fn_cdl_2crows, "CDL2CROWS", lib_candlestick::cdl_2crows);
+define_cdl_formula_function!(
+    fn_cdl_3blackcrows,
+    "CDL3BLACKCROWS",
+    lib_candlestick::cdl_3black_crows
+);
+define_cdl_formula_function!(fn_cdl_3inside, "CDL3INSIDE", lib_candlestick::cdl_3inside);
+define_cdl_formula_function!(
+    fn_cdl_3linestrike,
+    "CDL3LINESTRIKE",
+    lib_candlestick::cdl_3linestrike
+);
+define_cdl_formula_function!(
+    fn_cdl_3outside,
+    "CDL3OUTSIDE",
+    lib_candlestick::cdl_3outside
+);
+define_cdl_formula_function!(
+    fn_cdl_3starsinsouth,
+    "CDL3STARSINSOUTH",
+    lib_candlestick::cdl_3starsinsouth
+);
+define_cdl_formula_function!(
+    fn_cdl_3whitesoldiers,
+    "CDL3WHITESOLDIERS",
+    lib_candlestick::cdl_3white_soldiers
+);
+define_cdl_formula_function!(
+    fn_cdl_abandonedbaby,
+    "CDLABANDONEDBABY",
+    lib_candlestick::cdl_abandoned_baby
+);
+define_cdl_formula_function!(
+    fn_cdl_advanceblock,
+    "CDLADVANCEBLOCK",
+    lib_candlestick::cdl_advanceblock
+);
+define_cdl_formula_function!(
+    fn_cdl_belthold,
+    "CDLBELTHOLD",
+    lib_candlestick::cdl_belthold
+);
+define_cdl_formula_function!(
+    fn_cdl_breakaway,
+    "CDLBREAKAWAY",
+    lib_candlestick::cdl_breakaway
+);
+define_cdl_formula_function!(
+    fn_cdl_closingmarubozu,
+    "CDLCLOSINGMARUBOZU",
+    lib_candlestick::cdl_closingmarubozu
+);
+define_cdl_formula_function!(
+    fn_cdl_concealbabyswall,
+    "CDLCONCEALBABYSWALL",
+    lib_candlestick::cdl_concealbabyswall
+);
+define_cdl_formula_function!(
+    fn_cdl_counterattack,
+    "CDLCOUNTERATTACK",
+    lib_candlestick::cdl_counterattack
+);
+define_cdl_formula_function!(
+    fn_cdl_darkcloudcover,
+    "CDLDARKCLOUDCOVER",
+    lib_candlestick::cdl_darkcloudcover
+);
+define_cdl_formula_function!(
+    fn_cdl_dojistar,
+    "CDLDOJISTAR",
+    lib_candlestick::cdl_doji_star
+);
+define_cdl_formula_function!(
+    fn_cdl_eveningdojistar,
+    "CDLEVENINGDOJISTAR",
+    lib_candlestick::cdl_eveningdojistar
+);
+define_cdl_formula_function!(
+    fn_cdl_eveningstar,
+    "CDLEVENINGSTAR",
+    lib_candlestick::cdl_eveningstar
+);
+define_cdl_formula_function!(
+    fn_cdl_gapsidesidewhite,
+    "CDLGAPSIDESIDEWHITE",
+    lib_candlestick::cdl_gap_side_white
+);
+define_cdl_formula_function!(
+    fn_cdl_haramicross,
+    "CDLHARAMICROSS",
+    lib_candlestick::cdl_haramicross
+);
+define_cdl_formula_function!(
+    fn_cdl_highwave,
+    "CDLHIGHWAVE",
+    lib_candlestick::cdl_highwave
+);
+define_cdl_formula_function!(fn_cdl_hikkake, "CDLHIKKAKE", lib_candlestick::cdl_hikkake);
+define_cdl_formula_function!(
+    fn_cdl_hikkakemod,
+    "CDLHIKKAKEMOD",
+    lib_candlestick::cdl_hikkake_mod
+);
+define_cdl_formula_function!(
+    fn_cdl_homingpigeon,
+    "CDLHOMINGPIGEON",
+    lib_candlestick::cdl_homing_pigeon
+);
+define_cdl_formula_function!(
+    fn_cdl_identical3crows,
+    "CDLIDENTICAL3CROWS",
+    lib_candlestick::cdl_identical3crows
+);
+define_cdl_formula_function!(fn_cdl_inneck, "CDLINNECK", lib_candlestick::cdl_inneck);
+define_cdl_formula_function!(
+    fn_cdl_invertedhammer,
+    "CDLINVERTEDHAMMER",
+    lib_candlestick::cdl_invertedhammer
+);
+define_cdl_formula_function!(fn_cdl_kicking, "CDLKICKING", lib_candlestick::cdl_kicking);
+define_cdl_formula_function!(
+    fn_cdl_kickingbylength,
+    "CDLKICKINGBYLENGTH",
+    lib_candlestick::cdl_kickingbylength
+);
+define_cdl_formula_function!(
+    fn_cdl_ladderbottom,
+    "CDLLADDERBOTTOM",
+    lib_candlestick::cdl_ladder_bottom
+);
+define_cdl_formula_function!(
+    fn_cdl_longleggeddoji,
+    "CDLLONGLEGGEDDOJI",
+    lib_candlestick::cdl_longleggeddoji
+);
+define_cdl_formula_function!(
+    fn_cdl_longline,
+    "CDLLONGLINE",
+    lib_candlestick::cdl_longline
+);
+define_cdl_formula_function!(
+    fn_cdl_matchinglow,
+    "CDLMATCHINGLOW",
+    lib_candlestick::cdl_matchinglow
+);
+define_cdl_formula_function!(fn_cdl_mathold, "CDLMATHOLD", lib_candlestick::cdl_mathold);
+define_cdl_formula_function!(
+    fn_cdl_morningdojistar,
+    "CDLMORNINGDOJISTAR",
+    lib_candlestick::cdl_morningdojistar
+);
+define_cdl_formula_function!(
+    fn_cdl_morningstar,
+    "CDLMORNINGSTAR",
+    lib_candlestick::cdl_morningstar
+);
+define_cdl_formula_function!(fn_cdl_onneck, "CDLONNECK", lib_candlestick::cdl_onneck);
+define_cdl_formula_function!(
+    fn_cdl_rickshawman,
+    "CDLRICKSHAWMAN",
+    lib_candlestick::cdl_rickshawman
+);
+define_cdl_formula_function!(
+    fn_cdl_risefall3methods,
+    "CDLRISEFALL3METHODS",
+    lib_candlestick::cdl_rise_fall_3methods
+);
+define_cdl_formula_function!(
+    fn_cdl_separatinglines,
+    "CDLSEPARATINGLINES",
+    lib_candlestick::cdl_separatinglines
+);
+define_cdl_formula_function!(
+    fn_cdl_shortline,
+    "CDLSHORTLINE",
+    lib_candlestick::cdl_shortline
+);
+define_cdl_formula_function!(
+    fn_cdl_stalledpattern,
+    "CDLSTALLEDPATTERN",
+    lib_candlestick::cdl_stalledpattern
+);
+define_cdl_formula_function!(
+    fn_cdl_sticksandwich,
+    "CDLSTICKSANDWICH",
+    lib_candlestick::cdl_sticksandwich
+);
+define_cdl_formula_function!(fn_cdl_takuri, "CDLTAKURI", lib_candlestick::cdl_takuri);
+define_cdl_formula_function!(
+    fn_cdl_tasukigap,
+    "CDLTASUKIGAP",
+    lib_candlestick::cdl_tasukigap
+);
+define_cdl_formula_function!(
+    fn_cdl_thrusting,
+    "CDLTHRUSTING",
+    lib_candlestick::cdl_thrusting
+);
+define_cdl_formula_function!(fn_cdl_tristar, "CDLTRISTAR", lib_candlestick::cdl_tristar);
+define_cdl_formula_function!(
+    fn_cdl_unique3river,
+    "CDLUNIQUE3RIVER",
+    lib_candlestick::cdl_unique3river
+);
+define_cdl_formula_function!(
+    fn_cdl_upsidegap2crows,
+    "CDLUPSIDEGAP2CROWS",
+    lib_candlestick::cdl_upsidegap2crows
+);
+define_cdl_formula_function!(
+    fn_cdl_xsidegap3methods,
+    "CDLXSIDEGAP3METHODS",
+    lib_candlestick::cdl_xsidegap3methods
+);
+
 fn fn_cdl_doji(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     candlestick_values(ctx, args, "CDLDOJI", lib_candlestick::cdl_doji)
 }
@@ -5851,6 +6077,149 @@ pub fn get_builtin_functions() -> HashMap<String, FormulaFn> {
     map.insert(
         "CDLSPINNINGTOP".to_string(),
         fn_cdl_spinningtop as FormulaFn,
+    );
+    map.insert("CDL2CROWS".to_string(), fn_cdl_2crows as FormulaFn);
+    map.insert(
+        "CDL3BLACKCROWS".to_string(),
+        fn_cdl_3blackcrows as FormulaFn,
+    );
+    map.insert("CDL3INSIDE".to_string(), fn_cdl_3inside as FormulaFn);
+    map.insert(
+        "CDL3LINESTRIKE".to_string(),
+        fn_cdl_3linestrike as FormulaFn,
+    );
+    map.insert("CDL3OUTSIDE".to_string(), fn_cdl_3outside as FormulaFn);
+    map.insert(
+        "CDL3STARSINSOUTH".to_string(),
+        fn_cdl_3starsinsouth as FormulaFn,
+    );
+    map.insert(
+        "CDL3WHITESOLDIERS".to_string(),
+        fn_cdl_3whitesoldiers as FormulaFn,
+    );
+    map.insert(
+        "CDLABANDONEDBABY".to_string(),
+        fn_cdl_abandonedbaby as FormulaFn,
+    );
+    map.insert(
+        "CDLADVANCEBLOCK".to_string(),
+        fn_cdl_advanceblock as FormulaFn,
+    );
+    map.insert("CDLBELTHOLD".to_string(), fn_cdl_belthold as FormulaFn);
+    map.insert("CDLBREAKAWAY".to_string(), fn_cdl_breakaway as FormulaFn);
+    map.insert(
+        "CDLCLOSINGMARUBOZU".to_string(),
+        fn_cdl_closingmarubozu as FormulaFn,
+    );
+    map.insert(
+        "CDLCONCEALBABYSWALL".to_string(),
+        fn_cdl_concealbabyswall as FormulaFn,
+    );
+    map.insert(
+        "CDLCOUNTERATTACK".to_string(),
+        fn_cdl_counterattack as FormulaFn,
+    );
+    map.insert(
+        "CDLDARKCLOUDCOVER".to_string(),
+        fn_cdl_darkcloudcover as FormulaFn,
+    );
+    map.insert("CDLDOJISTAR".to_string(), fn_cdl_dojistar as FormulaFn);
+    map.insert(
+        "CDLEVENINGDOJISTAR".to_string(),
+        fn_cdl_eveningdojistar as FormulaFn,
+    );
+    map.insert(
+        "CDLEVENINGSTAR".to_string(),
+        fn_cdl_eveningstar as FormulaFn,
+    );
+    map.insert(
+        "CDLGAPSIDESIDEWHITE".to_string(),
+        fn_cdl_gapsidesidewhite as FormulaFn,
+    );
+    map.insert(
+        "CDLHARAMICROSS".to_string(),
+        fn_cdl_haramicross as FormulaFn,
+    );
+    map.insert("CDLHIGHWAVE".to_string(), fn_cdl_highwave as FormulaFn);
+    map.insert("CDLHIKKAKE".to_string(), fn_cdl_hikkake as FormulaFn);
+    map.insert("CDLHIKKAKEMOD".to_string(), fn_cdl_hikkakemod as FormulaFn);
+    map.insert(
+        "CDLHOMINGPIGEON".to_string(),
+        fn_cdl_homingpigeon as FormulaFn,
+    );
+    map.insert(
+        "CDLIDENTICAL3CROWS".to_string(),
+        fn_cdl_identical3crows as FormulaFn,
+    );
+    map.insert("CDLINNECK".to_string(), fn_cdl_inneck as FormulaFn);
+    map.insert(
+        "CDLINVERTEDHAMMER".to_string(),
+        fn_cdl_invertedhammer as FormulaFn,
+    );
+    map.insert("CDLKICKING".to_string(), fn_cdl_kicking as FormulaFn);
+    map.insert(
+        "CDLKICKINGBYLENGTH".to_string(),
+        fn_cdl_kickingbylength as FormulaFn,
+    );
+    map.insert(
+        "CDLLADDERBOTTOM".to_string(),
+        fn_cdl_ladderbottom as FormulaFn,
+    );
+    map.insert(
+        "CDLLONGLEGGEDDOJI".to_string(),
+        fn_cdl_longleggeddoji as FormulaFn,
+    );
+    map.insert("CDLLONGLINE".to_string(), fn_cdl_longline as FormulaFn);
+    map.insert(
+        "CDLMATCHINGLOW".to_string(),
+        fn_cdl_matchinglow as FormulaFn,
+    );
+    map.insert("CDLMATHOLD".to_string(), fn_cdl_mathold as FormulaFn);
+    map.insert(
+        "CDLMORNINGDOJISTAR".to_string(),
+        fn_cdl_morningdojistar as FormulaFn,
+    );
+    map.insert(
+        "CDLMORNINGSTAR".to_string(),
+        fn_cdl_morningstar as FormulaFn,
+    );
+    map.insert("CDLONNECK".to_string(), fn_cdl_onneck as FormulaFn);
+    map.insert(
+        "CDLRICKSHAWMAN".to_string(),
+        fn_cdl_rickshawman as FormulaFn,
+    );
+    map.insert(
+        "CDLRISEFALL3METHODS".to_string(),
+        fn_cdl_risefall3methods as FormulaFn,
+    );
+    map.insert(
+        "CDLSEPARATINGLINES".to_string(),
+        fn_cdl_separatinglines as FormulaFn,
+    );
+    map.insert("CDLSHORTLINE".to_string(), fn_cdl_shortline as FormulaFn);
+    map.insert(
+        "CDLSTALLEDPATTERN".to_string(),
+        fn_cdl_stalledpattern as FormulaFn,
+    );
+    map.insert(
+        "CDLSTICKSANDWICH".to_string(),
+        fn_cdl_sticksandwich as FormulaFn,
+    );
+    map.insert("CDLTAKURI".to_string(), fn_cdl_takuri as FormulaFn);
+    map.insert("CDLTASUKIGAP".to_string(), fn_cdl_tasukigap as FormulaFn);
+    map.insert("CDLTHRUSTING".to_string(), fn_cdl_thrusting as FormulaFn);
+    map.insert("CDLTRISTAR".to_string(), fn_cdl_tristar as FormulaFn);
+    map.insert(
+        "CDLUNIQUE3RIVER".to_string(),
+        fn_cdl_unique3river as FormulaFn,
+    );
+    map.insert(
+        "CDLUPSIDEGAP2CROWS".to_string(),
+        fn_cdl_upsidegap2crows as FormulaFn,
+    );
+    map.insert(
+        "CDLXSIDEGAP3METHODS".to_string(),
+        fn_cdl_xsidegap3methods as FormulaFn,
     );
     map.insert("IMI".to_string(), fn_imi as FormulaFn);
 

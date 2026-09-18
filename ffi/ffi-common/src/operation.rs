@@ -264,6 +264,15 @@ mod tests {
             .find(|operation| operation.name == "MAMA")
             .unwrap();
         assert_eq!(mama.output_names, vec!["MAMA", "FAMA"]);
+        let accbands = catalog
+            .operations
+            .iter()
+            .find(|operation| operation.name == "ACCBANDS")
+            .unwrap();
+        assert_eq!(
+            accbands.output_names,
+            vec!["UPPERBAND", "MIDDLEBAND", "LOWERBAND"]
+        );
     }
 
     #[test]
@@ -290,6 +299,9 @@ mod tests {
             "HT_TRENDMODE",
             "HT_TRENDLINE",
             "CDLDOJI",
+            "CDL2CROWS",
+            "CDLABANDONEDBABY",
+            "CDLDOJISTAR",
             "CDLENGULFING",
             "CDLHAMMER",
             "CDLHARAMI",
@@ -297,6 +309,7 @@ mod tests {
             "CDLPIERCING",
             "CDLSHOOTINGSTAR",
             "CDLSPINNINGTOP",
+            "CDLXSIDEGAP3METHODS",
             "MAVP",
             "SAREXT",
             "CMO",
