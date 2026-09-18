@@ -6,6 +6,15 @@
 //! Some names are also present in the Core registry; keeping the complete
 //! profile list here makes discovery deterministic across all bindings.
 
+/// Canonical semantic profile identifier for the current TA-Lib core contract.
+///
+/// Keep this in one module so the dispatcher, operation catalog and bindings
+/// cannot silently drift to different version strings.
+pub const TALIB_SEMANTIC_PROFILE: &str = "talib_0_7_1";
+
+/// Upstream TA-Lib core version represented by [`TALIB_SEMANTIC_PROFILE`].
+pub const TALIB_CORE_VERSION: &str = "0.7.1";
+
 /// TA-Lib 0.7.1 catalog names exposed by the versioned dispatcher.
 pub const TALIB_PROFILE_CATALOG_NAMES: &[&str] = &[
     "ACOS",

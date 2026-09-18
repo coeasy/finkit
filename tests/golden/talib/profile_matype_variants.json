@@ -1,7 +1,7 @@
 {
   "metadata": {
     "generator": "checked-in differential fixture",
-    "reference": "TA-Lib Python 0.6.8",
+    "reference": "TA-Lib Python 0.8.0",
     "fixture": "synthetic_ohlcv_v1",
     "length": 256,
     "periods": "2 + (index % 29)",
@@ -17,9 +17,9 @@
       "operation": "BBANDS",
       "params": [20, 2.0, 2.0, 1],
       "expected": {
-        "UPPERBAND": {"first_finite": 19, "last": 142.21338944498189},
+        "UPPERBAND": {"first_finite": 19, "last": 142.2133894449563},
         "MIDDLEBAND": {"first_finite": 19, "last": 141.0222209723241},
-        "LOWERBAND": {"first_finite": 19, "last": 139.83105249966633}
+        "LOWERBAND": {"first_finite": 19, "last": 139.8310524996919}
       }
     },
     {
@@ -39,7 +39,7 @@
       "operation": "STOCHF",
       "params": [14, 3, 1],
       "expected": {
-        "FASTK": {"first_finite": 15, "last": 70.12998468945},
+        "FASTK": {"first_finite": 15, "last": 70.12998468944998},
         "FASTD": {"first_finite": 15, "last": 67.14015311257774}
       }
     },

@@ -4,7 +4,7 @@ JSON reference outputs produced by `scripts/gen_talib_golden.py` using the
 official TA-Lib Python bindings (C library). These files anchor Finkit's
 numerical parity checks against TA-Lib C.
 
-The checked-in corpus is pinned to TA-Lib Python `0.6.8` for this release. A
+The checked-in corpus is pinned to TA-Lib Python `0.8.0` for this release. A
 golden regeneration is a deliberate reference-version update and must be
 reviewed together with the generated metadata and parity report.
 
@@ -63,7 +63,7 @@ variant fixture for official `matype` contracts:
 
 | File | Purpose |
 |------|---------|
-| `profile_matype_variants.json` | TA-Lib 0.6.8 `APO`, `BBANDS`, `MAVP`, `STOCH`, `STOCHF`, and `STOCHRSI` non-default MA-type warm-up/output references |
+| `profile_matype_variants.json` | TA-Lib 0.8.0 `APO`, `BBANDS`, `MAVP`, `STOCH`, `STOCHF`, and `STOCHRSI` non-default MA-type warm-up/output references |
 
 Generated indicator files:
 
@@ -115,7 +115,7 @@ Generated indicator files:
 | `tsf.json` | TSF | timeperiod=14 |
 
 Parameters are recorded in each file's metadata and are intentionally pinned
-to the TA-Lib Python `0.6.8` reference used for this corpus.
+to the TA-Lib Python `0.8.0` reference used for this corpus.
 
 ## JSON Schema
 

@@ -5,6 +5,7 @@
 //! name, ordered inputs, and numeric parameters while high-throughput callers
 //! keep using typed indicator APIs.
 
+use crate::talib_catalog::TALIB_SEMANTIC_PROFILE;
 use finkit::factors::FactorRegistry;
 use finkit::formula::FormulaContext;
 use finkit::operation::{OperationRequest, UnifiedOperationEngine, PRIMARY_OUTPUT_NAME};
@@ -145,7 +146,7 @@ fn execute_operation(request: &str) -> Result<Value, (&'static str, String)> {
     }
 
     let semantic_profile = normalize_profile(&request.semantic_profile);
-    if semantic_profile == "talib" || semantic_profile == "talib_0_7_1" {
+    if semantic_profile == TALIB_SEMANTIC_PROFILE {
         return execute_talib_profile(&request.operation, &input_order, &inputs, &request.params);
     }
     if semantic_profile != "core_registry" {
@@ -1587,6 +1588,19 @@ mod tests {
         assert_eq!(payload["semantic_profile"], "talib_0_7_1");
         assert_eq!(payload["values"]["SMA"][0], Value::Null);
         assert_eq!(payload["values"]["SMA"][2], 2.5);
+    }
+
+    #[test]
+    fn unversioned_talib_profile_is_rejected() {
+        let request = r#"{
+            "operation":"SMA",
+            "semantic_profile":"talib",
+            "input_order":["CLOSE"],
+            "inputs":{"CLOSE":[1.0,2.0,3.0]},
+            "params":[2]
+        }"#;
+        let payload: Value = serde_json::from_str(&execute_operation_json(request)).unwrap();
+        assert_eq!(payload["error"]["code"], "unsupported_profile");
     }
 
     #[test]

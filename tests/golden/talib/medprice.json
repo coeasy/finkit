@@ -3,7 +3,7 @@
     "generator": "gen_talib_golden.py",
     "generator_version": "1.0.0",
     "generation_date": "2026-09-18",
-    "talib_version": "0.6.8",
+    "talib_version": "0.8.0",
     "indicator": "MEDPRICE",
     "talib_function": "MEDPRICE",
     "parameters": {},

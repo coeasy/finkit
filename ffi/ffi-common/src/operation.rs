@@ -6,7 +6,7 @@
 //! shape, or capability declarations.
 
 use crate::execute::talib_profile_supported;
-use crate::talib_catalog::TALIB_PROFILE_CATALOG_NAMES;
+use crate::talib_catalog::{TALIB_PROFILE_CATALOG_NAMES, TALIB_SEMANTIC_PROFILE};
 use finkit::operation::{
     builtin_operation_registry, OperationCapabilities, OperationKind, OperationRegistry,
     OperationSpec,
@@ -135,7 +135,7 @@ impl OperationCatalogEntry {
             semantic_profiles: {
                 let mut profiles = vec!["core_registry".to_string()];
                 if talib_profile_supported(&spec.name) {
-                    profiles.push("talib_0_7_1".to_string());
+                    profiles.push(TALIB_SEMANTIC_PROFILE.to_string());
                 }
                 profiles
             },
@@ -211,7 +211,7 @@ fn profile_only_talib_entry(name: &str) -> OperationCatalogEntry {
         lookback: "dynamic",
         capabilities: OperationCapabilities::indicator(false, true).into(),
         schema_version: 1,
-        semantic_profiles: vec!["talib_0_7_1".to_string()],
+        semantic_profiles: vec![TALIB_SEMANTIC_PROFILE.to_string()],
     }
 }
 

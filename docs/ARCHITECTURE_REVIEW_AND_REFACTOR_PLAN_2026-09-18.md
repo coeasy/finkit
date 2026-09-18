@@ -193,7 +193,7 @@ semantic_profile + operation/formula id + parameter hash
 
 ### 5.4 公式与 TA-Lib profile
 
-TA-Lib profile 使用显式版本化名称（当前代码为 `talib_0_7_1`），不把 Core warm-up 语义伪装成 TA-Lib 语义。每个公开 TA-Lib operation 要有参数默认值、MA type、输出名、warm-up、NaN 和参考结果说明。当前 catalog 已补齐 profile-only 条目的可执行参数元数据，APO、BBANDS、MAVP、MACDEXT、PPO、STOCH、STOCHF、STOCHRSI 的 `matype` 已由共享 dispatcher 实际消费；剩余指标仍必须逐项完成同等数值验证，不能只在目录中声明。
+TA-Lib profile 使用显式版本化名称（当前代码为 `talib_0_7_1`，对应 TA-Lib C core 0.7.1），不把 Core warm-up 语义伪装成 TA-Lib 语义。当前 parity corpus 已升级到 TA-Lib Python 0.8.0；每个公开 TA-Lib operation 仍必须有参数默认值、MA type、输出名、warm-up、NaN 和参考结果说明。当前 catalog 已补齐 profile-only 条目的可执行参数元数据，APO、BBANDS、MAVP、MACDEXT、PPO、STOCH、STOCHF、STOCHRSI 的 `matype` 已由共享 dispatcher 实际消费；剩余指标仍必须逐项完成同等数值验证，不能只在目录中声明。
 
 Formula profile 也必须版本化：
 
@@ -266,10 +266,10 @@ talib_0_7_1
 - TA-Lib `MINMAX` 与 `MINMAXINDEX` 已加入 registry、core multi-output dispatcher、TA-Lib FFI profile 和 operation catalog；输出名固定为 `MIN/MAX` 与 `MININDEX/MAXINDEX`，并有 JSON execution tests。
 - TA-Lib profile catalog 已集中维护 161 个名称，所有绑定从同一目录发现；profile-only 条目现在公开输入形状、输出名、默认参数和约束，避免跨语言各自维护名称/参数表。
 - 新增 161 个 TA-Lib profile 名称的 JSON dispatcher smoke test：逐项经过统一请求、分派和结果 envelope，确认返回结构及等长输出；这属于执行链覆盖验证，不等同于 161 项数值等价验证。
-- TA-Lib 的 `APO`、`BBANDS`、`MAVP`、`STOCH`、`STOCHF`、`STOCHRSI` 已采用官方参数顺序并真实消费 `matype`；新增 Python TA-Lib 0.6.8 对照的非默认 MA type、输出暖机和末值断言。
+- TA-Lib 的 `APO`、`BBANDS`、`MAVP`、`STOCH`、`STOCHF`、`STOCHRSI` 已采用官方参数顺序并真实消费 `matype`；新增 Python TA-Lib 0.8.0 对照的非默认 MA type、输出暖机和末值断言。dispatcher 只接受显式 `talib_0_7_1` profile，不再接受无版本的 `talib` 别名。
 - `MAVP` profile 的 batch/非 SMA 路径已统一使用 TA-Lib 的 `maxperiod - 1` 暖机规则；新增 `tests/golden/talib/profile_matype_variants.json` 作为可复现的参数变体参考，而不是只在测试代码中硬编码末值。
 - 修复 DZH `MOD(...)` 函数调用与中缀 `MOD` 运算符的 grammar 冲突，国内公式集成测试重新通过。
-- TA-Lib parity corpus 已生成并纳入版本控制：44 个声明指标、3 组固定 OHLCV fixture，另有 `profile_matype_variants.json` 覆盖官方 MA type 变体，参考版本固定为 Python `0.6.8`；golden 缺失现在是失败，不再静默 skip。PLUS_DM/MINUS_DM 已接入带 period 的 Wilder 平滑，PPO 已接入 TA-Lib `matype`（默认 SMA）语义；STDDEV/VAR 使用文档化的相对浮点容差。AD 的公开路径保留 TA-Lib 标量运算顺序，避免 AVX2 累计 ULP 偏差；CLI OHLCV CSV 读取也支持 fixture 的 `#` 元数据行。
+- TA-Lib parity corpus 已生成并纳入版本控制：44 个声明指标、3 组固定 OHLCV fixture，另有 `profile_matype_variants.json` 覆盖官方 MA type 变体，参考版本固定为 Python `0.8.0`；golden 缺失现在是失败，不再静默 skip。PLUS_DM/MINUS_DM 已接入带 period 的 Wilder 平滑，PPO 已接入 TA-Lib `matype`（默认 SMA）语义；STDDEV/VAR 使用文档化的相对浮点容差。AD 的公开路径保留 TA-Lib 标量运算顺序，避免 AVX2 累计 ULP 偏差；CLI OHLCV CSV 读取也支持 fixture 的 `#` 元数据行。
 
 ## 7. 当前实际验证状态
 

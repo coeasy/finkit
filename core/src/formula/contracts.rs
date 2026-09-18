@@ -9,7 +9,7 @@
 use super::functions::get_builtin_functions;
 
 /// Catalog revision used by compatibility reports and generated clients.
-pub const TA_LIB_CATALOG_VERSION: &str = "ta-lib-python-0.6.x-public-v1";
+pub const TA_LIB_CATALOG_VERSION: &str = "ta-lib-core-0.7.1-public-v1";
 
 /// Machine-readable contract for one public TA-Lib function name.
 #[derive(Debug, Clone, PartialEq, Eq)]
