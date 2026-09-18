@@ -272,6 +272,7 @@ talib_0_7_1
 - Lightweight Charts adapter 已修复增量 payload 中动态新增 line 不创建 series 的问题；`visualization/frontend/lightweight-charts-adapter.test.mjs` 已覆盖 null/warm-up 空白点、markers、viewport、增量更新、完整替换和 schema 拒绝。
 - TA-Lib `MINMAX` 与 `MINMAXINDEX` 已加入 registry、core multi-output dispatcher、TA-Lib FFI profile 和 operation catalog；输出名固定为 `MIN/MAX` 与 `MININDEX/MAXINDEX`，并有 JSON execution tests。
 - TA-Lib profile catalog 已集中维护 161 个名称，所有绑定从同一目录发现；profile-only 条目现在公开输入形状、输出名、默认参数和约束，避免跨语言各自维护名称/参数表。
+- TA-Lib golden 生成器现在默认拒绝 Python 包版本漂移：当前 corpus 要求 `0.8.0`，只有显式 `--allow-version-mismatch` 才能生成本地诊断文件，避免较旧或未验证的环境静默覆盖正式参考基线。
 - 新增 161 个 TA-Lib profile 名称的 JSON dispatcher smoke test：逐项经过统一请求、分派和结果 envelope，确认返回结构及等长输出；这属于执行链覆盖验证，不等同于 161 项数值等价验证。
 - TA-Lib 的 `APO`、`BBANDS`、`MAVP`、`STOCH`、`STOCHF`、`STOCHRSI` 已采用官方参数顺序并真实消费 `matype`；新增 Python TA-Lib 0.8.0 对照的非默认 MA type、输出暖机和末值断言。dispatcher 只接受显式 `talib_0_7_1` profile，不再接受无版本的 `talib` 别名。
 - `MAVP` profile 的 batch/非 SMA 路径已统一使用 TA-Lib 的 `maxperiod - 1` 暖机规则；新增 `tests/golden/talib/profile_matype_variants.json` 作为可复现的参数变体参考，而不是只在测试代码中硬编码末值。

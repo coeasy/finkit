@@ -8,6 +8,11 @@ The checked-in corpus is pinned to TA-Lib Python `0.8.0` for this release. A
 golden regeneration is a deliberate reference-version update and must be
 reviewed together with the generated metadata and parity report.
 
+The generator refuses to write files when the imported TA-Lib Python package
+does not match `0.8.0`. `--allow-version-mismatch` is reserved for local
+diagnostics and must not be used to refresh the checked-in corpus without a
+reviewed reference-version change.
+
 ## Regenerating
 
 From the repository root:

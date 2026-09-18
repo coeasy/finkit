@@ -35,6 +35,7 @@ DEFAULT_OUTPUT_DIR = ROOT / "tests" / "golden" / "talib"
 FIXTURES_SCRIPT = ROOT / "scripts" / "gen_test_fixtures.py"
 
 GENERATOR_VERSION = "1.0.0"
+PINNED_TALIB_PYTHON_VERSION = "0.8.0"
 
 # Three fixture datasets: A-share daily, crypto minute, synthetic waves.
 DATASET_IDS = ("ashare", "crypto", "synthetic")
@@ -571,9 +572,18 @@ def generate_all(
     generation_date: str,
     talib_module: Any,
     np_module: Any,
+    allow_version_mismatch: bool = False,
 ) -> None:
-    output_dir.mkdir(parents=True, exist_ok=True)
     talib_version = talib_version_str(talib_module)
+    if talib_version != PINNED_TALIB_PYTHON_VERSION and not allow_version_mismatch:
+        raise RuntimeError(
+            "TA-Lib Python version mismatch: "
+            f"checked-in golden corpus requires {PINNED_TALIB_PYTHON_VERSION}, "
+            f"but the imported package is {talib_version}. "
+            "Install the pinned package or pass --allow-version-mismatch for "
+            "an explicitly non-reproducible local diagnostic run."
+        )
+    output_dir.mkdir(parents=True, exist_ok=True)
     metadata = load_fixture_metadata(fixtures_dir)
 
     # Load all datasets once.
@@ -653,6 +663,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Do not auto-run gen_test_fixtures.py when fixtures are missing.",
     )
+    parser.add_argument(
+        "--allow-version-mismatch",
+        action="store_true",
+        help=(
+            "Allow generation with a TA-Lib Python version other than the "
+            f"pinned {PINNED_TALIB_PYTHON_VERSION}; use only for local diagnostics."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -695,6 +713,7 @@ def main() -> int:
         generation_date,
         talib_module,
         np_module,
+        allow_version_mismatch=args.allow_version_mismatch,
     )
     print(f"Done. TA-Lib version: {talib_version_str(talib_module)}")
     return 0
