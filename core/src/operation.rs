@@ -28,6 +28,8 @@ use std::fmt;
 /// Reserved name used for the primary value returned by a formula.
 pub const PRIMARY_OUTPUT_NAME: &str = "__PRIMARY__";
 
+const COMPILED_FACTOR_PLAN_CACHE_CAPACITY: usize = 64;
+
 /// Top-level kind of a public operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum OperationKind {
@@ -555,6 +557,12 @@ struct CachedOperationResult {
     last_used: u64,
 }
 
+#[derive(Clone)]
+struct CompiledFactorPlanCacheEntry {
+    plan: CompiledFactorPlan,
+    last_used: u64,
+}
+
 impl PanelOperationResult {
     /// Number of symbol/timeframe frames evaluated.
     pub fn len(&self) -> usize {
@@ -652,7 +660,10 @@ pub struct UnifiedOperationEngine {
     factor: FactorEngine,
     composite: CompositeEngine,
     factor_catalog: FactorCatalog,
-    factor_plans: BTreeMap<String, CompiledFactorPlan>,
+    factor_plans: BTreeMap<String, CompiledFactorPlanCacheEntry>,
+    factor_plan_cache_hits: u64,
+    factor_plan_cache_misses: u64,
+    factor_plan_cache_clock: u64,
     operation_cache: BTreeMap<OperationCacheKey, CachedOperationResult>,
     operation_cache_capacity: usize,
     operation_cache_hits: u64,
@@ -678,6 +689,9 @@ impl UnifiedOperationEngine {
             composite: CompositeEngine::new(),
             factor_catalog,
             factor_plans: BTreeMap::new(),
+            factor_plan_cache_hits: 0,
+            factor_plan_cache_misses: 0,
+            factor_plan_cache_clock: 0,
             operation_cache: BTreeMap::new(),
             operation_cache_capacity: 64,
             operation_cache_hits: 0,
@@ -773,17 +787,8 @@ impl UnifiedOperationEngine {
                     .resolve_name(name)
                     .map(str::to_owned)
                     .ok_or_else(|| OperationExecutionError::UnknownOperation(name.to_string()))?;
-                if !self.factor_plans.contains_key(&canonical) {
-                    let plan = self
-                        .factor_catalog
-                        .compile(&[canonical.as_str()])
-                        .map_err(OperationExecutionError::Factor)?;
-                    self.factor_plans.insert(canonical.clone(), plan);
-                }
-                let result = self
-                    .factor_plans
-                    .get(&canonical)
-                    .expect("factor plan inserted before execution")
+                let plan = self.compiled_factor_plan(&canonical)?;
+                let result = plan
                     .execute_borrowed(&self.factor, context)
                     .map_err(OperationExecutionError::Factor)?
                     .remove(&canonical)
@@ -1167,6 +1172,47 @@ impl UnifiedOperationEngine {
         }
         self.operation_cache
             .insert(key, CachedOperationResult { result, last_used });
+    }
+
+    fn compiled_factor_plan(
+        &mut self,
+        canonical: &str,
+    ) -> Result<CompiledFactorPlan, OperationExecutionError> {
+        let tick = self.next_factor_plan_tick();
+        if let Some(entry) = self.factor_plans.get_mut(canonical) {
+            self.factor_plan_cache_hits = self.factor_plan_cache_hits.saturating_add(1);
+            entry.last_used = tick;
+            return Ok(entry.plan.clone());
+        }
+
+        self.factor_plan_cache_misses = self.factor_plan_cache_misses.saturating_add(1);
+        let plan = self
+            .factor_catalog
+            .compile(&[canonical])
+            .map_err(OperationExecutionError::Factor)?;
+        if self.factor_plans.len() >= COMPILED_FACTOR_PLAN_CACHE_CAPACITY {
+            if let Some(oldest) = self
+                .factor_plans
+                .iter()
+                .min_by_key(|(_, entry)| entry.last_used)
+                .map(|(name, _)| name.clone())
+            {
+                self.factor_plans.remove(&oldest);
+            }
+        }
+        self.factor_plans.insert(
+            canonical.to_string(),
+            CompiledFactorPlanCacheEntry {
+                plan: plan.clone(),
+                last_used: tick,
+            },
+        );
+        Ok(plan)
+    }
+
+    fn next_factor_plan_tick(&mut self) -> u64 {
+        self.factor_plan_cache_clock = self.factor_plan_cache_clock.wrapping_add(1);
+        self.factor_plan_cache_clock
     }
 
     fn get_cached_result(&mut self, key: &OperationCacheKey) -> Option<OperationResult> {
@@ -2096,6 +2142,8 @@ mod tests {
             })
             .unwrap();
         assert_eq!(factor.primary_values().unwrap(), &[2.0, 4.0, 6.0]);
+        assert_eq!(engine.factor_plan_cache_hits, 0);
+        assert_eq!(engine.factor_plan_cache_misses, 1);
         let factor_again = engine
             .execute(OperationRequest::Factor {
                 name: "DOUBLE_CLOSE",
@@ -2104,6 +2152,8 @@ mod tests {
             .unwrap();
         assert_eq!(factor_again.primary_values().unwrap(), &[2.0, 4.0, 6.0]);
         assert_eq!(engine.factor_plans.len(), 1);
+        assert_eq!(engine.factor_plan_cache_hits, 1);
+        assert_eq!(engine.factor_plan_cache_misses, 1);
 
         let timestamps = [10, 20];
         let symbols = ["AAA", "BBB", "CCC"];
