@@ -1,6 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { createRequire } from 'node:module'
 import * as finkit from '../index.mjs'
+
+const require = createRequire(import.meta.url)
+const commonjs = require('../index.js')
 
 test('loads the native binding and computes SMA', () => {
   const result = finkit.sma([1, 2, 3, 4, 5], 3)
@@ -14,6 +18,10 @@ test('exports the complete public runtime contract', () => {
     assert.equal(typeof finkit[name], 'function', `${name} must be exported`)
   }
   assert.equal(typeof finkit.computeComposite, 'function')
+})
+
+test('keeps ESM and CommonJS export surfaces identical', () => {
+  assert.deepEqual(Object.keys(finkit).sort(), Object.keys(commonjs).sort())
 })
 
 test('supports configurable streaming MACDEXT MA variants', () => {
