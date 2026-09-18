@@ -39,6 +39,12 @@ struct CrossSectionalFactorRequest {
     timestamps: Vec<i64>,
     symbols: Vec<String>,
     inputs: BTreeMap<String, Vec<Option<f64>>>,
+    /// Explicit cache/provenance namespace for the panel.
+    #[serde(default)]
+    scope: String,
+    /// Caller-owned revision for the panel snapshot.
+    #[serde(default)]
+    data_revision: u64,
 }
 
 /// Execute built-in factors through the compiled Factor plan contract.
@@ -216,11 +222,20 @@ pub fn evaluate_factor_cross_sectional_json(request: &str) -> Result<String, Str
     }
     let input_views: Vec<(&str, &CrossSectionView<'_>)> =
         views.iter().map(|(name, view)| (*name, view)).collect();
-    let result = FactorEngine::new(registry)
-        .evaluate_cross_sectional(target, &input_views)
+    let mut unified = UnifiedOperationEngine::new(registry);
+    let result = unified
+        .execute(OperationRequest::CrossSectionalFactor {
+            name: target,
+            inputs: &input_views,
+        })
         .map_err(|error| error.to_string())?;
+    let values = result
+        .values
+        .get(target)
+        .cloned()
+        .ok_or_else(|| format!("cross-sectional factor did not produce {target}"))?;
     let mut serialized = serde_json::Map::new();
-    serialized.insert(target.to_string(), nullable_series(&result.values));
+    serialized.insert(target.to_string(), nullable_series(&values));
 
     serde_json::to_string(&json!({
         "schema_version": FACTOR_CROSS_SECTIONAL_CONTRACT_SCHEMA_VERSION,
@@ -228,9 +243,11 @@ pub fn evaluate_factor_cross_sectional_json(request: &str) -> Result<String, Str
         "shape": "cross_section",
         "primary": target,
         "target": target,
+        "scope": request.scope,
+        "data_revision": request.data_revision,
         "semantic_identity": [format!("{}@{}", target, descriptor.metadata.version)],
-        "timestamps": result.timestamps,
-        "symbols": result.symbols,
+        "timestamps": request.timestamps,
+        "symbols": request.symbols,
         "values": Value::Object(serialized),
     }))
     .map_err(|error| error.to_string())
@@ -360,6 +377,8 @@ mod tests {
         assert_eq!(payload["shape"], "cross_section");
         assert_eq!(payload["timestamps"], json!([10, 20]));
         assert_eq!(payload["symbols"], json!(["AAA", "BBB", "CCC"]));
+        assert_eq!(payload["scope"], "");
+        assert_eq!(payload["data_revision"], 0);
         assert_eq!(
             payload["values"]["cross_rank"],
             json!([0.0, 1.0, 0.5, 0.0, null, 1.0])
@@ -378,5 +397,22 @@ mod tests {
         assert!(evaluate_factor_cross_sectional_json(request)
             .unwrap_err()
             .contains("invalid cross-sectional input score"));
+    }
+
+    #[test]
+    fn cross_sectional_contract_preserves_scope_and_revision() {
+        let request = r#"{
+            "schema_version":1,
+            "target":"cross_rank",
+            "scope":"panel@1d",
+            "data_revision":11,
+            "timestamps":[10],
+            "symbols":["AAA","BBB"],
+            "inputs":{"score":[1.0,2.0]}
+        }"#;
+        let payload: Value =
+            serde_json::from_str(&evaluate_factor_cross_sectional_json(request).unwrap()).unwrap();
+        assert_eq!(payload["scope"], "panel@1d");
+        assert_eq!(payload["data_revision"], 11);
     }
 }

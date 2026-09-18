@@ -131,6 +131,8 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
 - Factor/Composite 的跨语言批处理 JSON contract 已补充显式 `scope` 与
   `data_revision`，完整执行路径现在通过 `UnifiedOperationEngine`；range/stream
   仍明确走各自的增量/checkpoint 专用执行器，不把不同能力误报为同一模式。
+- 横截面 Factor 批处理入口也已接入统一 dispatcher，并保留时间戳/标的轴与
+  row-major null 语义；本轮 `finkit-ffi-common` 测试为 73 个通过。
 
 ## 6. 后续实施顺序
 
