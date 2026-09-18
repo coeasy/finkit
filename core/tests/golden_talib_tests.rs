@@ -75,6 +75,7 @@ struct Ohlcv {
     volume: Vec<f64>,
     math: Vec<f64>,
     benchmark: Vec<f64>,
+    periods: Vec<f64>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -192,6 +193,9 @@ fn read_fixture_csv(path: &Path) -> Ohlcv {
         .enumerate()
         .map(|(index, value)| value * 0.97 + index as f64 * 0.02)
         .collect();
+    let periods = (0..close.len())
+        .map(|index| (2 + index % 29) as f64)
+        .collect();
 
     Ohlcv {
         open,
@@ -201,6 +205,7 @@ fn read_fixture_csv(path: &Path) -> Ohlcv {
         volume,
         math,
         benchmark,
+        periods,
     }
 }
 
@@ -216,8 +221,23 @@ fn compute_alpha_ta_outputs(
     let volume = &ohlcv.volume;
     let math = &ohlcv.math;
     let benchmark = &ohlcv.benchmark;
+    let periods = &ohlcv.periods;
 
     match indicator {
+        "MA" => {
+            let p = param_usize(params, "timeperiod", 10);
+            HashMap::from([(
+                "ma".to_string(),
+                array_to_vec(
+                    finkit::indicators::overlap::ma(
+                        close,
+                        p,
+                        finkit::indicators::overlap::MaType::Sma,
+                    )
+                    .unwrap(),
+                ),
+            )])
+        }
         "SMA" => {
             let p = param_usize(params, "timeperiod", 10);
             HashMap::from([("sma".to_string(), array_to_vec(sma(close, p).unwrap()))])
@@ -442,6 +462,23 @@ fn compute_alpha_ta_outputs(
                 ("mama".to_string(), array_to_vec(r.mama)),
                 ("fama".to_string(), array_to_vec(r.fama)),
             ])
+        }
+        "MAVP" => {
+            let min_period = param_usize(params, "minperiod", 2);
+            let max_period = param_usize(params, "maxperiod", 30);
+            HashMap::from([(
+                "mavp".to_string(),
+                array_to_vec(
+                    finkit::indicators::overlap::mavp_with_ma_type(
+                        close,
+                        periods,
+                        min_period,
+                        max_period,
+                        finkit::indicators::overlap::MaType::Sma,
+                    )
+                    .unwrap(),
+                ),
+            )])
         }
         "OBV" => HashMap::from([("obv".to_string(), array_to_vec(obv(close, volume).unwrap()))]),
         "MFI" => {

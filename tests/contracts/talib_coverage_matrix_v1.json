@@ -14,7 +14,7 @@
     },
     "numeric_reference": {
       "status": "fixed_golden",
-      "expected_count": 89,
+      "expected_count": 91,
       "indicators": [
         "ACCBANDS",
         "ACOS",
@@ -54,11 +54,13 @@
         "LN",
         "KAMA",
         "LOG10",
+        "MA",
         "MACD",
         "MACDEXT",
         "MACDFIX",
         "MAX",
         "MAMA",
+        "MAVP",
         "MEDPRICE",
         "MFI",
         "MIDPOINT",

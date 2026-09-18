@@ -63,7 +63,7 @@ All outputs are computed on three shared fixtures from `tests/fixtures/`:
 
 ## Output Files
 
-One generated JSON file per indicator (89 total), plus a checked-in profile
+One generated JSON file per indicator (91 total), plus a checked-in profile
 variant fixture for official `matype` contracts:
 
 | File | Purpose |
@@ -75,6 +75,7 @@ Generated indicator files:
 | File | TA-Lib function | Key parameters |
 |------|-----------------|----------------|
 | `sma.json` | SMA | timeperiod=10 |
+| `ma.json` | MA | timeperiod=10, matype=0 (SMA) |
 | `ema.json` | EMA | timeperiod=10 |
 | `rsi.json` | RSI | timeperiod=14 |
 | `macd.json` | MACD | 12, 26, 9 |
@@ -99,6 +100,7 @@ Generated indicator files:
 | `t3.json` | T3 | timeperiod=5, vfactor=0.7 |
 | `kama.json` | KAMA | timeperiod=14 |
 | `mama.json` | MAMA | fastlimit=0.5, slowlimit=0.05 |
+| `mavp.json` | MAVP | minperiod=2, maxperiod=30, matype=0 (SMA) |
 | `obv.json` | OBV | — |
 | `mfi.json` | MFI | timeperiod=14 |
 | `ad.json` | AD | — |

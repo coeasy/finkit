@@ -48,6 +48,12 @@ INDICATORS: dict[str, dict[str, Any]] = {
         "inputs": ("close",),
         "outputs": ("sma",),
     },
+    "MA": {
+        "params": {"timeperiod": 10, "matype": 0},
+        "fn_name": "MA",
+        "inputs": ("close",),
+        "outputs": ("ma",),
+    },
     "EMA": {
         "params": {"timeperiod": 10},
         "fn_name": "EMA",
@@ -272,6 +278,12 @@ INDICATORS: dict[str, dict[str, Any]] = {
         "fn_name": "MAMA",
         "inputs": ("close",),
         "outputs": ("mama", "fama"),
+    },
+    "MAVP": {
+        "params": {"minperiod": 2, "maxperiod": 30, "matype": 0},
+        "fn_name": "MAVP",
+        "inputs": ("close", "periods"),
+        "outputs": ("mavp",),
     },
     "ADD": {
         "params": {},
@@ -713,6 +725,9 @@ def read_ohlcv_csv(path: Path) -> dict[str, list[float]]:
         "math": [0.25 + math.sin(index * 0.11) * 0.2 for index in range(len(rows_close))],
         # Deterministic second price series for cross-series TA-Lib statistics.
         "benchmark": [close * 0.97 + index * 0.02 for index, close in enumerate(rows_close)],
+        # Deterministic variable periods for MAVP. The range exercises both
+        # the minimum and maximum period clamps while keeping fixture alignment.
+        "periods": [float(2 + (index % 29)) for index in range(len(rows_close))],
     }
 
 
