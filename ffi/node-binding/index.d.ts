@@ -1352,6 +1352,10 @@ export declare function factorCatalogJson(): string
 export declare function compositeExecuteJson(requestJson: string): string
 /** Execute built-in factors using the shared compiled-plan JSON contract. */
 export declare function factorExecuteJson(requestJson: string): string
+/** Execute bounded Composite rows and return a portable checkpoint. */
+export declare function compositeStreamExecuteJson(requestJson: string): string
+/** Execute bounded Factor rows and return a portable checkpoint. */
+export declare function factorStreamExecuteJson(requestJson: string): string
 /** Execute one registered operation using the shared JSON request/result contract. */
 export declare function operationExecuteJson(requestJson: string): string
 export interface FormulaMultiResult {

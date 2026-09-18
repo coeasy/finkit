@@ -12,12 +12,14 @@
 //!   evaluation JSON contracts. Statistical logic remains in Rust.
 
 pub mod composite;
+pub mod composite_stream;
 #[cfg(test)]
 mod contract_conformance;
 pub mod error;
 pub mod execute;
 pub mod factor;
 pub mod factor_catalog;
+pub mod factor_stream;
 pub mod formula;
 pub mod golden;
 pub mod leak;
@@ -29,11 +31,15 @@ pub mod talib_catalog;
 pub mod types;
 
 pub use composite::{evaluate_composite_json, COMPOSITE_CONTRACT_SCHEMA_VERSION};
+pub use composite_stream::{
+    evaluate_composite_stream_json, COMPOSITE_STREAM_CONTRACT_SCHEMA_VERSION,
+};
 pub use execute::{
     execute_operation_json, talib_profile_supported, OPERATION_RESULT_SCHEMA_VERSION,
 };
 pub use factor::{evaluate_factor_json, FACTOR_CONTRACT_SCHEMA_VERSION};
 pub use factor_catalog::{factor_catalog, factor_catalog_json, FACTOR_CATALOG_SCHEMA_VERSION};
+pub use factor_stream::{evaluate_factor_stream_json, FACTOR_STREAM_CONTRACT_SCHEMA_VERSION};
 pub use formula::{
     evaluate_formula_json, formula_compatibility_report_json, FORMULA_COMPATIBILITY_SCHEMA_VERSION,
     FORMULA_CONTRACT_SCHEMA_VERSION,

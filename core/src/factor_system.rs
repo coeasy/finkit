@@ -437,10 +437,48 @@ pub struct FactorStreamCheckpoint {
 }
 
 impl FactorStreamCheckpoint {
+    /// Semantic identities of the factor nodes in this checkpoint.
+    #[must_use]
+    pub fn semantic_identity(&self) -> &[String] {
+        &self.semantic_identity
+    }
+
     /// Number of rows represented by this checkpoint.
     #[must_use]
     pub fn rows(&self) -> usize {
         self.row_count
+    }
+
+    /// Retained raw input window.
+    #[must_use]
+    pub fn inputs(&self) -> &BTreeMap<String, Vec<f64>> {
+        &self.inputs
+    }
+
+    /// Retained materialized output window.
+    #[must_use]
+    pub fn outputs(&self) -> &BTreeMap<String, Vec<f64>> {
+        &self.output
+    }
+
+    /// Construct a checkpoint payload for a compiled plan.
+    ///
+    /// The stream validates the semantic identity and buffer shape when the
+    /// checkpoint is restored. This constructor is intended for language
+    /// bindings that carry the checkpoint over a wire format.
+    #[must_use]
+    pub fn from_parts(
+        semantic_identity: Vec<String>,
+        row_count: usize,
+        inputs: BTreeMap<String, Vec<f64>>,
+        output: BTreeMap<String, Vec<f64>>,
+    ) -> Self {
+        Self {
+            semantic_identity,
+            row_count,
+            inputs,
+            output,
+        }
     }
 }
 

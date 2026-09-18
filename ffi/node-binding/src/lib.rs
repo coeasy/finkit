@@ -2446,10 +2446,24 @@ pub fn composite_execute_json(request_json: String) -> Result<String> {
         .map_err(|error| Error::new(Status::InvalidArg, error))
 }
 
+/// Execute bounded Composite rows and return a portable checkpoint.
+#[napi]
+pub fn composite_stream_execute_json(request_json: String) -> Result<String> {
+    finkit_ffi_common::evaluate_composite_stream_json(&request_json)
+        .map_err(|error| Error::new(Status::InvalidArg, error))
+}
+
 /// Execute built-in factors through the shared compiled-plan JSON contract.
 #[napi]
 pub fn factor_execute_json(request_json: String) -> Result<String> {
     finkit_ffi_common::evaluate_factor_json(&request_json)
+        .map_err(|error| Error::new(Status::InvalidArg, error))
+}
+
+/// Execute bounded Factor rows and return a portable checkpoint.
+#[napi]
+pub fn factor_stream_execute_json(request_json: String) -> Result<String> {
+    finkit_ffi_common::evaluate_factor_stream_json(&request_json)
         .map_err(|error| Error::new(Status::InvalidArg, error))
 }
 

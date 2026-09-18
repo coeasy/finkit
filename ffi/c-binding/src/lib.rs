@@ -295,6 +295,33 @@ pub unsafe extern "C" fn ta_factor_execute_json(request: *const c_char) -> *mut 
     })
 }
 
+/// Execute bounded Factor rows and return the portable streaming checkpoint.
+#[no_mangle]
+pub unsafe extern "C" fn ta_factor_stream_execute_json(request: *const c_char) -> *mut c_char {
+    ffi_catch_ptr(|| {
+        let payload = if request.is_null() {
+            serde_json::json!({
+                "schema_version": finkit_ffi_common::FACTOR_STREAM_CONTRACT_SCHEMA_VERSION,
+                "error": "request is null",
+            })
+            .to_string()
+        } else {
+            match unsafe { std::ffi::CStr::from_ptr(request) }.to_str() {
+                Ok(request) => finkit_ffi_common::evaluate_factor_stream_json(request)
+                    .unwrap_or_else(|error| serde_json::json!({
+                        "schema_version": finkit_ffi_common::FACTOR_STREAM_CONTRACT_SCHEMA_VERSION,
+                        "error": error,
+                    }).to_string()),
+                Err(_) => serde_json::json!({
+                    "schema_version": finkit_ffi_common::FACTOR_STREAM_CONTRACT_SCHEMA_VERSION,
+                    "error": "request is not valid UTF-8",
+                }).to_string(),
+            }
+        };
+        CString::new(payload).expect("factor stream result payload contains no NUL").into_raw()
+    })
+}
+
 /// Execute a dependency-aware Composite through the shared JSON contract.
 #[no_mangle]
 pub unsafe extern "C" fn ta_composite_execute_json(request: *const c_char) -> *mut c_char {
@@ -319,6 +346,33 @@ pub unsafe extern "C" fn ta_composite_execute_json(request: *const c_char) -> *m
             }
         };
         CString::new(payload).expect("composite result payload contains no NUL").into_raw()
+    })
+}
+
+/// Execute bounded Composite rows and return the portable streaming checkpoint.
+#[no_mangle]
+pub unsafe extern "C" fn ta_composite_stream_execute_json(request: *const c_char) -> *mut c_char {
+    ffi_catch_ptr(|| {
+        let payload = if request.is_null() {
+            serde_json::json!({
+                "schema_version": finkit_ffi_common::COMPOSITE_STREAM_CONTRACT_SCHEMA_VERSION,
+                "error": "request is null",
+            })
+            .to_string()
+        } else {
+            match unsafe { std::ffi::CStr::from_ptr(request) }.to_str() {
+                Ok(request) => finkit_ffi_common::evaluate_composite_stream_json(request)
+                    .unwrap_or_else(|error| serde_json::json!({
+                        "schema_version": finkit_ffi_common::COMPOSITE_STREAM_CONTRACT_SCHEMA_VERSION,
+                        "error": error,
+                    }).to_string()),
+                Err(_) => serde_json::json!({
+                    "schema_version": finkit_ffi_common::COMPOSITE_STREAM_CONTRACT_SCHEMA_VERSION,
+                    "error": "request is not valid UTF-8",
+                }).to_string(),
+            }
+        };
+        CString::new(payload).expect("composite stream result payload contains no NUL").into_raw()
     })
 }
 
@@ -605,6 +659,35 @@ mod tests {
         assert_eq!(value["primary"], "momentum_5");
         assert_eq!(value["values"]["momentum_5"][5], 5.0);
         unsafe { finkit_free_string(ptr) };
+    }
+
+    #[test]
+    fn stream_json_exports_return_portable_checkpoints() {
+        let factor_request = std::ffi::CString::new(
+            r#"{"schema_version":1,"targets":["momentum_5"],"inputs":{"close":[1.0,2.0,3.0,4.0,5.0,6.0]}}"#,
+        )
+        .unwrap();
+        let factor_ptr = unsafe { ta_factor_stream_execute_json(factor_request.as_ptr()) };
+        assert!(!factor_ptr.is_null());
+        let factor_json = unsafe { CStr::from_ptr(factor_ptr) }.to_str().unwrap();
+        let factor_value: serde_json::Value = serde_json::from_str(factor_json).unwrap();
+        assert_eq!(factor_value["execution"]["mode"], "streaming");
+        assert!(factor_value["checkpoint"]["semantic_identity"].is_array());
+        unsafe { finkit_free_string(factor_ptr) };
+
+        let composite_request = std::ffi::CString::new(
+            r#"{"schema_version":1,"inputs":{"close":[1.0,2.0,3.0]},"definitions":[{"name":"sma3","function":"sma","inputs":["close"],"params":[3]}],"outputs":["sma3"]}"#,
+        )
+        .unwrap();
+        let composite_ptr = unsafe {
+            ta_composite_stream_execute_json(composite_request.as_ptr())
+        };
+        assert!(!composite_ptr.is_null());
+        let composite_json = unsafe { CStr::from_ptr(composite_ptr) }.to_str().unwrap();
+        let composite_value: serde_json::Value = serde_json::from_str(composite_json).unwrap();
+        assert_eq!(composite_value["execution"]["mode"], "streaming");
+        assert!(composite_value["checkpoint"]["signature"].is_number());
+        unsafe { finkit_free_string(composite_ptr) };
     }
 
     #[test]

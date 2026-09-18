@@ -6,7 +6,10 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::{evaluate_composite_json, evaluate_factor_json, evaluate_formula_json};
+    use crate::{
+        evaluate_composite_json, evaluate_composite_stream_json, evaluate_factor_json,
+        evaluate_factor_stream_json, evaluate_formula_json,
+    };
     use serde_json::Value;
     use std::fs;
     use std::path::PathBuf;
@@ -107,6 +110,68 @@ mod tests {
                 assert!((actual - expected).abs() < 1e-12);
             }
         }
+    }
+
+    #[test]
+    fn factor_and_composite_stream_vectors_share_checkpoint_contract() {
+        let fixture = fixture();
+
+        let factor = &fixture["factor_stream"];
+        let factor_first: Value = serde_json::from_str(
+            &evaluate_factor_stream_json(&factor["request"].to_string()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            factor_first["values"]["momentum_5"],
+            factor["expected_primary"]
+        );
+        let factor_second_request = serde_json::json!({
+            "schema_version": 1,
+            "targets": ["momentum_5"],
+            "inputs": factor["next_inputs"].clone(),
+            "checkpoint": factor_first["checkpoint"].clone(),
+        });
+        let factor_second: Value = serde_json::from_str(
+            &evaluate_factor_stream_json(&factor_second_request.to_string()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            factor_second["values"]["momentum_5"],
+            factor["expected_next"]
+        );
+        assert_eq!(
+            factor_second["execution"]["total_rows"],
+            factor["expected_total_rows"]
+        );
+
+        let composite = &fixture["composite_stream"];
+        let composite_first: Value = serde_json::from_str(
+            &evaluate_composite_stream_json(&composite["request"].to_string()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            composite_first["values"]["sma3"],
+            composite["expected_primary"]
+        );
+        let composite_second_request = serde_json::json!({
+            "schema_version": 1,
+            "inputs": composite["next_inputs"].clone(),
+            "definitions": composite["request"]["definitions"].clone(),
+            "outputs": ["sma3"],
+            "checkpoint": composite_first["checkpoint"].clone(),
+        });
+        let composite_second: Value = serde_json::from_str(
+            &evaluate_composite_stream_json(&composite_second_request.to_string()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            composite_second["values"]["sma3"],
+            composite["expected_next"]
+        );
+        assert_eq!(
+            composite_second["execution"]["total_rows"],
+            composite["expected_total_rows"]
+        );
     }
 
     #[test]

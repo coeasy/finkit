@@ -26,6 +26,8 @@ pub struct FactorCatalogEntry {
     pub description: String,
     pub aliases: Vec<String>,
     pub deterministic: bool,
+    /// Whether the factor can use the finite-lookback streaming contract.
+    pub bounded_streaming: bool,
     pub streaming: bool,
     pub incremental: bool,
     pub fixed_lookback: Option<usize>,
@@ -48,6 +50,9 @@ pub fn factor_catalog() -> FactorCatalogEnvelope {
                 description: descriptor.metadata.description,
                 aliases: descriptor.metadata.aliases,
                 deterministic: descriptor.metadata.deterministic,
+                bounded_streaming: descriptor.metadata.incremental
+                    && descriptor.metadata.fixed_lookback.is_some()
+                    && definition.kind == FactorKind::TimeSeries,
                 streaming: descriptor.metadata.streaming,
                 incremental: descriptor.metadata.incremental,
                 fixed_lookback: descriptor.metadata.fixed_lookback,
@@ -98,6 +103,8 @@ mod tests {
             .unwrap();
         assert_eq!(momentum["kind"], "time_series");
         assert_eq!(momentum["direction"], "higher_better");
+        assert_eq!(momentum["bounded_streaming"], true);
+        assert_eq!(momentum["streaming"], false);
         let reversal = factors
             .iter()
             .find(|factor| factor["name"] == "reversal_5")

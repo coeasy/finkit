@@ -994,10 +994,44 @@ pub struct CompositeStreamCheckpoint {
 }
 
 impl CompositeStreamCheckpoint {
+    /// Stable graph signature for the checkpointed plan.
+    #[must_use]
+    pub const fn signature(&self) -> u64 {
+        self.signature
+    }
+
     /// Number of rows represented by this checkpoint.
     #[must_use]
     pub fn rows(&self) -> usize {
         self.row_count
+    }
+
+    /// Retained raw input window.
+    #[must_use]
+    pub fn inputs(&self) -> &BTreeMap<String, Vec<f64>> {
+        &self.inputs
+    }
+
+    /// Retained materialized output window.
+    #[must_use]
+    pub fn outputs(&self) -> &BTreeMap<String, Vec<f64>> {
+        &self.output
+    }
+
+    /// Construct a checkpoint payload for a compiled graph.
+    #[must_use]
+    pub fn from_parts(
+        signature: u64,
+        row_count: usize,
+        inputs: BTreeMap<String, Vec<f64>>,
+        output: BTreeMap<String, Vec<f64>>,
+    ) -> Self {
+        Self {
+            signature,
+            row_count,
+            inputs,
+            output,
+        }
     }
 }
 

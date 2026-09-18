@@ -6,6 +6,8 @@
     "operation_execute_json",
     "composite_execute_json",
     "factor_execute_json",
+    "composite_stream_execute_json",
+    "factor_stream_execute_json",
     "formula_eval_contract_json",
     "formula_compatibility_report_json"
   ],
@@ -17,6 +19,8 @@
         {"path": "ffi/ffi-common/src/execute.rs", "marker": "pub fn execute_operation_json"},
         {"path": "ffi/ffi-common/src/composite.rs", "marker": "pub fn evaluate_composite_json"},
         {"path": "ffi/ffi-common/src/factor.rs", "marker": "pub fn evaluate_factor_json"},
+        {"path": "ffi/ffi-common/src/composite_stream.rs", "marker": "pub fn evaluate_composite_stream_json"},
+        {"path": "ffi/ffi-common/src/factor_stream.rs", "marker": "pub fn evaluate_factor_stream_json"},
         {"path": "ffi/ffi-common/src/formula.rs", "marker": "pub fn evaluate_formula_json"},
         {"path": "ffi/ffi-common/src/formula.rs", "marker": "pub fn formula_compatibility_report_json"}
       ]
@@ -28,6 +32,8 @@
         {"path": "ffi/python-binding/src/lib.rs", "marker": "fn operation_execute_json"},
         {"path": "ffi/python-binding/src/lib.rs", "marker": "fn composite_execute_json"},
         {"path": "ffi/python-binding/src/lib.rs", "marker": "fn factor_execute_json"},
+        {"path": "ffi/python-binding/src/lib.rs", "marker": "fn composite_stream_execute_json"},
+        {"path": "ffi/python-binding/src/lib.rs", "marker": "fn factor_stream_execute_json"},
         {"path": "ffi/python-binding/src/lib.rs", "marker": "pub fn formula_eval_contract_json"},
         {"path": "ffi/python-binding/src/lib.rs", "marker": "pub fn formula_compatibility_report_json"}
       ]
@@ -39,6 +45,8 @@
         {"path": "ffi/go-binding/go/ta/ta.go", "marker": "func OperationExecuteJSON"},
         {"path": "ffi/go-binding/go/ta/ta.go", "marker": "func CompositeExecuteJSON"},
         {"path": "ffi/go-binding/go/ta/ta.go", "marker": "func FactorExecuteJSON"},
+        {"path": "ffi/go-binding/go/ta/ta.go", "marker": "func CompositeStreamExecuteJSON"},
+        {"path": "ffi/go-binding/go/ta/ta.go", "marker": "func FactorStreamExecuteJSON"},
         {"path": "ffi/go-binding/go/ta/ta.go", "marker": "func FormulaEvalContractJSON"},
         {"path": "ffi/go-binding/go/ta/ta.go", "marker": "func FormulaCompatibilityReportJSON"}
       ]
@@ -50,6 +58,8 @@
         {"path": "ffi/java-binding/java/src/main/java/com/finkit/Indicators.java", "marker": "operationExecuteJson"},
         {"path": "ffi/java-binding/java/src/main/java/com/finkit/Indicators.java", "marker": "compositeExecuteJson"},
         {"path": "ffi/java-binding/java/src/main/java/com/finkit/Indicators.java", "marker": "factorExecuteJson"},
+        {"path": "ffi/java-binding/java/src/main/java/com/finkit/Indicators.java", "marker": "compositeStreamExecuteJson"},
+        {"path": "ffi/java-binding/java/src/main/java/com/finkit/Indicators.java", "marker": "factorStreamExecuteJson"},
         {"path": "ffi/java-binding/java/src/main/java/com/finkit/Indicators.java", "marker": "formulaEvalContractJson"},
         {"path": "ffi/java-binding/java/src/main/java/com/finkit/Indicators.java", "marker": "formulaCompatibilityReportJson"}
       ]
@@ -61,6 +71,8 @@
         {"path": "ffi/dotnet-binding/src/Finkit/Indicators.cs", "marker": "OperationExecuteJson"},
         {"path": "ffi/dotnet-binding/src/Finkit/Indicators.cs", "marker": "CompositeExecuteJson"},
         {"path": "ffi/dotnet-binding/src/Finkit/Indicators.cs", "marker": "FactorExecuteJson"},
+        {"path": "ffi/dotnet-binding/src/Finkit/Indicators.cs", "marker": "CompositeStreamExecuteJson"},
+        {"path": "ffi/dotnet-binding/src/Finkit/Indicators.cs", "marker": "FactorStreamExecuteJson"},
         {"path": "ffi/dotnet-binding/src/Finkit/Indicators.cs", "marker": "FormulaEvalContractJson"},
         {"path": "ffi/dotnet-binding/src/Finkit/Indicators.cs", "marker": "FormulaCompatibilityReportJson"}
       ]
@@ -72,6 +84,8 @@
         {"path": "ffi/c-binding/include/finkit.h", "marker": "ta_operation_execute_json"},
         {"path": "ffi/c-binding/include/finkit.h", "marker": "ta_composite_execute_json"},
         {"path": "ffi/c-binding/include/finkit.h", "marker": "ta_factor_execute_json"},
+        {"path": "ffi/c-binding/include/finkit.h", "marker": "ta_composite_stream_execute_json"},
+        {"path": "ffi/c-binding/include/finkit.h", "marker": "ta_factor_stream_execute_json"},
         {"path": "ffi/c-binding/include/finkit.h", "marker": "ta_formula_eval_contract_json"},
         {"path": "ffi/c-binding/include/finkit.h", "marker": "ta_formula_compatibility_report_json"}
       ]
@@ -83,6 +97,8 @@
         {"path": "ffi/c-binding/include/finkit.hpp", "marker": "operation_execute_json"},
         {"path": "ffi/c-binding/include/finkit.hpp", "marker": "composite_execute_json"},
         {"path": "ffi/c-binding/include/finkit.hpp", "marker": "factor_execute_json"},
+        {"path": "ffi/c-binding/include/finkit.hpp", "marker": "composite_stream_execute_json"},
+        {"path": "ffi/c-binding/include/finkit.hpp", "marker": "factor_stream_execute_json"},
         {"path": "ffi/c-binding/include/finkit.hpp", "marker": "formula_eval_contract_json"},
         {"path": "ffi/c-binding/include/finkit.hpp", "marker": "formula_compatibility_report_json"}
       ]
@@ -94,6 +110,8 @@
         {"path": "ffi/node-binding/index.d.ts", "marker": "operationExecuteJson"},
         {"path": "ffi/node-binding/index.d.ts", "marker": "compositeExecuteJson"},
         {"path": "ffi/node-binding/index.d.ts", "marker": "factorExecuteJson"},
+        {"path": "ffi/node-binding/index.d.ts", "marker": "compositeStreamExecuteJson"},
+        {"path": "ffi/node-binding/index.d.ts", "marker": "factorStreamExecuteJson"},
         {"path": "ffi/node-binding/index.d.ts", "marker": "formulaEvalContractJson"},
         {"path": "ffi/node-binding/index.d.ts", "marker": "formulaCompatibilityReport"}
       ]

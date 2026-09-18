@@ -855,8 +855,14 @@ public final class Indicators {
     /** Executes a dependency-aware Composite through the shared JSON contract. */
     public static native String compositeExecuteJson(String requestJson);
 
+    /** Executes bounded Composite rows and returns a portable checkpoint. */
+    public static native String compositeStreamExecuteJson(String requestJson);
+
     /** Executes built-in factors through the shared compiled-plan JSON contract. */
     public static native String factorExecuteJson(String requestJson);
+
+    /** Executes bounded Factor rows and returns a portable checkpoint. */
+    public static native String factorStreamExecuteJson(String requestJson);
 
     /**
      * Evaluates a formula through the language-neutral versioned JSON contract.

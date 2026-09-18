@@ -6329,10 +6329,24 @@ fn composite_execute_json(request_json: &str) -> PyResult<String> {
         .map_err(pyo3::exceptions::PyValueError::new_err)
 }
 
+/// Execute bounded Composite rows and return a portable checkpoint.
+#[pyfunction]
+fn composite_stream_execute_json(request_json: &str) -> PyResult<String> {
+    finkit_ffi_common::evaluate_composite_stream_json(request_json)
+        .map_err(pyo3::exceptions::PyValueError::new_err)
+}
+
 /// Execute built-in factors through the shared compiled-plan JSON contract.
 #[pyfunction]
 fn factor_execute_json(request_json: &str) -> PyResult<String> {
     finkit_ffi_common::evaluate_factor_json(request_json)
+        .map_err(pyo3::exceptions::PyValueError::new_err)
+}
+
+/// Execute bounded Factor rows and return a portable checkpoint.
+#[pyfunction]
+fn factor_stream_execute_json(request_json: &str) -> PyResult<String> {
+    finkit_ffi_common::evaluate_factor_stream_json(request_json)
         .map_err(pyo3::exceptions::PyValueError::new_err)
 }
 
@@ -6342,7 +6356,9 @@ fn finkit(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(factor_catalog_json, m)?)?;
     m.add_function(wrap_pyfunction!(operation_execute_json, m)?)?;
     m.add_function(wrap_pyfunction!(composite_execute_json, m)?)?;
+    m.add_function(wrap_pyfunction!(composite_stream_execute_json, m)?)?;
     m.add_function(wrap_pyfunction!(factor_execute_json, m)?)?;
+    m.add_function(wrap_pyfunction!(factor_stream_execute_json, m)?)?;
     m.add_class::<PyKlineData>()?;
     m.add_class::<PyKlineChart>()?;
     m.add_function(wrap_pyfunction!(chan_analyze, m)?)?;

@@ -186,7 +186,13 @@ public static class Indicators
     private static extern IntPtr ta_composite_execute_json(string requestJson);
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern IntPtr ta_composite_stream_execute_json(string requestJson);
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern IntPtr ta_factor_execute_json(string requestJson);
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern IntPtr ta_factor_stream_execute_json(string requestJson);
 
     // ========================================================================
     // Helper Methods
@@ -277,6 +283,38 @@ public static class Indicators
         IntPtr resultPtr = ta_factor_execute_json(requestJson);
         if (resultPtr == IntPtr.Zero)
             throw new InvalidOperationException("Factor execution returned null");
+        try
+        {
+            return Marshal.PtrToStringUTF8(resultPtr) ?? "";
+        }
+        finally
+        {
+            ta_free_string(resultPtr);
+        }
+    }
+
+    /// <summary>Executes bounded Factor rows and returns a portable checkpoint.</summary>
+    public static string FactorStreamExecuteJson(string requestJson)
+    {
+        IntPtr resultPtr = ta_factor_stream_execute_json(requestJson);
+        if (resultPtr == IntPtr.Zero)
+            throw new InvalidOperationException("Factor stream execution returned null");
+        try
+        {
+            return Marshal.PtrToStringUTF8(resultPtr) ?? "";
+        }
+        finally
+        {
+            ta_free_string(resultPtr);
+        }
+    }
+
+    /// <summary>Executes bounded Composite rows and returns a portable checkpoint.</summary>
+    public static string CompositeStreamExecuteJson(string requestJson)
+    {
+        IntPtr resultPtr = ta_composite_stream_execute_json(requestJson);
+        if (resultPtr == IntPtr.Zero)
+            throw new InvalidOperationException("Composite stream execution returned null");
         try
         {
             return Marshal.PtrToStringUTF8(resultPtr) ?? "";

@@ -61,5 +61,30 @@
       "input_dirty": [4, 5],
       "affected": [4, 6]
     }
+  },
+  "factor_stream": {
+    "request": {
+      "schema_version": 1,
+      "targets": ["momentum_5"],
+      "inputs": {"close": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]}
+    },
+    "next_inputs": {"close": [7.0, 8.0]},
+    "expected_primary": [null, null, null, null, null, 5.0],
+    "expected_next": [2.5, 1.6666666666666663],
+    "expected_total_rows": 8
+  },
+  "composite_stream": {
+    "request": {
+      "schema_version": 1,
+      "inputs": {"close": [1.0, 2.0, 3.0, 4.0]},
+      "definitions": [
+        {"name": "sma3", "function": "sma", "inputs": ["close"], "params": [3]}
+      ],
+      "outputs": ["sma3"]
+    },
+    "next_inputs": {"close": [5.0, 6.0]},
+    "expected_primary": [null, null, 2.0, 3.0],
+    "expected_next": [4.0, 5.0],
+    "expected_total_rows": 6
   }
 }
