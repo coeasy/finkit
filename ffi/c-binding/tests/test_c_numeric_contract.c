@@ -215,19 +215,27 @@ static int check_vector(const FinkitNumericContractVector *vector) {
     int ok = 0;
 
     if (request == NULL) {
+        fprintf(stderr, "::error title=C numeric contract::%s: failed to allocate request\n",
+                vector->operation);
         return 0;
     }
     response = ta_operation_execute_json(request);
     free(request);
     if (response == NULL) {
+        fprintf(stderr, "::error title=C numeric contract::%s: null response\n",
+                vector->operation);
         return 0;
     }
     if (strstr(response, "\"error\"") != NULL) {
+        fprintf(stderr, "::error title=C numeric contract::%s: operation returned an error\n",
+                vector->operation);
         finkit_free_string(response);
         return 0;
     }
     values_marker = strstr(response, "\"values\":");
     if (values_marker == NULL) {
+        fprintf(stderr, "::error title=C numeric contract::%s: missing values envelope\n",
+                vector->operation);
         finkit_free_string(response);
         return 0;
     }
@@ -236,6 +244,8 @@ static int check_vector(const FinkitNumericContractVector *vector) {
         !parse_object_arrays(values_json, &actual, &actual_count) ||
         !parse_object_arrays(vector->expected_json, &expected, &expected_count) ||
         actual_count != expected_count) {
+        fprintf(stderr, "::error title=C numeric contract::%s: invalid output JSON or output count mismatch\n",
+                vector->operation);
         free_outputs(actual, actual_count);
         free_outputs(expected, expected_count);
         finkit_free_string(response);
@@ -248,6 +258,9 @@ static int check_vector(const FinkitNumericContractVector *vector) {
             actual, actual_count, expected[output_index].name);
         size_t point;
         if (got == NULL || got->length != expected[output_index].length) {
+            fprintf(stderr,
+                    "::error title=C numeric contract::%s: missing or length-mismatched output %s\n",
+                    vector->operation, expected[output_index].name);
             ok = 0;
             break;
         }
@@ -257,6 +270,11 @@ static int check_vector(const FinkitNumericContractVector *vector) {
             const double limit = vector->atol + vector->rtol * fabs(want.value);
             if (want.is_null != value.is_null ||
                 (!want.is_null && fabs(value.value - want.value) > limit)) {
+                fprintf(stderr,
+                        "::error title=C numeric contract::%s/%s[%zu]: expected %s%.17g got %s%.17g\n",
+                        vector->operation, expected[output_index].name, point,
+                        want.is_null ? "null" : "", want.value,
+                        value.is_null ? "null" : "", value.value);
                 ok = 0;
                 break;
             }

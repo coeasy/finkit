@@ -131,7 +131,9 @@ def main() -> int:
 
     print("ARCH_V3", json.dumps(metrics, ensure_ascii=False))
     if failures:
-        raise SystemExit("architecture v3 release gate failed: " + "; ".join(failures))
+        message = "architecture v3 release gate failed: " + "; ".join(failures)
+        print(f"::error title=TA-Lib architecture v3 gate::{message}")
+        raise SystemExit(message)
     return 0
 
 

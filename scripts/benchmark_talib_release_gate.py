@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Installed-wheel performance/parity gate against TA-Lib 0.7.1.
+"""Installed-wheel performance/parity gate against TA-Lib Python 0.8.0.
 
 This benchmark intentionally measures the public Python package boundary.  It
 catches regressions that native Rust Criterion runs cannot see (PyO3 container

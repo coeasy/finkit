@@ -154,7 +154,12 @@ jobs:
       - run: cargo build -p finkit-ffi --release --locked
       - run: cmake -S ffi/c-binding -B build/cpp -DFINKIT_AUTO_BUILD_RS=OFF -DFINKIT_BUILD_TESTS=ON -DFINKIT_BUILD_EXAMPLES=ON -DCMAKE_BUILD_TYPE=Release
       - run: cmake --build build/cpp --config Release --parallel 2
-      - run: ctest --test-dir build/cpp -C Release --output-on-failure
+      - name: Run C++ indicator and catalog tests
+        run: ctest --test-dir build/cpp -C Release -R '^test_indicators$' --output-on-failure
+      - name: Run C API smoke tests
+        run: ctest --test-dir build/cpp -C Release -R '^test_c_api$' --output-on-failure
+      - name: Run C numeric contract tests
+        run: ctest --test-dir build/cpp -C Release -R '^test_c_numeric_contract$' --output-on-failure
       - run: cmake --install build/cpp --config Release --prefix dist/cpp/linux-x86_64
       - name: Verify and package C/C++ SDK
         shell: bash

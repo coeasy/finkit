@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Extended installed-package benchmark: Finkit 0.1.4 vs TA-Lib 0.7.1.
+"""Extended installed-package benchmark: Finkit 0.1.15 vs TA-Lib 0.8.0.
 
 Scope:
 - broad public Python indicator API comparison across 10K/100K/1M bars;
@@ -224,7 +224,7 @@ def main() -> int:
         "warmups": WARMUPS,
     }
     print("ENV", json.dumps(env, ensure_ascii=False))
-    if env["finkit"] != "0.1.4" or env["talib_python"] != "0.7.1":
+    if env["finkit"] != "0.1.15" or env["talib_python"] != "0.8.0":
         raise SystemExit(f"unexpected versions: {env}")
 
     indicator_rows: list[dict[str, Any]] = []
@@ -299,7 +299,7 @@ def main() -> int:
     (out_dir / "python-vs-talib-extended.json").write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     lines = [
-        "# Finkit 0.1.4 vs TA-Lib 0.7.1 — Extended installed-package benchmark",
+        "# Finkit 0.1.15 vs TA-Lib 0.8.0 — Extended installed-package benchmark",
         "",
         f"- Indicator observations: **{len(ok_ind)}**, Finkit wins: **{ind_wins}**",
         f"- Indicator geometric mean (TA-Lib/Finkit): **{gm_ind:.4f}x** (TA-Lib about **{1/gm_ind:.1f}x faster** at the public Python layer)",

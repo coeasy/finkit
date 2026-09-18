@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fair installed-package benchmark: Finkit v0.1.4 vs TA-Lib 0.7.1.
+"""Fair installed-package benchmark: Finkit v0.1.15 vs TA-Lib 0.8.0.
 
 Measures end-user Python API latency on identical contiguous float64 NumPy inputs.
 Both libraries allocate/return their normal public outputs.  Results are medians of
@@ -138,10 +138,10 @@ def main() -> int:
     print("TA-Lib Python:", t_version)
     print("TA-Lib core:", ta_core)
 
-    if f_version != "0.1.4":
-        raise SystemExit(f"expected installed Finkit 0.1.4, got {f_version}")
-    if t_version != "0.7.1":
-        raise SystemExit(f"expected installed TA-Lib 0.7.1, got {t_version}")
+    if f_version != "0.1.15":
+        raise SystemExit(f"expected installed Finkit 0.1.15, got {f_version}")
+    if t_version != "0.8.0":
+        raise SystemExit(f"expected installed TA-Lib 0.8.0, got {t_version}")
 
     rows: list[dict[str, Any]] = []
     for n in SIZES:
@@ -215,12 +215,12 @@ def main() -> int:
     }
     out_dir = Path("dist/bench")
     out_dir.mkdir(parents=True, exist_ok=True)
-    json_path = out_dir / "python-vs-talib-0.7.1.json"
-    md_path = out_dir / "python-vs-talib-0.7.1.md"
+    json_path = out_dir / "python-vs-talib-0.8.0.json"
+    md_path = out_dir / "python-vs-talib-0.8.0.md"
     json_path.write_text(json.dumps(out, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     lines = [
-        "# Finkit 0.1.4 vs TA-Lib 0.7.1 — installed Python packages",
+        "# Finkit 0.1.15 vs TA-Lib 0.8.0 — installed Python packages",
         "",
         f"- Finkit faster in **{wins}/{len(rows)}** cases",
         f"- Geometric-mean speedup (TA-Lib/Finkit): **{geo:.3f}x**",

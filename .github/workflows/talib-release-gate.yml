@@ -39,7 +39,7 @@ jobs:
       - name: Install benchmark toolchain
         run: |
           python -m pip install --upgrade pip
-          python -m pip install 'maturin>=1.7,<2' 'numpy==2.3.3' 'TA-Lib==0.7.1' pytest
+          python -m pip install 'maturin>=1.7,<2' 'numpy==2.3.3' 'TA-Lib==0.8.0' pytest
       - name: Prepare canonical NumPy-direct Python bindings
         run: |
           python scripts/prepare_python_hot_bindings.py
