@@ -1,6 +1,22 @@
 use crate::error::{Result, TaError};
+use crate::math::kernels::{rolling_mean_into, rolling_sample_variance_into, KernelCompatError};
 use crate::math::rank::fractional_ranks;
 use ndarray::Array1;
+
+fn map_kernel_error(error: KernelCompatError) -> TaError {
+    match error {
+        KernelCompatError::InvalidWindow(window) => TaError::InvalidParameter {
+            name: "window".to_string(),
+            constraint: format!("greater than 0 (got {window})"),
+        },
+        KernelCompatError::LengthMismatch { input, output } => TaError::ComputationError {
+            message: format!("rolling kernel length mismatch: input={input}, output={output}"),
+        },
+        KernelCompatError::OhlcLengthMismatch => TaError::ComputationError {
+            message: "rolling statistics received mismatched OHLC lengths".to_string(),
+        },
+    }
+}
 
 /// Calculate arithmetic mean
 ///
@@ -215,24 +231,9 @@ pub fn rolling_mean(data: &[f64], window: usize) -> Result<Array1<f64>> {
         });
     }
 
-    let len = data.len();
-    let mut output = Array1::from_elem(len, f64::NAN);
-
-    if window > len {
-        return Ok(output);
-    }
-
-    // Compute initial window sum
-    let mut sum: f64 = data[..window].iter().sum();
-    output[window - 1] = sum / window as f64;
-
-    // Incremental sliding window: O(n) instead of O(n*window)
-    for i in window..len {
-        sum += data[i] - data[i - window];
-        output[i] = sum / window as f64;
-    }
-
-    Ok(output)
+    let mut output = vec![f64::NAN; data.len()];
+    rolling_mean_into(data, window, &mut output).map_err(map_kernel_error)?;
+    Ok(Array1::from_vec(output))
 }
 
 /// Calculate rolling variance over a window
@@ -264,32 +265,9 @@ pub fn rolling_variance(data: &[f64], window: usize) -> Result<Array1<f64>> {
         });
     }
 
-    let len = data.len();
-    let mut output = Array1::from_elem(len, f64::NAN);
-
-    if window > len {
-        return Ok(output);
-    }
-
-    let inv_w = 1.0 / window as f64;
-    let inv_w_minus_1 = 1.0 / (window as f64 - 1.0);
-
-    let mut sum: f64 = data[..window].iter().sum();
-    let mut sum_sq: f64 = data[..window].iter().map(|x| x * x).sum();
-    let mean = sum * inv_w;
-    output[window - 1] = (sum_sq - sum * mean) * inv_w_minus_1;
-
-    for i in window..len {
-        let old = data[i - window];
-        let new = data[i];
-        sum += new - old;
-        sum_sq += new * new - old * old;
-        let m = sum * inv_w;
-        let var = (sum_sq - sum * m) * inv_w_minus_1;
-        output[i] = var.max(0.0);
-    }
-
-    Ok(output)
+    let mut output = vec![f64::NAN; data.len()];
+    rolling_sample_variance_into(data, window, &mut output).map_err(map_kernel_error)?;
+    Ok(Array1::from_vec(output))
 }
 
 /// Calculate rolling standard deviation over a window
@@ -819,6 +797,16 @@ mod tests {
         assert_relative_eq!(result[2], 2.0, epsilon = 1e-10);
         assert_relative_eq!(result[3], 3.0, epsilon = 1e-10);
         assert_relative_eq!(result[4], 4.0, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn rolling_variance_is_stable_for_large_baseline_values() {
+        let data: Vec<f64> = (0..32).map(|index| 1.0e12 + index as f64).collect();
+        let result = rolling_variance(&data, 3).unwrap();
+
+        for value in result.iter().skip(2) {
+            assert_relative_eq!(*value, 1.0, epsilon = 1e-10);
+        }
     }
 
     #[test]

@@ -81,6 +81,19 @@ pub fn sma_into(input: &[f64], window: usize, output: &mut [f64]) -> Result<(), 
     Ok(())
 }
 
+/// Legacy-aligned rolling mean using the canonical O(1) moving-average state.
+///
+/// This named entry point makes the statistical meaning explicit at call
+/// sites while keeping SMA and rolling mean on the same implementation path.
+#[inline]
+pub fn rolling_mean_into(
+    input: &[f64],
+    window: usize,
+    output: &mut [f64],
+) -> Result<(), KernelCompatError> {
+    sma_into(input, window, output)
+}
+
 /// Legacy-aligned WMA using the canonical O(1) weighted recurrence.
 pub fn wma_into(input: &[f64], window: usize, output: &mut [f64]) -> Result<(), KernelCompatError> {
     validate(input, window, output)?;
