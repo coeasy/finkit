@@ -1348,6 +1348,8 @@ export declare function formulaEvalContractJson(source: string, dialect: string,
 export declare function formulaEvalTemporalContractJson(requestJson: string): string
 /** Execute a Formula independently for each symbol/timeframe frame. */
 export declare function formulaEvalPanelContractJson(requestJson: string): string
+/** Execute explicit CS_* Formula functions across each symbol row. */
+export declare function formulaEvalCrossSectionalContractJson(requestJson: string): string
 /** Execute a stateful Formula stream through the shared JSON contract. */
 export declare function formulaStreamExecuteJson(requestJson: string): string
 /** Return the versioned, language-neutral operation catalog. */

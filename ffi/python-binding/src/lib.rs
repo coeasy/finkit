@@ -1963,6 +1963,14 @@ pub fn formula_eval_panel_contract_json(request_json: &str) -> PyResult<String> 
         .map_err(pyo3::exceptions::PyValueError::new_err)
 }
 
+/// Evaluate a Formula across every timestamp row of a symbol panel.
+#[pyfunction]
+#[cfg(feature = "formula")]
+pub fn formula_eval_cross_sectional_contract_json(request_json: &str) -> PyResult<String> {
+    finkit_ffi_common::evaluate_formula_cross_sectional_json(request_json)
+        .map_err(pyo3::exceptions::PyValueError::new_err)
+}
+
 /// Return the shared versioned Formula compatibility report for a terminal.
 #[pyfunction]
 #[pyo3(signature = (source, terminal = "finkit"))]
@@ -6554,6 +6562,10 @@ fn finkit(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.add_function(wrap_pyfunction!(formula_eval_contract_json, m)?)?;
         m.add_function(wrap_pyfunction!(formula_eval_temporal_contract_json, m)?)?;
         m.add_function(wrap_pyfunction!(formula_eval_panel_contract_json, m)?)?;
+        m.add_function(wrap_pyfunction!(
+            formula_eval_cross_sectional_contract_json,
+            m
+        )?)?;
         m.add_function(wrap_pyfunction!(formula_compatibility_report_json, m)?)?;
         m.add_function(wrap_pyfunction!(formula_stream_execute_json, m)?)?;
         m.add_function(wrap_pyfunction!(formula_eval_bytecode, m)?)?;

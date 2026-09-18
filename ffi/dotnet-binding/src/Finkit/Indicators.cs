@@ -162,6 +162,9 @@ public static class Indicators
     private static extern IntPtr ta_formula_eval_panel_contract_json(string requestJson);
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern IntPtr ta_formula_eval_cross_sectional_contract_json(string requestJson);
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern IntPtr ta_formula_stream_execute_json(string requestJson);
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
@@ -406,6 +409,22 @@ public static class Indicators
         IntPtr resultPtr = ta_formula_eval_panel_contract_json(requestJson);
         if (resultPtr == IntPtr.Zero)
             throw new InvalidOperationException("Formula panel contract returned null");
+        try
+        {
+            return Marshal.PtrToStringUTF8(resultPtr) ?? "";
+        }
+        finally
+        {
+            ta_free_string(resultPtr);
+        }
+    }
+
+    /// <summary>Executes explicit CS_* Formula functions across each symbol row.</summary>
+    public static string FormulaEvalCrossSectionalContractJson(string requestJson)
+    {
+        IntPtr resultPtr = ta_formula_eval_cross_sectional_contract_json(requestJson);
+        if (resultPtr == IntPtr.Zero)
+            throw new InvalidOperationException("Cross-sectional Formula contract returned null");
         try
         {
             return Marshal.PtrToStringUTF8(resultPtr) ?? "";

@@ -44,6 +44,86 @@ fn extract_n(args: &[Array1<f64>], idx: usize, name: &str) -> Result<usize, Form
 }
 
 #[inline]
+fn cross_sectional_one_arg(
+    name: &str,
+    args: &[Array1<f64>],
+    operation: impl FnOnce(ndarray::ArrayView1<'_, f64>) -> Array1<f64>,
+) -> Result<Array1<f64>, FormulaError> {
+    ensure_args_len(name, args, 1)?;
+    Ok(operation(args[0].view()))
+}
+
+#[inline]
+fn fn_cs_rank(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+    let result = cross_sectional_one_arg("CS_RANK", args, crate::formula::ops::percentile_rank)?;
+    if result.len() != ctx.data_len {
+        return Err(FormulaError::InvalidParameter(
+            "CS_RANK input length does not match formula context".to_string(),
+        ));
+    }
+    Ok(result)
+}
+
+#[inline]
+fn fn_cs_zscore(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+    let result = cross_sectional_one_arg("CS_ZSCORE", args, crate::formula::ops::zscore)?;
+    if result.len() != ctx.data_len {
+        return Err(FormulaError::InvalidParameter(
+            "CS_ZSCORE input length does not match formula context".to_string(),
+        ));
+    }
+    Ok(result)
+}
+
+#[inline]
+fn fn_cs_scale(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+    ensure_args_len("CS_SCALE", args, 2)?;
+    let k = args[1].first().copied().ok_or_else(|| {
+        FormulaError::InvalidParameter("CS_SCALE requires a scalar multiplier".to_string())
+    })?;
+    let result = crate::formula::ops::scale(args[0].view(), k);
+    if result.len() != ctx.data_len {
+        return Err(FormulaError::InvalidParameter(
+            "CS_SCALE input length does not match formula context".to_string(),
+        ));
+    }
+    Ok(result)
+}
+
+#[inline]
+fn fn_cs_indneutralize(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
+    ensure_args_len("CS_INDNEUTRALIZE", args, 2)?;
+    let result = crate::formula::ops::indneutralize(args[0].view(), args[1].view());
+    if result.len() != ctx.data_len {
+        return Err(FormulaError::InvalidParameter(
+            "CS_INDNEUTRALIZE input length does not match formula context".to_string(),
+        ));
+    }
+    Ok(result)
+}
+
+#[inline]
+fn fn_cs_signed_power(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
+    ensure_args_len("CS_SIGNED_POWER", args, 2)?;
+    let exponent = args[1].first().copied().ok_or_else(|| {
+        FormulaError::InvalidParameter("CS_SIGNED_POWER requires a scalar exponent".to_string())
+    })?;
+    let result = crate::formula::ops::signed_power(args[0].view(), exponent);
+    if result.len() != ctx.data_len {
+        return Err(FormulaError::InvalidParameter(
+            "CS_SIGNED_POWER input length does not match formula context".to_string(),
+        ));
+    }
+    Ok(result)
+}
+
+#[inline]
 fn optional_f64(args: &[Array1<f64>], idx: usize, default: f64) -> f64 {
     args.get(idx)
         .and_then(|arg| arg.get(0))
@@ -437,6 +517,20 @@ pub fn get_builtin_functions() -> HashMap<String, FormulaFn> {
         map.insert(name, function);
     }
 
+    // Explicit cross-sectional transforms. These names are intentionally
+    // separate from the legacy time-window RANK(X, N) contract.
+    map.insert("CS_RANK".to_string(), fn_cs_rank as FormulaFn);
+    map.insert("CS_ZSCORE".to_string(), fn_cs_zscore as FormulaFn);
+    map.insert("CS_SCALE".to_string(), fn_cs_scale as FormulaFn);
+    map.insert(
+        "CS_INDNEUTRALIZE".to_string(),
+        fn_cs_indneutralize as FormulaFn,
+    );
+    map.insert(
+        "CS_SIGNED_POWER".to_string(),
+        fn_cs_signed_power as FormulaFn,
+    );
+
     map.insert("ATR".to_string(), canonical_atr as FormulaFn);
     map.insert("NATR".to_string(), canonical_natr as FormulaFn);
     map.insert("TRANGE".to_string(), canonical_trange as FormulaFn);
@@ -537,5 +631,34 @@ mod tests {
         let result = functions["GOLDEN_CROSS"](&ctx, &args).unwrap();
         assert_eq!(result.len(), 32);
         assert!(result.iter().all(|value| *value == 0.0));
+    }
+
+    #[test]
+    fn explicit_cross_sectional_functions_are_registered_without_changing_rank() {
+        let functions = get_builtin_functions();
+        for name in [
+            "CS_RANK",
+            "CS_ZSCORE",
+            "CS_SCALE",
+            "CS_INDNEUTRALIZE",
+            "CS_SIGNED_POWER",
+        ] {
+            assert!(functions.contains_key(name), "missing function {name}");
+        }
+        assert!(functions.contains_key("RANK"));
+
+        let ctx = context(3);
+        let score = Array1::from_vec(vec![1.0, 3.0, 2.0]);
+        let rank = functions["CS_RANK"](&ctx, std::slice::from_ref(&score)).unwrap();
+        assert_eq!(rank.to_vec(), vec![0.0, 1.0, 0.5]);
+        let power = functions["CS_SIGNED_POWER"](
+            &ctx,
+            &[
+                Array1::from_vec(vec![-2.0, 1.0, 3.0]),
+                Array1::from_elem(3, 2.0),
+            ],
+        )
+        .unwrap();
+        assert_eq!(power.to_vec(), vec![-4.0, 1.0, 9.0]);
     }
 }

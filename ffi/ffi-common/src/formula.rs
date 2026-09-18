@@ -26,6 +26,9 @@ pub const FORMULA_TEMPORAL_CONTRACT_SCHEMA_VERSION: u16 = 1;
 /// Version of the explicit multi-symbol / multi-timeframe Formula contract.
 pub const FORMULA_PANEL_CONTRACT_SCHEMA_VERSION: u16 = 1;
 
+/// Version of the row-major cross-sectional Formula contract.
+pub const FORMULA_CROSS_SECTIONAL_CONTRACT_SCHEMA_VERSION: u16 = 1;
+
 /// Version of the language-neutral formula compatibility report envelope.
 pub const FORMULA_COMPATIBILITY_SCHEMA_VERSION: u16 = 1;
 
@@ -142,6 +145,16 @@ struct FormulaPanelRequest {
     source: String,
     dialect: String,
     frames: Vec<TemporalFrameRequest>,
+}
+
+#[derive(Debug, Deserialize)]
+struct FormulaCrossSectionalRequest {
+    schema_version: u16,
+    source: String,
+    dialect: String,
+    timestamps: Vec<i64>,
+    symbols: Vec<String>,
+    inputs: BTreeMap<String, Vec<Option<f64>>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -353,6 +366,153 @@ pub fn evaluate_formula_panel_json(request: &str) -> Result<String, String> {
         "frames": frames.into_values().collect::<Vec<_>>(),
     }))
     .map_err(|error| error.to_string())
+}
+
+/// Execute a Formula independently across every timestamp row of a symbol
+/// panel. The explicit `CS_*` functions operate across the symbol columns;
+/// legacy time-series functions retain their ordinary series semantics and
+/// therefore are not silently reinterpreted as cross-sectional operations.
+pub fn evaluate_formula_cross_sectional_json(request: &str) -> Result<String, String> {
+    let request: FormulaCrossSectionalRequest =
+        serde_json::from_str(request).map_err(|error| error.to_string())?;
+    if request.schema_version != FORMULA_CROSS_SECTIONAL_CONTRACT_SCHEMA_VERSION {
+        return Err(format!(
+            "unsupported formula cross-sectional contract schema: {}",
+            request.schema_version
+        ));
+    }
+    let dialect = FormulaDialect::from_str(&request.dialect)
+        .ok_or_else(|| format!("unsupported formula dialect: {}", request.dialect))?;
+    if request.source.trim().is_empty() {
+        return Err("formula cross-sectional source must not be empty".to_string());
+    }
+    if request.timestamps.is_empty() {
+        return Err("formula cross-sectional timestamps must not be empty".to_string());
+    }
+    if request.symbols.is_empty() {
+        return Err("formula cross-sectional symbols must not be empty".to_string());
+    }
+    if request.inputs.is_empty() {
+        return Err("formula cross-sectional inputs must not be empty".to_string());
+    }
+
+    let symbol_refs: Vec<&str> = request.symbols.iter().map(String::as_str).collect();
+    let mut names = HashSet::new();
+    let mut inputs = BTreeMap::new();
+    for (raw_name, values) in &request.inputs {
+        let name = normalize_cross_sectional_input_name(raw_name)?;
+        if !names.insert(name.clone()) {
+            return Err(format!("duplicate formula cross-sectional input: {name}"));
+        }
+        let values = values
+            .iter()
+            .map(|value| value.unwrap_or(f64::NAN))
+            .collect::<Vec<_>>();
+        finkit::data_contract::CrossSectionView::new(&request.timestamps, &symbol_refs, &values)
+            .map_err(|error| format!("invalid formula cross-sectional input {name}: {error}"))?;
+        inputs.insert(name, values);
+    }
+
+    let symbols_per_row = request.symbols.len();
+    let mut engine = FormulaEngine::new();
+    let mut output_values: BTreeMap<String, Vec<f64>> = BTreeMap::new();
+    let mut draw_rows = Vec::with_capacity(request.timestamps.len());
+    for (row, timestamp) in request.timestamps.iter().copied().enumerate() {
+        let start = row * symbols_per_row;
+        let end = start + symbols_per_row;
+        let row_values = |name: &str| {
+            inputs
+                .get(name)
+                .map(|values| values[start..end].to_vec())
+                .unwrap_or_else(|| vec![f64::NAN; symbols_per_row])
+        };
+        let open = row_values("OPEN");
+        let high = row_values("HIGH");
+        let low = row_values("LOW");
+        let close = row_values("CLOSE");
+        let volume = row_values("VOLUME");
+        let amount = inputs
+            .contains_key("AMOUNT")
+            .then(|| Array1::from_vec(row_values("AMOUNT")));
+        let mut context = FormulaContext::new(
+            Array1::from_vec(open),
+            Array1::from_vec(high),
+            Array1::from_vec(low),
+            Array1::from_vec(close),
+            Array1::from_vec(volume),
+            amount,
+        );
+        context.datetime = Some(Array1::from_elem(symbols_per_row, timestamp));
+        for (name, values) in &inputs {
+            if matches!(
+                name.as_str(),
+                "OPEN" | "HIGH" | "LOW" | "CLOSE" | "VOLUME" | "AMOUNT"
+            ) {
+                continue;
+            }
+            context.variables.insert(
+                std::sync::Arc::from(name.as_str()),
+                Array1::from_vec(values[start..end].to_vec()),
+            );
+        }
+
+        let result = engine
+            .eval_multi_with_dialect(&request.source, dialect, &mut context)
+            .map_err(|error| format!("formula cross-sectional row {timestamp}: {error}"))?;
+        for (name, value) in result.outputs {
+            if value.len() != symbols_per_row {
+                return Err(format!(
+                    "formula output {name} length mismatch at timestamp {timestamp}"
+                ));
+            }
+            output_values
+                .entry(name)
+                .or_default()
+                .extend(value.iter().copied());
+        }
+        if result.final_value.len() != symbols_per_row {
+            return Err(format!(
+                "formula primary output length mismatch at timestamp {timestamp}"
+            ));
+        }
+        output_values
+            .entry("__PRIMARY__".to_string())
+            .or_default()
+            .extend(result.final_value.iter().copied());
+        let draw = context.draw_commands.borrow();
+        draw_rows.push(json!({
+            "timestamp": timestamp,
+            "commands": draw_commands_json(&draw),
+        }));
+    }
+
+    let serialized_values = output_values
+        .into_iter()
+        .map(|(name, values)| (name, nullable_series(&values)))
+        .collect::<BTreeMap<_, _>>();
+    serde_json::to_string(&json!({
+        "schema_version": FORMULA_CROSS_SECTIONAL_CONTRACT_SCHEMA_VERSION,
+        "contract": "formula.cross_sectional.v1",
+        "dialect": dialect.as_str(),
+        "primary": "__PRIMARY__",
+        "timestamps": request.timestamps,
+        "symbols": request.symbols,
+        "values": serialized_values,
+        "draw": {
+            "schema_version": FORMULA_DRAW_CONTRACT_SCHEMA_VERSION,
+            "mode": "per_row",
+            "rows": draw_rows,
+        },
+    }))
+    .map_err(|error| error.to_string())
+}
+
+fn normalize_cross_sectional_input_name(name: &str) -> Result<String, String> {
+    let name = name.trim().to_uppercase();
+    if name.is_empty() {
+        return Err("formula cross-sectional input name must not be empty".to_string());
+    }
+    Ok(name)
 }
 
 fn external_formula_name(name: &str) -> Result<String, String> {
@@ -790,6 +950,25 @@ mod tests {
         });
         let error = evaluate_formula_panel_json(&duplicate.to_string()).unwrap_err();
         assert!(error.contains("duplicate formula panel frame"));
+    }
+
+    #[test]
+    fn cross_sectional_contract_runs_explicit_cs_functions_per_row() {
+        let fixture: Value = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../tests/contracts/formula_cross_sectional_contract_v1.json"
+        )))
+        .unwrap();
+        let payload: Value = serde_json::from_str(
+            &evaluate_formula_cross_sectional_json(&fixture["request"].to_string()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(payload["contract"], "formula.cross_sectional.v1");
+        assert_eq!(
+            payload["values"]["__PRIMARY__"],
+            fixture["expected"]["primary"]
+        );
+        assert_eq!(payload["draw"]["mode"], "per_row");
     }
 
     #[test]

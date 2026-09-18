@@ -321,6 +321,32 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaEvalPanelContractJson(
     })
 }
 
+/// JNI bridge for the cross-sectional Formula contract.
+#[no_mangle]
+pub extern "system" fn Java_com_finkit_Indicators_formulaEvalCrossSectionalContractJson(
+    mut env: JNIEnv,
+    _class: JClass,
+    request_json: JString,
+) -> jni::sys::jstring {
+    ffi_catch_ptr(|| {
+        let request_json: String = match env.get_string(&request_json) {
+            Ok(value) => value.into(),
+            Err(_) => return std::ptr::null_mut(),
+        };
+        let payload = finkit_ffi_common::evaluate_formula_cross_sectional_json(&request_json)
+            .unwrap_or_else(|error| {
+                serde_json::json!({
+                    "schema_version": finkit_ffi_common::FORMULA_CROSS_SECTIONAL_CONTRACT_SCHEMA_VERSION,
+                    "error": error,
+                })
+                .to_string()
+            });
+        env.new_string(payload)
+            .map(|value| value.into_raw())
+            .unwrap_or(std::ptr::null_mut())
+    })
+}
+
 /// JNI bridge for the shared stateful Formula stream contract.
 #[no_mangle]
 pub extern "system" fn Java_com_finkit_Indicators_formulaStreamExecuteJson(

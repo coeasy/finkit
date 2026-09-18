@@ -29,6 +29,13 @@ Pine `request.security` 全语义、跨截面批量调度或 stateful 跨周期�
 `cross_zscore`、`cross_rank`、`cross_winsorize_05_95` 和 `cross_neutralize`。
 该契约不等同于自动多周期重采样，也不替代 Pine `request.security` 全语义。
 
+公式跨截面执行使用 `formula.cross_sectional.v1` 契约及对应的
+`formula_eval_cross_sectional_contract_json` 入口。它接收按行主序排列的命名面板输入，
+并在每个时间戳行执行显式的 `CS_RANK`、`CS_ZSCORE`、`CS_SCALE`、
+`CS_INDNEUTRALIZE` 和 `CS_SIGNED_POWER`。既有时间窗口语义的 `RANK(X, N)` 保持不变。
+返回值按行主序输出，绘图返回 `draw.mode = "per_row"`，因此绘图命令不会被静默丢弃；前端
+必须结合时间戳和标的列自行映射每一行绘图数据。
+
 ## 目录
 
 1. [重叠研究指标](#重叠研究指标)

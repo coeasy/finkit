@@ -881,6 +881,9 @@ public final class Indicators {
     /** Executes a Formula independently for each symbol/timeframe frame. */
     public static native String formulaEvalPanelContractJson(String requestJson);
 
+    /** Executes explicit CS_* Formula functions across each symbol row. */
+    public static native String formulaEvalCrossSectionalContractJson(String requestJson);
+
     /** Executes a stateful Formula stream through the shared JSON contract. */
     public static native String formulaStreamExecuteJson(String requestJson);
 

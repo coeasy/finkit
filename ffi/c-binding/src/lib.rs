@@ -545,6 +545,37 @@ pub unsafe extern "C" fn ta_formula_eval_panel_contract_json(
     })
 }
 
+/// Execute a Formula across every timestamp row of a symbol panel.
+#[no_mangle]
+pub unsafe extern "C" fn ta_formula_eval_cross_sectional_contract_json(
+    request: *const c_char,
+) -> *mut c_char {
+    ffi_catch_ptr(|| {
+        let payload = if request.is_null() {
+            serde_json::json!({
+                "schema_version": finkit_ffi_common::FORMULA_CROSS_SECTIONAL_CONTRACT_SCHEMA_VERSION,
+                "error": "request is null",
+            })
+            .to_string()
+        } else {
+            match unsafe { CStr::from_ptr(request) }.to_str() {
+                Ok(request) => finkit_ffi_common::evaluate_formula_cross_sectional_json(request)
+                    .unwrap_or_else(|error| serde_json::json!({
+                        "schema_version": finkit_ffi_common::FORMULA_CROSS_SECTIONAL_CONTRACT_SCHEMA_VERSION,
+                        "error": error,
+                    }).to_string()),
+                Err(_) => serde_json::json!({
+                    "schema_version": finkit_ffi_common::FORMULA_CROSS_SECTIONAL_CONTRACT_SCHEMA_VERSION,
+                    "error": "request is not valid UTF-8",
+                }).to_string(),
+            }
+        };
+        CString::new(payload)
+            .expect("cross-sectional formula result payload contains no NUL")
+            .into_raw()
+    })
+}
+
 /// Execute the verified stateful Formula stream JSON contract.
 ///
 /// The request and checkpoint are transport-neutral JSON; the returned string
@@ -921,6 +952,24 @@ mod tests {
         assert_eq!(value["contract"], "formula.panel.v1");
         assert_eq!(value["frames"][0]["symbol"], "AAA");
         assert_eq!(value["frames"][1]["values"]["__PRIMARY__"][1], 21.0);
+        unsafe { finkit_free_string(ptr) };
+    }
+
+    #[test]
+    fn formula_cross_sectional_contract_json_executes_cs_rank() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../tests/contracts/formula_cross_sectional_contract_v1.json"
+        )))
+        .unwrap();
+        let request = std::ffi::CString::new(fixture["request"].to_string()).unwrap();
+        let ptr = unsafe { ta_formula_eval_cross_sectional_contract_json(request.as_ptr()) };
+        assert!(!ptr.is_null());
+        let json = unsafe { CStr::from_ptr(ptr) }.to_str().unwrap();
+        let value: serde_json::Value = serde_json::from_str(json).unwrap();
+        assert_eq!(value["contract"], "formula.cross_sectional.v1");
+        assert_eq!(value["values"]["__PRIMARY__"][1], 1.0);
+        assert!(value["values"]["__PRIMARY__"][4].is_null());
         unsafe { finkit_free_string(ptr) };
     }
 

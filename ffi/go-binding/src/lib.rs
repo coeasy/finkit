@@ -1012,6 +1012,37 @@ pub unsafe extern "C" fn ta_formula_eval_panel_contract_json(
     })
 }
 
+/// Execute a Formula across every timestamp row of a symbol panel.
+#[no_mangle]
+pub unsafe extern "C" fn ta_formula_eval_cross_sectional_contract_json(
+    request: *const c_char,
+) -> *mut c_char {
+    ffi_catch_ptr(|| {
+        let payload = if request.is_null() {
+            serde_json::json!({
+                "schema_version": finkit_ffi_common::FORMULA_CROSS_SECTIONAL_CONTRACT_SCHEMA_VERSION,
+                "error": "request is null",
+            })
+            .to_string()
+        } else {
+            match unsafe { std::ffi::CStr::from_ptr(request) }.to_str() {
+                Ok(request) => finkit_ffi_common::evaluate_formula_cross_sectional_json(request)
+                    .unwrap_or_else(|error| serde_json::json!({
+                        "schema_version": finkit_ffi_common::FORMULA_CROSS_SECTIONAL_CONTRACT_SCHEMA_VERSION,
+                        "error": error,
+                    }).to_string()),
+                Err(_) => serde_json::json!({
+                    "schema_version": finkit_ffi_common::FORMULA_CROSS_SECTIONAL_CONTRACT_SCHEMA_VERSION,
+                    "error": "request is not valid UTF-8",
+                }).to_string(),
+            }
+        };
+        CString::new(payload)
+            .expect("cross-sectional formula result payload contains no NUL")
+            .into_raw()
+    })
+}
+
 /// Execute the shared stateful Formula stream JSON contract.
 #[no_mangle]
 pub unsafe extern "C" fn ta_formula_stream_execute_json(request: *const c_char) -> *mut c_char {

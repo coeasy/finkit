@@ -12,6 +12,7 @@
     "formula_eval_contract_json",
     "formula_eval_temporal_contract_json",
     "formula_eval_panel_contract_json",
+    "formula_eval_cross_sectional_contract_json",
     "formula_compatibility_report_json",
     "formula_stream_execute_json"
   ],
@@ -29,6 +30,7 @@
         {"path": "ffi/ffi-common/src/formula.rs", "marker": "pub fn evaluate_formula_json"},
         {"path": "ffi/ffi-common/src/formula.rs", "marker": "pub fn evaluate_formula_temporal_json"},
         {"path": "ffi/ffi-common/src/formula.rs", "marker": "pub fn evaluate_formula_panel_json"},
+        {"path": "ffi/ffi-common/src/formula.rs", "marker": "pub fn evaluate_formula_cross_sectional_json"},
         {"path": "ffi/ffi-common/src/formula.rs", "marker": "pub fn formula_compatibility_report_json"},
         {"path": "ffi/ffi-common/src/formula_stream.rs", "marker": "pub fn evaluate_formula_stream_json"}
       ]
@@ -46,6 +48,7 @@
         {"path": "ffi/python-binding/src/lib.rs", "marker": "pub fn formula_eval_contract_json"},
         {"path": "ffi/python-binding/src/lib.rs", "marker": "pub fn formula_eval_temporal_contract_json"},
         {"path": "ffi/python-binding/src/lib.rs", "marker": "pub fn formula_eval_panel_contract_json"},
+        {"path": "ffi/python-binding/src/lib.rs", "marker": "pub fn formula_eval_cross_sectional_contract_json"},
         {"path": "ffi/python-binding/src/lib.rs", "marker": "pub fn formula_compatibility_report_json"},
         {"path": "ffi/python-binding/src/lib.rs", "marker": "pub fn formula_stream_execute_json"}
       ]
@@ -63,6 +66,7 @@
         {"path": "ffi/go-binding/go/ta/ta.go", "marker": "func FormulaEvalContractJSON"},
         {"path": "ffi/go-binding/go/ta/ta.go", "marker": "func FormulaEvalTemporalContractJSON"},
         {"path": "ffi/go-binding/go/ta/ta.go", "marker": "func FormulaEvalPanelContractJSON"},
+        {"path": "ffi/go-binding/go/ta/ta.go", "marker": "func FormulaEvalCrossSectionalContractJSON"},
         {"path": "ffi/go-binding/go/ta/ta.go", "marker": "func FormulaCompatibilityReportJSON"},
         {"path": "ffi/go-binding/go/ta/ta.go", "marker": "func FormulaStreamExecuteJSON"}
       ]
@@ -80,6 +84,7 @@
         {"path": "ffi/java-binding/java/src/main/java/com/finkit/Indicators.java", "marker": "formulaEvalContractJson"},
         {"path": "ffi/java-binding/java/src/main/java/com/finkit/Indicators.java", "marker": "formulaEvalTemporalContractJson"},
         {"path": "ffi/java-binding/java/src/main/java/com/finkit/Indicators.java", "marker": "formulaEvalPanelContractJson"},
+        {"path": "ffi/java-binding/java/src/main/java/com/finkit/Indicators.java", "marker": "formulaEvalCrossSectionalContractJson"},
         {"path": "ffi/java-binding/java/src/main/java/com/finkit/Indicators.java", "marker": "formulaCompatibilityReportJson"},
         {"path": "ffi/java-binding/java/src/main/java/com/finkit/Indicators.java", "marker": "formulaStreamExecuteJson"}
       ]
@@ -97,6 +102,7 @@
         {"path": "ffi/dotnet-binding/src/Finkit/Indicators.cs", "marker": "FormulaEvalContractJson"},
         {"path": "ffi/dotnet-binding/src/Finkit/Indicators.cs", "marker": "FormulaEvalTemporalContractJson"},
         {"path": "ffi/dotnet-binding/src/Finkit/Indicators.cs", "marker": "FormulaEvalPanelContractJson"},
+        {"path": "ffi/dotnet-binding/src/Finkit/Indicators.cs", "marker": "FormulaEvalCrossSectionalContractJson"},
         {"path": "ffi/dotnet-binding/src/Finkit/Indicators.cs", "marker": "FormulaCompatibilityReportJson"},
         {"path": "ffi/dotnet-binding/src/Finkit/Indicators.cs", "marker": "FormulaStreamExecuteJson"}
       ]
@@ -114,6 +120,7 @@
         {"path": "ffi/c-binding/include/finkit.h", "marker": "ta_formula_eval_contract_json"},
         {"path": "ffi/c-binding/include/finkit.h", "marker": "ta_formula_eval_temporal_contract_json"},
         {"path": "ffi/c-binding/include/finkit.h", "marker": "ta_formula_eval_panel_contract_json"},
+        {"path": "ffi/c-binding/include/finkit.h", "marker": "ta_formula_eval_cross_sectional_contract_json"},
         {"path": "ffi/c-binding/include/finkit.h", "marker": "ta_formula_compatibility_report_json"},
         {"path": "ffi/c-binding/include/finkit.h", "marker": "ta_formula_stream_execute_json"}
       ]
@@ -131,6 +138,7 @@
         {"path": "ffi/c-binding/include/finkit.hpp", "marker": "formula_eval_contract_json"},
         {"path": "ffi/c-binding/include/finkit.hpp", "marker": "formula_eval_temporal_contract_json"},
         {"path": "ffi/c-binding/include/finkit.hpp", "marker": "formula_eval_panel_contract_json"},
+        {"path": "ffi/c-binding/include/finkit.hpp", "marker": "formula_eval_cross_sectional_contract_json"},
         {"path": "ffi/c-binding/include/finkit.hpp", "marker": "formula_compatibility_report_json"},
         {"path": "ffi/c-binding/include/finkit.hpp", "marker": "formula_stream_execute_json"}
       ]
@@ -148,6 +156,7 @@
         {"path": "ffi/node-binding/index.d.ts", "marker": "formulaEvalContractJson"},
         {"path": "ffi/node-binding/index.d.ts", "marker": "formulaEvalTemporalContractJson"},
         {"path": "ffi/node-binding/index.d.ts", "marker": "formulaEvalPanelContractJson"},
+        {"path": "ffi/node-binding/index.d.ts", "marker": "formulaEvalCrossSectionalContractJson"},
         {"path": "ffi/node-binding/index.d.ts", "marker": "formulaCompatibilityReport"},
         {"path": "ffi/node-binding/index.d.ts", "marker": "formulaStreamExecuteJson"}
       ]

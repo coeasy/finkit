@@ -2442,6 +2442,14 @@ pub fn formula_eval_panel_contract_json(request_json: String) -> Result<String> 
         .map_err(|error| Error::new(Status::InvalidArg, error))
 }
 
+/// Execute a Formula across every timestamp row of a symbol panel.
+#[napi]
+#[cfg(feature = "formula")]
+pub fn formula_eval_cross_sectional_contract_json(request_json: String) -> Result<String> {
+    finkit_ffi_common::evaluate_formula_cross_sectional_json(&request_json)
+        .map_err(|error| Error::new(Status::InvalidArg, error))
+}
+
 /// Execute a stateful Formula stream through the shared JSON contract.
 #[napi]
 #[cfg(feature = "formula")]

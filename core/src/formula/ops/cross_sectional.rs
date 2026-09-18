@@ -21,6 +21,64 @@ pub fn rank(input: ArrayView1<'_, f64>) -> Array1<f64> {
     out
 }
 
+/// Percentile rank finite values into `[0, 1]`, averaging ties.
+pub fn percentile_rank(input: ArrayView1<'_, f64>) -> Array1<f64> {
+    let finite: Vec<(usize, f64)> = input
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, value)| value.is_finite().then_some((idx, *value)))
+        .collect();
+    let count = finite.len();
+    let mut sorted: Vec<f64> = finite.iter().map(|(_, value)| *value).collect();
+    sorted.sort_by(f64::total_cmp);
+    let mut output = Array1::from_elem(input.len(), f64::NAN);
+    if count == 0 {
+        return output;
+    }
+    for (index, value) in finite {
+        let below = sorted.partition_point(|candidate| *candidate < value);
+        let equal_end = sorted.partition_point(|candidate| *candidate <= value);
+        let midpoint = (below + equal_end - 1) as f64 / 2.0;
+        output[index] = if count == 1 {
+            0.0
+        } else {
+            midpoint / (count - 1) as f64
+        };
+    }
+    output
+}
+
+/// Population z-score over the current cross-sectional row.
+pub fn zscore(input: ArrayView1<'_, f64>) -> Array1<f64> {
+    let finite: Vec<f64> = input
+        .iter()
+        .copied()
+        .filter(|value| value.is_finite())
+        .collect();
+    if finite.is_empty() {
+        return Array1::from_elem(input.len(), f64::NAN);
+    }
+    let mean = finite.iter().sum::<f64>() / finite.len() as f64;
+    let variance = finite
+        .iter()
+        .map(|value| (value - mean).powi(2))
+        .sum::<f64>()
+        / finite.len() as f64;
+    let std = variance.sqrt();
+    input
+        .iter()
+        .map(|value| {
+            if !value.is_finite() {
+                f64::NAN
+            } else if std <= f64::EPSILON {
+                0.0
+            } else {
+                (value - mean) / std
+            }
+        })
+        .collect()
+}
+
 pub fn scale(input: ArrayView1<'_, f64>, k: f64) -> Array1<f64> {
     let denom: f64 = input.iter().filter(|v| !v.is_nan()).map(|v| v.abs()).sum();
     if denom <= f64::EPSILON {
@@ -92,6 +150,15 @@ mod tests {
         let s = scale(x.view(), 1.0);
         let sum_abs: f64 = s.iter().map(|v| v.abs()).sum();
         assert!((sum_abs - 1.0).abs() < 1e-10);
+
+        let percentile = percentile_rank(x.view());
+        assert_eq!(percentile[1], 0.0);
+        assert_eq!(percentile[3], 1.0);
+
+        let z = zscore(x.view());
+        let endpoint = (9.0_f64 / 5.0).sqrt();
+        assert!((z[1] + endpoint).abs() < 1e-10);
+        assert!((z[3] - endpoint).abs() < 1e-10);
     }
 
     #[test]

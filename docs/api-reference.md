@@ -92,6 +92,15 @@ include `cross_zscore`, `cross_rank`, `cross_winsorize_05_95`, and
 `cross_neutralize`. This is a cross-sectional Factor contract, not an
 automatic multi-timeframe resampler or a Pine `request.security` replacement.
 
+Formula cross-sectional execution uses `formula.cross_sectional.v1` and the
+corresponding `formula_eval_cross_sectional_contract_json` entry points. It
+accepts row-major named inputs and evaluates explicit `CS_RANK`, `CS_ZSCORE`,
+`CS_SCALE`, `CS_INDNEUTRALIZE`, and `CS_SIGNED_POWER` functions for each
+timestamp row. The existing time-window `RANK(X, N)` remains unchanged. The
+response contains row-major values and a `draw.mode = "per_row"` payload so
+drawing commands are never silently discarded; consumers must map each draw
+row to its timestamp and symbol columns.
+
 Formula compatibility discovery uses the same versioned report in every
 official binding: `formula_compatibility_report_json` (Python),
 `FormulaCompatibilityReportJSON`, `formulaCompatibilityReportJson`, and their

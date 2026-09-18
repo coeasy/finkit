@@ -5,7 +5,7 @@
 pub mod cross_sectional;
 pub mod timeseries;
 
-pub use cross_sectional::{indneutralize, rank, scale, signed_power};
+pub use cross_sectional::{indneutralize, percentile_rank, rank, scale, signed_power, zscore};
 pub use timeseries::{
     correlation, covariance, decay_linear, delay, delta, ts_argmax, ts_argmin, ts_rank,
 };

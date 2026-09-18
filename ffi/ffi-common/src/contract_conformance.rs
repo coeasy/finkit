@@ -9,8 +9,8 @@ mod tests {
     use crate::{
         evaluate_composite_json, evaluate_composite_stream_json,
         evaluate_factor_cross_sectional_json, evaluate_factor_json, evaluate_factor_stream_json,
-        evaluate_formula_json, evaluate_formula_panel_json, evaluate_formula_stream_json,
-        evaluate_formula_temporal_json,
+        evaluate_formula_cross_sectional_json, evaluate_formula_json, evaluate_formula_panel_json,
+        evaluate_formula_stream_json, evaluate_formula_temporal_json,
     };
     use serde_json::Value;
     use std::fs;
@@ -185,6 +185,24 @@ mod tests {
         assert_eq!(payload["symbols"], fixture["expected"]["symbols"]);
         assert_eq!(
             payload["values"]["cross_rank"],
+            fixture["expected"]["primary"]
+        );
+    }
+
+    #[test]
+    fn cross_sectional_formula_contract_matches_shared_fixture() {
+        let fixture: Value = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../tests/contracts/formula_cross_sectional_contract_v1.json"
+        )))
+        .expect("cross-sectional formula contract fixture must be valid JSON");
+        let payload: Value = serde_json::from_str(
+            &evaluate_formula_cross_sectional_json(&fixture["request"].to_string()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(payload["contract"], fixture["expected"]["contract"]);
+        assert_eq!(
+            payload["values"]["__PRIMARY__"],
             fixture["expected"]["primary"]
         );
     }
