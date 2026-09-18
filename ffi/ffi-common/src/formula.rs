@@ -5,11 +5,13 @@
 //! to use typed indicator functions or zero-copy formula APIs.
 
 use finkit::data_contract::{FrameKey, FundamentalSeries, TemporalAlignment, TemporalSeries};
+use finkit::factors::FactorRegistry;
 use finkit::formula::{
     inspect_formula_compatibility, AstNode, DrawCommand, DrawResult, FormulaContext,
     FormulaDialect, FormulaEngine, FormulaTerminal, PineAstNode, PineMapperError,
     PineSecurityResolver,
 };
+use finkit::operation::{OperationRequest, UnifiedOperationEngine};
 use ndarray::Array1;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -81,24 +83,22 @@ pub fn evaluate_formula_json(
         Array1::from_vec(volume.to_vec()),
         None,
     );
-    let mut engine = FormulaEngine::new();
-    let result = engine
-        .eval_multi_with_dialect(source, dialect, &mut context)
+    let mut unified = UnifiedOperationEngine::new(FactorRegistry::new());
+    let result = unified
+        .execute(OperationRequest::Formula {
+            source,
+            dialect,
+            context: &mut context,
+        })
         .map_err(|error| error.to_string())?;
     let draw = {
-        let draw = context.draw_commands.borrow();
+        let draw = result.draw.unwrap_or_default();
         json!({
             "schema_version": FORMULA_DRAW_CONTRACT_SCHEMA_VERSION,
             "commands": draw_commands_json(&draw),
         })
     };
-    let mut values = result
-        .outputs
-        .into_iter()
-        .map(|(name, value)| (name, value.to_vec()))
-        .collect::<BTreeMap<_, _>>();
-    let final_value = result.final_value.to_vec();
-    values.insert("__PRIMARY__".to_string(), final_value);
+    let values = result.values;
 
     let serialized_values = values
         .into_iter()

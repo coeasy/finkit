@@ -133,6 +133,9 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
   仍明确走各自的增量/checkpoint 专用执行器，不把不同能力误报为同一模式。
 - 横截面 Factor 批处理入口也已接入统一 dispatcher，并保留时间戳/标的轴与
   row-major null 语义；本轮 `finkit-ffi-common` 测试为 73 个通过。
+- 基础 Formula JSON 入口也已改走 `UnifiedOperationEngine::Formula`，因此普通
+  公式、Factor、Composite 和横截面 Factor 的公开批处理入口共享同一 Runtime
+  dispatcher；Temporal/Panel/Streaming 仍保留其显式时间对齐与状态执行路径。
 
 ## 6. 后续实施顺序
 
