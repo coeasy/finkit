@@ -430,6 +430,47 @@ pub unsafe extern "C" fn ta_formula_eval_contract_json(
     })
 }
 
+/// Return the shared language-neutral Formula compatibility report.
+#[no_mangle]
+pub unsafe extern "C" fn ta_formula_compatibility_report_json(
+    source: *const c_char,
+    terminal: *const c_char,
+) -> *mut c_char {
+    ffi_catch_ptr(|| {
+        let error = |message: &str| {
+            CString::new(
+                serde_json::json!({
+                    "schema_version": finkit_ffi_common::FORMULA_COMPATIBILITY_SCHEMA_VERSION,
+                    "error": message,
+                })
+                .to_string(),
+            )
+            .expect("formula compatibility error contains no NUL")
+            .into_raw()
+        };
+        if source.is_null() || terminal.is_null() {
+            return error("formula compatibility input is null");
+        }
+        let Some(source) = read_c_string(source) else {
+            return error("formula source is not valid UTF-8");
+        };
+        let Some(terminal) = read_c_string(terminal) else {
+            return error("formula terminal is not valid UTF-8");
+        };
+        let payload = finkit_ffi_common::formula_compatibility_report_json(&source, &terminal)
+            .unwrap_or_else(|message| {
+                serde_json::json!({
+                    "schema_version": finkit_ffi_common::FORMULA_COMPATIBILITY_SCHEMA_VERSION,
+                    "error": message,
+                })
+                .to_string()
+            });
+        CString::new(payload)
+            .expect("formula compatibility payload contains no NUL")
+            .into_raw()
+    })
+}
+
 /// Execute one registered operation through the shared JSON result contract.
 #[no_mangle]
 pub unsafe extern "C" fn ta_operation_execute_json(request: *const c_char) -> *mut c_char {

@@ -97,6 +97,18 @@ inline std::string formula_eval_contract_json(
     return result;
 }
 
+inline std::string formula_compatibility_report_json(
+    const std::string& source,
+    const std::string& terminal) {
+    char* raw = ta_formula_compatibility_report_json(source.c_str(), terminal.c_str());
+    if (raw == nullptr) {
+        throw TaLibException("formula compatibility report returned null");
+    }
+    std::string result(raw);
+    finkit_free_string(raw);
+    return result;
+}
+
 namespace detail {
 
 inline void check_result(int32_t result, const std::string& func_name) {

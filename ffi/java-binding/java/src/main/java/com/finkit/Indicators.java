@@ -866,6 +866,9 @@ public final class Indicators {
             String source, String dialect, double[] open, double[] high, double[] low,
             double[] close, double[] volume);
 
+    /** Returns the shared versioned Formula compatibility report for a terminal profile. */
+    public static native String formulaCompatibilityReportJson(String source, String terminal);
+
     /**
      * Validates a formula source string for syntactic correctness.
      *

@@ -85,6 +85,10 @@ double[] sma = Indicators.Sma(close, 3);
 Console.WriteLine(sma[^1]);
 ```
 
+Formula compatibility discovery is available through
+`Indicators.FormulaCompatibilityReportJson(source, terminal)` and returns the
+same `formula.compatibility.v1` JSON contract as the other official bindings.
+
 ## Native loading
 
 `NativeBootstrap.cs` registers an assembly-level `DllImportResolver` for `finkit_dotnet`.

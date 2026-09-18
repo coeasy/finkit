@@ -61,6 +61,7 @@ extern char* ta_operation_execute_json(const char *request_json);
 extern char* ta_composite_execute_json(const char *request_json);
 extern char* ta_factor_execute_json(const char *request_json);
 extern char* ta_formula_eval_contract_json(const char *source, const char *dialect, const double *open, const double *high, const double *low, const double *close, const double *volume, int length);
+extern char* ta_formula_compatibility_report_json(const char *source, const char *terminal);
 extern void ta_free_result(TaResult *result);
 
 extern char* ta_formula_eval(const char *source, const double *open, const double *high, const double *low, const double *close, const double *volume, int length);
@@ -189,6 +190,16 @@ func FormulaEvalContractJSON(source, dialect string, open, high, low, close, vol
 	return formulaJSONResult(C.ta_formula_eval_contract_json(
 		cSource, cDialect, toCSlice(open), toCSlice(high), toCSlice(low), toCSlice(close), toCSlice(volume), cInt(length),
 	))
+}
+
+// FormulaCompatibilityReportJSON returns the shared versioned compatibility
+// report for a terminal formula profile.
+func FormulaCompatibilityReportJSON(source, terminal string) (string, error) {
+	cSource := C.CString(source)
+	defer C.free(unsafe.Pointer(cSource))
+	cTerminal := C.CString(terminal)
+	defer C.free(unsafe.Pointer(cTerminal))
+	return formulaJSONResult(C.ta_formula_compatibility_report_json(cSource, cTerminal))
 }
 
 // convertResult converts a C TaResult to a Go slice and frees the C memory.

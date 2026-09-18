@@ -156,6 +156,9 @@ public static class Indicators
     private static extern IntPtr ta_formula_eval_contract_json(string source, string dialect, IntPtr open, IntPtr high, IntPtr low, IntPtr close, IntPtr volume, int length);
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern IntPtr ta_formula_compatibility_report_json(string source, string terminal);
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern IntPtr ta_formula_eval_jit(string source, IntPtr open, IntPtr high, IntPtr low, IntPtr close, IntPtr volume, int length);
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
@@ -312,6 +315,22 @@ public static class Indicators
             {
                 ta_free_string(resultPtr);
             }
+        }
+    }
+
+    /// <summary>Returns the shared versioned Formula compatibility report.</summary>
+    public static string FormulaCompatibilityReportJson(string source, string terminal)
+    {
+        IntPtr resultPtr = ta_formula_compatibility_report_json(source, terminal);
+        if (resultPtr == IntPtr.Zero)
+            throw new InvalidOperationException("Formula compatibility report returned null");
+        try
+        {
+            return Marshal.PtrToStringUTF8(resultPtr) ?? "";
+        }
+        finally
+        {
+            ta_free_string(resultPtr);
         }
     }
 

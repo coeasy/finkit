@@ -44,6 +44,7 @@ TA_API char *ta_composite_execute_json(const char *request_json);
 TA_API char *ta_formula_eval_contract_json(const char *source, const char *dialect,
     const double *open, const double *high, const double *low, const double *close,
     const double *volume, int32_t length);
+TA_API char *ta_formula_compatibility_report_json(const char *source, const char *terminal);
 TA_API char *ta_last_error(void);
 TA_API int32_t ta_last_error_code(void);
 TA_API void finkit_free_string(char *s);

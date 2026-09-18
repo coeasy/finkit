@@ -391,6 +391,49 @@ pub unsafe extern "C" fn ta_formula_eval_contract_json(
     })
 }
 
+/// Inspect a formula through the shared language-neutral compatibility report.
+///
+/// The returned JSON owns the report and must be released with
+/// `finkit_free_string`.
+#[no_mangle]
+pub unsafe extern "C" fn ta_formula_compatibility_report_json(
+    source: *const c_char,
+    terminal: *const c_char,
+) -> *mut c_char {
+    ffi_catch_ptr(|| {
+        let error = |message: &str| {
+            CString::new(serde_json::json!({
+                "schema_version": finkit_ffi_common::FORMULA_COMPATIBILITY_SCHEMA_VERSION,
+                "error": message,
+            }).to_string())
+            .expect("formula compatibility error contains no NUL")
+            .into_raw()
+        };
+        if source.is_null() || terminal.is_null() {
+            return error("formula compatibility input is null");
+        }
+        let source = match unsafe { std::ffi::CStr::from_ptr(source) }.to_str() {
+            Ok(value) => value,
+            Err(_) => return error("formula source is not valid UTF-8"),
+        };
+        let terminal = match unsafe { std::ffi::CStr::from_ptr(terminal) }.to_str() {
+            Ok(value) => value,
+            Err(_) => return error("formula terminal is not valid UTF-8"),
+        };
+        let payload = finkit_ffi_common::formula_compatibility_report_json(source, terminal)
+            .unwrap_or_else(|message| {
+                serde_json::json!({
+                    "schema_version": finkit_ffi_common::FORMULA_COMPATIBILITY_SCHEMA_VERSION,
+                    "error": message,
+                })
+                .to_string()
+            });
+        CString::new(payload)
+            .expect("formula compatibility payload contains no NUL")
+            .into_raw()
+    })
+}
+
 /// Return the last FFI error code for the calling thread.
 #[no_mangle]
 pub extern "C" fn ta_last_error_code() -> i32 {
@@ -586,6 +629,22 @@ mod tests {
         assert_eq!(value["schema_version"], 1);
         assert_eq!(value["dialect"], "tdx");
         assert_eq!(value["primary"], "__PRIMARY__");
+        unsafe { finkit_free_string(ptr) };
+    }
+
+    #[test]
+    fn formula_compatibility_report_json_contains_shared_capabilities() {
+        let source = std::ffi::CString::new("X:=MA(CLOSE,5); X").unwrap();
+        let terminal = std::ffi::CString::new("tdx").unwrap();
+        let ptr = unsafe {
+            ta_formula_compatibility_report_json(source.as_ptr(), terminal.as_ptr())
+        };
+        assert!(!ptr.is_null());
+        let json = unsafe { CStr::from_ptr(ptr) }.to_str().unwrap();
+        let value: serde_json::Value = serde_json::from_str(json).unwrap();
+        assert_eq!(value["schema_version"], 1);
+        assert_eq!(value["terminal"], "tdx");
+        assert!(value["capabilities"].is_array());
         unsafe { finkit_free_string(ptr) };
     }
 

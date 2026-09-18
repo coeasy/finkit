@@ -41,6 +41,13 @@ Formula results use the corresponding versioned contract functions:
 `formula_eval_contract_json`, `FormulaEvalContractJSON`,
 `formulaEvalContractJson`, and their language-specific casing equivalents.
 
+Formula compatibility discovery uses the same versioned report in every
+official binding: `formula_compatibility_report_json`,
+`FormulaCompatibilityReportJSON`, `formulaCompatibilityReportJson`, and their
+language-specific casing equivalents. The report includes a
+`schema_version` and source-level capability matrix; it does not claim full
+terminal compatibility merely because a parser or function name is present.
+
 ## Core API (Rust)
 
 ### Module Structure

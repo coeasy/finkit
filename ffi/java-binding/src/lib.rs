@@ -193,6 +193,37 @@ pub extern "system" fn Java_com_finkit_Indicators_formulaEvalContractJson(
     })
 }
 
+/// JNI bridge for the shared Formula compatibility report contract.
+#[no_mangle]
+pub extern "system" fn Java_com_finkit_Indicators_formulaCompatibilityReportJson(
+    mut env: JNIEnv,
+    _class: JClass,
+    source: JString,
+    terminal: JString,
+) -> jni::sys::jstring {
+    ffi_catch_ptr(|| {
+        let source: String = match env.get_string(&source) {
+            Ok(value) => value.into(),
+            Err(_) => return std::ptr::null_mut(),
+        };
+        let terminal: String = match env.get_string(&terminal) {
+            Ok(value) => value.into(),
+            Err(_) => return std::ptr::null_mut(),
+        };
+        let payload = finkit_ffi_common::formula_compatibility_report_json(&source, &terminal)
+            .unwrap_or_else(|error| {
+                serde_json::json!({
+                    "schema_version": finkit_ffi_common::FORMULA_COMPATIBILITY_SCHEMA_VERSION,
+                    "error": error,
+                })
+                .to_string()
+            });
+        env.new_string(payload)
+            .map(|value| value.into_raw())
+            .unwrap_or(std::ptr::null_mut())
+    })
+}
+
 fn get_double_array(env: &mut JNIEnv, arr: JDoubleArray) -> Vec<f64> {
     let len = env.get_array_length(&arr).unwrap() as usize;
     let mut buf = vec![0.0f64; len];

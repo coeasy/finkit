@@ -5,9 +5,7 @@
 //! The NumPy zero-copy entry point requires contiguous float64 arrays and keeps
 //! the evaluation under the GIL while borrowing their memory.
 
-use ::finkit::formula::{
-    inspect_formula_compatibility, CompiledFormula, FormulaContext, FormulaEngine,
-};
+use ::finkit::formula::{CompiledFormula, FormulaContext, FormulaEngine};
 use ::finkit::math::rolling_stats;
 use ndarray::Array1;
 use numpy::{PyArray1, PyReadonlyArray1};
@@ -604,61 +602,13 @@ impl PyCompiledFormula {
         py: Python<'py>,
         terminal: &str,
     ) -> PyResult<Bound<'py, PyDict>> {
-        let terminal = ::finkit::formula::FormulaTerminal::from_str(terminal).ok_or_else(|| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "unknown formula terminal: {terminal}"
-            ))
-        })?;
-        let report = inspect_formula_compatibility(&self.source, terminal)
+        let payload = finkit_ffi_common::formula_compatibility_report_json(&self.source, terminal)
             .map_err(|error| PyErr::new::<pyo3::exceptions::PyValueError, _>(error))?;
-        let output = PyDict::new(py);
-        output.set_item("terminal", terminal.as_str())?;
-        output.set_item("normalized_source", report.normalized_source)?;
-        output.set_item("profile_id", report.profile.id)?;
-        output.set_item("null_policy", report.profile.null_policy)?;
-        output.set_item("sma_policy", report.profile.sma_policy)?;
-        output.set_item("lookahead_policy", report.profile.lookahead_policy)?;
-        output.set_item(
-            "requires_session_metadata",
-            report.profile.requires_session_metadata,
-        )?;
-        let functions: Vec<_> = report
-            .functions
-            .iter()
-            .map(|item| {
-                let dict = PyDict::new(py);
-                dict.set_item("name", &item.name)?;
-                dict.set_item("status", item.status.as_str())?;
-                dict.set_item("message", &item.message)?;
-                dict.set_item("cataloged", item.cataloged)?;
-                dict.set_item("runtime_registered", item.runtime_registered)?;
-                dict.set_item("category", &item.category)?;
-                dict.set_item("outputs", item.outputs)?;
-                Ok::<_, PyErr>(dict.into_any())
-            })
-            .collect::<PyResult<_>>()?;
-        output.set_item("functions", functions)?;
-        let capabilities: Vec<_> = report
-            .capabilities
-            .iter()
-            .map(|item| {
-                let dict = PyDict::new(py);
-                dict.set_item("name", &item.name)?;
-                dict.set_item("status", item.status.as_str())?;
-                dict.set_item("supported", item.supported)?;
-                dict.set_item("observed", item.observed)?;
-                dict.set_item("message", &item.message)?;
-                Ok::<_, PyErr>(dict.into_any())
-            })
-            .collect::<PyResult<_>>()?;
-        output.set_item("capabilities", capabilities)?;
-        output.set_item("ta_lib_catalog_version", report.ta_lib_catalog_version)?;
-        output.set_item("ta_lib_function_count", report.ta_lib_function_count)?;
-        output.set_item(
-            "ta_lib_runtime_registered_count",
-            report.ta_lib_runtime_registered_count,
-        )?;
-        Ok(output)
+        let json = pyo3::types::PyModule::import(py, "json")?;
+        json.call_method1("loads", (payload,))?
+            .cast::<PyDict>()
+            .map(|dict| dict.to_owned())
+            .map_err(Into::into)
     }
 
     /// Evaluate using the pooled engine. Inputs are copied into the owned

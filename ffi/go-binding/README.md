@@ -84,6 +84,8 @@ The Go binding exposes formula validation/evaluation in addition to indicator wr
 - `FormulaEvalDrawJSON`;
 - `FormulaEvalDebugJSON`;
 - `FormulaEvalZeroCopy`;
+- `FormulaCompatibilityReportJSON`, which returns the same
+  `formula.compatibility.v1` capability report as every official binding;
 - formula template helpers.
 
 Streaming MACD also has a configurable `NewStreamingMacdExt` constructor.

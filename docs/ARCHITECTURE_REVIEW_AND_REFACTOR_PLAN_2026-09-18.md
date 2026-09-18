@@ -265,7 +265,7 @@ talib_0_7_1
 - Factor 已补齐 `factor.contract.v1` JSON contract：所有正式绑定都可以执行稳定的内置因子并获得 compiled-plan 的 `semantic_identity/range_lookback`；Rust typed API 仍保留自定义闭包因子，跨语言 contract 不把不可序列化闭包伪装成可移植定义。
 - Factor 已补齐 `factor.catalog.v1` JSON discovery contract：C/C++、Go、Java、.NET、Python、Node 与 Rust FFI common 共用同一份内置因子目录，公开名称、类型、方向、依赖、版本及 streaming/incremental 能力，执行入口与发现入口不再断开。
 - Factor 与 Composite 的 v1 请求现在强制要求 `schema_version`，并拒绝重复 Factor target；新增 `tests/contracts/engine_contract_v1.json` 将 Formula/Factor/Composite 的请求与期望输出固定为同一份跨语言 conformance vector，避免各 binding 分叉维护示例和数值语义。
-- Formula compatibility report 已增加稳定的 source-level capability matrix：parser、batch/streaming、control flow、drawing、cross-timeframe、lookahead、host data；Node/Rust 采用同一 JSON wire name，Python 采用同一字段和值集合。能力矩阵只报告已验证的执行边界，不把 parser 识别或函数登记误报为完整兼容。
+- Formula compatibility report 已提升为 `formula.compatibility.v1` 共享 JSON contract：Rust、Python、Go、Java、.NET、C、C++、Node 均通过同一报告结构输出 parser、batch/streaming、control flow、drawing、cross-timeframe、lookahead、host data；各绑定只负责转发、生命周期和错误映射。能力矩阵只报告已验证的执行边界，不把 parser 识别或函数登记误报为完整兼容。
 - Lightweight Charts adapter 已修复增量 payload 中动态新增 line 不创建 series 的问题；`visualization/frontend/lightweight-charts-adapter.test.mjs` 已覆盖 null/warm-up 空白点、markers、viewport、增量更新、完整替换和 schema 拒绝。
 - TA-Lib `MINMAX` 与 `MINMAXINDEX` 已加入 registry、core multi-output dispatcher、TA-Lib FFI profile 和 operation catalog；输出名固定为 `MIN/MAX` 与 `MININDEX/MAXINDEX`，并有 JSON execution tests。
 - TA-Lib profile catalog 已集中维护 161 个名称，所有绑定从同一目录发现；profile-only 条目现在公开输入形状、输出名、默认参数和约束，避免跨语言各自维护名称/参数表。

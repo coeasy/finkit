@@ -34,7 +34,10 @@ pub use execute::{
 };
 pub use factor::{evaluate_factor_json, FACTOR_CONTRACT_SCHEMA_VERSION};
 pub use factor_catalog::{factor_catalog, factor_catalog_json, FACTOR_CATALOG_SCHEMA_VERSION};
-pub use formula::{evaluate_formula_json, FORMULA_CONTRACT_SCHEMA_VERSION};
+pub use formula::{
+    evaluate_formula_json, formula_compatibility_report_json, FORMULA_COMPATIBILITY_SCHEMA_VERSION,
+    FORMULA_CONTRACT_SCHEMA_VERSION,
+};
 pub use operation::{operation_catalog, operation_catalog_json, OperationCatalogEnvelope};
 pub use research::{
     factor_study_error_json, factor_study_json, quant_evaluation_error_json, quant_evaluation_json,

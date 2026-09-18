@@ -284,9 +284,7 @@ fn composite_input_expression_napi(
 }
 
 #[cfg(feature = "formula")]
-use finkit::formula::{
-    parse_formula, FormulaContext, FormulaEngine, FormulaError, FormulaTerminal,
-};
+use finkit::formula::{parse_formula, FormulaContext, FormulaEngine, FormulaError};
 #[cfg(feature = "formula")]
 use ndarray::Array1;
 
@@ -2403,14 +2401,8 @@ pub fn formula_talib_catalog() -> Result<String> {
 #[cfg(feature = "formula")]
 pub fn formula_compatibility_report(source: String, terminal: Option<String>) -> Result<String> {
     let terminal = terminal.as_deref().unwrap_or("finkit").to_string();
-    let terminal = FormulaTerminal::from_str(&terminal)
-        .ok_or_else(|| Error::new(Status::InvalidArg, "unknown formula terminal"))?;
-    finkit::formula::inspect_formula_compatibility(&source, terminal)
+    finkit_ffi_common::formula_compatibility_report_json(&source, &terminal)
         .map_err(|error| Error::new(Status::InvalidArg, error))
-        .and_then(|report| {
-            serde_json::to_string(&report)
-                .map_err(|error| Error::new(Status::GenericFailure, error.to_string()))
-        })
 }
 
 /// Evaluate a formula through the language-neutral, versioned JSON contract.

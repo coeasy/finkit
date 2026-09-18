@@ -3,7 +3,7 @@
 #![allow(missing_debug_implementations)]
 #![allow(deprecated)]
 
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_double, c_int, c_void};
 
 use finkit::formula::{FormulaContext, FormulaEngine};
@@ -843,6 +843,49 @@ pub unsafe extern "C" fn ta_formula_eval_contract_json(
         });
         CString::new(payload)
             .expect("formula contract payload contains no NUL")
+            .into_raw()
+    })
+}
+
+/// Return the shared language-neutral Formula compatibility report.
+#[no_mangle]
+pub unsafe extern "C" fn ta_formula_compatibility_report_json(
+    source: *const c_char,
+    terminal: *const c_char,
+) -> *mut c_char {
+    ffi_catch_ptr(|| {
+        let error = |message: &str| {
+            CString::new(
+                serde_json::json!({
+                    "schema_version": finkit_ffi_common::FORMULA_COMPATIBILITY_SCHEMA_VERSION,
+                    "error": message,
+                })
+                .to_string(),
+            )
+            .expect("formula compatibility error contains no NUL")
+            .into_raw()
+        };
+        if source.is_null() || terminal.is_null() {
+            return error("formula compatibility input is null");
+        }
+        let source = match unsafe { CStr::from_ptr(source) }.to_str() {
+            Ok(value) => value,
+            Err(_) => return error("formula source is not valid UTF-8"),
+        };
+        let terminal = match unsafe { CStr::from_ptr(terminal) }.to_str() {
+            Ok(value) => value,
+            Err(_) => return error("formula terminal is not valid UTF-8"),
+        };
+        let payload = finkit_ffi_common::formula_compatibility_report_json(&source, &terminal)
+            .unwrap_or_else(|message| {
+                serde_json::json!({
+                    "schema_version": finkit_ffi_common::FORMULA_COMPATIBILITY_SCHEMA_VERSION,
+                    "error": message,
+                })
+                .to_string()
+            });
+        CString::new(payload)
+            .expect("formula compatibility payload contains no NUL")
             .into_raw()
     })
 }

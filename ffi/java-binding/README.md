@@ -66,6 +66,10 @@ public class Example {
 
 The Java API also includes wrappers for momentum, volatility, volume, statistical, price-transform, candlestick, chart-pattern, formula, and other Finkit capabilities implemented by the binding. Use the Java sources and generated core registry as the exact current API source of truth rather than relying on a hard-coded indicator count.
 
+`Indicators.formulaCompatibilityReportJson(source, terminal)` returns the
+versioned `formula.compatibility.v1` report shared with Rust, Python, Go, .NET,
+C, C++ and Node.js, including the source-level capability matrix.
+
 ## Packaging for another platform
 
 The resource directory must match the platform expected by `NativeLoader`. The current loader recognizes platform families including:

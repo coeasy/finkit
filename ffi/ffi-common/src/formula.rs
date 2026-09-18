@@ -4,13 +4,38 @@
 //! need dialect selection and named outputs. Numeric hot paths can continue
 //! to use typed indicator functions or zero-copy formula APIs.
 
-use finkit::formula::{FormulaContext, FormulaDialect, FormulaEngine};
+use finkit::formula::{
+    inspect_formula_compatibility, FormulaContext, FormulaDialect, FormulaEngine, FormulaTerminal,
+};
 use ndarray::Array1;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
 /// Version of the cross-language formula result envelope.
 pub const FORMULA_CONTRACT_SCHEMA_VERSION: u16 = 1;
+
+/// Version of the language-neutral formula compatibility report envelope.
+pub const FORMULA_COMPATIBILITY_SCHEMA_VERSION: u16 = 1;
+
+/// Inspect a formula through the shared cross-language compatibility contract.
+///
+/// The report is intentionally emitted as one JSON shape for Rust, Python,
+/// Go, Java, .NET, C, C++ and Node.  Binding-specific APIs should only decode
+/// or forward this payload; they must not recreate terminal semantics.
+pub fn formula_compatibility_report_json(source: &str, terminal: &str) -> Result<String, String> {
+    let terminal = FormulaTerminal::from_str(terminal)
+        .ok_or_else(|| format!("unknown formula terminal: {terminal}"))?;
+    let report = inspect_formula_compatibility(source, terminal)?;
+    let mut payload = serde_json::to_value(report).map_err(|error| error.to_string())?;
+    let object = payload
+        .as_object_mut()
+        .ok_or_else(|| "formula compatibility report is not a JSON object".to_string())?;
+    object.insert(
+        "schema_version".to_string(),
+        serde_json::json!(FORMULA_COMPATIBILITY_SCHEMA_VERSION),
+    );
+    serde_json::to_string(&payload).map_err(|error| error.to_string())
+}
 
 /// Evaluate one formula and serialize the language-neutral result envelope.
 pub fn evaluate_formula_json(
@@ -133,5 +158,18 @@ mod tests {
             json["values"]["__PRIMARY__"],
             serde_json::json!([1.0, 2.0, 3.0])
         );
+    }
+
+    #[test]
+    fn compatibility_contract_contains_capability_matrix_and_schema() {
+        let payload =
+            formula_compatibility_report_json("X:=MA(CLOSE,5); X + SECURITY(CLOSE, 'WEEK')", "tdx")
+                .unwrap();
+        let json: Value = serde_json::from_str(&payload).unwrap();
+        assert_eq!(json["schema_version"], FORMULA_COMPATIBILITY_SCHEMA_VERSION);
+        assert_eq!(json["terminal"], "tdx");
+        assert!(json["capabilities"].as_array().unwrap().iter().any(|item| {
+            item["name"] == "cross_timeframe" && item["status"] == "host_required"
+        }));
     }
 }
