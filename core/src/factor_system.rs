@@ -627,6 +627,22 @@ impl FactorStream {
         &mut self,
         values: &BTreeMap<String, Vec<f64>>,
     ) -> FactorResult<BTreeMap<String, Vec<f64>>> {
+        let mut emitted = BTreeMap::new();
+        self.push_batch_into(values, &mut emitted)?;
+        Ok(emitted)
+    }
+
+    /// Append an aligned batch and write target values into reusable buffers.
+    ///
+    /// The caller owns `emitted` and may keep it across calls. Existing vector
+    /// capacity is reused, so steady-state ingestion does not allocate a new
+    /// result vector for every batch. On validation or execution failure the
+    /// output buffers are left unchanged.
+    pub fn push_batch_into(
+        &mut self,
+        values: &BTreeMap<String, Vec<f64>>,
+        emitted: &mut BTreeMap<String, Vec<f64>>,
+    ) -> FactorResult<()> {
         let required = self.plan.required_raw_inputs();
         let rows = required
             .first()
@@ -653,12 +669,10 @@ impl FactorStream {
             }
         }
         if rows == 0 {
-            return Ok(self
-                .plan
-                .targets()
-                .iter()
-                .map(|name| (name.clone(), Vec::new()))
-                .collect::<BTreeMap<_, _>>());
+            for name in self.plan.targets() {
+                emitted.entry(name.clone()).or_default().clear();
+            }
+            return Ok(());
         }
 
         let previous_rows = self.inputs.values().next().map_or(0, Vec::len);
@@ -684,23 +698,17 @@ impl FactorStream {
                 &mut self.output,
                 DirtyRange::new(previous_rows, total_rows),
             )?;
-            Ok(self
-                .plan
-                .targets()
-                .iter()
-                .map(|name| {
-                    (
-                        name.clone(),
-                        self.output
-                            .get(name)
-                            .map(|series| series[previous_rows..total_rows].to_vec())
-                            .unwrap_or_default(),
-                    )
-                })
-                .collect())
+            Ok(())
         })();
 
         if result.is_ok() {
+            for name in self.plan.targets() {
+                let target = emitted.entry(name.clone()).or_default();
+                target.clear();
+                if let Some(series) = self.output.get(name) {
+                    target.extend_from_slice(&series[previous_rows..total_rows]);
+                }
+            }
             self.row_count = self.row_count.saturating_add(rows);
             let capacity = self.plan.range_lookback().unwrap_or(0).saturating_add(1);
             let retained = self.inputs.values().next().map_or(0, Vec::len);
@@ -935,6 +943,21 @@ mod tests {
             .all(|(left, right)| {
                 (left.is_nan() && right.is_nan()) || (left - right).abs() < 1e-12
             }));
+
+        let mut reusable_stream = plan.stream(engine.clone()).unwrap();
+        let mut emitted = BTreeMap::new();
+        reusable_stream
+            .push_batch_into(&batch_inputs, &mut emitted)
+            .unwrap();
+        let first_capacity = emitted["momentum_5"].capacity();
+        let first_pointer = emitted["momentum_5"].as_ptr();
+        let next_inputs = BTreeMap::from([(String::from("close"), vec![19.0, 20.0])]);
+        reusable_stream
+            .push_batch_into(&next_inputs, &mut emitted)
+            .unwrap();
+        assert_eq!(emitted["momentum_5"].len(), 2);
+        assert_eq!(emitted["momentum_5"].capacity(), first_capacity);
+        assert_eq!(emitted["momentum_5"].as_ptr(), first_pointer);
 
         let checkpoint = stream.checkpoint();
         let mut next = BTreeMap::new();

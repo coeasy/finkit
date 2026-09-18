@@ -266,7 +266,7 @@ talib_0_7_1
 - Composite 已补齐 `composite.contract.v1` JSON contract：输入为 named series + graph definitions + outputs，结果统一返回 `shape/primary/values/schema_version`；C/C++、Go、Java、.NET、Python、Node 都有对应入口，避免 Composite 只在单一语言高层 API 中存在。现在同一 contract 可选接收 `previous + dirty_range`，并返回 `range_lookback` 与 `execution` trace；不具备有限 lookback 证明的图会显式失败。新增 `composite.stream.contract.v1`，所有正式绑定均可传递 checkpoint 并恢复有限窗口流。
 - Factor 已补齐 `factor.contract.v1` JSON contract：所有正式绑定都可以执行稳定的内置因子并获得 compiled-plan 的 `semantic_identity/range_lookback`；内置 `momentum/volatility/reversal` 已声明真实 incremental lookback。Rust typed API 与跨语言 `factor.stream.contract.v1` 都复用同一 range executor，支持逐行追加和同语义 checkpoint/restore；递归、跨截面或未知 lookback 计划仍拒绝 bounded streaming。跨语言 contract 不把不可序列化闭包伪装成可移植定义。Factor JSON contract 现在可选接收 `previous + dirty_range`，stream contract 另外返回 bounded checkpoint；递归指标的 O(1) stateful streaming 仍未宣称完成。
 - Composite compiled plan 的有限窗口能力已进一步落到 `CompositeStream`：SMA/WMA/VWMA/rolling statistics/return/volatility/cross 等可逐行追加，并以同一 graph signature checkpoint/restore；EMA、RSI、ATR、MACD、Z-score、未知自定义函数仍 full-only。这样 batch、range、bounded streaming 共用数值实现，不能据此宣称递归指标已有 O(1) stateful streaming。
-- Factor/Composite bounded stream 增加按 compiled plan 输入槽位排列的 `push_values` 热路径和一次性 `push_batch` 路径，跨语言 JSON 入口复用批量路径，避免逐行构造字符串键 map；`unified_engine_bench` 新增 100k 行 bounded stream 基线，实际测得当前主机逐行 Factor 约 `1.88–1.89M rows/s`、Composite 约 `1.32M rows/s`，批量 Factor 约 `435–459M rows/s`、Composite 约 `33.0–33.7M rows/s`，这些是待优化基线，不是跨硬件生产 SLO。
+- Factor/Composite bounded stream 增加按 compiled plan 输入槽位排列的 `push_values` 热路径、一次性 `push_batch` 路径和可复用输出缓冲的 `push_batch_into` 路径，跨语言 JSON 入口复用批量路径，避免逐行构造字符串键 map；`unified_engine_bench` 新增 100k 行 bounded stream 基线，实际测得当前主机逐行 Factor 约 `1.88–1.89M rows/s`、Composite 约 `1.32M rows/s`，批量 Factor 约 `435–459M rows/s`、Composite 约 `33.0–33.7M rows/s`；新增分块复用缓冲基线后再记录其实际结果，这些均是待优化基线，不是跨硬件生产 SLO。
 - Factor 已补齐 `factor.catalog.v1` JSON discovery contract：C/C++、Go、Java、.NET、Python、Node 与 Rust FFI common 共用同一份内置因子目录，公开名称、类型、方向、依赖、版本、`bounded_streaming` 及 streaming/incremental 能力，执行入口与发现入口不再断开。
 - Factor 与 Composite 的 v1 请求现在强制要求 `schema_version`，并拒绝重复 Factor target；新增 `tests/contracts/engine_contract_v1.json` 的 Factor/Composite stream checkpoint vectors，将 Formula/Factor/Composite 的请求与期望输出固定为同一份跨语言 conformance vector，避免各 binding 分叉维护示例和数值语义。
 - Formula compatibility report 已提升为 `formula.compatibility.v1` 共享 JSON contract：Rust、Python、Go、Java、.NET、C、C++、Node 均通过同一报告结构输出 parser、batch/streaming、control flow、drawing、cross-timeframe、lookahead、host data；各绑定只负责转发、生命周期和错误映射。能力矩阵只报告已验证的执行边界，不把 parser 识别或函数登记误报为完整兼容。
@@ -297,7 +297,7 @@ talib_0_7_1
 - 61 个 candlestick operation 在 `talib_0_7_1` profile 下逐项真实分派并返回等长结果。
 - `cargo +1.98.1 fmt --all` 已执行。
 - `cargo +1.98.1 bench -p finkit --bench unified_engine_bench --offline -- --sample-size 10 --measurement-time 1 --warm-up-time 1 --noplot` 已实际运行：100k borrowed Factor 计划命中约 `13.84–14.13 µs`，Composite 计划命中但结果重算约 `2.90–2.97 ms`，结果缓存命中约 `15.34–15.53 µs`；这些是当前主机基线，不是跨硬件生产 SLO。
-- 同一 benchmark 新增 bounded stream：Factor `momentum_5_push_values_100k` 为 `52.896–53.147 ms`，Composite `sum_close_push_values_100k` 为 `75.687–75.967 ms`；批量 append 基线分别为 Factor `218.00–229.99 µs`、Composite `2.9697–3.0325 ms`。批量路径已证明能显著降低窗口执行开销，但仍包含结果 materialization，零分配和跨硬件生产阈值仍待下一阶段。
+- 同一 benchmark 新增 bounded stream：Factor `momentum_5_push_values_100k` 为 `52.896–53.147 ms`，Composite `sum_close_push_values_100k` 为 `75.687–75.967 ms`；批量 append 基线分别为 Factor `218.00–229.99 µs`、Composite `2.9697–3.0325 ms`。分块复用输出缓冲的实测为 Factor `177.08–177.98 µs`、Composite `2.8750–2.9269 ms`，相对同一轮批量基线约降低 16% 和 3%；这只证明结果 vector 容量可以复用，输入扩展、窗口执行和 JSON 序列化仍有分配，跨硬件生产阈值仍待下一阶段。
 - `node --test visualization/frontend/lightweight-charts-adapter.test.mjs`：`2 passed, 0 failed`；这是 adapter contract test，不等同于真实浏览器版本兼容或完整交互集成。
 - TA-Lib golden：定向全指标 suite `1 passed, 0 failed`，161 个指标均有固定 reference 文件；当前集合不是 TA-Lib 全目录证明。
 - TA-Lib coverage matrix：profile-only catalog `101`、dispatcher smoke `161`、fixed numeric golden `161`；矩阵与 golden 文件、公共 catalog、dispatcher 支持集合已通过一致性测试。
@@ -307,7 +307,7 @@ talib_0_7_1
 - TA-Lib 全目录数值等价、性能全面超过 TA-Lib；
 - TDX/同花顺/东方财富全部市场函数和 Pine 全语言兼容；
 - Factor/Composite 所有路径都已达到生产吞吐 SLO；
-- 所有递归 Factor/Composite 都已有跨语言 O(1) stateful streaming；当前已完成有限窗口跨语言 checkpoint wire contract，但递归指标仍 full-only；
+- 递归 Factor/Composite 尚未全部接入跨语言 O(1) stateful streaming；当前已完成有限窗口跨语言 checkpoint wire contract，递归指标仍由 compiled bounded stream 明确拒绝，必须接入真实状态内核并通过 batch/stream 数值等价后才能标记完成；
 - CMake/CTest 下的 C++ 原生编译与安装（当前验证环境没有 CMake/CTest）；
 - 八语言真实宿主运行时 golden、发布包和 ABI 稳定性；workspace 中 Node binding 的 Rust 测试出现 Node-API 宿主符号加载告警，且 `ffi/node-binding npm test` 在当前环境因缺少 `finkit-win32-x64-msvc` native addon 包而未进入用例，不能替代真实 Node 宿主 smoke test；
 - Lightweight Charts 完整浏览器交互集成；
