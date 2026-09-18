@@ -7,6 +7,8 @@
 
 use crate::data::KlineData;
 use crate::error::{Result, VisualizationError};
+use crate::scene::{ChartScene, HitTarget, PanelId};
+use crate::viewport::Viewport;
 use serde::{Deserialize, Serialize};
 
 /// Time value accepted by Lightweight Charts.
@@ -63,6 +65,76 @@ pub struct LightweightLine {
     pub data: Vec<LightweightLinePoint>,
 }
 
+/// A panel descriptor consumed by the web adapter. Absolute rectangles are
+/// retained as metadata; Lightweight Charts owns the actual pane layout.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LightweightPanel {
+    /// Stable panel identifier.
+    pub id: String,
+    /// Source scene rectangle, when available.
+    pub rect: LightweightRect,
+    /// Whether the panel is visible.
+    pub visible: bool,
+}
+
+/// A render layer descriptor retained for frontend visibility controls.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LightweightLayer {
+    /// Stable layer identifier.
+    pub id: String,
+    /// Owning panel identifier.
+    pub panel: String,
+    /// Draw ordering inherited from the semantic scene.
+    pub z_index: i32,
+    /// Current visibility.
+    pub visible: bool,
+    /// Opacity in the source scene.
+    pub opacity: f32,
+}
+
+/// Rectangular scene metadata. Lightweight Charts does not position panes by
+/// absolute pixels, but other web adapters can use the same scene payload.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub struct LightweightRect {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+/// A semantic event or signal marker mapped to a candle time.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LightweightMarker {
+    /// Marker time.
+    pub time: LightweightTime,
+    /// `aboveBar`, `belowBar`, or `inBar`.
+    pub position: String,
+    /// Lightweight Charts marker shape.
+    pub shape: String,
+    /// CSS color.
+    pub color: String,
+    /// Optional short label or tooltip text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+}
+
+/// Viewport metadata for logical-range synchronization.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub struct LightweightViewport {
+    pub start: usize,
+    pub end: usize,
+    pub follow_latest: bool,
+}
+
+/// Semantic scene portion of a Lightweight Charts payload.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LightweightScene {
+    pub panels: Vec<LightweightPanel>,
+    pub layers: Vec<LightweightLayer>,
+    pub markers: Vec<LightweightMarker>,
+    pub viewport: LightweightViewport,
+}
+
 /// Versioned payload shared by Lightweight Charts and other web frontends.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LightweightChartsPayload {
@@ -77,6 +149,9 @@ pub struct LightweightChartsPayload {
     /// Additional named indicator lines.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub lines: Vec<LightweightLine>,
+    /// Optional semantic scene data for interactive web adapters.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scene: Option<LightweightScene>,
 }
 
 impl LightweightChartsPayload {
@@ -125,7 +200,56 @@ impl LightweightChartsPayload {
             candles,
             volume,
             lines: Vec::new(),
+            scene: None,
         })
+    }
+
+    /// Build a payload that includes semantic panels, layers, markers and
+    /// viewport metadata from the renderer-neutral chart scene.
+    pub fn from_kline_scene(
+        data: &KlineData,
+        scene: &ChartScene,
+        viewport: Viewport,
+    ) -> Result<Self> {
+        let mut payload = Self::from_kline(data)?;
+        let markers = scene_markers(data, &payload.candles, scene)?;
+        let panels = scene
+            .panels
+            .iter()
+            .map(|panel| LightweightPanel {
+                id: panel_id(panel.id),
+                rect: LightweightRect {
+                    x: panel.rect.x,
+                    y: panel.rect.y,
+                    width: panel.rect.width,
+                    height: panel.rect.height,
+                },
+                visible: panel.visible,
+            })
+            .collect();
+        let layers = scene
+            .layers
+            .iter()
+            .map(|layer| LightweightLayer {
+                id: layer.id.clone(),
+                panel: panel_id(layer.panel),
+                z_index: layer.z_index,
+                visible: layer.visible,
+                opacity: layer.opacity,
+            })
+            .collect();
+        let (start, end) = viewport.resolve(data.len());
+        payload.scene = Some(LightweightScene {
+            panels,
+            layers,
+            markers,
+            viewport: LightweightViewport {
+                start,
+                end,
+                follow_latest: viewport.follow_latest,
+            },
+        });
+        Ok(payload)
     }
 
     /// Add one aligned nullable indicator line.
@@ -192,6 +316,60 @@ fn times_for(data: &KlineData) -> Result<Vec<LightweightTime>> {
         .collect())
 }
 
+fn panel_id(panel: PanelId) -> String {
+    match panel {
+        PanelId::Main => "main".to_string(),
+        PanelId::Volume => "volume".to_string(),
+        PanelId::Indicator(index) => format!("indicator:{index}"),
+    }
+}
+
+fn scene_markers(
+    data: &KlineData,
+    candles: &[LightweightCandle],
+    scene: &ChartScene,
+) -> Result<Vec<LightweightMarker>> {
+    let mut markers = Vec::new();
+    for region in &scene.hit_regions {
+        let (index, position, shape, color, fallback_text) = match &region.target {
+            HitTarget::Event { index, kind } => {
+                (*index, "aboveBar", "circle", "#f59e0b", kind.clone())
+            }
+            HitTarget::ChanSignal { index, kind } => {
+                let is_sell = kind.to_ascii_uppercase().starts_with('S');
+                (
+                    *index,
+                    if is_sell { "aboveBar" } else { "belowBar" },
+                    if is_sell { "arrowDown" } else { "arrowUp" },
+                    if is_sell { "#ef5350" } else { "#26a69a" },
+                    kind.clone(),
+                )
+            }
+            HitTarget::ChanDivergence { index, kind } => {
+                (*index, "aboveBar", "square", "#ab47bc", kind.clone())
+            }
+            _ => continue,
+        };
+        if index >= data.len() || index >= candles.len() {
+            return Err(VisualizationError::ConversionError {
+                message: format!("scene marker index {index} exceeds kline length"),
+            });
+        }
+        markers.push((
+            index,
+            LightweightMarker {
+                time: candles[index].time.clone(),
+                position: position.to_string(),
+                shape: shape.to_string(),
+                color: color.to_string(),
+                text: region.tooltip.clone().or(Some(fallback_text)),
+            },
+        ));
+    }
+    markers.sort_by_key(|(index, _)| *index);
+    Ok(markers.into_iter().map(|(_, marker)| marker).collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -250,5 +428,38 @@ mod tests {
             LightweightChartsPayload::from_kline(&data),
             Err(VisualizationError::ConversionError { .. })
         ));
+    }
+
+    #[test]
+    fn scene_payload_maps_markers_panels_layers_and_viewport() {
+        use crate::geometry::Rect;
+        use crate::scene::{ChartMetadata, HitRegion, LayerDescriptor, PanelDescriptor};
+
+        let data = data();
+        let scene = ChartScene {
+            panels: vec![PanelDescriptor {
+                id: PanelId::Main,
+                rect: Rect::new(0.0, 0.0, 800.0, 500.0),
+                visible: true,
+            }],
+            layers: vec![LayerDescriptor::new("price", PanelId::Main, 10)],
+            hit_regions: vec![HitRegion {
+                rect: Rect::zero(),
+                target: HitTarget::Event {
+                    index: 1,
+                    kind: "signal".to_string(),
+                },
+                priority: 1,
+                tooltip: Some("event".to_string()),
+            }],
+            metadata: ChartMetadata::default(),
+        };
+        let mut payload =
+            LightweightChartsPayload::from_kline_scene(&data, &scene, Viewport::new(0, 1)).unwrap();
+        let scene = payload.scene.take().unwrap();
+        assert_eq!(scene.panels[0].id, "main");
+        assert_eq!(scene.layers[0].id, "price");
+        assert_eq!(scene.markers[0].text.as_deref(), Some("event"));
+        assert_eq!(scene.viewport.end, 1);
     }
 }

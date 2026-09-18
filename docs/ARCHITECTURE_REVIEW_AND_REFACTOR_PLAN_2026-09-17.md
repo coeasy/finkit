@@ -15,7 +15,7 @@ Finkit 已经具备一个功能面很宽的量化计算内核，但当前状态�
 3. **主体链路没有完全贯通。** Core 内已有 Formula、Factor、Composite、Streaming、V3/V4 Runtime 多条可运行链路，但它们没有全部落到同一个计划、Kernel、状态、缓存和输出契约上。工作区还存在 `crates/finkit-factor` 与 `crates/finkit-runtime` 两个重复的早期骨架；其中 `finkit-runtime` 的 `FactorFactory::create()` 返回描述字符串而不是可执行 Factor，不能作为生产执行链。
 4. **Factor 和 Composite 目前不能证明都满足高吞吐生产要求。** Core 的 borrowed、range、缓存和执行计划是正确方向，但 Factor 注册表使用 `Arc<dyn Fn>`，Composite 使用 `BTreeMap` 和独立缓存，仍有动态分发、重复物化和多套缓存身份的问题；没有统一的 compiled operator/typed state/kernel dispatch 作为唯一热路径。
 5. **多语言已有大量绑定，但“语义同 API”尚未完成。** Python、C++、Go、Rust、Java、.NET 都存在绑定或源码入口，但目前是多套手写/半生成 façade。返回类型、错误模型、数组所有权、公式计划句柄、Streaming 状态和研究 API 仍存在语言间差异。Node、Swift、Android/iOS 专用入口不纳入本产品第一阶段正式公开语言范围。最新增量已将版本化 Operation Catalog 接入六个正式入口，但执行、结果、状态和错误 contract tests 尚未全覆盖。
-6. **绘图已开始收敛为 Lightweight Charts Web adapter。** 已有 SVG、Canvas、WebGL/WebGPU、PNG、JSON/HTML 输出，适合 native/headless/export；当前新增了版本化 Lightweight Charts payload 和浏览器 adapter，已覆盖 OHLC、volume、line、null/warm-up、完整更新和最后一条增量更新。ChartScene 的 markers、pane、tooltip/viewport 全量映射仍需继续完成，不能把当前 adapter 宣称为最终绘图实现。
+6. **绘图已开始收敛为 Lightweight Charts Web adapter。** 已有 SVG、Canvas、WebGL/WebGPU、PNG、JSON/HTML 输出，适合 native/headless/export；当前版本化 payload 和浏览器 adapter 已覆盖 OHLC、volume、line、null/warm-up、markers、scene panels/layers、viewport、完整更新和增量更新。tooltip 仍以 marker text/scene metadata 形式传递，完整跨 pane tooltip 交互和前端集成测试仍待完成，不能把当前 adapter 宣称为最终绘图实现。
 7. **基础门禁已恢复全绿，但仍不能据此宣称全量生产化。** 审计初始验证为 `2882 passed, 5 failed, 1 ignored`；后续已修复 ADX 对齐、Runtime 检查点/状态恢复、注册表快照和版本/SSOT 漂移。当前 Core 专项 operation 测试为 `10 passed, 0 failed`，此前 Core 全量为 `2897 passed, 0 failed, 1 ignored`；本轮还通过了 Python/Go/Java/.NET binding 的 Rust 编译检查。公式完整语义、六语言执行 contract tests、跨语言 golden、性能 SLO 和持久化 typed state 仍未完成。
 
 因此，下一步不是继续增加零散接口，而是先建立一个 canonical compute contract，把 Formula、Factor、Composite、Streaming 和兼容层收敛到同一编译计划与 Runtime，再由各语言和绘图适配器消费这个契约。
@@ -272,7 +272,7 @@ Core `lib.rs` 暴露大量模块，并同时支持 std/no_std、formula、JIT、
 | Factor | Core 可运行，重复 crate 未贯通 | FactorEngine/FactorPlan/UnifiedRuntime 存在；独立 factor crate 只有最小骨架 | Factor 与 Formula 使用同一 IR/kernel/state/cache |
 | Composite | 可执行，性能/缓存未统一 | dependency、cycle、borrowed、cached 测试存在 | compiled graph、CSE、arena、统一 cache identity、parallel plan |
 | 量化研究分析 | 功能面已存在，发布契约未完全证明 | factor-analysis、ffi-common 和 JSON 入口存在 | 因子研究 request/report/error schema、跨语言 golden、artifact gate；不包含订单/回测/交易风控 |
-| Visualization | Rust 后端较完整，Lightweight Charts payload/基础 adapter 已落地 | SVG/Canvas/WebGL/WebGPU/JSON/HTML 以及 `visualization/src/lightweight.rs`、`frontend/lightweight-charts-adapter.js` | 完成 ChartScene 的 markers/pane/tooltip/viewport/incremental 全量映射与前端集成测试 |
+| Visualization | Lightweight Charts scene payload 已落地，前端基础映射已验证 | `visualization/src/lightweight.rs` 已输出 panels/layers/markers/viewport；adapter 已应用 markers 和 logical range | 完成跨 pane series/tooltip、浏览器版本矩阵和前端集成测试 |
 | 多语言 | 目录元数据已开始统一，执行语义一致未完成 | Rust/Python/C++/Go/Java/.NET 均已接入版本化 Operation Catalog；Rust binding 编译通过 | 统一 schema/错误/生命周期/能力矩阵和六语言执行 contract tests |
 | 版本/文档 SSOT | 未完成 | `check_versions.py` 和 `gen_ssot_docs.py --check` 失败 | clean checkout release gate 全绿 |
 

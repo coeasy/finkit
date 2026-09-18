@@ -29,6 +29,36 @@ function lineData(points) {
     : point);
 }
 
+function applySceneMetadata(chart, lightweightCharts, candle, scene, markerState) {
+  if (!scene) return;
+
+  if (typeof candle.setMarkers === 'function') {
+    candle.setMarkers(scene.markers || []);
+  } else if (typeof lightweightCharts.createSeriesMarkers === 'function') {
+    if (markerState.primitive && typeof markerState.primitive.detach === 'function') {
+      markerState.primitive.detach();
+    }
+    markerState.primitive = lightweightCharts.createSeriesMarkers(
+      candle,
+      scene.markers || [],
+    );
+  }
+
+  const viewport = scene.viewport;
+  if (viewport && typeof chart.timeScale === 'function') {
+    const timeScale = chart.timeScale();
+    if (typeof timeScale.setVisibleLogicalRange === 'function'
+      && Number.isFinite(viewport.start)
+      && Number.isFinite(viewport.end)
+      && viewport.end > viewport.start) {
+      timeScale.setVisibleLogicalRange({
+        from: viewport.start,
+        to: viewport.end - 1,
+      });
+    }
+  }
+}
+
 /**
  * Create a chart from a `LightweightChartsPayload`.
  *
@@ -55,11 +85,14 @@ export function createFinkitLightweightChart(container, payload, lightweightChar
     ...(options.volume || {}),
   });
   const lines = new Map();
+  const markerState = { primitive: null };
+  let currentPayload = payload;
 
   function apply(next) {
     if (!next || next.schema_version !== 1) {
       throw new Error('Unsupported Finkit Lightweight Charts payload schema');
     }
+    currentPayload = next;
     candle.setData(next.candles || []);
     volume.setData(next.volume || []);
     const incoming = new Set();
@@ -78,6 +111,7 @@ export function createFinkitLightweightChart(container, payload, lightweightChar
         lines.delete(name);
       }
     }
+    applySceneMetadata(chart, lightweightCharts, candle, next.scene, markerState);
   }
 
   apply(payload);
@@ -86,6 +120,9 @@ export function createFinkitLightweightChart(container, payload, lightweightChar
     candle,
     volume,
     lines,
+    get scene() {
+      return currentPayload.scene || null;
+    },
     setPayload: apply,
     update(next) {
       if (!next || next.schema_version !== 1) {
@@ -98,7 +135,9 @@ export function createFinkitLightweightChart(container, payload, lightweightChar
         const point = line.data?.[line.data.length - 1];
         if (series && point) series.update(lineData([point])[0]);
       }
+      if (next.scene) {
+        applySceneMetadata(chart, lightweightCharts, candle, next.scene, markerState);
+      }
     },
   };
 }
-
