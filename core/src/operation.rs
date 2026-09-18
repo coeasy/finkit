@@ -8,8 +8,8 @@
 
 use crate::composite::{CompositeDefinition, CompositeEngine};
 use crate::data_contract::{
-    CrossSectionView, DataContractError, FundamentalSeries, MarketPanel, TemporalAlignment,
-    TemporalSeries,
+    CrossSectionView, DataContractError, FrameKey, FundamentalSeries, MarketPanel,
+    TemporalAlignment, TemporalSeries,
 };
 use crate::factors::{
     BorrowedFactorContext, FactorDefinition, FactorEngine, FactorKind, FactorRegistry,
@@ -493,6 +493,57 @@ pub struct PanelOperationResult {
     pub values: BTreeMap<crate::data_contract::FrameKey, OperationResult>,
 }
 
+/// Stable result-cache identity for a panel operation.
+///
+/// The numeric buffers are intentionally not hashed. The caller owns the
+/// monotonic `data_revision` contract and must advance it whenever any input
+/// that can affect the result changes. This keeps hot-path caching O(1) with
+/// respect to data size while making symbol/timeframe isolation explicit.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct OperationCacheKey {
+    /// High-level operation family, such as `formula.panel`.
+    pub operation: String,
+    /// Canonical request signature, excluding the frame and revision.
+    pub request: String,
+    /// Formula dialect, when the operation has one.
+    pub dialect: Option<String>,
+    /// Explicit symbol/timeframe frame identity.
+    pub frame: FrameKey,
+    /// Caller-owned input revision.
+    pub data_revision: u64,
+}
+
+impl OperationCacheKey {
+    /// Build a cache key for a panel formula request.
+    pub fn panel_formula(
+        source: &str,
+        dialect: FormulaDialect,
+        frame: &FrameKey,
+        data_revision: u64,
+    ) -> Self {
+        Self {
+            operation: "formula.panel".to_string(),
+            request: source.to_string(),
+            dialect: Some(dialect.as_str().to_string()),
+            frame: frame.clone(),
+            data_revision,
+        }
+    }
+}
+
+/// Observable counters for the unified operation result cache.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OperationCacheStats {
+    /// Number of cache hits since construction or the last clear.
+    pub hits: u64,
+    /// Number of cache misses since construction or the last clear.
+    pub misses: u64,
+    /// Number of retained result entries.
+    pub entries: usize,
+    /// Maximum number of retained result entries.
+    pub capacity: usize,
+}
+
 impl PanelOperationResult {
     /// Number of symbol/timeframe frames evaluated.
     pub fn len(&self) -> usize {
@@ -589,6 +640,10 @@ pub struct UnifiedOperationEngine {
     formula: FormulaEngine,
     factor: FactorEngine,
     composite: CompositeEngine,
+    operation_cache: BTreeMap<OperationCacheKey, OperationResult>,
+    operation_cache_capacity: usize,
+    operation_cache_hits: u64,
+    operation_cache_misses: u64,
 }
 
 impl UnifiedOperationEngine {
@@ -606,7 +661,41 @@ impl UnifiedOperationEngine {
             formula: FormulaEngine::new(),
             factor: FactorEngine::new(factors),
             composite: CompositeEngine::new(),
+            operation_cache: BTreeMap::new(),
+            operation_cache_capacity: 64,
+            operation_cache_hits: 0,
+            operation_cache_misses: 0,
         })
+    }
+
+    /// Create an engine with an explicit unified result-cache capacity.
+    pub fn with_cache_capacity(factors: FactorRegistry, capacity: usize) -> Self {
+        let mut engine = Self::new(factors);
+        engine.set_cache_capacity(capacity);
+        engine
+    }
+
+    /// Change the unified result-cache capacity and invalidate old entries.
+    pub fn set_cache_capacity(&mut self, capacity: usize) {
+        self.operation_cache_capacity = capacity.max(1);
+        self.operation_cache.clear();
+    }
+
+    /// Remove all unified operation results and reset cache counters.
+    pub fn clear_cache(&mut self) {
+        self.operation_cache.clear();
+        self.operation_cache_hits = 0;
+        self.operation_cache_misses = 0;
+    }
+
+    /// Return unified operation result-cache counters.
+    pub fn cache_stats(&self) -> OperationCacheStats {
+        OperationCacheStats {
+            hits: self.operation_cache_hits,
+            misses: self.operation_cache_misses,
+            entries: self.operation_cache.len(),
+            capacity: self.operation_cache_capacity,
+        }
     }
 
     /// Read the canonical metadata catalog used by this engine.
@@ -785,36 +874,39 @@ impl UnifiedOperationEngine {
     ) -> Result<PanelOperationResult, OperationExecutionError> {
         let mut values = BTreeMap::new();
         for (key, frame) in panel.iter() {
-            frame
-                .validate()
-                .map_err(|error| DataContractError::InvalidMarketFrame(error))?;
-            let amount = frame.amount.map(|series| Array1::from_vec(series.to_vec()));
-            let mut context = FormulaContext::from_borrowed_ohlcv(
-                frame.open,
-                frame.high,
-                frame.low,
-                frame.close,
-                frame.volume,
-                amount,
-            );
-            context.datetime = frame
-                .timestamp
-                .map(|timestamps| Array1::from_vec(timestamps.to_vec()));
-            let (frame_values, draw) = self.execute_formula(source, dialect, &mut context)?;
-            let shape = if frame_values.len() > 1 {
-                ValueShape::MultiSeries
-            } else {
-                ValueShape::Series
-            };
             values.insert(
                 key.clone(),
-                OperationResult {
-                    values: frame_values,
-                    shape,
-                    primary: Some(PRIMARY_OUTPUT_NAME.to_string()),
-                    draw,
-                },
+                self.execute_formula_on_frame(source, dialect, frame)?,
             );
+        }
+        Ok(PanelOperationResult { values })
+    }
+
+    /// Execute a panel formula with revision-aware result caching.
+    ///
+    /// Every frame is cached independently, so adding or changing one symbol
+    /// does not invalidate unrelated symbol/timeframe results. Reusing a
+    /// revision for changed input data is a caller error by contract.
+    pub fn execute_panel_formula_cached(
+        &mut self,
+        source: &str,
+        dialect: FormulaDialect,
+        panel: &MarketPanel<'_>,
+        data_revision: u64,
+    ) -> Result<PanelOperationResult, OperationExecutionError> {
+        let mut values = BTreeMap::new();
+        for (key, frame) in panel.iter() {
+            let cache_key = OperationCacheKey::panel_formula(source, dialect, key, data_revision);
+            let result = if let Some(result) = self.operation_cache.get(&cache_key).cloned() {
+                self.operation_cache_hits = self.operation_cache_hits.saturating_add(1);
+                result
+            } else {
+                self.operation_cache_misses = self.operation_cache_misses.saturating_add(1);
+                let result = self.execute_formula_on_frame(source, dialect, frame)?;
+                self.insert_cached_result(cache_key, result.clone());
+                result
+            };
+            values.insert(key.clone(), result);
         }
         Ok(PanelOperationResult { values })
     }
@@ -974,6 +1066,52 @@ impl UnifiedOperationEngine {
             primary: Some(PRIMARY_OUTPUT_NAME.to_string()),
             draw,
         })
+    }
+
+    fn execute_formula_on_frame(
+        &mut self,
+        source: &str,
+        dialect: FormulaDialect,
+        frame: &crate::runtime::MarketFrame<'_>,
+    ) -> Result<OperationResult, OperationExecutionError> {
+        frame
+            .validate()
+            .map_err(|error| DataContractError::InvalidMarketFrame(error))?;
+        let amount = frame.amount.map(|series| Array1::from_vec(series.to_vec()));
+        let mut context = FormulaContext::from_borrowed_ohlcv(
+            frame.open,
+            frame.high,
+            frame.low,
+            frame.close,
+            frame.volume,
+            amount,
+        );
+        context.datetime = frame
+            .timestamp
+            .map(|timestamps| Array1::from_vec(timestamps.to_vec()));
+        let (values, draw) = self.execute_formula(source, dialect, &mut context)?;
+        let shape = if values.len() > 1 {
+            ValueShape::MultiSeries
+        } else {
+            ValueShape::Series
+        };
+        Ok(OperationResult {
+            values,
+            shape,
+            primary: Some(PRIMARY_OUTPUT_NAME.to_string()),
+            draw,
+        })
+    }
+
+    fn insert_cached_result(&mut self, key: OperationCacheKey, result: OperationResult) {
+        if self.operation_cache.len() >= self.operation_cache_capacity
+            && !self.operation_cache.contains_key(&key)
+        {
+            if let Some(oldest) = self.operation_cache.keys().next().cloned() {
+                self.operation_cache.remove(&oldest);
+            }
+        }
+        self.operation_cache.insert(key, result);
     }
 
     fn execute_formula(
@@ -1269,6 +1407,58 @@ mod tests {
         assert!(indicator_b[0].is_nan());
         assert_eq!(&indicator_a[1..], &[2.5, 3.5]);
         assert_eq!(&indicator_b[1..], &[12.0, 14.0]);
+    }
+
+    #[test]
+    fn cached_panel_formula_isolated_by_frame_and_revision() {
+        let values_a = [1.0, 2.0, 3.0];
+        let values_b = [10.0, 20.0, 30.0];
+        let timestamps = [100, 200, 300];
+        let frame_a = MarketFrame::new(&values_a, &values_a, &values_a, &values_a, &values_a)
+            .unwrap()
+            .with_timestamp(&timestamps)
+            .unwrap();
+        let frame_b = MarketFrame::new(&values_b, &values_b, &values_b, &values_b, &values_b)
+            .unwrap()
+            .with_timestamp(&timestamps)
+            .unwrap();
+        let key_a = FrameKey::new("AAA", "1d").unwrap();
+        let key_b = FrameKey::new("BBB", "1d").unwrap();
+        let mut panel = MarketPanel::new();
+        panel.insert(key_a.clone(), frame_a).unwrap();
+        panel.insert(key_b.clone(), frame_b).unwrap();
+
+        let mut engine = UnifiedOperationEngine::with_cache_capacity(FactorRegistry::new(), 8);
+        let first = engine
+            .execute_panel_formula_cached("CLOSE + 1", FormulaDialect::AlphaTA, &panel, 7)
+            .unwrap();
+        assert_eq!(first.get(&key_a).unwrap().primary_values().unwrap()[0], 2.0);
+        assert_eq!(
+            first.get(&key_b).unwrap().primary_values().unwrap()[0],
+            11.0
+        );
+        assert_eq!(engine.cache_stats().misses, 2);
+        assert_eq!(engine.cache_stats().hits, 0);
+
+        let second = engine
+            .execute_panel_formula_cached("CLOSE + 1", FormulaDialect::AlphaTA, &panel, 7)
+            .unwrap();
+        assert_eq!(
+            second.get(&key_a).unwrap().primary_values().unwrap()[2],
+            4.0
+        );
+        assert_eq!(
+            second.get(&key_b).unwrap().primary_values().unwrap()[2],
+            31.0
+        );
+        assert_eq!(engine.cache_stats().hits, 2);
+        assert_eq!(engine.cache_stats().entries, 2);
+
+        engine
+            .execute_panel_formula_cached("CLOSE + 1", FormulaDialect::AlphaTA, &panel, 8)
+            .unwrap();
+        assert_eq!(engine.cache_stats().misses, 4);
+        assert_eq!(engine.cache_stats().entries, 4);
     }
 
     #[test]

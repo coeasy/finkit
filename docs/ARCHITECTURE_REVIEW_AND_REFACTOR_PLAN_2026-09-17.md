@@ -38,7 +38,7 @@ V1 数据边界已冻结：
 
 当前已具备 `FrameKey`/`MarketPanel`/`CrossSectionView`/`FundamentalSeries` 契约，`FactorEngine::evaluate_cross_sectional` 已按每个时间点逐行调用横截面 Factor，统一入口也可返回 `ValueShape::CrossSection`；`UnifiedOperationEngine::execute_panel_formula` 与 `execute_panel_indicator` 已按显式 symbol/timeframe 分离执行并保留每个 frame 的结果，`execute_formula_with_fundamentals` 已按行情时间轴执行 point-in-time as-of 展开并拒绝无 timestamp 的 frame。
 
-本轮新增 `TemporalSeries`/`TemporalAlignment` 和 `execute_formula_with_temporal_inputs`：跨周期/外部时间序列必须显式选择 `Exact` 或 `AsOfClosed`，后者只传播 source timestamp 小于等于 target timestamp 的已收盘值，并对 source/target 的单调性和长度做校验。它已经阻断“高周期未收盘值泄漏到低周期”的核心风险，但仍不是自动重采样器，也尚未接入统一 Planner/cache、Pine `request.security` 数据提供器和六语言完整执行 API；因此不能据此宣称多维能力全部生产化。
+本轮新增 `TemporalSeries`/`TemporalAlignment` 和 `execute_formula_with_temporal_inputs`：跨周期/外部时间序列必须显式选择 `Exact` 或 `AsOfClosed`，后者只传播 source timestamp 小于等于 target timestamp 的已收盘值，并对 source/target 的单调性和长度做校验。`UnifiedOperationEngine` 另已提供按 `operation + dialect + symbol/timeframe + data_revision` 隔离的 Panel Formula 结果缓存及命中/未命中统计；revision 由调用方负责递增。它已经阻断“高周期未收盘值泄漏到低周期”的核心风险，但仍不是自动重采样器，也尚未接入统一 Planner、Pine `request.security` 数据提供器和六语言完整执行 API；因此不能据此宣称多维能力全部生产化。
 
 V1 四类维度的实际职责如下：
 
