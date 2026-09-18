@@ -150,6 +150,10 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
   JSON 调用每次重新创建 Runtime。Factor/Composite 批处理与三类 streaming 请求现在
   必须显式提供非空 `scope` 和 `data_revision`；`data_revision=0` 是合法的初始快照，
   缺少元数据或使用空 scope 直接拒绝，避免无来源数据进入共享缓存或 checkpoint。
+- Operation catalog 现在对同名但 profile 语义不同的 operation 发布
+  `profile_output_contracts`；顶层字段保留 Core registry 语义，TA-Lib profile
+  使用独立输出 schema，并通过 201 项 dispatcher smoke 逐项校验实际返回字段，
+  防止 discovery 与执行结果在 KDJ、AROON、DONCHIAN 及扩展多输出指标上漂移。
 - 主 CI 已加入 `finkit-ffi-common` 统一契约测试，多语言工作流的触发路径已覆盖
   共享 FFI 契约、C/Go/Java binding 和 `tests/contracts` fixtures。
 

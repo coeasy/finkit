@@ -3,10 +3,10 @@
 Finkit keeps the formula runtime and the TA-Lib compatibility catalog as two
 separate layers:
 
-1. The profile-only catalog contains 101 public TA-Lib names that are not
+1. The profile-only catalog contains 138 public TA-Lib-profile names that are not
    necessarily present in the Core registry. The complete versioned
    dispatcher surface is the union of those names and Core-overlap names,
-   currently 161 operations.
+   currently 201 operations.
 2. The runtime-registration bit is derived from the actual formula function
    map. A catalog entry is therefore not an implicit promise that the function
    can already execute.
@@ -14,8 +14,8 @@ separate layers:
    `host_required` and `unsupported` per called function. It also reports the
    catalog revision and global runtime coverage.
 
-The current release keeps 101 profile-only catalog entries and reports the
-complete 161-name dispatcher surface separately from formula-runtime
+The current release keeps 138 profile-only catalog entries and reports the
+complete 201-name dispatcher surface separately from formula-runtime
 registration and binding-level execution. The Python batch binding
 also exposes an explicit `talib_compat=True` adapter. It normalizes TA-Lib
 lookback/NaN conventions, absolute index outputs, directional-movement
@@ -23,10 +23,10 @@ smoothing, AROON output order and PPO moving-average type without changing the
 default native finkit behavior.
 
 The differential matrix must be read as three independent gates. The shared
-Rust JSON dispatcher currently executes all `161/161` dispatcher names in its
+Rust JSON dispatcher currently executes all `201/201` dispatcher names in its
 checked-in smoke contract; that is callable/shape coverage only. Numerical parity is
-currently pinned by the checked-in 161-indicator golden corpus, not by a claimed
-161-function pass. The versioned state is recorded in
+currently pinned by the checked-in 201-indicator golden corpus, not by a claimed
+201-function pass. The versioned state is recorded in
 `tests/contracts/talib_coverage_matrix_v1.json`. An entry is not promoted to exact parity until its
 parameter, warm-up, NaN, output-count and differential golden contract is
 complete.

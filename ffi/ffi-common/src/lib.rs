@@ -54,7 +54,10 @@ pub use formula::{
     FORMULA_PANEL_CONTRACT_SCHEMA_VERSION, FORMULA_TEMPORAL_CONTRACT_SCHEMA_VERSION,
 };
 pub use formula_stream::{evaluate_formula_stream_json, FORMULA_STREAM_CONTRACT_SCHEMA_VERSION};
-pub use operation::{operation_catalog, operation_catalog_json, OperationCatalogEnvelope};
+pub use operation::{
+    operation_catalog, operation_catalog_json, OperationCatalogEntry, OperationCatalogEnvelope,
+    OperationProfileOutputContract,
+};
 pub use research::{
     factor_study_error_json, factor_study_json, quant_evaluation_error_json, quant_evaluation_json,
     FactorStudyRequest, FactorStudyResponse, QuantEvaluationApiError, QuantEvaluationApiReport,

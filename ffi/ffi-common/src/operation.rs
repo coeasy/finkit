@@ -13,6 +13,7 @@ use finkit::operation::{
 };
 use finkit::registry::{FunctionCategory, InputKind, LookbackSpec};
 use serde::Serialize;
+use std::collections::BTreeMap;
 
 /// Versioned operation catalog envelope shared by all bindings.
 #[derive(Debug, Clone, Serialize)]
@@ -48,6 +49,9 @@ pub struct OperationCatalogEntry {
     pub outputs: usize,
     /// Stable names for output series in result order.
     pub output_names: Vec<String>,
+    /// Profile-specific output schemas for operations whose compatibility
+    /// profile intentionally has a different result shape than Core.
+    pub profile_output_contracts: BTreeMap<String, OperationProfileOutputContract>,
     /// Lookback behavior.
     pub lookback: &'static str,
     /// Explicit execution and semantic capabilities.
@@ -69,6 +73,19 @@ pub struct OperationParameter {
     pub default: Option<String>,
     /// Human-readable constraint.
     pub constraint: Option<String>,
+}
+
+/// Output schema selected by a semantic profile.
+#[derive(Debug, Clone, Serialize)]
+pub struct OperationProfileOutputContract {
+    /// Result shape under the selected profile.
+    pub value_shape: &'static str,
+    /// Parameter declarations selected by the profile.
+    pub params: Vec<OperationParameter>,
+    /// Number of aligned output series.
+    pub outputs: usize,
+    /// Stable output names in result order.
+    pub output_names: Vec<String>,
 }
 
 /// Serializable capability set.
@@ -109,6 +126,22 @@ impl From<OperationCapabilities> for OperationCapabilitiesJson {
 
 impl OperationCatalogEntry {
     fn from_spec(spec: &OperationSpec) -> Self {
+        let profile_output_contracts = if talib_profile_supported(&spec.name) {
+            let (value_shape, output_names) =
+                talib_profile_output_shape(&spec.name, &spec.output_names);
+            let outputs = output_names.len();
+            BTreeMap::from([(
+                TALIB_SEMANTIC_PROFILE.to_string(),
+                OperationProfileOutputContract {
+                    value_shape,
+                    params: talib_profile_params_for(&spec.name, &spec.params),
+                    outputs,
+                    output_names,
+                },
+            )])
+        } else {
+            BTreeMap::new()
+        };
         Self {
             operation_id: spec.id().0,
             name: spec.name.clone(),
@@ -129,6 +162,7 @@ impl OperationCatalogEntry {
                 .collect(),
             outputs: spec.outputs,
             output_names: spec.output_names.clone(),
+            profile_output_contracts,
             lookback: lookback_name(spec.lookback),
             capabilities: spec.capabilities.into(),
             schema_version: spec.schema_version,
@@ -172,10 +206,9 @@ pub fn operation_catalog(registry: &OperationRegistry) -> OperationCatalogEnvelo
 
 fn profile_only_talib_entry(name: &str) -> OperationCatalogEntry {
     let is_pattern = name.starts_with("CDL");
-    let (value_shape, outputs, output_names) = match name {
+    let (value_shape, output_names) = match name {
         "HA" => (
             "multi_series",
-            4,
             vec![
                 "HAOPEN".to_string(),
                 "HAHIGH".to_string(),
@@ -185,26 +218,51 @@ fn profile_only_talib_entry(name: &str) -> OperationCatalogEntry {
         ),
         "VORTEX" => (
             "multi_series",
-            2,
             vec!["PLUSVI".to_string(), "MINUSVI".to_string()],
+        ),
+        "AROON" => (
+            "multi_series",
+            vec!["AROON_UP".to_string(), "AROON_DOWN".to_string()],
         ),
         "STOCH" => (
             "multi_series",
-            2,
             vec!["SLOWK".to_string(), "SLOWD".to_string()],
         ),
         "STOCHF" => (
             "multi_series",
-            2,
             vec!["FASTK".to_string(), "FASTD".to_string()],
         ),
         "STOCHRSI" => (
             "multi_series",
-            2,
             vec!["FASTK".to_string(), "FASTD".to_string()],
         ),
-        _ => ("series", 1, vec![name.to_string()]),
+        "ERI" => (
+            "multi_series",
+            vec!["BULLPOWER".to_string(), "BEARPOWER".to_string()],
+        ),
+        "FRACTAL" => (
+            "multi_series",
+            vec!["SWINGHIGH".to_string(), "SWINGLOW".to_string()],
+        ),
+        "KC" => (
+            "multi_series",
+            vec![
+                "UPPERBAND".to_string(),
+                "MIDDLEBAND".to_string(),
+                "LOWERBAND".to_string(),
+            ],
+        ),
+        "SMI" => (
+            "multi_series",
+            vec!["SMI".to_string(), "SMISIGNAL".to_string()],
+        ),
+        "AC" | "ADR" | "CMOU" | "CVI" | "EFI" | "FOSC" | "MARKETFI" | "MASSI" | "PERCENTILE"
+        | "PVO" | "QSTICK" | "RMA" | "RVI" | "RVOL" | "VHF" | "WAD" => {
+            ("series", vec!["REAL".to_string()])
+        }
+        _ => ("series", vec![name.to_string()]),
     };
+    let outputs = output_names.len();
     let input = if is_pattern || matches!(name, "AVGPRICE" | "BOP" | "HA") {
         Some("ohlcv")
     } else if matches!(
@@ -227,12 +285,113 @@ fn profile_only_talib_entry(name: &str) -> OperationCatalogEntry {
         input,
         params: talib_profile_params(name),
         outputs,
-        output_names,
+        output_names: output_names.clone(),
         lookback: "dynamic",
         capabilities: OperationCapabilities::indicator(false, true).into(),
         schema_version: 1,
         semantic_profiles: vec![TALIB_SEMANTIC_PROFILE.to_string()],
+        profile_output_contracts: BTreeMap::from([(
+            TALIB_SEMANTIC_PROFILE.to_string(),
+            OperationProfileOutputContract {
+                value_shape,
+                params: talib_profile_params(name),
+                outputs,
+                output_names: output_names.clone(),
+            },
+        )]),
     }
+}
+
+fn talib_profile_output_shape(name: &str, fallback: &[String]) -> (&'static str, Vec<String>) {
+    match name {
+        "HA" => (
+            "multi_series",
+            vec![
+                "HAOPEN".to_string(),
+                "HAHIGH".to_string(),
+                "HALOW".to_string(),
+                "HACLOSE".to_string(),
+            ],
+        ),
+        "VORTEX" => (
+            "multi_series",
+            vec!["PLUSVI".to_string(), "MINUSVI".to_string()],
+        ),
+        "AROON" => (
+            "multi_series",
+            vec!["AROON_UP".to_string(), "AROON_DOWN".to_string()],
+        ),
+        "STOCH" => (
+            "multi_series",
+            vec!["SLOWK".to_string(), "SLOWD".to_string()],
+        ),
+        "STOCHF" | "STOCHRSI" => (
+            "multi_series",
+            vec!["FASTK".to_string(), "FASTD".to_string()],
+        ),
+        "ERI" => (
+            "multi_series",
+            vec!["BULLPOWER".to_string(), "BEARPOWER".to_string()],
+        ),
+        "FRACTAL" => (
+            "multi_series",
+            vec!["SWINGHIGH".to_string(), "SWINGLOW".to_string()],
+        ),
+        "KC" => (
+            "multi_series",
+            vec![
+                "UPPERBAND".to_string(),
+                "MIDDLEBAND".to_string(),
+                "LOWERBAND".to_string(),
+            ],
+        ),
+        "DONCHIAN" => (
+            "multi_series",
+            vec![
+                "UPPERBAND".to_string(),
+                "MIDDLEBAND".to_string(),
+                "LOWERBAND".to_string(),
+            ],
+        ),
+        "KDJ" => (
+            "multi_series",
+            vec!["K".to_string(), "D".to_string(), "J".to_string()],
+        ),
+        "SMI" => (
+            "multi_series",
+            vec!["SMI".to_string(), "SMISIGNAL".to_string()],
+        ),
+        "SUPERTREND" => (
+            "multi_series",
+            vec!["SUPERTREND".to_string(), "TREND".to_string()],
+        ),
+        "AC" | "ADR" | "CMOU" | "CVI" | "EFI" | "FOSC" | "MARKETFI" | "MASSI" | "PERCENTILE"
+        | "PVO" | "QSTICK" | "RMA" | "RVI" | "RVOL" | "VHF" | "WAD" => {
+            ("series", vec!["REAL".to_string()])
+        }
+        _ if fallback.len() > 1 => ("multi_series", fallback.to_vec()),
+        _ if !fallback.is_empty() => ("series", fallback.to_vec()),
+        _ => ("series", vec![name.to_string()]),
+    }
+}
+
+fn talib_profile_params_for(
+    name: &str,
+    fallback: &[finkit::registry::ParamSpec],
+) -> Vec<OperationParameter> {
+    let explicit = talib_profile_params(name);
+    if !explicit.is_empty() {
+        return explicit;
+    }
+    fallback
+        .iter()
+        .map(|param| OperationParameter {
+            name: param.name.to_string(),
+            value_type: param.value_type.to_string(),
+            default: param.default.map(str::to_string),
+            constraint: param.constraint.map(str::to_string),
+        })
+        .collect()
 }
 
 fn talib_parameter(
@@ -515,6 +674,7 @@ mod tests {
         assert!(json.contains("\"multi_symbol\":false"));
         assert!(json.contains("\"value_shape\":\"series\""));
         assert!(json.contains("\"semantic_profiles\":[\"core_registry\",\"talib_0_8_0\"]"));
+        assert!(json.contains("\"profile_output_contracts\""));
     }
 
     #[test]
@@ -701,5 +861,63 @@ mod tests {
 
         let candle = find("CDLDOJI");
         assert!(candle.params.is_empty());
+    }
+
+    #[test]
+    fn profile_only_output_names_match_dispatcher_contract() {
+        let catalog = operation_catalog(&builtin_operation_registry());
+        let expected = [
+            ("AC", vec!["REAL"]),
+            ("ADR", vec!["REAL"]),
+            ("AROON", vec!["AROON_UP", "AROON_DOWN"]),
+            ("ERI", vec!["BULLPOWER", "BEARPOWER"]),
+            ("FRACTAL", vec!["SWINGHIGH", "SWINGLOW"]),
+            ("KC", vec!["UPPERBAND", "MIDDLEBAND", "LOWERBAND"]),
+            ("SMI", vec!["SMI", "SMISIGNAL"]),
+            ("VORTEX", vec!["PLUSVI", "MINUSVI"]),
+        ];
+
+        for (name, output_names) in expected {
+            let entry = catalog
+                .operations
+                .iter()
+                .find(|operation| operation.name == name)
+                .unwrap_or_else(|| panic!("missing operation {name}"));
+            assert_eq!(
+                entry.output_names, output_names,
+                "catalog output names for {name}"
+            );
+            assert_eq!(
+                entry.outputs,
+                output_names.len(),
+                "catalog output count for {name}"
+            );
+        }
+
+        let kdj = catalog
+            .operations
+            .iter()
+            .find(|operation| operation.name == "KDJ")
+            .expect("missing core KDJ operation");
+        let kdj_profile = kdj
+            .profile_output_contracts
+            .get(TALIB_SEMANTIC_PROFILE)
+            .expect("KDJ must expose its TA-Lib profile output schema");
+        assert_eq!(kdj_profile.value_shape, "multi_series");
+        assert_eq!(kdj_profile.output_names, vec!["K", "D", "J"]);
+        assert_eq!(
+            kdj_profile
+                .params
+                .iter()
+                .map(|param| param.name.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "fastk_period",
+                "slowk_period",
+                "slowk_matype",
+                "slowd_period",
+                "slowd_matype",
+            ]
+        );
     }
 }

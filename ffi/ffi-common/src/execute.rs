@@ -2342,6 +2342,7 @@ mod tests {
             }
         }
         assert_eq!(names.len(), 201, "TA-Lib catalog must contain 201 names");
+        let catalog = crate::operation::operation_catalog(&registry);
 
         let length = 256;
         let close = (0..length)
@@ -2514,6 +2515,31 @@ mod tests {
             let payload: Value = serde_json::from_str(&execute_operation_json(&request)).unwrap();
             assert!(payload.get("error").is_none(), "{name}: {payload}");
             assert!(payload["values"].as_object().is_some(), "{name}: {payload}");
+            let expected_outputs = catalog
+                .operations
+                .iter()
+                .find(|operation| operation.name == name)
+                .and_then(|operation| {
+                    operation
+                        .profile_output_contracts
+                        .get(crate::talib_catalog::TALIB_SEMANTIC_PROFILE)
+                })
+                .unwrap_or_else(|| panic!("missing profile output contract for {name}"));
+            let actual_names = payload["values"]
+                .as_object()
+                .unwrap()
+                .keys()
+                .cloned()
+                .collect::<std::collections::BTreeSet<_>>();
+            let expected_names = expected_outputs
+                .output_names
+                .iter()
+                .cloned()
+                .collect::<std::collections::BTreeSet<_>>();
+            assert_eq!(
+                actual_names, expected_names,
+                "{name} output names must match the catalog profile contract"
+            );
             for (output_name, values) in payload["values"].as_object().unwrap() {
                 assert_eq!(
                     values.as_array().map(Vec::len),
