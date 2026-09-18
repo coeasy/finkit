@@ -239,5 +239,19 @@ mod tests {
             program["execution"]["required_inputs"],
             serde_json::json!(["close"])
         );
+
+        let bounded_loop = serde_json::json!({
+            "schema_version": 1,
+            "source": "FOR I:=1 TO 3 DO X:=CLOSE+I END; X",
+            "dialect": "tdx",
+            "inputs": {"close": [1.0, 2.0, 3.0]}
+        });
+        let bounded_loop: Value =
+            serde_json::from_str(&evaluate_formula_stream_json(&bounded_loop.to_string()).unwrap())
+                .unwrap();
+        assert_eq!(
+            bounded_loop["values"]["__PRIMARY__"],
+            serde_json::json!([4.0, 5.0, 6.0])
+        );
     }
 }

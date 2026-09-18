@@ -112,6 +112,16 @@ mod tests {
             formula_program_payload["values"]["__PRIMARY__"],
             formula_program["expected_primary"]
         );
+
+        let formula_loop = &fixture["formula_stateful_bounded_loop"];
+        let formula_loop_payload: Value = serde_json::from_str(
+            &evaluate_formula_stream_json(&formula_loop["request"].to_string()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            formula_loop_payload["values"]["__PRIMARY__"],
+            formula_loop["expected_primary"]
+        );
     }
 
     #[test]

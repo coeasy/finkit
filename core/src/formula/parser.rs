@@ -469,6 +469,11 @@ fn parse_for_stmt(pair: Pair<Rule>) -> Result<AstNode, String> {
         .as_str()
         .to_string();
 
+    // `for_assign_op` is a named grammar pair (`:=` or `=`), so it must be
+    // consumed before the start expression. Treating it as the expression
+    // used to make every textual FOR loop fail with "Empty expression".
+    inner.next().ok_or("Missing FOR assignment operator")?;
+
     let start = parse_expression(inner.next().ok_or("Missing FOR start expression")?)?;
 
     let end = parse_expression(inner.next().ok_or("Missing FOR end expression")?)?;

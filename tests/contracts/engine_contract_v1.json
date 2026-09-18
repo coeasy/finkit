@@ -31,6 +31,15 @@
     },
     "expected_primary": [null, null, 3.0, 4.0, 5.0]
   },
+  "formula_stateful_bounded_loop": {
+    "request": {
+      "schema_version": 1,
+      "source": "FOR I:=1 TO 3 DO X:=CLOSE+I END; X",
+      "dialect": "tdx",
+      "inputs": {"close": [1.0, 2.0, 3.0]}
+    },
+    "expected_primary": [4.0, 5.0, 6.0]
+  },
   "factor": {
     "request": {
       "schema_version": 1,

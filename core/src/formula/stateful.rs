@@ -20,6 +20,8 @@ use crate::streaming::momentum::macd::StreamingMacd;
 use crate::streaming::traits::StreamingIndicator;
 use std::collections::{BTreeMap, HashSet, VecDeque};
 
+const STATEFUL_MAX_LOOP_ITERATIONS: usize = 10_000;
+
 /// Direct raw OHLCV input consumed by a stateful Formula call.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -398,10 +400,7 @@ impl FormulaProgramState {
         self.variables.clear();
         let mut result = f64::NAN;
         for statement in &mut self.statements {
-            result = statement.expression.next(row, &mut self.variables);
-            if let Some(name) = &statement.target {
-                self.variables.insert(name.clone(), result);
-            }
+            result = statement.next(row, &mut self.variables);
         }
         result
     }
@@ -409,9 +408,60 @@ impl FormulaProgramState {
 
 #[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-struct FormulaStatementState {
-    target: Option<String>,
-    expression: FormulaExpressionState,
+enum FormulaStatementState {
+    Assignment {
+        target: String,
+        expression: FormulaExpressionState,
+    },
+    Expression {
+        expression: FormulaExpressionState,
+    },
+    For {
+        variable: String,
+        start: i64,
+        end: i64,
+        body: Vec<FormulaStatementState>,
+    },
+}
+
+impl FormulaStatementState {
+    fn next(&mut self, row: &[f64; 6], variables: &mut BTreeMap<String, f64>) -> f64 {
+        match self {
+            Self::Assignment { target, expression } => {
+                let value = expression.next(row, variables);
+                variables.insert(target.clone(), value);
+                value
+            }
+            Self::Expression { expression } => expression.next(row, variables),
+            Self::For {
+                variable,
+                start,
+                end,
+                body,
+            } => {
+                let mut result = f64::NAN;
+                if *start <= *end {
+                    let mut current = *start;
+                    let mut iterations = 0usize;
+                    loop {
+                        if iterations >= STATEFUL_MAX_LOOP_ITERATIONS {
+                            return f64::NAN;
+                        }
+                        variables.insert(variable.clone(), current as f64);
+                        for statement in body.iter_mut() {
+                            result = statement.next(row, variables);
+                        }
+                        iterations += 1;
+                        if current == *end {
+                            break;
+                        }
+                        current += 1;
+                    }
+                }
+                result
+            }
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -766,10 +816,39 @@ fn compile_program(ast: &AstNode) -> FactorResult<(FormulaProgramState, Vec<Form
     let mut known_variables = HashSet::new();
     let mut statements = Vec::with_capacity(nodes.len());
     let mut required_inputs = Vec::new();
+    compile_program_nodes(
+        nodes,
+        &mut known_variables,
+        &mut statements,
+        &mut required_inputs,
+    )?;
+
+    Ok((
+        FormulaProgramState {
+            statements,
+            variables: BTreeMap::new(),
+        },
+        required_inputs,
+    ))
+}
+
+fn compile_program_nodes(
+    nodes: &[AstNode],
+    known_variables: &mut HashSet<String>,
+    statements: &mut Vec<FormulaStatementState>,
+    required_inputs: &mut Vec<FormulaStateInput>,
+) -> FactorResult<()> {
     for node in nodes {
-        let (target, expression_ast) = match node {
+        match node {
             AstNode::Assignment { name, expr } | AstNode::Output { name, expr, .. } => {
-                (Some(name.clone()), expr.as_ref())
+                let (expression, inputs) =
+                    compile_expression_with_variables(expr, Some(known_variables))?;
+                merge_required_inputs(required_inputs, &inputs);
+                known_variables.insert(name.clone());
+                statements.push(FormulaStatementState::Assignment {
+                    target: name.clone(),
+                    expression,
+                });
             }
             AstNode::CompoundAssignment { name, op, expr } => {
                 if !known_variables.contains(name) {
@@ -783,38 +862,86 @@ fn compile_program(ast: &AstNode) -> FactorResult<(FormulaProgramState, Vec<Form
                     right: expr.clone(),
                 };
                 let (expression, inputs) =
-                    compile_expression_with_variables(&binary, Some(&known_variables))?;
-                merge_required_inputs(&mut required_inputs, &inputs);
-                statements.push(FormulaStatementState {
-                    target: Some(name.clone()),
+                    compile_expression_with_variables(&binary, Some(known_variables))?;
+                merge_required_inputs(required_inputs, &inputs);
+                statements.push(FormulaStatementState::Assignment {
+                    target: name.clone(),
                     expression,
                 });
-                continue;
+            }
+            AstNode::ForLoop {
+                var,
+                start,
+                end,
+                body,
+            } => {
+                let start = constant_loop_bound(start, "start")?;
+                let end = constant_loop_bound(end, "end")?;
+                let iterations = if start <= end {
+                    (end as i128 - start as i128 + 1) as usize
+                } else {
+                    0
+                };
+                if iterations > STATEFUL_MAX_LOOP_ITERATIONS {
+                    return Err(FactorError::InvalidParameter(format!(
+                        "stateful Formula FOR loop exceeds {} iterations",
+                        STATEFUL_MAX_LOOP_ITERATIONS
+                    )));
+                }
+                known_variables.insert(var.clone());
+                let mut compiled_body = Vec::with_capacity(body.len());
+                compile_program_nodes(body, known_variables, &mut compiled_body, required_inputs)?;
+                statements.push(FormulaStatementState::For {
+                    variable: var.clone(),
+                    start,
+                    end,
+                    body: compiled_body,
+                });
             }
             AstNode::ParamDecl { .. } => {
                 return Err(FactorError::InvalidParameter(
                     "stateful Formula programs do not support parameter declarations".to_string(),
                 ));
             }
-            _ => (None, node),
-        };
-
-        let (expression, inputs) =
-            compile_expression_with_variables(expression_ast, Some(&known_variables))?;
-        merge_required_inputs(&mut required_inputs, &inputs);
-        if let Some(name) = &target {
-            known_variables.insert(name.clone());
+            _ => {
+                let (expression, inputs) =
+                    compile_expression_with_variables(node, Some(known_variables))?;
+                merge_required_inputs(required_inputs, &inputs);
+                statements.push(FormulaStatementState::Expression { expression });
+            }
         }
-        statements.push(FormulaStatementState { target, expression });
     }
+    Ok(())
+}
 
-    Ok((
-        FormulaProgramState {
-            statements,
-            variables: BTreeMap::new(),
+fn constant_loop_bound(node: &AstNode, label: &str) -> FactorResult<i64> {
+    match node {
+        AstNode::Number(value) if value.is_finite() && value.fract() == 0.0 => {
+            if *value < i64::MIN as f64 || *value > i64::MAX as f64 {
+                Err(FactorError::InvalidParameter(format!(
+                    "stateful Formula FOR {label} bound is outside i64"
+                )))
+            } else {
+                Ok(*value as i64)
+            }
+        }
+        AstNode::UnaryOp {
+            op: UnaryOperator::Neg,
+            expr,
+        } => match expr.as_ref() {
+            AstNode::Number(value)
+                if value.is_finite() && value.fract() == 0.0 && *value <= i64::MAX as f64 =>
+            {
+                Ok(-(*value as i64))
+            }
+            _ => Err(FactorError::InvalidParameter(format!(
+                "stateful Formula FOR {label} bound must be a finite integer constant"
+            ))),
         },
-        required_inputs,
-    ))
+        _ => Err(FactorError::InvalidParameter(format!(
+            "stateful Formula FOR {label} bound must be a finite integer constant"
+        ))),
+    }
 }
 
 fn compound_assignment_operator(op: &CompoundAssignOp) -> BinaryOperator {
@@ -1467,6 +1594,7 @@ mod tests {
             "MA3:MA(CLOSE,3); MA3",
             "PREV:=REF(CLOSE,1); PREV",
             "X:=CLOSE; X+=1; X",
+            "FOR I:=1 TO 3 DO X:=CLOSE+I END; X",
         ] {
             let mut stream =
                 FormulaStatefulStream::from_source(source, FormulaDialect::TongDaXin).unwrap();
@@ -1495,6 +1623,16 @@ mod tests {
             FormulaStatefulStream::from_source("EMA(MY_SERIES,5)", FormulaDialect::AlphaTA)
                 .is_err()
         );
+        assert!(FormulaStatefulStream::from_source(
+            "FOR I:=1 TO CLOSE DO X:=CLOSE+I END; X",
+            FormulaDialect::TongDaXin
+        )
+        .is_err());
+        assert!(FormulaStatefulStream::from_source(
+            "WHILE CLOSE > 0 DO X:=CLOSE END; X",
+            FormulaDialect::TongDaXin
+        )
+        .is_err());
     }
 
     #[test]
