@@ -14,6 +14,9 @@ use finkit::operation::{
 use finkit::registry::{FunctionCategory, InputKind, LookbackSpec};
 use serde::Serialize;
 use std::collections::BTreeMap;
+use std::sync::OnceLock;
+
+static BUILTIN_OPERATION_CATALOG: OnceLock<OperationCatalogEnvelope> = OnceLock::new();
 
 /// Versioned operation catalog envelope shared by all bindings.
 #[derive(Debug, Clone, Serialize)]
@@ -202,6 +205,30 @@ pub fn operation_catalog(registry: &OperationRegistry) -> OperationCatalogEnvelo
         engine_version: env!("CARGO_PKG_VERSION"),
         operations,
     }
+}
+
+/// Return the process-stable catalog for the built-in operation registry.
+///
+/// The catalog is both discovery metadata and the runtime schema used by the
+/// compatibility dispatcher. Building it once avoids recreating the complete
+/// profile projection for every JSON request while keeping all bindings on the
+/// same immutable snapshot.
+pub fn builtin_operation_catalog() -> &'static OperationCatalogEnvelope {
+    BUILTIN_OPERATION_CATALOG.get_or_init(|| operation_catalog(&builtin_operation_registry()))
+}
+
+pub(crate) fn talib_profile_contract(
+    name: &str,
+) -> Option<&'static OperationProfileOutputContract> {
+    builtin_operation_catalog()
+        .operations
+        .iter()
+        .find(|operation| operation.name == name)
+        .and_then(|operation| {
+            operation
+                .profile_output_contracts
+                .get(TALIB_SEMANTIC_PROFILE)
+        })
 }
 
 fn profile_only_talib_entry(name: &str) -> OperationCatalogEntry {
@@ -421,6 +448,30 @@ fn period_parameter(default: &'static str) -> OperationParameter {
 fn talib_profile_params(name: &str) -> Vec<OperationParameter> {
     let period = || period_parameter("14");
     match name {
+        "MA" => vec![
+            period_parameter("30"),
+            talib_parameter("matype", "integer", Some("0"), Some("integer in 0..8")),
+        ],
+        "SMA" => vec![period_parameter("30")],
+        "SAR" => vec![
+            talib_parameter("acceleration", "number", Some("0.02"), Some("finite")),
+            talib_parameter("maximum", "number", Some("0.2"), Some("finite")),
+        ],
+        "SAREXT" => vec![
+            talib_parameter("startvalue", "number", Some("0.0"), Some("finite")),
+            talib_parameter("offsetonreverse", "number", Some("0.0"), Some("finite")),
+            talib_parameter("afinitlong", "number", Some("0.02"), Some("finite")),
+            talib_parameter("aflong", "number", Some("0.02"), Some("finite")),
+            talib_parameter("afmaxlong", "number", Some("0.2"), Some("finite")),
+            talib_parameter("afinitshort", "number", Some("0.02"), Some("finite")),
+            talib_parameter("afshort", "number", Some("0.02"), Some("finite")),
+            talib_parameter("afmaxshort", "number", Some("0.2"), Some("finite")),
+        ],
+        "MIDPRICE" => vec![period_parameter("14")],
+        "STDDEV" | "VAR" => vec![
+            period_parameter("30"),
+            talib_parameter("nbdev", "number", Some("1.0"), Some("finite")),
+        ],
         "AC" => vec![
             talib_parameter("fastperiod", "integer", Some("5"), Some("integer >= 2")),
             talib_parameter("slowperiod", "integer", Some("34"), Some("integer >= 2")),
@@ -588,9 +639,7 @@ fn talib_profile_params(name: &str) -> Vec<OperationParameter> {
         | "LINEARREG_ANGLE"
         | "LINEARREG_INTERCEPT"
         | "LINEARREG_SLOPE"
-        | "STDDEV"
-        | "TSF"
-        | "VAR" => vec![period_parameter("30")],
+        | "TSF" => vec![period_parameter("30")],
         "T3" => vec![
             talib_parameter("timeperiod", "integer", Some("5"), Some("integer >= 1")),
             talib_parameter(
@@ -607,7 +656,7 @@ fn talib_profile_params(name: &str) -> Vec<OperationParameter> {
 
 /// Build the built-in operation catalog as a JSON string.
 pub fn operation_catalog_json() -> Result<String, serde_json::Error> {
-    serde_json::to_string(&operation_catalog(&builtin_operation_registry()))
+    serde_json::to_string(builtin_operation_catalog())
 }
 
 fn operation_kind_name(kind: OperationKind) -> &'static str {

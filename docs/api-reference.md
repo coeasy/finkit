@@ -31,6 +31,10 @@ select the entry in `profile_output_contracts` for the requested profile. The
 top-level `output_names` and `params` describe the canonical Core registry;
 the profile map describes the exact profile parameters and result fields (for
 example, the TA-Lib profile of `KDJ` returns `K`, `D`, and `J`).
+The dispatcher rejects parameter lists longer than the selected profile schema
+and returns a structured error if execution produces unaligned fields or
+series, so catalog metadata is enforced at runtime rather than being
+descriptive only.
 
 The shared names are:
 

@@ -55,8 +55,8 @@ pub use formula::{
 };
 pub use formula_stream::{evaluate_formula_stream_json, FORMULA_STREAM_CONTRACT_SCHEMA_VERSION};
 pub use operation::{
-    operation_catalog, operation_catalog_json, OperationCatalogEntry, OperationCatalogEnvelope,
-    OperationProfileOutputContract,
+    builtin_operation_catalog, operation_catalog, operation_catalog_json, OperationCatalogEntry,
+    OperationCatalogEnvelope, OperationProfileOutputContract,
 };
 pub use research::{
     factor_study_error_json, factor_study_json, quant_evaluation_error_json, quant_evaluation_json,

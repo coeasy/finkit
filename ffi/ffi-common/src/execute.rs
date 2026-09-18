@@ -12,7 +12,7 @@ use finkit::operation::{OperationRequest, PRIMARY_OUTPUT_NAME};
 use ndarray::Array1;
 use serde::Deserialize;
 use serde_json::{json, Value};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Version of the direct operation result envelope.
 pub const OPERATION_RESULT_SCHEMA_VERSION: u16 = 1;
@@ -491,6 +491,20 @@ fn execute_talib_profile(
         return Err((
             "unsupported_operation",
             format!("TA-Lib profile does not yet dispatch {name}"),
+        ));
+    }
+    let contract = crate::operation::talib_profile_contract(&name).ok_or((
+        "internal_contract_error",
+        format!("missing TA-Lib profile contract for {name}"),
+    ))?;
+    if params.len() > contract.params.len() {
+        return Err((
+            "invalid_request",
+            format!(
+                "{name} accepts at most {} parameters, received {}",
+                contract.params.len(),
+                params.len()
+            ),
         ));
     }
     let mut values = BTreeMap::new();
@@ -1877,17 +1891,56 @@ fn execute_talib_profile(
         }
     };
 
+    let expected_names = contract
+        .output_names
+        .iter()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let actual_names = values.keys().cloned().collect::<BTreeSet<_>>();
+    if actual_names != expected_names || values.len() != contract.outputs {
+        return Err((
+            "internal_contract_error",
+            format!(
+                "{name} returned output fields {:?}, expected {:?}",
+                actual_names, expected_names
+            ),
+        ));
+    }
+    let expected_length = inputs.values().next().map(Vec::len).unwrap_or(0);
+    if values
+        .values()
+        .any(|series| series.len() != expected_length)
+    {
+        return Err((
+            "internal_contract_error",
+            format!("{name} returned an unaligned output series"),
+        ));
+    }
+    let value_shape = if values.len() > 1 {
+        "multi_series"
+    } else {
+        "series"
+    };
+    if value_shape != contract.value_shape {
+        return Err((
+            "internal_contract_error",
+            format!(
+                "{name} returned shape {value_shape}, expected {}",
+                contract.value_shape
+            ),
+        ));
+    }
     let serialized_values = values
         .iter()
         .map(|(name, series)| (name.clone(), nullable_series(series)))
         .collect::<BTreeMap<_, _>>();
     Ok(json!({
         "schema_version": OPERATION_RESULT_SCHEMA_VERSION,
-        "semantic_profile": "talib_0_8_0",
+        "semantic_profile": TALIB_SEMANTIC_PROFILE,
         "operation": name.clone(),
         "operation_id": finkit::operation::OperationId::from_name(&name).0,
         "primary": primary,
-        "shape": if values.len() > 1 { "multi_series" } else { "series" },
+        "shape": value_shape,
         "values": serialized_values,
     }))
 }
@@ -2122,6 +2175,23 @@ mod tests {
         assert_eq!(payload["semantic_profile"], "talib_0_8_0");
         assert_eq!(payload["values"]["SMA"][0], Value::Null);
         assert_eq!(payload["values"]["SMA"][2], 2.5);
+    }
+
+    #[test]
+    fn talib_profile_rejects_parameters_outside_catalog_contract() {
+        let request = r#"{
+            "operation":"SMA",
+            "semantic_profile":"talib_0_8_0",
+            "input_order":["CLOSE"],
+            "inputs":{"CLOSE":[1.0,2.0,3.0]},
+            "params":[2,99]
+        }"#;
+        let payload: Value = serde_json::from_str(&execute_operation_json(request)).unwrap();
+        assert_eq!(payload["error"]["code"], "invalid_request");
+        assert!(payload["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("at most 1 parameters"));
     }
 
     #[test]
@@ -2383,14 +2453,13 @@ mod tests {
                 if name.starts_with("CDL") || matches!(name, "AVGPRICE" | "BOP") {
                     (vec!["OPEN", "HIGH", "LOW", "CLOSE"], vec![])
                 } else if matches!(name, "MEDPRICE" | "MIDPRICE" | "SAR" | "SAREXT" | "AROON") {
-                    let params = if name == "SAREXT" {
-                        vec![0.0, 0.0, 0.02, 0.02, 0.2, 0.02, 0.02, 0.2]
-                    } else if name == "SAR" {
-                        vec![0.02, 0.2]
-                    } else if name == "AROON" {
-                        vec![14.0]
-                    } else {
-                        vec![14.0]
+                    let params = match name {
+                        "MEDPRICE" => vec![],
+                        "MIDPRICE" => vec![14.0],
+                        "SAREXT" => vec![0.0, 0.0, 0.02, 0.02, 0.2, 0.02, 0.02, 0.2],
+                        "SAR" => vec![0.02, 0.2],
+                        "AROON" => vec![14.0],
+                        _ => unreachable!(),
                     };
                     (vec!["HIGH", "LOW"], params)
                 } else if name == "MAVP" {

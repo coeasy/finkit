@@ -94,7 +94,7 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
 - 审计差集：0；
 - 21 个新增函数的独立 adapter、参数目录、输出字段和 warm-up：已接入；
 - Core golden suite：已通过；
-- `finkit-ffi-common`：已通过 78 个测试，包含全目录 dispatcher smoke 和三类
+- `finkit-ffi-common`：已通过 80 个测试，包含全目录 dispatcher smoke 和三类
   streaming checkpoint provenance 校验。
 
 这只证明当前 workspace 和参考环境的目录/数值对照，不等于所有操作系统、编译器、CPU、Node 宿主和发布包均已完成验证；发布前仍需运行完整 binding/ABI 矩阵。
@@ -136,9 +136,9 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
   仍明确走各自的增量/checkpoint 专用执行器，不把不同能力误报为同一模式。
 - Factor、Composite、Formula 的 stream contract 现在统一写入 checkpoint 的
   `scope`/`data_revision`，恢复前同时拒绝 scope mismatch 和 data revision mismatch；
-  本轮 `finkit-ffi-common` 78 个测试全部通过。
+  本轮 `finkit-ffi-common` 80 个测试全部通过。
 - 横截面 Factor 批处理入口也已接入统一 dispatcher，并保留时间戳/标的轴与
-  row-major null 语义；本轮 `finkit-ffi-common` 测试为 78 个通过。
+  row-major null 语义；本轮 `finkit-ffi-common` 测试为 80 个通过。
 - 基础 Formula JSON 入口也已改走 `UnifiedOperationEngine::Formula`，因此普通
   公式、Factor、Composite 和横截面 Factor 的公开批处理入口共享同一 Runtime
   dispatcher；Temporal/Panel/Streaming 仍保留其显式时间对齐与状态执行路径。
@@ -154,6 +154,10 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
   `profile_output_contracts`；顶层字段保留 Core registry 语义，TA-Lib profile
   使用独立输出 schema，并通过 201 项 dispatcher smoke 逐项校验实际返回字段，
   防止 discovery 与执行结果在 KDJ、AROON、DONCHIAN 及扩展多输出指标上漂移。
+- 内置 operation catalog 现在由进程级 `OnceLock` 缓存，并作为 TA-Lib dispatcher
+  的运行时执行契约：请求中的参数数量不得超出 profile schema，返回字段、输出数量、
+  shape 和序列长度必须与 schema 对齐；不一致统一返回结构化
+  `internal_contract_error`，避免仅依赖测试发现生产环境的 catalog/执行器漂移。
 - 主 CI 已加入 `finkit-ffi-common` 统一契约测试，多语言工作流的触发路径已覆盖
   共享 FFI 契约、C/Go/Java binding 和 `tests/contracts` fixtures。
 
@@ -161,7 +165,7 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
 
 1. 完成当前改动的 fmt、workspace、ABI 和 binding 回归并提交；Lightweight HTML
    页面生成已纳入 visualization 回归，但真实浏览器宿主仍需单独纳入 CI。
-2. 将 TA-Lib profile 参数/输出 metadata 从手写 match 逐步生成化，但保留 profile adapter 的显式语义代码。
+2. 将剩余 TA-Lib profile 参数/输出 metadata 从手写 match 逐步生成化，但保留 profile adapter 的显式语义代码。
 3. 为八语言补齐同一份 201 函数 typed-buffer/JSON conformance vector，尤其覆盖新增 21 个函数的多输出和 warm-up。
 4. 将 Formula dialect registry、TA-Lib catalog、Factor catalog 和 Draw schema 统一纳入版本发布清单。
 5. 为生产部署增加 benchmark workload、内存/分配、并发、checkpoint 恢复和错误可观测性门禁；性能结论按硬件和数据规模分别报告。
