@@ -35,6 +35,96 @@ pub enum DataContractError {
     NonMonotonicTimestamps { index: usize },
 }
 
+/// Policy used when a time-indexed input is projected onto another timeline.
+///
+/// The engine never guesses a resampling rule. Callers must choose whether
+/// only exact timestamps are valid or whether the latest value whose timestamp
+/// is at or before the target row may be carried forward.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TemporalAlignment {
+    /// Use a value only when the source and target timestamps are identical.
+    Exact,
+    /// Use the latest source value at or before the target timestamp.
+    ///
+    /// This is the safe closed-bar/as-of rule for higher-timeframe inputs:
+    /// values from a source bar that has not closed cannot enter an earlier
+    /// target row.
+    AsOfClosed,
+}
+
+/// One named time-indexed numeric input that can be aligned to a formula frame.
+#[derive(Debug, Clone, Copy)]
+pub struct TemporalSeries<'a> {
+    /// Formula variable name supplied by the caller.
+    pub name: &'a str,
+    /// Monotonic source timestamps, normally bar-close or publication times.
+    pub timestamps: &'a [i64],
+    /// Values corresponding one-to-one with [`Self::timestamps`].
+    pub values: &'a [f64],
+}
+
+impl<'a> TemporalSeries<'a> {
+    /// Construct a validated named temporal series.
+    pub fn new(
+        name: &'a str,
+        timestamps: &'a [i64],
+        values: &'a [f64],
+    ) -> Result<Self, DataContractError> {
+        if name.trim().is_empty() {
+            return Err(DataContractError::EmptyIdentifier("temporal series"));
+        }
+        if timestamps.len() != values.len() {
+            return Err(DataContractError::LengthMismatch {
+                field: "temporal_values",
+                expected: timestamps.len(),
+                actual: values.len(),
+            });
+        }
+        validate_monotonic_timestamps(timestamps)?;
+        Ok(Self {
+            name,
+            timestamps,
+            values,
+        })
+    }
+
+    /// Project this input onto `target_timestamps` using an explicit policy.
+    pub fn align_to(
+        &self,
+        target_timestamps: &[i64],
+        policy: TemporalAlignment,
+    ) -> Result<Vec<f64>, DataContractError> {
+        validate_monotonic_timestamps(target_timestamps)?;
+        Ok(target_timestamps
+            .iter()
+            .map(|&target| match policy {
+                TemporalAlignment::Exact => {
+                    let end = self.timestamps.partition_point(|&source| source <= target);
+                    end.checked_sub(1)
+                        .filter(|&index| self.timestamps[index] == target)
+                        .map(|index| self.values[index])
+                        .unwrap_or(f64::NAN)
+                }
+                TemporalAlignment::AsOfClosed => {
+                    let end = self.timestamps.partition_point(|&source| source <= target);
+                    end.checked_sub(1)
+                        .map(|index| self.values[index])
+                        .unwrap_or(f64::NAN)
+                }
+            })
+            .collect())
+    }
+}
+
+fn validate_monotonic_timestamps(timestamps: &[i64]) -> Result<(), DataContractError> {
+    for (index, pair) in timestamps.windows(2).enumerate() {
+        if pair[1] < pair[0] {
+            return Err(DataContractError::NonMonotonicTimestamps { index: index + 1 });
+        }
+    }
+    Ok(())
+}
+
 impl fmt::Display for DataContractError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -195,11 +285,7 @@ impl<'a> CrossSectionView<'a> {
         symbols: &'a [&'a str],
         values: &'a [f64],
     ) -> Result<Self, DataContractError> {
-        for (index, timestamp) in timestamps.windows(2).enumerate() {
-            if timestamp[1] < timestamp[0] {
-                return Err(DataContractError::NonMonotonicTimestamps { index: index + 1 });
-            }
-        }
+        validate_monotonic_timestamps(timestamps)?;
         for (index, &symbol) in symbols.iter().enumerate() {
             if symbol.trim().is_empty() {
                 return Err(DataContractError::EmptyIdentifier("symbol"));
@@ -289,11 +375,7 @@ impl<'a> FundamentalSeries<'a> {
                 actual: values.len(),
             });
         }
-        for (index, timestamp) in timestamps.windows(2).enumerate() {
-            if timestamp[1] < timestamp[0] {
-                return Err(DataContractError::NonMonotonicTimestamps { index: index + 1 });
-            }
-        }
+        validate_monotonic_timestamps(timestamps)?;
         Ok(Self {
             name,
             timestamps,
@@ -382,5 +464,40 @@ mod tests {
         assert_eq!(series.as_of(9), None);
         assert_eq!(series.as_of(19), Some(1.0));
         assert_eq!(series.as_of(20), Some(2.5));
+    }
+
+    #[test]
+    fn temporal_series_supports_exact_and_closed_bar_alignment() {
+        let source = TemporalSeries::new("daily_close", &[10, 20, 30], &[1.0, 2.0, 3.0]).unwrap();
+        let exact = source
+            .align_to(&[10, 15, 30], TemporalAlignment::Exact)
+            .unwrap();
+        assert_eq!(exact[0], 1.0);
+        assert!(exact[1].is_nan());
+        assert_eq!(exact[2], 3.0);
+
+        let as_of = source
+            .align_to(&[9, 15, 20, 29, 30], TemporalAlignment::AsOfClosed)
+            .unwrap();
+        assert!(as_of[0].is_nan());
+        assert_eq!(&as_of[1..], &[1.0, 2.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn temporal_series_rejects_unordered_target_timeline() {
+        let source = TemporalSeries::new("x", &[10, 20], &[1.0, 2.0]).unwrap();
+        assert!(matches!(
+            source.align_to(&[20, 10], TemporalAlignment::AsOfClosed),
+            Err(DataContractError::NonMonotonicTimestamps { index: 1 })
+        ));
+    }
+
+    #[test]
+    fn temporal_exact_alignment_uses_latest_same_timestamp_revision() {
+        let source = TemporalSeries::new("revised", &[10, 10, 20], &[1.0, 1.5, 2.0]).unwrap();
+        assert_eq!(
+            source.align_to(&[10], TemporalAlignment::Exact).unwrap(),
+            &[1.5]
+        );
     }
 }

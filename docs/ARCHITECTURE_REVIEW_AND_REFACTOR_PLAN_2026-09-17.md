@@ -36,7 +36,18 @@ V1 数据边界已冻结：
 - **横截面：纳入正式链路。** 作为同一时间点的 symbol 列集合，服务 rank、z-score、winsorize、行业/市值中性化等因子操作；它与单标的时间序列计算是两种不同的执行方向。
 - **基本面：纳入输入契约，不纳入数据供应商。** V1 支持带 publication/availability timestamp 的 point-in-time 字段和 as-of 查询，防止使用未来财报修订值；数据抓取、清洗、供应商适配和授权数据管道不属于计算内核范围。
 
-当前已具备 `FrameKey`/`MarketPanel`/`CrossSectionView`/`FundamentalSeries` 契约，`FactorEngine::evaluate_cross_sectional` 已按每个时间点逐行调用横截面 Factor，统一入口也可返回 `ValueShape::CrossSection`；`UnifiedOperationEngine::execute_panel_formula` 与 `execute_panel_indicator` 已按显式 symbol/timeframe 分离执行并保留每个 frame 的结果，`execute_formula_with_fundamentals` 已按行情时间轴执行 point-in-time as-of 展开并拒绝无 timestamp 的 frame。多周期安全对齐、point-in-time 基本面接入统一 Planner/cache 及六语言完整执行 API 仍未完成，不能据此宣称多维能力全部生产化。
+当前已具备 `FrameKey`/`MarketPanel`/`CrossSectionView`/`FundamentalSeries` 契约，`FactorEngine::evaluate_cross_sectional` 已按每个时间点逐行调用横截面 Factor，统一入口也可返回 `ValueShape::CrossSection`；`UnifiedOperationEngine::execute_panel_formula` 与 `execute_panel_indicator` 已按显式 symbol/timeframe 分离执行并保留每个 frame 的结果，`execute_formula_with_fundamentals` 已按行情时间轴执行 point-in-time as-of 展开并拒绝无 timestamp 的 frame。
+
+本轮新增 `TemporalSeries`/`TemporalAlignment` 和 `execute_formula_with_temporal_inputs`：跨周期/外部时间序列必须显式选择 `Exact` 或 `AsOfClosed`，后者只传播 source timestamp 小于等于 target timestamp 的已收盘值，并对 source/target 的单调性和长度做校验。它已经阻断“高周期未收盘值泄漏到低周期”的核心风险，但仍不是自动重采样器，也尚未接入统一 Planner/cache、Pine `request.security` 数据提供器和六语言完整执行 API；因此不能据此宣称多维能力全部生产化。
+
+V1 四类维度的实际职责如下：
+
+| 维度 | 第一版实际做什么 | 第一版不做什么 |
+| --- | --- | --- |
+| 多标的 | 用 `MarketPanel` 按 `symbol@timeframe` 隔离执行公式/指标，分别保存结果、状态和缓存身份 | 不把不同标的拼成一条时间序列，不隐式共享递归状态 |
+| 多周期 | 对显式时间轴做 exact/as-of-closed 对齐，允许公式读取已声明的外部周期序列 | 不自动猜测周期、不把未收盘高周期值前视、不承诺完整 Pine `request.security` |
+| 横截面 | 在同一 timestamp 的 symbol 列上执行 rank、z-score、winsorize 和横截面 Factor | 不把横截面运算误当成单标的 rolling 指标 |
+| 基本面 | 接收带 publication/availability timestamp 的字段并按 as-of 展开到行情轴 | 不抓取供应商数据、不处理授权、清洗、财报实体映射 |
 
 ### 2.2 指标、形态与市场结构
 

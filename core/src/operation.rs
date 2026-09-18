@@ -7,7 +7,10 @@
 //! verified dispatcher and golden vectors before it is marked fully complete.
 
 use crate::composite::{CompositeDefinition, CompositeEngine};
-use crate::data_contract::{CrossSectionView, DataContractError, FundamentalSeries, MarketPanel};
+use crate::data_contract::{
+    CrossSectionView, DataContractError, FundamentalSeries, MarketPanel, TemporalAlignment,
+    TemporalSeries,
+};
 use crate::factors::{
     BorrowedFactorContext, FactorDefinition, FactorEngine, FactorKind, FactorRegistry,
 };
@@ -915,6 +918,64 @@ impl UnifiedOperationEngine {
         })
     }
 
+    /// Execute a formula with explicitly aligned inputs from other timelines.
+    ///
+    /// Each input declares its own timestamps and alignment policy. The
+    /// `AsOfClosed` policy is suitable for a higher-timeframe series and
+    /// prevents an unfinished source bar from being visible to an earlier
+    /// target row. This method performs alignment only; it never resamples or
+    /// mutates the source frames.
+    pub fn execute_formula_with_temporal_inputs(
+        &mut self,
+        source: &str,
+        dialect: FormulaDialect,
+        frame: &crate::runtime::MarketFrame<'_>,
+        inputs: &[(&str, &[i64], &[f64], TemporalAlignment)],
+    ) -> Result<OperationResult, OperationExecutionError> {
+        frame
+            .validate()
+            .map_err(|error| DataContractError::InvalidMarketFrame(error))?;
+        let timestamps = frame.timestamp.ok_or_else(|| {
+            OperationExecutionError::InvalidRequest(
+                "temporal formula inputs require frame timestamps".to_string(),
+            )
+        })?;
+        let amount = frame.amount.map(|series| Array1::from_vec(series.to_vec()));
+        let mut context = FormulaContext::from_borrowed_ohlcv(
+            frame.open,
+            frame.high,
+            frame.low,
+            frame.close,
+            frame.volume,
+            amount,
+        );
+        context.datetime = Some(Array1::from_vec(timestamps.to_vec()));
+        for &(name, input_timestamps, values, policy) in inputs {
+            let input = TemporalSeries::new(name, input_timestamps, values)
+                .map_err(OperationExecutionError::DataContract)?;
+            let aligned = input
+                .align_to(timestamps, policy)
+                .map_err(OperationExecutionError::DataContract)?;
+            context.variables.insert(
+                std::sync::Arc::from(normalize_name(name)),
+                Array1::from_vec(aligned),
+            );
+        }
+
+        let (values, draw) = self.execute_formula(source, dialect, &mut context)?;
+        let shape = if values.len() > 1 {
+            ValueShape::MultiSeries
+        } else {
+            ValueShape::Series
+        };
+        Ok(OperationResult {
+            values,
+            shape,
+            primary: Some(PRIMARY_OUTPUT_NAME.to_string()),
+            draw,
+        })
+    }
+
     fn execute_formula(
         &mut self,
         source: &str,
@@ -1250,6 +1311,51 @@ mod tests {
                 FormulaDialect::AlphaTA,
                 &frame,
                 &[fundamental],
+            ),
+            Err(OperationExecutionError::InvalidRequest(message))
+                if message.contains("timestamps")
+        ));
+    }
+
+    #[test]
+    fn temporal_formula_inputs_use_only_closed_source_values() {
+        let values = [10.0, 11.0, 12.0];
+        let target_timestamps = [10, 15, 20];
+        let frame = MarketFrame::new(&values, &values, &values, &values, &values)
+            .unwrap()
+            .with_timestamp(&target_timestamps)
+            .unwrap();
+        let source_timestamps = [10, 20];
+        let source_values = [100.0, 200.0];
+        let mut engine = UnifiedOperationEngine::new(FactorRegistry::new());
+        let result = engine
+            .execute_formula_with_temporal_inputs(
+                "HIGHER + CLOSE",
+                FormulaDialect::AlphaTA,
+                &frame,
+                &[(
+                    "higher",
+                    &source_timestamps,
+                    &source_values,
+                    TemporalAlignment::AsOfClosed,
+                )],
+            )
+            .unwrap();
+
+        assert_eq!(result.primary_values().unwrap(), &[110.0, 111.0, 212.0]);
+    }
+
+    #[test]
+    fn temporal_formula_inputs_require_target_timestamps() {
+        let values = [1.0, 2.0];
+        let frame = MarketFrame::new(&values, &values, &values, &values, &values).unwrap();
+        let mut engine = UnifiedOperationEngine::new(FactorRegistry::new());
+        assert!(matches!(
+            engine.execute_formula_with_temporal_inputs(
+                "HIGHER",
+                FormulaDialect::AlphaTA,
+                &frame,
+                &[("higher", &[10], &[3.0], TemporalAlignment::Exact)],
             ),
             Err(OperationExecutionError::InvalidRequest(message))
                 if message.contains("timestamps")
