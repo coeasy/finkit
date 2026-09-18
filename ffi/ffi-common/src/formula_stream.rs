@@ -141,4 +141,68 @@ mod tests {
             .unwrap_err()
             .contains("unsupported formula stream mode"));
     }
+
+    #[test]
+    fn stateful_formula_stream_covers_common_rolling_functions() {
+        let cases = [
+            ("HHV(CLOSE, 3)", [f64::NAN, f64::NAN, 3.0, 4.0]),
+            ("LLV(CLOSE, 3)", [f64::NAN, f64::NAN, 1.0, 2.0]),
+            ("SUM(CLOSE, 3)", [f64::NAN, f64::NAN, 6.0, 9.0]),
+            (
+                "STD(CLOSE, 3)",
+                [f64::NAN, f64::NAN, 0.816496580927726, 0.816496580927726],
+            ),
+            ("VAR(CLOSE, 3)", [f64::NAN, f64::NAN, 2.0 / 3.0, 2.0 / 3.0]),
+        ];
+        for (source, expected) in cases {
+            let request = serde_json::json!({
+                "schema_version": 1,
+                "source": source,
+                "dialect": "tdx",
+                "inputs": {"close": [1.0, 2.0, 3.0, 4.0]}
+            });
+            let payload: Value =
+                serde_json::from_str(&evaluate_formula_stream_json(&request.to_string()).unwrap())
+                    .unwrap();
+            let actual = payload["values"]["__PRIMARY__"].as_array().unwrap();
+            for (index, expected) in expected.iter().enumerate() {
+                let actual = actual[index].as_f64().unwrap_or(f64::NAN);
+                assert!(
+                    (actual.is_nan() && expected.is_nan()) || (actual - expected).abs() < 1e-12,
+                    "{source} mismatch at {index}: actual={actual}, expected={expected}"
+                );
+            }
+        }
+
+        let reference = serde_json::json!({
+            "schema_version": 1,
+            "source": "REF(CLOSE, 2)",
+            "dialect": "tdx",
+            "inputs": {"close": [1.0, 2.0, 3.0, 4.0]}
+        });
+        let reference: Value =
+            serde_json::from_str(&evaluate_formula_stream_json(&reference.to_string()).unwrap())
+                .unwrap();
+        assert_eq!(
+            reference["values"]["__PRIMARY__"],
+            serde_json::json!([null, null, 1.0, 2.0])
+        );
+
+        let cross = serde_json::json!({
+            "schema_version": 1,
+            "source": "CROSS(CLOSE, OPEN)",
+            "dialect": "tdx",
+            "inputs": {
+                "close": [1.0, 2.0, 1.0, 3.0],
+                "open": [1.5, 1.5, 1.5, 2.0]
+            }
+        });
+        let cross: Value =
+            serde_json::from_str(&evaluate_formula_stream_json(&cross.to_string()).unwrap())
+                .unwrap();
+        assert_eq!(
+            cross["values"]["__PRIMARY__"],
+            serde_json::json!([0.0, 1.0, 0.0, 1.0])
+        );
+    }
 }

@@ -11,10 +11,13 @@ use super::ast::AstNode;
 use super::{normalize_formula_source, parse_formula_with_dialect, FormulaDialect};
 use crate::factors::{FactorError, FactorResult};
 use crate::formula::types::{classify_builtin_var, BuiltinVar};
-use crate::streaming::indicators::{StreamingEma, StreamingRsi, StreamingSma, StreamingWma};
+use crate::streaming::indicators::{
+    StreamingEma, StreamingMax, StreamingMin, StreamingRsi, StreamingSma, StreamingSum,
+    StreamingWma,
+};
 use crate::streaming::momentum::macd::StreamingMacd;
 use crate::streaming::traits::StreamingIndicator;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 
 /// Direct raw OHLCV input consumed by a stateful Formula call.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -267,6 +270,33 @@ enum FormulaState {
         input: FormulaStateInput,
         indicator: StreamingRsi,
     },
+    Max {
+        input: FormulaStateInput,
+        indicator: StreamingMax,
+    },
+    Min {
+        input: FormulaStateInput,
+        indicator: StreamingMin,
+    },
+    Sum {
+        input: FormulaStateInput,
+        indicator: StreamingSum,
+    },
+    Reference {
+        input: FormulaStateInput,
+        state: FormulaReferenceState,
+    },
+    Cross {
+        left: FormulaStateInput,
+        right: FormulaStateInput,
+        direction: FormulaCrossDirection,
+        previous: Option<(f64, f64)>,
+    },
+    Variance {
+        input: FormulaStateInput,
+        indicator: FormulaRollingVariance,
+        square_root: bool,
+    },
     Atr {
         high: FormulaStateInput,
         low: FormulaStateInput,
@@ -286,6 +316,46 @@ impl FormulaState {
             Self::Wma { input, indicator } => indicator.next(row[input.slot()]),
             Self::Ema { input, indicator } => indicator.next(row[input.slot()]),
             Self::Rsi { input, indicator } => indicator.next(row[input.slot()]),
+            Self::Max { input, indicator } => indicator.next(row[input.slot()]),
+            Self::Min { input, indicator } => indicator.next(row[input.slot()]),
+            Self::Sum { input, indicator } => indicator.next(row[input.slot()]),
+            Self::Reference { input, state } => state.next(row[input.slot()]),
+            Self::Cross {
+                left,
+                right,
+                direction,
+                previous,
+            } => {
+                let current = (row[left.slot()], row[right.slot()]);
+                let result = previous.map_or(0.0, |(previous_left, previous_right)| {
+                    let crossed = match direction {
+                        FormulaCrossDirection::Above => {
+                            previous_left <= previous_right && current.0 > current.1
+                        }
+                        FormulaCrossDirection::Below => {
+                            previous_left >= previous_right && current.0 < current.1
+                        }
+                    };
+                    if crossed {
+                        1.0
+                    } else {
+                        0.0
+                    }
+                });
+                *previous = Some(current);
+                Some(result)
+            }
+            Self::Variance {
+                input,
+                indicator,
+                square_root,
+            } => indicator.next(row[input.slot()]).map(|value| {
+                if *square_root {
+                    value.sqrt()
+                } else {
+                    value
+                }
+            }),
             Self::Atr {
                 high,
                 low,
@@ -349,6 +419,83 @@ impl FormulaAtrState {
             self.atr_value += (true_range - self.atr_value) / self.period as f64;
             Some(self.atr_value)
         }
+    }
+}
+
+/// Rolling population variance used by the canonical Formula `STD`/`VAR`
+/// semantics.  The public `StreamingVar` indicator intentionally keeps its
+/// historical sample-variance contract, while domestic Formula and TA-Lib
+/// profiles use population variance (division by `n`).
+#[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+struct FormulaRollingVariance {
+    period: usize,
+    buffer: Vec<f64>,
+    head: usize,
+    len: usize,
+    sum: f64,
+    sum_sq: f64,
+}
+
+#[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+struct FormulaReferenceState {
+    period: usize,
+    values: VecDeque<f64>,
+}
+
+impl FormulaReferenceState {
+    fn new(period: usize) -> Self {
+        Self {
+            period,
+            values: VecDeque::with_capacity(period),
+        }
+    }
+
+    fn next(&mut self, input: f64) -> Option<f64> {
+        let output = (self.values.len() >= self.period)
+            .then(|| self.values.pop_front().expect("reference buffer is ready"));
+        self.values.push_back(input);
+        output
+    }
+}
+
+#[derive(Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+enum FormulaCrossDirection {
+    Above,
+    Below,
+}
+
+impl FormulaRollingVariance {
+    fn new(period: usize) -> Self {
+        Self {
+            period,
+            buffer: vec![0.0; period],
+            head: 0,
+            len: 0,
+            sum: 0.0,
+            sum_sq: 0.0,
+        }
+    }
+
+    fn next(&mut self, input: f64) -> Option<f64> {
+        self.sum += input;
+        self.sum_sq += input * input;
+        if self.len == self.period {
+            let old = self.buffer[self.head];
+            self.sum -= old;
+            self.sum_sq -= old * old;
+        } else {
+            self.len += 1;
+        }
+        self.buffer[self.head] = input;
+        self.head = (self.head + 1) % self.period;
+        if self.len < self.period {
+            return None;
+        }
+        let mean = self.sum / self.period as f64;
+        Some(((self.sum_sq - self.sum * mean) / self.period as f64).max(0.0))
     }
 }
 
@@ -428,6 +575,101 @@ fn compile_state(expression: &AstNode) -> FactorResult<(FormulaState, Vec<Formul
                 FormulaState::Rsi {
                     input: value,
                     indicator: StreamingRsi::new(period),
+                },
+                vec![value],
+            )
+        }
+        "HHV" => {
+            let value = input(0)?;
+            let period = period(1, 14)?;
+            (
+                FormulaState::Max {
+                    input: value,
+                    indicator: StreamingMax::new(period),
+                },
+                vec![value],
+            )
+        }
+        "LLV" => {
+            let value = input(0)?;
+            let period = period(1, 14)?;
+            (
+                FormulaState::Min {
+                    input: value,
+                    indicator: StreamingMin::new(period),
+                },
+                vec![value],
+            )
+        }
+        "SUM" => {
+            let value = input(0)?;
+            let period = period(1, 14)?;
+            (
+                FormulaState::Sum {
+                    input: value,
+                    indicator: StreamingSum::new(period),
+                },
+                vec![value],
+            )
+        }
+        "REF" => {
+            let value = input(0)?;
+            let period = period(1, 1)?;
+            (
+                FormulaState::Reference {
+                    input: value,
+                    state: FormulaReferenceState::new(period),
+                },
+                vec![value],
+            )
+        }
+        "CROSS" | "CROSSBELOW" => {
+            let left = input(0)?;
+            let right = input(1)?;
+            (
+                FormulaState::Cross {
+                    left,
+                    right,
+                    direction: if normalized == "CROSS" {
+                        FormulaCrossDirection::Above
+                    } else {
+                        FormulaCrossDirection::Below
+                    },
+                    previous: None,
+                },
+                vec![left, right],
+            )
+        }
+        "STD" | "STDDEV" => {
+            let value = input(0)?;
+            let period = period(1, 14)?;
+            if period < 2 {
+                return Err(FactorError::InvalidParameter(format!(
+                    "{name} period must be at least 2"
+                )));
+            }
+            (
+                FormulaState::Variance {
+                    input: value,
+                    indicator: FormulaRollingVariance::new(period),
+                    square_root: true,
+                },
+                vec![value],
+            )
+        }
+        "VAR" => {
+            let value = input(0)?;
+            let period = period(1, 14)?;
+            if period < 2 {
+                return Err(FactorError::InvalidParameter(format!(
+                    "{name} period must be at least 2"
+                )));
+            }
+            (
+                FormulaState::Variance {
+                    input: value,
+                    indicator: FormulaRollingVariance::new(period),
+                    square_root: false,
                 },
                 vec![value],
             )
@@ -543,5 +785,89 @@ mod tests {
             FormulaStatefulStream::from_source("EMA(MY_SERIES,5)", FormulaDialect::AlphaTA)
                 .is_err()
         );
+    }
+
+    #[test]
+    fn rolling_formula_state_matches_batch_for_common_domestic_functions() {
+        let close: Vec<f64> = (0..48)
+            .map(|index| 20.0 + (index as f64 * 0.37).sin() * 3.0 + index as f64 * 0.05)
+            .collect();
+        for source in [
+            "HHV(CLOSE, 5)",
+            "LLV(CLOSE, 5)",
+            "SUM(CLOSE, 5)",
+            "STD(CLOSE, 5)",
+            "STDDEV(CLOSE, 5)",
+            "VAR(CLOSE, 5)",
+        ] {
+            let mut stream =
+                FormulaStatefulStream::from_source(source, FormulaDialect::TongDaXin).unwrap();
+            let mut actual = Vec::new();
+            stream
+                .push_batch_into(
+                    &BTreeMap::from([(String::from("close"), close.clone())]),
+                    &mut actual,
+                )
+                .unwrap();
+
+            let mut context = crate::formula::FormulaContext::new(
+                ndarray::Array1::from_vec(close.clone()),
+                ndarray::Array1::from_vec(close.clone()),
+                ndarray::Array1::from_vec(close.clone()),
+                ndarray::Array1::from_vec(close.clone()),
+                ndarray::Array1::from_vec(close.clone()),
+                None,
+            );
+            let mut engine = crate::formula::FormulaEngine::new();
+            let expected = engine
+                .eval_with_dialect(source, FormulaDialect::TongDaXin, &mut context)
+                .unwrap();
+            let expected = expected.as_slice().unwrap();
+            assert_eq!(actual.len(), expected.len(), "{source} length");
+            for (index, (left, right)) in actual.iter().zip(expected).enumerate() {
+                assert!(
+                    (left.is_nan() && right.is_nan()) || (left - right).abs() < 1e-10,
+                    "{source} mismatch at {index}: stateful={left:?}, batch={right:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn reference_and_cross_formula_state_matches_batch() {
+        let close = vec![1.0, 2.0, 1.0, 3.0, 2.0, 4.0];
+        let open = vec![1.0, 1.5, 1.5, 2.0, 2.5, 3.0];
+        for source in [
+            "REF(CLOSE, 2)",
+            "CROSS(CLOSE, OPEN)",
+            "CROSSBELOW(CLOSE, OPEN)",
+        ] {
+            let mut stream =
+                FormulaStatefulStream::from_source(source, FormulaDialect::TongDaXin).unwrap();
+            let mut actual = Vec::new();
+            stream
+                .push_batch_into(
+                    &BTreeMap::from([
+                        (String::from("close"), close.clone()),
+                        (String::from("open"), open.clone()),
+                    ]),
+                    &mut actual,
+                )
+                .unwrap();
+
+            let mut context = crate::formula::FormulaContext::new(
+                ndarray::Array1::from_vec(open.clone()),
+                ndarray::Array1::from_vec(open.clone()),
+                ndarray::Array1::from_vec(open.clone()),
+                ndarray::Array1::from_vec(close.clone()),
+                ndarray::Array1::from_vec(close.clone()),
+                None,
+            );
+            let mut engine = crate::formula::FormulaEngine::new();
+            let expected = engine
+                .eval_with_dialect(source, FormulaDialect::TongDaXin, &mut context)
+                .unwrap();
+            assert_same(&actual, expected.as_slice().unwrap());
+        }
     }
 }

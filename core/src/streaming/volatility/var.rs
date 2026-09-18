@@ -37,9 +37,13 @@ impl StreamingIndicator for StreamingVar {
         if self.window.len() == self.period {
             let old = self.window.pop_front().unwrap();
             let old_mean = self.mean;
-            self.mean += (input - old) / self.period as f64;
-            self.m2 +=
-                (input - self.mean) * (input - old_mean) - (old - self.mean) * (old - old_mean);
+            let new_mean = old_mean + (input - old) / self.period as f64;
+            // Remove the outgoing observation and add the incoming one in a
+            // single Welford-compatible update.  The previous expression
+            // subtracted the old contribution after already shifting the
+            // mean, which double-counted the mean delta for rolling windows.
+            self.m2 += (input - old) * (input - new_mean + old - old_mean);
+            self.mean = new_mean;
             if self.m2 < 0.0 {
                 self.m2 = 0.0;
             }
