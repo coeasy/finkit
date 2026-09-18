@@ -130,6 +130,22 @@ impl FormulaDialect {
     }
 }
 
+/// Normalize transport-level source differences for a selected formula
+/// dialect before parsing or execution.
+///
+/// Keeping this mapping in the core prevents the FFI, panel, and native
+/// execution paths from drifting into different BOM/line-ending behavior.
+pub fn normalize_formula_source(source: &str, dialect: FormulaDialect) -> String {
+    let terminal = match dialect {
+        FormulaDialect::AlphaTA => FormulaTerminal::Finkit,
+        FormulaDialect::TongDaXin => FormulaTerminal::TongDaXin,
+        FormulaDialect::TongHuaShun => FormulaTerminal::TongHuaShun,
+        FormulaDialect::EastMoney => FormulaTerminal::EastMoney,
+        FormulaDialect::Pine => FormulaTerminal::TradingView,
+    };
+    normalize_terminal_source(source, terminal)
+}
+
 /// Parse a formula expression using the specified dialect.
 ///
 /// `FormulaDialect::AlphaTA` delegates to [`parse_formula`].

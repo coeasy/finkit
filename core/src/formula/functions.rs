@@ -8,6 +8,7 @@ use crate::indicators::chart::zigzag as lib_zigzag;
 use crate::indicators::china::{bias as lib_bias, kdj as lib_kdj, psy as lib_psy};
 use crate::indicators::classic_patterns as lib_classic;
 use crate::indicators::cycle as lib_cycle;
+use crate::indicators::math_operators as lib_math_operators;
 use crate::indicators::momentum as lib_momentum;
 use crate::indicators::momentum_ext::imi as lib_imi;
 use crate::indicators::momentum_ext::{chop as lib_chop, fisher as lib_fisher, tsi as lib_tsi};
@@ -1021,6 +1022,28 @@ fn fn_minindex(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
     }
 
     Ok(output)
+}
+
+// MINMAX and MINMAXINDEX are multi-output operations in the canonical
+// Operation API. The scalar FormulaFn ABI has one return slot, so the formula
+// fallback exposes the first (minimum) output while the typed operation
+// dispatcher returns both named outputs.
+fn fn_minmax(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+    ensure_args_len("MINMAX", args, 2)?;
+    let period = extract_n(args, 1, "MINMAX")?;
+    lib_math_operators::min(args[0].as_slice().unwrap(), period)
+        .map(|values| values.to_owned())
+        .map_err(|error| FormulaError::RuntimeError(error.to_string()))
+        .or_else(|_| Ok(nan_vec(ctx.data_len)))
+}
+
+fn fn_minmaxindex(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+    ensure_args_len("MINMAXINDEX", args, 2)?;
+    let period = extract_n(args, 1, "MINMAXINDEX")?;
+    lib_math_operators::minindex(args[0].as_slice().unwrap(), period)
+        .map(|values| values.mapv(|value| value as f64))
+        .map_err(|error| FormulaError::RuntimeError(error.to_string()))
+        .or_else(|_| Ok(nan_vec(ctx.data_len)))
 }
 
 fn fn_sqrt(_ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
@@ -5733,6 +5756,8 @@ pub fn get_builtin_functions() -> HashMap<String, FormulaFn> {
     map.insert("MIN".to_string(), fn_min);
     map.insert("MAXINDEX".to_string(), fn_maxindex);
     map.insert("MININDEX".to_string(), fn_minindex);
+    map.insert("MINMAX".to_string(), fn_minmax);
+    map.insert("MINMAXINDEX".to_string(), fn_minmaxindex);
     map.insert("SQRT".to_string(), fn_sqrt);
     map.insert("POW".to_string(), fn_pow);
     map.insert("ADD".to_string(), fn_add);

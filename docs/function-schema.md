@@ -59,9 +59,9 @@ Current v0.1.2 declarations are:
 | Terminal id | Canonical dialect | Compatibility |
 | --- | --- | --- |
 | `finkit` | `alpha_ta` | `native` |
-| `tdx` | `alpha_ta` | `common_subset` |
-| `ths` | `alpha_ta` | `common_subset` |
-| `eastmoney` | `alpha_ta` | `common_subset` |
+| `tdx` | `tdx` | `common_subset` |
+| `ths` | `ths` | `common_subset` |
+| `eastmoney` | `eastmoney` | `common_subset` |
 | `pine` | `pine` | `common_subset` |
 
 The function and terminal contracts use independent schema identifiers:

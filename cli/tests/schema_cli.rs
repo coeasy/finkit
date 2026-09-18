@@ -53,7 +53,7 @@ fn terminal_schema_reports_real_compatibility_strength() {
         .iter()
         .find(|item| item["terminal"] == "tdx")
         .expect("tdx terminal");
-    assert_eq!(tdx["dialect"], "alpha_ta");
+    assert_eq!(tdx["dialect"], "tdx");
     assert_eq!(tdx["compatibility"], "common_subset");
 
     let pine = terminals
@@ -62,4 +62,18 @@ fn terminal_schema_reports_real_compatibility_strength() {
         .expect("pine terminal");
     assert_eq!(pine["dialect"], "pine");
     assert_eq!(pine["compatibility"], "common_subset");
+
+    let ths = terminals
+        .iter()
+        .find(|item| item["terminal"] == "ths")
+        .expect("ths terminal");
+    assert_eq!(ths["dialect"], "ths");
+    assert_eq!(ths["compatibility"], "common_subset");
+
+    let eastmoney = terminals
+        .iter()
+        .find(|item| item["terminal"] == "eastmoney")
+        .expect("eastmoney terminal");
+    assert_eq!(eastmoney["dialect"], "eastmoney");
+    assert_eq!(eastmoney["compatibility"], "common_subset");
 }

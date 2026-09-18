@@ -4,10 +4,10 @@
 //! need dialect selection and named outputs. Numeric hot paths can continue
 //! to use typed indicator functions or zero-copy formula APIs.
 
-use finkit::formula::{parse_formula_with_dialect, FormulaContext, FormulaDialect, FormulaEngine};
+use finkit::formula::{FormulaContext, FormulaDialect, FormulaEngine};
 use ndarray::Array1;
 use serde_json::{json, Value};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 
 /// Version of the cross-language formula result envelope.
 pub const FORMULA_CONTRACT_SCHEMA_VERSION: u16 = 1;
@@ -41,40 +41,15 @@ pub fn evaluate_formula_json(
         None,
     );
     let mut engine = FormulaEngine::new();
-    let mut values = BTreeMap::new();
-    let final_value = match dialect {
-        FormulaDialect::AlphaTA
-        | FormulaDialect::TongDaXin
-        | FormulaDialect::TongHuaShun
-        | FormulaDialect::EastMoney => {
-            let result = engine
-                .eval_multi(source, &mut context)
-                .map_err(|error| error.to_string())?;
-            values.extend(
-                result
-                    .outputs
-                    .into_iter()
-                    .map(|(name, value)| (name, value.to_vec())),
-            );
-            result.final_value.to_vec()
-        }
-        FormulaDialect::Pine => {
-            let ast = parse_formula_with_dialect(source, FormulaDialect::Pine)
-                .map_err(|error| error.to_string())?;
-            let variables_before: HashSet<String> =
-                context.variables.keys().map(ToString::to_string).collect();
-            let result = engine
-                .eval_ast(&ast, &mut context)
-                .map_err(|error| error.to_string())?;
-            for (name, value) in &context.variables {
-                let name = name.to_string();
-                if !variables_before.contains(&name) {
-                    values.insert(name, value.to_vec());
-                }
-            }
-            result.to_vec()
-        }
-    };
+    let result = engine
+        .eval_multi_with_dialect(source, dialect, &mut context)
+        .map_err(|error| error.to_string())?;
+    let mut values = result
+        .outputs
+        .into_iter()
+        .map(|(name, value)| (name, value.to_vec()))
+        .collect::<BTreeMap<_, _>>();
+    let final_value = result.final_value.to_vec();
     values.insert("__PRIMARY__".to_string(), final_value);
 
     let serialized_values = values
@@ -137,5 +112,26 @@ mod tests {
         .unwrap();
         let json: Value = serde_json::from_str(&payload).unwrap();
         assert_eq!(json["dialect"], "pine");
+    }
+
+    #[test]
+    fn contract_normalizes_domestic_source_before_execution() {
+        let values = [1.0, 2.0, 3.0];
+        let payload = evaluate_formula_json(
+            "\u{feff}X:=CLOSE;\r\nX",
+            "tdx",
+            &values,
+            &values,
+            &values,
+            &values,
+            &values,
+        )
+        .unwrap();
+        let json: Value = serde_json::from_str(&payload).unwrap();
+        assert_eq!(json["dialect"], "tdx");
+        assert_eq!(
+            json["values"]["__PRIMARY__"],
+            serde_json::json!([1.0, 2.0, 3.0])
+        );
     }
 }

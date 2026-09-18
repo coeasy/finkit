@@ -273,6 +273,18 @@ mod tests {
             accbands.output_names,
             vec!["UPPERBAND", "MIDDLEBAND", "LOWERBAND"]
         );
+        let minmax = catalog
+            .operations
+            .iter()
+            .find(|operation| operation.name == "MINMAX")
+            .unwrap();
+        assert_eq!(minmax.output_names, vec!["MIN", "MAX"]);
+        let minmaxindex = catalog
+            .operations
+            .iter()
+            .find(|operation| operation.name == "MINMAXINDEX")
+            .unwrap();
+        assert_eq!(minmaxindex.output_names, vec!["MININDEX", "MAXINDEX"]);
     }
 
     #[test]
@@ -318,6 +330,8 @@ mod tests {
             "ACCBANDS",
             "AVGDEV",
             "IMI",
+            "MINMAX",
+            "MINMAXINDEX",
         ] {
             let operation = catalog
                 .operations

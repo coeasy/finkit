@@ -112,8 +112,22 @@ impl CompositeDefinition {
 #[derive(Clone)]
 pub struct CompositeEngine {
     functions: BTreeMap<String, CompositeFn>,
-    cache: BTreeMap<(u64, u64), BTreeMap<String, Vec<f64>>>,
+    cache: BTreeMap<CompositeCacheKey, CompositeCacheEntry>,
     cache_capacity: usize,
+    cache_clock: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct CompositeCacheKey {
+    scope: String,
+    data_revision: u64,
+    graph_signature: u64,
+}
+
+#[derive(Debug, Clone)]
+struct CompositeCacheEntry {
+    values: BTreeMap<String, Vec<f64>>,
+    last_used: u64,
 }
 
 /// A value produced while walking a composite expression.
@@ -162,6 +176,7 @@ impl CompositeEngine {
         }
         self.functions.insert(name.to_ascii_lowercase(), function);
         self.cache.clear();
+        self.cache_clock = 0;
         Ok(())
     }
 
@@ -172,6 +187,7 @@ impl CompositeEngine {
     pub fn with_cache_capacity(mut self, capacity: usize) -> Self {
         self.cache_capacity = capacity.max(1);
         self.cache.clear();
+        self.cache_clock = 0;
         self
     }
 
@@ -179,11 +195,13 @@ impl CompositeEngine {
     pub fn set_cache_capacity(&mut self, capacity: usize) {
         self.cache_capacity = capacity.max(1);
         self.cache.clear();
+        self.cache_clock = 0;
     }
 
     /// Remove all cached graph snapshots.
     pub fn clear_cache(&mut self) {
         self.cache.clear();
+        self.cache_clock = 0;
     }
 
     /// Evaluate and cache a graph snapshot for an explicit data revision.
@@ -198,18 +216,61 @@ impl CompositeEngine {
         context: &BorrowedFactorContext<'_>,
         data_revision: u64,
     ) -> FactorResult<BTreeMap<String, Vec<f64>>> {
-        let key = (data_revision, graph_signature(definitions, outputs));
-        if let Some(result) = self.cache.get(&key) {
-            return Ok(result.clone());
+        self.evaluate_cached_scoped("", definitions, outputs, context, data_revision)
+    }
+
+    /// Evaluate and cache a graph under an explicit symbol/timeframe scope.
+    ///
+    /// The scope is part of cache identity; callers must not reuse one scope
+    /// for different instruments or timeframes while keeping a revision.
+    pub fn evaluate_cached_scoped(
+        &mut self,
+        scope: &str,
+        definitions: &[CompositeDefinition],
+        outputs: &[&str],
+        context: &BorrowedFactorContext<'_>,
+        data_revision: u64,
+    ) -> FactorResult<BTreeMap<String, Vec<f64>>> {
+        let key = CompositeCacheKey {
+            scope: scope.to_string(),
+            data_revision,
+            graph_signature: graph_signature(definitions, outputs),
+        };
+        if let Some(result) = self.get_cached_result(&key) {
+            return Ok(result);
         }
         let result = self.evaluate_borrowed(definitions, outputs, context)?;
         if self.cache.len() >= self.cache_capacity.max(1) {
-            if let Some(oldest) = self.cache.keys().next().copied() {
+            if let Some(oldest) = self
+                .cache
+                .iter()
+                .min_by_key(|(_, entry)| entry.last_used)
+                .map(|(key, _)| key.clone())
+            {
                 self.cache.remove(&oldest);
             }
         }
-        self.cache.insert(key, result.clone());
+        let last_used = self.next_cache_tick();
+        self.cache.insert(
+            key,
+            CompositeCacheEntry {
+                values: result.clone(),
+                last_used,
+            },
+        );
         Ok(result)
+    }
+
+    fn get_cached_result(&mut self, key: &CompositeCacheKey) -> Option<BTreeMap<String, Vec<f64>>> {
+        let last_used = self.next_cache_tick();
+        let entry = self.cache.get_mut(key)?;
+        entry.last_used = last_used;
+        Some(entry.values.clone())
+    }
+
+    fn next_cache_tick(&mut self) -> u64 {
+        self.cache_clock = self.cache_clock.wrapping_add(1);
+        self.cache_clock
     }
 
     /// Evaluate selected outputs from an owned context.
@@ -605,6 +666,7 @@ impl Default for CompositeEngine {
             functions: BTreeMap::new(),
             cache: BTreeMap::new(),
             cache_capacity: 64,
+            cache_clock: 0,
         }
     }
 }
@@ -931,6 +993,49 @@ mod tests {
         engine
             .evaluate_cached(&definitions, &["value"], &borrowed, 8)
             .expect("new revision evaluation");
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn cached_evaluation_isolated_by_scope_at_the_same_revision() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let counter = calls.clone();
+        let mut engine = CompositeEngine::new();
+        engine
+            .register(
+                "identity",
+                Arc::new(move |inputs, _| {
+                    counter.fetch_add(1, Ordering::SeqCst);
+                    Ok(inputs[0].to_vec())
+                }),
+            )
+            .expect("register custom function");
+        let first_context = FactorContext::new()
+            .with_series("close", vec![1.0, 2.0])
+            .expect("first context");
+        let second_context = FactorContext::new()
+            .with_series("close", vec![10.0, 20.0])
+            .expect("second context");
+        let first = first_context.as_borrowed();
+        let second = second_context.as_borrowed();
+        let definitions = [CompositeDefinition::new(
+            "value",
+            CompositeExpr::call("identity", vec![CompositeExpr::series("close")], vec![]),
+        )];
+
+        let first_result = engine
+            .evaluate_cached_scoped("AAA@1d", &definitions, &["value"], &first, 1)
+            .unwrap();
+        let second_result = engine
+            .evaluate_cached_scoped("BBB@1d", &definitions, &["value"], &second, 1)
+            .unwrap();
+        let first_cached = engine
+            .evaluate_cached_scoped("AAA@1d", &definitions, &["value"], &first, 1)
+            .unwrap();
+
+        assert_eq!(first_result["value"], vec![1.0, 2.0]);
+        assert_eq!(second_result["value"], vec![10.0, 20.0]);
+        assert_eq!(first_cached["value"], vec![1.0, 2.0]);
         assert_eq!(calls.load(Ordering::SeqCst), 2);
     }
 

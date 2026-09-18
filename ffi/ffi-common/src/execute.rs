@@ -326,6 +326,8 @@ pub fn talib_profile_supported(operation: &str) -> bool {
             | "MIN"
             | "MAXINDEX"
             | "MININDEX"
+            | "MINMAX"
+            | "MINMAXINDEX"
             | "SUM"
             | "ACOS"
             | "ASIN"
@@ -1258,6 +1260,30 @@ fn execute_talib_profile(
             values.insert(name.clone(), result);
             name.as_str()
         }
+        "MINMAX" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let period = parameter_usize(params, 0, 30, &name)?;
+            let (minimum, maximum) = finkit::indicators::math_operators::minmax(input, period)
+                .map_err(|error| ("execution_error", format!("{name}: {error}")))?;
+            values.insert("MIN".to_string(), minimum.to_vec());
+            values.insert("MAX".to_string(), maximum.to_vec());
+            "MIN"
+        }
+        "MINMAXINDEX" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let period = parameter_usize(params, 0, 30, &name)?;
+            let (minimum, maximum) = finkit::indicators::math_operators::minmaxindex(input, period)
+                .map_err(|error| ("execution_error", format!("{name}: {error}")))?;
+            values.insert(
+                "MININDEX".to_string(),
+                minimum.iter().map(|value| *value as f64).collect(),
+            );
+            values.insert(
+                "MAXINDEX".to_string(),
+                maximum.iter().map(|value| *value as f64).collect(),
+            );
+            "MININDEX"
+        }
         "ACOS" | "ASIN" | "ATAN" | "CEIL" | "COS" | "COSH" | "EXP" | "FLOOR" | "LN" | "LOG10"
         | "SIN" | "SINH" | "SQRT" | "TAN" | "TANH" => {
             let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
@@ -1810,6 +1836,41 @@ mod tests {
         let payload: Value = serde_json::from_str(&execute_operation_json(request)).unwrap();
         assert_eq!(payload["values"]["DIV"][0], 2.0);
         assert_eq!(payload["values"]["DIV"][1], Value::Null);
+    }
+
+    #[test]
+    fn talib_profile_dispatches_minmax_and_minmaxindex_multi_output() {
+        let request = serde_json::json!({
+            "operation": "MINMAX",
+            "semantic_profile": "talib_0_7_1",
+            "input_order": ["CLOSE"],
+            "inputs": {"CLOSE": [3.0, 1.0, 4.0, 1.0, 5.0]},
+            "params": [3]
+        })
+        .to_string();
+        let payload: Value = serde_json::from_str(&execute_operation_json(&request)).unwrap();
+        assert_eq!(payload["shape"], "multi_series");
+        assert_eq!(payload["primary"], "MIN");
+        assert_eq!(payload["values"]["MIN"][0], Value::Null);
+        assert_eq!(payload["values"]["MIN"][2], 1.0);
+        assert_eq!(payload["values"]["MAX"][2], 4.0);
+        assert_eq!(payload["values"]["MAX"][4], 5.0);
+
+        let request = serde_json::json!({
+            "operation": "MINMAXINDEX",
+            "semantic_profile": "talib_0_7_1",
+            "input_order": ["CLOSE"],
+            "inputs": {"CLOSE": [3.0, 1.0, 4.0, 1.0, 5.0]},
+            "params": [3]
+        })
+        .to_string();
+        let payload: Value = serde_json::from_str(&execute_operation_json(&request)).unwrap();
+        assert_eq!(payload["shape"], "multi_series");
+        assert_eq!(payload["primary"], "MININDEX");
+        assert_eq!(payload["values"]["MININDEX"][2], 1.0);
+        assert_eq!(payload["values"]["MAXINDEX"][2], 2.0);
+        assert_eq!(payload["values"]["MININDEX"][4], 1.0);
+        assert_eq!(payload["values"]["MAXINDEX"][4], 2.0);
     }
 
     #[test]

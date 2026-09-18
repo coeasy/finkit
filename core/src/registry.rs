@@ -1358,6 +1358,28 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             streaming: true,
             deterministic: true,
         },
+        FunctionSpec {
+            name: "MINMAX",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: PERIOD_REQUIRED,
+            outputs: 2,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "MINMAXINDEX",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: PERIOD_REQUIRED,
+            outputs: 2,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
     ];
 
     let math_transform_specs = [

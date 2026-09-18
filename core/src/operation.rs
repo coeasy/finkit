@@ -11,19 +11,18 @@ use crate::data_contract::{
     CrossSectionView, DataContractError, FrameKey, FundamentalSeries, MarketPanel,
     TemporalAlignment, TemporalSeries,
 };
+use crate::factor_system::{CompiledFactorPlan, FactorCatalog};
 use crate::factors::{
     BorrowedFactorContext, FactorDefinition, FactorEngine, FactorKind, FactorRegistry,
 };
 use crate::formula::{
-    parse_formula_with_dialect, AstNode, DrawResult, FormulaContext, FormulaDialect, FormulaEngine,
-    FormulaError,
+    AstNode, DrawResult, FormulaContext, FormulaDialect, FormulaEngine, FormulaError,
 };
 use crate::registry::{
     builtin_function_registry, FunctionCategory, FunctionSpec, InputKind, LookbackSpec, ParamSpec,
 };
 use ndarray::Array1;
 use std::collections::BTreeMap;
-use std::collections::HashSet;
 use std::fmt;
 
 /// Reserved name used for the primary value returned by a formula.
@@ -467,6 +466,8 @@ pub enum OperationRequest<'a> {
         context: &'a BorrowedFactorContext<'a>,
         /// Optional caller-owned revision used by the composite cache.
         data_revision: Option<u64>,
+        /// Optional symbol/timeframe or caller-defined cache namespace.
+        cache_scope: Option<&'a str>,
     },
     /// Evaluate one cross-sectional factor at every timestamp row.
     CrossSectionalFactor {
@@ -546,6 +547,12 @@ pub struct OperationCacheStats {
     pub entries: usize,
     /// Maximum number of retained result entries.
     pub capacity: usize,
+}
+
+#[derive(Debug, Clone)]
+struct CachedOperationResult {
+    result: OperationResult,
+    last_used: u64,
 }
 
 impl PanelOperationResult {
@@ -644,10 +651,13 @@ pub struct UnifiedOperationEngine {
     formula: FormulaEngine,
     factor: FactorEngine,
     composite: CompositeEngine,
-    operation_cache: BTreeMap<OperationCacheKey, OperationResult>,
+    factor_catalog: FactorCatalog,
+    factor_plans: BTreeMap<String, CompiledFactorPlan>,
+    operation_cache: BTreeMap<OperationCacheKey, CachedOperationResult>,
     operation_cache_capacity: usize,
     operation_cache_hits: u64,
     operation_cache_misses: u64,
+    operation_cache_clock: u64,
 }
 
 impl UnifiedOperationEngine {
@@ -660,15 +670,19 @@ impl UnifiedOperationEngine {
     pub fn try_new(factors: FactorRegistry) -> Result<Self, OperationRegistryError> {
         let mut catalog = builtin_operation_registry();
         catalog.register_factor_registry(&factors)?;
+        let factor_catalog = FactorCatalog::from_registry(factors.clone());
         Ok(Self {
             catalog,
             formula: FormulaEngine::new(),
             factor: FactorEngine::new(factors),
             composite: CompositeEngine::new(),
+            factor_catalog,
+            factor_plans: BTreeMap::new(),
             operation_cache: BTreeMap::new(),
             operation_cache_capacity: 64,
             operation_cache_hits: 0,
             operation_cache_misses: 0,
+            operation_cache_clock: 0,
         })
     }
 
@@ -690,6 +704,7 @@ impl UnifiedOperationEngine {
         self.operation_cache.clear();
         self.operation_cache_hits = 0;
         self.operation_cache_misses = 0;
+        self.operation_cache_clock = 0;
     }
 
     /// Return unified operation result-cache counters.
@@ -753,16 +768,36 @@ impl UnifiedOperationEngine {
                 })
             }
             OperationRequest::Factor { name, context } => {
-                let result = self
-                    .factor
-                    .evaluate_borrowed(name, context)
-                    .map_err(OperationExecutionError::Factor)?;
+                let canonical = self
+                    .factor_catalog
+                    .resolve_name(name)
+                    .ok_or_else(|| OperationExecutionError::UnknownOperation(name.to_string()))?;
+                let plan = if let Some(plan) = self.factor_plans.get(canonical) {
+                    plan.clone()
+                } else {
+                    let plan = self
+                        .factor_catalog
+                        .compile(&[canonical])
+                        .map_err(OperationExecutionError::Factor)?;
+                    self.factor_plans
+                        .insert(canonical.to_string(), plan.clone());
+                    plan
+                };
+                let result = plan
+                    .execute_borrowed(&self.factor, context)
+                    .map_err(OperationExecutionError::Factor)?
+                    .remove(canonical)
+                    .ok_or_else(|| {
+                        OperationExecutionError::InvalidRequest(format!(
+                            "compiled factor plan did not produce {canonical}"
+                        ))
+                    })?;
                 let mut values = BTreeMap::new();
-                values.insert(name.to_string(), result);
+                values.insert(canonical.to_string(), result);
                 Ok(OperationResult {
                     values,
                     shape: ValueShape::Series,
-                    primary: Some(name.to_string()),
+                    primary: Some(canonical.to_string()),
                     draw: None,
                 })
             }
@@ -771,12 +806,16 @@ impl UnifiedOperationEngine {
                 outputs,
                 context,
                 data_revision,
+                cache_scope,
             } => {
                 let values = match data_revision {
-                    Some(revision) => {
-                        self.composite
-                            .evaluate_cached(definitions, outputs, context, revision)
-                    }
+                    Some(revision) => self.composite.evaluate_cached_scoped(
+                        cache_scope.unwrap_or(""),
+                        definitions,
+                        outputs,
+                        context,
+                        revision,
+                    ),
                     None => self
                         .composite
                         .evaluate_borrowed(definitions, outputs, context),
@@ -905,7 +944,7 @@ impl UnifiedOperationEngine {
         let mut values = BTreeMap::new();
         for (key, frame) in panel.iter() {
             let cache_key = OperationCacheKey::panel_formula(source, dialect, key, data_revision);
-            let result = if let Some(result) = self.operation_cache.get(&cache_key).cloned() {
+            let result = if let Some(result) = self.get_cached_result(&cache_key) {
                 self.operation_cache_hits = self.operation_cache_hits.saturating_add(1);
                 result
             } else {
@@ -1112,14 +1151,33 @@ impl UnifiedOperationEngine {
     }
 
     fn insert_cached_result(&mut self, key: OperationCacheKey, result: OperationResult) {
+        let last_used = self.next_cache_tick();
         if self.operation_cache.len() >= self.operation_cache_capacity
             && !self.operation_cache.contains_key(&key)
         {
-            if let Some(oldest) = self.operation_cache.keys().next().cloned() {
+            if let Some(oldest) = self
+                .operation_cache
+                .iter()
+                .min_by_key(|(_, entry)| entry.last_used)
+                .map(|(key, _)| key.clone())
+            {
                 self.operation_cache.remove(&oldest);
             }
         }
-        self.operation_cache.insert(key, result);
+        self.operation_cache
+            .insert(key, CachedOperationResult { result, last_used });
+    }
+
+    fn get_cached_result(&mut self, key: &OperationCacheKey) -> Option<OperationResult> {
+        let last_used = self.next_cache_tick();
+        let entry = self.operation_cache.get_mut(key)?;
+        entry.last_used = last_used;
+        Some(entry.result.clone())
+    }
+
+    fn next_cache_tick(&mut self) -> u64 {
+        self.operation_cache_clock = self.operation_cache_clock.wrapping_add(1);
+        self.operation_cache_clock
     }
 
     fn execute_formula(
@@ -1128,33 +1186,15 @@ impl UnifiedOperationEngine {
         dialect: FormulaDialect,
         context: &mut FormulaContext,
     ) -> Result<(BTreeMap<String, Vec<f64>>, Option<DrawResult>), FormulaError> {
-        let mut values = BTreeMap::new();
-        match dialect {
-            FormulaDialect::AlphaTA
-            | FormulaDialect::TongDaXin
-            | FormulaDialect::TongHuaShun
-            | FormulaDialect::EastMoney => {
-                let result = self.formula.eval_multi(source, context)?;
-                for (name, value) in result.outputs {
-                    values.insert(name, value.to_vec());
-                }
-                values.insert(PRIMARY_OUTPUT_NAME.to_string(), result.final_value.to_vec());
-            }
-            FormulaDialect::Pine => {
-                let ast = parse_formula_with_dialect(source, dialect)
-                    .map_err(FormulaError::ParseError)?;
-                let variables_before: HashSet<String> =
-                    context.variables.keys().map(ToString::to_string).collect();
-                let final_value = self.formula.eval_ast(&ast, context)?;
-                for (name, value) in &context.variables {
-                    let name = name.to_string();
-                    if !variables_before.contains(&name) {
-                        values.insert(name, value.to_vec());
-                    }
-                }
-                values.insert(PRIMARY_OUTPUT_NAME.to_string(), final_value.to_vec());
-            }
-        }
+        let result = self
+            .formula
+            .eval_multi_with_dialect(source, dialect, context)?;
+        let mut values = result
+            .outputs
+            .into_iter()
+            .map(|(name, value)| (name, value.to_vec()))
+            .collect::<BTreeMap<_, _>>();
+        values.insert(PRIMARY_OUTPUT_NAME.to_string(), result.final_value.to_vec());
         let draw = {
             let draw = context.draw_commands.borrow();
             (!draw.commands.is_empty()).then(|| draw.clone())
@@ -1187,6 +1227,8 @@ fn output_names_for(name: &str, outputs: usize) -> Vec<String> {
         "MAMA" => vec!["MAMA".to_string(), "FAMA".to_string()],
         "HT_PHASOR" => vec!["INPHASE".to_string(), "QUADRATURE".to_string()],
         "HT_SINE" => vec!["SINE".to_string(), "LEADSINE".to_string()],
+        "MINMAX" => vec!["MIN".to_string(), "MAX".to_string()],
+        "MINMAXINDEX" => vec!["MININDEX".to_string(), "MAXINDEX".to_string()],
         _ if outputs == 1 => vec![normalize_name(name)],
         _ => (0..outputs)
             .map(|index| format!("{}_{}", normalize_name(name), index + 1))
@@ -1330,6 +1372,37 @@ fn execute_multi_output_indicator(
             MultiIndicatorOutput {
                 values: vec![("SINE", output.0.to_vec()), ("LEADSINE", output.1.to_vec())],
                 primary: "SINE",
+            }
+        }
+        "MINMAX" => {
+            require_input_count(name, inputs, 1)?;
+            let input = resolve_indicator_input(name, context, inputs[0])?;
+            let period = parameter_usize(name, params, 0, 30)?;
+            let (minimum, maximum) = crate::indicators::math_operators::minmax(input, period)
+                .map_err(|error| indicator_execution_error(name, error))?;
+            MultiIndicatorOutput {
+                values: vec![("MIN", minimum.to_vec()), ("MAX", maximum.to_vec())],
+                primary: "MIN",
+            }
+        }
+        "MINMAXINDEX" => {
+            require_input_count(name, inputs, 1)?;
+            let input = resolve_indicator_input(name, context, inputs[0])?;
+            let period = parameter_usize(name, params, 0, 30)?;
+            let (minimum, maximum) = crate::indicators::math_operators::minmaxindex(input, period)
+                .map_err(|error| indicator_execution_error(name, error))?;
+            MultiIndicatorOutput {
+                values: vec![
+                    (
+                        "MININDEX",
+                        minimum.iter().map(|value| *value as f64).collect(),
+                    ),
+                    (
+                        "MAXINDEX",
+                        maximum.iter().map(|value| *value as f64).collect(),
+                    ),
+                ],
+                primary: "MININDEX",
             }
         }
         _ => {
@@ -1604,6 +1677,25 @@ mod tests {
     }
 
     #[test]
+    fn unified_engine_normalizes_source_through_the_selected_domestic_dialect() {
+        let mut engine = UnifiedOperationEngine::new(FactorRegistry::new());
+        let mut context = formula_context();
+        let result = engine
+            .execute(OperationRequest::Formula {
+                source: "\u{feff}X:=CLOSE;\r\nX",
+                dialect: FormulaDialect::TongDaXin,
+                context: &mut context,
+            })
+            .unwrap();
+
+        assert_eq!(
+            result.primary_values().unwrap(),
+            &[10.0, 11.0, 12.0, 13.0, 14.0, 15.0]
+        );
+        assert_eq!(result.primary.as_deref(), Some(PRIMARY_OUTPUT_NAME));
+    }
+
+    #[test]
     fn unified_engine_dispatches_registered_indicator_without_source_parsing() {
         let mut engine = UnifiedOperationEngine::new(FactorRegistry::new());
         let mut context = formula_context();
@@ -1823,6 +1915,50 @@ mod tests {
     }
 
     #[test]
+    fn cached_panel_formula_uses_recently_used_eviction_order() {
+        let values = [1.0, 2.0, 3.0];
+        let timestamps = [100, 200, 300];
+        let frame = MarketFrame::new(&values, &values, &values, &values, &values)
+            .unwrap()
+            .with_timestamp(&timestamps)
+            .unwrap();
+        let key = FrameKey::new("AAA", "1d").unwrap();
+        let mut panel = MarketPanel::new();
+        panel.insert(key, frame).unwrap();
+
+        let mut engine = UnifiedOperationEngine::with_cache_capacity(FactorRegistry::new(), 2);
+        engine
+            .execute_panel_formula_cached("CLOSE + 1", FormulaDialect::AlphaTA, &panel, 1)
+            .unwrap();
+        engine
+            .execute_panel_formula_cached("CLOSE + 2", FormulaDialect::AlphaTA, &panel, 1)
+            .unwrap();
+
+        // Touch the first entry so the second entry becomes the LRU entry.
+        engine
+            .execute_panel_formula_cached("CLOSE + 1", FormulaDialect::AlphaTA, &panel, 1)
+            .unwrap();
+        engine
+            .execute_panel_formula_cached("CLOSE + 3", FormulaDialect::AlphaTA, &panel, 1)
+            .unwrap();
+
+        let misses_before = engine.cache_stats().misses;
+        engine
+            .execute_panel_formula_cached("CLOSE + 1", FormulaDialect::AlphaTA, &panel, 1)
+            .unwrap();
+        assert_eq!(
+            engine.cache_stats().misses,
+            misses_before,
+            "recently-used cache entry should survive eviction"
+        );
+
+        engine
+            .execute_panel_formula_cached("CLOSE + 2", FormulaDialect::AlphaTA, &panel, 1)
+            .unwrap();
+        assert_eq!(engine.cache_stats().misses, misses_before + 1);
+    }
+
+    #[test]
     fn formula_expands_fundamentals_using_point_in_time_as_of() {
         let open = [1.0, 2.0, 3.0];
         let timestamps = [100, 200, 300];
@@ -1959,6 +2095,14 @@ mod tests {
             })
             .unwrap();
         assert_eq!(factor.primary_values().unwrap(), &[2.0, 4.0, 6.0]);
+        let factor_again = engine
+            .execute(OperationRequest::Factor {
+                name: "DOUBLE_CLOSE",
+                context: &context,
+            })
+            .unwrap();
+        assert_eq!(factor_again.primary_values().unwrap(), &[2.0, 4.0, 6.0]);
+        assert_eq!(engine.factor_plans.len(), 1);
 
         let timestamps = [10, 20];
         let symbols = ["AAA", "BBB", "CCC"];
@@ -1991,6 +2135,7 @@ mod tests {
                 outputs: &outputs,
                 context: &context,
                 data_revision: Some(1),
+                cache_scope: Some("AAA@1d"),
             })
             .unwrap();
         assert_eq!(composite.primary_values().unwrap(), &[2.0, 3.0, 4.0]);

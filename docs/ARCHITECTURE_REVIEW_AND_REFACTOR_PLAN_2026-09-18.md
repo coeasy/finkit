@@ -250,14 +250,24 @@ talib_0_7_1
 - Web adapter 负责 series、pane、tooltip、crosshair、resize 和 update；不承担公式计算。
 - 增加浏览器集成测试、数据点顺序测试、null/warm-up 测试和大数据量更新基准。
 
+### 本轮已落地的架构收敛增量
+
+- Formula 的 `FormulaEngine`、Operation engine 和 FFI formula 入口统一走 `eval_with_dialect` / `eval_multi_with_dialect`；TDX、同花顺、东方财富先经过统一 transport normalization，再进入各自显式 dialect profile，Pine 走 Pine parser/lowering。
+- CLI 不再自行维护 AlphaTA/Pine 的分支匹配，直接调用核心 dialect 执行入口；终端 schema 现在明确返回 `alpha_ta`、`tdx`、`ths`、`eastmoney`、`pine`，避免把不同兼容契约伪装成同一方言。
+- Operation panel cache 已改为带访问时钟的 LRU 淘汰；Composite cache 纳入 `scope`、`data_revision` 和 graph signature，增加 scoped evaluation，防止不同标的/周期在相同 revision 下串缓存。
+- Unified Operation Engine 的 Factor 默认路径已改为 `FactorCatalog -> CompiledFactorPlan -> borrowed execution`，并缓存编译计划；这只证明主路径已接入 compiled plan，不代表所有 Factor/Composite、streaming 和跨语言高吞吐门禁已经完成。
+- Python 的公开 `formula_eval_dialect` 已与其他绑定统一调用 Core 的 `eval_with_dialect`；不能再让 Python 自己把国内 dialect 静默降级为 AlphaTA。
+- TA-Lib `MINMAX` 与 `MINMAXINDEX` 已加入 registry、core multi-output dispatcher、TA-Lib FFI profile 和 operation catalog；输出名固定为 `MIN/MAX` 与 `MININDEX/MAXINDEX`，并有 JSON execution tests。
+- 修复 DZH `MOD(...)` 函数调用与中缀 `MOD` 运算符的 grammar 冲突，国内公式集成测试重新通过。
+
 ## 7. 当前实际验证状态
 
-本轮已实际验证：
+截至 2026-09-18，本工作树已实际验证：
 
-- `cargo +1.98.1 test -p finkit --lib --offline --quiet`：2912 passed，0 failed，1 ignored。
-- `cargo +1.98.1 test -p finkit-ffi-common --lib --offline --quiet`：24 passed，0 failed。
+- `cargo +1.98.1 test --workspace --offline --quiet`：全 workspace 测试通过；其中核心库为 `2920 passed, 0 failed, 1 ignored`，DZH compatibility 为 `43 passed, 0 failed`，CLI schema 为 `3 passed, 0 failed`，其余 workspace test targets 也无失败。
+- 定向验证：`finkit` operation tests `19 passed`、Composite tests `8 passed`、`finkit-ffi-common` library tests `26 passed`。
+- `cargo +1.98.1 check -p finkit-python -p finkit-node -p finkit-go -p finkit-java -p finkit-dotnet -p finkit-ffi --offline`：通过。
 - 61 个 candlestick operation 在 `talib_0_7_1` profile 下逐项真实分派并返回等长结果。
-- `cargo +1.98.1 check` 已覆盖 ffi-common、C ABI crate、Go、Python、Java、.NET、Node binding。
 - `cargo +1.98.1 fmt --all` 已执行。
 
 本轮没有宣称完成：
@@ -266,7 +276,7 @@ talib_0_7_1
 - TDX/同花顺/东方财富全部市场函数和 Pine 全语言兼容；
 - Factor/Composite 所有路径都已达到生产吞吐 SLO；
 - CMake/CTest 下的 C++ 原生编译与安装（当前验证环境没有 CMake/CTest）；
-- 八语言真实运行时 golden、发布包和 ABI 稳定性；
+- 八语言真实宿主运行时 golden、发布包和 ABI 稳定性；workspace 中 Node binding 的测试出现 Node-API 宿主符号加载告警，不能替代真实 Node 宿主 smoke test；
 - Lightweight Charts 完整浏览器交互集成；
 - 订单、回测或风控能力（明确不在本项目范围）。
 

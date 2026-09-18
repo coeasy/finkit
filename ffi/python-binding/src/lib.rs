@@ -49,7 +49,7 @@ mod transforms;
 
 #[cfg(feature = "formula")]
 use ::finkit::formula::{
-    parse_formula, parse_formula_with_dialect, FormulaContext, FormulaDialect, FormulaEngine,
+    parse_formula, FormulaContext, FormulaDialect, FormulaEngine,
     FormulaError,
 };
 #[cfg(feature = "formula")]
@@ -1908,20 +1908,8 @@ pub fn formula_eval_dialect(
 
     let dialect = FormulaDialect::from_str(dialect).unwrap_or(FormulaDialect::AlphaTA);
     let result = py.detach(|| -> PyResult<Array1<f64>> {
-        let ast = match dialect {
-            FormulaDialect::AlphaTA
-            | FormulaDialect::TongDaXin
-            | FormulaDialect::TongHuaShun
-            | FormulaDialect::EastMoney => {
-                return engine
-                    .eval(source, &mut ctx)
-                    .map_err(formula_error_to_pyerr);
-            }
-            FormulaDialect::Pine => parse_formula_with_dialect(source, FormulaDialect::Pine)
-                .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e))?,
-        };
         engine
-            .eval_ast(&ast, &mut ctx)
+            .eval_with_dialect(source, dialect, &mut ctx)
             .map_err(formula_error_to_pyerr)
     })?;
 

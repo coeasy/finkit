@@ -14,6 +14,7 @@ use crate::formula::params::{apply_params, parse_params, validate_params, ParamD
 use crate::formula::parser::parse_formula;
 use crate::formula::templates::{FormulaTemplate, FormulaTemplates};
 use crate::formula::types::*;
+use crate::formula::{normalize_formula_source, parse_formula_with_dialect, FormulaDialect};
 use crate::streaming::indicators::{StreamingRsi, StreamingSma};
 use crate::streaming::StreamingIndicator;
 use ndarray::Array1;
@@ -963,6 +964,32 @@ impl FormulaEngine {
         self.execute(&formula, ctx)
     }
 
+    /// Compile and evaluate a formula through the selected dialect contract.
+    ///
+    /// Domestic dialects share the canonical AlphaTA AST/runtime, while Pine
+    /// is parsed and lowered by its dedicated subset mapper. Source
+    /// normalization is performed once here so native, panel, and FFI callers
+    /// cannot diverge on BOM or line-ending handling.
+    pub fn eval_with_dialect(
+        &mut self,
+        source: &str,
+        dialect: FormulaDialect,
+        ctx: &mut FormulaContext,
+    ) -> Result<Array1<f64>, FormulaError> {
+        let normalized = normalize_formula_source(source, dialect);
+        match dialect {
+            FormulaDialect::AlphaTA
+            | FormulaDialect::TongDaXin
+            | FormulaDialect::TongHuaShun
+            | FormulaDialect::EastMoney => self.eval(&normalized, ctx),
+            FormulaDialect::Pine => {
+                let ast = parse_formula_with_dialect(&normalized, dialect)
+                    .map_err(FormulaError::ParseError)?;
+                self.eval_ast(&ast, ctx)
+            }
+        }
+    }
+
     /// Evaluate a pre-built AST directly (no string parsing).
     ///
     /// This is the integration point for alternative dialects such as Pine
@@ -1026,6 +1053,39 @@ impl FormulaEngine {
             }
         }
         Ok(multi)
+    }
+
+    /// Evaluate a formula with dialect-aware parsing and named outputs.
+    ///
+    /// This is the canonical multi-output entry point used by the operation
+    /// engine and language-neutral bindings.
+    pub fn eval_multi_with_dialect(
+        &mut self,
+        source: &str,
+        dialect: FormulaDialect,
+        ctx: &mut FormulaContext,
+    ) -> Result<MultiOutput, FormulaError> {
+        let normalized = normalize_formula_source(source, dialect);
+        match dialect {
+            FormulaDialect::AlphaTA
+            | FormulaDialect::TongDaXin
+            | FormulaDialect::TongHuaShun
+            | FormulaDialect::EastMoney => self.eval_multi(&normalized, ctx),
+            FormulaDialect::Pine => {
+                let vars_before: std::collections::HashSet<Arc<str>> =
+                    ctx.variables.keys().cloned().collect();
+                let ast = parse_formula_with_dialect(&normalized, dialect)
+                    .map_err(FormulaError::ParseError)?;
+                let final_value = self.eval_ast(&ast, ctx)?;
+                let mut multi = MultiOutput::new(final_value);
+                for (name, value) in &ctx.variables {
+                    if !vars_before.contains(name) {
+                        multi.outputs.insert(name.to_string(), value.clone());
+                    }
+                }
+                Ok(multi)
+            }
+        }
     }
 
     /// 惰性求值：通过依赖分析只计算最终输出所需的变量

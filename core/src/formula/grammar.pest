@@ -104,7 +104,7 @@ identifier = @{ !builtin_keyword ~ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
 // 内置关键字 - 不能用作标识符（IF 允许作为函数名）
 // 必须后跟非标识符字符，避免前缀匹配（如 DO 匹配 DOWN）
 builtin_keyword = @{
-    ("THEN" | "ELSE" | "AND" | "and" | "OR" | "or" | "XOR" | "xor" | "NOT" | "not" | "MOD" | "mod" |
+    ("THEN" | "ELSE" | "AND" | "and" | "OR" | "or" | "XOR" | "xor" | "NOT" | "not" |
     "TRUE" | "FALSE" | "PARAMS" |
     "DRAWTEXT_FIX" | "DRAWTEXT" | "DRAWICON" | "STICKLINE" | "DRAWLINE" | "DRAWBAND" |
     "DRAWKLINE" | "DRAWRECTREL" | "FILLRGN" | "PARTLINE" | "POLYLINE" | "DRAWGBK" |

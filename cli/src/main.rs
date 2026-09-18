@@ -203,7 +203,7 @@ enum Commands {
         /// 公式表达式（与位置参数互斥）
         #[arg(long, conflicts_with = "formula")]
         expr: Option<String>,
-        /// 公式方言：alpha_ta（通达信，默认）或 pine（Pine Script v5）
+        /// 公式方言：alpha_ta、通达信、同花顺、东方财富或 pine（Pine Script v5）
         #[arg(long, default_value = "alpha_ta")]
         dialect: String,
         #[arg(short, long, value_enum, default_value_t = OutputFormat::Plain)]
@@ -891,21 +891,7 @@ fn main() {
 
             let dialect = finkit::formula::FormulaDialect::from_str(&dialect)
                 .unwrap_or(finkit::formula::FormulaDialect::AlphaTA);
-            let result = match dialect {
-                finkit::formula::FormulaDialect::AlphaTA => engine.eval(&expr_str, &mut ctx),
-                finkit::formula::FormulaDialect::Pine => {
-                    let ast = finkit::formula::parse_formula_with_dialect(
-                        &expr_str,
-                        finkit::formula::FormulaDialect::Pine,
-                    )
-                    .map_err(|e| {
-                        eprintln!("Pine parse/map error: {e}");
-                        std::process::exit(1);
-                    })
-                    .unwrap();
-                    engine.eval_ast(&ast, &mut ctx)
-                }
-            };
+            let result = engine.eval_with_dialect(&expr_str, dialect, &mut ctx);
             match result {
                 Ok(result) => {
                     output_single(
