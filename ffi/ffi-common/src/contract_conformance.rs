@@ -8,7 +8,7 @@
 mod tests {
     use crate::{
         evaluate_composite_json, evaluate_composite_stream_json, evaluate_factor_json,
-        evaluate_factor_stream_json, evaluate_formula_json,
+        evaluate_factor_stream_json, evaluate_formula_json, evaluate_formula_stream_json,
     };
     use serde_json::Value;
     use std::fs;
@@ -72,6 +72,35 @@ mod tests {
         assert_eq!(
             composite_payload["values"]["sma3"],
             fixture["composite"]["expected_primary"]
+        );
+
+        let formula_stateful = &fixture["formula_stateful_stream"];
+        let formula_first: Value = serde_json::from_str(
+            &evaluate_formula_stream_json(&formula_stateful["request"].to_string()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            formula_first["values"]["__PRIMARY__"],
+            formula_stateful["expected_primary"]
+        );
+        let formula_second_request = serde_json::json!({
+            "schema_version": 1,
+            "source": formula_stateful["request"]["source"].clone(),
+            "dialect": formula_stateful["request"]["dialect"].clone(),
+            "inputs": formula_stateful["next_inputs"].clone(),
+            "checkpoint": formula_first["checkpoint"].clone(),
+        });
+        let formula_second: Value = serde_json::from_str(
+            &evaluate_formula_stream_json(&formula_second_request.to_string()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            formula_second["values"]["__PRIMARY__"],
+            formula_stateful["expected_next"]
+        );
+        assert_eq!(
+            formula_second["execution"]["total_rows"],
+            formula_stateful["expected_total_rows"]
         );
     }
 

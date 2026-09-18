@@ -63,6 +63,7 @@ extern char* ta_factor_execute_json(const char *request_json);
 extern char* ta_composite_stream_execute_json(const char *request_json);
 extern char* ta_factor_stream_execute_json(const char *request_json);
 extern char* ta_formula_eval_contract_json(const char *source, const char *dialect, const double *open, const double *high, const double *low, const double *close, const double *volume, int length);
+extern char* ta_formula_stream_execute_json(const char *request_json);
 extern char* ta_formula_compatibility_report_json(const char *source, const char *terminal);
 extern void ta_free_result(TaResult *result);
 
@@ -218,6 +219,14 @@ func FormulaCompatibilityReportJSON(source, terminal string) (string, error) {
 	cTerminal := C.CString(terminal)
 	defer C.free(unsafe.Pointer(cTerminal))
 	return formulaJSONResult(C.ta_formula_compatibility_report_json(cSource, cTerminal))
+}
+
+// FormulaStreamExecuteJSON appends rows through the shared stateful Formula
+// stream contract and returns a portable checkpoint for the next call.
+func FormulaStreamExecuteJSON(requestJSON string) (string, error) {
+	cRequest := C.CString(requestJSON)
+	defer C.free(unsafe.Pointer(cRequest))
+	return formulaJSONResult(C.ta_formula_stream_execute_json(cRequest))
 }
 
 // convertResult converts a C TaResult to a Go slice and frees the C memory.

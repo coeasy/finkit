@@ -2425,6 +2425,14 @@ pub fn formula_eval_contract_json(
         .map_err(|error| Error::new(Status::InvalidArg, error))
 }
 
+/// Execute a stateful Formula stream through the shared JSON contract.
+#[napi]
+#[cfg(feature = "formula")]
+pub fn formula_stream_execute_json(request_json: String) -> Result<String> {
+    finkit_ffi_common::evaluate_formula_stream_json(&request_json)
+        .map_err(|error| Error::new(Status::InvalidArg, error))
+}
+
 /// Return the versioned, language-neutral operation catalog.
 #[napi]
 pub fn operation_catalog_json() -> Result<String> {

@@ -1956,6 +1956,14 @@ pub fn formula_compatibility_report_json(source: &str, terminal: &str) -> PyResu
         .map_err(pyo3::exceptions::PyValueError::new_err)
 }
 
+/// Execute a stateful Formula stream through the shared JSON contract.
+#[pyfunction]
+#[cfg(feature = "formula")]
+pub fn formula_stream_execute_json(request_json: &str) -> PyResult<String> {
+    finkit_ffi_common::evaluate_formula_stream_json(request_json)
+        .map_err(pyo3::exceptions::PyValueError::new_err)
+}
+
 /// Validate a formula without executing
 ///
 /// Checks if the formula syntax is valid without actually running it.
@@ -6521,6 +6529,7 @@ fn finkit(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.add_function(wrap_pyfunction!(formula_eval_dialect, m)?)?;
         m.add_function(wrap_pyfunction!(formula_eval_contract_json, m)?)?;
         m.add_function(wrap_pyfunction!(formula_compatibility_report_json, m)?)?;
+        m.add_function(wrap_pyfunction!(formula_stream_execute_json, m)?)?;
         m.add_function(wrap_pyfunction!(formula_eval_bytecode, m)?)?;
         m.add_function(wrap_pyfunction!(formula_eval_optimized, m)?)?;
         m.add_function(wrap_pyfunction!(formula_eval_jit, m)?)?;

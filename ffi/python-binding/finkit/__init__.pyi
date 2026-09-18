@@ -747,6 +747,10 @@ def formula_compatibility_report_json(source: str, terminal: str = "finkit") -> 
     """Return the shared versioned Formula compatibility report as JSON."""
     ...
 
+def formula_stream_execute_json(request_json: str) -> str:
+    """Execute a stateful Formula stream through the shared JSON contract."""
+    ...
+
 # ============================================================================
 # Visualization
 # ============================================================================
@@ -1155,7 +1159,7 @@ __all__ = [
     "log10", "sin", "sinh", "sqrt", "tan", "tanh",
     # Formula Engine
     "CompiledFormula", "formula_eval", "formula_eval_dialect",
-    "operation_catalog_json", "factor_catalog_json", "operation_execute_json", "composite_execute_json", "factor_execute_json", "formula_eval_contract_json", "formula_compatibility_report_json",
+    "operation_catalog_json", "factor_catalog_json", "operation_execute_json", "composite_execute_json", "factor_execute_json", "formula_eval_contract_json", "formula_compatibility_report_json", "formula_stream_execute_json",
     # Visualization
     "KlineChart", "KlineData",
     # Streaming Indicators

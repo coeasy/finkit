@@ -445,6 +445,44 @@ pub unsafe extern "C" fn ta_formula_eval_contract_json(
     })
 }
 
+/// Execute the verified stateful Formula stream JSON contract.
+///
+/// The request and checkpoint are transport-neutral JSON; the returned string
+/// must be released with `finkit_free_string`.
+#[no_mangle]
+pub unsafe extern "C" fn ta_formula_stream_execute_json(
+    request: *const c_char,
+) -> *mut c_char {
+    ffi_catch_ptr(|| {
+        let payload = if request.is_null() {
+            serde_json::json!({
+                "schema_version": finkit_ffi_common::FORMULA_STREAM_CONTRACT_SCHEMA_VERSION,
+                "error": "formula stream request is null",
+            })
+            .to_string()
+        } else {
+            match unsafe { std::ffi::CStr::from_ptr(request) }.to_str() {
+                Ok(request) => finkit_ffi_common::evaluate_formula_stream_json(request)
+                    .unwrap_or_else(|message| {
+                        serde_json::json!({
+                            "schema_version": finkit_ffi_common::FORMULA_STREAM_CONTRACT_SCHEMA_VERSION,
+                            "error": message,
+                        })
+                        .to_string()
+                    }),
+                Err(_) => serde_json::json!({
+                    "schema_version": finkit_ffi_common::FORMULA_STREAM_CONTRACT_SCHEMA_VERSION,
+                    "error": "formula stream request is not valid UTF-8",
+                })
+                .to_string(),
+            }
+        };
+        CString::new(payload)
+            .expect("formula stream payload contains no NUL")
+            .into_raw()
+    })
+}
+
 /// Inspect a formula through the shared language-neutral compatibility report.
 ///
 /// The returned JSON owns the report and must be released with
@@ -688,6 +726,19 @@ mod tests {
         assert_eq!(composite_value["execution"]["mode"], "streaming");
         assert!(composite_value["checkpoint"]["signature"].is_number());
         unsafe { finkit_free_string(composite_ptr) };
+
+        let formula_request = std::ffi::CString::new(
+            r#"{"schema_version":1,"source":"EMA(CLOSE,3)","dialect":"tdx","inputs":{"close":[10.0,11.0,12.0,15.0]}}"#,
+        )
+        .unwrap();
+        let formula_ptr = unsafe { ta_formula_stream_execute_json(formula_request.as_ptr()) };
+        assert!(!formula_ptr.is_null());
+        let formula_json = unsafe { CStr::from_ptr(formula_ptr) }.to_str().unwrap();
+        let formula_value: serde_json::Value = serde_json::from_str(formula_json).unwrap();
+        assert_eq!(formula_value["execution"]["mode"], "stateful_streaming");
+        assert_eq!(formula_value["values"]["__PRIMARY__"][2], 11.0);
+        assert!(formula_value["checkpoint"]["state"].is_object());
+        unsafe { finkit_free_string(formula_ptr) };
     }
 
     #[test]

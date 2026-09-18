@@ -1344,6 +1344,8 @@ export declare function klineDataValidate(data: KlineDataNapi): boolean
 export declare function formulaEval(source: string, open: Array<number>, high: Array<number>, low: Array<number>, close: Array<number>, volume: Array<number>): Record<string, Array<number>>
 /** Evaluate a formula using the shared versioned JSON result contract. */
 export declare function formulaEvalContractJson(source: string, dialect: string, open: Array<number>, high: Array<number>, low: Array<number>, close: Array<number>, volume: Array<number>): string
+/** Execute a stateful Formula stream through the shared JSON contract. */
+export declare function formulaStreamExecuteJson(requestJson: string): string
 /** Return the versioned, language-neutral operation catalog. */
 export declare function operationCatalogJson(): string
 

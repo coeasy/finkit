@@ -872,6 +872,9 @@ public final class Indicators {
             String source, String dialect, double[] open, double[] high, double[] low,
             double[] close, double[] volume);
 
+    /** Executes a stateful Formula stream through the shared JSON contract. */
+    public static native String formulaStreamExecuteJson(String requestJson);
+
     /** Returns the shared versioned Formula compatibility report for a terminal profile. */
     public static native String formulaCompatibilityReportJson(String source, String terminal);
 

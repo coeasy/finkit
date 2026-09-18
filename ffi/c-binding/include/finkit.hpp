@@ -129,6 +129,16 @@ inline std::string formula_compatibility_report_json(
     return result;
 }
 
+inline std::string formula_stream_execute_json(const std::string& request_json) {
+    char* raw = ta_formula_stream_execute_json(request_json.c_str());
+    if (raw == nullptr) {
+        throw TaLibException("formula stream execution returned null");
+    }
+    std::string result(raw);
+    finkit_free_string(raw);
+    return result;
+}
+
 namespace detail {
 
 inline void check_result(int32_t result, const std::string& func_name) {

@@ -430,6 +430,39 @@ pub unsafe extern "C" fn ta_formula_eval_contract_json(
     })
 }
 
+/// Execute a stateful Formula stream through the shared JSON contract.
+#[no_mangle]
+pub unsafe extern "C" fn ta_formula_stream_execute_json(request: *const c_char) -> *mut c_char {
+    ffi_catch_ptr(|| {
+        let payload = if request.is_null() {
+            serde_json::json!({
+                "schema_version": finkit_ffi_common::FORMULA_STREAM_CONTRACT_SCHEMA_VERSION,
+                "error": "request is null",
+            })
+            .to_string()
+        } else {
+            match unsafe { std::ffi::CStr::from_ptr(request) }.to_str() {
+                Ok(request) => finkit_ffi_common::evaluate_formula_stream_json(request)
+                    .unwrap_or_else(|error| {
+                        serde_json::json!({
+                            "schema_version": finkit_ffi_common::FORMULA_STREAM_CONTRACT_SCHEMA_VERSION,
+                            "error": error,
+                        })
+                        .to_string()
+                    }),
+                Err(_) => serde_json::json!({
+                    "schema_version": finkit_ffi_common::FORMULA_STREAM_CONTRACT_SCHEMA_VERSION,
+                    "error": "request is not valid UTF-8",
+                })
+                .to_string(),
+            }
+        };
+        CString::new(payload)
+            .expect("formula stream result payload contains no NUL")
+            .into_raw()
+    })
+}
+
 /// Return the shared language-neutral Formula compatibility report.
 #[no_mangle]
 pub unsafe extern "C" fn ta_formula_compatibility_report_json(

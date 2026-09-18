@@ -156,6 +156,9 @@ public static class Indicators
     private static extern IntPtr ta_formula_eval_contract_json(string source, string dialect, IntPtr open, IntPtr high, IntPtr low, IntPtr close, IntPtr volume, int length);
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern IntPtr ta_formula_stream_execute_json(string requestJson);
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern IntPtr ta_formula_compatibility_report_json(string source, string terminal);
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
@@ -353,6 +356,22 @@ public static class Indicators
             {
                 ta_free_string(resultPtr);
             }
+        }
+    }
+
+    /// <summary>Executes a stateful Formula stream through the shared JSON contract.</summary>
+    public static string FormulaStreamExecuteJson(string requestJson)
+    {
+        IntPtr resultPtr = ta_formula_stream_execute_json(requestJson);
+        if (resultPtr == IntPtr.Zero)
+            throw new InvalidOperationException("Formula stream contract returned null");
+        try
+        {
+            return Marshal.PtrToStringUTF8(resultPtr) ?? "";
+        }
+        finally
+        {
+            ta_free_string(resultPtr);
         }
     }
 

@@ -39,6 +39,7 @@ pub mod params;
 pub mod parser;
 pub mod pine;
 pub mod sandbox;
+pub mod stateful;
 // AArch64 guarantees NEON in the Finkit dispatch model, so the scalar fallback
 // statements that follow unconditional NEON returns are intentionally
 // unreachable on that architecture. Keep unreachable-code diagnostics enabled
@@ -85,6 +86,7 @@ pub use parser::parse_formula;
 pub use pine::{map_pine_to_alphata, parse_pine, PineBuiltinTable, PineError, PineMapperError};
 pub use sandbox::{ExecSandboxConfig, ExecSandboxState};
 pub use simd::SimdOps;
+pub use stateful::{FormulaStateInput, FormulaStatefulCheckpoint, FormulaStatefulStream};
 pub use templates::{FormulaTemplate, FormulaTemplates, TemplateCategory};
 pub use types::FormulaValue;
 pub use types::*;
