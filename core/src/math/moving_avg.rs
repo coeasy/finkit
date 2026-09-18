@@ -831,32 +831,30 @@ pub fn dema_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()>
         return Ok(());
     }
 
-    // Single-buffer approach: compute EMA1 into a temp vec, then do EMA2
-    // and DEMA combination in a single forward pass using only a scalar
-    // accumulator (eliminates the second vec allocation from the old code).
-    let mut ema1_buf = vec![0.0f64; len];
-    // SIMD-accelerated initial SMA seed: 4-6x faster than iterator sum.
+    // Keep only the first EMA seed window. After EMA2 is seeded, EMA1 and
+    // EMA2 can advance together, so retaining a full-length intermediate
+    // buffer would add a memory pass without contributing information.
     let sma1: f64 = simd_horizontal_sum(&input[..period]) * inv_p;
     let mut e1 = sma1;
-    ema1_buf[s1] = e1;
-    for i in period..len {
-        e1 = input[i] * k + e1 * one_k;
-        ema1_buf[i] = e1;
-    }
-
     let ema2_start = 2 * s1;
     if ema2_start >= len || len - s1 < period {
         return Ok(());
     }
 
-    // SIMD-accelerated second SMA seed.
-    let sma2: f64 = simd_horizontal_sum(&ema1_buf[s1..s1 + period]) * inv_p;
+    let mut ema1_seed = vec![0.0; period];
+    ema1_seed[0] = e1;
+    for offset in 1..period {
+        e1 = input[s1 + offset] * k + e1 * one_k;
+        ema1_seed[offset] = e1;
+    }
+    let sma2: f64 = simd_horizontal_sum(&ema1_seed) * inv_p;
     let mut e2 = sma2;
-    output[ema2_start] = 2.0 * ema1_buf[ema2_start] - e2;
+    output[ema2_start] = 2.0 * e1 - e2;
 
     for i in (ema2_start + 1)..len {
-        e2 = ema1_buf[i] * k + e2 * one_k;
-        output[i] = 2.0 * ema1_buf[i] - e2;
+        e1 = input[i] * k + e1 * one_k;
+        e2 = e1 * k + e2 * one_k;
+        output[i] = 2.0 * e1 - e2;
     }
 
     Ok(())
@@ -916,64 +914,45 @@ pub fn tema_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()>
         return Ok(());
     }
 
-    // EMA pass 1: input -> ema1_buf (single allocation)
-    let mut ema1_buf = vec![0.0f64; len];
-    // SIMD-accelerated SMA seed (4-6x faster than iterator sum).
+    // Retain only the seed windows for EMA1 and EMA2. The three recursive
+    // series can then advance in one pass after EMA3 is seeded.
     let sma1: f64 = simd_horizontal_sum(&input[..period]) * inv_p;
-    ema1_buf[s1] = sma1;
     let mut e1 = sma1;
-    for i in period..len {
-        e1 = input[i] * k + e1 * one_k;
-        ema1_buf[i] = e1;
-    }
-
-    // EMA pass 2: ema1_buf -> scalar e2 accumulator (no allocation)
     let ema2_start = 2 * s1;
     if len - s1 < period {
         return Ok(());
     }
-    // SIMD-accelerated second SMA seed.
-    let sma2: f64 = simd_horizontal_sum(&ema1_buf[s1..s1 + period]) * inv_p;
-    let mut e2 = sma2;
 
-    // We need EMA2 values at positions ema2_start.. for EMA3 seed.
-    // Store them temporarily in output[ema2_start..] to avoid a second buffer.
-    output[ema2_start] = e2;
-    for i in (ema2_start + 1)..len {
-        e2 = ema1_buf[i] * k + e2 * one_k;
-        output[i] = e2;
+    let mut ema1_seed = vec![0.0; period];
+    ema1_seed[0] = e1;
+    for offset in 1..period {
+        e1 = input[s1 + offset] * k + e1 * one_k;
+        ema1_seed[offset] = e1;
     }
-
-    // EMA pass 3: output[ema2_start..] -> scalar e3 accumulator, write TEMA
+    let sma2: f64 = simd_horizontal_sum(&ema1_seed) * inv_p;
+    let mut e2 = sma2;
     let ema3_start = 3 * s1;
     if len - ema2_start < period {
-        for i in ema2_start..len {
-            output[i] = f64::NAN;
-        }
         return Ok(());
     }
 
-    // SIMD-accelerated third SMA seed.
-    let sma3: f64 = simd_horizontal_sum(&output[ema2_start..ema2_start + period]) * inv_p;
+    let mut ema2_seed = vec![0.0; period];
+    ema2_seed[0] = e2;
+    for offset in 1..period {
+        e1 = input[ema2_start + offset] * k + e1 * one_k;
+        e2 = e1 * k + e2 * one_k;
+        ema2_seed[offset] = e2;
+    }
+    let sma3: f64 = simd_horizontal_sum(&ema2_seed) * inv_p;
     let mut e3 = sma3;
 
-    // Clear positions before ema3_start
-    for i in ema2_start..ema3_start {
-        output[i] = f64::NAN;
-    }
-
-    // Recompute EMA2 from ema3_start onward (since we overwrote output above)
-    let mut e2_re = sma2;
-    for i in (ema2_start + 1)..=ema3_start {
-        e2_re = ema1_buf[i] * k + e2_re * one_k;
-    }
-
-    output[ema3_start] = 3.0 * ema1_buf[ema3_start] - 3.0 * e2_re + e3;
+    output[ema3_start] = 3.0 * e1 - 3.0 * e2 + e3;
 
     for i in (ema3_start + 1)..len {
-        e2_re = ema1_buf[i] * k + e2_re * one_k;
-        e3 = e2_re * k + e3 * one_k;
-        output[i] = 3.0 * ema1_buf[i] - 3.0 * e2_re + e3;
+        e1 = input[i] * k + e1 * one_k;
+        e2 = e1 * k + e2 * one_k;
+        e3 = e2 * k + e3 * one_k;
+        output[i] = 3.0 * e1 - 3.0 * e2 + e3;
     }
 
     Ok(())

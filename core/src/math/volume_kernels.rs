@@ -299,6 +299,13 @@ fn adosc_default_3_10_into(
     volume: &[f64],
     output: &mut [f64],
 ) -> Result<()> {
+    #[cfg(all(feature = "std", target_arch = "x86_64"))]
+    if crate::math::simd_ops::has_avx2() {
+        // The AVX2 path uses the same FMA EMA recurrence as the scalar path,
+        // so dispatching it preserves the TA-Lib 0.8 numeric contract.
+        return unsafe { adosc_default_3_10_avx2(high, low, close, volume, output) };
+    }
+
     unsafe {
         let high_ptr = high.as_ptr();
         let low_ptr = low.as_ptr();

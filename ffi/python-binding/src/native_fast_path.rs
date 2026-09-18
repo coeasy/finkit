@@ -596,14 +596,15 @@ fn fast_unary_period<'py>(
         "midpoint" => {
             let output = unsafe { PyArray1::new(py, [len], false) };
             let output_addr = output.data() as usize;
-            py.detach(|| unsafe {
-                indicators::midpoint_into(
-                    close,
-                    timeperiod,
-                    std::slice::from_raw_parts_mut(output_addr as *mut f64, len),
-                )
-            })
-            .map_err(value_error)?;
+            let compute = || unsafe {
+                let output = std::slice::from_raw_parts_mut(output_addr as *mut f64, len);
+                if timeperiod == 14 {
+                    indicators::midpoint14_into(close, output)
+                } else {
+                    indicators::midpoint_into(close, timeperiod, output)
+                }
+            };
+            py.detach(compute).map_err(value_error)?;
             return Ok(output);
         }
         "dema" => {
@@ -697,6 +698,18 @@ fn fast_unary_period_scale<'py>(
     scale: f64,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let close = close.as_slice().map_err(value_error)?;
+    if operation == "var" && timeperiod == 20 {
+        let output = unsafe { PyArray1::new(py, [close.len()], false) };
+        let output_addr = output.data() as usize;
+        py.detach(|| unsafe {
+            rolling_stats::variance20_into(
+                close,
+                std::slice::from_raw_parts_mut(output_addr as *mut f64, close.len()),
+            )
+        })
+        .map_err(value_error)?;
+        return Ok(output);
+    }
     let output = match operation {
         "stddev" => {
             validate_period(close.len(), timeperiod)?;
@@ -781,7 +794,7 @@ fn fast_binary_period<'py>(
             let len = input_a.len();
             let output = unsafe { PyArray1::new(py, [len], false) };
             let output_addr = output.data() as usize;
-            if timeperiod == 14 && len <= 16_384 {
+            if timeperiod == 14 {
                 unsafe {
                     indicators::midprice14_into(
                         input_a,
@@ -835,10 +848,18 @@ fn fast_hlc_period<'py>(
     validate_same_len(high.len(), close.len())?;
     let output = match operation {
         "willr" => {
-            let mut output = vec![0.0; high.len()];
-            py.detach(|| indicators::willr_into(high, low, close, timeperiod, &mut output))
-                .map_err(value_error)?;
-            output
+            let output = unsafe { PyArray1::new(py, [high.len()], false) };
+            let output_addr = output.data() as usize;
+            let compute = || unsafe {
+                let output = std::slice::from_raw_parts_mut(output_addr as *mut f64, high.len());
+                if timeperiod == 14 {
+                    indicators::willr14_into(high, low, close, output)
+                } else {
+                    indicators::willr_into(high, low, close, timeperiod, output)
+                }
+            };
+            py.detach(compute).map_err(value_error)?;
+            return Ok(output);
         }
         "adx" => py
             .detach(|| {

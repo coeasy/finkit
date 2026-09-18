@@ -2005,6 +2005,73 @@ pub fn willr_into(
     Ok(())
 }
 
+/// Fixed-period WILLR kernel for the benchmark-critical 14-bar path.
+#[inline]
+pub fn willr14_into(high: &[f64], low: &[f64], close: &[f64], output: &mut [f64]) -> Result<()> {
+    const PERIOD: usize = 14;
+
+    if high.len() != low.len() || high.len() != close.len() {
+        return Err(TaError::InvalidParameter {
+            name: "high, low, close".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    validate_input(high.len(), PERIOD)?;
+    if output.len() != close.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
+
+    crate::utils::simd_fill_nan(&mut output[..PERIOD - 1]);
+    let mut high_queue = [0usize; 16];
+    let mut low_queue = [0usize; 16];
+    let mut high_head = 0usize;
+    let mut high_tail = 0usize;
+    let mut low_head = 0usize;
+    let mut low_tail = 0usize;
+    for index in 0..close.len() {
+        while high_head < high_tail && high_queue[high_head & 15] + PERIOD <= index {
+            high_head += 1;
+        }
+        while low_head < low_tail && low_queue[low_head & 15] + PERIOD <= index {
+            low_head += 1;
+        }
+        while high_head < high_tail {
+            let back = high_queue[(high_tail - 1) & 15];
+            if high[back] <= high[index] {
+                high_tail -= 1;
+            } else {
+                break;
+            }
+        }
+        high_queue[high_tail & 15] = index;
+        high_tail += 1;
+        while low_head < low_tail {
+            let back = low_queue[(low_tail - 1) & 15];
+            if low[back] >= low[index] {
+                low_tail -= 1;
+            } else {
+                break;
+            }
+        }
+        low_queue[low_tail & 15] = index;
+        low_tail += 1;
+        if index >= PERIOD - 1 {
+            let highest = high[high_queue[high_head & 15]];
+            let lowest = low[low_queue[low_head & 15]];
+            let range = highest - lowest;
+            output[index] = if range > 1e-15 {
+                (highest - close[index]) / range * -100.0
+            } else {
+                0.0
+            };
+        }
+    }
+    Ok(())
+}
+
 /// Elder-Ray Indicator Result
 #[derive(Debug, Clone)]
 pub struct ElderRayResult {

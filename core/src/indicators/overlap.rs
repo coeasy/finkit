@@ -399,6 +399,47 @@ pub fn midpoint_into(input: &[f64], period: usize, output: &mut [f64]) -> Result
     Ok(())
 }
 
+/// Fixed-period MIDPOINT kernel for the benchmark-critical 14-bar path.
+///
+/// The bounded scan avoids the callback and queue bookkeeping of the generic
+/// rolling extrema visitor while retaining the same newest-value tie rules.
+#[inline]
+pub fn midpoint14_into(input: &[f64], output: &mut [f64]) -> Result<()> {
+    const PERIOD: usize = 14;
+
+    validate_input(input.len(), PERIOD)?;
+    if output.len() != input.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
+
+    crate::utils::simd_fill_nan(&mut output[..PERIOD - 1]);
+    let input_ptr = input.as_ptr();
+    let output_ptr = output.as_mut_ptr();
+    unsafe {
+        for index in (PERIOD - 1)..input.len() {
+            let start = index + 1 - PERIOD;
+            let mut highest = *input_ptr.add(start);
+            let mut lowest = highest;
+            let mut cursor = start + 1;
+            while cursor <= index {
+                let value = *input_ptr.add(cursor);
+                if value > highest {
+                    highest = value;
+                }
+                if value < lowest {
+                    lowest = value;
+                }
+                cursor += 1;
+            }
+            *output_ptr.add(index) = (highest + lowest) * 0.5;
+        }
+    }
+    Ok(())
+}
+
 /// Midprice (MIDPRICE)
 ///
 /// MIDPRICE = (highest_high + lowest_low) / 2
