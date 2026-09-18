@@ -352,6 +352,73 @@ pub extern "C" fn ta_operation_catalog_json() -> *mut c_char {
     })
 }
 
+/// Execute a formula through the shared versioned JSON contract.
+#[no_mangle]
+pub unsafe extern "C" fn ta_formula_eval_contract_json(
+    source: *const c_char,
+    dialect: *const c_char,
+    open: *const c_double,
+    high: *const c_double,
+    low: *const c_double,
+    close: *const c_double,
+    volume: *const c_double,
+    length: c_int,
+) -> *mut c_char {
+    ffi_catch_ptr(|| {
+        let error = |message: &str| {
+            CString::new(
+                serde_json::json!({
+                    "schema_version": finkit_ffi_common::FORMULA_CONTRACT_SCHEMA_VERSION,
+                    "error": message,
+                })
+                .to_string(),
+            )
+            .expect("formula contract error contains no NUL")
+            .into_raw()
+        };
+        if source.is_null()
+            || dialect.is_null()
+            || open.is_null()
+            || high.is_null()
+            || low.is_null()
+            || close.is_null()
+            || volume.is_null()
+            || length < 0
+        {
+            return error("invalid formula contract input");
+        }
+        let Some(source) = read_c_string(source) else {
+            return error("formula source is not valid UTF-8");
+        };
+        let Some(dialect) = read_c_string(dialect) else {
+            return error("formula dialect is not valid UTF-8");
+        };
+        let length = length as usize;
+        let (open, high, low, close, volume) = unsafe {
+            (
+                std::slice::from_raw_parts(open, length),
+                std::slice::from_raw_parts(high, length),
+                std::slice::from_raw_parts(low, length),
+                std::slice::from_raw_parts(close, length),
+                std::slice::from_raw_parts(volume, length),
+            )
+        };
+        let payload = finkit_ffi_common::evaluate_formula_json(
+            &source, &dialect, open, high, low, close, volume,
+        )
+        .unwrap_or_else(|message| {
+            serde_json::json!({
+                "schema_version": finkit_ffi_common::FORMULA_CONTRACT_SCHEMA_VERSION,
+                "error": message,
+            })
+            .to_string()
+        });
+        CString::new(payload)
+            .expect("formula contract payload contains no NUL")
+            .into_raw()
+    })
+}
+
 // ============================================================================
 // Formula Engine
 // ============================================================================

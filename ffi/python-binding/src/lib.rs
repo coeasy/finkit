@@ -1937,6 +1937,29 @@ pub fn formula_eval_dialect(
     Ok(dict.into())
 }
 
+/// Evaluate a formula through the language-neutral, versioned JSON contract.
+#[pyfunction]
+#[pyo3(signature = (source, dialect, open, high, low, close, volume))]
+#[cfg(feature = "formula")]
+#[allow(clippy::too_many_arguments)]
+pub fn formula_eval_contract_json(
+    source: &str,
+    dialect: &str,
+    open: &Bound<'_, PyAny>,
+    high: &Bound<'_, PyAny>,
+    low: &Bound<'_, PyAny>,
+    close: &Bound<'_, PyAny>,
+    volume: &Bound<'_, PyAny>,
+) -> PyResult<String> {
+    let open = extract_array_bound(open)?;
+    let high = extract_array_bound(high)?;
+    let low = extract_array_bound(low)?;
+    let close = extract_array_bound(close)?;
+    let volume = extract_array_bound(volume)?;
+    finkit_ffi_common::evaluate_formula_json(source, dialect, &open, &high, &low, &close, &volume)
+        .map_err(pyo3::exceptions::PyValueError::new_err)
+}
+
 /// Validate a formula without executing
 ///
 /// Checks if the formula syntax is valid without actually running it.
@@ -6453,6 +6476,7 @@ fn finkit(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.add_class::<PyFormulaRegistry>()?;
         m.add_function(wrap_pyfunction!(formula_eval, m)?)?;
         m.add_function(wrap_pyfunction!(formula_eval_dialect, m)?)?;
+        m.add_function(wrap_pyfunction!(formula_eval_contract_json, m)?)?;
         m.add_function(wrap_pyfunction!(formula_eval_bytecode, m)?)?;
         m.add_function(wrap_pyfunction!(formula_eval_optimized, m)?)?;
         m.add_function(wrap_pyfunction!(formula_eval_jit, m)?)?;

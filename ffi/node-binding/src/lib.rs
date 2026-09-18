@@ -2413,6 +2413,26 @@ pub fn formula_compatibility_report(source: String, terminal: Option<String>) ->
         })
 }
 
+/// Evaluate a formula through the language-neutral, versioned JSON contract.
+///
+/// The contract preserves named outputs and represents non-finite warm-up
+/// values as JSON `null`, so Node callers observe the same result envelope as
+/// the C, C++, Go, Java, .NET, Python and Rust entry points.
+#[napi]
+#[cfg(feature = "formula")]
+pub fn formula_eval_contract_json(
+    source: String,
+    dialect: String,
+    open: Vec<f64>,
+    high: Vec<f64>,
+    low: Vec<f64>,
+    close: Vec<f64>,
+    volume: Vec<f64>,
+) -> Result<String> {
+    finkit_ffi_common::evaluate_formula_json(&source, &dialect, &open, &high, &low, &close, &volume)
+        .map_err(|error| Error::new(Status::InvalidArg, error))
+}
+
 /// Execute a trading formula with JIT compilation
 ///
 /// Compiles the formula using Just-In-Time compilation for maximum execution speed.

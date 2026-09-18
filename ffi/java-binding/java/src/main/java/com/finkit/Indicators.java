@@ -847,6 +847,14 @@ public final class Indicators {
     public static native String operationCatalogJson();
 
     /**
+     * Evaluates a formula through the language-neutral versioned JSON contract.
+     * Non-finite warm-up values are represented as JSON {@code null}.
+     */
+    public static native String formulaEvalContractJson(
+            String source, String dialect, double[] open, double[] high, double[] low,
+            double[] close, double[] volume);
+
+    /**
      * Validates a formula source string for syntactic correctness.
      *
      * @param source formula source code to validate

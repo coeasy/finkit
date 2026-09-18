@@ -56,6 +56,7 @@ extern TaResult* ta_tsf(const double *input, int length, int period);
 
 extern const char* ta_version();
 extern char* ta_operation_catalog_json();
+extern char* ta_formula_eval_contract_json(const char *source, const char *dialect, const double *open, const double *high, const double *low, const double *close, const double *volume, int length);
 extern void ta_free_result(TaResult *result);
 
 extern char* ta_formula_eval(const char *source, const double *open, const double *high, const double *low, const double *close, const double *volume, int length);
@@ -133,6 +134,22 @@ func OperationCatalogJSON() (string, error) {
 	}
 	defer C.ta_free_string(result)
 	return C.GoString(result), nil
+}
+
+// FormulaEvalContractJSON evaluates a formula using an explicit dialect and
+// returns the shared versioned result envelope used by the official bindings.
+func FormulaEvalContractJSON(source, dialect string, open, high, low, close, volume []float64) (string, error) {
+	length := len(open)
+	if len(high) != length || len(low) != length || len(close) != length || len(volume) != length {
+		return "", errors.New("all input arrays must have the same length")
+	}
+	cSource := C.CString(source)
+	defer C.free(unsafe.Pointer(cSource))
+	cDialect := C.CString(dialect)
+	defer C.free(unsafe.Pointer(cDialect))
+	return formulaJSONResult(C.ta_formula_eval_contract_json(
+		cSource, cDialect, toCSlice(open), toCSlice(high), toCSlice(low), toCSlice(close), toCSlice(volume), cInt(length),
+	))
 }
 
 // convertResult converts a C TaResult to a Go slice and frees the C memory.

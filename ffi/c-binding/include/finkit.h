@@ -37,6 +37,9 @@ typedef enum FfiStatus {
 
 TA_API char *ta_version(void);
 TA_API char *ta_operation_catalog_json(void);
+TA_API char *ta_formula_eval_contract_json(const char *source, const char *dialect,
+    const double *open, const double *high, const double *low, const double *close,
+    const double *volume, int32_t length);
 TA_API char *ta_last_error(void);
 TA_API int32_t ta_last_error_code(void);
 TA_API void finkit_free_string(char *s);

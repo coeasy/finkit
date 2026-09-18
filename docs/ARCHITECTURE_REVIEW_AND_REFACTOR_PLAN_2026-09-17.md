@@ -14,9 +14,9 @@ Finkit 已经具备一个功能面很宽的量化计算内核，但当前状态�
 2. **公式引擎已形成完整雏形，但兼容层仍是“共同子集 + 报告”，不是各终端的完整兼容运行时。** TDX、同花顺、东方财富现在在公开 `FormulaDialect` 中可被明确区分，同时共享 AlphaTA 风格的 canonical parser；`normalize_terminal_source` 主要处理 BOM/换行，尚未完成终端专属语义转换。Pine AST 已覆盖声明、`if`、`for`、`while`、`plot`、`fill` 等节点，但这仍是 Pine 子集，不能等价宣称支持 TradingView 全部语言、绘图对象和重绘语义。
 3. **主体链路没有完全贯通。** Core 内已有 Formula、Factor、Composite、Streaming、V3/V4 Runtime 多条可运行链路，但它们没有全部落到同一个计划、Kernel、状态、缓存和输出契约上。工作区还存在 `crates/finkit-factor` 与 `crates/finkit-runtime` 两个重复的早期骨架；其中 `finkit-runtime` 的 `FactorFactory::create()` 返回描述字符串而不是可执行 Factor，不能作为生产执行链。
 4. **Factor 和 Composite 目前不能证明都满足高吞吐生产要求。** Core 的 borrowed、range、缓存和执行计划是正确方向，但 Factor 注册表使用 `Arc<dyn Fn>`，Composite 使用 `BTreeMap` 和独立缓存，仍有动态分发、重复物化和多套缓存身份的问题；没有统一的 compiled operator/typed state/kernel dispatch 作为唯一热路径。
-5. **多语言已有大量绑定，但“语义同 API”尚未完成。** Python、C++、Go、Rust、Java、.NET 都存在绑定或源码入口，但目前是多套手写/半生成 façade。返回类型、错误模型、数组所有权、公式计划句柄、Streaming 状态和研究 API 仍存在语言间差异。Node、Swift、Android/iOS 专用入口不纳入本产品第一阶段正式公开语言范围。最新增量已将版本化 Operation Catalog 接入六个正式入口，但执行、结果、状态和错误 contract tests 尚未全覆盖。
+5. **多语言已有大量绑定，但“语义同 API”尚未完成。** Rust、Python、Go、Java、.NET、C、C++、Node 都存在绑定或源码入口，但目前是多套手写/半生成 façade。返回类型、错误模型、数组所有权、公式计划句柄、Streaming 状态和研究 API 仍存在语言间差异。Swift、Android/iOS 专用入口不纳入本产品第一阶段正式公开语言范围。最新增量已将版本化 Operation Catalog 接入正式入口，并开始接入统一 Formula JSON contract，但执行、结果、状态和错误 contract tests 尚未全覆盖。
 6. **绘图已开始收敛为 Lightweight Charts Web adapter。** 已有 SVG、Canvas、WebGL/WebGPU、PNG、JSON/HTML 输出，适合 native/headless/export；当前版本化 payload 和浏览器 adapter 已覆盖 OHLC、volume、line、null/warm-up、markers、scene panels/layers、viewport、完整更新和增量更新。tooltip 仍以 marker text/scene metadata 形式传递，完整跨 pane tooltip 交互和前端集成测试仍待完成，不能把当前 adapter 宣称为最终绘图实现。
-7. **基础门禁已恢复全绿，但仍不能据此宣称全量生产化。** 审计初始验证为 `2882 passed, 5 failed, 1 ignored`；后续已修复 ADX 对齐、Runtime 检查点/状态恢复、注册表快照和版本/SSOT 漂移。当前 Core 专项 operation 测试为 `10 passed, 0 failed`，此前 Core 全量为 `2897 passed, 0 failed, 1 ignored`；本轮还通过了 Python/Go/Java/.NET binding 的 Rust 编译检查。公式完整语义、六语言执行 contract tests、跨语言 golden、性能 SLO 和持久化 typed state 仍未完成。
+7. **基础门禁已恢复全绿，但仍不能据此宣称全量生产化。** 审计初始验证为 `2882 passed, 5 failed, 1 ignored`；后续已修复 ADX 对齐、Runtime 检查点/状态恢复、注册表快照和版本/SSOT 漂移。当前 Core 专项 operation 测试为 `10 passed, 0 failed`，此前 Core 全量为 `2897 passed, 0 failed, 1 ignored`；本轮已通过 ffi-common、C、Go、Python、Java、.NET、Node binding 的 Rust 编译检查。公式完整语义、八语言执行 contract tests、跨语言 golden、性能 SLO 和持久化 typed state 仍未完成。
 
 因此，下一步不是继续增加零散接口，而是先建立一个 canonical compute contract，把 Formula、Factor、Composite、Streaming 和兼容层收敛到同一编译计划与 Runtime，再由各语言和绘图适配器消费这个契约。
 
@@ -38,7 +38,7 @@ V1 数据边界已冻结：
 
 当前已具备 `FrameKey`/`MarketPanel`/`CrossSectionView`/`FundamentalSeries` 契约，`FactorEngine::evaluate_cross_sectional` 已按每个时间点逐行调用横截面 Factor，统一入口也可返回 `ValueShape::CrossSection`；`UnifiedOperationEngine::execute_panel_formula` 与 `execute_panel_indicator` 已按显式 symbol/timeframe 分离执行并保留每个 frame 的结果，`execute_formula_with_fundamentals` 已按行情时间轴执行 point-in-time as-of 展开并拒绝无 timestamp 的 frame。
 
-本轮新增 `TemporalSeries`/`TemporalAlignment` 和 `execute_formula_with_temporal_inputs`：跨周期/外部时间序列必须显式选择 `Exact` 或 `AsOfClosed`，后者只传播 source timestamp 小于等于 target timestamp 的已收盘值，并对 source/target 的单调性和长度做校验。`UnifiedOperationEngine` 另已提供按 `operation + dialect + symbol/timeframe + data_revision` 隔离的 Panel Formula 结果缓存及命中/未命中统计；revision 由调用方负责递增。它已经阻断“高周期未收盘值泄漏到低周期”的核心风险，但仍不是自动重采样器，也尚未接入统一 Planner、Pine `request.security` 数据提供器和六语言完整执行 API；因此不能据此宣称多维能力全部生产化。
+本轮新增 `TemporalSeries`/`TemporalAlignment` 和 `execute_formula_with_temporal_inputs`：跨周期/外部时间序列必须显式选择 `Exact` 或 `AsOfClosed`，后者只传播 source timestamp 小于等于 target timestamp 的已收盘值，并对 source/target 的单调性和长度做校验。`UnifiedOperationEngine` 另已提供按 `operation + dialect + symbol/timeframe + data_revision` 隔离的 Panel Formula 结果缓存及命中/未命中统计；revision 由调用方负责递增。它已经阻断“高周期未收盘值泄漏到低周期”的核心风险，但仍不是自动重采样器，也尚未接入统一 Planner、Pine `request.security` 数据提供器和八语言完整执行 API；因此不能据此宣称多维能力全部生产化。
 
 V1 四类维度的实际职责如下：
 
@@ -127,13 +127,13 @@ crates/finkit-runtime: FactorFactory/Registry/Executor/Cache/Graph 骨架
 - Kline、line、indicator、Chan、event marker；
 - SVG、Canvas、JSON、PNG、HTML、WebGL2/WebGPU fallback；
 - viewport、LOD、pan、zoom、crosshair、tooltip、replay、ring buffer；
-- 当前还存在 Python、Node、WASM 等 Kline/HTML/JSON 包装；其中 Node/WASM 入口不纳入第一阶段正式公开语言契约，避免继续扩大未收敛的绑定矩阵。
+- 当前还存在 Python、Node、WASM 等 Kline/HTML/JSON 包装；Node 已纳入本版正式公开语言契约，WASM 仍不进入第一阶段发布门禁。
 
 它的优点是无浏览器依赖、可做 native/headless/export；缺点是 Web 交互和图表生态需要在 Rust 字符串 HTML/JS 中重复维护。Lightweight Charts 应作为前端适配层，Core 只输出标准化 series/marker/viewport/tooltip 数据和事件，不应让 Core 依赖浏览器图表实现。
 
 ### 2.6 语言与交付入口
 
-当前工作区成员包含 Rust Core、research、visualization、C/C++、Python、Node、Go、.NET、iOS、Java、Android、CLI、WASM，以及 array/series/math/factor/runtime 等新 crate。正式产品公开语言范围冻结为 Rust、Python、C++、Go、Java、.NET；其他绑定暂列实验性或维护性入口，不得进入“全语言 API 一致”的发布门禁。
+当前工作区成员包含 Rust Core、research、visualization、C/C++、Python、Node、Go、.NET、iOS、Java、Android、CLI、WASM，以及 array/series/math/factor/runtime 等新 crate。正式产品公开语言范围冻结为 Rust、Python、Go、Java、.NET、C、C++、Node；iOS、Android、WASM 等暂列平台或实验性入口，不进入本版语言一致性发布门禁。
 
 目标应是“语义同构、类型符合语言习惯”：
 
@@ -284,7 +284,7 @@ Core `lib.rs` 暴露大量模块，并同时支持 std/no_std、formula、JIT、
 | Composite | 可执行，性能/缓存未统一 | dependency、cycle、borrowed、cached 测试存在 | compiled graph、CSE、arena、统一 cache identity、parallel plan |
 | 量化研究分析 | 功能面已存在，发布契约未完全证明 | factor-analysis、ffi-common 和 JSON 入口存在 | 因子研究 request/report/error schema、跨语言 golden、artifact gate；不包含订单/回测/交易风控 |
 | Visualization | Lightweight Charts scene payload 已落地，前端基础映射已验证 | `visualization/src/lightweight.rs` 已输出 panels/layers/markers/viewport；adapter 已应用 markers 和 logical range | 完成跨 pane series/tooltip、浏览器版本矩阵和前端集成测试 |
-| 多语言 | 目录元数据已开始统一，执行语义一致未完成 | Rust/Python/C++/Go/Java/.NET 均已接入版本化 Operation Catalog；Rust binding 编译通过 | 统一 schema/错误/生命周期/能力矩阵和六语言执行 contract tests |
+| 多语言 | 目录元数据已开始统一，执行语义一致未完成 | 八种正式语言均已接入版本化 Operation Catalog；Rust binding 编译通过 | 统一 schema/错误/生命周期/能力矩阵和八语言执行 contract tests |
 | 版本/文档 SSOT | 未完成 | `check_versions.py` 和 `gen_ssot_docs.py --check` 失败 | clean checkout release gate 全绿 |
 
 补充说明：Python 侧已有 accessor/strategy 相关测试以 `pytest.skip` 标记为尚未实现。这类入口应在公开 API 清单中明确标为 `planned` 或补齐实现与契约测试，不能仅因模块或测试文件存在就计入完成度。
@@ -337,7 +337,7 @@ Core `lib.rs` 暴露大量模块，并同时支持 std/no_std、formula、JIT、
                               +----------------------+-----------------------+
        |                      |                       |
   Rust/Python/C++/Go/     Lightweight Charts       Native export
-  Java/.NET adapters         Web adapter          SVG/Canvas/PNG/JSON
+  Java/.NET/C/Node adapters  Web adapter          SVG/Canvas/PNG/JSON
 ```
 
 ### 5.1 Canonical data与结果契约
@@ -372,9 +372,9 @@ Core `lib.rs` 暴露大量模块，并同时支持 std/no_std、formula、JIT、
 - algorithm/schema version；
 - language exposure status。
 
-Registry、Rust dispatch、FFI 声明、Python stubs、C++ 头文件/RAII wrapper、Go bindings、Java/.NET metadata、文档和测试清单从该源生成。
+Registry、Rust dispatch、FFI 声明、Python stubs、C++ 头文件/RAII wrapper、Go bindings、Java/.NET/C/Node metadata、文档和测试清单从该源生成。
 
-当前实现状态：`core/src/operation.rs` 已落地 `OperationKind`、`ValueShape`、`OperationCapabilities`、稳定 `OperationId`、别名解析、冲突校验、从 `FunctionRegistry` 的原子投影，以及从 `FactorRegistry` 投影 Factor 元数据；横截面 Factor 会正确标记 `cross_sectional/multi_symbol` 能力，名称冲突会在 `try_new` 阶段拒绝。`UnifiedOperationEngine` 已将已存在的指标直接 AST dispatch、Formula、Factor、Composite 接入统一 Request/Result/Error façade，并覆盖 AlphaTA、现有 Pine 子集、多标的/多周期 Formula 和横截面 Factor 路由测试。`MACD` 与 `BBANDS` 已通过统一 dispatcher 返回命名多输出，且输出名已进入 `ffi-common` 的版本化 catalog；未实现的多输出 operation 会显式报错，不再只返回一个数组。六个正式语言入口已提供同一版本化 `operation_catalog_json` 元数据读取，但这仍不代表所有指标、公式、Factor、Composite、Draw 已接入同一 dispatcher；逐项 dispatcher、golden、跨语言执行暴露和 Lightweight Charts scene 转换完成后，才能将对应 operation 标记为 `implemented`。
+当前实现状态：`core/src/operation.rs` 已落地 `OperationKind`、`ValueShape`、`OperationCapabilities`、稳定 `OperationId`、别名解析、冲突校验、从 `FunctionRegistry` 的原子投影，以及从 `FactorRegistry` 投影 Factor 元数据；横截面 Factor 会正确标记 `cross_sectional/multi_symbol` 能力，名称冲突会在 `try_new` 阶段拒绝。`UnifiedOperationEngine` 已将已存在的指标直接 AST dispatch、Formula、Factor、Composite 接入统一 Request/Result/Error façade，并覆盖 AlphaTA、现有 Pine 子集、多标的/多周期 Formula 和横截面 Factor 路由测试。`MACD` 与 `BBANDS` 已通过统一 dispatcher 返回命名多输出，且输出名已进入 `ffi-common` 的版本化 catalog；未实现的多输出 operation 会显式报错，不再只返回一个数组。八个正式语言入口已开始共享版本化 `operation_catalog_json`；C/C++/Go 已接入 Formula JSON 契约，Node/Python/Java/.NET 及 Rust 共享实现已接入，仍需完成各语言实际打包、运行时 golden 和生命周期门禁。这仍不代表所有指标、公式、Factor、Composite、Draw 已接入同一 dispatcher；逐项 dispatcher、golden、跨语言执行暴露和 Lightweight Charts scene 转换完成后，才能将对应 operation 标记为 `implemented`。
 
 ### 5.3 Formula 和兼容层
 
@@ -449,14 +449,16 @@ State record 至少包含：`plan_hash`、`operation_id`、`state_type_id`、`st
 - 低频研究/调试/兼容报告：versioned JSON；
 - Python：NumPy zero-copy view + owned result；
 - C++：RAII wrapper + `std::span`/显式 owned result；
+- C：稳定 ABI、显式 buffer/length 和统一错误/释放函数；
 - Go：显式 ownership/free 和稳定错误码；
 - Java/.NET：托管 wrapper + deterministic dispose/finalizer fallback。
+- Node：N-API typed-array/vector 入口，低频结构化结果使用统一 JSON contract。
 
 所有绑定必须通过同一套 cross-language golden vectors 和 error/lifecycle tests。
 
 ### 5.7 V1 目标公开 API 契约
 
-六种正式语言必须围绕同一组语义入口实现，名称可以符合语言习惯，但不能改变参数含义、默认值、预热规则、NaN 规则、输出字段或错误分类。目标公开面收敛为以下五类：
+八种正式语言必须围绕同一组语义入口实现，名称可以符合语言习惯，但不能改变参数含义、默认值、预热规则、NaN 规则、输出字段或错误分类。目标公开面收敛为以下五类：
 
 ```text
 Catalog
@@ -491,7 +493,7 @@ Streaming / persistence / drawing
 实现约束：
 
 - Rust 是 canonical implementation 和类型契约来源；C ABI 是跨语言边界，C++ 在其上提供 RAII、span/view 和异常安全的习惯化封装。
-- Python、C++、Go、Java、.NET 的公共入口必须覆盖 batch、compiled plan、range/latest、streaming、checkpoint、结果读取和结构化错误；不能出现某语言只能 full evaluate 的降级版本。
+- Python、C++、Go、Java、.NET、C、Node 的公共入口必须覆盖 batch、compiled plan、range/latest、streaming、checkpoint、结果读取和结构化错误；不能出现某语言只能 full evaluate 的降级版本。C ABI 作为跨语言底座，C++ 必须与其保持同语义；Node 的 N-API 层不得另造公式解释器。
 - `ResultEnvelope`、`ErrorEnvelope`、`OperationSpec`、`ChartSceneV1` 使用统一 schema；语言绑定只负责内存视图、对象生命周期和语言习惯包装。
 - 数值结果默认支持命名列、validity mask、warm-up metadata、algorithm/schema version 和 warnings；不得以不同语言的空值、异常或 NaN 约定替代统一语义。
 - 编译句柄、流式句柄和 checkpoint 都必须显式拥有 owner、线程安全属性、释放方式和版本验证规则；跨语言不得暴露 Rust `TypeId` 或裸内部指针作为稳定契约。
@@ -506,7 +508,7 @@ Streaming / persistence / drawing
 3. 修复 ADX parity、StateArena checkpoint、Runtime session restore、registry snapshot。
 4. 建立 `cargo fmt/check/test/clippy`、版本、SSOT、链接、FFI memory、跨语言 golden 的统一 release gate。
 5. 对每个公开 operation 标注 `implemented / partial / planned / unsupported`。
-6. 将 `FrameKey`、`MarketPanel`、`CrossSectionView`、`FundamentalSeries` 纳入 canonical data contract，并为六种语言生成一致的数据维度 API。
+6. 将 `FrameKey`、`MarketPanel`、`CrossSectionView`、`FundamentalSeries` 纳入 canonical data contract，并为八种语言生成一致的数据维度 API。
 
 **Gate：** 核心测试全绿、版本/SSOT 全绿、失败项不能以修改断言或降低误差预算解决。
 
@@ -517,7 +519,7 @@ Streaming / persistence / drawing
 3. 把 `MarketFrame`、series alignment、warm-up、NaN、revision 固化为唯一 contract。
 4. 生成多语言声明、文档、测试矩阵；删除手写重复 metadata。
 
-**Gate：** 任一 operation 可从 registry 查到同一参数、输出、能力和版本；Rust/Python/C++/Go/Java/.NET contract tests 一致。
+**Gate：** 任一 operation 可从 registry 查到同一参数、输出、能力和版本；Rust/Python/Go/Java/.NET/C/C++/Node contract tests 一致。
 
 ### Phase 2：统一 Semantic IR 与 Planner
 
@@ -549,7 +551,7 @@ Streaming / persistence / drawing
 
 ### Phase 5：多语言和研究 API 一次性收敛
 
-1. 从 schema 生成 Rust crate API、C ABI/C++ headers and wrappers、Python stubs、Go bindings、Java/.NET declarations。
+1. 从 schema 生成 Rust crate API、C ABI/C++ headers and wrappers、Python stubs、Go bindings、Java/.NET/C/Node declarations。
 2. 暴露统一的 formula/factor/composite request、compiled handle、streaming handle、checkpoint、result/error API。
 3. 量化研究 API 使用 versioned JSON request/report/error；低频操作不复制各语言业务逻辑，不扩展到订单、回测或交易风控。
 4. 每个 binding 增加 clean environment smoke test、memory ownership test、NaN/warm-up test、golden test。
@@ -610,7 +612,7 @@ Streaming / persistence / drawing
 
 以下边界已由产品方确认，后续重构按此执行，不再将其作为阻塞问题：
 
-- 正式公开语言固定为 Rust、Python、C++、Go、Java、.NET；Node、Swift、Kotlin、WASM 等不进入第一阶段正式 API 一致性承诺。
+- 正式公开语言固定为 Rust、Python、Go、Java、.NET、C、C++、Node；Swift、Kotlin、WASM 等不进入第一阶段正式 API 一致性承诺。
 - 产品核心固定为公式系统、TA-Lib 对标、经典公式兼容、Factor/Composite 因子计算器和量化计算能力。
 - Web 绘图优先采用 Lightweight Charts；Rust renderer 保留为 native/headless/export 后端，不能反向成为 Web 业务层。
 - V1 正式支持多标的、多周期和横截面计算；基本面先支持 point-in-time 输入契约与 as-of 语义，不建设数据抓取和供应商适配。
@@ -625,7 +627,7 @@ Streaming / persistence / drawing
 4. **Pine 边界：** 以 Pine v5 常见可计算子集为第一执行目标，持续扩展；`repaint/lookahead/request.security` 必须显式分类，订单/策略执行不纳入 Runtime。
 5. **Factor/Composite SLO：** 在产品方提供固定数据规模和延迟目标前，先建立可复现 bars/sec、p95/p99、分配量、RSS、并发扩展基线，禁止无基准宣称“高吞吐生产化”。
 6. **数据模型：** V1 纳入多标的、多周期、横截面；基本面只纳入 point-in-time/as-of 输入契约，不纳入 vendor ingestion；open interest、行业/市值中性化作为按同一数据契约扩展的计算能力。
-7. **发布形态：** 六种语言都进入同一 schema、golden 和 ABI/生命周期门禁；实现可分批合并，但不能发布语义不一致的语言包。
+7. **发布形态：** 八种语言都进入同一 schema、golden 和 ABI/生命周期门禁；实现可分批合并，但不能发布语义不一致的语言包。
 
 ## 9. 推荐的决策顺序
 

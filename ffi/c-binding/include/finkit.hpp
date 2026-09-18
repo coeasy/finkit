@@ -36,6 +36,29 @@ inline std::string operation_catalog_json() {
     return result;
 }
 
+inline std::string formula_eval_contract_json(
+    const std::string& source,
+    const std::string& dialect,
+    const std::vector<double>& open,
+    const std::vector<double>& high,
+    const std::vector<double>& low,
+    const std::vector<double>& close,
+    const std::vector<double>& volume) {
+    if (open.size() != high.size() || open.size() != low.size()
+        || open.size() != close.size() || open.size() != volume.size()) {
+        throw TaLibException("formula input lengths do not match");
+    }
+    char* raw = ta_formula_eval_contract_json(
+        source.c_str(), dialect.c_str(), open.data(), high.data(), low.data(),
+        close.data(), volume.data(), static_cast<int32_t>(open.size()));
+    if (raw == nullptr) {
+        throw TaLibException("formula contract returned null");
+    }
+    std::string result(raw);
+    finkit_free_string(raw);
+    return result;
+}
+
 namespace detail {
 
 inline void check_result(int32_t result, const std::string& func_name) {

@@ -67,6 +67,48 @@ pub extern "system" fn Java_com_finkit_Indicators_operationCatalogJson(
     })
 }
 
+#[no_mangle]
+pub extern "system" fn Java_com_finkit_Indicators_formulaEvalContractJson(
+    mut env: JNIEnv,
+    _class: JClass,
+    source: JString,
+    dialect: JString,
+    open: JDoubleArray,
+    high: JDoubleArray,
+    low: JDoubleArray,
+    close: JDoubleArray,
+    volume: JDoubleArray,
+) -> jni::sys::jstring {
+    ffi_catch_ptr(|| {
+        let source: String = match env.get_string(&source) {
+            Ok(value) => value.into(),
+            Err(_) => return std::ptr::null_mut(),
+        };
+        let dialect: String = match env.get_string(&dialect) {
+            Ok(value) => value.into(),
+            Err(_) => return std::ptr::null_mut(),
+        };
+        let open = get_double_array(&mut env, open);
+        let high = get_double_array(&mut env, high);
+        let low = get_double_array(&mut env, low);
+        let close = get_double_array(&mut env, close);
+        let volume = get_double_array(&mut env, volume);
+        let payload = finkit_ffi_common::evaluate_formula_json(
+            &source, &dialect, &open, &high, &low, &close, &volume,
+        )
+        .unwrap_or_else(|error| {
+            serde_json::json!({
+                "schema_version": finkit_ffi_common::FORMULA_CONTRACT_SCHEMA_VERSION,
+                "error": error,
+            })
+            .to_string()
+        });
+        env.new_string(payload)
+            .map(|value| value.into_raw())
+            .unwrap_or(std::ptr::null_mut())
+    })
+}
+
 fn get_double_array(env: &mut JNIEnv, arr: JDoubleArray) -> Vec<f64> {
     let len = env.get_array_length(&arr).unwrap() as usize;
     let mut buf = vec![0.0f64; len];

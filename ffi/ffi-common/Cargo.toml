@@ -13,3 +13,4 @@ finkit = { path = "../../core" }
 finkit-factor-analysis = { path = "../../factor-analysis" }
 serde = { workspace = true }
 serde_json = { workspace = true }
+ndarray = { workspace = true }

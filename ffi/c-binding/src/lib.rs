@@ -228,6 +228,75 @@ pub extern "C" fn ta_operation_catalog_json() -> *mut c_char {
     })
 }
 
+/// Execute a formula through the versioned cross-language result contract.
+///
+/// The returned JSON owns the named output arrays and represents non-finite
+/// values as `null`. Release it with `finkit_free_string`.
+#[no_mangle]
+pub unsafe extern "C" fn ta_formula_eval_contract_json(
+    source: *const c_char,
+    dialect: *const c_char,
+    open: *const f64,
+    high: *const f64,
+    low: *const f64,
+    close: *const f64,
+    volume: *const f64,
+    length: i32,
+) -> *mut c_char {
+    ffi_catch_ptr(|| {
+        let error = |message: &str| {
+            CString::new(serde_json::json!({
+                "schema_version": finkit_ffi_common::FORMULA_CONTRACT_SCHEMA_VERSION,
+                "error": message,
+            }).to_string())
+            .expect("formula contract error contains no NUL")
+            .into_raw()
+        };
+        if source.is_null()
+            || dialect.is_null()
+            || open.is_null()
+            || high.is_null()
+            || low.is_null()
+            || close.is_null()
+            || volume.is_null()
+            || length < 0
+        {
+            return error("invalid formula contract input");
+        }
+        let source = match unsafe { std::ffi::CStr::from_ptr(source) }.to_str() {
+            Ok(value) => value,
+            Err(_) => return error("formula source is not valid UTF-8"),
+        };
+        let dialect = match unsafe { std::ffi::CStr::from_ptr(dialect) }.to_str() {
+            Ok(value) => value,
+            Err(_) => return error("formula dialect is not valid UTF-8"),
+        };
+        let length = length as usize;
+        let (open, high, low, close, volume) = unsafe {
+            (
+                slice::from_raw_parts(open, length),
+                slice::from_raw_parts(high, length),
+                slice::from_raw_parts(low, length),
+                slice::from_raw_parts(close, length),
+                slice::from_raw_parts(volume, length),
+            )
+        };
+        let payload = finkit_ffi_common::evaluate_formula_json(
+            source, dialect, open, high, low, close, volume,
+        )
+        .unwrap_or_else(|message| {
+            serde_json::json!({
+                "schema_version": finkit_ffi_common::FORMULA_CONTRACT_SCHEMA_VERSION,
+                "error": message,
+            })
+            .to_string()
+        });
+        CString::new(payload)
+            .expect("formula contract payload contains no NUL")
+            .into_raw()
+    })
+}
+
 /// Return the last FFI error code for the calling thread.
 #[no_mangle]
 pub extern "C" fn ta_last_error_code() -> i32 {
@@ -309,6 +378,31 @@ mod tests {
             .unwrap()
             .iter()
             .any(|operation| operation["name"] == "EMA"));
+        unsafe { finkit_free_string(ptr) };
+    }
+
+    #[test]
+    fn formula_contract_json_contains_version_and_dialect() {
+        let values = [1.0, 2.0, 3.0];
+        let source = std::ffi::CString::new("CLOSE").unwrap();
+        let dialect = std::ffi::CString::new("tdx").unwrap();
+        let ptr = unsafe {
+            ta_formula_eval_contract_json(
+                source.as_ptr(),
+                dialect.as_ptr(),
+                values.as_ptr(),
+                values.as_ptr(),
+                values.as_ptr(),
+                values.as_ptr(),
+                values.as_ptr(),
+                values.len() as i32,
+            )
+        };
+        let json = unsafe { CStr::from_ptr(ptr) }.to_str().unwrap();
+        let value: serde_json::Value = serde_json::from_str(json).unwrap();
+        assert_eq!(value["schema_version"], 1);
+        assert_eq!(value["dialect"], "tdx");
+        assert_eq!(value["primary"], "__PRIMARY__");
         unsafe { finkit_free_string(ptr) };
     }
 

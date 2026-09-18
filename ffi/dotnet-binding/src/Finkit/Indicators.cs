@@ -153,6 +153,9 @@ public static class Indicators
     private static extern IntPtr ta_formula_eval(string source, IntPtr open, IntPtr high, IntPtr low, IntPtr close, IntPtr volume, int length);
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern IntPtr ta_formula_eval_contract_json(string source, string dialect, IntPtr open, IntPtr high, IntPtr low, IntPtr close, IntPtr volume, int length);
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern IntPtr ta_formula_eval_jit(string source, IntPtr open, IntPtr high, IntPtr low, IntPtr close, IntPtr volume, int length);
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
@@ -202,6 +205,37 @@ public static class Indicators
         finally
         {
             ta_free_string(resultPtr);
+        }
+    }
+
+    /// <summary>
+    /// Evaluates a formula through the language-neutral versioned JSON contract.
+    /// Named outputs are preserved and non-finite warm-up values are JSON null.
+    /// </summary>
+    public static unsafe string FormulaEvalContractJson(
+        string source, string dialect, double[] open, double[] high, double[] low,
+        double[] close, double[] volume)
+    {
+        EnsureSameLength(open, high, low, close, volume);
+        fixed (double* pOpen = open)
+        fixed (double* pHigh = high)
+        fixed (double* pLow = low)
+        fixed (double* pClose = close)
+        fixed (double* pVolume = volume)
+        {
+            IntPtr resultPtr = ta_formula_eval_contract_json(
+                source, dialect, (IntPtr)pOpen, (IntPtr)pHigh, (IntPtr)pLow,
+                (IntPtr)pClose, (IntPtr)pVolume, open.Length);
+            if (resultPtr == IntPtr.Zero)
+                throw new InvalidOperationException("Formula contract returned null");
+            try
+            {
+                return Marshal.PtrToStringUTF8(resultPtr) ?? "";
+            }
+            finally
+            {
+                ta_free_string(resultPtr);
+            }
         }
     }
 
