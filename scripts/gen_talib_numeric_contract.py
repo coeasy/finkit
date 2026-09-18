@@ -69,8 +69,17 @@ def read_fixture() -> dict[str, list[float]]:
                 series[name].append(float(row[name]))
 
     close = series["close"]
-    series["math"] = [0.25 + math.sin(index * 0.11) * 0.2 for index in range(len(close))]
-    series["benchmark"] = [value * 0.97 + index * 0.02 for index, value in enumerate(close)]
+    # Round derived values before serialization.  libm implementations can
+    # differ by a few ulps across Windows and Linux; the contract itself must
+    # remain byte-stable even though the numeric comparison is tolerant.
+    series["math"] = [
+        round(0.25 + math.sin(index * 0.11) * 0.2, 15)
+        for index in range(len(close))
+    ]
+    series["benchmark"] = [
+        round(value * 0.97 + index * 0.02, 15)
+        for index, value in enumerate(close)
+    ]
     series["periods"] = [float(2 + index % 29) for index in range(len(close))]
     return {name: values[:ROWS] for name, values in series.items()}
 
