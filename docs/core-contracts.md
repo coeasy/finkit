@@ -187,6 +187,16 @@ context/registry and delegates to the precompiled topology, so existing callers
 receive the optimized path without migrating API calls. `execute_precompiled`
 remains available when callers want to state that execution mode explicitly.
 
+The unified `OperationRequest::Factor` path can additionally carry an explicit
+`data_revision` and `cache_scope`. When both are supplied, the
+`UnifiedOperationEngine` uses the same bounded LRU result-cache contract as
+Composite execution; the revision must advance whenever any input affecting
+the Factor changes, and the scope isolates symbols/timeframes. Omitting the
+revision deliberately disables result caching while retaining compiled-plan
+reuse, so callers cannot accidentally reuse a result for mutable input data.
+This makes Factor and Composite cache identity explicit without reintroducing
+string-based Factory creation in the hot path.
+
 Built-in factors remain deliberately small reference factors. Register custom
 factors with `FactorDefinition::new` and return one value per context row. Factor
 and dependency names must be non-empty, and every computed result must remain

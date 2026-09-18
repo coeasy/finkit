@@ -71,6 +71,8 @@ fn bench_factor_plan_reuse(c: &mut Criterion) {
     let request = || OperationRequest::Factor {
         name: "DOUBLE_CLOSE",
         context: &context,
+        data_revision: None,
+        cache_scope: None,
     };
     engine.execute(request()).expect("warm factor plan");
 

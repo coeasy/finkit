@@ -258,6 +258,7 @@ talib_0_7_1
 - CLI 不再自行维护 AlphaTA/Pine 的分支匹配，直接调用核心 dialect 执行入口；终端 schema 现在明确返回 `alpha_ta`、`tdx`、`ths`、`eastmoney`、`pine`，避免把不同兼容契约伪装成同一方言。
 - Operation panel cache 已改为带访问时钟的 LRU 淘汰；Composite cache 纳入 `scope`、`data_revision` 和 graph signature，增加 scoped evaluation，防止不同标的/周期在相同 revision 下串缓存。
 - Unified Operation Engine 的 Factor 默认路径已改为 `FactorCatalog -> CompiledFactorPlan -> borrowed execution`，并使用带命中计数和容量上限的计划 LRU；这只证明主路径已接入 bounded compiled plan，不代表所有 Factor/Composite、streaming 和跨语言高吞吐门禁已经完成。
+- Unified Operation Engine 的 Factor typed request 现在可显式携带 `data_revision + cache_scope`，并复用统一 bounded LRU 结果缓存；同一 scope/revision 命中，scope 或 revision 变化隔离/失效，未提供 revision 时只复用 compiled plan 而不复用结果。该合同已通过 Core 路由测试，但不等同于所有 FFI JSON 请求拥有跨调用的进程级缓存（JSON 入口仍按请求创建控制面对象）。
 - Composite 默认路径已增加 `CompiledCompositePlan`：定义校验、引用/cycle 检查和 graph signature 在计划阶段完成，Operation Engine 按 graph signature 复用计划；结果缓存仍额外受 scope/data revision 约束。
 - Composite cached evaluation 已将 compiled-plan cache 与结果快照 cache 分离，并收敛为 `CompositeEngine` 的唯一 bounded LRU owner：相同 graph 会跨 scope/data revision 复用依赖图和 cycle 校验结果，注册新函数会清理计划与结果；专项测试同时断言计划 cache 的命中/未命中计数和容量上限，避免重复构建或无界增长重新进入执行热路径。
 - Composite compiled plan 现在同时保存 required raw inputs 和有限窗口能力证明：`SMA/WMA/VWMA/BBANDS/rolling statistics/return/volatility/cross` 等有限依赖可执行 `DirtyRange` 局部重算；EMA、RSI、ATR、MACD、Z-score、未知自定义函数等递归或全序列语义明确返回 full-only，不猜测固定 lookback。局部执行会返回统一 `RuntimeExecutionTrace`，并验证结果与完整重算逐值一致。

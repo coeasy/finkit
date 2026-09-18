@@ -457,6 +457,11 @@ pub enum OperationRequest<'a> {
         name: &'a str,
         /// Borrowed factor input context.
         context: &'a BorrowedFactorContext<'a>,
+        /// Optional caller-owned revision. When present, the result is
+        /// eligible for the bounded operation cache.
+        data_revision: Option<u64>,
+        /// Optional symbol/timeframe or caller-defined cache namespace.
+        cache_scope: Option<&'a str>,
     },
     /// Evaluate selected composite outputs from a borrowed named-series context.
     Composite {
@@ -533,6 +538,25 @@ impl OperationCacheKey {
             request: source.to_string(),
             dialect: Some(dialect.as_str().to_string()),
             frame: frame.clone(),
+            data_revision,
+        }
+    }
+
+    /// Build a cache key for a revision-scoped Factor result.
+    ///
+    /// The caller must advance `data_revision` whenever any raw input that can
+    /// affect the factor changes. The logical frame is kept separate from
+    /// panel-formula keys by the operation family and has a deterministic
+    /// default namespace for single-series callers.
+    pub fn factor(name: &str, cache_scope: Option<&str>, data_revision: u64) -> Self {
+        Self {
+            operation: "factor".to_string(),
+            request: name.to_string(),
+            dialect: None,
+            frame: FrameKey {
+                symbol: cache_scope.unwrap_or("__default__").to_string(),
+                timeframe: "factor".to_string(),
+            },
             data_revision,
         }
     }
@@ -781,30 +805,30 @@ impl UnifiedOperationEngine {
                     draw,
                 })
             }
-            OperationRequest::Factor { name, context } => {
+            OperationRequest::Factor {
+                name,
+                context,
+                data_revision,
+                cache_scope,
+            } => {
                 let canonical = self
                     .factor_catalog
                     .resolve_name(name)
                     .map(str::to_owned)
                     .ok_or_else(|| OperationExecutionError::UnknownOperation(name.to_string()))?;
-                let plan = self.compiled_factor_plan(&canonical)?;
-                let result = plan
-                    .execute_borrowed(&self.factor, context)
-                    .map_err(OperationExecutionError::Factor)?
-                    .remove(&canonical)
-                    .ok_or_else(|| {
-                        OperationExecutionError::InvalidRequest(format!(
-                            "compiled factor plan did not produce {canonical}"
-                        ))
-                    })?;
-                let mut values = BTreeMap::new();
-                values.insert(canonical.clone(), result);
-                Ok(OperationResult {
-                    values,
-                    shape: ValueShape::Series,
-                    primary: Some(canonical),
-                    draw: None,
-                })
+                if let Some(revision) = data_revision {
+                    let key = OperationCacheKey::factor(&canonical, cache_scope, revision);
+                    if let Some(result) = self.get_cached_result(&key) {
+                        self.operation_cache_hits = self.operation_cache_hits.saturating_add(1);
+                        return Ok(result);
+                    }
+                    self.operation_cache_misses = self.operation_cache_misses.saturating_add(1);
+                    let result = self.execute_factor_uncached(&canonical, context)?;
+                    self.insert_cached_result(key, result.clone());
+                    Ok(result)
+                } else {
+                    self.execute_factor_uncached(&canonical, context)
+                }
             }
             OperationRequest::Composite {
                 definitions,
@@ -1172,6 +1196,31 @@ impl UnifiedOperationEngine {
         }
         self.operation_cache
             .insert(key, CachedOperationResult { result, last_used });
+    }
+
+    fn execute_factor_uncached(
+        &mut self,
+        canonical: &str,
+        context: &BorrowedFactorContext<'_>,
+    ) -> Result<OperationResult, OperationExecutionError> {
+        let plan = self.compiled_factor_plan(canonical)?;
+        let result = plan
+            .execute_borrowed(&self.factor, context)
+            .map_err(OperationExecutionError::Factor)?
+            .remove(canonical)
+            .ok_or_else(|| {
+                OperationExecutionError::InvalidRequest(format!(
+                    "compiled factor plan did not produce {canonical}"
+                ))
+            })?;
+        let mut values = BTreeMap::new();
+        values.insert(canonical.to_string(), result);
+        Ok(OperationResult {
+            values,
+            shape: ValueShape::Series,
+            primary: Some(canonical.to_string()),
+            draw: None,
+        })
     }
 
     fn compiled_factor_plan(
@@ -2139,6 +2188,8 @@ mod tests {
             .execute(OperationRequest::Factor {
                 name: "DOUBLE_CLOSE",
                 context: &context,
+                data_revision: None,
+                cache_scope: None,
             })
             .unwrap();
         assert_eq!(factor.primary_values().unwrap(), &[2.0, 4.0, 6.0]);
@@ -2148,12 +2199,52 @@ mod tests {
             .execute(OperationRequest::Factor {
                 name: "DOUBLE_CLOSE",
                 context: &context,
+                data_revision: None,
+                cache_scope: None,
             })
             .unwrap();
         assert_eq!(factor_again.primary_values().unwrap(), &[2.0, 4.0, 6.0]);
         assert_eq!(engine.factor_plans.len(), 1);
         assert_eq!(engine.factor_plan_cache_hits, 1);
         assert_eq!(engine.factor_plan_cache_misses, 1);
+
+        let cached = engine
+            .execute(OperationRequest::Factor {
+                name: "DOUBLE_CLOSE",
+                context: &context,
+                data_revision: Some(1),
+                cache_scope: Some("AAA@1d"),
+            })
+            .unwrap();
+        assert_eq!(cached.primary_values().unwrap(), &[2.0, 4.0, 6.0]);
+        assert_eq!(engine.cache_stats().misses, 1);
+        let cached_again = engine
+            .execute(OperationRequest::Factor {
+                name: "DOUBLE_CLOSE",
+                context: &context,
+                data_revision: Some(1),
+                cache_scope: Some("AAA@1d"),
+            })
+            .unwrap();
+        assert_eq!(cached_again.primary_values().unwrap(), &[2.0, 4.0, 6.0]);
+        assert_eq!(engine.cache_stats().hits, 1);
+        engine
+            .execute(OperationRequest::Factor {
+                name: "DOUBLE_CLOSE",
+                context: &context,
+                data_revision: Some(1),
+                cache_scope: Some("BBB@1d"),
+            })
+            .unwrap();
+        engine
+            .execute(OperationRequest::Factor {
+                name: "DOUBLE_CLOSE",
+                context: &context,
+                data_revision: Some(2),
+                cache_scope: Some("AAA@1d"),
+            })
+            .unwrap();
+        assert_eq!(engine.cache_stats().misses, 3);
 
         let timestamps = [10, 20];
         let symbols = ["AAA", "BBB", "CCC"];
