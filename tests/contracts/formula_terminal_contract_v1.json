@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "description": "Small numeric semantic gate shared by the domestic terminal and Pine dialect adapters.",
+  "input": {
+    "open": [0.0, 1.0, 2.0, 3.0, 4.0],
+    "high": [1.0, 2.0, 3.0, 4.0, 5.0],
+    "low": [-1.0, 0.0, 1.0, 2.0, 3.0],
+    "close": [1.0, 2.0, 3.0, 4.0, 5.0],
+    "volume": [10.0, 20.0, 30.0, 40.0, 50.0]
+  },
+  "cases": [
+    {
+      "id": "tdx_assignment_and_alias",
+      "terminal": "tdx",
+      "source": "X:=C; Y:=X+1; Y",
+      "expected_primary": [2.0, 3.0, 4.0, 5.0, 6.0]
+    },
+    {
+      "id": "ths_simple_moving_average",
+      "terminal": "ths",
+      "source": "MA3:MA(CLOSE,3); MA3",
+      "expected_primary": [null, null, 2.0, 3.0, 4.0]
+    },
+    {
+      "id": "eastmoney_previous_value",
+      "terminal": "eastmoney",
+      "source": "PREV:=REF(CLOSE,1); PREV",
+      "expected_primary": [null, 1.0, 2.0, 3.0, 4.0]
+    },
+    {
+      "id": "pine_sma_lowering",
+      "terminal": "pine",
+      "source": "//@version=5\nindicator(\"SMA\")\nr = ta.sma(close, 3)\nplot(r)",
+      "expected_primary": [null, null, 2.0, 3.0, 4.0]
+    }
+  ]
+}

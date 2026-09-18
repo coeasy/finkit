@@ -107,9 +107,9 @@ tests/formula_corpus/
 | `crypto_btc_usdt_1m_1000.csv` | 1000 | 高频场景（可选） |
 | `synthetic_waves_500.csv` | 500 | 合成波形（可选） |
 
-## 运行回归（规划中）
+## 运行回归
 
-语料回归测试将集成到 CI，预期工作流：
+跨终端最小数值语义门禁已经集成到 CI；完整公式语料仍按下面的扩展计划逐步补齐参考输出：
 
 ```bash
 # 运行全部语料回归
@@ -118,6 +118,11 @@ cargo test -p finkit formula_corpus -- --nocapture
 # 仅运行 TDX 语料
 cargo test -p finkit formula_corpus_tdx
 ```
+
+固定 contract 位于
+`tests/contracts/formula_terminal_contract_v1.json`，覆盖 TDX、同花顺、东方财富
+和 Pine 的赋值、别名、窗口函数、前值引用及 Pine lowering。它验证的是实际
+`eval_multi_with_dialect` 数值，而不只是 parser/map 成功。
 
 当前语料作为回归基线定义；测试运行器将在后续 Story 中实现。
 
