@@ -118,11 +118,11 @@ fn tolerance_for_indicator(indicator: &str) -> f64 {
         // fixture. The implementation and TA-Lib agree in relative terms;
         // allow the sub-micro-unit absolute rounding difference at that scale.
         "AD" => 1e-6,
-        // TA-Lib's rolling first/second-moment accumulators and the Rust
-        // implementation can differ by a few ulps after subtracting large
-        // close-price squares. Compare these two scale-sensitive outputs with
-        // a relative tolerance in addition to the absolute floor.
-        "STDDEV" | "VAR" => 2e-7,
+        // TA-Lib's rolling first/second-moment accumulators and cumulative
+        // oscillator paths can differ by a few ulps at large magnitudes.
+        // Compare these scale-sensitive outputs with a relative tolerance in
+        // addition to the absolute floor.
+        "ADOSC" | "STDDEV" | "VAR" => 2e-7,
         "EMA" | "DEMA" | "TEMA" => 1e-8,
         _ => 1e-8,
     }
@@ -270,6 +270,13 @@ fn compute_alpha_ta_outputs(
                 array_to_vec(adx(high, low, close, p).unwrap()),
             )])
         }
+        "ADXR" => {
+            let p = param_usize(params, "timeperiod", 14);
+            HashMap::from([(
+                "adxr".to_string(),
+                array_to_vec(finkit::indicators::momentum::adxr(high, low, close, p).unwrap()),
+            )])
+        }
         "STOCH" => {
             let fastk = param_usize(params, "fastk_period", 14);
             let slowk = param_usize(params, "slowk_period", 3);
@@ -302,15 +309,70 @@ fn compute_alpha_ta_outputs(
             let p = param_usize(params, "timeperiod", 10);
             HashMap::from([("roc".to_string(), array_to_vec(roc(close, p).unwrap()))])
         }
+        "ROCP" => {
+            let p = param_usize(params, "timeperiod", 14);
+            HashMap::from([(
+                "rocp".to_string(),
+                array_to_vec(finkit::indicators::momentum::rocp(close, p).unwrap()),
+            )])
+        }
+        "ROCR" => {
+            let p = param_usize(params, "timeperiod", 14);
+            HashMap::from([(
+                "rocr".to_string(),
+                array_to_vec(finkit::indicators::momentum::rocr(close, p).unwrap()),
+            )])
+        }
+        "ROCR100" => {
+            let p = param_usize(params, "timeperiod", 14);
+            HashMap::from([(
+                "rocr100".to_string(),
+                array_to_vec(finkit::indicators::momentum::rocr100(close, p).unwrap()),
+            )])
+        }
         "TRIX" => {
             let p = param_usize(params, "timeperiod", 14);
             HashMap::from([("trix".to_string(), array_to_vec(trix(close, p).unwrap()))])
         }
+        "TRIMA" => {
+            let p = param_usize(params, "timeperiod", 14);
+            HashMap::from([(
+                "trima".to_string(),
+                array_to_vec(finkit::math::moving_avg::trima(close, p).unwrap()),
+            )])
+        }
+        "T3" => {
+            let p = param_usize(params, "timeperiod", 5);
+            let vfactor = param_f64(params, "vfactor", 0.7);
+            HashMap::from([(
+                "t3".to_string(),
+                array_to_vec(finkit::indicators::overlap::t3(close, p, vfactor).unwrap()),
+            )])
+        }
         "OBV" => HashMap::from([("obv".to_string(), array_to_vec(obv(close, volume).unwrap()))]),
+        "MFI" => {
+            let p = param_usize(params, "timeperiod", 14);
+            HashMap::from([(
+                "mfi".to_string(),
+                array_to_vec(
+                    finkit::indicators::momentum::mfi(high, low, close, volume, p).unwrap(),
+                ),
+            )])
+        }
         "AD" => HashMap::from([(
             "ad".to_string(),
             array_to_vec(ad(high, low, close, volume).unwrap()),
         )]),
+        "ADOSC" => {
+            let fast = param_usize(params, "fastperiod", 3);
+            let slow = param_usize(params, "slowperiod", 10);
+            HashMap::from([(
+                "adosc".to_string(),
+                array_to_vec(
+                    finkit::indicators::adosc(high, low, close, volume, fast, slow).unwrap(),
+                ),
+            )])
+        }
         "APO" => {
             let fast = param_usize(params, "fastperiod", 12);
             let slow = param_usize(params, "slowperiod", 26);
@@ -330,6 +392,13 @@ fn compute_alpha_ta_outputs(
                 ("aroondown".to_string(), array_to_vec(r.aroon_down)),
                 ("aroonup".to_string(), array_to_vec(r.aroon_up)),
             ])
+        }
+        "AROONOSC" => {
+            let p = param_usize(params, "timeperiod", 14);
+            HashMap::from([(
+                "aroonosc".to_string(),
+                array_to_vec(finkit::indicators::momentum::aroonosc(high, low, p).unwrap()),
+            )])
         }
         "TRANGE" => HashMap::from([(
             "trange".to_string(),
@@ -738,7 +807,7 @@ fn run_indicator_compat(indicator: &str) -> IndicatorReport {
                 actual,
                 tol,
                 exact,
-                matches!(indicator, "STDDEV" | "VAR"),
+                matches!(indicator, "ADOSC" | "STDDEV" | "VAR"),
                 &label,
             );
             alignment_errors.extend(cmp.errors);

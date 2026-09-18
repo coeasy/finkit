@@ -63,7 +63,7 @@ All outputs are computed on three shared fixtures from `tests/fixtures/`:
 
 ## Output Files
 
-One generated JSON file per indicator (44 total), plus a checked-in profile
+One generated JSON file per indicator (53 total), plus a checked-in profile
 variant fixture for official `matype` contracts:
 
 | File | Purpose |
@@ -81,14 +81,22 @@ Generated indicator files:
 | `bbands.json` | BBANDS | 20, nbdev=2 |
 | `atr.json` | ATR | timeperiod=14 |
 | `adx.json` | ADX | timeperiod=14 |
+| `adxr.json` | ADXR | timeperiod=14 |
 | `stoch.json` | STOCH | fastk=14, slowk/d=3 |
 | `cci.json` | CCI | timeperiod=14 |
 | `willr.json` | WILLR | timeperiod=14 |
 | `mom.json` | MOM | timeperiod=10 |
 | `roc.json` | ROC | timeperiod=10 |
+| `rocp.json` | ROCP | timeperiod=14 |
+| `rocr.json` | ROCR | timeperiod=14 |
+| `rocr100.json` | ROCR100 | timeperiod=14 |
 | `trix.json` | TRIX | timeperiod=14 |
+| `trima.json` | TRIMA | timeperiod=14 |
+| `t3.json` | T3 | timeperiod=5, vfactor=0.7 |
 | `obv.json` | OBV | — |
+| `mfi.json` | MFI | timeperiod=14 |
 | `ad.json` | AD | — |
+| `adosc.json` | ADOSC | fast=3, slow=10 |
 | `dema.json` | DEMA | timeperiod=10 |
 | `tema.json` | TEMA | timeperiod=10 |
 | `wma.json` | WMA | timeperiod=10 |
@@ -96,6 +104,7 @@ Generated indicator files:
 | `apo.json` | APO | 12, 26 |
 | `cmo.json` | CMO | timeperiod=14 |
 | `aroon.json` | AROON | timeperiod=14 |
+| `aroonosc.json` | AROONOSC | timeperiod=14 |
 | `trange.json` | TRANGE | — |
 | `dx.json` | DX | timeperiod=14 |
 | `plus_di.json` | PLUS_DI | timeperiod=14 |

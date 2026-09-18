@@ -93,6 +93,12 @@ INDICATORS: dict[str, dict[str, Any]] = {
         "inputs": ("high", "low", "close"),
         "outputs": ("adx",),
     },
+    "ADXR": {
+        "params": {"timeperiod": 14},
+        "fn_name": "ADXR",
+        "inputs": ("high", "low", "close"),
+        "outputs": ("adxr",),
+    },
     "STOCH": {
         "params": {
             "fastk_period": 14,
@@ -129,11 +135,41 @@ INDICATORS: dict[str, dict[str, Any]] = {
         "inputs": ("close",),
         "outputs": ("roc",),
     },
+    "ROCP": {
+        "params": {"timeperiod": 14},
+        "fn_name": "ROCP",
+        "inputs": ("close",),
+        "outputs": ("rocp",),
+    },
+    "ROCR": {
+        "params": {"timeperiod": 14},
+        "fn_name": "ROCR",
+        "inputs": ("close",),
+        "outputs": ("rocr",),
+    },
+    "ROCR100": {
+        "params": {"timeperiod": 14},
+        "fn_name": "ROCR100",
+        "inputs": ("close",),
+        "outputs": ("rocr100",),
+    },
     "TRIX": {
         "params": {"timeperiod": 14},
         "fn_name": "TRIX",
         "inputs": ("close",),
         "outputs": ("trix",),
+    },
+    "TRIMA": {
+        "params": {"timeperiod": 14},
+        "fn_name": "TRIMA",
+        "inputs": ("close",),
+        "outputs": ("trima",),
+    },
+    "T3": {
+        "params": {"timeperiod": 5, "vfactor": 0.7},
+        "fn_name": "T3",
+        "inputs": ("close",),
+        "outputs": ("t3",),
     },
     "OBV": {
         "params": {},
@@ -141,11 +177,23 @@ INDICATORS: dict[str, dict[str, Any]] = {
         "inputs": ("close", "volume"),
         "outputs": ("obv",),
     },
+    "MFI": {
+        "params": {"timeperiod": 14},
+        "fn_name": "MFI",
+        "inputs": ("high", "low", "close", "volume"),
+        "outputs": ("mfi",),
+    },
     "AD": {
         "params": {},
         "fn_name": "AD",
         "inputs": ("high", "low", "close", "volume"),
         "outputs": ("ad",),
+    },
+    "ADOSC": {
+        "params": {"fastperiod": 3, "slowperiod": 10},
+        "fn_name": "ADOSC",
+        "inputs": ("high", "low", "close", "volume"),
+        "outputs": ("adosc",),
     },
     "DEMA": {
         "params": {"timeperiod": 10},
@@ -188,6 +236,12 @@ INDICATORS: dict[str, dict[str, Any]] = {
         "fn_name": "AROON",
         "inputs": ("high", "low"),
         "outputs": ("aroondown", "aroonup"),
+    },
+    "AROONOSC": {
+        "params": {"timeperiod": 14},
+        "fn_name": "AROONOSC",
+        "inputs": ("high", "low"),
+        "outputs": ("aroonosc",),
     },
     "TRANGE": {
         "params": {},
