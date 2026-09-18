@@ -2,6 +2,8 @@
 
 use finkit::composite::{CompositeDefinition, CompositeEngine, CompositeExpr, CompositeOp};
 use finkit::factors::FactorContext;
+use finkit::factors::FactorRegistry;
+use finkit::operation::{OperationRequest, UnifiedOperationEngine};
 use finkit::unified_runtime::{DirtyRange, RuntimeExecutionMode};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -16,6 +18,12 @@ struct CompositeRequest {
     inputs: std::collections::BTreeMap<String, Vec<f64>>,
     definitions: Vec<CompositeDefinitionRequest>,
     outputs: Option<Vec<String>>,
+    /// Explicit cache/provenance namespace, usually `SYMBOL@TIMEFRAME`.
+    #[serde(default)]
+    scope: String,
+    /// Caller-owned monotonic revision. A changed input must advance it.
+    #[serde(default)]
+    data_revision: u64,
     #[serde(default)]
     previous: Option<std::collections::BTreeMap<String, Vec<f64>>>,
     #[serde(default)]
@@ -141,11 +149,21 @@ pub fn evaluate_composite_json(request: &str) -> Result<String, String> {
             .execute_range_borrowed(&plan, &borrowed, previous, DirtyRange::new(start, end))
             .map_err(|error| error.to_string())?,
         (None, None) => {
-            let output = engine
-                .evaluate_compiled(&plan, &borrowed)
+            // Route complete graph execution through the canonical operation
+            // façade so the public Composite contract shares the same
+            // revision-scoped cache and dispatcher as direct Runtime users.
+            let mut unified = UnifiedOperationEngine::new(FactorRegistry::new());
+            let result = unified
+                .execute(OperationRequest::Composite {
+                    definitions: &definitions,
+                    outputs: &output_refs,
+                    context: &borrowed,
+                    data_revision: Some(request.data_revision),
+                    cache_scope: Some(&request.scope),
+                })
                 .map_err(|error| error.to_string())?;
             finkit::unified_runtime::RuntimeExecution {
-                output,
+                output: result.values,
                 trace: finkit::unified_runtime::RuntimeExecutionTrace {
                     mode: RuntimeExecutionMode::Full,
                     rows: context.len(),
@@ -167,6 +185,8 @@ pub fn evaluate_composite_json(request: &str) -> Result<String, String> {
         "shape": if output_names.len() > 1 { "multi_series" } else { "series" },
         "primary": (output_names.len() == 1).then(|| output_names[0].clone()),
         "range_lookback": plan.range_lookback(),
+        "scope": request.scope,
+        "data_revision": request.data_revision,
         "execution": execution_envelope(trace.mode),
         "values": Value::Object(serialized),
     }))
@@ -241,7 +261,26 @@ mod tests {
         assert_eq!(payload["values"]["sma3"][0], Value::Null);
         assert_eq!(payload["values"]["sma3"][3], 3.0);
         assert_eq!(payload["execution"]["mode"], "full");
+        assert_eq!(payload["scope"], "");
+        assert_eq!(payload["data_revision"], 0);
         assert_eq!(payload["range_lookback"], 2);
+    }
+
+    #[test]
+    fn batch_contract_preserves_explicit_cache_scope_and_revision() {
+        let request = r#"{
+            "schema_version":1,
+            "scope":"BBB@5m",
+            "data_revision":9,
+            "inputs":{"close":[1.0,2.0,3.0,4.0]},
+            "definitions":[{"name":"sma3","function":"sma","inputs":["close"],"params":[3]}],
+            "outputs":["sma3"]
+        }"#;
+        let payload: Value =
+            serde_json::from_str(&evaluate_composite_json(request).unwrap()).unwrap();
+        assert_eq!(payload["scope"], "BBB@5m");
+        assert_eq!(payload["data_revision"], 9);
+        assert_eq!(payload["execution"]["mode"], "full");
     }
 
     #[test]

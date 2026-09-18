@@ -128,6 +128,9 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
   策略和发布平台矩阵验证。
 - 已验证：`finkit-visualization` 默认特性 406 个测试、`html` 特性 426 个测试，
   集成测试分别 26/27 个通过；前端 adapter Node 测试 2 个通过。
+- Factor/Composite 的跨语言批处理 JSON contract 已补充显式 `scope` 与
+  `data_revision`，完整执行路径现在通过 `UnifiedOperationEngine`；range/stream
+  仍明确走各自的增量/checkpoint 专用执行器，不把不同能力误报为同一模式。
 
 ## 6. 后续实施顺序
 

@@ -3,6 +3,7 @@
 use finkit::data_contract::CrossSectionView;
 use finkit::factor_system::FactorCatalog;
 use finkit::factors::{builtin_factor_registry, FactorContext, FactorEngine, FactorKind};
+use finkit::operation::{OperationRequest, UnifiedOperationEngine};
 use finkit::unified_runtime::{DirtyRange, RuntimeExecutionMode};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -19,6 +20,12 @@ struct FactorRequest {
     schema_version: Option<u16>,
     targets: Vec<String>,
     inputs: BTreeMap<String, Vec<f64>>,
+    /// Explicit cache/provenance namespace, usually `SYMBOL@TIMEFRAME`.
+    #[serde(default)]
+    scope: String,
+    /// Caller-owned monotonic revision. A changed input must advance it.
+    #[serde(default)]
+    data_revision: u64,
     #[serde(default)]
     previous: Option<BTreeMap<String, Vec<f64>>>,
     #[serde(default)]
@@ -82,7 +89,7 @@ pub fn evaluate_factor_json(request: &str) -> Result<String, String> {
             .insert(name, values)
             .map_err(|error| error.to_string())?;
     }
-    let engine = FactorEngine::new(registry);
+    let engine = FactorEngine::new(registry.clone());
     if request.previous.is_some() != request.dirty_range.is_some() {
         return Err("factor range execution requires both previous and dirty_range".to_string());
     }
@@ -91,9 +98,34 @@ pub fn evaluate_factor_json(request: &str) -> Result<String, String> {
         (Some(previous), Some([start, end])) => plan
             .execute_range_borrowed(&engine, &borrowed, previous, DirtyRange::new(start, end))
             .map_err(|error| error.to_string())?,
-        (None, None) => plan
-            .execute_runtime_borrowed(&engine, &borrowed)
-            .map_err(|error| error.to_string())?,
+        (None, None) => {
+            // Complete batch execution goes through the same operation
+            // façade used by the direct operation API. This keeps catalog
+            // resolution, compiled-plan caching and result caching in one
+            // Runtime path for every language binding.
+            let mut unified = UnifiedOperationEngine::new(registry);
+            let mut output = BTreeMap::new();
+            for target in &request.targets {
+                let result = unified
+                    .execute(OperationRequest::Factor {
+                        name: target,
+                        context: &borrowed,
+                        data_revision: Some(request.data_revision),
+                        cache_scope: Some(&request.scope),
+                    })
+                    .map_err(|error| error.to_string())?;
+                output.extend(result.values);
+            }
+            finkit::unified_runtime::RuntimeExecution {
+                output,
+                trace: finkit::unified_runtime::RuntimeExecutionTrace {
+                    mode: RuntimeExecutionMode::Full,
+                    rows: context.len(),
+                    executed_nodes: plan.execution_order().len(),
+                    recomputed_rows: context.len(),
+                },
+            }
+        }
         _ => unreachable!("range pair was validated"),
     };
     let trace = runtime.trace;
@@ -112,6 +144,8 @@ pub fn evaluate_factor_json(request: &str) -> Result<String, String> {
         "targets": request.targets,
         "semantic_identity": plan.semantic_identity(),
         "range_lookback": plan.range_lookback(),
+        "scope": request.scope,
+        "data_revision": request.data_revision,
         "execution": execution_envelope(trace.mode),
         "values": Value::Object(serialized),
     }))
@@ -252,7 +286,24 @@ mod tests {
         assert_eq!(payload["values"]["momentum_5"][5], 5.0);
         assert!(payload["semantic_identity"].as_array().is_some());
         assert_eq!(payload["execution"]["mode"], "full");
+        assert_eq!(payload["scope"], "");
+        assert_eq!(payload["data_revision"], 0);
         assert_eq!(payload["range_lookback"], 5);
+    }
+
+    #[test]
+    fn batch_contract_preserves_explicit_cache_scope_and_revision() {
+        let request = r#"{
+            "schema_version":1,
+            "targets":["momentum_5"],
+            "scope":"AAA@1d",
+            "data_revision":42,
+            "inputs":{"close":[1.0,2.0,3.0,4.0,5.0,6.0]}
+        }"#;
+        let payload: Value = serde_json::from_str(&evaluate_factor_json(request).unwrap()).unwrap();
+        assert_eq!(payload["scope"], "AAA@1d");
+        assert_eq!(payload["data_revision"], 42);
+        assert_eq!(payload["execution"]["mode"], "full");
     }
 
     #[test]
