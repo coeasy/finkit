@@ -315,6 +315,12 @@ INDICATORS: dict[str, dict[str, Any]] = {
         "inputs": ("close",),
         "outputs": ("trendline",),
     },
+    "HT_TRENDMODE": {
+        "params": {},
+        "fn_name": "HT_TRENDMODE",
+        "inputs": ("close",),
+        "outputs": ("trendmode",),
+    },
     "ADD": {
         "params": {},
         "fn_name": "ADD",
@@ -381,6 +387,24 @@ INDICATORS: dict[str, dict[str, Any]] = {
         "fn_name": "MINMAX",
         "inputs": ("close",),
         "outputs": ("min", "max"),
+    },
+    "MAXINDEX": {
+        "params": {"timeperiod": 30},
+        "fn_name": "MAXINDEX",
+        "inputs": ("close",),
+        "outputs": ("maxindex",),
+    },
+    "MININDEX": {
+        "params": {"timeperiod": 30},
+        "fn_name": "MININDEX",
+        "inputs": ("close",),
+        "outputs": ("minindex",),
+    },
+    "MINMAXINDEX": {
+        "params": {"timeperiod": 30},
+        "fn_name": "MINMAXINDEX",
+        "inputs": ("close",),
+        "outputs": ("minindex", "maxindex"),
     },
     "STOCHF": {
         "params": {

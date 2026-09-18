@@ -63,7 +63,7 @@ All outputs are computed on three shared fixtures from `tests/fixtures/`:
 
 ## Output Files
 
-One generated JSON file per indicator (157 numeric-parity indicators), plus a checked-in profile
+One generated JSON file per indicator (161 numeric-parity indicators), plus a checked-in profile
 variant fixture for official `matype` contracts. The previously excluded candlestick functions
 now use TA-Lib candle-setting, gap, penetration, and warm-up semantics and are included in the
 fixed corpus.

@@ -586,6 +586,14 @@ fn compute_alpha_ta_outputs(
             "trendline".to_string(),
             array_to_vec(finkit::indicators::cycle::ht_trendline(close).unwrap()),
         )]),
+        "HT_TRENDMODE" => HashMap::from([(
+            "trendmode".to_string(),
+            finkit::indicators::cycle::ht_trendmode(close)
+                .unwrap()
+                .iter()
+                .map(|value| if value.is_nan() { 0.0 } else { *value })
+                .collect(),
+        )]),
         "CDL2CROWS"
         | "CDL3BLACKCROWS"
         | "CDL3INSIDE"
@@ -750,6 +758,69 @@ fn compute_alpha_ta_outputs(
             HashMap::from([
                 ("min".to_string(), array_to_vec(minimum)),
                 ("max".to_string(), array_to_vec(maximum)),
+            ])
+        }
+        "MAXINDEX" => {
+            let period = param_usize(params, "timeperiod", 30);
+            let values = finkit::indicators::math_operators::maxindex(close, period)
+                .unwrap()
+                .iter()
+                .enumerate()
+                .map(|(index, value)| {
+                    if *value < 0 {
+                        0.0
+                    } else {
+                        (*value + (index + 1 - period) as i64) as f64
+                    }
+                })
+                .collect();
+            HashMap::from([("maxindex".to_string(), values)])
+        }
+        "MININDEX" => {
+            let period = param_usize(params, "timeperiod", 30);
+            let values = finkit::indicators::math_operators::minindex(close, period)
+                .unwrap()
+                .iter()
+                .enumerate()
+                .map(|(index, value)| {
+                    if *value < 0 {
+                        0.0
+                    } else {
+                        (*value + (index + 1 - period) as i64) as f64
+                    }
+                })
+                .collect();
+            HashMap::from([("minindex".to_string(), values)])
+        }
+        "MINMAXINDEX" => {
+            let period = param_usize(params, "timeperiod", 30);
+            let (minimum, maximum) =
+                finkit::indicators::math_operators::minmaxindex(close, period).unwrap();
+            let min_values = minimum
+                .iter()
+                .enumerate()
+                .map(|(index, value)| {
+                    if *value < 0 {
+                        0.0
+                    } else {
+                        (*value + (index + 1 - period) as i64) as f64
+                    }
+                })
+                .collect();
+            let max_values = maximum
+                .iter()
+                .enumerate()
+                .map(|(index, value)| {
+                    if *value < 0 {
+                        0.0
+                    } else {
+                        (*value + (index + 1 - period) as i64) as f64
+                    }
+                })
+                .collect();
+            HashMap::from([
+                ("minindex".to_string(), min_values),
+                ("maxindex".to_string(), max_values),
             ])
         }
         "BETA" => {

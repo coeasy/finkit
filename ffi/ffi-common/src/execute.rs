@@ -608,7 +608,16 @@ fn execute_talib_profile(
                 "HT_TRENDLINE" => finkit::indicators::cycle::ht_trendline(input),
                 _ => unreachable!(),
             };
-            values.insert(name.clone(), indicator_values(series, &name)?);
+            let output = indicator_values(series, &name)?;
+            let output = if name == "HT_TRENDMODE" {
+                output
+                    .into_iter()
+                    .map(|value| if value.is_finite() { value } else { 0.0 })
+                    .collect()
+            } else {
+                output
+            };
+            values.insert(name.clone(), output);
             name.as_str()
         }
         "HT_PHASOR" => {
@@ -1301,7 +1310,7 @@ fn execute_talib_profile(
             } else {
                 finkit::indicators::math_operators::minindex(input, period)
             }
-            .map(|series| series.iter().map(|value| *value as f64).collect::<Vec<_>>())
+            .map(|series| talib_absolute_index_values(&series, period))
             .map_err(|error| ("execution_error", format!("{name}: {error}")))?;
             values.insert(name.clone(), result);
             name.as_str()
@@ -1322,11 +1331,11 @@ fn execute_talib_profile(
                 .map_err(|error| ("execution_error", format!("{name}: {error}")))?;
             values.insert(
                 "MININDEX".to_string(),
-                minimum.iter().map(|value| *value as f64).collect(),
+                talib_absolute_index_values(&minimum, period),
             );
             values.insert(
                 "MAXINDEX".to_string(),
-                maximum.iter().map(|value| *value as f64).collect(),
+                talib_absolute_index_values(&maximum, period),
             );
             "MININDEX"
         }
@@ -1503,6 +1512,25 @@ fn indicator_values<T: std::fmt::Display>(
     result
         .map(|values| values.to_vec())
         .map_err(|error| ("execution_error", format!("{operation}: {error}")))
+}
+
+/// TA-Lib's MAXINDEX/MININDEX family returns absolute input indices and uses
+/// zero during the initial lookback. Core math helpers intentionally expose
+/// relative window offsets with `-1` warm-up markers, so the profile boundary
+/// converts the native representation here without changing the core API.
+fn talib_absolute_index_values(values: &Array1<i64>, period: usize) -> Vec<f64> {
+    values
+        .iter()
+        .enumerate()
+        .map(|(index, value)| {
+            if *value < 0 {
+                0.0
+            } else {
+                let window_start = index.saturating_add(1).saturating_sub(period);
+                (*value + window_start as i64) as f64
+            }
+        })
+        .collect()
 }
 
 fn pattern_values<T: std::fmt::Display>(
@@ -2297,8 +2325,37 @@ mod tests {
         assert_eq!(payload["primary"], "MININDEX");
         assert_eq!(payload["values"]["MININDEX"][2], 1.0);
         assert_eq!(payload["values"]["MAXINDEX"][2], 2.0);
-        assert_eq!(payload["values"]["MININDEX"][4], 1.0);
-        assert_eq!(payload["values"]["MAXINDEX"][4], 2.0);
+        assert_eq!(payload["values"]["MININDEX"][4], 3.0);
+        assert_eq!(payload["values"]["MAXINDEX"][4], 4.0);
+    }
+
+    #[test]
+    fn talib_profile_normalizes_absolute_index_and_trendmode_warmup() {
+        let close = (0..40).map(|index| index as f64).collect::<Vec<_>>();
+        let request = serde_json::json!({
+            "operation": "MAXINDEX",
+            "semantic_profile": "talib_0_7_1",
+            "input_order": ["CLOSE"],
+            "inputs": {"CLOSE": close},
+            "params": [5]
+        })
+        .to_string();
+        let payload: Value = serde_json::from_str(&execute_operation_json(&request)).unwrap();
+        assert_eq!(payload["values"]["MAXINDEX"][0], 0.0);
+        assert_eq!(payload["values"]["MAXINDEX"][4], 4.0);
+        assert_eq!(payload["values"]["MAXINDEX"][10], 10.0);
+
+        let request = serde_json::json!({
+            "operation": "HT_TRENDMODE",
+            "semantic_profile": "talib_0_7_1",
+            "input_order": ["CLOSE"],
+            "inputs": {"CLOSE": (0..80).map(|index| index as f64).collect::<Vec<_>>()}
+        })
+        .to_string();
+        let payload: Value = serde_json::from_str(&execute_operation_json(&request)).unwrap();
+        let values = payload["values"]["HT_TRENDMODE"].as_array().unwrap();
+        assert_eq!(values.len(), 80);
+        assert!(values.iter().take(32).all(|value| value == &json!(0.0)));
     }
 
     #[test]
