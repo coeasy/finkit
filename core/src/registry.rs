@@ -195,6 +195,10 @@ impl FunctionRegistry {
 
 const PERIOD_14: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("14"), Some("> 0"))];
 const PERIOD_REQUIRED: &[ParamSpec] = &[ParamSpec::new("period", "usize", None, Some("> 0"))];
+const PERIOD_NBDEV: &[ParamSpec] = &[
+    ParamSpec::new("period", "usize", Some("14"), Some("> 0")),
+    ParamSpec::new("nb_dev", "f64", Some("1"), Some("finite")),
+];
 const SMA_PARAMS: &[ParamSpec] = &[
     ParamSpec::new("period", "usize", None, Some("> 0")),
     ParamSpec::new("m", "f64", Some("1"), Some("> 0")),
@@ -207,6 +211,15 @@ const MACD_PARAMS: &[ParamSpec] = &[
 const ADOSC_PARAMS: &[ParamSpec] = &[
     ParamSpec::new("fast_period", "usize", Some("3"), Some("> 0")),
     ParamSpec::new("slow_period", "usize", Some("10"), Some("> 0")),
+];
+const PPO_PARAMS: &[ParamSpec] = &[
+    ParamSpec::new("fast_period", "usize", Some("12"), Some("> 0")),
+    ParamSpec::new("slow_period", "usize", Some("26"), Some("> fast_period")),
+];
+const ULTOSC_PARAMS: &[ParamSpec] = &[
+    ParamSpec::new("short_period", "usize", Some("7"), Some("> 0")),
+    ParamSpec::new("medium_period", "usize", Some("14"), Some("> 0")),
+    ParamSpec::new("long_period", "usize", Some("28"), Some("> 0")),
 ];
 const VWMA_PARAMS: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("20"), Some("> 0"))];
 const ZSCORE_PARAMS: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("20"), Some("> 1"))];
@@ -867,7 +880,240 @@ pub fn builtin_function_registry() -> FunctionRegistry {
         },
     ];
 
-    for spec in specs {
+    let additional_specs = [
+        FunctionSpec {
+            name: "STDDEV",
+            aliases: &[],
+            category: FunctionCategory::Statistics,
+            input: InputKind::Series,
+            params: PERIOD_NBDEV,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "VAR",
+            aliases: &[],
+            category: FunctionCategory::Statistics,
+            input: InputKind::Series,
+            params: PERIOD_NBDEV,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "CORREL",
+            aliases: &[],
+            category: FunctionCategory::Statistics,
+            input: InputKind::Dynamic,
+            params: PERIOD_REQUIRED,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "BETA",
+            aliases: &[],
+            category: FunctionCategory::Statistics,
+            input: InputKind::Dynamic,
+            params: PERIOD_REQUIRED,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "LINEARREG",
+            aliases: &[],
+            category: FunctionCategory::Statistics,
+            input: InputKind::Series,
+            params: PERIOD_REQUIRED,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "TSF",
+            aliases: &[],
+            category: FunctionCategory::Statistics,
+            input: InputKind::Series,
+            params: PERIOD_REQUIRED,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "PPO",
+            aliases: &[],
+            category: FunctionCategory::Momentum,
+            input: InputKind::Series,
+            params: PPO_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::Dynamic,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "ULTOSC",
+            aliases: &[],
+            category: FunctionCategory::Momentum,
+            input: InputKind::Hlc,
+            params: ULTOSC_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::Dynamic,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "PLUS_DM",
+            aliases: &[],
+            category: FunctionCategory::Momentum,
+            input: InputKind::Hlc,
+            params: &[],
+            outputs: 1,
+            lookback: LookbackSpec::None,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "MINUS_DM",
+            aliases: &[],
+            category: FunctionCategory::Momentum,
+            input: InputKind::Hlc,
+            params: &[],
+            outputs: 1,
+            lookback: LookbackSpec::None,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "ADD",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: &[],
+            outputs: 1,
+            lookback: LookbackSpec::None,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "SUB",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: &[],
+            outputs: 1,
+            lookback: LookbackSpec::None,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "MULT",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: &[],
+            outputs: 1,
+            lookback: LookbackSpec::None,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "DIV",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: &[],
+            outputs: 1,
+            lookback: LookbackSpec::None,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "SUM",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: PERIOD_REQUIRED,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "MAX",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: PERIOD_REQUIRED,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "MIN",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: PERIOD_REQUIRED,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "MAXINDEX",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: PERIOD_REQUIRED,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "MININDEX",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: PERIOD_REQUIRED,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+    ];
+
+    let math_transform_specs = [
+        "ACOS", "ASIN", "ATAN", "CEIL", "COS", "COSH", "EXP", "FLOOR", "LN", "LOG10", "SIN",
+        "SINH", "SQRT", "TAN", "TANH",
+    ]
+    .into_iter()
+    .map(|name| FunctionSpec {
+        name,
+        aliases: &[],
+        category: FunctionCategory::Formula,
+        input: InputKind::Series,
+        params: &[],
+        outputs: 1,
+        lookback: LookbackSpec::None,
+        streaming: true,
+        deterministic: true,
+    });
+
+    for spec in specs
+        .into_iter()
+        .chain(additional_specs)
+        .chain(math_transform_specs)
+    {
         registry
             .register(spec)
             .expect("built-in function names and aliases are unique");

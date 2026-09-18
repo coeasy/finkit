@@ -279,6 +279,45 @@ pub fn talib_profile_supported(operation: &str) -> bool {
             | "MIDPOINT"
             | "MIDPRICE"
             | "SAR"
+            | "AD"
+            | "ADOSC"
+            | "PLUS_DM"
+            | "MINUS_DM"
+            | "PPO"
+            | "ULTOSC"
+            | "BETA"
+            | "CORREL"
+            | "LINEARREG"
+            | "LINEARREG_ANGLE"
+            | "LINEARREG_INTERCEPT"
+            | "LINEARREG_SLOPE"
+            | "TSF"
+            | "STDDEV"
+            | "VAR"
+            | "ADD"
+            | "SUB"
+            | "MULT"
+            | "DIV"
+            | "MAX"
+            | "MIN"
+            | "MAXINDEX"
+            | "MININDEX"
+            | "SUM"
+            | "ACOS"
+            | "ASIN"
+            | "ATAN"
+            | "CEIL"
+            | "COS"
+            | "COSH"
+            | "EXP"
+            | "FLOOR"
+            | "LN"
+            | "LOG10"
+            | "SIN"
+            | "SINH"
+            | "SQRT"
+            | "TAN"
+            | "TANH"
     )
 }
 
@@ -714,6 +753,190 @@ fn execute_talib_profile(
             values.insert("SAR".to_string(), output.sar.to_vec());
             "SAR"
         }
+        "AD" => {
+            let (high, low, close, volume) = ohlcv(inputs, &name)?;
+            values.insert(
+                "AD".to_string(),
+                indicator_values(
+                    finkit::indicators::volume::ad(high, low, close, volume),
+                    &name,
+                )?,
+            );
+            "AD"
+        }
+        "ADOSC" => {
+            let (high, low, close, volume) = ohlcv(inputs, &name)?;
+            let fast = parameter_usize(params, 0, 3, &name)?;
+            let slow = parameter_usize(params, 1, 10, &name)?;
+            values.insert(
+                "ADOSC".to_string(),
+                indicator_values(
+                    finkit::indicators::volume::adosc(high, low, close, volume, fast, slow),
+                    &name,
+                )?,
+            );
+            "ADOSC"
+        }
+        "PLUS_DM" => {
+            let high = named_series(inputs, "HIGH", &name)?;
+            let low = named_series(inputs, "LOW", &name)?;
+            values.insert(
+                "PLUS_DM".to_string(),
+                indicator_values(finkit::indicators::momentum::plus_dm(high, low), &name)?,
+            );
+            "PLUS_DM"
+        }
+        "MINUS_DM" => {
+            let high = named_series(inputs, "HIGH", &name)?;
+            let low = named_series(inputs, "LOW", &name)?;
+            values.insert(
+                "MINUS_DM".to_string(),
+                indicator_values(finkit::indicators::momentum::minus_dm(high, low), &name)?,
+            );
+            "MINUS_DM"
+        }
+        "PPO" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let fast = parameter_usize(params, 0, 12, &name)?;
+            let slow = parameter_usize(params, 1, 26, &name)?;
+            values.insert(
+                "PPO".to_string(),
+                indicator_values(finkit::indicators::momentum::ppo(input, fast, slow), &name)?,
+            );
+            "PPO"
+        }
+        "ULTOSC" => {
+            let (high, low, close) = hlc(inputs, &name)?;
+            let first = parameter_usize(params, 0, 7, &name)?;
+            let second = parameter_usize(params, 1, 14, &name)?;
+            let third = parameter_usize(params, 2, 28, &name)?;
+            values.insert(
+                "ULTOSC".to_string(),
+                indicator_values(
+                    finkit::indicators::momentum::ultosc(high, low, close, first, second, third),
+                    &name,
+                )?,
+            );
+            "ULTOSC"
+        }
+        "BETA" => {
+            let asset = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let benchmark = ordered_series(inputs, input_order, 1, "BENCHMARK", &name)?;
+            let period = parameter_usize(params, 0, 5, &name)?;
+            values.insert(
+                "BETA".to_string(),
+                indicator_values(
+                    finkit::indicators::statistics::beta(asset, benchmark, period),
+                    &name,
+                )?,
+            );
+            "BETA"
+        }
+        "CORREL" => {
+            let first = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let second = ordered_series(inputs, input_order, 1, "BENCHMARK", &name)?;
+            let period = parameter_usize(params, 0, 30, &name)?;
+            values.insert(
+                "CORREL".to_string(),
+                indicator_values(
+                    finkit::indicators::statistics::correlation(first, second, period),
+                    &name,
+                )?,
+            );
+            "CORREL"
+        }
+        "LINEARREG"
+        | "LINEARREG_ANGLE"
+        | "LINEARREG_INTERCEPT"
+        | "LINEARREG_SLOPE"
+        | "TSF"
+        | "STDDEV"
+        | "VAR" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let period = parameter_usize(params, 0, 14, &name)?;
+            let series = match name.as_str() {
+                "LINEARREG" => finkit::indicators::statistics::linearreg(input, period),
+                "LINEARREG_ANGLE" => finkit::indicators::statistics::linearreg_angle(input, period),
+                "LINEARREG_INTERCEPT" => {
+                    finkit::indicators::statistics::linearreg_intercept(input, period)
+                }
+                "LINEARREG_SLOPE" => finkit::indicators::statistics::linearreg_slope(input, period),
+                "TSF" => finkit::indicators::statistics::tsf(input, period),
+                "STDDEV" => {
+                    let nb_dev = parameter_f64(params, 1, 1.0, &name)?;
+                    finkit::indicators::statistics::std_dev(input, period, nb_dev)
+                }
+                "VAR" => {
+                    let nb_dev = parameter_f64(params, 1, 1.0, &name)?;
+                    finkit::indicators::statistics::var(input, period, nb_dev)
+                }
+                _ => unreachable!(),
+            };
+            values.insert(name.clone(), indicator_values(series, &name)?);
+            name.as_str()
+        }
+        "ADD" | "SUB" | "MULT" | "DIV" => {
+            let first = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let second = ordered_series(inputs, input_order, 1, "OPEN", &name)?;
+            let series = match name.as_str() {
+                "ADD" => finkit::indicators::math_operators::add(first, second),
+                "SUB" => finkit::indicators::math_operators::sub(first, second),
+                "MULT" => finkit::indicators::math_operators::mult(first, second),
+                "DIV" => finkit::indicators::math_operators::div(first, second),
+                _ => unreachable!(),
+            };
+            values.insert(name.clone(), indicator_values(series, &name)?);
+            name.as_str()
+        }
+        "MAX" | "MIN" | "SUM" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let period = parameter_usize(params, 0, 30, &name)?;
+            let series = match name.as_str() {
+                "MAX" => finkit::indicators::math_operators::max(input, period),
+                "MIN" => finkit::indicators::math_operators::min(input, period),
+                "SUM" => finkit::indicators::math_operators::sum(input, period),
+                _ => unreachable!(),
+            };
+            values.insert(name.clone(), indicator_values(series, &name)?);
+            name.as_str()
+        }
+        "MAXINDEX" | "MININDEX" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let period = parameter_usize(params, 0, 30, &name)?;
+            let result = if name == "MAXINDEX" {
+                finkit::indicators::math_operators::maxindex(input, period)
+            } else {
+                finkit::indicators::math_operators::minindex(input, period)
+            }
+            .map(|series| series.iter().map(|value| *value as f64).collect::<Vec<_>>())
+            .map_err(|error| ("execution_error", format!("{name}: {error}")))?;
+            values.insert(name.clone(), result);
+            name.as_str()
+        }
+        "ACOS" | "ASIN" | "ATAN" | "CEIL" | "COS" | "COSH" | "EXP" | "FLOOR" | "LN" | "LOG10"
+        | "SIN" | "SINH" | "SQRT" | "TAN" | "TANH" => {
+            let input = ordered_series(inputs, input_order, 0, "CLOSE", &name)?;
+            let series = match name.as_str() {
+                "ACOS" => finkit::indicators::math_transform::acos(input),
+                "ASIN" => finkit::indicators::math_transform::asin(input),
+                "ATAN" => finkit::indicators::math_transform::atan(input),
+                "CEIL" => finkit::indicators::math_transform::ceil(input),
+                "COS" => finkit::indicators::math_transform::cos(input),
+                "COSH" => finkit::indicators::math_transform::cosh(input),
+                "EXP" => finkit::indicators::math_transform::exp(input),
+                "FLOOR" => finkit::indicators::math_transform::floor(input),
+                "LN" => finkit::indicators::math_transform::ln(input),
+                "LOG10" => finkit::indicators::math_transform::log10(input),
+                "SIN" => finkit::indicators::math_transform::sin(input),
+                "SINH" => finkit::indicators::math_transform::sinh(input),
+                "SQRT" => finkit::indicators::math_transform::sqrt(input),
+                "TAN" => finkit::indicators::math_transform::tan(input),
+                "TANH" => finkit::indicators::math_transform::tanh(input),
+                _ => unreachable!(),
+            };
+            values.insert(name.clone(), indicator_values(series, &name)?);
+            name.as_str()
+        }
         _ => {
             return Err((
                 "unsupported_operation",
@@ -767,6 +990,18 @@ fn hlc<'a>(
         named_series(inputs, "HIGH", operation)?,
         named_series(inputs, "LOW", operation)?,
         named_series(inputs, "CLOSE", operation)?,
+    ))
+}
+
+fn ohlcv<'a>(
+    inputs: &'a BTreeMap<String, Vec<f64>>,
+    operation: &str,
+) -> Result<(&'a [f64], &'a [f64], &'a [f64], &'a [f64]), (&'static str, String)> {
+    Ok((
+        named_series(inputs, "HIGH", operation)?,
+        named_series(inputs, "LOW", operation)?,
+        named_series(inputs, "CLOSE", operation)?,
+        named_series(inputs, "VOLUME", operation)?,
     ))
 }
 
@@ -913,6 +1148,58 @@ mod tests {
         let payload: Value = serde_json::from_str(&execute_operation_json(request)).unwrap();
         assert_eq!(payload["values"]["AVGPRICE"][0], 1.5);
         assert_eq!(payload["values"]["AVGPRICE"][1], 2.5);
+    }
+
+    #[test]
+    fn talib_profile_dispatches_math_operator_and_normalizes_nonfinite_values() {
+        let request = r#"{
+            "operation":"DIV",
+            "semantic_profile":"talib_0_7_1",
+            "input_order":["A","B"],
+            "inputs":{"A":[2.0,4.0],"B":[1.0,0.0]}
+        }"#;
+        let payload: Value = serde_json::from_str(&execute_operation_json(request)).unwrap();
+        assert_eq!(payload["values"]["DIV"][0], 2.0);
+        assert_eq!(payload["values"]["DIV"][1], Value::Null);
+    }
+
+    #[test]
+    fn core_registry_dispatches_newly_registered_formula_operation() {
+        let request = r#"{
+            "operation":"ADD",
+            "input_order":["LEFT","RIGHT"],
+            "inputs":{"LEFT":[1.0,2.0],"RIGHT":[10.0,20.0]}
+        }"#;
+        let payload: Value = serde_json::from_str(&execute_operation_json(request)).unwrap();
+        assert_eq!(payload["semantic_profile"], "core_registry");
+        assert_eq!(payload["values"]["ADD"][0], 11.0);
+        assert_eq!(payload["values"]["ADD"][1], 22.0);
+    }
+
+    #[test]
+    fn talib_profile_dispatches_statistics_and_multi_output_math() {
+        let stats = r#"{
+            "operation":"STDDEV",
+            "semantic_profile":"talib_0_7_1",
+            "input_order":["CLOSE"],
+            "inputs":{"CLOSE":[1.0,2.0,3.0,4.0]},
+            "params":[2]
+        }"#;
+        let stats_payload: Value = serde_json::from_str(&execute_operation_json(stats)).unwrap();
+        assert_eq!(stats_payload["values"]["STDDEV"][0], Value::Null);
+        assert!(stats_payload["values"]["STDDEV"][3].as_f64().unwrap() > 0.0);
+
+        let macd = r#"{
+            "operation":"MACD",
+            "semantic_profile":"talib_0_7_1",
+            "input_order":["CLOSE"],
+            "inputs":{"CLOSE":[1.0,2.0,3.0,4.0,5.0]},
+            "params":[2,3,2]
+        }"#;
+        let macd_payload: Value = serde_json::from_str(&execute_operation_json(macd)).unwrap();
+        assert_eq!(macd_payload["shape"], "multi_series");
+        assert!(macd_payload["values"].get("MACD").is_some());
+        assert!(macd_payload["values"].get("MACD_SIGNAL").is_some());
     }
 
     #[test]

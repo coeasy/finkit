@@ -2,6 +2,45 @@
 
 Complete API reference for all language bindings in Finkit.
 
+## Unified operation and formula contracts
+
+All eight public language surfaces share the same control-plane JSON contracts.
+The typed indicator functions remain the preferred hot path; these entry points
+are for dynamic operation selection, named outputs, capability discovery and
+cross-language parity tests.
+
+```json
+{
+  "operation": "SMA",
+  "semantic_profile": "talib_0_7_1",
+  "input_order": ["CLOSE"],
+  "inputs": {"CLOSE": [1, 2, 3]},
+  "params": [2]
+}
+```
+
+The result is a versioned envelope with `operation`, `operation_id`,
+`semantic_profile`, `primary`, `shape` and named `values`. Non-finite numeric
+values are JSON `null`. `core_registry` uses the canonical Formula/Core
+semantics; `talib_0_7_1` is explicit and only succeeds for operations listed by
+the catalog's `semantic_profiles` field. Unsupported profile/function pairs
+return a structured error instead of silently falling back.
+
+The shared names are:
+
+- Rust: `finkit_ffi_common::execute_operation_json`;
+- Python: `operation_execute_json`;
+- Go: `ta.OperationExecuteJSON`;
+- Java: `Indicators.operationExecuteJson`;
+- .NET: `Indicators.OperationExecuteJson`;
+- C: `ta_operation_execute_json`;
+- C++: `finkit::operation_execute_json`;
+- Node: `operationExecuteJson`.
+
+Formula results use the corresponding versioned contract functions:
+`formula_eval_contract_json`, `FormulaEvalContractJSON`,
+`formulaEvalContractJson`, and their language-specific casing equivalents.
+
 ## Core API (Rust)
 
 ### Module Structure

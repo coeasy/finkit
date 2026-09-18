@@ -259,4 +259,20 @@ mod tests {
             vec!["UPPERBAND", "MIDDLEBAND", "LOWERBAND"]
         );
     }
+
+    #[test]
+    fn catalog_marks_new_talib_dispatch_groups() {
+        let catalog = operation_catalog(&builtin_operation_registry());
+        for name in ["ADD", "STDDEV", "LINEARREG", "AD", "ADOSC", "SQRT"] {
+            let operation = catalog
+                .operations
+                .iter()
+                .find(|operation| operation.name == name)
+                .unwrap_or_else(|| panic!("missing operation {name}"));
+            assert!(operation
+                .semantic_profiles
+                .iter()
+                .any(|profile| profile == "talib_0_7_1"));
+        }
+    }
 }
