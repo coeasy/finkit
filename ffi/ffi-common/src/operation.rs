@@ -232,40 +232,9 @@ pub(crate) fn talib_profile_contract(
 }
 
 fn profile_only_talib_entry(name: &str) -> OperationCatalogEntry {
-    let is_pattern = name.starts_with("CDL");
     let (value_shape, output_names) = talib_profile_output_shape(name, &[]);
     let outputs = output_names.len();
-    let input = if is_pattern || matches!(name, "AVGPRICE" | "BOP" | "HA") {
-        Some("ohlcv")
-    } else if matches!(
-        name,
-        "AC" | "ADR"
-            | "AO"
-            | "DONCHIAN"
-            | "ERI"
-            | "FRACTAL"
-            | "KC"
-            | "MASSI"
-            | "MEDPRICE"
-            | "MIDPRICE"
-            | "SAR"
-            | "SUPERTREND"
-            | "VORTEX"
-            | "WAD"
-    ) {
-        Some("hlc")
-    } else if matches!(name, "CMF") {
-        Some("hlcv")
-    } else if matches!(name, "MARKETFI") {
-        Some("dynamic")
-    } else if matches!(
-        name,
-        "EFI" | "NVI" | "PVI" | "PVO" | "PVT" | "QSTICK" | "RVOL"
-    ) {
-        Some("dynamic")
-    } else {
-        Some("series")
-    };
+    let input = Some(talib_profile_input_kind(name));
     OperationCatalogEntry {
         operation_id: finkit::operation::OperationId::from_name(name).0,
         name: name.to_string(),
@@ -291,6 +260,45 @@ fn profile_only_talib_entry(name: &str) -> OperationCatalogEntry {
             },
         )]),
     }
+}
+
+const TALIB_PROFILE_INPUT_SPECS: &[(&str, &str)] = &[
+    ("AVGPRICE", "ohlcv"),
+    ("BOP", "ohlcv"),
+    ("HA", "ohlcv"),
+    ("AC", "hlc"),
+    ("ADR", "hlc"),
+    ("AO", "hlc"),
+    ("DONCHIAN", "hlc"),
+    ("ERI", "hlc"),
+    ("FRACTAL", "hlc"),
+    ("KC", "hlc"),
+    ("MASSI", "hlc"),
+    ("MEDPRICE", "hlc"),
+    ("MIDPRICE", "hlc"),
+    ("SAR", "hlc"),
+    ("SUPERTREND", "hlc"),
+    ("VORTEX", "hlc"),
+    ("WAD", "hlc"),
+    ("CMF", "hlcv"),
+    ("MARKETFI", "dynamic"),
+    ("EFI", "dynamic"),
+    ("NVI", "dynamic"),
+    ("PVI", "dynamic"),
+    ("PVO", "dynamic"),
+    ("PVT", "dynamic"),
+    ("QSTICK", "dynamic"),
+    ("RVOL", "dynamic"),
+];
+
+fn talib_profile_input_kind(name: &str) -> &'static str {
+    if name.starts_with("CDL") {
+        return "ohlcv";
+    }
+    TALIB_PROFILE_INPUT_SPECS
+        .iter()
+        .find(|(operation, _)| *operation == name)
+        .map_or("series", |(_, input)| input)
 }
 
 struct TalibProfileOutputSpec {
@@ -1376,5 +1384,27 @@ mod tests {
                 assert!(param.constraint.is_some());
             }
         }
+    }
+
+    #[test]
+    fn talib_profile_input_schema_table_is_unique_and_valid() {
+        let mut operation_names = std::collections::BTreeSet::new();
+        for (name, input) in TALIB_PROFILE_INPUT_SPECS {
+            assert!(
+                operation_names.insert(*name),
+                "duplicate TA-Lib input spec: {name}"
+            );
+            assert!(
+                talib_profile_supported(name),
+                "input spec is not executable: {name}"
+            );
+            assert!(matches!(
+                *input,
+                "series" | "hlc" | "hlcv" | "ohlcv" | "dynamic"
+            ));
+            assert_eq!(talib_profile_input_kind(name), *input);
+        }
+        assert_eq!(talib_profile_input_kind("CDLDOJI"), "ohlcv");
+        assert_eq!(talib_profile_input_kind("UNKNOWN"), "series");
     }
 }
