@@ -104,6 +104,25 @@ unsafe fn mom10_avx512(input: &[f64], result: &mut [f64]) {
     let mut output = result.as_mut_ptr().add(PERIOD);
     let mut remaining = len - PERIOD;
 
+    while remaining >= 32 {
+        let current0 = _mm512_loadu_pd(current);
+        let previous0 = _mm512_loadu_pd(previous);
+        let current1 = _mm512_loadu_pd(current.add(8));
+        let previous1 = _mm512_loadu_pd(previous.add(8));
+        let current2 = _mm512_loadu_pd(current.add(16));
+        let previous2 = _mm512_loadu_pd(previous.add(16));
+        let current3 = _mm512_loadu_pd(current.add(24));
+        let previous3 = _mm512_loadu_pd(previous.add(24));
+        _mm512_storeu_pd(output, _mm512_sub_pd(current0, previous0));
+        _mm512_storeu_pd(output.add(8), _mm512_sub_pd(current1, previous1));
+        _mm512_storeu_pd(output.add(16), _mm512_sub_pd(current2, previous2));
+        _mm512_storeu_pd(output.add(24), _mm512_sub_pd(current3, previous3));
+        current = current.add(32);
+        previous = previous.add(32);
+        output = output.add(32);
+        remaining -= 32;
+    }
+
     while remaining >= 8 {
         let current_values = _mm512_loadu_pd(current);
         let previous_values = _mm512_loadu_pd(previous);
@@ -402,11 +421,10 @@ unsafe fn rsi_avx512(input: &[f64], period: usize, output: &mut [f64]) {
     let mut prev = input[count];
 
     // Seed RSI value
-    output[count] = if avg_loss.abs() < 1e-15 {
+    output[count] = if avg_loss < 1e-15 {
         100.0
     } else {
-        let rs = avg_gain / avg_loss;
-        100.0 - 100.0 / (1.0 + rs)
+        100.0 * avg_gain / (avg_gain + avg_loss)
     };
 
     // Wilder smoothing (scalar — recurrence)
@@ -418,11 +436,10 @@ unsafe fn rsi_avx512(input: &[f64], period: usize, output: &mut [f64]) {
         let l = if diff < 0.0 { -diff } else { 0.0 };
         avg_gain = (g - avg_gain).mul_add(k, avg_gain);
         avg_loss = (l - avg_loss).mul_add(k, avg_loss);
-        output[i] = if avg_loss.abs() < 1e-15 {
+        output[i] = if avg_loss < 1e-15 {
             100.0
         } else {
-            let rs = avg_gain / avg_loss;
-            100.0 - 100.0 / (1.0 + rs)
+            100.0 * avg_gain / (avg_gain + avg_loss)
         };
     }
 }
@@ -453,11 +470,10 @@ fn rsi_scalar_fallback(input: &[f64], period: usize, output: &mut [f64]) {
     avg_gain *= k;
     avg_loss *= k;
     let mut prev = input[period];
-    output[period] = if avg_loss.abs() < 1e-15 {
+    output[period] = if avg_loss < 1e-15 {
         100.0
     } else {
-        let rs = avg_gain / avg_loss;
-        100.0 - 100.0 / (1.0 + rs)
+        100.0 * avg_gain / (avg_gain + avg_loss)
     };
 
     for i in (period + 1)..len {
@@ -467,11 +483,10 @@ fn rsi_scalar_fallback(input: &[f64], period: usize, output: &mut [f64]) {
         let l = if diff < 0.0 { -diff } else { 0.0 };
         avg_gain = (g - avg_gain).mul_add(k, avg_gain);
         avg_loss = (l - avg_loss).mul_add(k, avg_loss);
-        output[i] = if avg_loss.abs() < 1e-15 {
+        output[i] = if avg_loss < 1e-15 {
             100.0
         } else {
-            let rs = avg_gain / avg_loss;
-            100.0 - 100.0 / (1.0 + rs)
+            100.0 * avg_gain / (avg_gain + avg_loss)
         };
     }
 }

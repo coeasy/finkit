@@ -269,11 +269,10 @@ unsafe fn rsi_simd128(input: &[f64], period: usize, output: &mut [f64]) {
     }
 
     let mut prev = input[count];
-    output[count] = if avg_loss.abs() < 1e-15 {
+    output[count] = if avg_loss < 1e-15 {
         100.0
     } else {
-        let rs = avg_gain / avg_loss;
-        100.0 - 100.0 / (1.0 + rs)
+        100.0 * avg_gain / (avg_gain + avg_loss)
     };
     let kk = 1.0 / period as f64;
     for i in (count + 1)..len {
@@ -283,11 +282,10 @@ unsafe fn rsi_simd128(input: &[f64], period: usize, output: &mut [f64]) {
         let l = if diff < 0.0 { -diff } else { 0.0 };
         avg_gain = (g - avg_gain).mul_add(kk, avg_gain);
         avg_loss = (l - avg_loss).mul_add(kk, avg_loss);
-        output[i] = if avg_loss.abs() < 1e-15 {
+        output[i] = if avg_loss < 1e-15 {
             100.0
         } else {
-            let rs = avg_gain / avg_loss;
-            100.0 - 100.0 / (1.0 + rs)
+            100.0 * avg_gain / (avg_gain + avg_loss)
         };
     }
 }
