@@ -1,4 +1,4 @@
-use crate::Factor;
+use crate::{Factor, FactorResult};
 use finkit_series::QuantSeries;
 
 #[derive(Debug, Clone)]
@@ -17,13 +17,26 @@ impl Factor for Ema {
         "EMA"
     }
 
-    fn compute(&self, input: &QuantSeries) -> QuantSeries {
+    fn compute(&self, input: &QuantSeries) -> FactorResult {
+        if !input.is_valid() || self.period == 0 || input.len() < self.period {
+            return FactorResult::new(
+                self.name(),
+                QuantSeries::new(
+                    input.symbol(),
+                    Vec::new(),
+                    finkit_array::FloatArray::new(Vec::new()),
+                ),
+            );
+        }
         let values = finkit_math::ema(input.values(), self.period);
-        let timestamps = input.timestamps()[self.period.saturating_sub(1)..].to_vec();
-        QuantSeries::new(
-            input.symbol().to_string(),
-            timestamps,
-            finkit_array::FloatArray::new(values),
+        let timestamps = input.timestamps()[self.period - 1..].to_vec();
+        FactorResult::new(
+            self.name(),
+            QuantSeries::new(
+                input.symbol().to_string(),
+                timestamps,
+                finkit_array::FloatArray::new(values),
+            ),
         )
     }
 }

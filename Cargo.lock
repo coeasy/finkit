@@ -850,6 +850,7 @@ dependencies = [
 name = "finkit-runtime"
 version = "0.1.15"
 dependencies = [
+ "finkit-array",
  "finkit-factor",
  "finkit-series",
 ]

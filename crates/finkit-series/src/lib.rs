@@ -37,4 +37,26 @@ impl QuantSeries {
     pub fn is_empty(&self) -> bool {
         self.values.is_empty()
     }
+
+    /// Whether values and timestamps form a strictly ordered aligned series.
+    pub fn is_valid(&self) -> bool {
+        self.timestamps.len() == self.values.len()
+            && self
+                .timestamps
+                .windows(2)
+                .all(|window| window[0] < window[1])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use finkit_array::FloatArray;
+
+    #[test]
+    fn validates_alignment_and_order() {
+        assert!(QuantSeries::new("A", vec![1, 2], FloatArray::new(vec![1.0, 2.0])).is_valid());
+        assert!(!QuantSeries::new("A", vec![2, 1], FloatArray::new(vec![1.0, 2.0])).is_valid());
+        assert!(!QuantSeries::new("A", vec![1], FloatArray::new(vec![1.0, 2.0])).is_valid());
+    }
 }

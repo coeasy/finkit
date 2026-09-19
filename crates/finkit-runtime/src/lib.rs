@@ -14,13 +14,16 @@ mod scheduler;
 pub use cache::FactorCache;
 pub use cache_key::FactorCacheKey;
 pub use config::FactorConfig;
-pub use executor::Executor;
-pub use factories::EmaFactory;
-pub use factory::{FactorFactory, FactorFactoryRequest, SimpleFactorFactory};
+pub use executor::{Executor, RuntimeError};
+pub use factories::{EmaFactory, MacdFactory, RsiFactory, SmaFactory};
+pub use factory::{
+    DynFactor, FactorFactory, FactorFactoryError, FactorFactoryRequest, FactorProvider,
+    SimpleFactorFactory,
+};
 pub use graph::{FactorGraph, FactorNode};
 pub use output::FactorOutput;
-pub use registry::FactorRegistry;
-pub use scheduler::Scheduler;
+pub use registry::{FactorRegistry, FactorRegistryError};
+pub use scheduler::{Scheduler, SchedulerError};
 
 #[derive(Clone, Debug)]
 pub struct ExecutionPlan {

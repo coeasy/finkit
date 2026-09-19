@@ -24,6 +24,11 @@ impl FactorNode {
         self.params.insert(key.into(), value.into());
         self
     }
+
+    pub fn depends_on(mut self, node_id: impl Into<String>) -> Self {
+        self.dependencies.push(node_id.into());
+        self
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -38,5 +43,9 @@ impl FactorGraph {
 
     pub fn add_node(&mut self, node: FactorNode) {
         self.nodes.push(node);
+    }
+
+    pub fn node(&self, id: &str) -> Option<&FactorNode> {
+        self.nodes.iter().find(|node| node.id == id)
     }
 }

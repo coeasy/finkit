@@ -1,4 +1,4 @@
-use crate::Factor;
+use crate::{Factor, FactorResult};
 use finkit_series::QuantSeries;
 
 #[derive(Debug, Clone)]
@@ -17,37 +17,62 @@ impl Factor for Rsi {
         "RSI"
     }
 
-    fn compute(&self, input: &QuantSeries) -> QuantSeries {
+    fn compute(&self, input: &QuantSeries) -> FactorResult {
         let values = input.values();
-        if self.period == 0 || values.len() <= self.period {
-            return QuantSeries::new(
-                input.symbol(),
-                Vec::new(),
-                finkit_array::FloatArray::new(Vec::new()),
+        if !input.is_valid() || self.period == 0 || values.len() <= self.period {
+            return FactorResult::new(
+                self.name(),
+                QuantSeries::new(
+                    input.symbol(),
+                    Vec::new(),
+                    finkit_array::FloatArray::new(Vec::new()),
+                ),
             );
         }
 
-        let mut result = Vec::new();
-        for window in values.windows(self.period + 1) {
-            let mut gain = 0.0;
-            let mut loss = 0.0;
-            for pair in window.windows(2) {
-                let diff = pair[1] - pair[0];
-                if diff > 0.0 {
-                    gain += diff;
-                } else {
-                    loss -= diff;
-                }
+        let period = self.period;
+        let inv_period = 1.0 / period as f64;
+        let mut gain = 0.0;
+        let mut loss = 0.0;
+        for index in 1..=period {
+            let diff = values[index] - values[index - 1];
+            if diff > 0.0 {
+                gain += diff;
+            } else {
+                loss -= diff;
             }
-            let rs = if loss == 0.0 { 100.0 } else { gain / loss };
-            result.push(100.0 - (100.0 / (1.0 + rs)));
+        }
+        let mut average_gain = gain * inv_period;
+        let mut average_loss = loss * inv_period;
+        let mut result = Vec::with_capacity(values.len() - period);
+        result.push(rsi_value(average_gain, average_loss));
+
+        for index in period + 1..values.len() {
+            let diff = values[index] - values[index - 1];
+            let current_gain = diff.max(0.0);
+            let current_loss = (-diff).max(0.0);
+            average_gain = (average_gain * (period as f64 - 1.0) + current_gain) * inv_period;
+            average_loss = (average_loss * (period as f64 - 1.0) + current_loss) * inv_period;
+            result.push(rsi_value(average_gain, average_loss));
         }
 
         let timestamps = input.timestamps()[self.period..].to_vec();
-        QuantSeries::new(
-            input.symbol(),
-            timestamps,
-            finkit_array::FloatArray::new(result),
+        FactorResult::new(
+            self.name(),
+            QuantSeries::new(
+                input.symbol(),
+                timestamps,
+                finkit_array::FloatArray::new(result),
+            ),
         )
+    }
+}
+
+#[inline]
+fn rsi_value(average_gain: f64, average_loss: f64) -> f64 {
+    if average_loss < 1e-15 {
+        100.0
+    } else {
+        100.0 * average_gain / (average_gain + average_loss)
     }
 }

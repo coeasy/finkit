@@ -1,18 +1,5 @@
 //! Runtime factor output model.
 
-use finkit_series::QuantSeries;
-
-#[derive(Clone, Debug)]
-pub struct FactorOutput {
-    pub factor_name: String,
-    pub series: QuantSeries,
-}
-
-impl FactorOutput {
-    pub fn new(name: impl Into<String>, series: QuantSeries) -> Self {
-        Self {
-            factor_name: name.into(),
-            series,
-        }
-    }
-}
+/// Runtime outputs reuse the factor crate's canonical primary-plus-named-output
+/// result instead of maintaining a second incompatible result type.
+pub type FactorOutput = finkit_factor::FactorResult;
