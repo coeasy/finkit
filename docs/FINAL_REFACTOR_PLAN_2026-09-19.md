@@ -96,6 +96,8 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
 - registry operation 与 profile-only operation 共用 TA-Lib 输出 schema table/helper；
   `DONCHIAN`、`KDJ`、`SUPERTREND` 等多输出契约通过 profile 层校验，避免把 Core
   顶层输出语义误当成 TA-Lib 兼容输出；schema table 还具备唯一性和非空输出门禁；
+- TA-Lib profile 参数 metadata 也已改为声明式 parameter schema table，统一维护
+  参数名、类型、默认值和约束，并通过唯一性、可执行性和完整约束门禁；
 - checked-in numeric golden：201 个；
 - shared numeric contract：201 个向量、160 行合成输入，直接从 checked-in TA-Lib
   0.8.0 golden 生成；Node、Python 已实际执行，Go、Java、.NET 已接入相同逐元素
@@ -104,7 +106,7 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
 - 审计差集：0；
 - 21 个新增函数的独立 adapter、参数目录、输出字段和 warm-up：已接入；
 - Core golden suite：已通过；
-- `finkit-ffi-common`：已通过 81 个测试，包含全目录 dispatcher smoke、canonical
+- `finkit-ffi-common`：已通过 83 个测试，包含全目录 dispatcher smoke、canonical
   catalog 覆盖门禁和三类
   streaming checkpoint provenance 校验。
 
@@ -201,7 +203,8 @@ truth source。`scripts/gen_talib_numeric_contract.py --check` 会重新读取
 
 1. 已完成当前 Runtime typed execution chain 的 fmt、workspace check 和专属回归并提交；
    Lightweight HTML 页面生成已纳入 visualization 回归，但真实浏览器宿主仍需单独纳入 CI。
-2. 将剩余 TA-Lib profile 参数/输出 metadata 从手写 match 逐步生成化，但保留 profile adapter 的显式语义代码。
+2. TA-Lib profile 参数/输出 metadata 已收敛为声明式 schema table；下一步继续收敛
+   输入槽位 metadata，并保留 profile adapter 的显式数值语义代码。
 3. 将本轮已接入的 `engine_contract_v1.json` 与 `talib_numeric_contract_v1.json`
    扩展到 C/C++、Go、Java、.NET 的实际宿主运行证明；C/C++ 已完成测试接入，Go、
    Java、.NET 仍需在其 CI/toolchain 矩阵中完成逐元素运行证据。

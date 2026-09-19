@@ -488,23 +488,497 @@ fn talib_profile_params_for(
         .collect()
 }
 
-fn talib_parameter(
-    name: &str,
-    value_type: &str,
-    default: Option<&str>,
-    constraint: Option<&str>,
-) -> OperationParameter {
-    OperationParameter {
-        name: name.to_string(),
-        value_type: value_type.to_string(),
-        default: default.map(str::to_string),
-        constraint: constraint.map(str::to_string),
-    }
+#[derive(Debug, Clone, Copy)]
+struct TalibParameterSpec {
+    name: &'static str,
+    value_type: &'static str,
+    default: Option<&'static str>,
+    constraint: Option<&'static str>,
 }
 
-fn period_parameter(default: &'static str) -> OperationParameter {
-    talib_parameter("timeperiod", "integer", Some(default), Some("integer >= 1"))
+#[derive(Debug, Clone, Copy)]
+struct TalibProfileParameterSpec {
+    name: &'static str,
+    params: &'static [TalibParameterSpec],
 }
+
+macro_rules! define_talib_params {
+    ($name:ident: $(($param:literal, $value_type:literal, $default:expr, $constraint:expr)),* $(,)?) => {
+        const $name: &[TalibParameterSpec] = &[
+            $(TalibParameterSpec {
+                name: $param,
+                value_type: $value_type,
+                default: $default,
+                constraint: $constraint,
+            }),*
+        ];
+    };
+}
+
+define_talib_params!(TALIB_PARAMS_PERIOD_5:
+    ("timeperiod", "integer", Some("5"), Some("integer >= 1")),
+);
+define_talib_params!(TALIB_PARAMS_PERIOD_10:
+    ("timeperiod", "integer", Some("10"), Some("integer >= 1")),
+);
+define_talib_params!(TALIB_PARAMS_PERIOD_13:
+    ("timeperiod", "integer", Some("13"), Some("integer >= 1")),
+);
+define_talib_params!(TALIB_PARAMS_PERIOD_14:
+    ("timeperiod", "integer", Some("14"), Some("integer >= 1")),
+);
+define_talib_params!(TALIB_PARAMS_PERIOD_20:
+    ("timeperiod", "integer", Some("20"), Some("integer >= 1")),
+);
+define_talib_params!(TALIB_PARAMS_PERIOD_28:
+    ("timeperiod", "integer", Some("28"), Some("integer >= 1")),
+);
+define_talib_params!(TALIB_PARAMS_PERIOD_30:
+    ("timeperiod", "integer", Some("30"), Some("integer >= 1")),
+);
+define_talib_params!(TALIB_PARAMS_PERIOD_100:
+    ("timeperiod", "integer", Some("100"), Some("integer >= 1")),
+);
+define_talib_params!(TALIB_PARAMS_MA:
+    ("timeperiod", "integer", Some("30"), Some("integer >= 1")),
+    ("matype", "integer", Some("0"), Some("integer in 0..8")),
+);
+define_talib_params!(TALIB_PARAMS_SAR:
+    ("acceleration", "number", Some("0.02"), Some("finite")),
+    ("maximum", "number", Some("0.2"), Some("finite")),
+);
+define_talib_params!(TALIB_PARAMS_SAREXT:
+    ("startvalue", "number", Some("0.0"), Some("finite")),
+    ("offsetonreverse", "number", Some("0.0"), Some("finite")),
+    ("afinitlong", "number", Some("0.02"), Some("finite")),
+    ("aflong", "number", Some("0.02"), Some("finite")),
+    ("afmaxlong", "number", Some("0.2"), Some("finite")),
+    ("afinitshort", "number", Some("0.02"), Some("finite")),
+    ("afshort", "number", Some("0.02"), Some("finite")),
+    ("afmaxshort", "number", Some("0.2"), Some("finite")),
+);
+define_talib_params!(TALIB_PARAMS_PERIOD_30_NBDEV:
+    ("timeperiod", "integer", Some("30"), Some("integer >= 1")),
+    ("nbdev", "number", Some("1.0"), Some("finite")),
+);
+define_talib_params!(TALIB_PARAMS_AC:
+    ("fastperiod", "integer", Some("5"), Some("integer >= 2")),
+    ("slowperiod", "integer", Some("34"), Some("integer >= 2")),
+    ("signalperiod", "integer", Some("5"), Some("integer >= 2")),
+);
+define_talib_params!(TALIB_PARAMS_CVI:
+    ("timeperiod", "integer", Some("10"), Some("integer >= 1")),
+    ("rocperiod", "integer", Some("10"), Some("integer >= 1")),
+);
+define_talib_params!(TALIB_PARAMS_FRACTAL:
+    ("leftbars", "integer", Some("2"), Some("integer >= 1")),
+    ("rightbars", "integer", Some("2"), Some("integer >= 1")),
+);
+define_talib_params!(TALIB_PARAMS_KC:
+    ("timeperiod", "integer", Some("20"), Some("integer >= 2")),
+    ("atrperiod", "integer", Some("10"), Some("integer >= 1")),
+    ("nbdev", "number", Some("2.0"), Some("finite number")),
+);
+define_talib_params!(TALIB_PARAMS_KDJ:
+    ("fastk_period", "integer", Some("9"), Some("integer >= 1")),
+    ("slowk_period", "integer", Some("3"), Some("integer >= 1")),
+    ("slowk_matype", "integer", Some("13"), Some("TA-Lib MA type")),
+    ("slowd_period", "integer", Some("3"), Some("integer >= 1")),
+    ("slowd_matype", "integer", Some("13"), Some("TA-Lib MA type")),
+);
+define_talib_params!(TALIB_PARAMS_MASSI:
+    ("fastperiod", "integer", Some("9"), Some("integer >= 1")),
+    ("slowperiod", "integer", Some("25"), Some("integer >= 1")),
+);
+define_talib_params!(TALIB_PARAMS_PERCENTILE:
+    ("timeperiod", "integer", Some("30"), Some("integer >= 1")),
+    ("percentile", "number", Some("50.0"), Some("0 <= value <= 100")),
+);
+define_talib_params!(TALIB_PARAMS_PVO:
+    ("fastperiod", "integer", Some("12"), Some("integer >= 1")),
+    ("slowperiod", "integer", Some("26"), Some("integer >= 1")),
+    ("matype", "integer", Some("1"), Some("TA-Lib MA type")),
+);
+define_talib_params!(TALIB_PARAMS_RVI:
+    ("timeperiod", "integer", Some("14"), Some("integer >= 1")),
+    ("stddevperiod", "integer", Some("10"), Some("integer >= 2")),
+);
+define_talib_params!(TALIB_PARAMS_SMI:
+    ("timeperiod", "integer", Some("13"), Some("integer >= 2")),
+    ("fastperiod", "integer", Some("2"), Some("integer >= 2")),
+    ("slowperiod", "integer", Some("25"), Some("integer >= 2")),
+    ("signalperiod", "integer", Some("9"), Some("integer >= 2")),
+);
+define_talib_params!(TALIB_PARAMS_AO:
+    ("fastperiod", "integer", Some("5"), Some("integer >= 1")),
+    ("slowperiod", "integer", Some("34"), Some("integer >= 1")),
+);
+define_talib_params!(TALIB_PARAMS_COPPOCK:
+    ("wmaperiod", "integer", Some("10"), Some("integer >= 1")),
+    ("roc1period", "integer", Some("11"), Some("integer >= 1")),
+    ("roc2period", "integer", Some("14"), Some("integer >= 1")),
+);
+define_talib_params!(TALIB_PARAMS_TSI:
+    ("firstperiod", "integer", Some("25"), Some("integer >= 1")),
+    ("secondperiod", "integer", Some("13"), Some("integer >= 1")),
+);
+define_talib_params!(TALIB_PARAMS_SUPERTREND:
+    ("timeperiod", "integer", Some("10"), Some("integer >= 1")),
+    ("multiplier", "number", Some("3.0"), Some("value > 0")),
+);
+define_talib_params!(TALIB_PARAMS_APO:
+    ("fastperiod", "integer", Some("12"), Some("integer >= 1")),
+    ("slowperiod", "integer", Some("26"), Some("integer >= 1")),
+    ("matype", "integer", Some("0"), Some("integer in 0..8")),
+);
+define_talib_params!(TALIB_PARAMS_STOCH:
+    ("fastk_period", "integer", Some("5"), Some("integer >= 1")),
+    ("slowk_period", "integer", Some("3"), Some("integer >= 1")),
+    ("slowk_matype", "integer", Some("0"), Some("integer in 0..8")),
+    ("slowd_period", "integer", Some("3"), Some("integer >= 1")),
+    ("slowd_matype", "integer", Some("0"), Some("integer in 0..8")),
+);
+define_talib_params!(TALIB_PARAMS_STOCHF:
+    ("fastk_period", "integer", Some("5"), Some("integer >= 1")),
+    ("fastd_period", "integer", Some("3"), Some("integer >= 1")),
+    ("fastd_matype", "integer", Some("0"), Some("integer in 0..8")),
+);
+define_talib_params!(TALIB_PARAMS_STOCHRSI:
+    ("timeperiod", "integer", Some("14"), Some("integer >= 1")),
+    ("fastk_period", "integer", Some("5"), Some("integer >= 1")),
+    ("fastd_period", "integer", Some("3"), Some("integer >= 1")),
+    ("fastd_matype", "integer", Some("0"), Some("integer in 0..8")),
+);
+define_talib_params!(TALIB_PARAMS_MAVP:
+    ("minperiod", "integer", Some("2"), Some("integer >= 2")),
+    ("maxperiod", "integer", Some("30"), Some("integer >= minperiod")),
+    ("matype", "integer", Some("0"), Some("integer in 0..8")),
+);
+define_talib_params!(TALIB_PARAMS_STAT_PERIOD_14:
+    ("timeperiod", "integer", Some("14"), Some("integer >= 1")),
+);
+define_talib_params!(TALIB_PARAMS_STAT_PERIOD_30:
+    ("timeperiod", "integer", Some("30"), Some("integer >= 1")),
+);
+define_talib_params!(TALIB_PARAMS_T3:
+    ("timeperiod", "integer", Some("5"), Some("integer >= 1")),
+    ("vfactor", "number", Some("0.7"), Some("0.0 <= value <= 1.0")),
+);
+
+const TALIB_PROFILE_PARAMETER_SPECS: &[TalibProfileParameterSpec] = &[
+    TalibProfileParameterSpec {
+        name: "MA",
+        params: TALIB_PARAMS_MA,
+    },
+    TalibProfileParameterSpec {
+        name: "SMA",
+        params: TALIB_PARAMS_PERIOD_30,
+    },
+    TalibProfileParameterSpec {
+        name: "SAR",
+        params: TALIB_PARAMS_SAR,
+    },
+    TalibProfileParameterSpec {
+        name: "SAREXT",
+        params: TALIB_PARAMS_SAREXT,
+    },
+    TalibProfileParameterSpec {
+        name: "MIDPOINT",
+        params: TALIB_PARAMS_PERIOD_14,
+    },
+    TalibProfileParameterSpec {
+        name: "MIDPRICE",
+        params: TALIB_PARAMS_PERIOD_14,
+    },
+    TalibProfileParameterSpec {
+        name: "STDDEV",
+        params: TALIB_PARAMS_PERIOD_30_NBDEV,
+    },
+    TalibProfileParameterSpec {
+        name: "VAR",
+        params: TALIB_PARAMS_PERIOD_30_NBDEV,
+    },
+    TalibProfileParameterSpec {
+        name: "AC",
+        params: TALIB_PARAMS_AC,
+    },
+    TalibProfileParameterSpec {
+        name: "ADR",
+        params: TALIB_PARAMS_PERIOD_14,
+    },
+    TalibProfileParameterSpec {
+        name: "CMOU",
+        params: TALIB_PARAMS_PERIOD_14,
+    },
+    TalibProfileParameterSpec {
+        name: "CVI",
+        params: TALIB_PARAMS_CVI,
+    },
+    TalibProfileParameterSpec {
+        name: "EFI",
+        params: TALIB_PARAMS_PERIOD_13,
+    },
+    TalibProfileParameterSpec {
+        name: "ERI",
+        params: TALIB_PARAMS_PERIOD_13,
+    },
+    TalibProfileParameterSpec {
+        name: "FOSC",
+        params: TALIB_PARAMS_PERIOD_5,
+    },
+    TalibProfileParameterSpec {
+        name: "FRACTAL",
+        params: TALIB_PARAMS_FRACTAL,
+    },
+    TalibProfileParameterSpec {
+        name: "KC",
+        params: TALIB_PARAMS_KC,
+    },
+    TalibProfileParameterSpec {
+        name: "KDJ",
+        params: TALIB_PARAMS_KDJ,
+    },
+    TalibProfileParameterSpec {
+        name: "MASSI",
+        params: TALIB_PARAMS_MASSI,
+    },
+    TalibProfileParameterSpec {
+        name: "PERCENTILE",
+        params: TALIB_PARAMS_PERCENTILE,
+    },
+    TalibProfileParameterSpec {
+        name: "PVO",
+        params: TALIB_PARAMS_PVO,
+    },
+    TalibProfileParameterSpec {
+        name: "QSTICK",
+        params: TALIB_PARAMS_PERIOD_10,
+    },
+    TalibProfileParameterSpec {
+        name: "RMA",
+        params: TALIB_PARAMS_PERIOD_30,
+    },
+    TalibProfileParameterSpec {
+        name: "RVI",
+        params: TALIB_PARAMS_RVI,
+    },
+    TalibProfileParameterSpec {
+        name: "RVOL",
+        params: TALIB_PARAMS_PERIOD_20,
+    },
+    TalibProfileParameterSpec {
+        name: "SMI",
+        params: TALIB_PARAMS_SMI,
+    },
+    TalibProfileParameterSpec {
+        name: "VHF",
+        params: TALIB_PARAMS_PERIOD_28,
+    },
+    TalibProfileParameterSpec {
+        name: "AO",
+        params: TALIB_PARAMS_AO,
+    },
+    TalibProfileParameterSpec {
+        name: "CMF",
+        params: TALIB_PARAMS_PERIOD_20,
+    },
+    TalibProfileParameterSpec {
+        name: "COPPOCK",
+        params: TALIB_PARAMS_COPPOCK,
+    },
+    TalibProfileParameterSpec {
+        name: "DPO",
+        params: TALIB_PARAMS_PERIOD_20,
+    },
+    TalibProfileParameterSpec {
+        name: "ER",
+        params: TALIB_PARAMS_PERIOD_10,
+    },
+    TalibProfileParameterSpec {
+        name: "HMA",
+        params: TALIB_PARAMS_PERIOD_20,
+    },
+    TalibProfileParameterSpec {
+        name: "PERCENTRANK",
+        params: TALIB_PARAMS_PERIOD_100,
+    },
+    TalibProfileParameterSpec {
+        name: "TSI",
+        params: TALIB_PARAMS_TSI,
+    },
+    TalibProfileParameterSpec {
+        name: "VORTEX",
+        params: TALIB_PARAMS_PERIOD_14,
+    },
+    TalibProfileParameterSpec {
+        name: "VWMA",
+        params: TALIB_PARAMS_PERIOD_30,
+    },
+    TalibProfileParameterSpec {
+        name: "ZLEMA",
+        params: TALIB_PARAMS_PERIOD_30,
+    },
+    TalibProfileParameterSpec {
+        name: "SUPERTREND",
+        params: TALIB_PARAMS_SUPERTREND,
+    },
+    TalibProfileParameterSpec {
+        name: "ADX",
+        params: TALIB_PARAMS_STAT_PERIOD_14,
+    },
+    TalibProfileParameterSpec {
+        name: "ADXR",
+        params: TALIB_PARAMS_STAT_PERIOD_14,
+    },
+    TalibProfileParameterSpec {
+        name: "AROON",
+        params: TALIB_PARAMS_STAT_PERIOD_14,
+    },
+    TalibProfileParameterSpec {
+        name: "AROONOSC",
+        params: TALIB_PARAMS_STAT_PERIOD_14,
+    },
+    TalibProfileParameterSpec {
+        name: "CCI",
+        params: TALIB_PARAMS_STAT_PERIOD_14,
+    },
+    TalibProfileParameterSpec {
+        name: "CMO",
+        params: TALIB_PARAMS_STAT_PERIOD_14,
+    },
+    TalibProfileParameterSpec {
+        name: "DX",
+        params: TALIB_PARAMS_STAT_PERIOD_14,
+    },
+    TalibProfileParameterSpec {
+        name: "MFI",
+        params: TALIB_PARAMS_STAT_PERIOD_14,
+    },
+    TalibProfileParameterSpec {
+        name: "MINUS_DI",
+        params: TALIB_PARAMS_STAT_PERIOD_14,
+    },
+    TalibProfileParameterSpec {
+        name: "MINUS_DM",
+        params: TALIB_PARAMS_STAT_PERIOD_14,
+    },
+    TalibProfileParameterSpec {
+        name: "PLUS_DI",
+        params: TALIB_PARAMS_STAT_PERIOD_14,
+    },
+    TalibProfileParameterSpec {
+        name: "PLUS_DM",
+        params: TALIB_PARAMS_STAT_PERIOD_14,
+    },
+    TalibProfileParameterSpec {
+        name: "RSI",
+        params: TALIB_PARAMS_STAT_PERIOD_14,
+    },
+    TalibProfileParameterSpec {
+        name: "WILLR",
+        params: TALIB_PARAMS_STAT_PERIOD_14,
+    },
+    TalibProfileParameterSpec {
+        name: "ROCP",
+        params: TALIB_PARAMS_STAT_PERIOD_14,
+    },
+    TalibProfileParameterSpec {
+        name: "ROCR",
+        params: TALIB_PARAMS_STAT_PERIOD_14,
+    },
+    TalibProfileParameterSpec {
+        name: "ROCR100",
+        params: TALIB_PARAMS_STAT_PERIOD_14,
+    },
+    TalibProfileParameterSpec {
+        name: "APO",
+        params: TALIB_PARAMS_APO,
+    },
+    TalibProfileParameterSpec {
+        name: "PPO",
+        params: TALIB_PARAMS_APO,
+    },
+    TalibProfileParameterSpec {
+        name: "STOCH",
+        params: TALIB_PARAMS_STOCH,
+    },
+    TalibProfileParameterSpec {
+        name: "STOCHF",
+        params: TALIB_PARAMS_STOCHF,
+    },
+    TalibProfileParameterSpec {
+        name: "STOCHRSI",
+        params: TALIB_PARAMS_STOCHRSI,
+    },
+    TalibProfileParameterSpec {
+        name: "MAVP",
+        params: TALIB_PARAMS_MAVP,
+    },
+    TalibProfileParameterSpec {
+        name: "BETA",
+        params: TALIB_PARAMS_STAT_PERIOD_14,
+    },
+    TalibProfileParameterSpec {
+        name: "CORREL",
+        params: TALIB_PARAMS_STAT_PERIOD_14,
+    },
+    TalibProfileParameterSpec {
+        name: "MAX",
+        params: TALIB_PARAMS_STAT_PERIOD_30,
+    },
+    TalibProfileParameterSpec {
+        name: "MIN",
+        params: TALIB_PARAMS_STAT_PERIOD_30,
+    },
+    TalibProfileParameterSpec {
+        name: "MAXINDEX",
+        params: TALIB_PARAMS_STAT_PERIOD_30,
+    },
+    TalibProfileParameterSpec {
+        name: "MININDEX",
+        params: TALIB_PARAMS_STAT_PERIOD_30,
+    },
+    TalibProfileParameterSpec {
+        name: "MINMAX",
+        params: TALIB_PARAMS_STAT_PERIOD_30,
+    },
+    TalibProfileParameterSpec {
+        name: "MINMAXINDEX",
+        params: TALIB_PARAMS_STAT_PERIOD_30,
+    },
+    TalibProfileParameterSpec {
+        name: "SUM",
+        params: TALIB_PARAMS_STAT_PERIOD_30,
+    },
+    TalibProfileParameterSpec {
+        name: "LINEARREG",
+        params: TALIB_PARAMS_STAT_PERIOD_30,
+    },
+    TalibProfileParameterSpec {
+        name: "LINEARREG_ANGLE",
+        params: TALIB_PARAMS_STAT_PERIOD_30,
+    },
+    TalibProfileParameterSpec {
+        name: "LINEARREG_INTERCEPT",
+        params: TALIB_PARAMS_STAT_PERIOD_30,
+    },
+    TalibProfileParameterSpec {
+        name: "LINEARREG_SLOPE",
+        params: TALIB_PARAMS_STAT_PERIOD_30,
+    },
+    TalibProfileParameterSpec {
+        name: "TSF",
+        params: TALIB_PARAMS_STAT_PERIOD_30,
+    },
+    TalibProfileParameterSpec {
+        name: "T3",
+        params: TALIB_PARAMS_T3,
+    },
+    TalibProfileParameterSpec {
+        name: "TRIX",
+        params: TALIB_PARAMS_STAT_PERIOD_30,
+    },
+];
 
 /// Parameters for names that are not projected from the Core registry.
 ///
@@ -513,212 +987,21 @@ fn period_parameter(default: &'static str) -> OperationParameter {
 /// Core kernel consumes it; a catalog entry must never advertise a parameter
 /// that the executor silently ignores.
 fn talib_profile_params(name: &str) -> Vec<OperationParameter> {
-    let period = || period_parameter("14");
-    match name {
-        "MA" => vec![
-            period_parameter("30"),
-            talib_parameter("matype", "integer", Some("0"), Some("integer in 0..8")),
-        ],
-        "SMA" => vec![period_parameter("30")],
-        "SAR" => vec![
-            talib_parameter("acceleration", "number", Some("0.02"), Some("finite")),
-            talib_parameter("maximum", "number", Some("0.2"), Some("finite")),
-        ],
-        "SAREXT" => vec![
-            talib_parameter("startvalue", "number", Some("0.0"), Some("finite")),
-            talib_parameter("offsetonreverse", "number", Some("0.0"), Some("finite")),
-            talib_parameter("afinitlong", "number", Some("0.02"), Some("finite")),
-            talib_parameter("aflong", "number", Some("0.02"), Some("finite")),
-            talib_parameter("afmaxlong", "number", Some("0.2"), Some("finite")),
-            talib_parameter("afinitshort", "number", Some("0.02"), Some("finite")),
-            talib_parameter("afshort", "number", Some("0.02"), Some("finite")),
-            talib_parameter("afmaxshort", "number", Some("0.2"), Some("finite")),
-        ],
-        "MIDPOINT" | "MIDPRICE" => vec![period_parameter("14")],
-        "STDDEV" | "VAR" => vec![
-            period_parameter("30"),
-            talib_parameter("nbdev", "number", Some("1.0"), Some("finite")),
-        ],
-        "AC" => vec![
-            talib_parameter("fastperiod", "integer", Some("5"), Some("integer >= 2")),
-            talib_parameter("slowperiod", "integer", Some("34"), Some("integer >= 2")),
-            talib_parameter("signalperiod", "integer", Some("5"), Some("integer >= 2")),
-        ],
-        "ADR" => vec![period_parameter("14")],
-        "CMOU" => vec![period_parameter("14")],
-        "CVI" => vec![
-            period_parameter("10"),
-            talib_parameter("rocperiod", "integer", Some("10"), Some("integer >= 1")),
-        ],
-        "EFI" => vec![period_parameter("13")],
-        "ERI" => vec![period_parameter("13")],
-        "FOSC" => vec![period_parameter("5")],
-        "FRACTAL" => vec![
-            talib_parameter("leftbars", "integer", Some("2"), Some("integer >= 1")),
-            talib_parameter("rightbars", "integer", Some("2"), Some("integer >= 1")),
-        ],
-        "KC" => vec![
-            talib_parameter("timeperiod", "integer", Some("20"), Some("integer >= 2")),
-            talib_parameter("atrperiod", "integer", Some("10"), Some("integer >= 1")),
-            talib_parameter("nbdev", "number", Some("2.0"), Some("finite number")),
-        ],
-        "KDJ" => vec![
-            talib_parameter("fastk_period", "integer", Some("9"), Some("integer >= 1")),
-            talib_parameter("slowk_period", "integer", Some("3"), Some("integer >= 1")),
-            talib_parameter(
-                "slowk_matype",
-                "integer",
-                Some("13"),
-                Some("TA-Lib MA type"),
-            ),
-            talib_parameter("slowd_period", "integer", Some("3"), Some("integer >= 1")),
-            talib_parameter(
-                "slowd_matype",
-                "integer",
-                Some("13"),
-                Some("TA-Lib MA type"),
-            ),
-        ],
-        "MARKETFI" => vec![],
-        "MASSI" => vec![
-            talib_parameter("fastperiod", "integer", Some("9"), Some("integer >= 1")),
-            talib_parameter("slowperiod", "integer", Some("25"), Some("integer >= 1")),
-        ],
-        "PERCENTILE" => vec![
-            talib_parameter("timeperiod", "integer", Some("30"), Some("integer >= 1")),
-            talib_parameter(
-                "percentile",
-                "number",
-                Some("50.0"),
-                Some("0 <= value <= 100"),
-            ),
-        ],
-        "PVO" => vec![
-            talib_parameter("fastperiod", "integer", Some("12"), Some("integer >= 1")),
-            talib_parameter("slowperiod", "integer", Some("26"), Some("integer >= 1")),
-            talib_parameter("matype", "integer", Some("1"), Some("TA-Lib MA type")),
-        ],
-        "QSTICK" => vec![period_parameter("10")],
-        "RMA" => vec![period_parameter("30")],
-        "RVI" => vec![
-            period_parameter("14"),
-            talib_parameter("stddevperiod", "integer", Some("10"), Some("integer >= 2")),
-        ],
-        "RVOL" => vec![period_parameter("20")],
-        "SMI" => vec![
-            talib_parameter("timeperiod", "integer", Some("13"), Some("integer >= 2")),
-            talib_parameter("fastperiod", "integer", Some("2"), Some("integer >= 2")),
-            talib_parameter("slowperiod", "integer", Some("25"), Some("integer >= 2")),
-            talib_parameter("signalperiod", "integer", Some("9"), Some("integer >= 2")),
-        ],
-        "VHF" => vec![period_parameter("28")],
-        "WAD" => vec![],
-        "AO" => vec![
-            talib_parameter("fastperiod", "integer", Some("5"), Some("integer >= 1")),
-            talib_parameter("slowperiod", "integer", Some("34"), Some("integer >= 1")),
-        ],
-        "CMF" => vec![period_parameter("20")],
-        "COPPOCK" => vec![
-            talib_parameter("wmaperiod", "integer", Some("10"), Some("integer >= 1")),
-            talib_parameter("roc1period", "integer", Some("11"), Some("integer >= 1")),
-            talib_parameter("roc2period", "integer", Some("14"), Some("integer >= 1")),
-        ],
-        "DPO" => vec![period_parameter("20")],
-        "ER" => vec![period_parameter("10")],
-        "HMA" => vec![period_parameter("20")],
-        "PERCENTRANK" => vec![period_parameter("100")],
-        "TSI" => vec![
-            talib_parameter("firstperiod", "integer", Some("25"), Some("integer >= 1")),
-            talib_parameter("secondperiod", "integer", Some("13"), Some("integer >= 1")),
-        ],
-        "VORTEX" => vec![period_parameter("14")],
-        "VWMA" | "ZLEMA" => vec![period_parameter("30")],
-        "SUPERTREND" => vec![
-            period_parameter("10"),
-            talib_parameter("multiplier", "number", Some("3.0"), Some("value > 0")),
-        ],
-        "ADX" | "ADXR" | "AROON" | "AROONOSC" | "CCI" | "CMO" | "DX" | "MFI" | "MINUS_DI"
-        | "MINUS_DM" | "PLUS_DI" | "PLUS_DM" | "RSI" | "WILLR" | "ROCP" | "ROCR" | "ROCR100" => {
-            vec![period()]
-        }
-        "APO" | "PPO" => vec![
-            talib_parameter("fastperiod", "integer", Some("12"), Some("integer >= 1")),
-            talib_parameter("slowperiod", "integer", Some("26"), Some("integer >= 1")),
-            talib_parameter("matype", "integer", Some("0"), Some("integer in 0..8")),
-        ],
-        "STOCH" => vec![
-            talib_parameter("fastk_period", "integer", Some("5"), Some("integer >= 1")),
-            talib_parameter("slowk_period", "integer", Some("3"), Some("integer >= 1")),
-            talib_parameter(
-                "slowk_matype",
-                "integer",
-                Some("0"),
-                Some("integer in 0..8"),
-            ),
-            talib_parameter("slowd_period", "integer", Some("3"), Some("integer >= 1")),
-            talib_parameter(
-                "slowd_matype",
-                "integer",
-                Some("0"),
-                Some("integer in 0..8"),
-            ),
-        ],
-        "STOCHF" => vec![
-            talib_parameter("fastk_period", "integer", Some("5"), Some("integer >= 1")),
-            talib_parameter("fastd_period", "integer", Some("3"), Some("integer >= 1")),
-            talib_parameter(
-                "fastd_matype",
-                "integer",
-                Some("0"),
-                Some("integer in 0..8"),
-            ),
-        ],
-        "STOCHRSI" => vec![
-            talib_parameter("timeperiod", "integer", Some("14"), Some("integer >= 1")),
-            talib_parameter("fastk_period", "integer", Some("5"), Some("integer >= 1")),
-            talib_parameter("fastd_period", "integer", Some("3"), Some("integer >= 1")),
-            talib_parameter(
-                "fastd_matype",
-                "integer",
-                Some("0"),
-                Some("integer in 0..8"),
-            ),
-        ],
-        "MAVP" => vec![
-            talib_parameter("minperiod", "integer", Some("2"), Some("integer >= 2")),
-            talib_parameter(
-                "maxperiod",
-                "integer",
-                Some("30"),
-                Some("integer >= minperiod"),
-            ),
-            talib_parameter("matype", "integer", Some("0"), Some("integer in 0..8")),
-        ],
-        "BETA" | "CORREL" => vec![period()],
-        "MAX"
-        | "MIN"
-        | "MAXINDEX"
-        | "MININDEX"
-        | "MINMAX"
-        | "MINMAXINDEX"
-        | "SUM"
-        | "LINEARREG"
-        | "LINEARREG_ANGLE"
-        | "LINEARREG_INTERCEPT"
-        | "LINEARREG_SLOPE"
-        | "TSF" => vec![period_parameter("30")],
-        "T3" => vec![
-            talib_parameter("timeperiod", "integer", Some("5"), Some("integer >= 1")),
-            talib_parameter(
-                "vfactor",
-                "number",
-                Some("0.7"),
-                Some("0.0 <= value <= 1.0"),
-            ),
-        ],
-        "TRIX" => vec![period_parameter("30")],
-        _ => Vec::new(),
-    }
+    let Some(spec) = TALIB_PROFILE_PARAMETER_SPECS
+        .iter()
+        .find(|spec| spec.name == name)
+    else {
+        return Vec::new();
+    };
+    spec.params
+        .iter()
+        .map(|param| OperationParameter {
+            name: param.name.to_string(),
+            value_type: param.value_type.to_string(),
+            default: param.default.map(str::to_string),
+            constraint: param.constraint.map(str::to_string),
+        })
+        .collect()
 }
 
 /// Build the built-in operation catalog as a JSON string.
@@ -1063,6 +1346,35 @@ mod tests {
                 spec.name,
                 spec.value_shape
             );
+        }
+    }
+
+    #[test]
+    fn talib_profile_parameter_schema_table_is_unique_and_valid() {
+        let mut operation_names = std::collections::BTreeSet::new();
+        for spec in TALIB_PROFILE_PARAMETER_SPECS {
+            assert!(
+                operation_names.insert(spec.name),
+                "duplicate TA-Lib parameter spec: {}",
+                spec.name
+            );
+            assert!(
+                talib_profile_supported(spec.name),
+                "parameter spec is not executable: {}",
+                spec.name
+            );
+            let mut parameter_names = std::collections::BTreeSet::new();
+            for param in spec.params {
+                assert!(
+                    parameter_names.insert(param.name),
+                    "duplicate parameter {} for {}",
+                    param.name,
+                    spec.name
+                );
+                assert!(!param.value_type.is_empty());
+                assert!(param.default.is_some());
+                assert!(param.constraint.is_some());
+            }
         }
     }
 }
