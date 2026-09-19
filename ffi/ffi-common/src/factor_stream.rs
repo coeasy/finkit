@@ -1,10 +1,10 @@
 //! Shared JSON contract for bounded Factor streaming and checkpoints.
 
+use crate::shared_runtime::with_unified_engine;
 use crate::stream_contract::{
     annotate_checkpoint, require_scope_and_revision, validate_checkpoint_metadata,
 };
-use finkit::factor_system::{FactorCatalog, FactorStreamCheckpoint, StatefulFactorCheckpoint};
-use finkit::factors::{builtin_factor_registry, FactorEngine};
+use finkit::factor_system::{FactorStreamCheckpoint, StatefulFactorCheckpoint};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -77,16 +77,16 @@ pub fn evaluate_factor_stream_json(request: &str) -> Result<String, String> {
         return Err("factor stream targets must be unique".to_string());
     }
 
-    let registry = builtin_factor_registry();
-    let catalog = FactorCatalog::from_registry(registry.clone());
     let target_refs = request
         .targets
         .iter()
         .map(String::as_str)
         .collect::<Vec<_>>();
-    let plan = catalog
-        .compile(&target_refs)
-        .map_err(|error| error.to_string())?;
+    let (plan, stream_engine) = with_unified_engine(|unified| {
+        unified
+            .prepare_factor_stream(&target_refs)
+            .map_err(|error| error.to_string())
+    })?;
 
     let mode = request
         .mode
@@ -141,8 +141,9 @@ pub fn evaluate_factor_stream_json(request: &str) -> Result<String, String> {
         return Err(format!("unsupported factor stream mode: {mode}"));
     }
 
-    let engine = FactorEngine::new(registry);
-    let mut stream = plan.stream(engine).map_err(|error| error.to_string())?;
+    let mut stream = plan
+        .stream(stream_engine)
+        .map_err(|error| error.to_string())?;
 
     if let Some(checkpoint) = request.checkpoint {
         let checkpoint: FactorStreamCheckpointRequest =

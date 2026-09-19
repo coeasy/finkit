@@ -836,6 +836,46 @@ impl UnifiedOperationEngine {
         Ok((plan, self.composite.clone()))
     }
 
+    /// Prepare a Factor streaming plan from the canonical Runtime engine.
+    ///
+    /// Targets are resolved, de-duplicated, and canonically ordered before
+    /// entering the shared compiled-plan cache. The stream owns a cloned
+    /// FactorEngine snapshot for the same reason as Composite streams: the
+    /// stream can outlive the dispatch borrow without losing registered
+    /// factors.
+    pub fn prepare_factor_stream(
+        &mut self,
+        targets: &[&str],
+    ) -> Result<(CompiledFactorPlan, FactorEngine), OperationExecutionError> {
+        if targets.is_empty() {
+            return Err(OperationExecutionError::InvalidRequest(
+                "factor stream targets must not be empty".to_string(),
+            ));
+        }
+        let mut canonical_targets = targets
+            .iter()
+            .map(|target| {
+                self.factor_catalog
+                    .resolve_name(target)
+                    .map(str::to_owned)
+                    .ok_or_else(|| OperationExecutionError::UnknownOperation((*target).to_string()))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        if canonical_targets
+            .iter()
+            .collect::<std::collections::BTreeSet<_>>()
+            .len()
+            != canonical_targets.len()
+        {
+            return Err(OperationExecutionError::InvalidRequest(
+                "factor stream targets must be unique".to_string(),
+            ));
+        }
+        canonical_targets.sort_unstable();
+        let plan = self.compiled_factor_plan_targets(&canonical_targets)?;
+        Ok((plan, self.factor.clone()))
+    }
+
     /// Execute a Formula, Factor, or Composite request using one result contract.
     pub fn execute<'a>(
         &mut self,
@@ -2689,6 +2729,27 @@ mod tests {
             .unwrap();
         assert_eq!(stream.rows(), 3);
         assert_eq!(emitted["sum"], vec![2.0, 3.0, 4.0]);
+    }
+
+    #[test]
+    fn unified_engine_prepares_factor_stream_from_registered_runtime() {
+        let mut engine = UnifiedOperationEngine::new(builtin_factor_registry());
+        let (plan, stream_engine) = engine.prepare_factor_stream(&["momentum_5"]).unwrap();
+
+        assert_eq!(engine.factor_plan_cache_misses, 1);
+        assert_eq!(plan.targets(), &["momentum_5".to_string()]);
+        let mut stream = plan.stream(stream_engine).unwrap();
+        let emitted = stream
+            .push_batch(&BTreeMap::from([(
+                "close".to_string(),
+                vec![10.0, 11.0, 12.0, 13.0, 14.0, 20.0],
+            )]))
+            .unwrap();
+        assert_eq!(stream.rows(), 6);
+        assert!(emitted["momentum_5"][0..5]
+            .iter()
+            .all(|value| value.is_nan()));
+        assert_eq!(emitted["momentum_5"][5], 1.0);
     }
 
     #[test]
