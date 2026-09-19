@@ -224,17 +224,26 @@ truth source。`scripts/gen_talib_numeric_contract.py --check` 会重新读取
 ### 当前基线与门禁状态（2026-09-19）
 
 - 当前基线分支：`feature/finkit-v1-unified-engine-20260917`。
-- 历史性能基线提交为 `6ad4aa8`，文档基线随后由 `f7eb988` 推送；固定窗口内核改动提交为 `f69bca8`，随后 `MIDPOINT14` 线性块扫描提交为 `cc123a6`，均已推送到远端同名分支。
-- Rust 格式检查、`finkit` library 测试（当前提交 2946 passed、1 ignored）、`finkit-ffi-common` 测试（80 passed、1 ignored doc）以及 Python ABI3 release check 已实际通过。
+- 历史性能基线提交为 `6ad4aa8`，文档基线随后由 `f7eb988` 推送；固定窗口内核改动提交为 `f69bca8`，随后 `MIDPOINT14` 线性块扫描提交为 `cc123a6`；当前稳定性能提交为 `146b39a`，均已推送到远端同名分支。
+- Rust 格式检查、`finkit` library 测试（当前提交 2947 passed、1 ignored）、`finkit-ffi-common` 测试（80 passed、1 ignored doc）以及 Python ABI3 release check 已实际通过。
 - 历史基线的 TA-Lib 0.8.0 对照门禁覆盖 96 个指标和 24 个公式，`parity_failures=[]`、`errors=[]`；三档规模指标几何平均约 `1.61x`，但性能门禁未通过（top-20 最低约 `0.64x`，`MIDPRICE14`、`VAR20`、`WILLR14` 持续低于 `0.95x`）。该数字仅用于保留基线，不代表本轮结果；因此不能宣称“全面超过 TA-Lib”。
 - 已实际通过的 binding 验证包括 Node 全部 14 项默认测试，以及 Python 当前 wheel 的 TA-Lib 数值合同；Go 因本机 `CGO_ENABLED=0` 且缺少 `gcc` 未运行，Java 因缺少 Maven 未运行，C/C++ 因缺少 CMake/编译器未运行，.NET 因缺少 `dotnet` 未运行。这些语言仍需由对应 CI 宿主提供真实运行证据。
 - GitHub Actions 页面目前没有显示该最新提交的可核验运行结果；在出现对应 workflow run 前，不能把 GitHub CI 说成已通过。工作流文件已配置 `feature/finkit-v1-unified-engine-*` 分支触发规则。
 
 本节是实施状态记录，不是完成声明。下一阶段仍以多语言实际宿主验证、公式方言覆盖、Lightweight Charts 浏览器宿主验证、剩余性能瓶颈和生产发布门禁为主线。
 
-### 固定窗口内核复核（本轮工作区，2026-09-19）
+### VAR20/RSI 稳定优化后的公开 wheel 复核（`146b39a`，2026-09-19）
 
-- `WILLR14` 与 `MIDPRICE14` 的固定周期路径改为无分配的 Van Herk/Gil-Werman 前缀/后缀块扫描；`MIDPOINT14` 使用固定窗口展开访问；`VAR20` 保留 TA-Lib 的移位累计与周期重播种语义，并改为 caller-owned raw-pointer 输出循环。
+- `VAR20` 新增 O(1) rolling mean/M2 稳定快速路径；固定间隔重播种，并对高绝对基线输入回退到精确 TA-Lib 兼容状态机。测试覆盖普通数据的容差等价和高基线数据的 bitwise 精确回退。
+- `RSI` 平均值转换改为等价的单除法形式，减少每个输出点的除法次数；其公开兼容结果仍通过 TA-Lib 数值容差验证。
+- 基于当前提交重建并安装 Windows ABI3 wheel，在 Python 3.12.13、NumPy 2.3.3、TA-Lib Python 0.8.0 / core 0.8.1 环境实测：96 个指标、24 个公式全部 `parity=True`，`errors=[]`、`parity_failures=[]`。
+- 指标几何平均加速比为 `1.7286x`，100K 为 `1.8387x`，1M 为 `1.5738x`；三档规模没有指标持续低于 `0.95x`。
+- 性能 release gate 仍未通过，top-20 最低为 `0.9967x`，低于门槛 `1.05x`。因此当前只能确认数值合同、主体执行链和本轮稳定优化通过验证，不能宣称整体性能已经全面超过 TA-Lib。
+- 本轮稳定修改已提交并推送：`146b39a perf: stabilize fixed variance and rsi kernels`。下一步应继续针对 top-20 最慢项做受控优化，每轮都必须保留全量 parity、跨规模基准和 Rust/FFI 回归证据。
+
+### 固定窗口内核复核（前一轮，2026-09-19）
+
+- `WILLR14` 与 `MIDPRICE14` 的固定周期路径改为无分配的 Van Herk/Gil-Werman 前缀/后缀块扫描；`MIDPOINT14` 使用固定窗口展开访问；前一轮的 `VAR20` 仍使用 TA-Lib 的移位累计与周期重播种语义，并改为 caller-owned raw-pointer 输出循环，随后已由 `146b39a` 的稳定 rolling mean/M2 路径替代普通输入热路径。
 - 补充了长度为 `14/15/27/28/29` 以及长序列的跨块回归测试，验证块边界不会改变 warm-up、窗口覆盖或结果。
 - 重新运行的 TA-Lib 0.8.0 / core 0.8.1 对照：96 个指标、24 个公式，`parity_failures=[]`、`errors=[]`；指标几何平均加速比约 `1.69x`，100K 约 `1.78x`，1M 约 `1.56x`。
 - 完整架构门禁仍失败：top-20 最小加速比约 `0.775x`，`VAR20` 在三档规模均低于 `0.95x`。这是真实测量结果，不调整阈值、不视为生产性能门禁通过；后续需单独优化 VAR20 和 top-20 中的慢项。
