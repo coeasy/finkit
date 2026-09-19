@@ -42,6 +42,15 @@ def test_shared_engine_contract_v1_is_executed_by_python_binding():
     )
     assert composite_result["values"]["sma3"] == composite["expected_primary"]
 
+    composite_multi_input = FIXTURE["composite_multi_input"]
+    composite_multi_result = json.loads(
+        ta.composite_execute_json(json.dumps(composite_multi_input["request"]))
+    )
+    assert composite_multi_result["shape"] == "multi_series"
+    assert composite_multi_result["primary"] is None
+    for name, expected in composite_multi_input["expected"].items():
+        assert composite_multi_result["values"][name] == expected
+
 
 def test_publishes_current_talib_catalog_contract():
     matrix = json.loads(

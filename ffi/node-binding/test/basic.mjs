@@ -50,6 +50,14 @@ test('executes the shared engine contract vector', () => {
   const composite = engineContract.composite
   const compositeResult = JSON.parse(finkit.compositeExecuteJson(JSON.stringify(composite.request)))
   assert.deepEqual(compositeResult.values.sma3, composite.expected_primary)
+
+  const compositeMultiInput = engineContract.composite_multi_input
+  const compositeMultiResult = JSON.parse(finkit.compositeExecuteJson(JSON.stringify(compositeMultiInput.request)))
+  assert.equal(compositeMultiResult.shape, 'multi_series')
+  assert.equal(compositeMultiResult.primary, null)
+  for (const [name, expected] of Object.entries(compositeMultiInput.expected)) {
+    assert.deepEqual(compositeMultiResult.values[name], expected)
+  }
 })
 
 test('publishes the current TA-Lib catalog contract', () => {

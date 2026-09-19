@@ -812,6 +812,20 @@ mod tests {
         assert_eq!(value["primary"], "sum");
         assert_eq!(value["values"]["sum"][2], 4.0);
         unsafe { finkit_free_string(ptr) };
+
+        let multi_input_request = std::ffi::CString::new(
+            r#"{"schema_version":1,"scope":"C-BINDING@1d","data_revision":0,"inputs":{"high":[11.0,12.0,13.0,14.0],"low":[9.0,10.0,11.0,12.0]},"definitions":[{"name":"spread","function":"sub","inputs":["high","low"],"params":[]},{"name":"mid","function":"div","inputs":["sum","const:2"],"params":[]},{"name":"sum","function":"add","inputs":["high","low"],"params":[]},{"name":"signal","function":"add","inputs":["mid","spread"],"params":[]}],"outputs":["mid","spread","signal"]}"#,
+        )
+        .unwrap();
+        let multi_input_ptr = unsafe { ta_composite_execute_json(multi_input_request.as_ptr()) };
+        assert!(!multi_input_ptr.is_null());
+        let multi_input_json = unsafe { CStr::from_ptr(multi_input_ptr) }.to_str().unwrap();
+        let multi_input_value: serde_json::Value = serde_json::from_str(multi_input_json).unwrap();
+        assert_eq!(multi_input_value["shape"], "multi_series");
+        assert!(multi_input_value["primary"].is_null());
+        assert_eq!(multi_input_value["values"]["mid"][3], 13.0);
+        assert_eq!(multi_input_value["values"]["signal"][3], 15.0);
+        unsafe { finkit_free_string(multi_input_ptr) };
     }
 
     #[test]

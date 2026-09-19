@@ -184,10 +184,11 @@ truth source。`scripts/gen_talib_numeric_contract.py --check` 会重新读取
 - 主 CI 已加入 `finkit-ffi-common` 统一契约测试，多语言工作流的触发路径已覆盖
   共享 FFI 契约、C/Go/Java binding 和 `tests/contracts` fixtures。
 - `tests/contracts/engine_contract_v1.json` 现在同时包含 direct Operation、Formula、
-  Factor 和 Composite 的共享请求/结果向量。该向量已由 Rust
-  `finkit-ffi-common`、Node、Python 和 Java JNI host 实际执行并通过；Go、C/C++、
-  .NET 已接入同一 fixture 的测试入口，但本次工作机没有 C 编译器/CMake、dotnet
-  或 CGO 工具链，因此未将它们标记为本机运行通过。
+  Factor 和 Composite 的共享请求/结果向量，并新增多个原始序列、跨定义依赖、
+  常量广播和多输出的 `composite_multi_input` 向量。该向量已由 Rust
+  `finkit-ffi-common`、Node、Python 和 C ABI 实际执行并通过；Go、Java、.NET
+  已接入同一 fixture 的测试入口，但本次工作机缺少 Go native 链接产物/Maven/.NET
+  SDK，因此未将它们标记为本机运行通过。C++ 复用同一 C ABI，不维护第二套数值实现。
 
 ## 6. 后续实施顺序
 
@@ -207,8 +208,8 @@ truth source。`scripts/gen_talib_numeric_contract.py --check` 会重新读取
 
 ### 本轮共享向量验证记录
 
-- Rust：`cargo +1.98.1 test -p finkit-ffi-common contract_conformance --offline`，10 passed。
-- Node：`npm test`，12 passed。
+- Rust：`cargo +1.98.1 test -p finkit-ffi-common --offline`，80 passed，1 ignored doc。
+- Node：共享 engine contract 测试，13 passed。
 - Node：重建当前 Rust native module 后 `npm test`，13 passed（含 TA-Lib 目录集合门禁）。
 - Node：重建当前 Rust native module 后 `npm test`，14 passed（含 201/201 数值向量）。
 - Python：从 workspace 根目录运行
@@ -220,6 +221,12 @@ truth source。`scripts/gen_talib_numeric_contract.py --check` 会重新读取
 - Java：重新构建当前 `finkit_java.dll`，编译并运行
   `com.finkit.ContractConformance`，exit code 0（含 TA-Lib 目录门禁）。
 - Go：未运行，工作机 `CGO_ENABLED=0` 且没有 `gcc`；C/C++：未运行，工作机没有 CMake/C++ 编译器；.NET：未运行，工作机没有 `dotnet`。这些是未验证项，不视为通过。
+
+### 多输入 Composite 契约收敛记录（2026-09-19）
+
+- `composite_multi_input` 验证了同一请求中 `high`/`low` 多原始序列、`sum`/`mid`/`spread`/`signal` 跨定义依赖、`const:2` 广播、三路输出以及 `multi_series`/无 primary 结果语义。
+- 完整执行仍通过 `UnifiedOperationEngine -> OperationRequest::Composite -> CompositeEngine`；本轮没有把旧 `crates/finkit-runtime` 单依赖 Executor 扩展成第二套生产 Runtime。
+- 本轮实际验证：`finkit-ffi-common` 80 tests passed、C ABI 31 tests passed、Python contract 2 passed、Node 13 passed。Go 测试在未完成 native 产物链接时无法编译，Java 因 Maven 不可用，.NET 因 SDK 不可用；这些均保持未验证状态。
 
 ### 当前基线与门禁状态（2026-09-19）
 

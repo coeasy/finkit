@@ -181,6 +181,22 @@ func TestSharedEngineContractV1(t *testing.T) {
 		t.Fatalf("composite execution failed: %v", err)
 	}
 	assertContractSeries(t, decodeContractResult(t, compositeResult)["values"].(map[string]interface{})["sma3"], composite["expected_primary"])
+
+	compositeMultiInput := fixture["composite_multi_input"].(map[string]interface{})
+	compositeMultiRequest, _ := json.Marshal(compositeMultiInput["request"])
+	compositeMultiResult, err := CompositeExecuteJSON(string(compositeMultiRequest))
+	if err != nil {
+		t.Fatalf("multi-input composite execution failed: %v", err)
+	}
+	multiPayload := decodeContractResult(t, compositeMultiResult)
+	if multiPayload["shape"] != "multi_series" || multiPayload["primary"] != nil {
+		t.Fatalf("multi-input composite shape: got shape=%v primary=%v", multiPayload["shape"], multiPayload["primary"])
+	}
+	multiValues := multiPayload["values"].(map[string]interface{})
+	expectedMulti := compositeMultiInput["expected"].(map[string]interface{})
+	for name, expected := range expectedMulti {
+		assertContractSeries(t, multiValues[name], expected)
+	}
 }
 
 func TestCurrentTalibCatalogContract(t *testing.T) {

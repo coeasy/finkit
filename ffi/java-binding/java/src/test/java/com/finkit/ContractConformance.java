@@ -149,6 +149,20 @@ public final class ContractConformance {
                         + "\"inputs\":[\"close\"],\"params\":[3]}],\"outputs\":[\"sma3\"]}");
         requireContains(composite, "\"sma3\":[null,null,2.0,3.0,4.0]");
 
+        String compositeMultiInput = Indicators.compositeExecuteJson(
+                "{\"schema_version\":1,\"scope\":\"FIXTURE@1d\",\"data_revision\":1,"
+                        + "\"inputs\":{\"high\":[11.0,12.0,13.0,14.0],\"low\":[9.0,10.0,11.0,12.0]},"
+                        + "\"definitions\":["
+                        + "{\"name\":\"spread\",\"function\":\"sub\",\"inputs\":[\"high\",\"low\"],\"params\":[]},"
+                        + "{\"name\":\"mid\",\"function\":\"div\",\"inputs\":[\"sum\",\"const:2\"],\"params\":[]},"
+                        + "{\"name\":\"sum\",\"function\":\"add\",\"inputs\":[\"high\",\"low\"],\"params\":[]},"
+                        + "{\"name\":\"signal\",\"function\":\"add\",\"inputs\":[\"mid\",\"spread\"],\"params\":[]}],"
+                        + "\"outputs\":[\"mid\",\"spread\",\"signal\"]}");
+        requireContains(compositeMultiInput, "\"shape\":\"multi_series\"");
+        requireContains(compositeMultiInput, "\"mid\":[10.0,11.0,12.0,13.0]");
+        requireContains(compositeMultiInput, "\"spread\":[2.0,2.0,2.0,2.0]");
+        requireContains(compositeMultiInput, "\"signal\":[12.0,13.0,14.0,15.0]");
+
         String catalog = Indicators.operationCatalogJson();
         requireContains(catalog, "\"schema_version\":1");
         requireContains(catalog, "\"name\":\"SMA\"");

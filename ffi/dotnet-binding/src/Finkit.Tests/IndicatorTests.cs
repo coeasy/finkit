@@ -107,6 +107,17 @@ public class IndicatorTests
         AssertContractSeries(
             compositeResult.RootElement.GetProperty("values").GetProperty("sma3"),
             composite.GetProperty("expected_primary"));
+
+        var compositeMultiInput = root.GetProperty("composite_multi_input");
+        using var compositeMultiResult = JsonDocument.Parse(
+            Indicators.CompositeExecuteJson(compositeMultiInput.GetProperty("request").GetRawText()));
+        Assert.Equal("multi_series", compositeMultiResult.RootElement.GetProperty("shape").GetString());
+        Assert.Equal(JsonValueKind.Null, compositeMultiResult.RootElement.GetProperty("primary").ValueKind);
+        var actualMultiValues = compositeMultiResult.RootElement.GetProperty("values");
+        foreach (var expected in compositeMultiInput.GetProperty("expected").EnumerateObject())
+        {
+            AssertContractSeries(actualMultiValues.GetProperty(expected.Name), expected.Value);
+        }
     }
 
     [Fact]

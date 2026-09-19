@@ -95,6 +95,29 @@
     },
     "expected_primary": [null, null, 2.0, 3.0, 4.0]
   },
+  "composite_multi_input": {
+    "request": {
+      "schema_version": 1,
+      "scope": "FIXTURE@1d",
+      "data_revision": 1,
+      "inputs": {
+        "high": [11.0, 12.0, 13.0, 14.0],
+        "low": [9.0, 10.0, 11.0, 12.0]
+      },
+      "definitions": [
+        {"name": "spread", "function": "sub", "inputs": ["high", "low"], "params": []},
+        {"name": "mid", "function": "div", "inputs": ["sum", "const:2"], "params": []},
+        {"name": "sum", "function": "add", "inputs": ["high", "low"], "params": []},
+        {"name": "signal", "function": "add", "inputs": ["mid", "spread"], "params": []}
+      ],
+      "outputs": ["mid", "spread", "signal"]
+    },
+    "expected": {
+      "mid": [10.0, 11.0, 12.0, 13.0],
+      "spread": [2.0, 2.0, 2.0, 2.0],
+      "signal": [12.0, 13.0, 14.0, 15.0]
+    }
+  },
   "composite_range": {
     "request": {
       "schema_version": 1,

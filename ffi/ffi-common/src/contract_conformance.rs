@@ -86,6 +86,20 @@ mod tests {
             fixture["composite"]["expected_primary"]
         );
 
+        let composite_multi_input = &fixture["composite_multi_input"];
+        let composite_multi_input_payload: Value = serde_json::from_str(
+            &evaluate_composite_json(&composite_multi_input["request"].to_string()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(composite_multi_input_payload["shape"], "multi_series");
+        assert!(composite_multi_input_payload["primary"].is_null());
+        for output in ["mid", "spread", "signal"] {
+            assert_eq!(
+                composite_multi_input_payload["values"][output],
+                composite_multi_input["expected"][output]
+            );
+        }
+
         let formula_stateful = &fixture["formula_stateful_stream"];
         let formula_first: Value = serde_json::from_str(
             &evaluate_formula_stream_json(&formula_stateful["request"].to_string()).unwrap(),
