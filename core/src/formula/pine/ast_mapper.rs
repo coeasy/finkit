@@ -791,7 +791,10 @@ mod pr14_semantic_mapper_v3_tests {
             + "v = ta.variance(close, 5)\n"
             + "c = ta.correlation(close, open, 5)\n"
             + "b = ta.barssince(close > open)\n"
-            + "tr = ta.tr()\n";
+            + "tr = ta.tr()\n"
+            + "u = ta.sum(close, 5)\n"
+            + "q = ta.cum(close)\n"
+            + "m = ta.median(close, 5)\n";
         let debug = mapped(&source);
         for name in [
             "WMA",
@@ -801,6 +804,9 @@ mod pr14_semantic_mapper_v3_tests {
             "CORREL",
             "BARSSINCE",
             "TRANGE",
+            "SUM",
+            "CUMSUM",
+            "MEDIAN",
         ] {
             assert!(
                 debug.contains(&format!("FunctionCall {{ name: \"{name}\"")),
@@ -818,7 +824,10 @@ mod pr14_semantic_mapper_v3_tests {
             + "v = ta.variance(close, 5)\n"
             + "c = ta.correlation(close, open, 5)\n"
             + "b = ta.barssince(close > open)\n"
-            + "tr = ta.tr()\n";
+            + "tr = ta.tr()\n"
+            + "u = ta.sum(close, 5)\n"
+            + "q = ta.cum(close)\n"
+            + "m = ta.median(close, 5)\n";
         let close = Array1::from_iter((0..32).map(|index| index as f64 + 10.0));
         let open = close.mapv(|value| value - 0.5);
         let high = close.mapv(|value| value + 1.0);
@@ -829,7 +838,7 @@ mod pr14_semantic_mapper_v3_tests {
         engine
             .eval_with_dialect(&source, FormulaDialect::Pine, &mut context)
             .expect("common Pine functions must execute");
-        for name in ["W", "H", "S", "V", "C", "B", "TR"] {
+        for name in ["W", "H", "S", "V", "C", "B", "TR", "U", "Q", "M"] {
             assert!(
                 context.variables.contains_key(name),
                 "runtime did not publish Pine output {name}"
