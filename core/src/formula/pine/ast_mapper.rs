@@ -1,5 +1,8 @@
 //! Maps Pine Script AST nodes to AlphaTA formula AST (`AstNode`).
 
+use std::cell::Cell;
+use std::collections::HashMap;
+
 use crate::formula::ast::{
     AstNode, BinaryOperator, ColorSpec, LineStyle, OutputModifier, PointStyle, UnaryOperator,
 };
@@ -45,7 +48,17 @@ pub fn map_pine_to_alphata_with_security(
     resolver: Option<&dyn PineSecurityResolver>,
 ) -> Result<AstNode, PineMapperError> {
     let table = PineBuiltinTable::new();
-    let mapper = PineAstMapper::new(&table, resolver);
+    let function_defs = pine
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            PineAstNode::FunctionDecl { name, params, body } => {
+                Some((name.clone(), (params.clone(), body.clone())))
+            }
+            _ => None,
+        })
+        .collect();
+    let mapper = PineAstMapper::new(&table, resolver, function_defs);
     let stmts = mapper.map_items(&pine.items)?;
     if stmts.len() == 1 {
         Ok(stmts[0].clone())
@@ -57,16 +70,21 @@ pub fn map_pine_to_alphata_with_security(
 struct PineAstMapper<'a> {
     table: &'a PineBuiltinTable,
     security_resolver: Option<&'a dyn PineSecurityResolver>,
+    function_defs: HashMap<String, (Vec<String>, FunctionBody)>,
+    expansion_depth: Cell<usize>,
 }
 
 impl<'a> PineAstMapper<'a> {
     fn new(
         table: &'a PineBuiltinTable,
         security_resolver: Option<&'a dyn PineSecurityResolver>,
+        function_defs: HashMap<String, (Vec<String>, FunctionBody)>,
     ) -> Self {
         Self {
             table,
             security_resolver,
+            function_defs,
+            expansion_depth: Cell::new(0),
         }
     }
 
@@ -78,6 +96,9 @@ impl<'a> PineAstMapper<'a> {
                 PineAstNode::IndicatorDecl { title, .. } | PineAstNode::StudyDecl { title, .. } => {
                     out.push(AstNode::StringLit(format!("INDICATOR:{}", title)));
                 }
+                // User-defined functions are declarations, not executable
+                // statements. Calls are expanded at their use sites below.
+                PineAstNode::FunctionDecl { .. } => {}
                 other => out.push(self.map_node(other)?),
             }
         }
@@ -95,20 +116,11 @@ impl<'a> PineAstMapper<'a> {
                 expr: Box::new(self.map_node(init)?),
             }),
             PineAstNode::InputDecl { default, .. } => self.map_node(default),
-            PineAstNode::FunctionDecl {
-                name,
-                params: _,
-                body,
-            } => {
-                let body_nodes = match body {
-                    FunctionBody::Expr(expr) => vec![self.map_node(expr)?],
-                    FunctionBody::Block(stmts) => self.map_items(stmts)?,
-                };
-                Ok(AstNode::FunctionCall {
-                    name: format!("FN_{}", name.to_uppercase()),
-                    args: body_nodes,
-                })
-            }
+            PineAstNode::FunctionDecl { name, .. } => Err(PineMapperError {
+                message: format!(
+                    "user-defined function declaration '{name}' cannot be evaluated as a statement"
+                ),
+            }),
             PineAstNode::Assignment {
                 name,
                 is_reassign: _,
@@ -451,6 +463,13 @@ impl<'a> PineAstMapper<'a> {
             return Ok(AstNode::Number(1.0));
         }
 
+        // Pine user-defined functions are expanded into the canonical formula
+        // AST. This keeps the runtime free of dynamic function dispatch while
+        // preserving series semantics for each call site.
+        if namespace.is_none() && self.function_defs.contains_key(name) {
+            return self.expand_user_function(name, args);
+        }
+
         // Special Pine na helpers
         if namespace.is_none() {
             match name {
@@ -628,6 +647,246 @@ impl<'a> PineAstMapper<'a> {
             })
         }
     }
+
+    fn expand_user_function(
+        &self,
+        name: &str,
+        args: &[(Option<String>, PineAstNode)],
+    ) -> Result<AstNode, PineMapperError> {
+        const MAX_EXPANSION_DEPTH: usize = 32;
+
+        if self.expansion_depth.get() >= MAX_EXPANSION_DEPTH {
+            return Err(PineMapperError {
+                message: format!(
+                    "user-defined function expansion exceeded {MAX_EXPANSION_DEPTH} levels (possible recursion at '{name}')"
+                ),
+            });
+        }
+
+        let (params, body) = self
+            .function_defs
+            .get(name)
+            .expect("function definition checked before expansion");
+        if params.len() != args.len() {
+            return Err(PineMapperError {
+                message: format!(
+                    "function '{name}' expects {} arguments but received {}",
+                    params.len(),
+                    args.len()
+                ),
+            });
+        }
+        if args.iter().any(|(arg_name, _)| arg_name.is_some()) {
+            return Err(PineMapperError {
+                message: format!(
+                    "function '{name}' only supports positional arguments in the Pine subset"
+                ),
+            });
+        }
+
+        let substitutions = params
+            .iter()
+            .zip(args.iter().map(|(_, value)| value))
+            .map(|(param, value)| (param.clone(), value.clone()))
+            .collect::<HashMap<_, _>>();
+        let expanded_body = substitute_pine_body(body, &substitutions);
+
+        self.expansion_depth.set(self.expansion_depth.get() + 1);
+        let result = match expanded_body {
+            FunctionBody::Expr(expr) => self.map_node(&expr),
+            FunctionBody::Block(stmts) => self.map_block_as_expr(&stmts),
+        };
+        self.expansion_depth.set(self.expansion_depth.get() - 1);
+        result
+    }
+}
+
+fn substitute_pine_body(
+    body: &FunctionBody,
+    substitutions: &HashMap<String, PineAstNode>,
+) -> FunctionBody {
+    match body {
+        FunctionBody::Expr(expr) => {
+            FunctionBody::Expr(Box::new(substitute_pine_node(expr, substitutions)))
+        }
+        FunctionBody::Block(stmts) => FunctionBody::Block(
+            stmts
+                .iter()
+                .map(|stmt| substitute_pine_node(stmt, substitutions))
+                .collect(),
+        ),
+    }
+}
+
+fn substitute_pine_node(
+    node: &PineAstNode,
+    substitutions: &HashMap<String, PineAstNode>,
+) -> PineAstNode {
+    match node {
+        PineAstNode::VersionAnnotation(version) => PineAstNode::VersionAnnotation(*version),
+        PineAstNode::IndicatorDecl { title, args } => PineAstNode::IndicatorDecl {
+            title: title.clone(),
+            args: args
+                .iter()
+                .map(|(name, value)| (name.clone(), substitute_pine_node(value, substitutions)))
+                .collect(),
+        },
+        PineAstNode::StudyDecl { title, args } => PineAstNode::StudyDecl {
+            title: title.clone(),
+            args: args
+                .iter()
+                .map(|(name, value)| (name.clone(), substitute_pine_node(value, substitutions)))
+                .collect(),
+        },
+        PineAstNode::VarDecl {
+            is_varip,
+            type_qualifier,
+            name,
+            init,
+        } => PineAstNode::VarDecl {
+            is_varip: *is_varip,
+            type_qualifier: *type_qualifier,
+            name: name.clone(),
+            init: Box::new(substitute_pine_node(init, substitutions)),
+        },
+        PineAstNode::InputDecl {
+            input_type,
+            default,
+            args,
+        } => PineAstNode::InputDecl {
+            input_type: input_type.clone(),
+            default: Box::new(substitute_pine_node(default, substitutions)),
+            args: args
+                .iter()
+                .map(|value| substitute_pine_node(value, substitutions))
+                .collect(),
+        },
+        PineAstNode::FunctionDecl { name, params, body } => PineAstNode::FunctionDecl {
+            name: name.clone(),
+            params: params.clone(),
+            body: substitute_pine_body(body, substitutions),
+        },
+        PineAstNode::Assignment {
+            name,
+            is_reassign,
+            expr,
+        } => PineAstNode::Assignment {
+            name: name.clone(),
+            is_reassign: *is_reassign,
+            expr: Box::new(substitute_pine_node(expr, substitutions)),
+        },
+        PineAstNode::TupleAssign { names, expr } => PineAstNode::TupleAssign {
+            names: names.clone(),
+            expr: Box::new(substitute_pine_node(expr, substitutions)),
+        },
+        PineAstNode::IfStmt {
+            cond,
+            then_body,
+            else_body,
+        } => PineAstNode::IfStmt {
+            cond: Box::new(substitute_pine_node(cond, substitutions)),
+            then_body: then_body
+                .iter()
+                .map(|stmt| substitute_pine_node(stmt, substitutions))
+                .collect(),
+            else_body: else_body.as_ref().map(|body| {
+                body.iter()
+                    .map(|stmt| substitute_pine_node(stmt, substitutions))
+                    .collect()
+            }),
+        },
+        PineAstNode::ForStmt {
+            var,
+            start,
+            end,
+            step,
+            body,
+        } => PineAstNode::ForStmt {
+            var: var.clone(),
+            start: Box::new(substitute_pine_node(start, substitutions)),
+            end: Box::new(substitute_pine_node(end, substitutions)),
+            step: step
+                .as_ref()
+                .map(|value| Box::new(substitute_pine_node(value, substitutions))),
+            body: body
+                .iter()
+                .map(|stmt| substitute_pine_node(stmt, substitutions))
+                .collect(),
+        },
+        PineAstNode::WhileStmt { cond, body } => PineAstNode::WhileStmt {
+            cond: Box::new(substitute_pine_node(cond, substitutions)),
+            body: body
+                .iter()
+                .map(|stmt| substitute_pine_node(stmt, substitutions))
+                .collect(),
+        },
+        PineAstNode::PlotCall { value, args } => PineAstNode::PlotCall {
+            value: Box::new(substitute_pine_node(value, substitutions)),
+            args: substitute_pine_args(args, substitutions),
+        },
+        PineAstNode::HlineCall { price, args } => PineAstNode::HlineCall {
+            price: Box::new(substitute_pine_node(price, substitutions)),
+            args: substitute_pine_args(args, substitutions),
+        },
+        PineAstNode::FillCall { plot1, plot2, args } => PineAstNode::FillCall {
+            plot1: Box::new(substitute_pine_node(plot1, substitutions)),
+            plot2: Box::new(substitute_pine_node(plot2, substitutions)),
+            args: substitute_pine_args(args, substitutions),
+        },
+        PineAstNode::Expr(expr) => {
+            PineAstNode::Expr(Box::new(substitute_pine_node(expr, substitutions)))
+        }
+        PineAstNode::Number(value) => PineAstNode::Number(*value),
+        PineAstNode::StringLit(value) => PineAstNode::StringLit(value.clone()),
+        PineAstNode::NaLiteral => PineAstNode::NaLiteral,
+        PineAstNode::Identifier(identifier) => substitutions
+            .get(identifier)
+            .cloned()
+            .unwrap_or_else(|| PineAstNode::Identifier(identifier.clone())),
+        PineAstNode::BinaryOp { op, left, right } => PineAstNode::BinaryOp {
+            op: *op,
+            left: Box::new(substitute_pine_node(left, substitutions)),
+            right: Box::new(substitute_pine_node(right, substitutions)),
+        },
+        PineAstNode::UnaryOp { op, expr } => PineAstNode::UnaryOp {
+            op: *op,
+            expr: Box::new(substitute_pine_node(expr, substitutions)),
+        },
+        PineAstNode::Ternary {
+            cond,
+            then_expr,
+            else_expr,
+        } => PineAstNode::Ternary {
+            cond: Box::new(substitute_pine_node(cond, substitutions)),
+            then_expr: Box::new(substitute_pine_node(then_expr, substitutions)),
+            else_expr: Box::new(substitute_pine_node(else_expr, substitutions)),
+        },
+        PineAstNode::FunctionCall {
+            namespace,
+            name,
+            args,
+        } => PineAstNode::FunctionCall {
+            namespace: namespace.clone(),
+            name: name.clone(),
+            args: substitute_pine_args(args, substitutions),
+        },
+        PineAstNode::IndexAccess { array, index } => PineAstNode::IndexAccess {
+            array: Box::new(substitute_pine_node(array, substitutions)),
+            index: Box::new(substitute_pine_node(index, substitutions)),
+        },
+        PineAstNode::BarstateAccess { field } => PineAstNode::BarstateAccess {
+            field: field.clone(),
+        },
+    }
+}
+
+fn substitute_pine_args(
+    args: &[(Option<String>, PineAstNode)],
+    substitutions: &HashMap<String, PineAstNode>,
+) -> Vec<(Option<String>, PineAstNode)> {
+    args.iter()
+        .map(|(name, value)| (name.clone(), substitute_pine_node(value, substitutions)))
+        .collect()
 }
 
 /// Build an `Assignment` node, normalizing the target name the same way
@@ -998,6 +1257,59 @@ mod pr14_semantic_mapper_v3_tests {
         assert_eq!(fixed[1], 2.0);
         assert_eq!(fixed[2], 2.0);
         assert_eq!(fixed[3], 4.0);
+    }
+
+    #[test]
+    fn pine_user_defined_expression_function_is_inlined_and_executes() {
+        let source = "//@version=5\nindicator(\"Fn\")\n".to_string()
+            + "add(x, y) => x + y\n"
+            + "value = add(close, open)\n"
+            + "plot(value, title=\"ADD\")\n";
+        let pine = parse_pine(&source).unwrap();
+        let ast = map_pine_to_alphata(&pine).unwrap();
+        let debug = format!("{ast:?}");
+        assert!(
+            !debug.contains("FN_ADD"),
+            "function call was not inlined: {debug}"
+        );
+        assert!(debug.contains("Variable(\"CLOSE\")"));
+        assert!(debug.contains("Variable(\"OPEN\")"));
+
+        let close = Array1::from_iter((0..8).map(|index| index as f64 + 10.0));
+        let open = close.mapv(|value| value - 0.5);
+        let mut context = FormulaContext::new(
+            open.clone(),
+            close.clone(),
+            close.clone(),
+            close.clone(),
+            Array1::ones(close.len()),
+            None,
+        );
+        FormulaEngine::new()
+            .eval_with_dialect(&source, FormulaDialect::Pine, &mut context)
+            .expect("inlined Pine function must execute");
+        let value = context
+            .variables
+            .get("VALUE")
+            .expect("function result assignment must exist");
+        assert_eq!(value[0], 19.5);
+        assert_eq!(value[7], 33.5);
+    }
+
+    #[test]
+    fn pine_user_defined_function_validates_arity_and_recursion() {
+        let arity =
+            parse_pine("//@version=5\nindicator(\"Fn\")\nadd(x, y) => x + y\nvalue = add(close)\n")
+                .unwrap();
+        let error = map_pine_to_alphata(&arity).unwrap_err();
+        assert!(error.message.contains("expects 2 arguments but received 1"));
+
+        let recursive = parse_pine(
+            "//@version=5\nindicator(\"Fn\")\nloop(x) => loop(x)\nvalue = loop(close)\n",
+        )
+        .unwrap();
+        let error = map_pine_to_alphata(&recursive).unwrap_err();
+        assert!(error.message.contains("possible recursion at 'loop'"));
     }
 }
 
