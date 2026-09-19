@@ -401,8 +401,9 @@ pub fn midpoint_into(input: &[f64], period: usize, output: &mut [f64]) -> Result
 
 /// Fixed-period MIDPOINT kernel for the benchmark-critical 14-bar path.
 ///
-/// The bounded scan avoids the callback and queue bookkeeping of the generic
-/// rolling extrema visitor while retaining the same newest-value tie rules.
+/// The block scan avoids repeating fourteen comparisons for every output row.
+/// Prefix/suffix extrema produce all overlapping windows in linear time while
+/// keeping the fixed-period path allocation-free.
 #[inline]
 pub fn midpoint14_into(input: &[f64], output: &mut [f64]) -> Result<()> {
     const PERIOD: usize = 14;
@@ -418,36 +419,84 @@ pub fn midpoint14_into(input: &[f64], output: &mut [f64]) -> Result<()> {
     crate::utils::simd_fill_nan(&mut output[..PERIOD - 1]);
     let input_ptr = input.as_ptr();
     let output_ptr = output.as_mut_ptr();
+
+    let mut suffix_high = [0.0f64; PERIOD];
+    let mut suffix_low = [0.0f64; PERIOD];
+    let mut prefix_high = [0.0f64; PERIOD];
+    let mut prefix_low = [0.0f64; PERIOD];
+
+    macro_rules! emit {
+        ($index:expr, $highest:expr, $lowest:expr) => {
+            *output_ptr.add($index) = ($highest + $lowest) * 0.5;
+        };
+    }
+
     unsafe {
-        for index in (PERIOD - 1)..input.len() {
-            let window = input_ptr.add(index + 1 - PERIOD);
-            let mut highest = *window;
+        let mut block_start = 0usize;
+        let mut today = PERIOD - 1;
+        while today < input.len() {
+            let block_end = block_start + PERIOD - 1;
+            let mut highest = *input_ptr.add(block_end);
             let mut lowest = highest;
-            macro_rules! visit {
-                ($offset:expr) => {
-                    let value = *window.add($offset);
-                    if value > highest {
-                        highest = value;
-                    }
-                    if value < lowest {
-                        lowest = value;
-                    }
-                };
+            suffix_high[PERIOD - 1] = highest;
+            suffix_low[PERIOD - 1] = lowest;
+            let mut offset = PERIOD - 1;
+            while offset > 0 {
+                offset -= 1;
+                let value = *input_ptr.add(block_start + offset);
+                if value > highest {
+                    highest = value;
+                }
+                if value < lowest {
+                    lowest = value;
+                }
+                suffix_high[offset] = highest;
+                suffix_low[offset] = lowest;
             }
-            visit!(1);
-            visit!(2);
-            visit!(3);
-            visit!(4);
-            visit!(5);
-            visit!(6);
-            visit!(7);
-            visit!(8);
-            visit!(9);
-            visit!(10);
-            visit!(11);
-            visit!(12);
-            visit!(13);
-            *output_ptr.add(index) = (highest + lowest) * 0.5;
+            // The first complete window is the first block itself.
+            emit!(today, suffix_high[0], suffix_low[0]);
+
+            let block_next = block_start + PERIOD;
+            if block_next >= input.len() {
+                break;
+            }
+            let n_available = (input.len() - block_next).min(PERIOD - 1);
+            highest = *input_ptr.add(block_next);
+            lowest = highest;
+            prefix_high[0] = highest;
+            prefix_low[0] = lowest;
+            let mut prefix_len = 1usize;
+            while prefix_len < n_available {
+                let value = *input_ptr.add(block_next + prefix_len);
+                if value > highest {
+                    highest = value;
+                }
+                if value < lowest {
+                    lowest = value;
+                }
+                prefix_high[prefix_len] = highest;
+                prefix_low[prefix_len] = lowest;
+                prefix_len += 1;
+            }
+
+            let mut offset = 1usize;
+            while offset <= n_available {
+                let combined_high = if prefix_high[offset - 1] > suffix_high[offset] {
+                    prefix_high[offset - 1]
+                } else {
+                    suffix_high[offset]
+                };
+                let combined_low = if prefix_low[offset - 1] < suffix_low[offset] {
+                    prefix_low[offset - 1]
+                } else {
+                    suffix_low[offset]
+                };
+                emit!(today + offset, combined_high, combined_low);
+                offset += 1;
+            }
+
+            block_start += PERIOD;
+            today += n_available + 1;
         }
     }
     Ok(())
@@ -2223,6 +2272,25 @@ mod tests {
         assert!(result[0].is_nan());
         assert!(result[1].is_nan());
         assert_relative_eq!(result[2], 2.0, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn test_midpoint14_into_matches_generic_across_block_boundaries() {
+        for length in [14, 15, 27, 28, 29, 64] {
+            let input: Vec<f64> = (0..length)
+                .map(|index| 100.0 + ((index * 17) % 23) as f64)
+                .collect();
+            let expected = midpoint(&input, 14).unwrap();
+            let mut actual = vec![0.0; input.len()];
+            midpoint14_into(&input, &mut actual).unwrap();
+            for (expected, actual) in expected.iter().zip(actual.iter()) {
+                if expected.is_nan() {
+                    assert!(actual.is_nan());
+                } else {
+                    assert_relative_eq!(*actual, *expected, epsilon = 1e-12);
+                }
+            }
+        }
     }
 
     #[test]
