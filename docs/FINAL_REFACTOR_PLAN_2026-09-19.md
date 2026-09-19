@@ -166,8 +166,8 @@ truth source。`scripts/gen_talib_numeric_contract.py --check` 会重新读取
   保留显式 security resolver，以维持 provider 缺失、时间对齐和 host-required
   错误语义，不将 provider 访问伪装成普通变量。
 - Pine 子集本轮新增 `ta.wma`、`ta.hma`、`ta.stdev`、`ta.variance`、
-  `ta.correlation`、`ta.barssince`、`ta.tr`、`ta.sum`、`ta.cum` 和 `ta.median`
-  的 catalog mapping；其中 `ta.tr` 显式展开为 OHLC
+  `ta.correlation`、`ta.barssince`、`ta.tr`、`ta.sum`、`ta.cum`、`ta.median`
+  和 `ta.rma` 的 catalog mapping；其中 `ta.tr` 显式展开为 OHLC
   输入后再 lower 到 Core `TRANGE`，其余函数通过统一 Formula runtime 执行。
   AST lowering 与 `FormulaEngine` 数值执行回归均已覆盖；未经过参考向量和语义
   矩阵验证的 Pine 函数不宣称为生产支持。

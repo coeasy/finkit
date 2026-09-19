@@ -428,6 +428,14 @@ fn default_mappings() -> Vec<BuiltinMapping> {
         },
         BuiltinMapping {
             namespace: Some("ta".to_string()),
+            pine_name: "rma".to_string(),
+            alpha_ta_name: "RMA".to_string(),
+            multi_return: false,
+            return_names: vec!["RMA".to_string()],
+            description: "Wilder moving average — ta.rma(source, length) → RMA".to_string(),
+        },
+        BuiltinMapping {
+            namespace: Some("ta".to_string()),
             pine_name: "highest".to_string(),
             alpha_ta_name: "HHV".to_string(),
             multi_return: false,

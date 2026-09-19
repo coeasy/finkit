@@ -106,6 +106,42 @@ fn fn_ema(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, For
     }
 }
 
+/// RMA(X, N): Wilder's moving average, as used by Pine `ta.rma`.
+/// The first value is seeded from the first N non-NaN observations; later
+/// values use the Wilder recurrence `prev + (x - prev) / N`.
+fn fn_rma(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+    ensure_args_len("RMA", args, 2)?;
+    let input = &args[0];
+    let n = extract_n(args, 1, "RMA")?;
+    let mut output = nan_vec(ctx.data_len);
+    let mut seed_sum = 0.0;
+    let mut seed_count = 0usize;
+    let mut previous = None;
+
+    for i in 0..ctx.data_len {
+        let value = input[i];
+        if value.is_nan() {
+            continue;
+        }
+
+        if let Some(prev) = previous {
+            let current = prev + (value - prev) / n as f64;
+            output[i] = current;
+            previous = Some(current);
+        } else {
+            seed_sum += value;
+            seed_count += 1;
+            if seed_count == n {
+                let current = seed_sum / n as f64;
+                output[i] = current;
+                previous = Some(current);
+            }
+        }
+    }
+
+    Ok(output)
+}
+
 fn fn_sma(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     if args.len() < 2 || args.len() > 3 {
         return Err(FormulaError::InvalidParameter(format!(
@@ -5703,6 +5739,7 @@ pub fn get_builtin_functions() -> HashMap<String, FormulaFn> {
 
     map.insert("MA".to_string(), fn_ma);
     map.insert("EMA".to_string(), fn_ema);
+    map.insert("RMA".to_string(), fn_rma);
     map.insert("SMA".to_string(), fn_sma);
     map.insert("WMA".to_string(), fn_wma);
     map.insert("DMA".to_string(), fn_dma);
