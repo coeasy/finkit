@@ -267,6 +267,13 @@ truth source。`scripts/gen_talib_numeric_contract.py --check` 会重新读取
 - 基于 `881f7d3` 重建的 Windows ABI3 wheel 复测：96 个指标、24 个公式全部 `parity=True`，`errors=[]`、`parity_failures=[]`；指标几何平均 `1.7433x`，100K `1.8398x`，1M `1.5878x`，持续低于 `0.95x` 的指标为空。
 - 性能 release gate 仍未通过：top20 最低 `1.0362x`，门槛为 `1.05x`。本轮完整 Rust/FFI 回归仍为 `finkit 2947 passed / 1 ignored`、`finkit-ffi-common 80 passed / 1 ignored doc`。不得将该结果表述为“全面超过 TA-Lib”。
 
+### 当前提交宿主重建复核（`7582c8f`，2026-09-19）
+
+- Node binding 使用 Rust `1.98.1` 从当前源码重建 Windows native module，随后运行 `npm test`：14 passed，包含共享多目标 Factor 向量和 201 项 TA-Lib numeric contract。
+- Python 使用当前源码构建并安装 `finkit-0.1.15-cp38-abi3-win_amd64.whl`：
+  `test_engine_contract_v1.py` 为 2 passed，`test_talib_numeric_contract.py` 为 1 passed。
+- 本机 Go/Java/.NET 仍分别受 CGO/native 链接产物、Maven、.NET SDK 限制；这些语言的共享 fixture 接入已提交，但没有将未运行的宿主测试记为通过。
+
 ### Runtime typed execution chain 复核（`18bff08`，2026-09-19）
 
 - `crates/finkit-runtime` 已从描述字符串骨架收敛为可执行链：`FactorProvider -> FactorRegistry -> Scheduler -> Executor -> FactorCache`。Factory/Provider 返回 `Box<dyn Factor>`，不再返回 `EMA(period=20)` 这类不可执行字符串。
