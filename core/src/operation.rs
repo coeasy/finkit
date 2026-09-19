@@ -816,6 +816,26 @@ impl UnifiedOperationEngine {
         &mut self.composite
     }
 
+    /// Prepare a Composite streaming plan from the canonical Runtime engine.
+    ///
+    /// The stream object owns an engine snapshot because it may outlive the
+    /// short mutable borrow used by the dispatcher. The snapshot is cloned
+    /// from the registered Runtime engine, so custom functions and stateful
+    /// specifications are preserved instead of silently falling back to a
+    /// fresh built-in-only `CompositeEngine` in a binding.
+    pub fn prepare_composite_stream(
+        &mut self,
+        definitions: &[CompositeDefinition],
+        outputs: &[&str],
+    ) -> Result<(crate::composite::CompiledCompositePlan, CompositeEngine), OperationExecutionError>
+    {
+        let plan = self
+            .composite
+            .compile_cached(definitions, outputs)
+            .map_err(OperationExecutionError::Composite)?;
+        Ok((plan, self.composite.clone()))
+    }
+
     /// Execute a Formula, Factor, or Composite request using one result contract.
     pub fn execute<'a>(
         &mut self,
@@ -2641,6 +2661,34 @@ mod tests {
         assert_eq!(engine.composite_cache_stats().hits, 1);
         assert_eq!(engine.composite_cache_stats().misses, 1);
         assert_eq!(engine.composite_cache_stats().entries, 1);
+    }
+
+    #[test]
+    fn unified_engine_prepares_composite_stream_from_registered_runtime() {
+        let definitions = [CompositeDefinition::new(
+            "sum",
+            CompositeExpr::Op {
+                op: CompositeOp::Add,
+                inputs: vec![CompositeExpr::series("close"), CompositeExpr::Constant(1.0)],
+            },
+        )];
+        let outputs = ["sum"];
+        let mut engine = UnifiedOperationEngine::new(FactorRegistry::new());
+        let (plan, stream_engine) = engine
+            .prepare_composite_stream(&definitions, &outputs)
+            .unwrap();
+
+        assert_eq!(engine.composite_engine().compiled_plan_count(), 1);
+        assert_eq!(plan.required_raw_inputs(), &["close".to_string()]);
+        let mut stream = plan.stream(stream_engine).unwrap();
+        let emitted = stream
+            .push_batch(&BTreeMap::from([(
+                "close".to_string(),
+                vec![1.0, 2.0, 3.0],
+            )]))
+            .unwrap();
+        assert_eq!(stream.rows(), 3);
+        assert_eq!(emitted["sum"], vec![2.0, 3.0, 4.0]);
     }
 
     #[test]

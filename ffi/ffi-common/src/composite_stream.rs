@@ -1,10 +1,11 @@
 //! Shared JSON contract for bounded Composite streaming and checkpoints.
 
+use crate::shared_runtime::with_unified_engine;
 use crate::stream_contract::{
     annotate_checkpoint, require_scope_and_revision, validate_checkpoint_metadata,
 };
 use finkit::composite::{
-    CompositeDefinition, CompositeEngine, CompositeExpr, CompositeOp, CompositeStreamCheckpoint,
+    CompositeDefinition, CompositeExpr, CompositeOp, CompositeStreamCheckpoint,
 };
 use finkit::stateful_composite::StatefulCompositeCheckpoint;
 use serde::Deserialize;
@@ -133,10 +134,11 @@ pub fn evaluate_composite_stream_json(request: &str) -> Result<String, String> {
         return Err("composite stream outputs must not be empty".to_string());
     }
     let output_refs = output_names.iter().map(String::as_str).collect::<Vec<_>>();
-    let engine = CompositeEngine::new();
-    let plan = engine
-        .compile(&definitions, &output_refs)
-        .map_err(|error| error.to_string())?;
+    let (plan, stream_engine) = with_unified_engine(|unified| {
+        unified
+            .prepare_composite_stream(&definitions, &output_refs)
+            .map_err(|error| error.to_string())
+    })?;
 
     let mode = request
         .mode
@@ -190,7 +192,9 @@ pub fn evaluate_composite_stream_json(request: &str) -> Result<String, String> {
         return Err(format!("unsupported composite stream mode: {mode}"));
     }
 
-    let mut stream = plan.stream(engine).map_err(|error| error.to_string())?;
+    let mut stream = plan
+        .stream(stream_engine)
+        .map_err(|error| error.to_string())?;
 
     if let Some(checkpoint) = request.checkpoint {
         let checkpoint: CompositeStreamCheckpointRequest =

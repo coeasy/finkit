@@ -236,6 +236,10 @@ truth source。`scripts/gen_talib_numeric_contract.py --check` 会重新读取
   并按目标集合建立 batch result cache；重复依赖只计算一次，重复请求直接命中
   batch 缓存；canonical target 集合按稳定顺序归一化，反序请求也复用同一缓存，
   不再由 FFI 按 target 循环调用单目标入口。
+- Composite bounded/stateful stream 现在通过
+  `UnifiedOperationEngine::prepare_composite_stream()` 编译计划，并从已注册的
+  Runtime 克隆 stream engine；FFI 不再以 `CompositeEngine::new()` 重建仅含内置函数的
+  第二条初始化路径，注册的自定义函数和 stateful spec 不会在流式入口丢失。
 - `engine_contract_v1.json` 新增 `factor_multi_target`，覆盖 `momentum_5` 与依赖它的
   `reversal_5`；Rust FFI common、Python、Node 和 C ABI 当前源码已实际执行该向量，
   Go/Java/.NET 测试入口也已接入同一 fixture。
