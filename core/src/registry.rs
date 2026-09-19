@@ -1325,6 +1325,61 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             deterministic: true,
         },
         FunctionSpec {
+            name: "RMA",
+            aliases: &[],
+            category: FunctionCategory::Overlap,
+            input: InputKind::Series,
+            params: PERIOD_REQUIRED,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "CUMSUM",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Series,
+            params: &[],
+            outputs: 1,
+            lookback: LookbackSpec::None,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "MEDIAN",
+            aliases: &[],
+            category: FunctionCategory::Statistics,
+            input: InputKind::Series,
+            params: PERIOD_REQUIRED,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: false,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "FIXNAN",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Series,
+            params: &[],
+            outputs: 1,
+            lookback: LookbackSpec::None,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "ROLLING_RANGE",
+            aliases: &[],
+            category: FunctionCategory::Statistics,
+            input: InputKind::Series,
+            params: PERIOD_REQUIRED,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: false,
+            deterministic: true,
+        },
+        FunctionSpec {
             name: "MAX",
             aliases: &[],
             category: FunctionCategory::Formula,
@@ -1615,6 +1670,22 @@ mod tests {
         for name in ["REF", "HHV", "LLV", "COUNT", "BARSLAST", "CROSS", "IF"] {
             assert!(registry.get(name).is_some(), "missing metadata for {name}");
         }
+    }
+
+    #[test]
+    fn pine_formula_runtime_extensions_are_discoverable() {
+        let registry = builtin_function_registry();
+        for name in ["RMA", "CUMSUM", "MEDIAN", "FIXNAN", "ROLLING_RANGE"] {
+            let spec = registry
+                .get(name)
+                .unwrap_or_else(|| panic!("missing metadata for {name}"));
+            assert!(spec.deterministic, "{name} must be deterministic");
+        }
+        assert_eq!(
+            registry.get("RMA").unwrap().lookback,
+            LookbackSpec::PeriodMinusOne
+        );
+        assert_eq!(registry.get("FIXNAN").unwrap().params.len(), 0);
     }
 
     #[test]

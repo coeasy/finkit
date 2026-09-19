@@ -222,6 +222,23 @@ fn fn_isna(_ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, F
     Ok(out)
 }
 
+/// `FIXNAN(x)` — forward-fill missing values, preserving leading NaN values.
+/// This is the Pine `fixnan` contract and is intentionally distinct from a
+/// zero-fill or unconditional carry-forward transform.
+fn fn_fixnan(_ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+    ensure_args_len("FIXNAN", args, 1)?;
+    let input = &args[0];
+    let mut out = nan_vec(input.len());
+    let mut previous = f64::NAN;
+    for (index, &value) in input.iter().enumerate() {
+        if !value.is_nan() {
+            previous = value;
+        }
+        out[index] = previous;
+    }
+    Ok(out)
+}
+
 /// `VWMA(close, volume, n)` — volume-weighted moving average.
 fn fn_vwma_indicator(
     ctx: &FormulaContext,
@@ -5524,6 +5541,30 @@ fn fn_median(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, 
     Ok(result)
 }
 
+/// ROLLING_RANGE(X, N): rolling maximum minus rolling minimum.
+/// Kept separate from the TDX `RANGE(X, A, B)` predicate so dialects cannot
+/// silently inherit incompatible arity or boolean semantics.
+fn fn_rolling_range(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
+    ensure_args_len("ROLLING_RANGE", args, 2)?;
+    let input = &args[0];
+    let n = extract_n(args, 1, "ROLLING_RANGE")?;
+    let values = input.as_slice().unwrap_or_default();
+    let max = lib_stat::rolling_max(values, n)
+        .map_err(|_| FormulaError::InvalidParameter("ROLLING_RANGE window is invalid".into()))?;
+    let min = lib_stat::rolling_min(values, n)
+        .map_err(|_| FormulaError::InvalidParameter("ROLLING_RANGE window is invalid".into()))?;
+    let mut out = nan_vec(ctx.data_len);
+    for index in 0..ctx.data_len {
+        if max[index].is_finite() && min[index].is_finite() {
+            out[index] = max[index] - min[index];
+        }
+    }
+    Ok(out)
+}
+
 // === Higher-order statistics ===
 
 /// SKEW(X, N): Rolling skewness over N-bar window
@@ -5849,6 +5890,7 @@ pub fn get_builtin_functions() -> HashMap<String, FormulaFn> {
     // Pine-compat helpers used by the formula engine's Pine Script mapper.
     map.insert("MATH_AVG".to_string(), fn_math_avg);
     map.insert("ISNA".to_string(), fn_isna);
+    map.insert("FIXNAN".to_string(), fn_fixnan);
     map.insert("VWMA".to_string(), fn_vwma_indicator);
 
     map.insert("CCI".to_string(), fn_cci);
@@ -5933,6 +5975,7 @@ pub fn get_builtin_functions() -> HashMap<String, FormulaFn> {
     map.insert("SLOPE".to_string(), fn_slope);
     map.insert("FORCAST".to_string(), fn_forcast);
     map.insert("RANGE".to_string(), fn_range);
+    map.insert("ROLLING_RANGE".to_string(), fn_rolling_range);
     map.insert("CONST".to_string(), fn_const_val);
     map.insert("SUMBARS".to_string(), fn_sumbars);
     map.insert("INTPART".to_string(), fn_intpart);

@@ -795,7 +795,9 @@ mod pr14_semantic_mapper_v3_tests {
             + "u = ta.sum(close, 5)\n"
             + "q = ta.cum(close)\n"
             + "m = ta.median(close, 5)\n"
-            + "a = ta.rma(close, 5)\n";
+            + "a = ta.rma(close, 5)\n"
+            + "t = ta.range(close, 5)\n"
+            + "z = fixnan(close)\n";
         let debug = mapped(&source);
         for name in [
             "WMA",
@@ -809,6 +811,8 @@ mod pr14_semantic_mapper_v3_tests {
             "CUMSUM",
             "MEDIAN",
             "RMA",
+            "ROLLING_RANGE",
+            "FIXNAN",
         ] {
             assert!(
                 debug.contains(&format!("FunctionCall {{ name: \"{name}\"")),
@@ -830,7 +834,9 @@ mod pr14_semantic_mapper_v3_tests {
             + "u = ta.sum(close, 5)\n"
             + "q = ta.cum(close)\n"
             + "m = ta.median(close, 5)\n"
-            + "a = ta.rma(close, 5)\n";
+            + "a = ta.rma(close, 5)\n"
+            + "t = ta.range(close, 5)\n"
+            + "z = fixnan(close)\n";
         let close = Array1::from_iter((0..32).map(|index| index as f64 + 10.0));
         let open = close.mapv(|value| value - 0.5);
         let high = close.mapv(|value| value + 1.0);
@@ -841,7 +847,9 @@ mod pr14_semantic_mapper_v3_tests {
         engine
             .eval_with_dialect(&source, FormulaDialect::Pine, &mut context)
             .expect("common Pine functions must execute");
-        for name in ["W", "H", "S", "V", "C", "B", "TR", "U", "Q", "M", "A"] {
+        for name in [
+            "W", "H", "S", "V", "C", "B", "TR", "U", "Q", "M", "A", "T", "Z",
+        ] {
             assert!(
                 context.variables.contains_key(name),
                 "runtime did not publish Pine output {name}"
@@ -850,6 +858,28 @@ mod pr14_semantic_mapper_v3_tests {
         let rma = context.variables.get("A").expect("RMA output must exist");
         assert!((rma[4] - 12.0).abs() < 1e-12);
         assert!((rma[5] - 12.6).abs() < 1e-12);
+        let range = context
+            .variables
+            .get("T")
+            .expect("rolling range output must exist");
+        assert!((range[4] - 4.0).abs() < 1e-12);
+
+        let missing = Array1::from_vec(vec![f64::NAN, 2.0, f64::NAN, 4.0]);
+        let mut fix_context = FormulaContext::new(
+            missing.clone(),
+            missing.clone(),
+            missing.clone(),
+            missing,
+            Array1::ones(4),
+            None,
+        );
+        let fixed = engine
+            .eval_with_dialect("fixnan(CLOSE)", FormulaDialect::Pine, &mut fix_context)
+            .expect("Pine fixnan must execute");
+        assert!(fixed[0].is_nan());
+        assert_eq!(fixed[1], 2.0);
+        assert_eq!(fixed[2], 2.0);
+        assert_eq!(fixed[3], 4.0);
     }
 }
 

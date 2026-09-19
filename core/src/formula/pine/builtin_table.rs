@@ -428,6 +428,15 @@ fn default_mappings() -> Vec<BuiltinMapping> {
         },
         BuiltinMapping {
             namespace: Some("ta".to_string()),
+            pine_name: "range".to_string(),
+            alpha_ta_name: "ROLLING_RANGE".to_string(),
+            multi_return: false,
+            return_names: vec!["ROLLING_RANGE".to_string()],
+            description: "Rolling high-low range — ta.range(source, length) → ROLLING_RANGE"
+                .to_string(),
+        },
+        BuiltinMapping {
+            namespace: Some("ta".to_string()),
             pine_name: "rma".to_string(),
             alpha_ta_name: "RMA".to_string(),
             multi_return: false,
