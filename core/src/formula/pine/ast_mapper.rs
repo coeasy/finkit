@@ -519,6 +519,12 @@ impl<'a> PineAstMapper<'a> {
         // (e.g. `ta.atr(length)`); AlphaTA functions expect OHLCV-expanded args.
         if namespace == Some("ta") {
             match name {
+                "tr" => {
+                    return Ok(AstNode::FunctionCall {
+                        name: "TRANGE".to_string(),
+                        args: vec![v("HIGH"), v("LOW"), v("CLOSE")],
+                    });
+                }
                 "atr" | "natr" => {
                     let n = mapped_args.get(0).cloned().unwrap_or(AstNode::Number(14.0));
                     return Ok(AstNode::FunctionCall {
@@ -733,6 +739,8 @@ mod tests {
 mod pr14_semantic_mapper_v3_tests {
     use super::*;
     use crate::formula::pine::parser::parse_pine;
+    use crate::formula::{FormulaContext, FormulaDialect, FormulaEngine};
+    use ndarray::Array1;
 
     fn mapped(source: &str) -> String {
         let pine = parse_pine(source).unwrap();
@@ -772,6 +780,61 @@ mod pr14_semantic_mapper_v3_tests {
         assert!(error
             .message
             .contains("requires explicit host timeframe alignment"));
+    }
+
+    #[test]
+    fn pine_common_ta_functions_lower_to_registered_runtime_functions() {
+        let source = "//@version=5\nindicator(\"Common\")\n".to_string()
+            + "w = ta.wma(close, 5)\n"
+            + "h = ta.hma(close, 5)\n"
+            + "s = ta.stdev(close, 5)\n"
+            + "v = ta.variance(close, 5)\n"
+            + "c = ta.correlation(close, open, 5)\n"
+            + "b = ta.barssince(close > open)\n"
+            + "tr = ta.tr()\n";
+        let debug = mapped(&source);
+        for name in [
+            "WMA",
+            "HMA",
+            "STDDEV",
+            "VAR",
+            "CORREL",
+            "BARSSINCE",
+            "TRANGE",
+        ] {
+            assert!(
+                debug.contains(&format!("FunctionCall {{ name: \"{name}\"")),
+                "Pine function did not lower to {name}: {debug}"
+            );
+        }
+    }
+
+    #[test]
+    fn pine_common_ta_functions_execute_through_formula_runtime() {
+        let source = "//@version=5\nindicator(\"Runtime\")\n".to_string()
+            + "w = ta.wma(close, 5)\n"
+            + "h = ta.hma(close, 5)\n"
+            + "s = ta.stdev(close, 5)\n"
+            + "v = ta.variance(close, 5)\n"
+            + "c = ta.correlation(close, open, 5)\n"
+            + "b = ta.barssince(close > open)\n"
+            + "tr = ta.tr()\n";
+        let close = Array1::from_iter((0..32).map(|index| index as f64 + 10.0));
+        let open = close.mapv(|value| value - 0.5);
+        let high = close.mapv(|value| value + 1.0);
+        let low = close.mapv(|value| value - 1.0);
+        let volume = Array1::from_elem(close.len(), 100.0);
+        let mut context = FormulaContext::new(open, high, low, close, volume, None);
+        let mut engine = FormulaEngine::new();
+        engine
+            .eval_with_dialect(&source, FormulaDialect::Pine, &mut context)
+            .expect("common Pine functions must execute");
+        for name in ["W", "H", "S", "V", "C", "B", "TR"] {
+            assert!(
+                context.variables.contains_key(name),
+                "runtime did not publish Pine output {name}"
+            );
+        }
     }
 }
 

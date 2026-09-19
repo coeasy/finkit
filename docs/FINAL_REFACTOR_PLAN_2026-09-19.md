@@ -156,15 +156,20 @@ truth source。`scripts/gen_talib_numeric_contract.py --check` 会重新读取
   仍明确走各自的增量/checkpoint 专用执行器，不把不同能力误报为同一模式。
 - Factor、Composite、Formula 的 stream contract 现在统一写入 checkpoint 的
   `scope`/`data_revision`，恢复前同时拒绝 scope mismatch 和 data revision mismatch；
-  本轮 `finkit-ffi-common` 80 个测试全部通过。
+  本轮 `finkit-ffi-common` 84 个测试全部通过。
 - 横截面 Factor 批处理入口也已接入统一 dispatcher，并保留时间戳/标的轴与
-  row-major null 语义；本轮 `finkit-ffi-common` 测试为 80 个通过。
+  row-major null 语义；本轮 `finkit-ffi-common` 测试为 84 个通过。
 - 基础 Formula JSON 入口也已改走 `UnifiedOperationEngine::Formula`，因此普通
   公式、Factor、Composite 和横截面 Factor 的公开批处理入口共享同一 Runtime
   dispatcher；Temporal/Panel/Streaming 仍保留其显式时间对齐与状态执行路径。
 - Temporal Formula 的非 Pine 请求现在也复用统一 Formula dispatcher；Pine 请求
   保留显式 security resolver，以维持 provider 缺失、时间对齐和 host-required
   错误语义，不将 provider 访问伪装成普通变量。
+- Pine 子集本轮新增 `ta.wma`、`ta.hma`、`ta.stdev`、`ta.variance`、
+  `ta.correlation`、`ta.barssince` 和 `ta.tr` 的 catalog mapping；其中 `ta.tr`
+  显式展开为 OHLC 输入后再 lower 到 Core `TRANGE`，其余函数通过统一 Formula
+  runtime 执行。AST lowering 与 `FormulaEngine` 数值执行回归均已覆盖；未经过
+  参考向量和语义矩阵验证的 Pine 函数不宣称为生产支持。
 - FFI 的 Factor、Composite、Formula 和 direct operation 入口现在复用线程本地的
   `UnifiedOperationEngine`，每个线程保留有界 compiled-plan/result cache，避免跨语言
   JSON 调用每次重新创建 Runtime。Factor/Composite 批处理与三类 streaming 请求现在
