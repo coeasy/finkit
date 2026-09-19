@@ -224,7 +224,7 @@ truth source。`scripts/gen_talib_numeric_contract.py --check` 会重新读取
 ### 当前基线与门禁状态（2026-09-19）
 
 - 当前基线分支：`feature/finkit-v1-unified-engine-20260917`。
-- 历史性能基线提交为 `6ad4aa8`，文档基线随后由 `f7eb988` 推送；固定窗口内核改动提交为 `f69bca8`，随后 `MIDPOINT14` 线性块扫描提交为 `cc123a6`；当前稳定性能提交为 `146b39a`，均已推送到远端同名分支。
+- 历史性能基线提交为 `6ad4aa8`，文档基线随后由 `f7eb988` 推送；固定窗口内核改动提交为 `f69bca8`，随后 `MIDPOINT14` 线性块扫描提交为 `cc123a6`；当前稳定性能提交为 `146b39a`，最新 SIMD 路径提交为 `881f7d3`，均已推送到远端同名分支。
 - Rust 格式检查、`finkit` library 测试（当前提交 2947 passed、1 ignored）、`finkit-ffi-common` 测试（80 passed、1 ignored doc）以及 Python ABI3 release check 已实际通过。
 - 历史基线的 TA-Lib 0.8.0 对照门禁覆盖 96 个指标和 24 个公式，`parity_failures=[]`、`errors=[]`；三档规模指标几何平均约 `1.61x`，但性能门禁未通过（top-20 最低约 `0.64x`，`MIDPRICE14`、`VAR20`、`WILLR14` 持续低于 `0.95x`）。该数字仅用于保留基线，不代表本轮结果；因此不能宣称“全面超过 TA-Lib”。
 - 已实际通过的 binding 验证包括 Node 全部 14 项默认测试，以及 Python 当前 wheel 的 TA-Lib 数值合同；Go 因本机 `CGO_ENABLED=0` 且缺少 `gcc` 未运行，Java 因缺少 Maven 未运行，C/C++ 因缺少 CMake/编译器未运行，.NET 因缺少 `dotnet` 未运行。这些语言仍需由对应 CI 宿主提供真实运行证据。
@@ -240,6 +240,13 @@ truth source。`scripts/gen_talib_numeric_contract.py --check` 会重新读取
 - 指标几何平均加速比为 `1.7286x`，100K 为 `1.8387x`，1M 为 `1.5738x`；三档规模没有指标持续低于 `0.95x`。
 - 性能 release gate 仍未通过，top-20 最低为 `0.9967x`，低于门槛 `1.05x`。因此当前只能确认数值合同、主体执行链和本轮稳定优化通过验证，不能宣称整体性能已经全面超过 TA-Lib。
 - 本轮稳定修改已提交并推送：`146b39a perf: stabilize fixed variance and rsi kernels`。下一步应继续针对 top-20 最慢项做受控优化，每轮都必须保留全量 parity、跨规模基准和 Rust/FFI 回归证据。
+
+### AVX-512 公开路径补齐复核（`881f7d3`，2026-09-19）
+
+- 复核发现公开 wheel 在当前机器实际走 AVX-512 RSI 路径；此前单除法优化只覆盖 AVX2/scalar，因此补齐 AVX-512 RSI，并同步补齐 WASM SIMD 语义。AVX-512 RSI 与通用 SIMD 回归均通过。
+- MOM10 AVX-512 固定周期循环增加 4×8 展开；结果保持与既有输出一致，但公开边界 benchmark 的收益受 CPU 频率和测量波动影响，不把单次改善视为稳定门禁通过。
+- 基于 `881f7d3` 重建的 Windows ABI3 wheel 复测：96 个指标、24 个公式全部 `parity=True`，`errors=[]`、`parity_failures=[]`；指标几何平均 `1.7433x`，100K `1.8398x`，1M `1.5878x`，持续低于 `0.95x` 的指标为空。
+- 性能 release gate 仍未通过：top20 最低 `1.0362x`，门槛为 `1.05x`。本轮完整 Rust/FFI 回归仍为 `finkit 2947 passed / 1 ignored`、`finkit-ffi-common 80 passed / 1 ignored doc`。不得将该结果表述为“全面超过 TA-Lib”。
 
 ### 固定窗口内核复核（前一轮，2026-09-19）
 
