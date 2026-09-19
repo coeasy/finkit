@@ -36,6 +36,15 @@ def test_shared_engine_contract_v1_is_executed_by_python_binding():
     factor_result = json.loads(ta.factor_execute_json(json.dumps(factor["request"])))
     assert factor_result["values"]["momentum_5"] == factor["expected_primary"]
 
+    factor_multi_target = FIXTURE["factor_multi_target"]
+    factor_multi_result = json.loads(
+        ta.factor_execute_json(json.dumps(factor_multi_target["request"]))
+    )
+    assert factor_multi_result["shape"] == "multi_series"
+    assert factor_multi_result["primary"] is None
+    for name, expected in factor_multi_target["expected"].items():
+        assert factor_multi_result["values"][name] == expected
+
     composite = FIXTURE["composite"]
     composite_result = json.loads(
         ta.composite_execute_json(json.dumps(composite["request"]))

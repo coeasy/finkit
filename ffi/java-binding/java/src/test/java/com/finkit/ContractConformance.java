@@ -142,6 +142,14 @@ public final class ContractConformance {
                         + "\"inputs\":{\"close\":[1.0,2.0,3.0,4.0,5.0,6.0]}}");
         requireContains(factor, "\"momentum_5\":[null,null,null,null,null,5.0]");
 
+        String factorMultiTarget = Indicators.factorExecuteJson(
+                "{\"schema_version\":1,\"targets\":[\"momentum_5\",\"reversal_5\"],"
+                        + "\"scope\":\"FIXTURE@1d\",\"data_revision\":1,"
+                        + "\"inputs\":{\"close\":[1.0,2.0,3.0,4.0,5.0,6.0]}}");
+        requireContains(factorMultiTarget, "\"shape\":\"multi_series\"");
+        requireContains(factorMultiTarget, "\"momentum_5\":[null,null,null,null,null,5.0]");
+        requireContains(factorMultiTarget, "\"reversal_5\":[null,null,null,null,null,-5.0]");
+
         String composite = Indicators.compositeExecuteJson(
                 "{\"schema_version\":1,\"scope\":\"FIXTURE@1d\","
                         + "\"data_revision\":1,\"inputs\":{\"close\":[1.0,2.0,3.0,4.0,5.0]},"

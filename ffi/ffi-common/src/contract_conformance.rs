@@ -78,6 +78,20 @@ mod tests {
             fixture["factor"]["expected_primary"]
         );
 
+        let factor_multi_target = &fixture["factor_multi_target"];
+        let factor_multi_payload: Value = serde_json::from_str(
+            &evaluate_factor_json(&factor_multi_target["request"].to_string()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(factor_multi_payload["shape"], "multi_series");
+        assert!(factor_multi_payload["primary"].is_null());
+        for target in ["momentum_5", "reversal_5"] {
+            assert_eq!(
+                factor_multi_payload["values"][target],
+                factor_multi_target["expected"][target]
+            );
+        }
+
         let composite_request = serde_json::to_string(&fixture["composite"]["request"]).unwrap();
         let composite_payload: Value =
             serde_json::from_str(&evaluate_composite_json(&composite_request).unwrap()).unwrap();

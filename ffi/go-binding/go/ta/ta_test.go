@@ -174,6 +174,21 @@ func TestSharedEngineContractV1(t *testing.T) {
 	}
 	assertContractSeries(t, decodeContractResult(t, factorResult)["values"].(map[string]interface{})["momentum_5"], factor["expected_primary"])
 
+	factorMultiTarget := fixture["factor_multi_target"].(map[string]interface{})
+	factorMultiRequest, _ := json.Marshal(factorMultiTarget["request"])
+	factorMultiResult, err := FactorExecuteJSON(string(factorMultiRequest))
+	if err != nil {
+		t.Fatalf("multi-target factor execution failed: %v", err)
+	}
+	factorMultiPayload := decodeContractResult(t, factorMultiResult)
+	if factorMultiPayload["shape"] != "multi_series" || factorMultiPayload["primary"] != nil {
+		t.Fatalf("multi-target factor shape: got shape=%v primary=%v", factorMultiPayload["shape"], factorMultiPayload["primary"])
+	}
+	factorMultiValues := factorMultiPayload["values"].(map[string]interface{})
+	for name, expected := range factorMultiTarget["expected"].(map[string]interface{}) {
+		assertContractSeries(t, factorMultiValues[name], expected)
+	}
+
 	composite := fixture["composite"].(map[string]interface{})
 	compositeRequest, _ := json.Marshal(composite["request"])
 	compositeResult, err := CompositeExecuteJSON(string(compositeRequest))

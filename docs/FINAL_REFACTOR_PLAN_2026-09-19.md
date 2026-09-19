@@ -235,6 +235,9 @@ truth source。`scripts/gen_talib_numeric_contract.py --check` 会重新读取
 - Factor 多目标 full batch 现在通过 `execute_factor_targets()` 一次执行共享 DAG，
   并按目标集合建立 batch result cache；重复依赖只计算一次，重复请求直接命中
   batch 缓存，不再由 FFI 按 target 循环调用单目标入口。
+- `engine_contract_v1.json` 新增 `factor_multi_target`，覆盖 `momentum_5` 与依赖它的
+  `reversal_5`；Rust FFI common、Python、Node 和 C ABI 当前源码已实际执行该向量，
+  Go/Java/.NET 测试入口也已接入同一 fixture。
 - 本轮实际验证：`finkit-ffi-common` 80 tests passed、C ABI 31 tests passed、Python contract 2 passed、Node 13 passed。Go 测试在未完成 native 产物链接时无法编译，Java 因 Maven 不可用，.NET 因 SDK 不可用；这些均保持未验证状态。
 
 ### 当前基线与门禁状态（2026-09-19）

@@ -101,6 +101,17 @@ public class IndicatorTests
             factorResult.RootElement.GetProperty("values").GetProperty("momentum_5"),
             factor.GetProperty("expected_primary"));
 
+        var factorMultiTarget = root.GetProperty("factor_multi_target");
+        using var factorMultiResult = JsonDocument.Parse(
+            Indicators.FactorExecuteJson(factorMultiTarget.GetProperty("request").GetRawText()));
+        Assert.Equal("multi_series", factorMultiResult.RootElement.GetProperty("shape").GetString());
+        Assert.Equal(JsonValueKind.Null, factorMultiResult.RootElement.GetProperty("primary").ValueKind);
+        var actualFactorMultiValues = factorMultiResult.RootElement.GetProperty("values");
+        foreach (var expected in factorMultiTarget.GetProperty("expected").EnumerateObject())
+        {
+            AssertContractSeries(actualFactorMultiValues.GetProperty(expected.Name), expected.Value);
+        }
+
         var composite = root.GetProperty("composite");
         using var compositeResult = JsonDocument.Parse(
             Indicators.CompositeExecuteJson(composite.GetProperty("request").GetRawText()));

@@ -842,6 +842,19 @@ mod tests {
         assert_eq!(value["primary"], "momentum_5");
         assert_eq!(value["values"]["momentum_5"][5], 5.0);
         unsafe { finkit_free_string(ptr) };
+
+        let multi_target_request = std::ffi::CString::new(
+            r#"{"schema_version":1,"targets":["momentum_5","reversal_5"],"scope":"C-BINDING@1d","data_revision":0,"inputs":{"close":[1.0,2.0,3.0,4.0,5.0,6.0]}}"#,
+        )
+        .unwrap();
+        let multi_target_ptr = unsafe { ta_factor_execute_json(multi_target_request.as_ptr()) };
+        assert!(!multi_target_ptr.is_null());
+        let multi_target_json = unsafe { CStr::from_ptr(multi_target_ptr) }.to_str().unwrap();
+        let multi_target_value: serde_json::Value = serde_json::from_str(multi_target_json).unwrap();
+        assert_eq!(multi_target_value["shape"], "multi_series");
+        assert_eq!(multi_target_value["values"]["momentum_5"][5], 5.0);
+        assert_eq!(multi_target_value["values"]["reversal_5"][5], -5.0);
+        unsafe { finkit_free_string(multi_target_ptr) };
     }
 
     #[test]

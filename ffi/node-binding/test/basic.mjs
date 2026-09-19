@@ -47,6 +47,14 @@ test('executes the shared engine contract vector', () => {
   const factorResult = JSON.parse(finkit.factorExecuteJson(JSON.stringify(factor.request)))
   assert.deepEqual(factorResult.values.momentum_5, factor.expected_primary)
 
+  const factorMultiTarget = engineContract.factor_multi_target
+  const factorMultiResult = JSON.parse(finkit.factorExecuteJson(JSON.stringify(factorMultiTarget.request)))
+  assert.equal(factorMultiResult.shape, 'multi_series')
+  assert.equal(factorMultiResult.primary, null)
+  for (const [name, expected] of Object.entries(factorMultiTarget.expected)) {
+    assert.deepEqual(factorMultiResult.values[name], expected)
+  }
+
   const composite = engineContract.composite
   const compositeResult = JSON.parse(finkit.compositeExecuteJson(JSON.stringify(composite.request)))
   assert.deepEqual(compositeResult.values.sma3, composite.expected_primary)

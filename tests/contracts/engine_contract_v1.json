@@ -65,6 +65,19 @@
     },
     "expected_primary": [null, null, null, null, null, 5.0]
   },
+  "factor_multi_target": {
+    "request": {
+      "schema_version": 1,
+      "targets": ["momentum_5", "reversal_5"],
+      "scope": "FIXTURE@1d",
+      "data_revision": 1,
+      "inputs": {"close": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]}
+    },
+    "expected": {
+      "momentum_5": [null, null, null, null, null, 5.0],
+      "reversal_5": [null, null, null, null, null, -5.0]
+    }
+  },
   "factor_range": {
     "request": {
       "schema_version": 1,
