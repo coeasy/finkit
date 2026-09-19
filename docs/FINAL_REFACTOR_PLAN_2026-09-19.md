@@ -191,13 +191,13 @@ truth source。`scripts/gen_talib_numeric_contract.py --check` 会重新读取
 
 ## 6. 后续实施顺序
 
-1. 完成当前改动的 fmt、workspace、ABI 和 binding 回归并提交；Lightweight HTML
-   页面生成已纳入 visualization 回归，但真实浏览器宿主仍需单独纳入 CI。
+1. 已完成当前 Runtime typed execution chain 的 fmt、workspace check 和专属回归并提交；
+   Lightweight HTML 页面生成已纳入 visualization 回归，但真实浏览器宿主仍需单独纳入 CI。
 2. 将剩余 TA-Lib profile 参数/输出 metadata 从手写 match 逐步生成化，但保留 profile adapter 的显式语义代码。
 3. 将本轮已接入的 `engine_contract_v1.json` 与 `talib_numeric_contract_v1.json`
    扩展到 C/C++、Go、Java、.NET 的实际宿主运行证明；C/C++ 已完成测试接入，Go、
    Java、.NET 仍需在其 CI/toolchain 矩阵中完成逐元素运行证据。
-4. 将 Formula dialect registry、TA-Lib catalog、Factor catalog 和 Draw schema 统一纳入版本发布清单。
+4. 将 Formula dialect registry、TA-Lib catalog、Factor catalog 和 Draw schema 统一纳入版本发布清单；继续把多输入 Composite 接入同一 typed plan，而不是重新引入平行 Factory。
 5. 为生产部署增加 benchmark workload、内存/分配、并发、checkpoint 恢复和错误可观测性门禁；性能结论按硬件和数据规模分别报告。
 6. 继续扩展 TDX/同花顺/东方财富通用函数与 Pine 子集，但每次扩展必须先增加语义矩阵和参考向量，再进入 production catalog。
 
@@ -224,7 +224,7 @@ truth source。`scripts/gen_talib_numeric_contract.py --check` 会重新读取
 ### 当前基线与门禁状态（2026-09-19）
 
 - 当前基线分支：`feature/finkit-v1-unified-engine-20260917`。
-- 历史性能基线提交为 `6ad4aa8`，文档基线随后由 `f7eb988` 推送；固定窗口内核改动提交为 `f69bca8`，随后 `MIDPOINT14` 线性块扫描提交为 `cc123a6`；当前稳定性能提交为 `146b39a`，最新 SIMD 路径提交为 `881f7d3`，均已推送到远端同名分支。
+- 历史性能基线提交为 `6ad4aa8`，文档基线随后由 `f7eb988` 推送；固定窗口内核改动提交为 `f69bca8`，随后 `MIDPOINT14` 线性块扫描提交为 `cc123a6`；当前稳定性能提交为 `146b39a`，最新 SIMD 路径提交为 `881f7d3`，Runtime typed chain 提交为 `18bff08`，均已推送到远端同名分支。
 - Rust 格式检查、`finkit` library 测试（当前提交 2947 passed、1 ignored）、`finkit-ffi-common` 测试（80 passed、1 ignored doc）以及 Python ABI3 release check 已实际通过。
 - 历史基线的 TA-Lib 0.8.0 对照门禁覆盖 96 个指标和 24 个公式，`parity_failures=[]`、`errors=[]`；三档规模指标几何平均约 `1.61x`，但性能门禁未通过（top-20 最低约 `0.64x`，`MIDPRICE14`、`VAR20`、`WILLR14` 持续低于 `0.95x`）。该数字仅用于保留基线，不代表本轮结果；因此不能宣称“全面超过 TA-Lib”。
 - 已实际通过的 binding 验证包括 Node 全部 14 项默认测试，以及 Python 当前 wheel 的 TA-Lib 数值合同；Go 因本机 `CGO_ENABLED=0` 且缺少 `gcc` 未运行，Java 因缺少 Maven 未运行，C/C++ 因缺少 CMake/编译器未运行，.NET 因缺少 `dotnet` 未运行。这些语言仍需由对应 CI 宿主提供真实运行证据。
@@ -247,6 +247,15 @@ truth source。`scripts/gen_talib_numeric_contract.py --check` 会重新读取
 - MOM10 AVX-512 固定周期循环增加 4×8 展开；结果保持与既有输出一致，但公开边界 benchmark 的收益受 CPU 频率和测量波动影响，不把单次改善视为稳定门禁通过。
 - 基于 `881f7d3` 重建的 Windows ABI3 wheel 复测：96 个指标、24 个公式全部 `parity=True`，`errors=[]`、`parity_failures=[]`；指标几何平均 `1.7433x`，100K `1.8398x`，1M `1.5878x`，持续低于 `0.95x` 的指标为空。
 - 性能 release gate 仍未通过：top20 最低 `1.0362x`，门槛为 `1.05x`。本轮完整 Rust/FFI 回归仍为 `finkit 2947 passed / 1 ignored`、`finkit-ffi-common 80 passed / 1 ignored doc`。不得将该结果表述为“全面超过 TA-Lib”。
+
+### Runtime typed execution chain 复核（`18bff08`，2026-09-19）
+
+- `crates/finkit-runtime` 已从描述字符串骨架收敛为可执行链：`FactorProvider -> FactorRegistry -> Scheduler -> Executor -> FactorCache`。Factory/Provider 返回 `Box<dyn Factor>`，不再返回 `EMA(period=20)` 这类不可执行字符串。
+- Scheduler 现在验证重复节点、缺失依赖和环，并输出确定性的拓扑顺序；Executor 支持无依赖输入和单依赖串接，多个依赖会返回结构化错误，不会静默使用错误输入。
+- Cache 增加 `get_or_compute`、命中/未命中统计和稳定参数身份；同一 DAG 二次执行已由测试证明复用两个节点的缓存结果。
+- `FactorResult` 与 Runtime 输出类型已合并为“主序列 + 命名多输出”；MACD 现在真实产出 `macd`、`signal`、`histogram`，并按时间戳对齐快慢 EMA，修复旧实现的 warm-up 错位和未使用 `signal` 参数问题。
+- `QuantSeries` 增加值/时间戳对齐和严格递增校验；RSI 改为 Wilder 递推语义。专属回归为：`finkit-factor` 3 passed、`finkit-runtime` 5 passed、`finkit-series` 1 passed；workspace check 通过。
+- 该批次尚未宣称 Formula/Composite 已全部迁移：当前 Runtime Executor 对单节点/单依赖链已可执行，多输入 Composite、统一 Formula typed plan、各语言实际宿主运行证明和 Lightweight Charts 浏览器 CI 仍是后续工作。
 
 ### 固定窗口内核复核（前一轮，2026-09-19）
 
