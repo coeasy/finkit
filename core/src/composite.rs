@@ -243,6 +243,19 @@ struct CompiledPlanCacheEntry {
     last_used: u64,
 }
 
+/// Observable statistics for the bounded Composite result cache.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CompositeCacheStats {
+    /// Number of result snapshots served from the cache.
+    pub hits: u64,
+    /// Number of result snapshots that required graph evaluation.
+    pub misses: u64,
+    /// Number of retained result snapshots.
+    pub entries: usize,
+    /// Maximum number of retained result snapshots.
+    pub capacity: usize,
+}
+
 /// Dependency-aware composite-indicator evaluator.
 #[derive(Clone)]
 pub struct CompositeEngine {
@@ -258,6 +271,8 @@ pub struct CompositeEngine {
     compiled_plan_cache_clock: u64,
     cache: BTreeMap<CompositeCacheKey, CompositeCacheEntry>,
     cache_capacity: usize,
+    cache_hits: u64,
+    cache_misses: u64,
     cache_clock: u64,
 }
 
@@ -329,6 +344,8 @@ impl CompositeEngine {
         self.compiled_plan_cache_misses = 0;
         self.compiled_plan_cache_clock = 0;
         self.cache.clear();
+        self.cache_hits = 0;
+        self.cache_misses = 0;
         self.cache_clock = 0;
         Ok(())
     }
@@ -351,6 +368,8 @@ impl CompositeEngine {
         self.compiled_plan_cache_misses = 0;
         self.compiled_plan_cache_clock = 0;
         self.cache.clear();
+        self.cache_hits = 0;
+        self.cache_misses = 0;
         self.cache_clock = 0;
         Ok(())
     }
@@ -368,6 +387,8 @@ impl CompositeEngine {
     pub fn with_cache_capacity(mut self, capacity: usize) -> Self {
         self.cache_capacity = capacity.max(1);
         self.cache.clear();
+        self.cache_hits = 0;
+        self.cache_misses = 0;
         self.cache_clock = 0;
         self
     }
@@ -376,13 +397,28 @@ impl CompositeEngine {
     pub fn set_cache_capacity(&mut self, capacity: usize) {
         self.cache_capacity = capacity.max(1);
         self.cache.clear();
+        self.cache_hits = 0;
+        self.cache_misses = 0;
         self.cache_clock = 0;
     }
 
     /// Remove all cached graph snapshots.
     pub fn clear_cache(&mut self) {
         self.cache.clear();
+        self.cache_hits = 0;
+        self.cache_misses = 0;
         self.cache_clock = 0;
+    }
+
+    /// Return hit/miss counters and current capacity for result snapshots.
+    #[must_use]
+    pub fn cache_stats(&self) -> CompositeCacheStats {
+        CompositeCacheStats {
+            hits: self.cache_hits,
+            misses: self.cache_misses,
+            entries: self.cache.len(),
+            capacity: self.cache_capacity,
+        }
     }
 
     /// Return the number of compiled graph plans currently retained.
@@ -543,8 +579,10 @@ impl CompositeEngine {
             graph_signature: plan.signature,
         };
         if let Some(result) = self.get_cached_result(&key) {
+            self.cache_hits = self.cache_hits.saturating_add(1);
             return Ok(result);
         }
+        self.cache_misses = self.cache_misses.saturating_add(1);
         let result = self.evaluate_compiled(plan, context)?;
         if self.cache.len() >= self.cache_capacity.max(1) {
             if let Some(oldest) = self
@@ -1473,6 +1511,8 @@ impl Default for CompositeEngine {
             compiled_plan_cache_clock: 0,
             cache: BTreeMap::new(),
             cache_capacity: 64,
+            cache_hits: 0,
+            cache_misses: 0,
             cache_clock: 0,
         }
     }
@@ -2026,6 +2066,9 @@ mod tests {
             .evaluate_cached(&definitions, &["value"], &borrowed, 7)
             .expect("first evaluation");
         assert_eq!(engine.compiled_plans.len(), 1);
+        assert_eq!(engine.cache_stats().hits, 0);
+        assert_eq!(engine.cache_stats().misses, 1);
+        assert_eq!(engine.cache_stats().entries, 1);
         assert_eq!(engine.compiled_plan_cache_hits, 0);
         assert_eq!(engine.compiled_plan_cache_misses, 1);
         engine
@@ -2033,6 +2076,8 @@ mod tests {
             .expect("cached evaluation");
         assert_eq!(calls.load(Ordering::SeqCst), 1);
         assert_eq!(engine.compiled_plans.len(), 1);
+        assert_eq!(engine.cache_stats().hits, 1);
+        assert_eq!(engine.cache_stats().misses, 1);
         assert_eq!(engine.compiled_plan_cache_hits, 1);
         assert_eq!(engine.compiled_plan_cache_misses, 1);
         engine
@@ -2040,6 +2085,8 @@ mod tests {
             .expect("new revision evaluation");
         assert_eq!(calls.load(Ordering::SeqCst), 2);
         assert_eq!(engine.compiled_plans.len(), 1);
+        assert_eq!(engine.cache_stats().hits, 1);
+        assert_eq!(engine.cache_stats().misses, 2);
         assert_eq!(engine.compiled_plan_cache_hits, 2);
         assert_eq!(engine.compiled_plan_cache_misses, 1);
     }

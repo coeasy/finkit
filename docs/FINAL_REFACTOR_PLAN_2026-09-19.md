@@ -226,6 +226,7 @@ truth source。`scripts/gen_talib_numeric_contract.py --check` 会重新读取
 
 - `composite_multi_input` 验证了同一请求中 `high`/`low` 多原始序列、`sum`/`mid`/`spread`/`signal` 跨定义依赖、`const:2` 广播、三路输出以及 `multi_series`/无 primary 结果语义。
 - 完整执行仍通过 `UnifiedOperationEngine -> OperationRequest::Composite -> CompositeEngine`；本轮没有把旧 `crates/finkit-runtime` 单依赖 Executor 扩展成第二套生产 Runtime。
+- `CompositeEngine` 现在公开只读 `CompositeCacheStats`，记录结果快照缓存的 hits、misses、entries、capacity；注册自定义函数、变更容量和清理缓存都会清零旧统计，避免把失效前的命中率带入新缓存周期。
 - 本轮实际验证：`finkit-ffi-common` 80 tests passed、C ABI 31 tests passed、Python contract 2 passed、Node 13 passed。Go 测试在未完成 native 产物链接时无法编译，Java 因 Maven 不可用，.NET 因 SDK 不可用；这些均保持未验证状态。
 
 ### 当前基线与门禁状态（2026-09-19）
