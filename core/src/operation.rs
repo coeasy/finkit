@@ -21,6 +21,7 @@ use crate::formula::{
 use crate::registry::{
     builtin_function_registry, FunctionCategory, FunctionSpec, InputKind, LookbackSpec, ParamSpec,
 };
+use crate::unified_runtime::{DirtyRange, RuntimeExecutionTrace};
 use ndarray::Array1;
 use std::collections::BTreeMap;
 use std::fmt;
@@ -890,6 +891,123 @@ impl UnifiedOperationEngine {
         }
     }
 
+    /// Execute a range-safe Factor plan through the canonical Runtime façade.
+    ///
+    /// This is the incremental counterpart to [`Self::execute`]. It keeps
+    /// plan compilation, dependency validation, and dirty-range semantics in
+    /// the same typed engine instead of making FFI adapters call the domain
+    /// executor directly.
+    pub fn execute_factor_range(
+        &mut self,
+        name: &str,
+        context: &BorrowedFactorContext<'_>,
+        previous: &BTreeMap<String, Vec<f64>>,
+        dirty: DirtyRange,
+    ) -> Result<(OperationResult, RuntimeExecutionTrace), OperationExecutionError> {
+        self.execute_factor_range_targets(&[name], context, previous, dirty)
+    }
+
+    /// Execute several range-safe Factor targets as one shared dependency plan.
+    ///
+    /// Multi-target requests are compiled together so shared dependencies are
+    /// evaluated once, matching the full-batch Factor contract.
+    pub fn execute_factor_range_targets(
+        &mut self,
+        names: &[&str],
+        context: &BorrowedFactorContext<'_>,
+        previous: &BTreeMap<String, Vec<f64>>,
+        dirty: DirtyRange,
+    ) -> Result<(OperationResult, RuntimeExecutionTrace), OperationExecutionError> {
+        if names.is_empty() {
+            return Err(OperationExecutionError::InvalidRequest(
+                "factor range targets must not be empty".to_string(),
+            ));
+        }
+        let canonical_targets = names
+            .iter()
+            .map(|name| {
+                self.factor_catalog
+                    .resolve_name(name)
+                    .map(str::to_owned)
+                    .ok_or_else(|| OperationExecutionError::UnknownOperation((*name).to_string()))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let target_refs = canonical_targets
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        let plan = if canonical_targets.len() == 1 {
+            self.compiled_factor_plan(&canonical_targets[0])?
+        } else {
+            self.factor_catalog
+                .compile(&target_refs)
+                .map_err(OperationExecutionError::Factor)?
+        };
+        let runtime = plan
+            .execute_range_borrowed(&self.factor, context, previous, dirty)
+            .map_err(OperationExecutionError::Factor)?;
+        let mut named = BTreeMap::new();
+        for canonical in &canonical_targets {
+            let values = runtime.output.get(canonical).cloned().ok_or_else(|| {
+                OperationExecutionError::InvalidRequest(format!(
+                    "compiled factor plan did not produce {canonical}"
+                ))
+            })?;
+            named.insert(canonical.clone(), values);
+        }
+        let primary = (canonical_targets.len() == 1).then(|| canonical_targets[0].clone());
+        Ok((
+            OperationResult {
+                values: named,
+                shape: if canonical_targets.len() > 1 {
+                    ValueShape::MultiSeries
+                } else {
+                    ValueShape::Series
+                },
+                primary,
+                draw: None,
+            },
+            runtime.trace,
+        ))
+    }
+
+    /// Execute a range-safe Composite plan through the canonical Runtime façade.
+    ///
+    /// Composite result snapshots are intentionally not inserted into the
+    /// full-result cache: the caller supplies the retained previous material-
+    /// ization, and the range executor returns a new trace describing exactly
+    /// which rows were recomputed.
+    pub fn execute_composite_range(
+        &mut self,
+        definitions: &[CompositeDefinition],
+        outputs: &[&str],
+        context: &BorrowedFactorContext<'_>,
+        previous: &BTreeMap<String, Vec<f64>>,
+        dirty: DirtyRange,
+    ) -> Result<(OperationResult, RuntimeExecutionTrace), OperationExecutionError> {
+        let plan = self
+            .composite
+            .compile_cached(definitions, outputs)
+            .map_err(OperationExecutionError::Composite)?;
+        let runtime = self
+            .composite
+            .execute_range_borrowed(&plan, context, previous, dirty)
+            .map_err(OperationExecutionError::Composite)?;
+        Ok((
+            OperationResult {
+                values: runtime.output,
+                shape: if outputs.len() > 1 {
+                    ValueShape::MultiSeries
+                } else {
+                    ValueShape::Series
+                },
+                primary: (outputs.len() == 1).then(|| outputs[0].to_string()),
+                draw: None,
+            },
+            runtime.trace,
+        ))
+    }
+
     fn execute_indicator(
         &mut self,
         name: &str,
@@ -1630,9 +1748,11 @@ mod tests {
     use super::*;
     use crate::composite::{CompositeExpr, CompositeOp};
     use crate::data_contract::FrameKey;
-    use crate::factors::{FactorDefinition, FactorDirection, FactorKind};
+    use crate::factors::{builtin_factor_registry, FactorDefinition, FactorDirection, FactorKind};
     use crate::runtime::MarketFrame;
+    use crate::unified_runtime::RuntimeExecutionMode;
     use ndarray::Array1;
+    use std::collections::BTreeMap;
     use std::sync::Arc;
 
     #[test]
@@ -2306,5 +2426,61 @@ mod tests {
         assert_eq!(engine.composite_cache_stats().hits, 1);
         assert_eq!(engine.composite_cache_stats().misses, 1);
         assert_eq!(engine.composite_cache_stats().entries, 1);
+    }
+
+    #[test]
+    fn unified_engine_routes_factor_and_composite_range_execution() {
+        let close = [10.0, 11.0, 12.0, 13.0, 14.0, 20.0, 16.0];
+        let context = BorrowedFactorContext::new()
+            .with_series("close", &close)
+            .unwrap();
+
+        let mut engine = UnifiedOperationEngine::new(builtin_factor_registry());
+        let previous_factor = BTreeMap::from([("momentum_5".to_string(), vec![0.0; close.len()])]);
+        let (factor, factor_trace) = engine
+            .execute_factor_range(
+                "momentum_5",
+                &context,
+                &previous_factor,
+                DirtyRange::new(5, 6),
+            )
+            .unwrap();
+        assert_eq!(factor.primary_values().unwrap()[5], 1.0);
+        assert_eq!(
+            factor_trace.mode,
+            RuntimeExecutionMode::Range {
+                input_dirty: DirtyRange::new(5, 6),
+                affected: DirtyRange::new(5, 7),
+                recompute: DirtyRange::new(0, 7),
+            }
+        );
+
+        let definitions = [CompositeDefinition::new(
+            "sum",
+            CompositeExpr::Op {
+                op: CompositeOp::Add,
+                inputs: vec![CompositeExpr::series("close"), CompositeExpr::Constant(1.0)],
+            },
+        )];
+        let outputs = ["sum"];
+        let previous_composite = BTreeMap::from([("sum".to_string(), vec![0.0; close.len()])]);
+        let (composite, composite_trace) = engine
+            .execute_composite_range(
+                &definitions,
+                &outputs,
+                &context,
+                &previous_composite,
+                DirtyRange::new(5, 6),
+            )
+            .unwrap();
+        assert_eq!(composite.primary_values().unwrap()[5], 21.0);
+        assert_eq!(
+            composite_trace.mode,
+            RuntimeExecutionMode::Range {
+                input_dirty: DirtyRange::new(5, 6),
+                affected: DirtyRange::new(5, 6),
+                recompute: DirtyRange::new(5, 6),
+            }
+        );
     }
 }

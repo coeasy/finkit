@@ -228,6 +228,10 @@ truth source。`scripts/gen_talib_numeric_contract.py --check` 会重新读取
 - 完整执行仍通过 `UnifiedOperationEngine -> OperationRequest::Composite -> CompositeEngine`；本轮没有把旧 `crates/finkit-runtime` 单依赖 Executor 扩展成第二套生产 Runtime。
 - `CompositeEngine` 现在公开只读 `CompositeCacheStats`，记录结果快照缓存的 hits、misses、entries、capacity；注册自定义函数、变更容量和清理缓存都会清零旧统计，避免把失效前的命中率带入新缓存周期。
 - `UnifiedOperationEngine::composite_cache_stats()` 将该统计暴露在统一 Runtime façade，避免调用方只看到 Factor/Formula 通用缓存而看不到 Composite 的独立计划/结果缓存。
+- dirty-range 现在也进入统一 façade：`execute_factor_range_targets()` 和
+  `execute_composite_range()` 负责计划解析、依赖执行和 `RuntimeExecutionTrace`；
+  FFI Factor/Composite range 分支不再直接绕过 Runtime 调用领域引擎，原有
+  `input_dirty/affected/recompute` contract 向量保持不变。
 - 本轮实际验证：`finkit-ffi-common` 80 tests passed、C ABI 31 tests passed、Python contract 2 passed、Node 13 passed。Go 测试在未完成 native 产物链接时无法编译，Java 因 Maven 不可用，.NET 因 SDK 不可用；这些均保持未验证状态。
 
 ### 当前基线与门禁状态（2026-09-19）

@@ -4,7 +4,7 @@ use crate::shared_runtime::with_unified_engine;
 use crate::stream_contract::require_scope_and_revision;
 use finkit::data_contract::CrossSectionView;
 use finkit::factor_system::FactorCatalog;
-use finkit::factors::{builtin_factor_registry, FactorContext, FactorEngine, FactorKind};
+use finkit::factors::{builtin_factor_registry, FactorContext, FactorKind};
 use finkit::operation::OperationRequest;
 use finkit::unified_runtime::{DirtyRange, RuntimeExecutionMode};
 use serde::Deserialize;
@@ -98,15 +98,32 @@ pub fn evaluate_factor_json(request: &str) -> Result<String, String> {
             .insert(name, values)
             .map_err(|error| error.to_string())?;
     }
-    let engine = FactorEngine::new(registry.clone());
     if request.previous.is_some() != request.dirty_range.is_some() {
         return Err("factor range execution requires both previous and dirty_range".to_string());
     }
     let borrowed = context.as_borrowed();
     let runtime = match (request.previous.as_ref(), request.dirty_range) {
-        (Some(previous), Some([start, end])) => plan
-            .execute_range_borrowed(&engine, &borrowed, previous, DirtyRange::new(start, end))
-            .map_err(|error| error.to_string())?,
+        (Some(previous), Some([start, end])) => {
+            let target_refs = request
+                .targets
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>();
+            let (result, trace) = with_unified_engine(|unified| {
+                unified
+                    .execute_factor_range_targets(
+                        &target_refs,
+                        &borrowed,
+                        previous,
+                        DirtyRange::new(start, end),
+                    )
+                    .map_err(|error| error.to_string())
+            })?;
+            finkit::unified_runtime::RuntimeExecution {
+                output: result.values,
+                trace,
+            }
+        }
         (None, None) => {
             // Complete batch execution goes through the same operation
             // façade used by the direct operation API. This keeps catalog

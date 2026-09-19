@@ -2,7 +2,7 @@
 
 use crate::shared_runtime::with_unified_engine;
 use crate::stream_contract::require_scope_and_revision;
-use finkit::composite::{CompositeDefinition, CompositeEngine, CompositeExpr, CompositeOp};
+use finkit::composite::{CompositeDefinition, CompositeExpr, CompositeOp};
 use finkit::factors::FactorContext;
 use finkit::operation::OperationRequest;
 use finkit::unified_runtime::{DirtyRange, RuntimeExecutionMode};
@@ -140,18 +140,35 @@ pub fn evaluate_composite_json(request: &str) -> Result<String, String> {
             .insert(name, values)
             .map_err(|error| error.to_string())?;
     }
-    let engine = CompositeEngine::new();
-    let plan = engine
-        .compile(&definitions, &output_refs)
-        .map_err(|error| error.to_string())?;
+    let range_lookback = with_unified_engine(|unified| {
+        unified
+            .composite_engine_mut()
+            .compile_cached(&definitions, &output_refs)
+            .map(|plan| plan.range_lookback())
+            .map_err(|error| error.to_string())
+    })?;
     if request.previous.is_some() != request.dirty_range.is_some() {
         return Err("composite range execution requires both previous and dirty_range".to_string());
     }
     let borrowed = context.as_borrowed();
     let runtime = match (request.previous.as_ref(), request.dirty_range) {
-        (Some(previous), Some([start, end])) => engine
-            .execute_range_borrowed(&plan, &borrowed, previous, DirtyRange::new(start, end))
-            .map_err(|error| error.to_string())?,
+        (Some(previous), Some([start, end])) => {
+            let (result, trace) = with_unified_engine(|unified| {
+                unified
+                    .execute_composite_range(
+                        &definitions,
+                        &output_refs,
+                        &borrowed,
+                        previous,
+                        DirtyRange::new(start, end),
+                    )
+                    .map_err(|error| error.to_string())
+            })?;
+            finkit::unified_runtime::RuntimeExecution {
+                output: result.values,
+                trace,
+            }
+        }
         (None, None) => {
             // Route complete graph execution through the canonical operation
             // façade so the public Composite contract shares the same
@@ -189,7 +206,7 @@ pub fn evaluate_composite_json(request: &str) -> Result<String, String> {
         "schema_version": COMPOSITE_CONTRACT_SCHEMA_VERSION,
         "shape": if output_names.len() > 1 { "multi_series" } else { "series" },
         "primary": (output_names.len() == 1).then(|| output_names[0].clone()),
-        "range_lookback": plan.range_lookback(),
+        "range_lookback": range_lookback,
         "scope": scope,
         "data_revision": data_revision,
         "execution": execution_envelope(trace.mode),
