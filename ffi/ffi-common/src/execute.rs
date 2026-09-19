@@ -6,7 +6,7 @@
 //! keep using typed indicator APIs.
 
 use crate::shared_runtime::with_unified_engine;
-use crate::talib_catalog::TALIB_SEMANTIC_PROFILE;
+use crate::talib_catalog::{is_profile_catalog_name, TALIB_SEMANTIC_PROFILE};
 use finkit::formula::FormulaContext;
 use finkit::operation::{OperationRequest, PRIMARY_OUTPUT_NAME};
 use ndarray::Array1;
@@ -246,148 +246,7 @@ pub fn talib_profile_supported(operation: &str) -> bool {
     if name.starts_with("CDL") {
         return candlestick_detector(&name).is_some();
     }
-    matches!(
-        name.as_str(),
-        "MA" | "SMA"
-            | "EMA"
-            | "WMA"
-            | "DEMA"
-            | "TEMA"
-            | "TRIMA"
-            | "T3"
-            | "KAMA"
-            | "MAMA"
-            | "MAVP"
-            | "SAREXT"
-            | "HT_DCPERIOD"
-            | "HT_DCPHASE"
-            | "HT_PHASOR"
-            | "HT_SINE"
-            | "HT_TRENDMODE"
-            | "HT_TRENDLINE"
-            | "RSI"
-            | "MACD"
-            | "MACDEXT"
-            | "MACDFIX"
-            | "ACCBANDS"
-            | "AVGDEV"
-            | "IMI"
-            | "AO"
-            | "CMF"
-            | "COPPOCK"
-            | "CUMSUM"
-            | "DONCHIAN"
-            | "DPO"
-            | "ER"
-            | "HA"
-            | "HMA"
-            | "NVI"
-            | "PERCENTRANK"
-            | "PVI"
-            | "PVT"
-            | "SUPERTREND"
-            | "TSI"
-            | "VORTEX"
-            | "VWAP"
-            | "VWMA"
-            | "ZLEMA"
-            | "BBANDS"
-            | "ATR"
-            | "NATR"
-            | "TRANGE"
-            | "ADX"
-            | "ADXR"
-            | "DX"
-            | "PLUS_DI"
-            | "MINUS_DI"
-            | "AC"
-            | "ADR"
-            | "CMOU"
-            | "CVI"
-            | "EFI"
-            | "ERI"
-            | "FOSC"
-            | "FRACTAL"
-            | "KC"
-            | "KDJ"
-            | "MARKETFI"
-            | "MASSI"
-            | "PERCENTILE"
-            | "PVO"
-            | "QSTICK"
-            | "RMA"
-            | "RVI"
-            | "RVOL"
-            | "SMI"
-            | "VHF"
-            | "WAD"
-            | "CCI"
-            | "AROON"
-            | "AROONOSC"
-            | "APO"
-            | "BOP"
-            | "TRIX"
-            | "STOCH"
-            | "STOCHF"
-            | "STOCHRSI"
-            | "WILLR"
-            | "MOM"
-            | "ROC"
-            | "ROCP"
-            | "ROCR"
-            | "ROCR100"
-            | "OBV"
-            | "MFI"
-            | "AVGPRICE"
-            | "MEDPRICE"
-            | "TYPPRICE"
-            | "WCLPRICE"
-            | "MIDPOINT"
-            | "MIDPRICE"
-            | "SAR"
-            | "AD"
-            | "ADOSC"
-            | "PLUS_DM"
-            | "MINUS_DM"
-            | "PPO"
-            | "ULTOSC"
-            | "BETA"
-            | "CORREL"
-            | "LINEARREG"
-            | "LINEARREG_ANGLE"
-            | "LINEARREG_INTERCEPT"
-            | "LINEARREG_SLOPE"
-            | "TSF"
-            | "STDDEV"
-            | "VAR"
-            | "CMO"
-            | "ADD"
-            | "SUB"
-            | "MULT"
-            | "DIV"
-            | "MAX"
-            | "MIN"
-            | "MAXINDEX"
-            | "MININDEX"
-            | "MINMAX"
-            | "MINMAXINDEX"
-            | "SUM"
-            | "ACOS"
-            | "ASIN"
-            | "ATAN"
-            | "CEIL"
-            | "COS"
-            | "COSH"
-            | "EXP"
-            | "FLOOR"
-            | "LN"
-            | "LOG10"
-            | "SIN"
-            | "SINH"
-            | "SQRT"
-            | "TAN"
-            | "TANH"
-    )
+    is_profile_catalog_name(&name) || finkit::formula::ta_lib_function_contract(&name).is_some()
 }
 
 fn candlestick_detector(
@@ -2162,6 +2021,24 @@ fn nullable_series(values: &[f64]) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::talib_catalog::TALIB_PROFILE_CATALOG_NAMES;
+
+    #[test]
+    fn talib_support_is_derived_from_canonical_catalogs() {
+        for contract in finkit::formula::ta_lib_function_contracts() {
+            assert!(
+                talib_profile_supported(&contract.name),
+                "TA-Lib contract is not executable: {}",
+                contract.name
+            );
+        }
+        for name in TALIB_PROFILE_CATALOG_NAMES {
+            assert!(
+                talib_profile_supported(name),
+                "profile catalog name is not executable: {name}"
+            );
+        }
+    }
 
     #[test]
     fn executes_single_output_with_canonical_name_and_core_warmup() {

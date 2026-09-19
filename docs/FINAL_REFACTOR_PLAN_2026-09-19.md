@@ -90,6 +90,9 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
 
 - profile catalog：138 个 profile-only 名称；
 - 合并 Core registry 后 dispatcher：201 个名称；
+- TA-Lib profile 的可执行性由 Core TA-Lib contract 与 profile-only catalog
+  联合推导，扩展项 `DONCHIAN`、`SUPERTREND`、`VWAP` 也纳入同一 canonical
+  catalog；测试强制校验所有 catalog 名称都能到达 dispatcher，避免手写支持列表再次漂移；
 - checked-in numeric golden：201 个；
 - shared numeric contract：201 个向量、160 行合成输入，直接从 checked-in TA-Lib
   0.8.0 golden 生成；Node、Python 已实际执行，Go、Java、.NET 已接入相同逐元素
@@ -98,7 +101,8 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
 - 审计差集：0；
 - 21 个新增函数的独立 adapter、参数目录、输出字段和 warm-up：已接入；
 - Core golden suite：已通过；
-- `finkit-ffi-common`：已通过 80 个测试，包含全目录 dispatcher smoke 和三类
+- `finkit-ffi-common`：已通过 81 个测试，包含全目录 dispatcher smoke、canonical
+  catalog 覆盖门禁和三类
   streaming checkpoint provenance 校验。
 
 这只证明当前 workspace 和已执行 binding 的目录/数值对照，不等于所有操作系统、编译器、CPU、Node 宿主和发布包均已完成验证；发布前仍需运行完整 binding/ABI 矩阵。
