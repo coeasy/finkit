@@ -755,6 +755,17 @@ impl UnifiedOperationEngine {
         }
     }
 
+    /// Return Composite result-cache counters owned by the canonical façade.
+    ///
+    /// Composite keeps its graph-result cache separate from the generic
+    /// operation cache so compiled plans and snapshots can use their own
+    /// bounded lifetimes. Exposing the counters here keeps observability at
+    /// the same typed Runtime boundary used for execution.
+    #[must_use]
+    pub fn composite_cache_stats(&self) -> crate::composite::CompositeCacheStats {
+        self.composite.cache_stats()
+    }
+
     /// Read the canonical metadata catalog used by this engine.
     pub fn catalog(&self) -> &OperationRegistry {
         &self.catalog
@@ -2292,5 +2303,8 @@ mod tests {
             .unwrap();
         assert_eq!(composite_again.primary_values().unwrap(), &[2.0, 3.0, 4.0]);
         assert_eq!(engine.composite_engine().compiled_plan_count(), 1);
+        assert_eq!(engine.composite_cache_stats().hits, 1);
+        assert_eq!(engine.composite_cache_stats().misses, 1);
+        assert_eq!(engine.composite_cache_stats().entries, 1);
     }
 }
