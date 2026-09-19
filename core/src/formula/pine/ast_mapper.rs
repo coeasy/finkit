@@ -1,6 +1,8 @@
 //! Maps Pine Script AST nodes to AlphaTA formula AST (`AstNode`).
 
-use crate::formula::ast::{AstNode, BinaryOperator, UnaryOperator};
+use crate::formula::ast::{
+    AstNode, BinaryOperator, ColorSpec, LineStyle, OutputModifier, PointStyle, UnaryOperator,
+};
 use crate::formula::pine::builtin_table::PineBuiltinTable;
 use crate::formula::pine::parser::{FunctionBody, PineAst, PineAstNode, PineBinaryOp, PineUnaryOp};
 
@@ -152,12 +154,12 @@ impl<'a> PineAstMapper<'a> {
             PineAstNode::PlotCall { value, args } => Ok(AstNode::Output {
                 name: pine_visual_name(args, "PLOT"),
                 expr: Box::new(self.map_node(value)?),
-                modifier: None,
+                modifier: pine_output_modifier(args),
             }),
             PineAstNode::HlineCall { price, args } => Ok(AstNode::Output {
                 name: pine_visual_name(args, "HLINE"),
                 expr: Box::new(self.map_node(price)?),
-                modifier: None,
+                modifier: pine_output_modifier(args),
             }),
             PineAstNode::FillCall { plot1, plot2, .. } => Ok(AstNode::DrawGeneric {
                 command: "FILL".to_string(),
@@ -674,6 +676,67 @@ fn pine_visual_name(args: &[(Option<String>, PineAstNode)], default: &str) -> St
         .unwrap_or_else(|| default.to_string())
 }
 
+/// Lower common Pine visual attributes into the canonical output schema.
+/// Unsupported visual attributes remain absent instead of being guessed into
+/// a different chart behavior.
+fn pine_output_modifier(args: &[(Option<String>, PineAstNode)]) -> Option<OutputModifier> {
+    let color = args
+        .iter()
+        .find_map(|(name, value)| {
+            (name.as_deref() == Some("color")).then(|| match value {
+                PineAstNode::Identifier(identifier) if identifier.starts_with("color.") => {
+                    Some(ColorSpec::Named(identifier.replace('.', "").to_uppercase()))
+                }
+                _ => None,
+            })
+        })
+        .flatten();
+
+    let line_style = args
+        .iter()
+        .find_map(|(name, value)| {
+            (name.as_deref() == Some("linewidth")).then(|| match value {
+                PineAstNode::Number(width) if width.is_finite() && *width >= 1.0 => {
+                    Some(LineStyle {
+                        width: (*width).round() as u32,
+                    })
+                }
+                _ => None,
+            })
+        })
+        .flatten();
+
+    let point_style = args
+        .iter()
+        .find_map(|(name, value)| {
+            (name.as_deref() == Some("style")).then(|| match value {
+                PineAstNode::Identifier(identifier) => match identifier.as_str() {
+                    "plot.style_line" | "plot.style_linebr" | "plot.style_stepline" => {
+                        Some(PointStyle::LineStick)
+                    }
+                    "plot.style_histogram" => Some(PointStyle::Stick),
+                    "plot.style_columns" => Some(PointStyle::VolStick),
+                    "plot.style_circles" => Some(PointStyle::CircleDot),
+                    "plot.style_cross" => Some(PointStyle::CrossDot),
+                    _ => None,
+                },
+                _ => None,
+            })
+        })
+        .flatten();
+
+    if color.is_none() && line_style.is_none() && point_style.is_none() {
+        None
+    } else {
+        Some(OutputModifier {
+            line_style,
+            draw_modifier: None,
+            point_style,
+            color,
+        })
+    }
+}
+
 /// Map a Pine `color.*` constant to a numeric value. Colors are not first-class
 /// in the evaluation engine; when they appear as values (e.g. in a ternary
 /// feeding a plot `color=` argument) we surface a stable numeric stand-in.
@@ -752,12 +815,41 @@ mod tests {
 
     #[test]
     fn titled_pine_visuals_keep_stable_output_channels() {
-        let src = "//@version=5\nindicator(\"P\")\nplot(close, title=\"Close line\")\nhline(10, title=\"Threshold\")\n";
+        let src = "//@version=5\nindicator(\"P\")\nplot(close, title=\"Close line\", color=color.red, linewidth=2, style=plot.style_histogram)\nhline(10, title=\"Threshold\", color=color.blue)\n";
         let pine = parse_pine(src).unwrap();
         let ast = map_pine_to_alphata(&pine).unwrap();
-        let debug = format!("{ast:?}");
-        assert!(debug.contains("name: \"CLOSE LINE\""));
-        assert!(debug.contains("name: \"THRESHOLD\""));
+        let AstNode::Statements(statements) = ast else {
+            panic!("expected Pine visual program to lower to statements");
+        };
+        let outputs = statements
+            .iter()
+            .filter_map(|node| match node {
+                AstNode::Output { name, modifier, .. } => Some((name, modifier.as_ref())),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(outputs.len(), 2);
+        assert_eq!(outputs[0].0, "CLOSE LINE");
+        assert_eq!(outputs[1].0, "THRESHOLD");
+        let Some(modifier) = outputs[0].1 else {
+            panic!("plot metadata must be preserved");
+        };
+        assert_eq!(
+            modifier.line_style.as_ref().map(|style| style.width),
+            Some(2)
+        );
+        assert!(matches!(modifier.point_style, Some(PointStyle::Stick)));
+        assert_eq!(
+            modifier.color,
+            Some(ColorSpec::Named("COLORRED".to_string()))
+        );
+        let Some(hline_modifier) = outputs[1].1 else {
+            panic!("hline metadata must be preserved");
+        };
+        assert_eq!(
+            hline_modifier.color,
+            Some(ColorSpec::Named("COLORBLUE".to_string()))
+        );
     }
 }
 
