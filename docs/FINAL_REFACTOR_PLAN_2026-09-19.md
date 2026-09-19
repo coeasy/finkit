@@ -224,7 +224,7 @@ truth source。`scripts/gen_talib_numeric_contract.py --check` 会重新读取
 ### 当前基线与门禁状态（2026-09-19）
 
 - 当前基线分支：`feature/finkit-v1-unified-engine-20260917`。
-- 历史性能基线提交为 `6ad4aa8`，文档基线随后由 `f7eb988` 推送；本节以下结果对应本轮固定窗口内核改动，提交哈希以本次提交后的远端校验为准。
+- 历史性能基线提交为 `6ad4aa8`，文档基线随后由 `f7eb988` 推送；本轮固定窗口内核改动已提交为 `f69bca8` 并推送到远端同名分支。
 - Rust 格式检查、`finkit` library 测试（2945 passed、1 ignored）、`finkit-ffi-common` 测试（80 passed、1 ignored doc）以及 Python ABI3 release check 已实际通过。
 - 历史基线的 TA-Lib 0.8.0 对照门禁覆盖 96 个指标和 24 个公式，`parity_failures=[]`、`errors=[]`；三档规模指标几何平均约 `1.61x`，但性能门禁未通过（top-20 最低约 `0.64x`，`MIDPRICE14`、`VAR20`、`WILLR14` 持续低于 `0.95x`）。该数字仅用于保留基线，不代表本轮结果；因此不能宣称“全面超过 TA-Lib”。
 - 已实际通过的 binding 验证包括 Node 全部 14 项默认测试，以及 Python 当前 wheel 的 TA-Lib 数值合同；Go 因本机 `CGO_ENABLED=0` 且缺少 `gcc` 未运行，Java 因缺少 Maven 未运行，C/C++ 因缺少 CMake/编译器未运行，.NET 因缺少 `dotnet` 未运行。这些语言仍需由对应 CI 宿主提供真实运行证据。
