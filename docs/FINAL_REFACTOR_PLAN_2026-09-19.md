@@ -88,7 +88,7 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
 
 真实 `talib.get_functions()` 为 201 个公开函数。当前仓库已完成：
 
-- profile catalog：138 个 profile-only 名称；
+- profile catalog：141 个 profile-only 名称；
 - 合并 Core registry 后 dispatcher：201 个名称；
 - TA-Lib profile 的可执行性由 Core TA-Lib contract 与 profile-only catalog
   联合推导，扩展项 `DONCHIAN`、`SUPERTREND`、`VWAP` 也纳入同一 canonical
