@@ -184,6 +184,15 @@ truth source。`scripts/gen_talib_numeric_contract.py --check` 会重新读取
   到 Draw IR；本轮已将常用 `color`、`linewidth`、`style` lower 到统一
   `OutputModifier`，但 pane、display、透明度和动态颜色仍需继续扩展，不能把这批
   元数据接入误报为完整 Pine 绘图兼容。
+- Formula 执行上下文现在按首次出现顺序记录所有 `Output` 通道，即使输出没有样式；
+  Lightweight Charts payload 可从同一上下文批量导出这些通道，并 lower `OutputModifier`
+  的颜色、宽度、点型、隐藏状态和 histogram/line 系列类型。前端 adapter 已按该
+  payload 创建或替换对应 series；这条链路已覆盖 Rust payload 单测和 Node adapter
+  测试，但 pane 分配、动态颜色、透明度和跨语言 metadata contract 仍需继续补齐。
+- 统一 Formula JSON contract 的普通、temporal、panel 和 cross-sectional 响应现在都
+  发布有序 `outputs` 元数据；每个条目包含稳定通道名和可空 `modifier`，语言绑定只转发
+  该结果，不再各自猜测绘图序列身份或样式。stateful stream 仍只返回其数值主输出，需
+  在具备可移植状态布局后再扩展多输出绘图元数据。
 - FFI 的 Factor、Composite、Formula 和 direct operation 入口现在复用线程本地的
   `UnifiedOperationEngine`，每个线程保留有界 compiled-plan/result cache，避免跨语言
   JSON 调用每次重新创建 Runtime。Factor/Composite 批处理与三类 streaming 请求现在

@@ -139,6 +139,9 @@ impl FormulaExecutor {
                         ctx.variables.insert(name_arc, arr.clone());
                     }
                 }
+                if !ctx.output_names.iter().any(|output| output == name) {
+                    ctx.output_names.push(name.clone());
+                }
                 if let Some(modifier) = modifier {
                     ctx.output_modifiers
                         .insert(name.to_string(), modifier.clone());
@@ -1027,6 +1030,9 @@ impl FormulaExecutor {
                 let value = self.execute_with_pool_cached(expr, ctx, pool, name_cache)?;
                 let name_arc = name_cache.get_or_create(name);
                 ctx.assign_var_no_copy(name_arc, value.clone());
+                if !ctx.output_names.iter().any(|output| output == name) {
+                    ctx.output_names.push(name.clone());
+                }
                 if let Some(modifier) = modifier {
                     ctx.output_modifiers
                         .insert(name.to_string(), modifier.clone());
@@ -1357,6 +1363,9 @@ impl FormulaExecutor {
             } => {
                 let value = self.execute_with_pool(expr, ctx, pool)?;
                 let value = ctx.assign_var(name, value);
+                if !ctx.output_names.iter().any(|output| output == name) {
+                    ctx.output_names.push(name.clone());
+                }
                 if let Some(modifier) = modifier {
                     ctx.output_modifiers
                         .insert(name.to_string(), modifier.clone());

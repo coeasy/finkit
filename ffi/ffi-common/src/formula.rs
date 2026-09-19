@@ -109,6 +109,7 @@ pub fn evaluate_formula_json(
         "dialect": dialect.as_str(),
         "primary": "__PRIMARY__",
         "values": serialized_values,
+        "outputs": formula_outputs_json(&context),
         "draw": draw,
     }))
     .map_err(|error| error.to_string())
@@ -474,6 +475,7 @@ pub fn evaluate_formula_temporal_json(request: &str) -> Result<String, String> {
         "fundamentals": fundamental_metadata,
         "security": security_metadata,
         "values": serialized_values,
+        "outputs": formula_outputs_json(&context),
         "draw": draw,
     }))
     .map_err(|error| error.to_string())
@@ -523,6 +525,7 @@ pub fn evaluate_formula_panel_json(request: &str) -> Result<String, String> {
                 "timestamps": child["frame"]["timestamps"],
                 "primary": child["primary"],
                 "values": child["values"],
+                "outputs": child["outputs"],
                 "draw": child["draw"],
             }),
         );
@@ -583,6 +586,7 @@ pub fn evaluate_formula_cross_sectional_json(request: &str) -> Result<String, St
 
     let symbols_per_row = request.symbols.len();
     let mut output_values: BTreeMap<String, Vec<f64>> = BTreeMap::new();
+    let mut output_metadata: BTreeMap<String, Value> = BTreeMap::new();
     let mut draw_rows = Vec::with_capacity(request.timestamps.len());
     for (row, timestamp) in request.timestamps.iter().copied().enumerate() {
         let start = row * symbols_per_row;
@@ -632,6 +636,14 @@ pub fn evaluate_formula_cross_sectional_json(request: &str) -> Result<String, St
                 })
                 .map_err(|error| format!("formula cross-sectional row {timestamp}: {error}"))
         })?;
+        for name in &context.output_names {
+            output_metadata.entry(name.clone()).or_insert_with(|| {
+                json!({
+                    "name": name,
+                    "modifier": context.output_modifiers.get(name),
+                })
+            });
+        }
         let primary =
             result.values.get("__PRIMARY__").cloned().ok_or_else(|| {
                 format!("formula primary output missing at timestamp {timestamp}")
@@ -678,6 +690,7 @@ pub fn evaluate_formula_cross_sectional_json(request: &str) -> Result<String, St
         "timestamps": request.timestamps,
         "symbols": request.symbols,
         "values": serialized_values,
+        "outputs": output_metadata.into_values().collect::<Vec<_>>(),
         "draw": {
             "schema_version": FORMULA_DRAW_CONTRACT_SCHEMA_VERSION,
             "mode": "per_row",
@@ -741,6 +754,21 @@ fn nullable_array(values: &ndarray::Array1<f64>) -> Value {
         values
             .as_slice()
             .expect("formula drawing arrays must be contiguous"),
+    )
+}
+
+fn formula_outputs_json(context: &FormulaContext) -> Value {
+    Value::Array(
+        context
+            .output_names
+            .iter()
+            .map(|name| {
+                json!({
+                    "name": name,
+                    "modifier": context.output_modifiers.get(name),
+                })
+            })
+            .collect(),
     )
 }
 
@@ -930,6 +958,7 @@ mod tests {
         assert_eq!(json["schema_version"], 1);
         assert_eq!(json["primary"], "__PRIMARY__");
         assert_eq!(json["values"]["__PRIMARY__"][1], Value::Null);
+        assert_eq!(json["outputs"], serde_json::json!([]));
         assert_eq!(json["draw"]["schema_version"], 1);
         assert_eq!(json["draw"]["commands"], serde_json::json!([]));
     }
@@ -949,6 +978,8 @@ mod tests {
         .unwrap();
         let json: Value = serde_json::from_str(&payload).unwrap();
         assert_eq!(json["dialect"], "pine");
+        assert_eq!(json["outputs"][0]["name"], "PLOT");
+        assert!(json["outputs"][0]["modifier"].is_null());
     }
 
     #[test]

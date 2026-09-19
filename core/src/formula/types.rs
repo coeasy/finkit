@@ -551,6 +551,11 @@ pub struct FormulaContext {
     pub string_table: Vec<String>,
     /// 变量存储（使用 Arc<str> 避免字符串克隆）
     pub variables: HashMap<VarName, Array1<f64>>,
+    /// Ordered visual output channels emitted by the Formula AST.
+    ///
+    /// This is separate from `output_modifiers`: a plain `OUTPUT`/Pine `plot`
+    /// without styling still needs to be discoverable by chart adapters.
+    pub output_names: Vec<String>,
     /// 输出修饰符
     pub output_modifiers: HashMap<String, OutputModifier>,
     /// 绘图命令
@@ -587,6 +592,7 @@ impl Clone for FormulaContext {
             em_data: self.em_data.clone(),
             string_table: self.string_table.clone(),
             variables: self.variables.clone(),
+            output_names: self.output_names.clone(),
             output_modifiers: self.output_modifiers.clone(),
             draw_commands: RefCell::new(self.draw_commands.borrow().clone()),
             data_len: self.data_len,
@@ -627,6 +633,7 @@ impl FormulaContext {
             em_data: None,
             string_table: Vec::new(),
             variables: HashMap::new(),
+            output_names: Vec::new(),
             output_modifiers: HashMap::new(),
             draw_commands: RefCell::new(DrawResult::new()),
             data_len,
@@ -669,6 +676,7 @@ impl FormulaContext {
             em_data: None,
             string_table: Vec::new(),
             variables: HashMap::new(),
+            output_names: Vec::new(),
             output_modifiers: HashMap::new(),
             draw_commands: RefCell::new(DrawResult::new()),
             data_len,
@@ -934,6 +942,7 @@ impl FormulaContext {
             em_data: self.em_data.clone(),
             string_table: self.string_table.clone(),
             variables: HashMap::new(),
+            output_names: self.output_names.clone(),
             output_modifiers: self.output_modifiers.clone(),
             draw_commands: RefCell::new(self.draw_commands.borrow().clone()),
             data_len: end - start,

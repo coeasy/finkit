@@ -10,8 +10,10 @@
 
 `alignment` 只允许 `exact` 和 `as_of_closed`。不支持隐式重采样、乱序时间戳、重复变量名或
 覆盖 `OPEN/HIGH/LOW/CLOSE/VOLUME/AMOUNT`。基本面时间戳按披露/可用时间执行 as-of 查询，
-因此未来修订不会进入更早的行情行。返回结果包含标的/周期/时间戳、命名输出、绘图 payload，
-非有限值统一为 JSON `null`。
+因此未来修订不会进入更早的行情行。返回结果包含标的/周期/时间戳、命名输出、按执行顺序排列的
+`outputs` 元数据数组和绘图 payload；普通输出的 `modifier` 为 null，Pine 样式输出携带统一
+修饰符对象，非有限值统一为 JSON `null`。普通 Formula 入口使用同一 `outputs` 结构，确保各语言
+绑定和 Lightweight Charts 适配器使用相同的序列身份与绘图类型。
 
 该入口已经打通显式跨周期/外部时序的批量 Formula 链路，但不等同于自动重采样，也不宣称
 Pine `request.security` 全语义、跨截面批量调度或 stateful 跨周期续算已完成。

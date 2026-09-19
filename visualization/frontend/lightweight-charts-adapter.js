@@ -85,6 +85,7 @@ export function createFinkitLightweightChart(container, payload, lightweightChar
     ...(options.volume || {}),
   });
   const lines = new Map();
+  const lineKinds = new Map();
   const markerState = { primitive: null };
   let currentPayload = payload;
 
@@ -98,10 +99,28 @@ export function createFinkitLightweightChart(container, payload, lightweightChar
     const incoming = new Set();
     for (const line of next.lines || []) {
       incoming.add(line.name);
+      const kind = line.kind === 'histogram' ? 'HistogramSeries' : 'LineSeries';
       let series = lines.get(line.name);
+      if (series && lineKinds.get(line.name) !== kind) {
+        if (typeof chart.removeSeries === 'function') chart.removeSeries(series);
+        lines.delete(line.name);
+        lineKinds.delete(line.name);
+        series = null;
+      }
       if (!series) {
-        series = addSeries(chart, lightweightCharts, 'LineSeries', options.lines?.[line.name]);
+        const metadata = {
+          ...(line.color ? { color: line.color } : {}),
+          ...(Number.isFinite(line.line_width) ? { lineWidth: line.line_width } : {}),
+          ...(line.hidden ? { visible: false } : {}),
+        };
+        series = addSeries(
+          chart,
+          lightweightCharts,
+          kind,
+          { ...metadata, ...(options.lines?.[line.name] || {}) },
+        );
         lines.set(line.name, series);
+        lineKinds.set(line.name, kind);
       }
       series.setData(lineData(line.data || []));
     }
@@ -109,6 +128,7 @@ export function createFinkitLightweightChart(container, payload, lightweightChar
       if (!incoming.has(name) && typeof chart.removeSeries === 'function') {
         chart.removeSeries(series);
         lines.delete(name);
+        lineKinds.delete(name);
       }
     }
     applySceneMetadata(chart, lightweightCharts, candle, next.scene, markerState);
@@ -131,10 +151,28 @@ export function createFinkitLightweightChart(container, payload, lightweightChar
       if (next.candles?.length) candle.update(next.candles[next.candles.length - 1]);
       if (next.volume?.length) volume.update(next.volume[next.volume.length - 1]);
       for (const line of next.lines || []) {
+        const kind = line.kind === 'histogram' ? 'HistogramSeries' : 'LineSeries';
         let series = lines.get(line.name);
+        if (series && lineKinds.get(line.name) !== kind) {
+          if (typeof chart.removeSeries === 'function') chart.removeSeries(series);
+          lines.delete(line.name);
+          lineKinds.delete(line.name);
+          series = null;
+        }
         if (!series) {
-          series = addSeries(chart, lightweightCharts, 'LineSeries', options.lines?.[line.name]);
+          const metadata = {
+            ...(line.color ? { color: line.color } : {}),
+            ...(Number.isFinite(line.line_width) ? { lineWidth: line.line_width } : {}),
+            ...(line.hidden ? { visible: false } : {}),
+          };
+          series = addSeries(
+            chart,
+            lightweightCharts,
+            kind,
+            { ...metadata, ...(options.lines?.[line.name] || {}) },
+          );
           lines.set(line.name, series);
+          lineKinds.set(line.name, kind);
         }
         const point = line.data?.[line.data.length - 1];
         if (series && point) series.update(lineData([point])[0]);

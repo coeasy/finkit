@@ -1136,6 +1136,8 @@ impl FormulaEngine {
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
         ctx.variables.clear();
+        ctx.output_names.clear();
+        ctx.output_modifiers.clear();
         self.eval(source, ctx)
     }
 
@@ -1181,14 +1183,21 @@ impl FormulaEngine {
                                     (
                                         result,
                                         local_ctx.variables,
+                                        local_ctx.output_names,
                                         local_ctx.output_modifiers,
                                         local_ctx.draw_commands.into_inner(),
                                     )
                                 })
                                 .collect();
-                            for (r, vars, mods, draws) in results {
+                            for (r, vars, output_names, mods, draws) in results {
                                 last_result = r?;
                                 ctx.variables.extend(vars);
+                                for output in output_names {
+                                    if !ctx.output_names.iter().any(|existing| existing == &output)
+                                    {
+                                        ctx.output_names.push(output);
+                                    }
+                                }
                                 ctx.output_modifiers.extend(mods);
                                 ctx.draw_commands
                                     .borrow_mut()

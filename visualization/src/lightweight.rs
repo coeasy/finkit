@@ -10,6 +10,7 @@ use crate::data::KlineData;
 use crate::error::{Result, VisualizationError};
 use crate::scene::{ChartScene, HitTarget, PanelId};
 use crate::viewport::Viewport;
+use finkit::formula::{ColorSpec, DrawModifier, FormulaContext, OutputModifier, PointStyle};
 use finkit::indicators;
 use finkit::math::moving_avg;
 use serde::{Deserialize, Serialize};
@@ -66,6 +67,29 @@ pub struct LightweightLine {
     pub name: String,
     /// Ordered line points.
     pub data: Vec<LightweightLinePoint>,
+    /// Lightweight Charts series family: `line` or `histogram`.
+    #[serde(default = "default_line_kind")]
+    pub kind: String,
+    /// Optional CSS color lowered from the Formula output modifier.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    /// Optional line width lowered from the Formula output modifier.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line_width: Option<u32>,
+    /// Canonical point style for adapters that support richer primitives.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub point_style: Option<String>,
+    /// Whether the output should be hidden by default.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub hidden: bool,
+}
+
+fn default_line_kind() -> String {
+    "line".to_string()
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 /// A panel descriptor consumed by the web adapter. Absolute rectangles are
@@ -257,6 +281,17 @@ impl LightweightChartsPayload {
 
     /// Add one aligned nullable indicator line.
     pub fn add_line(&mut self, name: impl Into<String>, values: &[f64]) -> Result<()> {
+        self.add_line_with_modifier(name, values, None)
+    }
+
+    /// Add one aligned output line and lower the Formula output modifier into
+    /// the renderer-neutral Lightweight Charts contract.
+    pub fn add_line_with_modifier(
+        &mut self,
+        name: impl Into<String>,
+        values: &[f64],
+        modifier: Option<&OutputModifier>,
+    ) -> Result<()> {
         let name = name.into();
         if name.trim().is_empty() {
             return Err(VisualizationError::ConversionError {
@@ -286,7 +321,41 @@ impl LightweightChartsPayload {
                 value: value.is_finite().then_some(value),
             })
             .collect();
-        self.lines.push(LightweightLine { name, data });
+        let (kind, color, line_width, point_style, hidden) = modifier
+            .map(lower_output_modifier)
+            .unwrap_or_else(|| (default_line_kind(), None, None, None, false));
+        self.lines.push(LightweightLine {
+            name,
+            data,
+            kind,
+            color,
+            line_width,
+            point_style,
+            hidden,
+        });
+        Ok(())
+    }
+
+    /// Add all visual Formula outputs in their execution order.
+    ///
+    /// Formula execution owns the authoritative output channel list and
+    /// modifiers; this method only validates alignment and lowers that
+    /// canonical result into the web payload.
+    pub fn add_formula_outputs(&mut self, context: &FormulaContext) -> Result<()> {
+        for name in context.output_names.iter().cloned() {
+            let values = context.variables.get(name.as_str()).ok_or_else(|| {
+                VisualizationError::ConversionError {
+                    message: format!("Formula output {name} has no materialized series"),
+                }
+            })?;
+            let values = values
+                .as_slice()
+                .ok_or_else(|| VisualizationError::ConversionError {
+                    message: format!("Formula output {name} is not contiguous"),
+                })?;
+            let modifier = context.output_modifiers.get(&name);
+            self.add_line_with_modifier(name, values, modifier)?;
+        }
         Ok(())
     }
 
@@ -406,6 +475,52 @@ impl LightweightChartsPayload {
     }
 }
 
+fn lower_output_modifier(
+    modifier: &OutputModifier,
+) -> (String, Option<String>, Option<u32>, Option<String>, bool) {
+    let kind = match modifier.point_style {
+        Some(PointStyle::Stick | PointStyle::VolStick | PointStyle::ColorStick) => {
+            "histogram".to_string()
+        }
+        _ => default_line_kind(),
+    };
+    let point_style = modifier.point_style.as_ref().map(|style| {
+        match style {
+            PointStyle::PointDot => "point",
+            PointStyle::CircleDot => "circle",
+            PointStyle::CrossDot => "cross",
+            PointStyle::Stick => "stick",
+            PointStyle::VolStick => "vol_stick",
+            PointStyle::LineStick => "line",
+            PointStyle::ColorStick => "color_stick",
+        }
+        .to_string()
+    });
+    let color = modifier.color.as_ref().map(lower_color);
+    let line_width = modifier.line_style.as_ref().map(|style| style.width);
+    let hidden = matches!(modifier.draw_modifier, Some(DrawModifier::NoDraw));
+    (kind, color, line_width, point_style, hidden)
+}
+
+fn lower_color(color: &ColorSpec) -> String {
+    match color {
+        ColorSpec::Rgb(red, green, blue) => format!("rgb({red}, {green}, {blue})"),
+        ColorSpec::Hex(hex) => hex.clone(),
+        ColorSpec::Named(name) => match name.to_ascii_uppercase().as_str() {
+            "COLORRED" => "#ef5350".to_string(),
+            "COLORGREEN" => "#26a69a".to_string(),
+            "COLORBLUE" => "#42a5f5".to_string(),
+            "COLORYELLOW" => "#fdd835".to_string(),
+            "COLORORANGE" => "#ff9800".to_string(),
+            "COLORPURPLE" => "#ab47bc".to_string(),
+            "COLORWHITE" => "#ffffff".to_string(),
+            "COLORBLACK" => "#000000".to_string(),
+            "COLORGRAY" | "COLOURGRAY" => "#9e9e9e".to_string(),
+            other => other.to_ascii_lowercase(),
+        },
+    }
+}
+
 fn times_for(data: &KlineData) -> Result<Vec<LightweightTime>> {
     if let Some(timestamps) = data.timestamps() {
         return Ok(timestamps
@@ -506,6 +621,26 @@ mod tests {
         assert!(json.contains("\"time\":1704067200"));
         assert!(json.contains("\"value\":null"));
         assert!(json.contains("\"name\":\"EMA\""));
+    }
+
+    #[test]
+    fn payload_lowers_formula_output_modifier_metadata() {
+        let mut payload = LightweightChartsPayload::from_kline(&data()).unwrap();
+        let modifier = OutputModifier {
+            line_style: Some(finkit::formula::LineStyle { width: 2 }),
+            draw_modifier: None,
+            point_style: Some(PointStyle::Stick),
+            color: Some(ColorSpec::Named("COLORRED".to_string())),
+        };
+        payload
+            .add_line_with_modifier("HIST", &[1.0, -1.0], Some(&modifier))
+            .unwrap();
+        let line = &payload.lines[0];
+        assert_eq!(line.kind, "histogram");
+        assert_eq!(line.color.as_deref(), Some("#ef5350"));
+        assert_eq!(line.line_width, Some(2));
+        assert_eq!(line.point_style.as_deref(), Some("stick"));
+        assert!(!line.hidden);
     }
 
     #[test]

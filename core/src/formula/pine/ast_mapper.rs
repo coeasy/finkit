@@ -1292,6 +1292,7 @@ mod pr14_semantic_mapper_v3_tests {
             .variables
             .get("VALUE")
             .expect("function result assignment must exist");
+        assert_eq!(context.output_names, vec!["ADD"]);
         assert_eq!(value[0], 19.5);
         assert_eq!(value[7], 33.5);
     }

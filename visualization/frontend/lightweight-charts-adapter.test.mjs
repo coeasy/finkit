@@ -91,3 +91,27 @@ test('removes lines on full payload replacement and rejects wrong schema', () =>
   assert.equal(state.removed.length, 1)
   assert.throws(() => view.setPayload({ schema_version: 99 }), /Unsupported/)
 })
+
+test('lowers formula line metadata into the matching chart series', () => {
+  const { lightweightCharts, state } = fakeChartEnvironment()
+  const view = createFinkitLightweightChart(
+    'chart',
+    payload([{
+      name: 'hist',
+      kind: 'histogram',
+      color: '#ef5350',
+      line_width: 2,
+      hidden: true,
+      data: [{ time: 1, value: 1 }, { time: 2, value: -1 }],
+    }]),
+    lightweightCharts,
+  )
+
+  assert.equal(view.lines.get('hist').type, lightweightCharts.HistogramSeries)
+  assert.deepEqual(view.lines.get('hist').options, {
+    color: '#ef5350',
+    lineWidth: 2,
+    visible: false,
+  })
+  assert.equal(state.added.at(-1).type, lightweightCharts.HistogramSeries)
+})

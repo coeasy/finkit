@@ -79,9 +79,15 @@ casing. The request includes a frame with `symbol`, `timeframe`, monotonic
 non-monotonic timestamps, duplicate names, and built-in-field shadowing are
 rejected. Fundamental timestamps are publication/availability times and use
 as-of lookup, so future revisions cannot enter an earlier row. The result
-includes frame identity, timestamps, named values, the versioned `draw`
-payload, and JSON `null` for non-finite values. This is explicit alignment,
-not an implicit resampler or a complete Pine `request.security` implementation.
+includes frame identity, timestamps, named values, an ordered `outputs` array
+with output names and optional modifier metadata, the versioned `draw` payload,
+and JSON `null` for non-finite values. This is explicit alignment, not an
+implicit resampler or a complete Pine `request.security` implementation.
+
+The ordinary Formula response uses the same `outputs` array. A plain output is
+represented with a null modifier; styled Pine outputs carry the canonical
+modifier object so every language binding and the Lightweight Charts adapter
+can select the same series identity and rendering family.
 
 Multi-symbol and multi-timeframe Formula evaluation uses the
 `formula.panel.v1` contract and the corresponding
