@@ -173,6 +173,10 @@ truth source。`scripts/gen_talib_numeric_contract.py --check` 会重新读取
   `ROLLING_RANGE` 均已接入 Formula runtime 与公共 registry。AST lowering 与
   `FormulaEngine` 数值执行回归均已覆盖；未经过参考向量和语义矩阵验证的 Pine
   函数不宣称为生产支持。
+- Pine `plot`/`hline` 的显式 `title` 现在会 lower 为规范化的稳定输出通道名，
+  不再把所有绘图序列折叠为 `PLOT`/`HLINE`；因此 Lightweight Charts adapter、
+  FFI 和多语言结果可以共享同一绘图序列身份。颜色、线型和 pane 等仍需继续扩展
+  到 Draw IR，不能把标题通道修复误报为完整 Pine 绘图兼容。
 - FFI 的 Factor、Composite、Formula 和 direct operation 入口现在复用线程本地的
   `UnifiedOperationEngine`，每个线程保留有界 compiled-plan/result cache，避免跨语言
   JSON 调用每次重新创建 Runtime。Factor/Composite 批处理与三类 streaming 请求现在

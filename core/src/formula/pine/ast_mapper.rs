@@ -149,13 +149,13 @@ impl<'a> PineAstMapper<'a> {
                 cond: Box::new(self.map_node(cond)?),
                 body: self.map_items(body)?,
             }),
-            PineAstNode::PlotCall { value, .. } => Ok(AstNode::Output {
-                name: "PLOT".to_string(),
+            PineAstNode::PlotCall { value, args } => Ok(AstNode::Output {
+                name: pine_visual_name(args, "PLOT"),
                 expr: Box::new(self.map_node(value)?),
                 modifier: None,
             }),
-            PineAstNode::HlineCall { price, .. } => Ok(AstNode::Output {
-                name: "HLINE".to_string(),
+            PineAstNode::HlineCall { price, args } => Ok(AstNode::Output {
+                name: pine_visual_name(args, "HLINE"),
                 expr: Box::new(self.map_node(price)?),
                 modifier: None,
             }),
@@ -658,6 +658,22 @@ fn v(name: &str) -> AstNode {
     AstNode::Variable(name.to_string())
 }
 
+/// Use Pine's explicit visual title as the stable output channel identity.
+/// Plot metadata is intentionally normalized to an uppercase identifier here;
+/// Draw/Chart adapters can use the same name across Formula, FFI and language
+/// bindings without depending on source casing.
+fn pine_visual_name(args: &[(Option<String>, PineAstNode)], default: &str) -> String {
+    args.iter()
+        .find_map(|(name, value)| {
+            (name.as_deref() == Some("title")).then(|| match value {
+                PineAstNode::StringLit(title) => title.to_uppercase(),
+                _ => String::new(),
+            })
+        })
+        .filter(|title| !title.is_empty())
+        .unwrap_or_else(|| default.to_string())
+}
+
 /// Map a Pine `color.*` constant to a numeric value. Colors are not first-class
 /// in the evaluation engine; when they appear as values (e.g. in a ternary
 /// feeding a plot `color=` argument) we surface a stable numeric stand-in.
@@ -732,6 +748,16 @@ mod tests {
         let ast = map_pine_to_alphata(&pine).unwrap();
         let json = format!("{:?}", ast);
         assert!(json.contains("PLOT"));
+    }
+
+    #[test]
+    fn titled_pine_visuals_keep_stable_output_channels() {
+        let src = "//@version=5\nindicator(\"P\")\nplot(close, title=\"Close line\")\nhline(10, title=\"Threshold\")\n";
+        let pine = parse_pine(src).unwrap();
+        let ast = map_pine_to_alphata(&pine).unwrap();
+        let debug = format!("{ast:?}");
+        assert!(debug.contains("name: \"CLOSE LINE\""));
+        assert!(debug.contains("name: \"THRESHOLD\""));
     }
 }
 
