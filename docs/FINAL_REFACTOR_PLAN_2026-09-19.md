@@ -244,6 +244,9 @@ truth source。`scripts/gen_talib_numeric_contract.py --check` 会重新读取
   `UnifiedOperationEngine::prepare_factor_stream()` 解析目标、复用编译计划缓存并克隆
   已注册的 `FactorEngine`；FFI 不再重建独立的 builtin registry，Factor streaming 与
   full/range/batch execution 使用同一注册和 canonical target 语义。
+- Factor 普通、横截面和 catalog metadata 读取也改为使用 Runtime-owned
+  `FactorCatalog`；FFI 不再为计划/描述信息单独构造 builtin catalog，避免执行与公开
+  catalog 在注册表、别名和元数据上的漂移。
 - `engine_contract_v1.json` 新增 `factor_multi_target`，覆盖 `momentum_5` 与依赖它的
   `reversal_5`；Rust FFI common、Python、Node 和 C ABI 当前源码已实际执行该向量，
   Go/Java/.NET 测试入口也已接入同一 fixture。

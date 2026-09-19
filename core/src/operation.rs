@@ -801,6 +801,11 @@ impl UnifiedOperationEngine {
         &self.catalog
     }
 
+    /// Read the canonical Factor catalog used for planning and metadata.
+    pub fn factor_catalog(&self) -> &FactorCatalog {
+        &self.factor_catalog
+    }
+
     /// Access the factor engine for registration and precompiled workflows.
     pub fn factor_engine(&self) -> &FactorEngine {
         &self.factor
@@ -847,9 +852,19 @@ impl UnifiedOperationEngine {
         &mut self,
         targets: &[&str],
     ) -> Result<(CompiledFactorPlan, FactorEngine), OperationExecutionError> {
+        let plan = self.prepare_factor_plan(targets)?;
+        Ok((plan, self.factor.clone()))
+    }
+
+    /// Prepare a canonical Factor plan from the Runtime-owned catalog and
+    /// compiled-plan cache without creating a stream object.
+    pub fn prepare_factor_plan(
+        &mut self,
+        targets: &[&str],
+    ) -> Result<CompiledFactorPlan, OperationExecutionError> {
         if targets.is_empty() {
             return Err(OperationExecutionError::InvalidRequest(
-                "factor stream targets must not be empty".to_string(),
+                "factor targets must not be empty".to_string(),
             ));
         }
         let mut canonical_targets = targets
@@ -868,12 +883,11 @@ impl UnifiedOperationEngine {
             != canonical_targets.len()
         {
             return Err(OperationExecutionError::InvalidRequest(
-                "factor stream targets must be unique".to_string(),
+                "factor targets must be unique".to_string(),
             ));
         }
         canonical_targets.sort_unstable();
-        let plan = self.compiled_factor_plan_targets(&canonical_targets)?;
-        Ok((plan, self.factor.clone()))
+        self.compiled_factor_plan_targets(&canonical_targets)
     }
 
     /// Execute a Formula, Factor, or Composite request using one result contract.

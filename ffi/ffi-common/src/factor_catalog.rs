@@ -1,7 +1,7 @@
 //! Shared discovery contract for the built-in Factor catalog.
 
-use finkit::factor_system::FactorCatalog;
-use finkit::factors::{builtin_factor_registry, FactorDirection, FactorKind};
+use crate::shared_runtime::with_unified_engine;
+use finkit::factors::{FactorDirection, FactorKind};
 use serde::Serialize;
 
 /// Version of the cross-language Factor catalog envelope.
@@ -39,31 +39,33 @@ pub struct FactorCatalogEntry {
 
 /// Build the stable catalog of portable built-in Factors.
 pub fn factor_catalog() -> FactorCatalogEnvelope {
-    let registry = builtin_factor_registry();
-    let catalog = FactorCatalog::from_registry(registry.clone());
-    let factors = registry
-        .iter()
-        .filter_map(|definition| {
-            let descriptor = catalog.descriptor(&definition.name)?;
-            Some(FactorCatalogEntry {
-                name: descriptor.name,
-                kind: factor_kind_name(definition.kind),
-                direction: factor_direction_name(definition.direction),
-                dependencies: descriptor.dependencies,
-                version: descriptor.metadata.version,
-                description: descriptor.metadata.description,
-                aliases: descriptor.metadata.aliases,
-                deterministic: descriptor.metadata.deterministic,
-                bounded_streaming: descriptor.metadata.incremental
-                    && descriptor.metadata.fixed_lookback.is_some()
-                    && definition.kind == FactorKind::TimeSeries,
-                stateful_streaming: catalog.stateful_spec(&definition.name).is_some(),
-                streaming: descriptor.metadata.streaming,
-                incremental: descriptor.metadata.incremental,
-                fixed_lookback: descriptor.metadata.fixed_lookback,
+    let factors = with_unified_engine(|unified| {
+        let catalog = unified.factor_catalog();
+        catalog
+            .registry()
+            .iter()
+            .filter_map(|definition| {
+                let descriptor = catalog.descriptor(&definition.name)?;
+                Some(FactorCatalogEntry {
+                    name: descriptor.name,
+                    kind: factor_kind_name(definition.kind),
+                    direction: factor_direction_name(definition.direction),
+                    dependencies: descriptor.dependencies,
+                    version: descriptor.metadata.version,
+                    description: descriptor.metadata.description,
+                    aliases: descriptor.metadata.aliases,
+                    deterministic: descriptor.metadata.deterministic,
+                    bounded_streaming: descriptor.metadata.incremental
+                        && descriptor.metadata.fixed_lookback.is_some()
+                        && definition.kind == FactorKind::TimeSeries,
+                    stateful_streaming: catalog.stateful_spec(&definition.name).is_some(),
+                    streaming: descriptor.metadata.streaming,
+                    incremental: descriptor.metadata.incremental,
+                    fixed_lookback: descriptor.metadata.fixed_lookback,
+                })
             })
-        })
-        .collect();
+            .collect()
+    });
     FactorCatalogEnvelope {
         schema_version: FACTOR_CATALOG_SCHEMA_VERSION,
         engine_version: env!("CARGO_PKG_VERSION"),

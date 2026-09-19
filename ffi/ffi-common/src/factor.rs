@@ -3,8 +3,7 @@
 use crate::shared_runtime::with_unified_engine;
 use crate::stream_contract::require_scope_and_revision;
 use finkit::data_contract::CrossSectionView;
-use finkit::factor_system::FactorCatalog;
-use finkit::factors::{builtin_factor_registry, FactorContext, FactorKind};
+use finkit::factors::{FactorContext, FactorKind};
 use finkit::operation::OperationRequest;
 use finkit::unified_runtime::{DirtyRange, RuntimeExecutionMode};
 use serde::Deserialize;
@@ -82,16 +81,16 @@ pub fn evaluate_factor_json(request: &str) -> Result<String, String> {
         return Err("factor inputs must not be empty".to_string());
     }
 
-    let registry = builtin_factor_registry();
-    let catalog = FactorCatalog::from_registry(registry.clone());
     let target_refs = request
         .targets
         .iter()
         .map(String::as_str)
         .collect::<Vec<_>>();
-    let plan = catalog
-        .compile(&target_refs)
-        .map_err(|error| error.to_string())?;
+    let plan = with_unified_engine(|unified| {
+        unified
+            .prepare_factor_plan(&target_refs)
+            .map_err(|error| error.to_string())
+    })?;
     let mut context = FactorContext::new();
     for (name, values) in request.inputs {
         context
@@ -215,17 +214,20 @@ pub fn evaluate_factor_cross_sectional_json(request: &str) -> Result<String, Str
         return Err("cross-sectional factor inputs must not be empty".to_string());
     }
 
-    let registry = builtin_factor_registry();
-    let catalog = FactorCatalog::from_registry(registry.clone());
-    let target = catalog
-        .resolve_name(&request.target)
-        .ok_or_else(|| format!("unknown cross-sectional factor: {}", request.target))?;
-    let descriptor = catalog
-        .descriptor(target)
-        .ok_or_else(|| format!("unknown cross-sectional factor: {target}"))?;
-    if descriptor.kind != FactorKind::CrossSectional {
-        return Err(format!("factor {target} is not cross-sectional"));
-    }
+    let (target, descriptor) = with_unified_engine(|unified| {
+        let catalog = unified.factor_catalog();
+        let target = catalog
+            .resolve_name(&request.target)
+            .ok_or_else(|| format!("unknown cross-sectional factor: {}", request.target))?
+            .to_string();
+        let descriptor = catalog
+            .descriptor(&target)
+            .ok_or_else(|| format!("unknown cross-sectional factor: {target}"))?;
+        if descriptor.kind != FactorKind::CrossSectional {
+            return Err(format!("factor {target} is not cross-sectional"));
+        }
+        Ok::<_, String>((target, descriptor))
+    })?;
 
     let symbol_refs: Vec<&str> = request.symbols.iter().map(String::as_str).collect();
     let numeric_inputs: BTreeMap<String, Vec<f64>> = request
@@ -252,14 +254,14 @@ pub fn evaluate_factor_cross_sectional_json(request: &str) -> Result<String, Str
     let result = with_unified_engine(|unified| {
         unified
             .execute(OperationRequest::CrossSectionalFactor {
-                name: target,
+                name: &target,
                 inputs: &input_views,
             })
             .map_err(|error| error.to_string())
     })?;
     let values = result
         .values
-        .get(target)
+        .get(&target)
         .cloned()
         .ok_or_else(|| format!("cross-sectional factor did not produce {target}"))?;
     let mut serialized = serde_json::Map::new();
