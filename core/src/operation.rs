@@ -17,7 +17,7 @@ use crate::factors::{
 };
 use crate::formula::{
     AstNode, DrawResult, FormulaContext, FormulaDialect, FormulaEngine, FormulaError,
-    PineSecurityResolver,
+    FormulaStatefulStream, PineSecurityResolver,
 };
 use crate::registry::{
     builtin_function_registry, FunctionCategory, FunctionSpec, InputKind, LookbackSpec, ParamSpec,
@@ -888,6 +888,18 @@ impl UnifiedOperationEngine {
         }
         canonical_targets.sort_unstable();
         self.compiled_factor_plan_targets(&canonical_targets)
+    }
+
+    /// Compile a stateful Formula stream through the canonical Runtime
+    /// boundary. The returned stream owns its incremental state and portable
+    /// checkpoint image; the Runtime remains responsible for dialect selection
+    /// and admission of the stream contract.
+    pub fn prepare_formula_stream(
+        &mut self,
+        source: &str,
+        dialect: FormulaDialect,
+    ) -> Result<FormulaStatefulStream, OperationExecutionError> {
+        FormulaStatefulStream::from_source(source, dialect).map_err(OperationExecutionError::Factor)
     }
 
     /// Execute a Formula, Factor, or Composite request using one result contract.

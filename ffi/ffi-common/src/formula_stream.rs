@@ -1,9 +1,10 @@
 //! Shared JSON contract for stateful Formula streaming.
 
+use crate::shared_runtime::with_unified_engine;
 use crate::stream_contract::{
     annotate_checkpoint, require_scope_and_revision, validate_checkpoint_metadata,
 };
-use finkit::formula::{FormulaDialect, FormulaStatefulCheckpoint, FormulaStatefulStream};
+use finkit::formula::{FormulaDialect, FormulaStatefulCheckpoint};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -62,8 +63,11 @@ pub fn evaluate_formula_stream_json(request: &str) -> Result<String, String> {
     }
     let dialect = FormulaDialect::from_str(&request.dialect)
         .ok_or_else(|| format!("unsupported formula dialect: {}", request.dialect))?;
-    let mut stream = FormulaStatefulStream::from_source(&request.source, dialect)
-        .map_err(|error| error.to_string())?;
+    let mut stream = with_unified_engine(|unified| {
+        unified
+            .prepare_formula_stream(&request.source, dialect)
+            .map_err(|error| error.to_string())
+    })?;
     if let Some(checkpoint) = request.checkpoint {
         let checkpoint = match checkpoint {
             Value::String(checkpoint) => checkpoint,

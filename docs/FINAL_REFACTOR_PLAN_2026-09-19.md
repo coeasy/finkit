@@ -247,6 +247,10 @@ truth source。`scripts/gen_talib_numeric_contract.py --check` 会重新读取
 - Factor 普通、横截面和 catalog metadata 读取也改为使用 Runtime-owned
   `FactorCatalog`；FFI 不再为计划/描述信息单独构造 builtin catalog，避免执行与公开
   catalog 在注册表、别名和元数据上的漂移。
+- Formula stateful stream 现在通过
+  `UnifiedOperationEngine::prepare_formula_stream()` 完成 dialect admission 和 stream
+  编译；三类 stream contract（Formula/Factor/Composite）均由同一 `shared_runtime`
+  facade 创建，checkpoint 仍由各自的 Core state object 持有。
 - `engine_contract_v1.json` 新增 `factor_multi_target`，覆盖 `momentum_5` 与依赖它的
   `reversal_5`；Rust FFI common、Python、Node 和 C ABI 当前源码已实际执行该向量，
   Go/Java/.NET 测试入口也已接入同一 fixture。
