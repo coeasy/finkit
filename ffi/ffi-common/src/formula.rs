@@ -8,8 +8,7 @@ use crate::shared_runtime::with_unified_engine;
 use finkit::data_contract::{FrameKey, FundamentalSeries, TemporalAlignment, TemporalSeries};
 use finkit::formula::{
     inspect_formula_compatibility, AstNode, DrawCommand, DrawResult, FormulaContext,
-    FormulaDialect, FormulaEngine, FormulaTerminal, PineAstNode, PineMapperError,
-    PineSecurityResolver,
+    FormulaDialect, FormulaTerminal, PineAstNode, PineMapperError, PineSecurityResolver,
 };
 use finkit::operation::OperationRequest;
 use ndarray::Array1;
@@ -425,22 +424,16 @@ pub fn evaluate_formula_temporal_json(request: &str) -> Result<String, String> {
         // specific than the ordinary Formula operation contract. Keep that
         // explicit path rather than pretending provider lookup is a regular
         // variable dispatch.
-        let mut engine = FormulaEngine::new();
         let resolver = TemporalSecurityResolver {
             frame_symbol: &frame.symbol,
             providers: &security_providers,
         };
-        let result = engine
-            .eval_multi_with_pine_security(&request.source, &mut context, &resolver)
-            .map_err(|error| error.to_string())?;
-        let mut values = result
-            .outputs
-            .into_iter()
-            .map(|(name, value)| (name, value.to_vec()))
-            .collect::<BTreeMap<_, _>>();
-        values.insert("__PRIMARY__".to_string(), result.final_value.to_vec());
-        let draw = context.draw_commands.borrow().clone();
-        (values, draw)
+        let result = with_unified_engine(|unified| {
+            unified
+                .execute_formula_with_pine_security(&request.source, &mut context, &resolver)
+                .map_err(|error| error.to_string())
+        })?;
+        (result.values, result.draw.unwrap_or_default())
     } else {
         let result = with_unified_engine(|unified| {
             unified

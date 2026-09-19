@@ -17,6 +17,7 @@ use crate::factors::{
 };
 use crate::formula::{
     AstNode, DrawResult, FormulaContext, FormulaDialect, FormulaEngine, FormulaError,
+    PineSecurityResolver,
 };
 use crate::registry::{
     builtin_function_registry, FunctionCategory, FunctionSpec, InputKind, LookbackSpec, ParamSpec,
@@ -1376,6 +1377,46 @@ impl UnifiedOperationEngine {
         })
     }
 
+    /// Execute a Pine formula with an explicit host-owned `request.security`
+    /// resolver.
+    ///
+    /// The resolver is deliberately supplied by the host because symbol and
+    /// timeframe alignment are data-contract concerns. Keeping the actual
+    /// Pine parse/map/evaluate step here ensures temporal Pine execution uses
+    /// the same Formula engine and result envelope as every other formula
+    /// request instead of creating a second engine in a binding.
+    pub fn execute_formula_with_pine_security(
+        &mut self,
+        source: &str,
+        context: &mut FormulaContext,
+        resolver: &dyn PineSecurityResolver,
+    ) -> Result<OperationResult, OperationExecutionError> {
+        let result = self
+            .formula
+            .eval_multi_with_pine_security(source, context, resolver)?;
+        let mut values = result
+            .outputs
+            .into_iter()
+            .map(|(name, value)| (name, value.to_vec()))
+            .collect::<BTreeMap<_, _>>();
+        values.insert(PRIMARY_OUTPUT_NAME.to_string(), result.final_value.to_vec());
+        let draw = {
+            let draw = context.draw_commands.borrow();
+            (!draw.commands.is_empty()).then(|| draw.clone())
+        };
+        let shape = if values.len() > 1 {
+            ValueShape::MultiSeries
+        } else {
+            ValueShape::Series
+        };
+        Ok(OperationResult {
+            values,
+            shape,
+            primary: Some(PRIMARY_OUTPUT_NAME.to_string()),
+            draw,
+        })
+    }
+
     fn execute_formula_on_frame(
         &mut self,
         source: &str,
@@ -2159,6 +2200,41 @@ mod tests {
         assert!(result.primary_values().is_some());
         assert!(result.get("PLOT").is_some());
         assert!(result.draw.is_none());
+    }
+
+    #[test]
+    fn unified_engine_routes_pine_security_through_the_same_formula_engine() {
+        struct TestSecurityResolver;
+
+        impl crate::formula::PineSecurityResolver for TestSecurityResolver {
+            fn resolve_security(
+                &self,
+                args: &[(Option<String>, crate::formula::PineAstNode)],
+            ) -> Result<crate::formula::AstNode, crate::formula::PineMapperError> {
+                assert_eq!(args.len(), 3);
+                Ok(crate::formula::AstNode::Variable("__HTF".to_string()))
+            }
+        }
+
+        let mut engine = UnifiedOperationEngine::new(FactorRegistry::new());
+        let mut context = formula_context();
+        context.variables.insert(
+            Arc::from("__HTF"),
+            Array1::from_vec(vec![20.0, 20.0, 30.0, 30.0, 40.0, 40.0]),
+        );
+        let result = engine
+            .execute_formula_with_pine_security(
+                "//@version=5\nindicator(\"HTF\")\nhtf = request.security(\"AAA\", \"D\", close)\nhtf",
+                &mut context,
+                &TestSecurityResolver,
+            )
+            .unwrap();
+
+        assert_eq!(result.shape, ValueShape::MultiSeries);
+        assert_eq!(
+            result.primary_values().unwrap(),
+            &[20.0, 20.0, 30.0, 30.0, 40.0, 40.0]
+        );
     }
 
     #[test]

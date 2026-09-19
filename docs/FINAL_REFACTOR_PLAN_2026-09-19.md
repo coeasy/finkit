@@ -275,6 +275,14 @@ truth source。`scripts/gen_talib_numeric_contract.py --check` 会重新读取
   `test_engine_contract_v1.py` 为 2 passed，`test_talib_numeric_contract.py` 为 1 passed。
 - 本机 Go/Java/.NET 仍分别受 CGO/native 链接产物、Maven、.NET SDK 限制；这些语言的共享 fixture 接入已提交，但没有将未运行的宿主测试记为通过。
 
+### Pine security 统一 Runtime 复核（2026-09-19）
+
+- Pine `request.security` 的 provider 对齐和数据防泄漏策略仍由宿主 resolver 负责；这是跨时间周期数据契约，不下沉为隐式重采样。
+- 解析、Pine-to-AlphaTA 映射、求值、多输出封装和绘图结果现在统一由
+  `UnifiedOperationEngine::execute_formula_with_pine_security()` 完成。
+- `ffi-common` 不再为 temporal Pine security 路径临时创建独立 `FormulaEngine`；因此普通 Formula、带 provider 的 Pine Formula 和其他高层操作共享同一 Core Runtime façade。
+- Core 回归已覆盖自定义 security resolver 的 `MultiSeries`/primary 结果语义；FFI temporal contract 继续覆盖实际 provider 对齐、缺失 provider 和非法输入场景。
+
 ### Runtime typed execution chain 复核（`18bff08`，2026-09-19）
 
 - `crates/finkit-runtime` 已从描述字符串骨架收敛为可执行链：`FactorProvider -> FactorRegistry -> Scheduler -> Executor -> FactorCache`。Factory/Provider 返回 `Box<dyn Factor>`，不再返回 `EMA(period=20)` 这类不可执行字符串。
