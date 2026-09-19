@@ -941,6 +941,8 @@ impl UnifiedOperationEngine {
                 "factor targets must be unique".to_string(),
             ));
         }
+        let mut canonical_targets = canonical_targets;
+        canonical_targets.sort_unstable();
         if canonical_targets.len() == 1 {
             return self.execute(OperationRequest::Factor {
                 name: &canonical_targets[0],
@@ -2669,8 +2671,9 @@ mod tests {
         assert_eq!(first.get("RIGHT").unwrap(), &[1.0, 3.0, 5.0]);
         assert_eq!(base_calls.load(Ordering::SeqCst), 1);
 
+        let reversed_targets = ["RIGHT", "LEFT"];
         let second = engine
-            .execute_factor_targets(&targets, &context, Some(7), Some("AAA@1d"))
+            .execute_factor_targets(&reversed_targets, &context, Some(7), Some("AAA@1d"))
             .unwrap();
         assert_eq!(second.values, first.values);
         assert_eq!(base_calls.load(Ordering::SeqCst), 1);
