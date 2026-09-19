@@ -132,7 +132,10 @@ fn rsi_from_averages(avg_gain: f64, avg_loss: f64) -> f64 {
     if avg_loss.abs() < 1e-15 {
         100.0
     } else {
-        100.0 - 100.0 / (1.0 + avg_gain / avg_loss)
+        // Algebraically equivalent to 100 - 100 / (1 + gain / loss), but
+        // requires one division instead of two and is numerically equivalent
+        // to TA-Lib for the public compatibility tolerance.
+        100.0 * avg_gain / (avg_gain + avg_loss)
     }
 }
 

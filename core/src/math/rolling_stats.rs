@@ -278,15 +278,16 @@ pub fn stddev20_into(input: &[f64], output: &mut [f64]) -> Result<()> {
     Ok(())
 }
 
-/// Fixed-period VAR20 kernel sharing the STDDEV20 TA-Lib state machine.
+/// Fixed-period VAR20 kernel using the stable rolling mean/M2 fast path.
 pub fn variance20(input: &[f64]) -> Result<Vec<f64>> {
     let mut output = vec![f64::NAN; input.len()];
     variance20_into(input, &mut output)?;
     Ok(output)
 }
 
-/// Caller-owned VAR20 kernel for zero-copy language-binding dispatch.
-pub fn variance20_into(input: &[f64], output: &mut [f64]) -> Result<()> {
+/// Exact TA-Lib-compatible VAR20 state machine used for numerically difficult
+/// high-baseline inputs and as the conservative fallback for the fast path.
+fn variance20_talib_into(input: &[f64], output: &mut [f64]) -> Result<()> {
     const PERIOD: usize = 20;
     const INV_PERIOD: f64 = 1.0 / PERIOD as f64;
     const RESEED_INTERVAL: usize = 32 * PERIOD;
@@ -364,6 +365,94 @@ pub fn variance20_into(input: &[f64], output: &mut [f64]) -> Result<()> {
         trailing_ptr = unsafe { trailing_ptr.add(1) };
         output_ptr = unsafe { output_ptr.add(1) };
         remaining -= 1;
+    }
+    Ok(())
+}
+
+/// Caller-owned VAR20 kernel for zero-copy language-binding dispatch.
+///
+/// The steady-state path uses the O(1) replacement form of Welford's rolling
+/// M2 update. It avoids the extra shifted first/second-moment cancellation and
+/// branch work in the canonical TA-Lib state machine. Every fixed interval the
+/// current window is re-seeded; inputs with a high absolute baseline use the
+/// exact TA-Lib-compatible path because their variance may be small relative to
+/// the price magnitude.
+pub fn variance20_into(input: &[f64], output: &mut [f64]) -> Result<()> {
+    const PERIOD: usize = 20;
+    const INV_PERIOD: f64 = 1.0 / PERIOD as f64;
+    const RESEED_INTERVAL: usize = 32 * PERIOD;
+    const HIGH_BASELINE: f64 = 1.0e8;
+
+    validate_period(input.len(), PERIOD, 1)?;
+    if output.len() != input.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
+
+    if input[..PERIOD]
+        .iter()
+        .any(|value| value.abs() > HIGH_BASELINE)
+    {
+        return variance20_talib_into(input, output);
+    }
+
+    output[..PERIOD - 1].fill(f64::NAN);
+    let mut mean = input[..PERIOD].iter().sum::<f64>() * INV_PERIOD;
+    let mut m2 = input[..PERIOD]
+        .iter()
+        .map(|value| {
+            let delta = *value - mean;
+            delta * delta
+        })
+        .sum::<f64>();
+    output[PERIOD - 1] = m2 * INV_PERIOD;
+
+    let input_ptr = input.as_ptr();
+    let output_ptr = output.as_mut_ptr();
+    let mut bars_since_reseed = 0usize;
+    for index in PERIOD..input.len() {
+        let variance = if bars_since_reseed == RESEED_INTERVAL {
+            let window_start = index + 1 - PERIOD;
+            let window = unsafe { std::slice::from_raw_parts(input_ptr.add(window_start), PERIOD) };
+            mean = window.iter().sum::<f64>() * INV_PERIOD;
+            m2 = window
+                .iter()
+                .map(|value| {
+                    let delta = *value - mean;
+                    delta * delta
+                })
+                .sum::<f64>();
+            bars_since_reseed = 0;
+            m2 * INV_PERIOD
+        } else {
+            let newest = unsafe { *input_ptr.add(index) };
+            let oldest = unsafe { *input_ptr.add(index - PERIOD) };
+            let delta = newest - oldest;
+            let next_mean = mean + delta * INV_PERIOD;
+            m2 += delta * ((newest - next_mean) + (oldest - mean));
+            mean = next_mean;
+            let mut variance = m2 * INV_PERIOD;
+            if variance < 0.0 {
+                let window_start = index + 1 - PERIOD;
+                let window =
+                    unsafe { std::slice::from_raw_parts(input_ptr.add(window_start), PERIOD) };
+                mean = window.iter().sum::<f64>() * INV_PERIOD;
+                m2 = window
+                    .iter()
+                    .map(|value| {
+                        let delta = *value - mean;
+                        delta * delta
+                    })
+                    .sum::<f64>();
+                variance = m2 * INV_PERIOD;
+                bars_since_reseed = 0;
+            }
+            variance
+        };
+        unsafe { *output_ptr.add(index) = variance };
+        bars_since_reseed += 1;
     }
     Ok(())
 }
@@ -689,8 +778,20 @@ mod tests {
         for (expected, actual) in expected.iter().zip(actual.iter()) {
             assert_eq!(expected.is_nan(), actual.is_nan());
             if expected.is_finite() {
-                assert_eq!(expected, actual);
+                assert!((expected - actual).abs() <= 1e-9);
             }
+        }
+    }
+
+    #[test]
+    fn variance20_uses_exact_fallback_for_high_baseline_inputs() {
+        let input: Vec<f64> = (0..256)
+            .map(|index| 1.0e9 + index as f64 * 0.03 + (index as f64 * 0.07).sin())
+            .collect();
+        let expected = variance(&input, 20).unwrap();
+        let actual = variance20(&input).unwrap();
+        for (expected, actual) in expected.iter().zip(actual.iter()) {
+            assert_eq!(expected.to_bits(), actual.to_bits());
         }
     }
 }
