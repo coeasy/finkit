@@ -561,6 +561,20 @@ impl OperationCacheKey {
             data_revision,
         }
     }
+
+    /// Build a revision-scoped cache key for a multi-target Factor batch.
+    pub fn factor_batch(names: &[String], cache_scope: Option<&str>, data_revision: u64) -> Self {
+        Self {
+            operation: "factor.batch".to_string(),
+            request: names.join("\u{1f}"),
+            dialect: None,
+            frame: FrameKey {
+                symbol: cache_scope.unwrap_or("__default__").to_string(),
+                timeframe: "factor".to_string(),
+            },
+            data_revision,
+        }
+    }
 }
 
 /// Observable counters for the unified operation result cache.
@@ -889,6 +903,92 @@ impl UnifiedOperationEngine {
                 })
             }
         }
+    }
+
+    /// Execute one or more Factor targets through one shared dependency plan.
+    ///
+    /// A single target preserves the ordinary Factor cache identity. Multiple
+    /// targets are compiled and evaluated as one DAG, so common dependencies
+    /// are executed once and the complete result is cached as one batch.
+    pub fn execute_factor_targets(
+        &mut self,
+        names: &[&str],
+        context: &BorrowedFactorContext<'_>,
+        data_revision: Option<u64>,
+        cache_scope: Option<&str>,
+    ) -> Result<OperationResult, OperationExecutionError> {
+        if names.is_empty() {
+            return Err(OperationExecutionError::InvalidRequest(
+                "factor targets must not be empty".to_string(),
+            ));
+        }
+        let canonical_targets = names
+            .iter()
+            .map(|name| {
+                self.factor_catalog
+                    .resolve_name(name)
+                    .map(str::to_owned)
+                    .ok_or_else(|| OperationExecutionError::UnknownOperation((*name).to_string()))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        if canonical_targets
+            .iter()
+            .collect::<std::collections::BTreeSet<_>>()
+            .len()
+            != canonical_targets.len()
+        {
+            return Err(OperationExecutionError::InvalidRequest(
+                "factor targets must be unique".to_string(),
+            ));
+        }
+        if canonical_targets.len() == 1 {
+            return self.execute(OperationRequest::Factor {
+                name: &canonical_targets[0],
+                context,
+                data_revision,
+                cache_scope,
+            });
+        }
+
+        let key = data_revision.map(|revision| {
+            OperationCacheKey::factor_batch(&canonical_targets, cache_scope, revision)
+        });
+        if let Some(key) = key.as_ref() {
+            if let Some(result) = self.get_cached_result(key) {
+                self.operation_cache_hits = self.operation_cache_hits.saturating_add(1);
+                return Ok(result);
+            }
+            self.operation_cache_misses = self.operation_cache_misses.saturating_add(1);
+        }
+
+        let plan = self.compiled_factor_plan_targets(&canonical_targets)?;
+        let output = plan
+            .execute_borrowed(&self.factor, context)
+            .map_err(OperationExecutionError::Factor)?;
+        let values = canonical_targets
+            .iter()
+            .map(|name| {
+                output
+                    .get(name)
+                    .cloned()
+                    .map(|series| (name.clone(), series))
+                    .ok_or_else(|| {
+                        OperationExecutionError::InvalidRequest(format!(
+                            "compiled factor plan did not produce {name}"
+                        ))
+                    })
+            })
+            .collect::<Result<BTreeMap<_, _>, _>>()?;
+        let result = OperationResult {
+            values,
+            shape: ValueShape::MultiSeries,
+            primary: None,
+            draw: None,
+        };
+        if let Some(key) = key {
+            self.insert_cached_result(key, result.clone());
+        }
+        Ok(result)
     }
 
     /// Execute a range-safe Factor plan through the canonical Runtime façade.
@@ -1356,8 +1456,20 @@ impl UnifiedOperationEngine {
         &mut self,
         canonical: &str,
     ) -> Result<CompiledFactorPlan, OperationExecutionError> {
+        self.compiled_factor_plan_targets(&[canonical.to_string()])
+    }
+
+    fn compiled_factor_plan_targets(
+        &mut self,
+        canonical_targets: &[String],
+    ) -> Result<CompiledFactorPlan, OperationExecutionError> {
+        let cache_name = if canonical_targets.len() == 1 {
+            canonical_targets[0].clone()
+        } else {
+            format!("batch:{}", canonical_targets.join("\u{1f}"))
+        };
         let tick = self.next_factor_plan_tick();
-        if let Some(entry) = self.factor_plans.get_mut(canonical) {
+        if let Some(entry) = self.factor_plans.get_mut(&cache_name) {
             self.factor_plan_cache_hits = self.factor_plan_cache_hits.saturating_add(1);
             entry.last_used = tick;
             return Ok(entry.plan.clone());
@@ -1366,7 +1478,12 @@ impl UnifiedOperationEngine {
         self.factor_plan_cache_misses = self.factor_plan_cache_misses.saturating_add(1);
         let plan = self
             .factor_catalog
-            .compile(&[canonical])
+            .compile(
+                &canonical_targets
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>(),
+            )
             .map_err(OperationExecutionError::Factor)?;
         if self.factor_plans.len() >= COMPILED_FACTOR_PLAN_CACHE_CAPACITY {
             if let Some(oldest) = self
@@ -1379,7 +1496,7 @@ impl UnifiedOperationEngine {
             }
         }
         self.factor_plans.insert(
-            canonical.to_string(),
+            cache_name,
             CompiledFactorPlanCacheEntry {
                 plan: plan.clone(),
                 last_used: tick,
@@ -1753,6 +1870,7 @@ mod tests {
     use crate::unified_runtime::RuntimeExecutionMode;
     use ndarray::Array1;
     use std::collections::BTreeMap;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
 
     #[test]
@@ -2482,5 +2600,83 @@ mod tests {
                 recompute: DirtyRange::new(5, 6),
             }
         );
+    }
+
+    #[test]
+    fn multi_target_factor_execution_shares_dependencies_and_batch_cache() {
+        let base_calls = Arc::new(AtomicUsize::new(0));
+        let base_calls_for_factor = base_calls.clone();
+        let mut factors = FactorRegistry::new();
+        factors
+            .register(FactorDefinition::new(
+                "BASE",
+                ["close"],
+                FactorKind::TimeSeries,
+                FactorDirection::Neutral,
+                Arc::new(move |inputs| {
+                    base_calls_for_factor.fetch_add(1, Ordering::SeqCst);
+                    Ok(inputs
+                        .get("close")?
+                        .iter()
+                        .map(|value| value * 2.0)
+                        .collect())
+                }),
+            ))
+            .unwrap();
+        factors
+            .register(FactorDefinition::new(
+                "LEFT",
+                ["BASE"],
+                FactorKind::TimeSeries,
+                FactorDirection::Neutral,
+                Arc::new(|inputs| {
+                    Ok(inputs
+                        .get("BASE")?
+                        .iter()
+                        .map(|value| value + 1.0)
+                        .collect())
+                }),
+            ))
+            .unwrap();
+        factors
+            .register(FactorDefinition::new(
+                "RIGHT",
+                ["BASE"],
+                FactorKind::TimeSeries,
+                FactorDirection::Neutral,
+                Arc::new(|inputs| {
+                    Ok(inputs
+                        .get("BASE")?
+                        .iter()
+                        .map(|value| value - 1.0)
+                        .collect())
+                }),
+            ))
+            .unwrap();
+
+        let close = [1.0, 2.0, 3.0];
+        let context = BorrowedFactorContext::new()
+            .with_series("close", &close)
+            .unwrap();
+        let mut engine = UnifiedOperationEngine::with_cache_capacity(factors, 8);
+        let targets = ["LEFT", "RIGHT"];
+        let first = engine
+            .execute_factor_targets(&targets, &context, Some(7), Some("AAA@1d"))
+            .unwrap();
+        assert_eq!(first.shape, ValueShape::MultiSeries);
+        assert_eq!(first.primary, None);
+        assert_eq!(first.get("LEFT").unwrap(), &[3.0, 5.0, 7.0]);
+        assert_eq!(first.get("RIGHT").unwrap(), &[1.0, 3.0, 5.0]);
+        assert_eq!(base_calls.load(Ordering::SeqCst), 1);
+
+        let second = engine
+            .execute_factor_targets(&targets, &context, Some(7), Some("AAA@1d"))
+            .unwrap();
+        assert_eq!(second.values, first.values);
+        assert_eq!(base_calls.load(Ordering::SeqCst), 1);
+        assert_eq!(engine.cache_stats().misses, 1);
+        assert_eq!(engine.cache_stats().hits, 1);
+        assert_eq!(engine.factor_plan_cache_hits, 0);
+        assert_eq!(engine.factor_plan_cache_misses, 1);
     }
 }

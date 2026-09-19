@@ -129,22 +129,23 @@ pub fn evaluate_factor_json(request: &str) -> Result<String, String> {
             // façade used by the direct operation API. This keeps catalog
             // resolution, compiled-plan caching and result caching in one
             // Runtime path for every language binding.
-            let mut output = BTreeMap::new();
-            for target in &request.targets {
-                let result = with_unified_engine(|unified| {
-                    unified
-                        .execute(OperationRequest::Factor {
-                            name: target,
-                            context: &borrowed,
-                            data_revision: Some(data_revision),
-                            cache_scope: Some(scope),
-                        })
-                        .map_err(|error| error.to_string())
-                })?;
-                output.extend(result.values);
-            }
+            let target_refs = request
+                .targets
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>();
+            let result = with_unified_engine(|unified| {
+                unified
+                    .execute_factor_targets(
+                        &target_refs,
+                        &borrowed,
+                        Some(data_revision),
+                        Some(scope),
+                    )
+                    .map_err(|error| error.to_string())
+            })?;
             finkit::unified_runtime::RuntimeExecution {
-                output,
+                output: result.values,
                 trace: finkit::unified_runtime::RuntimeExecutionTrace {
                     mode: RuntimeExecutionMode::Full,
                     rows: context.len(),

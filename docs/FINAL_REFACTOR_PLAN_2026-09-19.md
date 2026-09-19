@@ -232,6 +232,9 @@ truth source。`scripts/gen_talib_numeric_contract.py --check` 会重新读取
   `execute_composite_range()` 负责计划解析、依赖执行和 `RuntimeExecutionTrace`；
   FFI Factor/Composite range 分支不再直接绕过 Runtime 调用领域引擎，原有
   `input_dirty/affected/recompute` contract 向量保持不变。
+- Factor 多目标 full batch 现在通过 `execute_factor_targets()` 一次执行共享 DAG，
+  并按目标集合建立 batch result cache；重复依赖只计算一次，重复请求直接命中
+  batch 缓存，不再由 FFI 按 target 循环调用单目标入口。
 - 本轮实际验证：`finkit-ffi-common` 80 tests passed、C ABI 31 tests passed、Python contract 2 passed、Node 13 passed。Go 测试在未完成 native 产物链接时无法编译，Java 因 Maven 不可用，.NET 因 SDK 不可用；这些均保持未验证状态。
 
 ### 当前基线与门禁状态（2026-09-19）
