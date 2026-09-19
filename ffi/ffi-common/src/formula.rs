@@ -430,7 +430,11 @@ pub fn evaluate_formula_temporal_json(request: &str) -> Result<String, String> {
         };
         let result = with_unified_engine(|unified| {
             unified
-                .execute_formula_with_pine_security(&request.source, &mut context, &resolver)
+                .execute(OperationRequest::FormulaWithPineSecurity {
+                    source: &request.source,
+                    context: &mut context,
+                    resolver: &resolver,
+                })
                 .map_err(|error| error.to_string())
         })?;
         (result.values, result.draw.unwrap_or_default())

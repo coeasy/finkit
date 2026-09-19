@@ -453,6 +453,20 @@ pub enum OperationRequest<'a> {
         /// Mutable context, because formulas may assign variables or emit draw commands.
         context: &'a mut FormulaContext,
     },
+    /// Execute a Pine Formula with an explicit host-owned `request.security`
+    /// resolver.
+    ///
+    /// The resolver owns symbol/timeframe alignment and data-leakage policy;
+    /// parsing, mapping, evaluation, and result normalization remain in the
+    /// unified Core Runtime.
+    FormulaWithPineSecurity {
+        /// Pine source in the supported Pine subset.
+        source: &'a str,
+        /// Mutable input context.
+        context: &'a mut FormulaContext,
+        /// Host-owned provider resolver.
+        resolver: &'a dyn PineSecurityResolver,
+    },
     /// Evaluate one registered factor from a borrowed named-series context.
     Factor {
         /// Registered factor name.
@@ -832,6 +846,11 @@ impl UnifiedOperationEngine {
                     draw,
                 })
             }
+            OperationRequest::FormulaWithPineSecurity {
+                source,
+                context,
+                resolver,
+            } => self.execute_formula_with_pine_security(source, context, resolver),
             OperationRequest::Factor {
                 name,
                 context,
@@ -2223,11 +2242,11 @@ mod tests {
             Array1::from_vec(vec![20.0, 20.0, 30.0, 30.0, 40.0, 40.0]),
         );
         let result = engine
-            .execute_formula_with_pine_security(
-                "//@version=5\nindicator(\"HTF\")\nhtf = request.security(\"AAA\", \"D\", close)\nhtf",
-                &mut context,
-                &TestSecurityResolver,
-            )
+            .execute(OperationRequest::FormulaWithPineSecurity {
+                source: "//@version=5\nindicator(\"HTF\")\nhtf = request.security(\"AAA\", \"D\", close)\nhtf",
+                context: &mut context,
+                resolver: &TestSecurityResolver,
+            })
             .unwrap();
 
         assert_eq!(result.shape, ValueShape::MultiSeries);

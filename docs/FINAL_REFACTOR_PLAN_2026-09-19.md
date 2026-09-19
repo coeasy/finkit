@@ -279,7 +279,8 @@ truth source。`scripts/gen_talib_numeric_contract.py --check` 会重新读取
 
 - Pine `request.security` 的 provider 对齐和数据防泄漏策略仍由宿主 resolver 负责；这是跨时间周期数据契约，不下沉为隐式重采样。
 - 解析、Pine-to-AlphaTA 映射、求值、多输出封装和绘图结果现在统一由
-  `UnifiedOperationEngine::execute_formula_with_pine_security()` 完成。
+  `OperationRequest::FormulaWithPineSecurity` ->
+  `UnifiedOperationEngine::execute()` 完成；底层 resolver 方法只作为 Core 内部实现。
 - `ffi-common` 不再为 temporal Pine security 路径临时创建独立 `FormulaEngine`；因此普通 Formula、带 provider 的 Pine Formula 和其他高层操作共享同一 Core Runtime façade。
 - Core 回归已覆盖自定义 security resolver 的 `MultiSeries`/primary 结果语义；FFI temporal contract 继续覆盖实际 provider 对齐、缺失 provider 和非法输入场景。
 
