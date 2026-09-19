@@ -1,7 +1,7 @@
 //! Maps Pine Script AST nodes to AlphaTA formula AST (`AstNode`).
 
 use std::cell::Cell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::formula::ast::{
     AstNode, BinaryOperator, ColorSpec, LineStyle, OutputModifier, PointStyle, UnaryOperator,
@@ -72,6 +72,7 @@ struct PineAstMapper<'a> {
     security_resolver: Option<&'a dyn PineSecurityResolver>,
     function_defs: HashMap<String, (Vec<String>, FunctionBody)>,
     expansion_depth: Cell<usize>,
+    expansion_serial: Cell<u64>,
 }
 
 impl<'a> PineAstMapper<'a> {
@@ -85,6 +86,7 @@ impl<'a> PineAstMapper<'a> {
             security_resolver,
             function_defs,
             expansion_depth: Cell::new(0),
+            expansion_serial: Cell::new(0),
         }
     }
 
@@ -684,11 +686,30 @@ impl<'a> PineAstMapper<'a> {
             });
         }
 
-        let substitutions = params
+        let local_names = collect_function_local_names(body);
+        if let Some(parameter) = params
+            .iter()
+            .find(|parameter| local_names.contains(*parameter))
+        {
+            return Err(PineMapperError {
+                message: format!(
+                    "function '{name}' reassigns parameter '{parameter}'; parameter mutation is outside the Pine subset"
+                ),
+            });
+        }
+        let serial = self.expansion_serial.get();
+        self.expansion_serial.set(serial.saturating_add(1));
+        let mut substitutions = params
             .iter()
             .zip(args.iter().map(|(_, value)| value))
             .map(|(param, value)| (param.clone(), value.clone()))
             .collect::<HashMap<_, _>>();
+        for local_name in local_names {
+            substitutions.insert(
+                local_name.clone(),
+                PineAstNode::Identifier(format!("__PINE_FN_{serial}_{local_name}")),
+            );
+        }
         let expanded_body = substitute_pine_body(body, &substitutions);
 
         self.expansion_depth.set(self.expansion_depth.get() + 1);
@@ -698,6 +719,146 @@ impl<'a> PineAstMapper<'a> {
         };
         self.expansion_depth.set(self.expansion_depth.get() - 1);
         result
+    }
+}
+
+fn substitute_binding_name(name: &str, substitutions: &HashMap<String, PineAstNode>) -> String {
+    match substitutions.get(name) {
+        Some(PineAstNode::Identifier(identifier)) => identifier.clone(),
+        _ => name.to_string(),
+    }
+}
+
+fn collect_function_local_names(body: &FunctionBody) -> HashSet<String> {
+    let mut names = HashSet::new();
+    match body {
+        FunctionBody::Expr(expr) => collect_function_local_names_from_node(expr, &mut names),
+        FunctionBody::Block(stmts) => {
+            for stmt in stmts {
+                collect_function_local_names_from_node(stmt, &mut names);
+            }
+        }
+    }
+    names
+}
+
+fn collect_function_local_names_from_node(node: &PineAstNode, names: &mut HashSet<String>) {
+    match node {
+        PineAstNode::VarDecl { name, init, .. } => {
+            names.insert(name.clone());
+            collect_function_local_names_from_node(init, names);
+        }
+        PineAstNode::Assignment { name, expr, .. } => {
+            names.insert(name.clone());
+            collect_function_local_names_from_node(expr, names);
+        }
+        PineAstNode::TupleAssign {
+            names: targets,
+            expr,
+        } => {
+            names.extend(targets.iter().cloned());
+            collect_function_local_names_from_node(expr, names);
+        }
+        PineAstNode::IfStmt {
+            cond,
+            then_body,
+            else_body,
+        } => {
+            collect_function_local_names_from_node(cond, names);
+            for stmt in then_body {
+                collect_function_local_names_from_node(stmt, names);
+            }
+            if let Some(body) = else_body {
+                for stmt in body {
+                    collect_function_local_names_from_node(stmt, names);
+                }
+            }
+        }
+        PineAstNode::ForStmt {
+            var,
+            start,
+            end,
+            step,
+            body,
+        } => {
+            names.insert(var.clone());
+            collect_function_local_names_from_node(start, names);
+            collect_function_local_names_from_node(end, names);
+            if let Some(step) = step {
+                collect_function_local_names_from_node(step, names);
+            }
+            for stmt in body {
+                collect_function_local_names_from_node(stmt, names);
+            }
+        }
+        PineAstNode::WhileStmt { cond, body } => {
+            collect_function_local_names_from_node(cond, names);
+            for stmt in body {
+                collect_function_local_names_from_node(stmt, names);
+            }
+        }
+        PineAstNode::PlotCall { value, args } => {
+            collect_function_local_names_from_node(value, names);
+            collect_function_local_names_from_args(args, names);
+        }
+        PineAstNode::HlineCall { price, args } => {
+            collect_function_local_names_from_node(price, names);
+            collect_function_local_names_from_args(args, names);
+        }
+        PineAstNode::FillCall { plot1, plot2, args } => {
+            collect_function_local_names_from_node(plot1, names);
+            collect_function_local_names_from_node(plot2, names);
+            collect_function_local_names_from_args(args, names);
+        }
+        PineAstNode::Expr(expr) | PineAstNode::UnaryOp { expr, .. } => {
+            collect_function_local_names_from_node(expr, names)
+        }
+        PineAstNode::BinaryOp { left, right, .. } => {
+            collect_function_local_names_from_node(left, names);
+            collect_function_local_names_from_node(right, names);
+        }
+        PineAstNode::Ternary {
+            cond,
+            then_expr,
+            else_expr,
+        } => {
+            collect_function_local_names_from_node(cond, names);
+            collect_function_local_names_from_node(then_expr, names);
+            collect_function_local_names_from_node(else_expr, names);
+        }
+        PineAstNode::FunctionCall { args, .. } => {
+            collect_function_local_names_from_args(args, names)
+        }
+        PineAstNode::IndexAccess { array, index } => {
+            collect_function_local_names_from_node(array, names);
+            collect_function_local_names_from_node(index, names);
+        }
+        PineAstNode::FunctionDecl { body, .. } => match body {
+            FunctionBody::Expr(expr) => collect_function_local_names_from_node(expr, names),
+            FunctionBody::Block(stmts) => {
+                for stmt in stmts {
+                    collect_function_local_names_from_node(stmt, names);
+                }
+            }
+        },
+        PineAstNode::VersionAnnotation(_)
+        | PineAstNode::IndicatorDecl { .. }
+        | PineAstNode::StudyDecl { .. }
+        | PineAstNode::InputDecl { .. }
+        | PineAstNode::Number(_)
+        | PineAstNode::StringLit(_)
+        | PineAstNode::NaLiteral
+        | PineAstNode::Identifier(_)
+        | PineAstNode::BarstateAccess { .. } => {}
+    }
+}
+
+fn collect_function_local_names_from_args(
+    args: &[(Option<String>, PineAstNode)],
+    names: &mut HashSet<String>,
+) {
+    for (_, value) in args {
+        collect_function_local_names_from_node(value, names);
     }
 }
 
@@ -746,7 +907,7 @@ fn substitute_pine_node(
         } => PineAstNode::VarDecl {
             is_varip: *is_varip,
             type_qualifier: *type_qualifier,
-            name: name.clone(),
+            name: substitute_binding_name(name, substitutions),
             init: Box::new(substitute_pine_node(init, substitutions)),
         },
         PineAstNode::InputDecl {
@@ -771,12 +932,15 @@ fn substitute_pine_node(
             is_reassign,
             expr,
         } => PineAstNode::Assignment {
-            name: name.clone(),
+            name: substitute_binding_name(name, substitutions),
             is_reassign: *is_reassign,
             expr: Box::new(substitute_pine_node(expr, substitutions)),
         },
         PineAstNode::TupleAssign { names, expr } => PineAstNode::TupleAssign {
-            names: names.clone(),
+            names: names
+                .iter()
+                .map(|name| substitute_binding_name(name, substitutions))
+                .collect(),
             expr: Box::new(substitute_pine_node(expr, substitutions)),
         },
         PineAstNode::IfStmt {
@@ -802,7 +966,7 @@ fn substitute_pine_node(
             step,
             body,
         } => PineAstNode::ForStmt {
-            var: var.clone(),
+            var: substitute_binding_name(var, substitutions),
             start: Box::new(substitute_pine_node(start, substitutions)),
             end: Box::new(substitute_pine_node(end, substitutions)),
             step: step
@@ -1311,6 +1475,76 @@ mod pr14_semantic_mapper_v3_tests {
         .unwrap();
         let error = map_pine_to_alphata(&recursive).unwrap_err();
         assert!(error.message.contains("possible recursion at 'loop'"));
+    }
+
+    #[test]
+    fn pine_user_defined_block_locals_are_hygienic_per_call_site() {
+        let function = PineAstNode::FunctionDecl {
+            name: "with_temp".to_string(),
+            params: vec!["x".to_string()],
+            body: FunctionBody::Block(vec![
+                PineAstNode::Assignment {
+                    name: "temp".to_string(),
+                    is_reassign: false,
+                    expr: Box::new(PineAstNode::Identifier("x".to_string())),
+                },
+                PineAstNode::Expr(Box::new(PineAstNode::BinaryOp {
+                    op: PineBinaryOp::Add,
+                    left: Box::new(PineAstNode::Identifier("temp".to_string())),
+                    right: Box::new(PineAstNode::Number(1.0)),
+                })),
+            ]),
+        };
+        let call = |argument: &str| PineAstNode::Assignment {
+            name: format!("result_{argument}"),
+            is_reassign: false,
+            expr: Box::new(PineAstNode::FunctionCall {
+                namespace: None,
+                name: "with_temp".to_string(),
+                args: vec![(None, PineAstNode::Identifier(argument.to_string()))],
+            }),
+        };
+        let pine = PineAst {
+            version: Some(5),
+            items: vec![function, call("close"), call("open")],
+        };
+        let debug = format!("{:?}", map_pine_to_alphata(&pine).unwrap());
+        assert!(debug.contains("__PINE_FN_0_TEMP"));
+        assert!(debug.contains("__PINE_FN_1_TEMP"));
+        assert!(!debug.contains("Assignment { name: \"TEMP\""));
+    }
+
+    #[test]
+    fn pine_user_defined_block_function_parses_and_executes() {
+        let source = concat!(
+            "//@version=5\n",
+            "indicator(\"Fn\")\n",
+            "with_temp(x) =>\n",
+            "    temp = x\n",
+            "    temp + 1\n",
+            "value = with_temp(close)\n",
+            "plot(value, title=\"VALUE\")\n",
+        );
+        let close = Array1::from_iter((0..4).map(|index| index as f64 + 10.0));
+        let mut context = FormulaContext::new(
+            close.clone(),
+            close.clone(),
+            close.clone(),
+            close.clone(),
+            Array1::ones(close.len()),
+            None,
+        );
+
+        FormulaEngine::new()
+            .eval_with_dialect(source, FormulaDialect::Pine, &mut context)
+            .expect("block-bodied Pine function must execute");
+
+        let value = context
+            .variables
+            .get("VALUE")
+            .expect("function result assignment must exist");
+        assert_eq!(value.to_vec(), vec![11.0, 12.0, 13.0, 14.0]);
+        assert_eq!(context.output_names, vec!["VALUE"]);
     }
 }
 

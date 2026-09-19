@@ -174,10 +174,11 @@ truth source。`scripts/gen_talib_numeric_contract.py --check` 会重新读取
   `FormulaEngine` 数值执行回归均已覆盖；未经过参考向量和语义矩阵验证的 Pine
   函数不宣称为生产支持。
 - Pine 用户自定义函数不再被错误 lower 为不存在的 `FN_*` runtime 调用：映射层现在
-  收集声明、按调用点做参数替换并内联到统一 Formula AST；已验证表达式函数的真实
-  `FormulaEngine` 执行、参数个数错误和递归深度保护。函数体中的语句块也复用同一
-  `Statements`/控制流 lowering，但局部变量作用域、闭包、递归函数和带命名参数的
-  用户函数仍属于受控子集边界，不能宣称为完整 Pine 语言兼容。
+  收集声明、按调用点做参数替换并内联到统一 Formula AST；已验证表达式函数和多行
+  语句块函数的真实 `FormulaEngine` 执行、参数个数错误和递归深度保护。函数体中的
+  缩进块会在解析入口规范化为显式边界，避免吞掉后续顶层语句；局部赋值名按调用点
+  做 hygienic 重命名，参数重新赋值明确拒绝。闭包、递归函数和带命名参数的用户函数
+  仍属于受控子集边界，不能宣称为完整 Pine 语言兼容。
 - Pine `plot`/`hline` 的显式 `title` 现在会 lower 为规范化的稳定输出通道名，
   不再把所有绘图序列折叠为 `PLOT`/`HLINE`；因此 Lightweight Charts adapter、
   FFI 和多语言结果可以共享同一绘图序列身份。颜色、线型和 pane 等仍需继续扩展

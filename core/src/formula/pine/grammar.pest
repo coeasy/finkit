@@ -54,12 +54,13 @@ input_arg = { string | identifier ~ "=" ~ expression }
 
 // 函数声明: myFunc(x, y) => body  或  myFunc(x) =>\n    expr
 function_decl = {
-    identifier ~ "(" ~ param_list? ~ ")" ~ "=>" ~ NEWLINE* ~ (expression | block)
+    identifier ~ "(" ~ param_list? ~ ")" ~ "=>" ~ NEWLINE* ~ (block | expression)
 }
 param_list = { identifier ~ ("," ~ identifier)* }
 
-// 语句块（多行语句，缩进不敏感子集）
-block = { statement ~ (NEWLINE+ ~ !("else") ~ statement)* }
+// 语句块。parse_pine 会将 Pine 的缩进块规范化为显式边界，避免
+// PEG 在忽略缩进后把后续顶层语句吞入当前函数或控制流。
+block = { "{" ~ NEWLINE* ~ statement ~ (NEWLINE+ ~ statement)* ~ NEWLINE* ~ "}" }
 
 // 语句
 statement = {

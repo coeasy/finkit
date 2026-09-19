@@ -196,7 +196,8 @@ struct PineGrammar;
 
 /// Parse Pine Script v5 source into AST.
 pub fn parse_pine(source: &str) -> Result<PineAst, PineError> {
-    let program_pairs = PineGrammar::parse(Rule::program, source).map_err(|e| {
+    let normalized_source = normalize_indented_blocks(source);
+    let program_pairs = PineGrammar::parse(Rule::program, &normalized_source).map_err(|e| {
         let (line, col) = line_col_from_pest_error(source, &e);
         PineError {
             message: e.to_string(),
@@ -238,6 +239,88 @@ pub fn parse_pine(source: &str) -> Result<PineAst, PineError> {
     }
 
     Ok(PineAst { version, items })
+}
+
+/// Convert indentation-delimited Pine blocks into explicit parser delimiters.
+///
+/// The grammar intentionally ignores spaces and tabs, so it cannot recover
+/// indentation boundaries on its own. This pass keeps the original line count
+/// and only inserts braces when a block header is followed by a deeper line.
+/// Expression-bodied functions remain unchanged.
+fn normalize_indented_blocks(source: &str) -> String {
+    let mut lines: Vec<String> = Vec::new();
+    let mut block_indents: Vec<usize> = Vec::new();
+    let mut pending_header_indent: Option<usize> = None;
+    let mut last_code_line: Option<usize> = None;
+
+    for raw_line in source.split('\n') {
+        let line = raw_line.strip_suffix('\r').unwrap_or(raw_line);
+        let trimmed_start = line.trim_start_matches([' ', '\t']);
+        if trimmed_start.trim().is_empty() {
+            lines.push(String::new());
+            continue;
+        }
+
+        let indent = line.len() - trimmed_start.len();
+
+        while block_indents
+            .last()
+            .is_some_and(|block_indent| indent < *block_indent)
+        {
+            if let Some(index) = last_code_line {
+                lines[index].push('}');
+            }
+            block_indents.pop();
+        }
+
+        let opens_block = pending_header_indent
+            .take()
+            .is_some_and(|header_indent| indent > header_indent);
+
+        let mut normalized = trimmed_start.to_string();
+        if opens_block {
+            normalized.insert(0, '{');
+            block_indents.push(indent);
+        }
+
+        let line_index = lines.len();
+        lines.push(normalized);
+        last_code_line = Some(line_index);
+
+        if is_block_header(trimmed_start) {
+            pending_header_indent = Some(indent);
+        }
+    }
+
+    while !block_indents.is_empty() {
+        if let Some(index) = last_code_line {
+            lines[index].push('}');
+        }
+        block_indents.pop();
+    }
+
+    let mut normalized_source = lines.join("\n");
+    if source.ends_with('\n') {
+        normalized_source.push('\n');
+    }
+    normalized_source
+}
+
+fn is_block_header(line: &str) -> bool {
+    let trimmed = line.trim_end();
+    if trimmed.ends_with("=>") {
+        return true;
+    }
+
+    ["if", "for", "while", "else"].iter().any(|keyword| {
+        trimmed.strip_prefix(keyword).is_some_and(|rest| {
+            rest.is_empty()
+                || rest
+                    .chars()
+                    .next()
+                    .is_some_and(|character| character.is_whitespace())
+        })
+    })
 }
 
 fn line_col_from_pest_error(_source: &str, err: &pest::error::Error<Rule>) -> (usize, usize) {
@@ -1033,5 +1116,59 @@ mod tests {
             }
         });
         assert!(has_barstate);
+    }
+
+    #[test]
+    fn test_parse_function_block_does_not_consume_following_top_level_items() {
+        let src = concat!(
+            "//@version=5\n",
+            "indicator(\"Fn\")\n",
+            "with_temp(x) =>\n",
+            "    temp = x\n",
+            "    temp + 1\n",
+            "value = with_temp(close)\n",
+            "plot(value)\n",
+        );
+
+        let ast = parse_pine(src).unwrap();
+        assert!(matches!(
+            ast.items.get(2),
+            Some(PineAstNode::FunctionDecl { .. })
+        ));
+        assert!(
+            matches!(ast.items.get(3), Some(PineAstNode::Assignment { name, .. }) if name == "value")
+        );
+        assert!(matches!(
+            ast.items.get(4),
+            Some(PineAstNode::PlotCall { .. })
+        ));
+        assert_eq!(ast.items.len(), 5);
+    }
+
+    #[test]
+    fn test_parse_if_else_blocks_keep_top_level_plot_outside_control_flow() {
+        let src = concat!(
+            "//@version=5\n",
+            "indicator(\"If\")\n",
+            "if close > open\n",
+            "    value = close\n",
+            "else\n",
+            "    value = open\n",
+            "plot(value)\n",
+        );
+
+        let ast = parse_pine(src).unwrap();
+        assert!(matches!(
+            ast.items.get(2),
+            Some(PineAstNode::IfStmt {
+                else_body: Some(_),
+                ..
+            })
+        ));
+        assert!(matches!(
+            ast.items.get(3),
+            Some(PineAstNode::PlotCall { .. })
+        ));
+        assert_eq!(ast.items.len(), 4);
     }
 }
