@@ -2006,6 +2006,13 @@ pub fn willr_into(
 }
 
 /// Fixed-period WILLR kernel for the benchmark-critical 14-bar path.
+///
+/// TA-Lib 0.8.x uses a Van Herk/Gil-Werman block scan for the batch API.  A
+/// monotonic deque is asymptotically equivalent, but the block scan performs
+/// two straight-line extrema passes per block and then combines the two
+/// prefix/suffix tables.  That layout is substantially friendlier to the
+/// optimizer for a small fixed window and, unlike a callback-based generic
+/// visitor, keeps the hot path allocation-free.
 #[inline]
 pub fn willr14_into(high: &[f64], low: &[f64], close: &[f64], output: &mut [f64]) -> Result<()> {
     const PERIOD: usize = 14;
@@ -2025,54 +2032,104 @@ pub fn willr14_into(high: &[f64], low: &[f64], close: &[f64], output: &mut [f64]
     }
 
     crate::utils::simd_fill_nan(&mut output[..PERIOD - 1]);
-    let mut high_queue = [0usize; 16];
-    let mut high_values = [0.0f64; 16];
-    let mut low_queue = [0usize; 16];
-    let mut low_values = [0.0f64; 16];
-    let mut high_head = 0usize;
-    let mut high_tail = 0usize;
-    let mut low_head = 0usize;
-    let mut low_tail = 0usize;
-    for index in 0..close.len() {
-        while high_head < high_tail && high_queue[high_head & 15] + PERIOD <= index {
-            high_head += 1;
-        }
-        while low_head < low_tail && low_queue[low_head & 15] + PERIOD <= index {
-            low_head += 1;
-        }
-        while high_head < high_tail {
-            let back_slot = (high_tail - 1) & 15;
-            if high_values[back_slot] <= high[index] {
-                high_tail -= 1;
-            } else {
-                break;
-            }
-        }
-        let high_slot = high_tail & 15;
-        high_queue[high_slot] = index;
-        high_values[high_slot] = high[index];
-        high_tail += 1;
-        while low_head < low_tail {
-            let back_slot = (low_tail - 1) & 15;
-            if low_values[back_slot] >= low[index] {
-                low_tail -= 1;
-            } else {
-                break;
-            }
-        }
-        let low_slot = low_tail & 15;
-        low_queue[low_slot] = index;
-        low_values[low_slot] = low[index];
-        low_tail += 1;
-        if index >= PERIOD - 1 {
-            let highest = high_values[high_head & 15];
-            let lowest = low_values[low_head & 15];
+    let high_ptr = high.as_ptr();
+    let low_ptr = low.as_ptr();
+    let close_ptr = close.as_ptr();
+    let output_ptr = output.as_mut_ptr();
+
+    // Four small stack tables are enough for the fixed period.  The suffix
+    // table belongs to the older block and the prefix table to the next block;
+    // combining them produces all windows crossing the block boundary.
+    let mut suffix_high = [0.0f64; PERIOD];
+    let mut suffix_low = [0.0f64; PERIOD];
+    let mut prefix_high = [0.0f64; PERIOD];
+    let mut prefix_low = [0.0f64; PERIOD];
+
+    macro_rules! emit {
+        ($index:expr, $highest:expr, $lowest:expr) => {{
+            let highest = $highest;
+            let lowest = $lowest;
             let range = highest - lowest;
-            output[index] = if range > 1e-15 {
-                (highest - close[index]) / range * -100.0
+            let close_value = *close_ptr.add($index);
+            *output_ptr.add($index) = if range > 1e-15 {
+                (highest - close_value) / range * -100.0
             } else {
                 0.0
             };
+        }};
+    }
+
+    unsafe {
+        let mut block_start = 0usize;
+        let mut today = PERIOD - 1;
+        while today < close.len() {
+            let block_end = block_start + PERIOD - 1;
+            let mut highest = *high_ptr.add(block_end);
+            let mut lowest = *low_ptr.add(block_end);
+            suffix_high[PERIOD - 1] = highest;
+            suffix_low[PERIOD - 1] = lowest;
+
+            let mut offset = PERIOD - 1;
+            while offset > 0 {
+                offset -= 1;
+                let index = block_start + offset;
+                let high_value = *high_ptr.add(index);
+                let low_value = *low_ptr.add(index);
+                if high_value > highest {
+                    highest = high_value;
+                }
+                if low_value < lowest {
+                    lowest = low_value;
+                }
+                suffix_high[offset] = highest;
+                suffix_low[offset] = lowest;
+            }
+
+            emit!(today, suffix_high[0], suffix_low[0]);
+
+            let block_next = block_start + PERIOD;
+            if block_next >= close.len() {
+                break;
+            }
+            let n_available = (close.len() - block_next).min(PERIOD - 1);
+            highest = *high_ptr.add(block_next);
+            lowest = *low_ptr.add(block_next);
+            prefix_high[0] = highest;
+            prefix_low[0] = lowest;
+            let mut prefix = 1usize;
+            while prefix < n_available {
+                let index = block_next + prefix;
+                let high_value = *high_ptr.add(index);
+                let low_value = *low_ptr.add(index);
+                if high_value > highest {
+                    highest = high_value;
+                }
+                if low_value < lowest {
+                    lowest = low_value;
+                }
+                prefix_high[prefix] = highest;
+                prefix_low[prefix] = lowest;
+                prefix += 1;
+            }
+
+            let mut offset = 1usize;
+            while offset <= n_available {
+                let combined_high = if prefix_high[offset - 1] > suffix_high[offset] {
+                    prefix_high[offset - 1]
+                } else {
+                    suffix_high[offset]
+                };
+                let combined_low = if prefix_low[offset - 1] < suffix_low[offset] {
+                    prefix_low[offset - 1]
+                } else {
+                    suffix_low[offset]
+                };
+                emit!(today + offset, combined_high, combined_low);
+                offset += 1;
+            }
+
+            block_start += PERIOD;
+            today += n_available + 1;
         }
     }
     Ok(())
@@ -4977,24 +5034,26 @@ mod tests {
 
     #[test]
     fn test_willr14_fixed_kernel_matches_generic() {
-        let high: Vec<f64> = (0..96)
-            .map(|index| 100.0 + (index % 17) as f64 + (index / 17) as f64 * 0.25)
-            .collect();
-        let low: Vec<f64> = high
-            .iter()
-            .enumerate()
-            .map(|(index, value)| value - 2.0 - (index % 5) as f64 * 0.1)
-            .collect();
-        let close: Vec<f64> = high
-            .iter()
-            .zip(&low)
-            .enumerate()
-            .map(|(index, (&high, &low))| low + (high - low) * (0.2 + (index % 7) as f64 * 0.1))
-            .collect();
-        let expected = willr(&high, &low, &close, 14).unwrap();
-        let mut actual = vec![0.0; close.len()];
-        willr14_into(&high, &low, &close, &mut actual).unwrap();
-        assert_array_matches_slice(&expected, &actual);
+        for length in [14, 15, 27, 28, 29, 96] {
+            let high: Vec<f64> = (0..length)
+                .map(|index| 100.0 + (index % 17) as f64 + (index / 17) as f64 * 0.25)
+                .collect();
+            let low: Vec<f64> = high
+                .iter()
+                .enumerate()
+                .map(|(index, value)| value - 2.0 - (index % 5) as f64 * 0.1)
+                .collect();
+            let close: Vec<f64> = high
+                .iter()
+                .zip(&low)
+                .enumerate()
+                .map(|(index, (&high, &low))| low + (high - low) * (0.2 + (index % 7) as f64 * 0.1))
+                .collect();
+            let expected = willr(&high, &low, &close, 14).unwrap();
+            let mut actual = vec![0.0; close.len()];
+            willr14_into(&high, &low, &close, &mut actual).unwrap();
+            assert_array_matches_slice(&expected, &actual);
+        }
     }
 
     #[test]

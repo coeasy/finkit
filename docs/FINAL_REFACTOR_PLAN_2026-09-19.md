@@ -224,10 +224,17 @@ truth source。`scripts/gen_talib_numeric_contract.py --check` 会重新读取
 ### 当前基线与门禁状态（2026-09-19）
 
 - 当前基线分支：`feature/finkit-v1-unified-engine-20260917`。
-- 当前已推送提交：`6ad4aa8`（固定周期 rolling kernel 优化）；本地工作区无未提交修改，远端同名分支已指向该提交。
+- 历史性能基线提交为 `6ad4aa8`，文档基线随后由 `f7eb988` 推送；本节以下结果对应本轮固定窗口内核改动，提交哈希以本次提交后的远端校验为准。
 - Rust 格式检查、`finkit` library 测试（2945 passed、1 ignored）、`finkit-ffi-common` 测试（80 passed、1 ignored doc）以及 Python ABI3 release check 已实际通过。
-- 当前 TA-Lib 0.8.0 对照门禁已实际覆盖 96 个指标和 24 个公式，`parity_failures=[]`、`errors=[]`；三档规模的指标几何平均加速比为约 `1.61x`，但性能门禁仍未通过：top-20 最小加速比约 `0.64x`，持续低于 `0.95x` 的指标包括 `MIDPRICE14`、`VAR20`、`WILLR14`。因此不能宣称“全面超过 TA-Lib”，后续必须按指标和数据规模继续优化或调整门禁定义并保留证据。
+- 历史基线的 TA-Lib 0.8.0 对照门禁覆盖 96 个指标和 24 个公式，`parity_failures=[]`、`errors=[]`；三档规模指标几何平均约 `1.61x`，但性能门禁未通过（top-20 最低约 `0.64x`，`MIDPRICE14`、`VAR20`、`WILLR14` 持续低于 `0.95x`）。该数字仅用于保留基线，不代表本轮结果；因此不能宣称“全面超过 TA-Lib”。
 - 已实际通过的 binding 验证包括 Node 全部 14 项默认测试，以及 Python 当前 wheel 的 TA-Lib 数值合同；Go 因本机 `CGO_ENABLED=0` 且缺少 `gcc` 未运行，Java 因缺少 Maven 未运行，C/C++ 因缺少 CMake/编译器未运行，.NET 因缺少 `dotnet` 未运行。这些语言仍需由对应 CI 宿主提供真实运行证据。
 - GitHub Actions 页面目前没有显示该最新提交的可核验运行结果；在出现对应 workflow run 前，不能把 GitHub CI 说成已通过。工作流文件已配置 `feature/finkit-v1-unified-engine-*` 分支触发规则。
 
 本节是实施状态记录，不是完成声明。下一阶段仍以多语言实际宿主验证、公式方言覆盖、Lightweight Charts 浏览器宿主验证、剩余性能瓶颈和生产发布门禁为主线。
+
+### 固定窗口内核复核（本轮工作区，2026-09-19）
+
+- `WILLR14` 与 `MIDPRICE14` 的固定周期路径改为无分配的 Van Herk/Gil-Werman 前缀/后缀块扫描；`MIDPOINT14` 使用固定窗口展开访问；`VAR20` 保留 TA-Lib 的移位累计与周期重播种语义，并改为 caller-owned raw-pointer 输出循环。
+- 补充了长度为 `14/15/27/28/29` 以及长序列的跨块回归测试，验证块边界不会改变 warm-up、窗口覆盖或结果。
+- 重新运行的 TA-Lib 0.8.0 / core 0.8.1 对照：96 个指标、24 个公式，`parity_failures=[]`、`errors=[]`；指标几何平均加速比约 `1.69x`，100K 约 `1.78x`，1M 约 `1.56x`。
+- 完整架构门禁仍失败：top-20 最小加速比约 `0.775x`，`VAR20` 在三档规模均低于 `0.95x`。这是真实测量结果，不调整阈值、不视为生产性能门禁通过；后续需单独优化 VAR20 和 top-20 中的慢项。

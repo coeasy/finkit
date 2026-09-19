@@ -420,20 +420,33 @@ pub fn midpoint14_into(input: &[f64], output: &mut [f64]) -> Result<()> {
     let output_ptr = output.as_mut_ptr();
     unsafe {
         for index in (PERIOD - 1)..input.len() {
-            let start = index + 1 - PERIOD;
-            let mut highest = *input_ptr.add(start);
+            let window = input_ptr.add(index + 1 - PERIOD);
+            let mut highest = *window;
             let mut lowest = highest;
-            let mut cursor = start + 1;
-            while cursor <= index {
-                let value = *input_ptr.add(cursor);
-                if value > highest {
-                    highest = value;
-                }
-                if value < lowest {
-                    lowest = value;
-                }
-                cursor += 1;
+            macro_rules! visit {
+                ($offset:expr) => {
+                    let value = *window.add($offset);
+                    if value > highest {
+                        highest = value;
+                    }
+                    if value < lowest {
+                        lowest = value;
+                    }
+                };
             }
+            visit!(1);
+            visit!(2);
+            visit!(3);
+            visit!(4);
+            visit!(5);
+            visit!(6);
+            visit!(7);
+            visit!(8);
+            visit!(9);
+            visit!(10);
+            visit!(11);
+            visit!(12);
+            visit!(13);
             *output_ptr.add(index) = (highest + lowest) * 0.5;
         }
     }
@@ -525,24 +538,93 @@ pub fn midprice14_into(high: &[f64], low: &[f64], output: &mut [f64]) -> Result<
     let high_ptr = high.as_ptr();
     let low_ptr = low.as_ptr();
     let output_ptr = output.as_mut_ptr();
+
+    // Match the block-batched extrema algorithm used by the current TA-Lib
+    // MIDPRICE implementation.  The four tables stay on the stack and let
+    // one suffix/prefix pass produce all fourteen overlapping windows at a
+    // block boundary.
+    let mut suffix_high = [0.0f64; PERIOD];
+    let mut suffix_low = [0.0f64; PERIOD];
+    let mut prefix_high = [0.0f64; PERIOD];
+    let mut prefix_low = [0.0f64; PERIOD];
+
+    macro_rules! emit {
+        ($index:expr, $highest:expr, $lowest:expr) => {
+            *output_ptr.add($index) = ($highest + $lowest) * 0.5;
+        };
+    }
+
     unsafe {
-        for index in (PERIOD - 1)..high.len() {
-            let start = index + 1 - PERIOD;
-            let mut highest = *high_ptr.add(start);
-            let mut lowest = *low_ptr.add(start);
-            let mut cursor = start + 1;
-            while cursor <= index {
-                let high_value = *high_ptr.add(cursor);
-                let low_value = *low_ptr.add(cursor);
+        let mut block_start = 0usize;
+        let mut today = PERIOD - 1;
+        while today < high.len() {
+            let block_end = block_start + PERIOD - 1;
+            let mut highest = *high_ptr.add(block_end);
+            let mut lowest = *low_ptr.add(block_end);
+            suffix_high[PERIOD - 1] = highest;
+            suffix_low[PERIOD - 1] = lowest;
+
+            let mut offset = PERIOD - 1;
+            while offset > 0 {
+                offset -= 1;
+                let index = block_start + offset;
+                let high_value = *high_ptr.add(index);
+                let low_value = *low_ptr.add(index);
                 if high_value > highest {
                     highest = high_value;
                 }
                 if low_value < lowest {
                     lowest = low_value;
                 }
-                cursor += 1;
+                suffix_high[offset] = highest;
+                suffix_low[offset] = lowest;
             }
-            *output_ptr.add(index) = (highest + lowest) * 0.5;
+
+            emit!(today, suffix_high[0], suffix_low[0]);
+
+            let block_next = block_start + PERIOD;
+            if block_next >= high.len() {
+                break;
+            }
+            let n_available = (high.len() - block_next).min(PERIOD - 1);
+            highest = *high_ptr.add(block_next);
+            lowest = *low_ptr.add(block_next);
+            prefix_high[0] = highest;
+            prefix_low[0] = lowest;
+            let mut prefix = 1usize;
+            while prefix < n_available {
+                let index = block_next + prefix;
+                let high_value = *high_ptr.add(index);
+                let low_value = *low_ptr.add(index);
+                if high_value > highest {
+                    highest = high_value;
+                }
+                if low_value < lowest {
+                    lowest = low_value;
+                }
+                prefix_high[prefix] = highest;
+                prefix_low[prefix] = lowest;
+                prefix += 1;
+            }
+
+            let mut offset = 1usize;
+            while offset <= n_available {
+                let combined_high = if prefix_high[offset - 1] > suffix_high[offset] {
+                    prefix_high[offset - 1]
+                } else {
+                    suffix_high[offset]
+                };
+                let combined_low = if prefix_low[offset - 1] < suffix_low[offset] {
+                    prefix_low[offset - 1]
+                } else {
+                    suffix_low[offset]
+                };
+                emit!(today + offset, combined_high, combined_low);
+                offset += 1;
+            }
+
+            block_start += PERIOD;
+            today += n_available + 1;
         }
     }
     Ok(())
@@ -2156,22 +2238,24 @@ mod tests {
 
     #[test]
     fn test_midprice14_into_matches_generic() {
-        let high: Vec<f64> = (0..64)
-            .map(|index| 100.0 + ((index * 17) % 23) as f64)
-            .collect();
-        let low: Vec<f64> = high
-            .iter()
-            .enumerate()
-            .map(|(index, value)| value - 1.0 - (index % 5) as f64)
-            .collect();
-        let expected = midprice(&high, &low, 14).unwrap();
-        let mut actual = vec![0.0; high.len()];
-        midprice14_into(&high, &low, &mut actual).unwrap();
-        for (expected, actual) in expected.iter().zip(actual.iter()) {
-            if expected.is_nan() {
-                assert!(actual.is_nan());
-            } else {
-                assert_relative_eq!(*actual, *expected, epsilon = 1e-12);
+        for length in [14, 15, 27, 28, 29, 64] {
+            let high: Vec<f64> = (0..length)
+                .map(|index| 100.0 + ((index * 17) % 23) as f64)
+                .collect();
+            let low: Vec<f64> = high
+                .iter()
+                .enumerate()
+                .map(|(index, value)| value - 1.0 - (index % 5) as f64)
+                .collect();
+            let expected = midprice(&high, &low, 14).unwrap();
+            let mut actual = vec![0.0; high.len()];
+            midprice14_into(&high, &low, &mut actual).unwrap();
+            for (expected, actual) in expected.iter().zip(actual.iter()) {
+                if expected.is_nan() {
+                    assert!(actual.is_nan());
+                } else {
+                    assert_relative_eq!(*actual, *expected, epsilon = 1e-12);
+                }
             }
         }
     }

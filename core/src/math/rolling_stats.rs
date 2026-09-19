@@ -309,22 +309,23 @@ pub fn variance20_into(input: &[f64], output: &mut [f64]) -> Result<()> {
         total2 += delta * delta;
     }
 
-    let mut trailing_idx = 0usize;
     let mut bars_since_reseed = RESEED_INTERVAL;
     let input_ptr = input.as_ptr();
-    let output_ptr = output.as_mut_ptr();
-    for index in PERIOD - 1..input.len() {
-        let delta = unsafe { *input_ptr.add(index) } - shift;
+    let mut current_ptr = unsafe { input_ptr.add(PERIOD - 1) };
+    let mut trailing_ptr = input_ptr;
+    let mut output_ptr = unsafe { output.as_mut_ptr().add(PERIOD - 1) };
+    let mut remaining = input.len() - (PERIOD - 1);
+    while remaining != 0 {
+        let delta = unsafe { *current_ptr } - shift;
         total1 += delta;
         total2 += delta * delta;
         let mean = total1 * INV_PERIOD;
         let mut variance = total2 * INV_PERIOD - mean * mean;
 
-        let trailing_delta = unsafe { *input_ptr.add(trailing_idx) } - shift;
+        let trailing_delta = unsafe { *trailing_ptr } - shift;
         let trailing_square = trailing_delta * trailing_delta;
         total1 -= trailing_delta;
         total2 -= trailing_square;
-        trailing_idx += 1;
         bars_since_reseed -= 1;
 
         if variance < 1e-6 * (total2 * INV_PERIOD)
@@ -332,33 +333,37 @@ pub fn variance20_into(input: &[f64], output: &mut [f64]) -> Result<()> {
             || bars_since_reseed == 0
         {
             bars_since_reseed = RESEED_INTERVAL;
-            let window_start = index + 1 - PERIOD;
+            let window_start = unsafe { current_ptr.sub(PERIOD - 1) };
             let mut sum = 0.0;
             let mut cursor = window_start;
-            while cursor <= index {
-                sum += unsafe { *input_ptr.add(cursor) };
-                cursor += 1;
+            while cursor <= current_ptr {
+                sum += unsafe { *cursor };
+                cursor = unsafe { cursor.add(1) };
             }
             shift = sum * INV_PERIOD;
             total1 = 0.0;
             total2 = 0.0;
             cursor = window_start;
-            while cursor <= index {
-                let delta = unsafe { *input_ptr.add(cursor) } - shift;
+            while cursor <= current_ptr {
+                let delta = unsafe { *cursor } - shift;
                 total1 += delta;
                 total2 += delta * delta;
-                cursor += 1;
+                cursor = unsafe { cursor.add(1) };
             }
             let mean = total1 * INV_PERIOD;
             variance = total2 * INV_PERIOD - mean * mean;
             if variance < 1e-12 * (total2 * INV_PERIOD) {
                 variance = 0.0;
             }
-            let delta = unsafe { *input_ptr.add(window_start) } - shift;
+            let delta = unsafe { *window_start } - shift;
             total1 -= delta;
             total2 -= delta * delta;
         }
-        unsafe { *output_ptr.add(index) = variance };
+        unsafe { *output_ptr = variance };
+        current_ptr = unsafe { current_ptr.add(1) };
+        trailing_ptr = unsafe { trailing_ptr.add(1) };
+        output_ptr = unsafe { output_ptr.add(1) };
+        remaining -= 1;
     }
     Ok(())
 }
