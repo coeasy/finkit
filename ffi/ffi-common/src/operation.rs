@@ -233,62 +233,7 @@ pub(crate) fn talib_profile_contract(
 
 fn profile_only_talib_entry(name: &str) -> OperationCatalogEntry {
     let is_pattern = name.starts_with("CDL");
-    let (value_shape, output_names) = match name {
-        "HA" => (
-            "multi_series",
-            vec![
-                "HAOPEN".to_string(),
-                "HAHIGH".to_string(),
-                "HALOW".to_string(),
-                "HACLOSE".to_string(),
-            ],
-        ),
-        "VORTEX" => (
-            "multi_series",
-            vec!["PLUSVI".to_string(), "MINUSVI".to_string()],
-        ),
-        "AROON" => (
-            "multi_series",
-            vec!["AROON_UP".to_string(), "AROON_DOWN".to_string()],
-        ),
-        "STOCH" => (
-            "multi_series",
-            vec!["SLOWK".to_string(), "SLOWD".to_string()],
-        ),
-        "STOCHF" => (
-            "multi_series",
-            vec!["FASTK".to_string(), "FASTD".to_string()],
-        ),
-        "STOCHRSI" => (
-            "multi_series",
-            vec!["FASTK".to_string(), "FASTD".to_string()],
-        ),
-        "ERI" => (
-            "multi_series",
-            vec!["BULLPOWER".to_string(), "BEARPOWER".to_string()],
-        ),
-        "FRACTAL" => (
-            "multi_series",
-            vec!["SWINGHIGH".to_string(), "SWINGLOW".to_string()],
-        ),
-        "KC" => (
-            "multi_series",
-            vec![
-                "UPPERBAND".to_string(),
-                "MIDDLEBAND".to_string(),
-                "LOWERBAND".to_string(),
-            ],
-        ),
-        "SMI" => (
-            "multi_series",
-            vec!["SMI".to_string(), "SMISIGNAL".to_string()],
-        ),
-        "AC" | "ADR" | "CMOU" | "CVI" | "EFI" | "FOSC" | "MARKETFI" | "MASSI" | "PERCENTILE"
-        | "PVO" | "QSTICK" | "RMA" | "RVI" | "RVOL" | "VHF" | "WAD" => {
-            ("series", vec!["REAL".to_string()])
-        }
-        _ => ("series", vec![name.to_string()]),
-    };
+    let (value_shape, output_names) = talib_profile_output_shape(name, &[]);
     let outputs = output_names.len();
     let input = if is_pattern || matches!(name, "AVGPRICE" | "BOP" | "HA") {
         Some("ohlcv")
@@ -938,10 +883,12 @@ mod tests {
             ("AC", vec!["REAL"]),
             ("ADR", vec!["REAL"]),
             ("AROON", vec!["AROON_UP", "AROON_DOWN"]),
+            ("DONCHIAN", vec!["UPPERBAND", "MIDDLEBAND", "LOWERBAND"]),
             ("ERI", vec!["BULLPOWER", "BEARPOWER"]),
             ("FRACTAL", vec!["SWINGHIGH", "SWINGLOW"]),
             ("KC", vec!["UPPERBAND", "MIDDLEBAND", "LOWERBAND"]),
             ("SMI", vec!["SMI", "SMISIGNAL"]),
+            ("SUPERTREND", vec!["SUPERTREND", "TREND"]),
             ("VORTEX", vec!["PLUSVI", "MINUSVI"]),
         ];
 
@@ -951,14 +898,18 @@ mod tests {
                 .iter()
                 .find(|operation| operation.name == name)
                 .unwrap_or_else(|| panic!("missing operation {name}"));
+            let profile = entry
+                .profile_output_contracts
+                .get(TALIB_SEMANTIC_PROFILE)
+                .unwrap_or_else(|| panic!("missing TA-Lib profile for {name}"));
             assert_eq!(
-                entry.output_names, output_names,
-                "catalog output names for {name}"
+                profile.output_names, output_names,
+                "TA-Lib profile output names for {name}"
             );
             assert_eq!(
-                entry.outputs,
+                profile.outputs,
                 output_names.len(),
-                "catalog output count for {name}"
+                "TA-Lib profile output count for {name}"
             );
         }
 
