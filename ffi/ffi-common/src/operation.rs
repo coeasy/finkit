@@ -293,76 +293,179 @@ fn profile_only_talib_entry(name: &str) -> OperationCatalogEntry {
     }
 }
 
+struct TalibProfileOutputSpec {
+    name: &'static str,
+    value_shape: &'static str,
+    output_names: &'static [&'static str],
+}
+
+const TALIB_PROFILE_OUTPUT_SPECS: &[TalibProfileOutputSpec] = &[
+    TalibProfileOutputSpec {
+        name: "HA",
+        value_shape: "multi_series",
+        output_names: &["HAOPEN", "HAHIGH", "HALOW", "HACLOSE"],
+    },
+    TalibProfileOutputSpec {
+        name: "VORTEX",
+        value_shape: "multi_series",
+        output_names: &["PLUSVI", "MINUSVI"],
+    },
+    TalibProfileOutputSpec {
+        name: "AROON",
+        value_shape: "multi_series",
+        output_names: &["AROON_UP", "AROON_DOWN"],
+    },
+    TalibProfileOutputSpec {
+        name: "STOCH",
+        value_shape: "multi_series",
+        output_names: &["SLOWK", "SLOWD"],
+    },
+    TalibProfileOutputSpec {
+        name: "STOCHF",
+        value_shape: "multi_series",
+        output_names: &["FASTK", "FASTD"],
+    },
+    TalibProfileOutputSpec {
+        name: "STOCHRSI",
+        value_shape: "multi_series",
+        output_names: &["FASTK", "FASTD"],
+    },
+    TalibProfileOutputSpec {
+        name: "ERI",
+        value_shape: "multi_series",
+        output_names: &["BULLPOWER", "BEARPOWER"],
+    },
+    TalibProfileOutputSpec {
+        name: "FRACTAL",
+        value_shape: "multi_series",
+        output_names: &["SWINGHIGH", "SWINGLOW"],
+    },
+    TalibProfileOutputSpec {
+        name: "KC",
+        value_shape: "multi_series",
+        output_names: &["UPPERBAND", "MIDDLEBAND", "LOWERBAND"],
+    },
+    TalibProfileOutputSpec {
+        name: "DONCHIAN",
+        value_shape: "multi_series",
+        output_names: &["UPPERBAND", "MIDDLEBAND", "LOWERBAND"],
+    },
+    TalibProfileOutputSpec {
+        name: "KDJ",
+        value_shape: "multi_series",
+        output_names: &["K", "D", "J"],
+    },
+    TalibProfileOutputSpec {
+        name: "SMI",
+        value_shape: "multi_series",
+        output_names: &["SMI", "SMISIGNAL"],
+    },
+    TalibProfileOutputSpec {
+        name: "SUPERTREND",
+        value_shape: "multi_series",
+        output_names: &["SUPERTREND", "TREND"],
+    },
+    TalibProfileOutputSpec {
+        name: "AC",
+        value_shape: "series",
+        output_names: &["REAL"],
+    },
+    TalibProfileOutputSpec {
+        name: "ADR",
+        value_shape: "series",
+        output_names: &["REAL"],
+    },
+    TalibProfileOutputSpec {
+        name: "CMOU",
+        value_shape: "series",
+        output_names: &["REAL"],
+    },
+    TalibProfileOutputSpec {
+        name: "CVI",
+        value_shape: "series",
+        output_names: &["REAL"],
+    },
+    TalibProfileOutputSpec {
+        name: "EFI",
+        value_shape: "series",
+        output_names: &["REAL"],
+    },
+    TalibProfileOutputSpec {
+        name: "FOSC",
+        value_shape: "series",
+        output_names: &["REAL"],
+    },
+    TalibProfileOutputSpec {
+        name: "MARKETFI",
+        value_shape: "series",
+        output_names: &["REAL"],
+    },
+    TalibProfileOutputSpec {
+        name: "MASSI",
+        value_shape: "series",
+        output_names: &["REAL"],
+    },
+    TalibProfileOutputSpec {
+        name: "PERCENTILE",
+        value_shape: "series",
+        output_names: &["REAL"],
+    },
+    TalibProfileOutputSpec {
+        name: "PVO",
+        value_shape: "series",
+        output_names: &["REAL"],
+    },
+    TalibProfileOutputSpec {
+        name: "QSTICK",
+        value_shape: "series",
+        output_names: &["REAL"],
+    },
+    TalibProfileOutputSpec {
+        name: "RMA",
+        value_shape: "series",
+        output_names: &["REAL"],
+    },
+    TalibProfileOutputSpec {
+        name: "RVI",
+        value_shape: "series",
+        output_names: &["REAL"],
+    },
+    TalibProfileOutputSpec {
+        name: "RVOL",
+        value_shape: "series",
+        output_names: &["REAL"],
+    },
+    TalibProfileOutputSpec {
+        name: "VHF",
+        value_shape: "series",
+        output_names: &["REAL"],
+    },
+    TalibProfileOutputSpec {
+        name: "WAD",
+        value_shape: "series",
+        output_names: &["REAL"],
+    },
+];
+
 fn talib_profile_output_shape(name: &str, fallback: &[String]) -> (&'static str, Vec<String>) {
-    match name {
-        "HA" => (
-            "multi_series",
-            vec![
-                "HAOPEN".to_string(),
-                "HAHIGH".to_string(),
-                "HALOW".to_string(),
-                "HACLOSE".to_string(),
-            ],
-        ),
-        "VORTEX" => (
-            "multi_series",
-            vec!["PLUSVI".to_string(), "MINUSVI".to_string()],
-        ),
-        "AROON" => (
-            "multi_series",
-            vec!["AROON_UP".to_string(), "AROON_DOWN".to_string()],
-        ),
-        "STOCH" => (
-            "multi_series",
-            vec!["SLOWK".to_string(), "SLOWD".to_string()],
-        ),
-        "STOCHF" | "STOCHRSI" => (
-            "multi_series",
-            vec!["FASTK".to_string(), "FASTD".to_string()],
-        ),
-        "ERI" => (
-            "multi_series",
-            vec!["BULLPOWER".to_string(), "BEARPOWER".to_string()],
-        ),
-        "FRACTAL" => (
-            "multi_series",
-            vec!["SWINGHIGH".to_string(), "SWINGLOW".to_string()],
-        ),
-        "KC" => (
-            "multi_series",
-            vec![
-                "UPPERBAND".to_string(),
-                "MIDDLEBAND".to_string(),
-                "LOWERBAND".to_string(),
-            ],
-        ),
-        "DONCHIAN" => (
-            "multi_series",
-            vec![
-                "UPPERBAND".to_string(),
-                "MIDDLEBAND".to_string(),
-                "LOWERBAND".to_string(),
-            ],
-        ),
-        "KDJ" => (
-            "multi_series",
-            vec!["K".to_string(), "D".to_string(), "J".to_string()],
-        ),
-        "SMI" => (
-            "multi_series",
-            vec!["SMI".to_string(), "SMISIGNAL".to_string()],
-        ),
-        "SUPERTREND" => (
-            "multi_series",
-            vec!["SUPERTREND".to_string(), "TREND".to_string()],
-        ),
-        "AC" | "ADR" | "CMOU" | "CVI" | "EFI" | "FOSC" | "MARKETFI" | "MASSI" | "PERCENTILE"
-        | "PVO" | "QSTICK" | "RMA" | "RVI" | "RVOL" | "VHF" | "WAD" => {
-            ("series", vec!["REAL".to_string()])
-        }
-        _ if fallback.len() > 1 => ("multi_series", fallback.to_vec()),
-        _ if !fallback.is_empty() => ("series", fallback.to_vec()),
-        _ => ("series", vec![name.to_string()]),
+    if let Some(spec) = TALIB_PROFILE_OUTPUT_SPECS
+        .iter()
+        .find(|spec| spec.name == name)
+    {
+        return (
+            spec.value_shape,
+            spec.output_names
+                .iter()
+                .map(|name| (*name).to_string())
+                .collect(),
+        );
+    }
+    if fallback.len() > 1 {
+        ("multi_series", fallback.to_vec())
+    } else if let Some(fallback_name) = fallback.first() {
+        ("series", vec![fallback_name.clone()])
+    } else {
+        ("series", vec![name.to_string()])
     }
 }
 
@@ -938,5 +1041,28 @@ mod tests {
                 "slowd_matype",
             ]
         );
+    }
+
+    #[test]
+    fn talib_profile_output_schema_table_is_unique_and_non_empty() {
+        let mut names = std::collections::BTreeSet::new();
+        for spec in TALIB_PROFILE_OUTPUT_SPECS {
+            assert!(
+                names.insert(spec.name),
+                "duplicate TA-Lib output spec: {}",
+                spec.name
+            );
+            assert!(
+                !spec.output_names.is_empty(),
+                "empty output spec: {}",
+                spec.name
+            );
+            assert!(
+                matches!(spec.value_shape, "series" | "multi_series"),
+                "invalid output shape for {}: {}",
+                spec.name,
+                spec.value_shape
+            );
+        }
     }
 }

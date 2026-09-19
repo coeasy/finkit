@@ -93,9 +93,9 @@ TDX、同花顺、东方财富的 `REF/HHV/LLV/SUM/STD/CROSS` 等语义必须在
 - TA-Lib profile 的可执行性由 Core TA-Lib contract 与 profile-only catalog
   联合推导，扩展项 `DONCHIAN`、`SUPERTREND`、`VWAP` 也纳入同一 canonical
   catalog；测试强制校验所有 catalog 名称都能到达 dispatcher，避免手写支持列表再次漂移；
-- registry operation 与 profile-only operation 共用 TA-Lib 输出 schema helper；
+- registry operation 与 profile-only operation 共用 TA-Lib 输出 schema table/helper；
   `DONCHIAN`、`KDJ`、`SUPERTREND` 等多输出契约通过 profile 层校验，避免把 Core
-  顶层输出语义误当成 TA-Lib 兼容输出；
+  顶层输出语义误当成 TA-Lib 兼容输出；schema table 还具备唯一性和非空输出门禁；
 - checked-in numeric golden：201 个；
 - shared numeric contract：201 个向量、160 行合成输入，直接从 checked-in TA-Lib
   0.8.0 golden 生成；Node、Python 已实际执行，Go、Java、.NET 已接入相同逐元素
