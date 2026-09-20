@@ -136,4 +136,4 @@ packaging/usage/dotnet/tests/obj/
 .forge/
 
 # Alternate cargo target dir used when the default target/ is unavailable
-/.cargo-target/
+/.cargo-target*/
