@@ -3245,11 +3245,16 @@ mod plan_execution_tests {
         let engine = FormulaEngine::new();
         let context = ctx(40);
 
-        // `IF` is a documented kernel gap. The plan path must report it rather
-        // than quietly re-running the tree path, otherwise a caller could never
-        // tell which engine produced a number.
+        // `FILTER` is a documented kernel gap. The plan path must report it
+        // rather than quietly re-running the tree path, otherwise a caller
+        // could never tell which engine produced a number.
+        //
+        // `IF` used to stand in here and had to be swapped out once it gained
+        // a kernel. If this fails because the function below now works, pick
+        // another entry from the plan-kernel backlog -- the point of the test
+        // is that *some* gap still fails loudly, so do not delete the check.
         let error = engine
-            .eval_plan("IF(CLOSE>OPEN, 1, 0)", &context)
+            .eval_plan("FILTER(CLOSE>OPEN, 5)", &context)
             .expect_err("a kernel-less operator must fail");
 
         let message = error.to_string();

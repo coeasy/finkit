@@ -125,6 +125,11 @@ impl KernelDispatcher for FormulaKernelDispatcher {
             return dispatch_stochf_call(call, buffers);
         }
 
+        // `IF(COND, A, B)` and Pine's `cond ? A : B` both lower to `CALL:IF`.
+        if call.kernel == KernelId::from_static("CALL:IF") {
+            return dispatch_if_call(call, buffers);
+        }
+
         if call.kernel == KernelId::from_static("DRAW:FILL")
             || call.kernel == KernelId::from_static("STICK_LINE")
             || call.kernel == KernelId::from_static("DRAW_TEXT")
@@ -561,6 +566,62 @@ fn dispatch_hlc_periodic_call(
         crate::indicators::momentum::cci_into(high, low, close, period, output)
     };
     result.map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))
+}
+
+/// Execute `IF(COND, A, B)` and Pine's `cond ? A : B`, which both lower to
+/// `CALL:IF`.
+///
+/// Delegated to [`crate::formula::simd::SimdOps::select`] — the same primitive
+/// `fn_if` reaches for series it can vectorise — so the two paths agree on
+/// truthiness as well as on values.
+///
+/// Truthiness here is `condition != 0.0`. This is **not** universal across the
+/// codebase: `stateful.rs` and `fn_if`'s short-series fallback use `> 0.0`,
+/// which differs for negative and NaN conditions. Corpus-length series take the
+/// vectorised path in the tree executor, so `!= 0.0` is the convention the plan
+/// has to match; the inconsistency itself is a separate pre-existing issue.
+fn dispatch_if_call(
+    call: KernelCall<'_>,
+    buffers: &mut [Vec<f64>],
+) -> Result<(), KernelDispatchError> {
+    if call.inputs.len() != 3 {
+        return Err(KernelDispatchError::new(FormulaKernelDispatcher::ERR_ARITY));
+    }
+    let cond_slot = call.inputs[0].0;
+    let then_slot = call.inputs[1].0;
+    let else_slot = call.inputs[2].0;
+    let output_slot = call.output.0;
+    if [cond_slot, then_slot, else_slot]
+        .into_iter()
+        .any(|slot| slot == output_slot)
+    {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+    let len = buffers[output_slot].len();
+    if buffers[cond_slot].len() != len
+        || buffers[then_slot].len() != len
+        || buffers[else_slot].len() != len
+    {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+    let cond_ptr = buffers[cond_slot].as_ptr();
+    let then_ptr = buffers[then_slot].as_ptr();
+    let else_ptr = buffers[else_slot].as_ptr();
+    let output_ptr = buffers[output_slot].as_mut_ptr();
+    let (cond, then_values, else_values, output) = unsafe {
+        (
+            std::slice::from_raw_parts(cond_ptr, len),
+            std::slice::from_raw_parts(then_ptr, len),
+            std::slice::from_raw_parts(else_ptr, len),
+            std::slice::from_raw_parts_mut(output_ptr, len),
+        )
+    };
+    crate::formula::simd::SimdOps::select(cond, then_values, else_values, output);
+    Ok(())
 }
 
 /// Execute formula BOLL/BBANDS as its public upper-band projection.

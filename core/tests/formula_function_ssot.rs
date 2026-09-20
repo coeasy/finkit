@@ -84,6 +84,7 @@ const PLAN_KERNELS: &[&str] = &[
     "HHV",
     "ICHIMOKU_KIJUN",
     "ICHIMOKU_TENKAN",
+    "IF",
     "KAMA",
     "KDJ",
     "KDJ_D",
@@ -233,7 +234,6 @@ const DECLARED_BUT_NO_KERNEL: &[&str] = &[
     "HT_SINE",
     "HT_TRENDLINE",
     "HT_TRENDMODE",
-    "IF",
     "IFF",
     "IMI",
     "KD",
@@ -438,7 +438,7 @@ fn the_three_surfaces_have_the_expected_sizes() {
     let actual = (registry.len(), formulas.len(), kernels.len());
     assert_eq!(
         actual,
-        (226, 416, 59),
+        (226, 416, 60),
         "surface sizes changed: (registry, formula, plan kernels)"
     );
 }

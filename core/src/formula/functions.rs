@@ -2856,11 +2856,8 @@ fn fn_ichimoku_kijun(
 }
 
 #[allow(unused_assignments)]
-fn fn_supertrend(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+fn fn_supertrend(_ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("SUPERTREND", args, 4)?;
-    let high = &args[0];
-    let low = &args[1];
-    let close = &args[2];
     let atr_n = if args.len() > 3 && !args[3].is_empty() && !args[3][0].is_nan() {
         args[3][0] as usize
     } else {
@@ -2871,67 +2868,25 @@ fn fn_supertrend(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f6
     } else {
         3.0
     };
+    let data_len = args[0].len().min(args[1].len()).min(args[2].len());
 
-    let data_len = ctx.data_len;
-    let mut tr = Array1::zeros(data_len);
-    tr[0] = high[0] - low[0];
-    for i in 1..data_len {
-        let hl = high[i] - low[i];
-        let hc = (high[i] - close[i - 1]).abs();
-        let lc = (low[i] - close[i - 1]).abs();
-        tr[i] = hl.max(hc).max(lc);
+    // Delegated to the golden-pinned indicator instead of keeping a second
+    // hand-rolled copy. The local version smoothed TR with a *simple* moving
+    // average, while `indicators::supertrend::supertrend` uses Wilder ATR --
+    // which is what `tests/golden/talib/supertrend.json` pins through
+    // `golden_talib_all_indicators`. The two diverge from the very first bar
+    // (SMA is defined at `atr_n - 1`; Wilder ATR needs its own seed), so this
+    // is a "has a value at all" difference, not a rounding one.
+    match crate::indicators::supertrend::supertrend(
+        &args[0].as_slice().unwrap()[..data_len],
+        &args[1].as_slice().unwrap()[..data_len],
+        &args[2].as_slice().unwrap()[..data_len],
+        atr_n,
+        mult,
+    ) {
+        Ok(result) => Ok(result.trend_line),
+        Err(_) => Ok(nan_vec(data_len)),
     }
-
-    let atr_vals = match lib_ma::sma(tr.as_slice().unwrap(), atr_n) {
-        Ok(r) => r,
-        Err(_) => return Ok(nan_vec(data_len)),
-    };
-
-    let mut result = nan_vec(data_len);
-    let mut upper_band = f64::NAN;
-    let mut lower_band = f64::NAN;
-    let mut prev_upper = f64::NAN;
-    let mut prev_lower = f64::NAN;
-    let mut is_long = true;
-
-    for i in 0..data_len {
-        if atr_vals[i].is_nan() {
-            continue;
-        }
-        let hl2 = (high[i] + low[i]) / 2.0;
-        upper_band = hl2 + mult * atr_vals[i];
-        lower_band = hl2 - mult * atr_vals[i];
-
-        if !prev_lower.is_nan() {
-            if !(lower_band < prev_lower || close[i - 1] < prev_lower) {
-                lower_band = prev_lower;
-            }
-            if !(upper_band > prev_upper || close[i - 1] > prev_upper) {
-                upper_band = prev_upper;
-            }
-        }
-
-        if is_long {
-            if close[i] < lower_band {
-                is_long = false;
-                result[i] = upper_band;
-            } else {
-                result[i] = lower_band;
-            }
-        } else {
-            if close[i] > upper_band {
-                is_long = true;
-                result[i] = lower_band;
-            } else {
-                result[i] = upper_band;
-            }
-        }
-
-        prev_upper = upper_band;
-        prev_lower = lower_band;
-    }
-
-    Ok(result)
 }
 
 fn fn_vwap(_ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {

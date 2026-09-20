@@ -245,10 +245,16 @@ impl<'a> FormulaLowerer<'a> {
                 // FormulaExecutor currently evaluates both branches before
                 // selecting the result, so lowering both branches preserves its
                 // existing observable side-effect order.
+                //
+                // Emitted as `CALL:IF` rather than a bespoke `IF_THEN_ELSE`
+                // node name: the operation is the same select that the `IF(...)`
+                // function performs, and `IF` is a registered, pure function.
+                // An unregistered node name would instead be demoted to a
+                // stateful barrier by `function_metadata`, blocking CSE.
                 let cond = self.lower(cond);
                 let then_branch = self.lower(then_branch);
                 let else_branch = self.lower(else_branch);
-                self.add_pure("IF_THEN_ELSE", vec![cond, then_branch, else_branch])
+                self.add_pure("CALL:IF", vec![cond, then_branch, else_branch])
             }
             AstNode::ForLoop {
                 var, start, end, ..

@@ -61,10 +61,6 @@ const DOMESTIC_UNSUPPORTED: &[(&str, &str)] = &[
 /// marker constant. Every remaining entry is a genuine kernel or lowering gap.
 const PINE_UNSUPPORTED: &[(&str, &str)] = &[
     // --- Structural lowering gaps ------------------------------------------------
-    (
-        "supertrend",
-        "no kernel for `CALL:IF` / no lowering for the `IF_THEN_ELSE` node",
-    ),
     // `compute_ir` treats loop bodies as opaque control flow and does not lower
     // them into the acyclic compute plan, so `volume[i]` never becomes a bound
     // input and the executor cannot infer an execution length.
