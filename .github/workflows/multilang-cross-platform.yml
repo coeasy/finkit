@@ -52,8 +52,8 @@ jobs:
         run: python scripts/check_versions.py
       - name: Verify warning contract
         run: python scripts/check_warning_contracts.py
-      - name: Verify generated Python binding surface
-        run: python scripts/sync_bindings.py --lang python --check
+      - name: Verify generated binding surface (Python + Node tier)
+        run: python scripts/sync_bindings.py --check
       - name: Verify generated TA-Lib numeric fixtures
         run: python scripts/gen_talib_numeric_contract.py --check
       - id: version

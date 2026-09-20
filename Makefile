@@ -45,7 +45,7 @@ LANGS := $(sort $(LANGS))
 .PHONY: install-and-test
 .PHONY: docker-build docker-run docker-bench
 .PHONY: preflight lint
-.PHONY: gen-c-header verify-ffi gen-c-binding verify-bindings verify-all-bindings
+.PHONY: gen-c-header verify-ffi gen-c-binding verify-bindings verify-bindings-tier verify-all-bindings
 
 # ---- default ----------------------------------------------------------------
 all: preflight
@@ -117,12 +117,19 @@ gen-c-binding:
 verify-bindings:
 	python3 $(ROOT)/scripts/gen_binding.py --lang c --check
 
-# ---- codegen: registry-driven drift check for all tracked FFI bindings -----
-# `verify-all-bindings` runs scripts/sync_bindings.py --check across the
-# registry-backed language bindings and fails if committed wrappers drift from
-# docs/indicator_registry.json.
-verify-all-bindings:
+# ---- codegen: registry-driven drift check for the active FFI binding tier --
+# `verify-bindings-tier` drift-checks the **active tier** (Python, Node) against
+# docs/ffi_registry.json -- the Rust core needs no binding, so this is the whole
+# first tier. `verify-all-bindings` additionally *reports* the deferred
+# languages (c/go/java/dotnet/ios/android): they stay in-tree and keep
+# compiling, but their bodies are not stored, so they are not drift-checked.
+# Neither target accepts `--allow-unchecked`: a tier-1 language without stored
+# bodies is a hard failure, not something to wave through.
+verify-bindings-tier:
 	python3 $(ROOT)/scripts/sync_bindings.py --check
+
+verify-all-bindings:
+	python3 $(ROOT)/scripts/sync_bindings.py --check --all
 
 # ---- help ------------------------------------------------------------------
 help:
@@ -143,7 +150,8 @@ help:
 	@echo "  make verify-ffi       Fail if the C header has drifted from the registry"
 	@echo "  make gen-c-binding    Regenerate ffi/c-binding/src/{lib.rs,generated.rs} from registry"
 	@echo "  make verify-bindings  Fail if the C wrappers drifted from the registry"
-	@echo "  make verify-all-bindings  Fail if tracked bindings drift from the registry"
+	@echo "  make verify-bindings-tier  Drift-check the active tier (Python, Node)"
+	@echo "  make verify-all-bindings  Same, plus report the deferred languages"
 	@echo ""
 	@echo "Underlying scripts (read these for full control):"
 	@echo "  build-usage.{sh,ps1}                  Root entry point"

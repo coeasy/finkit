@@ -46,6 +46,25 @@ jobs:
       - name: Check cross-platform warning contracts
         run: python scripts/check_warning_contracts.py
 
+  binding-ssot:
+    name: Multi-language binding SSOT
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      # `--check --all` must be green with NO `--allow-unchecked` escape hatch.
+      # Tier-1 languages (Python, Node) are genuinely drift-checked against
+      # stored bodies; the deferred languages report an explicit
+      # `status=DEFERRED` rather than a vacuous `drift=none`, so a real gap can
+      # never hide behind a passing job. See scripts/sync_bindings.py.
+      - name: Verify binding bodies against the registry
+        run: python scripts/sync_bindings.py --check --all
+
   fmt:
     name: Format
     runs-on: ubuntu-22.04

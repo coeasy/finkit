@@ -8,6 +8,65 @@ Finkit distinguishes three different claims:
 
 These states are intentionally not treated as equivalent.
 
+## Active language tier (SSOT)
+
+The project's *active* language set is deliberately narrow, and the drift gate
+is scoped to match it. `scripts/sync_bindings.py` is the single source of truth
+for the tier.
+
+| Tier | Languages | Drift-checked? |
+| --- | --- | --- |
+| **Active** | Rust (this repository's `core` crate), Python, Node | yes — a tier-1 language with no stored bodies fails the run |
+| **Deferred** | C, Go, Java, .NET, iOS, Android | no — reported as `status=DEFERRED`, does not fail the run |
+
+The Rust core needs no binding: it *is* the runtime, and `cargo test -p finkit`
+is its contract. Python and Node are the first-tier bindings.
+
+A deferred binding still lives in `ffi/` and still compiles under
+`cargo check --workspace`; what it does **not** have is stored wrapper bodies in
+`docs/ffi_registry.json`, so `--check` cannot detect hand edits to it. That gap
+is recorded explicitly rather than papered over, for two reasons: a gate that is
+permanently red gets ignored, and a language reported as `drift=none` with zero
+stored bodies would be a vacuous pass that hides the real gap.
+
+**Promoting a language** to the active tier is a two-step change: move it from
+`DEFERRED_LANGS` to `TIER1_LANGS` in `scripts/sync_bindings.py`, then store its
+bodies with `python scripts/sync_bindings.py --discover --lang <lang>` and
+confirm `--check` is green.
+
+```
+python scripts/sync_bindings.py --check        # active tier (Python, Node)
+python scripts/sync_bindings.py --check --all  # + report the deferred languages
+```
+
+`--check` exits non-zero on drift, or on an active-tier language that has no
+stored bodies. It is wired into CI (`.github/workflows/ci.yml`, job
+`binding-ssot`, with no `--allow-unchecked` escape hatch) and into the
+`make verify-bindings-tier` / `make verify-all-bindings` targets.
+
+### Registry round-trip invariants
+
+`docs/indicator_registry.json` (236 indicators, rich per-indicator metadata) is
+a **superset** of `docs/ffi_registry.json` (78 indicators carrying binding
+bodies) — 158 indicators have no binding at all. `sync_bindings.py` must
+therefore never rebuild the core registry *from* the FFI one. Two invariants are
+load-bearing:
+
+1. **`--discover` is superset-preserving.** It keeps every entry already in the
+   core registry, in its existing order, and only appends names that carry core
+   metadata. A name that appears in the FFI SSOT with nothing but `{name, ffi}`
+   (for example `DARVAS_BOX`, `RENKO` — dispatched through a `match` and
+   deliberately without a core entry) must not spring into existence. Without
+   this, running `--discover` on a clean checkout — where the transient Python
+   overlay is absent and the FFI SSOT is the fallback — deleted all 158
+   binding-less indicators.
+2. **Both registries are written with `\n` line endings.** The default
+   translation to `os.linesep` made every Windows run rewrite both files as CRLF
+   and produce a whole-file diff.
+
+CI asserts the core registry is untouched by the binding job
+(`git diff --exit-code -- docs/indicator_registry.json`).
+
 ## v0.1.5 distribution contract
 
 The `v0.1.5` tag and release workflow are the authoritative version contract:

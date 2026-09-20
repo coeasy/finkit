@@ -1,0 +1,168 @@
+# crates/\* 接入生产：功能缺口分析与迁移规划
+
+日期：2026-09-20
+状态：**规划（尚未执行）**
+上游决策：用户 2026-09-20 选择「接入生产，作为 Runtime 载体」
+相关文档：[improvement-plan-2026-09-20.md](improvement-plan-2026-09-20.md) §P2-1、[architecture-gap-assessment-2026-09-20.md](architecture-gap-assessment-2026-09-20.md):118
+
+---
+
+## 0. 结论摘要
+
+先给结论，再给证据。
+
+1. **平行轨道（`crates/finkit-{array,series,math,factor,runtime}`）确实有 4 项能力是 core 没有的**，值得接入生产：
+   - ① `Factor` 对象边界 + `FactorProvider` 工厂 + **带类型的参数校验**；
+   - ② 手写**声明式因子图** API（不写公式字符串也能构图）；
+   - ③ `QuantSeries` 的**符号 + 时间戳 + 严格递增校验**；
+   - ④ 以 `(symbol, factor, params, time_range)` 为键的**结果缓存形状**。
+
+2. **但它的 `Executor` / `Scheduler` / `FactorRegistry` / kernel / 指标实现 5 项已被 core 超越，不能当 Runtime 载体**——`core/src/unified_executor.rs` 的 `UnifiedExecutor` + `KernelDispatcher` + `BufferArena` 在每一个维度上都更强，且已通过差分验证。**把载体换成平行轨道会让已绿的路径回退。**
+
+3. **因此「接入生产」的正确落法**是：载体仍是 `UnifiedExecutor`（已验证），平行轨道**降级为它的声明式前端**——即把上面 4 项真缺口实现为「构图 / 构造 / 缓存」三层，向下 lowering 到现有的 `HotExecutionPlan`，而不是替换它。
+
+> 换句话说：**crate 接入生产 = 是；crate 当执行引擎 = 否。** 下面第 1 节给出逐项证据，第 2 节给出 4 个阶段的可验证规划。
+
+---
+
+## 1. 具体有哪些功能未接入
+
+### 1.1 平行轨道的完整能力清单
+
+逐文件清点（共 1392 LOC / 9 个测试）：
+
+| 能力 | 位置 | 说明 |
+|---|---|---|
+| `FloatArray` | `crates/finkit-array/src/lib.rs:6` | `Vec<f64>` 的薄包装，26 LOC |
+| `QuantSeries` | `crates/finkit-series/src/lib.rs:6` | `symbol + timestamps + values` + `is_valid()`（等长 + 严格递增） |
+| `ema` / `rolling_mean` / `rolling_variance` / `rolling_std` | `crates/finkit-math/src/` | 4 个数学 kernel |
+| `trait Factor` | `crates/finkit-factor/src/lib.rs:21` | `name()` + `compute(&QuantSeries) -> FactorResult` |
+| `FactorResult`（结构体） | `crates/finkit-factor/src/result.rs:7` | `factor_name` + 主 `series` + `outputs: BTreeMap<String, QuantSeries>` |
+| `Sma` / `Ema` / `Rsi` / `Macd` | `crates/finkit-factor/src/{sma,ema,rsi,macd}.rs` | 4 个指标实现 |
+| `FactorProvider` / `FactorFactory` | `crates/finkit-runtime/src/factory.rs:97` | `name()` + `create(params) -> DynFactor` |
+| `FactorFactoryError` | `crates/finkit-runtime/src/factory.rs:13` | **InvalidParameter / UnknownParameter / DuplicateParameter** |
+| `FactorFactoryRequest` | `crates/finkit-runtime/src/factory.rs:49` | 有序参数 + `canonical_params()`（排序后稳定串） |
+| `FactorRegistry` | `crates/finkit-runtime/src/registry.rs:10` | 名字 → `Arc<dyn FactorProvider>` |
+| `Scheduler::topological_order` | `crates/finkit-runtime/src/scheduler.rs:31` | 拓扑排序 + Duplicate/Missing/Cycle 错误 |
+| `FactorGraph` / `FactorNode` / `ExecutionPlan` | `crates/finkit-runtime/src/graph.rs:35`、`lib.rs:29` | 手写声明式图 |
+| `FactorCache` / `FactorCacheKey` / `CacheStats` | `crates/finkit-runtime/src/cache.rs:13`、`cache_key.rs:4` | `get_or_compute` + 命中/未命中统计 |
+| `Executor` | `crates/finkit-runtime/src/executor.rs:55` | plan + registry + cache，按拓扑序逐节点执行 |
+| `FactorConfig` / `FactorOutput` | `crates/finkit-runtime/src/{config,output}.rs` | 配置 + 输出别名 |
+
+### 1.2 判定：真缺口 vs core 已超越
+
+#### A. core 已超越 —— **不能作为载体**（5 项，逐项给出反证）
+
+| 平行轨道能力 | core 对应实现 | 判定依据 |
+|---|---|---|
+| `Executor`（逐节点、每节点 `Vec<f64>`、输出 `clone()`） | `UnifiedExecutor<D>`（`core/src/unified_executor.rs:191`）+ `KernelDispatcher`（:78）+ `BufferArena` | core 有缓冲区复用、kernel 分派、`execute_range` / `execute_last`、`reset` / `rebind`、`buffer_stats`；且已差分验证 |
+| 执行语义 | `ArtifactHash`（`core/src/unified_runtime.rs:24`）、`DirtyRange`（:69）、`RuntimeExecutionMode`（:180）、`RuntimeExecutionTrace`（:196） | core 有**增量/脏区**执行与可观测轨迹，平行轨道完全没有 |
+| `Scheduler::topological_order`（含 Cycle 检测） | `ComputePlanError::DependencyCycle(Vec<ComputeNodeId>)`（`core/src/compute.rs:158`） | core 的 Kahn 环检测（`compute.rs:262`）会**回传具体环路径**（`:523` DFS 抽取），比平行轨道只报 `Cycle` 更强 |
+| `FactorResult.outputs`（多输出） | `OutputLayout`（`core/src/execution_plan.rs:233`）+ `FormulaHotPlan::outputs()` / `FormulaOutputBinding`（`core/src/formula/hot_plan.rs`，2026-09-20 新增） | 多输出**已经具备**，且带 `level_marker` 语义（Pine `hline`） |
+| `FactorCache` / `FactorCacheKey` | `OperationCacheKey`（`core/src/operation.rs:531`）、`CompositeCache`（`composite.rs`）、`FormulaCache`（`formula/compiler.rs:29`） | core 的键含 `dialect` + `FrameKey` + **`data_revision: u64`**（O(1)，不哈希缓冲区）；平行轨道的 `time_range: String` 更脆弱 |
+| `ema` / `rolling_*`（4 个 kernel） | `core/src/formula/functions.rs`（7431 行）+ `core/src/indicators/`（37 个模块）+ `registry.rs` 111 条 `FunctionSpec` | 平行轨道是这 354 个批量函数的子集 |
+| `Sma` / `Ema` / `Rsi` / `Macd` | 同上，且过 TA-Lib 201/201 parity | 平行轨道的 4 个实现是 core 的真子集 |
+| `QuantSeries` 的输入模型 | `MarketFrame<'a>`（`core/src/runtime.rs:139`）+ `NanPolicy`（:12）+ `WarmupPolicy`（:24） | core 的输入模型是**多字段 OHLCV + NaN/预热策略**，比单序列更强 |
+
+#### B. core 确实缺失 —— **值得接入**（4 项）
+
+| # | 能力 | 平行轨道位置 | core 现状（反证） | 价值 |
+|---|---|---|---|---|
+| ① | `Factor` 对象边界 + `FactorProvider` 工厂 + **带类型的参数校验** | `factory.rs:13`、`:97` | `FactorDefinition`（`core/src/factors.rs:307`）只有 `name / dependencies / kind / direction / compute: FactorFn`，**没有参数概念，也没有参数校验** | 外部调用方（Python/Node）可以用声明式请求构造因子，拿到 `InvalidParameter / UnknownParameter / DuplicateParameter` 三种结构化错误，而不是笼统的失败 |
+| ② | 手写**声明式因子图** | `graph.rs:35`、`lib.rs:29` | core 全库无 `add_node` / `depends_on` 式构图 API（grep 0 命中）；计划只能从公式源串生成 | 不写公式字符串即可组合因子（`SMA(3) → EMA(2)`），这是 pandas-ta 风格组合 API（P2-3）的前置 |
+| ③ | `QuantSeries`：符号 + 时间戳 + **严格递增校验** | `series/src/lib.rs:6`、`:42` | `MarketFrame` 是 OHLCV 多字段；无「单序列 + symbol」类型 | 缓存键与错误信息需要 symbol；`is_valid()` 是廉价的前置校验 |
+| ④ | `(symbol, factor, params, time_range)` 形状的结果缓存 | `cache_key.rs:4`、`cache.rs:41` | 三套缓存都不是这个键形状 | 需要**重新基底**到 `OperationCacheKey`（见 §2 阶段 R4），而非照搬 |
+
+#### C. 一项语义冲突（必须在规划里解决）
+
+平行轨道的 `FactorResult.series` 采用**预热裁剪**语义：`SMA(3)` 输入 10 点 → 输出 8 点，时间戳 `[2..9]`（`crates/finkit-factor/src/lib.rs:43` 的测试断言了这一点）。
+
+core 的 `apply_warmup`（`core/src/runtime.rs:273`）+ `WarmupPolicy` 采用**保持长度 + 填充**语义。
+
+两者**不兼容**：直接接入会让「同一公式在两条路径上长度不同」。这是本次接入最大的语义风险，必须在阶段 R2 明确二选一（建议：以 core 的 `WarmupPolicy` 为准，`QuantSeries` 只作为**输入端**类型，不作为输出端类型）。
+
+---
+
+## 2. 需要如何规划
+
+### 2.1 总原则
+
+- **载体不变**：执行仍是 `UnifiedExecutor` + `FormulaKernelDispatcher` + `HotExecutionPlan`。平行轨道不接管执行。
+- **只搬真缺口**：§1.2-B 的 4 项；§1.2-A 的 5 项**不搬**，只把平行轨道对应文件降级/删除。
+- **每阶段独立可验证**，且**不得**让 `cargo test -p finkit`（基线 3976 passed / 0 failed）与差分门禁回退。
+- **命名冲突先解决**：core 的 `FactorResult<T> = Result<T, FactorError>`（`core/src/factors.rs:17`）与平行轨道的 `FactorResult` 结构体同名异义。搬入前必须先改名（建议 `FactorOutputSet`），否则会在同一个 crate 内撞名。
+
+### 2.2 阶段划分
+
+#### 阶段 R1 —— 定边界与去重（无功能变更，纯收敛）
+
+- 在 `docs/` 记录本决策：载体 = `UnifiedExecutor`，平行轨道 = 声明式前端。
+- 把 §1.2-A 的 5 项在平行轨道中的实现**标注为 superseded**，并给出 core 对应实现的位置（便于后续删除）。
+- **验收**：文档落地；`cargo check --workspace` 仍 0；无代码行为变化。
+
+#### 阶段 R2 —— 搬「构造层」：`FactorProvider` + 参数校验（真缺口 ①）
+
+- 在 core 新增 `FactorProvider` / `FactorFactoryRequest` / `FactorFactoryError`，`canonical_params()` 原样保留（它是缓存键的稳定性基础）。
+- 与既有 `FactorDefinition` 的关系：`FactorDefinition` 是**已注册的因子**；`FactorProvider` 是**按参数构造因子实例**的工厂。二者是组合关系，不是替代关系。
+- **必须解决** §1.2-C 的预热语义冲突：`QuantSeries` 只做**输入端**；输出端统一走 core 的 `WarmupPolicy`。
+- **验收**：新增用例覆盖 `InvalidParameter` / `UnknownParameter` / `DuplicateParameter` 三条错误路径；`canonical_params()` 对参数顺序不敏感（`a=1,b=2` ≡ `b=2,a=1`）。
+
+#### 阶段 R3 —— 搬「构图层」：声明式因子图（真缺口 ②）
+
+- 新增 `FactorGraph` / `FactorNode`，但**向下 lowering 到现有 compute IR**：复用 `ComputeNodeId`、`cse_plan`、`prune_unreachable`、`HotExecutionPlan::compile_with_parameters`。
+- **不要**搬平行轨道的 `Scheduler`：环检测直接用 `ComputePlanError::DependencyCycle`（`core/src/compute.rs:158`），它更强。
+- **不要**搬「每节点最多 1 个依赖」的限制（`executor.rs:112` 的 `MultipleDependencies`）——core 的 kernel 是 N 元输入的，这是能力回退。
+- **验收**：`SMA(3) → EMA(2)` 这类图，经图 API 与经等价公式字符串两条路径，**逐元素一致**（沿用 `core/tests/formula_plan_differential.rs` 的差分口径）。
+
+#### 阶段 R4 —— 搬「缓存层」：结果缓存（真缺口 ④）
+
+- 缓存键**重新基底**到 `OperationCacheKey` 的形状（`dialect` + `FrameKey` + `data_revision`），**不要**照搬 `time_range: String`。
+- 保留 `CacheStats`（hits/misses）与 `get_or_compute` 这两个有用的抽象。
+- 与 `OperationCache` / `CompositeCache` 的关系需先裁决：**优先扩展现有缓存**，只有在键形状确实无法表达时才新增第四套（避免制造新的双轨）。
+- **验收**：命中/未命中统计正确；`data_revision` 变化必须导致 miss（这是正确性而非性能要求）。
+
+### 2.3 平行轨道本身的处置（与 R1–R4 并行）
+
+| crate | 处置 | 理由 |
+|---|---|---|
+| `finkit-array` | **删除** | `FloatArray` 被 core 的 `BufferArena` / `ndarray` 完全覆盖，26 LOC 无独立价值 |
+| `finkit-math` | **删除** | 4 个 kernel 是 `formula/functions.rs` 的真子集 |
+| `finkit-series` | **合并后删除** | `QuantSeries` 的 symbol + 校验迁入 core（阶段 R2），其余丢弃 |
+| `finkit-factor` | **合并后删除** | `trait Factor` 与 4 个指标实现迁入/对齐 core；`FactorResult` 改名后并入 |
+| `finkit-runtime` | **部分合并后删除** | 只搬 ①④ 两项（+ ②的 `FactorGraph` 骨架）；`Executor` / `Scheduler` / `Registry` / `Factories` 不搬 |
+
+> 全部删除都在 git 历史中可恢复；每个 crate 的删除与对应阶段的合并**同一个提交**完成，保证可回滚。
+
+### 2.4 建议顺序与理由
+
+R1 → R2 → R3 → R4。理由：
+
+- R2 的 `canonical_params()` 是 R4 缓存键的输入，必须先有；
+- R3 的构图 API 需要 R2 的 provider 边界来解析节点；
+- R4 依赖前三者的键与实例；
+- 每一阶段结束都应保持 `cargo test -p finkit` 全绿，随时可停。
+
+---
+
+## 3. 风险与回滚
+
+| 风险 | 影响 | 缓解 |
+|---|---|---|
+| **预热语义冲突**（§1.2-C） | 同一公式两条路径长度不同，差分门禁会红 | R2 明确 `QuantSeries` 仅作输入端；输出端统一 `WarmupPolicy` |
+| **`FactorResult` 撞名** | 同 crate 内同名异义，编译期混乱 | R2 搬入前先改名 `FactorOutputSet` |
+| **制造第四套缓存** | 新的双轨，与本轮收敛目标相反 | R4 优先扩展 `OperationCache`；新增需单独论证 |
+| **误把平行轨道当载体** | 回退已差分验证的执行路径 | R1 先把边界写进文档；载体不变是硬约束 |
+| 平行轨道测试依赖裁剪语义 | 删除 crate 时连带删除 9 个测试 | 迁入的用例按 core 语义重写，不照抄断言 |
+
+回滚：每个阶段独立提交；删除类操作集中在 R2–R4 的对应提交内，`git revert` 单个提交即可恢复。
+
+---
+
+## 4. 验收（整体）
+
+1. `cargo test -p finkit` 不低于基线 3976 passed / 0 failed；
+2. `cargo check --workspace` 退出码 0；
+3. `core/tests/formula_plan_differential.rs` 全绿（构图路径与公式路径逐元素一致）；
+4. 参数校验三条错误路径有用例；
+5. `workspace.members` 中 5 个平行 crate 全部移除，且无任何残留引用；
+6. `docs/` 只保留本文件 + `improvement-plan-2026-09-20.md` 作为权威基线。

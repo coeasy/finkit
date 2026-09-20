@@ -28,17 +28,29 @@ Modes
         Emit generated.rs for each language from the registry.  With
         ``--rewrite`` also drop the hand-written indicator spans from lib.rs
         and insert ``include!("generated.rs");``.
-    --check [--lang ...] [--allow-unchecked]
+    --check [--lang ...] [--all] [--allow-unchecked]
         Re-extract from the current lib.rs and compare against the stored
         bodies to detect drift (hand edits that were not pushed to the
         registry).  Exits non-zero on drift.
 
         Coverage is reported per language as ``covered=M/N``.  A language with
-        **zero** stored bodies cannot be drift-checked at all: it is reported as
-        ``status=UNCHECKED`` and the run exits non-zero, because printing
+        **zero** stored bodies cannot be drift-checked at all, so printing
         ``drift=none`` for it would be a vacuous pass that hides the real gap.
-        Pass ``--allow-unchecked`` only to acknowledge such a gap explicitly
-        during a migration; it is not a substitute for storing the bodies.
+        Such a language is therefore reported under one of two statuses:
+
+        ``status=DEFERRED``
+            The language is in ``DEFERRED_LANGS`` -- outside the active
+            Python/Node/Rust tier.  It is reported but does **not** fail the
+            run, because a permanently-red gate gets ignored.  Promote it by
+            moving it to ``TIER1_LANGS`` and running ``--discover`` for it.
+        ``status=UNCHECKED``
+            The language is in ``TIER1_LANGS`` but has no stored bodies.  This
+            **is** a hard failure.  Pass ``--allow-unchecked`` only to
+            acknowledge such a gap explicitly during a migration; it is not a
+            substitute for storing the bodies.
+
+        With no ``--lang``/``--all`` the run defaults to ``TIER1_LANGS``;
+        ``--all`` widens it to every configured binding.
 
     The binding registry is the SSOT for wrappers: adding an indicator becomes
     "add its body to ``ffi.bodies.<lang>`` for every language (or run --discover
@@ -62,6 +74,26 @@ from optimize_python_bindings import optimize_source as optimize_python_source
 ROOT = Path(__file__).resolve().parents[1]
 REG = ROOT / "docs" / "indicator_registry.json"
 FFI_REG = ROOT / "docs" / "ffi_registry.json"
+
+# ---------------------------------------------------------------------------
+# Language tiers -- the SSOT for the multi-language roadmap.
+#
+# The project's *active* language set is deliberately small: Rust (this
+# repository's own `core` crate, which needs no binding), then Python, then
+# Node. Every other binding is **deferred**: it stays in-tree and keeps
+# compiling, but its wrapper bodies are not stored in the registry, so `--check`
+# cannot drift-check it.
+#
+# A deferred language must not be reported as `drift=none` (a vacuous pass that
+# hides the gap) nor as a hard failure (which leaves the gate permanently red
+# and therefore ignored). It gets its own explicit, visible status instead.
+#
+# Promote a language by moving it from DEFERRED_LANGS to TIER1_LANGS **and**
+# running `--discover --lang <lang>` so its bodies are actually stored; a
+# tier-1 language with zero stored bodies still fails the run.
+# ---------------------------------------------------------------------------
+TIER1_LANGS = ("python", "node")
+DEFERRED_LANGS = ("c", "go", "java", "dotnet", "ios", "android")
 
 # Per-language configuration.  ``sig`` matches the function *signature* line;
 # the extractor then walks backward over doc/attribute lines and forward over
@@ -143,34 +175,123 @@ PYTHON_REGISTRY_OVERLAY = ROOT / "target" / "python_registry_ssot.json"
 
 
 def load_registry() -> dict:
-    # The core registry intentionally has no FFI blocks.  Prefer the
-    # transient enriched Python overlay when a preparation workflow created
-    # it; otherwise validate directly against the checked-in FFI SSOT so a
-    # clean checkout does not depend on ignored build artifacts.
+    # The core registry (`REG`) carries the per-indicator metadata
+    # (category / description / params / convergence / streaming); the FFI SSOT
+    # (`FFI_REG`) carries the `ffi` blocks.  `save_registry` splits them back
+    # apart, so whatever this returns must contain BOTH halves -- otherwise the
+    # round trip is lossy.
+    #
+    # Prefer the transient enriched Python overlay when a preparation workflow
+    # created it: it already holds both halves.  Otherwise merge the checked-in
+    # FFI SSOT with the checked-in core registry, so a clean checkout does not
+    # depend on ignored build artifacts.
+    #
+    # The merge is load-bearing, not cosmetic: falling back to the FFI SSOT
+    # *alone* used to make `--discover` overwrite the rich core registry with a
+    # name-only stub, silently deleting `category` / `description` / `params` /
+    # `convergence` / `streaming` for every indicator.
     if PYTHON_REGISTRY_OVERLAY.exists():
-        registry_path = PYTHON_REGISTRY_OVERLAY
-    elif FFI_REG.exists():
-        registry_path = FFI_REG
-    else:
-        registry_path = REG
-    return json.loads(registry_path.read_text(encoding="utf-8"))
+        return json.loads(PYTHON_REGISTRY_OVERLAY.read_text(encoding="utf-8"))
+
+    if not FFI_REG.exists():
+        return json.loads(REG.read_text(encoding="utf-8"))
+
+    ffi_registry = json.loads(FFI_REG.read_text(encoding="utf-8"))
+    core_registry = (
+        json.loads(REG.read_text(encoding="utf-8")) if REG.exists() else {"indicators": []}
+    )
+    core_by_name = {item.get("name"): item for item in core_registry.get("indicators", [])}
+
+    merged = dict(core_registry)
+    if "version" in ffi_registry:
+        merged["version"] = ffi_registry["version"]
+    merged["indicators"] = []
+    for item in ffi_registry.get("indicators", []):
+        combined = dict(core_by_name.get(item.get("name"), {}))
+        combined.update(item)
+        merged["indicators"].append(combined)
+    return merged
+
+
+def _core_fields(item: dict) -> dict:
+    """The per-indicator fields that belong to the core registry."""
+    return {k: v for k, v in item.items() if k not in ("ffi", "_ffi_only")}
+
+
+def _carries_core_metadata(item: dict) -> bool:
+    """Whether an entry says anything about the *core* registry.
+
+    An entry loaded from the FFI SSOT holds only ``{name, ffi}`` -- i.e. nothing
+    beyond its name.  Such an entry must not be used to create a core registry
+    entry, or the 8 FFI-only public names (`DARVAS_BOX`, `RENKO`, ...) that are
+    dispatched through a `match` and deliberately have no core entry would
+    spring into existence.
+    """
+    return len(_core_fields(item)) > 1
 
 
 def save_registry(reg: dict) -> None:
+    # The core registry is a *superset* of the FFI one: 236 indicators against
+    # the FFI SSOT's 78, because 158 of them have no binding at all.  It must
+    # therefore be rebuilt as a superset-preserving overlay rather than
+    # reconstructed from `reg`:
+    #   1. keep every entry already checked in, in its existing order;
+    #   2. overlay core fields for names that also appear in `reg`;
+    #   3. append names that are new to the core registry *and* carry core
+    #      metadata.
+    # Reconstructing from `reg` alone (the previous behaviour) deleted the 158
+    # binding-less indicators whenever `load_registry` had fallen back to the
+    # FFI SSOT -- which is the normal case on a clean checkout.
+    existing: list[dict] = []
+    if REG.exists():
+        try:
+            existing = json.loads(REG.read_text(encoding="utf-8")).get("indicators", [])
+        except json.JSONDecodeError:
+            existing = []
+
+    incoming = {
+        item.get("name"): item
+        for item in reg.get("indicators", [])
+        if not item.get("_ffi_only")
+    }
+
     core = dict(reg)
     core["indicators"] = []
-    ffi_items = []
-    for item in reg.get("indicators", []):
-        clean = {k: v for k, v in item.items() if k not in ("ffi", "_ffi_only")}
-        if not item.get("_ffi_only"):
-            core["indicators"].append(clean)
-        if item.get("ffi", {}).get("c_name"):
-            ffi_items.append({"name": item["name"], "ffi": item["ffi"]})
-    REG.write_text(json.dumps(core, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    seen: set[str] = set()
+    for item in existing:
+        name = item.get("name")
+        seen.add(name)
+        source = incoming.get(name)
+        if source is not None and _carries_core_metadata(source):
+            merged = dict(item)
+            merged.update(_core_fields(source))
+            core["indicators"].append(merged)
+        else:
+            core["indicators"].append(item)
+    for name, source in incoming.items():
+        if name not in seen and _carries_core_metadata(source):
+            core["indicators"].append(_core_fields(source))
+
+    ffi_items = [
+        {"name": item["name"], "ffi": item["ffi"]}
+        for item in reg.get("indicators", [])
+        if item.get("ffi", {}).get("c_name")
+    ]
+    # `newline="\n"` is required: the default translates "\n" to os.linesep, so
+    # on Windows every run rewrote both registries as CRLF and produced a
+    # whole-file diff (CI asserts `git diff --exit-code -- docs/*.json`).
+    REG.write_text(
+        json.dumps(core, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n"
+    )
     FFI_REG.write_text(
-        json.dumps({"version": core.get("version"), "indicators": ffi_items}, indent=2, ensure_ascii=False)
+        json.dumps(
+            {"version": core.get("version"), "indicators": ffi_items},
+            indent=2,
+            ensure_ascii=False,
+        )
         + "\n",
         encoding="utf-8",
+        newline="\n",
     )
 
 
@@ -565,6 +686,7 @@ def do_check(langs: list[str], allow_unchecked: bool = False) -> int:
     inds = indicators_with_ffi(reg)
     rc = 0
     unchecked: list[str] = []
+    deferred: list[str] = []
     for lang in langs:
         cfg = LANG_CFG[lang]
         src = (ROOT / cfg["lib"]).read_text(encoding="utf-8")
@@ -586,10 +708,18 @@ def do_check(langs: list[str], allow_unchecked: bool = False) -> int:
             if ind.get("ffi", {}).get("bodies", {}).get(lang) is not None
         ]
         if not covered:
+            if lang in DEFERRED_LANGS:
+                deferred.append(lang)
+                print(
+                    f"[check/{lang}] registry={len(stored)} covered=0/{len(stored)} "
+                    f"status=DEFERRED (outside the active Python/Node/Rust tier; "
+                    f"bodies not stored, so NOT drift-checked)"
+                )
+                continue
             unchecked.append(lang)
             print(
                 f"[check/{lang}] registry={len(stored)} covered=0/{len(stored)} "
-                f"status=UNCHECKED (no stored bodies for this language; this "
+                f"status=UNCHECKED (tier-1 language with no stored bodies; this "
                 f"check provides NO coverage)"
             )
             continue
@@ -625,13 +755,23 @@ def do_check(langs: list[str], allow_unchecked: bool = False) -> int:
         if drift:
             rc = 1
 
+    if deferred:
+        print(
+            "deferred languages (outside the active Python/Node/Rust tier; "
+            "not drift-checked, does NOT fail this run): " + ", ".join(deferred)
+        )
+        print(
+            "  -> promote by moving the language to TIER1_LANGS and running "
+            "`--discover --lang <lang>`; see docs/language-bindings.md"
+        )
     if unchecked:
-        print("unchecked languages (no stored bodies, NOT drift-checked): "
+        print("unchecked tier-1 languages (no stored bodies, NOT drift-checked): "
               + ", ".join(unchecked))
         if not allow_unchecked:
-            print("FAIL: a language with no stored bodies cannot be drift-checked, "
-                  "so this run must not report success. Run --discover for those "
-                  "languages, or pass --allow-unchecked to acknowledge the gap.")
+            print("FAIL: a tier-1 language with no stored bodies cannot be "
+                  "drift-checked, so this run must not report success. Run "
+                  "--discover for it, or pass --allow-unchecked to acknowledge "
+                  "the gap explicitly during a migration.")
             rc = 1
     return rc
 
@@ -642,6 +782,7 @@ def main() -> int:
     langs: list[str] = []
     rewrite = False
     allow_unchecked = False
+    all_langs = False
     i = 0
     while i < len(args):
         a = args[i]
@@ -655,17 +796,29 @@ def main() -> int:
             rewrite = True
         elif a == "--allow-unchecked":
             allow_unchecked = True
+        elif a == "--all":
+            all_langs = True
         elif a == "--lang":
             langs.append(args[i + 1])
             i += 1
         elif a.startswith("--lang="):
             langs.append(a.split("=", 1)[1])
         i += 1
+    if all_langs and langs:
+        print("FAIL: --all and --lang are mutually exclusive")
+        return 2
     if not langs:
-        langs = list(LANG_CFG.keys())
+        # No explicit selection: check the active tier only. `--all` widens this
+        # to every configured binding, including the deferred ones.
+        langs = list(LANG_CFG.keys()) if all_langs else list(TIER1_LANGS)
+    unknown = [lang for lang in langs if lang not in LANG_CFG]
+    if unknown:
+        print(f"FAIL: unknown language(s) {unknown}; "
+              f"expected one of {sorted(LANG_CFG)}")
+        return 2
     if mode is None:
         print("usage: sync_bindings.py (--discover|--generate [--rewrite]|--check "
-              "[--allow-unchecked]) [--lang c|python|node|go|java|dotnet|ios|android]...")
+              "[--allow-unchecked]) [--all] [--lang c|python|node|go|java|dotnet|ios|android]...")
         return 2
     if mode == "discover":
         return do_discover(langs)
