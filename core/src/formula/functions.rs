@@ -2742,43 +2742,18 @@ fn fn_adx(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, For
         Err(_) => return Ok(nan_vec(data_len)),
     };
 
-    let mut dx = nan_vec(data_len);
-    for i in 0..data_len {
-        let plus = plus_di[i];
-        let minus = minus_di[i];
-        if plus.is_finite() && minus.is_finite() {
-            let sum = plus + minus;
-            dx[i] = if sum.abs() > 1e-15 {
-                (plus - minus).abs() / sum * 100.0
-            } else {
-                0.0
-            };
-        }
-    }
-
-    // Pine ta.dmi smooths DX with Wilder/RMA using adxSmoothing.  Seed the
-    // recursion with the arithmetic mean of the first adx_n valid DX values,
-    // then use alpha = 1/adx_n.  This keeps diLength and adxSmoothing distinct.
+    // The DX + Wilder/RMA tail lives in the indicator layer so the compiled-plan
+    // kernel and this executor cannot drift apart.
     let mut output = nan_vec(data_len);
-    let Some(first_valid) = dx.iter().position(|value| value.is_finite()) else {
-        return Ok(output);
-    };
-    let Some(seed_end) = first_valid.checked_add(adx_n - 1) else {
-        return Ok(output);
-    };
-    if seed_end >= data_len || (first_valid..=seed_end).any(|i| !dx[i].is_finite()) {
-        return Ok(output);
-    }
-
-    let seed = (first_valid..=seed_end).map(|i| dx[i]).sum::<f64>() / adx_n as f64;
-    output[seed_end] = seed;
-    let mut previous = seed;
-    for i in (seed_end + 1)..data_len {
-        let value = dx[i];
-        if value.is_finite() {
-            previous = (value + (adx_n as f64 - 1.0) * previous) / adx_n as f64;
-            output[i] = previous;
-        }
+    if lib_momentum::adx_from_di_into(
+        plus_di.as_slice().unwrap(),
+        minus_di.as_slice().unwrap(),
+        adx_n,
+        output.as_slice_mut().unwrap(),
+    )
+    .is_err()
+    {
+        return Ok(nan_vec(data_len));
     }
 
     Ok(output)

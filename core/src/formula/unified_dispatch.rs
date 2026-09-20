@@ -87,6 +87,13 @@ impl KernelDispatcher for FormulaKernelDispatcher {
             return dispatch_aroon_call(call, buffers);
         }
 
+        if call.kernel == KernelId::from_static("CALL:PLUS_DI")
+            || call.kernel == KernelId::from_static("CALL:MINUS_DI")
+            || call.kernel == KernelId::from_static("CALL:ADX")
+        {
+            return dispatch_dmi_call(call, buffers);
+        }
+
         if call.kernel == KernelId::from_static("CALL:AD")
             || call.kernel == KernelId::from_static("CALL:ADOSC")
             || call.kernel == KernelId::from_static("CALL:MFI")
@@ -727,6 +734,97 @@ fn dispatch_aroon_call(
         ));
     }
     output.copy_from_slice(source.as_slice().unwrap());
+    Ok(())
+}
+
+/// Execute the directional-movement family into the plan-owned output.
+///
+/// `PLUS_DI` / `MINUS_DI` delegate to `momentum::plus_di` / `momentum::minus_di`
+/// — the same functions `fn_plus_di` / `fn_minus_di` call on the tree path. The
+/// DX + Wilder/RMA tail of the five-argument `ADX` contract is not reimplemented
+/// here either: it lives in `momentum::adx_from_di_into`, which `fn_adx` now
+/// calls too, so the two paths cannot drift.
+///
+/// `ADX` accepts both the domestic four-argument form `(HIGH, LOW, CLOSE, N)`,
+/// which smooths DX with the directional-movement length, and Pine's
+/// five-argument `ta.dmi` form, which keeps the two lengths distinct.
+fn dispatch_dmi_call(
+    call: KernelCall<'_>,
+    buffers: &mut [Vec<f64>],
+) -> Result<(), KernelDispatchError> {
+    let is_adx = call.kernel == KernelId::from_static("CALL:ADX");
+    if call.inputs.len() != 4 && !(is_adx && call.inputs.len() == 5) {
+        return Err(KernelDispatchError::new(FormulaKernelDispatcher::ERR_ARITY));
+    }
+    let high_slot = call.inputs[0].0;
+    let low_slot = call.inputs[1].0;
+    let close_slot = call.inputs[2].0;
+    let period_slot = call.inputs[3].0;
+    let output_slot = call.output.0;
+    let used = [high_slot, low_slot, close_slot, period_slot];
+    if used.contains(&output_slot)
+        || (call.inputs.len() == 5 && call.inputs[4].0 == output_slot)
+    {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+    let period = period_from_slot(buffers, period_slot)?;
+    let len = buffers[output_slot].len();
+    if buffers[high_slot].len() != len
+        || buffers[low_slot].len() != len
+        || buffers[close_slot].len() != len
+    {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+
+    // Scoped so the immutable borrows end before the output is borrowed mutably.
+    let result = {
+        let high = &buffers[high_slot];
+        let low = &buffers[low_slot];
+        let close = &buffers[close_slot];
+        let invalid = || KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER);
+        if call.kernel == KernelId::from_static("CALL:PLUS_DI") {
+            crate::indicators::momentum::plus_di(high, low, close, period)
+                .map_err(|_| invalid())?
+                .to_vec()
+        } else if call.kernel == KernelId::from_static("CALL:MINUS_DI") {
+            crate::indicators::momentum::minus_di(high, low, close, period)
+                .map_err(|_| invalid())?
+                .to_vec()
+        } else if call.inputs.len() == 4 {
+            crate::indicators::momentum::adx(high, low, close, period)
+                .map_err(|_| invalid())?
+                .to_vec()
+        } else {
+            let adx_n = period_from_slot(buffers, call.inputs[4].0)?;
+            let plus_di =
+                crate::indicators::momentum::plus_di(high, low, close, period).map_err(|_| invalid())?;
+            let minus_di =
+                crate::indicators::momentum::minus_di(high, low, close, period).map_err(|_| invalid())?;
+            let mut adx = vec![f64::NAN; len];
+            crate::indicators::momentum::adx_from_di_into(
+                plus_di.as_slice().unwrap(),
+                minus_di.as_slice().unwrap(),
+                adx_n,
+                &mut adx,
+            )
+            .map_err(|_| invalid())?;
+            adx
+        }
+    };
+
+    let output = buffers
+        .get_mut(output_slot)
+        .ok_or_else(|| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+    if output.len() != result.len() {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+    output.copy_from_slice(&result);
     Ok(())
 }
 

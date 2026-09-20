@@ -212,6 +212,15 @@ const ADOSC_PARAMS: &[ParamSpec] = &[
     ParamSpec::new("fast_period", "usize", Some("3"), Some("> 0")),
     ParamSpec::new("slow_period", "usize", Some("10"), Some("> 0")),
 ];
+/// `ADX(srcHigh, srcLow, srcClose, diLength, adxSmoothing)`.
+///
+/// The fourth argument is optional: the domestic four-argument form smooths DX
+/// with the same length used for the directional movement, while Pine's
+/// `ta.dmi(diLength, adxSmoothing)` keeps the two lengths distinct.
+const ADX_PARAMS: &[ParamSpec] = &[
+    ParamSpec::new("di_length", "usize", Some("14"), Some("> 0")),
+    ParamSpec::new("adx_smoothing", "usize", Some("14"), Some("> 0")),
+];
 const PPO_PARAMS: &[ParamSpec] = &[
     ParamSpec::new("fast_period", "usize", Some("12"), Some("> 0")),
     ParamSpec::new("slow_period", "usize", Some("26"), Some("> fast_period")),
@@ -447,6 +456,43 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             category: FunctionCategory::Momentum,
             input: InputKind::Hlc,
             params: PERIOD_14,
+            outputs: 1,
+            lookback: LookbackSpec::Period,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "PLUS_DI",
+            // Not aliased to `PDI`: that name is a thin wrapper in the legacy
+            // table, and the alias invariant requires the *identical* function
+            // item, not merely an equivalent one.
+            aliases: &[],
+            category: FunctionCategory::Momentum,
+            input: InputKind::Hlc,
+            params: PERIOD_14,
+            outputs: 1,
+            lookback: LookbackSpec::Period,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "MINUS_DI",
+            // Same reasoning as `PLUS_DI` / `PDI`.
+            aliases: &[],
+            category: FunctionCategory::Momentum,
+            input: InputKind::Hlc,
+            params: PERIOD_14,
+            outputs: 1,
+            lookback: LookbackSpec::Period,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "ADX",
+            aliases: &[],
+            category: FunctionCategory::Momentum,
+            input: InputKind::Hlc,
+            params: ADX_PARAMS,
             outputs: 1,
             lookback: LookbackSpec::Period,
             streaming: true,

@@ -847,6 +847,80 @@ fn macd_inner(
     })
 }
 
+/// Average Directional Index from pre-computed `+DI` / `-DI` series.
+///
+/// This is the five-argument `ADX(srcHigh, srcLow, srcClose, diLength,
+/// adxSmoothing)` contract lifted out of the formula engine so the
+/// tree-walking executor and the compiled-plan kernel share one
+/// implementation. `diLength` and `adxSmoothing` stay distinct: DX is smoothed
+/// with Wilder/RMA whose seed is the arithmetic mean of the first `adx_n`
+/// valid DX values.
+///
+/// `output` is fully written: NaN where the contract has no value yet.
+///
+/// # Errors
+///
+/// Returns `TaError::InvalidParameter` if the `+DI` / `-DI` inputs are shorter
+/// than `output`, or if `adx_n` is zero.
+#[allow(clippy::cast_precision_loss)] // smoothing lengths are far below 2^53
+pub fn adx_from_di_into(
+    plus_di: &[f64],
+    minus_di: &[f64],
+    adx_n: usize,
+    output: &mut [f64],
+) -> Result<()> {
+    let len = output.len();
+    if plus_di.len() < len || minus_di.len() < len {
+        return Err(TaError::InvalidParameter {
+            name: "plus_di, minus_di".to_string(),
+            constraint: "must have at least the output length".to_string(),
+        });
+    }
+    if adx_n == 0 {
+        return Err(TaError::InvalidParameter {
+            name: "adx_n".to_string(),
+            constraint: "greater than 0".to_string(),
+        });
+    }
+    output.fill(f64::NAN);
+
+    let mut dx = vec![f64::NAN; len];
+    for i in 0..len {
+        let plus = plus_di[i];
+        let minus = minus_di[i];
+        if plus.is_finite() && minus.is_finite() {
+            let sum = plus + minus;
+            dx[i] = if sum.abs() > 1e-15 {
+                (plus - minus).abs() / sum * 100.0
+            } else {
+                0.0
+            };
+        }
+    }
+
+    let Some(first_valid) = dx.iter().position(|value| value.is_finite()) else {
+        return Ok(());
+    };
+    let Some(seed_end) = first_valid.checked_add(adx_n - 1) else {
+        return Ok(());
+    };
+    if seed_end >= len || (first_valid..=seed_end).any(|i| !dx[i].is_finite()) {
+        return Ok(());
+    }
+
+    let seed = (first_valid..=seed_end).map(|i| dx[i]).sum::<f64>() / adx_n as f64;
+    output[seed_end] = seed;
+    let mut previous = seed;
+    for i in (seed_end + 1)..len {
+        let value = dx[i];
+        if value.is_finite() {
+            previous = (value + (adx_n as f64 - 1.0) * previous) / adx_n as f64;
+            output[i] = previous;
+        }
+    }
+    Ok(())
+}
+
 /// Average Directional Index (ADX)
 ///
 /// Measures trend strength regardless of trend direction.

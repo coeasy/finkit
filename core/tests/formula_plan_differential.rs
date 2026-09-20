@@ -46,16 +46,11 @@ const DOMESTIC_UNSUPPORTED: &[(&str, &str)] = &[
         "cross_period_refdate",
         "no kernel for `CALL:PERIODTYPE`/`CALL:REFDATE`; needs chart-period host context",
     ),
-    // The SSOT (`registry.rs`) declares 213 names; the formula surface exposes
-    // 416. Anything the SSOT does not declare is lowered as an unknown,
-    // stateful function: it gains a phantom trailing dependency and never
-    // becomes pure, so it can never be interned or reordered. The exact
-    // inventory of that gap, and of the plan-path kernel backlog, is pinned by
+    // What is left here is host context, not a missing kernel: `WINNER`/`COST`
+    // need per-bar chip-distribution data and `PERIODTYPE`/`REFDATE` need the
+    // chart period. The plan-path kernel backlog, and the inventory of the gap
+    // between the SSOT and the formula surface, is pinned by
     // `formula_function_ssot.rs`.
-    (
-        "dmi_tdx",
-        "no kernel for `CALL:PLUS_DI`/`CALL:MINUS_DI`/`CALL:ADX` (directional movement)",
-    ),
 ];
 
 /// Pine corpus cases the compiled plan path cannot execute yet.
@@ -66,10 +61,6 @@ const DOMESTIC_UNSUPPORTED: &[(&str, &str)] = &[
 /// marker constant. Every remaining entry is a genuine kernel or lowering gap.
 const PINE_UNSUPPORTED: &[(&str, &str)] = &[
     // --- Missing numeric kernels -------------------------------------------------
-    (
-        "adx",
-        "no kernel for `CALL:PLUS_DI`/`CALL:MINUS_DI`/`CALL:ADX` (directional movement)",
-    ),
     (
         "bollinger_bands",
         "no kernel for `CALL:BOLLUP`/`CALL:BOLLMID`/`CALL:BOLLDN`",

@@ -640,11 +640,66 @@ plan 与树路径就会数值分叉。
   说明下一步只需补 PLUS_DI / MINUS_DI / ADX 三个 kernel。
 - 门禁同步更新：kernel 46 → 48，registry 213 → 215。
 
-### 12.5 下一步（本批的延续）
+### 12.5 下一步（已执行，记录见 §13）
 
 1. `PLUS_DI` / `MINUS_DI`（委托 `momentum::plus_di` / `minus_di`）+ `ADX`
-   （5 实参契约见 `fn_adx`：先算 DI 再算 DX 后平滑 —— **必须逐行照抄，不要用 `adx_into`**）。
+   （5 实参契约见 `fn_adx`：先算 DI 再算 DX 后平滑 —— **不要另写一份**）。
    完成后可清掉 Pine `adx` 与国内 `dmi_tdx` 两条白名单条目。
+2. `WILLR`（Pine `wpr` 已是显式 `(HIGH,LOW,CLOSE,N)`，形状现成）。
+3. `TRIX`/`WILLR` 的**多份实现分歧**先单独决策（见 §10.6），再动 kernel。
+
+## 13. 第二批 kernel：PLUS_DI / MINUS_DI / ADX（2026-09-20 续）
+
+### 13.1 不照抄算法，而是把契约抽到 indicator 层
+
+`fn_adx` 的 5 实参分支原本是一段自制算法：先算 `plus_di`/`minus_di`，再
+`dx[i] = |plus - minus| / (plus + minus) * 100`（`sum.abs() > 1e-15` 守卫），
+最后用 Wilder/RMA 平滑，种子是前 `adx_n` 个**有效** DX 的算术平均。
+
+若在 dispatcher 里逐行照抄一遍，就造出第二份实现 —— 正是 §12.3 那条规则要避免的。
+所以把这段尾部**抽成** `indicators::momentum::adx_from_di_into(plus_di, minus_di, adx_n, output)`，
+再把 `fn_adx` 改为调用它。两条路径**共用同一份代码**：不是"照抄"，而是"抽出"。
+4 实参（国内）仍走 `momentum::adx`，未改动。
+
+### 13.2 ADX 的双 arity
+
+| 来源 | 形状 | 含义 |
+|---|---|---|
+| 国内 `dmi_tdx` | `ADX(HIGH, LOW, CLOSE, 14)` | 4 实参；DI 长度与 DX 平滑长度相同 |
+| Pine `ta.dmi` | `ADX(HIGH, LOW, CLOSE, diLength, adxSmoothing)` | 5 实参；两者分开 |
+
+`dispatch_dmi_call` 对 `ADX` 同时接受 4 与 5；`PLUS_DI` / `MINUS_DI` 恒为 4。
+registry 里 `ADX` 用新的 `ADX_PARAMS`（`di_length` + `adx_smoothing`）声明两个参数。
+
+### 13.3 两个踩到的坑（都被门禁兜住）
+
+1. **文档注释又被"偷"了一次。** 插入点落在 `adx` 的 `///` 块与 `fn` 之间，
+   于是 `adx` 的 doctest 并进了新函数的文档，`adx` 自己变成未注释 ——
+   **编译通过、4020 个测试也通过**，只有 clippy 会报。已用脚本搬回，
+   并断言"每个 `///` 块后面必须紧跟 `///`、`#[` 或条目关键字"。
+2. **`PDI` / `MDI` 不能写成 registry 别名。** `functions.rs:6339` 有一条**未加 cfg 的**运行时断言：
+   别名若已存在实现，必须 `fn_addr_eq` 等于 canonical。而 `fn_pdi` 只是调用 `fn_plus_di` 的
+   **包装函数**，函数地址不同 —— 加别名会直接 panic。故 `aliases: &[]`，并在原地写明原因。
+
+### 13.4 结果
+
+- 三个 kernel 落地：`PLUS_DI`、`MINUS_DI`、`ADX`（4/5 双 arity）。
+- 语料经编译计划路径验证：Pine **14 → 15**，国内 **15 → 16**。
+- 白名单按门禁要求删掉 Pine `adx` 与国内 `dmi_tdx` 两条（`assert_allowlist_matches` 主动报的）。
+- 门禁同步：registry 215 → **218**，kernel 48 → **51**（formula 面 416 不变）。
+- `docs/generated/indicators.md` 重新生成（公开函数 385 → 386）。
+- 全量 `cargo test -p finkit`：**4020 passed / 0 failed**。
+
+### 13.5 下一步
+
+1. **`ta.cci` 降级显式化（新发现，与 §12.1/§12.2 同一类问题）。**
+   Pine 的 `cci` 目前降级成 `CCI(source, n)` —— **两个实参**。
+   树路径走 `resolve_hlc_args` 的第二分支，从 ctx 补 HIGH/LOW，结果正确；
+   但 `CCI` kernel 由 `dispatch_hlc_periodic_call` 服务，**硬要求 4 个实参**，
+   于是 plan 路径报的是 `CALL:CCI` **code 2（`ERR_ARITY`）**，而不是"缺 kernel"。
+   改成 `CCI(HIGH, LOW, CLOSE, n)` 即可同时解掉 —— 且值保持不变
+   （2 实参分支取的就是 `ctx.high/low/close`）。
+   > 这类"arity 不匹配"比"缺 kernel"便宜得多，值得单独扫一遍白名单里的 code 2。
 2. `WILLR`（Pine `wpr` 已是显式 `(HIGH,LOW,CLOSE,N)`，形状现成）。
 3. `TRIX`/`WILLR` 的**多份实现分歧**先单独决策（见 §10.6），再动 kernel。
 
