@@ -46,10 +46,11 @@ const DOMESTIC_UNSUPPORTED: &[(&str, &str)] = &[
         "cross_period_refdate",
         "no kernel for `CALL:PERIODTYPE`/`CALL:REFDATE`; needs chart-period host context",
     ),
-    // `registry.rs` declares only 104 of the 327 functions the formula engine
-    // implements. Anything absent is lowered as an unknown, stateful function:
-    // it gains a phantom trailing dependency and never becomes pure, so it can
-    // never be interned, reordered, or executed by the numeric dispatcher.
+    // `registry.rs` declares only 111 of the 371 function names the formula
+    // engine implements. Anything absent is lowered as an unknown, stateful
+    // function: it gains a phantom trailing dependency and never becomes pure,
+    // so it can never be interned, reordered, or executed by the numeric
+    // dispatcher.
     (
         "dmi_tdx",
         "no kernel for `CALL:PLUS_DI`/`CALL:MINUS_DI`/`CALL:ADX` (directional movement)",
