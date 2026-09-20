@@ -970,3 +970,88 @@ WILLR 那次我是**先改后看**；这次先写了个一次性探针，把两�
 > **改数值行为前先写一次性探针，改完再跑一遍。**
 > 这次"改前/改后"两张表是**同一个探针**出的，所以"逐位相等"这个结论是可复核的，
 > 不是"我觉得应该对了"。探针用完即删，不留进仓库。
+
+## 19. `IF` kernel 与 `SUPERTREND` 收敛（2026-09-20 续）
+
+### 19.1 白名单里的理由写错了
+
+原条目写的是「`CALL:IF` 无 kernel / `IF_THEN_ELSE` 节点无降级」。实际：
+
+- `IF_THEN_ELSE` **有降级**（`compute_ir.rs:251` `add_pure`），只是**没有 kernel**；
+- 而且 `supertrend` 一个脚本里**两个名字都产生**了：
+  Pine 三元 `a ? b : c` → mapper 改写为 `IF(...)` 调用 → `CALL:IF`；
+  另一处 `AstNode::IfThenElse` → `IF_THEN_ELSE`。
+
+→ 我先在 `dispatch_periodic_call` 之外补了 `dispatch_if_call`（委托 `SimdOps::select`，
+即 `fn_if` 在可向量化时用的**同一个原语**）→ 报错从 `CALL:IF` 变成了 `IF_THEN_ELSE`。
+→ 再把 `compute_ir` 的 `add_pure("IF_THEN_ELSE")` 改为 `add_pure("CALL:IF")`。
+
+**统一成一个名字而不是补第二个 kernel**，理由是：`IF` 是**已注册且纯**的函数名，
+而未注册的节点名会被 `function_metadata` 降级成 `stateful` 屏障，**挡住 CSE**。
+（`IF_THEN_ELSE` 全仓库只有这一处产出，改名无其他影响。）
+
+### 19.2 补上 kernel 后，门禁抓到了真正的数值分歧
+
+`supertrend` 从「跑不了」变成「**跑得出来但数不对**」：
+
+```
+[UNDECLARED] supertrend: divergence: index 9: ast=74.76700000264893 plan=NaN
+```
+
+| | ATR 做法 | 首个有效位置 |
+|---|---|---|
+| `fn_supertrend`（手写） | **`lib_ma::sma(TR, n)`**——TR 的**简单**均线 | `n-1`（n=10 → index 9） |
+| `indicators::supertrend`（kernel 用） | **Wilder ATR**（`volatility::atr`） | 需要自己的种子，晚于 index 9 |
+
+这和 §18 的 TRIX 是**同一类错误**：差异是**有没有值**，不是精度。
+而 `SUPERTREND` 此前**只在探针里被验证过**（可注册、可调度），**从未被数值比对过**——
+与 §17.5 里三个 `BOLL*` 的情况完全一样。**差分门禁一旦真的跑起来，就抓到了。**
+
+### 19.3 裁决：golden 存在且覆盖完整契约
+
+`tests/golden/talib/supertrend.json`（`timeperiod=10, multiplier=3.0`）存在，
+且确实**被执行**：`golden_talib_all_indicators` 遍历 `known_indicators()`
+（= 矩阵 `numeric_reference.indicators`，含 `SUPERTREND`）逐个跑，
+比对的是 `indicators::supertrend::supertrend`。契约 `(high, low, close, period, multiplier)`
+与 `fn_supertrend(H,L,C,N,M)` **完全一致** → §15.1 前提成立 → 手写那份收敛。
+
+> ⚠️ 差点判错：我一开始 `grep golden_talib_supertrend` **没找到**，以为 golden 没被执行。
+> 实际它是**由聚合测试遍历**的，不是每个指标一个 `run_or_skip` 函数。
+> **判断「有没有 golden 覆盖」时要找聚合入口，不能只 grep 指标名。**
+
+### 19.4 两道门禁按设计报警（不是 bug）
+
+1. `an_unsupported_operator_fails_loudly_instead_of_falling_back` **用 `IF` 当作"kernel 缺口"的样例**——
+   `IF` 有了 kernel 后它就通过了，于是**失败**。改用它处仍缺 kernel 的 `FILTER`，
+   并加注释：**下次它再转绿，就改指另一个缺口条目，不要删掉这个检查**。
+2. `DECLARED_BUT_NO_KERNEL` 里还记着 `IF` → 摘掉。
+
+### 19.5 结果
+
+- Pine 语料 **23 → 24**；**只剩 `volume_profile` 一条**（`for` 循环体不降级）。
+- 三面 `(226, 416, 59)` → **`(226, 416, 60)`**。
+- 全量 **4020 passed / 0 failed**（43 二进制）。
+
+### 19.6 尚未解决（刻意留着，需要决策）
+
+**`IF` 的真值判定在代码库里不统一**：
+
+| 约定 | 出处 |
+|---|---|
+| `condition != 0.0` | 树执行器、字节码 VM、JIT、`fn_if` 的 SIMD 分支（**热路径**） |
+| `condition > 0.0` | `stateful.rs`、`fn_if` 的 `len < 16` 回落分支 |
+
+两者对**负数**与 **NaN** 的条件给出不同结果 → 严格说 `IF(-1, a, b)` 在
+**短序列（<16）与长序列上结果不同**，这是 `fn_if` 自身的**长度依赖不一致**。
+`supertrend` 的条件是 `direction < 0`（0/1），不受影响，故本次**没有顺手改**——
+改它会同时动到国内公式的行为，属于**独立决策**，不在本轮范围。
+
+### 19.7 教训
+
+> **"白名单里的理由"也会过期/不准，动手前先验证。**
+> 我这次照着「`IF_THEN_ELSE` 无降级」的字面去规划，实际它是**有降级、只缺 kernel**，
+> 且一个脚本会产出**两个**名字。**理由写的是当时的观察，不一定是当前的机制。**
+
+> **补上 kernel 让用例"能跑"之后，才是真正的验证开始。**
+> `SUPERTREND` 在探针里"已覆盖"了很久，直到差分门禁真的比数值才暴露
+> SMA-of-TR vs Wilder ATR 的分歧。**"能跑通" ≠ "算得对"。**
