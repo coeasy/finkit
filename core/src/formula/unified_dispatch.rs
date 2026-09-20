@@ -52,6 +52,7 @@ impl KernelDispatcher for FormulaKernelDispatcher {
             || call.kernel == KernelId::from_static("CALL:RSI")
             || call.kernel == KernelId::from_static("CALL:MOM")
             || call.kernel == KernelId::from_static("CALL:ROC")
+            || call.kernel == KernelId::from_static("CALL:TRIX")
             || call.kernel == KernelId::from_static("CALL:TRIMA")
             || call.kernel == KernelId::from_static("CALL:STD")
             || call.kernel == KernelId::from_static("CALL:HHV")
@@ -305,6 +306,8 @@ fn dispatch_periodic_call(
         crate::indicators::mom_into(input, period, output)
     } else if call.kernel == KernelId::from_static("CALL:TRIMA") {
         crate::math::moving_avg::trima_into(input, period, output)
+    } else if call.kernel == KernelId::from_static("CALL:TRIX") {
+        crate::indicators::momentum::trix_into(input, period, output)
     } else if call.kernel == KernelId::from_static("CALL:STD") {
         crate::math::rolling_stats::stddev_into(input, period, 1.0, output)
     } else {

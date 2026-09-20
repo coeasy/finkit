@@ -572,6 +572,19 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             deterministic: true,
         },
         FunctionSpec {
+            name: "TRIX",
+            aliases: &[],
+            category: FunctionCategory::Momentum,
+            input: InputKind::Series,
+            params: PERIOD_14,
+            // Warm-up is `3 * (period - 1)`: each of the three chained EMAs
+            // consumes its own SMA seed before the rate of change is defined.
+            lookback: LookbackSpec::Dynamic,
+            outputs: 1,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
             name: "TRIMA",
             aliases: &[],
             category: FunctionCategory::Overlap,

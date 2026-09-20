@@ -2151,43 +2151,23 @@ fn fn_ppo(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, For
     Ok(result)
 }
 
-fn fn_trix(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+fn fn_trix(_ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("TRIX", args, 2)?;
-    let input = &args[0];
     let n = extract_n(args, 1, "TRIX")?;
+    let data_len = args[0].len();
+    let input = &args[0].as_slice().unwrap()[..data_len];
 
-    let data_len = ctx.data_len;
-    let values = input.as_slice().unwrap();
-
-    let ema1 = match lib_ma::ema(values, n) {
-        Ok(r) => r,
-        Err(_) => return Ok(nan_vec(data_len)),
-    };
-    let ema1_vec: Vec<f64> = ema1
-        .iter()
-        .map(|&x| if x.is_nan() { 0.0 } else { x })
-        .collect();
-    let ema2 = match lib_ma::ema(&ema1_vec, n) {
-        Ok(r) => r,
-        Err(_) => return Ok(nan_vec(data_len)),
-    };
-    let ema2_vec: Vec<f64> = ema2
-        .iter()
-        .map(|&x| if x.is_nan() { 0.0 } else { x })
-        .collect();
-    let ema3 = match lib_ma::ema(&ema2_vec, n) {
-        Ok(r) => r,
-        Err(_) => return Ok(nan_vec(data_len)),
-    };
-
-    let mut result = nan_vec(data_len);
-    for i in 1..data_len {
-        if !ema3[i].is_nan() && !ema3[i - 1].is_nan() && ema3[i - 1].abs() > 1e-15 {
-            result[i] = (ema3[i] - ema3[i - 1]) / ema3[i - 1] * 100.0;
-        }
+    // Delegated to the TA-Lib-golden indicator rather than keeping a second
+    // hand-rolled copy. The previous local implementation substituted `0.0`
+    // for the warm-up NaN before feeding EMA2 and EMA3, which did two wrong
+    // things at once: it produced values in the warm-up region where TA-Lib
+    // yields NaN (22 spurious points at period 12), and the injected zeros
+    // contaminated the settled region with a residual that only decayed
+    // geometrically (~1e-4 still present at bar 120 for period 15).
+    match lib_momentum::trix(input, n) {
+        Ok(result) => Ok(result),
+        Err(_) => Ok(nan_vec(data_len)),
     }
-
-    Ok(result)
 }
 
 fn fn_bop(_ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {

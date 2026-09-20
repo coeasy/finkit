@@ -110,6 +110,7 @@ const PLAN_KERNELS: &[&str] = &[
     "SUM",
     "SUPERTREND",
     "TRIMA",
+    "TRIX",
     "TSI",
     "VWAP",
     "VWMA",
@@ -437,7 +438,7 @@ fn the_three_surfaces_have_the_expected_sizes() {
     let actual = (registry.len(), formulas.len(), kernels.len());
     assert_eq!(
         actual,
-        (225, 416, 58),
+        (226, 416, 59),
         "surface sizes changed: (registry, formula, plan kernels)"
     );
 }

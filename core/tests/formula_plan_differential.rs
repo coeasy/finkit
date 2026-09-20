@@ -60,13 +60,11 @@ const DOMESTIC_UNSUPPORTED: &[(&str, &str)] = &[
 /// script ending in `hline(...)` reports its `plot(...)` series instead of the
 /// marker constant. Every remaining entry is a genuine kernel or lowering gap.
 const PINE_UNSUPPORTED: &[(&str, &str)] = &[
-    // --- Missing numeric kernels -------------------------------------------------
+    // --- Structural lowering gaps ------------------------------------------------
     (
         "supertrend",
         "no kernel for `CALL:IF` / no lowering for the `IF_THEN_ELSE` node",
     ),
-    ("trix", "no kernel for `CALL:TRIX`"),
-    // --- Structural lowering gaps ------------------------------------------------
     // `compute_ir` treats loop bodies as opaque control flow and does not lower
     // them into the acyclic compute plan, so `volume[i]` never becomes a bound
     // input and the executor cannot infer an execution length.
