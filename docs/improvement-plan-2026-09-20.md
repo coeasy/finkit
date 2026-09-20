@@ -360,3 +360,81 @@ Pine 转绿 4 例：`momentum`、`roc`、`rsi`（输出选择修复）、`ichimo
 - P0-1 的多语言绑定工作按此收敛：Rust（本仓）→ Python → Node 为第一梯队，其余语言从「近期里程碑」降为「后续扩展」。
 - P0-3 的终端方言（`FormulaTerminal::{DaZhiHui, Wenhua}`）与 `"dzh" → TongDaXin` 静默映射仍待处理，但优先级低于语言收敛。
 - 先做「收敛」：把当前计划路径的门禁、白名单、文档全部对齐到实际状态，确保 `cargo test -p finkit` 与 `cargo check --workspace` 全绿后再开新战场。
+
+---
+
+## 9. P0-2 步骤 2 执行记录（2026-09-20 续）：编译期接入
+
+步骤 2 的目标（见 §P0-2 步骤 2）：**在 `FormulaEngine` 增加 plan 编译与缓存（按 `source + dialect + 参数指纹` 作 key），
+编译失败时明确报错而非静默回退。**
+
+### 9.1 交付
+
+| 项 | 落点 |
+|---|---|
+| plan 编译 + 缓存 | `core/src/formula/engine.rs`：`FormulaPlanCache` / `FormulaPlanKey` / `parameter_fingerprint` |
+| 公开 API | `FormulaEngine::{compile_plan, compile_plan_default, plan_cache_stats, plan_cache_size, clear_plan_cache}` |
+| 统计类型 | `FormulaPlanCacheStats { hits, misses }`（与 `FormulaEngine` 一同 re-export） |
+| dialect 可作 key | `FormulaDialect` 增加 `Hash` derive |
+
+`compile_plan` 的 AST 管线**刻意对齐 `eval_with_dialect`**（先 `normalize_formula_source`，再按方言解析），
+再加上 `compile()` 的自定义组件展开，因此 plan 描述的就是树路径会求值的那个程序：
+
+```
+normalize_formula_source(source, dialect)
+  → parse_formula_with_dialect(&normalized, dialect)
+  → custom_formulas.expand(&ast)
+  → apply_params(&ast, params)          // 参数替换必须在规划之前
+  → FormulaHotPlan::compile(&ast)
+```
+
+### 9.2 三个 key 分量都是必需的
+
+- **`source`** —— 调用方写的原文（未规范化）。
+- **`dialect`** —— 同一段文本按不同方言解析出不同 AST（Pine 走 `parse_pine` + `map_pine_to_alphata`）。
+  已知代价：AlphaTA 与 TongDaXin 目前共用 `parse_formula`，故二者会各编译一份。这是**刻意选保守的一侧** ——
+  多付一次编译，而不是冒「方言不同却复用同一 plan」的风险。
+- **参数指纹** —— `apply_params` 把参数引用改写成数值字面量，**早于** plan 把字面量绑进 parameter arena，
+  所以 `MA(CLOSE,N)` 的 `N=14` 与 `N=20` 是**两个不同的 plan**。测试直接断言两个 plan 的 arena 里
+  分别是 `14.0` 与 `20.0`，而不只是断言「键不同」。
+
+`ParamValues` 是 `HashMap`，迭代顺序不确定，故指纹**按名排序**：同一组参数换个插入顺序必须命中同一 plan
+（有专门用例钉住）。值用 `{:?}` 而非 `{}` 渲染：Rust 的 float `Debug` 输出「可往返的最短表示」，
+因此能区分 `0.0` / `-0.0`（二者行为确实不同），同时把各种 NaN 折叠成同一个 key（行为确实相同）。
+**缓存键不允许碰撞**，这是选 `{:?}` 而不是 `{}` 的唯一理由。
+
+### 9.3 「明确报错」为什么复用 `InvalidOperation`
+
+`ffi/c-binding/src/lib.rs:123-134` 对 `FormulaError` 做**穷尽 match** 来产出错误码 ABI（`ffi/node-binding` 亦然）。
+**新增一个 variant 会静默改变所有语言绑定的错误码契约**，所以编译失败报
+`FormulaError::InvalidOperation("formula plan compilation failed: …")` ——
+与 `compile()` 既有的「语义规划失败 → `InvalidOperation`」一致；消息带前缀，日志里仍可区分。
+
+### 9.4 缓存语义
+
+- 与 `semantic_plan_cache` / `bytecode_cache` 一致：**不设容量上限**（进程内公式种类有限，设上限会淘汰即将复用的 plan）。
+  `clear_plan_cache()` 可整体丢弃。它持有的是**数值 plan**，与按 source 单独作键的 `semantic_plan_cache`（语义 DAG）是两回事。
+- **失败不缓存**：`compile_plan` 只在成功时 `insert`，因此失败不会被记成「过期成功」。
+- 计数器（hits/misses）与判定它们的查询**放在同一个 `get` 里**，调用点无法记错分支 —— 与 R4 的 `OperationResultCache` 同一原则。
+- **注册自定义组件会失效 plan 但保留计数器**（`invalidate` vs `clear`）：新注册的组件可能改变既有 source 的解析结果，
+  所以 plan 必须丢弃；计数器仍描述本引擎的行为，故保留。
+
+### 9.5 验收
+
+`cargo test -p finkit --lib plan_cache_tests` → **9 passed / 0 failed**，覆盖：
+
+同一请求命中缓存、参数值参与身份（并直接断言 parameter arena 内容）、参数插入顺序不分裂缓存、
+方言参与身份、Pine 源经 Pine 解析器可编译、**不可规划公式报错且不缓存**、解析失败报错、
+注册自定义组件失效 plan 但保留计数、`clear_plan_cache` 同时清计数。
+
+其中「不可规划」用**两个绘图语句组成的块**触发（`STATEMENTS` 无产值语句 → `UnsupportedPlumbing`）。
+注意**单个 `STICKLINE` 不足以触发**：它降级为普通数值节点，只会在**执行期**报缺 kernel，
+所以这条用例同时钉住了「失败发生在编译期」这一点。
+
+### 9.6 下一步
+
+- **步骤 3（执行期接入）**：用 `FormulaKernelDispatcher` 驱动 `UnifiedExecutor`，先覆盖无状态算子，再覆盖状态算子。
+  当前 `compile_plan` 返回**拥有所有权的 `FormulaHotPlan`**（内部缓存克隆一份），刻意不用 `Rc`：
+  `FormulaEngine` 含 `RefCell` 已是 `!Sync`，但用 `Rc` 会进一步变成 `!Send`，可能破坏 FFI/线程化调用方。
+- **步骤 4（切换默认）**：需要 `formula_execution_mode = tree | plan`，并要求 differential 全绿 + 性能不回归。
+  步骤 2 的「失败即报错」正是该开关能成为**真开关**而非提示的前提。

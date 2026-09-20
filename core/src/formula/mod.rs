@@ -70,7 +70,7 @@ pub use contracts::{
 pub use custom::{CustomFormula, FormulaRegistry};
 pub use debugger::{DebugEvent, FormulaDebugger, FormulaErrorWithLocation};
 pub use drawing::{DrawCommand, DrawResult};
-pub use engine::{FormulaEngine, FormulaResult};
+pub use engine::{FormulaEngine, FormulaPlanCacheStats, FormulaResult};
 pub use executor::FormulaExecutor;
 pub use functions::get_builtin_functions;
 pub use hot_plan::{FormulaHotPlan, FormulaHotPlanError, FormulaInputBinding};
@@ -96,7 +96,11 @@ pub use types::*;
 pub use unified_dispatch::{unified_formula_executor, FormulaKernelDispatcher};
 
 /// Formula language dialect selector.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+///
+/// `Hash` is derived so a dialect can take part in a cache key: the same source
+/// text parses to different ASTs per dialect, so a compiled plan is only valid
+/// for the dialect it was parsed under.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum FormulaDialect {
     /// Finkit / AlphaTA formula language (default).
     #[default]

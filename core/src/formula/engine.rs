@@ -6,6 +6,7 @@ use crate::formula::compute_ir::FormulaComputePlan;
 use crate::formula::custom::FormulaRegistry;
 use crate::formula::debugger::FormulaDebugger;
 use crate::formula::executor::FormulaExecutor;
+use crate::formula::hot_plan::FormulaHotPlan;
 use crate::formula::jit::JitCompiler;
 #[cfg(feature = "formula-jit")]
 use crate::formula::jit::OptimizedBytecode;
@@ -22,6 +23,129 @@ use ndarray::Array1;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::Arc;
+
+/// Identity of a compiled formula plan.
+///
+/// All three components are load-bearing:
+///
+/// * `source` — the formula text as the caller wrote it, before normalisation.
+/// * `dialect` — the same text parses to different ASTs per dialect (Pine goes
+///   through `parse_pine` + `map_pine_to_alphata`), so a plan is only valid for
+///   the dialect it was parsed under.
+/// * `params` — [`apply_params`] rewrites parameter references into numeric
+///   literals *before* the plan binds them into its parameter arena, so
+///   `SMA(CLOSE,N)` with `N=14` and with `N=20` are genuinely different plans.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct FormulaPlanKey {
+    source: String,
+    dialect: FormulaDialect,
+    params: String,
+}
+
+impl FormulaPlanKey {
+    fn new(source: &str, dialect: FormulaDialect, params: &ParamValues) -> Self {
+        Self {
+            source: source.to_string(),
+            dialect,
+            params: parameter_fingerprint(params),
+        }
+    }
+}
+
+/// Order-independent fingerprint of a parameter set.
+///
+/// [`ParamValues`] is a `HashMap`, whose iteration order is unspecified, so the
+/// fingerprint sorts by name: two callers that pass the same parameters in a
+/// different order must share one cached plan.
+///
+/// Values are rendered with `{:?}` rather than `{}` because a cache key must not
+/// collide. Rust's float `Debug` prints the shortest representation that
+/// round-trips, so it keeps `0.0` and `-0.0` distinct — they really do behave
+/// differently — while folding every NaN into one key, which is right because
+/// they do not.
+fn parameter_fingerprint(params: &ParamValues) -> String {
+    let mut entries: Vec<(&str, f64)> = params
+        .iter()
+        .map(|(name, &value)| (name.as_str(), value))
+        .collect();
+    // Names are unique by construction (`HashMap` keys), so this is a total
+    // order and the result is deterministic.
+    entries.sort_unstable_by(|left, right| left.0.cmp(right.0));
+    entries
+        .into_iter()
+        .map(|(name, value)| format!("{name}={value:?}"))
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+/// Statistics for the compiled-plan cache.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct FormulaPlanCacheStats {
+    /// Lookups that returned an already-compiled plan.
+    pub hits: u64,
+    /// Lookups that had to compile.
+    pub misses: u64,
+}
+
+/// Compiled-plan cache.
+///
+/// Unbounded, matching the engine's other caches (`semantic_plan_cache`,
+/// `bytecode_cache`): a process evaluates a handful of distinct formulas, and a
+/// bound here would evict plans that are about to be reused.
+/// [`FormulaEngine::clear_plan_cache`] drops everything if that ever stops
+/// being true.
+///
+/// Both counters live here, next to the lookup that decides them, so a call site
+/// cannot bump the wrong one.
+#[derive(Debug, Default)]
+struct FormulaPlanCache {
+    entries: HashMap<FormulaPlanKey, FormulaHotPlan>,
+    hits: u64,
+    misses: u64,
+}
+
+impl FormulaPlanCache {
+    fn get(&mut self, key: &FormulaPlanKey) -> Option<FormulaHotPlan> {
+        if let Some(plan) = self.entries.get(key) {
+            self.hits = self.hits.saturating_add(1);
+            Some(plan.clone())
+        } else {
+            self.misses = self.misses.saturating_add(1);
+            None
+        }
+    }
+
+    fn insert(&mut self, key: FormulaPlanKey, plan: FormulaHotPlan) {
+        self.entries.insert(key, plan);
+    }
+
+    fn stats(&self) -> FormulaPlanCacheStats {
+        FormulaPlanCacheStats {
+            hits: self.hits,
+            misses: self.misses,
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    /// Drop every plan but keep the counters.
+    ///
+    /// Registering a custom component can change what an existing source
+    /// resolves to, so the plans must go; the counters still describe this
+    /// engine's behaviour, so they stay.
+    fn invalidate(&mut self) {
+        self.entries.clear();
+    }
+
+    /// Drop every plan and reset the counters.
+    fn clear(&mut self) {
+        self.entries.clear();
+        self.hits = 0;
+        self.misses = 0;
+    }
+}
 
 #[derive(Debug, Clone)]
 struct StreamingEmaState {
@@ -110,6 +234,12 @@ pub struct FormulaEngine {
     cache: FormulaCache,
     /// Semantic Compute IR plans keyed by the exact formula source.
     semantic_plan_cache: RefCell<HashMap<String, FormulaComputePlan>>,
+    /// Compiled hot plans keyed by source + dialect + parameter fingerprint.
+    ///
+    /// Distinct from `semantic_plan_cache`, which is keyed by source alone and
+    /// holds the *semantic* DAG: this one holds the *numeric* plan the unified
+    /// executor runs, and it is dialect- and parameter-sensitive.
+    plan_cache: RefCell<FormulaPlanCache>,
     templates: FormulaTemplates,
     jit_compiler: RefCell<JitCompiler>,
     /// Persistent bytecode cache and VM scratch buffers.
@@ -137,6 +267,7 @@ impl FormulaEngine {
             executor: FormulaExecutor::new(),
             cache: FormulaCache::new(100),
             semantic_plan_cache: RefCell::new(HashMap::new()),
+            plan_cache: RefCell::new(FormulaPlanCache::default()),
             templates: FormulaTemplates::new(),
             jit_compiler: RefCell::new(JitCompiler::new()),
             bytecode_cache: RefCell::new(HashMap::new()),
@@ -152,6 +283,7 @@ impl FormulaEngine {
             executor: FormulaExecutor::new(),
             cache: FormulaCache::new(cache_size),
             semantic_plan_cache: RefCell::new(HashMap::new()),
+            plan_cache: RefCell::new(FormulaPlanCache::default()),
             templates: FormulaTemplates::new(),
             jit_compiler: RefCell::new(JitCompiler::new()),
             bytecode_cache: RefCell::new(HashMap::new()),
@@ -195,6 +327,94 @@ impl FormulaEngine {
         self.cache.insert(source, formula.clone());
 
         Ok(formula)
+    }
+
+    /// Compile `source` into an executable hot plan, cached by
+    /// `source + dialect + parameter fingerprint`.
+    ///
+    /// This is the compile half of P0-2 step 2: it makes the compiled plan
+    /// reachable from the engine so the execution path can be switched onto it.
+    /// The AST pipeline deliberately mirrors [`Self::eval_with_dialect`] (source
+    /// normalisation, then a dialect parse) followed by [`Self::compile`]'s
+    /// custom-component expansion, so the plan describes exactly what the tree
+    /// path would have evaluated.
+    ///
+    /// # Errors
+    ///
+    /// A formula the plan path cannot compile returns [`FormulaError`]; this
+    /// **never** silently falls back to the tree-walker. A caller that wants the
+    /// tree path must ask for it explicitly, which is what makes
+    /// `formula_execution_mode` a real switch rather than a hint.
+    ///
+    /// Failure is reported as [`FormulaError::InvalidOperation`] rather than as a
+    /// new variant because `ffi/c-binding` matches `FormulaError` exhaustively to
+    /// produce its error-code ABI; adding a variant would silently change that
+    /// contract for every language binding. The message is prefixed so it stays
+    /// distinguishable in logs.
+    pub fn compile_plan(
+        &self,
+        source: &str,
+        dialect: FormulaDialect,
+        params: &ParamValues,
+    ) -> Result<FormulaHotPlan, FormulaError> {
+        let key = FormulaPlanKey::new(source, dialect, params);
+        // Bind the lookup to a local so the `RefCell` borrow provably ends here,
+        // rather than relying on `if let` scrutinee temporary lifetimes.
+        let cached = self.plan_cache.borrow_mut().get(&key);
+        if let Some(plan) = cached {
+            return Ok(plan);
+        }
+
+        let plan = self.build_plan(source, dialect, params)?;
+        self.plan_cache.borrow_mut().insert(key, plan.clone());
+        Ok(plan)
+    }
+
+    /// [`Self::compile_plan`] with the default dialect and no parameters.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::compile_plan`].
+    pub fn compile_plan_default(&self, source: &str) -> Result<FormulaHotPlan, FormulaError> {
+        self.compile_plan(source, FormulaDialect::default(), &ParamValues::new())
+    }
+
+    /// Build a plan without consulting or populating the cache.
+    fn build_plan(
+        &self,
+        source: &str,
+        dialect: FormulaDialect,
+        params: &ParamValues,
+    ) -> Result<FormulaHotPlan, FormulaError> {
+        let normalized = normalize_formula_source(source, dialect);
+        let ast =
+            parse_formula_with_dialect(&normalized, dialect).map_err(FormulaError::ParseError)?;
+        let ast = self
+            .custom_formulas
+            .expand(&ast)
+            .map_err(FormulaError::InvalidOperation)?;
+        // Parameters are substituted *before* planning, not after: the plan
+        // binds numeric literals into its parameter arena, so the substituted
+        // values are precisely what make two parameterisations different plans.
+        let ast = apply_params(&ast, params);
+        FormulaHotPlan::compile(&ast).map_err(|error| {
+            FormulaError::InvalidOperation(format!("formula plan compilation failed: {error}"))
+        })
+    }
+
+    /// Compiled-plan cache statistics.
+    pub fn plan_cache_stats(&self) -> FormulaPlanCacheStats {
+        self.plan_cache.borrow().stats()
+    }
+
+    /// Number of compiled plans currently cached.
+    pub fn plan_cache_size(&self) -> usize {
+        self.plan_cache.borrow().len()
+    }
+
+    /// Drop every cached plan and reset the cache statistics.
+    pub fn clear_plan_cache(&mut self) {
+        self.plan_cache.borrow_mut().clear();
     }
 
     /// Register a reusable, parameterized expression component.
@@ -257,6 +477,9 @@ impl FormulaEngine {
     fn invalidate_formula_caches(&mut self) {
         self.cache.clear();
         self.semantic_plan_cache.borrow_mut().clear();
+        // `invalidate`, not `clear`: the plans are stale because a custom
+        // component changed, but the counters still describe this engine.
+        self.plan_cache.borrow_mut().invalidate();
         self.bytecode_cache.borrow_mut().clear();
         self.streaming_ema.borrow_mut().clear();
         self.streaming_common.borrow_mut().clear();
@@ -2417,5 +2640,221 @@ mod pr14_compute_ir_production_tests {
         let plan = cache.get(&compiled.source).expect("semantic plan cached");
         assert!(!plan.plan().is_empty());
         assert!(!plan.plan().has_observable_effects());
+    }
+}
+
+#[cfg(test)]
+mod plan_cache_tests {
+    use super::*;
+    use crate::execution_plan::{ParameterSlot, ParameterValue};
+
+    fn params(pairs: &[(&str, f64)]) -> ParamValues {
+        pairs
+            .iter()
+            .map(|(name, value)| ((*name).to_string(), *value))
+            .collect()
+    }
+
+    /// Every scalar the plan bound, as `f64`, in slot order.
+    ///
+    /// Integer parameters are stored as `Usize`, so decode both representations
+    /// rather than assuming every literal was bound as raw bits.
+    fn bound_parameters(plan: &FormulaHotPlan) -> Vec<f64> {
+        let arena = plan.hot().parameter_arena();
+        (0..arena.len())
+            .filter_map(|slot| arena.get(ParameterSlot(slot)))
+            .map(|value| match value {
+                ParameterValue::F64Bits(bits) => f64::from_bits(bits),
+                ParameterValue::Usize(value) => value as f64,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_repeated_compile_returns_the_cached_plan() {
+        let engine = FormulaEngine::new();
+
+        engine
+            .compile_plan_default("MA(CLOSE,5)")
+            .expect("plan compiles");
+        engine
+            .compile_plan_default("MA(CLOSE,5)")
+            .expect("plan compiles");
+
+        assert_eq!(engine.plan_cache_size(), 1);
+        assert_eq!(
+            engine.plan_cache_stats(),
+            FormulaPlanCacheStats { hits: 1, misses: 1 }
+        );
+    }
+
+    #[test]
+    fn parameter_values_are_part_of_the_plan_identity() {
+        let engine = FormulaEngine::new();
+
+        let short = engine
+            .compile_plan(
+                "MA(CLOSE,N)",
+                FormulaDialect::AlphaTA,
+                &params(&[("N", 14.0)]),
+            )
+            .expect("plan compiles");
+        let long = engine
+            .compile_plan(
+                "MA(CLOSE,N)",
+                FormulaDialect::AlphaTA,
+                &params(&[("N", 20.0)]),
+            )
+            .expect("plan compiles");
+
+        // Two entries, not one reused plan: the parameter is part of the key.
+        assert_eq!(engine.plan_cache_size(), 2);
+        assert_eq!(
+            engine.plan_cache_stats(),
+            FormulaPlanCacheStats {
+                hits: 0,
+                misses: 2
+            }
+        );
+        // And the plans really differ, rather than being two keys over one plan.
+        assert_eq!(bound_parameters(&short), vec![14.0]);
+        assert_eq!(bound_parameters(&long), vec![20.0]);
+    }
+
+    #[test]
+    fn parameter_insertion_order_does_not_split_the_cache() {
+        let engine = FormulaEngine::new();
+        let source = "MA(CLOSE,A)+MA(CLOSE,B)";
+
+        engine
+            .compile_plan(
+                source,
+                FormulaDialect::AlphaTA,
+                &params(&[("A", 3.0), ("B", 5.0)]),
+            )
+            .expect("plan compiles");
+        engine
+            .compile_plan(
+                source,
+                FormulaDialect::AlphaTA,
+                &params(&[("B", 5.0), ("A", 3.0)]),
+            )
+            .expect("plan compiles");
+
+        // `ParamValues` is a `HashMap`, whose iteration order is unspecified, so
+        // without a sorted fingerprint these two identical requests would miss
+        // twice and compile the same plan twice.
+        assert_eq!(engine.plan_cache_size(), 1);
+        assert_eq!(
+            engine.plan_cache_stats(),
+            FormulaPlanCacheStats { hits: 1, misses: 1 }
+        );
+    }
+
+    #[test]
+    fn the_dialect_is_part_of_the_plan_identity() {
+        let engine = FormulaEngine::new();
+
+        engine
+            .compile_plan_default("MA(CLOSE,5)")
+            .expect("AlphaTA plan compiles");
+        engine
+            .compile_plan(
+                "MA(CLOSE,5)",
+                FormulaDialect::TongDaXin,
+                &ParamValues::new(),
+            )
+            .expect("TongDaXin plan compiles");
+
+        // AlphaTA and TongDaXin currently share `parse_formula`, so this costs a
+        // duplicate plan rather than preventing a wrong reuse. That is the side
+        // to err on: Pine genuinely parses the same text to a different AST.
+        assert_eq!(engine.plan_cache_size(), 2);
+    }
+
+    #[test]
+    fn a_pine_source_compiles_through_the_pine_parser() {
+        let engine = FormulaEngine::new();
+
+        let plan = engine
+            .compile_plan(
+                "ta.sma(close, 5)",
+                FormulaDialect::Pine,
+                &ParamValues::new(),
+            )
+            .expect("Pine plan compiles");
+
+        assert!(plan.hot().buffer_layout().slot_count() > 0);
+    }
+
+    #[test]
+    fn an_unplannable_formula_reports_an_error_instead_of_falling_back() {
+        let engine = FormulaEngine::new();
+
+        // A statement block whose statements are all drawing directives has no
+        // value-producing statement, so the plan layer cannot name a result and
+        // must refuse the plan. The tree path would hand back a placeholder
+        // buffer; the plan path says so instead of quietly returning something
+        // else. (A single `STICKLINE` is not enough — it lowers to a numeric
+        // node and only fails later, at execution.)
+        let error = engine
+            .compile_plan_default(
+                "STICKLINE(CLOSE>OPEN,CLOSE,OPEN,3,TRUE);STICKLINE(CLOSE>OPEN,OPEN,CLOSE,3,FALSE)",
+            )
+            .expect_err("a draw-only block cannot be planned");
+
+        let message = error.to_string();
+        assert!(
+            message.contains("formula plan compilation failed"),
+            "unexpected error: {message}"
+        );
+        // A failed compile must not be cached, or a later call would report a
+        // stale success.
+        assert_eq!(engine.plan_cache_size(), 0);
+    }
+
+    #[test]
+    fn a_parse_failure_is_reported_rather_than_silently_ignored() {
+        let engine = FormulaEngine::new();
+
+        assert!(engine.compile_plan_default("MA(CLOSE,").is_err());
+        assert_eq!(engine.plan_cache_size(), 0);
+    }
+
+    #[test]
+    fn registering_a_custom_formula_drops_plans_but_keeps_the_counters() {
+        let mut engine = FormulaEngine::new();
+        engine
+            .compile_plan_default("MA(CLOSE,5)")
+            .expect("plan compiles");
+        assert_eq!(engine.plan_cache_size(), 1);
+
+        engine
+            .register_custom_formula("SIGNAL", &["X"], "MA(X,5)")
+            .expect("custom formula registers");
+
+        // A newly registered component can change what an existing source
+        // resolves to, so the plans must go; the counters still describe this
+        // engine's behaviour and are kept.
+        assert_eq!(engine.plan_cache_size(), 0);
+        assert_eq!(
+            engine.plan_cache_stats(),
+            FormulaPlanCacheStats { hits: 0, misses: 1 }
+        );
+    }
+
+    #[test]
+    fn clear_plan_cache_drops_entries_and_resets_the_counters() {
+        let mut engine = FormulaEngine::new();
+        engine
+            .compile_plan_default("MA(CLOSE,5)")
+            .expect("plan compiles");
+        engine.clear_plan_cache();
+
+        assert_eq!(engine.plan_cache_size(), 0);
+        assert_eq!(
+            engine.plan_cache_stats(),
+            FormulaPlanCacheStats { hits: 0, misses: 0 }
+        );
     }
 }
