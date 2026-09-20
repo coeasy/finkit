@@ -28,15 +28,27 @@ Modes
         Emit generated.rs for each language from the registry.  With
         ``--rewrite`` also drop the hand-written indicator spans from lib.rs
         and insert ``include!("generated.rs");``.
-    --check [--lang ...]
+    --check [--lang ...] [--allow-unchecked]
         Re-extract from the current lib.rs and compare against the stored
         bodies to detect drift (hand edits that were not pushed to the
         registry).  Exits non-zero on drift.
+
+        Coverage is reported per language as ``covered=M/N``.  A language with
+        **zero** stored bodies cannot be drift-checked at all: it is reported as
+        ``status=UNCHECKED`` and the run exits non-zero, because printing
+        ``drift=none`` for it would be a vacuous pass that hides the real gap.
+        Pass ``--allow-unchecked`` only to acknowledge such a gap explicitly
+        during a migration; it is not a substitute for storing the bodies.
 
     The binding registry is the SSOT for wrappers: adding an indicator becomes
     "add its body to ``ffi.bodies.<lang>`` for every language (or run --discover
     on the canonical binding)" + regenerate.  CI should run ``--check`` for every language to keep
 the bindings in sync.
+
+    Note: ``gen_binding.py`` is superseded by this script (it read an ``ffi``
+    block that now lives in ``docs/ffi_registry.json``, not
+    ``docs/indicator_registry.json``) and refuses to run rather than emit empty
+    output.
 """
 from __future__ import annotations
 
@@ -548,10 +560,11 @@ def do_generate(langs: list[str], rewrite: bool) -> int:
     return 0
 
 
-def do_check(langs: list[str]) -> int:
+def do_check(langs: list[str], allow_unchecked: bool = False) -> int:
     reg = load_registry()
     inds = indicators_with_ffi(reg)
     rc = 0
+    unchecked: list[str] = []
     for lang in langs:
         cfg = LANG_CFG[lang]
         src = (ROOT / cfg["lib"]).read_text(encoding="utf-8")
@@ -562,16 +575,28 @@ def do_check(langs: list[str]) -> int:
         if gen_path.exists():
             extracted.update(extract_functions(gen_path.read_text(encoding="utf-8"), lang))
         stored = {ind["ffi"]["c_name"]: ind for ind in inds}
+
+        # Coverage first.  An indicator is drift-checkable in a language only
+        # if the registry stores a body for that language.  A language with
+        # ZERO stored bodies cannot be checked at all, so reporting it as
+        # "drift=none" would be a vacuous pass that hides the real gap.
+        covered = [
+            (c_name, ind)
+            for c_name, ind in stored.items()
+            if ind.get("ffi", {}).get("bodies", {}).get(lang) is not None
+        ]
+        if not covered:
+            unchecked.append(lang)
+            print(
+                f"[check/{lang}] registry={len(stored)} covered=0/{len(stored)} "
+                f"status=UNCHECKED (no stored bodies for this language; this "
+                f"check provides NO coverage)"
+            )
+            continue
+
         drift = []
-        for c_name, ind in stored.items():
+        for c_name, ind in covered:
             body_stored = ind.get("ffi", {}).get("bodies", {}).get(lang)
-            # Only indicators the registry says are exposed in this language
-            # (i.e. have a stored body) are drift-checked.  Indicators a binding
-            # intentionally does NOT expose as a standalone function (e.g.
-            # `cdl_*` via a dispatcher, `darvas_box`/`renko` via `match`,
-            # `midpoint`/`ht_*`) have no stored body and are not drift.
-            if body_stored is None:
-                continue
             nm = match_indicator(ind, lang, extracted)
             if nm is None:
                 drift.append(f"missing:{c_name}")
@@ -591,10 +616,22 @@ def do_check(langs: list[str]) -> int:
                 != normalize_body_for_check(lang, wrap_body(lang, body_stored)).strip()
             ):
                 drift.append(f"changed:{c_name}")
-        # also: hand-written fns present that the registry dropped?
-        print(f"[check/{lang}] registry={len(inds)} extracted={len(extracted)} "
-              f"drift={drift if drift else 'none'}")
+        # `skipped` = registry indicators with no stored body for this language:
+        # intentionally not exposed as a standalone function (e.g. `cdl_*` via a
+        # dispatcher, `darvas_box`/`renko` via `match`, `midpoint`/`ht_*`).
+        skipped = len(stored) - len(covered)
+        print(f"[check/{lang}] registry={len(stored)} covered={len(covered)}/{len(stored)} "
+              f"skipped={skipped} drift={drift if drift else 'none'}")
         if drift:
+            rc = 1
+
+    if unchecked:
+        print("unchecked languages (no stored bodies, NOT drift-checked): "
+              + ", ".join(unchecked))
+        if not allow_unchecked:
+            print("FAIL: a language with no stored bodies cannot be drift-checked, "
+                  "so this run must not report success. Run --discover for those "
+                  "languages, or pass --allow-unchecked to acknowledge the gap.")
             rc = 1
     return rc
 
@@ -604,6 +641,7 @@ def main() -> int:
     mode = None
     langs: list[str] = []
     rewrite = False
+    allow_unchecked = False
     i = 0
     while i < len(args):
         a = args[i]
@@ -615,6 +653,8 @@ def main() -> int:
             mode = "check"
         elif a == "--rewrite":
             rewrite = True
+        elif a == "--allow-unchecked":
+            allow_unchecked = True
         elif a == "--lang":
             langs.append(args[i + 1])
             i += 1
@@ -624,15 +664,15 @@ def main() -> int:
     if not langs:
         langs = list(LANG_CFG.keys())
     if mode is None:
-        print("usage: sync_bindings.py (--discover|--generate [--rewrite]|--check) "
-              "[--lang c|python|node|go|java|dotnet|ios|android]...")
+        print("usage: sync_bindings.py (--discover|--generate [--rewrite]|--check "
+              "[--allow-unchecked]) [--lang c|python|node|go|java|dotnet|ios|android]...")
         return 2
     if mode == "discover":
         return do_discover(langs)
     if mode == "generate":
         return do_generate(langs, rewrite)
     if mode == "check":
-        return do_check(langs)
+        return do_check(langs, allow_unchecked)
     return 2
 
 

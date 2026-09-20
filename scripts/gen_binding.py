@@ -1,6 +1,17 @@
 #!/usr/bin/env python3
 """Registry-driven binding code generator for Finkit.
 
+.. deprecated::
+    Superseded by ``scripts/sync_bindings.py``.  The ``ffi`` block this script
+    reads was moved out of ``docs/indicator_registry.json`` into
+    ``docs/ffi_registry.json``, so ``load_registry()`` here always yields zero
+    indicators.  That previously made ``--check`` pass vacuously for
+    python/node and made ``--generate`` write an EMPTY binding file.  The script
+    now refuses to run rather than produce either, and points at
+    ``sync_bindings.py``.  Do not re-wire it without re-deriving the per-language
+    metadata (``c_params`` / ``core_call`` / ``copies`` / ``out_kind`` /
+    ``core_arg_kinds``), which the current FFI registry does not carry.
+
 Consumes the single-source-of-truth ``docs/indicator_registry.json`` (each
 indicator carries an ``ffi`` block enriched by ``extract_corecalls.py``) and
 emits FFI wrappers for several languages:
@@ -49,6 +60,18 @@ def indicators_with_ffi(reg: dict) -> list[dict]:
         ff = ind.get("ffi")
         if ff and ff.get("c_name"):
             out.append(ind)
+    if not out:
+        # An empty result is never a valid input: it makes --check pass
+        # vacuously and --generate emit an empty binding file.  The FFI
+        # metadata now lives in docs/ffi_registry.json, so this loader is
+        # structurally obsolete.
+        raise SystemExit(
+            "gen_binding.py is superseded by scripts/sync_bindings.py: "
+            f"{REG.relative_to(ROOT)} carries no `ffi` blocks (the FFI SSOT is "
+            "docs/ffi_registry.json). Refusing to run rather than report an "
+            "empty registry or write an empty binding. Use "
+            "`python scripts/sync_bindings.py --check --all` instead."
+        )
     out.sort(key=lambda i: i["ffi"].get("order", 0))
     return out
 
