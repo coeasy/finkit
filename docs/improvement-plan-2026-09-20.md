@@ -155,6 +155,18 @@ feature/finkit-v1-...      f441e76   2026-09-19   ← 是 main 与 perf 的后�
 - 现状：`crates/finkit-{array,series,math,factor,runtime}` 无生产依赖。
 - 决策二选一：**接入生产**（作为 P0-2 的 Runtime 载体）或**标记 deprecated 并删除**。不允许长期悬空。
 
+**已定（2026-09-20）**：用户选择「接入生产」，但逐文件比对后该选择必须拆分执行——
+平行轨道的 **9 项能力中 4 项是 core 的真缺口**（`FactorProvider` 边界 + 带类型参数校验、
+声明式因子图、`QuantSeries`、`(symbol, factor, params, time_range)` 缓存键形状），
+**5 项已被 core 超越**（`Executor` / `Scheduler` / 多输出 / 缓存 / kernel 与指标实现）。
+
+因此**执行载体仍是 `UnifiedExecutor` + `HotExecutionPlan`**，平行轨道降级为**声明式前端**，
+按 R1→R4 四阶段并入 core，每阶段独立可验证。完整分析、逐项反证与阶段划分见
+[runtime-carrier-adoption-plan-2026-09-20.md](runtime-carrier-adoption-plan-2026-09-20.md)。
+
+**R1 已完成**：决策落文档；5 个 crate 的 `lib.rs` 顶部标注了各自「adopted / superseded」
+的判定与 core 对应实现位置，便于后续按阶段删除。无功能变更。
+
 ### P2-2 文档收敛
 
 - 现状：`docs/` 74 个文件，≥10 份重叠架构/重构计划，判断真实进度需读 5 份以上。

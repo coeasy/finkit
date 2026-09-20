@@ -1,4 +1,27 @@
 //! Execution runtime foundation for factor graphs.
+//!
+//! # Mixed: partially adopted, mostly superseded
+//!
+//! Part of the unconverged `crates/finkit-*` migration track -- see
+//! `docs/runtime-carrier-adoption-plan-2026-09-20.md`.
+//!
+//! **This crate does not become the Runtime carrier.** Its [`Executor`] is
+//! weaker than `core`'s on every axis: no buffer arena, no kernel dispatch, no
+//! range/incremental execution, no NaN or warm-up policy, one dependency per
+//! node, and a `Vec<f64>` copy per node -- against an already differential-tested
+//! path. Adopting it as the carrier would regress `core`.
+//!
+//! | Module | Verdict | `core` counterpart |
+//! |---|---|---|
+//! | `factory` (`FactorProvider`, `FactorFactoryRequest`, typed param errors) | **adopted (R2)** | none -- genuine gap |
+//! | `graph` (`FactorGraph`/`FactorNode`) | **adopted (R3)** | none -- lowers onto `ComputeNodeId` |
+//! | `cache`, `cache_key` (shape only) | **adopted (R4)** | re-base onto `operation::OperationCacheKey` |
+//! | `executor` | superseded | `unified_executor::UnifiedExecutor` + `KernelDispatcher` + `BufferArena` |
+//! | `scheduler` | superseded | `compute::ComputePlanError::DependencyCycle` (reports the cycle path) |
+//! | `registry` | superseded | `factors::FactorRegistry` |
+//! | `factories` | superseded | `core`'s indicator set |
+//!
+//! Do not add public API to the superseded modules.
 
 mod cache;
 mod cache_key;

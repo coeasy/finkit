@@ -1,4 +1,18 @@
 //! Quant series model for the Finkit factor engine.
+//!
+//! # Partially adopted -- do not add public API
+//!
+//! Part of the unconverged `crates/finkit-*` migration track. [`QuantSeries`]
+//! carries one capability `core` lacks: a symbol tag plus strict
+//! alignment/monotonicity validation. That is being merged into `core` as an
+//! **input-side** type (phase R2 of
+//! `docs/runtime-carrier-adoption-plan-2026-09-20.md`); everything else here is
+//! scheduled for removal.
+//!
+//! Note the warm-up semantics deliberately do **not** transfer: this crate's
+//! outputs are warm-up *trimmed* (an `SMA(3)` over 10 points yields 8 values),
+//! whereas `core`'s `runtime::WarmupPolicy` preserves length and fills. Core
+//! wins; do not carry the trimming semantics across.
 
 use finkit_array::FloatArray;
 

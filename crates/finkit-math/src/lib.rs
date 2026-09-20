@@ -1,4 +1,12 @@
 //! Mathematical kernels for Quant Factor Computing Engine.
+//!
+//! # Superseded -- do not add public API
+//!
+//! Every kernel here is a strict subset of `core`'s batch function set
+//! (`core/src/formula/functions.rs`, 7431 lines, plus `core/src/indicators/` and
+//! the 111 `FunctionSpec` entries in `core/src/registry.rs`), which is also
+//! covered by the TA-Lib 201/201 parity gate. Scheduled for removal -- see
+//! `docs/runtime-carrier-adoption-plan-2026-09-20.md`.
 
 mod ema;
 

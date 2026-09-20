@@ -94,6 +94,9 @@ pub mod factor_system;
 #[cfg(feature = "std")]
 /// Dependency-aware production factor engine and factor transforms.
 pub mod factors;
+#[cfg(feature = "std")]
+/// Declarative factor construction: provider boundary with typed parameter validation.
+pub mod factor_provider;
 #[cfg(all(feature = "std", feature = "indicators-all", feature = "formula"))]
 /// Feature engineering: multi-period features, signal detection, and ML label generation.
 pub mod features;

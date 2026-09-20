@@ -1,4 +1,20 @@
 //! Factor abstraction layer.
+//!
+//! # Mixed: partially adopted, mostly superseded
+//!
+//! Part of the unconverged `crates/finkit-*` migration track -- see
+//! `docs/runtime-carrier-adoption-plan-2026-09-20.md`.
+//!
+//! * **Adopted (phase R2):** the [`Factor`] object boundary. `core` has only the
+//!   closure-based `factors::FactorFn` over `FactorInputs`; the provider/factory
+//!   boundary built on this trait is a genuine gap and moves into `core`.
+//!   [`FactorResult`] is renamed on the way in (`FactorOutputSet`) because
+//!   `core::factors::FactorResult<T>` is already `Result<T, FactorError>`.
+//! * **Superseded:** [`Sma`], [`Ema`], [`Rsi`] and [`Macd`] duplicate `core`'s
+//!   indicator set, which passes the TA-Lib parity gate. Do not extend them.
+//!
+//! Outputs here are warm-up *trimmed*; `core`'s `runtime::WarmupPolicy` preserves
+//! length. Core wins -- see the note in `finkit-series`.
 
 use finkit_series::QuantSeries;
 

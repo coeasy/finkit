@@ -1,7 +1,7 @@
 # crates/\* 接入生产：功能缺口分析与迁移规划
 
 日期：2026-09-20
-状态：**规划（尚未执行）**
+状态：**R1 已完成，R2 已实现；R3 / R4 待执行**
 上游决策：用户 2026-09-20 选择「接入生产，作为 Runtime 载体」
 相关文档：[improvement-plan-2026-09-20.md](improvement-plan-2026-09-20.md) §P2-1、[architecture-gap-assessment-2026-09-20.md](architecture-gap-assessment-2026-09-20.md):118
 
@@ -166,3 +166,57 @@ R1 → R2 → R3 → R4。理由：
 4. 参数校验三条错误路径有用例；
 5. `workspace.members` 中 5 个平行 crate 全部移除，且无任何残留引用；
 6. `docs/` 只保留本文件 + `improvement-plan-2026-09-20.md` 作为权威基线。
+
+---
+
+## 5. 执行记录
+
+### R1 已完成（无功能变更）
+
+- 决策落文档：本文件 + `improvement-plan-2026-09-20.md` §P2-1。
+- 5 个 crate 的 `lib.rs` 顶部标注各自「adopted / superseded」判定与 core 对应实现位置；
+  `finkit-runtime` 的标注含逐模块对照表（`factory`/`graph`/`cache` 采用，`executor`/`scheduler`/`registry`/`factories` 被超越）。
+- 验收：`RUSTFLAGS="-D warnings" cargo check -p finkit-array -p finkit-series -p finkit-math -p finkit-factor -p finkit-runtime --all-targets` → **exit 0，无警告**。
+
+**R1 附带修复（既有缺陷，与本次改动无关）**：CI 的 `workspace-check` job
+（`cargo check --workspace --all-targets` + `RUSTFLAGS="-D warnings"`）**本来就是红的**。
+`core/tests/common/golden_loader.rs` 被 3 个测试目标 `mod common;` 引入，
+但 `DEFAULT_TOLERANCE` 只被 `golden_example.rs` 使用，于是另外两个目标触发
+`-D dead-code` → `error: could not compile finkit (test "talib_coverage_matrix")`。
+该文件自身的约定是给这类共享测试支撑项加 `#[allow(dead_code)]` 并写明原因
+（见同文件第 49、88 行），`DEFAULT_TOLERANCE` 只是漏了。已按同一约定补上；
+三个目标现在都能在 `-D warnings` 下编译通过。
+
+### R2 已实现（真缺口 ①）
+
+新增 `core/src/factor_provider.rs`（在 `lib.rs` 中以 `pub mod factor_provider` 挂载，`#[cfg(feature = "std")]`）：
+
+| 项目 | 说明 |
+|---|---|
+| `FactorFactoryError` | 三种结构化错误：`InvalidParameter` / `UnknownParameter` / `DuplicateParameter` |
+| `FactorFactoryRequest` | 有序参数表（保持 `Vec` 而非 map，**重复参数才能被检出**）+ `try_params_map()` + `canonical_params()` |
+| `FactorProvider` | `name()` + `create(&params) -> Result<FactorDefinition, FactorFactoryError>` |
+| `FactorProviderRegistry` | 名字（大小写不敏感）→ `Arc<dyn FactorProvider>`，`create(&request)` |
+| `positive_usize` / `reject_unknown` | 供 provider 复用的两个校验助手 |
+
+**两处刻意的偏离**（对应 §1.2-A 的既有结论）：
+
+1. **不搬 `FactorResult` 多输出结构体**。多输出已由 `execution_plan::OutputLayout` +
+   `formula::FormulaHotPlan::outputs()` 表达；搬过来还会与 `factors::FactorResult<T>`（`Result` 别名）撞名。
+   这样 §2.1 提到的「改名 `FactorOutputSet`」就不需要了——**通过不引入重复类型来消除冲突**。
+2. **不搬预热裁剪语义**。预热统一由 `runtime::WarmupPolicy` 负责（保持长度）；再引入一套长度不同的约定，
+   会让同一公式在不同路径上产生不同长度。
+
+**与既有 `FactorDefinition` 的关系**是组合而非替代：`FactorDefinition` 是**已注册的因子**，
+`FactorProvider` 是**按参数构造因子**的工厂。provider 负责把参数集编码进返回的
+`FactorDefinition::name`（如 `IDENTITY(period=5)`），使同一 provider 的不同参数化在注册表里可区分。
+
+**一个可观察的行为**（已写进 `create` 的文档）：provider **先解析、后校验请求**，
+因此名字未知时即使参数也畸形，报的仍是 `UnknownProvider`。
+
+**验收**：`cargo test -p finkit --lib factor_provider` → **6 passed / 0 failed**，覆盖
+三条错误路径（`invalid_parameter_is_rejected` / `unknown_parameter_is_rejected` /
+`duplicate_parameter_is_rejected`）、`canonical_params_is_order_independent`
+（`a=1,b=2` ≡ `b=2,a=1`）、`unknown_provider_is_rejected`，以及
+`registry_constructs_a_runnable_definition`（构造出的定义经 `FactorRegistry` + `FactorEngine`
+真实求值通过）。
