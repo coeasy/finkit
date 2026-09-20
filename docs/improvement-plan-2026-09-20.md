@@ -218,7 +218,6 @@ feature/finkit-v1-...      f441e76   2026-09-19   ← 是 main 与 perf 的后�
 | plan 路径纳入差分对比 | `core/tests/formula_differential_tests.rs`（新增 `run_plan` + 5 组回归用例，共 9 例） | 全绿 |
 | 语料级差分门禁 | `core/tests/formula_plan_differential.rs`（新增） | 全绿 |
 | 计划检视工具 | `core/examples/dump_formula_plan.rs`、`core/examples/diff_ast_plan.rs` | 新增 |
-| MSVC 构建环境固化 | `.workbuddy-ai/msvc-env.sh` | 新增 |
 
 ### 7.2 harness 抓出的缺陷（均已修复）
 

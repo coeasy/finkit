@@ -205,3 +205,16 @@ stored bodies per lang: {'python': 71}
    - 方案 B：改为"从 Rust catalog 单向生成"，不再存储 body（更彻底，但要先补 `c_params` / `core_call` / `copies` / `out_kind` / `core_arg_kinds` 等元数据，即 `gen_binding.py` 当初依赖的那批字段）。
 2. **CI 仍未接入该门禁**。目前只有 `apply-talib-performance-plan.yml`（且只跑 `--lang python --check`，触发分支为 `fix/talib-performance-plan-20260904`）。在主 CI 加入 `--check --all` 会立刻变红——这正是真实状态，但需要团队先接受或先补齐覆盖。
 3. `--allow-unchecked` 只是一个显式逃生口，不是 allow-failure 的替代品；建议在补齐覆盖后从 CI 调用中移除。
+
+---
+
+## 12. 后续执行记录的位置
+
+本文档是**一次性评估**，不再追加执行记录，避免与 `docs/improvement-plan-2026-09-20.md` 重复。
+
+- P0-1（多语言 SSOT 空检查）执行记录 → 见本文 §11。
+- **P0-2（统一编译执行链接入生产）执行记录 → 见 `docs/improvement-plan-2026-09-20.md` §7。**
+
+§7 记录了 differential harness 一上线就抓出的 3 个真实缺陷（非交换算子操作数被排序交换、plumbing 节点污染外部输入 ABI、无 DCE），
+以及一个量化结论：`functions.rs` 实现 327 个函数而 `registry.rs` 只声明 104 个，
+**223 个已实现函数对注册表不可见**并因此落入保守兜底路径。该结论强化了本文 §4「多语言 SSOT 断裂」的判断。
