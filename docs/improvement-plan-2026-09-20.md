@@ -648,49 +648,6 @@ plan 与树路径就会数值分叉。
 2. `WILLR`（Pine `wpr` 已是显式 `(HIGH,LOW,CLOSE,N)`，形状现成）。
 3. `TRIX`/`WILLR` 的**多份实现分歧**先单独决策（见 §10.6），再动 kernel。
 
-## 14. `CCI` 的双形状（2026-09-20 续）：一次错误的判断与纠正
-
-### 14.1 我一开始判断错了
-
-看到 Pine `cci` 报 `CALL:CCI` **code 2（`ERR_ARITY`）** 而不是"缺 kernel"，
-我第一反应是"又是 §12.1/§12.2 那类隐式上下文问题"，打算把降级改成 `CCI(HIGH, LOW, CLOSE, n)`，
-并断言"值不变，因为 2 实参分支取的就是 `ctx.high/low/close`"。
-
-**这个断言是错的。** 查证后发现 `fn_cci` 并不走 `resolve_hlc_args`，而是**自己的 arity 分派**：
-
-```rust
-let (source, n) = match args.len() {
-    2 => (args[0].clone(), extract_n(args, 1, "CCI")?),        // source 直接用 args[0]
-    len if len >= 4 => { /* typical = (H+L+C)/3 */ }
-    _ => Err(...)
-};
-```
-
-所以 2 实参分支**真的把 `args[0]` 当 source 用**（Pine `ta.cci(src, length)` 的语义），
-而 4 实参分支用的是典型价。**两者数值不同** —— 若按原计划改，就会静默改变 Pine 的计算结果。
-
-> 教训：**看到一个 kernel 报 `ERR_ARITY`，不要默认是"实参没给满"**。
-> 先读后端函数的 arity 分派，确认短实参分支到底是"从 ctx 补"还是"另一种语义"。
-> 白名单里 `cci` 那条注释其实早就写明了正确答案（"Needs a src/period CCI kernel"），
-> 我该先读它。
-
-### 14.2 正确做法：给 source 形状一个 kernel，并共用同一份循环
-
-- 新增 `indicators::momentum::cci_source_into(source, period, output)` —— 从 `fn_cci`
-  **抽出**滚动均值 / 平均绝对偏差那段循环（含 `mean_dev > 1e-15` 守卫与 `0.015` 系数）。
-- `fn_cci` 的 2 实参分支改为调用它（4 实参分支**不动**）。
-- 新增 `dispatch_cci_source_call`，在 `CALL:CCI` 且 `inputs.len() == 2` 时接管；
-  4 实参仍走 `dispatch_hlc_periodic_call`。
-
-两形状并存是有意为之：国内 `CCI(H,L,C,N)` 与 Pine `CCI(src,N)` 是**两个不同的契约**，
-不能互相降级。
-
-### 14.3 结果
-
-- Pine 语料经编译计划路径验证：**15 → 16**（`cci` 从白名单消失）。
-- 三面大小不变：`(218, 416, 51)` —— `CCI` 本来就在 kernel 清单里，只是形状不全。
-- 白名单按门禁要求删掉 `cci` 及那条已过时的"Wrong kernel shape"注释。
-
 ## 13. 第二批 kernel：PLUS_DI / MINUS_DI / ADX（2026-09-20 续）
 
 ### 13.1 不照抄算法，而是把契约抽到 indicator 层
@@ -737,6 +694,49 @@ registry 里 `ADX` 用新的 `ADX_PARAMS`（`di_length` + `adx_smoothing`）声�
 
 1. ~~`WILLR`~~（已完成，见 §15）。
 2. `TRIX` 的**多份实现分歧**先单独决策（见 §10.6 / §15.4），再动 kernel。
+
+## 14. `CCI` 的双形状（2026-09-20 续）：一次错误的判断与纠正
+
+### 14.1 我一开始判断错了
+
+看到 Pine `cci` 报 `CALL:CCI` **code 2（`ERR_ARITY`）** 而不是"缺 kernel"，
+我第一反应是"又是 §12.1/§12.2 那类隐式上下文问题"，打算把降级改成 `CCI(HIGH, LOW, CLOSE, n)`，
+并断言"值不变，因为 2 实参分支取的就是 `ctx.high/low/close`"。
+
+**这个断言是错的。** 查证后发现 `fn_cci` 并不走 `resolve_hlc_args`，而是**自己的 arity 分派**：
+
+```rust
+let (source, n) = match args.len() {
+    2 => (args[0].clone(), extract_n(args, 1, "CCI")?),        // source 直接用 args[0]
+    len if len >= 4 => { /* typical = (H+L+C)/3 */ }
+    _ => Err(...)
+};
+```
+
+所以 2 实参分支**真的把 `args[0]` 当 source 用**（Pine `ta.cci(src, length)` 的语义），
+而 4 实参分支用的是典型价。**两者数值不同** —— 若按原计划改，就会静默改变 Pine 的计算结果。
+
+> 教训：**看到一个 kernel 报 `ERR_ARITY`，不要默认是"实参没给满"**。
+> 先读后端函数的 arity 分派，确认短实参分支到底是"从 ctx 补"还是"另一种语义"。
+> 白名单里 `cci` 那条注释其实早就写明了正确答案（"Needs a src/period CCI kernel"），
+> 我该先读它。
+
+### 14.2 正确做法：给 source 形状一个 kernel，并共用同一份循环
+
+- 新增 `indicators::momentum::cci_source_into(source, period, output)` —— 从 `fn_cci`
+  **抽出**滚动均值 / 平均绝对偏差那段循环（含 `mean_dev > 1e-15` 守卫与 `0.015` 系数）。
+- `fn_cci` 的 2 实参分支改为调用它（4 实参分支**不动**）。
+- 新增 `dispatch_cci_source_call`，在 `CALL:CCI` 且 `inputs.len() == 2` 时接管；
+  4 实参仍走 `dispatch_hlc_periodic_call`。
+
+两形状并存是有意为之：国内 `CCI(H,L,C,N)` 与 Pine `CCI(src,N)` 是**两个不同的契约**，
+不能互相降级。
+
+### 14.3 结果
+
+- Pine 语料经编译计划路径验证：**15 → 16**（`cci` 从白名单消失）。
+- 三面大小不变：`(218, 416, 51)` —— `CCI` 本来就在 kernel 清单里，只是形状不全。
+- 白名单按门禁要求删掉 `cci` 及那条已过时的"Wrong kernel shape"注释。
 
 ## 15. WILLR：裁决分歧并收敛掉一份手写实现（2026-09-20 续）
 
@@ -820,3 +820,51 @@ registry 里 `ADX` 用新的 `ADX_PARAMS`（`di_length` + `adx_smoothing`）声�
 | 国内 `chip_distribution_ths` | `CALL:WINNER`/`COST` 需筹码分布数据 |
 | 国内 `cross_period_refdate` | `CALL:PERIODTYPE`/`REFDATE` 需图表周期上下文 |
 
+## 17. 新发现的缺口类别：绘图原语（`DRAW:*`）—— 待决策
+
+### 17.1 现象
+
+`bollinger_bands` 补上 `BOLLUP`/`BOLLMID`/`BOLLDN` 三个 kernel 后**仍未通过**，
+失败原因变成了 `DRAW:FILL`。该脚本最后是 `fill(upper, lower, ...)`。
+
+### 17.2 根因：任何含绘图命令的脚本在 plan 路径上**结构性必然失败**
+
+```
+compute_ir.rs：AstNode::DrawGeneric → add_draw(...) → add_effect(...)
+add_effect：dependencies.push(last_effect)；last_effect = id
+```
+
+- 绘图节点走 `add_effect` → **串在 `last_effect` 上** → `prune_unreachable` 剪不掉 → **必定被执行**。
+- 而 dispatcher **完全没有任何 `DRAW:` 分支**（全仓库 `grep '"DRAW:'` 只有 `compute_ir.rs:238` 一处**产生**它）。
+- → 只要脚本里有 `plot`/`fill`/`hline`/`label`/… 之类命令，plan 路径必然报 `unsupported kernel DRAW:*`。
+
+之所以现在只有 `bollinger_bands` 命中，是因为其它用例的绘图节点恰好没被执行到；
+**这是一个随时会爆的雷，不是个案。**
+
+### 17.3 为什么我没有顺手补上
+
+`KernelId` 是 **FNV 哈希（`pub struct KernelId(pub u64)`）**，没有字符串访问器。
+→ **无法**按 `DRAW:` 前缀匹配，只能逐个枚举命令名（`DRAW:FILL`、`DRAW:PLOT`…）。
+枚举是**会腐烂**的：新增一种绘图命令就会重新炸。所以这是**设计问题**，不是补丁。
+
+### 17.4 两个方案（需要决策）
+
+| 方案 | 做法 | 优 | 劣 |
+|---|---|---|---|
+| **A. 绘图节点不进 plan** | `lower` 遇到 `DrawGeneric`/`StickLine`/`DrawText`/`DrawIcon` 时**只 lower 其实参**（保留副作用）、**不 `add_draw`**，返回最后一个依赖 id | 彻底消除一类节点；不再腐烂；plan 更小更快 | 改动 IR 语义；plan 不再能表达"画了什么"，宿主无法从 plan 取绘图信息 |
+| **B. `DRAW:*` 作空操作 kernel** | 枚举已知命令名，命中即 `Ok(())` | 不改 lowering；保留将来接渲染器的可能 | 必须枚举，会腐烂；且静默吞掉绘图语义 |
+
+**我的倾向：A。** 理由：既然**当前**没有任何 `DRAW:` kernel、也没有宿主消费绘图节点，
+它们在 plan 里**纯粹是 dead weight 且必然致命**；而 `produces_value()` 早已把
+`DrawGeneric` 判为"不产生值"，说明设计意图本就是"绘图不参与数值结果"。
+A 与该意图一致。
+
+需要确认的前提：**是否有（或计划有）宿主消费 plan 里的绘图节点？**
+若有 → 选 B 并接受枚举；若无 → 选 A。
+
+### 17.5 影响面
+
+- 选 A 会同时影响国内的 `STICKLINE`/`DRAWTEXT`/`DRAWICON`（`AstNode::StickLine`/`DrawText`/`DrawIcon`）。
+  目前国内语料 16/2 通过，说明**现有用例没触发**；但改动后需重跑差分门禁确认。
+- 修好后 `bollinger_bands` 应转绿，且 **§17 那三个 band kernel 才会被端到端数值验证**
+  （当前只经过探针验证已注册/可调度，尚未与树路径比过数值）。
