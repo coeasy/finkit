@@ -61,9 +61,15 @@ const DOMESTIC_UNSUPPORTED: &[(&str, &str)] = &[
 /// marker constant. Every remaining entry is a genuine kernel or lowering gap.
 const PINE_UNSUPPORTED: &[(&str, &str)] = &[
     // --- Missing numeric kernels -------------------------------------------------
+    // The band kernels (`CALL:BOLLUP`/`CALL:BOLLMID`/`CALL:BOLLDN`) now exist;
+    // what blocks this script is that it *ends* with `fill(...)`, and every
+    // drawing command becomes a `DRAW:*` plan node that no dispatcher handles.
+    // See improvement-plan §17 for why that is a design decision, not a patch:
+    // `KernelId` is a hash, so `DRAW:*` cannot be matched by prefix and each
+    // command would have to be enumerated by hand.
     (
         "bollinger_bands",
-        "no kernel for `CALL:BOLLUP`/`CALL:BOLLMID`/`CALL:BOLLDN`",
+        "no kernel for `DRAW:FILL` (drawing primitives are not executable)",
     ),
     ("parabolic_sar", "no kernel for `CALL:SAR`"),
     (

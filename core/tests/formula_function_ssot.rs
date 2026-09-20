@@ -66,6 +66,9 @@ const PLAN_KERNELS: &[&str] = &[
     "AROON_UP",
     "ATR",
     "BBANDS",
+    "BOLLDN",
+    "BOLLMID",
+    "BOLLUP",
     "CCI",
     "CHOP",
     "CMF",
@@ -432,7 +435,7 @@ fn the_three_surfaces_have_the_expected_sizes() {
     let actual = (registry.len(), formulas.len(), kernels.len());
     assert_eq!(
         actual,
-        (220, 416, 53),
+        (223, 416, 56),
         "surface sizes changed: (registry, formula, plan kernels)"
     );
 }

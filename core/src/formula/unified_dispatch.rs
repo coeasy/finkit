@@ -80,6 +80,13 @@ impl KernelDispatcher for FormulaKernelDispatcher {
             return dispatch_bbands_call(call, buffers);
         }
 
+        if call.kernel == KernelId::from_static("CALL:BOLLUP")
+            || call.kernel == KernelId::from_static("CALL:BOLLMID")
+            || call.kernel == KernelId::from_static("CALL:BOLLDN")
+        {
+            return dispatch_boll_band_call(call, buffers);
+        }
+
         if call.kernel == KernelId::from_static("CALL:MACD") {
             return dispatch_macd_line_call(call, buffers);
         }
@@ -585,6 +592,69 @@ fn dispatch_bbands_call(
     };
     crate::math::rolling_stats::bbands_upper_into(input, period, nb_dev, output)
         .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))
+}
+
+/// Execute the single-band `BBANDS` projections into the plan-owned output.
+///
+/// `BOLLUP` / `BOLLMID` / `BOLLDN` are the three legs of one
+/// `overlap::bbands` call — the same call `canonical_bband_component` makes on
+/// the tree path — so the kernel picks a leg instead of recomputing. Note this
+/// is a different entry point from `CALL:BBANDS`, which only needs the upper
+/// band and uses the cheaper `rolling_stats::bbands_upper_into`; the corpus is
+/// what keeps the two honest.
+fn dispatch_boll_band_call(
+    call: KernelCall<'_>,
+    buffers: &mut [Vec<f64>],
+) -> Result<(), KernelDispatchError> {
+    if !(2..=3).contains(&call.inputs.len()) {
+        return Err(KernelDispatchError::new(FormulaKernelDispatcher::ERR_ARITY));
+    }
+    let input_slot = call.inputs[0].0;
+    let period_slot = call.inputs[1].0;
+    let output_slot = call.output.0;
+    if input_slot == output_slot
+        || period_slot == output_slot
+        || call.inputs.get(2).is_some_and(|slot| slot.0 == output_slot)
+    {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+    let period = period_from_slot(buffers, period_slot)?;
+    let nb_dev = match call.inputs.get(2) {
+        Some(parameter) => scalar_from_slot(buffers, parameter.0)?,
+        None => 2.0,
+    };
+    let len = buffers[output_slot].len();
+    if buffers[input_slot].len() != len {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+
+    // Scoped so the immutable borrow ends before the output is borrowed mutably.
+    let result = {
+        let input = &buffers[input_slot];
+        crate::indicators::overlap::bbands(input, period, nb_dev, nb_dev)
+            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?
+    };
+    let source = if call.kernel == KernelId::from_static("CALL:BOLLMID") {
+        result.middle
+    } else if call.kernel == KernelId::from_static("CALL:BOLLDN") {
+        result.lower
+    } else {
+        result.upper
+    };
+    let output = buffers
+        .get_mut(output_slot)
+        .ok_or_else(|| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+    if output.len() != source.len() {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+    output.copy_from_slice(source.as_slice().unwrap());
+    Ok(())
 }
 
 /// Execute formula MACD as its historical MACD/DIF-line projection.
