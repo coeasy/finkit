@@ -407,6 +407,18 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             deterministic: true,
         },
         FunctionSpec {
+            // The signal leg of MACD, exposed as a standalone domestic function.
+            name: "DEA",
+            aliases: &[],
+            category: FunctionCategory::Momentum,
+            input: InputKind::Series,
+            params: MACD_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::Dynamic,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
             name: "RSI",
             aliases: &[],
             category: FunctionCategory::Momentum,

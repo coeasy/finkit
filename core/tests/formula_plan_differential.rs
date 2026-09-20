@@ -65,11 +65,6 @@ const PINE_UNSUPPORTED: &[(&str, &str)] = &[
         "bollinger_bands",
         "no kernel for `CALL:BOLLUP`/`CALL:BOLLMID`/`CALL:BOLLDN`",
     ),
-    (
-        "macd",
-        "no kernel for `CALL:DEA` (`CALL:MACD` itself is implemented)",
-    ),
-    ("macd_histogram", "no kernel for `CALL:DEA`"),
     ("parabolic_sar", "no kernel for `CALL:SAR`"),
     (
         "supertrend",

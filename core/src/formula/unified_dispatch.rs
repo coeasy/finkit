@@ -84,6 +84,10 @@ impl KernelDispatcher for FormulaKernelDispatcher {
             return dispatch_macd_line_call(call, buffers);
         }
 
+        if call.kernel == KernelId::from_static("CALL:DEA") {
+            return dispatch_dea_call(call, buffers);
+        }
+
         if call.kernel == KernelId::from_static("CALL:OBV") {
             return dispatch_obv(call, buffers);
         }
@@ -625,6 +629,63 @@ fn dispatch_macd_line_call(
     };
     crate::indicators::macd_line_into(input, fast, slow, signal, output)
         .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))
+}
+
+/// Execute `DEA` — the MACD signal line — into the plan-owned output.
+///
+/// Delegates to `momentum::macd` and keeps its `.signal` leg, which is exactly
+/// what `fn_dea` does on the tree path. This is deliberately a *different*
+/// entry point from `CALL:MACD`, which uses `macd_line_into` for the DIF line
+/// only; the differential corpus is what keeps the two honest.
+fn dispatch_dea_call(
+    call: KernelCall<'_>,
+    buffers: &mut [Vec<f64>],
+) -> Result<(), KernelDispatchError> {
+    if !(2..=4).contains(&call.inputs.len()) {
+        return Err(KernelDispatchError::new(FormulaKernelDispatcher::ERR_ARITY));
+    }
+    let input_slot = call.inputs[0].0;
+    let output_slot = call.output.0;
+    if input_slot == output_slot || call.inputs.iter().skip(1).any(|slot| slot.0 == output_slot) {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+    let fast = period_from_slot(buffers, call.inputs[1].0)?;
+    let slow = if let Some(slot) = call.inputs.get(2) {
+        period_from_slot(buffers, slot.0)?
+    } else {
+        26
+    };
+    let signal = if let Some(slot) = call.inputs.get(3) {
+        period_from_slot(buffers, slot.0)?
+    } else {
+        9
+    };
+    let len = buffers[output_slot].len();
+    if buffers[input_slot].len() != len {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+
+    // Scoped so the immutable borrow ends before the output is borrowed mutably.
+    let result = {
+        let input = &buffers[input_slot];
+        crate::indicators::momentum::macd(input, fast, slow, signal)
+            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?
+    };
+    let source = result.signal;
+    let output = buffers
+        .get_mut(output_slot)
+        .ok_or_else(|| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+    if output.len() != source.len() {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+    output.copy_from_slice(source.as_slice().unwrap());
+    Ok(())
 }
 
 /// Execute OBV using the canonical caller-owned volume kernel.
