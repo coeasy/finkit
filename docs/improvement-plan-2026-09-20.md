@@ -862,7 +862,25 @@ add_effect：dependencies.push(last_effect)；last_effect = id
 → **无法**按 `DRAW:` 前缀匹配，只能逐个枚举命令名（`DRAW:FILL`、`DRAW:PLOT`…）。
 枚举是**会腐烂**的：新增一种绘图命令就会重新炸。所以这是**设计问题**，不是补丁。
 
-### 17.4 两个方案（需要决策）
+### 17.4 ~~两个方案（需要决策）~~ → **已裁决：让它们执行（空操作）**
+
+**决定性证据在 `hot_plan.rs:476`** —— 绘图节点被**显式保留为 plan 的 root**：
+
+> retaining drawings stops chart side effects from being silently dropped by
+> dead-code elimination. **An unsupported drawing still fails the plan loudly
+> instead of vanishing.**
+
+也就是说：**"剪掉绘图节点"是被明确设计否掉的**（无论是不 lower 还是让 DCE 吃掉）。
+设计意图是"**让它们执行**"—— 所以正确做法是**补 handler**，而不是删节点。
+我先前倾向的方案 A 与这段注释直接冲突；**是证据推翻了我的倾向，不是我改变了主意。**
+
+| 方案 | 结论 |
+|---|---|
+| A. 绘图节点不进 plan | ❌ **与 `hot_plan.rs` 的明确设计意图冲突** |
+| B. `DRAW:*` 空操作 kernel | ✅ **采纳**（`e6aebc4`） |
+
+绘图是图表副作用、**没有数值结果** → handler 不写序列，渲染交给宿主。
+四个名字是**枚举**而非前缀匹配（`KernelId` 是哈希），且是 IR 目前产生的**全集**。
 
 | 方案 | 做法 | 优 | 劣 |
 |---|---|---|---|
@@ -877,9 +895,17 @@ A 与该意图一致。
 需要确认的前提：**是否有（或计划有）宿主消费 plan 里的绘图节点？**
 若有 → 选 B 并接受枚举；若无 → 选 A。
 
-### 17.5 影响面
+### 17.5 结果
 
-- 选 A 会同时影响国内的 `STICKLINE`/`DRAWTEXT`/`DRAWICON`（`AstNode::StickLine`/`DrawText`/`DrawIcon`）。
-  目前国内语料 16/2 通过，说明**现有用例没触发**；但改动后需重跑差分门禁确认。
-- 修好后 `bollinger_bands` 应转绿，且 **§17 那三个 band kernel 才会被端到端数值验证**
-  （当前只经过探针验证已注册/可调度，尚未与树路径比过数值）。
+- `bollinger_bands` 转绿，Pine 语料 **21 → 22**。
+- **三个 band kernel 终于被端到端数值验证**：此前脚本在比较发生前就死在 `fill()`，
+  它们只经过"已注册/可调度"的探针验证。现在差分门禁真的比过数值了。
+- 剩余 Pine 条目 **3 条**：`trix`（待裁决实现分歧）、`supertrend`（`IF` 无降级）、
+  `volume_profile`（循环体不降级）。
+
+### 17.6 教训
+
+> **想删掉一类"没用"的节点前，先搜它为什么存在。**
+> 我看到绘图节点"没有 kernel、必然失败"，第一反应是"这是 dead weight，删掉"。
+> 但 `hot_plan.rs` 的注释说明它是**有意保留**的，目的是**让不支持的绘图响亮失败而不是静默消失**。
+> 按我的第一反应改，就会把一个**刻意设计的护栏**当成垃圾清掉。
