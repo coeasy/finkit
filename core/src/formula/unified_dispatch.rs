@@ -116,6 +116,10 @@ impl KernelDispatcher for FormulaKernelDispatcher {
             return dispatch_willr_call(call, buffers);
         }
 
+        if call.kernel == KernelId::from_static("CALL:SAR") {
+            return dispatch_sar_call(call, buffers);
+        }
+
         if call.kernel == KernelId::from_static("CALL:AD")
             || call.kernel == KernelId::from_static("CALL:ADOSC")
             || call.kernel == KernelId::from_static("CALL:MFI")
@@ -1069,6 +1073,77 @@ fn dispatch_willr_call(
         crate::indicators::momentum::willr_into(high, low, close, period, &mut willr)
             .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
         willr
+    };
+
+    let output = buffers
+        .get_mut(output_slot)
+        .ok_or_else(|| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+    if output.len() != result.len() {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+    output.copy_from_slice(&result);
+    Ok(())
+}
+
+/// Execute `SAR` into the plan-owned output.
+///
+/// Accepts the four-argument `(HIGH, LOW, start, max)` form, where the
+/// increment equals the start, and the five-argument `(HIGH, LOW, start,
+/// increment, max)` form that Pine's `ta.sar` lowers to. Both delegate to
+/// `overlap::sar_with_factors_into`, which `fn_sar` now calls too.
+///
+/// This deliberately does *not* use `overlap::sar`: that entry point only
+/// takes `(acceleration, maximum)` and so cannot express an increment that
+/// differs from the start.
+fn dispatch_sar_call(
+    call: KernelCall<'_>,
+    buffers: &mut [Vec<f64>],
+) -> Result<(), KernelDispatchError> {
+    if !(4..=5).contains(&call.inputs.len()) {
+        return Err(KernelDispatchError::new(FormulaKernelDispatcher::ERR_ARITY));
+    }
+    let high_slot = call.inputs[0].0;
+    let low_slot = call.inputs[1].0;
+    let start_slot = call.inputs[2].0;
+    let output_slot = call.output.0;
+    if call.inputs.iter().any(|slot| slot.0 == output_slot) {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+    let af_start = scalar_from_slot(buffers, start_slot)?;
+    let (af_increment, af_max) = if call.inputs.len() == 5 {
+        (
+            scalar_from_slot(buffers, call.inputs[3].0)?,
+            scalar_from_slot(buffers, call.inputs[4].0)?,
+        )
+    } else {
+        (af_start, scalar_from_slot(buffers, call.inputs[3].0)?)
+    };
+    let len = buffers[output_slot].len();
+    if buffers[high_slot].len() != len || buffers[low_slot].len() != len {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+
+    // Scoped so the immutable borrows end before the output is borrowed mutably.
+    let result = {
+        let high = &buffers[high_slot];
+        let low = &buffers[low_slot];
+        let mut sar = vec![f64::NAN; len];
+        crate::indicators::overlap::sar_with_factors_into(
+            high,
+            low,
+            af_start,
+            af_increment,
+            af_max,
+            &mut sar,
+        )
+        .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+        sar
     };
 
     let output = buffers

@@ -3,7 +3,7 @@
 > **SSOT** — auto-generated from `core/src/indicators/mod.rs` and submodule `pub fn` exports.
 > Do not edit manually. Regenerate: `python scripts/gen_ssot_docs.py --generate`
 
-Modules exported from `indicators/mod.rs`: **36** | Public indicator functions: **387**
+Modules exported from `indicators/mod.rs`: **36** | Public indicator functions: **388**
 
 ## astock
 
@@ -302,6 +302,7 @@ Modules exported from `indicators/mod.rs`: **36** | Public indicator functions: 
 | `midprice14_into` |
 | `midprice_into` |
 | `sar` |
+| `sar_with_factors_into` |
 | `sarext` |
 | `sarext_sar_into` |
 | `t3` |

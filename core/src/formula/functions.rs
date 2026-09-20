@@ -2796,54 +2796,22 @@ fn fn_sar(_ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, Fo
         ));
     }
 
+    // The Wilder recursion lives in the indicator layer so the compiled-plan
+    // kernel and this executor cannot drift apart.
     let data_len = high.len().min(low.len());
-    if data_len < 2 {
+    let mut result = nan_vec(data_len);
+    if crate::indicators::overlap::sar_with_factors_into(
+        &high.as_slice().unwrap()[..data_len],
+        &low.as_slice().unwrap()[..data_len],
+        af_start,
+        af_increment,
+        af_max,
+        result.as_slice_mut().unwrap(),
+    )
+    .is_err()
+    {
         return Ok(nan_vec(data_len));
     }
-
-    let mut result = nan_vec(data_len);
-    let mut is_long = high[1] - low[1] > 0.0;
-    let mut af = af_start;
-    let mut ep = if is_long { high[0] } else { low[0] };
-    result[0] = if is_long { low[0] } else { high[0] };
-
-    for i in 1..data_len {
-        let prev_sar = result[i - 1];
-        let mut sar = prev_sar + af * (ep - prev_sar);
-
-        if is_long {
-            sar = sar.min(low[i - 1]);
-            if i >= 2 {
-                sar = sar.min(low[i - 2]);
-            }
-            if low[i] < sar {
-                is_long = false;
-                sar = ep;
-                af = af_start;
-                ep = low[i];
-            } else if high[i] > ep {
-                ep = high[i];
-                af = (af + af_increment).min(af_max);
-            }
-        } else {
-            sar = sar.max(high[i - 1]);
-            if i >= 2 {
-                sar = sar.max(high[i - 2]);
-            }
-            if high[i] > sar {
-                is_long = true;
-                sar = ep;
-                af = af_start;
-                ep = high[i];
-            } else if low[i] < ep {
-                ep = low[i];
-                af = (af + af_increment).min(af_max);
-            }
-        }
-
-        result[i] = sar;
-    }
-
     Ok(result)
 }
 

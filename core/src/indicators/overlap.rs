@@ -688,6 +688,95 @@ pub struct SarResult {
     pub af: Array1<f64>,
 }
 
+/// Parabolic SAR with an acceleration increment that may differ from the start.
+///
+/// This is the formula engine's `SAR(high, low, start, increment, maximum)`
+/// contract, lifted out so the tree-walking executor and the compiled-plan
+/// kernel share one implementation. It is deliberately *not* folded into
+/// [`sar`]: that entry point only takes `(acceleration, maximum)` because
+/// TA-Lib uses one value for both the start and the increment, so it cannot
+/// express Pine's `ta.sar(start, increment, maximum)` when the two differ.
+/// Whether the two should ultimately converge is an open question — see the
+/// improvement plan.
+///
+/// `output` is fully written: NaN where the contract has no value yet.
+///
+/// # Errors
+///
+/// Returns `TaError::InvalidParameter` if the price inputs are shorter than
+/// `output`, or if the acceleration factors are out of range.
+pub fn sar_with_factors_into(
+    high: &[f64],
+    low: &[f64],
+    af_start: f64,
+    af_increment: f64,
+    af_max: f64,
+    output: &mut [f64],
+) -> Result<()> {
+    let len = output.len();
+    if high.len() < len || low.len() < len {
+        return Err(TaError::InvalidParameter {
+            name: "high, low".to_string(),
+            constraint: "must have at least the output length".to_string(),
+        });
+    }
+    // Kept as the original guard so NaN factors are rejected too.
+    let factors_valid = af_start > 0.0 && af_increment > 0.0 && af_max >= af_start;
+    if !factors_valid {
+        return Err(TaError::InvalidParameter {
+            name: "af_start, af_increment, af_max".to_string(),
+            constraint: "start > 0, increment > 0, max >= start".to_string(),
+        });
+    }
+    output.fill(f64::NAN);
+    if len < 2 {
+        return Ok(());
+    }
+
+    let mut is_long = high[1] - low[1] > 0.0;
+    let mut af = af_start;
+    let mut ep = if is_long { high[0] } else { low[0] };
+    output[0] = if is_long { low[0] } else { high[0] };
+
+    for i in 1..len {
+        let prev_sar = output[i - 1];
+        let mut sar = prev_sar + af * (ep - prev_sar);
+
+        if is_long {
+            sar = sar.min(low[i - 1]);
+            if i >= 2 {
+                sar = sar.min(low[i - 2]);
+            }
+            if low[i] < sar {
+                is_long = false;
+                sar = ep;
+                af = af_start;
+                ep = low[i];
+            } else if high[i] > ep {
+                ep = high[i];
+                af = (af + af_increment).min(af_max);
+            }
+        } else {
+            sar = sar.max(high[i - 1]);
+            if i >= 2 {
+                sar = sar.max(high[i - 2]);
+            }
+            if high[i] > sar {
+                is_long = true;
+                sar = ep;
+                af = af_start;
+                ep = high[i];
+            } else if low[i] < ep {
+                ep = low[i];
+                af = (af + af_increment).min(af_max);
+            }
+        }
+
+        output[i] = sar;
+    }
+    Ok(())
+}
+
 /// Parabolic Stop and Reverse (SAR)
 ///
 /// # Arguments

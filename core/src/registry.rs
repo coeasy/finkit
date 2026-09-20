@@ -296,6 +296,15 @@ const SUPERTREND_PARAMS: &[ParamSpec] = &[
 const DONCHIAN_PARAMS: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("20"), Some("> 0"))];
 const TENKAN_PARAMS: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("9"), Some("> 0"))];
 const KIJUN_PARAMS: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("26"), Some("> 0"))];
+/// `SAR(high, low, start, increment, max)`.
+///
+/// The four-argument form omits `increment`, which then defaults to `start` —
+/// the TA-Lib shape where one acceleration value serves both roles.
+const SAR_PARAMS: &[ParamSpec] = &[
+    ParamSpec::new("af_start", "f64", Some("0.02"), Some("> 0")),
+    ParamSpec::new("af_increment", "f64", Some("0.02"), Some("> 0")),
+    ParamSpec::new("af_max", "f64", Some("0.2"), Some(">= af_start")),
+];
 const BBANDS_PARAMS: &[ParamSpec] = &[
     ParamSpec::new("period", "usize", Some("20"), Some("> 1")),
     ParamSpec::new("nbdevup", "f64", Some("2.0"), Some("finite")),
@@ -518,6 +527,17 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             params: PERIOD_14,
             outputs: 1,
             lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "SAR",
+            aliases: &[],
+            category: FunctionCategory::Overlap,
+            input: InputKind::Dynamic,
+            params: SAR_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::Dynamic,
             streaming: true,
             deterministic: true,
         },

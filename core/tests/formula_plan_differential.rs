@@ -71,7 +71,6 @@ const PINE_UNSUPPORTED: &[(&str, &str)] = &[
         "bollinger_bands",
         "no kernel for `DRAW:FILL` (drawing primitives are not executable)",
     ),
-    ("parabolic_sar", "no kernel for `CALL:SAR`"),
     (
         "supertrend",
         "no kernel for `CALL:IF` / no lowering for the `IF_THEN_ELSE` node",
