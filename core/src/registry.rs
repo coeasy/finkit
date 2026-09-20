@@ -1314,6 +1314,17 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             deterministic: true,
         },
         FunctionSpec {
+            name: "ABS",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Series,
+            params: &[],
+            outputs: 1,
+            lookback: LookbackSpec::None,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
             name: "SUM",
             aliases: &[],
             category: FunctionCategory::Formula,

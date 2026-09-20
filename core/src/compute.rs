@@ -186,19 +186,18 @@ impl ComputePlan {
     /// Validate a graph and compile a stable topological execution order.
     pub fn compile(nodes: impl IntoIterator<Item = ComputeNode>) -> Result<Self, ComputePlanError> {
         let mut by_id = BTreeMap::new();
-        for mut node in nodes {
+        for node in nodes {
             if node.operation.trim().is_empty() {
                 return Err(ComputePlanError::EmptyOperation(node.id));
             }
-            // Function-call dependencies are an ordered argument ABI.  Do
-            // not collapse repeated literals such as KDJ(H, L, C, 9, 3, 3),
-            // otherwise the hot executor cannot distinguish omitted optional
-            // arguments from two equal arguments.  Generic graph nodes still
-            // retain the historical sorted/deduplicated dependency contract.
-            if !node.operation.starts_with("CALL:") && node.operation != "STATEMENTS" {
-                node.dependencies.sort_unstable();
-                node.dependencies.dedup();
-            }
+            // `dependencies` is an ordered operand list, not a set: kernels are
+            // dispatched positionally, so `A - B`, `MA(C,6)/C` and
+            // `KDJ(H,L,C,9,3,3)` all depend on the emitted order surviving
+            // compilation. Sorting or deduplicating here silently swapped
+            // operands of non-commutative kernels and collapsed repeated
+            // arguments such as `X + X`. Graph bookkeeping does not need the
+            // stored list to be canonical — the topological pass below builds
+            // its own deduplicated indegree and adjacency maps.
             let id = node.id;
             if by_id.insert(id, node).is_some() {
                 return Err(ComputePlanError::DuplicateNode(id));
@@ -605,7 +604,10 @@ mod tests {
     }
 
     #[test]
-    fn compute_plan_normalizes_duplicate_dependencies() {
+    fn compute_plan_preserves_ordered_dependencies_and_duplicates() {
+        // `dependencies` is an ordered operand list. Deduplicating it would make
+        // `SUM(X, X)` indistinguishable from `SUM(X)`, and sorting it would swap
+        // the operands of every non-commutative kernel.
         let plan = ComputePlan::compile([
             ComputeNode::new(ComputeNodeId(1), "SOURCE", vec![], pure_capabilities(true)),
             ComputeNode::new(
@@ -620,7 +622,47 @@ mod tests {
             plan.execution_order(),
             &[ComputeNodeId(1), ComputeNodeId(2)]
         );
-        assert_eq!(plan.node(ComputeNodeId(2)).unwrap().dependencies.len(), 1);
+        assert_eq!(
+            plan.node(ComputeNodeId(2)).unwrap().dependencies,
+            vec![ComputeNodeId(1), ComputeNodeId(1)]
+        );
+    }
+
+    #[test]
+    fn compute_plan_does_not_reorder_non_commutative_operands() {
+        // Node ids are deliberately emitted in the opposite order to the
+        // operands, so a sort by id would invert the subtraction.
+        let plan = ComputePlan::compile([
+            ComputeNode::new(ComputeNodeId(0), "LEFT", vec![], pure_capabilities(true)),
+            ComputeNode::new(ComputeNodeId(1), "RIGHT", vec![], pure_capabilities(true)),
+            ComputeNode::new(
+                ComputeNodeId(2),
+                "BINARY:Sub",
+                vec![ComputeNodeId(0), ComputeNodeId(1)],
+                pure_capabilities(true),
+            ),
+        ])
+        .unwrap();
+        assert_eq!(
+            plan.node(ComputeNodeId(2)).unwrap().dependencies,
+            vec![ComputeNodeId(0), ComputeNodeId(1)]
+        );
+
+        let reversed = ComputePlan::compile([
+            ComputeNode::new(ComputeNodeId(0), "LEFT", vec![], pure_capabilities(true)),
+            ComputeNode::new(ComputeNodeId(1), "RIGHT", vec![], pure_capabilities(true)),
+            ComputeNode::new(
+                ComputeNodeId(2),
+                "BINARY:Sub",
+                vec![ComputeNodeId(1), ComputeNodeId(0)],
+                pure_capabilities(true),
+            ),
+        ])
+        .unwrap();
+        assert_eq!(
+            reversed.node(ComputeNodeId(2)).unwrap().dependencies,
+            vec![ComputeNodeId(1), ComputeNodeId(0)]
+        );
     }
 
     #[test]

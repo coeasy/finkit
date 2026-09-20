@@ -54,6 +54,10 @@ impl KernelDispatcher for FormulaKernelDispatcher {
             || call.kernel == KernelId::from_static("CALL:ROC")
             || call.kernel == KernelId::from_static("CALL:TRIMA")
             || call.kernel == KernelId::from_static("CALL:STD")
+            || call.kernel == KernelId::from_static("CALL:HHV")
+            || call.kernel == KernelId::from_static("CALL:LLV")
+            || call.kernel == KernelId::from_static("CALL:SUM")
+            || call.kernel == KernelId::from_static("CALL:REF")
         {
             return dispatch_periodic_call(call, buffers);
         }
@@ -113,6 +117,9 @@ impl KernelDispatcher for FormulaKernelDispatcher {
         if call.kernel == KernelId::from_static("UNARY:Not") {
             return unary(call, buffers, |value| if value <= 0.0 { 1.0 } else { 0.0 });
         }
+        if call.kernel == KernelId::from_static("CALL:ABS") {
+            return unary(call, buffers, f64::abs);
+        }
 
         let op = if call.kernel == KernelId::from_static("BINARY:Add") {
             BinaryKernel::Add
@@ -144,6 +151,10 @@ impl KernelDispatcher for FormulaKernelDispatcher {
             BinaryKernel::Or
         } else if call.kernel == KernelId::from_static("BINARY:Xor") {
             BinaryKernel::Xor
+        } else if call.kernel == KernelId::from_static("CALL:MAX") {
+            BinaryKernel::Max
+        } else if call.kernel == KernelId::from_static("CALL:MIN") {
+            BinaryKernel::Min
         } else {
             return Err(KernelDispatchError::new(Self::ERR_UNSUPPORTED_KERNEL));
         };
@@ -198,6 +209,25 @@ fn dispatch_periodic_call(
             std::slice::from_raw_parts_mut(output_ptr, output_len),
         )
     };
+
+    // Rolling extrema return their own error type, so they return early rather
+    // than joining the `TaError`-typed chain below.
+    if call.kernel == KernelId::from_static("CALL:HHV") {
+        return crate::math::kernels::rolling_max_into(input, period, output)
+            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER));
+    }
+    if call.kernel == KernelId::from_static("CALL:LLV") {
+        return crate::math::kernels::rolling_min_into(input, period, output)
+            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER));
+    }
+    if call.kernel == KernelId::from_static("CALL:SUM") {
+        return sum_formula_into(input, period, output)
+            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER));
+    }
+    if call.kernel == KernelId::from_static("CALL:REF") {
+        return ref_formula_into(input, period, output)
+            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER));
+    }
 
     let result = if is_sma {
         let multiplier = call
@@ -260,6 +290,55 @@ fn sma_formula_into(
             .unwrap_or(current);
         output[index] = value;
         previous = Some(value);
+    }
+    Ok(())
+}
+
+/// Execute terminal SUM(X, N) without materialising argument arrays.
+///
+/// Mirrors the reference implementation exactly, including its NaN behaviour:
+/// once a NaN enters the window it stays in the running sum until it slides out,
+/// because the accumulator is never re-seeded.
+fn sum_formula_into(
+    input: &[f64],
+    period: usize,
+    output: &mut [f64],
+) -> crate::error::Result<()> {
+    if period == 0 || input.len() != output.len() {
+        return Err(crate::error::TaError::InvalidParameter {
+            name: "SUM parameters".to_string(),
+            constraint: "period must be > 0 and input/output lengths must match".to_string(),
+        });
+    }
+    output.fill(f64::NAN);
+    let mut running = 0.0;
+    for (index, &current) in input.iter().enumerate() {
+        running += current;
+        if index >= period {
+            running -= input[index - period];
+            output[index] = running;
+        } else if index == period - 1 {
+            output[index] = running;
+        }
+    }
+    Ok(())
+}
+
+/// Execute terminal REF(X, N) without materialising argument arrays.
+fn ref_formula_into(
+    input: &[f64],
+    period: usize,
+    output: &mut [f64],
+) -> crate::error::Result<()> {
+    if period == 0 || input.len() != output.len() {
+        return Err(crate::error::TaError::InvalidParameter {
+            name: "REF parameters".to_string(),
+            constraint: "period must be > 0 and input/output lengths must match".to_string(),
+        });
+    }
+    output.fill(f64::NAN);
+    for index in period..input.len() {
+        output[index] = input[index - period];
     }
     Ok(())
 }
@@ -868,6 +947,8 @@ enum BinaryKernel {
     Div,
     Mod,
     Pow,
+    Max,
+    Min,
     Gt,
     Lt,
     Gte,
@@ -938,6 +1019,10 @@ fn apply_binary(op: BinaryKernel, lhs: f64, rhs: f64) -> f64 {
             }
         }
         BinaryKernel::Pow => lhs.powf(rhs),
+        // `f64::max`/`f64::min` return the non-NaN operand when exactly one side
+        // is NaN, matching the reference `MAX`/`MIN` implementations.
+        BinaryKernel::Max => lhs.max(rhs),
+        BinaryKernel::Min => lhs.min(rhs),
         BinaryKernel::Gt => bool_value(lhs > rhs),
         BinaryKernel::Lt => bool_value(lhs < rhs),
         BinaryKernel::Gte => bool_value(lhs >= rhs),

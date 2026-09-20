@@ -1,10 +1,19 @@
 //! Differential consistency tests across formula execution paths.
 //!
 //! For each formula and input, compares AST interpretation, bytecode VM,
-//! JIT (when enabled), and SIMD (when enabled). Any divergence beyond
-//! tolerance `1e-10` fails the test with index and values printed.
+//! JIT (when enabled), SIMD (when enabled), and the compiled plan path
+//! (`FormulaHotPlan` + `UnifiedExecutor`). Any divergence beyond tolerance
+//! `1e-10` fails the test with index and values printed.
+//!
+//! The plan path is the production target of the P0-2 workstream: it must be
+//! proven bit-comparable to the AST tree-walker *before* it is allowed to
+//! become the default execution mode. This file is that gate for the
+//! hand-written formula set; `formula_plan_differential.rs` extends the same
+//! gate over the on-disk corpora.
 
-use finkit::formula::{FormulaContext, FormulaEngine};
+use finkit::formula::{
+    parse_formula, unified_formula_executor, FormulaContext, FormulaEngine, FormulaHotPlan,
+};
 use ndarray::Array1;
 
 const TOLERANCE: f64 = 1e-10;
@@ -75,6 +84,37 @@ fn run_simd(engine: &mut FormulaEngine, source: &str, ctx: &mut FormulaContext) 
     engine.eval_simd(source, ctx).expect("SIMD eval failed")
 }
 
+/// Execute a formula through the compiled plan path.
+///
+/// This mirrors exactly what a production caller does: parse once, compile to a
+/// `FormulaHotPlan` (semantic DAG -> CSE -> hot plan), resolve the context
+/// series into the plan's numeric input slots, then drive the unified executor.
+fn run_plan(source: &str, ctx: &FormulaContext) -> Array1<f64> {
+    let ast = parse_formula(source).expect("plan parse failed");
+    let plan = FormulaHotPlan::compile(&ast).expect("plan compile failed");
+
+    let slot_count = plan.hot().input_layout().len();
+    let close = ctx.get_data("CLOSE").expect("CLOSE missing from context");
+    let mut inputs: Vec<&[f64]> = vec![close; slot_count];
+    for name in ["OPEN", "HIGH", "LOW", "CLOSE", "VOLUME"] {
+        if let Some(values) = ctx.get_data(name) {
+            let op = format!("VARIABLE:{name}");
+            if let Some(slot) = plan.hot().input_layout().slot_for_operation(&op) {
+                inputs[slot.0] = values;
+            }
+        }
+    }
+
+    let mut executor = unified_formula_executor(&plan);
+    let result = executor.execute(&inputs).expect("plan execute failed");
+    let values = result
+        .values
+        .into_iter()
+        .next()
+        .expect("plan produced no output series");
+    Array1::from_vec(values)
+}
+
 fn check_all_paths(formula_name: &str, source: &str, data_len: usize) {
     let mut engine = FormulaEngine::new();
 
@@ -84,6 +124,10 @@ fn check_all_paths(formula_name: &str, source: &str, data_len: usize) {
     let ctx_bc = make_ctx(data_len);
     let bytecode_result = run_bytecode(&mut engine, source, &ctx_bc);
     assert_arrays_match(formula_name, "bytecode", &reference, &bytecode_result);
+
+    let ctx_plan = make_ctx(data_len);
+    let plan_result = run_plan(source, &ctx_plan);
+    assert_arrays_match(formula_name, "plan", &reference, &plan_result);
 
     #[cfg(feature = "formula-jit")]
     {
@@ -143,4 +187,56 @@ fn formula_differential_boll_all_paths() {
 #[test]
 fn formula_differential_ma_sum_all_paths() {
     check_all_paths("MA_SUM", MA_SUM, 80);
+}
+
+// --- Regression cases for plan-path defects found by this harness -------------
+
+/// The same node appearing twice as an operand must stay twice.
+///
+/// `ComputePlan::compile` used to deduplicate stored dependencies, which turned
+/// `CLOSE + CLOSE` into a one-operand addition and failed the kernel arity check.
+#[test]
+fn formula_differential_duplicate_operand_all_paths() {
+    check_all_paths("CLOSE_PLUS_CLOSE", "CLOSE + CLOSE", 80);
+}
+
+/// Non-commutative operands must not be reordered by compilation.
+///
+/// Dependency sorting used to invert this division, producing `MA/CLOSE`
+/// instead of `CLOSE/MA` — a silent numeric error, not a failure.
+#[test]
+fn formula_differential_non_commutative_operand_order_all_paths() {
+    check_all_paths("CLOSE_OVER_MA", "CLOSE / MA(CLOSE, 6)", 80);
+    check_all_paths("MA_OVER_CLOSE", "MA(CLOSE, 6) / CLOSE", 80);
+}
+
+/// Multi-statement formulas exercise plumbing resolution (assignments and local
+/// variable reads) which the numeric dispatcher has no kernels for.
+#[test]
+fn formula_differential_multi_statement_plumbing_all_paths() {
+    check_all_paths(
+        "BIAS3",
+        "BIAS1 := (CLOSE - MA(CLOSE,6)) / MA(CLOSE,6) * 100; \
+         BIAS2 := (CLOSE - MA(CLOSE,12)) / MA(CLOSE,12) * 100; \
+         BIAS3 := (CLOSE - MA(CLOSE,24)) / MA(CLOSE,24) * 100; \
+         BIAS3",
+        120,
+    );
+}
+
+#[test]
+fn formula_differential_rolling_extrema_all_paths() {
+    check_all_paths(
+        "HHV_LLV",
+        "(CLOSE - LLV(LOW, 9)) / (HHV(HIGH, 9) - LLV(LOW, 9)) * 100",
+        80,
+    );
+}
+
+#[test]
+fn formula_differential_elementwise_helpers_all_paths() {
+    check_all_paths("ABS", "ABS(CLOSE - MA(CLOSE, 5))", 80);
+    check_all_paths("SUM", "SUM(CLOSE, 5)", 80);
+    check_all_paths("REF", "CLOSE - REF(CLOSE, 3)", 80);
+    check_all_paths("MAX_MIN", "MAX(CLOSE, MA(CLOSE,5)) - MIN(CLOSE, MA(CLOSE,5))", 80);
 }

@@ -31,18 +31,40 @@ pub struct KernelCall<'a> {
 pub struct KernelDispatchError {
     /// Dispatcher-defined stable numeric error code.
     pub code: u32,
+    /// Kernel that failed, when the executor knows it.
+    ///
+    /// The dispatcher constructs errors without this and the executor attaches
+    /// it at the single call site, so a failure names the exact instruction
+    /// instead of only a numeric code.
+    pub kernel: Option<KernelId>,
 }
 
 impl KernelDispatchError {
     /// Construct an error with a stable dispatcher-defined code.
     pub const fn new(code: u32) -> Self {
-        Self { code }
+        Self {
+            code,
+            kernel: None,
+        }
+    }
+
+    /// Attach the kernel that produced this error.
+    pub const fn with_kernel(mut self, kernel: KernelId) -> Self {
+        self.kernel = Some(kernel);
+        self
     }
 }
 
 impl fmt::Display for KernelDispatchError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "kernel dispatch failed with code {}", self.code)
+        match self.kernel {
+            Some(kernel) => write!(
+                f,
+                "kernel dispatch failed for kernel 0x{:016x} with code {}",
+                kernel.0, self.code
+            ),
+            None => write!(f, "kernel dispatch failed with code {}", self.code),
+        }
     }
 }
 
@@ -277,7 +299,8 @@ impl<D: KernelDispatcher> UnifiedExecutor<D> {
                     },
                     &mut buffers,
                     &mut self.states,
-                )?;
+                )
+                .map_err(|error| error.with_kernel(node.kernel))?;
             }
 
             let mut values = Vec::with_capacity(self.plan.output_layout().len());

@@ -7,7 +7,10 @@
 
 use super::ast::AstNode;
 use super::compute_ir::FormulaComputePlan;
-use crate::compute::{ComputeNode, ComputeNodeId, ComputePlan, ComputePlanError};
+use crate::compute::{
+    ComputeCapabilities, ComputeEffect, ComputeNode, ComputeNodeId, ComputePlan, ComputePlanError,
+    LookbackRequirement,
+};
 use crate::execution_plan::{
     HotExecutionPlan, HotPlanError, InputSlot, ParameterArena, ParameterRange, ParameterValue,
 };
@@ -49,20 +52,7 @@ impl FormulaHotPlan {
     /// Compile with the canonical built-in function registry.
     pub fn compile(ast: &AstNode) -> Result<Self, FormulaHotPlanError> {
         let semantic = FormulaComputePlan::compile(ast)?;
-        let (parameters, ranges) = bind_numeric_literals(ast, &semantic)?;
-        let optimized = cse_plan(&semantic, &parameters, &ranges)?;
-        let hot = HotExecutionPlan::compile_with_parameters(
-            &optimized,
-            [semantic.root()],
-            parameters,
-            ranges,
-        )?;
-        let input_bindings = compile_input_bindings(&semantic, &hot);
-        Ok(Self {
-            semantic,
-            hot,
-            input_bindings,
-        })
+        Self::finish(semantic, ast)
     }
 
     /// Compile with an explicit registry while keeping the same hot-plan ABI.
@@ -71,14 +61,18 @@ impl FormulaHotPlan {
         registry: &FunctionRegistry,
     ) -> Result<Self, FormulaHotPlanError> {
         let semantic = FormulaComputePlan::compile_with_registry(ast, registry)?;
+        Self::finish(semantic, ast)
+    }
+
+    /// Shared tail of both compile entry points: literal binding, CSE, plumbing
+    /// resolution, then numeric hot lowering.
+    fn finish(semantic: FormulaComputePlan, ast: &AstNode) -> Result<Self, FormulaHotPlanError> {
         let (parameters, ranges) = bind_numeric_literals(ast, &semantic)?;
         let optimized = cse_plan(&semantic, &parameters, &ranges)?;
-        let hot = HotExecutionPlan::compile_with_parameters(
-            &optimized,
-            [semantic.root()],
-            parameters,
-            ranges,
-        )?;
+        let (numeric, root) = lower_formula_plumbing(&optimized, semantic.root())?;
+        let numeric = prune_unreachable(&numeric, root)?;
+        let hot =
+            HotExecutionPlan::compile_with_parameters(&numeric, [root], parameters, ranges)?;
         let input_bindings = compile_input_bindings(&semantic, &hot);
         Ok(Self {
             semantic,
@@ -198,6 +192,265 @@ fn cse_plan(
     }
 
     ComputePlan::compile(nodes)
+}
+
+/// Resolve formula plumbing out of the numeric plan.
+///
+/// The semantic DAG keeps bookkeeping nodes so that optimizers and diagnostics
+/// can see assignments, emitted outputs and statement structure. None of them
+/// performs numeric work at run time:
+///
+/// * `ASSIGN:<name>` — the assigned value is already materialised in the
+///   dependency's buffer, so the node is a pure alias.
+/// * `OUTPUT:<name>` — same, the emitted value is its dependency.
+/// * `VARIABLE:<name>` for a locally written name — reads back a value that was
+///   just written, so it aliases the write.
+/// * `STATEMENTS` — a block's value is its final statement.
+/// * `COMPOUND:<name>:<op>` — rewrites to the equivalent `BINARY:<op>` node
+///   with the current value and the right-hand side as operands.
+///
+/// Leaving these in the numeric plan had two costs. The runtime dispatcher was
+/// forced to implement copy kernels it should never need, and — more seriously
+/// — [`crate::execution_plan::InputLayout`] treats every `VARIABLE:` node as an
+/// external input, so formula-local names such as `DIF` were advertised as
+/// caller-supplied inputs. Removing them here fixes both at once and shrinks
+/// the plan, which is why this runs after CSE (a cleaner graph means fewer
+/// buffers and fewer hot instructions).
+///
+/// Only the root node id is remapped; every retained node keeps its original
+/// id, so parameter ranges bound by [`bind_numeric_literals`] stay valid.
+fn lower_formula_plumbing(
+    optimized: &ComputePlan,
+    root: ComputeNodeId,
+) -> Result<(ComputePlan, ComputeNodeId), FormulaHotPlanError> {
+    fn resolve(
+        aliases: &BTreeMap<ComputeNodeId, ComputeNodeId>,
+        mut id: ComputeNodeId,
+    ) -> ComputeNodeId {
+        // Aliases only ever point at an already-resolved id, so this walk is a
+        // bounded chain and cannot loop.
+        while let Some(&next) = aliases.get(&id) {
+            if next == id {
+                break;
+            }
+            id = next;
+        }
+        id
+    }
+
+    fn value_operand(
+        rewritten: &[ComputeNodeId],
+        operation: &str,
+    ) -> Result<ComputeNodeId, FormulaHotPlanError> {
+        rewritten.first().copied().ok_or_else(|| {
+            FormulaHotPlanError::UnsupportedPlumbing {
+                operation: operation.to_string(),
+                reason: "node has no value operand".to_string(),
+            }
+        })
+    }
+
+    let mut aliases = BTreeMap::<ComputeNodeId, ComputeNodeId>::new();
+    let mut local_writes = BTreeMap::<String, ComputeNodeId>::new();
+    let mut nodes = Vec::with_capacity(optimized.len());
+    let mut next_synthetic_id = optimized
+        .execution_order()
+        .iter()
+        .map(|id| id.0)
+        .max()
+        .map_or(0, |max| max + 1);
+
+    for &node_id in optimized.execution_order() {
+        let source = optimized
+            .node(node_id)
+            .expect("optimized execution order only contains compiled nodes");
+        let operation = source.operation.as_str();
+        let rewritten: Vec<ComputeNodeId> = source
+            .dependencies
+            .iter()
+            .map(|dependency| resolve(&aliases, *dependency))
+            .collect();
+
+        if let Some(name) = operation.strip_prefix("ASSIGN:") {
+            let value = value_operand(&rewritten, operation)?;
+            aliases.insert(node_id, value);
+            local_writes.insert(name.to_string(), node_id);
+            continue;
+        }
+
+        if operation.starts_with("OUTPUT:") {
+            let value = value_operand(&rewritten, operation)?;
+            aliases.insert(node_id, value);
+            continue;
+        }
+
+        if let Some(name) = operation.strip_prefix("VARIABLE:") {
+            if let Some(&write) = local_writes.get(name) {
+                // A read of a formula-local variable is an alias for its most
+                // recent write, which in turn aliases the value that produced it.
+                aliases.insert(node_id, resolve(&aliases, write));
+                continue;
+            }
+            // No preceding write: this is a genuine external input. Keep the
+            // node so the hot plan can bind it to a caller-supplied slot.
+            aliases.insert(node_id, node_id);
+            nodes.push(ComputeNode::new(
+                node_id,
+                operation.to_string(),
+                rewritten,
+                source.capabilities.clone(),
+            ));
+            continue;
+        }
+
+        if operation == "STATEMENTS" {
+            let value = rewritten.last().copied().ok_or_else(|| {
+                FormulaHotPlanError::UnsupportedPlumbing {
+                    operation: operation.to_string(),
+                    reason: "statement block has no statements".to_string(),
+                }
+            })?;
+            aliases.insert(node_id, value);
+            continue;
+        }
+
+        if operation.starts_with("COMPOUND:") {
+            let synthetic = lower_compound(
+                node_id,
+                operation,
+                rewritten,
+                next_synthetic_id,
+                &mut aliases,
+                &mut local_writes,
+                &mut nodes,
+            )?;
+            next_synthetic_id = next_synthetic_id.max(synthetic.0 + 1);
+            continue;
+        }
+
+        aliases.insert(node_id, node_id);
+        nodes.push(ComputeNode::new(
+            node_id,
+            operation.to_string(),
+            rewritten,
+            source.capabilities.clone(),
+        ));
+    }
+
+    let plan = ComputePlan::compile(nodes)?;
+    Ok((plan, resolve(&aliases, root)))
+}
+
+/// Rewrite one `COMPOUND:<name>:<op>` node into the equivalent binary node.
+///
+/// `X += Y` is exactly `X = X + Y`, so the node is replaced by a synthetic
+/// `BINARY:<op>` whose operands are already in `[current value, right-hand
+/// side]` order. The synthetic id is allocated above every existing id, which
+/// keeps the parameter ranges bound by [`bind_numeric_literals`] valid.
+///
+/// Returns the synthetic node id so the caller can keep allocating.
+fn lower_compound(
+    node_id: ComputeNodeId,
+    operation: &str,
+    rewritten: Vec<ComputeNodeId>,
+    next_synthetic_id: usize,
+    aliases: &mut BTreeMap<ComputeNodeId, ComputeNodeId>,
+    local_writes: &mut BTreeMap<String, ComputeNodeId>,
+    nodes: &mut Vec<ComputeNode>,
+) -> Result<ComputeNodeId, FormulaHotPlanError> {
+    let unsupported = |reason: String| FormulaHotPlanError::UnsupportedPlumbing {
+        operation: operation.to_string(),
+        reason,
+    };
+
+    let (name, assign_op) = operation
+        .strip_prefix("COMPOUND:")
+        .and_then(|rest| rest.rsplit_once(':'))
+        .ok_or_else(|| unsupported("compound assignment is missing its operator".to_string()))?;
+    let binary_op = match assign_op {
+        "AddAssign" => "Add",
+        "SubAssign" => "Sub",
+        "MulAssign" => "Mul",
+        "DivAssign" => "Div",
+        other => {
+            return Err(unsupported(format!(
+                "unknown compound assignment operator `{other}`"
+            )))
+        }
+    };
+    if rewritten.len() != 2 {
+        return Err(unsupported(format!(
+            "expected 2 operands (current value, right-hand side), found {}",
+            rewritten.len()
+        )));
+    }
+
+    let synthetic = ComputeNodeId(next_synthetic_id);
+    aliases.insert(node_id, synthetic);
+    local_writes.insert(name.to_string(), synthetic);
+    nodes.push(ComputeNode::new(
+        synthetic,
+        format!("BINARY:{binary_op}"),
+        rewritten,
+        ComputeCapabilities {
+            deterministic: true,
+            streaming: true,
+            stateful: false,
+            lookback: LookbackRequirement::None,
+            effect: ComputeEffect::Pure,
+        },
+    ));
+    Ok(synthetic)
+}
+
+/// Drop every node the retained root cannot reach.
+///
+/// The semantic plan keeps all syntax occurrences for diagnostics, and formula
+/// plumbing resolution leaves the value subgraphs of dead assignments behind.
+/// Neither contributes to the result, but both cost buffers, hot instructions
+/// and — for nodes the numeric dispatcher has no kernel for, such as string
+/// literals — would fail the whole plan.
+///
+/// This runs after [`lower_formula_plumbing`] on purpose: aliases must be
+/// resolved first, otherwise a removed node would still look reachable through
+/// a stale dependency edge.
+fn prune_unreachable(
+    plan: &ComputePlan,
+    root: ComputeNodeId,
+) -> Result<ComputePlan, FormulaHotPlanError> {
+    let mut reachable = BTreeSet::new();
+    let mut pending = vec![root];
+    while let Some(node_id) = pending.pop() {
+        if !reachable.insert(node_id) {
+            continue;
+        }
+        let node = plan
+            .node(node_id)
+            .ok_or(FormulaHotPlanError::UnsupportedPlumbing {
+                operation: format!("{node_id:?}"),
+                reason: "root references a node that is not in the numeric plan".to_string(),
+            })?;
+        pending.extend(node.dependencies.iter().copied());
+    }
+
+    let nodes = plan
+        .execution_order()
+        .iter()
+        .filter(|node_id| reachable.contains(node_id))
+        .map(|node_id| {
+            let node = plan
+                .node(*node_id)
+                .expect("execution order only contains compiled nodes");
+            ComputeNode::new(
+                node.id,
+                node.operation.clone(),
+                node.dependencies.clone(),
+                node.capabilities.clone(),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    Ok(ComputePlan::compile(nodes)?)
 }
 
 /// Bind exact numeric literals to NUMBER nodes without carrying literal strings
@@ -322,6 +575,13 @@ pub enum FormulaHotPlanError {
         /// Number of NUMBER nodes present in the semantic plan.
         number_nodes: usize,
     },
+    /// A formula plumbing node could not be resolved out of the numeric plan.
+    UnsupportedPlumbing {
+        /// Operation label that could not be lowered.
+        operation: String,
+        /// Why the node could not be lowered.
+        reason: String,
+    },
 }
 
 impl From<ComputePlanError> for FormulaHotPlanError {
@@ -347,6 +607,10 @@ impl fmt::Display for FormulaHotPlanError {
             } => write!(
                 f,
                 "formula literal binding mismatch: {ast_literals} AST literals vs {number_nodes} NUMBER nodes"
+            ),
+            Self::UnsupportedPlumbing { operation, reason } => write!(
+                f,
+                "unsupported formula plumbing node `{operation}`: {reason}"
             ),
         }
     }

@@ -134,3 +134,6 @@ packaging/usage/dotnet/tests/obj/
 # Abandoned AI-tool local state (mirrors existing .agentvault/ / .aza/ ignores)
 .trae/
 .forge/
+
+# Alternate cargo target dir used when the default target/ is unavailable
+/.cargo-target/

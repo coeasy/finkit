@@ -204,3 +204,66 @@ feature/finkit-v1-...      f441e76   2026-09-19   ← 是 main 与 perf 的后�
 - 不为「新增函数数量」而新增函数；
 - 不在 Research / Formula / Binding / Visualization 中新增独立算法实现（必须落到 canonical kernel）；
 - 不在没有参考向量的情况下把函数推进 production catalog。
+
+---
+
+## 7. P0-2 执行记录（2026-09-20）
+
+本节记录 P0-2 步骤 1（differential harness）的实际执行结果。**harness 一上线就抓出 3 个真实缺陷**，这印证了「无此步不得动生产路径」这条门禁的必要性。
+
+### 7.1 已交付
+
+| 项 | 落点 | 状态 |
+|---|---|---|
+| plan 路径纳入差分对比 | `core/tests/formula_differential_tests.rs`（新增 `run_plan` + 5 组回归用例，共 9 例） | 全绿 |
+| 语料级差分门禁 | `core/tests/formula_plan_differential.rs`（新增） | 全绿 |
+| 计划检视工具 | `core/examples/dump_formula_plan.rs`、`core/examples/diff_ast_plan.rs` | 新增 |
+| MSVC 构建环境固化 | `.workbuddy-ai/msvc-env.sh` | 新增 |
+
+### 7.2 harness 抓出的缺陷（均已修复）
+
+**缺陷 1：`ComputePlan::compile` 排序/去重依赖 → 非交换算子操作数被交换（静默数值错误）**
+
+`compute.rs` 对非 `CALL:`/`STATEMENTS` 节点执行 `dependencies.sort_unstable(); dedup();`。`dependencies` 实际是**按位传递的操作数列表**，排序后 `MA(CLOSE,6)/CLOSE` 被编译成 `CLOSE/MA(CLOSE,6)`，`CLOSE+CLOSE` 被去重成单操作数加法。前者是**静默错误结果**，后者直接 arity 报错。
+
+改法：不再改写存储的依赖顺序（拓扑排序内部已自建去重 indegree/邻接表）；新增 `compute_plan_preserves_ordered_dependencies_and_duplicates`、`compute_plan_does_not_reorder_non_commutative_operands` 固化契约。
+
+**缺陷 2：plumbing 节点泄漏进数值计划 → 外部输入 ABI 被污染**
+
+`ASSIGN:` / `OUTPUT:` / 局部 `VARIABLE:` / `STATEMENTS` 是语义记账节点，不产生数值。但它们留在计划里有两个后果：dispatcher 被迫实现 copy kernel；更严重的是 `InputLayout::compile` 把**每个** `VARIABLE:` 节点都当作外部输入，于是公式局部变量（`DIF`、`DEA`）被宣告为调用方必须提供的输入。MACD 的输入槽数是 3（应为 1），且 dispatcher 缺 `ASSIGN:`/`VARIABLE:`/`STATEMENTS` kernel。
+
+改法：`hot_plan.rs` 新增 `lower_formula_plumbing`，在 CSE 之后、hot lowering 之前把 plumbing 解析为别名（`COMPOUND` 重写为等价的 `BINARY:` 节点）。MACD 计划 16 → 11 节点，输入槽 3 → 1。
+
+**缺陷 3：无死代码消除 → 计划携带不可达节点**
+
+`STRING_LITERAL`、被丢弃赋值的值子图都会留在计划里。Pine 脚本因 `indicator("RSI")` 的字面量直接编译失败。
+
+改法：`hot_plan.rs` 新增 `prune_unreachable`，从 retained root 做反向可达性裁剪（必须在 plumbing 解析之后，否则过期依赖边会让已删除节点看起来可达）。
+
+### 7.3 顺带修复的 SSOT 断裂
+
+- `registry.rs` **缺少 `ABS`**。未注册函数在 `compute_ir::function_metadata` 落入保守兜底（`stateful: true`），于是 `CALL:ABS` 被 `add_effect` 处理并额外挂上一条**幽灵依赖**（指向上一个 effect 节点），一元 kernel 因此 arity 报错。已补注册。
+- **规模远超单个函数**：`functions.rs` 注册 **327** 个函数，`registry.rs` 只声明 **104** 个。**223 个已实现函数对注册表不可见**，全部落入上述兜底路径——不能被 CSE 内联、不能被优化器推理、不能被数值 dispatcher 执行。这是当前 plan 路径剩余失败的主要根因，应作为 P0-2 的独立子项排期。
+- `KernelDispatchError` 现在携带 `kernel: Option<KernelId>`，由 executor 在唯一 dispatch 调用点填充；错误信息可直接定位到具体 kernel。
+
+### 7.4 新增 canonical kernel
+
+`FormulaKernelDispatcher` 新增：`CALL:HHV`、`CALL:LLV`（复用 `math::kernels::{rolling_max_into,rolling_min_into}`）、`CALL:SUM`、`CALL:REF`、`CALL:ABS`、`CALL:MAX`、`CALL:MIN`。语义逐条对齐 `functions.rs` 参考实现（含 NaN 传播）。
+
+### 7.5 当前覆盖度
+
+| 语料 | 经 plan 路径验证 | 白名单（已写明原因） |
+|---|---|---|
+| `tests/formula_corpus/`（18） | **15** | 3 |
+| `tests/pine_corpus/`（25） | **9** | 16 |
+
+剩余失败归为两类，均已在 `formula_plan_differential.rs` 的白名单中逐条注明：
+
+1. **缺 kernel**：`PLUS_DI`/`MINUS_DI`/`ADX`、`AROON_UP`/`AROON_DN`、`BOLLUP`/`BOLLMID`/`BOLLDN`、`MATH_AVG`、`DEA`、`SAR`、`IF`/`IF_THEN_ELSE`、`WINNER`/`COST`、`PERIODTYPE`/`REFDATE`。
+2. **输出选择错误（设计问题，非 kernel 缺口）**：Pine 脚本末尾语句是绘图指令，retained root（「末语句的值」）落到 `hline` 常量，DCE 后计划只剩一个常量、输入槽变空。修法是保留 `OUTPUT:*` 作为命名输出（多输出支持），**不能靠加 kernel 解决**。
+
+### 7.6 门禁状态
+
+- `cargo test -p finkit`：**全绿**（lib 2963 passed / 1 ignored，集成测试 0 失败；基线 2947，不减反增）；
+- `cargo check --workspace`：全绿；
+- 新增 kernel 与缺陷 1/2/3 均有对应回归用例，白名单具备「条目变绿即失败」的反腐机制。
