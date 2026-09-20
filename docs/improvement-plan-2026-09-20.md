@@ -266,3 +266,85 @@ feature/finkit-v1-...      f441e76   2026-09-19   ← 是 main 与 perf 的后�
 - `cargo test -p finkit`：**全绿**（lib 2963 passed / 1 ignored，集成测试 0 失败；基线 2947，不减反增）；
 - `cargo check --workspace`：全绿；
 - 新增 kernel 与缺陷 1/2/3 均有对应回归用例，白名单具备「条目变绿即失败」的反腐机制。
+
+---
+
+## 8. P0-2 步骤 1.5 执行记录（2026-09-20 续）：输出选择设计点已决并修复
+
+§7.5 末尾标注的「步骤 2 之前要先解决输出选择设计点」在本轮已定案并落地。用户决策：**两条路径统一改**。
+
+### 8.1 决策与依据
+
+规则：**语句块的结果 = 最后一个「产值语句」（value-producing statement）**。两类节点是纯副作用，不参与结果选择：
+
+1. **绘图指令** —— `DrawText` / `DrawIcon` / `StickLine` / `DrawGeneric`。它们把绘图命令推入上下文并返回一个临时缓冲区（**恒为全 0**）。
+2. **水平标尺（level marker）** —— 带 `DrawModifier::LevelLine` 的 `Output`，即 Pine 的 `hline`。它标记价位，自身不携带序列。
+
+关键证据（三条，均为实测而非推断）：
+
+- `tests/pine_corpus/rsi.pine` 末尾是 `hline(30, "Oversold")`；dump 显示语义 root 为 `STATEMENTS → OUTPUT:HLINE → NUMBER(30)`，DCE 后计划塌缩成**单个 NUMBER 节点、输入槽 0 个**，故执行器报 `cannot infer execution length without bound inputs`。
+- **AST 参考路径同样是退化值**：`executor.rs` 的 `DrawGeneric` 分支返回 `pool.get_buffer()`，即**全 0 数组**。所以此前 harness 一直在拿全 0 做对比——这不是 plan 路径单方面的 bug，而是「结果选择规则」在两条路径上都错。
+- **字节码路径早已正确**：`OpCode::Output` 与各绘图 opcode 都是 pop 操作数、不 push 值，故 `final_value = stack.pop()` 天然就是「最后一个产值语句」。**树遍历器才是异类**，本次改动是向既有语义收敛。
+
+### 8.2 改动清单
+
+| 文件 | 改动 |
+| --- | --- |
+| `core/src/formula/ast.rs` | 新增 `DrawModifier::LevelLine`、`OutputModifier::is_level_marker()`、`AstNode::produces_value()`、`result_statement_index()` |
+| `core/src/formula/executor.rs` | 三处 `Statements` 分支（`execute_val_inner` / `execute_with_pool_cached` / `execute_with_pool`）改为只取「最后一个产值语句」的值，**其余语句仍全部求值以保留副作用**，其临时缓冲归还池 |
+| `core/src/formula/engine.rs` | 可选并行路径 `execute_parallel`：当末尾存在纯副作用语句时退回串行执行（该路径按分组覆盖 `last_result`，无法表达该规则） |
+| `core/src/compute.rs` | `ComputeEffect` 新增 `EmitLevelMarker(String)`（与 `EmitOutput` 同为可观测，但明确「不携带序列」） |
+| `core/src/schema.rs` | 新 effect 的序列化分支 `"emit_level_marker"` |
+| `core/src/formula/compute_ir.rs` | `AstNode::Output` 按 level marker 选择 `EmitLevelMarker` / `EmitOutput` |
+| `core/src/formula/pine/ast_mapper.rs` | `hline` 仍降级为 `Output`（保住视觉通道与 modifier），但打上 `DrawModifier::LevelLine` |
+| `core/src/formula/hot_plan.rs` | `STATEMENTS` 解析取**最后一个产值依赖**（读原始依赖而非已解析依赖，否则 `OUTPUT:HLINE` 会被折叠成常量而丢失标记信息）；新增 `FormulaOutputBinding` + `FormulaHotPlan::outputs()`；`prune_unreachable` 改为**多根可达**（primary + 全部命名输出 + 全部绘图指令） |
+| `core/src/registry.rs` | 补登 `MATH_AVG`（variadic） |
+| `core/src/formula/unified_dispatch.rs` | 新增 `mean_formula_into`（`CALL:MATH_AVG`，变参均值） |
+
+**多根保留是有意为之**：绘图指令不再被 DCE 静默丢弃，而是作为根保留。计划路径目前没有绘图命令出口，因此含绘图指令的公式会**响亮失败**（`unsupported kernel DRAW_*`）而不是静默丢图。这是「不静默分歧」原则的体现；待计划路径具备绘图出口后再放开。
+
+### 8.3 覆盖率变化（编译计划路径）
+
+| 语料 | 本轮前 | 本轮后 |
+| --- | --- | --- |
+| `tests/formula_corpus/`（18） | 15 | **15** |
+| `tests/pine_corpus/`（25） | 9 | **13** |
+
+Pine 转绿 4 例：`momentum`、`roc`、`rsi`（输出选择修复）、`ichimoku`、`donchian_channels`（`MATH_AVG`）。
+
+**注意**：`donchian_channels` 由「通过」变为「因 `MATH_AVG` 失败再修复通过」。它暴露了一个此前被静默吞掉的事实：多根保留让 `basis = math.avg(upper, lower)` 这条输出通道重新进入依赖图，而它此前被 DCE 丢掉了——**即旧行为在悄悄少算一条输出**。这正是多根保留要修的问题。
+
+### 8.4 剩余 backlog（已按成因分类，白名单逐条注明）
+
+1. **缺 kernel**：`PLUS_DI`/`MINUS_DI`/`ADX`、`AROON_UP`/`AROON_DN`、`BOLLUP`/`BOLLMID`/`BOLLDN`、`DEA`、`SAR`、`IF`、`STOCHF`、`TRIX`、`WILLR`、`WINNER`/`COST`、`PERIODTYPE`/`REFDATE`。
+2. **kernel 形状不符**：`CALL:CCI` 走的是 4 操作数 HLC kernel，而 Pine 的 `ta.cci(src, length)` 只给 2 个 → arity 拒绝。需要 src/period 形态的 CCI kernel，或在前端把 `hlc3` 类源映射到 HLC 形态。
+3. **结构性 lowering 缺口**：`volume_profile` 用 `for` 循环 + `volume[i]` 序列索引，而 `compute_ir` 把循环体当作不透明控制流、不降级进无环计划，因此没有绑定输入、无法推断执行长度。这是循环降级问题，不是 kernel 问题。
+4. **SSOT 缺口（仍然存在）**：`functions.rs` 实现 327 个函数，`registry.rs` 只声明 104 个。未声明的会走保守 `stateful: true` 兜底，被 `add_effect` 追加**幻影尾依赖**，从而 arity 出错。`ABS`（上一轮）与 `MATH_AVG`（本轮）都是这个成因的实例——每接一个 kernel 都要同时补登 registry。
+
+### 8.5 第三路径收敛：字节码 VM 的结果选择缺陷（新发现）
+
+新增的差分回归用例 `formula_differential_trailing_draw_directive_all_paths` **又抓到一个独立缺陷**——这次在字节码 VM，与本次改动无关（属既存缺陷）。
+
+现象：`MA5 := MA(CLOSE, 5); DRAWICON(...)` 经字节码 VM 求值，`ast=NaN, bytecode=0`。
+
+根因：`Assignment` / `CompoundAssignment` / `Output` 分别编译成 `StoreVar` / `CompoundStore` / `StoreVar + Output`，**这些 opcode 都会 pop 操作数且不 push 值**，于是 `final_value = stack.pop()` 拿到空栈，返回全 0 数组。
+
+推论：**任何以赋值语句结尾的公式，经字节码路径都返回全 0**（例如单独一句 `MA5 := MA(CLOSE, 5)`）。此前无任何用例覆盖，故一直是绿的。
+
+修法：在 `compile_to_bytecode` 顶层补一条 `LoadVar(name)`，把结果语句存下的值重新压栈。
+
+- **只在顶层做**，不放进 `AstNode::Statements` 的编译分支——嵌套语句块若被当作表达式使用，绝不能扰动值栈。
+- `load_variable` 是直接查 `self.variables`，而 `StoreVar` 用的就是原始名字，故 `LoadVar(同名)` 一定能取回。
+- 覆盖 `Assignment` / `CompoundAssignment` / `Output` 三种会吃掉值的语句。
+
+至此**三条执行路径（树遍历 / 字节码 / 编译计划）在「结果选择」上完全一致**，由该用例钉住。
+
+### 8.6 语言收敛方向（用户 2026-09-20 指示）
+
+**优先 Python、Node、Rust 三个版本；Java/C++/C/.NET/Golang 后续再扩展。先收敛项目，再继续改进优化。**
+
+对应调整：
+
+- P0-1 的多语言绑定工作按此收敛：Rust（本仓）→ Python → Node 为第一梯队，其余语言从「近期里程碑」降为「后续扩展」。
+- P0-3 的终端方言（`FormulaTerminal::{DaZhiHui, Wenhua}`）与 `"dzh" → TongDaXin` 静默映射仍待处理，但优先级低于语言收敛。
+- 先做「收敛」：把当前计划路径的门禁、白名单、文档全部对齐到实际状态，确保 `cargo test -p finkit` 与 `cargo check --workspace` 全绿后再开新战场。

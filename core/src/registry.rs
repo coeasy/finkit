@@ -1314,6 +1314,18 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             deterministic: true,
         },
         FunctionSpec {
+            name: "MATH_AVG",
+            aliases: &["AVG"],
+            category: FunctionCategory::Formula,
+            // Variadic: Pine `math.avg(a, b, ...)` averages every argument.
+            input: InputKind::Dynamic,
+            params: &[],
+            outputs: 1,
+            lookback: LookbackSpec::None,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
             name: "ABS",
             aliases: &[],
             category: FunctionCategory::Formula,

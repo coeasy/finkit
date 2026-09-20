@@ -5,7 +5,7 @@
 //! semantics without guessing whether an assignment, output, drawing command,
 //! or context mutation is safe to remove.
 
-use super::ast::AstNode;
+use super::ast::{AstNode, OutputModifier};
 use crate::compute::{
     ComputeCapabilities, ComputeEffect, ComputeNode, ComputeNodeId, ComputePlan, ComputePlanError,
     LookbackRequirement,
@@ -155,8 +155,24 @@ impl<'a> FormulaLowerer<'a> {
                 self.last_write.insert(canonical_name(name), id);
                 id
             }
-            AstNode::Output { name, expr, .. } => {
+            AstNode::Output {
+                name,
+                expr,
+                modifier,
+            } => {
                 let expr = self.lower(expr);
+                // A level marker (Pine `hline`) draws a horizontal price line.
+                // It is observable like any other output, but it carries no data
+                // series, so it must stay distinguishable here — otherwise the
+                // plan path would select `hline(30)` as the whole result of a
+                // script. See `AstNode::produces_value`.
+                let effect = match modifier
+                    .as_ref()
+                    .is_some_and(OutputModifier::is_level_marker)
+                {
+                    true => ComputeEffect::EmitLevelMarker(name.clone()),
+                    false => ComputeEffect::EmitOutput(name.clone()),
+                };
                 let id = self.add_effect(
                     format!("OUTPUT:{}", canonical_name(name)),
                     vec![expr],
@@ -165,7 +181,7 @@ impl<'a> FormulaLowerer<'a> {
                         streaming: true,
                         stateful: false,
                         lookback: LookbackRequirement::None,
-                        effect: ComputeEffect::EmitOutput(name.clone()),
+                        effect,
                     },
                 );
                 // FormulaExecutor stores outputs in FormulaContext::variables, so

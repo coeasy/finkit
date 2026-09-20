@@ -58,6 +58,11 @@ pub enum ComputeEffect {
     WriteVariable(String),
     /// Named output emitted to the caller.
     EmitOutput(String),
+    /// Named *level marker* emitted to the caller — a horizontal price line
+    /// such as Pine's `hline`. Like [`Self::EmitOutput`] it is observable, but
+    /// it carries no data series of its own, so it is never eligible to be the
+    /// result of a formula.
+    EmitLevelMarker(String),
     /// Drawing/chart side effect.
     Draw,
     /// Stateful operation whose internal state changes across evaluations.

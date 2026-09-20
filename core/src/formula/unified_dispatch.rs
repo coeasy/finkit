@@ -120,6 +120,9 @@ impl KernelDispatcher for FormulaKernelDispatcher {
         if call.kernel == KernelId::from_static("CALL:ABS") {
             return unary(call, buffers, f64::abs);
         }
+        if call.kernel == KernelId::from_static("CALL:MATH_AVG") {
+            return mean_formula_into(call, buffers);
+        }
 
         let op = if call.kernel == KernelId::from_static("BINARY:Add") {
             BinaryKernel::Add
@@ -339,6 +342,38 @@ fn ref_formula_into(
     output.fill(f64::NAN);
     for index in period..input.len() {
         output[index] = input[index - period];
+    }
+    Ok(())
+}
+
+/// Execute Pine `math.avg(a, b, ...)` — the arithmetic mean of every input.
+///
+/// Variadic on purpose: Pine's `math.avg` accepts two or more series, and the
+/// plan carries them as an ordered operand list.
+fn mean_formula_into(
+    call: KernelCall<'_>,
+    buffers: &mut [Vec<f64>],
+) -> Result<(), KernelDispatchError> {
+    if call.inputs.is_empty() {
+        return Err(KernelDispatchError::new(FormulaKernelDispatcher::ERR_ARITY));
+    }
+    let output_slot = call.output.0;
+    let len = buffers[output_slot].len();
+    let divisor = call.inputs.len() as f64;
+    let mut accumulator = vec![0.0; len];
+    for input in call.inputs {
+        let slot = input.0;
+        if slot == output_slot || buffers[slot].len() != len {
+            return Err(KernelDispatchError::new(
+                FormulaKernelDispatcher::ERR_PARAMETER,
+            ));
+        }
+        for (total, value) in accumulator.iter_mut().zip(&buffers[slot]) {
+            *total += value;
+        }
+    }
+    for (output, total) in buffers[output_slot].iter_mut().zip(&accumulator) {
+        *output = total / divisor;
     }
     Ok(())
 }

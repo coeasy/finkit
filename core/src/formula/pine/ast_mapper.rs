@@ -4,7 +4,8 @@ use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 
 use crate::formula::ast::{
-    AstNode, BinaryOperator, ColorSpec, LineStyle, OutputModifier, PointStyle, UnaryOperator,
+    AstNode, BinaryOperator, ColorSpec, DrawModifier, LineStyle, OutputModifier, PointStyle,
+    UnaryOperator,
 };
 use crate::formula::pine::builtin_table::PineBuiltinTable;
 use crate::formula::pine::parser::{FunctionBody, PineAst, PineAstNode, PineBinaryOp, PineUnaryOp};
@@ -170,11 +171,27 @@ impl<'a> PineAstMapper<'a> {
                 expr: Box::new(self.map_node(value)?),
                 modifier: pine_output_modifier(args),
             }),
-            PineAstNode::HlineCall { price, args } => Ok(AstNode::Output {
-                name: pine_visual_name(args, "HLINE"),
-                expr: Box::new(self.map_node(price)?),
-                modifier: pine_output_modifier(args),
-            }),
+            PineAstNode::HlineCall { price, args } => {
+                // `hline` draws a horizontal price level. It is lowered to an
+                // `Output` so its visual attributes keep flowing through the
+                // canonical visual-channel schema, but it is tagged as a level
+                // marker: it carries no data series of its own. Without the tag
+                // a script ending in `hline(30, "Oversold")` would report the
+                // constant `30` as its entire result instead of the plotted
+                // series. See `AstNode::produces_value`.
+                let mut modifier = pine_output_modifier(args).unwrap_or(OutputModifier {
+                    line_style: None,
+                    draw_modifier: None,
+                    point_style: None,
+                    color: None,
+                });
+                modifier.draw_modifier = Some(DrawModifier::LevelLine);
+                Ok(AstNode::Output {
+                    name: pine_visual_name(args, "HLINE"),
+                    expr: Box::new(self.map_node(price)?),
+                    modifier: Some(modifier),
+                })
+            }
             PineAstNode::FillCall { plot1, plot2, .. } => Ok(AstNode::DrawGeneric {
                 command: "FILL".to_string(),
                 args: vec![self.map_node(plot1)?, self.map_node(plot2)?],

@@ -162,6 +162,7 @@ const fn effect_name(effect: &ComputeEffect) -> &'static str {
         ComputeEffect::Pure => "pure",
         ComputeEffect::WriteVariable(_) => "write_variable",
         ComputeEffect::EmitOutput(_) => "emit_output",
+        ComputeEffect::EmitLevelMarker(_) => "emit_level_marker",
         ComputeEffect::Draw => "draw",
         ComputeEffect::Stateful => "stateful",
     }

@@ -1158,9 +1158,19 @@ impl FormulaEngine {
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
         use crate::formula::ast::AstNode;
+        use crate::formula::result_statement_index;
 
         match ast {
             AstNode::Statements(stmts) => {
+                // This path overwrites `last_result` once per dependency group,
+                // which cannot express "the last *value-producing* statement".
+                // When trailing drawing directives or level markers would change
+                // the result, fall back to the serial executor — the same
+                // no-rayon behaviour this path already documents.
+                if result_statement_index(stmts) != stmts.len().checked_sub(1) {
+                    return self.executor.execute(ast, ctx);
+                }
+
                 // Group statements into independent batches based on dependencies
                 let groups = DependencyAnalyzer::group_independent_stmts(stmts);
 

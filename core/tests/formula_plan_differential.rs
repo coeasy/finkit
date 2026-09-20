@@ -10,9 +10,11 @@
 //! Two rules keep this honest:
 //!
 //! 1. Divergence is never tolerated silently. Any case the plan path cannot run
-//!    must appear in [`PLAN_UNSUPPORTED`] with a written reason.
-//! 2. The allowlist cannot rot. A listed case that starts working fails the
-//!    test, so the list can only shrink by deliberate edit.
+//!    must appear in [`DOMESTIC_UNSUPPORTED`] or [`PINE_UNSUPPORTED`] with a
+//!    written reason. Each corpus has its own list so one corpus's entries can
+//!    never look like stale entries to the other.
+//! 2. The allowlists cannot rot. A listed case that starts working fails the
+//!    test, so a list can only shrink by deliberate edit.
 
 use finkit::execution_plan::KernelId;
 use finkit::formula::pine::{map_pine_to_alphata, parse_pine};
@@ -55,11 +57,16 @@ const DOMESTIC_UNSUPPORTED: &[(&str, &str)] = &[
 ];
 
 /// Pine corpus cases the compiled plan path cannot execute yet.
+///
+/// The output-selection failures that used to dominate this list are gone: a
+/// statement block now reports its last *value-producing* statement, so a
+/// script ending in `hline(...)` reports its `plot(...)` series instead of the
+/// marker constant. Every remaining entry is a genuine kernel or lowering gap.
 const PINE_UNSUPPORTED: &[(&str, &str)] = &[
     // --- Missing numeric kernels -------------------------------------------------
     (
         "adx",
-        "no kernel for `CALL:PLUS_DI`/`CALL:MINUS_DI` (directional movement)",
+        "no kernel for `CALL:PLUS_DI`/`CALL:MINUS_DI`/`CALL:ADX` (directional movement)",
     ),
     (
         "aroon",
@@ -67,9 +74,8 @@ const PINE_UNSUPPORTED: &[(&str, &str)] = &[
     ),
     (
         "bollinger_bands",
-        "no kernel for `CALL:BOLLUP`/`CALL:BOLLMID`/`CALL:BOLLDN` and no lowering for the `DRAW:FILL` node",
+        "no kernel for `CALL:BOLLUP`/`CALL:BOLLMID`/`CALL:BOLLDN`",
     ),
-    ("ichimoku", "no kernel for `CALL:MATH_AVG`"),
     (
         "macd",
         "no kernel for `CALL:DEA` (`CALL:MACD` itself is implemented)",
@@ -80,43 +86,28 @@ const PINE_UNSUPPORTED: &[(&str, &str)] = &[
         "supertrend",
         "no kernel for `CALL:IF` / no lowering for the `IF_THEN_ELSE` node",
     ),
-    // --- Wrong output selection --------------------------------------------------
-    // A Pine script's final statements are drawing directives, so the retained
-    // root ("value of the last statement") resolves to an `hline`/`plot`
-    // constant. Dead-code elimination then reduces the plan to that constant and
-    // the input layout becomes empty. Fixing this requires retaining `OUTPUT:*`
-    // nodes as named outputs (multi-output support), not another kernel.
-    (
-        "cci",
-        "retained root resolves to a trailing drawing directive; needs multi-output support",
-    ),
-    (
-        "momentum",
-        "retained root resolves to a trailing drawing directive; needs multi-output support",
-    ),
-    (
-        "roc",
-        "retained root resolves to a trailing drawing directive; needs multi-output support",
-    ),
-    (
-        "rsi",
-        "retained root resolves to a trailing drawing directive; needs multi-output support",
-    ),
     (
         "stochastic",
-        "retained root resolves to a trailing drawing directive; needs multi-output support",
+        "no kernel for `CALL:STOCHF` (fast stochastic)",
     ),
+    ("trix", "no kernel for `CALL:TRIX`"),
+    ("williams_r", "no kernel for `CALL:WILLR`"),
+    // --- Wrong kernel shape ------------------------------------------------------
+    // `ta.cci(src, length)` is the two-operand form. `CALL:CCI` currently routes
+    // to the HLC kernel, which requires four operands (high, low, close,
+    // period), so the arity check rejects it. Needs a src/period CCI kernel or a
+    // frontend mapping from `hlc3`-style sources onto the HLC form.
     (
-        "trix",
-        "retained root resolves to a trailing drawing directive; needs multi-output support",
+        "cci",
+        "`CALL:CCI` routes to the 4-operand HLC kernel but Pine supplies 2 operands",
     ),
+    // --- Structural lowering gaps ------------------------------------------------
+    // `compute_ir` treats loop bodies as opaque control flow and does not lower
+    // them into the acyclic compute plan, so `volume[i]` never becomes a bound
+    // input and the executor cannot infer an execution length.
     (
         "volume_profile",
-        "retained root resolves to a trailing drawing directive; needs multi-output support",
-    ),
-    (
-        "williams_r",
-        "retained root resolves to a trailing drawing directive; needs multi-output support",
+        "`for` loop bodies are not lowered into the compute plan (series indexing)",
     ),
 ];
 

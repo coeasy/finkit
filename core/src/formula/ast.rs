@@ -96,6 +96,51 @@ pub enum AstNode {
     },
 }
 
+impl AstNode {
+    /// Whether this statement contributes the formula's numeric result.
+    ///
+    /// A formula's result is *the value of its last value-producing statement*,
+    /// not simply its last statement. Two node families are side-effect-only:
+    ///
+    /// * **Drawing directives** — [`AstNode::DrawText`], [`AstNode::DrawIcon`],
+    ///   [`AstNode::StickLine`] and [`AstNode::DrawGeneric`] push draw commands
+    ///   into the context and return a scratch buffer. Selecting one as the
+    ///   result would report that scratch buffer (which is always zeroed).
+    /// * **Level markers** — an [`AstNode::Output`] tagged with
+    ///   [`DrawModifier::LevelLine`], i.e. Pine's `hline`. It marks a price
+    ///   level and carries no series of its own.
+    ///
+    /// Skipping these is what makes `plot(rsi)` the result of an RSI script
+    /// whose final statements are `hline(70)` / `hline(30)`, instead of the
+    /// constant `30`.
+    ///
+    /// Every statement is still *evaluated* for its side effects — this only
+    /// decides which statement's value is reported.
+    pub fn produces_value(&self) -> bool {
+        match self {
+            AstNode::DrawText { .. }
+            | AstNode::DrawIcon { .. }
+            | AstNode::StickLine { .. }
+            | AstNode::DrawGeneric { .. } => false,
+            AstNode::Output { modifier, .. } => !modifier
+                .as_ref()
+                .is_some_and(OutputModifier::is_level_marker),
+            _ => true,
+        }
+    }
+}
+
+/// Index of the statement whose value a statement block reports.
+///
+/// This is the last statement that [`AstNode::produces_value`]. `None` means
+/// every statement was side-effect-only, in which case callers keep their
+/// existing placeholder result.
+pub fn result_statement_index(statements: &[AstNode]) -> Option<usize> {
+    statements
+        .iter()
+        .rposition(AstNode::produces_value)
+}
+
 /// 颜色规格
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -118,6 +163,12 @@ pub enum DrawModifier {
     NoText,
     NoAxis,
     ColorAuto,
+    /// The output is a *level marker* rather than a data series: it draws a
+    /// horizontal line at a fixed price (Pine `hline`) and carries no data of
+    /// its own. [`AstNode::produces_value`] therefore refuses to select it as a
+    /// formula's result, otherwise a script ending in `hline(30)` would report
+    /// the constant `30` as its entire output.
+    LevelLine,
 }
 
 #[derive(Debug, Clone)]
@@ -139,6 +190,13 @@ pub struct OutputModifier {
     pub draw_modifier: Option<DrawModifier>,
     pub point_style: Option<PointStyle>,
     pub color: Option<ColorSpec>,
+}
+
+impl OutputModifier {
+    /// Whether this output is a level marker rather than a data series.
+    pub fn is_level_marker(&self) -> bool {
+        matches!(self.draw_modifier, Some(DrawModifier::LevelLine))
+    }
 }
 
 /// 二元运算符
@@ -469,5 +527,103 @@ mod tests {
         let back: AstNode = serde_json::from_str(&json).expect("deserialize AstNode");
         let json2 = serde_json::to_string(&back).expect("re-serialize AstNode");
         assert_eq!(json, json2, "serde round-trip must be stable");
+    }
+
+    fn level_marker(name: &str) -> AstNode {
+        AstNode::Output {
+            name: name.to_string(),
+            expr: Box::new(AstNode::Number(30.0)),
+            modifier: Some(OutputModifier {
+                line_style: None,
+                draw_modifier: Some(DrawModifier::LevelLine),
+                point_style: None,
+                color: None,
+            }),
+        }
+    }
+
+    #[test]
+    fn drawing_directives_do_not_produce_values() {
+        let directives = [
+            AstNode::DrawText {
+                cond: Box::new(AstNode::Number(1.0)),
+                price: Box::new(AstNode::Number(1.0)),
+                text: "t".to_string(),
+                color: None,
+            },
+            AstNode::DrawIcon {
+                cond: Box::new(AstNode::Number(1.0)),
+                price: Box::new(AstNode::Number(1.0)),
+                icon: Box::new(AstNode::Number(1.0)),
+                color: None,
+            },
+            AstNode::StickLine {
+                cond: Box::new(AstNode::Number(1.0)),
+                price1: Box::new(AstNode::Number(1.0)),
+                price2: Box::new(AstNode::Number(2.0)),
+                width: Box::new(AstNode::Number(1.0)),
+                empty: false,
+                color: None,
+            },
+            AstNode::DrawGeneric {
+                command: "FILL".to_string(),
+                args: vec![AstNode::Number(1.0), AstNode::Number(2.0)],
+                color: None,
+            },
+            level_marker("HLINE"),
+        ];
+        for directive in &directives {
+            assert!(
+                !directive.produces_value(),
+                "a drawing directive or level marker must not be a formula result"
+            );
+        }
+    }
+
+    /// A plain output is still a value; only level markers are excluded.
+    #[test]
+    fn plain_outputs_still_produce_values() {
+        let plain = AstNode::Output {
+            name: "RSI".to_string(),
+            expr: Box::new(AstNode::Variable("RSI".to_string())),
+            modifier: Some(OutputModifier {
+                line_style: None,
+                draw_modifier: Some(DrawModifier::NoDraw),
+                point_style: None,
+                color: None,
+            }),
+        };
+        assert!(plain.produces_value());
+        assert!(AstNode::Number(1.0).produces_value());
+        assert!(AstNode::Variable("CLOSE".to_string()).produces_value());
+    }
+
+    /// The reported result is the last statement that carries a value, so a
+    /// trailing `hline(30, "Oversold")` cannot become an RSI script's output.
+    #[test]
+    fn result_statement_skips_trailing_side_effects() {
+        let statements = vec![
+            AstNode::Assignment {
+                name: "RSI".to_string(),
+                expr: Box::new(AstNode::FunctionCall {
+                    name: "RSI".to_string(),
+                    args: vec![AstNode::Variable("CLOSE".to_string()), AstNode::Number(14.0)],
+                }),
+            },
+            level_marker("HLINE"),
+            level_marker("HLINE"),
+        ];
+        assert_eq!(result_statement_index(&statements), Some(0));
+
+        // No value-producing statement at all: the caller keeps its placeholder.
+        let only_markers = vec![level_marker("HLINE")];
+        assert_eq!(result_statement_index(&only_markers), None);
+
+        // The ordinary case is unchanged: the last statement wins.
+        let plain = vec![
+            AstNode::Number(1.0),
+            AstNode::Number(2.0),
+        ];
+        assert_eq!(result_statement_index(&plain), Some(1));
     }
 }

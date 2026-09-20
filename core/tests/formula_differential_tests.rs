@@ -11,6 +11,7 @@
 //! hand-written formula set; `formula_plan_differential.rs` extends the same
 //! gate over the on-disk corpora.
 
+use finkit::execution_plan::KernelId;
 use finkit::formula::{
     parse_formula, unified_formula_executor, FormulaContext, FormulaEngine, FormulaHotPlan,
 };
@@ -239,4 +240,41 @@ fn formula_differential_elementwise_helpers_all_paths() {
     check_all_paths("SUM", "SUM(CLOSE, 5)", 80);
     check_all_paths("REF", "CLOSE - REF(CLOSE, 3)", 80);
     check_all_paths("MAX_MIN", "MAX(CLOSE, MA(CLOSE,5)) - MIN(CLOSE, MA(CLOSE,5))", 80);
+}
+
+/// A trailing drawing directive must not become the formula's result.
+///
+/// The tree-walker used to return the last statement's buffer unconditionally,
+/// so a formula ending in `DRAWICON(...)` reported that directive's scratch
+/// buffer — which is always zeroed — instead of the series computed above it.
+/// The bytecode VM never had this bug (its draw opcodes pop their operands and
+/// push nothing), so the tree-walker was the outlier; this test pins the two
+/// together and anchors the shared rule in `AstNode::produces_value`.
+#[test]
+fn formula_differential_trailing_draw_directive_all_paths() {
+    const SOURCE: &str = "MA5 := MA(CLOSE, 5); DRAWICON(CLOSE > MA5, HIGH, 1);";
+
+    let mut engine = FormulaEngine::new();
+    let reference = run_ast(&mut engine, SOURCE, &mut make_ctx(80));
+
+    let bytecode_result = run_bytecode(&mut engine, SOURCE, &make_ctx(80));
+    assert_arrays_match("DRAWICON_TAIL", "bytecode", &reference, &bytecode_result);
+
+    // The result is the assignment above the directive, not a zeroed buffer.
+    let ma5 = run_ast(&mut engine, "MA(CLOSE, 5)", &mut make_ctx(80));
+    assert_arrays_match("DRAWICON_TAIL", "MA5", &ma5, &reference);
+
+    // The plan path cannot execute this yet, and that is deliberate: drawing
+    // directives are retained as roots so their side effects are never silently
+    // dropped, while the numeric dispatcher has no `DRAW_ICON` kernel. When a
+    // real drawing sink lands, replace this with a plan comparison.
+    let ast = parse_formula(SOURCE).expect("plan parse failed");
+    let plan = FormulaHotPlan::compile(&ast).expect("plan compile failed");
+    assert!(
+        plan.hot()
+            .nodes()
+            .iter()
+            .any(|node| node.kernel == KernelId::from_static("DRAW_ICON")),
+        "a drawing directive must be retained as a root, not dropped by dead-code elimination"
+    );
 }

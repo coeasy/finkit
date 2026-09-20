@@ -11,6 +11,7 @@ use crate::compute::{
     ComputeCapabilities, ComputeEffect, ComputeNode, ComputeNodeId, ComputePlan, ComputePlanError,
     LookbackRequirement,
 };
+use crate::buffer_arena::BufferSlot;
 use crate::execution_plan::{
     HotExecutionPlan, HotPlanError, InputSlot, ParameterArena, ParameterRange, ParameterValue,
 };
@@ -24,6 +25,7 @@ pub struct FormulaHotPlan {
     semantic: FormulaComputePlan,
     hot: HotExecutionPlan,
     input_bindings: Vec<FormulaInputBinding>,
+    outputs: Vec<FormulaOutputBinding>,
 }
 
 /// Compile-time binding from a formula variable to a numeric input slot.
@@ -34,6 +36,39 @@ pub struct FormulaHotPlan {
 pub struct FormulaInputBinding {
     name: String,
     slot: InputSlot,
+}
+
+/// Compile-time binding from a named formula output to a retained buffer slot.
+///
+/// A formula can emit several channels — a MACD script emits `DIF`, `DEA` and
+/// `MACD`; a Pine script emits one channel per `plot`. Retaining every named
+/// output lets a caller read them all instead of only the single primary
+/// result, and keeps each channel's value subgraph alive through dead-code
+/// elimination.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FormulaOutputBinding {
+    name: String,
+    slot: BufferSlot,
+    level_marker: bool,
+}
+
+impl FormulaOutputBinding {
+    /// Output channel name, without the `OUTPUT:` operation prefix.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Buffer slot holding this output's series after a run.
+    pub const fn slot(&self) -> BufferSlot {
+        self.slot
+    }
+
+    /// Whether this output is a level marker (Pine `hline`) rather than a data
+    /// series. Level markers are still emitted, but are never chosen as a
+    /// formula's primary result — see [`AstNode::produces_value`].
+    pub const fn is_level_marker(&self) -> bool {
+        self.level_marker
+    }
 }
 
 impl FormulaInputBinding {
@@ -69,15 +104,17 @@ impl FormulaHotPlan {
     fn finish(semantic: FormulaComputePlan, ast: &AstNode) -> Result<Self, FormulaHotPlanError> {
         let (parameters, ranges) = bind_numeric_literals(ast, &semantic)?;
         let optimized = cse_plan(&semantic, &parameters, &ranges)?;
-        let (numeric, root) = lower_formula_plumbing(&optimized, semantic.root())?;
-        let numeric = prune_unreachable(&numeric, root)?;
+        let lowered = lower_formula_plumbing(&optimized, semantic.root())?;
+        let numeric = prune_unreachable(&lowered.plan, &lowered.roots)?;
         let hot =
-            HotExecutionPlan::compile_with_parameters(&numeric, [root], parameters, ranges)?;
+            HotExecutionPlan::compile_with_parameters(&numeric, lowered.roots, parameters, ranges)?;
         let input_bindings = compile_input_bindings(&semantic, &hot);
+        let outputs = compile_output_bindings(&lowered.named_outputs, &hot);
         Ok(Self {
             semantic,
             hot,
             input_bindings,
+            outputs,
         })
     }
 
@@ -95,6 +132,37 @@ impl FormulaHotPlan {
     pub fn input_bindings(&self) -> &[FormulaInputBinding] {
         &self.input_bindings
     }
+
+    /// Named output channels in declaration order.
+    ///
+    /// The first value of an execution is always the formula's primary result
+    /// (the value of its last value-producing statement); these bindings let a
+    /// caller address every channel by name instead of only that one.
+    pub fn outputs(&self) -> &[FormulaOutputBinding] {
+        &self.outputs
+    }
+}
+
+/// Pair each named output with the buffer slot its series lands in.
+fn compile_output_bindings(
+    named_outputs: &[NamedOutput],
+    hot: &HotExecutionPlan,
+) -> Vec<FormulaOutputBinding> {
+    let layout = hot.output_layout().outputs();
+    named_outputs
+        .iter()
+        .filter_map(|output| {
+            let slot = layout
+                .iter()
+                .find(|(node, _)| *node == output.node)
+                .map(|(_, slot)| *slot)?;
+            Some(FormulaOutputBinding {
+                name: output.name.clone(),
+                slot,
+                level_marker: output.level_marker,
+            })
+        })
+        .collect()
 }
 
 fn compile_input_bindings(
@@ -194,6 +262,28 @@ fn cse_plan(
     ComputePlan::compile(nodes)
 }
 
+/// One named output discovered while resolving formula plumbing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct NamedOutput {
+    name: String,
+    /// Node carrying the output's value after plumbing resolution.
+    node: ComputeNodeId,
+    level_marker: bool,
+}
+
+/// Result of [`lower_formula_plumbing`].
+struct LoweredPlumbing {
+    /// Numeric plan with every plumbing node resolved away.
+    plan: ComputePlan,
+    /// Retained roots, frontend-requested order: the primary result first, then
+    /// every named output, then every retained drawing directive. The primary
+    /// result stays at index 0 so the first value of an execution is the
+    /// formula's result.
+    roots: Vec<ComputeNodeId>,
+    /// Named outputs in declaration order.
+    named_outputs: Vec<NamedOutput>,
+}
+
 /// Resolve formula plumbing out of the numeric plan.
 ///
 /// The semantic DAG keeps bookkeeping nodes so that optimizers and diagnostics
@@ -205,7 +295,8 @@ fn cse_plan(
 /// * `OUTPUT:<name>` — same, the emitted value is its dependency.
 /// * `VARIABLE:<name>` for a locally written name — reads back a value that was
 ///   just written, so it aliases the write.
-/// * `STATEMENTS` — a block's value is its final statement.
+/// * `STATEMENTS` — a block's value is its final *value-producing* statement,
+///   so a trailing drawing directive or level marker cannot become the result.
 /// * `COMPOUND:<name>:<op>` — rewrites to the equivalent `BINARY:<op>` node
 ///   with the current value and the right-hand side as operands.
 ///
@@ -217,12 +308,13 @@ fn cse_plan(
 /// the plan, which is why this runs after CSE (a cleaner graph means fewer
 /// buffers and fewer hot instructions).
 ///
-/// Only the root node id is remapped; every retained node keeps its original
-/// id, so parameter ranges bound by [`bind_numeric_literals`] stay valid.
+/// Retained node ids are remapped only where a node was aliased away; every
+/// kept node keeps its original id, so parameter ranges bound by
+/// [`bind_numeric_literals`] stay valid.
 fn lower_formula_plumbing(
     optimized: &ComputePlan,
     root: ComputeNodeId,
-) -> Result<(ComputePlan, ComputeNodeId), FormulaHotPlanError> {
+) -> Result<LoweredPlumbing, FormulaHotPlanError> {
     fn resolve(
         aliases: &BTreeMap<ComputeNodeId, ComputeNodeId>,
         mut id: ComputeNodeId,
@@ -250,8 +342,22 @@ fn lower_formula_plumbing(
         })
     }
 
+    /// Mirrors [`AstNode::produces_value`] on the lowered numeric plan.
+    ///
+    /// Drawing directives and level markers are observable but carry no data
+    /// series, so they can never be a statement block's result.
+    fn value_producing(plan: &ComputePlan, id: ComputeNodeId) -> bool {
+        plan.node(id).is_some_and(|node| {
+            !matches!(
+                node.capabilities.effect,
+                ComputeEffect::Draw | ComputeEffect::EmitLevelMarker(_)
+            )
+        })
+    }
+
     let mut aliases = BTreeMap::<ComputeNodeId, ComputeNodeId>::new();
     let mut local_writes = BTreeMap::<String, ComputeNodeId>::new();
+    let mut named_outputs = Vec::<NamedOutput>::new();
     let mut nodes = Vec::with_capacity(optimized.len());
     let mut next_synthetic_id = optimized
         .execution_order()
@@ -278,9 +384,17 @@ fn lower_formula_plumbing(
             continue;
         }
 
-        if operation.starts_with("OUTPUT:") {
+        if let Some(name) = operation.strip_prefix("OUTPUT:") {
             let value = value_operand(&rewritten, operation)?;
             aliases.insert(node_id, value);
+            named_outputs.push(NamedOutput {
+                name: name.to_string(),
+                node: value,
+                level_marker: matches!(
+                    source.capabilities.effect,
+                    ComputeEffect::EmitLevelMarker(_)
+                ),
+            });
             continue;
         }
 
@@ -304,12 +418,22 @@ fn lower_formula_plumbing(
         }
 
         if operation == "STATEMENTS" {
-            let value = rewritten.last().copied().ok_or_else(|| {
-                FormulaHotPlanError::UnsupportedPlumbing {
+            // A block's result is its last *value-producing* statement, so a
+            // trailing drawing directive or level marker cannot become the
+            // whole result. The predicate reads the original dependency (the
+            // statement node) rather than the resolved one: resolution
+            // collapses e.g. `OUTPUT:HLINE` onto its constant operand and would
+            // lose the fact that it was a marker.
+            let value = source
+                .dependencies
+                .iter()
+                .rev()
+                .find(|dependency| value_producing(optimized, **dependency))
+                .map(|dependency| resolve(&aliases, *dependency))
+                .ok_or_else(|| FormulaHotPlanError::UnsupportedPlumbing {
                     operation: operation.to_string(),
-                    reason: "statement block has no statements".to_string(),
-                }
-            })?;
+                    reason: "statement block has no value-producing statement".to_string(),
+                })?;
             aliases.insert(node_id, value);
             continue;
         }
@@ -337,8 +461,30 @@ fn lower_formula_plumbing(
         ));
     }
 
+    // Retain the primary result first, then every named output, then every
+    // drawing directive. Named outputs keep their value subgraphs alive, and
+    // retaining drawings stops chart side effects from being silently dropped
+    // by dead-code elimination. An unsupported drawing still fails the plan
+    // loudly instead of vanishing.
+    let primary = resolve(&aliases, root);
+    let mut roots = vec![primary];
+    for output in &named_outputs {
+        if !roots.contains(&output.node) {
+            roots.push(output.node);
+        }
+    }
+    for node in &nodes {
+        if matches!(node.capabilities.effect, ComputeEffect::Draw) && !roots.contains(&node.id) {
+            roots.push(node.id);
+        }
+    }
+
     let plan = ComputePlan::compile(nodes)?;
-    Ok((plan, resolve(&aliases, root)))
+    Ok(LoweredPlumbing {
+        plan,
+        roots,
+        named_outputs,
+    })
 }
 
 /// Rewrite one `COMPOUND:<name>:<op>` node into the equivalent binary node.
@@ -403,7 +549,7 @@ fn lower_compound(
     Ok(synthetic)
 }
 
-/// Drop every node the retained root cannot reach.
+/// Drop every node the retained roots cannot reach.
 ///
 /// The semantic plan keeps all syntax occurrences for diagnostics, and formula
 /// plumbing resolution leaves the value subgraphs of dead assignments behind.
@@ -413,13 +559,14 @@ fn lower_compound(
 ///
 /// This runs after [`lower_formula_plumbing`] on purpose: aliases must be
 /// resolved first, otherwise a removed node would still look reachable through
-/// a stale dependency edge.
+/// a stale dependency edge. Reachability starts from *every* retained root, not
+/// just the primary result, so named outputs and drawing side effects survive.
 fn prune_unreachable(
     plan: &ComputePlan,
-    root: ComputeNodeId,
+    roots: &[ComputeNodeId],
 ) -> Result<ComputePlan, FormulaHotPlanError> {
     let mut reachable = BTreeSet::new();
-    let mut pending = vec![root];
+    let mut pending = roots.to_vec();
     while let Some(node_id) = pending.pop() {
         if !reachable.insert(node_id) {
             continue;
@@ -734,5 +881,68 @@ mod tests {
         assert_eq!(compiled.input_bindings().len(), 1);
         assert_eq!(compiled.input_bindings()[0].name(), "CLOSE");
         assert_eq!(compiled.input_bindings()[0].slot(), InputSlot(0));
+    }
+
+    /// A Pine script ending in `hline` must report its plotted series, not the
+    /// marker constant.
+    ///
+    /// Before the level-marker tag, the retained root resolved to `hline(30)`,
+    /// dead-code elimination reduced the plan to a single `NUMBER`, and the
+    /// input layout came out empty — the executor then could not infer an
+    /// execution length at all.
+    #[test]
+    fn trailing_level_markers_are_not_the_formula_result() {
+        let pine = crate::formula::pine::parse_pine(
+            "//@version=5\nindicator(\"RSI\")\nrsi = ta.rsi(close, 14)\nplot(rsi, \"RSI\")\nhline(70)\nhline(30)\n",
+        )
+        .expect("Pine script must parse");
+        let ast = crate::formula::pine::map_pine_to_alphata(&pine).expect("Pine must map");
+        let compiled = FormulaHotPlan::compile(&ast).expect("plan must compile");
+
+        // The plotted series is the result, so `close` stays a real input.
+        assert_eq!(compiled.input_bindings().len(), 1);
+        assert_eq!(compiled.input_bindings()[0].name(), "CLOSE");
+
+        // Both markers are still emitted as channels, tagged as level markers.
+        let markers: Vec<_> = compiled
+            .outputs()
+            .iter()
+            .filter(|output| output.is_level_marker())
+            .collect();
+        assert_eq!(markers.len(), 2, "both hline calls must be retained");
+        assert!(
+            compiled.outputs().iter().any(|output| !output.is_level_marker()),
+            "the plotted series must be retained as a data channel"
+        );
+    }
+
+    /// Named outputs are exposed with the buffer slot their series lands in.
+    #[test]
+    fn named_outputs_expose_buffer_slots() {
+        let ast = parse_formula("MA5: MA(CLOSE, 5); MA10: MA(CLOSE, 10)").unwrap();
+        let compiled = FormulaHotPlan::compile(&ast).unwrap();
+
+        let names: Vec<_> = compiled
+            .outputs()
+            .iter()
+            .map(|output| output.name().to_string())
+            .collect();
+        assert_eq!(names, vec!["MA5".to_string(), "MA10".to_string()]);
+        assert!(compiled.outputs().iter().all(|output| !output.is_level_marker()));
+
+        // Both channels need distinct buffers.
+        let slots: Vec<_> = compiled.outputs().iter().map(|output| output.slot()).collect();
+        assert_ne!(slots[0], slots[1]);
+
+        // The retained-root order is not the declaration order: root 0 is the
+        // *primary* result, which is the last value-producing statement — here
+        // `MA10`. `outputs()` stays in declaration order so callers can address
+        // channels by name.
+        let roots = compiled.hot().output_layout().outputs();
+        assert_eq!(
+            roots[0].1, slots[1],
+            "the primary result must be the last value-producing statement (MA10)"
+        );
+        assert_eq!(roots[1].1, slots[0], "MA5 must follow as a named channel");
     }
 }

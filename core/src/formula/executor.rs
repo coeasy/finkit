@@ -92,9 +92,16 @@ impl FormulaExecutor {
     ) -> Result<FormulaValue, FormulaError> {
         match ast {
             AstNode::Statements(stmts) => {
+                // Every statement runs for its side effects, but only the last
+                // *value-producing* one may become the block's result — see
+                // `AstNode::produces_value`.
+                let result_index = result_statement_index(stmts);
                 let mut result = FormulaValue::Scalar(0.0);
-                for stmt in stmts {
-                    result = self.execute_val(stmt, ctx)?;
+                for (index, stmt) in stmts.iter().enumerate() {
+                    let value = self.execute_val(stmt, ctx)?;
+                    if Some(index) == result_index {
+                        result = value;
+                    }
                 }
                 Ok(result)
             }
@@ -998,11 +1005,18 @@ impl FormulaExecutor {
     ) -> Result<Array1<f64>, FormulaError> {
         match ast {
             AstNode::Statements(stmts) => {
+                let result_index = result_statement_index(stmts);
                 let mut result = pool.get_buffer(ctx.data_len);
-                for stmt in stmts {
-                    let new_result = self.execute_with_pool_cached(stmt, ctx, pool, name_cache)?;
-                    pool.return_buffer(result);
-                    result = new_result;
+                for (index, stmt) in stmts.iter().enumerate() {
+                    let value = self.execute_with_pool_cached(stmt, ctx, pool, name_cache)?;
+                    if Some(index) == result_index {
+                        pool.return_buffer(result);
+                        result = value;
+                    } else {
+                        // A drawing directive or level marker: it ran for its
+                        // side effect and its scratch buffer is not the result.
+                        pool.return_buffer(value);
+                    }
                 }
                 Ok(result)
             }
@@ -1336,11 +1350,16 @@ impl FormulaExecutor {
     ) -> Result<Array1<f64>, FormulaError> {
         match ast {
             AstNode::Statements(stmts) => {
+                let result_index = result_statement_index(stmts);
                 let mut result = pool.get_buffer(ctx.data_len);
-                for stmt in stmts {
-                    let new_result = self.execute_with_pool(stmt, ctx, pool)?;
-                    pool.return_buffer(result);
-                    result = new_result;
+                for (index, stmt) in stmts.iter().enumerate() {
+                    let value = self.execute_with_pool(stmt, ctx, pool)?;
+                    if Some(index) == result_index {
+                        pool.return_buffer(result);
+                        result = value;
+                    } else {
+                        pool.return_buffer(value);
+                    }
                 }
                 Ok(result)
             }

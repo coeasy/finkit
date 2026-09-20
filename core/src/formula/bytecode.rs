@@ -105,11 +105,42 @@ pub fn compile_to_bytecode(ast: &AstNode, source: &str) -> Result<Bytecode, Stri
         output_names: Vec::new(),
     };
     compiler.compile(ast)?;
+
+    // A statement block's result is its last *value-producing* statement — see
+    // `AstNode::produces_value`. `Assignment`, `CompoundAssignment` and `Output`
+    // all compile to a store opcode that pops its operands, so the value stack
+    // is left empty and the VM would report an all-zero result. Re-push the
+    // stored value so `final_value` is that statement's series.
+    //
+    // This runs at the top level only. A nested block used as an expression must
+    // never disturb the stack, which is why this is not inside the
+    // `AstNode::Statements` compile arm.
+    let result_statement = match ast {
+        AstNode::Statements(statements) => {
+            result_statement_index(statements).and_then(|index| statements.get(index))
+        }
+        other => Some(other),
+    };
+    if let Some(name) = result_statement.and_then(stored_result_name) {
+        compiler.instructions.push(OpCode::LoadVar(name));
+    }
+
     Ok(Bytecode {
         instructions: compiler.instructions,
         source: source.to_string(),
         output_names: compiler.output_names,
     })
+}
+
+/// The variable a statement stores its value under, when that statement also
+/// consumes the value from the stack.
+fn stored_result_name(statement: &AstNode) -> Option<String> {
+    match statement {
+        AstNode::Assignment { name, .. }
+        | AstNode::CompoundAssignment { name, .. }
+        | AstNode::Output { name, .. } => Some(name.clone()),
+        _ => None,
+    }
 }
 
 impl BytecodeCompiler {
