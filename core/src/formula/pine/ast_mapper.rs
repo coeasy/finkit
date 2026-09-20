@@ -371,7 +371,16 @@ impl<'a> PineAstMapper<'a> {
                     ])
                 }
                 (Some("ta"), "dmi") if mapped_args.len() >= 2 => {
-                    // ta.dmi(diLength, adxSmoothing) -> [+DI, -DI, ADX] (HLC implicit)
+                    // ta.dmi(diLength, adxSmoothing) -> [+DI, -DI, ADX]
+                    //
+                    // HLC is now passed explicitly on *all three* legs, not just
+                    // ADX. `resolve_hlc_args` would accept `(CLOSE, N)` and pull
+                    // HIGH/LOW from the evaluation context, but the compiled-plan
+                    // path has no context to expand from: its input layout can
+                    // only carry series that the source text names. Spelling the
+                    // three series out is value-preserving (the context's HIGH/
+                    // LOW/CLOSE are exactly these series) and lets a kernel serve
+                    // the call.
                     let l1 = mapped_args[0].clone();
                     let l2 = mapped_args[1].clone();
                     Some(vec![
@@ -379,14 +388,14 @@ impl<'a> PineAstMapper<'a> {
                             &names[0],
                             AstNode::FunctionCall {
                                 name: "PLUS_DI".to_string(),
-                                args: vec![cl.clone(), l1.clone()],
+                                args: vec![hi.clone(), lo.clone(), cl.clone(), l1.clone()],
                             },
                         ),
                         assignment(
                             &names[1],
                             AstNode::FunctionCall {
                                 name: "MINUS_DI".to_string(),
-                                args: vec![cl.clone(), l1.clone()],
+                                args: vec![hi.clone(), lo.clone(), cl.clone(), l1.clone()],
                             },
                         ),
                         assignment(
@@ -422,20 +431,29 @@ impl<'a> PineAstMapper<'a> {
                 }
                 (Some("ta"), "aroon") if !mapped_args.is_empty() => {
                     // ta.aroon(length) -> [aroonUp, aroonDown]
+                    //
+                    // Both legs must name HIGH *and* LOW explicitly.
+                    // `AROON_UP`/`AROON_DN` resolve through `resolve_hl_args`,
+                    // which only understands the explicit three-argument form
+                    // `(HIGH, LOW, N)`; anything shorter falls through to
+                    // `extract_n(args, 0)`, which reads the *price series* as
+                    // the period. The previous two-argument form was worse than
+                    // merely implicit: it read `HIGH[0]`/`LOW[0]` as the period,
+                    // so the two legs ran with different periods.
                     let length = mapped_args[0].clone();
                     Some(vec![
                         assignment(
                             &names[0],
                             AstNode::FunctionCall {
                                 name: "AROON_UP".to_string(),
-                                args: vec![hi, length.clone()],
+                                args: vec![hi.clone(), lo.clone(), length.clone()],
                             },
                         ),
                         assignment(
                             &names[1],
                             AstNode::FunctionCall {
                                 name: "AROON_DN".to_string(),
-                                args: vec![lo, length],
+                                args: vec![hi, lo, length],
                             },
                         ),
                     ])

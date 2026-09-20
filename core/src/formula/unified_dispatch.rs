@@ -81,6 +81,12 @@ impl KernelDispatcher for FormulaKernelDispatcher {
             return dispatch_obv(call, buffers);
         }
 
+        if call.kernel == KernelId::from_static("CALL:AROON_UP")
+            || call.kernel == KernelId::from_static("CALL:AROON_DN")
+        {
+            return dispatch_aroon_call(call, buffers);
+        }
+
         if call.kernel == KernelId::from_static("CALL:AD")
             || call.kernel == KernelId::from_static("CALL:ADOSC")
             || call.kernel == KernelId::from_static("CALL:MFI")
@@ -662,6 +668,66 @@ fn dispatch_volume_call(
         crate::math::mfi::mfi_into(high, low, close, volume, period, output)
     };
     result.map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))
+}
+
+/// Execute `AROON_UP` / `AROON_DN` into the plan-owned output.
+///
+/// Both legs delegate to `indicators::momentum::aroon`, which is the *same*
+/// function the tree path calls from `fn_aroon_up` / `fn_aroon_dn`. That is
+/// deliberate: `momentum::aroon_into` is a separately optimised implementation
+/// (monotonic-queue rather than a window rescan), and routing this kernel to it
+/// would let the two paths disagree the moment the variants drift. Correctness
+/// first — the extra allocation can go once an equivalence test pins the fast
+/// variant to the reference.
+fn dispatch_aroon_call(
+    call: KernelCall<'_>,
+    buffers: &mut [Vec<f64>],
+) -> Result<(), KernelDispatchError> {
+    if call.inputs.len() != 3 {
+        return Err(KernelDispatchError::new(FormulaKernelDispatcher::ERR_ARITY));
+    }
+    let high_slot = call.inputs[0].0;
+    let low_slot = call.inputs[1].0;
+    let period_slot = call.inputs[2].0;
+    let output_slot = call.output.0;
+    if [high_slot, low_slot, period_slot]
+        .into_iter()
+        .any(|slot| slot == output_slot)
+    {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+    let period = period_from_slot(buffers, period_slot)?;
+    let len = buffers[output_slot].len();
+    if buffers[high_slot].len() != len || buffers[low_slot].len() != len {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+
+    // Scoped so the immutable borrows end before the output is borrowed mutably.
+    let result = {
+        let high = &buffers[high_slot];
+        let low = &buffers[low_slot];
+        crate::indicators::momentum::aroon(high, low, period)
+            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?
+    };
+    let source = if call.kernel == KernelId::from_static("CALL:AROON_UP") {
+        result.aroon_up
+    } else {
+        result.aroon_down
+    };
+    let output = buffers
+        .get_mut(output_slot)
+        .ok_or_else(|| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+    if output.len() != source.len() {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+    output.copy_from_slice(source.as_slice().unwrap());
+    Ok(())
 }
 
 /// Execute the formula catalogue's popular non-TA-Lib indicators through the

@@ -71,10 +71,6 @@ const PINE_UNSUPPORTED: &[(&str, &str)] = &[
         "no kernel for `CALL:PLUS_DI`/`CALL:MINUS_DI`/`CALL:ADX` (directional movement)",
     ),
     (
-        "aroon",
-        "no kernel for `CALL:AROON_UP`/`CALL:AROON_DN` (rolling argmax)",
-    ),
-    (
         "bollinger_bands",
         "no kernel for `CALL:BOLLUP`/`CALL:BOLLMID`/`CALL:BOLLDN`",
     ),

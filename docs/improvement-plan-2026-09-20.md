@@ -592,3 +592,59 @@ DIF:EMA(CLOSE,12)-EMA(CLOSE,26);DEA:EMA(DIF,9);MACD:(DIF-DEA)*2
 （数学变换与 K 线形态在各自构造函数里生成，所以只数内联的 `FunctionSpec {` 字面量会**少算 110 个**：
 103 vs 实际 213）。**这类数字一律以运行时为准，不要靠数源码。**
 
+## 12. Pine 降级显式化 + 首批 kernel（AROON，2026-09-20 续）
+
+### 12.1 修掉一个真实缺陷：`ta.aroon` 的 period 被读成了价格
+
+`ast_mapper.rs` 把 `ta.aroon(length)` 降级成 `AROON_UP(HIGH, length)` / `AROON_DN(LOW, length)`（**两个实参**）。
+而 `fn_aroon_up` 走 `resolve_hl_args`，该函数的分支是：
+
+```rust
+if args.len() >= 3 { (args[0], args[1], n = args[2]) }      // (HIGH, LOW, N)
+else if !args.is_empty() { n = extract_n(args, 0, name)? }  // ← 把 args[0] 当成 N
+```
+
+两个实参落在**第二分支**，于是 `n = extract_n(args, 0)` = `args[0][0] as usize` ——
+**把价格序列的第一个值当成了周期**。而且 UP 读 `HIGH[0]`、DN 读 `LOW[0]`，两条腿的周期还不一样。
+
+修复：两条腿都显式传 `(HIGH, LOW, N)` 三个实参。
+既有用例 `pine_aroon_preserves_high_low_sources` 只断言 `HIGH`/`LOW` 都出现，故不受影响。
+
+### 12.2 `ta.dmi` 的三条腿全部显式化（值保持不变）
+
+原先 `PLUS_DI(CLOSE, l1)` / `MINUS_DI(CLOSE, l1)`，只有 `ADX` 显式带 HLC。
+`resolve_hlc_args` 确实接受 `(CLOSE, N)` 并从 ctx 取 HIGH/LOW —— **树路径结果正确**，
+但 plan 的输入布局只能携带**源码里出现过的**序列，没有 ctx 可展开，所以 kernel 永远拿不到 HIGH/LOW。
+
+改成 `PLUS_DI(HIGH, LOW, CLOSE, l1)` / `MINUS_DI(HIGH, LOW, CLOSE, l1)`。
+**数值等价**：ctx 的 HIGH/LOW/CLOSE 正是这三个序列。这一步只消除隐式性，不改变任何输出。
+
+### 12.3 加 kernel 的安全规则：调用树路径所用的**同一个函数**
+
+`indicators::momentum` 里 `aroon`（分配版，`aroon_with_deques`）与 `aroon_into`
+（单调队列优化版）**是两份独立实现**。若 kernel 走 `aroon_into`，一旦两份实现漂移，
+plan 与树路径就会数值分叉。
+
+因此 `dispatch_aroon_call` **刻意调用 `momentum::aroon`** —— 与 `fn_aroon_up`/`fn_aroon_dn` 完全同一个函数，
+**由构造保证一致**。代价是每次调用一次分配；等有等价性测试把快速变体钉住后再优化。
+
+> 这条应作为后续批量加 kernel 的默认规则：**kernel 先委托给树路径已在调用的那个函数**，
+> 而不是顺手选 `_into` 变体。`_into` 变体只有在通过等价性测试后才可用。
+
+### 12.4 结果
+
+- Pine 语料经编译计划路径验证：**13 → 14**（`aroon` 从白名单消失）。
+- 白名单条目按门禁要求**有意删除**（`assert_allowlist_matches` 会拦住未删除的陈旧条目）——
+  这正是该机制设计的目的：覆盖率提升必须被显式记录。
+- `adx` 的失败原因因此从 `CALL:PLUS_DI/MINUS_DI/ADX` 收敛为 `CALL:PLUS_DI`（首个缺失项），
+  说明下一步只需补 PLUS_DI / MINUS_DI / ADX 三个 kernel。
+- 门禁同步更新：kernel 46 → 48，registry 213 → 215。
+
+### 12.5 下一步（本批的延续）
+
+1. `PLUS_DI` / `MINUS_DI`（委托 `momentum::plus_di` / `minus_di`）+ `ADX`
+   （5 实参契约见 `fn_adx`：先算 DI 再算 DX 后平滑 —— **必须逐行照抄，不要用 `adx_into`**）。
+   完成后可清掉 Pine `adx` 与国内 `dmi_tdx` 两条白名单条目。
+2. `WILLR`（Pine `wpr` 已是显式 `(HIGH,LOW,CLOSE,N)`，形状现成）。
+3. `TRIX`/`WILLR` 的**多份实现分歧**先单独决策（见 §10.6），再动 kernel。
+
