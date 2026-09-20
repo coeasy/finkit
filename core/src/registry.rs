@@ -300,6 +300,14 @@ const KIJUN_PARAMS: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("26"
 ///
 /// The four-argument form omits `increment`, which then defaults to `start` —
 /// the TA-Lib shape where one acceleration value serves both roles.
+/// `STOCHF(high, low, close, fastK, fastD)`.
+///
+/// Pine's `ta.stoch` lowers to this with a fast-D period of 1, which is what
+/// makes it the *unsmoothed* stochastic rather than the smoothed `STOCH`.
+const STOCHF_PARAMS: &[ParamSpec] = &[
+    ParamSpec::new("fastk_period", "usize", Some("5"), Some("> 0")),
+    ParamSpec::new("fastd_period", "usize", Some("3"), Some("> 0")),
+];
 const SAR_PARAMS: &[ParamSpec] = &[
     ParamSpec::new("af_start", "f64", Some("0.02"), Some("> 0")),
     ParamSpec::new("af_increment", "f64", Some("0.02"), Some("> 0")),
@@ -527,6 +535,17 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             params: PERIOD_14,
             outputs: 1,
             lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "STOCHF",
+            aliases: &[],
+            category: FunctionCategory::Momentum,
+            input: InputKind::Hlc,
+            params: STOCHF_PARAMS,
+            outputs: 2,
+            lookback: LookbackSpec::Dynamic,
             streaming: true,
             deterministic: true,
         },

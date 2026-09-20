@@ -75,10 +75,6 @@ const PINE_UNSUPPORTED: &[(&str, &str)] = &[
         "supertrend",
         "no kernel for `CALL:IF` / no lowering for the `IF_THEN_ELSE` node",
     ),
-    (
-        "stochastic",
-        "no kernel for `CALL:STOCHF` (fast stochastic)",
-    ),
     ("trix", "no kernel for `CALL:TRIX`"),
     // --- Structural lowering gaps ------------------------------------------------
     // `compute_ir` treats loop bodies as opaque control flow and does not lower

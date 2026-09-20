@@ -120,6 +120,10 @@ impl KernelDispatcher for FormulaKernelDispatcher {
             return dispatch_sar_call(call, buffers);
         }
 
+        if call.kernel == KernelId::from_static("CALL:STOCHF") {
+            return dispatch_stochf_call(call, buffers);
+        }
+
         if call.kernel == KernelId::from_static("CALL:AD")
             || call.kernel == KernelId::from_static("CALL:ADOSC")
             || call.kernel == KernelId::from_static("CALL:MFI")
@@ -1155,6 +1159,70 @@ fn dispatch_sar_call(
         ));
     }
     output.copy_from_slice(&result);
+    Ok(())
+}
+
+/// Execute `STOCHF` into the plan-owned output.
+///
+/// Delegates to `momentum::stochf` and keeps its fast-K leg, which is exactly
+/// what `fn_stochf` does on the tree path. Accepts three to five operands:
+/// `(HIGH, LOW, CLOSE)` with both periods defaulted, plus optional `fastK` and
+/// `fastD`. Pine's `ta.stoch` uses the five-operand form with a fast-D period
+/// of 1, which is what makes it the unsmoothed stochastic.
+fn dispatch_stochf_call(
+    call: KernelCall<'_>,
+    buffers: &mut [Vec<f64>],
+) -> Result<(), KernelDispatchError> {
+    if !(3..=5).contains(&call.inputs.len()) {
+        return Err(KernelDispatchError::new(FormulaKernelDispatcher::ERR_ARITY));
+    }
+    let high_slot = call.inputs[0].0;
+    let low_slot = call.inputs[1].0;
+    let close_slot = call.inputs[2].0;
+    let output_slot = call.output.0;
+    if call.inputs.iter().any(|slot| slot.0 == output_slot) {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+    let fast_k = if let Some(slot) = call.inputs.get(3) {
+        period_from_slot(buffers, slot.0)?
+    } else {
+        5
+    };
+    let fast_d = if let Some(slot) = call.inputs.get(4) {
+        period_from_slot(buffers, slot.0)?
+    } else {
+        3
+    };
+    let len = buffers[output_slot].len();
+    if buffers[high_slot].len() != len
+        || buffers[low_slot].len() != len
+        || buffers[close_slot].len() != len
+    {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+
+    // Scoped so the immutable borrows end before the output is borrowed mutably.
+    let result = {
+        let high = &buffers[high_slot];
+        let low = &buffers[low_slot];
+        let close = &buffers[close_slot];
+        crate::indicators::momentum::stochf(high, low, close, fast_k, fast_d)
+            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?
+    };
+    let source = result.k;
+    let output = buffers
+        .get_mut(output_slot)
+        .ok_or_else(|| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+    if output.len() != source.len() {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+    output.copy_from_slice(source.as_slice().unwrap());
     Ok(())
 }
 
