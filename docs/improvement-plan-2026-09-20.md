@@ -836,10 +836,25 @@ add_effect：dependencies.push(last_effect)；last_effect = id
 
 - 绘图节点走 `add_effect` → **串在 `last_effect` 上** → `prune_unreachable` 剪不掉 → **必定被执行**。
 - 而 dispatcher **完全没有任何 `DRAW:` 分支**（全仓库 `grep '"DRAW:'` 只有 `compute_ir.rs:238` 一处**产生**它）。
-- → 只要脚本里有 `plot`/`fill`/`hline`/`label`/… 之类命令，plan 路径必然报 `unsupported kernel DRAW:*`。
+- → 含绘图节点的脚本必然报 `unsupported kernel DRAW:*`。
 
-之所以现在只有 `bollinger_bands` 命中，是因为其它用例的绘图节点恰好没被执行到；
-**这是一个随时会爆的雷，不是个案。**
+### 17.2.1 影响面修正（我最初高估了）
+
+**只有少数命令会产生绘图节点**，绝大多数 Pine 脚本**不受影响**：
+
+| Pine / 国内命令 | 降级结果 | 是否绘图节点 |
+|---|---|---|
+| `plot(x, "name")` | `AstNode::Output` | ❌ 不是（**故 19 个通过用例都没事**） |
+| `hline(30)` | `AstNode::Output` + `LevelLine` 修饰符 | ❌ 不是 |
+| **`fill(a, b)`** | `AstNode::DrawGeneric`（`FillCall`） | ✅ 是 → `DRAW:FILL` |
+| 国内 `STICKLINE` | `AstNode::StickLine` | ✅ 是 → `STICK_LINE` |
+| 国内 `DRAWTEXT`/`DRAWICON` | `AstNode::DrawText`/`DrawIcon` | ✅ 是 |
+
+> 我第一版写的是「任何含 `plot`/`fill`/`hline`/`label` 的脚本都必然失败」—— **这是错的**，
+> `plot`/`hline` 走 `Output`，是值节点。实际只有上表 ✅ 的几类，集合**很小且封闭**。
+> （`ast_mapper.rs:169` `PlotCall → Output`；`:195` `FillCall → DrawGeneric`。）
+
+因为集合小，方案 B（枚举）的"腐烂"顾虑比原先估计的要轻；但 A 仍然更彻底。
 
 ### 17.3 为什么我没有顺手补上
 
