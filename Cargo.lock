@@ -706,10 +706,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "finkit-array"
-version = "0.1.15"
-
-[[package]]
 name = "finkit-cli"
 version = "0.1.15"
 dependencies = [
@@ -735,15 +731,6 @@ dependencies = [
  "ndarray 0.16.1",
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "finkit-factor"
-version = "0.1.15"
-dependencies = [
- "finkit-array",
- "finkit-math",
- "finkit-series",
 ]
 
 [[package]]
@@ -815,10 +802,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "finkit-math"
-version = "0.1.15"
-
-[[package]]
 name = "finkit-node"
 version = "0.1.15"
 dependencies = [
@@ -844,22 +827,6 @@ dependencies = [
  "ndarray 0.16.1",
  "numpy",
  "pyo3",
-]
-
-[[package]]
-name = "finkit-runtime"
-version = "0.1.15"
-dependencies = [
- "finkit-array",
- "finkit-factor",
- "finkit-series",
-]
-
-[[package]]
-name = "finkit-series"
-version = "0.1.15"
-dependencies = [
- "finkit-array",
 ]
 
 [[package]]

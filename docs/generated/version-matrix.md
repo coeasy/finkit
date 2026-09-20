@@ -9,11 +9,6 @@ Canonical workspace version: **`0.1.15`**
 |---------|------|---------|--------|-------|
 | workspace | `Cargo.toml` | 0.1.15 | workspace.package | ✅ canonical |
 | finkit | `core/Cargo.toml` | 0.1.15 | workspace | ✅ |
-| finkit-array | `crates/finkit-array/Cargo.toml` | 0.1.15 | workspace | ✅ |
-| finkit-series | `crates/finkit-series/Cargo.toml` | 0.1.15 | workspace | ✅ |
-| finkit-math | `crates/finkit-math/Cargo.toml` | 0.1.15 | workspace | ✅ |
-| finkit-factor | `crates/finkit-factor/Cargo.toml` | 0.1.15 | workspace | ✅ |
-| finkit-runtime | `crates/finkit-runtime/Cargo.toml` | 0.1.15 | workspace | ✅ |
 | finkit-factor-analysis | `factor-analysis/Cargo.toml` | 0.1.15 | workspace | ✅ |
 | finkit-visualization | `visualization/Cargo.toml` | 0.1.15 | workspace | ✅ |
 | finkit-ffi | `ffi/c-binding/Cargo.toml` | 0.1.15 | workspace | ✅ |
@@ -34,7 +29,7 @@ Canonical workspace version: **`0.1.15`**
 
 ## Benchmark data
 
-Criterion JSON benchmarks indexed: **13** (from `target/criterion/` when present).
+Criterion JSON benchmarks indexed: **0** (from `target/criterion/` when present).
 
 Full benchmark report: `python scripts/gen_benchmark_report.py` → `docs/BENCHMARK_REPORT.md`.
 

@@ -1,7 +1,7 @@
 # crates/\* 接入生产：功能缺口分析与迁移规划
 
 日期：2026-09-20
-状态：**R1 / R2 / R3 / R4 均已实现；R1–R4 全部完成**
+状态：**R1–R4 全部完成；平行轨道（5 个 crate）已删除 —— 收敛完成（见 §6）**
 上游决策：用户 2026-09-20 选择「接入生产，作为 Runtime 载体」
 相关文档：[improvement-plan-2026-09-20.md](improvement-plan-2026-09-20.md) §P2-1、[architecture-gap-assessment-2026-09-20.md](architecture-gap-assessment-2026-09-20.md):118
 
@@ -11,11 +11,12 @@
 
 先给结论，再给证据。
 
-1. **平行轨道（`crates/finkit-{array,series,math,factor,runtime}`）确实有 4 项能力是 core 没有的**，值得接入生产：
-   - ① `Factor` 对象边界 + `FactorProvider` 工厂 + **带类型的参数校验**；
-   - ② 手写**声明式因子图** API（不写公式字符串也能构图）；
-   - ③ `QuantSeries` 的**符号 + 时间戳 + 严格递增校验**；
-   - ④ 以 `(symbol, factor, params, time_range)` 为键的**结果缓存形状**。
+1. **平行轨道（`crates/finkit-{array,series,math,factor,runtime}`）声称有 4 项能力是 core 没有的**。
+   其中 3 项确为缺口并已接入生产，第 ③ 项实测**已被 core 覆盖**（详见 §6.3）：
+   - ① `Factor` 对象边界 + `FactorProvider` 工厂 + **带类型的参数校验** → 已落地（R2，`core/src/factor_provider.rs`）；
+   - ② 手写**声明式因子图** API（不写公式字符串也能构图）→ 已落地（R3，`core/src/factor_graph.rs`）；
+   - ③ ~~`QuantSeries` 的**符号 + 时间戳 + 严格递增校验**~~ → **core 早已有更强实现**：`data_contract::TemporalSeries` 在构造期校验名称/长度/单调时间戳并提供 `align_to` 对齐策略，`FrameKey` 校验 symbol 与 timeframe —— 无需接入；
+   - ④ 以 `(symbol, factor, params, time_range)` 为键的**结果缓存形状** → 已落地（R4，`operation::OperationResultCache`）。
 
 2. **但它的 `Executor` / `Scheduler` / `FactorRegistry` / kernel / 指标实现 5 项已被 core 超越，不能当 Runtime 载体**——`core/src/unified_executor.rs` 的 `UnifiedExecutor` + `KernelDispatcher` + `BufferArena` 在每一个维度上都更强，且已通过差分验证。**把载体换成平行轨道会让已绿的路径回退。**
 
@@ -307,7 +308,76 @@ lowering / CSE / DCE / kernel dispatcher。这一点由文件末尾的差分测�
 既有 4 个缓存行为测试（LRU 顺序、帧+revision 隔离、批量缓存、plan 缓存计数）**原样全部通过**：
 `cargo test -p finkit --lib operation` → **31 passed / 0 failed**。
 
-### R1–R4 完成后的剩余工作
+## 6. 收敛完成记录（平行轨道删除）
 
-`crates/finkit-{array,series,math,factor,runtime}` 现在**五项都已落地或判定为 superseded**，
-可以按 §2.3 逐个删除（每个删除与其对应合并同一个提交）。删除前需先确认没有 workspace 成员再引用它们。
+`crates/finkit-{array,series,math,factor,runtime}` 五个 crate **已整体删除**（30 个文件），
+`Cargo.toml` 的 `members` 同步移除 5 项。删除前按 §2.3 的要求先做了依赖确认。
+
+### 6.1 删除前置确认：零个生产依赖
+
+全仓库（排除 `crates/` 自身与构建目录）检索五个 crate 的名字，命中只有三类：
+
+| 命中位置 | 性质 |
+|---|---|
+| `Cargo.toml:4-8` | `members` 列表本身 —— 本次移除对象 |
+| `core/src/factor_graph.rs:66`、`core/src/factor_provider.rs:22`、`core/src/operation.rs:1672` | **溯源注释**（说明移植来源），非代码依赖 |
+| `docs/**`、`.workbuddy-ai/memory/**` | 文档与工作记录 |
+
+`core` / `ffi/*` / `cli` / `wasm` / `visualization` / `factor-analysis` 均**未**以任何形式引用它们；
+五个 crate 只互相引用，随本次删除一并消失。注意 `finkit-factor-analysis` 是**另一个 crate**
+（`factor-analysis/`，保留），与 `finkit-factor` 无依赖关系 —— 检索时勿混淆。
+
+### 6.2 能力覆盖表
+
+| crate | 能力 | core 对应实现 | 判定 |
+|---|---|---|---|
+| `finkit-array` | `FloatArray` | `buffer_arena::BufferArena`（`core/src/buffer_arena.rs:177`）+ ndarray 缓冲 | superseded |
+| `finkit-math` | `ema`、`rolling_mean/variance/std` | `math/statistics.rs:226/260/294`、`features/simd_opt.rs`、`formula/functions.rs` | superseded |
+| `finkit-series` | `QuantSeries`：symbol 标签 + 长度/顺序校验 | `data_contract::TemporalSeries` + `FrameKey`（见 6.3） | superseded |
+| `finkit-factor` | `trait Factor` 对象边界 | `factor_provider::FactorProvider`（R2） | **adopted (R2)** |
+| `finkit-factor` | `Sma`/`Ema`/`Rsi`/`Macd` | core 指标集（TA-Lib 201/201 对齐门） | superseded |
+| `finkit-factor` | `FactorResult`（多输出） | `execution_plan::OutputLayout` + `FormulaHotPlan::outputs()` | superseded |
+| `finkit-runtime` | `factory`（provider + 类型化参数校验） | `core/src/factor_provider.rs` | **adopted (R2)** |
+| `finkit-runtime` | `graph`（`FactorGraph`/`FactorNode`） | `core/src/factor_graph.rs` | **adopted (R3)** |
+| `finkit-runtime` | `cache`、`cache_key` | `operation::OperationResultCache` + `OperationCacheKey` | **adopted (R4)** |
+| `finkit-runtime` | `executor` | `unified_executor::UnifiedExecutor` + dispatcher + `BufferArena` | superseded |
+| `finkit-runtime` | `scheduler` | `compute::ComputePlanError::DependencyCycle` | superseded |
+| `finkit-runtime` | `registry` | `factors::FactorRegistry` | superseded |
+| `finkit-runtime` | `factories` | core 指标集 | superseded |
+
+### 6.3 §2.3 两处「合并后删除」的实测结论：无需再合并
+
+§2.3 曾要求 `finkit-series` 的 `QuantSeries` 与 `finkit-factor` 的 `trait Factor` **先合并再删除**。
+实测两者**都无需再做合并**，因为它们所声称的缺口在 core 中早已被更强的实现覆盖：
+
+* **`QuantSeries`** —— core 的 `data_contract::TemporalSeries::new`（`core/src/data_contract.rs:68`）
+  在**构造期**校验：名称非空、`timestamps.len() == values.len()`、时间戳单调；
+  并额外提供显式 `align_to(target, TemporalAlignment::{Exact, AsOfClosed})` 对齐策略，
+  这是 `QuantSeries` 完全没有的能力。symbol 维度由 `FrameKey::new` 承载（校验 symbol 与 timeframe 非空）。
+  语义差异（**以 core 为准**）：`QuantSeries::is_valid` 要求时间戳**严格递增**，
+  core 的 `validate_monotonic_timestamps` 只拒绝**下降**（允许相等）。R2 实际落地的是 provider 边界，
+  并非 `QuantSeries` 迁移。
+* **`trait Factor`** —— 该对象边界已由 R2 的 `FactorProvider` 承载；其 `compute(&QuantSeries)` 签名
+  会拖入已被 superseded 的 `QuantSeries` 输入类型，照搬等于把要删的东西重新引入。
+  `FactorResult`（多输出）亦已由 `OutputLayout` + `FormulaHotPlan::outputs()` 覆盖，
+  R2 已明确记录「不搬」以避免与 `factors::FactorResult<T>`（一个 `Result` 别名）冲突。
+
+### 6.4 与 §2.3 的一处流程偏离
+
+§2.3 要求「每个 crate 的删除与对应阶段的合并**同一个提交**」。R2/R3/R4 已分别在
+`41149fb` / `d6138be` / `c0b11f5` 提交完毕，无法回溯捆绑，故五个 crate 改为**一次性删除**。
+该偏离保留了 §2.3 真正要的属性 —— **一次 `git revert` 即可整体回滚** —— 且删除不引入任何功能变更。
+
+### 6.5 随本次删除的生成物与测试变化
+
+* `docs/generated/version-matrix.md` 重新生成，少 5 行（被删的五个 crate）。
+* 顺带修复 3 个**既有**过期生成物：`formula-functions.md`（305→308）、`indicators.md`（383→385）、
+  `pine-compatibility.md`（33→45）。它们是 `26251ef` / `68b5756` / `fb70a7c` 等特性提交之后
+  **未重新生成**所致 —— 也就是说 `docs-check.yml` 的 `gen_ssot_docs.py --check` 在任何全新检出上
+  本来就会失败，本次一并修好。`--check` 与 `check_versions.py` 现均通过。
+* `version-matrix.md` 的 `Criterion JSON benchmarks indexed` 由 **13 → 0**。该值取自本地
+  `target/criterion/`；本机与 CI 全新检出均无此目录，故 **0 才是可复现值**，13 不可复现
+  （保留 13 会让 `--check` 必失败）。真正的基准数据在 `docs/BENCHMARK_REPORT.md`。
+  **遗留项**：把环境相关值写进被逐字节比对的生成物是设计缺陷，应把该行移出生成物或改读已提交的数据文件。
+* 随 crate 一并删除 **9 个测试**（`finkit-factor` 3 + `finkit-runtime` 5 + `finkit-series` 1）。
+  `cargo test -p finkit`（core）基线不受影响，仍为 **3997 passed / 0 failed**。

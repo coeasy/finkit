@@ -3,7 +3,7 @@
 > **SSOT** — auto-generated from `core/src/indicators/mod.rs` and submodule `pub fn` exports.
 > Do not edit manually. Regenerate: `python scripts/gen_ssot_docs.py --generate`
 
-Modules exported from `indicators/mod.rs`: **36** | Public indicator functions: **383**
+Modules exported from `indicators/mod.rs`: **36** | Public indicator functions: **385**
 
 ## astock
 
@@ -248,6 +248,7 @@ Modules exported from `indicators/mod.rs`: **36** | Public indicator functions: 
 | `ultosc` |
 | `ultosc_into` |
 | `willr` |
+| `willr14_into` |
 | `willr_into` |
 
 ## momentum_ext
@@ -293,6 +294,7 @@ Modules exported from `indicators/mod.rs`: **36** | Public indicator functions: 
 | `mama_into` |
 | `mavp_with_ma_type` |
 | `midpoint` |
+| `midpoint14_into` |
 | `midpoint_into` |
 | `midprice` |
 | `midprice14_into` |

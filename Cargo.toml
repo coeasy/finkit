@@ -1,11 +1,6 @@
 [workspace]
 members = [
     "core",
-    "crates/finkit-array",
-    "crates/finkit-series",
-    "crates/finkit-math",
-    "crates/finkit-factor",
-    "crates/finkit-runtime",
     "factor-analysis",
     "visualization",
     "ffi/c-binding",

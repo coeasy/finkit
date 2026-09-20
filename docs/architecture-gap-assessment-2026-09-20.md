@@ -115,7 +115,7 @@ stored bodies per lang: {'python': 71}
 
 ## 6. 差距四：双轨 crate 与文档 sprawl（P1/P2，工程健康度）
 
-1. **双轨 crate**：`crates/finkit-array | finkit-series | finkit-math | finkit-factor | finkit-runtime` 构成一条平行的 V2 骨架。实测依赖关系：**core / ffi / cli / wasm / visualization 没有任何一个依赖它们**，五个 crate 只互相引用。`docs/FINAL_REFACTOR_PLAN_2026-09-19.md` 自己也写明「本轮没有把旧 `crates/finkit-runtime` 单依赖 Executor 扩展成第二套生产 Runtime」——即：**这是一条在飞但没接地的迁移轨道**。在它接入生产或明确废弃之前，任何"Runtime 已统一"的表述都不成立。
+1. **双轨 crate**：`crates/finkit-array | finkit-series | finkit-math | finkit-factor | finkit-runtime` 构成一条平行的 V2 骨架。实测依赖关系：**core / ffi / cli / wasm / visualization 没有任何一个依赖它们**，五个 crate 只互相引用。`docs/FINAL_REFACTOR_PLAN_2026-09-19.md` 自己也写明「本轮没有把旧 `crates/finkit-runtime` 单依赖 Executor 扩展成第二套生产 Runtime」——即：**这是一条在飞但没接地的迁移轨道**。在它接入生产或明确废弃之前，任何"Runtime 已统一"的表述都不成立。**（2026-09-20 更新：已解决 —— 其中 3 项真缺口已接入生产（R2/R3/R4），五个 crate 随后整体删除；见 [`runtime-carrier-adoption-plan-2026-09-20.md`](runtime-carrier-adoption-plan-2026-09-20.md) §6。）**
 2. **文档 sprawl**：`docs/` 共 74 个文件，其中架构/重构计划类 ≥10 份且内容高度重叠（V2 / V3 / V4 / V5 / V6、`ARCHITECTURE_REVIEW_2026-09-17`、`-09-18`、`FINAL_2026-09-19`、`optimal-architecture-refactor-plan-v5`、`pr28-architecture-v3-refactor-plan`、`finkit-architecture-review-refactor-plan-v4` …）。**判断当前真实进度需要读 5 份以上文档且互相矛盾**，这本身就是风险。建议收敛为「1 份权威基线 + 1 份执行状态」，其余归档到 `docs/archive/`。
 
 ---
