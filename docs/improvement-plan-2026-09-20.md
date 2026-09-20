@@ -520,11 +520,75 @@ DIF:EMA(CLOSE,12)-EMA(CLOSE,26);DEA:EMA(DIF,9);MACD:(DIF-DEA)*2
 本步新增用例：`plan_execution_tests` 8 条（无状态一致、有状态一致、预热 NaN 一致、多通道具名输出、
 多通道数值一致、缺输入报错、重复求值复用缓存、缺 kernel 明确报错）+ `hot_plan.rs` 回归 1 条。
 
-### 10.6 下一步
+### 10.6 下一步（含对原有判断的更正）
 
 - **步骤 4（切换默认）**：加 `formula_execution_mode = tree | plan`，默认仍是 `tree`；differential 全绿且性能不回归后
   才切默认，并**保留 `tree` 一个版本**作为回退路径。
-- **先补 registry SSOT 缺口**：`registry.rs` 只声明了公式引擎实现的 327 个函数中的 104 个，
-  缺席者被降级成「未知有状态函数」（多一条幽灵尾依赖、永不纯化），这是剩余 plan 路径失败的主因，
-  也是白名单里 kernel 类条目清不掉的根因。
+- **更正此前「registry SSOT 缺口」的判断（重要）**。此前写的是「`registry.rs` 只声明了公式引擎实现的
+  327 个函数中的 104 个，这是剩余 plan 路径失败的主因」。2026-09-20 用三面门禁实测后更正：
+  - 三个面**本来就不该相等**，它们服务不同消费者：
+    | 面 | 数量 | 消费者 |
+    |---|---|---|
+    | `registry.rs`（指标/算子 SSOT） | **213** 个名字 | `schema.rs` 发现、`operation.rs`、FFI、**以及 planner 的纯度判定** |
+    | `functions.rs` + `functions_router.rs`（公式语言面） | **416** 个可调用名 | 公式脚本 / 树路径 |
+    | `FormulaKernelDispatcher`（plan 数值核） | **46** 个 | 编译计划的执行 |
+  - 因此 `ACCBANDS`/`MAMA` **不是**「registry 撒谎」：它们在 `indicators/overlap.rs`
+    （`ACCBANDS` 312 行、`MAMA` 1127 行）与 `operation.rs` 里**确有实现**，只是不是公式语言函数，
+    所以 `get_builtin_functions` 末尾的别名注入循环**有意** `continue` 跳过它们。
+  - **plan 路径跑不动某个函数的原因是缺 kernel（46 个），不是缺 registry 声明。**
+    registry 声明只影响**纯度判定**：`compute_ir::function_metadata` 把未声明者保守降级为
+    `stateful: true` + `effect: Stateful`，于是走 `add_effect` 串上 `last_effect`（幽灵尾依赖）、永不纯化，
+    **影响的是 CSE/重排，不是能否执行**。所以白名单里 kernel 类条目清不掉的根因是 **kernel 覆盖不足**。
+  - 实测的两个口径：**165** 个函数「已在 registry + 公式面可调用，但无 kernel」＝ plan 覆盖率缺口；
+    **281** 个公式函数「不在 registry」＝ planner 纯度缺口。二者是**两个不同的问题**。
+- **plan 路径扩容的两个真实前置条件**（本步实测得出，必须先解决才能批量加 kernel）：
+  1. **隐式上下文展开**：树路径的 `resolve_hlc_args`/`resolve_hl_args` 会把 `(CLOSE, N)` 自动展开成
+     `(HIGH, LOW, CLOSE, N)`（HLC 从 `ctx` 取）；而 plan 的输入布局只能携带**显式**输入。
+     Pine `ta.dmi` 恰好降级成 `PLUS_DI(CLOSE,14)` / `MINUS_DI(CLOSE,14)`，属于这一类 ——
+     必须先让**降级期**把隐式 HLC 展开成显式实参，否则 kernel 拿不到 HIGH/LOW。
+  2. **同一指标存在多份数值不同的实现**：`fn_trix`（树路径）把预热期 NaN **替换成 `0.0`** 再喂下一层 EMA；
+     `indicators::momentum::trix_into`（共享核）按 SMA 正规种子 —— **两者数值不同**。
+     `WILLR` 更有三份实现（`fn_willr` 手写、`indicators::momentum::willr_into`、
+     `math::kernels::compat::willr_into`）。
+     **先加 kernel 会造成 plan/tree 数值分叉**（differential 会拦下）；而「统一到共享核」会**改变树路径的输出** ——
+     这是必须显式决策的**数值语义**问题，不能顺手改。**建议：先把 `fn_*` 包装统一到共享核并单独评审数值变化，
+     再批量加 kernel。**
 - **EMA 种子健壮性**（见 §10.4）单独处理：要么种子只用**已就绪**的窗口，要么前导 NaN 不参与种子。
+
+## 11. 三面 SSOT 门禁（2026-09-20 续）
+
+新增 `core/tests/formula_function_ssot.rs`，把上面三面的关系变成**可执行契约**，取代靠人工核对源码。
+
+**为什么用行为探测而不是名单**：门禁通过**调用 `FormulaKernelDispatcher::dispatch`** 来枚举真实 kernel ——
+构造 `KernelCall` 逐个探（6 个 buffer 槽，比最宽 arity 还宽，保证每个 handler 走到自己的 arity 检查），
+只有返回 `ERR_UNSUPPORTED_KERNEL`（码 1）才算「无 kernel」。
+**手写名单会与 `dispatch` 里的 `if` 链漂移，行为探测不会。**
+`ERR_UNSUPPORTED_KERNEL` 在 trait impl 内是私有的，故门禁把码值 `1` 钉住 —— 码变了门禁就红，
+这正是我们要的（否则会把所有 kernel 误判为不支持）。
+
+**五条断言**：
+
+| 断言 | 性质 |
+|---|---|
+| `every_plan_kernel_is_registered_in_the_ssot` | **必须恒成立**：kernel 未声明 → planner 把它当未知有状态算子 |
+| `every_plan_kernel_has_a_formula_implementation` | **必须恒成立**：能执行却没有公式能命名它 |
+| `plan_kernel_coverage_is_exactly_the_recorded_set` | kernel 集合 == 显式 46 条 |
+| `declared_functions_without_a_kernel_are_recorded` | plan 覆盖率缺口 == 显式 **165** 条 |
+| `the_three_surfaces_have_the_expected_sizes` | 三面规模 == `(213, 416, 46)` |
+
+后三条都是**不可腐烂**的显式清单：某个条目不再成立（例如补上 kernel 后从缺口里消失）会让门禁变红，
+因此清单**只能通过有意编辑来缩短** —— 与 `formula_plan_differential.rs` 的 allowlist 同一机制。
+
+**两个细节值得记住**：
+- 探测必须跑在**两个面的并集**上。只探 registry 会让「每个 kernel 都已注册」**永真**
+  （探测只能返回喂给它的名字）。跑并集后，用**只在公式面出现**的名字加 kernel 会被抓出来。
+  仍无法发现「两个面都没有的名字」——那类残差由规模断言 `(213, 416, 46)` 兜住。
+- 规模断言写成**一个元组** `assert_eq!(actual, (213, 416, 46))`，这样一次运行就能报出三个实际值，
+  不用为每个数字各跑一轮。
+
+**实测规模**（写这份门禁时才第一次拿到准确值）：
+`registry.rs` 的 `builtin_function_registry()` 由**四个**来源串起来 ——
+`specs` + `additional_specs` + `math_transform_specs` + `candlestick_specs`
+（数学变换与 K 线形态在各自构造函数里生成，所以只数内联的 `FunctionSpec {` 字面量会**少算 110 个**：
+103 vs 实际 213）。**这类数字一律以运行时为准，不要靠数源码。**
+

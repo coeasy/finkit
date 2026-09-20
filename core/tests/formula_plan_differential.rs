@@ -46,11 +46,12 @@ const DOMESTIC_UNSUPPORTED: &[(&str, &str)] = &[
         "cross_period_refdate",
         "no kernel for `CALL:PERIODTYPE`/`CALL:REFDATE`; needs chart-period host context",
     ),
-    // `registry.rs` declares only 111 of the 371 function names the formula
-    // engine implements. Anything absent is lowered as an unknown, stateful
-    // function: it gains a phantom trailing dependency and never becomes pure,
-    // so it can never be interned, reordered, or executed by the numeric
-    // dispatcher.
+    // The SSOT (`registry.rs`) declares 213 names; the formula surface exposes
+    // 416. Anything the SSOT does not declare is lowered as an unknown,
+    // stateful function: it gains a phantom trailing dependency and never
+    // becomes pure, so it can never be interned or reordered. The exact
+    // inventory of that gap, and of the plan-path kernel backlog, is pinned by
+    // `formula_function_ssot.rs`.
     (
         "dmi_tdx",
         "no kernel for `CALL:PLUS_DI`/`CALL:MINUS_DI`/`CALL:ADX` (directional movement)",
