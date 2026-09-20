@@ -1987,8 +1987,27 @@ fn fn_mfi(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, For
 }
 
 fn fn_cci(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+    // Two-operand `CCI(source, period)`: the plan path can only carry series the
+    // source text names, so this form needs a kernel of its own. It shares
+    // `momentum::cci_source_into` with that kernel rather than keeping a second
+    // copy of the rolling mean / mean-deviation loop.
+    if args.len() == 2 {
+        let n = extract_n(args, 1, "CCI")?;
+        let data_len = args[0].len().min(ctx.data_len);
+        let mut result = nan_vec(data_len);
+        if lib_momentum::cci_source_into(
+            &args[0].as_slice().unwrap()[..data_len],
+            n,
+            result.as_slice_mut().unwrap(),
+        )
+        .is_err()
+        {
+            return Ok(nan_vec(data_len));
+        }
+        return Ok(result);
+    }
+
     let (source, n) = match args.len() {
-        2 => (args[0].clone(), extract_n(args, 1, "CCI")?),
         len if len >= 4 => {
             let high = &args[0];
             let low = &args[1];

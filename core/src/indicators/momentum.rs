@@ -1891,6 +1891,51 @@ fn cci_generic_into(high: &[f64], low: &[f64], close: &[f64], period: usize, out
     }
 }
 
+/// Commodity Channel Index over an arbitrary source series.
+///
+/// This is the two-operand `CCI(source, period)` contract lifted out of the
+/// formula engine so the tree-walking executor and the compiled-plan kernel
+/// share one implementation. The four-operand HLC form is the same computation
+/// applied to the typical price `(high + low + close) / 3`, which the caller
+/// builds.
+///
+/// `output` is fully written: NaN where the contract has no value yet.
+///
+/// # Errors
+///
+/// Returns `TaError::InvalidParameter` if `source` is shorter than `output`, or
+/// if `period` is zero.
+#[allow(clippy::cast_precision_loss)] // periods are far below 2^53
+pub fn cci_source_into(source: &[f64], period: usize, output: &mut [f64]) -> Result<()> {
+    let len = output.len();
+    if source.len() < len {
+        return Err(TaError::InvalidParameter {
+            name: "source".to_string(),
+            constraint: "must have at least the output length".to_string(),
+        });
+    }
+    if period == 0 {
+        return Err(TaError::InvalidParameter {
+            name: "period".to_string(),
+            constraint: "greater than 0".to_string(),
+        });
+    }
+    output.fill(f64::NAN);
+
+    for i in (period - 1)..len {
+        let window_start = i + 1 - period;
+        let mean = (window_start..=i).map(|j| source[j]).sum::<f64>() / period as f64;
+        let mean_dev = (window_start..=i)
+            .map(|j| (source[j] - mean).abs())
+            .sum::<f64>()
+            / period as f64;
+        if mean_dev > 1e-15 {
+            output[i] = (source[i] - mean) / (0.015 * mean_dev);
+        }
+    }
+    Ok(())
+}
+
 /// Commodity Channel Index (CCI).
 #[allow(clippy::uninit_vec)]
 pub fn cci(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Array1<f64>> {

@@ -3,7 +3,7 @@
 > **SSOT** — auto-generated from `core/src/indicators/mod.rs` and submodule `pub fn` exports.
 > Do not edit manually. Regenerate: `python scripts/gen_ssot_docs.py --generate`
 
-Modules exported from `indicators/mod.rs`: **36** | Public indicator functions: **386**
+Modules exported from `indicators/mod.rs`: **36** | Public indicator functions: **387**
 
 ## astock
 
@@ -202,6 +202,7 @@ Modules exported from `indicators/mod.rs`: **36** | Public indicator functions: 
 | `bop` |
 | `cci` |
 | `cci_into` |
+| `cci_source_into` |
 | `cmo` |
 | `cmo_fast_into` |
 | `dx` |

@@ -62,6 +62,13 @@ impl KernelDispatcher for FormulaKernelDispatcher {
             return dispatch_periodic_call(call, buffers);
         }
 
+        // `CALL:CCI` has two shapes: the domestic four-operand HLC form and the
+        // Pine two-operand `ta.cci(source, length)` form, where the source is
+        // passed through instead of being folded into a typical price.
+        if call.kernel == KernelId::from_static("CALL:CCI") && call.inputs.len() == 2 {
+            return dispatch_cci_source_call(call, buffers);
+        }
+
         if call.kernel == KernelId::from_static("CALL:ATR")
             || call.kernel == KernelId::from_static("CALL:NATR")
             || call.kernel == KernelId::from_static("CALL:CCI")
@@ -416,6 +423,60 @@ fn scalar_from_slot(buffers: &[Vec<f64>], slot: usize) -> Result<f64, KernelDisp
 }
 
 /// Execute ATR directly from the HLC dependency slots.
+/// Execute the two-operand `CCI(source, period)` form into the plan-owned
+/// output.
+///
+/// Delegates to `momentum::cci_source_into`, which is the same function
+/// `fn_cci` now calls for its two-operand branch, so the tree path and the
+/// compiled-plan kernel cannot drift. The four-operand HLC form keeps routing
+/// to [`dispatch_hlc_periodic_call`].
+fn dispatch_cci_source_call(
+    call: KernelCall<'_>,
+    buffers: &mut [Vec<f64>],
+) -> Result<(), KernelDispatchError> {
+    if call.inputs.len() != 2 {
+        return Err(KernelDispatchError::new(FormulaKernelDispatcher::ERR_ARITY));
+    }
+    let source_slot = call.inputs[0].0;
+    let period_slot = call.inputs[1].0;
+    let output_slot = call.output.0;
+    if [source_slot, period_slot]
+        .into_iter()
+        .any(|slot| slot == output_slot)
+    {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+    let period = period_from_slot(buffers, period_slot)?;
+    let len = buffers[output_slot].len();
+    if buffers[source_slot].len() != len {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+
+    // Scoped so the immutable borrow ends before the output is borrowed mutably.
+    let result = {
+        let source = &buffers[source_slot];
+        let mut cci = vec![f64::NAN; len];
+        crate::indicators::momentum::cci_source_into(source, period, &mut cci)
+            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+        cci
+    };
+
+    let output = buffers
+        .get_mut(output_slot)
+        .ok_or_else(|| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+    if output.len() != result.len() {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+    output.copy_from_slice(&result);
+    Ok(())
+}
+
 fn dispatch_hlc_periodic_call(
     call: KernelCall<'_>,
     buffers: &mut [Vec<f64>],

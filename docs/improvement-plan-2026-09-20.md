@@ -648,6 +648,49 @@ plan 与树路径就会数值分叉。
 2. `WILLR`（Pine `wpr` 已是显式 `(HIGH,LOW,CLOSE,N)`，形状现成）。
 3. `TRIX`/`WILLR` 的**多份实现分歧**先单独决策（见 §10.6），再动 kernel。
 
+## 14. `CCI` 的双形状（2026-09-20 续）：一次错误的判断与纠正
+
+### 14.1 我一开始判断错了
+
+看到 Pine `cci` 报 `CALL:CCI` **code 2（`ERR_ARITY`）** 而不是"缺 kernel"，
+我第一反应是"又是 §12.1/§12.2 那类隐式上下文问题"，打算把降级改成 `CCI(HIGH, LOW, CLOSE, n)`，
+并断言"值不变，因为 2 实参分支取的就是 `ctx.high/low/close`"。
+
+**这个断言是错的。** 查证后发现 `fn_cci` 并不走 `resolve_hlc_args`，而是**自己的 arity 分派**：
+
+```rust
+let (source, n) = match args.len() {
+    2 => (args[0].clone(), extract_n(args, 1, "CCI")?),        // source 直接用 args[0]
+    len if len >= 4 => { /* typical = (H+L+C)/3 */ }
+    _ => Err(...)
+};
+```
+
+所以 2 实参分支**真的把 `args[0]` 当 source 用**（Pine `ta.cci(src, length)` 的语义），
+而 4 实参分支用的是典型价。**两者数值不同** —— 若按原计划改，就会静默改变 Pine 的计算结果。
+
+> 教训：**看到一个 kernel 报 `ERR_ARITY`，不要默认是"实参没给满"**。
+> 先读后端函数的 arity 分派，确认短实参分支到底是"从 ctx 补"还是"另一种语义"。
+> 白名单里 `cci` 那条注释其实早就写明了正确答案（"Needs a src/period CCI kernel"），
+> 我该先读它。
+
+### 14.2 正确做法：给 source 形状一个 kernel，并共用同一份循环
+
+- 新增 `indicators::momentum::cci_source_into(source, period, output)` —— 从 `fn_cci`
+  **抽出**滚动均值 / 平均绝对偏差那段循环（含 `mean_dev > 1e-15` 守卫与 `0.015` 系数）。
+- `fn_cci` 的 2 实参分支改为调用它（4 实参分支**不动**）。
+- 新增 `dispatch_cci_source_call`，在 `CALL:CCI` 且 `inputs.len() == 2` 时接管；
+  4 实参仍走 `dispatch_hlc_periodic_call`。
+
+两形状并存是有意为之：国内 `CCI(H,L,C,N)` 与 Pine `CCI(src,N)` 是**两个不同的契约**，
+不能互相降级。
+
+### 14.3 结果
+
+- Pine 语料经编译计划路径验证：**15 → 16**（`cci` 从白名单消失）。
+- 三面大小不变：`(218, 416, 51)` —— `CCI` 本来就在 kernel 清单里，只是形状不全。
+- 白名单按门禁要求删掉 `cci` 及那条已过时的"Wrong kernel shape"注释。
+
 ## 13. 第二批 kernel：PLUS_DI / MINUS_DI / ADX（2026-09-20 续）
 
 ### 13.1 不照抄算法，而是把契约抽到 indicator 层
@@ -692,14 +735,6 @@ registry 里 `ADX` 用新的 `ADX_PARAMS`（`di_length` + `adx_smoothing`）声�
 
 ### 13.5 下一步
 
-1. **`ta.cci` 降级显式化（新发现，与 §12.1/§12.2 同一类问题）。**
-   Pine 的 `cci` 目前降级成 `CCI(source, n)` —— **两个实参**。
-   树路径走 `resolve_hlc_args` 的第二分支，从 ctx 补 HIGH/LOW，结果正确；
-   但 `CCI` kernel 由 `dispatch_hlc_periodic_call` 服务，**硬要求 4 个实参**，
-   于是 plan 路径报的是 `CALL:CCI` **code 2（`ERR_ARITY`）**，而不是"缺 kernel"。
-   改成 `CCI(HIGH, LOW, CLOSE, n)` 即可同时解掉 —— 且值保持不变
-   （2 实参分支取的就是 `ctx.high/low/close`）。
-   > 这类"arity 不匹配"比"缺 kernel"便宜得多，值得单独扫一遍白名单里的 code 2。
-2. `WILLR`（Pine `wpr` 已是显式 `(HIGH,LOW,CLOSE,N)`，形状现成）。
-3. `TRIX`/`WILLR` 的**多份实现分歧**先单独决策（见 §10.6），再动 kernel。
+1. `WILLR`（Pine `wpr` 已是显式 `(HIGH,LOW,CLOSE,N)`，形状现成）。
+2. `TRIX`/`WILLR` 的**多份实现分歧**先单独决策（见 §10.6），再动 kernel。
 

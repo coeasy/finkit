@@ -81,15 +81,6 @@ const PINE_UNSUPPORTED: &[(&str, &str)] = &[
     ),
     ("trix", "no kernel for `CALL:TRIX`"),
     ("williams_r", "no kernel for `CALL:WILLR`"),
-    // --- Wrong kernel shape ------------------------------------------------------
-    // `ta.cci(src, length)` is the two-operand form. `CALL:CCI` currently routes
-    // to the HLC kernel, which requires four operands (high, low, close,
-    // period), so the arity check rejects it. Needs a src/period CCI kernel or a
-    // frontend mapping from `hlc3`-style sources onto the HLC form.
-    (
-        "cci",
-        "`CALL:CCI` routes to the 4-operand HLC kernel but Pine supplies 2 operands",
-    ),
     // --- Structural lowering gaps ------------------------------------------------
     // `compute_ir` treats loop bodies as opaque control flow and does not lower
     // them into the acyclic compute plan, so `volume[i]` never becomes a bound
