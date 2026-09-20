@@ -15,11 +15,22 @@
 //! |---|---|---|
 //! | `factory` (`FactorProvider`, `FactorFactoryRequest`, typed param errors) | **adopted (R2)** | none -- genuine gap |
 //! | `graph` (`FactorGraph`/`FactorNode`) | **adopted (R3)** | none -- lowers onto `ComputeNodeId` |
-//! | `cache`, `cache_key` (shape only) | **adopted (R4)** | re-base onto `operation::OperationCacheKey` |
+//! | `cache`, `cache_key` (shape only) | **adopted (R4)** | key re-based onto `operation::OperationCacheKey`; `get_or_compute` + counters wired onto the existing `OperationResultCache` |
 //! | `executor` | superseded | `unified_executor::UnifiedExecutor` + `KernelDispatcher` + `BufferArena` |
 //! | `scheduler` | superseded | `compute::ComputePlanError::DependencyCycle` (reports the cycle path) |
 //! | `registry` | superseded | `factors::FactorRegistry` |
 //! | `factories` | superseded | `core`'s indicator set |
+//!
+//! Two R4 decisions are worth recording here, because the retired code did the
+//! opposite:
+//!
+//! * `FactorCacheKey::time_range: Option<String>` is **not** adopted. A
+//!   caller-owned monotonic `data_revision` replaces it, so the key stays O(1) to
+//!   compare no matter how a caller spells a range.
+//! * **No fourth cache was added.** `get_or_compute` and the hit/miss counters
+//!   were wired onto the existing operation cache, whose key already had the
+//!   required `dialect` + frame + revision shape. A second result cache would
+//!   have re-created the exact double-track this migration is meant to remove.
 //!
 //! Do not add public API to the superseded modules.
 

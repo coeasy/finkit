@@ -606,9 +606,141 @@ pub struct OperationCacheStats {
 }
 
 #[derive(Debug, Clone)]
-struct CachedOperationResult {
+struct CacheEntry {
     result: OperationResult,
     last_used: u64,
+}
+
+/// Bounded, revision-aware result cache keyed by [`OperationCacheKey`].
+///
+/// This is *the* result cache of the operation façade — it is an extraction of
+/// the entry table, capacity, LRU clock and counters that used to live as five
+/// separate fields of [`UnifiedOperationEngine`]. Keeping them in one type is
+/// the point: they are only correct together, and while they were spread over
+/// the engine every call site had to remember to bump the right counter on
+/// exactly one branch. [`Self::get`] now owns that, so a call site cannot get
+/// it wrong.
+///
+/// Cache isolation is the caller's contract, not a property of the key's
+/// contents. Entries are never invalidated on read, so a caller must advance
+/// [`OperationCacheKey::data_revision`] whenever any input that can affect the
+/// result changes. Reusing a revision for changed data serves a stale result —
+/// this is a correctness requirement, not a performance tuning knob.
+#[derive(Debug, Clone)]
+pub struct OperationResultCache {
+    entries: BTreeMap<OperationCacheKey, CacheEntry>,
+    capacity: usize,
+    hits: u64,
+    misses: u64,
+    clock: u64,
+}
+
+impl OperationResultCache {
+    /// Capacity of a freshly constructed façade.
+    pub const DEFAULT_CAPACITY: usize = 64;
+
+    /// Create an empty cache.
+    ///
+    /// `capacity` is clamped to at least one entry, so the eviction path needs
+    /// no special case for a zero-sized cache.
+    #[must_use]
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            entries: BTreeMap::new(),
+            capacity: capacity.max(1),
+            hits: 0,
+            misses: 0,
+            clock: 0,
+        }
+    }
+
+    /// Look up `key`, marking it most-recently-used and counting a hit or miss.
+    ///
+    /// A lookup produces exactly one of the two counters, and this is the only
+    /// place either is incremented.
+    pub fn get(&mut self, key: &OperationCacheKey) -> Option<OperationResult> {
+        let tick = self.next_tick();
+        if let Some(entry) = self.entries.get_mut(key) {
+            entry.last_used = tick;
+            self.hits = self.hits.saturating_add(1);
+            Some(entry.result.clone())
+        } else {
+            self.misses = self.misses.saturating_add(1);
+            None
+        }
+    }
+
+    /// Retain `result` under `key` as the most-recently-used entry.
+    ///
+    /// Evicts the least-recently-used entry when the cache is already at
+    /// capacity and `key` is new. Replacing an existing key never evicts, so a
+    /// refresh cannot displace an unrelated entry.
+    pub fn insert(&mut self, key: OperationCacheKey, result: OperationResult) {
+        let last_used = self.next_tick();
+        if self.entries.len() >= self.capacity && !self.entries.contains_key(&key) {
+            if let Some(oldest) = self
+                .entries
+                .iter()
+                .min_by_key(|(_, entry)| entry.last_used)
+                .map(|(key, _)| key.clone())
+            {
+                self.entries.remove(&oldest);
+            }
+        }
+        self.entries.insert(key, CacheEntry { result, last_used });
+    }
+
+    /// Hit/miss counters and current occupancy.
+    #[must_use]
+    pub fn stats(&self) -> OperationCacheStats {
+        OperationCacheStats {
+            hits: self.hits,
+            misses: self.misses,
+            entries: self.entries.len(),
+            capacity: self.capacity,
+        }
+    }
+
+    /// Remove every entry and reset the counters.
+    pub fn clear(&mut self) {
+        self.entries.clear();
+        self.hits = 0;
+        self.misses = 0;
+        self.clock = 0;
+    }
+
+    /// Change the capacity and invalidate retained entries.
+    ///
+    /// Counters are lifetime statistics and are deliberately *not* reset here;
+    /// use [`Self::clear`] when the counters should restart too.
+    pub fn set_capacity(&mut self, capacity: usize) {
+        self.capacity = capacity.max(1);
+        self.entries.clear();
+    }
+
+    /// Number of retained entries.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    /// Whether no entries are retained.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// Maximum number of retained entries.
+    #[must_use]
+    pub fn capacity(&self) -> usize {
+        self.capacity
+    }
+
+    /// Advance the monotonic LRU clock, wrapping rather than overflowing.
+    fn next_tick(&mut self) -> u64 {
+        self.clock = self.clock.wrapping_add(1);
+        self.clock
+    }
 }
 
 #[derive(Clone)]
@@ -718,11 +850,7 @@ pub struct UnifiedOperationEngine {
     factor_plan_cache_hits: u64,
     factor_plan_cache_misses: u64,
     factor_plan_cache_clock: u64,
-    operation_cache: BTreeMap<OperationCacheKey, CachedOperationResult>,
-    operation_cache_capacity: usize,
-    operation_cache_hits: u64,
-    operation_cache_misses: u64,
-    operation_cache_clock: u64,
+    operation_cache: OperationResultCache,
 }
 
 impl UnifiedOperationEngine {
@@ -746,11 +874,7 @@ impl UnifiedOperationEngine {
             factor_plan_cache_hits: 0,
             factor_plan_cache_misses: 0,
             factor_plan_cache_clock: 0,
-            operation_cache: BTreeMap::new(),
-            operation_cache_capacity: 64,
-            operation_cache_hits: 0,
-            operation_cache_misses: 0,
-            operation_cache_clock: 0,
+            operation_cache: OperationResultCache::new(OperationResultCache::DEFAULT_CAPACITY),
         })
     }
 
@@ -763,26 +887,17 @@ impl UnifiedOperationEngine {
 
     /// Change the unified result-cache capacity and invalidate old entries.
     pub fn set_cache_capacity(&mut self, capacity: usize) {
-        self.operation_cache_capacity = capacity.max(1);
-        self.operation_cache.clear();
+        self.operation_cache.set_capacity(capacity);
     }
 
     /// Remove all unified operation results and reset cache counters.
     pub fn clear_cache(&mut self) {
         self.operation_cache.clear();
-        self.operation_cache_hits = 0;
-        self.operation_cache_misses = 0;
-        self.operation_cache_clock = 0;
     }
 
     /// Return unified operation result-cache counters.
     pub fn cache_stats(&self) -> OperationCacheStats {
-        OperationCacheStats {
-            hits: self.operation_cache_hits,
-            misses: self.operation_cache_misses,
-            entries: self.operation_cache.len(),
-            capacity: self.operation_cache_capacity,
-        }
+        self.operation_cache.stats()
     }
 
     /// Return Composite result-cache counters owned by the canonical façade.
@@ -950,14 +1065,9 @@ impl UnifiedOperationEngine {
                     .ok_or_else(|| OperationExecutionError::UnknownOperation(name.to_string()))?;
                 if let Some(revision) = data_revision {
                     let key = OperationCacheKey::factor(&canonical, cache_scope, revision);
-                    if let Some(result) = self.get_cached_result(&key) {
-                        self.operation_cache_hits = self.operation_cache_hits.saturating_add(1);
-                        return Ok(result);
-                    }
-                    self.operation_cache_misses = self.operation_cache_misses.saturating_add(1);
-                    let result = self.execute_factor_uncached(&canonical, context)?;
-                    self.insert_cached_result(key, result.clone());
-                    Ok(result)
+                    self.cached_or_compute(key, |engine| {
+                        engine.execute_factor_uncached(&canonical, context)
+                    })
                 } else {
                     self.execute_factor_uncached(&canonical, context)
                 }
@@ -1058,18 +1168,27 @@ impl UnifiedOperationEngine {
             });
         }
 
-        let key = data_revision.map(|revision| {
-            OperationCacheKey::factor_batch(&canonical_targets, cache_scope, revision)
-        });
-        if let Some(key) = key.as_ref() {
-            if let Some(result) = self.get_cached_result(key) {
-                self.operation_cache_hits = self.operation_cache_hits.saturating_add(1);
-                return Ok(result);
+        match data_revision {
+            Some(revision) => {
+                let key = OperationCacheKey::factor_batch(&canonical_targets, cache_scope, revision);
+                self.cached_or_compute(key, |engine| {
+                    engine.execute_factor_targets_uncached(&canonical_targets, context)
+                })
             }
-            self.operation_cache_misses = self.operation_cache_misses.saturating_add(1);
+            None => self.execute_factor_targets_uncached(&canonical_targets, context),
         }
+    }
 
-        let plan = self.compiled_factor_plan_targets(&canonical_targets)?;
+    /// Evaluate several canonical Factor targets as one shared dependency plan.
+    ///
+    /// Split out of [`Self::execute_factor_targets`] so the cached and uncached
+    /// paths run the same code and the result cache has a single place to wrap.
+    fn execute_factor_targets_uncached(
+        &mut self,
+        canonical_targets: &[String],
+        context: &BorrowedFactorContext<'_>,
+    ) -> Result<OperationResult, OperationExecutionError> {
+        let plan = self.compiled_factor_plan_targets(canonical_targets)?;
         let output = plan
             .execute_borrowed(&self.factor, context)
             .map_err(OperationExecutionError::Factor)?;
@@ -1087,16 +1206,12 @@ impl UnifiedOperationEngine {
                     })
             })
             .collect::<Result<BTreeMap<_, _>, _>>()?;
-        let result = OperationResult {
+        Ok(OperationResult {
             values,
             shape: ValueShape::MultiSeries,
             primary: None,
             draw: None,
-        };
-        if let Some(key) = key {
-            self.insert_cached_result(key, result.clone());
-        }
-        Ok(result)
+        })
     }
 
     /// Execute a range-safe Factor plan through the canonical Runtime façade.
@@ -1311,15 +1426,9 @@ impl UnifiedOperationEngine {
         let mut values = BTreeMap::new();
         for (key, frame) in panel.iter() {
             let cache_key = OperationCacheKey::panel_formula(source, dialect, key, data_revision);
-            let result = if let Some(result) = self.get_cached_result(&cache_key) {
-                self.operation_cache_hits = self.operation_cache_hits.saturating_add(1);
-                result
-            } else {
-                self.operation_cache_misses = self.operation_cache_misses.saturating_add(1);
-                let result = self.execute_formula_on_frame(source, dialect, frame)?;
-                self.insert_cached_result(cache_key, result.clone());
-                result
-            };
+            let result = self.cached_or_compute(cache_key, |engine| {
+                engine.execute_formula_on_frame(source, dialect, frame)
+            })?;
             values.insert(key.clone(), result);
         }
         Ok(PanelOperationResult { values })
@@ -1557,22 +1666,33 @@ impl UnifiedOperationEngine {
         })
     }
 
-    fn insert_cached_result(&mut self, key: OperationCacheKey, result: OperationResult) {
-        let last_used = self.next_cache_tick();
-        if self.operation_cache.len() >= self.operation_cache_capacity
-            && !self.operation_cache.contains_key(&key)
-        {
-            if let Some(oldest) = self
-                .operation_cache
-                .iter()
-                .min_by_key(|(_, entry)| entry.last_used)
-                .map(|(key, _)| key.clone())
-            {
-                self.operation_cache.remove(&oldest);
-            }
+    /// Return the cached result for `key`, or compute, retain and return it.
+    ///
+    /// This is the `get_or_compute` abstraction kept from the retired
+    /// `crates/finkit-runtime` cache, and it is the only place a result enters
+    /// [`OperationResultCache`] on a miss. Both the hit and miss counters live
+    /// inside the cache's `get`, so no call site can bump one on the wrong
+    /// branch.
+    ///
+    /// The compute closure receives `&mut self` rather than being self-contained
+    /// so that a miss can still compile and cache a factor plan. That ordering is
+    /// deliberate: compiling the plan *before* the lookup would make every
+    /// result-cache hit pay for a plan lookup and would move the
+    /// `factor_plan_cache_hits` / `factor_plan_cache_misses` counters.
+    fn cached_or_compute<F>(
+        &mut self,
+        key: OperationCacheKey,
+        compute: F,
+    ) -> Result<OperationResult, OperationExecutionError>
+    where
+        F: FnOnce(&mut Self) -> Result<OperationResult, OperationExecutionError>,
+    {
+        if let Some(result) = self.operation_cache.get(&key) {
+            return Ok(result);
         }
-        self.operation_cache
-            .insert(key, CachedOperationResult { result, last_used });
+        let result = compute(self)?;
+        self.operation_cache.insert(key, result.clone());
+        Ok(result)
     }
 
     fn execute_factor_uncached(
@@ -1656,18 +1776,6 @@ impl UnifiedOperationEngine {
     fn next_factor_plan_tick(&mut self) -> u64 {
         self.factor_plan_cache_clock = self.factor_plan_cache_clock.wrapping_add(1);
         self.factor_plan_cache_clock
-    }
-
-    fn get_cached_result(&mut self, key: &OperationCacheKey) -> Option<OperationResult> {
-        let last_used = self.next_cache_tick();
-        let entry = self.operation_cache.get_mut(key)?;
-        entry.last_used = last_used;
-        Some(entry.result.clone())
-    }
-
-    fn next_cache_tick(&mut self) -> u64 {
-        self.operation_cache_clock = self.operation_cache_clock.wrapping_add(1);
-        self.operation_cache_clock
     }
 
     fn execute_formula(
@@ -2020,6 +2128,121 @@ mod tests {
     use std::collections::BTreeMap;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+
+    /// Minimal single-series result for cache-level tests.
+    fn cached_result(value: f64) -> OperationResult {
+        let mut values = BTreeMap::new();
+        values.insert(PRIMARY_OUTPUT_NAME.to_string(), vec![value]);
+        OperationResult {
+            values,
+            shape: ValueShape::Series,
+            primary: Some(PRIMARY_OUTPUT_NAME.to_string()),
+            draw: None,
+        }
+    }
+
+    #[test]
+    fn result_cache_counts_exactly_one_hit_or_miss_per_lookup() {
+        let mut cache = OperationResultCache::new(4);
+        let key = OperationCacheKey::factor("SMA", Some("AAA"), 1);
+
+        assert!(cache.get(&key).is_none());
+        assert_eq!(cache.stats().misses, 1);
+        assert_eq!(cache.stats().hits, 0);
+
+        cache.insert(key.clone(), cached_result(1.0));
+        assert!(cache.get(&key).is_some());
+        assert_eq!(cache.stats().misses, 1);
+        assert_eq!(cache.stats().hits, 1);
+
+        // A miss must not be recorded as a hit, and vice versa.
+        assert!(cache.get(&OperationCacheKey::factor("SMA", Some("BBB"), 1)).is_none());
+        assert_eq!(cache.stats().misses, 2);
+        assert_eq!(cache.stats().hits, 1);
+    }
+
+    #[test]
+    fn result_cache_isolates_entries_by_data_revision() {
+        // The revision is the caller's input-identity contract: the same factor
+        // over changed data must not be served from the previous revision's
+        // entry, so it has to be a distinct cache key.
+        let mut cache = OperationResultCache::new(4);
+        let first = OperationCacheKey::factor("SMA", Some("AAA"), 1);
+        cache.insert(first.clone(), cached_result(1.0));
+
+        let second = OperationCacheKey::factor("SMA", Some("AAA"), 2);
+        assert!(
+            cache.get(&second).is_none(),
+            "a new data_revision must miss even for an unchanged factor and scope"
+        );
+        assert_eq!(cache.stats().misses, 1);
+        assert_eq!(cache.len(), 1);
+    }
+
+    #[test]
+    fn result_cache_evicts_the_least_recently_used_entry() {
+        let mut cache = OperationResultCache::new(2);
+        let key_a = OperationCacheKey::factor("SMA", Some("AAA"), 1);
+        let key_b = OperationCacheKey::factor("SMA", Some("BBB"), 1);
+        let key_c = OperationCacheKey::factor("SMA", Some("CCC"), 1);
+
+        cache.insert(key_a.clone(), cached_result(1.0));
+        cache.insert(key_b.clone(), cached_result(2.0));
+        // Touch `a` so `b` becomes the least-recently-used entry.
+        assert!(cache.get(&key_a).is_some());
+
+        cache.insert(key_c.clone(), cached_result(3.0));
+        assert_eq!(cache.len(), 2);
+        assert!(cache.get(&key_a).is_some(), "recently used entry must survive");
+        assert!(cache.get(&key_b).is_none(), "least recently used entry must be evicted");
+        assert!(cache.get(&key_c).is_some());
+    }
+
+    #[test]
+    fn result_cache_replacing_a_key_does_not_evict_another_entry() {
+        let mut cache = OperationResultCache::new(2);
+        let key_a = OperationCacheKey::factor("SMA", Some("AAA"), 1);
+        let key_b = OperationCacheKey::factor("SMA", Some("BBB"), 1);
+
+        cache.insert(key_a.clone(), cached_result(1.0));
+        cache.insert(key_b.clone(), cached_result(2.0));
+        // A refresh at capacity must replace in place, not evict a sibling.
+        cache.insert(key_a.clone(), cached_result(9.0));
+
+        assert_eq!(cache.len(), 2);
+        assert!(cache.get(&key_b).is_some());
+        // The replacement is visible under the original key, and `b` survived.
+        assert_eq!(
+            cache.get(&key_a).unwrap().primary_values().unwrap(),
+            &[9.0]
+        );
+    }
+
+    #[test]
+    fn result_cache_capacity_and_clear_scope_their_effects_correctly() {
+        let mut cache = OperationResultCache::new(4);
+        let key = OperationCacheKey::factor("SMA", Some("AAA"), 1);
+        cache.insert(key.clone(), cached_result(1.0));
+        let _ = cache.get(&key);
+
+        // Changing capacity invalidates entries but keeps lifetime counters.
+        cache.set_capacity(2);
+        assert_eq!(cache.capacity(), 2);
+        assert!(cache.is_empty());
+        assert_eq!(cache.stats().hits, 1);
+        assert_eq!(cache.stats().misses, 0);
+
+        // Clearing resets the counters too.
+        cache.insert(key.clone(), cached_result(1.0));
+        let _ = cache.get(&key);
+        cache.clear();
+        assert!(cache.is_empty());
+        assert_eq!(cache.stats().hits, 0);
+        assert_eq!(cache.stats().misses, 0);
+
+        // A zero capacity is clamped so eviction needs no special case.
+        assert_eq!(OperationResultCache::new(0).capacity(), 1);
+    }
 
     #[test]
     fn builtins_project_without_losing_function_contracts() {

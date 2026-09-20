@@ -1,7 +1,7 @@
 # crates/\* 接入生产：功能缺口分析与迁移规划
 
 日期：2026-09-20
-状态：**R1 已完成，R2 / R3 已实现；R4 待执行**
+状态：**R1 / R2 / R3 / R4 均已实现；R1–R4 全部完成**
 上游决策：用户 2026-09-20 选择「接入生产，作为 Runtime 载体」
 相关文档：[improvement-plan-2026-09-20.md](improvement-plan-2026-09-20.md) §P2-1、[architecture-gap-assessment-2026-09-20.md](architecture-gap-assessment-2026-09-20.md):118
 
@@ -265,3 +265,49 @@ lowering / CSE / DCE / kernel dispatcher。这一点由文件末尾的差分测�
 `fast - slow`，而不只是长度对）、`declaration_order_does_not_affect_the_result`、
 `a_cycle_is_reported_by_node_name`、`an_undeclared_input_is_rejected_rather_than_becoming_a_data_series`、
 `node_kind_arity_is_enforced`、`ids_that_differ_only_in_case_are_the_same_node` 等。
+
+### R4 已实现（真缺口 ④）
+
+**先裁决「要不要新增第四套缓存」：不新增。** 读代码后发现 R4 的真实缺口比计划里写的更窄、也更有意思：
+
+1. **缓存键的形状 core 早就有了。** `operation::OperationCacheKey` 已经是
+   `operation` + `request` + `dialect` + `frame: FrameKey` + `data_revision: u64`，正是 R4 要求的形状。
+   平行轨道的 `FactorCacheKey { symbol, factor_name, params, time_range }` **一个字段都不需要搬**：
+   `symbol` → `frame.symbol`，`factor_name` → `request`，`time_range` → `data_revision`
+   （这正是 R4 说的「不要照搬 `time_range: String`」）。
+2. **`get_or_compute` 在 core 里根本不存在**（全仓 grep 零命中），而 `OperationCacheStats` 存在、
+   却只是一个孤立结构体。后果是**命中/未命中计数被手写在三个调用点上**
+   （重构前：`Factor` `:948`、`FactorBatch` `:1062`、`panel_formula` `:1313`），
+   每处都重复「`get` → 自己加计数器 → 算 → `insert`」。
+   所以真缺口不是「缺缓存」，而是**缺把计数收进缓存的那层抽象**。
+
+**改动**（全部在 `core/src/operation.rs`）：
+
+| 项目 | 说明 |
+|---|---|
+| `OperationResultCache`（新增，`pub`） | 把原先散在 `UnifiedOperationEngine` 上的**5 个字段**（entries / capacity / hits / misses / clock）收成一个类型 |
+| `OperationResultCache::get` | **唯一**递增 hit/miss 的地方 → 一次查询必然恰好记一个 hit 或一个 miss，调用点不可能记错分支 |
+| `OperationResultCache::insert` | 承担 LRU 淘汰；容量满且 key 为新才淘汰，**替换已存在的 key 不会淘汰旁人** |
+| `UnifiedOperationEngine::cached_or_compute` | R4 要保留的 `get_or_compute` 抽象；三个调用点全部改走它 |
+| 删除 | `get_cached_result` / `insert_cached_result` / `next_cache_tick` / `CachedOperationResult` 四个私有项 |
+
+**一处刻意的签名偏离**（值得记下来）：`cached_or_compute` 的闭包接收 `&mut Self`，
+而不是像平行轨道那样接收一个自包含的 `FnOnce() -> Result<..>`。原因是**命中路径必须保持廉价**：
+编译 plan 需要 `&mut self`，若在查结果缓存**之前**就编译 plan，
+则每一次结果缓存命中都会白付一次 plan 查询，并把 `factor_plan_cache_hits` 从 0 变成 1 ——
+而既有测试 `multi_target_factor_execution_shares_dependencies_and_batch_cache`
+正是断言「命中结果缓存后 plan 缓存命中数仍为 0」。所以**抽象保留，形状按借用检查器调整**。
+
+**验收**：新增 5 个 `OperationResultCache` 单元测试（可脱离引擎直接测，这也是把它抽出来的理由之一）：
+`result_cache_counts_exactly_one_hit_or_miss_per_lookup`、
+`result_cache_isolates_entries_by_data_revision`（**`data_revision` 变化必须 miss** —— 这是正确性要求而非性能要求）、
+`result_cache_evicts_the_least_recently_used_entry`、
+`result_cache_replacing_a_key_does_not_evict_another_entry`、
+`result_cache_capacity_and_clear_scope_their_effects_correctly`。
+既有 4 个缓存行为测试（LRU 顺序、帧+revision 隔离、批量缓存、plan 缓存计数）**原样全部通过**：
+`cargo test -p finkit --lib operation` → **31 passed / 0 failed**。
+
+### R1–R4 完成后的剩余工作
+
+`crates/finkit-{array,series,math,factor,runtime}` 现在**五项都已落地或判定为 superseded**，
+可以按 §2.3 逐个删除（每个删除与其对应合并同一个提交）。删除前需先确认没有 workspace 成员再引用它们。
