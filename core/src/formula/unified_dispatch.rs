@@ -101,6 +101,10 @@ impl KernelDispatcher for FormulaKernelDispatcher {
             return dispatch_dmi_call(call, buffers);
         }
 
+        if call.kernel == KernelId::from_static("CALL:WILLR") {
+            return dispatch_willr_call(call, buffers);
+        }
+
         if call.kernel == KernelId::from_static("CALL:AD")
             || call.kernel == KernelId::from_static("CALL:ADOSC")
             || call.kernel == KernelId::from_static("CALL:MFI")
@@ -875,6 +879,65 @@ fn dispatch_dmi_call(
             .map_err(|_| invalid())?;
             adx
         }
+    };
+
+    let output = buffers
+        .get_mut(output_slot)
+        .ok_or_else(|| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+    if output.len() != result.len() {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+    output.copy_from_slice(&result);
+    Ok(())
+}
+
+/// Execute `WILLR` into the plan-owned output.
+///
+/// Delegates to `momentum::willr_into`, which is what `momentum::willr` calls
+/// and therefore what `fn_willr` now resolves to on the tree path. Both paths
+/// share the TA-Lib-golden extrema lifecycle instead of keeping a third copy.
+fn dispatch_willr_call(
+    call: KernelCall<'_>,
+    buffers: &mut [Vec<f64>],
+) -> Result<(), KernelDispatchError> {
+    if call.inputs.len() != 4 {
+        return Err(KernelDispatchError::new(FormulaKernelDispatcher::ERR_ARITY));
+    }
+    let high_slot = call.inputs[0].0;
+    let low_slot = call.inputs[1].0;
+    let close_slot = call.inputs[2].0;
+    let period_slot = call.inputs[3].0;
+    let output_slot = call.output.0;
+    if [high_slot, low_slot, close_slot, period_slot]
+        .into_iter()
+        .any(|slot| slot == output_slot)
+    {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+    let period = period_from_slot(buffers, period_slot)?;
+    let len = buffers[output_slot].len();
+    if buffers[high_slot].len() != len
+        || buffers[low_slot].len() != len
+        || buffers[close_slot].len() != len
+    {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+
+    // Scoped so the immutable borrows end before the output is borrowed mutably.
+    let result = {
+        let high = &buffers[high_slot];
+        let low = &buffers[low_slot];
+        let close = &buffers[close_slot];
+        let mut willr = vec![f64::NAN; len];
+        crate::indicators::momentum::willr_into(high, low, close, period, &mut willr)
+            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+        willr
     };
 
     let output = buffers

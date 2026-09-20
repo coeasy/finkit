@@ -2048,29 +2048,22 @@ fn fn_cci(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, For
 
 fn fn_willr(_ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("WILLR", args, 4)?;
-    let high = &args[0];
-    let low = &args[1];
-    let close = &args[2];
     let n = extract_n(args, 3, "WILLR")?;
+    let data_len = args[0].len().min(args[1].len()).min(args[2].len());
 
-    let data_len = high.len().min(low.len()).min(close.len());
-    let mut result = nan_vec(data_len);
-
-    for i in (n - 1)..data_len {
-        let window_start = (i + 1).saturating_sub(n);
-        let hh = (window_start..=i)
-            .map(|j| high[j])
-            .fold(f64::NEG_INFINITY, f64::max);
-        let ll = (window_start..=i)
-            .map(|j| low[j])
-            .fold(f64::INFINITY, f64::min);
-        let range = hh - ll;
-        if range.abs() > 1e-15 {
-            result[i] = (hh - close[i]) / range * (-100.0);
-        }
+    // Delegated to the TA-Lib-golden indicator rather than keeping a second
+    // hand-rolled copy. The local loop that used to live here agreed with
+    // `momentum::willr_into` on every value except a zero high/low range, where
+    // it left NaN while the canonical kernel — and the reference it is checked
+    // against in `extrema_round6.rs` — yield 0.0. The canonical kernel is the
+    // one with golden-file coverage, so that is the behaviour to keep.
+    let high = &args[0].as_slice().unwrap()[..data_len];
+    let low = &args[1].as_slice().unwrap()[..data_len];
+    let close = &args[2].as_slice().unwrap()[..data_len];
+    match lib_momentum::willr(high, low, close, n) {
+        Ok(result) => Ok(result),
+        Err(_) => Ok(nan_vec(data_len)),
     }
-
-    Ok(result)
 }
 
 fn fn_mom(_ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {

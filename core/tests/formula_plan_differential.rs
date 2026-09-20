@@ -80,7 +80,6 @@ const PINE_UNSUPPORTED: &[(&str, &str)] = &[
         "no kernel for `CALL:STOCHF` (fast stochastic)",
     ),
     ("trix", "no kernel for `CALL:TRIX`"),
-    ("williams_r", "no kernel for `CALL:WILLR`"),
     // --- Structural lowering gaps ------------------------------------------------
     // `compute_ir` treats loop bodies as opaque control flow and does not lower
     // them into the acyclic compute plan, so `volume[i]` never becomes a bound

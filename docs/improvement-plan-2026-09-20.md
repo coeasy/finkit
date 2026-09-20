@@ -735,6 +735,51 @@ registry 里 `ADX` 用新的 `ADX_PARAMS`（`di_length` + `adx_smoothing`）声�
 
 ### 13.5 下一步
 
-1. `WILLR`（Pine `wpr` 已是显式 `(HIGH,LOW,CLOSE,N)`，形状现成）。
-2. `TRIX`/`WILLR` 的**多份实现分歧**先单独决策（见 §10.6），再动 kernel。
+1. ~~`WILLR`~~（已完成，见 §15）。
+2. `TRIX` 的**多份实现分歧**先单独决策（见 §10.6 / §15.4），再动 kernel。
+
+## 15. WILLR：裁决分歧并收敛掉一份手写实现（2026-09-20 续）
+
+### 15.1 分歧的裁决依据
+
+`WILLR` 一度有 4 份实现：`indicators::momentum::willr_into`（通用，单调队列）、
+`willr14_into`（14 周期快路径）、`math::kernels::compat::willr_into`，
+以及 `fn_willr` —— 一份**完全手写、不调用任何 indicator 函数**的本地循环。
+
+逐项对比 `fn_willr` 与 `momentum::willr_into`，**只有一个差异**：
+
+| | `fn_willr`（旧） | `momentum::willr_into` |
+|---|---|---|
+| 预热区 | NaN | NaN（`output[..period-1]`） |
+| 极值与公式 | `(hh - close) / range * -100` | 同 |
+| **range ≈ 0 时** | **留 NaN** | **`0.0`** |
+
+裁决：**保留 `0.0`**。依据是 `core/tests/extrema_round6.rs` 的 `reference_willr`
+与 `core/tests/golden_talib_tests.rs` —— **canonical kernel 有 TA-Lib golden 覆盖，
+`fn_willr` 那份没有**。于是把 `fn_willr` 改为委托 `momentum::willr`，**删掉本地循环**：
+实现数 **-1**，这是收敛而不是新增。
+
+> 可复用的裁决规则：**两份实现冲突时，以「有 golden / 参考实现覆盖」的那份为准**；
+> 手写且无覆盖的那份是待收敛对象，不是基准。
+
+### 15.2 kernel
+
+新增 `dispatch_willr_call`，委托 `momentum::willr_into` —— 也正是 `momentum::willr`
+所调用、因而 `fn_willr` 现在解析到的那一份。两条路径**由构造保证一致**。
+顺带把 `WILLR` 补进 registry（此前**未声明**，属于纯度缺口）。
+
+### 15.3 结果
+
+- Pine 语料经 plan 路径验证 **16 → 17**（`williams_r` 从白名单消失）。
+- 三面大小 **(219, 416, 52)**。
+- 全量 **4020 passed / 0 failed** —— **没有任何测试依赖旧的「range≈0 留 NaN」行为**，
+  含 TA-Lib golden 测试与差分测试。这是本次裁决能被接受的关键证据。
+- `gen_ssot_docs.py --check` 无需重新生成（registry 不是其数据源）。
+
+### 15.4 下一步
+
+1. `TRIX` —— `fn_trix`（手写，**把预热 NaN 换成 `0.0`**）与 `trix_into`（SMA 正规种子）
+   **数值不同**，且缺少像 `reference_willr` 那样的参考实现，**不能照 §15.1 直接收敛**。
+   先补一份参考实现或确定 golden 基准，再动 kernel。
+2. `SAR`、`DEA`、`BOLLMID`、`STOCHF`、`IF`（`IF_THEN_ELSE` 无降级）—— 白名单剩余项。
 

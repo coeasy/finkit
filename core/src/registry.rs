@@ -499,6 +499,17 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             deterministic: true,
         },
         FunctionSpec {
+            name: "WILLR",
+            aliases: &[],
+            category: FunctionCategory::Momentum,
+            input: InputKind::Hlc,
+            params: PERIOD_14,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
             name: "CCI",
             aliases: &[],
             category: FunctionCategory::Momentum,
