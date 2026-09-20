@@ -781,5 +781,42 @@ registry 里 `ADX` 用新的 `ADX_PARAMS`（`di_length` + `adx_smoothing`）声�
 1. `TRIX` —— `fn_trix`（手写，**把预热 NaN 换成 `0.0`**）与 `trix_into`（SMA 正规种子）
    **数值不同**，且缺少像 `reference_willr` 那样的参考实现，**不能照 §15.1 直接收敛**。
    先补一份参考实现或确定 golden 基准，再动 kernel。
-2. `SAR`、`DEA`、`BOLLMID`、`STOCHF`、`IF`（`IF_THEN_ELSE` 无降级）—— 白名单剩余项。
+2. `SAR`、`BOLLMID`、`STOCHF`、`IF`（`IF_THEN_ELSE` 无降级）—— 白名单剩余项。
+
+## 16. `DEA` kernel：一个 kernel 清掉两条白名单（2026-09-20 续）
+
+`DEA` 是 MACD 的**信号腿**，国内公式里作为独立函数暴露：
+`fn_dea(source, fast, [slow=26], [signal=9])` → `momentum::macd(...).signal`。
+新增 `dispatch_dea_call`，**同一个调用、同一条腿**，接受 2/3/4 个实参（与 `fn_dea` 的可选尾参一致）。
+
+### 16.1 顺带回答了一个悬而未决的问题
+
+`CALL:MACD` 委托 `macd_line_into`，而树路径的 `fn_macd` 用 `momentum::macd().macd` ——
+**同一个族的两个不同入口**。此前**无法验证**它们是否一致：语料里的 `macd` 用例
+在比较发生之前就因 `CALL:DEA` 失败了。
+
+`DEA` 补上后 `macd` 用例端到端通过 → **两份实现数值一致**。
+这个分裂是**有意为之**（kernel 只要 DIF 线，用更省的入口），现在是被覆盖而非只是被假设；
+已写进 `dispatch_dea_call` 的文档注释，避免后人误以为是无意重复。
+
+> 教训：**白名单里"A 缺 kernel"会掩盖"B 是否一致"**。补上 A 常常顺带把 B 的验证也解锁了。
+
+### 16.2 结果
+
+- Pine 语料经 plan 路径验证 **17 → 19**（`macd` 与 `macd_histogram` 同时消失）。
+- 三面大小 **(220, 416, 53)**；`DEA` 此前**不在 registry**，顺带补上。
+- 4020 passed / 0 failed；clippy 5429（新增行零告警）。
+
+### 16.3 剩余白名单（Pine 6 条 / 国内 2 条）
+
+| 条目 | 原因 |
+|---|---|
+| `bollinger_bands` | `CALL:BOLLUP`/`BOLLMID`/`BOLLDN` |
+| `parabolic_sar` | `CALL:SAR` |
+| `stochastic` | `CALL:STOCHF` |
+| `trix` | `CALL:TRIX`（**先裁决实现分歧**，见 §15.4） |
+| `supertrend` | `CALL:IF` / `IF_THEN_ELSE` 无降级 |
+| `volume_profile` | `for` 循环体不降级（结构性） |
+| 国内 `chip_distribution_ths` | `CALL:WINNER`/`COST` 需筹码分布数据 |
+| 国内 `cross_period_refdate` | `CALL:PERIODTYPE`/`REFDATE` 需图表周期上下文 |
 
