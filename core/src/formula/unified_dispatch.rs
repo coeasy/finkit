@@ -124,6 +124,14 @@ impl KernelDispatcher for FormulaKernelDispatcher {
             return dispatch_stochf_call(call, buffers);
         }
 
+        if call.kernel == KernelId::from_static("DRAW:FILL")
+            || call.kernel == KernelId::from_static("STICK_LINE")
+            || call.kernel == KernelId::from_static("DRAW_TEXT")
+            || call.kernel == KernelId::from_static("DRAW_ICON")
+        {
+            return dispatch_draw_call(call, buffers);
+        }
+
         if call.kernel == KernelId::from_static("CALL:AD")
             || call.kernel == KernelId::from_static("CALL:ADOSC")
             || call.kernel == KernelId::from_static("CALL:MFI")
@@ -1223,6 +1231,35 @@ fn dispatch_stochf_call(
         ));
     }
     output.copy_from_slice(source.as_slice().unwrap());
+    Ok(())
+}
+
+/// Acknowledge a drawing directive without producing a numeric series.
+///
+/// Drawing commands are chart side effects, so they have no numeric result.
+/// They are nevertheless kept as plan roots **on purpose**: `hot_plan.rs`
+/// retains them so that "an unsupported drawing still fails the plan loudly
+/// instead of vanishing" under dead-code elimination. The numeric runtime's
+/// side of that bargain is to execute them and write no series, leaving
+/// rendering to the host. Pruning them instead would contradict that decision.
+///
+/// The set is enumerated rather than prefix-matched because [`KernelId`] is a
+/// hash with no string accessor. The four names are the complete set the IR
+/// produces today (`compute_ir.rs`: `STICK_LINE`, `DRAW_TEXT`, `DRAW_ICON`, and
+/// `DRAW:<command>` for `DrawGeneric`).
+fn dispatch_draw_call(
+    call: KernelCall<'_>,
+    buffers: &mut [Vec<f64>],
+) -> Result<(), KernelDispatchError> {
+    if call.inputs.iter().any(|slot| slot.0 == call.output.0) {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+    let output = buffers
+        .get_mut(call.output.0)
+        .ok_or_else(|| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+    output.fill(f64::NAN);
     Ok(())
 }
 
