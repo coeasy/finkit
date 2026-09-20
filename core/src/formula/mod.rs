@@ -70,7 +70,7 @@ pub use contracts::{
 pub use custom::{CustomFormula, FormulaRegistry};
 pub use debugger::{DebugEvent, FormulaDebugger, FormulaErrorWithLocation};
 pub use drawing::{DrawCommand, DrawResult};
-pub use engine::{FormulaEngine, FormulaPlanCacheStats, FormulaResult};
+pub use engine::{FormulaEngine, FormulaPlanCacheStats, FormulaPlanOutput, FormulaResult};
 pub use executor::FormulaExecutor;
 pub use functions::get_builtin_functions;
 pub use hot_plan::{FormulaHotPlan, FormulaHotPlanError, FormulaInputBinding};

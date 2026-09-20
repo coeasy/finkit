@@ -387,6 +387,17 @@ fn lower_formula_plumbing(
         if let Some(name) = operation.strip_prefix("OUTPUT:") {
             let value = value_operand(&rewritten, operation)?;
             aliases.insert(node_id, value);
+            // An `Output` is *also* a variable write. The tree path stores the
+            // value in `ctx.variables[name]` (see the `AstNode::Output` arms in
+            // `executor.rs`), which is what makes the ubiquitous
+            // `DIF:...;DEA:EMA(DIF,9);MACD:(DIF-DEA)*2` idiom work. Omitting this
+            // leaves the later read of `DIF` as a bare `VARIABLE:DIF` that misses
+            // `local_writes`, so it is declared an external input and the plan
+            // demands a caller-supplied series named `DIF`.
+            //
+            // The parser emits a single `AstNode::Output` for the single-colon
+            // form, so this is the only place that can record the write.
+            local_writes.insert(name.to_string(), node_id);
             named_outputs.push(NamedOutput {
                 name: name.to_string(),
                 node: value,
@@ -780,6 +791,30 @@ mod tests {
         assert!(compiled.hot().nodes().len() <= compiled.semantic().plan().len());
         assert!(compiled.hot().buffer_layout().slot_count() > 0);
         assert_eq!(compiled.hot().parameter_arena().len(), 2);
+    }
+
+    #[test]
+    fn a_named_output_is_readable_as_a_local_variable() {
+        // The single-colon form parses to a bare `AstNode::Output`, so the
+        // plumbing pass is the only place that can record it as a variable
+        // write. Without that, the second statement's `DIF` read stays a bare
+        // `VARIABLE:DIF` and the plan asks the caller for a series named `DIF`.
+        let ast = parse_formula("DIF:EMA(CLOSE,12)-EMA(CLOSE,26);DEA:EMA(DIF,9)").unwrap();
+        let compiled = FormulaHotPlan::compile(&ast).unwrap();
+
+        let inputs: Vec<&str> = compiled
+            .input_bindings()
+            .iter()
+            .map(|binding| binding.name())
+            .collect();
+        assert_eq!(inputs, vec!["CLOSE"], "only CLOSE is an external input");
+
+        let outputs: Vec<&str> = compiled
+            .outputs()
+            .iter()
+            .map(|binding| binding.name())
+            .collect();
+        assert_eq!(outputs, vec!["DIF", "DEA"]);
     }
 
     #[test]

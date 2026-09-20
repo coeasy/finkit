@@ -438,3 +438,93 @@ normalize_formula_source(source, dialect)
   `FormulaEngine` 含 `RefCell` 已是 `!Sync`，但用 `Rc` 会进一步变成 `!Send`，可能破坏 FFI/线程化调用方。
 - **步骤 4（切换默认）**：需要 `formula_execution_mode = tree | plan`，并要求 differential 全绿 + 性能不回归。
   步骤 2 的「失败即报错」正是该开关能成为**真开关**而非提示的前提。
+
+## 10. P0-2 步骤 3 执行记录（2026-09-20 续）：执行期接入
+
+步骤 3 的目标（见 §P0-2 步骤 3）：**用 `FormulaKernelDispatcher` 驱动 `UnifiedExecutor`，先覆盖无状态算子，再覆盖状态算子。**
+
+### 10.1 交付
+
+| 项 | 落点 |
+|---|---|
+| 执行入口 | `core/src/formula/engine.rs`：`FormulaEngine::{eval_plan, eval_plan_with_dialect, eval_plan_channels}` |
+| 多通道输出 | `FormulaPlanOutput { primary, channels }`（`primary()` / `channels()` / `channel(name)` / `into_primary()`） |
+| 输入绑定 | 按 `plan.input_bindings()` 的 `name → slot` 显式填槽，槽未绑满即报错 |
+| **降级缺陷修复** | `core/src/formula/hot_plan.rs`：`OUTPUT:` 现在也记入 `local_writes` |
+| 导出 | `core/src/formula/mod.rs` 增加 `FormulaPlanOutput` re-export |
+
+执行路径就是 differential 门禁验证的那一条：`compile_plan` 取缓存 plan → `unified_formula_executor(&plan)` → `UnifiedExecutor::execute(&inputs)`。
+树路径**完全未动**，本步只是新增入口，因此步骤 4 的开关仍有真正的回退路径。
+
+### 10.2 接入执行期暴露了一个真实缺陷：`OUTPUT:` 未记入 `local_writes`
+
+这是本步最重要的产出，**不是**测试问题而是生产缺陷。
+
+`lower_formula_plumbing` 只把 `ASSIGN:` 记进 `local_writes`，`OUTPUT:` 没有。而 `InputLayout::compile` 会为**每个**
+`VARIABLE:` 节点开一个输入槽、**不检查依赖**，所以 `VARIABLE:<id>` 能否解析成定义，取决于该定义是否在 `local_writes` 里。
+
+单冒号形式 `DIF:expr` 解析出的是**单个 `AstNode::Output`**（`parser.rs`），而树路径的 `Output` 分支**会**写
+`ctx.variables[name]`（`executor.rs:133-155` 与 `1039-1054` 调 `assign_var` / `assign_var_no_copy`）。
+所以 `Output` 本质**同时是一次变量写**，缺了这条记录就使
+
+```
+DIF:EMA(CLOSE,12)-EMA(CLOSE,26);DEA:EMA(DIF,9);MACD:(DIF-DEA)*2
+```
+
+这一**国内终端最通用的写法**在 plan 路径上把 `DIF` 判成外部输入，要求调用方提供名为 `DIF` 的序列。
+
+修复即在 `OUTPUT:` 分支补 `local_writes.insert(name.to_string(), node_id)`，并加了回归用例
+`a_named_output_is_readable_as_a_local_variable`（断言外部输入恰好是 `["CLOSE"]`，输出是 `["DIF","DEA"]`）。
+
+读取优先级已核对**与树路径逐条一致**：`FormulaContext::get_data` 先 `classify_builtin_var`（OHLCV/A），
+再落 `ctx.variables`；树路径 `resolve_variable_zero_copy` 同样是先 builtin 再 `ctx.variables`。
+两处都没有「数据列」这一层，因此不存在「输出名恰好等于某数据列」时的歧义。
+
+### 10.3 primary 与最后一个具名输出通常是**同一块 buffer**
+
+`ExecutionOutput::values` 按保留顺序排列，`values[i]` 对应 `output_layout().outputs()[i].1`，`values[0]` 是主结果。
+但**主结果与最后一个具名输出常常指向同一个槽**（上式里是 `MACD`）。
+
+第一版实现先取 channels 再取 primary，于是 `take` 掉了 primary 也指向的缓冲区，主结果变成空序列
+（表现为 `left: 0, right: 80`）。现在改为：`values` 用 `Option` 逐个消费，**先取 primary**，
+槽已被取走的 channel 回落到 `primary.clone()`。
+
+用例 `a_multi_channel_formula_exposes_every_named_output` 钉住这一点，并额外断言 `DIF` 通道**确实带计算值**
+（不能只证明「两个全 NaN 序列相等」）。另一个用例
+`a_multi_channel_formula_carries_distinct_finite_series` 用 `A:MA(CLOSE,5);B:MA(CLOSE,10);C:A-B` 做**数值**验证：
+`C == A - B` 逐点成立、`A` 与 `B` 不同、`C`（末句）同时是 primary 与通道，且与树路径一致。
+
+### 10.4 为什么比较是 NaN-aware 的
+
+`assert_eq!` 不能用于 `f64` 序列：`NaN != NaN`，而**预热期 NaN 是合法结果**。
+`assert_same_series(plan, tree, tol)` 把「两边都是 NaN」也判为相等，本模块所有序列比较都走它。
+
+顺带记录一个**既有数值特性**（两条路径行为一致，故非本步缺陷，也不在本步修）：
+`ema_scalar`（`core/src/math/simd_kernels.rs:64`）以 `data[..period]` 的**简单均值**作种子，
+故种子窗口含 NaN 会**污染整条序列**。因此上式里 `DEA = EMA(DIF,9)` 与 `MACD` 在全 80 根上都是 NaN
+（`DIF` 前 25 根为 NaN，种子均值吃到 NaN）。这是「EMA 种子对前导 NaN 不健壮」的通用问题，
+**单独列为后续项**，不混进步骤 3。
+
+### 10.5 验收
+
+`cargo test -p finkit` 全量：**4015 passed / 0 failed / 16 ignored**（步骤 2 后为 4006，+9 即本步新增用例）。
+
+**differential 门禁必须重点看**，因为本步改了降级行为：
+
+- `domestic_corpus_plan_matches_ast_reference` → ok
+- `pine_corpus_plan_matches_ast_reference` → ok
+
+即 `assert_allowlist_matches` 未被触发 —— `OUTPUT:` 修复**既没有把任何白名单用例变绿**
+（现有条目全是缺 kernel 类，与输入布局无关），**也没有弄红任何原本通过的用例**。
+
+本步新增用例：`plan_execution_tests` 8 条（无状态一致、有状态一致、预热 NaN 一致、多通道具名输出、
+多通道数值一致、缺输入报错、重复求值复用缓存、缺 kernel 明确报错）+ `hot_plan.rs` 回归 1 条。
+
+### 10.6 下一步
+
+- **步骤 4（切换默认）**：加 `formula_execution_mode = tree | plan`，默认仍是 `tree`；differential 全绿且性能不回归后
+  才切默认，并**保留 `tree` 一个版本**作为回退路径。
+- **先补 registry SSOT 缺口**：`registry.rs` 只声明了公式引擎实现的 327 个函数中的 104 个，
+  缺席者被降级成「未知有状态函数」（多一条幽灵尾依赖、永不纯化），这是剩余 plan 路径失败的主因，
+  也是白名单里 kernel 类条目清不掉的根因。
+- **EMA 种子健壮性**（见 §10.4）单独处理：要么种子只用**已就绪**的窗口，要么前导 NaN 不参与种子。

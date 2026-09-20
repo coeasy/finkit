@@ -16,7 +16,9 @@ use crate::formula::parser::parse_formula;
 use crate::formula::pine::{map_pine_to_alphata_with_security, parse_pine, PineSecurityResolver};
 use crate::formula::templates::{FormulaTemplate, FormulaTemplates};
 use crate::formula::types::*;
-use crate::formula::{normalize_formula_source, parse_formula_with_dialect, FormulaDialect};
+use crate::formula::{
+    normalize_formula_source, parse_formula_with_dialect, unified_formula_executor, FormulaDialect,
+};
 use crate::streaming::indicators::{StreamingRsi, StreamingSma};
 use crate::streaming::StreamingIndicator;
 use ndarray::Array1;
@@ -144,6 +146,47 @@ impl FormulaPlanCache {
         self.entries.clear();
         self.hits = 0;
         self.misses = 0;
+    }
+}
+
+/// One compiled-plan evaluation: the primary series plus every named channel.
+///
+/// The primary is always the value of the formula's last value-producing
+/// statement (see [`FormulaHotPlan::outputs`]); `channels` are the `OUTPUT:`
+/// declarations, so a MACD script reports `DIF`/`DEA`/`MACD` rather than only
+/// its last line.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct FormulaPlanOutput {
+    primary: Vec<f64>,
+    channels: Vec<(String, Vec<f64>)>,
+}
+
+impl FormulaPlanOutput {
+    /// The formula's primary result series.
+    #[must_use]
+    pub fn primary(&self) -> &[f64] {
+        &self.primary
+    }
+
+    /// Named output channels in declaration order.
+    #[must_use]
+    pub fn channels(&self) -> &[(String, Vec<f64>)] {
+        &self.channels
+    }
+
+    /// One named channel's series, if the formula declares it.
+    #[must_use]
+    pub fn channel(&self, name: &str) -> Option<&[f64]> {
+        self.channels
+            .iter()
+            .find(|(channel, _)| channel == name)
+            .map(|(_, values)| values.as_slice())
+    }
+
+    /// Consume this output and return its primary series.
+    #[must_use]
+    pub fn into_primary(self) -> Vec<f64> {
+        self.primary
     }
 }
 
@@ -415,6 +458,121 @@ impl FormulaEngine {
     /// Drop every cached plan and reset the cache statistics.
     pub fn clear_plan_cache(&mut self) {
         self.plan_cache.borrow_mut().clear();
+    }
+
+    /// Evaluate `source` through the compiled plan path, returning its primary series.
+    ///
+    /// This is the execution half of P0-2 step 3: it drives the same
+    /// `UnifiedExecutor` the differential gate validates, using the cached plan
+    /// from [`Self::compile_plan`].
+    ///
+    /// The tree path is untouched — this is an *additional* entry point, so
+    /// nothing switches over until `formula_execution_mode` lands in step 4.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FormulaError`] if the formula cannot be parsed or planned (see
+    /// [`Self::compile_plan`]), if the context does not supply every input series
+    /// the plan declares, or if execution fails — most often because the plan
+    /// contains an operator with no numeric kernel yet.
+    pub fn eval_plan(
+        &self,
+        source: &str,
+        ctx: &FormulaContext,
+    ) -> Result<Array1<f64>, FormulaError> {
+        Ok(Array1::from_vec(
+            self.eval_plan_channels(source, FormulaDialect::default(), &ParamValues::new(), ctx)?
+                .into_primary(),
+        ))
+    }
+
+    /// [`Self::eval_plan`] for an explicit dialect.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::eval_plan`].
+    pub fn eval_plan_with_dialect(
+        &self,
+        source: &str,
+        dialect: FormulaDialect,
+        ctx: &FormulaContext,
+    ) -> Result<Array1<f64>, FormulaError> {
+        Ok(Array1::from_vec(
+            self.eval_plan_channels(source, dialect, &ParamValues::new(), ctx)?
+                .into_primary(),
+        ))
+    }
+
+    /// Evaluate `source` through the compiled plan path and return every channel.
+    ///
+    /// Unlike the tree path this takes `&FormulaContext`: the plan reads inputs and
+    /// returns outputs, and never writes assignment results back into
+    /// `ctx.variables`, so a shared borrow is all it needs.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::eval_plan`].
+    pub fn eval_plan_channels(
+        &self,
+        source: &str,
+        dialect: FormulaDialect,
+        params: &ParamValues,
+        ctx: &FormulaContext,
+    ) -> Result<FormulaPlanOutput, FormulaError> {
+        let plan = self.compile_plan(source, dialect, params)?;
+
+        // Bind every numeric input slot the plan declared. A slot that no binding
+        // fills is a hard error: substituting another series would convert an
+        // input-layout bug into a silent numeric mismatch.
+        let mut slots: Vec<Option<&[f64]>> = vec![None; plan.hot().input_layout().len()];
+        for binding in plan.input_bindings() {
+            let values = ctx.get_data(binding.name()).ok_or_else(|| {
+                FormulaError::RuntimeError(format!(
+                    "formula plan requires input series `{}`, which the context does not provide",
+                    binding.name()
+                ))
+            })?;
+            slots[binding.slot().0] = Some(values);
+        }
+        let mut inputs = Vec::with_capacity(slots.len());
+        for (index, slot) in slots.into_iter().enumerate() {
+            inputs.push(slot.ok_or_else(|| {
+                FormulaError::RuntimeError(format!(
+                    "formula plan input slot {index} was never bound"
+                ))
+            })?);
+        }
+
+        let mut executor = unified_formula_executor(&plan);
+        let output = executor.execute(&inputs).map_err(|error| {
+            FormulaError::RuntimeError(format!("formula plan execution failed: {error}"))
+        })?;
+
+        // `ExecutionOutput::values` is ordered by retained output, so resolve each
+        // named channel through the output layout instead of assuming the binding
+        // order matches it.
+        //
+        // The primary and the *last* named output are usually the same retained
+        // buffer — `DIF:...;DEA:...;MACD:...` reports `MACD` as the result — so
+        // neither may simply be `take`n first: taking the channel would leave the
+        // primary empty. `values` is therefore consumed through `Option`s, and a
+        // channel whose slot was already taken clones the primary.
+        let layout = plan.hot().output_layout().outputs();
+        let mut values: Vec<Option<Vec<f64>>> = output.values.into_iter().map(Some).collect();
+        let primary = values.first_mut().and_then(Option::take).ok_or_else(|| {
+            FormulaError::RuntimeError("formula plan produced no output series".to_string())
+        })?;
+        let channels = plan
+            .outputs()
+            .iter()
+            .filter_map(|binding| {
+                let index = layout.iter().position(|(_, slot)| *slot == binding.slot())?;
+                let series = values[index].take().unwrap_or_else(|| primary.clone());
+                Some((binding.name().to_string(), series))
+            })
+            .collect();
+
+        Ok(FormulaPlanOutput { primary, channels })
     }
 
     /// Register a reusable, parameterized expression component.
@@ -2855,6 +3013,249 @@ mod plan_cache_tests {
         assert_eq!(
             engine.plan_cache_stats(),
             FormulaPlanCacheStats { hits: 0, misses: 0 }
+        );
+    }
+}
+
+#[cfg(test)]
+mod plan_execution_tests {
+    use super::*;
+
+    /// Deterministic OHLCV with a trend plus a wave, long enough for the longest
+    /// warm-up used below.
+    #[allow(clippy::cast_precision_loss)] // bar counts here are far below 2^53
+    fn ctx(len: usize) -> FormulaContext {
+        let series = |base: f64, step: f64, wave: f64| {
+            Array1::from_vec(
+                (0..len)
+                    .map(|index| {
+                        let i = index as f64;
+                        base + step * i + wave * (i * 0.7).sin()
+                    })
+                    .collect(),
+            )
+        };
+        FormulaContext::new(
+            series(10.0, 0.10, 0.30),
+            series(10.5, 0.10, 0.40),
+            series(9.5, 0.10, 0.20),
+            series(10.0, 0.10, 0.35),
+            series(1000.0, 10.0, 50.0),
+            None,
+        )
+    }
+
+    /// Compare two series element-wise, treating two NaNs as equal.
+    ///
+    /// Warm-up bars are legitimately NaN — `EMA(CLOSE, 26)` has no value for its
+    /// first 25 samples — so a plain equality assertion on the vectors would fail
+    /// on a correct result.
+    fn assert_same_series(plan: &[f64], tree: &[f64], tolerance: f64) {
+        assert_eq!(plan.len(), tree.len(), "series lengths differ");
+        for (index, (left, right)) in plan.iter().zip(tree.iter()).enumerate() {
+            assert!(
+                (left - right).abs() <= tolerance || (left.is_nan() && right.is_nan()),
+                "index {index}: plan {left} vs tree {right}"
+            );
+        }
+    }
+
+    /// Evaluate `source` on both paths and assert they agree element-wise.
+    fn assert_plan_matches_tree(source: &str, len: usize) {
+        let context = ctx(len);
+        let plan = FormulaEngine::new()
+            .eval_plan(source, &context)
+            .unwrap_or_else(|error| panic!("plan path failed for `{source}`: {error}"));
+
+        let mut tree_context = context.clone();
+        let tree = FormulaEngine::new()
+            .eval(source, &mut tree_context)
+            .unwrap_or_else(|error| panic!("tree path failed for `{source}`: {error}"));
+
+        assert_same_series(&plan.to_vec(), &tree.to_vec(), 1e-9);
+    }
+
+    #[test]
+    fn a_stateless_plan_matches_the_tree_path() {
+        assert_plan_matches_tree("CLOSE * 2 + 1", 60);
+        assert_plan_matches_tree("MA(CLOSE, 5)", 60);
+        assert_plan_matches_tree("HHV(HIGH, 10) - LLV(LOW, 10)", 60);
+    }
+
+    #[test]
+    fn a_stateful_plan_matches_the_tree_path() {
+        assert_plan_matches_tree("EMA(CLOSE, 12)", 80);
+        assert_plan_matches_tree("RSI(CLOSE, 14)", 80);
+        assert_plan_matches_tree("EMA(CLOSE, 12) + ROC(CLOSE, 10)", 80);
+    }
+
+    #[test]
+    fn plan_and_tree_agree_on_warm_up_nans() {
+        let context = ctx(40);
+        let plan = FormulaEngine::new()
+            .eval_plan("EMA(CLOSE, 12)", &context)
+            .expect("plan evaluates");
+        let mut tree_context = context.clone();
+        let tree = FormulaEngine::new()
+            .eval("EMA(CLOSE, 12)", &mut tree_context)
+            .expect("tree evaluates");
+
+        let plan = plan.to_vec();
+        let tree = tree.to_vec();
+        // The first 11 samples have no EMA yet, on both paths.
+        assert!(
+            plan[..11].iter().all(|value| value.is_nan()),
+            "plan warm-up should be NaN: {:?}",
+            &plan[..11]
+        );
+        assert!(tree[..11].iter().all(|value| value.is_nan()));
+        assert!(plan[11].is_finite() && tree[11].is_finite());
+        assert_same_series(&plan, &tree, 1e-9);
+    }
+
+    #[test]
+    fn a_multi_channel_formula_exposes_every_named_output() {
+        let engine = FormulaEngine::new();
+        let context = ctx(80);
+
+        let output = engine
+            .eval_plan_channels(
+                "DIF:EMA(CLOSE,12)-EMA(CLOSE,26);DEA:EMA(DIF,9);MACD:(DIF-DEA)*2",
+                FormulaDialect::AlphaTA,
+                &ParamValues::new(),
+                &context,
+            )
+            .expect("multi-channel plan evaluates");
+
+        // Every `OUTPUT:` declaration is addressable by name, not just the last
+        // line — that is what multi-root retention in the plan layer buys.
+        assert_eq!(output.channels().len(), 3);
+        for name in ["DIF", "DEA", "MACD"] {
+            let channel = output
+                .channel(name)
+                .unwrap_or_else(|| panic!("channel `{name}` missing from {:?}", output.channels()));
+            assert_eq!(channel.len(), 80);
+        }
+        assert_eq!(output.primary().len(), 80);
+
+        // `DIF` is the first channel and must carry real data: the plan lowered
+        // `DIF:...` into a local write (see the `OUTPUT:` arm of
+        // `lower_formula_plumbing`), so the later `EMA(DIF, 9)` reads it as a
+        // variable rather than demanding a caller-supplied series named `DIF`.
+        let dif = output.channel("DIF").unwrap();
+        assert!(
+            dif.iter().any(|value| value.is_finite()),
+            "the DIF channel should carry computed values, not warm-up NaNs only"
+        );
+
+        // The primary is the value of the last value-producing statement, which
+        // for this formula is `MACD` — so the two must be the *same* series. This
+        // is the case that used to hand back an empty primary, because resolving
+        // the channels consumed the very buffer the primary also points at.
+        //
+        // Compared NaN-aware, not with `assert_eq!`: `DEA` is `EMA(DIF, 9)` and
+        // `DIF` is NaN for its first 25 samples, so the EMA seed averages a NaN
+        // window and `DEA`/`MACD` are legitimately all-NaN here. Slice equality
+        // would fail on two identical vectors because `NaN != NaN`.
+        assert_same_series(output.primary(), output.channel("MACD").unwrap(), 0.0);
+        assert!(output.channel("NOPE").is_none());
+    }
+
+    #[test]
+    fn a_multi_channel_formula_carries_distinct_finite_series() {
+        // A channel that is *not* the primary must still be its own series: this
+        // formula's last statement is `C`, but `A` and `B` are retained roots in
+        // their own right. Using rolling means (rather than EMAs) keeps the
+        // values finite from index 9, so the comparison is numeric rather than a
+        // warm-up-NaN artefact.
+        let engine = FormulaEngine::new();
+        let context = ctx(60);
+
+        let output = engine
+            .eval_plan_channels(
+                "A:MA(CLOSE,5);B:MA(CLOSE,10);C:A-B",
+                FormulaDialect::AlphaTA,
+                &ParamValues::new(),
+                &context,
+            )
+            .expect("multi-channel plan evaluates");
+
+        let a = output.channel("A").expect("channel A").to_vec();
+        let b = output.channel("B").expect("channel B").to_vec();
+        let c = output.channel("C").expect("channel C").to_vec();
+
+        assert!(c.iter().any(|value| value.is_finite()));
+        assert_eq!(c[9], a[9] - b[9], "C should be A - B at index 9");
+        assert!(
+            a.iter().zip(b.iter()).any(|(left, right)| left != right),
+            "A and B should be different series"
+        );
+
+        // `C` is the last statement, so it is both the primary and a channel.
+        assert_same_series(output.primary(), &c, 0.0);
+
+        // And the whole channel set must agree with the reference tree path.
+        let mut tree_context = context.clone();
+        let tree = FormulaEngine::new()
+            .eval("A:MA(CLOSE,5);B:MA(CLOSE,10);C:A-B", &mut tree_context)
+            .expect("tree evaluates");
+        assert_same_series(output.primary(), &tree.to_vec(), 1e-9);
+    }
+
+    #[test]
+    fn a_missing_input_series_is_reported_rather_than_substituted() {
+        let engine = FormulaEngine::new();
+        let context = ctx(40);
+
+        // `MYVAR` is neither OHLCV nor a context variable. The plan path must
+        // refuse, because silently substituting another series would hide an
+        // input-layout bug behind a numeric mismatch.
+        let error = engine
+            .eval_plan("MA(MYVAR, 5)", &context)
+            .expect_err("an unbound input must fail");
+
+        let message = error.to_string();
+        assert!(
+            message.contains("MYVAR"),
+            "error should name the missing series: {message}"
+        );
+    }
+
+    #[test]
+    fn a_repeated_evaluation_reuses_the_cached_plan() {
+        let engine = FormulaEngine::new();
+        let context = ctx(40);
+
+        engine
+            .eval_plan("MA(CLOSE,5)", &context)
+            .expect("plan evaluates");
+        engine
+            .eval_plan("MA(CLOSE,5)", &context)
+            .expect("plan evaluates");
+
+        assert_eq!(engine.plan_cache_size(), 1);
+        assert_eq!(
+            engine.plan_cache_stats(),
+            FormulaPlanCacheStats { hits: 1, misses: 1 }
+        );
+    }
+
+    #[test]
+    fn an_unsupported_operator_fails_loudly_instead_of_falling_back() {
+        let engine = FormulaEngine::new();
+        let context = ctx(40);
+
+        // `IF` is a documented kernel gap. The plan path must report it rather
+        // than quietly re-running the tree path, otherwise a caller could never
+        // tell which engine produced a number.
+        let error = engine
+            .eval_plan("IF(CLOSE>OPEN, 1, 0)", &context)
+            .expect_err("a kernel-less operator must fail");
+
+        let message = error.to_string();
+        assert!(
+            message.contains("formula plan"),
+            "error should identify the plan path: {message}"
         );
     }
 }
