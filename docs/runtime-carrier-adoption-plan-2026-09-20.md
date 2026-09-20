@@ -1,7 +1,7 @@
 # crates/\* 接入生产：功能缺口分析与迁移规划
 
 日期：2026-09-20
-状态：**R1 已完成，R2 已实现；R3 / R4 待执行**
+状态：**R1 已完成，R2 / R3 已实现；R4 待执行**
 上游决策：用户 2026-09-20 选择「接入生产，作为 Runtime 载体」
 相关文档：[improvement-plan-2026-09-20.md](improvement-plan-2026-09-20.md) §P2-1、[architecture-gap-assessment-2026-09-20.md](architecture-gap-assessment-2026-09-20.md):118
 
@@ -220,3 +220,48 @@ R1 → R2 → R3 → R4。理由：
 （`a=1,b=2` ≡ `b=2,a=1`）、`unknown_provider_is_rejected`，以及
 `registry_constructs_a_runnable_definition`（构造出的定义经 `FactorRegistry` + `FactorEngine`
 真实求值通过）。
+
+### R3 已实现（真缺口 ②）
+
+新增 `core/src/factor_graph.rs`（`lib.rs` 中以
+`#[cfg(all(feature = "std", feature = "formula"))] pub mod factor_graph` 挂载）。
+**没有引入第二套执行引擎**：`FactorGraph::build` 把图 lowering 成
+`AstNode::Statements` 块后交给 `FormulaHotPlan::compile`，因此图与等价公式串共用同一套
+lowering / CSE / DCE / kernel dispatcher。这一点由文件末尾的差分测试守住。
+
+| 项目 | 说明 |
+|---|---|
+| `FactorOperation` | `Call { function }` / `Binary(BinaryOperator)` / `Constant` |
+| `FactorNode` | `id` + `operation` + 输入列表 + 数值参数；builder：`new` / `binary` / `constant` / `input` / `param` |
+| `FactorGraph` | `declare_input(s)` / `add_node` / `build(primary)` / `to_ast(primary)` / `used_inputs` |
+| `FactorGraphError` | `DuplicateNode` / `UnknownPrimary` / `UnknownInput` / `InputArity` / `UnexpectedParams` / `ParamArity` / `Cycle` / `Plan` |
+| `FactorGraphPlan` | `plan()` / `order()` / `primary()` / `external_inputs()` / `node_index(id)` |
+
+**实现过程中发现的两条硬约束**（都写进了模块文档，因为从 AST 上看不出来）：
+
+1. **节点必须用 `Assignment` 定义，不能只发 `Output`。**
+   `hot_plan::lower_formula_plumbing` 只把 `ASSIGN:` 节点记进 `local_writes`；
+   `VARIABLE:<id>` 只有在定义是 assignment 时才会被解析成别名，否则会被
+   `execution_plan::InputLayout` 判成**外部输入**——plan 能编译成功，却在执行时索要一个
+   与你节点同名的数据序列。所以 lowering 是「先 `Assignment` 定义全部节点，再为每个节点
+   发一个 `Output` 使其可按 id 寻址，最后以裸 `Variable(primary)` 声明结果」。
+   最后一句必须是裸引用而不是 primary 自己的 `Output`：拓扑序并不保证 primary 在末尾
+   （没有任何节点依赖它的节点可能排在它前面）。
+2. **算术必须走 `BINARY:*`，不能走 `CALL:ADD/SUB/MULT/DIV`。**
+   `unified_dispatch` 只派发 `BINARY:Add|Sub|Mul|Div|...`；`CALL:SUB` 不在派发表里，
+   所以把 `fast - slow` 建模成对注册表 `SUB` 函数的调用会**编译通过然后执行失败**。
+   `FactorOperation::Binary` 把这个区分显式化，而不是从函数名去猜。
+
+**顺带的一处去重**：`compute_ir::canonical_name` 从私有改为 `pub(crate)`。
+公式层把每个变量名 trim + 大写，直接构造 AST 的前端必须用同一条规则，否则
+`fast` / `FAST` 会在 plan 里变成同一个变量而互相覆盖——现在二者在 `add_node` 阶段就报
+`DuplicateNode`。
+
+**验收**：`cargo test -p finkit --lib factor_graph` → **10 passed / 0 failed**。其中
+`graph_and_equivalent_formula_produce_the_same_series` 是差分门：
+`(EMA(CLOSE,12)-EMA(CLOSE,26))/CLOSE` 分别由图与等价公式串编译执行，逐点比对
+（NaN 视为相等，因为预热段两侧都是 NaN），容差 1e-12。
+另有 `every_node_series_is_addressable_by_id`（校验发布出来的 `diff` 通道确实等于
+`fast - slow`，而不只是长度对）、`declaration_order_does_not_affect_the_result`、
+`a_cycle_is_reported_by_node_name`、`an_undeclared_input_is_rejected_rather_than_becoming_a_data_series`、
+`node_kind_arity_is_enforced`、`ids_that_differ_only_in_case_are_the_same_node` 等。

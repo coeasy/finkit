@@ -97,6 +97,9 @@ pub mod factors;
 #[cfg(feature = "std")]
 /// Declarative factor construction: provider boundary with typed parameter validation.
 pub mod factor_provider;
+#[cfg(all(feature = "std", feature = "formula"))]
+/// Declarative multi-node factor graphs, lowered onto the compiled formula plan path.
+pub mod factor_graph;
 #[cfg(all(feature = "std", feature = "indicators-all", feature = "formula"))]
 /// Feature engineering: multi-period features, signal detection, and ML label generation.
 pub mod features;

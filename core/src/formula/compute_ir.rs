@@ -380,7 +380,13 @@ impl<'a> FormulaLowerer<'a> {
     }
 }
 
-fn canonical_name(name: &str) -> String {
+/// Canonical form of a formula variable name.
+///
+/// The formula layer trims and upper-cases every name before it becomes an
+/// operation label, so `fast`, `FAST` and `" fast "` all denote one variable.
+/// Exposed crate-wide so a frontend that builds an AST directly (see
+/// [`crate::factor_graph`]) can apply the same rule instead of mirroring it.
+pub(crate) fn canonical_name(name: &str) -> String {
     name.trim().to_ascii_uppercase()
 }
 
