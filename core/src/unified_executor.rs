@@ -233,12 +233,22 @@ impl<D: KernelDispatcher> UnifiedExecutor<D> {
         range: Range<usize>,
     ) -> Result<ExecutionOutput, ExecuteError> {
         let common_len = validate_inputs(&self.plan, inputs)?;
-        if range.start > range.end || range.end > common_len {
+        if range.start > range.end {
             return Err(ExecuteError::InvalidRange {
                 start: range.start,
                 end: range.end,
-                len: common_len,
+                len: common_len.unwrap_or(0),
             });
+        }
+        // Only a plan with bound inputs has an extent the range must fit inside.
+        if let Some(len) = common_len {
+            if range.end > len {
+                return Err(ExecuteError::InvalidRange {
+                    start: range.start,
+                    end: range.end,
+                    len,
+                });
+            }
         }
         self.run(inputs, range)
     }
@@ -248,7 +258,16 @@ impl<D: KernelDispatcher> UnifiedExecutor<D> {
     /// This is the streaming/`eval_last` path. Stateful dispatchers update the
     /// same [`StateArena`] slots on every call.
     pub fn execute_last(&mut self, inputs: &[&[f64]]) -> Result<ExecutionOutput, ExecuteError> {
-        let common_len = validate_inputs(&self.plan, inputs)?;
+        // Without bound inputs there is no "last sample" to address: the length
+        // of a constant-only plan is the caller's to choose, and this entry point
+        // has no way to receive it.
+        let Some(common_len) = validate_inputs(&self.plan, inputs)? else {
+            return Err(ExecuteError::InvalidRange {
+                start: 0,
+                end: 1,
+                len: 0,
+            });
+        };
         if common_len == 0 {
             return Err(ExecuteError::InvalidRange {
                 start: 0,
@@ -350,7 +369,16 @@ impl<D: KernelDispatcher> UnifiedExecutor<D> {
     }
 }
 
-fn validate_inputs(plan: &HotExecutionPlan, inputs: &[&[f64]]) -> Result<usize, ExecuteError> {
+/// Validate the bound inputs and report their common extent.
+///
+/// `Ok(None)` means the plan declares no input slots at all — a constant-only
+/// formula such as `10 + 20`. There is then no input extent to check a range
+/// against, and the caller supplies the length itself; collapsing that case to
+/// `0` (as this used to) made every non-empty range look out of bounds.
+fn validate_inputs(
+    plan: &HotExecutionPlan,
+    inputs: &[&[f64]],
+) -> Result<Option<usize>, ExecuteError> {
     let expected = plan.input_layout().len();
     if inputs.len() != expected {
         return Err(ExecuteError::InputCount {
@@ -358,7 +386,9 @@ fn validate_inputs(plan: &HotExecutionPlan, inputs: &[&[f64]]) -> Result<usize, 
             actual: inputs.len(),
         });
     }
-    let common_len = inputs.first().map_or(0, |input| input.len());
+    let Some(common_len) = inputs.first().map(|input| input.len()) else {
+        return Ok(None);
+    };
     for (slot, input) in inputs.iter().enumerate() {
         if input.len() != common_len {
             return Err(ExecuteError::InputLength {
@@ -368,7 +398,7 @@ fn validate_inputs(plan: &HotExecutionPlan, inputs: &[&[f64]]) -> Result<usize, 
             });
         }
     }
-    Ok(common_len)
+    Ok(Some(common_len))
 }
 
 #[cfg(test)]

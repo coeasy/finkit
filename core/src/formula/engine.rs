@@ -133,6 +133,10 @@ impl FormulaPlanCache {
         self.entries.len()
     }
 
+    fn contains_key(&self, key: &FormulaPlanKey) -> bool {
+        self.entries.contains_key(key)
+    }
+
     /// Drop every plan but keep the counters.
     ///
     /// Registering a custom component can change what an existing source
@@ -297,9 +301,16 @@ pub enum FormulaExecutionMode {
     ///
     /// This is not caution for its own sake. Flipping the default was measured,
     /// not assumed: doing so failed 18 test groups, and closing the kernel,
-    /// sandbox, compound-assignment and statistics gaps brought that to 6. See
-    /// the note in `docs/refactor-plan-2026-09-21.md` (§3.2) for the measured
-    /// per-round list and what each remaining group needs.
+    /// sandbox, compound-assignment, statistics, cache and length-inference gaps
+    /// brought that to 3. See the note in `docs/refactor-plan-2026-09-21.md`
+    /// (§3.2) for the measured per-round list.
+    ///
+    /// The 3 that remain are one decision, not three bugs: Pine user-defined
+    /// functions and named outputs read their result from `ctx.variables`, and
+    /// the plan path deliberately does not write it (see
+    /// [`Self::eval_plan_channels`], which takes `&FormulaContext`). Closing
+    /// that changes a public signature across five language bindings, so it
+    /// waits on an explicit release decision.
     #[default]
     Tree,
     /// Compiled compute plan driven by `UnifiedExecutor`.
@@ -628,9 +639,17 @@ impl FormulaEngine {
                 period_type: ctx.period_type,
             },
         );
-        let output = executor.execute(&inputs).map_err(|error| {
-            FormulaError::RuntimeError(format!("formula plan execution failed: {error}"))
-        })?;
+        // A formula with no bound inputs is a constant expression (`10 + 20`),
+        // and it still has a length: the context's series length. `execute`
+        // derives the length from `inputs.first()`, which does not exist here, so
+        // the range is supplied explicitly. When inputs do exist they define the
+        // length, exactly as before.
+        let length = inputs.first().map_or(ctx.data_len, |input| input.len());
+        let output = executor
+            .execute_range(&inputs, 0..length)
+            .map_err(|error| {
+                FormulaError::RuntimeError(format!("formula plan execution failed: {error}"))
+            })?;
 
         // Re-check the wall-clock budget: entering the sandbox only proves the
         // limit held before execution started.
@@ -1858,18 +1877,51 @@ impl FormulaEngine {
     }
 
     /// 缓存相关方法
+    ///
+    /// Whether `source` is already compiled, **in the cache the active mode
+    /// uses**.
+    ///
+    /// The engine keeps two compiled-formula caches: the AST cache the tree path
+    /// uses and the plan cache the plan path uses. Reporting only the AST cache
+    /// made these statistics describe a cache the engine was not consulting, so
+    /// every formula looked uncached in plan mode while its plan sat in the plan
+    /// cache. Which cache is live follows [`Self::execution_mode`].
+    ///
+    /// The plan cache is keyed by source *and* dialect *and* parameter
+    /// fingerprint, but this method only receives a source, so it queries the
+    /// default dialect with no parameters — the same key [`Self::eval`] uses.
+    /// [`Self::plan_cache_stats`] covers the rest.
     pub fn cache_hit(&self, source: &str) -> bool {
-        self.cache.contains(source)
+        match self.execution_mode {
+            FormulaExecutionMode::Tree => self.cache.contains(source),
+            FormulaExecutionMode::Plan => self.plan_cache.borrow().contains_key(
+                &FormulaPlanKey::new(source, FormulaDialect::default(), &ParamValues::new()),
+            ),
+        }
     }
 
+    /// Number of compiled formulas currently held, in the active mode's cache.
+    ///
+    /// See [`Self::cache_hit`] for why this follows the execution mode.
     pub fn cache_size(&self) -> usize {
-        self.cache.len()
+        match self.execution_mode {
+            FormulaExecutionMode::Tree => self.cache.len(),
+            FormulaExecutionMode::Plan => self.plan_cache.borrow().len(),
+        }
     }
 
+    /// Drop every compiled formula and every streaming scratch series.
+    ///
+    /// Clears the AST cache *and* the plan cache regardless of the active mode.
+    /// Clearing only one would let the next evaluation skip recompilation right
+    /// after the caller asked for a clean slate — which is the whole point of
+    /// calling this after registering a custom component or otherwise changing
+    /// what a source resolves to.
     pub fn clear_cache(&mut self) {
         self.cache.clear();
         self.streaming_ema.borrow_mut().clear();
         self.streaming_common.borrow_mut().clear();
+        self.clear_plan_cache();
     }
 
     pub fn compile_bytecode(&mut self, source: &str) -> Result<Bytecode, FormulaError> {

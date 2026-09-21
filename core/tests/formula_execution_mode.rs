@@ -156,3 +156,86 @@ fn the_switch_applies_to_dialect_entry_points() {
         );
     }
 }
+
+/// A formula with no bound input still has a length: the context's.
+///
+/// The plan path used to derive the execution length from the first bound input
+/// slot, so a constant expression (`10 + 20`) had no length to run over and
+/// failed with "cannot infer execution length without bound inputs". The tree
+/// path broadcast the constant across `ctx.data_len`, so the two modes
+/// disagreed on whether the formula was even runnable.
+#[test]
+fn constant_only_formulas_run_at_the_context_length() {
+    for source in ["10 + 20", "SQRT(9) * 2", "IF(1, 7, 8)"] {
+        let tree = FormulaEngine::new()
+            .eval(source, &mut context(5))
+            .unwrap_or_else(|error| panic!("tree failed on `{source}`: {error:?}"));
+        let plan = FormulaEngine::new()
+            .with_execution_mode(FormulaExecutionMode::Plan)
+            .eval(source, &mut context(5))
+            .unwrap_or_else(|error| panic!("plan failed on `{source}`: {error:?}"));
+
+        assert_eq!(tree.len(), 5, "`{source}` must span the whole context");
+        assert_eq!(plan.len(), 5, "`{source}` must span the whole context");
+        for index in 0..tree.len() {
+            assert!(
+                (tree[index] - plan[index]).abs() < 1e-12,
+                "`{source}` index {index}: tree={} plan={}",
+                tree[index],
+                plan[index]
+            );
+        }
+    }
+}
+
+/// The public cache statistics must describe the cache the engine is using.
+///
+/// Under `Plan` the engine compiles through the plan cache and never touches the
+/// AST cache, so reporting the AST cache made `cache_hit` return false and
+/// `cache_size` return 0 for a formula that was in fact cached. A caller could
+/// not tell a warm engine from a cold one.
+#[test]
+fn cache_statistics_follow_the_active_mode() {
+    for mode in [FormulaExecutionMode::Tree, FormulaExecutionMode::Plan] {
+        let mut engine = FormulaEngine::new().with_execution_mode(mode);
+        assert!(
+            !engine.cache_hit("MA(CLOSE, 5)"),
+            "{mode:?}: nothing is compiled yet"
+        );
+
+        engine.eval("MA(CLOSE, 5)", &mut context(32)).expect("eval");
+        assert!(
+            engine.cache_hit("MA(CLOSE, 5)"),
+            "{mode:?}: the formula just ran, so its compiled form is held"
+        );
+        assert_eq!(engine.cache_size(), 1, "{mode:?}");
+
+        engine.clear_cache();
+        assert!(
+            !engine.cache_hit("MA(CLOSE, 5)"),
+            "{mode:?}: clear_cache must drop the cache this mode reads"
+        );
+        assert_eq!(engine.cache_size(), 0, "{mode:?}");
+    }
+}
+
+/// `clear_cache` must drop both caches, not just the active one.
+///
+/// Leaving the plan cache behind would let an evaluation in plan mode skip
+/// recompilation immediately after the caller asked for a clean slate — the
+/// reason to call this at all is that a source may now resolve differently.
+#[test]
+fn clear_cache_drops_the_plan_cache_from_tree_mode_too() {
+    let mut engine = FormulaEngine::new();
+    engine
+        .eval_plan("MA(CLOSE, 5)", &context(32))
+        .expect("plan");
+    assert_eq!(engine.plan_cache_size(), 1);
+
+    engine.clear_cache();
+    assert_eq!(
+        engine.plan_cache_size(),
+        0,
+        "clear_cache left a compiled plan behind while in Tree mode"
+    );
+}

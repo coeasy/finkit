@@ -258,7 +258,7 @@
 **切默认只需一行**（`#[default] Tree` → `Plan`）；建议同时决定
 JIT/`eval_simd` 与多语言绑定的统一发布节奏（§3.4）。
 
-##### 实测：现在切默认会挂 6 组测试（2026-09-21，第四轮）
+##### 实测：现在切默认会挂 3 组测试（2026-09-21，第五轮）
 
 不猜了，直接把 `#[default]` 翻成 `Plan` 跑了一遍 `cargo test -p finkit`，
 **每轮都实测、只记录实测值**：
@@ -269,13 +269,12 @@ JIT/`eval_simd` 与多语言绑定的统一发布节奏（§3.4）。
 | 第二轮（算术/超越/窗口 kernel） | **12 failed** | `ADD/SUB/MULT/DIV`、`MINUS`、`SQRT`、`SINH/COSH/TANH`、`MAXINDEX/MININDEX`、`HHVBARS/LLVBARS` |
 | 第三轮（沙箱 + COMPOUND + 元素级 kernel） | **8 failed** | 沙箱 2 组、`COMPOUND:X:AddAssign`、`CROSS`/`FIXNAN`/`STDDEV` |
 | 第四轮（`CROSSBELOW`/`VAR`） | **6 failed** | `CROSSBELOW`、`VAR` |
+| 第五轮（缓存 API + 常量公式定长） | **3 failed** | 缓存语义 2 组、常量-only 公式 1 组 |
 
-**剩余 6 组全是结构性缺口，没有一条是数值分叉**：
+**剩余 3 组是同一个根因，且没有一条是数值分叉**：
 
 | 类型 | 证据 | 代表用例 |
 |---|---|---|
-| **缓存语义** | `engine.cache_hit("MA(CLOSE, 5)")` 断言失败；`clear_cache` 计数对不上 | plan 走的是另一套 `compile_plan` 缓存，两个缓存互不可见 |
-| **常量-only 公式** | `cannot infer execution length without bound inputs` | 没有序列操作数的公式（plan 靠输入槽推断长度） |
 | **Pine 具名输出** | `runtime did not publish Pine output W` | plan 只回传主结果 + `plan.outputs()`，不写 `ctx.variables` |
 | **Pine 用户自定义函数** | `function result assignment must exist` | 同上，函数结果取不到 |
 
@@ -288,11 +287,36 @@ JIT/`eval_simd` 与多语言绑定的统一发布节奏（§3.4）。
    会让合成出的 `BINARY:Add` 拿到 3 个输入、在 dispatch 处撞 arity 检查。
    正确做法是只取前两个（`ASSIGN`/`OUTPUT` 早就是这么做的），排序边丢弃是安全的
    —— 写入已登记进 `local_writes`，后续读取会重新建立真实的数据依赖。
-3. **缓存语义**：需要设计决定（`cache_hit` 是否应覆盖 plan 缓存）。
-4. **常量-only 公式**：plan 需要一条「无输入时如何定长」的规则。
-5. **Pine 具名输出 / 用户自定义函数**：需要决定 plan 是否把赋值写回 `ctx.variables`
-   —— 这会把 `eval_plan_channels` 的签名从 `&FormulaContext` 改成 `&mut`，属于
-   跨 5 个语言绑定的行为变更，**必须由用户拍板**。
+3. ~~**缓存语义**~~ ✅ **已修**：见下。
+4. ~~**常量-only 公式**~~ ✅ **已修**：见下。
+5. **Pine 具名输出 / 用户自定义函数**：**唯一剩下的，需要用户拍板** —— 见下。
+
+##### 缓存 API 与常量公式定长（2026-09-21，第五轮）
+
+**① 缓存统计必须描述「引擎正在用的那个缓存」。**
+引擎有两个编译缓存：树路径的 AST 缓存、plan 路径的 plan 缓存。而
+`cache_hit`/`cache_size`/`clear_cache` 只看 AST 缓存 → 在 plan 模式下**恒为
+「未命中 / 0 条」**，统计描述的是一个引擎根本没在查的缓存，调用方分不出冷热。
+现按 `execution_mode` 分派；`cache_hit(source)` 只收 source，plan 缓存却按
+source+dialect+参数指纹做键，所以它在 plan 模式下查**默认 dialect + 空参数**
+（与 `eval` 同键），完整信息走 `plan_cache_stats`。
+
+`clear_cache` 则**两个缓存都清**，与模式无关 —— 只清一个会让下一次求值在调用方
+刚要求「清空」之后照样跳过重编译，而「某个 source 现在解析到别的东西了」正是调用它的原因。
+
+**② 常量公式的长度来自 `ctx.data_len`。**
+plan 路径原来从**第一个输入槽**推断执行长度，于是 `10 + 20` 这种没有输入槽的公式
+直接报 `cannot infer execution length without bound inputs`；而树路径会把常量广播到
+`ctx.data_len`。两条路径连「能不能跑」都不一致。
+修法有两层：`eval_plan_channels` 在无输入时显式用 `ctx.data_len` 定长；
+`UnifiedExecutor::validate_inputs` 的返回值从 `usize` 改成 `Option<usize>`
+（`None` = 计划没有输入槽），否则 `range.end > common_len` 会把**任何非空区间**
+都判成越界。
+
+**③ 剩下的 3 组是同一个决策，且会改公开签名。**
+plan 路径**刻意不写 `ctx.variables`**（`eval_plan_channels` 只收 `&FormulaContext`），
+而 Pine 的用户自定义函数与具名输出要靠它取结果。要修就得把签名改成 `&mut`，
+**跨 5 个语言绑定**，属于行为变更 —— 已列进「已知未决」，**不动**。
 
 ##### 沙箱如何在 plan 路径落地（2026-09-21）
 
