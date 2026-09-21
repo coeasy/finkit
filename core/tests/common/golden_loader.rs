@@ -21,8 +21,8 @@ use std::path::Path;
 
 /// 标准数值容差（与 TA-Lib / 同花顺绝对值输出对齐）
 #[allow(dead_code)] // shared test-support module: only some of the targets that
-// `mod common;` actually use the default tolerance, and the others compile it
-// under `-D warnings`.
+                    // `mod common;` actually use the default tolerance, and the others compile it
+                    // under `-D warnings`.
 pub const DEFAULT_TOLERANCE: f64 = 1e-9;
 
 /// 从黄金 CSV 文件加载第一列数值。

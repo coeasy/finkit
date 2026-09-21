@@ -21,7 +21,8 @@ fn main() {
         map_pine_to_alphata(&pine).expect("map_pine_to_alphata failed")
     } else {
         let source = args.first().cloned().unwrap_or_else(|| {
-            "DIF := EMA(CLOSE, 12) - EMA(CLOSE, 26); DEA := EMA(DIF, 9); (DIF - DEA) * 2".to_string()
+            "DIF := EMA(CLOSE, 12) - EMA(CLOSE, 26); DEA := EMA(DIF, 9); (DIF - DEA) * 2"
+                .to_string()
         });
         parse_formula(&source).expect("parse failed")
     };

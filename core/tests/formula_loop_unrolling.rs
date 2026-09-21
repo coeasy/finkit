@@ -9,7 +9,9 @@
 //! - that `array[index]` gathers and broadcasts rather than shifting.
 
 use finkit::formula::pine::{map_pine_to_alphata, parse_pine};
-use finkit::formula::{unified_formula_executor, AstNode, FormulaContext, FormulaEngine, FormulaHotPlan};
+use finkit::formula::{
+    unified_formula_executor, AstNode, FormulaContext, FormulaEngine, FormulaHotPlan,
+};
 use ndarray::Array1;
 
 /// Deterministic synthetic OHLCV.
@@ -61,7 +63,9 @@ fn plan_values(ast: &AstNode, ctx: &FormulaContext) -> Result<Array1<f64>, Strin
         inputs.push(slot.ok_or_else(|| format!("input slot {index} was never bound"))?);
     }
     let mut executor = unified_formula_executor(&plan);
-    let result = executor.execute(&inputs).map_err(|e| format!("execute: {e}"))?;
+    let result = executor
+        .execute(&inputs)
+        .map_err(|e| format!("execute: {e}"))?;
     result
         .values
         .into_iter()

@@ -239,7 +239,11 @@ fn formula_differential_elementwise_helpers_all_paths() {
     check_all_paths("ABS", "ABS(CLOSE - MA(CLOSE, 5))", 80);
     check_all_paths("SUM", "SUM(CLOSE, 5)", 80);
     check_all_paths("REF", "CLOSE - REF(CLOSE, 3)", 80);
-    check_all_paths("MAX_MIN", "MAX(CLOSE, MA(CLOSE,5)) - MIN(CLOSE, MA(CLOSE,5))", 80);
+    check_all_paths(
+        "MAX_MIN",
+        "MAX(CLOSE, MA(CLOSE,5)) - MIN(CLOSE, MA(CLOSE,5))",
+        80,
+    );
 }
 
 /// A trailing drawing directive must not become the formula's result.

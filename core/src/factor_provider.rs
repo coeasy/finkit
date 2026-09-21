@@ -461,7 +461,8 @@ mod tests {
         for bad in ["abc", "0", "-1"] {
             assert!(
                 matches!(
-                    registry.create(&FactorFactoryRequest::new("IDENTITY").with_param("period", bad)),
+                    registry
+                        .create(&FactorFactoryRequest::new("IDENTITY").with_param("period", bad)),
                     Err(FactorProviderError::Factory(
                         FactorFactoryError::InvalidParameter { .. }
                     ))

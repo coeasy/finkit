@@ -356,7 +356,12 @@ const TWO_SERIES: &[ParamSpec] = &[];
 // series (chip distribution, chart period), so they are declared here to keep
 // the plan-path kernel set a subset of the SSOT.
 const WINNER_PARAMS: &[ParamSpec] = &[ParamSpec::new("price", "series", None, None)];
-const COST_PARAMS: &[ParamSpec] = &[ParamSpec::new("ratio", "f64", None, Some("0 <= ratio <= 100"))];
+const COST_PARAMS: &[ParamSpec] = &[ParamSpec::new(
+    "ratio",
+    "f64",
+    None,
+    Some("0 <= ratio <= 100"),
+)];
 const REFDATE_PARAMS: &[ParamSpec] = &[
     ParamSpec::new("source", "series", None, None),
     ParamSpec::new("date", "f64", None, None),

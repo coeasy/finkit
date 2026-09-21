@@ -126,7 +126,10 @@ fn a_declarative_request_registers_an_executable_factor() {
 
     let mut engine = UnifiedOperationEngine::new(FactorRegistry::new());
     let name = engine
-        .define_factor(&providers, &FactorFactoryRequest::new("SMA").with_param("period", "5"))
+        .define_factor(
+            &providers,
+            &FactorFactoryRequest::new("SMA").with_param("period", "5"),
+        )
         .expect("the provider accepts the request");
     assert_eq!(name, "SMA_5");
 
@@ -145,7 +148,10 @@ fn a_declarative_request_registers_an_executable_factor() {
         .expect("the declarative factor executes");
 
     let values = &result.values[&name];
-    assert!(values[..4].iter().all(|value| value.is_nan()), "warm-up NaN");
+    assert!(
+        values[..4].iter().all(|value| value.is_nan()),
+        "warm-up NaN"
+    );
     for (index, expected) in [3.0, 4.0, 5.0, 6.0, 7.0, 8.0].iter().enumerate() {
         assert!(
             (values[index + 4] - expected).abs() < 1e-9,

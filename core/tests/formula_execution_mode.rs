@@ -147,8 +147,12 @@ fn the_switch_applies_to_dialect_entry_points() {
 
     assert_eq!(tree.len(), plan.len());
     for index in 0..tree.len() {
-        let matches =
-            (tree[index] - plan[index]).abs() < 1e-9 || (tree[index].is_nan() && plan[index].is_nan());
-        assert!(matches, "index {index}: tree={} plan={}", tree[index], plan[index]);
+        let matches = (tree[index] - plan[index]).abs() < 1e-9
+            || (tree[index].is_nan() && plan[index].is_nan());
+        assert!(
+            matches,
+            "index {index}: tree={} plan={}",
+            tree[index], plan[index]
+        );
     }
 }

@@ -1314,7 +1314,8 @@ impl UnifiedOperationEngine {
 
         match data_revision {
             Some(revision) => {
-                let key = OperationCacheKey::factor_batch(&canonical_targets, cache_scope, revision);
+                let key =
+                    OperationCacheKey::factor_batch(&canonical_targets, cache_scope, revision);
                 self.cached_or_compute(key, |engine| {
                     engine.execute_factor_targets_uncached(&canonical_targets, context)
                 })
@@ -2300,7 +2301,9 @@ mod tests {
         assert_eq!(cache.stats().hits, 1);
 
         // A miss must not be recorded as a hit, and vice versa.
-        assert!(cache.get(&OperationCacheKey::factor("SMA", Some("BBB"), 1)).is_none());
+        assert!(cache
+            .get(&OperationCacheKey::factor("SMA", Some("BBB"), 1))
+            .is_none());
         assert_eq!(cache.stats().misses, 2);
         assert_eq!(cache.stats().hits, 1);
     }
@@ -2337,8 +2340,14 @@ mod tests {
 
         cache.insert(key_c.clone(), cached_result(3.0));
         assert_eq!(cache.len(), 2);
-        assert!(cache.get(&key_a).is_some(), "recently used entry must survive");
-        assert!(cache.get(&key_b).is_none(), "least recently used entry must be evicted");
+        assert!(
+            cache.get(&key_a).is_some(),
+            "recently used entry must survive"
+        );
+        assert!(
+            cache.get(&key_b).is_none(),
+            "least recently used entry must be evicted"
+        );
         assert!(cache.get(&key_c).is_some());
     }
 
@@ -2356,10 +2365,7 @@ mod tests {
         assert_eq!(cache.len(), 2);
         assert!(cache.get(&key_b).is_some());
         // The replacement is visible under the original key, and `b` survived.
-        assert_eq!(
-            cache.get(&key_a).unwrap().primary_values().unwrap(),
-            &[9.0]
-        );
+        assert_eq!(cache.get(&key_a).unwrap().primary_values().unwrap(), &[9.0]);
     }
 
     #[test]

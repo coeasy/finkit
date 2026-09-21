@@ -84,17 +84,17 @@ pub mod unified_executor;
 /// Parallel batch API: run multiple independent indicator jobs in parallel
 /// over the same input slice. Disabled in no_std builds.
 pub mod batch;
+#[cfg(all(feature = "std", feature = "formula"))]
+/// Declarative multi-node factor graphs, lowered onto the compiled formula plan path.
+pub mod factor_graph;
+#[cfg(feature = "std")]
+/// Declarative factor construction: provider boundary with typed parameter validation.
+pub mod factor_provider;
 #[cfg(feature = "std")]
 pub mod factor_system;
 #[cfg(feature = "std")]
 /// Dependency-aware production factor engine and factor transforms.
 pub mod factors;
-#[cfg(feature = "std")]
-/// Declarative factor construction: provider boundary with typed parameter validation.
-pub mod factor_provider;
-#[cfg(all(feature = "std", feature = "formula"))]
-/// Declarative multi-node factor graphs, lowered onto the compiled formula plan path.
-pub mod factor_graph;
 #[cfg(all(feature = "std", feature = "indicators-all", feature = "formula"))]
 /// Feature engineering: multi-period features, signal detection, and ML label generation.
 pub mod features;

@@ -9,8 +9,8 @@ use crate::error::TaError;
 use crate::execution_plan::KernelId;
 use crate::formula::types::HostContext;
 use crate::state_arena::StateArena;
-use ndarray::Array1;
 use crate::unified_executor::{KernelCall, KernelDispatchError, KernelDispatcher, UnifiedExecutor};
+use ndarray::Array1;
 
 /// Numeric dispatcher for formula constants and core arithmetic/logical operators.
 ///
@@ -45,7 +45,6 @@ impl FormulaKernelDispatcher {
         Self { host }
     }
 }
-
 
 impl KernelDispatcher for FormulaKernelDispatcher {
     fn dispatch(
@@ -326,9 +325,7 @@ fn dispatch_index_call(
     buffers: &mut [Vec<f64>],
 ) -> Result<(), KernelDispatchError> {
     if call.inputs.len() != 2 {
-        return Err(KernelDispatchError::new(
-            FormulaKernelDispatcher::ERR_ARITY,
-        ));
+        return Err(KernelDispatchError::new(FormulaKernelDispatcher::ERR_ARITY));
     }
     let array_slot = call.inputs[0].0;
     let index_slot = call.inputs[1].0;
@@ -343,7 +340,11 @@ fn dispatch_index_call(
         let array = &buffers[array_slot];
         let index = &buffers[index_slot];
         for bar in 0..length {
-            let at = if bar < index.len() { index[bar] } else { f64::NAN };
+            let at = if bar < index.len() {
+                index[bar]
+            } else {
+                f64::NAN
+            };
             // Saturating by design: this must agree with the interpreter, where
             // `idx[i] as usize` sends NaN and negatives to index 0.
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
@@ -505,11 +506,7 @@ fn sma_formula_into(
 /// Mirrors the reference implementation exactly, including its NaN behaviour:
 /// once a NaN enters the window it stays in the running sum until it slides out,
 /// because the accumulator is never re-seeded.
-fn sum_formula_into(
-    input: &[f64],
-    period: usize,
-    output: &mut [f64],
-) -> crate::error::Result<()> {
+fn sum_formula_into(input: &[f64], period: usize, output: &mut [f64]) -> crate::error::Result<()> {
     if period == 0 || input.len() != output.len() {
         return Err(crate::error::TaError::InvalidParameter {
             name: "SUM parameters".to_string(),
@@ -531,11 +528,7 @@ fn sum_formula_into(
 }
 
 /// Execute terminal REF(X, N) without materialising argument arrays.
-fn ref_formula_into(
-    input: &[f64],
-    period: usize,
-    output: &mut [f64],
-) -> crate::error::Result<()> {
+fn ref_formula_into(input: &[f64], period: usize, output: &mut [f64]) -> crate::error::Result<()> {
     if period == 0 || input.len() != output.len() {
         return Err(crate::error::TaError::InvalidParameter {
             name: "REF parameters".to_string(),
@@ -736,9 +729,7 @@ fn dispatch_chip_call(
     buffers: &mut [Vec<f64>],
 ) -> Result<(), KernelDispatchError> {
     if call.inputs.len() != 1 {
-        return Err(KernelDispatchError::new(
-            FormulaKernelDispatcher::ERR_ARITY,
-        ));
+        return Err(KernelDispatchError::new(FormulaKernelDispatcher::ERR_ARITY));
     }
     let input = call.inputs[0].0;
     let output = call.output.0;
@@ -771,9 +762,7 @@ fn dispatch_periodtype_call(
     buffers: &mut [Vec<f64>],
 ) -> Result<(), KernelDispatchError> {
     if !call.inputs.is_empty() {
-        return Err(KernelDispatchError::new(
-            FormulaKernelDispatcher::ERR_ARITY,
-        ));
+        return Err(KernelDispatchError::new(FormulaKernelDispatcher::ERR_ARITY));
     }
     buffers[call.output.0].fill(host.period_type as f64);
     Ok(())
@@ -789,9 +778,7 @@ fn dispatch_refdate_call(
     buffers: &mut [Vec<f64>],
 ) -> Result<(), KernelDispatchError> {
     if call.inputs.len() != 2 {
-        return Err(KernelDispatchError::new(
-            FormulaKernelDispatcher::ERR_ARITY,
-        ));
+        return Err(KernelDispatchError::new(FormulaKernelDispatcher::ERR_ARITY));
     }
     let source = call.inputs[0].0;
     let date = call.inputs[1].0;
@@ -1264,9 +1251,7 @@ fn dispatch_dmi_call(
     let period_slot = call.inputs[3].0;
     let output_slot = call.output.0;
     let used = [high_slot, low_slot, close_slot, period_slot];
-    if used.contains(&output_slot)
-        || (call.inputs.len() == 5 && call.inputs[4].0 == output_slot)
-    {
+    if used.contains(&output_slot) || (call.inputs.len() == 5 && call.inputs[4].0 == output_slot) {
         return Err(KernelDispatchError::new(
             FormulaKernelDispatcher::ERR_PARAMETER,
         ));
@@ -1302,10 +1287,10 @@ fn dispatch_dmi_call(
                 .to_vec()
         } else {
             let adx_n = period_from_slot(buffers, call.inputs[4].0)?;
-            let plus_di =
-                crate::indicators::momentum::plus_di(high, low, close, period).map_err(|_| invalid())?;
-            let minus_di =
-                crate::indicators::momentum::minus_di(high, low, close, period).map_err(|_| invalid())?;
+            let plus_di = crate::indicators::momentum::plus_di(high, low, close, period)
+                .map_err(|_| invalid())?;
+            let minus_di = crate::indicators::momentum::minus_di(high, low, close, period)
+                .map_err(|_| invalid())?;
             let mut adx = vec![f64::NAN; len];
             crate::indicators::momentum::adx_from_di_into(
                 plus_di.as_slice().unwrap(),
@@ -1984,10 +1969,7 @@ pub fn unified_formula_executor_with_host(
     plan: &super::hot_plan::FormulaHotPlan,
     host: HostContext,
 ) -> UnifiedExecutor<FormulaKernelDispatcher> {
-    UnifiedExecutor::new(
-        plan.hot().clone(),
-        FormulaKernelDispatcher::with_host(host),
-    )
+    UnifiedExecutor::new(plan.hot().clone(), FormulaKernelDispatcher::with_host(host))
 }
 
 #[cfg(test)]

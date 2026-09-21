@@ -159,7 +159,10 @@ fn plan_values(ast: &AstNode, ctx: &FormulaContext) -> Result<Array1<f64>, Strin
         if let ExecuteError::Kernel(dispatch) = &error {
             if let Some(kernel) = dispatch.kernel {
                 if let Some(operation) = kernel_operations(&plan).get(&kernel.0) {
-                    return format!("execute: unsupported kernel `{operation}` (code {})", dispatch.code);
+                    return format!(
+                        "execute: unsupported kernel `{operation}` (code {})",
+                        dispatch.code
+                    );
                 }
             }
         }
@@ -363,10 +366,9 @@ fn domestic_corpus_plan_matches_ast_reference() {
 #[test]
 fn pine_corpus_plan_matches_ast_reference() {
     let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/pine_corpus");
-    let manifest: Value = serde_json::from_str(
-        &std::fs::read_to_string(corpus_dir.join("manifest.json")).unwrap(),
-    )
-    .expect("Pine corpus manifest must be valid JSON");
+    let manifest: Value =
+        serde_json::from_str(&std::fs::read_to_string(corpus_dir.join("manifest.json")).unwrap())
+            .expect("Pine corpus manifest must be valid JSON");
     let skipped: Vec<String> = manifest["scripts"]
         .as_array()
         .unwrap()

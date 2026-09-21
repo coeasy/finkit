@@ -78,8 +78,9 @@ fn a_declarative_request_produces_a_runnable_factor() {
     assert_eq!(definition.name, "SMA_5");
 
     let close: Vec<f64> = (1..=10).map(f64::from).collect();
-    let context =
-        FactorContext::new().with_series("CLOSE", close).expect("context accepts CLOSE");
+    let context = FactorContext::new()
+        .with_series("CLOSE", close)
+        .expect("context accepts CLOSE");
 
     let mut factors = FactorRegistry::new();
     factors
@@ -111,7 +112,8 @@ fn a_declarative_request_produces_a_runnable_factor() {
 fn an_invalid_parameter_is_reported_distinctly() {
     let error = registry()
         .create(&FactorFactoryRequest::new("SMA").with_param("period", "0"))
-        .err().expect("period=0 violates the contract");
+        .err()
+        .expect("period=0 violates the contract");
 
     match error {
         FactorProviderError::Factory(FactorFactoryError::InvalidParameter {
@@ -133,7 +135,8 @@ fn an_invalid_parameter_is_reported_distinctly() {
 fn an_unknown_parameter_is_rejected() {
     let error = registry()
         .create(&FactorFactoryRequest::new("SMA").with_param("smoothing", "3"))
-        .err().expect("smoothing is not accepted");
+        .err()
+        .expect("smoothing is not accepted");
 
     match error {
         FactorProviderError::Factory(FactorFactoryError::UnknownParameter { factor, name }) => {
@@ -183,7 +186,8 @@ fn canonical_params_is_order_independent() {
 fn an_unknown_provider_is_reported_before_validation() {
     let error = registry()
         .create(&FactorFactoryRequest::new("NOT_REGISTERED"))
-        .err().expect("no such provider");
+        .err()
+        .expect("no such provider");
 
     match error {
         FactorProviderError::UnknownProvider(name) => assert_eq!(name, "NOT_REGISTERED"),

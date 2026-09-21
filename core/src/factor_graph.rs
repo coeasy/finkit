@@ -532,7 +532,8 @@ impl FactorGraph {
     fn validate_inputs(&self, index: &BTreeMap<String, usize>) -> Result<(), FactorGraphError> {
         for node in &self.nodes {
             for input in &node.inputs {
-                if index.contains_key(&canonical_name(input)) || self.inputs.contains(&canonical_name(input))
+                if index.contains_key(&canonical_name(input))
+                    || self.inputs.contains(&canonical_name(input))
                 {
                     continue;
                 }
@@ -736,11 +737,11 @@ impl FactorGraphPlan {
     pub fn execute(&self, ctx: &FormulaContext) -> Result<Vec<Vec<f64>>, FactorGraphError> {
         let mut slots: Vec<Option<&[f64]>> = vec![None; self.plan.hot().input_layout().len()];
         for binding in self.plan.input_bindings() {
-            let values = ctx.get_data(binding.name()).ok_or_else(|| {
-                FactorGraphError::MissingInput {
-                    name: binding.name().to_string(),
-                }
-            })?;
+            let values =
+                ctx.get_data(binding.name())
+                    .ok_or_else(|| FactorGraphError::MissingInput {
+                        name: binding.name().to_string(),
+                    })?;
             slots[binding.slot().0] = Some(values);
         }
         let inputs: Vec<&[f64]> = slots
@@ -754,7 +755,9 @@ impl FactorGraphPlan {
             .collect::<Result<_, FactorGraphError>>()?;
 
         let mut executor = unified_formula_executor(&self.plan);
-        let output = executor.execute(&inputs).map_err(FactorGraphError::Execution)?;
+        let output = executor
+            .execute(&inputs)
+            .map_err(FactorGraphError::Execution)?;
         Ok(output.values)
     }
 
@@ -768,16 +771,14 @@ impl FactorGraphPlan {
         ctx: &FormulaContext,
         id: &str,
     ) -> Result<Vec<f64>, FactorGraphError> {
-        let index = self.node_index(id).ok_or_else(|| FactorGraphError::UnknownNode {
-            id: id.to_string(),
-        })?;
+        let index = self
+            .node_index(id)
+            .ok_or_else(|| FactorGraphError::UnknownNode { id: id.to_string() })?;
         let values = self.execute(ctx)?;
         values
             .into_iter()
             .nth(index)
-            .ok_or_else(|| FactorGraphError::UnknownNode {
-                id: id.to_string(),
-            })
+            .ok_or_else(|| FactorGraphError::UnknownNode { id: id.to_string() })
     }
 }
 
@@ -863,9 +864,17 @@ mod tests {
             .unwrap()
             .add_node(FactorNode::new("slow", "EMA").input("CLOSE").param(26.0))
             .unwrap()
-            .add_node(FactorNode::binary("diff", BinaryOperator::Sub).input("fast").input("slow"))
+            .add_node(
+                FactorNode::binary("diff", BinaryOperator::Sub)
+                    .input("fast")
+                    .input("slow"),
+            )
             .unwrap()
-            .add_node(FactorNode::binary("primary", BinaryOperator::Div).input("diff").input("CLOSE"))
+            .add_node(
+                FactorNode::binary("primary", BinaryOperator::Div)
+                    .input("diff")
+                    .input("CLOSE"),
+            )
             .unwrap();
         graph
     }
@@ -879,7 +888,8 @@ mod tests {
 
         let from_graph = plan_series(graph_plan.plan(), &ctx);
 
-        let ast = parse_formula("FAST:=EMA(CLOSE,12);SLOW:=EMA(CLOSE,26);(FAST-SLOW)/CLOSE").unwrap();
+        let ast =
+            parse_formula("FAST:=EMA(CLOSE,12);SLOW:=EMA(CLOSE,26);(FAST-SLOW)/CLOSE").unwrap();
         let formula_plan = FormulaHotPlan::compile(&ast).unwrap();
         let from_formula = plan_series(&formula_plan, &ctx);
 
@@ -900,7 +910,9 @@ mod tests {
         // ...and the intermediates are readable too, which is the point of
         // emitting one named output per node.
         for id in ["fast", "slow", "diff", "primary"] {
-            let index = graph_plan.node_index(id).unwrap_or_else(|| panic!("{id} not addressable"));
+            let index = graph_plan
+                .node_index(id)
+                .unwrap_or_else(|| panic!("{id} not addressable"));
             assert_eq!(output.values[index].len(), ctx.data_len);
         }
 
@@ -923,9 +935,17 @@ mod tests {
         let mut graph = FactorGraph::new();
         graph.declare_input("CLOSE");
         graph
-            .add_node(FactorNode::binary("primary", BinaryOperator::Div).input("diff").input("CLOSE"))
+            .add_node(
+                FactorNode::binary("primary", BinaryOperator::Div)
+                    .input("diff")
+                    .input("CLOSE"),
+            )
             .unwrap()
-            .add_node(FactorNode::binary("diff", BinaryOperator::Sub).input("fast").input("slow"))
+            .add_node(
+                FactorNode::binary("diff", BinaryOperator::Sub)
+                    .input("fast")
+                    .input("slow"),
+            )
             .unwrap()
             .add_node(FactorNode::new("slow", "EMA").input("CLOSE").param(26.0))
             .unwrap()
@@ -955,9 +975,17 @@ mod tests {
         let mut graph = FactorGraph::new();
         graph.declare_input("CLOSE");
         graph
-            .add_node(FactorNode::binary("a", BinaryOperator::Add).input("b").input("CLOSE"))
+            .add_node(
+                FactorNode::binary("a", BinaryOperator::Add)
+                    .input("b")
+                    .input("CLOSE"),
+            )
             .unwrap()
-            .add_node(FactorNode::binary("b", BinaryOperator::Add).input("a").input("CLOSE"))
+            .add_node(
+                FactorNode::binary("b", BinaryOperator::Add)
+                    .input("a")
+                    .input("CLOSE"),
+            )
             .unwrap();
 
         let error = graph.build("a").unwrap_err();
@@ -1073,13 +1101,13 @@ mod tests {
         graph
             .add_node(FactorNode::constant("two", 2.0))
             .unwrap()
-            .add_node(
-                FactorNode::new("ma", "SMA")
-                    .input("CLOSE")
-                    .param(5.0),
-            )
+            .add_node(FactorNode::new("ma", "SMA").input("CLOSE").param(5.0))
             .unwrap()
-            .add_node(FactorNode::binary("scaled", BinaryOperator::Mul).input("two").input("ma"))
+            .add_node(
+                FactorNode::binary("scaled", BinaryOperator::Mul)
+                    .input("two")
+                    .input("ma"),
+            )
             .unwrap();
 
         let plan = graph.build("scaled").unwrap();
@@ -1106,7 +1134,9 @@ mod tests {
             .add_node(FactorNode::new("base", "SMA").input("CLOSE").param(10.0))
             .unwrap()
             .add_node(
-                FactorNode::binary("squared", BinaryOperator::Mul).input("base").input("base"),
+                FactorNode::binary("squared", BinaryOperator::Mul)
+                    .input("base")
+                    .input("base"),
             )
             .unwrap();
 
@@ -1142,8 +1172,15 @@ mod tests {
         let mut lower = FactorGraph::new();
         lower.declare_input("close");
         lower
-            .add_node(FactorNode::binary("doubled", BinaryOperator::Add).input("close").input("CLOSE"))
+            .add_node(
+                FactorNode::binary("doubled", BinaryOperator::Add)
+                    .input("close")
+                    .input("CLOSE"),
+            )
             .unwrap();
-        assert_eq!(lower.build("doubled").unwrap().external_inputs(), vec!["CLOSE"]);
+        assert_eq!(
+            lower.build("doubled").unwrap().external_inputs(),
+            vec!["CLOSE"]
+        );
     }
 }

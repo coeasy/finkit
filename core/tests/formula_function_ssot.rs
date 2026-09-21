@@ -374,8 +374,7 @@ fn all_candidate_names() -> BTreeSet<String> {
 
 /// Symmetric difference formatted for an assertion message.
 fn assert_recorded(expected: &[&str], actual: &BTreeSet<String>, what: &str) {
-    let expected_set: BTreeSet<String> =
-        expected.iter().map(|name| (*name).to_string()).collect();
+    let expected_set: BTreeSet<String> = expected.iter().map(|name| (*name).to_string()).collect();
     let missing: Vec<&String> = expected_set.difference(actual).collect();
     let unexpected: Vec<&String> = actual.difference(&expected_set).collect();
     assert!(
@@ -427,9 +426,14 @@ fn plan_kernel_coverage_is_exactly_the_recorded_set() {
 #[test]
 fn declared_functions_without_a_kernel_are_recorded() {
     let kernels = probed_plan_kernels(&all_candidate_names());
-    let declared_and_callable: BTreeSet<String> =
-        registered_names().intersection(&formula_names()).cloned().collect();
-    let backlog: BTreeSet<String> = declared_and_callable.difference(&kernels).cloned().collect();
+    let declared_and_callable: BTreeSet<String> = registered_names()
+        .intersection(&formula_names())
+        .cloned()
+        .collect();
+    let backlog: BTreeSet<String> = declared_and_callable
+        .difference(&kernels)
+        .cloned()
+        .collect();
     assert_recorded(DECLARED_BUT_NO_KERNEL, &backlog, "plan-path backlog");
 }
 
@@ -471,8 +475,8 @@ fn generated_formula_catalogue_matches_the_runtime_surface() {
         .join("docs")
         .join("generated")
         .join("formula-functions.md");
-    let text =
-        std::fs::read_to_string(&path).unwrap_or_else(|err| panic!("read {}: {err}", path.display()));
+    let text = std::fs::read_to_string(&path)
+        .unwrap_or_else(|err| panic!("read {}: {err}", path.display()));
 
     let mut documented: BTreeSet<String> = BTreeSet::new();
     let mut stated_count: Option<usize> = None;

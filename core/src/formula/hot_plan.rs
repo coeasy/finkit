@@ -7,11 +7,11 @@
 
 use super::ast::AstNode;
 use super::compute_ir::FormulaComputePlan;
+use crate::buffer_arena::BufferSlot;
 use crate::compute::{
     ComputeCapabilities, ComputeEffect, ComputeNode, ComputeNodeId, ComputePlan, ComputePlanError,
     LookbackRequirement,
 };
-use crate::buffer_arena::BufferSlot;
 use crate::execution_plan::{
     HotExecutionPlan, HotPlanError, InputSlot, ParameterArena, ParameterRange, ParameterValue,
 };
@@ -334,12 +334,13 @@ fn lower_formula_plumbing(
         rewritten: &[ComputeNodeId],
         operation: &str,
     ) -> Result<ComputeNodeId, FormulaHotPlanError> {
-        rewritten.first().copied().ok_or_else(|| {
-            FormulaHotPlanError::UnsupportedPlumbing {
+        rewritten
+            .first()
+            .copied()
+            .ok_or_else(|| FormulaHotPlanError::UnsupportedPlumbing {
                 operation: operation.to_string(),
                 reason: "node has no value operand".to_string(),
-            }
-        })
+            })
     }
 
     /// Mirrors [`AstNode::produces_value`] on the lowered numeric plan.
@@ -646,12 +647,13 @@ fn bind_numeric_literals(
     let mut arena = ParameterArena::new();
     let mut ranges = BTreeMap::new();
     for node in number_nodes {
-        let value = semantic.number_literal(node).ok_or(
-            FormulaHotPlanError::LiteralBindingMismatch {
-                ast_literals: recorded,
-                number_nodes: recorded,
-            },
-        )?;
+        let value =
+            semantic
+                .number_literal(node)
+                .ok_or(FormulaHotPlanError::LiteralBindingMismatch {
+                    ast_literals: recorded,
+                    number_nodes: recorded,
+                })?;
         let range = arena.extend([ParameterValue::from_f64(value)]);
         ranges.insert(node, range);
     }
@@ -885,7 +887,10 @@ mod tests {
             .collect();
         assert_eq!(markers.len(), 2, "both hline calls must be retained");
         assert!(
-            compiled.outputs().iter().any(|output| !output.is_level_marker()),
+            compiled
+                .outputs()
+                .iter()
+                .any(|output| !output.is_level_marker()),
             "the plotted series must be retained as a data channel"
         );
     }
@@ -902,10 +907,17 @@ mod tests {
             .map(|output| output.name().to_string())
             .collect();
         assert_eq!(names, vec!["MA5".to_string(), "MA10".to_string()]);
-        assert!(compiled.outputs().iter().all(|output| !output.is_level_marker()));
+        assert!(compiled
+            .outputs()
+            .iter()
+            .all(|output| !output.is_level_marker()));
 
         // Both channels need distinct buffers.
-        let slots: Vec<_> = compiled.outputs().iter().map(|output| output.slot()).collect();
+        let slots: Vec<_> = compiled
+            .outputs()
+            .iter()
+            .map(|output| output.slot())
+            .collect();
         assert_ne!(slots[0], slots[1]);
 
         // The retained-root order is not the declaration order: root 0 is the

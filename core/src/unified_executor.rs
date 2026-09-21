@@ -42,10 +42,7 @@ pub struct KernelDispatchError {
 impl KernelDispatchError {
     /// Construct an error with a stable dispatcher-defined code.
     pub const fn new(code: u32) -> Self {
-        Self {
-            code,
-            kernel: None,
-        }
+        Self { code, kernel: None }
     }
 
     /// Attach the kernel that produced this error.
@@ -289,18 +286,19 @@ impl<D: KernelDispatcher> UnifiedExecutor<D> {
                     .parameter_arena()
                     .range(node.parameters)
                     .ok_or(ExecuteError::MissingParameters)?;
-                self.dispatcher.dispatch(
-                    KernelCall {
-                        kernel: node.kernel,
-                        inputs: &node.inputs,
-                        output: node.output,
-                        parameters,
-                        state: node.state,
-                    },
-                    &mut buffers,
-                    &mut self.states,
-                )
-                .map_err(|error| error.with_kernel(node.kernel))?;
+                self.dispatcher
+                    .dispatch(
+                        KernelCall {
+                            kernel: node.kernel,
+                            inputs: &node.inputs,
+                            output: node.output,
+                            parameters,
+                            state: node.state,
+                        },
+                        &mut buffers,
+                        &mut self.states,
+                    )
+                    .map_err(|error| error.with_kernel(node.kernel))?;
             }
 
             let mut values = Vec::with_capacity(self.plan.output_layout().len());

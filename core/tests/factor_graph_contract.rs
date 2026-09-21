@@ -152,7 +152,11 @@ fn a_declared_input_the_context_cannot_supply_fails() {
     let mut graph = FactorGraph::new();
     graph.declare_input("ADJ_CLOSE");
     graph
-        .add_node(FactorNode::new("SLOW", "SMA").input("ADJ_CLOSE").param(20.0))
+        .add_node(
+            FactorNode::new("SLOW", "SMA")
+                .input("ADJ_CLOSE")
+                .param(20.0),
+        )
         .expect("SLOW node is valid");
     let plan = graph.build("SLOW").expect("the graph compiles");
 
@@ -190,9 +194,7 @@ fn node_ids_are_case_and_whitespace_insensitive() {
         .build("RATIO")
         .expect("the ratio graph compiles");
 
-    let canonical = plan
-        .execute_node(&ctx, "RATIO")
-        .expect("RATIO is a node");
+    let canonical = plan.execute_node(&ctx, "RATIO").expect("RATIO is a node");
     let lower = plan.execute_node(&ctx, "ratio").expect("case-insensitive");
     let padded = plan
         .execute_node(&ctx, " ratio ")

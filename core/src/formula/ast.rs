@@ -136,9 +136,7 @@ impl AstNode {
 /// every statement was side-effect-only, in which case callers keep their
 /// existing placeholder result.
 pub fn result_statement_index(statements: &[AstNode]) -> Option<usize> {
-    statements
-        .iter()
-        .rposition(AstNode::produces_value)
+    statements.iter().rposition(AstNode::produces_value)
 }
 
 /// 颜色规格
@@ -607,7 +605,10 @@ mod tests {
                 name: "RSI".to_string(),
                 expr: Box::new(AstNode::FunctionCall {
                     name: "RSI".to_string(),
-                    args: vec![AstNode::Variable("CLOSE".to_string()), AstNode::Number(14.0)],
+                    args: vec![
+                        AstNode::Variable("CLOSE".to_string()),
+                        AstNode::Number(14.0),
+                    ],
                 }),
             },
             level_marker("HLINE"),
@@ -620,10 +621,7 @@ mod tests {
         assert_eq!(result_statement_index(&only_markers), None);
 
         // The ordinary case is unchanged: the last statement wins.
-        let plain = vec![
-            AstNode::Number(1.0),
-            AstNode::Number(2.0),
-        ];
+        let plain = vec![AstNode::Number(1.0), AstNode::Number(2.0)];
         assert_eq!(result_statement_index(&plain), Some(1));
     }
 }

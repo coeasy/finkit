@@ -77,7 +77,11 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      # Pinned, not `@stable`: rustfmt's output changes between releases, and a
+      # floating toolchain turns this job red on someone else's schedule. Bump
+      # it deliberately, then run `cargo fmt --all` locally with the same
+      # toolchain so the committed formatting matches what this job checks.
+      - uses: dtolnay/rust-toolchain@1.98
         with:
           components: rustfmt
       - name: Check formatting

@@ -554,12 +554,7 @@ impl<'a> FormulaLowerer<'a> {
     ///
     /// Only reached on the error path, so the plan still has a node to return
     /// while [`FormulaComputePlan::compile`] reports the recorded failure.
-    fn opaque_for_loop(
-        &mut self,
-        var: &str,
-        start: &AstNode,
-        end: &AstNode,
-    ) -> ComputeNodeId {
+    fn opaque_for_loop(&mut self, var: &str, start: &AstNode, end: &AstNode) -> ComputeNodeId {
         let start = self.lower(start);
         let end = self.lower(end);
         let id = self.add_effect(

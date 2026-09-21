@@ -625,7 +625,9 @@ impl FormulaEngine {
             .outputs()
             .iter()
             .filter_map(|binding| {
-                let index = layout.iter().position(|(_, slot)| *slot == binding.slot())?;
+                let index = layout
+                    .iter()
+                    .position(|(_, slot)| *slot == binding.slot())?;
                 let series = values[index].take().unwrap_or_else(|| primary.clone());
                 Some((binding.name().to_string(), series))
             })
@@ -2964,10 +2966,7 @@ mod plan_cache_tests {
         assert_eq!(engine.plan_cache_size(), 2);
         assert_eq!(
             engine.plan_cache_stats(),
-            FormulaPlanCacheStats {
-                hits: 0,
-                misses: 2
-            }
+            FormulaPlanCacheStats { hits: 0, misses: 2 }
         );
         // And the plans really differ, rather than being two keys over one plan.
         assert_eq!(bound_parameters(&short), vec![14.0]);
