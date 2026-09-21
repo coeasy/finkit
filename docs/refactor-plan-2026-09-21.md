@@ -255,8 +255,30 @@
 所以 `core/tests/formula_execution_mode.rs` 钉的是「路径真的换了」而不是「数值一样」：
 `ctx.variables` 是否被写、`WHILE`（无环降级不了）在 plan 模式是否响亮失败。
 
-**切默认只需一行**（`#[default] Tree` → `Plan`），门禁已就绪；建议同时决定
+**切默认只需一行**（`#[default] Tree` → `Plan`）；建议同时决定
 JIT/`eval_simd` 与多语言绑定的统一发布节奏（§3.4）。
+
+##### 实测：现在切默认会挂 18 组测试（2026-09-21）
+
+不猜了，直接把 `#[default]` 翻成 `Plan` 跑了一遍 `cargo test -p finkit`：
+**2944 passed / 18 failed**。失败原因分五类，**都不是数值分叉**：
+
+| 类型 | 证据 | 代表用例 |
+|---|---|---|
+| **kernel 缺口**（最多） | `kernel dispatch failed ... code 1` | `ADD/SUB/MULT/DIV`、`MINUS`、`SQRT`、`SINH/COSH/TANH`、`MAXINDEX/MININDEX`、`HHVBARS/LLVBARS` |
+| **复合赋值降级错** | `unsupported ... COMPOUND:X:AddAssign: expected 2 operands ... found 3` | `+=` 类公式 |
+| **常量-only 公式** | `cannot infer execution length without bound inputs` | 无序列操作数的公式 |
+| **Pine 函数** | `common Pine functions must execute: kernel dispatch failed` | pine 用户自定义函数 / 常见 TA 函数 |
+| **缓存与状态语义** | `engine.cache_hit(...)` 断言失败；stateful 4 组 | plan 缓存键、stateful 批流一致性 |
+
+**结论：plan 路径离「可当默认」还差得远** —— 卡在**最基础的算术与超越函数**上，
+不是边角。`ADD(CLOSE,1)`、`SQRT(CLOSE)` 这种都会直接报错。
+`DECLARED_BUT_NO_KERNEL` 那个 165 条的缺口**正是这里的拦路石**，且优先级最高的
+就是 `ADD/SUB/MULT/DIV`（MEMORY 已记：它们不在 kernel 表里，编译得过但跑不动）。
+
+**顺手修好的一个小设计问题**：两个构造函数原本硬写 `FormulaExecutionMode::Tree`，
+与 `#[default]` 脱钩 → 改 `#[default]` 不会生效（会让人以为切了其实没切）。
+现改为 `FormulaExecutionMode::default()`，**切默认真正只需一处**。
 
 #### §3.4 附注：❄️ 冻结（freeze）的定义 —— 用户 2026-09-21 定调
 

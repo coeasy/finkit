@@ -294,6 +294,11 @@ struct StreamingFormulaState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FormulaExecutionMode {
     /// Tree-walking interpreter. The reference path and the current default.
+    ///
+    /// This is not caution for its own sake. Flipping the default was measured,
+    /// not assumed: doing so fails 18 test groups today, including basic
+    /// arithmetic and transcendental functions. See the note in
+    /// `docs/refactor-plan-2026-09-21.md` (§3.2) for the measured list.
     #[default]
     Tree,
     /// Compiled compute plan driven by `UnifiedExecutor`.
@@ -337,7 +342,7 @@ impl Default for FormulaEngine {
 impl FormulaEngine {
     pub fn new() -> Self {
         Self {
-            execution_mode: FormulaExecutionMode::Tree,
+            execution_mode: FormulaExecutionMode::default(),
             executor: FormulaExecutor::new(),
             cache: FormulaCache::new(100),
             semantic_plan_cache: RefCell::new(HashMap::new()),
@@ -371,7 +376,7 @@ impl FormulaEngine {
 
     pub fn with_cache_size(cache_size: usize) -> Self {
         Self {
-            execution_mode: FormulaExecutionMode::Tree,
+            execution_mode: FormulaExecutionMode::default(),
             executor: FormulaExecutor::new(),
             cache: FormulaCache::new(cache_size),
             semantic_plan_cache: RefCell::new(HashMap::new()),
