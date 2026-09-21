@@ -273,7 +273,36 @@ struct StreamingFormulaState {
 }
 
 /// 公式引擎主入口
+/// Which execution path the `eval*` entry points take.
+///
+/// The two paths are kept numerically equal by the differential gates
+/// (`formula_plan_differential.rs`, `formula_differential_tests.rs`), but they
+/// are not interchangeable in every respect, and the differences are why this
+/// is an explicit choice rather than an internal detail:
+///
+/// | | [`Self::Tree`] | [`Self::Plan`] |
+/// |---|---|---|
+/// | Coverage | everything | only what lowers to a compute plan |
+/// | Failure | non-evaluable nodes error at runtime | **unsupported formulas fail at compile time** |
+/// | `ctx.variables` | assignments are written back | untouched (inputs in, outputs out) |
+/// | Warm-up / streaming state | full | single-shot batch |
+///
+/// A formula the plan path cannot compile is a hard error. It deliberately does
+/// **not** fall back to the tree-walker: a silent fallback would make "the fast
+/// path" mean "usually the fast path", and would hide the gap instead of
+/// reporting it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FormulaExecutionMode {
+    /// Tree-walking interpreter. The reference path and the current default.
+    #[default]
+    Tree,
+    /// Compiled compute plan driven by `UnifiedExecutor`.
+    Plan,
+}
+
 pub struct FormulaEngine {
+    /// Execution path used by the `eval*` entry points.
+    execution_mode: FormulaExecutionMode,
     executor: FormulaExecutor,
     cache: FormulaCache,
     /// Semantic Compute IR plans keyed by the exact formula source.
@@ -308,6 +337,7 @@ impl Default for FormulaEngine {
 impl FormulaEngine {
     pub fn new() -> Self {
         Self {
+            execution_mode: FormulaExecutionMode::Tree,
             executor: FormulaExecutor::new(),
             cache: FormulaCache::new(100),
             semantic_plan_cache: RefCell::new(HashMap::new()),
@@ -322,8 +352,26 @@ impl FormulaEngine {
         }
     }
 
+    /// Build an engine that runs formulas on the given execution path.
+    #[must_use]
+    pub fn with_execution_mode(mut self, mode: FormulaExecutionMode) -> Self {
+        self.execution_mode = mode;
+        self
+    }
+
+    /// Switch the execution path used by the `eval*` entry points.
+    pub fn set_execution_mode(&mut self, mode: FormulaExecutionMode) {
+        self.execution_mode = mode;
+    }
+
+    /// Execution path the `eval*` entry points currently use.
+    pub const fn execution_mode(&self) -> FormulaExecutionMode {
+        self.execution_mode
+    }
+
     pub fn with_cache_size(cache_size: usize) -> Self {
         Self {
+            execution_mode: FormulaExecutionMode::Tree,
             executor: FormulaExecutor::new(),
             cache: FormulaCache::new(cache_size),
             semantic_plan_cache: RefCell::new(HashMap::new()),
@@ -1353,6 +1401,9 @@ impl FormulaEngine {
         source: &str,
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
+        if self.execution_mode == FormulaExecutionMode::Plan {
+            return self.eval_plan(source, ctx);
+        }
         let formula = self.compile(source)?;
         self.execute(&formula, ctx)
     }
@@ -1363,6 +1414,9 @@ impl FormulaEngine {
     /// is parsed and lowered by its dedicated subset mapper. Source
     /// normalization is performed once here so native, panel, and FFI callers
     /// cannot diverge on BOM or line-ending handling.
+    ///
+    /// Under [`FormulaExecutionMode::Plan`] both branches route through the
+    /// compiled plan path, which does its own dialect-aware parse.
     pub fn eval_with_dialect(
         &mut self,
         source: &str,
@@ -1370,6 +1424,9 @@ impl FormulaEngine {
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
         let normalized = normalize_formula_source(source, dialect);
+        if self.execution_mode == FormulaExecutionMode::Plan {
+            return self.eval_plan_with_dialect(&normalized, dialect, ctx);
+        }
         match dialect {
             FormulaDialect::AlphaTA
             | FormulaDialect::TongDaXin
@@ -1628,6 +1685,12 @@ impl FormulaEngine {
         ctx: &mut FormulaContext,
         params: &ParamValues,
     ) -> Result<Array1<f64>, FormulaError> {
+        if self.execution_mode == FormulaExecutionMode::Plan {
+            return Ok(Array1::from_vec(
+                self.eval_plan_channels(source, FormulaDialect::default(), params, ctx)?
+                    .into_primary(),
+            ));
+        }
         let formula = self.compile(source)?;
         let ast_with_params = apply_params(&formula.ast, params);
         self.executor.execute(&ast_with_params, ctx)

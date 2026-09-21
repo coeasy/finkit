@@ -168,7 +168,7 @@
 | # | 动作 | 状态 |
 |---|---|---|
 | 3.1 | 补 3 条结构性缺口 | ✅ **B/C 已完成，A 已预估**（见 §3.1） |
-| 3.2/3.3 | 落地 `formula_execution_mode` 并切换默认 `plan` | 待 3.1-A 完成 |
+| 3.2/3.3 | 落地 `formula_execution_mode` | ✅ 开关已落地；**默认仍 `tree`**（切 `plan` 未拍板，见 §3.2 附注） |
 | 3.4/3.5 | JIT / `eval_simd` | ❄️ **冻结保留**（见 §3.4 附注） |
 | 3.6 | `BytecodeVM` 标注实验路径 | 并入冻结处理 |
 | 3.7 | ~~`functions_legacy` 归并~~ | **作废**，见 §3-D |
@@ -228,6 +228,26 @@
 **N 上限**：不新设常量，**直接复用解释器的 `MAX_LOOP_ITERATIONS`（10_000）**。
 低于它会造出「树路径能跑、plan 路径编译失败」的分裂，那正是「可直接替换的更快路径」失效的样子。
 超过则编译期**响亮失败**，绝不截断（截断 = 静默算出部分和）。
+
+#### §3.2 附注：`formula_execution_mode` 已落地，但**默认没切**
+
+`FormulaExecutionMode::{Tree, Plan}` + `with_execution_mode()` / `set_execution_mode()` /
+`execution_mode()`，路由进 `eval` / `eval_with_dialect` / `eval_with_params`。
+**默认 `Tree`** —— 切 `plan` 是发布级决定，不是重构的一部分。
+
+**为什么不顺手切**：
+- `FormulaEngine` 有 **~18 个 `pub fn eval*`** 入口（range / multi / zero-copy / incremental /
+  parallel …）。「切默认」的口子比计划表里那一行字宽得多。
+- plan 路径**失败不静默回退**（这是刻意的）→ 切默认 = 5 个语言绑定上任何 plan 编不了的公式
+  **直接报错**。语料覆盖只有 24 Pine + 18 国内，撑不起这个判断。
+- 两条路径还有一个非数值差异：树路径把赋值**写回 `ctx.variables`**，plan 路径不动它。
+  只比数值的测试**证明不了开关真的生效**（两条路径数值本来就一致）。
+
+所以 `core/tests/formula_execution_mode.rs` 钉的是「路径真的换了」而不是「数值一样」：
+`ctx.variables` 是否被写、`WHILE`（无环降级不了）在 plan 模式是否响亮失败。
+
+**切默认只需一行**（`#[default] Tree` → `Plan`），门禁已就绪；建议同时决定
+JIT/`eval_simd` 与多语言绑定的统一发布节奏（§3.4）。
 
 #### §3.4 附注：❄️ 冻结（freeze）的定义 —— 用户 2026-09-21 定调
 
