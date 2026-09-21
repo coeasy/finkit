@@ -83,7 +83,9 @@ pub use engine::{
 };
 pub use executor::FormulaExecutor;
 pub use functions::get_builtin_functions;
-pub use hot_plan::{FormulaHotPlan, FormulaHotPlanError, FormulaInputBinding};
+pub use hot_plan::{
+    FormulaHotPlan, FormulaHotPlanError, FormulaInputBinding, FormulaVariableBinding,
+};
 pub use jit::{JitCompiler, OptimizedBytecode};
 pub use memory_pool::{BufferPool, ZeroCopyContext};
 pub use ops::*;

@@ -97,12 +97,17 @@ fn run_plan(source: &str, ctx: &FormulaContext) -> Array1<f64> {
     let slot_count = plan.hot().input_layout().len();
     let close = ctx.get_data("CLOSE").expect("CLOSE missing from context");
     let mut inputs: Vec<&[f64]> = vec![close; slot_count];
-    for name in ["OPEN", "HIGH", "LOW", "CLOSE", "VOLUME"] {
+    // Bind every slot the plan declares, resolving each name through the same
+    // `get_data` the tree path uses. A hard-coded alias list would miss names
+    // like `VOL` (whose slot is `VARIABLE:VOL`, not `VARIABLE:VOLUME`) and leave
+    // them bound to the CLOSE default, which turns a harness gap into a
+    // phantom kernel divergence.
+    for (operation, slot) in plan.hot().input_layout().operations() {
+        let Some(name) = operation.strip_prefix("VARIABLE:") else {
+            continue;
+        };
         if let Some(values) = ctx.get_data(name) {
-            let op = format!("VARIABLE:{name}");
-            if let Some(slot) = plan.hot().input_layout().slot_for_operation(&op) {
-                inputs[slot.0] = values;
-            }
+            inputs[slot.0] = values;
         }
     }
 
@@ -230,6 +235,383 @@ fn formula_differential_window_kernels() {
     // Composed, so the window reads a computed series rather than a bound input.
     check_all_paths("MINUS_OF_MA", "MINUS(MA(CLOSE, 3), 2)", 80);
     check_all_paths("HHVBARS_OF_HHV", "HHVBARS(HHV(HIGH, 3), 5)", 80);
+}
+
+/// `HMA` is a three-pass WMA with no `_into` helper, so its kernel delegates to
+/// `math::moving_avg::hma` — the same function the tree path calls.
+///
+/// The case worth pinning is the warm-up: Hull MA's first finite value is at
+/// `period + round(sqrt(period)) - 2`, not at `period - 1` like a plain WMA. A
+/// kernel that reused `wma_into` semantics would agree in the interior and be
+/// wrong for the first few bars, which is exactly the kind of difference a
+/// "does it run" check misses.
+#[test]
+fn formula_differential_hma_kernel() {
+    check_all_paths("HMA", "HMA(CLOSE, 9)", 80);
+    check_all_paths("HMA_SHORT", "HMA(CLOSE, 4)", 80);
+    // Composed: the input is a computed series rather than a bound one.
+    check_all_paths("HMA_OF_MA", "HMA(MA(CLOSE, 3), 9)", 80);
+}
+
+/// `CORREL` is a two-series rolling kernel with the period last, like `VWMA`.
+///
+/// It delegates to `rolling_correlation_into`, the same helper `fn_correl`
+/// calls, so the plan path cannot pick a different correlation convention (e.g.
+/// sample vs population, or a different NaN policy) than the tree path.
+#[test]
+fn formula_differential_correl_kernel() {
+    check_all_paths("CORREL", "CORREL(CLOSE, OPEN, 5)", 80);
+    check_all_paths("CORREL_SELF", "CORREL(CLOSE, CLOSE, 5)", 80);
+    // Reversed operands: Pearson correlation is symmetric, so a kernel that
+    // swapped its inputs would still pass this one — the two cases together
+    // pin the argument order rather than just the result.
+    check_all_paths("CORREL_SWAPPED", "CORREL(OPEN, CLOSE, 5)", 80);
+    check_all_paths("CORREL_OF_MA", "CORREL(MA(CLOSE, 3), OPEN, 5)", 80);
+}
+
+/// `ISNA` is a predicate, not a transform: it must report gaps as `1.0`
+/// rather than propagating them, or Pine's `na(x)` and `nz(x, y)` invert.
+#[test]
+fn formula_differential_isna_kernel() {
+    // No gap at all — the trivial branch, which a kernel that returned NaN
+    // everywhere would still "pass" if this were the only case.
+    check_all_paths("ISNA_PLAIN", "ISNA(CLOSE)", 80);
+    // `REF` leaves a NaN prefix, so the boundary between gap and non-gap is
+    // exercised rather than just the two constant regimes.
+    check_all_paths("ISNA_REF", "ISNA(REF(CLOSE, 3))", 80);
+    // Entirely NaN. `SQRT` of a negative is NaN on every path, which reaches
+    // the all-gap regime without asking for a period longer than the series —
+    // that combination is a *separate*, pre-existing divergence recorded in
+    // `docs/refactor-plan-2026-09-21.md` (tree path returns NaN, plan path
+    // fails the kernel with `ERR_PARAMETER`), and mixing it in here would make
+    // an ISNA failure indistinguishable from that one.
+    check_all_paths("ISNA_ALL_NAN", "ISNA(SQRT(0 - CLOSE))", 80);
+    // The composed form, which is what the Pine mapper actually emits.
+    check_all_paths("ISNA_IN_IF", "IF(ISNA(REF(CLOSE, 3)), 7, CLOSE)", 80);
+}
+
+/// `TRANGE` has no period operand, so it cannot ride the HLC periodic family.
+///
+/// It also pins a shadowed-implementation trap: the router overrides the legacy
+/// `fn_trange` with `volatility::trange`, and the two disagree on bar 0 (NaN vs
+/// `high[0] - low[0]`). A kernel that copied the legacy body would diverge here
+/// on exactly one index.
+#[test]
+fn formula_differential_trange_kernel() {
+    check_all_paths("TRANGE", "TRANGE(HIGH, LOW, CLOSE)", 80);
+    // Reversed and self-referential operands, to pin the argument order rather
+    // than only the value: `TRANGE(H, L, C)` is not symmetric in any pair.
+    check_all_paths("TRANGE_REORDERED", "TRANGE(HIGH, CLOSE, LOW)", 80);
+    check_all_paths("TRANGE_SELF", "TRANGE(HIGH, HIGH, HIGH)", 80);
+    check_all_paths("TRANGE_OF_MA", "TRANGE(MA(HIGH, 3), LOW, CLOSE)", 80);
+}
+
+/// `CUMSUM` accumulates from bar 0, and a NaN contributes nothing rather than
+/// poisoning the rest of the prefix.
+#[test]
+fn formula_differential_cumsum_kernel() {
+    check_all_paths("CUMSUM", "CUMSUM(CLOSE)", 80);
+    // A NaN prefix must not zero or NaN the whole result.
+    check_all_paths("CUMSUM_NAN_PREFIX", "CUMSUM(REF(CLOSE, 5))", 80);
+    check_all_paths("CUMSUM_OF_ROC", "CUMSUM(ROC(CLOSE, 1))", 80);
+}
+
+/// `BARSSINCE` is NaN until the first truthy bar, then counts bars since it.
+#[test]
+fn formula_differential_barssince_kernel() {
+    // Never true: every bar stays NaN, which is the case a zero-initialised
+    // accumulator would get wrong. The literal is written out because the
+    // grammar has no scientific-notation suffix.
+    check_all_paths("BARSSINCE_NEVER", "BARSSINCE(CLOSE > 1000000000000)", 80);
+    // True on a known bar, so the count-up and the leading NaN both appear.
+    check_all_paths("BARSSINCE_LATE", "BARSSINCE(CLOSE > 120)", 80);
+    // A NaN condition is not truthy, matching `fn_barssince`.
+    check_all_paths("BARSSINCE_NAN_COND", "BARSSINCE(REF(CLOSE, 3) > 120)", 80);
+    check_all_paths(
+        "BARSSINCE_CROSS",
+        "BARSSINCE(CROSS(CLOSE, MA(CLOSE, 5)))",
+        80,
+    );
+}
+
+/// `RMA` is Wilder's smoothing with a NaN-skipping seed.
+///
+/// The NaN cases are the point: `indicators::talib_ext::rma_profile` implements
+/// the same recurrence but seeds from `input[..period]` unconditionally, so it
+/// produces a fully-NaN series where this must produce a live one.
+#[test]
+fn formula_differential_rma_kernel() {
+    check_all_paths("RMA", "RMA(CLOSE, 5)", 80);
+    check_all_paths("RMA_14", "RMA(CLOSE, 14)", 80);
+    check_all_paths("RMA_NAN_PREFIX", "RMA(REF(CLOSE, 5), 5)", 80);
+    check_all_paths("RMA_OF_ROC", "RMA(ROC(CLOSE, 1), 5)", 80);
+}
+
+/// `MEDIAN` drops NaN before taking the window median, and averages the two
+/// middle values on an even-sized window.
+#[test]
+fn formula_differential_median_kernel() {
+    check_all_paths("MEDIAN_ODD", "MEDIAN(CLOSE, 5)", 80);
+    // Even window: the average-the-two-middles branch.
+    check_all_paths("MEDIAN_EVEN", "MEDIAN(CLOSE, 4)", 80);
+    // Window 1 degenerates to the identity, which a broken warm-up would miss.
+    check_all_paths("MEDIAN_ONE", "MEDIAN(CLOSE, 1)", 80);
+    check_all_paths("MEDIAN_NAN_PREFIX", "MEDIAN(REF(CLOSE, 3), 5)", 80);
+}
+
+/// `ROLLING_RANGE` is `rolling_max - rolling_min` over the same window, so it
+/// shares their NaN policy instead of inventing a third one.
+#[test]
+fn formula_differential_rolling_range_kernel() {
+    check_all_paths("ROLLING_RANGE", "ROLLING_RANGE(CLOSE, 5)", 80);
+    check_all_paths("ROLLING_RANGE_HIGH", "ROLLING_RANGE(HIGH, 3)", 80);
+    check_all_paths(
+        "ROLLING_RANGE_NAN_PREFIX",
+        "ROLLING_RANGE(REF(CLOSE, 4), 3)",
+        80,
+    );
+}
+
+/// Known, **recorded** divergence: a period longer than the series.
+///
+/// The tree path's `canonical_*` wrappers swallow a kernel error and return an
+/// all-NaN series, so `MA(CLOSE, 100)` over 80 bars evaluates to NaN. The
+/// compiled-plan path propagates the underlying `InsufficientData` as
+/// `ERR_PARAMETER` and fails the execution instead.
+///
+/// This is pre-existing — it predates the kernel-coverage work and no corpus
+/// case asks for a period longer than its data, which is why the differential
+/// gate never saw it. It is pinned rather than fixed so that (a) the divergence
+/// cannot drift unnoticed, and (b) promoting the plan path to the default fails
+/// *here*, forcing the dispatcher's error policy to be decided deliberately
+/// instead of silently turning a NaN result into a hard failure.
+#[test]
+fn out_of_range_period_is_a_recorded_divergence() {
+    use finkit::formula::FormulaExecutionMode;
+
+    let mut tree = FormulaEngine::new();
+    let mut tree_ctx = make_ctx(80);
+    let reference = tree
+        .eval("MA(CLOSE, 100)", &mut tree_ctx)
+        .expect("the tree path must tolerate an out-of-range period");
+    assert!(
+        reference.iter().all(|value| value.is_nan()),
+        "the tree path must swallow the insufficient-data error and yield NaN, \
+         got {:?}",
+        &reference.as_slice().unwrap()[..5.min(reference.len())]
+    );
+
+    let mut plan = FormulaEngine::new().with_execution_mode(FormulaExecutionMode::Plan);
+    let mut plan_ctx = make_ctx(80);
+    let outcome = plan.eval("MA(CLOSE, 100)", &mut plan_ctx);
+    assert!(
+        outcome.is_err(),
+        "the plan path now agrees with the tree path on an out-of-range period, \
+         so this divergence is closed: delete this test and update \
+         docs/refactor-plan-2026-09-21.md"
+    );
+}
+
+/// `MOD` must follow the *function*, not the `%` operator.
+///
+/// `fn_mod` uses Rust's truncating remainder and yields NaN for a near-zero
+/// divisor; `BINARY:Mod` uses a floor-based remainder. They disagree in sign for
+/// negative operands, so the negative case here is what pins the choice.
+#[test]
+fn formula_differential_mod_kernel() {
+    check_all_paths("MOD", "MOD(CLOSE, 3)", 80);
+    check_all_paths("MOD_NEGATIVE_LHS", "MOD(0 - CLOSE, 3)", 80);
+    check_all_paths("MOD_NEGATIVE_RHS", "MOD(CLOSE, 0 - 3)", 80);
+    // The near-zero guard: the function returns NaN where the operator would
+    // divide by zero.
+    check_all_paths("MOD_ZERO_DIVISOR", "MOD(CLOSE, 0)", 80);
+}
+
+/// `INTPART` truncates toward zero and `FRACPART` keeps the sign, so the two
+/// recombine into the original value on both sides of zero.
+#[test]
+fn formula_differential_intpart_fracpart_kernel() {
+    check_all_paths("INTPART", "INTPART(CLOSE)", 80);
+    check_all_paths("FRACPART", "FRACPART(CLOSE)", 80);
+    check_all_paths("INTPART_NEGATIVE", "INTPART(0 - CLOSE)", 80);
+    check_all_paths("FRACPART_NEGATIVE", "FRACPART(0 - CLOSE)", 80);
+    // `INTPART(X) + FRACPART(X) == X` — the identity that makes truncation
+    // toward zero (rather than `floor`) observable.
+    check_all_paths(
+        "INTPART_FRACPART_IDENTITY",
+        "INTPART(0 - CLOSE) + FRACPART(0 - CLOSE) - (0 - CLOSE)",
+        80,
+    );
+}
+
+/// `REVERSE` mirrors the series, so applying it twice must be the identity.
+#[test]
+fn formula_differential_reverse_kernel() {
+    check_all_paths("REVERSE", "REVERSE(CLOSE)", 80);
+    check_all_paths("REVERSE_TWICE", "REVERSE(REVERSE(CLOSE)) - CLOSE", 80);
+    check_all_paths("REVERSE_OF_MA", "REVERSE(MA(CLOSE, 5))", 80);
+}
+
+/// `SUMBARS` scans backwards to a per-bar threshold, so it needs a case where
+/// the threshold is never reached as well as one where it is.
+#[test]
+fn formula_differential_sumbars_kernel() {
+    check_all_paths("SUMBARS", "SUMBARS(VOL, 5000)", 80);
+    check_all_paths("SUMBARS_SMALL", "SUMBARS(VOL, 100)", 80);
+    // Never reached: the answer is the distance to the start of the series, not
+    // NaN, which is the branch a NaN-initialised accumulator would get wrong.
+    check_all_paths("SUMBARS_UNREACHED", "SUMBARS(CLOSE, 1000000)", 80);
+    check_all_paths("SUMBARS_OF_ROC", "SUMBARS(ROC(CLOSE, 1), 0.5)", 80);
+}
+
+/// Every `DrawGeneric` command lowers to the same `DRAW_GENERIC` operation.
+///
+/// The plan path used to emit `DRAW:<command>`, which needed one kernel per
+/// command; the dispatcher enumerated four names by hand and eleven real
+/// commands — `DRAWLINE` first among them — fell through unhandled, so any
+/// formula drawing a line failed under the compiled plan. These two cases are
+/// different commands from that set, so they fail if the gate ever regresses to
+/// per-command names.
+#[test]
+fn formula_differential_generic_draw_kernel() {
+    check_all_paths(
+        "DRAWLINE",
+        "MA5 := MA(CLOSE, 5);\n\
+         DRAWLINE(CROSS(CLOSE, MA5), CLOSE, CROSS(MA5, CLOSE), MA5, 1);\n\
+         MA5",
+        80,
+    );
+    check_all_paths("DRAWKLINE", "DRAWKLINE(HIGH, OPEN, LOW, CLOSE);\nCLOSE", 80);
+}
+
+/// Both execution modes must leave the same observable state on the context.
+///
+/// The tree path publishes every `ASSIGN:`/`OUTPUT:`/`COMPOUND:` write into
+/// `ctx.variables` and every declared channel into `ctx.output_names`; the
+/// language bindings read those two fields back to build their result
+/// dictionaries. A plan path that returned only its own channel list would make
+/// switching modes silently drop named results — a difference no numeric
+/// comparison of the primary series would catch.
+#[test]
+fn formula_differential_both_modes_publish_the_same_context() {
+    use finkit::formula::FormulaExecutionMode;
+
+    // A plain assignment, an assignment that depends on it, a compound write and
+    // a declared output: all four write shapes the tree path publishes.
+    //
+    // The *output* name is deliberately lower case. Operation strings inside the
+    // plan are canonicalised (upper-cased) so that `VARIABLE:` reads resolve,
+    // while `ctx.output_names` is keyed by the name as written and the parser
+    // preserves case. An upper-case-only test cannot tell the two apart, and
+    // publishing `GOLDEN` where the tree published `golden` would be a silent
+    // cross-mode difference in the result dictionaries the bindings build.
+    //
+    // Variables stay upper case on purpose: the tree path resolves a variable
+    // read through the canonical name but stores the write under the source
+    // spelling, so a lower-case *variable* already fails on the reference path
+    // (`Unknown variable: MA5`). That is a pre-existing limitation of the tree
+    // path, not something this test should paper over.
+    let source = "MA5 := MA(CLOSE, 5); MA10 := MA(CLOSE, 10); \
+                  TALLY := MA5 - MA10; TALLY += 1; golden: CROSS(MA5, MA10)";
+
+    let mut tree_ctx = make_ctx(80);
+    let mut plan_ctx = make_ctx(80);
+
+    let tree = FormulaEngine::new()
+        .with_execution_mode(FormulaExecutionMode::Tree)
+        .eval(source, &mut tree_ctx)
+        .expect("tree path evaluates");
+    let plan = FormulaEngine::new()
+        .with_execution_mode(FormulaExecutionMode::Plan)
+        .eval(source, &mut plan_ctx)
+        .expect("plan path evaluates");
+
+    assert_arrays_match("both_modes_publish", "plan", &tree, &plan);
+
+    let mut tree_names: Vec<&str> = tree_ctx.variables.keys().map(|k| k.as_ref()).collect();
+    let mut plan_names: Vec<&str> = plan_ctx.variables.keys().map(|k| k.as_ref()).collect();
+    tree_names.sort_unstable();
+    plan_names.sort_unstable();
+    assert_eq!(
+        tree_names, plan_names,
+        "the two modes published different variable names"
+    );
+    assert!(
+        tree_names.contains(&"MA5") && tree_names.contains(&"TALLY"),
+        "the reference path stopped publishing intermediate assignments, so this \
+         test no longer proves anything: {tree_names:?}"
+    );
+
+    for name in &tree_names {
+        let reference = tree_ctx
+            .variables
+            .get(*name)
+            .expect("name came from the tree context");
+        let candidate = plan_ctx
+            .variables
+            .get(*name)
+            .unwrap_or_else(|| panic!("plan path did not publish `{name}`"));
+        assert_arrays_match(name, "plan", reference, candidate);
+    }
+
+    assert_eq!(
+        tree_ctx.output_names, plan_ctx.output_names,
+        "the two modes disagree on the declared output channels"
+    );
+    assert_eq!(tree_ctx.output_names, vec!["golden"]);
+}
+
+/// Chart styling is the last piece of context state both paths must agree on.
+///
+/// `ctx.output_modifiers` is what the FFI layer reads to describe a series'
+/// colour and line style, so a plan path that skipped it would hand back a chart
+/// with every series unstyled — invisible to any numeric comparison.
+///
+/// `OutputModifier` has no `PartialEq` and `ctx.output_modifiers` is a
+/// `HashMap`, so the maps are compared as *sorted* `(name, debug)` pairs rather
+/// than through their own rendering, whose order is hash-dependent.
+#[test]
+fn formula_differential_both_modes_publish_the_same_output_modifiers() {
+    use finkit::formula::FormulaExecutionMode;
+
+    let source = "FAST: MA(CLOSE, 5), COLORRED, LINETHICK2; \
+                  SLOW: MA(CLOSE, 10), COLORGREEN";
+
+    let mut tree_ctx = make_ctx(80);
+    let mut plan_ctx = make_ctx(80);
+
+    FormulaEngine::new()
+        .with_execution_mode(FormulaExecutionMode::Tree)
+        .eval(source, &mut tree_ctx)
+        .expect("tree path evaluates");
+    FormulaEngine::new()
+        .with_execution_mode(FormulaExecutionMode::Plan)
+        .eval(source, &mut plan_ctx)
+        .expect("plan path evaluates");
+
+    let collect = |ctx: &FormulaContext| {
+        let mut entries: Vec<(String, String)> = ctx
+            .output_modifiers
+            .iter()
+            .map(|(name, modifier)| (name.clone(), format!("{modifier:?}")))
+            .collect();
+        entries.sort();
+        entries
+    };
+    let reference = collect(&tree_ctx);
+    let candidate = collect(&plan_ctx);
+
+    let rendered = format!("{reference:?}");
+    assert!(
+        rendered.contains("COLORRED") && rendered.contains("LineStyle"),
+        "the reference path stopped publishing modifiers, so this test no longer \
+         proves anything: {rendered}"
+    );
+    assert_eq!(
+        reference, candidate,
+        "the two modes disagree on the output modifiers"
+    );
+    assert_eq!(tree_ctx.output_names, plan_ctx.output_names);
 }
 
 /// Element-wise kernels with no period: `CROSS`, `FIXNAN` and `STDDEV`.

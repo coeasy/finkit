@@ -164,6 +164,7 @@ impl FormulaPlanCache {
 pub struct FormulaPlanOutput {
     primary: Vec<f64>,
     channels: Vec<(String, Vec<f64>)>,
+    variables: Vec<(String, Vec<f64>)>,
 }
 
 impl FormulaPlanOutput {
@@ -174,6 +175,10 @@ impl FormulaPlanOutput {
     }
 
     /// Named output channels in declaration order.
+    ///
+    /// These are the `OUTPUT:`/`plot` declarations only. Assigned variables are
+    /// in [`Self::variables`], mirroring the tree path's split between
+    /// `ctx.output_names` and `ctx.variables`.
     #[must_use]
     pub fn channels(&self) -> &[(String, Vec<f64>)] {
         &self.channels
@@ -185,6 +190,24 @@ impl FormulaPlanOutput {
         self.channels
             .iter()
             .find(|(channel, _)| channel == name)
+            .map(|(_, values)| values.as_slice())
+    }
+
+    /// Every variable the formula assigns, in first-write order.
+    ///
+    /// The same set the tree path publishes into `ctx.variables`, including
+    /// `OUTPUT:` names — an output is a variable write as well as a channel.
+    #[must_use]
+    pub fn variables(&self) -> &[(String, Vec<f64>)] {
+        &self.variables
+    }
+
+    /// One assigned variable's series, if the formula writes it.
+    #[must_use]
+    pub fn variable(&self, name: &str) -> Option<&[f64]> {
+        self.variables
+            .iter()
+            .find(|(variable, _)| variable == name)
             .map(|(_, values)| values.as_slice())
     }
 
@@ -288,7 +311,7 @@ struct StreamingFormulaState {
 /// |---|---|---|
 /// | Coverage | everything | only what lowers to a compute plan |
 /// | Failure | non-evaluable nodes error at runtime | **unsupported formulas fail at compile time** |
-/// | `ctx.variables` | assignments are written back | untouched (inputs in, outputs out) |
+/// | `ctx.variables`, `ctx.output_names`, `ctx.output_modifiers` | written back | written back |
 /// | Warm-up / streaming state | full | single-shot batch |
 ///
 /// A formula the plan path cannot compile is a hard error. It deliberately does
@@ -301,16 +324,15 @@ pub enum FormulaExecutionMode {
     ///
     /// This is not caution for its own sake. Flipping the default was measured,
     /// not assumed: doing so failed 18 test groups, and closing the kernel,
-    /// sandbox, compound-assignment, statistics, cache and length-inference gaps
-    /// brought that to 3. See the note in `docs/refactor-plan-2026-09-21.md`
-    /// (§3.2) for the measured per-round list.
+    /// sandbox, compound-assignment, statistics, cache, length-inference and
+    /// `ctx.variables` gaps brought that down round by round. See the note in
+    /// `docs/refactor-plan-2026-09-21.md` (§3.2) for the measured per-round list.
     ///
-    /// The 3 that remain are one decision, not three bugs: Pine user-defined
-    /// functions and named outputs read their result from `ctx.variables`, and
-    /// the plan path deliberately does not write it (see
-    /// [`Self::eval_plan_channels`], which takes `&FormulaContext`). Closing
-    /// that changes a public signature across five language bindings, so it
-    /// waits on an explicit release decision.
+    /// Both paths now publish the same observable results — assignments into
+    /// `ctx.variables`, declared channels into `ctx.output_names`, chart styling
+    /// into `ctx.output_modifiers` — so a caller cannot tell from the context
+    /// which one ran. What remains is coverage: under [`Self::Plan`] a formula
+    /// with no kernel fails at compile time rather than at runtime.
     #[default]
     Tree,
     /// Compiled compute plan driven by `UnifiedExecutor`.
@@ -544,7 +566,7 @@ impl FormulaEngine {
     pub fn eval_plan(
         &self,
         source: &str,
-        ctx: &FormulaContext,
+        ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
         Ok(Array1::from_vec(
             self.eval_plan_channels(source, FormulaDialect::default(), &ParamValues::new(), ctx)?
@@ -561,7 +583,7 @@ impl FormulaEngine {
         &self,
         source: &str,
         dialect: FormulaDialect,
-        ctx: &FormulaContext,
+        ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
         Ok(Array1::from_vec(
             self.eval_plan_channels(source, dialect, &ParamValues::new(), ctx)?
@@ -571,9 +593,12 @@ impl FormulaEngine {
 
     /// Evaluate `source` through the compiled plan path and return every channel.
     ///
-    /// Unlike the tree path this takes `&FormulaContext`: the plan reads inputs and
-    /// returns outputs, and never writes assignment results back into
-    /// `ctx.variables`, so a shared borrow is all it needs.
+    /// This takes `&mut FormulaContext` because the plan path reproduces the
+    /// tree path's side effects: assignments and outputs are published into
+    /// `ctx.variables`, and declared channels into `ctx.output_names`. The
+    /// language bindings read both back to build their result dictionaries, so a
+    /// shared borrow would make the two modes observably different for the same
+    /// source.
     ///
     /// # Errors
     ///
@@ -583,7 +608,7 @@ impl FormulaEngine {
         source: &str,
         dialect: FormulaDialect,
         params: &ParamValues,
-        ctx: &FormulaContext,
+        ctx: &mut FormulaContext,
     ) -> Result<FormulaPlanOutput, FormulaError> {
         let plan = self.compile_plan(source, dialect, params)?;
 
@@ -667,26 +692,80 @@ impl FormulaEngine {
         // The primary and the *last* named output are usually the same retained
         // buffer — `DIF:...;DEA:...;MACD:...` reports `MACD` as the result — so
         // neither may simply be `take`n first: taking the channel would leave the
-        // primary empty. `values` is therefore consumed through `Option`s, and a
-        // channel whose slot was already taken clones the primary.
+        // primary empty. `values` is therefore consumed through `Option`s.
+        //
+        // Several *names* can also share one slot: `value := ...` and
+        // `plot(value, title="VALUE")` resolve to the same node, so the variable
+        // binding and the channel binding point at the same buffer. The first
+        // reader takes the buffer and later readers of that slot get a copy of
+        // that same series — *not* of the primary one, which is what an
+        // unconditional fallback to `primary` handed back whenever the shared
+        // value was not itself the primary result.
         let layout = plan.hot().output_layout().outputs();
         let mut values: Vec<Option<Vec<f64>>> = output.values.into_iter().map(Some).collect();
         let primary = values.first_mut().and_then(Option::take).ok_or_else(|| {
             FormulaError::RuntimeError("formula plan produced no output series".to_string())
         })?;
-        let channels = plan
+        let mut already_read: std::collections::HashMap<usize, Vec<f64>> =
+            std::collections::HashMap::new();
+        let mut read_slot = |slot: crate::buffer_arena::BufferSlot| -> Option<Vec<f64>> {
+            let index = layout
+                .iter()
+                .position(|(_, candidate)| *candidate == slot)?;
+            // Index 0 is the primary result, which was taken above.
+            if index == 0 {
+                return Some(primary.clone());
+            }
+            if let Some(existing) = already_read.get(&index) {
+                return Some(existing.clone());
+            }
+            let series = values[index].take()?;
+            already_read.insert(index, series.clone());
+            Some(series)
+        };
+
+        let channels: Vec<(String, Vec<f64>)> = plan
             .outputs()
             .iter()
             .filter_map(|binding| {
-                let index = layout
-                    .iter()
-                    .position(|(_, slot)| *slot == binding.slot())?;
-                let series = values[index].take().unwrap_or_else(|| primary.clone());
-                Some((binding.name().to_string(), series))
+                read_slot(binding.slot()).map(|series| (binding.name().to_string(), series))
+            })
+            .collect();
+        let variables: Vec<(String, Vec<f64>)> = plan
+            .variables()
+            .iter()
+            .filter_map(|binding| {
+                read_slot(binding.slot()).map(|series| (binding.name().to_string(), series))
             })
             .collect();
 
-        Ok(FormulaPlanOutput { primary, channels })
+        // Publish the same side effects the tree path leaves behind, so a caller
+        // reading `ctx.variables`/`ctx.output_names` after an evaluation cannot
+        // tell which mode ran it. The language bindings build their result
+        // dictionaries from exactly these two fields; without this, switching to
+        // the plan path silently dropped every named result.
+        for (name, series) in &variables {
+            ctx.variables.insert(
+                std::sync::Arc::<str>::from(name.as_str()),
+                Array1::from_vec(series.clone()),
+            );
+        }
+        for (name, _) in &channels {
+            if !ctx.output_names.iter().any(|existing| existing == name) {
+                ctx.output_names.push(name.clone());
+            }
+        }
+        // Styling travels beside the numeric plan rather than inside it, so it is
+        // copied here rather than derived from a channel's series.
+        for (name, modifier) in plan.output_modifiers() {
+            ctx.output_modifiers.insert(name.clone(), modifier.clone());
+        }
+
+        Ok(FormulaPlanOutput {
+            primary,
+            channels,
+            variables,
+        })
     }
 
     /// Register a reusable, parameterized expression component.
@@ -3242,9 +3321,9 @@ mod plan_execution_tests {
 
     /// Evaluate `source` on both paths and assert they agree element-wise.
     fn assert_plan_matches_tree(source: &str, len: usize) {
-        let context = ctx(len);
+        let mut context = ctx(len);
         let plan = FormulaEngine::new()
-            .eval_plan(source, &context)
+            .eval_plan(source, &mut context)
             .unwrap_or_else(|error| panic!("plan path failed for `{source}`: {error}"));
 
         let mut tree_context = context.clone();
@@ -3271,9 +3350,9 @@ mod plan_execution_tests {
 
     #[test]
     fn plan_and_tree_agree_on_warm_up_nans() {
-        let context = ctx(40);
+        let mut context = ctx(40);
         let plan = FormulaEngine::new()
-            .eval_plan("EMA(CLOSE, 12)", &context)
+            .eval_plan("EMA(CLOSE, 12)", &mut context)
             .expect("plan evaluates");
         let mut tree_context = context.clone();
         let tree = FormulaEngine::new()
@@ -3296,14 +3375,14 @@ mod plan_execution_tests {
     #[test]
     fn a_multi_channel_formula_exposes_every_named_output() {
         let engine = FormulaEngine::new();
-        let context = ctx(80);
+        let mut context = ctx(80);
 
         let output = engine
             .eval_plan_channels(
                 "DIF:EMA(CLOSE,12)-EMA(CLOSE,26);DEA:EMA(DIF,9);MACD:(DIF-DEA)*2",
                 FormulaDialect::AlphaTA,
                 &ParamValues::new(),
-                &context,
+                &mut context,
             )
             .expect("multi-channel plan evaluates");
 
@@ -3349,14 +3428,14 @@ mod plan_execution_tests {
         // values finite from index 9, so the comparison is numeric rather than a
         // warm-up-NaN artefact.
         let engine = FormulaEngine::new();
-        let context = ctx(60);
+        let mut context = ctx(60);
 
         let output = engine
             .eval_plan_channels(
                 "A:MA(CLOSE,5);B:MA(CLOSE,10);C:A-B",
                 FormulaDialect::AlphaTA,
                 &ParamValues::new(),
-                &context,
+                &mut context,
             )
             .expect("multi-channel plan evaluates");
 
@@ -3385,13 +3464,13 @@ mod plan_execution_tests {
     #[test]
     fn a_missing_input_series_is_reported_rather_than_substituted() {
         let engine = FormulaEngine::new();
-        let context = ctx(40);
+        let mut context = ctx(40);
 
         // `MYVAR` is neither OHLCV nor a context variable. The plan path must
         // refuse, because silently substituting another series would hide an
         // input-layout bug behind a numeric mismatch.
         let error = engine
-            .eval_plan("MA(MYVAR, 5)", &context)
+            .eval_plan("MA(MYVAR, 5)", &mut context)
             .expect_err("an unbound input must fail");
 
         let message = error.to_string();
@@ -3404,13 +3483,13 @@ mod plan_execution_tests {
     #[test]
     fn a_repeated_evaluation_reuses_the_cached_plan() {
         let engine = FormulaEngine::new();
-        let context = ctx(40);
+        let mut context = ctx(40);
 
         engine
-            .eval_plan("MA(CLOSE,5)", &context)
+            .eval_plan("MA(CLOSE,5)", &mut context)
             .expect("plan evaluates");
         engine
-            .eval_plan("MA(CLOSE,5)", &context)
+            .eval_plan("MA(CLOSE,5)", &mut context)
             .expect("plan evaluates");
 
         assert_eq!(engine.plan_cache_size(), 1);
@@ -3423,7 +3502,7 @@ mod plan_execution_tests {
     #[test]
     fn an_unsupported_operator_fails_loudly_instead_of_falling_back() {
         let engine = FormulaEngine::new();
-        let context = ctx(40);
+        let mut context = ctx(40);
 
         // `FILTER` is a documented kernel gap. The plan path must report it
         // rather than quietly re-running the tree path, otherwise a caller
@@ -3434,7 +3513,7 @@ mod plan_execution_tests {
         // another entry from the plan-kernel backlog -- the point of the test
         // is that *some* gap still fails loudly, so do not delete the check.
         let error = engine
-            .eval_plan("FILTER(CLOSE>OPEN, 5)", &context)
+            .eval_plan("FILTER(CLOSE>OPEN, 5)", &mut context)
             .expect_err("a kernel-less operator must fail");
 
         let message = error.to_string();

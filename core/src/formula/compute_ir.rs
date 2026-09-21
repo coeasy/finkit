@@ -42,6 +42,13 @@ pub struct FormulaComputePlan {
     number_literals: BTreeMap<ComputeNodeId, f64>,
     /// Deepest AST nesting seen while lowering. See [`Self::max_ast_depth`].
     max_ast_depth: usize,
+    /// Chart styling per declared output, keyed by the name as written.
+    ///
+    /// The tree path publishes these into `ctx.output_modifiers` and the FFI
+    /// layer reads them back to describe a series' colour and line style. They
+    /// are not part of the numeric plan, so they travel beside it rather than in
+    /// a [`ComputeEffect`].
+    output_modifiers: BTreeMap<String, OutputModifier>,
 }
 
 impl FormulaComputePlan {
@@ -67,6 +74,7 @@ impl FormulaComputePlan {
             root,
             number_literals: lowerer.number_literals,
             max_ast_depth: lowerer.max_depth,
+            output_modifiers: lowerer.output_modifiers,
         })
     }
 
@@ -102,6 +110,14 @@ impl FormulaComputePlan {
     /// executes, the stack has already been used.
     pub const fn max_ast_depth(&self) -> usize {
         self.max_ast_depth
+    }
+
+    /// Chart styling for each declared output, keyed by the name as written.
+    ///
+    /// Published so the plan path can leave `ctx.output_modifiers` in the same
+    /// state the tree path does; see [`Self::output_modifiers`]'s field docs.
+    pub const fn output_modifiers(&self) -> &BTreeMap<String, OutputModifier> {
+        &self.output_modifiers
     }
 }
 
@@ -142,6 +158,8 @@ struct FormulaLowerer<'a> {
     loop_var: Option<(String, f64)>,
     /// Literal value of each `NUMBER` node, recorded at creation time.
     number_literals: BTreeMap<ComputeNodeId, f64>,
+    /// Chart styling per declared output, keyed by the name as written.
+    output_modifiers: BTreeMap<String, OutputModifier>,
     /// Current AST nesting depth of the walk.
     depth: usize,
     /// Deepest nesting the walk reached, i.e. the value the sandbox compares
@@ -168,6 +186,7 @@ impl<'a> FormulaLowerer<'a> {
             const_env: BTreeMap::new(),
             loop_var: None,
             number_literals: BTreeMap::new(),
+            output_modifiers: BTreeMap::new(),
             depth: 0,
             max_depth: 0,
             pending_error: None,
@@ -309,6 +328,14 @@ impl<'a> FormulaLowerer<'a> {
                 // FormulaExecutor stores outputs in FormulaContext::variables, so
                 // a later reference to the output must depend on this node.
                 self.last_write.insert(canonical_name(name), id);
+                // Chart styling is host-visible state the tree path leaves in
+                // `ctx.output_modifiers`, keyed by the name as written. It is
+                // recorded here because lowering is the last point where the
+                // `AstNode::Output` modifier is still in hand — the compute plan
+                // itself only needs the level-marker distinction.
+                if let Some(modifier) = modifier {
+                    self.output_modifiers.insert(name.clone(), modifier.clone());
+                }
                 id
             }
             AstNode::Statements(statements) => {
@@ -355,9 +382,21 @@ impl<'a> FormulaLowerer<'a> {
                 let width = self.lower(width);
                 self.add_draw("STICK_LINE", vec![cond, price1, price2, width])
             }
-            AstNode::DrawGeneric { command, args, .. } => {
+            AstNode::DrawGeneric { args, .. } => {
                 let dependencies = args.iter().map(|arg| self.lower(arg)).collect();
-                self.add_draw(format!("DRAW:{}", canonical_name(command)), dependencies)
+                // One operation name for *every* generic draw, deliberately. The
+                // command is rendering information that the numeric plan does
+                // not carry, exactly like the command-less `DRAW_TEXT`,
+                // `DRAW_ICON` and `STICK_LINE` above.
+                //
+                // Emitting `DRAW:{command}` here instead made the plan path need
+                // one kernel per command, and because `KernelId` is an opaque
+                // hash the dispatcher had to enumerate them by hand — so eleven
+                // of the twelve commands (including `DRAWLINE`, the most common
+                // one) fell through unhandled while the dispatcher's list still
+                // read as if it were complete. Collapsing removes that failure
+                // mode structurally rather than by keeping two lists in sync.
+                self.add_draw("DRAW_GENERIC", dependencies)
             }
             AstNode::IfThenElse {
                 cond,

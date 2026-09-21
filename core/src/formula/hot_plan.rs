@@ -5,7 +5,7 @@
 //! pure deterministic common subexpressions are interned once, then that DAG is
 //! compiled into numeric kernel/input/parameter/buffer/state slots.
 
-use super::ast::AstNode;
+use super::ast::{AstNode, OutputModifier};
 use super::compute_ir::FormulaComputePlan;
 use crate::buffer_arena::BufferSlot;
 use crate::compute::{
@@ -26,6 +26,7 @@ pub struct FormulaHotPlan {
     hot: HotExecutionPlan,
     input_bindings: Vec<FormulaInputBinding>,
     outputs: Vec<FormulaOutputBinding>,
+    variables: Vec<FormulaVariableBinding>,
 }
 
 /// Compile-time binding from a formula variable to a numeric input slot.
@@ -36,6 +37,36 @@ pub struct FormulaHotPlan {
 pub struct FormulaInputBinding {
     name: String,
     slot: InputSlot,
+}
+
+/// Compile-time binding from a formula variable to a retained buffer slot.
+///
+/// The tree path publishes every assignment into
+/// [`FormulaContext::variables`](super::types::FormulaContext::variables) — a
+/// plain `ASSIGN:`/`OUTPUT:`/`COMPOUND:` all write there — and the language
+/// bindings read that map back to build their result dictionaries. A plan that
+/// only retained `OUTPUT:` channels would therefore return a *smaller* result
+/// set than the tree path for the same source, which is the kind of silent
+/// cross-mode divergence this refactor exists to remove.
+///
+/// The type is shared with [`FormulaOutputBinding`] because a variable binding
+/// is exactly the same pair: a name and the slot its series lands in.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FormulaVariableBinding {
+    name: String,
+    slot: BufferSlot,
+}
+
+impl FormulaVariableBinding {
+    /// Formula variable name, without the `ASSIGN:`/`OUTPUT:` operation prefix.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Buffer slot holding this variable's series after a run.
+    pub const fn slot(&self) -> BufferSlot {
+        self.slot
+    }
 }
 
 /// Compile-time binding from a named formula output to a retained buffer slot.
@@ -110,11 +141,13 @@ impl FormulaHotPlan {
             HotExecutionPlan::compile_with_parameters(&numeric, lowered.roots, parameters, ranges)?;
         let input_bindings = compile_input_bindings(&semantic, &hot);
         let outputs = compile_output_bindings(&lowered.named_outputs, &hot);
+        let variables = compile_variable_bindings(&lowered.variable_writes, &hot);
         Ok(Self {
             semantic,
             hot,
             input_bindings,
             outputs,
+            variables,
         })
     }
 
@@ -138,8 +171,40 @@ impl FormulaHotPlan {
     /// The first value of an execution is always the formula's primary result
     /// (the value of its last value-producing statement); these bindings let a
     /// caller address every channel by name instead of only that one.
+    ///
+    /// The name is the spelling used **in the source**, not the canonical
+    /// (upper-cased) form the internal `OUTPUT:` operation carries: the tree path
+    /// keys `ctx.output_names` by the source spelling and the parser preserves
+    /// case, so publishing the canonical form here would make the two modes
+    /// disagree for a source such as `golden: CROSS(a, b)`. Callers that need to
+    /// match a name case-insensitively — as
+    /// [`crate::factor_graph::GraphPlan::node_index`] does — must canonicalize
+    /// both sides.
     pub fn outputs(&self) -> &[FormulaOutputBinding] {
         &self.outputs
+    }
+
+    /// Every variable this formula assigns, with the slot holding its series.
+    ///
+    /// This mirrors the entries the tree path leaves in
+    /// [`FormulaContext::variables`](super::types::FormulaContext::variables):
+    /// `ASSIGN:`, `OUTPUT:` and `COMPOUND:` writes all appear, in first-write
+    /// order, with a later write to the same name replacing the earlier one.
+    /// The language bindings read that map back after an evaluation, so a plan
+    /// that did not expose these would return fewer results than the tree path
+    /// for the same source.
+    pub fn variables(&self) -> &[FormulaVariableBinding] {
+        &self.variables
+    }
+
+    /// Chart styling for each declared output, keyed by the name as written.
+    ///
+    /// The FFI layer reads `ctx.output_modifiers` to describe a series' colour
+    /// and line style, so the plan path publishes the same map. It is not part
+    /// of the numeric plan, which is why it is read straight off the semantic
+    /// plan instead of being a field here.
+    pub fn output_modifiers(&self) -> &BTreeMap<String, OutputModifier> {
+        self.semantic.output_modifiers()
     }
 }
 
@@ -160,6 +225,31 @@ fn compile_output_bindings(
                 name: output.name.clone(),
                 slot,
                 level_marker: output.level_marker,
+            })
+        })
+        .collect()
+}
+
+/// Pair each variable write with the buffer slot its series lands in.
+///
+/// A write whose node has no retained slot is dropped rather than guessed at:
+/// the binding list is what the engine publishes into `ctx.variables`, and
+/// publishing a value from the wrong slot would be worse than publishing none.
+fn compile_variable_bindings(
+    variable_writes: &[NamedOutput],
+    hot: &HotExecutionPlan,
+) -> Vec<FormulaVariableBinding> {
+    let layout = hot.output_layout().outputs();
+    variable_writes
+        .iter()
+        .filter_map(|write| {
+            let slot = layout
+                .iter()
+                .find(|(node, _)| *node == write.node)
+                .map(|(_, slot)| *slot)?;
+            Some(FormulaVariableBinding {
+                name: write.name.clone(),
+                slot,
             })
         })
         .collect()
@@ -282,6 +372,10 @@ struct LoweredPlumbing {
     roots: Vec<ComputeNodeId>,
     /// Named outputs in declaration order.
     named_outputs: Vec<NamedOutput>,
+    /// Every variable the tree path would publish in `ctx.variables`, in
+    /// first-write order with later writes to the same name replacing earlier
+    /// ones (the map semantics `ctx.variables` has).
+    variable_writes: Vec<NamedOutput>,
 }
 
 /// Resolve formula plumbing out of the numeric plan.
@@ -359,6 +453,7 @@ fn lower_formula_plumbing(
     let mut aliases = BTreeMap::<ComputeNodeId, ComputeNodeId>::new();
     let mut local_writes = BTreeMap::<String, ComputeNodeId>::new();
     let mut named_outputs = Vec::<NamedOutput>::new();
+    let mut variable_writes = Vec::<NamedOutput>::new();
     let mut nodes = Vec::with_capacity(optimized.len());
     let mut next_synthetic_id = optimized
         .execution_order()
@@ -382,6 +477,14 @@ fn lower_formula_plumbing(
             let value = value_operand(&rewritten, operation)?;
             aliases.insert(node_id, value);
             local_writes.insert(name.to_string(), node_id);
+            // `ctx.variables` is part of the tree path's observable contract, so
+            // the value has to stay readable here too. See `FormulaVariableBinding`.
+            variable_writes.push(NamedOutput {
+                name: published_name(&source.capabilities.effect)
+                    .unwrap_or_else(|| name.to_string()),
+                node: value,
+                level_marker: false,
+            });
             continue;
         }
 
@@ -399,13 +502,29 @@ fn lower_formula_plumbing(
             // The parser emits a single `AstNode::Output` for the single-colon
             // form, so this is the only place that can record the write.
             local_writes.insert(name.to_string(), node_id);
+            // The caller-visible spelling, not the canonical one the operation
+            // string carries: `ctx.output_names` and `ctx.variables` are keyed by
+            // the name as written, and the parser preserves case.
+            let display =
+                published_name(&source.capabilities.effect).unwrap_or_else(|| name.to_string());
             named_outputs.push(NamedOutput {
-                name: name.to_string(),
+                name: display.clone(),
                 node: value,
                 level_marker: matches!(
                     source.capabilities.effect,
                     ComputeEffect::EmitLevelMarker(_)
                 ),
+            });
+            // An `Output` is a variable write *as well as* a channel, so it
+            // appears in both lists: `named_outputs` fixes the channel order a
+            // caller sees, `variable_writes` mirrors what the tree path stores
+            // in `ctx.variables`. Both point at the same node, so the two
+            // bindings share one buffer slot rather than computing the value
+            // twice.
+            variable_writes.push(NamedOutput {
+                name: display,
+                node: value,
+                level_marker: false,
             });
             continue;
         }
@@ -458,6 +577,7 @@ fn lower_formula_plumbing(
                 next_synthetic_id,
                 &mut aliases,
                 &mut local_writes,
+                &mut variable_writes,
                 &mut nodes,
             )?;
             next_synthetic_id = next_synthetic_id.max(synthetic.0 + 1);
@@ -473,16 +593,32 @@ fn lower_formula_plumbing(
         ));
     }
 
+    // Collapse repeated writes to the same name *before* choosing roots, so a
+    // superseded first write is not retained (and not published) at all.
+    let variable_writes = dedupe_last_write_wins(variable_writes);
+
     // Retain the primary result first, then every named output, then every
-    // drawing directive. Named outputs keep their value subgraphs alive, and
+    // variable the tree path would publish, then every drawing directive.
+    // Named outputs keep their value subgraphs alive, retaining variables keeps
+    // `ctx.variables` populated exactly as the tree path leaves it, and
     // retaining drawings stops chart side effects from being silently dropped
     // by dead-code elimination. An unsupported drawing still fails the plan
     // loudly instead of vanishing.
+    //
+    // A retained root is never recycled by the buffer arena (its last use is the
+    // end of the run), so this does cost one buffer per variable. That is the
+    // same memory the tree path already holds in `ctx.variables` for the same
+    // source — parity, not a new cost.
     let primary = resolve(&aliases, root);
     let mut roots = vec![primary];
     for output in &named_outputs {
         if !roots.contains(&output.node) {
             roots.push(output.node);
+        }
+    }
+    for variable in &variable_writes {
+        if !roots.contains(&variable.node) {
+            roots.push(variable.node);
         }
     }
     for node in &nodes {
@@ -496,7 +632,41 @@ fn lower_formula_plumbing(
         plan,
         roots,
         named_outputs,
+        variable_writes,
     })
+}
+
+/// The spelling a caller sees for a write node.
+///
+/// `ASSIGN:`/`OUTPUT:` operation strings are canonicalised (upper-cased) so that
+/// dependency resolution matches `VARIABLE:` reads, but the tree path keys
+/// `ctx.variables` and `ctx.output_names` by the name *as written in the
+/// source*, and the parser preserves case. The attached effect is the only place
+/// that spelling survives lowering, so it is authoritative here.
+fn published_name(effect: &ComputeEffect) -> Option<String> {
+    match effect {
+        ComputeEffect::WriteVariable(name)
+        | ComputeEffect::EmitOutput(name)
+        | ComputeEffect::EmitLevelMarker(name) => Some(name.clone()),
+        _ => None,
+    }
+}
+
+/// Keep only the final write to each variable name.
+///
+/// `ctx.variables` is a map, so `x = 1; x = 2` leaves one entry. Keeping both
+/// here would retain a buffer for the dead first write and then publish the
+/// wrong one, since the binding list is read in order.
+fn dedupe_last_write_wins(writes: Vec<NamedOutput>) -> Vec<NamedOutput> {
+    let mut seen = BTreeSet::new();
+    let mut kept = Vec::with_capacity(writes.len());
+    for write in writes.into_iter().rev() {
+        if seen.insert(write.name.clone()) {
+            kept.push(write);
+        }
+    }
+    kept.reverse();
+    kept
 }
 
 /// Rewrite one `COMPOUND:<name>:<op>` node into the equivalent binary node.
@@ -517,6 +687,7 @@ fn lower_compound(
     next_synthetic_id: usize,
     aliases: &mut BTreeMap<ComputeNodeId, ComputeNodeId>,
     local_writes: &mut BTreeMap<String, ComputeNodeId>,
+    variable_writes: &mut Vec<NamedOutput>,
     nodes: &mut Vec<ComputeNode>,
 ) -> Result<ComputeNodeId, FormulaHotPlanError> {
     let unsupported = |reason: String| FormulaHotPlanError::UnsupportedPlumbing {
@@ -560,6 +731,13 @@ fn lower_compound(
     let synthetic = ComputeNodeId(next_synthetic_id);
     aliases.insert(node_id, synthetic);
     local_writes.insert(name.to_string(), synthetic);
+    // The compound result is published to `ctx.variables` by the tree path too,
+    // and this synthetic node is the only carrier of that value.
+    variable_writes.push(NamedOutput {
+        name: name.to_string(),
+        node: synthetic,
+        level_marker: false,
+    });
     nodes.push(ComputeNode::new(
         synthetic,
         format!("BINARY:{binary_op}"),

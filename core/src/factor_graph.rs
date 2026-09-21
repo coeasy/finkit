@@ -705,6 +705,10 @@ impl FactorGraphPlan {
     /// retained output in plan order, so this index is what a caller needs to
     /// read an intermediate node rather than only the primary result. The id is
     /// canonicalized, so the spelling used at declaration works here.
+    ///
+    /// Both sides are canonicalized: the binding carries the name *as written*,
+    /// because that is the spelling the tree path publishes into
+    /// `ctx.output_names`, while a node id may be declared in any case.
     #[must_use]
     pub fn node_index(&self, id: &str) -> Option<usize> {
         let canonical = canonical_name(id);
@@ -712,7 +716,7 @@ impl FactorGraphPlan {
             .plan
             .outputs()
             .iter()
-            .find(|output| output.name() == canonical)
+            .find(|output| canonical_name(output.name()) == canonical)
             .map(FormulaOutputBinding::slot)?;
         self.plan
             .hot()

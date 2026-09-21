@@ -643,6 +643,142 @@ pub fn rolling_min(data: &[f64], window: usize) -> Result<Array1<f64>> {
     Ok(output)
 }
 
+/// Rolling median over a trailing window of `window` observations.
+///
+/// The single implementation behind the formula surface's `MEDIAN` and the
+/// compiled-plan `CALL:MEDIAN` kernel. Missing values are dropped before the
+/// median is taken, so a window that is entirely NaN yields NaN rather than
+/// zero; bars before the first full window are NaN.
+///
+/// # Arguments
+/// * `data` - Input data series
+/// * `window` - Window size
+///
+/// # Returns
+/// Array of rolling medians (first `window - 1` values are NaN)
+///
+/// # Examples
+///
+/// ```
+/// use finkit::math::statistics;
+///
+/// let data = vec![1.0, 3.0, 2.0, 5.0];
+/// let result = statistics::rolling_median(&data, 3).unwrap();
+/// assert!(result[0].is_nan() && result[1].is_nan());
+/// assert_eq!(result[2], 2.0);
+/// assert_eq!(result[3], 3.0);
+/// ```
+pub fn rolling_median(data: &[f64], window: usize) -> Result<Array1<f64>> {
+    let mut output = Array1::from_elem(data.len(), f64::NAN);
+    rolling_median_into(
+        data,
+        window,
+        output.as_slice_mut().expect("owned Array1 is contiguous"),
+    )?;
+    Ok(output)
+}
+
+/// Compute the rolling median directly into caller-owned output.
+pub fn rolling_median_into(data: &[f64], window: usize, output: &mut [f64]) -> Result<()> {
+    if data.is_empty() {
+        return Err(TaError::EmptyInput);
+    }
+    if window == 0 {
+        return Err(TaError::InvalidParameter {
+            name: "window".to_string(),
+            constraint: "greater than 0".to_string(),
+        });
+    }
+    if output.len() != data.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as data".to_string(),
+        });
+    }
+
+    output.fill(f64::NAN);
+    let mut buffer: Vec<f64> = Vec::with_capacity(window);
+
+    for i in 0..data.len() {
+        if i + 1 < window {
+            continue;
+        }
+        let start = i + 1 - window;
+        buffer.clear();
+        buffer.extend(data[start..=i].iter().copied().filter(|v| !v.is_nan()));
+        if buffer.is_empty() {
+            continue;
+        }
+        buffer.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let middle = buffer.len() / 2;
+        output[i] = if buffer.len().is_multiple_of(2) {
+            (buffer[middle - 1] + buffer[middle]) / 2.0
+        } else {
+            buffer[middle]
+        };
+    }
+
+    Ok(())
+}
+
+/// Rolling range: the trailing maximum minus the trailing minimum.
+///
+/// The single implementation behind the formula surface's `ROLLING_RANGE` and
+/// the compiled-plan `CALL:ROLLING_RANGE` kernel. It is defined in terms of
+/// [`rolling_max`] and [`rolling_min`] so the three cannot disagree, and it is
+/// deliberately distinct from the TDX `RANGE(X, A, B)` predicate.
+///
+/// # Arguments
+/// * `data` - Input data series
+/// * `window` - Window size
+///
+/// # Returns
+/// Array of rolling ranges (NaN where either extremum is not finite)
+///
+/// # Examples
+///
+/// ```
+/// use finkit::math::statistics;
+///
+/// let data = vec![1.0, 4.0, 2.0, 5.0];
+/// let result = statistics::rolling_range(&data, 3).unwrap();
+/// assert!(result[0].is_nan() && result[1].is_nan());
+/// assert_eq!(result[2], 3.0);
+/// assert_eq!(result[3], 3.0);
+/// ```
+pub fn rolling_range(data: &[f64], window: usize) -> Result<Array1<f64>> {
+    let mut output = Array1::from_elem(data.len(), f64::NAN);
+    rolling_range_into(
+        data,
+        window,
+        output.as_slice_mut().expect("owned Array1 is contiguous"),
+    )?;
+    Ok(output)
+}
+
+/// Compute the rolling range directly into caller-owned output.
+///
+/// Expressed through [`rolling_max`] and [`rolling_min`] rather than a third
+/// deque, so the three cannot disagree about NaN handling or tie-breaking.
+pub fn rolling_range_into(data: &[f64], window: usize, output: &mut [f64]) -> Result<()> {
+    let max = rolling_max(data, window)?;
+    let min = rolling_min(data, window)?;
+    if output.len() != data.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as data".to_string(),
+        });
+    }
+    for index in 0..data.len() {
+        output[index] = if max[index].is_finite() && min[index].is_finite() {
+            max[index] - min[index]
+        } else {
+            f64::NAN
+        };
+    }
+    Ok(())
+}
+
 /// Compute Kendall Tau rank correlation coefficient between two series.
 ///
 /// Uses the O(n²) pairwise comparison algorithm. For each pair (i, j) with i < j,

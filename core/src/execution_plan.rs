@@ -213,6 +213,23 @@ impl InputLayout {
         self.slots_by_operation.get(operation).copied()
     }
 
+    /// Every external input slot paired with the `VARIABLE:` operation naming it.
+    ///
+    /// A frontend binding pass needs this to fill *all* slots generically. The
+    /// plan's variable vocabulary is the source spelling of each name, so a
+    /// caller cannot discover the slots by probing a fixed list of market-data
+    /// aliases — `SUMBARS(VOL, 5000)` opens a slot named `VARIABLE:VOL`, not
+    /// `VARIABLE:VOLUME`, and a caller that only knew the canonical spelling
+    /// would silently leave that slot bound to whatever it defaulted to.
+    ///
+    /// The pairs are ordered by operation name. Slot indices are the second
+    /// element, so callers must index by `slot.0`, not by position.
+    pub fn operations(&self) -> impl Iterator<Item = (&str, InputSlot)> {
+        self.slots_by_operation
+            .iter()
+            .map(|(operation, slot)| (operation.as_str(), *slot))
+    }
+
     /// Number of external input slots required by the plan.
     pub fn len(&self) -> usize {
         self.slots

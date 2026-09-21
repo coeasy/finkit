@@ -208,6 +208,90 @@ pub fn sma20_into(input: &[f64], output: &mut [f64]) -> Result<()> {
     Ok(())
 }
 
+/// Wilder's moving average — Pine's `ta.rma`, and the smoothing behind the
+/// TA-Lib ATR/DMI/ADX family.
+///
+/// # Arguments
+/// * `input` - Input data series
+/// * `period` - Lookback period
+///
+/// # Returns
+/// Array of RMA values (NaN until the seed is complete)
+///
+/// # Contract
+///
+/// Missing values are **skipped**, not propagated: the seed is the arithmetic
+/// mean of the first `period` *non-NaN* observations, and every bar before that
+/// seed is NaN. This is deliberately not
+/// [`crate::indicators::talib_ext::rma_profile`], which seeds from
+/// `input[..period]` unconditionally and therefore poisons the entire series
+/// when the warm-up contains a NaN.
+///
+/// # Examples
+///
+/// ```
+/// use finkit::math::moving_avg;
+///
+/// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+/// let result = moving_avg::rma(&data, 3).unwrap();
+/// assert!(result[0].is_nan() && result[1].is_nan());
+/// assert_eq!(result[2], 2.0);
+/// ```
+pub fn rma(input: &[f64], period: usize) -> Result<Array1<f64>> {
+    let mut output = Array1::from_elem(input.len(), f64::NAN);
+    rma_into(
+        input,
+        period,
+        output.as_slice_mut().expect("owned Array1 is contiguous"),
+    )?;
+    Ok(output)
+}
+
+/// Compute Wilder's moving average directly into caller-owned output.
+///
+/// The single implementation behind both the formula surface's `RMA` and the
+/// compiled-plan `CALL:RMA` kernel; see [`rma`] for the NaN contract.
+pub fn rma_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> {
+    if period == 0 {
+        return Err(TaError::InvalidParameter {
+            name: "period".to_string(),
+            constraint: "greater than 0".to_string(),
+        });
+    }
+    if output.len() != input.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
+
+    output.fill(f64::NAN);
+    let mut seed_sum = 0.0;
+    let mut seed_count = 0usize;
+    let mut previous: Option<f64> = None;
+
+    for (index, &value) in input.iter().enumerate() {
+        if value.is_nan() {
+            continue;
+        }
+        if let Some(prev) = previous {
+            let current = prev + (value - prev) / period as f64;
+            output[index] = current;
+            previous = Some(current);
+        } else {
+            seed_sum += value;
+            seed_count += 1;
+            if seed_count == period {
+                let current = seed_sum / period as f64;
+                output[index] = current;
+                previous = Some(current);
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// Exponential Moving Average (EMA)
 ///
 /// Applies more weight to recent prices using exponential smoothing.

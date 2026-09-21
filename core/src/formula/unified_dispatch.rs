@@ -105,6 +105,37 @@ impl KernelDispatcher for FormulaKernelDispatcher {
         if call.kernel == KernelId::from_static("CALL:FIXNAN") {
             return dispatch_elementwise_call(call, buffers, ElementwiseKernel::FixNan);
         }
+        if call.kernel == KernelId::from_static("CALL:ISNA") {
+            return dispatch_elementwise_call(call, buffers, ElementwiseKernel::IsNa);
+        }
+        if call.kernel == KernelId::from_static("CALL:INTPART") {
+            return dispatch_elementwise_call(call, buffers, ElementwiseKernel::IntPart);
+        }
+        if call.kernel == KernelId::from_static("CALL:FRACPART") {
+            return dispatch_elementwise_call(call, buffers, ElementwiseKernel::FracPart);
+        }
+        if call.kernel == KernelId::from_static("CALL:MOD") {
+            return dispatch_elementwise_call(call, buffers, ElementwiseKernel::Mod);
+        }
+
+        if call.kernel == KernelId::from_static("CALL:CUMSUM") {
+            return dispatch_sequence_call(call, buffers, SequenceKernel::CumSum);
+        }
+        if call.kernel == KernelId::from_static("CALL:BARSSINCE") {
+            return dispatch_sequence_call(call, buffers, SequenceKernel::BarsSince);
+        }
+        if call.kernel == KernelId::from_static("CALL:REVERSE") {
+            return dispatch_sequence_call(call, buffers, SequenceKernel::Reverse);
+        }
+        if call.kernel == KernelId::from_static("CALL:SUMBARS") {
+            return dispatch_sequence_call(call, buffers, SequenceKernel::SumBars);
+        }
+
+        // `TRANGE(H, L, C)` has no period operand, so it cannot join the HLC
+        // periodic family that `ATR`/`NATR`/`CCI` use.
+        if call.kernel == KernelId::from_static("CALL:TRANGE") {
+            return dispatch_trange_call(call, buffers);
+        }
 
         if call.kernel == KernelId::from_static("CALL:MINUS") {
             return dispatch_window_call(call, buffers, WindowKernel::Minus);
@@ -126,6 +157,10 @@ impl KernelDispatcher for FormulaKernelDispatcher {
             || call.kernel == KernelId::from_static("CALL:SMA")
             || call.kernel == KernelId::from_static("CALL:EMA")
             || call.kernel == KernelId::from_static("CALL:WMA")
+            || call.kernel == KernelId::from_static("CALL:HMA")
+            || call.kernel == KernelId::from_static("CALL:RMA")
+            || call.kernel == KernelId::from_static("CALL:MEDIAN")
+            || call.kernel == KernelId::from_static("CALL:ROLLING_RANGE")
             || call.kernel == KernelId::from_static("CALL:KAMA")
             || call.kernel == KernelId::from_static("CALL:RSI")
             || call.kernel == KernelId::from_static("CALL:MOM")
@@ -233,7 +268,7 @@ impl KernelDispatcher for FormulaKernelDispatcher {
             return dispatch_refdate_call(call, buffers);
         }
 
-        if call.kernel == KernelId::from_static("DRAW:FILL")
+        if call.kernel == KernelId::from_static("DRAW_GENERIC")
             || call.kernel == KernelId::from_static("STICK_LINE")
             || call.kernel == KernelId::from_static("DRAW_TEXT")
             || call.kernel == KernelId::from_static("DRAW_ICON")
@@ -262,6 +297,7 @@ impl KernelDispatcher for FormulaKernelDispatcher {
             || call.kernel == KernelId::from_static("CALL:ICHIMOKU_KIJUN")
             || call.kernel == KernelId::from_static("CALL:SUPERTREND")
             || call.kernel == KernelId::from_static("CALL:VWAP")
+            || call.kernel == KernelId::from_static("CALL:CORREL")
             || call.kernel == KernelId::from_static("CALL:DONCHIAN")
             || call.kernel == KernelId::from_static("CALL:DONCHIAN_UPPER")
             || call.kernel == KernelId::from_static("CALL:DONCHIAN_LOWER")
@@ -421,6 +457,14 @@ fn dispatch_arith_call(
 ///   `fixnan` contract rather than a generic carry-forward.
 /// - `CROSS` yields `0.0` — not NaN — wherever nothing crossed, and a NaN operand
 ///   compares false, so it never crosses.
+/// - `ISNA` yields `1.0`/`0.0`, never NaN: it is a *predicate*, so a NaN input
+///   is a `1.0` result rather than a propagated gap. Pine's `na(x)` and the
+///   first half of `nz(x, y)` depend on that.
+/// - `MOD` is **not** the `%` operator and not `BINARY:Mod`. `fn_mod` uses
+///   Rust's truncating `%` and yields NaN when the divisor is near zero, while
+///   `BINARY:Mod` uses a floor-based remainder. The two disagree in sign for
+///   negative operands (`MOD(-7, 3)` is `-1`, `-7 % 3` as an operator is `2`),
+///   so reusing the operator kernel here would silently change results.
 enum ElementwiseKernel {
     /// `CROSS(A, B)`: `1.0` on the bar A crosses above B.
     Cross,
@@ -428,6 +472,14 @@ enum ElementwiseKernel {
     CrossBelow,
     /// `FIXNAN(X)`: forward-fill missing values, preserving leading NaN.
     FixNan,
+    /// `ISNA(X)`: `1.0` where `X` is NaN, else `0.0`.
+    IsNa,
+    /// `INTPART(X)`: truncate toward zero.
+    IntPart,
+    /// `FRACPART(X)`: the fractional part, `X.fract()`.
+    FracPart,
+    /// `MOD(A, B)`: truncating remainder, NaN where `|B| <= 1e-15`.
+    Mod,
 }
 
 fn dispatch_elementwise_call(
@@ -436,8 +488,11 @@ fn dispatch_elementwise_call(
     op: ElementwiseKernel,
 ) -> Result<(), KernelDispatchError> {
     let expected = match op {
-        ElementwiseKernel::Cross | ElementwiseKernel::CrossBelow => 2,
-        ElementwiseKernel::FixNan => 1,
+        ElementwiseKernel::Cross | ElementwiseKernel::CrossBelow | ElementwiseKernel::Mod => 2,
+        ElementwiseKernel::FixNan
+        | ElementwiseKernel::IsNa
+        | ElementwiseKernel::IntPart
+        | ElementwiseKernel::FracPart => 1,
     };
     if call.inputs.len() != expected {
         return Err(KernelDispatchError::new(FormulaKernelDispatcher::ERR_ARITY));
@@ -446,6 +501,41 @@ fn dispatch_elementwise_call(
     let length = buffers[out].len();
 
     match op {
+        ElementwiseKernel::IntPart => {
+            let input = call.inputs[0].0;
+            for index in 0..length {
+                let value = buffers[input][index];
+                buffers[out][index] = value.trunc();
+            }
+        }
+        ElementwiseKernel::FracPart => {
+            let input = call.inputs[0].0;
+            for index in 0..length {
+                let value = buffers[input][index];
+                buffers[out][index] = value.fract();
+            }
+        }
+        ElementwiseKernel::Mod => {
+            let lhs = call.inputs[0].0;
+            let rhs = call.inputs[1].0;
+            for index in 0..length {
+                let divisor = buffers[rhs][index];
+                let value = buffers[lhs][index];
+                buffers[out][index] = if divisor.abs() > 1e-15 {
+                    value % divisor
+                } else {
+                    f64::NAN
+                };
+            }
+        }
+        ElementwiseKernel::IsNa => {
+            let input = call.inputs[0].0;
+            for index in 0..length {
+                // Read before writing, for the same aliasing reason as `FixNan`.
+                let value = buffers[input][index];
+                buffers[out][index] = if value.is_nan() { 1.0 } else { 0.0 };
+            }
+        }
         ElementwiseKernel::FixNan => {
             let input = call.inputs[0].0;
             let mut previous = f64::NAN;
@@ -490,6 +580,116 @@ fn dispatch_elementwise_call(
                 // aliases one of the operands.
                 previous_lhs = lhs_now;
                 previous_rhs = rhs_now;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Whole-series scans behind `CUMSUM` and `BARSSINCE`.
+///
+/// Both are single-input, windowless accumulations, so they cannot join the
+/// periodic family (which demands a period operand) or the elementwise family
+/// (which is stateless per bar). Their warm-up rules differ and are the contract:
+///
+/// - `CUMSUM` writes a value from bar 0 — its accumulator starts at `0.0`, so
+///   leading NaN contributes nothing rather than poisoning the prefix.
+/// - `BARSSINCE` leaves every bar before the first truthy input as NaN, then
+///   counts bars since the most recent truthy one (so the truthy bar itself is
+///   `0.0`). A NaN condition is not truthy, matching `fn_barssince`.
+/// - `REVERSE` mirrors the whole series, so it is an O(n) scan that needs the
+///   *final* length up front rather than a running accumulator.
+/// - `SUMBARS` is the one two-operand member: it scans *backwards* from each bar
+///   until the running total reaches that bar's target, and reports how many
+///   bars that took. A target that is never reached yields the distance to the
+///   start of the series, not NaN.
+enum SequenceKernel {
+    /// `CUMSUM(X)`: running sum, skipping NaN.
+    CumSum,
+    /// `BARSSINCE(X)`: bars since `X` was last non-zero and non-NaN.
+    BarsSince,
+    /// `REVERSE(X)`: the series mirrored end to end.
+    Reverse,
+    /// `SUMBARS(X, T)`: bars back from each bar until the sum reaches `T`.
+    SumBars,
+}
+
+fn dispatch_sequence_call(
+    call: KernelCall<'_>,
+    buffers: &mut [Vec<f64>],
+    op: SequenceKernel,
+) -> Result<(), KernelDispatchError> {
+    let expected = match op {
+        SequenceKernel::CumSum | SequenceKernel::BarsSince | SequenceKernel::Reverse => 1,
+        SequenceKernel::SumBars => 2,
+    };
+    if call.inputs.len() != expected {
+        return Err(KernelDispatchError::new(FormulaKernelDispatcher::ERR_ARITY));
+    }
+    let input = call.inputs[0].0;
+    let out = call.output.0;
+    let length = buffers[out].len();
+    if call
+        .inputs
+        .iter()
+        .any(|slot| slot.0 == out || buffers[slot.0].len() != length)
+    {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+
+    match op {
+        SequenceKernel::CumSum => {
+            let mut sum = 0.0;
+            for index in 0..length {
+                // Read before writing: the output may alias the input, and the
+                // read and write are at the same index, so this stays correct.
+                let value = buffers[input][index];
+                if !value.is_nan() {
+                    sum += value;
+                }
+                buffers[out][index] = sum;
+            }
+        }
+        SequenceKernel::BarsSince => {
+            let mut last_true: Option<usize> = None;
+            for index in 0..length {
+                let value = buffers[input][index];
+                if value != 0.0 && !value.is_nan() {
+                    last_true = Some(index);
+                }
+                buffers[out][index] = match last_true {
+                    Some(position) => (index - position) as f64,
+                    None => f64::NAN,
+                };
+            }
+        }
+        SequenceKernel::Reverse => {
+            // Mirrored indices are read and written in opposite order, so an
+            // aliased output would clobber values it has not read yet. Snapshot
+            // the source instead of relying on the read/write symmetry the
+            // single-index kernels get for free.
+            let source: Vec<f64> = buffers[input].clone();
+            for index in 0..length {
+                buffers[out][index] = source[length - 1 - index];
+            }
+        }
+        SequenceKernel::SumBars => {
+            let target = call.inputs[1].0;
+            let source: Vec<f64> = buffers[input].clone();
+            for index in 0..length {
+                let threshold = buffers[target][index];
+                let mut cumulative = 0.0;
+                let mut bars = 0.0;
+                for position in (0..=index).rev() {
+                    cumulative += source[position];
+                    bars += 1.0;
+                    if cumulative >= threshold {
+                        break;
+                    }
+                }
+                buffers[out][index] = bars;
             }
         }
     }
@@ -821,8 +1021,26 @@ fn dispatch_periodic_call(
         crate::math::moving_avg::ema_into(input, period, output)
     } else if call.kernel == KernelId::from_static("CALL:WMA") {
         crate::math::moving_avg::wma_into(input, period, output)
+    } else if call.kernel == KernelId::from_static("CALL:HMA") {
+        // No `hma_into` exists: the Hull MA is a three-pass WMA that builds the
+        // intermediate `2*WMA(n/2) - WMA(n)` series itself, so the tree path's
+        // `moving_avg::hma` is the only implementation to delegate to. Writing
+        // through `_into` here would mean re-deriving that algorithm in the
+        // dispatcher, which is exactly how the two paths drift apart.
+        crate::math::moving_avg::hma(input, period).map(|series| {
+            output.copy_from_slice(series.as_slice().expect("Array1 is contiguous"));
+        })
     } else if call.kernel == KernelId::from_static("CALL:KAMA") {
         crate::math::moving_avg::kama_into(input, period, 2, 30, output)
+    } else if call.kernel == KernelId::from_static("CALL:RMA") {
+        // Wilder's smoothing, shared with `fn_rma` via the math layer rather
+        // than re-derived here: the NaN-skipping seed is exactly the kind of
+        // detail that drifts when it is written twice.
+        crate::math::moving_avg::rma_into(input, period, output)
+    } else if call.kernel == KernelId::from_static("CALL:MEDIAN") {
+        crate::math::statistics::rolling_median_into(input, period, output)
+    } else if call.kernel == KernelId::from_static("CALL:ROLLING_RANGE") {
+        crate::math::statistics::rolling_range_into(input, period, output)
     } else if call.kernel == KernelId::from_static("CALL:RSI") {
         crate::indicators::rsi_into(input, period, output)
     } else if call.kernel == KernelId::from_static("CALL:MOM") {
@@ -1026,6 +1244,62 @@ fn dispatch_cci_source_call(
     }
     output.copy_from_slice(&result);
     Ok(())
+}
+
+/// Execute `TRANGE(H, L, C)` into the plan-owned output.
+///
+/// Delegates to `indicators::volatility::trange_into`, which is what the
+/// formula surface's `canonical_trange` override calls — **not** the legacy
+/// `fn_trange` in `functions_legacy.rs`. The two disagree on bar 0: TA-Lib has
+/// no previous close there, so the canonical implementation writes NaN, while
+/// the legacy copy writes `high[0] - low[0]`. The router shadows the legacy
+/// copy, so NaN is what the tree path actually produces, and matching the
+/// shadowed copy here would make the two paths diverge on the first bar.
+fn dispatch_trange_call(
+    call: KernelCall<'_>,
+    buffers: &mut [Vec<f64>],
+) -> Result<(), KernelDispatchError> {
+    if call.inputs.len() != 3 {
+        return Err(KernelDispatchError::new(FormulaKernelDispatcher::ERR_ARITY));
+    }
+    let high_slot = call.inputs[0].0;
+    let low_slot = call.inputs[1].0;
+    let close_slot = call.inputs[2].0;
+    let output_slot = call.output.0;
+    if [high_slot, low_slot, close_slot]
+        .into_iter()
+        .any(|slot| slot == output_slot)
+    {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+    let len = buffers[output_slot].len();
+    if [high_slot, low_slot, close_slot]
+        .into_iter()
+        .any(|slot| buffers[slot].len() != len)
+    {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+
+    let high_ptr = buffers[high_slot].as_ptr();
+    let low_ptr = buffers[low_slot].as_ptr();
+    let close_ptr = buffers[close_slot].as_ptr();
+    let output_ptr = buffers[output_slot].as_mut_ptr();
+    // All four slots were checked to be distinct above, so the aliasing this
+    // requires is exactly the aliasing the dispatcher already forbids.
+    let (high, low, close, output) = unsafe {
+        (
+            std::slice::from_raw_parts(high_ptr, len),
+            std::slice::from_raw_parts(low_ptr, len),
+            std::slice::from_raw_parts(close_ptr, len),
+            std::slice::from_raw_parts_mut(output_ptr, len),
+        )
+    };
+    crate::indicators::volatility::trange_into(high, low, close, output)
+        .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))
 }
 
 fn dispatch_hlc_periodic_call(
@@ -1894,9 +2168,15 @@ fn dispatch_stochf_call(
 /// rendering to the host. Pruning them instead would contradict that decision.
 ///
 /// The set is enumerated rather than prefix-matched because [`KernelId`] is a
-/// hash with no string accessor. The four names are the complete set the IR
-/// produces today (`compute_ir.rs`: `STICK_LINE`, `DRAW_TEXT`, `DRAW_ICON`, and
-/// `DRAW:<command>` for `DrawGeneric`).
+/// hash with no string accessor — an enumeration is the only option available.
+///
+/// That constraint is exactly why `compute_ir.rs` collapses every `DrawGeneric`
+/// command onto the single name `DRAW_GENERIC` instead of emitting
+/// `DRAW:<command>`. The per-command form required this list to mirror the
+/// parser's command vocabulary by hand, and it did not: `DRAW:FILL` was listed
+/// but never produced, while eleven commands that *are* produced — `DRAWLINE`
+/// among them — fell through unhandled, so any formula drawing a line failed on
+/// the plan path. A one-name gate cannot rot that way.
 fn dispatch_draw_call(
     call: KernelCall<'_>,
     buffers: &mut [Vec<f64>],
@@ -1992,6 +2272,26 @@ fn dispatch_modern_call(
             )
         };
         return crate::math::moving_avg::vwma_into(input, volume, period, output)
+            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER));
+    }
+
+    if is("CALL:CORREL") {
+        // `CORREL(x, y, n)` is the rolling Pearson correlation of two series, so
+        // it is a two-input kernel with the period last — the same shape as
+        // VWMA. It delegates to `rolling_correlation_into`, which is exactly
+        // what `fn_correl` calls on the tree path.
+        let period = period_from_slot(buffers, call.inputs[2].0)?;
+        let left_ptr = buffers[call.inputs[0].0].as_ptr();
+        let right_ptr = buffers[call.inputs[1].0].as_ptr();
+        let output_ptr = buffers[output_slot].as_mut_ptr();
+        let (left, right, output) = unsafe {
+            (
+                std::slice::from_raw_parts(left_ptr, len),
+                std::slice::from_raw_parts(right_ptr, len),
+                std::slice::from_raw_parts_mut(output_ptr, len),
+            )
+        };
+        return crate::math::kernels::rolling_correlation_into(left, right, period, output)
             .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER));
     }
 

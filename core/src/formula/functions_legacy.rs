@@ -109,36 +109,20 @@ fn fn_ema(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, For
 /// RMA(X, N): Wilder's moving average, as used by Pine `ta.rma`.
 /// The first value is seeded from the first N non-NaN observations; later
 /// values use the Wilder recurrence `prev + (x - prev) / N`.
+///
+/// The recursion itself lives in `math::moving_avg::rma_into` so the tree path
+/// and the compiled-plan `CALL:RMA` kernel share one implementation.
 fn fn_rma(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("RMA", args, 2)?;
     let input = &args[0];
     let n = extract_n(args, 1, "RMA")?;
     let mut output = nan_vec(ctx.data_len);
-    let mut seed_sum = 0.0;
-    let mut seed_count = 0usize;
-    let mut previous = None;
-
-    for i in 0..ctx.data_len {
-        let value = input[i];
-        if value.is_nan() {
-            continue;
-        }
-
-        if let Some(prev) = previous {
-            let current = prev + (value - prev) / n as f64;
-            output[i] = current;
-            previous = Some(current);
-        } else {
-            seed_sum += value;
-            seed_count += 1;
-            if seed_count == n {
-                let current = seed_sum / n as f64;
-                output[i] = current;
-                previous = Some(current);
-            }
-        }
-    }
-
+    crate::math::moving_avg::rma_into(
+        input.as_slice().unwrap_or_default(),
+        n,
+        output.as_slice_mut().expect("owned Array1 is contiguous"),
+    )
+    .map_err(|_| FormulaError::InvalidParameter("RMA period is invalid".to_string()))?;
     Ok(output)
 }
 
@@ -5391,41 +5375,26 @@ fn fn_percentile(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f6
 }
 
 /// MEDIAN(X, N): Median over N-bar window
+///
+/// Delegates to `math::statistics::rolling_median` so the tree path and the
+/// compiled-plan `CALL:MEDIAN` kernel share one implementation.
 fn fn_median(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("MEDIAN", args, 2)?;
     let input = &args[0];
     let n = extract_n(args, 1, "MEDIAN")?;
-    let data_len = ctx.data_len;
-    let mut result = nan_vec(data_len);
-
-    for i in 0..data_len {
-        if i + 1 < n {
-            continue;
-        }
-        let start = i + 1 - n;
-        let mut window: Vec<f64> = input
-            .slice(s![start..=i])
-            .iter()
-            .copied()
-            .filter(|v| !v.is_nan())
-            .collect();
-        if window.is_empty() {
-            continue;
-        }
-        window.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-        let mid = window.len() / 2;
-        result[i] = if window.len().is_multiple_of(2) {
-            (window[mid - 1] + window[mid]) / 2.0
-        } else {
-            window[mid]
-        };
+    if input.is_empty() {
+        return Ok(nan_vec(ctx.data_len));
     }
-    Ok(result)
+    crate::math::statistics::rolling_median(input.as_slice().unwrap_or_default(), n)
+        .map_err(|_| FormulaError::InvalidParameter("MEDIAN window is invalid".to_string()))
 }
 
 /// ROLLING_RANGE(X, N): rolling maximum minus rolling minimum.
 /// Kept separate from the TDX `RANGE(X, A, B)` predicate so dialects cannot
 /// silently inherit incompatible arity or boolean semantics.
+///
+/// Delegates to `math::statistics::rolling_range` so the tree path and the
+/// compiled-plan `CALL:ROLLING_RANGE` kernel share one implementation.
 fn fn_rolling_range(
     ctx: &FormulaContext,
     args: &[Array1<f64>],
@@ -5433,18 +5402,11 @@ fn fn_rolling_range(
     ensure_args_len("ROLLING_RANGE", args, 2)?;
     let input = &args[0];
     let n = extract_n(args, 1, "ROLLING_RANGE")?;
-    let values = input.as_slice().unwrap_or_default();
-    let max = lib_stat::rolling_max(values, n)
-        .map_err(|_| FormulaError::InvalidParameter("ROLLING_RANGE window is invalid".into()))?;
-    let min = lib_stat::rolling_min(values, n)
-        .map_err(|_| FormulaError::InvalidParameter("ROLLING_RANGE window is invalid".into()))?;
-    let mut out = nan_vec(ctx.data_len);
-    for index in 0..ctx.data_len {
-        if max[index].is_finite() && min[index].is_finite() {
-            out[index] = max[index] - min[index];
-        }
+    if input.is_empty() {
+        return Ok(nan_vec(ctx.data_len));
     }
-    Ok(out)
+    crate::math::statistics::rolling_range(input.as_slice().unwrap_or_default(), n)
+        .map_err(|_| FormulaError::InvalidParameter("ROLLING_RANGE window is invalid".into()))
 }
 
 // === Higher-order statistics ===

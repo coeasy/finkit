@@ -416,6 +416,21 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             deterministic: true,
         },
         FunctionSpec {
+            name: "HMA",
+            aliases: &[],
+            category: FunctionCategory::Overlap,
+            input: InputKind::Series,
+            params: PERIOD_REQUIRED,
+            outputs: 1,
+            // Hull MA is `WMA(2*WMA(n/2) - WMA(n), sqrt(n))`, so its first finite
+            // value sits at `period + round(sqrt(period)) - 2` — not a linear
+            // function of the period. `Period`/`PeriodMinusOne` would understate
+            // the warm-up and let a caller read NaN as a real value.
+            lookback: LookbackSpec::Dynamic,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
             name: "KAMA",
             aliases: &[],
             category: FunctionCategory::Overlap,
@@ -628,6 +643,20 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             params: PERIOD_14,
             outputs: 1,
             lookback: LookbackSpec::Period,
+            streaming: true,
+            deterministic: true,
+        },
+        // True Range itself, without the Wilder smoothing `ATR` applies. It takes
+        // no period, so the only lookback it needs is the previous close — which
+        // is also why bar 0 is NaN rather than `high[0] - low[0]`.
+        FunctionSpec {
+            name: "TRANGE",
+            aliases: &[],
+            category: FunctionCategory::Volatility,
+            input: InputKind::Hlc,
+            params: &[],
+            outputs: 1,
+            lookback: LookbackSpec::None,
             streaming: true,
             deterministic: true,
         },
@@ -1034,6 +1063,33 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             outputs: 1,
             lookback: LookbackSpec::Dynamic,
             streaming: true,
+            deterministic: true,
+        },
+        // `BARSLAST` counted *forward* from the series start instead of backward
+        // from the current bar. Same windowless shape, same dynamic lookback.
+        FunctionSpec {
+            name: "BARSSINCE",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: &[],
+            outputs: 1,
+            lookback: LookbackSpec::Dynamic,
+            streaming: true,
+            deterministic: true,
+        },
+        // `SUMBARS(X, T)` scans backwards from each bar until the running total
+        // of `X` reaches that bar's `T`, so its reach is unbounded — hence
+        // `Dynamic`, not `PeriodMinusOne`, even though it takes two operands.
+        FunctionSpec {
+            name: "SUMBARS",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: TWO_SERIES,
+            outputs: 1,
+            lookback: LookbackSpec::Dynamic,
+            streaming: false,
             deterministic: true,
         },
         FunctionSpec {
@@ -1721,6 +1777,20 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             streaming: true,
             deterministic: true,
         },
+        // The predicate half of the NaN toolkit: `ISNA` reports *where* a gap is,
+        // where `FIXNAN` erases it. Both back Pine's `nz`/`na`, which is why
+        // neither takes a period and neither can be folded into the other.
+        FunctionSpec {
+            name: "ISNA",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Series,
+            params: &[],
+            outputs: 1,
+            lookback: LookbackSpec::None,
+            streaming: true,
+            deterministic: true,
+        },
         FunctionSpec {
             name: "ROLLING_RANGE",
             aliases: &[],
@@ -1729,6 +1799,63 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             params: PERIOD_REQUIRED,
             outputs: 1,
             lookback: LookbackSpec::PeriodMinusOne,
+            streaming: false,
+            deterministic: true,
+        },
+        // The DZH integer/fraction split. Neither is a rounding mode on the
+        // other: `INTPART(-1.5)` is `-1.0` (truncation toward zero, not
+        // `floor`), and `FRACPART(-1.5)` is `-0.5` because `f64::fract` keeps
+        // the sign. They are also the two halves of the `INTPART(X) +
+        // FRACPART(X) == X` identity that the DZH corpus checks.
+        FunctionSpec {
+            name: "INTPART",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Series,
+            params: &[],
+            outputs: 1,
+            lookback: LookbackSpec::None,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "FRACPART",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Series,
+            params: &[],
+            outputs: 1,
+            lookback: LookbackSpec::None,
+            streaming: true,
+            deterministic: true,
+        },
+        // `MOD` is registered as a *function* separately from the `%` operator
+        // (`BINARY:Mod`) because the two disagree: the function uses Rust's
+        // truncating remainder and returns NaN for a near-zero divisor, while the
+        // operator uses a floor-based remainder. For negative operands they give
+        // different answers, so one cannot stand in for the other.
+        FunctionSpec {
+            name: "MOD",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: TWO_SERIES,
+            outputs: 1,
+            lookback: LookbackSpec::None,
+            streaming: true,
+            deterministic: true,
+        },
+        // `REVERSE` mirrors the series end to end, so it is a whole-series
+        // transform rather than a window: no warm-up, but its lookback is the
+        // full length, which `Dynamic` expresses.
+        FunctionSpec {
+            name: "REVERSE",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: &[],
+            outputs: 1,
+            lookback: LookbackSpec::Dynamic,
             streaming: false,
             deterministic: true,
         },

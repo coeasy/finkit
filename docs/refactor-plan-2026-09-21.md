@@ -313,10 +313,93 @@ plan 路径原来从**第一个输入槽**推断执行长度，于是 `10 + 20` 
 （`None` = 计划没有输入槽），否则 `range.end > common_len` 会把**任何非空区间**
 都判成越界。
 
-**③ 剩下的 3 组是同一个决策，且会改公开签名。**
-plan 路径**刻意不写 `ctx.variables`**（`eval_plan_channels` 只收 `&FormulaContext`），
-而 Pine 的用户自定义函数与具名输出要靠它取结果。要修就得把签名改成 `&mut`，
-**跨 5 个语言绑定**，属于行为变更 —— 已列进「已知未决」，**不动**。
+**③ 剩下的 3 组：原判断「会改 5 个语言绑定」是错的，已修完。**
+原结论是「plan 路径刻意不写 `ctx.variables`，要修就得改签名，跨 5 个语言绑定」。
+**实测把成本估错了**：
+
+| 断言 | 实测 |
+|---|---|
+| `eval_plan*` 被谁调用 | **只有 `engine.rs` 内部 3 处 + 2 个测试文件**；绑定一个都没调 |
+| 绑定走哪个入口 | `eval` / `eval_with_dialect` / `eval_with_params`，**签名本来就是 `&mut FormulaContext`** |
+| 真正的阻力 | 不是签名，是 **plan 会把赋值全部剪掉**（只保留 `OUTPUT:` 节点当 root），所以即便改了签名也没有东西可写回 |
+
+所以修法分两层，都不涉及绑定：
+
+1. **保留赋值**：`lower_formula_plumbing` 把 `ASSIGN:`/`COMPOUND:` 的目标也登记为 root，
+   并作为 `FormulaVariableBinding` 暴露（`FormulaHotPlan::variables()`）。
+   保留 root 意味着缓冲区不被回收 —— 这与树路径把同一批值放在 `ctx.variables` 里
+   是**同等内存**，不是新增开销。
+2. **写回**：`eval_plan_channels` 收 `&mut FormulaContext`，把变量写进 `ctx.variables`、
+   把声明通道推进 `ctx.output_names`、把样式写进 `ctx.output_modifiers`。
+
+**踩到的两个坑（都不是签名问题）**：
+
+- **重名写入要「后者胜」**：`x = 1; x = 2` 在 `ctx.variables` 里只剩一个条目，
+  所以去重必须在**选 root 之前**做，否则会为一个死掉的首次写入白留一个缓冲区，
+  并按顺序发布错误的值。
+- **大小写不能丢**：`ASSIGN:`/`OUTPUT:` 的操作名是 **canonical（全大写）**的，
+  依赖解析靠它；但 `ctx.variables`/`ctx.output_names` 是**按源码原样**做键的，
+  而 parser 不做大小写归一。所以发布名必须从 `ComputeEffect`（`WriteVariable`/
+  `EmitOutput`）里取回原样拼写 —— 否则 `golden:` 会被发布成 `GOLDEN`。
+  上例两个测试都用**小写输出名**正是为了钉住这一点。
+- `ctx.output_modifiers` 也补齐了：样式不属于数值计划，所以随 `FormulaComputePlan`
+  一起带出（新增一个 `BTreeMap`，不动 `ComputeEffect`，也就不用给 `OutputModifier`
+  补 `PartialEq`）。
+
+**顺带发现（未修，属既有行为）**：树路径对**变量读**走 canonical 名、对**变量写**按原样
+存储，所以小写变量名在参考路径上直接失败（`Unknown variable: MA5`）。这是既有实现
+不一致，不是本次改动引入的，**没有动**。
+
+**结果：3 → 1。** 剩下那 1 组（Pine 语义映射器）不再是上下文问题，而是
+**kernel 覆盖缺口**：它一次性调用 13 个函数，缺一个就整组红。本轮补了 `HMA`、`CORREL`
+（两者都是「公式面可调用但 registry 未声明」，已一并注册）；仍缺 6 个：
+`BARSSINCE`、`TRANGE`、`CUMSUM`、`MEDIAN`、`ROLLING_RANGE`、`RMA`
+（前两个还要补注册）。缺口清单由错误信息里的 kernel 哈希反查得到 ——
+`KernelId` 是 `"CALL:<NAME>"` 的 FNV-1a 64，所以从哈希反查名字是定位缺口最快的手段。
+
+##### 第七轮：写回改动把「隐藏的覆盖缺口」翻了出来（2026-09-21）
+
+上面 6 个 kernel 连同 `ISNA` 已补齐（`ISNA` 是写回改动带出来的：保留赋值 root 后
+`nz()` 这个原先被死代码消除的节点现在必须执行），Pine 语料门禁转绿。但同一次翻转默认
+又暴露出**一整组此前从未被测量到的缺口** —— `dzh_compat_tests` 35 个测试里红了 34 个，
+涉及 15 个缺失 kernel。这不是「再补几个 kernel」，15 个缺口分属四类：
+
+| 类别 | 函数 | 为什么不是「补个 kernel」 |
+|---|---|---|
+| ① 字符串字面量 | `STRING_LITERAL` | plan 路径**根本没有字符串字面量的表示**。树路径把字面量追加到 `FormulaContext::string_table`，而 kernel ABI 只有数值 buffer、没有上下文对象。**任何含字符串参数的公式在 plan 路径上都跑不动**，不止 DZH 板块引用函数 |
+| ② 宿主数据通道 | `MONEYFLOW` / `NETINFLOW` / `MAININFLOW` / `MAININFLOWPCT` / `BIGORDER` / `SUPERBIGORDER` / `SMALLORDER`（7 个） | 全部**零参**，读 `ctx.money_flow_data`；而 `HostContext` 只有 `chip` / `period_type`。同 `WINNER`/`COST` 的处理方式，需要扩 `HostContext` |
+| ③ 隐式 OHLC | `TR()` | 也是**零参**，读 `ctx.high/low/close`，不从公式操作数取输入 |
+| ④ 纯数值 | `MOD` / `INTPART` / `FRACPART` / `REVERSE` / `SUMBARS`（5 个） | 真正机械，本轮已补（含 registry 注册） |
+
+四类里只有 ④ 是机械缺口；①②③ 都需要先决定 plan 路径如何表示**非数值输入**。
+补完 ④ 后重新实测：翻转默认时 `dzh_compat_tests` 从 **34 个红降到 26 个红**
+（缺失 kernel 从 15 个降到 9 个），剩下的 9 个**全部**落在 ①②③ ——
+即 `STRING_LITERAL` + `TR` + 7 个资金流函数。
+
+另外两个**与 DZH 无关**的独立发现：
+
+- **`DRAW:DRAWLINE` 从未被派发。** `dispatch_draw_call` 的清单列着
+  `DRAW:FILL` / `STICK_LINE` / `DRAW_TEXT` / `DRAW_ICON`，并声称「这是 IR 今天产出的完整
+  集合」；实际上 `DRAW:FILL` **从来不会被产出**，而 parser 能产出的 11 个 `DRAW:<command>`
+  （`DRAWLINE` 首当其冲）**一个都没处理**。根因是 `KernelId` 是不透明哈希，派发只能手工
+  枚举，而手工枚举会腐烂。已把 `DrawGeneric` 收敛为单一名字 `DRAW_GENERIC`，**从结构上
+  消灭这类腐烂** —— 命令串本就是渲染信息，数值计划不携带它，`STICK_LINE` / `DRAW_TEXT` /
+  `DRAW_ICON` 早就是这个形态。
+- **测试夹具的绑定缺口会伪装成 kernel 分歧。** 差分夹具原先按硬编码别名表绑定输入槽，而
+  `SUMBARS(VOL, 5000)` 开出的槽是 `VARIABLE:VOL`（不是 `VOLUME`），该槽因此被静默留在
+  CLOSE 默认值上，`SUMBARS` 看起来「算错了」。已给 `InputLayout` 增加 `operations()`
+  访问器，夹具改为**按计划声明的槽逐个用 `ctx.get_data` 解析** —— 与树路径同一套别名规则，
+  也与真实前端的绑定方式一致。
+
+**同时钉住了一条既有分歧（未修）**：周期大于序列长度时，树路径的 `canonical_*` 包装层
+吞掉 kernel 的 `InsufficientData` 并返回全 NaN，而 `dispatch_periodic_call` 把它映射成
+`ERR_PARAMETER` 抛出。这是既有行为、非本轮引入，且当前无任何语料覆盖（所以差分门禁一直
+没看见）。已用 `out_of_range_period_is_a_recorded_divergence` 钉住：翻转默认时它会红，
+逼着这条错误策略被**显式决定**，而不是把 NaN 悄悄变成异常。
+
+**结论**：plan 路径仍不能当默认。拦路石已从「算术 / 沙箱 / Pine 函数 / 复合赋值 / 上下文
+写回」退到 **kernel 覆盖**，并进一步分化出两条**非机械**缺口 —— **字符串字面量在 plan
+路径上没有表示**，以及**零参宿主数据函数需要扩 `HostContext`**。这两条需要先拍板。
 
 ##### 沙箱如何在 plan 路径落地（2026-09-21）
 
@@ -371,8 +454,8 @@ kernel 会通过宽松比较却是错的算术**。实测（同一输入、perio
 > **默认仍是 `Plan` 的窗口期**跑的探针 —— 探针打印的 "tree" 其实是 plan 路径。
 > 翻默认做实验时，**任何旁路测量都必须先确认默认值已经回滚**。
 
-**结论**：plan 路径仍不能当默认，但拦路石已经从「最基础的算术」退到「沙箱 +
-Pine 函数 + 复合赋值」这几类结构性缺口。
+**结论**：plan 路径仍不能当默认，但拦路石已经从「最基础的算术」退到
+**纯 kernel 覆盖**这一类机械缺口（详见上文 ③ 的收尾）。
 
 **顺手修好的一个小设计问题**：两个构造函数原本硬写 `FormulaExecutionMode::Tree`，
 与 `#[default]` 脱钩 → 改 `#[default]` 不会生效（会让人以为切了其实没切）。

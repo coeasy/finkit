@@ -89,28 +89,51 @@ fn both_modes_agree_on_the_primary_series() {
 fn the_mode_changes_which_path_runs() {
     let source = "X:MA(CLOSE, 5);";
 
+    // `ctx.variables` can no longer tell the two paths apart: both publish the
+    // same assignments, which is the point of the parity work. The compiled-plan
+    // cache is the remaining signal — only the plan path ever populates it — so a
+    // non-zero plan cache is what proves Plan mode compiled a plan instead of
+    // quietly delegating to the tree-walker.
+    let mut tree_engine = FormulaEngine::new();
     let mut tree_ctx = context(32);
-    FormulaEngine::new()
+    tree_engine
         .eval(source, &mut tree_ctx)
         .expect("tree path must evaluate");
-    let tree_wrote_variables = !tree_ctx.variables.is_empty();
-
-    let mut plan_ctx = context(32);
-    FormulaEngine::new()
-        .with_execution_mode(FormulaExecutionMode::Plan)
-        .eval(source, &mut plan_ctx)
-        .expect("plan path must evaluate");
-    let plan_wrote_variables = !plan_ctx.variables.is_empty();
-
     assert!(
-        tree_wrote_variables,
+        tree_ctx.variables.contains_key("X"),
         "the tree path is expected to publish assignments into ctx.variables; \
          if it stops, this test no longer discriminates the two paths"
     );
-    assert!(
-        !plan_wrote_variables,
-        "the plan path must not mutate ctx.variables — if it does, the engine is \
-         still running the tree-walker in Plan mode"
+    assert_eq!(
+        tree_engine.plan_cache_size(),
+        0,
+        "the tree path must not compile a plan"
+    );
+
+    let mut plan_engine = FormulaEngine::new().with_execution_mode(FormulaExecutionMode::Plan);
+    let mut plan_ctx = context(32);
+    plan_engine
+        .eval(source, &mut plan_ctx)
+        .expect("plan path must evaluate");
+    assert_eq!(
+        plan_engine.plan_cache_size(),
+        1,
+        "Plan mode must have compiled a plan — a zero plan cache means the engine \
+         is still running the tree-walker"
+    );
+
+    // The parity itself: the two paths must agree on which variables they
+    // publish. Values are compared by the differential gates, which know how to
+    // treat the warm-up NaN that `MA` emits.
+    let names = |ctx: &FormulaContext| {
+        let mut names: Vec<String> = ctx.variables.keys().map(|k| k.to_string()).collect();
+        names.sort();
+        names
+    };
+    assert_eq!(
+        names(&tree_ctx),
+        names(&plan_ctx),
+        "the two modes must publish the same variables"
     );
 }
 
@@ -228,7 +251,7 @@ fn cache_statistics_follow_the_active_mode() {
 fn clear_cache_drops_the_plan_cache_from_tree_mode_too() {
     let mut engine = FormulaEngine::new();
     engine
-        .eval_plan("MA(CLOSE, 5)", &context(32))
+        .eval_plan("MA(CLOSE, 5)", &mut context(32))
         .expect("plan");
     assert_eq!(engine.plan_cache_size(), 1);
 
