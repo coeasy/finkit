@@ -653,28 +653,40 @@ impl FormulaEngine {
             })?);
         }
 
-        // Host data (chip distribution, chart period) cannot travel in a numeric
-        // slot, so it is handed to the dispatcher separately. Without this,
-        // `WINNER`/`COST`/`PERIODTYPE` would return NaN on the plan path while
-        // the tree path returned real values -- a silent cross-path divergence.
-        let mut executor = unified_formula_executor_with_host(
-            &plan,
-            HostContext {
-                chip: ctx.chip_data.clone(),
-                period_type: ctx.period_type,
-            },
-        );
         // A formula with no bound inputs is a constant expression (`10 + 20`),
         // and it still has a length: the context's series length. `execute`
         // derives the length from `inputs.first()`, which does not exist here, so
         // the range is supplied explicitly. When inputs do exist they define the
         // length, exactly as before.
         let length = inputs.first().map_or(ctx.data_len, |input| input.len());
-        let output = executor
-            .execute_range(&inputs, 0..length)
-            .map_err(|error| {
-                FormulaError::RuntimeError(format!("formula plan execution failed: {error}"))
-            })?;
+
+        // Host data (chip distribution, chart period, money flow, implicit OHLC)
+        // cannot travel in a numeric slot, so it is handed to the dispatcher
+        // separately. Without this, `WINNER`/`COST`/`PERIODTYPE`/`TR` and the
+        // zero-argument money-flow family would return NaN on the plan path while
+        // the tree path returned real values -- a silent cross-path divergence.
+        //
+        // Borrowed rather than cloned, and scoped to this block: the executor is
+        // the only holder of the borrow, and it is dropped with `output`, so the
+        // write-back below can still take `&mut ctx`.
+        let output = {
+            let host = HostContext {
+                chip: ctx.chip_data.as_ref(),
+                period_type: ctx.period_type,
+                money_flow: ctx.money_flow_data.as_ref(),
+                ohlc: Some(HostOhlc {
+                    high: ctx.high.as_slice(),
+                    low: ctx.low.as_slice(),
+                    close: ctx.close.as_slice(),
+                }),
+            };
+            let mut executor = unified_formula_executor_with_host(&plan, host);
+            executor
+                .execute_range(&inputs, 0..length)
+                .map_err(|error| {
+                    FormulaError::RuntimeError(format!("formula plan execution failed: {error}"))
+                })?
+        };
 
         // Re-check the wall-clock budget: entering the sandbox only proves the
         // limit held before execution started.

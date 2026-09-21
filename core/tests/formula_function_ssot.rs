@@ -69,6 +69,7 @@ const PLAN_KERNELS: &[&str] = &[
     "ATR",
     "BARSSINCE",
     "BBANDS",
+    "BIGORDER",
     "BOLLDN",
     "BOLLMID",
     "BOLLUP",
@@ -111,6 +112,8 @@ const PLAN_KERNELS: &[&str] = &[
     "LLVBARS",
     "MA",
     "MACD",
+    "MAININFLOW",
+    "MAININFLOWPCT",
     "MATH_AVG",
     "MAX",
     "MAXINDEX",
@@ -121,9 +124,11 @@ const PLAN_KERNELS: &[&str] = &[
     "MINUS",
     "MINUS_DI",
     "MOD",
+    "MONEYFLOW",
     "MOM",
     "MULT",
     "NATR",
+    "NETINFLOW",
     "OBV",
     "PERIODTYPE",
     "PLUS_DI",
@@ -140,6 +145,7 @@ const PLAN_KERNELS: &[&str] = &[
     "SAR",
     "SINH",
     "SMA",
+    "SMALLORDER",
     "SQRT",
     "STD",
     "STDDEV",
@@ -147,8 +153,10 @@ const PLAN_KERNELS: &[&str] = &[
     "STOCHF",
     "SUM",
     "SUMBARS",
+    "SUPERBIGORDER",
     "SUPERTREND",
     "TANH",
+    "TR",
     "TRANGE",
     "TRIMA",
     "TRIX",
@@ -468,7 +476,7 @@ fn the_three_surfaces_have_the_expected_sizes() {
     let actual = (registry.len(), formulas.len(), kernels.len());
     assert_eq!(
         actual,
-        (246, 419, 99),
+        (254, 419, 107),
         "surface sizes changed: (registry, formula, plan kernels)"
     );
 }

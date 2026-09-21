@@ -1263,6 +1263,114 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             streaming: false,
             deterministic: true,
         },
+        // The zero-argument host-data readers. None of them takes an operand
+        // because the series each reads is supplied out of band through
+        // `HostContext`, so `InputKind::Dynamic` describes them honestly: there
+        // is no numeric signature to advertise.
+        //
+        // Declaring them here is not cosmetic. The SSOT gate requires every plan
+        // kernel to be registered, and registration is also what makes the
+        // planner treat them as pure -- unregistered, each would lower to a
+        // stateful barrier with a phantom tail dependency and could never be
+        // shared or reordered.
+        //
+        // `TR` reads the implicit OHLC and so needs one warm-up row (it uses the
+        // previous close). It has no period operand to derive that from, which is
+        // why its lookback is `Dynamic` rather than `PeriodMinusOne`.
+        FunctionSpec {
+            name: "TR",
+            aliases: &[],
+            category: FunctionCategory::Volatility,
+            input: InputKind::Dynamic,
+            params: &[],
+            outputs: 1,
+            lookback: LookbackSpec::Dynamic,
+            streaming: true,
+            deterministic: true,
+        },
+        // The DZH money-flow family. Each is a straight read of one host series
+        // with no warm-up at all, so `LookbackSpec::None` is exact rather than
+        // conservative.
+        FunctionSpec {
+            name: "MONEYFLOW",
+            aliases: &[],
+            category: FunctionCategory::Volume,
+            input: InputKind::Dynamic,
+            params: &[],
+            outputs: 1,
+            lookback: LookbackSpec::None,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "MAININFLOW",
+            aliases: &[],
+            category: FunctionCategory::Volume,
+            input: InputKind::Dynamic,
+            params: &[],
+            outputs: 1,
+            lookback: LookbackSpec::None,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "MAININFLOWPCT",
+            aliases: &[],
+            category: FunctionCategory::Volume,
+            input: InputKind::Dynamic,
+            params: &[],
+            outputs: 1,
+            lookback: LookbackSpec::None,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "BIGORDER",
+            aliases: &[],
+            category: FunctionCategory::Volume,
+            input: InputKind::Dynamic,
+            params: &[],
+            outputs: 1,
+            lookback: LookbackSpec::None,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "SMALLORDER",
+            aliases: &[],
+            category: FunctionCategory::Volume,
+            input: InputKind::Dynamic,
+            params: &[],
+            outputs: 1,
+            lookback: LookbackSpec::None,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "SUPERBIGORDER",
+            aliases: &[],
+            category: FunctionCategory::Volume,
+            input: InputKind::Dynamic,
+            params: &[],
+            outputs: 1,
+            lookback: LookbackSpec::None,
+            streaming: true,
+            deterministic: true,
+        },
+        // `NETINFLOW` is the only member of the family taking an operand -- an
+        // optional level selecting the order-size bucket -- so its arity is
+        // 0-or-1 rather than strictly zero.
+        FunctionSpec {
+            name: "NETINFLOW",
+            aliases: &[],
+            category: FunctionCategory::Volume,
+            input: InputKind::Dynamic,
+            params: &[],
+            outputs: 1,
+            lookback: LookbackSpec::None,
+            streaming: true,
+            deterministic: true,
+        },
         FunctionSpec {
             name: "REFDATE",
             aliases: &[],

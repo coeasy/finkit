@@ -288,28 +288,59 @@ pub struct FinanceData {
     pub fields: HashMap<usize, f64>,
 }
 
+/// The implicit OHLC triple a zero-argument function such as `TR()` reads.
+///
+/// `TR()` takes no arguments and reads the context's high/low/close directly,
+/// so there is no numeric slot to bind them to — exactly the case
+/// [`HostContext`] exists for. Borrowed rather than owned because these are
+/// per-bar series, not per-instrument scalars.
+#[derive(Clone, Copy)]
+pub struct HostOhlc<'a> {
+    /// High series.
+    pub high: &'a [f64],
+    /// Low series.
+    pub low: &'a [f64],
+    /// Close series.
+    pub close: &'a [f64],
+}
+
 /// Host-side data the compiled-plan path cannot carry as a numeric input slot.
 ///
 /// The plan executor receives only `&[&[f64]]` numeric slots, so anything a
 /// function needs *besides* the price series has to travel separately. Carrying
-/// it explicitly is what lets `WINNER`/`COST` (chip distribution) and
-/// `PERIODTYPE` (chart period) run on the plan path at all.
+/// it explicitly is what lets `WINNER`/`COST` (chip distribution), `PERIODTYPE`
+/// (chart period), `TR` (implicit OHLC) and the zero-argument DZH money-flow
+/// family run on the plan path at all.
 ///
-/// This is deliberately cheap to clone: `ChipData` is one price/volume
-/// distribution, not a per-bar structure.
-#[derive(Clone, Default)]
-pub struct HostContext {
+/// Everything here is **borrowed**, never owned. The plan path exists for
+/// throughput, and cloning every host series once per evaluation would put a
+/// multi-megabyte `memcpy` in front of each call — the opposite of the point.
+/// A caller therefore keeps the data alive and hands over slices.
+#[derive(Clone, Copy, Default)]
+pub struct HostContext<'a> {
     /// Chip distribution used by `WINNER` / `COST` / `LWINNER`.
-    pub chip: Option<ChipData>,
+    pub chip: Option<&'a ChipData>,
     /// Chart period type reported by `PERIODTYPE` (0=daily, 1=weekly, 2=monthly,
     /// 3=minute), matching the tree-path semantics.
     pub period_type: u8,
+    /// Money-flow series used by the zero-argument DZH family (`MONEYFLOW`,
+    /// `NETINFLOW`, `BIGORDER`, `SMALLORDER`, `MAININFLOW`, `MAININFLOWPCT`,
+    /// `SUPERBIGORDER`). Absent means those functions yield `NaN`, matching the
+    /// tree path without money-flow data.
+    pub money_flow: Option<&'a MoneyFlowData>,
+    /// Implicit OHLC for `TR()`.
+    pub ohlc: Option<HostOhlc<'a>>,
 }
 
-impl HostContext {
+impl<'a> HostContext<'a> {
     /// An empty context: host-dependent functions evaluate to `NaN`.
-    pub fn new() -> Self {
-        Self::default()
+    pub const fn new() -> Self {
+        Self {
+            chip: None,
+            period_type: 0,
+            money_flow: None,
+            ohlc: None,
+        }
     }
 }
 

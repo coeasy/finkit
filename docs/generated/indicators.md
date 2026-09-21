@@ -3,7 +3,7 @@
 > **SSOT** — auto-generated from `core/src/indicators/mod.rs` and submodule `pub fn` exports.
 > Do not edit manually. Regenerate: `python scripts/gen_ssot_docs.py --generate`
 
-Modules exported from `indicators/mod.rs`: **36** | Public indicator functions: **388**
+Modules exported from `indicators/mod.rs`: **36** | Public indicator functions: **389**
 
 ## astock
 
@@ -501,6 +501,7 @@ _No `pub fn` exports in this module file._
 | `natr` |
 | `natr_into` |
 | `trange` |
+| `trange_dzh_into` |
 | `trange_into` |
 
 ## volatility_ext

@@ -173,6 +173,36 @@ pub fn trange_into(high: &[f64], low: &[f64], close: &[f64], output: &mut [f64])
     Ok(())
 }
 
+/// Compute the DZH `TR()` true range directly into caller-owned output.
+///
+/// Bar 0 is `high - low`. That single bar is the entire difference from
+/// [`trange_into`], which follows the TA-Lib convention of `NaN` at row zero
+/// because TA-Lib has no previous close there; DZH substitutes the bar's own
+/// range instead. Both are legitimately "true range" for their own contract, so
+/// the two live side by side rather than one being folded into the other.
+///
+/// The **output length is the contract**: every slot is written. The inputs must
+/// each be at least that long — a longer series has its tail ignored, which is
+/// what the tree path's `fn_tr` has always done by iterating to `ctx.data_len`.
+pub fn trange_dzh_into(high: &[f64], low: &[f64], close: &[f64], output: &mut [f64]) -> Result<()> {
+    let len = output.len();
+    if len == 0 || high.len() < len || low.len() < len || close.len() < len {
+        return Err(TaError::InvalidParameter {
+            name: "high, low, close".to_string(),
+            constraint: "must each span the output length".to_string(),
+        });
+    }
+
+    output[0] = high[0] - low[0];
+    for index in 1..len {
+        let high_low = high[index] - low[index];
+        let high_close = (high[index] - close[index - 1]).abs();
+        let low_close = (low[index] - close[index - 1]).abs();
+        output[index] = high_low.max(high_close).max(low_close);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

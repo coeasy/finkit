@@ -401,6 +401,76 @@ plan 路径原来从**第一个输入槽**推断执行长度，于是 `10 + 20` 
 写回」退到 **kernel 覆盖**，并进一步分化出两条**非机械**缺口 —— **字符串字面量在 plan
 路径上没有表示**，以及**零参宿主数据函数需要扩 `HostContext`**。这两条需要先拍板。
 
+##### 第八轮：**测量方法本身是错的** —— 缺口不是 1 个，是 87 个（2026-09-21）
+
+第七轮之后我按惯例翻转默认、跑 `cargo test -p finkit`、数红，得到「26 个」。**这个数字
+是错的，而且从第一次翻转起就一直错着。**
+
+`cargo test` 在**第一个失败的 test target 上就停**。所以历次「18 → 12 → 8 → 7 → 6 → 3 → 1
+→ 26」记录的是**第一个红 target 的红数**，不是全量缺口。加 `--no-fail-fast` 重跑，真实数字是：
+
+| 口径 | 数值 |
+|---|---|
+| 红 test target | **11 个**（`dzh` / `em` / `fox` / `tdx` / `ths` / `formula_compat` / `formula_regression` / `formula_differential_tests` / `formula_engine_integration` / `formula_execution_mode` / `formula_cache_tests`） |
+| 红测试 | **179 个** |
+| **缺失 kernel（`code 1`）** | **87 个**（去重后） |
+| 其它派发错误 | `code 3`（`ERR_PARAMETER`）6 处、`code 2`（`ERR_ARITY`）2 处 |
+
+> **方法论教训（第二条）**：翻转默认做实验时，**必须加 `--no-fail-fast`**。只看退出码或
+> 第一个红 target，会把「一个 target 红了 26 个」误当成「总共红了 26 个」，从而系统性
+> 低估缺口、误判收敛。第一条同类教训见 §3.3（探针在默认仍为 `Plan` 的窗口期跑，把 plan
+> 当成了 tree）。两条合起来是一条规则：**测量工具本身要先被验证。**
+
+**本轮已闭环的部分（第八轮）**：第七轮列的四类缺口里 ② ③ 已全部补完 ——
+`MONEYFLOW` / `NETINFLOW` / `MAININFLOW` / `MAININFLOWPCT` / `BIGORDER` / `SMALLORDER` /
+`SUPERBIGORDER`（7 个）与 `TR()`（1 个），共 8 个 kernel + 8 条 registry 注册。
+`dzh_compat_tests` 从 26 红降到 **12 红，且 12 个全部只差 `STRING_LITERAL`**
+（`BLOCKINDEX`/`BLOCKAVG`/`BLOCKDATA` 的测试全部要传字符串）。
+
+实现要点：
+
+- **`HostContext` 改为借用（`HostContext<'a>`）。** 原先 `chip: Option<ChipData>` 是
+  **按值克隆**，每次 plan 求值都克隆一次筹码分布。再往里塞资金流（9 条序列）和 OHLC
+  （3 条序列）就会变成每次求值 14 条序列的 `memcpy` —— 与 plan 路径「为吞吐而生」的目的
+  相反。现在 `chip` / `money_flow` 借用、`ohlc` 借用切片，构造即零拷贝；调用点只有 4 处，
+  且 `engine.rs` 里用块作用域把借用收在 `output` 上，写回仍能取 `&mut ctx`。
+- **`TR()` 不能复用 `TRANGE` 的 kernel。** `TRANGE` 第 0 根是 `NaN`（TA-Lib 口径，没有前收），
+  DZH `TR()` 第 0 根是 `high - low`。两者从第 1 根起完全相同 —— 复用会**只错一根**，差分
+  语料若只比「两条路径是否一致」根本看不出来。已抽出 `volatility::trange_dzh_into`，
+  `fn_tr` 与 kernel **共用同一份实现**，并新增测试直接断言第 0 根 `== high - low`。
+- **7 个资金流函数共用一条派发体**（`MoneyFlowKernel` 枚举）。它们的差别只是「取哪条宿主
+  序列」，长度守卫必须只有一处 —— 分散成 7 份就一定会有一份漂移。
+
+**87 个缺失 kernel 的构成（这才是真正的待办）**：
+
+| 组 | 数量 | 函数（部分） | 处置 |
+|---|---|---|---|
+| **域外：回测 / 选股** | ~22 | `FOX_BACKTEST`、`FOX_BUY`、`FOX_SELL`、`FOX_TRADE_SIGNAL`、`FOX_WIN_RATE`、`FOX_PROFIT_RATIO`、`FOX_MAX_DRAWDOWN`、`ENTERLONG`、`AUTOFILTER`、`CHECKSIG`、`MULTSIG`、`SELECTCOND`、`SMARTSELECT`、`SORT`、`TOPN`、`RANK` | **按 §2 产品边界应删除，不是补 kernel。** 补 kernel = 把已定调不做的能力实现一遍 |
+| 字符串 / 板块 | 4 | `STRING_LITERAL` + `BLOCKINDEX` / `BLOCKAVG` / `BLOCKDATA` | 见下：设计已由树路径确定，属机械 |
+| 宿主数据 | ~12 | `FINANCE`、`DYNAINFO`、`DKCOL`、`INDEXC`、`EM_REF`、`EM_COSTEX`、`EM_ZLCCV`、`EM_ZIG`、`EM_PEAK(BARS)`、`EM_TROUGH(BARS)`、`EM_CROSS` | 需扩 `HostContext`（`block_data` / `index_data` / `em_data` / 财务与动态数据） |
+| 普通指标 / 统计 | ~50 | `PDI`/`DMI`/`DX`/`ADXR`/`AROONOSC`、`SKEW`/`KURT`/`DEVSQ`/`AVEDEV`/`PERCENTILE`/`MODE`/`SLOPE`/`FORCAST`、`BARSLAST`/`BARSLASTCOUNT`/`BARSCOUNT`/`BARSSINCEN`/`CURRBARSCOUNT`/`TOTALBARSCOUNT`/`ISLASTBAR`/`BARSTATUS`、`VALUEWHEN`/`COUNT`/`CUM`/`CUMMAX`/`CUMMIN`/`RANGE`/`BETWEEN`/`CEILING`/`POW`/`SIN`/`WR`/`DATE`/`YEAR`/`FROMOPEN`/`CONST`/`LAST`/`PEAK(BARS)`/`TROUGH(BARS)`/`FINDHIGH`/`FINDLOW`/`ZIGZAG`/`MAXPRICE`/`MINPRICE`/`AVGPRICE_N`/`TOTALVOL`/`DPO`/`PSY`/`LWINNER` | 机械，但量大 |
+
+**关键判断**：**翻转默认这件事与产品边界是耦合的。** 87 个缺口里约四分之一是
+「按定调不该存在的函数」—— 在删除它们之前补 kernel，等于把 §2 已经划出去的域重新
+实现一遍。所以正确的顺序是**先删域外，再补剩余**，而不是先补完再删。
+
+**另有 8 处非 kernel 的分歧（同一批测出来，均未修）**：
+
+| kernel | 错误码 | 现象 |
+|---|---|---|
+| `MA` / `EMA` / `MACD` | `code 3` (`ERR_PARAMETER`) | 周期大于序列长度或只有 1 根时，树路径的 `canonical_*` 吞掉 `InsufficientData` 返回全 `NaN`，plan 路径抛错。即第七轮已钉住的那条分歧，现在测出它还牵连 `EMA` / `MACD` 与单根输入 |
+| `PLUS_DI` / `MINUS_DI` | `code 2` (`ERR_ARITY`) | kernel 要求的实参个数与公式实际传入的不一致 —— 是**真 kernel bug**，不是错误策略分歧 |
+
+**本轮对「字符串字面量」的判断更正**：第七轮记的是「需要先拍板」，实际读代码后发现
+**没有可选项** —— 树路径的语义就是「字面量追加进 `FormulaContext::string_table`，
+表达式求值为**该表的下标**」（`executor.rs` 追加、`get_string_from_hash` 取回）。
+所以 plan 路径只能照抄这条语义：计划携带自己的字面量表，绑定时由引擎注册进
+`ctx.string_table` 并把解析出的下标经 `HostContext` 交给 dispatcher，
+`STRING_LITERAL` 携带「第几个字面量」作为常量参数。**这不是设计选择，是镜像。**
+
+真正需要拍板的是另一件事：**是否把 §2 划定的域外函数（回测/选股，约 22 个）连同
+它们的测试一并删除**。删掉它们会同时消掉 87 个缺口里的约四分之一。
+
 ##### 沙箱如何在 plan 路径落地（2026-09-21）
 
 三条限制在 plan 路径上没有一一对应的机制，所以**映射方式必须显式**，不能假装一致：
@@ -559,3 +629,18 @@ kernel 会通过宽松比较却是错的算术**。实测（同一输入、perio
 6. **工作区事故**：`git rm -f` 清掉了 `docs/` 下大量工作区文件，已全部从 git 恢复；
    唯一损失是本文件（untracked）与 `docs/archive/README.md`，均已重建。
    **教训：对带 staged 改动的文件（`git mv` 目标）用 `git rm` 极其危险。**
+7. **【第八轮新增 · 优先级最高】是否删除域外的「回测 / 选股」公式函数？**
+   翻转默认的缺口实测为 **87 个缺失 kernel / 179 个红测试 / 11 个红 target**（不是此前
+   误记的 1 个或 26 个，原因见 §3.3 第八轮）。其中约 **22 个**是 `FOX_*`（回测信号、
+   胜率、盈亏比、最大回撤）、`ENTERLONG` / `AUTOFILTER` / `CHECKSIG` / `MULTSIG`、
+   `SELECTCOND` / `SMARTSELECT` / `SORT` / `TOPN` / `RANK` —— **正是 §2 定调「不涉及
+   回测、不涉及选股」的那一类**。补它们的 kernel 等于把划出去的域重新实现一遍。
+   - **方案 A（建议）**：按 §2 删除这些函数及其测试（连带 `fox_compat_tests` 等 target），
+     再补剩余的机械缺口。缺口一次性减少约四分之一。
+   - **方案 B**：保留它们（视为「方言兼容层」而非产品能力），照常补 kernel —— 缺口 87 个全补。
+   - 若选 A，删除范围需要你确认到**函数清单粒度**，我不会自行扩大。
+8. **`PLUS_DI` / `MINUS_DI` 的 `ERR_ARITY`（`code 2`）是 kernel 真 bug**，与错误策略无关，
+   建议直接修（不影响其它函数）。
+9. **`MA` / `EMA` / `MACD` 在「周期 > 序列长度」或「只有 1 根」时 tree=NaN / plan=抛错** ——
+   这是**既有**分歧（非本轮引入），已由 `out_of_range_period_is_a_recorded_divergence` 钉住。
+   要么让 plan 跟随 tree 返回 NaN，要么明确 plan 的严格语义并同步改 tree。**属行为变更，需你定。**

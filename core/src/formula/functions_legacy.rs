@@ -4336,18 +4336,21 @@ fn fn_reverse(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>,
 }
 
 fn fn_tr(ctx: &FormulaContext, _args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
-    let len = ctx.data_len;
-    let mut out = Array1::zeros(len);
-    let h = ctx.high.as_slice();
-    let l = ctx.low.as_slice();
-    let c = ctx.close.as_slice();
-    out[0] = h[0] - l[0];
-    for i in 1..len {
-        let hl = h[i] - l[i];
-        let hc = (h[i] - c[i - 1]).abs();
-        let lc = (l[i] - c[i - 1]).abs();
-        out[i] = hl.max(hc).max(lc);
-    }
+    // Delegates to the indicator layer rather than re-implementing the loop, so
+    // the tree path and the `CALL:TR` kernel cannot drift apart. Note the DZH
+    // bar-0 convention (`high - low`): this is *not* `TRANGE`, whose bar 0 is
+    // `NaN`.
+    let mut out = nan_vec(ctx.data_len);
+    let output = out.as_slice_mut().expect("owned Array1 is contiguous");
+    crate::indicators::volatility::trange_dzh_into(
+        ctx.high.as_slice(),
+        ctx.low.as_slice(),
+        ctx.close.as_slice(),
+        output,
+    )
+    .map_err(|_| {
+        FormulaError::InvalidParameter("TR: high/low/close must span the series".to_string())
+    })?;
     Ok(out)
 }
 

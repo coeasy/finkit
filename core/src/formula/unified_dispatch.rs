@@ -15,16 +15,18 @@ use ndarray::Array1;
 /// Numeric dispatcher for formula constants and core arithmetic/logical operators.
 ///
 /// The dispatcher is no longer a unit struct: it carries the [`HostContext`]
-/// that host-dependent kernels (`WINNER`, `COST`, `PERIODTYPE`) need and that
-/// the numeric input slots cannot express.
+/// that host-dependent kernels (`WINNER`, `COST`, `PERIODTYPE`, `TR` and the
+/// zero-argument DZH money-flow family) need and that the numeric input slots
+/// cannot express.
 #[derive(Clone, Default)]
-pub struct FormulaKernelDispatcher {
-    /// Host-side data (chip distribution, chart period) that the numeric input
-    /// slots cannot carry. Empty unless the caller supplies it.
-    host: HostContext,
+pub struct FormulaKernelDispatcher<'a> {
+    /// Host-side data (chip distribution, chart period, money flow, implicit
+    /// OHLC) that the numeric input slots cannot carry. Empty unless the caller
+    /// supplies it.
+    host: HostContext<'a>,
 }
 
-impl FormulaKernelDispatcher {
+impl<'a> FormulaKernelDispatcher<'a> {
     const ERR_UNSUPPORTED_KERNEL: u32 = 1;
     const ERR_ARITY: u32 = 2;
     const ERR_PARAMETER: u32 = 3;
@@ -33,20 +35,17 @@ impl FormulaKernelDispatcher {
     /// `WINNER` evaluate to `NaN`, matching the tree path without chip data.
     pub const fn new() -> Self {
         Self {
-            host: HostContext {
-                chip: None,
-                period_type: 0,
-            },
+            host: HostContext::new(),
         }
     }
 
     /// Create a dispatcher carrying host data for the host-dependent kernels.
-    pub fn with_host(host: HostContext) -> Self {
+    pub const fn with_host(host: HostContext<'a>) -> Self {
         Self { host }
     }
 }
 
-impl KernelDispatcher for FormulaKernelDispatcher {
+impl KernelDispatcher for FormulaKernelDispatcher<'_> {
     fn dispatch(
         &mut self,
         call: KernelCall<'_>,
@@ -260,6 +259,15 @@ impl KernelDispatcher for FormulaKernelDispatcher {
         }
         if call.kernel == KernelId::from_static("CALL:PERIODTYPE") {
             return dispatch_periodtype_call(&self.host, call, buffers);
+        }
+        // `TR()` reads the implicit OHLC rather than taking it as operands, so
+        // it needs the host channel too. It deliberately does *not* share the
+        // `TRANGE` kernel: see `dispatch_tr_call`.
+        if call.kernel == KernelId::from_static("CALL:TR") {
+            return dispatch_tr_call(&self.host, call, buffers);
+        }
+        if let Some(selector) = money_flow_kernel(call.kernel) {
+            return dispatch_money_flow_call(&self.host, call, buffers, selector);
         }
         // `REFDATE` needs no host data — it reads a scalar index out of its
         // second operand — but it must exist as a kernel or the plan path cannot
@@ -1373,7 +1381,7 @@ fn dispatch_hlc_periodic_call(
 /// by 100 before applying the `0..=1` range check. Delegating to the same
 /// `ChipData` methods is what keeps the two paths numerically identical.
 fn dispatch_chip_call(
-    host: &HostContext,
+    host: &HostContext<'_>,
     call: KernelCall<'_>,
     buffers: &mut [Vec<f64>],
 ) -> Result<(), KernelDispatchError> {
@@ -1406,7 +1414,7 @@ fn dispatch_chip_call(
 
 /// `PERIODTYPE()`: a constant series carrying the host's chart period.
 fn dispatch_periodtype_call(
-    host: &HostContext,
+    host: &HostContext<'_>,
     call: KernelCall<'_>,
     buffers: &mut [Vec<f64>],
 ) -> Result<(), KernelDispatchError> {
@@ -1415,6 +1423,157 @@ fn dispatch_periodtype_call(
     }
     buffers[call.output.0].fill(host.period_type as f64);
     Ok(())
+}
+
+/// Selector for the zero-argument DZH money-flow readers.
+///
+/// All seven are the same shape — hand back one host array when it is the right
+/// length, `NaN` otherwise — so they share one dispatcher body. Keeping them as
+/// one enum rather than seven near-identical functions is what makes the shared
+/// length guard the single place that can drift.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum MoneyFlowKernel {
+    /// `MONEYFLOW()`
+    MoneyFlow,
+    /// `MAININFLOW()`
+    MainInflow,
+    /// `MAININFLOWPCT()`
+    MainInflowPct,
+    /// `BIGORDER()`
+    BigOrder,
+    /// `SMALLORDER()`
+    SmallOrder,
+    /// `SUPERBIGORDER()`
+    SuperBigOrder,
+    /// `NETINFLOW([level])`
+    NetInflow,
+}
+
+/// Resolve a `CALL:<name>` kernel to its money-flow selector.
+fn money_flow_kernel(kernel: KernelId) -> Option<MoneyFlowKernel> {
+    if kernel == KernelId::from_static("CALL:MONEYFLOW") {
+        return Some(MoneyFlowKernel::MoneyFlow);
+    }
+    if kernel == KernelId::from_static("CALL:MAININFLOW") {
+        return Some(MoneyFlowKernel::MainInflow);
+    }
+    if kernel == KernelId::from_static("CALL:MAININFLOWPCT") {
+        return Some(MoneyFlowKernel::MainInflowPct);
+    }
+    if kernel == KernelId::from_static("CALL:BIGORDER") {
+        return Some(MoneyFlowKernel::BigOrder);
+    }
+    if kernel == KernelId::from_static("CALL:SMALLORDER") {
+        return Some(MoneyFlowKernel::SmallOrder);
+    }
+    if kernel == KernelId::from_static("CALL:SUPERBIGORDER") {
+        return Some(MoneyFlowKernel::SuperBigOrder);
+    }
+    if kernel == KernelId::from_static("CALL:NETINFLOW") {
+        return Some(MoneyFlowKernel::NetInflow);
+    }
+    None
+}
+
+/// The zero-argument DZH money-flow family, read out of [`HostContext`].
+///
+/// These mirror the `fn_*` family in `functions_legacy.rs` exactly, including
+/// the length guard: a host series whose length does not match the output is
+/// treated as *absent* (all `NaN`) rather than broadcast. Without that guard a
+/// shorter series would silently leave stale buffer contents behind, so the
+/// guard is part of the contract rather than an optimisation.
+///
+/// `NETINFLOW` is the only one taking an operand — an optional level selecting
+/// the order-size bucket — and it reads that level from the first element of its
+/// input, the same way the tree path reads `args[0][0]`.
+fn dispatch_money_flow_call(
+    host: &HostContext<'_>,
+    call: KernelCall<'_>,
+    buffers: &mut [Vec<f64>],
+    selector: MoneyFlowKernel,
+) -> Result<(), KernelDispatchError> {
+    // `NETINFLOW` accepts an omitted level; every other member is strictly
+    // zero-argument.
+    let arity_ok = if selector == MoneyFlowKernel::NetInflow {
+        call.inputs.len() <= 1
+    } else {
+        call.inputs.is_empty()
+    };
+    if !arity_ok {
+        return Err(KernelDispatchError::new(FormulaKernelDispatcher::ERR_ARITY));
+    }
+
+    let output = call.output.0;
+    let Some(money_flow) = host.money_flow else {
+        buffers[output].fill(f64::NAN);
+        return Ok(());
+    };
+
+    let source = match selector {
+        MoneyFlowKernel::MoneyFlow => &money_flow.money_flow,
+        MoneyFlowKernel::MainInflow => &money_flow.main_inflow,
+        MoneyFlowKernel::MainInflowPct => &money_flow.main_inflow_pct,
+        MoneyFlowKernel::BigOrder => &money_flow.big_order_pct,
+        MoneyFlowKernel::SmallOrder => &money_flow.small_order_pct,
+        MoneyFlowKernel::SuperBigOrder => &money_flow.super_big_inflow,
+        MoneyFlowKernel::NetInflow => {
+            // An absent, out-of-range or non-finite level falls back to the
+            // main-inflow series, exactly as `fn_netinflow` does. `as i32`
+            // saturates NaN to 0 on both paths.
+            let level = call
+                .inputs
+                .first()
+                .map_or(0, |slot| buffers[slot.0].first().map_or(0, |v| *v as i32));
+            match level {
+                0 => &money_flow.main_inflow,
+                1 => &money_flow.super_big_inflow,
+                2 => &money_flow.big_inflow,
+                3 => &money_flow.medium_inflow,
+                4 => &money_flow.small_inflow,
+                _ => &money_flow.main_inflow,
+            }
+        }
+    };
+
+    let Some(source) = source.as_slice() else {
+        buffers[output].fill(f64::NAN);
+        return Ok(());
+    };
+    if source.len() != buffers[output].len() {
+        buffers[output].fill(f64::NAN);
+        return Ok(());
+    }
+    buffers[output].copy_from_slice(source);
+    Ok(())
+}
+
+/// `TR()`: the DZH true range over the host's implicit OHLC.
+///
+/// Bar 0 is `high - low`, **not** `NaN`. That single bar is what separates this
+/// from `TRANGE(H, L, C)`, whose bar 0 is `NaN` by the TA-Lib convention, so the
+/// two cannot share a kernel even though both are called "true range". Folding
+/// `TR()` into the `TRANGE` kernel would have been a one-line change that
+/// silently moved bar 0 of every `TR()` result.
+fn dispatch_tr_call(
+    host: &HostContext<'_>,
+    call: KernelCall<'_>,
+    buffers: &mut [Vec<f64>],
+) -> Result<(), KernelDispatchError> {
+    if !call.inputs.is_empty() {
+        return Err(KernelDispatchError::new(FormulaKernelDispatcher::ERR_ARITY));
+    }
+    let output = call.output.0;
+    let Some(ohlc) = host.ohlc else {
+        buffers[output].fill(f64::NAN);
+        return Ok(());
+    };
+    crate::indicators::volatility::trange_dzh_into(
+        ohlc.high,
+        ohlc.low,
+        ohlc.close,
+        &mut buffers[output],
+    )
+    .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))
 }
 
 /// `REFDATE(X, DATE)`: a constant series holding `X` at one bar index.
@@ -2631,19 +2790,20 @@ const fn bool_value(value: bool) -> f64 {
 /// Construct a reusable unified executor for one compiled formula hot plan.
 pub fn unified_formula_executor(
     plan: &super::hot_plan::FormulaHotPlan,
-) -> UnifiedExecutor<FormulaKernelDispatcher> {
+) -> UnifiedExecutor<FormulaKernelDispatcher<'static>> {
     UnifiedExecutor::new(plan.hot().clone(), FormulaKernelDispatcher::new())
 }
 
 /// [`unified_formula_executor`] carrying host data.
 ///
 /// Callers that evaluate formulas against a `FormulaContext` should use this so
-/// host-dependent functions (`WINNER`, `COST`, `PERIODTYPE`) agree with the tree
-/// path instead of silently degrading to `NaN`.
-pub fn unified_formula_executor_with_host(
+/// host-dependent functions (`WINNER`, `COST`, `PERIODTYPE`, `TR` and the
+/// money-flow family) agree with the tree path instead of silently degrading to
+/// `NaN`.
+pub fn unified_formula_executor_with_host<'a>(
     plan: &super::hot_plan::FormulaHotPlan,
-    host: HostContext,
-) -> UnifiedExecutor<FormulaKernelDispatcher> {
+    host: HostContext<'a>,
+) -> UnifiedExecutor<FormulaKernelDispatcher<'a>> {
     UnifiedExecutor::new(plan.hot().clone(), FormulaKernelDispatcher::with_host(host))
 }
 
