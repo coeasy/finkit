@@ -366,9 +366,7 @@ fn dispatch_arith_call(
     op: ArithKernel,
 ) -> Result<(), KernelDispatchError> {
     if call.inputs.len() != 2 {
-        return Err(KernelDispatchError::new(
-            FormulaKernelDispatcher::ERR_ARITY,
-        ));
+        return Err(KernelDispatchError::new(FormulaKernelDispatcher::ERR_ARITY));
     }
     let lhs = call.inputs[0].0;
     let rhs = call.inputs[1].0;
@@ -427,9 +425,7 @@ fn dispatch_window_call(
     op: WindowKernel,
 ) -> Result<(), KernelDispatchError> {
     if call.inputs.len() != 2 {
-        return Err(KernelDispatchError::new(
-            FormulaKernelDispatcher::ERR_ARITY,
-        ));
+        return Err(KernelDispatchError::new(FormulaKernelDispatcher::ERR_ARITY));
     }
     let input_slot = call.inputs[0].0;
     let period_slot = call.inputs[1].0;
@@ -545,9 +541,7 @@ fn dispatch_unary_math_call(
     op: UnaryMathKernel,
 ) -> Result<(), KernelDispatchError> {
     if call.inputs.len() != 1 {
-        return Err(KernelDispatchError::new(
-            FormulaKernelDispatcher::ERR_ARITY,
-        ));
+        return Err(KernelDispatchError::new(FormulaKernelDispatcher::ERR_ARITY));
     }
     let input = call.inputs[0].0;
     let out = call.output.0;

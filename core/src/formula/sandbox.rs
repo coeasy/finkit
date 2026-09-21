@@ -102,16 +102,7 @@ fn sandbox_push_depth(
         st.started_at = Some(Instant::now());
     }
 
-    if let Some(limit) = config.timeout_ms {
-        if let Some(start) = st.started_at {
-            if start.elapsed() > Duration::from_millis(limit) {
-                return Err(FormulaError::RuntimeError(format!(
-                    "Sandbox timeout exceeded ({} ms)",
-                    limit
-                )));
-            }
-        }
-    }
+    check_timeout(config, &st)?;
 
     st.recursion_depth += 1;
     if let Some(max) = config.max_recursion_depth {
@@ -123,6 +114,34 @@ fn sandbox_push_depth(
         }
     }
 
+    Ok(())
+}
+
+/// Check the wall-clock budget without consuming a recursion level.
+///
+/// The tree path checks on every recursive call. The compiled-plan path has no
+/// per-node recursion to hang the check on, so it calls this at the points it
+/// can. It is a no-op until [`sandbox_enter`] has started the budget.
+pub fn sandbox_check_elapsed(
+    config: &ExecSandboxConfig,
+    state: &RefCell<ExecSandboxState>,
+) -> Result<(), FormulaError> {
+    check_timeout(config, &state.borrow())
+}
+
+fn check_timeout(config: &ExecSandboxConfig, st: &ExecSandboxState) -> Result<(), FormulaError> {
+    let Some(limit) = config.timeout_ms else {
+        return Ok(());
+    };
+    let Some(start) = st.started_at else {
+        return Ok(());
+    };
+    if start.elapsed() > Duration::from_millis(limit) {
+        return Err(FormulaError::RuntimeError(format!(
+            "Sandbox timeout exceeded ({} ms)",
+            limit
+        )));
+    }
     Ok(())
 }
 
@@ -138,6 +157,25 @@ pub fn sandbox_push(
 pub fn sandbox_pop(state: &RefCell<ExecSandboxState>) {
     let mut st = state.borrow_mut();
     st.recursion_depth = st.recursion_depth.saturating_sub(1);
+}
+
+/// Apply the recursion-depth limit to a nesting depth measured elsewhere.
+///
+/// The tree path counts `execute_val` frames as it recurses. The compiled-plan
+/// path does not recurse at execution time, so it measures the AST depth while
+/// lowering (see `FormulaComputePlan::max_ast_depth`) and checks it here. Same
+/// limit, same failure mode guarded (stack exhaustion), measured where that
+/// path actually consumes stack.
+pub fn sandbox_check_depth(config: &ExecSandboxConfig, depth: usize) -> Result<(), FormulaError> {
+    if let Some(max) = config.max_recursion_depth {
+        if depth > max {
+            return Err(FormulaError::RuntimeError(format!(
+                "Sandbox recursion depth exceeded (max {})",
+                max
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// Track approximate bytes allocated during execution.
@@ -162,7 +200,7 @@ pub fn sandbox_track_bytes(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::formula::engine::FormulaEngine;
+    use crate::formula::engine::{FormulaEngine, FormulaExecutionMode};
     use crate::formula::types::FormulaContext;
     use ndarray::Array1;
 
@@ -218,6 +256,63 @@ mod tests {
             err.contains("recursion depth"),
             "expected recursion limit error, got: {err}"
         );
+    }
+
+    /// The compiled-plan path must honour the same budgets as the tree path.
+    ///
+    /// It used to ignore `ctx.sandbox` completely, so switching execution mode
+    /// silently disabled every limit. Both tests below fail without the sandbox
+    /// wiring in `eval_plan_channels`, and the third guards against the opposite
+    /// mistake: a limit that is enforced too eagerly and rejects ordinary
+    /// formulas.
+    #[test]
+    fn sandbox_limits_recursion_depth_enforced_on_the_plan_path() {
+        let mut ctx = make_ctx(10);
+        ctx.sandbox = ExecSandboxConfig::default().with_max_recursion_depth(8);
+        let mut engine = FormulaEngine::new();
+        engine.set_execution_mode(FormulaExecutionMode::Plan);
+        let source = "MA(MA(MA(MA(MA(MA(MA(MA(MA(MA(CLOSE,2),2),2),2),2),2),2),2),2),2)";
+        let err = engine.eval(source, &mut ctx).unwrap_err().to_string();
+        assert!(
+            err.contains("recursion depth"),
+            "expected recursion limit error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn sandbox_limits_memory_enforced_on_the_plan_path() {
+        let mut ctx = make_ctx(100);
+        ctx.sandbox = ExecSandboxConfig::default().with_max_memory_bytes(64);
+        let mut engine = FormulaEngine::new();
+        engine.set_execution_mode(FormulaExecutionMode::Plan);
+        let err = engine
+            .eval("MA(CLOSE, 5)", &mut ctx)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("memory limit"),
+            "expected memory limit error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn sandbox_limits_accept_moderate_formulas_on_the_plan_path() {
+        let mut ctx = make_ctx(32);
+        ctx.sandbox = ExecSandboxConfig::default()
+            .with_max_recursion_depth(16)
+            .with_max_memory_bytes(1 << 20);
+        let mut engine = FormulaEngine::new();
+        engine.set_execution_mode(FormulaExecutionMode::Plan);
+        for source in [
+            "MA(CLOSE, 5)",
+            "EMA(CLOSE, 12) - EMA(CLOSE, 26)",
+            "CLOSE + OPEN",
+        ] {
+            assert!(
+                engine.eval(source, &mut ctx).is_ok(),
+                "a sandbox limit rejected `{source}` on the plan path"
+            );
+        }
     }
 
     #[test]

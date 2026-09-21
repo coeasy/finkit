@@ -40,6 +40,8 @@ pub struct FormulaComputePlan {
     /// times a loop body was duplicated), and any drift shows up as a plan that
     /// silently binds the wrong constant.
     number_literals: BTreeMap<ComputeNodeId, f64>,
+    /// Deepest AST nesting seen while lowering. See [`Self::max_ast_depth`].
+    max_ast_depth: usize,
 }
 
 impl FormulaComputePlan {
@@ -64,6 +66,7 @@ impl FormulaComputePlan {
             plan,
             root,
             number_literals: lowerer.number_literals,
+            max_ast_depth: lowerer.max_depth,
         })
     }
 
@@ -88,6 +91,17 @@ impl FormulaComputePlan {
     /// Number of `NUMBER` literals recorded by the lowerer.
     pub fn number_literals_len(&self) -> usize {
         self.number_literals.len()
+    }
+
+    /// Deepest AST nesting the lowerer walked.
+    ///
+    /// Published so the execution sandbox can apply `max_recursion_depth` to
+    /// the compiled plan. The limit protects against stack exhaustion, and on
+    /// this path the recursive walk is lowering rather than interpretation, so
+    /// the depth has to be measured there and carried out — by the time the plan
+    /// executes, the stack has already been used.
+    pub const fn max_ast_depth(&self) -> usize {
+        self.max_ast_depth
     }
 }
 
@@ -128,6 +142,11 @@ struct FormulaLowerer<'a> {
     loop_var: Option<(String, f64)>,
     /// Literal value of each `NUMBER` node, recorded at creation time.
     number_literals: BTreeMap<ComputeNodeId, f64>,
+    /// Current AST nesting depth of the walk.
+    depth: usize,
+    /// Deepest nesting the walk reached, i.e. the value the sandbox compares
+    /// against `max_recursion_depth`.
+    max_depth: usize,
     /// First error that made lowering impossible.
     ///
     /// `lower` returns a node id rather than a `Result`, so a failure that is
@@ -149,11 +168,28 @@ impl<'a> FormulaLowerer<'a> {
             const_env: BTreeMap::new(),
             loop_var: None,
             number_literals: BTreeMap::new(),
+            depth: 0,
+            max_depth: 0,
             pending_error: None,
         }
     }
 
+    /// Lower one AST node, tracking how deeply the walk nested.
+    ///
+    /// The nesting depth is recorded because the sandbox's recursion limit is
+    /// checked against it on the plan path. Lowering is the plan path's
+    /// equivalent of the tree path's recursive `execute_val`: it is where a
+    /// deeply nested formula would consume stack, so it is also where the limit
+    /// has to be applied.
     fn lower(&mut self, ast: &AstNode) -> ComputeNodeId {
+        self.depth += 1;
+        self.max_depth = self.max_depth.max(self.depth);
+        let node = self.lower_inner(ast);
+        self.depth -= 1;
+        node
+    }
+
+    fn lower_inner(&mut self, ast: &AstNode) -> ComputeNodeId {
         match ast {
             AstNode::Number(value) => self.add_number(*value),
             AstNode::StringLit(_) => self.add_effect(

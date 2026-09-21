@@ -576,6 +576,25 @@ impl FormulaEngine {
     ) -> Result<FormulaPlanOutput, FormulaError> {
         let plan = self.compile_plan(source, dialect, params)?;
 
+        // The plan path must honour the same execution sandbox as the tree path.
+        // It used to ignore `ctx.sandbox` outright, so every configured budget
+        // became unenforced the moment a caller switched modes -- a silent
+        // security regression rather than a numeric one.
+        //
+        // Two limits map over directly: the nesting limit is checked against the
+        // AST depth measured while lowering (lowering is where this path spends
+        // stack), and the memory budget is charged the same single output series
+        // the tree path charges. The timeout is coarser here -- checked on entry
+        // and again after execution, not per node -- because the executor runs
+        // the plan as one call.
+        crate::formula::sandbox::sandbox_reset(&ctx.sandbox_state);
+        crate::formula::sandbox::sandbox_check_depth(
+            &ctx.sandbox,
+            plan.semantic().max_ast_depth(),
+        )?;
+        let _sandbox_guard =
+            crate::formula::sandbox::sandbox_enter(&ctx.sandbox, &ctx.sandbox_state)?;
+
         // Bind every numeric input slot the plan declared. A slot that no binding
         // fills is a hard error: substituting another series would convert an
         // input-layout bug into a silent numeric mismatch.
@@ -612,6 +631,15 @@ impl FormulaEngine {
         let output = executor.execute(&inputs).map_err(|error| {
             FormulaError::RuntimeError(format!("formula plan execution failed: {error}"))
         })?;
+
+        // Re-check the wall-clock budget: entering the sandbox only proves the
+        // limit held before execution started.
+        crate::formula::sandbox::sandbox_check_elapsed(&ctx.sandbox, &ctx.sandbox_state)?;
+        crate::formula::sandbox::sandbox_track_bytes(
+            &ctx.sandbox,
+            &ctx.sandbox_state,
+            ctx.data_len * 8,
+        )?;
 
         // `ExecutionOutput::values` is ordered by retained output, so resolve each
         // named channel through the output layout instead of assuming the binding
