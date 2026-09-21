@@ -47,9 +47,20 @@ fn read_fixture(path: &Path) -> HashMap<String, Vec<f64>> {
     columns
 }
 
+/// Map a corpus `platform` tag onto a dialect the engine actually implements.
+///
+/// `dzh` (大智慧) is **not** an implemented dialect — there is no DaZhiHui
+/// variant of [`FormulaDialect`]. The two corpus cases tagged `dzh` are
+/// therefore evaluated under TongDaXin semantics, and passing here means
+/// "correct for TongDaXin", not "correct for DaZhiHui". The mapping is written
+/// out rather than folded into the `tdx` arm so that gap stays visible instead
+/// of looking like deliberate support.
 fn dialect_for(platform: &str) -> FormulaDialect {
     match platform.to_ascii_lowercase().as_str() {
-        "tdx" | "dzh" | "cross" => FormulaDialect::TongDaXin,
+        "tdx" | "cross" => FormulaDialect::TongDaXin,
+        // No DaZhiHui dialect exists; run these under the closest implemented
+        // profile. See the function documentation.
+        "dzh" => FormulaDialect::TongDaXin,
         "ths" => FormulaDialect::TongHuaShun,
         "eastmoney" | "em" => FormulaDialect::EastMoney,
         "pine" | "tradingview" => FormulaDialect::Pine,

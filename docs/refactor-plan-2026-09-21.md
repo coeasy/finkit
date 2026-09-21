@@ -90,11 +90,20 @@
 `finkit-vs-talib-performance-optimization-plan.md`（`apply_talib_performance_plan.py` 依据）、
 `talib-0.8.0-coverage-audit-2026-09-19.md`（事实快照且被索引）。
 
-### J. 方言层静默语义错误（未修）
+### J. 方言层静默语义错误 ✅ 已定性并消除「静默」（生产代码无需改）
 
-`formula_corpus.rs` 把 `"dzh"`（大智慧）**静默映射到 TongDaXin** —— 用户拿到「看起来成功但语义可能不对」的结果。
-文华财经：仅注册了几个信号函数，无 terminal / dialect / corpus / 文档。
-→ **属行为变更，未动，等确认。**
+**更正：这不是生产代码问题。** `"dzh"` 的映射**只存在于两个测试文件**
+（`core/tests/formula_corpus.rs`、`core/tests/formula_plan_differential.rs`），
+生产代码里根本没有 `dzh` —— `FormulaDialect` 只有
+`AlphaTA / TongDaXin / TongHuaShun / EastMoney / Pine`，**没有大智慧变体**。
+
+所以「静默」只影响**测试证据的可信度**：18 条国内语料里 **2 条**标着 DZH，
+它们实际是按通达信语义跑的，绿色 = 「通达信语义下两条路径一致」，
+**不等于「大智慧已验证」**。
+
+✅ **已消除静默**：`dzh` 拆成独立 match arm + 函数文档写明「这不是已实现方言，
+跑的是最接近的 profile」。纯测试/文档改动，**不动生产行为**。
+真要「支持大智慧」= 新增 `FormulaDialect::DaZhiHui` + 完整实现，**属大工程，另议**。
 
 ### K. IF 真值判定不统一（未修，刻意）
 
