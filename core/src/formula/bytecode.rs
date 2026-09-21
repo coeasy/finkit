@@ -726,8 +726,13 @@ impl BytecodeVM {
                 let cond = self.pop_val()?;
                 match (&cond, &then_val, &else_val) {
                     (FormulaValue::Scalar(c), FormulaValue::Scalar(t), FormulaValue::Scalar(e)) => {
-                        self.stack
-                            .push(FormulaValue::Scalar(if *c > 0.0 { *t } else { *e }));
+                        self.stack.push(FormulaValue::Scalar(
+                            if crate::formula::truth::is_true(*c) {
+                                *t
+                            } else {
+                                *e
+                            },
+                        ));
                     }
                     _ => {
                         let cond_arr = cond.to_array(ctx.data_len);
@@ -741,7 +746,13 @@ impl BytecodeVM {
                                 .iter()
                                 .zip(then_arr.iter())
                                 .zip(else_arr.iter())
-                                .map(|((&c, &t), &e)| if c > 0.0 { t } else { e })
+                                .map(|((&c, &t), &e)| {
+                                    if crate::formula::truth::is_true(c) {
+                                        t
+                                    } else {
+                                        e
+                                    }
+                                })
                                 .collect()
                         };
                         self.stack.push(FormulaValue::Array(result));

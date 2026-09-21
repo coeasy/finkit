@@ -480,18 +480,13 @@ fn fn_if(_ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, For
     let cond = &args[0];
     let then_val = &args[1];
     let else_val = &args[2];
-    let len = cond.len().min(then_val.len()).min(else_val.len());
 
-    if len >= 16 {
-        Ok(SimdOps::simd_select_arrays(cond, then_val, else_val))
-    } else {
-        Ok(cond
-            .iter()
-            .zip(then_val.iter())
-            .zip(else_val.iter())
-            .map(|((&c, &t), &e)| if c > 0.0 { t } else { e })
-            .collect())
-    }
+    // A single code path for every length. The previous short-series fallback
+    // tested `c > 0.0` while the vectorised path tested `c != 0.0`, so
+    // `IF(-1, a, b)` returned different results depending on series length.
+    // The rule now lives in `formula::truth::is_true`, which `SimdOps::select`
+    // also uses.
+    Ok(SimdOps::simd_select_arrays(cond, then_val, else_val))
 }
 
 fn fn_count(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {

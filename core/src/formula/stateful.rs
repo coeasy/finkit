@@ -601,7 +601,10 @@ impl FormulaExpressionState {
                 // evaluation before the result is selected.
                 let then_value = then_branch.next(row, variables);
                 let else_value = else_branch.next(row, variables);
-                if condition > 0.0 {
+                // Shared truthiness rule; see `formula::truth`. This used to
+                // test `> 0.0`, which disagreed with the batch paths for
+                // negative and NaN conditions.
+                if crate::formula::truth::is_true(condition) {
                     then_value
                 } else {
                     else_value

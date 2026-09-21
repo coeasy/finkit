@@ -54,6 +54,7 @@ pub mod stateful;
 #[cfg_attr(target_arch = "aarch64", allow(unreachable_code))]
 pub mod simd;
 pub mod templates;
+pub mod truth;
 pub mod types;
 pub mod unified_dispatch;
 

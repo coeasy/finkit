@@ -389,7 +389,13 @@ impl FormulaExecutor {
                 let else_val = self.execute_val(else_branch, ctx)?;
                 match (&cond_val, &then_val, &else_val) {
                     (FormulaValue::Scalar(c), FormulaValue::Scalar(t), FormulaValue::Scalar(e)) => {
-                        Ok(FormulaValue::Scalar(if *c > 0.0 { *t } else { *e }))
+                        Ok(FormulaValue::Scalar(
+                            if crate::formula::truth::is_true(*c) {
+                                *t
+                            } else {
+                                *e
+                            },
+                        ))
                     }
                     _ => {
                         let cond_arr = cond_val.to_array(ctx.data_len);
@@ -402,7 +408,13 @@ impl FormulaExecutor {
                                 .iter()
                                 .zip(then_arr.iter())
                                 .zip(else_arr.iter())
-                                .map(|((&c, &t), &e)| if c > 0.0 { t } else { e })
+                                .map(|((&c, &t), &e)| {
+                                    if crate::formula::truth::is_true(c) {
+                                        t
+                                    } else {
+                                        e
+                                    }
+                                })
                                 .collect()
                         };
                         Ok(FormulaValue::Array(result))
@@ -1278,11 +1290,11 @@ impl FormulaExecutor {
                 let else_val = self.execute_with_pool_cached(else_branch, ctx, pool, name_cache)?;
                 let mut result = pool.get_buffer(ctx.data_len);
                 for i in 0..ctx.data_len {
-                    if cond_val[i] > 0.0 {
-                        result[i] = then_val[i];
+                    result[i] = if crate::formula::truth::is_true(cond_val[i]) {
+                        then_val[i]
                     } else {
-                        result[i] = else_val[i];
-                    }
+                        else_val[i]
+                    };
                 }
                 pool.return_buffer(cond_val);
                 pool.return_buffer(then_val);
@@ -1616,11 +1628,11 @@ impl FormulaExecutor {
                 let else_val = self.execute_with_pool(else_branch, ctx, pool)?;
                 let mut result = pool.get_buffer(ctx.data_len);
                 for i in 0..ctx.data_len {
-                    if cond_val[i] > 0.0 {
-                        result[i] = then_val[i];
+                    result[i] = if crate::formula::truth::is_true(cond_val[i]) {
+                        then_val[i]
                     } else {
-                        result[i] = else_val[i];
-                    }
+                        else_val[i]
+                    };
                 }
                 pool.return_buffer(cond_val);
                 pool.return_buffer(then_val);
