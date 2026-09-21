@@ -1047,6 +1047,19 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             streaming: true,
             deterministic: true,
         },
+        // The downward mirror of `CROSS`. Like it, it has no fixed lookback:
+        // the crossing is a per-bar predicate, not a window statistic.
+        FunctionSpec {
+            name: "CROSSBELOW",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: TWO_SERIES,
+            outputs: 1,
+            lookback: LookbackSpec::Dynamic,
+            streaming: true,
+            deterministic: true,
+        },
         FunctionSpec {
             name: "GOLDEN_CROSS",
             aliases: &["CROSSUP", "BULLISH_CROSS"],

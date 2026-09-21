@@ -75,6 +75,8 @@ const PLAN_KERNELS: &[&str] = &[
     "CHOP",
     "CMF",
     "COSH",
+    "CROSS",
+    "CROSSBELOW",
     // Host-context kernels: they read data the numeric input slots cannot carry
     // (see `HostContext`), so they are only executable when the caller supplies it.
     "COST",
@@ -87,6 +89,7 @@ const PLAN_KERNELS: &[&str] = &[
     "DONCHIAN_WIDTH",
     "EMA",
     "FISHER",
+    "FIXNAN",
     "FISHER_SIGNAL",
     "HHV",
     "HHVBARS",
@@ -127,6 +130,7 @@ const PLAN_KERNELS: &[&str] = &[
     "SMA",
     "SQRT",
     "STD",
+    "STDDEV",
     "SUB",
     "STOCHF",
     "SUM",
@@ -135,6 +139,7 @@ const PLAN_KERNELS: &[&str] = &[
     "TRIMA",
     "TRIX",
     "TSI",
+    "VAR",
     "VWAP",
     "VWMA",
     "WILLR",
@@ -233,7 +238,6 @@ const DECLARED_BUT_NO_KERNEL: &[&str] = &[
     "CORREL",
     "COS",
     "COUNT",
-    "CROSS",
     "CROSSDOWN",
     "CROSSOVER",
     "CROSSUP",
@@ -243,7 +247,6 @@ const DECLARED_BUT_NO_KERNEL: &[&str] = &[
     "DONCHIAN_MID",
     "EXP",
     "FISHER_TRANSFORM",
-    "FIXNAN",
     "FLOOR",
     "GAP",
     "GAP_SIGNAL",
@@ -288,7 +291,6 @@ const DECLARED_BUT_NO_KERNEL: &[&str] = &[
     "SAREXT",
     "SHIFT",
     "SIN",
-    "STDDEV",
     "SUPERTREND_LINE",
     "T3",
     "TAN",
@@ -299,7 +301,6 @@ const DECLARED_BUT_NO_KERNEL: &[&str] = &[
     "TREND_SCREEN",
     "TSF",
     "ULTOSC",
-    "VAR",
     "VOLSURGE",
     "VOLUME_EXPANSION",
     "VOLUME_SURGE",
@@ -458,7 +459,7 @@ fn the_three_surfaces_have_the_expected_sizes() {
     let actual = (registry.len(), formulas.len(), kernels.len());
     assert_eq!(
         actual,
-        (236, 419, 80),
+        (237, 419, 85),
         "surface sizes changed: (registry, formula, plan kernels)"
     );
 }

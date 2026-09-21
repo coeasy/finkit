@@ -121,7 +121,13 @@ impl<'a> TaVarianceState<'a> {
     }
 }
 
-fn variance_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> {
+/// Population variance written into a caller-owned output slice.
+///
+/// Public because it is the exact helper behind `indicators::statistics::var`,
+/// which is what the formula surface's `VAR` resolves to — the compiled-plan
+/// kernel delegates here rather than squaring `stddev_into`'s output, so the two
+/// paths cannot drift apart by a rounding step.
+pub fn variance_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> {
     validate_period(input.len(), period, 1)?;
     if output.len() != input.len() {
         return Err(TaError::InvalidParameter {

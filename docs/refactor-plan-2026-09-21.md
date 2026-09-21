@@ -258,44 +258,41 @@
 **切默认只需一行**（`#[default] Tree` → `Plan`）；建议同时决定
 JIT/`eval_simd` 与多语言绑定的统一发布节奏（§3.4）。
 
-##### 实测：现在切默认会挂 12 组测试（2026-09-21，第二轮）
+##### 实测：现在切默认会挂 6 组测试（2026-09-21，第四轮）
 
-不猜了，直接把 `#[default]` 翻成 `Plan` 跑了一遍 `cargo test -p finkit`。
+不猜了，直接把 `#[default]` 翻成 `Plan` 跑了一遍 `cargo test -p finkit`，
+**每轮都实测、只记录实测值**：
 
-| 轮次 | 结果 | 说明 |
+| 轮次 | 结果 | 这一轮消掉的 |
 |---|---|---|
-| 第一轮（补 kernel 前） | **2944 passed / 18 failed** | 卡在最基础的算术与超越函数上 |
-| 第二轮（补完算术/超越/窗口 kernel） | **2950 passed / 12 failed** | 18 → 12 全部来自这一批 |
+| 第一轮（补 kernel 前） | **18 failed** | —— |
+| 第二轮（算术/超越/窗口 kernel） | **12 failed** | `ADD/SUB/MULT/DIV`、`MINUS`、`SQRT`、`SINH/COSH/TANH`、`MAXINDEX/MININDEX`、`HHVBARS/LLVBARS` |
+| 第三轮（沙箱 + COMPOUND + 元素级 kernel） | **8 failed** | 沙箱 2 组、`COMPOUND:X:AddAssign`、`CROSS`/`FIXNAN`/`STDDEV` |
+| 第四轮（`CROSSBELOW`/`VAR`） | **6 failed** | `CROSSBELOW`、`VAR` |
 
-失败原因**都不是数值分叉**，分五类：
+**剩余 6 组全是结构性缺口，没有一条是数值分叉**：
 
 | 类型 | 证据 | 代表用例 |
 |---|---|---|
-| **kernel 缺口** | `kernel dispatch failed ... code 1` | stateful 批流一致性 3 组、pine 常见 TA 函数 1 组 |
-| **Pine 用户自定义函数** | `function result assignment must exist` | plan 不写回 `ctx.variables`，取不到函数结果 |
-| **沙箱被绕过** | `assert!(result.is_err())` 失败 | `sandbox_limits_memory/recursion_depth_enforced` |
-| **复合赋值降级错** | `unsupported ... COMPOUND:X:AddAssign: expected 2 operands ... found 3` | `X := X + ...` |
-| **缓存语义** | `engine.cache_hit(...)`、clear_cache 计数断言失败 | plan 走的是另一套 `compile_plan` 缓存 |
+| **缓存语义** | `engine.cache_hit("MA(CLOSE, 5)")` 断言失败；`clear_cache` 计数对不上 | plan 走的是另一套 `compile_plan` 缓存，两个缓存互不可见 |
+| **常量-only 公式** | `cannot infer execution length without bound inputs` | 没有序列操作数的公式（plan 靠输入槽推断长度） |
+| **Pine 具名输出** | `runtime did not publish Pine output W` | plan 只回传主结果 + `plan.outputs()`，不写 `ctx.variables` |
+| **Pine 用户自定义函数** | `function result assignment must exist` | 同上，函数结果取不到 |
 
-**已消掉的一类**：算术/超越/窗口 kernel（`ADD/SUB/MULT/DIV`、`MINUS`、`SQRT`、
-`SINH/COSH/TANH`、`MAXINDEX/MININDEX`、`HHVBARS/LLVBARS`）。
+**优先级**（按「不修就不能切」排）：
 
-其中 `MINUS/HHVBARS/LLVBARS` 顺带暴露一个 SSOT 问题：**它们是公式函数但没进
-`registry.rs`**。未声明 → planner 按 stateful 处理 → kernel 就算存在也拿不到纯度
-（挡 CSE，且门禁 `every_plan_kernel_is_registered_in_the_ssot` 会红）。已补注册，
-`LookbackSpec` 按实现分别取 `Period`（`MINUS`，预热 n 根）与 `None`
-（`HHVBARS/LLVBARS`，窗口起点 saturating，第 0 根就有值），与两个 `fn_*` 的
-预热规则一致 —— **两组预热规则不同，正是必须分开钉的原因**。
-
-**下一步优先级**（按「不修就不能切」排）：
-
-1. ~~**沙箱**（最高）~~ ✅ **已修**：plan 路径原本**完全绕过** `ctx.sandbox` ——
-   递归深度与内存预算只在树解释器里检查，切模式即静默关闭全部限制。这是安全问题，
-   不是兼容性问题。修法与映射见下。
-2. **COMPOUND 降级 arity**：`X := X + ...` 这类很常见。
-3. **Pine 用户自定义函数**：plan 需把具名输出写回 `ctx.variables`。
-4. **stateful 批流一致性**：先解码 `KernelId` 找出缺口函数再补。
-5. **缓存语义**：需要设计决定（`cache_hit` 是否应覆盖 plan 缓存）。
+1. ~~**沙箱**~~ ✅ **已修**（见下）。
+2. ~~**COMPOUND 降级 arity**~~ ✅ **已修**：`add_effect` 会给每个 effect 节点追加一条
+   排序边，所以 `X += Y` 后面若还有别的语句，节点就带 **3 个**依赖而不是 2 个。
+   原来的检查写死 `len != 2` → 直接报错；另一种「顺手修法」（把第三个也当操作数）
+   会让合成出的 `BINARY:Add` 拿到 3 个输入、在 dispatch 处撞 arity 检查。
+   正确做法是只取前两个（`ASSIGN`/`OUTPUT` 早就是这么做的），排序边丢弃是安全的
+   —— 写入已登记进 `local_writes`，后续读取会重新建立真实的数据依赖。
+3. **缓存语义**：需要设计决定（`cache_hit` 是否应覆盖 plan 缓存）。
+4. **常量-only 公式**：plan 需要一条「无输入时如何定长」的规则。
+5. **Pine 具名输出 / 用户自定义函数**：需要决定 plan 是否把赋值写回 `ctx.variables`
+   —— 这会把 `eval_plan_channels` 的签名从 `&FormulaContext` 改成 `&mut`，属于
+   跨 5 个语言绑定的行为变更，**必须由用户拍板**。
 
 ##### 沙箱如何在 plan 路径落地（2026-09-21）
 
@@ -310,6 +307,45 @@ JIT/`eval_simd` 与多语言绑定的统一发布节奏（§3.4）。
 `max_ast_depth` 由 lowering 记录进 `FormulaComputePlan`，随缓存一起复用，**不在执行时重算**。
 新增 3 个测试：两个钉「限制在 plan 路径确实生效」，第三个钉**反向**——
 限制不能误伤普通公式（`MA`、`EMA 差`、`CLOSE+OPEN` 必须照常通过）。
+
+##### 补 kernel 时踩到的两个 SSOT / 语义坑（2026-09-21）
+
+**① 公式函数没进 `registry.rs`，kernel 就是半残的。**
+`MINUS`/`HHVBARS`/`LLVBARS`/`CROSSBELOW` 都是**公式面可调用但 registry 里没有**的名字。
+未声明 → planner 按 `stateful` 处理 → 该节点永远拿不到纯度（挡 CSE、多一条幽灵尾依赖），
+而且门禁 `every_plan_kernel_is_registered_in_the_ssot` 会直接红。
+已按实现补齐注册，`LookbackSpec` 逐个核对：
+
+| 函数 | lookback | 依据 |
+|---|---|---|
+| `MINUS` | `Period` | 预热恰好 n 根（`i >= n` 才有值） |
+| `HHVBARS` / `LLVBARS` | `None` | 窗口起点 `saturating_sub`，第 0 根就有值 |
+| `CROSSBELOW` | `Dynamic` | 逐根谓词，与 `CROSS` 同形 |
+
+**两组预热规则不同，正是 `MINUS` 与 `HHVBARS/LLVBARS` 必须分开钉的原因。**
+
+**② `VAR` 是「总体方差」，不是「样本方差」——而且差点被写成 `STD * STD`。**
+`VAR` 看起来就是 `STD²`，两者只差一个舍入步，所以**用 `stddev_into` 的输出平方来凑
+kernel 会通过宽松比较却是错的算术**。实测（同一输入、period 6、窗口
+`[102.0, 102.6, 103.2, 103.8, 104.4, 105.0]`）：
+
+| 路径 | `VAR` | `STD` |
+|---|---|---|
+| tree / `eval` / `eval_with_dialect` | `1.05` = 总体 | `1.0247` = 总体 |
+| bytecode | `1.05` = 总体 | `1.0247` = 总体 |
+| streaming（TongDaXin） | `1.05` = 总体 | —— |
+
+三条真实路径**本来就一致**（总体口径，`indicators::statistics::var` →
+`math::rolling_stats::variance`）。真正的坑是 `functions_legacy.rs` 里那个被 router
+遮蔽的 `fn_var` 用的是**样本**方差 —— 如果照着它写 kernel，plan 路径就会和其余三条
+全部对不上。现改为直接委托 `rolling_stats::variance_into`（为此把它从私有改成公开，
+它就是 `variance` 内部调用的那个函数，比平方少一个舍入步），并用
+`check_all_paths("VAR", ...)` + `VAR - STD*STD` 两条断言同时钉住「口径」与
+「`VAR == STD²` 关系」。
+
+> **方法论教训**：`VAR` 那次我一度得出「tree 与 bytecode 分叉」的结论，原因是我在
+> **默认仍是 `Plan` 的窗口期**跑的探针 —— 探针打印的 "tree" 其实是 plan 路径。
+> 翻默认做实验时，**任何旁路测量都必须先确认默认值已经回滚**。
 
 **结论**：plan 路径仍不能当默认，但拦路石已经从「最基础的算术」退到「沙箱 +
 Pine 函数 + 复合赋值」这几类结构性缺口。

@@ -506,6 +506,9 @@ fn lower_formula_plumbing(
 /// side]` order. The synthetic id is allocated above every existing id, which
 /// keeps the parameter ranges bound by [`bind_numeric_literals`] valid.
 ///
+/// The rewritten dependency list may carry one extra entry beyond the operands:
+/// the sequencing edge every effect node gets. See the arity check below.
+///
 /// Returns the synthetic node id so the caller can keep allocating.
 fn lower_compound(
     node_id: ComputeNodeId,
@@ -536,12 +539,23 @@ fn lower_compound(
             )))
         }
     };
-    if rewritten.len() != 2 {
+    // The node carries the two value operands, and — when it follows another
+    // effect — the sequencing edge `add_effect` appends after them. Only the
+    // first two are operands: forwarding the sequencing edge too would hand the
+    // synthetic `BINARY:<op>` three inputs, which fails the kernel's arity check
+    // at dispatch. `ASSIGN` and `OUTPUT` already read their value operand
+    // positionally for the same reason.
+    //
+    // Dropping the edge loses no ordering. The write is registered in
+    // `local_writes`, so every later read of the variable resolves to this node
+    // and re-creates a real data dependency on it.
+    if rewritten.len() < 2 {
         return Err(unsupported(format!(
-            "expected 2 operands (current value, right-hand side), found {}",
+            "expected at least 2 operands (current value, right-hand side), found {}",
             rewritten.len()
         )));
     }
+    let operands = vec![rewritten[0], rewritten[1]];
 
     let synthetic = ComputeNodeId(next_synthetic_id);
     aliases.insert(node_id, synthetic);
@@ -549,7 +563,7 @@ fn lower_compound(
     nodes.push(ComputeNode::new(
         synthetic,
         format!("BINARY:{binary_op}"),
-        rewritten,
+        operands,
         ComputeCapabilities {
             deterministic: true,
             streaming: true,

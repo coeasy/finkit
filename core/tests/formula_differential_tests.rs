@@ -232,6 +232,72 @@ fn formula_differential_window_kernels() {
     check_all_paths("HHVBARS_OF_HHV", "HHVBARS(HHV(HIGH, 3), 5)", 80);
 }
 
+/// Element-wise kernels with no period: `CROSS`, `FIXNAN` and `STDDEV`.
+///
+/// The interesting cases are the ones where a plausible implementation would
+/// disagree with `fn_*` rather than fail: `FIXNAN` must keep leading NaN (not
+/// seed from the first finite value), and `CROSS` must emit `0.0` rather than
+/// NaN when nothing crossed. `STDDEV` is an alias of `STD` on the formula
+/// surface, so it is checked against the same reference and would catch the two
+/// names being given different kernels.
+#[test]
+fn formula_differential_elementwise_and_stddev_kernels() {
+    check_all_paths("CROSS", "CROSS(MA(CLOSE, 3), MA(CLOSE, 8))", 80);
+    check_all_paths("CROSS_FLAT", "CROSS(CLOSE, CLOSE)", 80);
+    check_all_paths("CROSSBELOW", "CROSSBELOW(MA(CLOSE, 3), MA(CLOSE, 8))", 80);
+    check_all_paths("CROSSBELOW_FLAT", "CROSSBELOW(CLOSE, CLOSE)", 80);
+    // Leading NaN: the first bars have no previous finite value to carry.
+    check_all_paths("FIXNAN", "FIXNAN(IF(CLOSE > 105, CLOSE, 0/0))", 80);
+    check_all_paths("FIXNAN_PLAIN", "FIXNAN(CLOSE)", 80);
+    check_all_paths("STDDEV", "STDDEV(CLOSE, 6)", 80);
+    check_all_paths("STDDEV_MATCHES_STD", "STDDEV(CLOSE, 6) - STD(CLOSE, 6)", 80);
+}
+
+/// `VAR` on the compiled-plan path must be the *population* variance.
+///
+/// This is the assertion that catches a subtle mistake: `VAR` looks like
+/// `STD * STD`, and the two are the same up to a rounding step, so a kernel
+/// built by squaring `stddev_into`'s output would pass a loose comparison while
+/// being arithmetically different. Every other path (tree, bytecode, and the
+/// streaming engine) uses the population convention via
+/// `indicators::statistics::var` -> `math::rolling_stats::variance`, and the
+/// kernel delegates to that same helper.
+///
+/// It also pins that `STD` and `VAR` are consistent with each other, since a
+/// kernel could match `VAR` while breaking the `VAR == STD * STD` relation.
+#[test]
+fn formula_differential_variance_is_population_on_every_path() {
+    check_all_paths("VAR", "VAR(CLOSE, 6)", 80);
+    check_all_paths(
+        "VAR_MATCHES_STD_SQUARED",
+        "VAR(CLOSE, 6) - STD(CLOSE, 6) * STD(CLOSE, 6)",
+        80,
+    );
+}
+
+/// Compound assignment has to survive the effect-sequencing edge.
+///
+/// Every effect node gets the previous effect appended as an extra dependency,
+/// so a `+=` that follows another statement carries three dependencies rather
+/// than two. The plumbing rewrite used to require exactly two and rejected the
+/// formula outright; the other wrong fix — forwarding the third entry as an
+/// operand — would fail the kernel's arity check instead. Both are covered by
+/// the chained case below, which is what makes the edge appear repeatedly.
+#[test]
+fn formula_differential_compound_assignment_all_paths() {
+    check_all_paths("COMPOUND_ADD", "X := CLOSE; X += 1; X", 80);
+    check_all_paths(
+        "COMPOUND_CHAINED",
+        "X := CLOSE; X += CLOSE; X += 2; X * 2",
+        80,
+    );
+    check_all_paths(
+        "COMPOUND_ALL_OPS",
+        "X := CLOSE; X -= 1; X *= 2; X /= 3; X",
+        80,
+    );
+}
+
 // --- Regression cases for plan-path defects found by this harness -------------
 
 /// The same node appearing twice as an operand must stay twice.

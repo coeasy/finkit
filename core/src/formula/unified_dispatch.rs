@@ -96,6 +96,16 @@ impl KernelDispatcher for FormulaKernelDispatcher {
             return dispatch_unary_math_call(call, buffers, UnaryMathKernel::Tanh);
         }
 
+        if call.kernel == KernelId::from_static("CALL:CROSS") {
+            return dispatch_elementwise_call(call, buffers, ElementwiseKernel::Cross);
+        }
+        if call.kernel == KernelId::from_static("CALL:CROSSBELOW") {
+            return dispatch_elementwise_call(call, buffers, ElementwiseKernel::CrossBelow);
+        }
+        if call.kernel == KernelId::from_static("CALL:FIXNAN") {
+            return dispatch_elementwise_call(call, buffers, ElementwiseKernel::FixNan);
+        }
+
         if call.kernel == KernelId::from_static("CALL:MINUS") {
             return dispatch_window_call(call, buffers, WindowKernel::Minus);
         }
@@ -122,10 +132,15 @@ impl KernelDispatcher for FormulaKernelDispatcher {
             || call.kernel == KernelId::from_static("CALL:ROC")
             || call.kernel == KernelId::from_static("CALL:TRIX")
             || call.kernel == KernelId::from_static("CALL:TRIMA")
+            // `STDDEV` is an alias of `STD` on the formula surface (`fn_std` is
+            // registered under both names), so it shares the branch rather than
+            // getting a kernel of its own.
             || call.kernel == KernelId::from_static("CALL:STD")
+            || call.kernel == KernelId::from_static("CALL:STDDEV")
             || call.kernel == KernelId::from_static("CALL:HHV")
             || call.kernel == KernelId::from_static("CALL:LLV")
             || call.kernel == KernelId::from_static("CALL:SUM")
+            || call.kernel == KernelId::from_static("CALL:VAR")
             || call.kernel == KernelId::from_static("CALL:REF")
             || call.kernel == KernelId::from_static("CALL:ROCP")
             || call.kernel == KernelId::from_static("CALL:ROCR")
@@ -390,6 +405,93 @@ fn dispatch_arith_call(
                 }
             }
         };
+    }
+    Ok(())
+}
+
+/// Non-periodic element-wise operations behind `CROSS` and `FIXNAN`.
+///
+/// Neither takes a period, so neither can ride the periodic kernel: `CROSS`
+/// compares two series and `FIXNAN` transforms one. Both reproduce their `fn_*`
+/// counterparts exactly, including the details that look like oversights but are
+/// the contract:
+///
+/// - `FIXNAN` forward-fills and **keeps leading NaN**. It does not seed from the
+///   first finite value and does not zero-fill; that is what makes it the Pine
+///   `fixnan` contract rather than a generic carry-forward.
+/// - `CROSS` yields `0.0` — not NaN — wherever nothing crossed, and a NaN operand
+///   compares false, so it never crosses.
+enum ElementwiseKernel {
+    /// `CROSS(A, B)`: `1.0` on the bar A crosses above B.
+    Cross,
+    /// `CROSSBELOW(A, B)`: `1.0` on the bar A crosses below B.
+    CrossBelow,
+    /// `FIXNAN(X)`: forward-fill missing values, preserving leading NaN.
+    FixNan,
+}
+
+fn dispatch_elementwise_call(
+    call: KernelCall<'_>,
+    buffers: &mut [Vec<f64>],
+    op: ElementwiseKernel,
+) -> Result<(), KernelDispatchError> {
+    let expected = match op {
+        ElementwiseKernel::Cross | ElementwiseKernel::CrossBelow => 2,
+        ElementwiseKernel::FixNan => 1,
+    };
+    if call.inputs.len() != expected {
+        return Err(KernelDispatchError::new(FormulaKernelDispatcher::ERR_ARITY));
+    }
+    let out = call.output.0;
+    let length = buffers[out].len();
+
+    match op {
+        ElementwiseKernel::FixNan => {
+            let input = call.inputs[0].0;
+            let mut previous = f64::NAN;
+            for index in 0..length {
+                // Read before writing: the allocator may alias the output onto
+                // the operand, and this stays correct because the read and the
+                // write are at the same index.
+                let value = buffers[input][index];
+                if !value.is_nan() {
+                    previous = value;
+                }
+                buffers[out][index] = previous;
+            }
+        }
+        ElementwiseKernel::Cross | ElementwiseKernel::CrossBelow => {
+            if length == 0 {
+                return Ok(());
+            }
+            let above = matches!(op, ElementwiseKernel::Cross);
+            let lhs = call.inputs[0].0;
+            let rhs = call.inputs[1].0;
+            // Bar 0 has no predecessor to compare against, so it can never be a
+            // crossing. `fn_cross`/`fn_crossbelow` initialise the series to zeros
+            // for the same reason, which also means a NaN operand yields 0.0
+            // rather than NaN.
+            let mut previous_lhs = buffers[lhs][0];
+            let mut previous_rhs = buffers[rhs][0];
+            buffers[out][0] = 0.0;
+            for index in 1..length {
+                let lhs_now = buffers[lhs][index];
+                let rhs_now = buffers[rhs][index];
+                let was_below = previous_lhs <= previous_rhs;
+                let was_above = previous_lhs >= previous_rhs;
+                let crossed = if above {
+                    was_below && lhs_now > rhs_now
+                } else {
+                    was_above && lhs_now < rhs_now
+                };
+                buffers[out][index] = if crossed { 1.0 } else { 0.0 };
+                // Carry the values read above rather than re-reading `index - 1`:
+                // that slot may already have been overwritten if the output
+                // aliases one of the operands.
+                previous_lhs = lhs_now;
+                previous_rhs = rhs_now;
+            }
+        }
     }
     Ok(())
 }
@@ -676,6 +778,17 @@ fn dispatch_periodic_call(
         return sum_formula_into(input, period, output)
             .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER));
     }
+    // `VAR` is the *population* variance on every other path -- the formula
+    // surface resolves it to `indicators::statistics::var`, which is
+    // `math::rolling_stats::variance`, and the streaming engine agrees. It is
+    // deliberately not `STD * STD`: squaring `stddev_into`'s output would
+    // reintroduce a rounding step between the two paths. (`fn_var` in
+    // `functions_legacy.rs` uses the *sample* variance, but it is shadowed by
+    // the router and is not what any path executes.)
+    if call.kernel == KernelId::from_static("CALL:VAR") {
+        return crate::math::rolling_stats::variance_into(input, period, output)
+            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER));
+    }
     if call.kernel == KernelId::from_static("CALL:REF") {
         return ref_formula_into(input, period, output)
             .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER));
@@ -718,7 +831,9 @@ fn dispatch_periodic_call(
         crate::math::moving_avg::trima_into(input, period, output)
     } else if call.kernel == KernelId::from_static("CALL:TRIX") {
         crate::indicators::momentum::trix_into(input, period, output)
-    } else if call.kernel == KernelId::from_static("CALL:STD") {
+    } else if call.kernel == KernelId::from_static("CALL:STD")
+        || call.kernel == KernelId::from_static("CALL:STDDEV")
+    {
         crate::math::rolling_stats::stddev_into(input, period, 1.0, output)
     } else {
         crate::indicators::roc_into(input, period, output)
