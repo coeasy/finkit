@@ -67,6 +67,10 @@ impl KernelDispatcher for FormulaKernelDispatcher {
             return Ok(());
         }
 
+        if call.kernel == KernelId::from_static("INDEX") {
+            return dispatch_index_call(call, buffers);
+        }
+
         if call.kernel == KernelId::from_static("CALL:MA")
             || call.kernel == KernelId::from_static("CALL:SMA")
             || call.kernel == KernelId::from_static("CALL:EMA")
@@ -299,6 +303,61 @@ fn rate_of_change_into(
             Ok(())
         }
     }
+}
+
+/// `INDEX(array, index)`: per-bar historical element access, i.e. `array[index]`.
+///
+/// This is a **gather, not a shift**, and the difference is the whole point.
+/// Every output bar receives `array` at the bar that *that bar's* index
+/// expression names. When the index is a constant — which is what an unrolled
+/// loop produces — the result is one historical element broadcast across the
+/// whole series. `REF(X, N)` is a different operation and must never be
+/// substituted for this one.
+///
+/// The semantics mirror the AST interpreter in `executor.rs` exactly, including
+/// the edge cases, because the differential gate compares the two paths
+/// element by element:
+///
+/// - The index is converted with Rust's saturating `f64 as usize` cast, so NaN
+///   and negative values land on index `0` rather than panicking.
+/// - An index past the end of `array` yields NaN.
+fn dispatch_index_call(
+    call: KernelCall<'_>,
+    buffers: &mut [Vec<f64>],
+) -> Result<(), KernelDispatchError> {
+    if call.inputs.len() != 2 {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_ARITY,
+        ));
+    }
+    let array_slot = call.inputs[0].0;
+    let index_slot = call.inputs[1].0;
+    let output_slot = call.output.0;
+    let length = buffers[output_slot].len();
+
+    // Read both operands before writing: the gather can address any bar of
+    // `array`, so writing in place while reading would corrupt the result if
+    // the allocator ever gave the output the same buffer as an operand.
+    let mut gathered = Vec::with_capacity(length);
+    {
+        let array = &buffers[array_slot];
+        let index = &buffers[index_slot];
+        for bar in 0..length {
+            let at = if bar < index.len() { index[bar] } else { f64::NAN };
+            // Saturating by design: this must agree with the interpreter, where
+            // `idx[i] as usize` sends NaN and negatives to index 0.
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let position = at as usize;
+            gathered.push(if position < array.len() {
+                array[position]
+            } else {
+                f64::NAN
+            });
+        }
+    }
+    let output = &mut buffers[output_slot];
+    output.copy_from_slice(&gathered);
+    Ok(())
 }
 
 fn dispatch_periodic_call(

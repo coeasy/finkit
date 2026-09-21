@@ -605,15 +605,22 @@ fn parse_for_stmt(pair: Pair<Rule>) -> Result<PineAstNode, PineError> {
     let var = inner.next().expect("var").as_str().to_string();
     let start = parse_expression(inner.next().expect("start"))?;
     let end = parse_expression(inner.next().expect("end"))?;
-    let step = inner
-        .find(|p| p.as_rule() == Rule::expression)
-        .map(|p| parse_expression(p))
-        .transpose()?;
-    let body_pair = inner.into_iter().find(|p| p.as_rule() == Rule::block);
-    let body = match body_pair {
-        Some(p) => parse_block(p)?,
-        None => Vec::new(),
-    };
+    // `Iterator::find` consumes the iterator, so running it for the optional
+    // `by` step and then again for the block silently dropped the block: with
+    // no `by` clause the first `find` drained everything and every loop body
+    // came out empty. Collect once and classify, rather than searching twice.
+    let rest: Vec<_> = inner.collect();
+    let mut step = None;
+    let mut body = Vec::new();
+    for pair in rest {
+        match pair.as_rule() {
+            Rule::expression if step.is_none() => {
+                step = Some(parse_expression(pair)?);
+            }
+            Rule::block => body = parse_block(pair)?,
+            _ => {}
+        }
+    }
     Ok(PineAstNode::ForStmt {
         var,
         start: Box::new(start),

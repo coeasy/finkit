@@ -53,14 +53,19 @@ const DOMESTIC_UNSUPPORTED: &[(&str, &str)] = &[
 /// script ending in `hline(...)` reports its `plot(...)` series instead of the
 /// marker constant. Every remaining entry is a genuine kernel or lowering gap.
 const PINE_UNSUPPORTED: &[(&str, &str)] = &[
-    // --- Structural lowering gaps ------------------------------------------------
-    // `compute_ir` treats loop bodies as opaque control flow and does not lower
-    // them into the acyclic compute plan, so `volume[i]` never becomes a bound
-    // input and the executor cannot infer an execution length.
-    (
-        "volume_profile",
-        "`for` loop bodies are not lowered into the compute plan (series indexing)",
-    ),
+    // Empty as of 2026-09-21. The one entry that used to be here
+    // (`volume_profile`) is now handled, and the gate fails on stale entries, so
+    // this list can only grow by a deliberate edit with a written reason.
+    //
+    // Closing it took three separate fixes, none of which was the lowering gap
+    // the old reason described:
+    //   1. `parse_for_stmt` called `Iterator::find` twice on the same iterator.
+    //      With no `by` clause the first `find` drained it, so every loop body
+    //      parsed as empty — a silent wrong answer in the reference path too.
+    //   2. The mapper canonicalised every identifier except the loop variable,
+    //      so the executor bound `i` while the body read `I`.
+    //   3. `compute_ir` now unrolls constant-bound loops, and `INDEX` is a
+    //      gather with broadcast, not a `REF` shift.
 ];
 
 fn read_fixture(path: &Path) -> HashMap<String, Vec<f64>> {

@@ -157,7 +157,11 @@ impl<'a> PineAstMapper<'a> {
                 body,
                 ..
             } => Ok(AstNode::ForLoop {
-                var: var.clone(),
+                // Canonicalise the loop variable exactly like every other
+                // identifier: the body reads it through `AstNode::Variable`,
+                // which is upper-cased, so binding the raw name here would make
+                // `volume[i]` look up a variable the loop never defined.
+                var: map_builtin_var(var),
                 start: Box::new(self.map_node(start)?),
                 end: Box::new(self.map_node(end)?),
                 body: self.map_items(body)?,

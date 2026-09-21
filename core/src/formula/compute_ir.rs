@@ -5,7 +5,7 @@
 //! semantics without guessing whether an assignment, output, drawing command,
 //! or context mutation is safe to remove.
 
-use super::ast::{AstNode, OutputModifier};
+use super::ast::{AstNode, BinaryOperator, OutputModifier, UnaryOperator};
 use crate::compute::{
     ComputeCapabilities, ComputeEffect, ComputeNode, ComputeNodeId, ComputePlan, ComputePlanError,
     LookbackRequirement,
@@ -13,11 +13,33 @@ use crate::compute::{
 use crate::registry::{builtin_function_registry, FunctionRegistry};
 use std::collections::BTreeMap;
 
+/// Ceiling on how many times a `for` loop body may be duplicated.
+///
+/// Unrolling is linear in the iteration count, so an unbounded loop would be a
+/// memory-amplification vector: `for i = 0 to 1000000` would emit millions of
+/// nodes. Exceeding this is a compile error rather than a truncation, because
+/// a truncated loop silently computes a partial sum.
+///
+/// It deliberately reuses the interpreter's own iteration ceiling rather than
+/// introducing a second one. A lower ceiling here would make loops that the
+/// tree path executes perfectly well a hard compile error on the plan path,
+/// which is exactly the kind of split that makes a "drop-in faster path" a lie.
+use super::executor::MAX_LOOP_ITERATIONS as MAX_UNROLLED_LOOP_ITERATIONS;
+
 /// Validated semantic compute plan derived from one formula AST.
 #[derive(Debug, Clone)]
 pub struct FormulaComputePlan {
     plan: ComputePlan,
     root: ComputeNodeId,
+    /// Exact literal carried by each `NUMBER` node, keyed by node id.
+    ///
+    /// The lowerer records a literal at the moment it creates the node, so this
+    /// map stays correct under loop unrolling and under any pass that later
+    /// drops nodes. Binding literals by re-walking the AST cannot: the walker
+    /// would have to reproduce every lowering decision (including how many
+    /// times a loop body was duplicated), and any drift shows up as a plan that
+    /// silently binds the wrong constant.
+    number_literals: BTreeMap<ComputeNodeId, f64>,
 }
 
 impl FormulaComputePlan {
@@ -35,7 +57,14 @@ impl FormulaComputePlan {
         let mut lowerer = FormulaLowerer::new(registry);
         let root = lowerer.lower(ast);
         let plan = ComputePlan::compile(lowerer.nodes)?;
-        Ok(Self { plan, root })
+        if let Some(error) = lowerer.pending_error {
+            return Err(error);
+        }
+        Ok(Self {
+            plan,
+            root,
+            number_literals: lowerer.number_literals,
+        })
     }
 
     /// Unified compute plan containing dependencies and effects.
@@ -46,6 +75,19 @@ impl FormulaComputePlan {
     /// Node representing the formula's final value.
     pub const fn root(&self) -> ComputeNodeId {
         self.root
+    }
+
+    /// Literal carried by a `NUMBER` node, if that node is a literal.
+    ///
+    /// See the field documentation on [`FormulaComputePlan`] for why the value
+    /// is recorded by the lowerer rather than recovered from the AST.
+    pub fn number_literal(&self, node: ComputeNodeId) -> Option<f64> {
+        self.number_literals.get(&node).copied()
+    }
+
+    /// Number of `NUMBER` literals recorded by the lowerer.
+    pub fn number_literals_len(&self) -> usize {
+        self.number_literals.len()
     }
 }
 
@@ -69,6 +111,30 @@ struct FormulaLowerer<'a> {
     last_write: BTreeMap<String, ComputeNodeId>,
     last_effect: Option<ComputeNodeId>,
     last_control_flow: Option<ComputeNodeId>,
+    /// Variables whose current value is a compile-time constant, so a later
+    /// read can be folded.
+    ///
+    /// Invalidated wholesale at every control-flow boundary. An opaque loop or
+    /// a conditional body can assign to a variable we believe is constant, so
+    /// folding a read across one would replace a runtime value with a stale
+    /// literal — silently, and only for the formulas that actually take the
+    /// other branch.
+    const_env: BTreeMap<String, f64>,
+    /// The loop variable of the `for` loop currently being unrolled, if any.
+    ///
+    /// Kept apart from [`Self::const_env`] because it must survive a control-flow
+    /// boundary inside the loop body: `if cond { x := x + y[i] }` still has to
+    /// resolve `i`, even though the branch invalidates every other constant.
+    loop_var: Option<(String, f64)>,
+    /// Literal value of each `NUMBER` node, recorded at creation time.
+    number_literals: BTreeMap<ComputeNodeId, f64>,
+    /// First error that made lowering impossible.
+    ///
+    /// `lower` returns a node id rather than a `Result`, so a failure that is
+    /// only discovered mid-traversal is parked here and surfaced by
+    /// [`FormulaComputePlan::compile`]. Lowering still completes, which keeps
+    /// node ids stable for the rest of the pass.
+    pending_error: Option<ComputePlanError>,
 }
 
 impl<'a> FormulaLowerer<'a> {
@@ -80,12 +146,16 @@ impl<'a> FormulaLowerer<'a> {
             last_write: BTreeMap::new(),
             last_effect: None,
             last_control_flow: None,
+            const_env: BTreeMap::new(),
+            loop_var: None,
+            number_literals: BTreeMap::new(),
+            pending_error: None,
         }
     }
 
     fn lower(&mut self, ast: &AstNode) -> ComputeNodeId {
         match ast {
-            AstNode::Number(_) => self.add_pure("NUMBER", Vec::new()),
+            AstNode::Number(value) => self.add_number(*value),
             AstNode::StringLit(_) => self.add_effect(
                 "STRING_LITERAL",
                 Vec::new(),
@@ -98,7 +168,14 @@ impl<'a> FormulaLowerer<'a> {
                     effect: ComputeEffect::Stateful,
                 },
             ),
-            AstNode::Variable(name) => self.lower_variable(name),
+            AstNode::Variable(name) => match self.constant_of(name) {
+                // A variable bound to a constant reads as that constant. This is
+                // what makes an unrolled loop variable reachable inside the
+                // body: `volume[i]` must resolve `i`, not bind an input series
+                // named `i`.
+                Some(value) => self.add_number(value),
+                None => self.lower_variable(name),
+            },
             AstNode::BinaryOp { op, left, right } => {
                 let left = self.lower(left);
                 let right = self.lower(right);
@@ -123,6 +200,15 @@ impl<'a> FormulaLowerer<'a> {
                 self.add_pure("INDEX", vec![array, index])
             }
             AstNode::Assignment { name, expr } => {
+                // Track constant variables so a later `for` bound such as
+                // `lookback - 1` can still be folded after the parameter has
+                // been applied. A reassignment to something non-constant must
+                // drop the entry: a stale constant would fold a variable that
+                // is no longer constant.
+                match self.const_eval(expr) {
+                    Some(value) => self.const_env.insert(canonical_name(name), value),
+                    None => self.const_env.remove(&canonical_name(name)),
+                };
                 let expr = self.lower(expr);
                 let id = self.add_effect(
                     format!("ASSIGN:{}", canonical_name(name)),
@@ -254,30 +340,27 @@ impl<'a> FormulaLowerer<'a> {
                 let cond = self.lower(cond);
                 let then_branch = self.lower(then_branch);
                 let else_branch = self.lower(else_branch);
-                self.add_pure("CALL:IF", vec![cond, then_branch, else_branch])
-            }
-            AstNode::ForLoop {
-                var, start, end, ..
-            } => {
-                let start = self.lower(start);
-                let end = self.lower(end);
-                let id = self.add_effect(
-                    format!("FOR_LOOP:{}", canonical_name(var)),
-                    vec![start, end],
-                    opaque_control_flow_capabilities(),
-                );
-                // Loop bodies remain opaque at this planning layer because
-                // representing loop-carried dependencies in an acyclic plan
-                // requires a dedicated control-flow IR. The stateful barrier
-                // prevents unsafe elimination/reordering in the meantime.
-                self.last_write.insert(canonical_name(var), id);
+                let id = self.add_pure("CALL:IF", vec![cond, then_branch, else_branch]);
+                // Either branch may assign, and which one runs is a runtime
+                // fact, so nothing folded before this point is still a known
+                // constant afterwards.
+                self.invalidate_constants();
                 id
             }
+            AstNode::ForLoop {
+                var,
+                start,
+                end,
+                body,
+            } => self.lower_for_loop(var, start, end, body),
             AstNode::WhileLoop { cond, .. } => {
                 let cond = self.lower(cond);
                 let id =
                     self.add_effect("WHILE_LOOP", vec![cond], opaque_control_flow_capabilities());
                 self.last_control_flow = Some(id);
+                // The body is opaque, so any number of iterations — including
+                // zero — may have assigned to something we folded as constant.
+                self.invalidate_constants();
                 id
             }
         }
@@ -320,6 +403,181 @@ impl<'a> FormulaLowerer<'a> {
                 )
             },
         )
+    }
+
+    /// Constant currently bound to a variable, if it has one.
+    ///
+    /// The unrolled loop variable wins over [`Self::const_env`], because the
+    /// latter is cleared by control flow inside the loop body while the loop
+    /// variable must stay visible for the whole iteration.
+    fn constant_of(&self, name: &str) -> Option<f64> {
+        let key = canonical_name(name);
+        if let Some((variable, value)) = &self.loop_var {
+            if *variable == key {
+                return Some(*value);
+            }
+        }
+        self.const_env.get(&key).copied()
+    }
+
+    /// Drop every folded constant.
+    ///
+    /// Called at control-flow boundaries: anything the body of an opaque loop
+    /// or a conditional assigns may or may not have happened at runtime, so no
+    /// read after one can be trusted to still hold a literal.
+    fn invalidate_constants(&mut self) {
+        self.const_env.clear();
+    }
+
+    /// Evaluate an expression whose value is already known at compile time.
+    ///
+    /// Only arithmetic over literals and over variables bound to literals is
+    /// folded. Everything else yields `None`, which callers must treat as "not
+    /// a constant" rather than as zero.
+    fn const_eval(&self, ast: &AstNode) -> Option<f64> {
+        match ast {
+            AstNode::Number(value) => Some(*value),
+            AstNode::Variable(name) => self.constant_of(name),
+            AstNode::UnaryOp {
+                op: UnaryOperator::Neg,
+                expr,
+            } => self.const_eval(expr).map(|value| -value),
+            AstNode::BinaryOp { op, left, right } => {
+                let left = self.const_eval(left)?;
+                let right = self.const_eval(right)?;
+                match op {
+                    BinaryOperator::Add => Some(left + right),
+                    BinaryOperator::Sub => Some(left - right),
+                    BinaryOperator::Mul => Some(left * right),
+                    BinaryOperator::Div => Some(left / right),
+                    BinaryOperator::Mod => Some(left % right),
+                    BinaryOperator::Pow => Some(left.powf(right)),
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// Record the first lowering failure. Later failures do not overwrite it,
+    /// so the reported cause is the earliest one in the formula.
+    fn fail(&mut self, error: ComputePlanError) {
+        if self.pending_error.is_none() {
+            self.pending_error = Some(error);
+        }
+    }
+
+    /// Lower a `for` loop by unrolling it, when its bounds are compile-time
+    /// constants.
+    ///
+    /// An acyclic plan has nowhere to put a back edge, so the only way to give
+    /// the loop its real semantics is to emit the body once per iteration.
+    /// Loop-carried state then becomes an ordinary dependency chain: each
+    /// iteration writes a variable and the next one reads it, which is exactly
+    /// the order the tree-walking reference path evaluates them in.
+    ///
+    /// Bounds that are not constant cannot be unrolled, and that is a hard
+    /// error rather than a silent skip. Dropping the body would leave every
+    /// accumulator at its initial value, producing a wrong number instead of a
+    /// missing one — the failure has to be loud so the caller sees it.
+    fn lower_for_loop(
+        &mut self,
+        var: &str,
+        start: &AstNode,
+        end: &AstNode,
+        body: &[AstNode],
+    ) -> ComputeNodeId {
+        let key = canonical_name(var);
+        let bounds = match (self.const_eval(start), self.const_eval(end)) {
+            (Some(from), Some(to))
+                if from.fract() == 0.0 && to.fract() == 0.0 && from >= 0.0 && to >= 0.0 =>
+            {
+                Some((from as i64, to as i64))
+            }
+            _ => None,
+        };
+
+        let Some((from, to)) = bounds else {
+            self.fail(ComputePlanError::UnsupportedLoop {
+                variable: var.to_string(),
+                reason: "bounds are not compile-time constants, so the loop cannot be unrolled"
+                    .to_string(),
+            });
+            return self.opaque_for_loop(var, start, end);
+        };
+
+        if to < from {
+            // The body never runs. This is a legal empty range, not an error.
+            return self.lower(end);
+        }
+
+        let iterations = (to - from + 1) as usize;
+        if iterations > MAX_UNROLLED_LOOP_ITERATIONS {
+            self.fail(ComputePlanError::UnsupportedLoop {
+                variable: var.to_string(),
+                reason: format!(
+                    "{iterations} iterations exceeds the unrolling limit of \
+                     {MAX_UNROLLED_LOOP_ITERATIONS}"
+                ),
+            });
+            return self.opaque_for_loop(var, start, end);
+        }
+
+        // Nested loops: an outer loop variable must still resolve inside an
+        // inner body, so the binding is saved and restored rather than cleared.
+        let outer_loop_var = self.loop_var.take();
+        let mut last = None;
+        for index in from..=to {
+            self.loop_var = Some((key.clone(), index as f64));
+            for statement in body {
+                last = Some(self.lower(statement));
+            }
+        }
+        self.loop_var = outer_loop_var;
+
+        // Iterations may have assigned to anything, and how many ran is enough
+        // to make no pre-loop constant trustworthy afterwards.
+        self.invalidate_constants();
+        // Pine leaves the loop variable at its final value once the loop ends,
+        // so keep it bound instead of letting a later read fall through to an
+        // input slot and fail as an unknown series.
+        self.const_env.insert(key, to as f64);
+
+        match last {
+            Some(id) => id,
+            // An empty body produces no value; fall back to the bound it ended on.
+            None => self.add_number(to as f64),
+        }
+    }
+
+    /// The pre-unrolling fallback: one opaque node standing in for the loop.
+    ///
+    /// Only reached on the error path, so the plan still has a node to return
+    /// while [`FormulaComputePlan::compile`] reports the recorded failure.
+    fn opaque_for_loop(
+        &mut self,
+        var: &str,
+        start: &AstNode,
+        end: &AstNode,
+    ) -> ComputeNodeId {
+        let start = self.lower(start);
+        let end = self.lower(end);
+        let id = self.add_effect(
+            format!("FOR_LOOP:{}", canonical_name(var)),
+            vec![start, end],
+            opaque_control_flow_capabilities(),
+        );
+        self.last_write.insert(canonical_name(var), id);
+        // The body was never lowered, so it may have assigned to anything.
+        self.invalidate_constants();
+        id
+    }
+
+    /// Create a `NUMBER` node and record the literal it carries.
+    fn add_number(&mut self, value: f64) -> ComputeNodeId {
+        let id = self.add_pure("NUMBER", Vec::new());
+        self.number_literals.insert(id, value);
+        id
     }
 
     fn add_pure(

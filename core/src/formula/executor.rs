@@ -11,7 +11,13 @@ use crate::formula::types::*;
 
 type FormulaFn = fn(&FormulaContext, &[Array1<f64>]) -> Result<Array1<f64>, FormulaError>;
 
-const MAX_LOOP_ITERATIONS: usize = 10_000;
+/// Iteration ceiling for `for` / `while` loops on the tree-walking path.
+///
+/// Shared with the compiled plan path, which must unroll a loop rather than
+/// execute it: see [`crate::formula::compute_ir`]. The two paths have to agree
+/// on which formulas are executable at all, otherwise a loop that the
+/// interpreter happily runs would be a hard compile error on the plan path.
+pub(crate) const MAX_LOOP_ITERATIONS: usize = 10_000;
 
 fn loop_iteration_limit_error(kind: &str) -> FormulaError {
     FormulaError::RuntimeError(format!(

@@ -196,13 +196,38 @@
 **已发现的既有 plan 路径限制**（非本次引入）：常量-only 公式（如单独的 `COST(50)`、
 `PERIODTYPE()`）无法推断执行长度，需至少一个序列操作数。
 
-#### §3.1 缺口 A — Pine `for` 循环（预估完成，未实现）
+#### §3.1 缺口 A — Pine `for` 循环 ✅ 已完成
 
-- 语料 `for i = 0 to lookback - 1`，`lookback = input(50)` → **参数应用后循环界是编译期常量**
-  → 可做**常量界完全展开**，**不需要**循环运行时。
-- 展开后 `volume[i]`/`close[i]` = 位移 i 的输入绑定；N=50 → ~100 节点 + 100 位移绑定，**体积随 N 线性增长**。
-- **动手前必须定**：① 界非常量 → **响亮失败**（不能静默跳过循环体）；② **N 上限**（建议 512）。
-- 需实测：位移输入扩大 `input_layout` 后，`OperationResultCache` 键形状是否仍能正确区分。
+**关键更正：这不是一个缺口，是三个 bug。原预估只看到了第三个。**
+
+| # | 真因 | 位置 |
+|---|---|---|
+| 1 | `parse_for_stmt` 对同一迭代器连调两次 `Iterator::find`：先找 `by` 步、再找 `block`。无 `by` 时第一次 `find` **把迭代器抽干** → 循环体永远解析为空 | `pine/parser.rs` |
+| 2 | mapper 规范化了除循环变量外的所有标识符 → 执行器绑 `i`，循环体读 `I` → `Unknown variable: I` | `pine/ast_mapper.rs` |
+| 3 | `compute_ir` 把循环体当不透明控制流 | `formula/compute_ir.rs` |
+
+**1 和 2 是「参考路径也算错」的静默错误** —— 循环体被丢弃，`volSum`/`priceSum` 恒为 0，
+`avgPrice = 0/0 = NaN`。差分门禁查不出来，因为两条路径**一致地错着**。
+→ 修完 1、2 之后，`volume_profile` 从「两条路径都给 NaN」变成「两条路径都给对的值」。
+
+**做法（第 3 项）**：常量界完全展开，不需要循环运行时。
+- `const_env` + `const_eval`：`input(50)` 折叠为字面量后 `lookback - 1` 可折叠为单节点 `NUMBER`，
+  实测语料里**没有** `BINARY:Sub` 节点，直接是 `NUMBER(49)`。
+- 循环变量进 `const_env` → `volume[i]` 的 `i` 解析为常量而非「名为 I 的输入序列」。
+- 循环携带状态变成普通依赖链（每轮 `ASSIGN:` 读上一轮写的值），与树路径求值顺序一致。
+
+**第二个更正：`volume[i]` 不是 `REF` 位移。** 树路径 `IndexAccess` 语义是
+`result[i] = arr[idx[i]]`（**gather + 广播**），常量下标 = 把历史上**一个**元素广播到整条序列。
+写成 `REF(volume, i)` 会数值分叉。`INDEX` kernel 连边界都照抄：下标用 Rust 饱和 `as usize`
+（NaN/负数 → 0），越界 → NaN。
+
+**顺带必须改的**：`bind_numeric_literals` 原本靠**重走 AST** 收集字面量并与 NUMBER 节点按顺序配对。
+展开后这条路必错（它得复现「循环体复制了几遍」）。改为**由 lowerer 在造节点时按 id 记录字面量**
+（`FormulaComputePlan::number_literal`），删掉那个 AST 镜像 walker —— 它本身就是一类漂移 bug 的温床。
+
+**N 上限**：不新设常量，**直接复用解释器的 `MAX_LOOP_ITERATIONS`（10_000）**。
+低于它会造出「树路径能跑、plan 路径编译失败」的分裂，那正是「可直接替换的更快路径」失效的样子。
+超过则编译期**响亮失败**，绝不截断（截断 = 静默算出部分和）。
 
 #### §3.4 附注：❄️ 冻结（freeze）的定义 —— 用户 2026-09-21 定调
 

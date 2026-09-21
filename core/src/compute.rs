@@ -156,6 +156,19 @@ pub enum ComputePlanError {
     /// The dependency graph contains a cycle. The list contains nodes that
     /// remain cyclic after deterministic topological sorting.
     DependencyCycle(Vec<ComputeNodeId>),
+    /// A `for` loop cannot be lowered into the acyclic compute plan.
+    ///
+    /// Loop bodies are lowered by unrolling, which needs bounds that are known
+    /// at compile time. This is a hard error rather than a silent skip: a loop
+    /// that is quietly dropped would make every accumulator that depends on it
+    /// evaluate to its initial value, which is a wrong number rather than a
+    /// missing one.
+    UnsupportedLoop {
+        /// Loop variable name, as written in the formula.
+        variable: String,
+        /// Why the bounds cannot be unrolled.
+        reason: String,
+    },
 }
 
 impl fmt::Display for ComputePlanError {
@@ -171,6 +184,9 @@ impl fmt::Display for ComputePlanError {
             Self::DependencyCycle(nodes) => {
                 let ids: Vec<String> = nodes.iter().map(|id| id.0.to_string()).collect();
                 write!(f, "compute dependency cycle: {}", ids.join(" -> "))
+            }
+            Self::UnsupportedLoop { variable, reason } => {
+                write!(f, "unsupported `for` loop over `{variable}`: {reason}")
             }
         }
     }

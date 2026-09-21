@@ -87,7 +87,7 @@ impl FormulaHotPlan {
     /// Compile with the canonical built-in function registry.
     pub fn compile(ast: &AstNode) -> Result<Self, FormulaHotPlanError> {
         let semantic = FormulaComputePlan::compile(ast)?;
-        Self::finish(semantic, ast)
+        Self::finish(semantic)
     }
 
     /// Compile with an explicit registry while keeping the same hot-plan ABI.
@@ -96,13 +96,13 @@ impl FormulaHotPlan {
         registry: &FunctionRegistry,
     ) -> Result<Self, FormulaHotPlanError> {
         let semantic = FormulaComputePlan::compile_with_registry(ast, registry)?;
-        Self::finish(semantic, ast)
+        Self::finish(semantic)
     }
 
     /// Shared tail of both compile entry points: literal binding, CSE, plumbing
     /// resolution, then numeric hot lowering.
-    fn finish(semantic: FormulaComputePlan, ast: &AstNode) -> Result<Self, FormulaHotPlanError> {
-        let (parameters, ranges) = bind_numeric_literals(ast, &semantic)?;
+    fn finish(semantic: FormulaComputePlan) -> Result<Self, FormulaHotPlanError> {
+        let (parameters, ranges) = bind_numeric_literals(&semantic)?;
         let optimized = cse_plan(&semantic, &parameters, &ranges)?;
         let lowered = lower_formula_plumbing(&optimized, semantic.root())?;
         let numeric = prune_unreachable(&lowered.plan, &lowered.roots)?;
@@ -614,17 +614,15 @@ fn prune_unreachable(
 /// Bind exact numeric literals to NUMBER nodes without carrying literal strings
 /// or floating-point equality into the hot loop.
 ///
-/// `FormulaLowerer` allocates node ids monotonically while recursively visiting
-/// the AST. This visitor mirrors only the child traversal performed by that
-/// lowerer. NUMBER node ids are then paired with literals in creation order and
-/// encoded as exact IEEE-754 bits in the immutable [`ParameterArena`].
+/// Literals come from [`FormulaComputePlan::number_literal`], i.e. from the
+/// lowerer that created each node, rather than from a second walk of the AST.
+/// A mirrored walk cannot survive loop unrolling: it would have to reproduce
+/// every lowering decision, including how many times a loop body was
+/// duplicated, and any drift would bind the wrong constant to the wrong node
+/// instead of failing.
 fn bind_numeric_literals(
-    ast: &AstNode,
     semantic: &FormulaComputePlan,
 ) -> Result<(ParameterArena, BTreeMap<ComputeNodeId, ParameterRange>), FormulaHotPlanError> {
-    let mut literals = Vec::new();
-    collect_lowered_numeric_literals(ast, &mut literals);
-
     let mut number_nodes = Vec::new();
     for raw_id in 0..semantic.plan().len() {
         let id = ComputeNodeId(raw_id);
@@ -637,86 +635,27 @@ fn bind_numeric_literals(
         }
     }
 
-    if literals.len() != number_nodes.len() {
+    let recorded = semantic.number_literals_len();
+    if recorded != number_nodes.len() {
         return Err(FormulaHotPlanError::LiteralBindingMismatch {
-            ast_literals: literals.len(),
+            ast_literals: recorded,
             number_nodes: number_nodes.len(),
         });
     }
 
     let mut arena = ParameterArena::new();
     let mut ranges = BTreeMap::new();
-    for (node, value) in number_nodes.into_iter().zip(literals) {
+    for node in number_nodes {
+        let value = semantic.number_literal(node).ok_or(
+            FormulaHotPlanError::LiteralBindingMismatch {
+                ast_literals: recorded,
+                number_nodes: recorded,
+            },
+        )?;
         let range = arena.extend([ParameterValue::from_f64(value)]);
         ranges.insert(node, range);
     }
     Ok((arena, ranges))
-}
-
-/// Mirror FormulaLowerer child traversal exactly. Loop bodies are intentionally
-/// excluded because `compute_ir` currently treats loop bodies as opaque control
-/// flow and does not lower them into the acyclic compute plan.
-fn collect_lowered_numeric_literals(ast: &AstNode, out: &mut Vec<f64>) {
-    match ast {
-        AstNode::Number(value) => out.push(*value),
-        AstNode::StringLit(_) | AstNode::Variable(_) | AstNode::ParamDecl { .. } => {}
-        AstNode::BinaryOp { left, right, .. } => {
-            collect_lowered_numeric_literals(left, out);
-            collect_lowered_numeric_literals(right, out);
-        }
-        AstNode::UnaryOp { expr, .. }
-        | AstNode::Assignment { expr, .. }
-        | AstNode::CompoundAssignment { expr, .. }
-        | AstNode::Output { expr, .. } => collect_lowered_numeric_literals(expr, out),
-        AstNode::FunctionCall { args, .. }
-        | AstNode::Statements(args)
-        | AstNode::DrawGeneric { args, .. } => {
-            for arg in args {
-                collect_lowered_numeric_literals(arg, out);
-            }
-        }
-        AstNode::IndexAccess { array, index } => {
-            collect_lowered_numeric_literals(array, out);
-            collect_lowered_numeric_literals(index, out);
-        }
-        AstNode::DrawText { cond, price, .. } => {
-            collect_lowered_numeric_literals(cond, out);
-            collect_lowered_numeric_literals(price, out);
-        }
-        AstNode::DrawIcon {
-            cond, price, icon, ..
-        } => {
-            collect_lowered_numeric_literals(cond, out);
-            collect_lowered_numeric_literals(price, out);
-            collect_lowered_numeric_literals(icon, out);
-        }
-        AstNode::StickLine {
-            cond,
-            price1,
-            price2,
-            width,
-            ..
-        } => {
-            collect_lowered_numeric_literals(cond, out);
-            collect_lowered_numeric_literals(price1, out);
-            collect_lowered_numeric_literals(price2, out);
-            collect_lowered_numeric_literals(width, out);
-        }
-        AstNode::IfThenElse {
-            cond,
-            then_branch,
-            else_branch,
-        } => {
-            collect_lowered_numeric_literals(cond, out);
-            collect_lowered_numeric_literals(then_branch, out);
-            collect_lowered_numeric_literals(else_branch, out);
-        }
-        AstNode::ForLoop { start, end, .. } => {
-            collect_lowered_numeric_literals(start, out);
-            collect_lowered_numeric_literals(end, out);
-        }
-        AstNode::WhileLoop { cond, .. } => collect_lowered_numeric_literals(cond, out),
-    }
 }
 
 /// Errors produced while compiling a Formula Architecture v3 plan.
