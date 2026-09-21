@@ -44,13 +44,18 @@ Finkit 的产品原则很简单：**一个 Rust 核心、一套 canonical kernel
 | 能力层 | 主要能力 | 当前定位 |
 | --- | --- | --- |
 | Technical Analysis | 趋势、动量、波动率、成交量、周期、统计、价格变换、形态、A 股扩展 | 稳定核心 |
-| Formula Engine | Parser、Compiler、Bytecode/JIT、缓存、`eval_range`、`eval_last`、append | 稳定核心 |
+| Formula Engine | Parser、Compiler、缓存、`eval_range`、`eval_last`、append，以及 opt-in 字节码/JIT 路径（已冻结） | 稳定核心 |
 | Streaming Engine | 单 Bar 更新、状态保持、批量/流式一致性验证 | 稳定核心 |
 | Feature Engineering | lag/lead、rolling stats、归一化、标签、组合、选择、导出 | 稳定核心 |
 | Factor Engine | 命名因子、依赖 DAG、借用输入、`FactorPlan` | 稳定核心 / 持续收敛 |
 | Unified Runtime | typed artifact、full/borrowed/range/into、DirtyRange | 下一版本候选 |
 | Factor Research | Prepare、Validate、Analyze、Multi-factor、Portfolio、Report | 下一版本扩展 |
 | Multi-language Delivery | Rust、Python、CLI 以及多种 native/mobile/WASM 绑定 | 发布状态分层 |
+
+> **已冻结的接口。** opt-in 字节码/JIT 路径与 `eval_simd` **冻结保留，不删除**：四个语言绑定已将它们
+> 导出为公开 API，删除即跨语言破坏性变更。冻结期内只接受正确性修复，不再新增能力，且 `eval()` 从不
+> 经过它们。SIMD 在 kernel 层是真实存在的（走正常路径），但 `eval_simd` 只是 `eval` 的等价别名。
+> 是否下线推迟到统一的多语言改造中一次性决定。
 
 ## 统一运行时：为什么重要
 
@@ -140,6 +145,8 @@ Finkit 区分 source exists、CI validated、package candidate、GitHub Release 
 ## Finkit 的边界
 
 Finkit 不定位为 OMS、券商交易接口、交易所 Gateway、撮合引擎或一站式实盘平台。它专注于这些系统都会依赖的 **金融计算、因子研究、实时分析与多语言运行时底座**。
+
+同时，Finkit **不做回测引擎，也不做选股/组合构建引擎**：库内不提供回测器与排序选股模块。评估层衡量的是**你传入的收益序列与因子研究结果**，下游的策略/回测产品是该层的消费方，不属于本库职责。选股**公式**仍属于公式层能力 —— 它们是条件表达式，不是选股引擎。
 
 ## License
 

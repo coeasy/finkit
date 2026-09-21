@@ -35,7 +35,7 @@
 //! ```
 
 use crate::error::{Result, TaError};
-use crate::patterns::common::{validate_ohlcv, Signal};
+use crate::patterns::common::Signal;
 use crate::utils::validate_input;
 use ndarray::Array1;
 
@@ -399,12 +399,6 @@ fn validate_ohlcv_inputs(high: &[f64], low: &[f64], pivot_tolerance: f64) -> Res
         });
     }
     validate_input(high.len(), 20)
-}
-
-// Silence the unused-import warning for `validate_ohlcv` (kept for API symmetry)
-#[allow(dead_code)]
-fn _unused() {
-    let _ = validate_ohlcv;
 }
 
 // ============================================================================

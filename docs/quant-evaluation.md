@@ -199,19 +199,6 @@ println!("Max DD = {}", report.drawdown.max_drawdown);
 println!("CAGR = {}", report.returns.annualized_return);
 ```
 
-### Rich legacy backtest evaluation
-
-```rust
-use finkit::backtest_evaluation::evaluate_backtest;
-use finkit::performance::PerformanceConfig;
-
-let rich = evaluate_backtest(&backtest_result, PerformanceConfig::default());
-println!("profit factor = {}", rich.trades.profit_factor);
-println!("ulcer index = {}", rich.performance.drawdown.ulcer_index);
-```
-
-The original `BacktestResult` API remains source-compatible. Its existing total-return, Sharpe, Sortino, and maximum-drawdown values are contract-tested against the canonical performance engine.
-
 ## Language-neutral generic API
 
 For languages that prefer a stable data contract, use the JSON-in/JSON-out quantitative evaluation API.
@@ -287,7 +274,7 @@ Portfolio `gross_target` is enforced subject to `max_abs_weight`. The allocator 
 The quantitative evaluation implementation is protected by:
 
 - canonical SSOT checks for Sharpe, Sortino, maximum drawdown and shared research kernels;
-- cross-module equality tests between legacy backtest metrics and the canonical evaluator;
+- cross-module equality tests between every evaluation facade and the canonical evaluator;
 - HHI/effective-bets equality tests between factor-risk facades and the core owner;
 - no-lookahead and future-mutation locality tests;
 - sparse-panel exact-horizon tests;

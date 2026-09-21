@@ -35,22 +35,15 @@ use std::path::{Path, PathBuf};
 /// concrete backlog for finishing the plan path — they are grouped by cause
 /// rather than written per case.
 const DOMESTIC_UNSUPPORTED: &[(&str, &str)] = &[
-    // Chip distribution and cross-period functions are not numeric series
-    // kernels at all: they need host-side data (per-bar chip histograms, the
-    // chart period type) that the plan's numeric input layout cannot carry.
-    (
-        "chip_distribution_ths",
-        "no kernel for `CALL:WINNER`/`CALL:COST`; needs per-bar chip-distribution data",
-    ),
-    (
-        "cross_period_refdate",
-        "no kernel for `CALL:PERIODTYPE`/`CALL:REFDATE`; needs chart-period host context",
-    ),
-    // What is left here is host context, not a missing kernel: `WINNER`/`COST`
-    // need per-bar chip-distribution data and `PERIODTYPE`/`REFDATE` need the
-    // chart period. The plan-path kernel backlog, and the inventory of the gap
-    // between the SSOT and the formula surface, is pinned by
-    // `formula_function_ssot.rs`.
+    // Empty as of 2026-09-21. The two entries that used to be here
+    // (`chip_distribution_ths`, `cross_period_refdate`) were *not* kernel gaps:
+    // `executor.execute(&inputs)` only ever received numeric slots, so no kernel
+    // could reach the chip distribution or the chart period. Adding a
+    // `HostContext` to `FormulaKernelDispatcher` closed both at once.
+    //
+    // The list is intentionally left in place rather than deleted: it is the
+    // backlog mechanism, and the next host-context or lowering gap belongs here
+    // with a stated reason.
 ];
 
 /// Pine corpus cases the compiled plan path cannot execute yet.

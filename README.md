@@ -48,13 +48,19 @@ Finkit's product rule is straightforward: **one Rust core, canonical kernels, re
 | Layer | Capability | Position |
 | --- | --- | --- |
 | Technical Analysis | Trend, momentum, volatility, volume, cycle, statistics, price transforms, patterns, market helpers | Stable core |
-| Formula Engine | Parser, compiler, cache, bytecode/JIT, range/last evaluation, append workflows | Stable core |
+| Formula Engine | Parser, compiler, cache, range/last evaluation, append workflows; opt-in bytecode/JIT path (frozen) | Stable core |
 | Streaming Engine | Bar-by-bar updates, retained state, batch/stream parity validation | Stable core |
 | Feature Engineering | Lags, rolling statistics, normalization, labels, combinations, selection, export | Stable core |
 | Factor Engine | Named factor DAGs, dependency validation, borrowed inputs, `FactorPlan` | Stable core / expanding |
 | Unified Runtime | Typed artifacts, full/borrowed/range/into execution, DirtyRange | Next-release candidate |
 | Factor Research | Prepare, validate, analyze, multi-factor, portfolio, reporting workflows | Next-release expansion |
 | Multi-language Delivery | Rust, Python, CLI plus native/mobile/WASM binding paths | Publication state varies |
+
+> **Frozen surface.** The opt-in bytecode/JIT path and `eval_simd` are **frozen**, not removed: four
+> language bindings export them, so dropping them is a cross-language breaking change. They receive
+> correctness fixes only — no new capabilities — and `eval()` never routes through them. SIMD is real
+> at the kernel level on the normal path; `eval_simd` is an exact alias of `eval`. Removal is deferred
+> to a deliberate multi-language rollout.
 
 ## One runtime, multiple workloads
 
@@ -166,6 +172,8 @@ See [docs/language-bindings.md](docs/language-bindings.md) for the exact support
 ## What Finkit is not
 
 Finkit is not an OMS, brokerage adapter, exchange gateway, matching engine, or turnkey live-trading platform. It is the **calculation, research, and realtime analytics engine** those systems can call.
+
+It is also **not a backtest engine and not a stock-selection/portfolio-construction engine**. Finkit ships no backtester and no ranking/selection module: its evaluation layer measures the return series and factor studies you supply, and downstream strategy products consume that layer rather than being part of it. Screening *formulas* remain part of the formula layer — they are indicator expressions, not a selection engine.
 
 ## License
 

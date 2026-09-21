@@ -34,7 +34,7 @@ STREAMING_DIR = ROOT / "core" / "src" / "streaming"
 FORMULA_MOD = ROOT / "core" / "src" / "formula" / "mod.rs"
 FORMULA_FUNCTION_SOURCES = (
     ROOT / "core" / "src" / "formula" / "functions.rs",
-    ROOT / "core" / "src" / "formula" / "functions_router.rs",
+    ROOT / "core" / "src" / "formula" / "functions_legacy.rs",
 )
 FEATURES_MOD = ROOT / "core" / "src" / "features" / "mod.rs"
 PINE_BUILTIN = ROOT / "core" / "src" / "formula" / "pine" / "builtin_table.rs"
@@ -45,6 +45,9 @@ JAVA_POM = ROOT / "ffi" / "java-binding" / "pom.xml"
 GENERATED_DIR = ROOT / "docs" / "generated"
 DEFAULT_CRITERION_DIR = ROOT / "target" / "criterion"
 INDICATOR_REGISTRY = ROOT / "docs" / "indicator_registry.json"
+# Registry specs declare the compatibility aliases that `get_builtin_functions()`
+# injects at runtime; the generated formula catalogue has to include them too.
+FUNCTION_REGISTRY_SOURCE = ROOT / "core" / "src" / "registry.rs"
 
 OUT_INDICATORS = GENERATED_DIR / "indicators.md"
 OUT_STREAMING = GENERATED_DIR / "streaming-indicators.md"
@@ -229,18 +232,41 @@ def parse_formula_functions() -> list[str]:
     the legacy table still contains compatibility functions. Keep both in the
     generated catalog so newly routed functions cannot disappear from the API
     documentation.
+
+    Extraction deliberately mirrors the runtime construction of the table in
+    `get_builtin_functions()`:
+
+    1. every `map.insert("NAME", ...)` site in either formula source;
+    2. plus, for each registry spec whose canonical name is registered, that
+       spec's aliases -- mirroring the `map.get(spec.name)` guard.
+
+    An earlier line-based regex matched *any* uppercase literal followed by
+    `,`/`)`, which both invented entries from error-message strings
+    (`ensure_args_len("ROCP", ...)`) and silently missed every
+    `map.insert("NAME".to_string(), ...)` site. This version reproduces the
+    runtime function count exactly (416 at the time of writing), which
+    `core/tests/formula_function_ssot.rs` also asserts.
     """
-    fns: list[str] = []
-    # Match list entries (`"SMA",`) and routed inserts (`map.insert("SMA",`).
-    fn_name_re = re.compile(r'"([A-Z_]+)"\s*(?:,|\))')
+    insert_re = re.compile(r'map\.insert\(\s*"([A-Z_0-9]+)"')
+    registered: set[str] = set()
     for source in FORMULA_FUNCTION_SOURCES:
         if not source.is_file():
             continue
-        for line in source.read_text(encoding="utf-8").splitlines():
-            m = fn_name_re.search(line)
-            if m:
-                fns.append(m.group(1))
-    return sorted(set(fns))
+        # Match against the whole file, not line by line: `map.insert(` and its
+        # name argument are frequently split across lines.
+        registered.update(insert_re.findall(source.read_text(encoding="utf-8")))
+
+    if FUNCTION_REGISTRY_SOURCE.is_file():
+        spec_re = re.compile(
+            r'FunctionSpec\s*\{\s*name:\s*"([A-Z_0-9]+)"\s*,\s*aliases:\s*&\[([^\]]*)\]',
+            re.S,
+        )
+        alias_re = re.compile(r'"([A-Z_0-9]+)"')
+        for match in spec_re.finditer(FUNCTION_REGISTRY_SOURCE.read_text(encoding="utf-8")):
+            if match.group(1) in registered:
+                registered.update(alias_re.findall(match.group(2)))
+
+    return sorted(registered)
 
 
 def parse_features_modules() -> list[str]:

@@ -55,7 +55,9 @@ Formula 与 Factor 从“一次性函数调用”升级为可以提前编译、�
 
 ### 4. Research-Ready Building Blocks
 
-Finkit 不停留在技术指标层，还提供或正在整合 transforms、labels、feature engineering、statistics、ranking、regression、validation、factor analysis、risk 与 lightweight backtest primitives。
+Finkit 不停留在技术指标层，还提供或正在整合 transforms、labels、feature engineering、statistics、ranking、regression、validation、factor analysis、returns / risk 与 performance 评估能力。
+
+Finkit 是计算库，不是交易系统：**明确不提供回测引擎，也不提供选股引擎**。上述评估层衡量的是**你传入的收益序列与因子研究结果** —— 下游的策略/回测产品是该层的消费方，不属于本库职责。
 
 ### 5. Performance with Evidence
 

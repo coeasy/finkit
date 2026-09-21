@@ -352,6 +352,15 @@ const TREND_BREAKOUT_PARAMS: &[ParamSpec] = &[
 ];
 const REF_PARAMS: &[ParamSpec] = &[ParamSpec::new("bars", "usize", None, Some(">= 0"))];
 const TWO_SERIES: &[ParamSpec] = &[];
+// Host-context functions: these read data the host supplies alongside the price
+// series (chip distribution, chart period), so they are declared here to keep
+// the plan-path kernel set a subset of the SSOT.
+const WINNER_PARAMS: &[ParamSpec] = &[ParamSpec::new("price", "series", None, None)];
+const COST_PARAMS: &[ParamSpec] = &[ParamSpec::new("ratio", "f64", None, Some("0 <= ratio <= 100"))];
+const REFDATE_PARAMS: &[ParamSpec] = &[
+    ParamSpec::new("source", "series", None, None),
+    ParamSpec::new("date", "f64", None, None),
+];
 
 /// Build the stable v0.1.2 public function registry.
 pub fn builtin_function_registry() -> FunctionRegistry {
@@ -1100,6 +1109,91 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             params: &[],
             outputs: 1,
             lookback: LookbackSpec::Dynamic,
+            streaming: true,
+            deterministic: true,
+        },
+        // --- Host-context functions -------------------------------------------
+        // Deterministic given (inputs, host data), but not streamable: the host
+        // supplies the chip distribution / chart period, so there is no
+        // bar-by-bar state to carry forward.
+        FunctionSpec {
+            name: "WINNER",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: WINNER_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::None,
+            streaming: false,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "COST",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: COST_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::None,
+            streaming: false,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "PERIODTYPE",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: &[],
+            outputs: 1,
+            lookback: LookbackSpec::None,
+            streaming: false,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "REFDATE",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: REFDATE_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::None,
+            streaming: false,
+            deterministic: true,
+        },
+        // --- Rate-of-change ratio variants ------------------------------------
+        // Implemented and delegated to the canonical momentum functions long
+        // before they were registered here; declaring them keeps the plan-path
+        // kernel set a subset of the SSOT.
+        FunctionSpec {
+            name: "ROCP",
+            aliases: &[],
+            category: FunctionCategory::Momentum,
+            input: InputKind::Series,
+            params: PERIOD_REQUIRED,
+            outputs: 1,
+            lookback: LookbackSpec::Period,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "ROCR",
+            aliases: &[],
+            category: FunctionCategory::Momentum,
+            input: InputKind::Series,
+            params: PERIOD_REQUIRED,
+            outputs: 1,
+            lookback: LookbackSpec::Period,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "ROCR100",
+            aliases: &[],
+            category: FunctionCategory::Momentum,
+            input: InputKind::Series,
+            params: PERIOD_REQUIRED,
+            outputs: 1,
+            lookback: LookbackSpec::Period,
             streaming: true,
             deterministic: true,
         },

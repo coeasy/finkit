@@ -3,7 +3,7 @@
 日期：2026-09-20
 状态：**R1–R4 全部完成；平行轨道（5 个 crate）已删除 —— 收敛完成（见 §6）**
 上游决策：用户 2026-09-20 选择「接入生产，作为 Runtime 载体」
-相关文档：[improvement-plan-2026-09-20.md](improvement-plan-2026-09-20.md) §P2-1、[architecture-gap-assessment-2026-09-20.md](architecture-gap-assessment-2026-09-20.md):118
+相关文档：[archive/improvement-plan-2026-09-20.md](archive/improvement-plan-2026-09-20.md) §P2-1、[archive/architecture-gap-assessment-2026-09-20.md](archive/architecture-gap-assessment-2026-09-20.md):118
 
 ---
 

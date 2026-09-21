@@ -1,3 +1,29 @@
+//! Frozen experimental path: the formula "JIT".
+//!
+//! # Status: FROZEN (decided 2026-09-21)
+//!
+//! This is **not** a JIT in the usual sense. It runs `FormulaOptimizer` peephole
+//! passes over bytecode and then interprets that bytecode; it never emits native
+//! code. It is retained because four language bindings already export it as
+//! public API, and removing it would be a cross-language breaking change.
+//!
+//! Until the multi-language rollout is revisited, this module is **frozen**:
+//!
+//! * **No new capabilities.** Optimizations, new `OpCode`s, or new dispatch
+//!   strategies are not to be added here. Investment goes into the production
+//!   pair — `tree` (reference) and `plan` (`FormulaHotPlan` + `UnifiedExecutor`).
+//! * **Correctness fixes only.** A bug that makes this path disagree with the
+//!   tree path is in scope; anything else is not.
+//! * **Never on the default path.** `FormulaEngine::eval` does not touch this
+//!   module. It is reachable only through the explicit opt-in entry points
+//!   `eval_jit` / `compile_jit` / `execute_jit`.
+//! * **It is compared, not trusted.** `core/tests/formula_differential_tests.rs`
+//!   asserts this path agrees with the tree path; that gate is what keeps a
+//!   frozen path from silently rotting.
+//!
+//! Do not add callers from core. Adding a binding export is a deliberate,
+//! recorded decision, not a cleanup.
+
 use ahash::AHashMap;
 use ndarray::Array1;
 use std::collections::HashSet;

@@ -150,6 +150,17 @@ For exact supported functions and Pine mappings, prefer generated catalogs over 
 
 Benchmark values are measured snapshots, not universal latency/throughput guarantees. Re-run the benchmark harness on the target CPU/compiler/runtime before making production commitments. The scheduled `competitive-benchmark.yml` workflow produces commit-bound TA-Lib evidence; it complements, rather than replaces, correctness and regression gates in normal PR CI.
 
+## Current refactor baseline
+
+| Document | Purpose |
+| --- | --- |
+| [refactor-plan-2026-09-21.md](refactor-plan-2026-09-21.md) | **唯一执行基线** —— 架构去重主轴、Phase 状态与待决事项 |
+| [runtime-carrier-adoption-plan-2026-09-20.md](runtime-carrier-adoption-plan-2026-09-20.md) | R2/R3/R4 声明式载体落地规格（进行中） |
+| [archive/README.md](archive/README.md) | 历史计划归档索引（audit trail，**非**当前指导） |
+
+Every other dated plan in this repository has been moved to [`archive/`](archive/README.md). Those
+documents are audit trail only: where they conflict with the code, the code wins.
+
 ## Generated source of truth — do not delete
 
 The following files are generated or machine-readable contracts and are intentionally retained:

@@ -162,7 +162,7 @@ feature/finkit-v1-...      f441e76   2026-09-19   ← 是 main 与 perf 的后�
 
 因此**执行载体仍是 `UnifiedExecutor` + `HotExecutionPlan`**，平行轨道降级为**声明式前端**，
 按 R1→R4 四阶段并入 core，每阶段独立可验证。完整分析、逐项反证与阶段划分见
-[runtime-carrier-adoption-plan-2026-09-20.md](runtime-carrier-adoption-plan-2026-09-20.md)。
+[runtime-carrier-adoption-plan-2026-09-20.md](../runtime-carrier-adoption-plan-2026-09-20.md)。
 
 **R1 已完成**：决策落文档；5 个 crate 的 `lib.rs` 顶部标注了各自「adopted / superseded」
 的判定与 core 对应实现位置，便于后续按阶段删除。无功能变更。

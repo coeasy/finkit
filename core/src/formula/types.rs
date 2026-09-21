@@ -288,6 +288,31 @@ pub struct FinanceData {
     pub fields: HashMap<usize, f64>,
 }
 
+/// Host-side data the compiled-plan path cannot carry as a numeric input slot.
+///
+/// The plan executor receives only `&[&[f64]]` numeric slots, so anything a
+/// function needs *besides* the price series has to travel separately. Carrying
+/// it explicitly is what lets `WINNER`/`COST` (chip distribution) and
+/// `PERIODTYPE` (chart period) run on the plan path at all.
+///
+/// This is deliberately cheap to clone: `ChipData` is one price/volume
+/// distribution, not a per-bar structure.
+#[derive(Clone, Default)]
+pub struct HostContext {
+    /// Chip distribution used by `WINNER` / `COST` / `LWINNER`.
+    pub chip: Option<ChipData>,
+    /// Chart period type reported by `PERIODTYPE` (0=daily, 1=weekly, 2=monthly,
+    /// 3=minute), matching the tree-path semantics.
+    pub period_type: u8,
+}
+
+impl HostContext {
+    /// An empty context: host-dependent functions evaluate to `NaN`.
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
 /// 筹码分布数据（用于 WINNER/COST/LWINNER 函数）
 /// 筹码分布是一个价格-成交量的映射表
 #[derive(Clone, Default)]

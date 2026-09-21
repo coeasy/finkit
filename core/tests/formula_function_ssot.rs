@@ -38,6 +38,7 @@ use finkit::registry::builtin_function_registry;
 use finkit::state_arena::StateArena;
 use finkit::unified_executor::{KernelCall, KernelDispatcher};
 use std::collections::BTreeSet;
+use std::path::Path;
 
 /// `FormulaKernelDispatcher::ERR_UNSUPPORTED_KERNEL`.
 ///
@@ -72,6 +73,9 @@ const PLAN_KERNELS: &[&str] = &[
     "CCI",
     "CHOP",
     "CMF",
+    // Host-context kernels: they read data the numeric input slots cannot carry
+    // (see `HostContext`), so they are only executable when the caller supplies it.
+    "COST",
     "DEA",
     "DONCHIAN",
     "DONCHIAN_LOWER",
@@ -100,9 +104,14 @@ const PLAN_KERNELS: &[&str] = &[
     "MOM",
     "NATR",
     "OBV",
+    "PERIODTYPE",
     "PLUS_DI",
     "REF",
+    "REFDATE",
     "ROC",
+    "ROCP",
+    "ROCR",
+    "ROCR100",
     "RSI",
     "SAR",
     "SMA",
@@ -116,6 +125,7 @@ const PLAN_KERNELS: &[&str] = &[
     "VWAP",
     "VWMA",
     "WILLR",
+    "WINNER",
     "WMA",
     "ZSCORE",
 ];
@@ -324,7 +334,9 @@ fn probed_plan_kernels(candidates: &BTreeSet<String>) -> BTreeSet<String> {
     let output = BufferSlot(PROBE_SLOTS - 1);
 
     for name in candidates {
-        let mut dispatcher = FormulaKernelDispatcher;
+        // Host context is irrelevant to probing: a kernel that *handles* the
+        // call is covered whether or not host data is present.
+        let mut dispatcher = FormulaKernelDispatcher::new();
         let mut states = StateArena::new();
         let mut scratch = buffers.clone();
         let call = KernelCall {
@@ -426,10 +438,11 @@ fn the_three_surfaces_have_the_expected_sizes() {
     // Sizes are recorded so an accidental mass registration or mass removal is
     // visible as a single, deliberate edit rather than a silent drift.
     //
-    // The formula surface is larger than the literal `map.insert` count in
-    // `functions.rs` (371) because `functions_router.rs` overrides and adds
-    // names (385) and then injects the SSOT's aliases for every spec whose
-    // canonical name resolved (416).
+    // The formula surface is larger than the literal `map.insert` count across
+    // `functions_legacy.rs` and `functions.rs` (388) because `get_builtin_functions`
+    // then injects the SSOT aliases of every spec whose canonical name resolved
+    // (+31 -> 419). Measured, not counted by hand: see the doc-vs-runtime gate in
+    // `generated_formula_catalogue_matches_the_runtime_surface`.
     let registry = registered_names();
     let formulas = formula_names();
     let kernels = probed_plan_kernels(&registry);
@@ -438,7 +451,61 @@ fn the_three_surfaces_have_the_expected_sizes() {
     let actual = (registry.len(), formulas.len(), kernels.len());
     assert_eq!(
         actual,
-        (226, 416, 60),
+        (233, 419, 67),
         "surface sizes changed: (registry, formula, plan kernels)"
+    );
+}
+
+/// The generated catalogue must agree with the table the engine actually builds.
+///
+/// `scripts/gen_ssot_docs.py` parses the sources statically, and static parsing
+/// drifts in both directions: an earlier regex invented names from error-message
+/// literals (`ensure_args_len("ROCP", ...)` listed a function no script can
+/// call) while silently missing every `map.insert("NAME".to_string(), ...)` site.
+/// Pinning the document to the live table makes that class of drift impossible
+/// to reintroduce: regenerate the docs or the gate fails.
+#[test]
+fn generated_formula_catalogue_matches_the_runtime_surface() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("docs")
+        .join("generated")
+        .join("formula-functions.md");
+    let text =
+        std::fs::read_to_string(&path).unwrap_or_else(|err| panic!("read {}: {err}", path.display()));
+
+    let mut documented: BTreeSet<String> = BTreeSet::new();
+    let mut stated_count: Option<usize> = None;
+    for line in text.lines() {
+        if let Some(rest) = line.strip_prefix("Built-in formula functions: **") {
+            stated_count = rest
+                .split("**")
+                .next()
+                .and_then(|value| value.trim().parse().ok());
+        }
+        if let Some(rest) = line.trim().strip_prefix("| `") {
+            if let Some(name) = rest.split('`').next() {
+                documented.insert(name.to_string());
+            }
+        }
+    }
+
+    let runtime = formula_names();
+    let missing: Vec<&String> = runtime.difference(&documented).collect();
+    let invented: Vec<&String> = documented.difference(&runtime).collect();
+    assert!(
+        missing.is_empty() && invented.is_empty(),
+        "docs/generated/formula-functions.md drifted from get_builtin_functions(): \
+         documented={} runtime={} missing={:?} invented={:?}. \
+         Regenerate with `python scripts/gen_ssot_docs.py --generate`.",
+        documented.len(),
+        runtime.len(),
+        missing,
+        invented
+    );
+    assert_eq!(
+        stated_count,
+        Some(runtime.len()),
+        "the stated count in docs/generated/formula-functions.md must match the runtime surface"
     );
 }

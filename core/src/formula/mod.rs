@@ -25,9 +25,16 @@ pub mod debugger;
 pub mod drawing;
 pub mod engine;
 pub mod executor;
-#[path = "functions_router.rs"]
+// `functions.rs` is the router that assembles the public formula table: it starts
+// from the large compatibility catalogue in `functions_legacy.rs` and overrides
+// the TA-Lib-sensitive names with canonical kernels.
+//
+// These two used to be declared with `#[path]` under swapped names, so
+// `pub mod functions` resolved to `functions_router.rs` while `functions.rs` was
+// the private legacy table — editing the obvious file silently edited the wrong
+// one. Module names now match file names; the layering itself is deliberate and
+// is documented on `functions::get_builtin_functions`.
 pub mod functions;
-#[path = "functions.rs"]
 mod functions_legacy;
 pub mod hot_plan;
 pub mod jit;
@@ -93,7 +100,9 @@ pub use stateful::{FormulaStateInput, FormulaStatefulCheckpoint, FormulaStateful
 pub use templates::{FormulaTemplate, FormulaTemplates, TemplateCategory};
 pub use types::FormulaValue;
 pub use types::*;
-pub use unified_dispatch::{unified_formula_executor, FormulaKernelDispatcher};
+pub use unified_dispatch::{
+    unified_formula_executor, unified_formula_executor_with_host, FormulaKernelDispatcher,
+};
 
 /// Formula language dialect selector.
 ///

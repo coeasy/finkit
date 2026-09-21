@@ -200,10 +200,18 @@ metrics-prometheus = ["dep:metrics-exporter-prometheus", "metrics"]
 metrics = ["dep:metrics"]
 # R-4: circuit breaker pattern for repeated failure isolation.
 circuit-breaker = ["std"]
-# Optional formula execution paths (enabled by default for backward compatibility).
-# Both features are real public-API gates but `formula-simd` is currently a
-# thin alias for the bytecode executor (see `engine.rs::eval_simd`).
-# `formula-jit` gates the real (if rudimentary) `JitCompiler` entry points.
+# Optional formula execution paths, enabled by default for backward compatibility.
+#
+# FROZEN (decided 2026-09-21): both features stay in the default set because four
+# language bindings export them as public API, but neither is to grow.
+#   * `formula-simd` gates `eval_simd`, an exact alias of `eval` — there is no
+#     SIMD formula-evaluation path. (SIMD is real at the kernel level in
+#     `math::simd_kernels`, on the normal path, not behind this feature.)
+#   * `formula-jit` gates the `JitCompiler` entry points — peephole + bytecode
+#     interpretation, not native codegen. See `formula::jit` for the freeze rules.
+# They are retained, not recommended: new work goes to `tree` (reference) and
+# `plan` (production). Removal is deferred to the multi-language rollout, where
+# it can be done as one deliberate cross-binding change.
 formula-jit = []
 formula-simd = []
 # Unsafe unchecked indexing for hot paths — opt-in for maximum throughput.

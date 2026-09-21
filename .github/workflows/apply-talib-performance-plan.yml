@@ -96,7 +96,7 @@ jobs:
             core/src/indicators/overlap.rs \
             core/src/math/moving_avg.rs \
             core/src/math/simd_kernels.rs \
-            core/src/formula/functions.rs \
+            core/src/formula/functions_legacy.rs \
             core/src/formula/engine.rs
           git commit -m 'perf: implement TA-Lib parity and zero-copy runtime plan'
           git pull --rebase origin fix/talib-performance-plan-20260904

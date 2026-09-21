@@ -81,7 +81,9 @@ For calculations that naturally evolve one bar at a time, Finkit provides statef
 
 ### 6. Feature and research layer
 
-The project includes feature engineering, labels, cross-validation helpers, stability/regime tools, PCA, selection/importance primitives, lightweight backtest/risk components, and the developing Factor Research layer.
+The project includes feature engineering, labels, cross-validation helpers, stability/regime tools, PCA, selection/importance primitives, returns/risk/performance evaluation components, and the developing Factor Research layer.
+
+Finkit is a compute library, not a trading system: it deliberately ships no backtest engine and no stock-selection engine. The evaluation layer above measures **return series and factor studies** you supply — downstream strategy/backtest products are consumers of that layer, not part of it.
 
 The research architecture is reuse-first: it consumes existing canonical returns, statistics, regression, rank, calendar, risk, feature, and execution infrastructure rather than creating another research-only math stack.
 

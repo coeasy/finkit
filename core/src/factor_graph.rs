@@ -80,8 +80,10 @@ use std::fmt;
 use crate::formula::compute_ir::canonical_name;
 use crate::formula::hot_plan::FormulaOutputBinding;
 use crate::formula::{
-    AstNode, BinaryOperator, FormulaHotPlan, FormulaHotPlanError, FormulaInputBinding,
+    unified_formula_executor, AstNode, BinaryOperator, FormulaContext, FormulaHotPlan,
+    FormulaHotPlanError, FormulaInputBinding,
 };
+use crate::unified_executor::ExecuteError;
 
 /// What a [`FactorNode`] computes from its inputs.
 #[derive(Clone, Debug, PartialEq)]
@@ -249,6 +251,21 @@ pub enum FactorGraphError {
     },
     /// Lowering succeeded but the formula plan compiler rejected the result.
     Plan(FormulaHotPlanError),
+    /// A series the compiled plan reads is not available in the supplied context.
+    ///
+    /// Raised at execution time rather than at build time: a graph declares its
+    /// external inputs, but only the context can say whether a series is present.
+    MissingInput {
+        /// The series the plan asked for and the context could not supply.
+        name: String,
+    },
+    /// A node id was asked for at execution time but is not an output of the plan.
+    UnknownNode {
+        /// The requested node id.
+        id: String,
+    },
+    /// The compiled plan failed while executing.
+    Execution(ExecuteError),
 }
 
 impl fmt::Display for FactorGraphError {
@@ -286,6 +303,12 @@ impl fmt::Display for FactorGraphError {
                 nodes.join(", ")
             ),
             Self::Plan(error) => write!(f, "factor graph plan error: {error}"),
+            Self::MissingInput { name } => write!(
+                f,
+                "factor graph needs input series `{name}`, which the context does not supply"
+            ),
+            Self::UnknownNode { id } => write!(f, "`{id}` is not an output node of this factor graph"),
+            Self::Execution(error) => write!(f, "factor graph execution failed: {error}"),
         }
     }
 }
@@ -696,6 +719,65 @@ impl FactorGraphPlan {
             .outputs()
             .iter()
             .position(|(_, candidate)| *candidate == slot)
+    }
+
+    /// Execute the compiled plan against a formula context.
+    ///
+    /// This is the seam the module used to be missing: [`Self::plan`] handed the
+    /// caller a compiled plan and no way to run it, so every caller had to
+    /// re-derive the input-binding loop from this file's own tests. Binding is
+    /// therefore **explicit and total**: every input slot declared by
+    /// [`Self::external_inputs`] must be present in the context, and an unbound
+    /// slot is an error rather than a silently substituted series.
+    ///
+    /// The returned series are in the plan's retained-output order, which is the
+    /// order [`Self::node_index`] indexes — so `values[node_index(id)]` is node
+    /// `id`. Prefer [`Self::execute_node`] when only one node is wanted.
+    pub fn execute(&self, ctx: &FormulaContext) -> Result<Vec<Vec<f64>>, FactorGraphError> {
+        let mut slots: Vec<Option<&[f64]>> = vec![None; self.plan.hot().input_layout().len()];
+        for binding in self.plan.input_bindings() {
+            let values = ctx.get_data(binding.name()).ok_or_else(|| {
+                FactorGraphError::MissingInput {
+                    name: binding.name().to_string(),
+                }
+            })?;
+            slots[binding.slot().0] = Some(values);
+        }
+        let inputs: Vec<&[f64]> = slots
+            .into_iter()
+            .enumerate()
+            .map(|(index, slot)| {
+                slot.ok_or_else(|| FactorGraphError::MissingInput {
+                    name: format!("input slot {index}"),
+                })
+            })
+            .collect::<Result<_, FactorGraphError>>()?;
+
+        let mut executor = unified_formula_executor(&self.plan);
+        let output = executor.execute(&inputs).map_err(FactorGraphError::Execution)?;
+        Ok(output.values)
+    }
+
+    /// Execute the plan and return one node's series by id.
+    ///
+    /// Reading an intermediate node is the point of a graph rather than a
+    /// formula string, so it is a first-class operation instead of a two-step
+    /// `execute` + [`Self::node_index`] dance the caller has to get right.
+    pub fn execute_node(
+        &self,
+        ctx: &FormulaContext,
+        id: &str,
+    ) -> Result<Vec<f64>, FactorGraphError> {
+        let index = self.node_index(id).ok_or_else(|| FactorGraphError::UnknownNode {
+            id: id.to_string(),
+        })?;
+        let values = self.execute(ctx)?;
+        values
+            .into_iter()
+            .nth(index)
+            .ok_or_else(|| FactorGraphError::UnknownNode {
+                id: id.to_string(),
+            })
     }
 }
 

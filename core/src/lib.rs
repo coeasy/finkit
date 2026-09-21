@@ -80,11 +80,6 @@ pub mod unified_executor;
 // `formula` engine). They are therefore gated behind `indicators-all` so that
 // turning the indicator surface off (tree-shaking) also prunes its dependents.
 // Default build keeps `indicators-all` on, so public behaviour is unchanged.
-#[cfg(feature = "std")]
-/// Lightweight vectorized backtest engine.
-pub mod backtest;
-#[cfg(feature = "std")]
-pub mod backtest_evaluation;
 #[cfg(feature = "rayon")]
 /// Parallel batch API: run multiple independent indicator jobs in parallel
 /// over the same input slice. Disabled in no_std builds.
@@ -127,16 +122,8 @@ pub mod risk;
 /// Zero-copy aligned market-frame and warm-up/NaN runtime contracts.
 pub mod runtime;
 #[cfg(feature = "std")]
-pub mod runtime_engine;
-#[cfg(feature = "std")]
 /// Owned machine-readable API schema derived from the canonical registry.
 pub mod schema;
-#[cfg(feature = "std")]
-/// 申万一级 31 行业板块轮动.
-pub mod sector;
-#[cfg(feature = "std")]
-/// 选股因子合成 + 横截面排序.
-pub mod selectors;
 #[cfg(feature = "std")]
 /// Slot-addressed persistent rolling/streaming state storage for compute plans.
 pub mod state_arena;

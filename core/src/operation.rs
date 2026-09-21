@@ -11,6 +11,8 @@ use crate::data_contract::{
     CrossSectionView, DataContractError, FrameKey, FundamentalSeries, MarketPanel,
     TemporalAlignment, TemporalSeries,
 };
+use crate::factor_graph::{FactorGraphError, FactorGraphPlan};
+use crate::factor_provider::{FactorFactoryRequest, FactorProviderError, FactorProviderRegistry};
 use crate::factor_system::{CompiledFactorPlan, FactorCatalog};
 use crate::factors::{
     BorrowedFactorContext, FactorDefinition, FactorEngine, FactorKind, FactorRegistry,
@@ -492,6 +494,22 @@ pub enum OperationRequest<'a> {
         /// Optional symbol/timeframe or caller-defined cache namespace.
         cache_scope: Option<&'a str>,
     },
+    /// Execute a declarative factor graph through the compiled-plan path.
+    ///
+    /// The graph is already lowered by [`crate::factor_graph::FactorGraph::build`];
+    /// this request supplies the context that binds its declared external inputs
+    /// and selects which node series to return. A graph and the equivalent
+    /// formula string share one lowering contract and one kernel dispatcher, so
+    /// this is not a second execution engine — see the module docs in
+    /// `factor_graph`.
+    FactorGraph {
+        /// The compiled graph to run.
+        plan: &'a FactorGraphPlan,
+        /// Node ids to expose as named results. Empty means every node.
+        outputs: &'a [&'a str],
+        /// Mutable context supplying the graph's external inputs.
+        context: &'a mut FormulaContext,
+    },
     /// Evaluate one cross-sectional factor at every timestamp row.
     CrossSectionalFactor {
         /// Registered factor name.
@@ -803,6 +821,12 @@ pub enum OperationExecutionError {
     Factor(crate::factors::FactorError),
     /// Composite graph validation or evaluation failed.
     Composite(crate::factors::FactorError),
+    /// A declarative factor graph could not be executed.
+    FactorGraph(FactorGraphError),
+    /// A declarative factor request could not be turned into a factor.
+    FactorProvider(FactorProviderError),
+    /// A factor could not be added to the operation catalog (name collision).
+    Registry(OperationRegistryError),
     /// Market-panel data violated the canonical dimension contract.
     DataContract(DataContractError),
 }
@@ -817,6 +841,13 @@ impl fmt::Display for OperationExecutionError {
             Self::Formula(error) => write!(formatter, "formula operation failed: {error}"),
             Self::Factor(error) => write!(formatter, "factor operation failed: {error}"),
             Self::Composite(error) => write!(formatter, "composite operation failed: {error}"),
+            Self::FactorGraph(error) => {
+                write!(formatter, "factor graph operation failed: {error}")
+            }
+            Self::FactorProvider(error) => {
+                write!(formatter, "factor provider request failed: {error}")
+            }
+            Self::Registry(error) => write!(formatter, "operation registry error: {error}"),
             Self::DataContract(error) => {
                 write!(formatter, "operation data contract failed: {error}")
             }
@@ -838,10 +869,31 @@ impl From<DataContractError> for OperationExecutionError {
     }
 }
 
+impl From<FactorGraphError> for OperationExecutionError {
+    fn from(value: FactorGraphError) -> Self {
+        Self::FactorGraph(value)
+    }
+}
+
+impl From<FactorProviderError> for OperationExecutionError {
+    fn from(value: FactorProviderError) -> Self {
+        Self::FactorProvider(value)
+    }
+}
+
+impl From<OperationRegistryError> for OperationExecutionError {
+    fn from(value: OperationRegistryError) -> Self {
+        Self::Registry(value)
+    }
+}
+
 /// Runtime façade that routes the three currently executable high-level
 /// operation families through one request/result/error contract.
 pub struct UnifiedOperationEngine {
     catalog: OperationRegistry,
+    // Kept alongside `factor` so `define_factor` can register a declarative
+    // factor and refresh the engine without the caller rebuilding it.
+    factors: FactorRegistry,
     formula: FormulaEngine,
     factor: FactorEngine,
     composite: CompositeEngine,
@@ -866,6 +918,7 @@ impl UnifiedOperationEngine {
         let factor_catalog = FactorCatalog::from_registry(factors.clone());
         Ok(Self {
             catalog,
+            factors: factors.clone(),
             formula: FormulaEngine::new(),
             factor: FactorEngine::new(factors),
             composite: CompositeEngine::new(),
@@ -1105,6 +1158,11 @@ impl UnifiedOperationEngine {
                     draw: None,
                 })
             }
+            OperationRequest::FactorGraph {
+                plan,
+                outputs,
+                context,
+            } => self.execute_factor_graph(plan, outputs, context),
             OperationRequest::CrossSectionalFactor { name, inputs } => {
                 let result = self
                     .factor
@@ -1119,6 +1177,92 @@ impl UnifiedOperationEngine {
                 })
             }
         }
+    }
+
+    /// Execute a declarative factor graph and name each requested node series.
+    ///
+    /// `plan.execute` returns one series per retained output in plan order, and
+    /// [`FactorGraphPlan::node_index`] maps a node id onto that order. Requesting
+    /// an intermediate node is therefore the same operation as requesting the
+    /// primary one — which is exactly what a graph offers over a formula string.
+    pub fn execute_factor_graph(
+        &self,
+        plan: &FactorGraphPlan,
+        outputs: &[&str],
+        context: &mut FormulaContext,
+    ) -> Result<OperationResult, OperationExecutionError> {
+        let requested: Vec<&str> = if outputs.is_empty() {
+            plan.order().iter().map(String::as_str).collect()
+        } else {
+            outputs.to_vec()
+        };
+
+        let series = plan.execute(context)?;
+
+        let mut values = BTreeMap::new();
+        for id in &requested {
+            let missing = || FactorGraphError::UnknownNode {
+                id: (*id).to_string(),
+            };
+            let index = plan.node_index(id).ok_or_else(missing)?;
+            let values_at = series.get(index).ok_or_else(missing)?;
+            values.insert((*id).to_string(), values_at.clone());
+        }
+
+        let primary = if requested.len() == 1 {
+            Some(requested[0].to_string())
+        } else {
+            let graph_primary = plan.primary();
+            values
+                .contains_key(graph_primary)
+                .then(|| graph_primary.to_string())
+        };
+
+        Ok(OperationResult {
+            shape: if values.len() > 1 {
+                ValueShape::MultiSeries
+            } else {
+                ValueShape::Series
+            },
+            values,
+            primary,
+            draw: None,
+        })
+    }
+
+    /// Build a factor from a declarative request and register it for execution.
+    ///
+    /// This is the production seam for `factor_provider`: a request such as
+    /// `("SMA", period=20)` becomes a [`FactorDefinition`] built by the matching
+    /// provider, is registered under the name that provider chose, and is from
+    /// then on reachable through [`OperationRequest::Factor`]. The provider
+    /// boundary is what turns three failure modes — invalid, unknown and
+    /// duplicate parameters — into distinct, actionable errors instead of one
+    /// opaque failure.
+    ///
+    /// Returns the registered factor name, which the provider chooses (it usually
+    /// encodes the parameters, e.g. `SMA_20`).
+    pub fn define_factor(
+        &mut self,
+        providers: &FactorProviderRegistry,
+        request: &FactorFactoryRequest,
+    ) -> Result<String, OperationExecutionError> {
+        let definition = providers.create(request)?;
+        let name = definition.name.clone();
+
+        self.factors
+            .register(definition)
+            .map_err(OperationExecutionError::Factor)?;
+
+        // `FactorEngine` and the catalogs own registry snapshots, so refresh all
+        // three; otherwise the new factor would register and then be invisible.
+        self.factor = FactorEngine::new(self.factors.clone());
+        self.factor_catalog = FactorCatalog::from_registry(self.factors.clone());
+        let mut catalog = builtin_operation_registry();
+        catalog.register_factor_registry(&self.factors)?;
+        self.catalog = catalog;
+
+        Ok(name)
     }
 
     /// Execute one or more Factor targets through one shared dependency plan.

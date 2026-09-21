@@ -45,6 +45,12 @@ jobs:
         run: python scripts/check_versions.py
       - name: Check cross-platform warning contracts
         run: python scripts/check_warning_contracts.py
+      # Public modules that nothing calls rotted silently once before (see
+      # docs/refactor-plan-2026-09-21.md §3-B). This fails on any unrecorded
+      # orphan, and on any allowlist entry that is no longer orphaned, so the
+      # recorded list can only shrink by deliberate edit.
+      - name: Check for public modules with no callers
+        run: python scripts/check_orphan_modules.py
 
   binding-ssot:
     name: Multi-language binding SSOT

@@ -5,24 +5,47 @@
 //! constants and core numeric unary/binary operators uses only [`KernelId`],
 //! physical buffer slots and prebound parameter values.
 
+use crate::error::TaError;
 use crate::execution_plan::KernelId;
+use crate::formula::types::HostContext;
 use crate::state_arena::StateArena;
+use ndarray::Array1;
 use crate::unified_executor::{KernelCall, KernelDispatchError, KernelDispatcher, UnifiedExecutor};
 
 /// Numeric dispatcher for formula constants and core arithmetic/logical operators.
-#[derive(Debug, Default, Clone, Copy)]
-pub struct FormulaKernelDispatcher;
+///
+/// The dispatcher is no longer a unit struct: it carries the [`HostContext`]
+/// that host-dependent kernels (`WINNER`, `COST`, `PERIODTYPE`) need and that
+/// the numeric input slots cannot express.
+#[derive(Clone, Default)]
+pub struct FormulaKernelDispatcher {
+    /// Host-side data (chip distribution, chart period) that the numeric input
+    /// slots cannot carry. Empty unless the caller supplies it.
+    host: HostContext,
+}
 
 impl FormulaKernelDispatcher {
     const ERR_UNSUPPORTED_KERNEL: u32 = 1;
     const ERR_ARITY: u32 = 2;
     const ERR_PARAMETER: u32 = 3;
 
-    /// Create the default stateless formula dispatcher.
+    /// Create a dispatcher with no host context: host-dependent kernels such as
+    /// `WINNER` evaluate to `NaN`, matching the tree path without chip data.
     pub const fn new() -> Self {
-        Self
+        Self {
+            host: HostContext {
+                chip: None,
+                period_type: 0,
+            },
+        }
+    }
+
+    /// Create a dispatcher carrying host data for the host-dependent kernels.
+    pub fn with_host(host: HostContext) -> Self {
+        Self { host }
     }
 }
+
 
 impl KernelDispatcher for FormulaKernelDispatcher {
     fn dispatch(
@@ -59,6 +82,9 @@ impl KernelDispatcher for FormulaKernelDispatcher {
             || call.kernel == KernelId::from_static("CALL:LLV")
             || call.kernel == KernelId::from_static("CALL:SUM")
             || call.kernel == KernelId::from_static("CALL:REF")
+            || call.kernel == KernelId::from_static("CALL:ROCP")
+            || call.kernel == KernelId::from_static("CALL:ROCR")
+            || call.kernel == KernelId::from_static("CALL:ROCR100")
         {
             return dispatch_periodic_call(call, buffers);
         }
@@ -128,6 +154,23 @@ impl KernelDispatcher for FormulaKernelDispatcher {
         // `IF(COND, A, B)` and Pine's `cond ? A : B` both lower to `CALL:IF`.
         if call.kernel == KernelId::from_static("CALL:IF") {
             return dispatch_if_call(call, buffers);
+        }
+
+        // Host-context kernels. These are the only kernels that read data the
+        // numeric input slots cannot carry; see `HostContext`.
+        if call.kernel == KernelId::from_static("CALL:WINNER")
+            || call.kernel == KernelId::from_static("CALL:COST")
+        {
+            return dispatch_chip_call(&self.host, call, buffers);
+        }
+        if call.kernel == KernelId::from_static("CALL:PERIODTYPE") {
+            return dispatch_periodtype_call(&self.host, call, buffers);
+        }
+        // `REFDATE` needs no host data — it reads a scalar index out of its
+        // second operand — but it must exist as a kernel or the plan path cannot
+        // run the cross-period corpus at all.
+        if call.kernel == KernelId::from_static("CALL:REFDATE") {
+            return dispatch_refdate_call(call, buffers);
         }
 
         if call.kernel == KernelId::from_static("DRAW:FILL")
@@ -229,6 +272,35 @@ impl KernelDispatcher for FormulaKernelDispatcher {
 /// live dependencies do not alias the output slot; raw pointers let us keep
 /// that invariant without allocating temporary `Vec`s or borrowing the whole
 /// arena for the duration of the kernel call.
+/// Run an allocating rate-of-change kernel into a preallocated buffer.
+///
+/// Canonical `rocp`/`rocr`/`rocr100` return an owned series, so the result is
+/// copied rather than computed in place. A failure fills the output with NaN,
+/// matching what the tree path does for an invalid period.
+fn rate_of_change_into(
+    kernel: fn(&[f64], usize) -> Result<Array1<f64>, TaError>,
+    input: &[f64],
+    period: usize,
+    output: &mut [f64],
+) -> Result<(), KernelDispatchError> {
+    match kernel(input, period) {
+        Ok(values) => {
+            let values = values.as_slice().unwrap_or(&[]);
+            if values.len() != output.len() {
+                return Err(KernelDispatchError::new(
+                    FormulaKernelDispatcher::ERR_PARAMETER,
+                ));
+            }
+            output.copy_from_slice(values);
+            Ok(())
+        }
+        Err(_) => {
+            output.fill(f64::NAN);
+            Ok(())
+        }
+    }
+}
+
 fn dispatch_periodic_call(
     call: KernelCall<'_>,
     buffers: &mut [Vec<f64>],
@@ -287,6 +359,19 @@ fn dispatch_periodic_call(
     if call.kernel == KernelId::from_static("CALL:REF") {
         return ref_formula_into(input, period, output)
             .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER));
+    }
+    // Rate-of-change ratio variants. These delegate to the *same* canonical
+    // functions the tree path calls (`fn_rocp`/`fn_rocr`/`fn_rocr100`), and on
+    // error they mirror the tree path by emitting NaN instead of failing, so
+    // the two paths cannot diverge on a bad period.
+    if call.kernel == KernelId::from_static("CALL:ROCP") {
+        return rate_of_change_into(crate::indicators::momentum::rocp, input, period, output);
+    }
+    if call.kernel == KernelId::from_static("CALL:ROCR") {
+        return rate_of_change_into(crate::indicators::momentum::rocr, input, period, output);
+    }
+    if call.kernel == KernelId::from_static("CALL:ROCR100") {
+        return rate_of_change_into(crate::indicators::momentum::rocr100, input, period, output);
     }
 
     let result = if is_sma {
@@ -580,6 +665,88 @@ fn dispatch_hlc_periodic_call(
 /// which differs for negative and NaN conditions. Corpus-length series take the
 /// vectorised path in the tree executor, so `!= 0.0` is the convention the plan
 /// has to match; the inconsistency itself is a separate pre-existing issue.
+/// `WINNER(price)` / `COST(ratio)` over the host-supplied chip distribution.
+///
+/// Mirrors the tree path exactly (`fn_winner` / `fn_cost` in the compatibility
+/// table): with no chip data both yield `NaN`, and `COST` divides its argument
+/// by 100 before applying the `0..=1` range check. Delegating to the same
+/// `ChipData` methods is what keeps the two paths numerically identical.
+fn dispatch_chip_call(
+    host: &HostContext,
+    call: KernelCall<'_>,
+    buffers: &mut [Vec<f64>],
+) -> Result<(), KernelDispatchError> {
+    if call.inputs.len() != 1 {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_ARITY,
+        ));
+    }
+    let input = call.inputs[0].0;
+    let output = call.output.0;
+    let is_cost = call.kernel == KernelId::from_static("CALL:COST");
+    let Some(chip) = host.chip.as_ref() else {
+        buffers[output].fill(f64::NAN);
+        return Ok(());
+    };
+    let len = buffers[output].len();
+    for index in 0..len {
+        let value = buffers[input][index];
+        buffers[output][index] = if is_cost {
+            let ratio = value / 100.0;
+            if (0.0..=1.0).contains(&ratio) {
+                chip.cost(ratio)
+            } else {
+                f64::NAN
+            }
+        } else {
+            chip.winner(value)
+        };
+    }
+    Ok(())
+}
+
+/// `PERIODTYPE()`: a constant series carrying the host's chart period.
+fn dispatch_periodtype_call(
+    host: &HostContext,
+    call: KernelCall<'_>,
+    buffers: &mut [Vec<f64>],
+) -> Result<(), KernelDispatchError> {
+    if !call.inputs.is_empty() {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_ARITY,
+        ));
+    }
+    buffers[call.output.0].fill(host.period_type as f64);
+    Ok(())
+}
+
+/// `REFDATE(X, DATE)`: a constant series holding `X` at one bar index.
+///
+/// The date operand is read from its first element and cast the same way the
+/// tree path does, so a negative or non-finite operand saturates to index 0
+/// rather than behaving differently between the two paths.
+fn dispatch_refdate_call(
+    call: KernelCall<'_>,
+    buffers: &mut [Vec<f64>],
+) -> Result<(), KernelDispatchError> {
+    if call.inputs.len() != 2 {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_ARITY,
+        ));
+    }
+    let source = call.inputs[0].0;
+    let date = call.inputs[1].0;
+    let output = call.output.0;
+    let index = buffers[date][0] as usize;
+    let value = if index < buffers[source].len() {
+        buffers[source][index]
+    } else {
+        f64::NAN
+    };
+    buffers[output].fill(value);
+    Ok(())
+}
+
 fn dispatch_if_call(
     call: KernelCall<'_>,
     buffers: &mut [Vec<f64>],
@@ -1747,6 +1914,21 @@ pub fn unified_formula_executor(
     plan: &super::hot_plan::FormulaHotPlan,
 ) -> UnifiedExecutor<FormulaKernelDispatcher> {
     UnifiedExecutor::new(plan.hot().clone(), FormulaKernelDispatcher::new())
+}
+
+/// [`unified_formula_executor`] carrying host data.
+///
+/// Callers that evaluate formulas against a `FormulaContext` should use this so
+/// host-dependent functions (`WINNER`, `COST`, `PERIODTYPE`) agree with the tree
+/// path instead of silently degrading to `NaN`.
+pub fn unified_formula_executor_with_host(
+    plan: &super::hot_plan::FormulaHotPlan,
+    host: HostContext,
+) -> UnifiedExecutor<FormulaKernelDispatcher> {
+    UnifiedExecutor::new(
+        plan.hot().clone(),
+        FormulaKernelDispatcher::with_host(host),
+    )
 }
 
 #[cfg(test)]

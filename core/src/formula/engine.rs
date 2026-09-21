@@ -17,7 +17,8 @@ use crate::formula::pine::{map_pine_to_alphata_with_security, parse_pine, PineSe
 use crate::formula::templates::{FormulaTemplate, FormulaTemplates};
 use crate::formula::types::*;
 use crate::formula::{
-    normalize_formula_source, parse_formula_with_dialect, unified_formula_executor, FormulaDialect,
+    normalize_formula_source, parse_formula_with_dialect, unified_formula_executor_with_host,
+    FormulaDialect,
 };
 use crate::streaming::indicators::{StreamingRsi, StreamingSma};
 use crate::streaming::StreamingIndicator;
@@ -543,7 +544,17 @@ impl FormulaEngine {
             })?);
         }
 
-        let mut executor = unified_formula_executor(&plan);
+        // Host data (chip distribution, chart period) cannot travel in a numeric
+        // slot, so it is handed to the dispatcher separately. Without this,
+        // `WINNER`/`COST`/`PERIODTYPE` would return NaN on the plan path while
+        // the tree path returned real values -- a silent cross-path divergence.
+        let mut executor = unified_formula_executor_with_host(
+            &plan,
+            HostContext {
+                chip: ctx.chip_data.clone(),
+                period_type: ctx.period_type,
+            },
+        );
         let output = executor.execute(&inputs).map_err(|error| {
             FormulaError::RuntimeError(format!("formula plan execution failed: {error}"))
         })?;
@@ -1840,6 +1851,11 @@ impl FormulaEngine {
         self.executor.execute(&ast_with_params, ctx)
     }
 
+    /// Evaluate through the **frozen** experimental bytecode path.
+    ///
+    /// See `formula::jit` for the freeze rules: opt-in only, never on the
+    /// default path, compared against the tree path by the differential gate.
+    /// Prefer [`Self::eval`] or the `plan` path for anything new.
     #[cfg(feature = "formula-jit")]
     pub fn eval_jit(
         &mut self,
@@ -1854,6 +1870,16 @@ impl FormulaEngine {
         jit.execute(&optimized, ctx).map(|r| r.final_value)
     }
 
+    /// **Frozen** compatibility alias — this is `eval`, verbatim.
+    ///
+    /// There is no SIMD formula-evaluation path: the body delegates to
+    /// [`Self::eval`]. It exists because four language bindings export
+    /// `formula_eval_simd`, and removing it would be a cross-language breaking
+    /// change. SIMD is real at the *kernel* level (`math::simd_kernels`, reached
+    /// from the normal path) — not here.
+    ///
+    /// Freeze rule: keep it an exact alias. If it ever needs different results
+    /// from `eval`, that is a new feature and belongs in a new entry point.
     #[cfg(feature = "formula-simd")]
     pub fn eval_simd(
         &mut self,
@@ -1901,6 +1927,9 @@ impl FormulaEngine {
         Ok(val.to_array(ctx.data_len))
     }
 
+    /// Compile into the **frozen** experimental bytecode representation.
+    ///
+    /// See [`Self::eval_jit`] and `formula::jit`; opt-in only, no new callers.
     #[cfg(feature = "formula-jit")]
     pub fn compile_jit(&mut self, source: &str) -> Result<OptimizedBytecode, FormulaError> {
         let formula = self.compile(source)?;
@@ -1910,6 +1939,9 @@ impl FormulaEngine {
         Ok(jit.compile_cached(bytecode))
     }
 
+    /// Execute an already-compiled **frozen** bytecode program.
+    ///
+    /// See [`Self::eval_jit`] and `formula::jit`; opt-in only, no new callers.
     #[cfg(feature = "formula-jit")]
     pub fn execute_jit(
         &self,

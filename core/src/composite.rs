@@ -5,6 +5,30 @@
 //! vector operators, and user-registered functions.  Definitions are
 //! evaluated with dependency memoization and cycle detection, so a request
 //! can reuse an intermediate series without recomputing it.
+//!
+//! # Boundary (refactor plan 2026-09-21, Phase 2.3)
+//!
+//! `composite` is a **front-end**: it owns graph *expression* — naming,
+//! validation, cycle detection, and the JSON contract exported to the FFI
+//! (`ffi-common::evaluate_composite_json`). It is real, shipped surface —
+//! reachable from `operation.rs`, `stateful_composite.rs`, the C and .NET
+//! bindings and the WASM/JS path — so it is **not** a candidate for deletion.
+//!
+//! It is *not* meant to own **execution**. This module currently carries its
+//! own memoizing evaluator, which makes it a second DAG executor alongside the
+//! formula path's `FormulaHotPlan` / `UnifiedExecutor`. That duplication is
+//! tolerated only because migrating it is a behaviour-affecting change; the
+//! execution backend is to move onto the compiled-plan path, and that move is
+//! registered as **Phase 4 input** rather than being done opportunistically.
+//!
+//! Two rules follow, and both are enforced by review:
+//!
+//! * **Do not add numerical algorithms here.** New maths belongs in
+//!   `indicators/` as a canonical kernel and is then *referenced* from
+//!   `CompositeOp`. This module composes; it does not compute.
+//! * **Do not add a second memoization/evaluation strategy.** If a composite
+//!   needs incremental or streaming evaluation, extend the compiled-plan path,
+//!   not a parallel cache inside this module.
 
 use crate::factors::{zscore, BorrowedFactorContext, FactorContext, FactorError, FactorResult};
 use crate::indicators::{self, momentum, volatility};

@@ -242,7 +242,9 @@ def fix_sar() -> None:
 
 
 def fix_formula_delegation() -> None:
-    path = ROOT / "core/src/formula/functions.rs"
+    # The compatibility catalogue, not the router that overrides it — see the
+    # module note in `core/src/formula/mod.rs`.
+    path = ROOT / "core/src/formula/functions_legacy.rs"
 
     _replace_function(
         path,

@@ -6,6 +6,12 @@
 > 原则：**优先复用、单一事实源、兼容迁移、No-Lookahead、先门禁后扩展**。  
 > 本文取代早期 `factor-research-expansion-plan-v2.md`，后续 Factor Research / Alpha Research 的设计与实施以本文为准。
 
+> ⚠️ **2026-09-21 范围变更**：finkit 明确**不涉及回测、不涉及选股**。本文所有涉及
+> `core/src/backtest.rs` 的段落（约 10 处，含 §「Lightweight backtest」、risk 委托改造、
+> `BacktestConfig` cost model 等）**已失效** —— 该模块已删除。这些段落仅作历史设计意图保留，
+> **不得作为实施依据**。Factor Research 自身的 factor / labels / risk / performance 部分不受影响，仍然有效。
+> 彻底清理这些段落属独立工作项，尚未执行。
+
 ---
 
 ## 1. 总目标
