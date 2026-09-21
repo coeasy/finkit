@@ -258,23 +258,46 @@
 **切默认只需一行**（`#[default] Tree` → `Plan`）；建议同时决定
 JIT/`eval_simd` 与多语言绑定的统一发布节奏（§3.4）。
 
-##### 实测：现在切默认会挂 18 组测试（2026-09-21）
+##### 实测：现在切默认会挂 12 组测试（2026-09-21，第二轮）
 
-不猜了，直接把 `#[default]` 翻成 `Plan` 跑了一遍 `cargo test -p finkit`：
-**2944 passed / 18 failed**。失败原因分五类，**都不是数值分叉**：
+不猜了，直接把 `#[default]` 翻成 `Plan` 跑了一遍 `cargo test -p finkit`。
+
+| 轮次 | 结果 | 说明 |
+|---|---|---|
+| 第一轮（补 kernel 前） | **2944 passed / 18 failed** | 卡在最基础的算术与超越函数上 |
+| 第二轮（补完算术/超越/窗口 kernel） | **2950 passed / 12 failed** | 18 → 12 全部来自这一批 |
+
+失败原因**都不是数值分叉**，分五类：
 
 | 类型 | 证据 | 代表用例 |
 |---|---|---|
-| **kernel 缺口**（最多） | `kernel dispatch failed ... code 1` | `ADD/SUB/MULT/DIV`、`MINUS`、`SQRT`、`SINH/COSH/TANH`、`MAXINDEX/MININDEX`、`HHVBARS/LLVBARS` |
-| **复合赋值降级错** | `unsupported ... COMPOUND:X:AddAssign: expected 2 operands ... found 3` | `+=` 类公式 |
-| **常量-only 公式** | `cannot infer execution length without bound inputs` | 无序列操作数的公式 |
-| **Pine 函数** | `common Pine functions must execute: kernel dispatch failed` | pine 用户自定义函数 / 常见 TA 函数 |
-| **缓存与状态语义** | `engine.cache_hit(...)` 断言失败；stateful 4 组 | plan 缓存键、stateful 批流一致性 |
+| **kernel 缺口** | `kernel dispatch failed ... code 1` | stateful 批流一致性 3 组、pine 常见 TA 函数 1 组 |
+| **Pine 用户自定义函数** | `function result assignment must exist` | plan 不写回 `ctx.variables`，取不到函数结果 |
+| **沙箱被绕过** | `assert!(result.is_err())` 失败 | `sandbox_limits_memory/recursion_depth_enforced` |
+| **复合赋值降级错** | `unsupported ... COMPOUND:X:AddAssign: expected 2 operands ... found 3` | `X := X + ...` |
+| **缓存语义** | `engine.cache_hit(...)`、clear_cache 计数断言失败 | plan 走的是另一套 `compile_plan` 缓存 |
 
-**结论：plan 路径离「可当默认」还差得远** —— 卡在**最基础的算术与超越函数**上，
-不是边角。`ADD(CLOSE,1)`、`SQRT(CLOSE)` 这种都会直接报错。
-`DECLARED_BUT_NO_KERNEL` 那个 165 条的缺口**正是这里的拦路石**，且优先级最高的
-就是 `ADD/SUB/MULT/DIV`（MEMORY 已记：它们不在 kernel 表里，编译得过但跑不动）。
+**已消掉的一类**：算术/超越/窗口 kernel（`ADD/SUB/MULT/DIV`、`MINUS`、`SQRT`、
+`SINH/COSH/TANH`、`MAXINDEX/MININDEX`、`HHVBARS/LLVBARS`）。
+
+其中 `MINUS/HHVBARS/LLVBARS` 顺带暴露一个 SSOT 问题：**它们是公式函数但没进
+`registry.rs`**。未声明 → planner 按 stateful 处理 → kernel 就算存在也拿不到纯度
+（挡 CSE，且门禁 `every_plan_kernel_is_registered_in_the_ssot` 会红）。已补注册，
+`LookbackSpec` 按实现分别取 `Period`（`MINUS`，预热 n 根）与 `None`
+（`HHVBARS/LLVBARS`，窗口起点 saturating，第 0 根就有值），与两个 `fn_*` 的
+预热规则一致 —— **两组预热规则不同，正是必须分开钉的原因**。
+
+**下一步优先级**（按「不修就不能切」排）：
+
+1. **沙箱**（最高）：plan 路径现在**完全绕过** `ctx.sandbox` —— 递归深度与内存预算
+   只在树解释器里检查。这是安全问题，不是兼容性问题。
+2. **COMPOUND 降级 arity**：`X := X + ...` 这类很常见。
+3. **Pine 用户自定义函数**：plan 需把具名输出写回 `ctx.variables`。
+4. **stateful 批流一致性**：先解码 `KernelId` 找出缺口函数再补。
+5. **缓存语义**：需要设计决定（`cache_hit` 是否应覆盖 plan 缓存）。
+
+**结论**：plan 路径仍不能当默认，但拦路石已经从「最基础的算术」退到「沙箱 +
+Pine 函数 + 复合赋值」这几类结构性缺口。
 
 **顺手修好的一个小设计问题**：两个构造函数原本硬写 `FormulaExecutionMode::Tree`，
 与 `#[default]` 脱钩 → 改 `#[default]` 不会生效（会让人以为切了其实没切）。

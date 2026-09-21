@@ -190,6 +190,48 @@ fn formula_differential_ma_sum_all_paths() {
     check_all_paths("MA_SUM", MA_SUM, 80);
 }
 
+/// Newly added plan kernels must agree with the tree path, not merely execute.
+///
+/// `DIV` is the one worth a second look: the plan kernel guards `rhs == 0.0`
+/// (matching `fn_div`) while `BinaryKernel::Div` guards `rhs.abs() < 1e-15`.
+/// Routing `CALL:DIV` through the binary kernel would have agreed on ordinary
+/// data and diverged only on a tiny-but-nonzero divisor, so that case is pinned
+/// explicitly rather than left to luck.
+#[test]
+fn formula_differential_arithmetic_and_unary_math_kernels() {
+    check_all_paths("ADD", "ADD(CLOSE, 2)", 80);
+    check_all_paths("SUB", "SUB(CLOSE, 2)", 80);
+    check_all_paths("MULT", "MULT(CLOSE, 2)", 80);
+    check_all_paths("DIV", "DIV(CLOSE, 2)", 80);
+    // Tiny but non-zero: `fn_div` yields a huge finite number, whereas
+    // `BinaryKernel::Div`'s epsilon guard would yield NaN.
+    check_all_paths("DIV_TINY", "DIV(CLOSE, 0.00000000000000000001)", 80);
+    check_all_paths("SQRT", "SQRT(CLOSE)", 80);
+    check_all_paths("SINH", "SINH(CLOSE / 100)", 80);
+    check_all_paths("COSH", "COSH(CLOSE / 100)", 80);
+    check_all_paths("TANH", "TANH(CLOSE / 100)", 80);
+}
+
+/// Window kernels, in both warm-up families.
+///
+/// `MINUS` and `*INDEX` need a full window before they can answer, so the first
+/// bars are NaN; `HHVBARS`/`LLVBARS` start from a saturating window and are
+/// defined at bar 0. The split is the point: a kernel that got the warm-up rule
+/// wrong would not fail, it would quietly shift or extend the series, so each
+/// family has to be pinned separately.
+#[test]
+fn formula_differential_window_kernels() {
+    check_all_paths("MINUS", "MINUS(CLOSE, 3)", 80);
+    check_all_paths("MAXINDEX", "MAXINDEX(CLOSE, 5)", 80);
+    check_all_paths("MININDEX", "MININDEX(HIGH, 5)", 80);
+    check_all_paths("HHVBARS", "HHVBARS(HIGH, 5)", 80);
+    check_all_paths("LLVBARS", "LLVBARS(LOW, 5)", 80);
+
+    // Composed, so the window reads a computed series rather than a bound input.
+    check_all_paths("MINUS_OF_MA", "MINUS(MA(CLOSE, 3), 2)", 80);
+    check_all_paths("HHVBARS_OF_HHV", "HHVBARS(HHV(HIGH, 3), 5)", 80);
+}
+
 // --- Regression cases for plan-path defects found by this harness -------------
 
 /// The same node appearing twice as an operand must stay twice.

@@ -952,6 +952,20 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             streaming: true,
             deterministic: true,
         },
+        // `MINUS(x, n)` is `x[i] - x[i - n]`, so unlike `REF` its warm-up is
+        // exactly the period: the first `n` bars have no predecessor to
+        // subtract and stay NaN.
+        FunctionSpec {
+            name: "MINUS",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: PERIOD_REQUIRED,
+            outputs: 1,
+            lookback: LookbackSpec::Period,
+            streaming: true,
+            deterministic: true,
+        },
         FunctionSpec {
             name: "HHV",
             aliases: &[],
@@ -971,6 +985,32 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             params: PERIOD_REQUIRED,
             outputs: 1,
             lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        // `HHVBARS`/`LLVBARS` report how many bars back the window extreme sits.
+        // Unlike the extreme itself they need no warm-up: the saturating window
+        // start makes bar 0 well defined, so the lookback is `None`, not
+        // `PeriodMinusOne`.
+        FunctionSpec {
+            name: "HHVBARS",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: PERIOD_REQUIRED,
+            outputs: 1,
+            lookback: LookbackSpec::None,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "LLVBARS",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: PERIOD_REQUIRED,
+            outputs: 1,
+            lookback: LookbackSpec::None,
             streaming: true,
             deterministic: true,
         },

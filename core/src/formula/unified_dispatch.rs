@@ -70,6 +70,48 @@ impl KernelDispatcher for FormulaKernelDispatcher {
             return dispatch_index_call(call, buffers);
         }
 
+        if call.kernel == KernelId::from_static("CALL:ADD") {
+            return dispatch_arith_call(call, buffers, ArithKernel::Add);
+        }
+        if call.kernel == KernelId::from_static("CALL:SUB") {
+            return dispatch_arith_call(call, buffers, ArithKernel::Sub);
+        }
+        if call.kernel == KernelId::from_static("CALL:MULT") {
+            return dispatch_arith_call(call, buffers, ArithKernel::Mul);
+        }
+        if call.kernel == KernelId::from_static("CALL:DIV") {
+            return dispatch_arith_call(call, buffers, ArithKernel::Div);
+        }
+
+        if call.kernel == KernelId::from_static("CALL:SQRT") {
+            return dispatch_unary_math_call(call, buffers, UnaryMathKernel::Sqrt);
+        }
+        if call.kernel == KernelId::from_static("CALL:SINH") {
+            return dispatch_unary_math_call(call, buffers, UnaryMathKernel::Sinh);
+        }
+        if call.kernel == KernelId::from_static("CALL:COSH") {
+            return dispatch_unary_math_call(call, buffers, UnaryMathKernel::Cosh);
+        }
+        if call.kernel == KernelId::from_static("CALL:TANH") {
+            return dispatch_unary_math_call(call, buffers, UnaryMathKernel::Tanh);
+        }
+
+        if call.kernel == KernelId::from_static("CALL:MINUS") {
+            return dispatch_window_call(call, buffers, WindowKernel::Minus);
+        }
+        if call.kernel == KernelId::from_static("CALL:MAXINDEX") {
+            return dispatch_window_call(call, buffers, WindowKernel::MaxIndex);
+        }
+        if call.kernel == KernelId::from_static("CALL:MININDEX") {
+            return dispatch_window_call(call, buffers, WindowKernel::MinIndex);
+        }
+        if call.kernel == KernelId::from_static("CALL:HHVBARS") {
+            return dispatch_window_call(call, buffers, WindowKernel::HhvBars);
+        }
+        if call.kernel == KernelId::from_static("CALL:LLVBARS") {
+            return dispatch_window_call(call, buffers, WindowKernel::LlvBars);
+        }
+
         if call.kernel == KernelId::from_static("CALL:MA")
             || call.kernel == KernelId::from_static("CALL:SMA")
             || call.kernel == KernelId::from_static("CALL:EMA")
@@ -302,6 +344,230 @@ fn rate_of_change_into(
             Ok(())
         }
     }
+}
+
+/// Element-wise arithmetic behind the `ADD` / `SUB` / `MULT` / `DIV` functions.
+///
+/// These deliberately do **not** reuse `BINARY:<op>`. `DIV` guards with
+/// `rhs == 0.0`, while `BinaryKernel::Div` guards with `rhs.abs() < 1e-15`;
+/// routing one to the other would turn `a / 1e-20` into NaN (or the reverse
+/// into an infinity) depending on which path ran. The rule is to reproduce what
+/// the tree path's `fn_add` / `fn_sub` / `fn_mult` / `fn_div` do, exactly.
+enum ArithKernel {
+    Add,
+    Sub,
+    Mul,
+    Div,
+}
+
+fn dispatch_arith_call(
+    call: KernelCall<'_>,
+    buffers: &mut [Vec<f64>],
+    op: ArithKernel,
+) -> Result<(), KernelDispatchError> {
+    if call.inputs.len() != 2 {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_ARITY,
+        ));
+    }
+    let lhs = call.inputs[0].0;
+    let rhs = call.inputs[1].0;
+    let out = call.output.0;
+    let length = buffers[out].len();
+    for index in 0..length {
+        // Read both operands before writing: element-wise, so a single index is
+        // all that is needed, which keeps this correct even if the allocator
+        // aliased the output onto an operand.
+        let a = buffers[lhs][index];
+        let b = buffers[rhs][index];
+        buffers[out][index] = match op {
+            ArithKernel::Add => a + b,
+            ArithKernel::Sub => a - b,
+            ArithKernel::Mul => a * b,
+            ArithKernel::Div => {
+                if b == 0.0 {
+                    f64::NAN
+                } else {
+                    a / b
+                }
+            }
+        };
+    }
+    Ok(())
+}
+
+/// Windowed functions behind `MINUS` / `MAXINDEX` / `MININDEX` / `HHVBARS` /
+/// `LLVBARS`.
+///
+/// All five reproduce their `fn_*` counterparts bar for bar, including the warm-up
+/// rules, which differ between them and are the easiest thing to get wrong:
+///
+/// - `MINUS` and the `*INDEX` pair leave the first `n - 1` bars NaN.
+/// - `HHVBARS` / `LLVBARS` clamp the window with `saturating_sub`, so they
+///   produce a value from bar 0 and have no warm-up at all.
+///
+/// Ties keep the **first** occurrence, because the comparisons are strict
+/// (`>` / `<`) rather than `>=` / `<=`.
+enum WindowKernel {
+    /// `MINUS(X, N)`: `X[i] - X[i-N]`.
+    Minus,
+    /// `MAXINDEX(X, N)`: offset of the window maximum, counted from its start.
+    MaxIndex,
+    /// `MININDEX(X, N)`: offset of the window minimum, counted from its start.
+    MinIndex,
+    /// `HHVBARS(X, N)`: bars since the highest value in the window.
+    HhvBars,
+    /// `LLVBARS(X, N)`: bars since the lowest value in the window.
+    LlvBars,
+}
+
+fn dispatch_window_call(
+    call: KernelCall<'_>,
+    buffers: &mut [Vec<f64>],
+    op: WindowKernel,
+) -> Result<(), KernelDispatchError> {
+    if call.inputs.len() != 2 {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_ARITY,
+        ));
+    }
+    let input_slot = call.inputs[0].0;
+    let period_slot = call.inputs[1].0;
+    let output_slot = call.output.0;
+    if input_slot == output_slot || period_slot == output_slot {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+    let period = period_from_slot(buffers, period_slot)?;
+    let input_len = buffers[input_slot].len();
+    let output_len = buffers[output_slot].len();
+    if input_len != output_len {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+    let input_ptr = buffers[input_slot].as_ptr();
+    let output_ptr = buffers[output_slot].as_mut_ptr();
+    // Both operands were checked to be distinct slots above, so the aliasing
+    // this requires is exactly the aliasing the dispatcher already forbids.
+    let (input, output) = unsafe {
+        (
+            std::slice::from_raw_parts(input_ptr, input_len),
+            std::slice::from_raw_parts_mut(output_ptr, output_len),
+        )
+    };
+
+    output.fill(f64::NAN);
+    match op {
+        WindowKernel::Minus => {
+            for index in period..input.len() {
+                output[index] = input[index] - input[index - period];
+            }
+        }
+        WindowKernel::MaxIndex | WindowKernel::MinIndex => {
+            let want_max = matches!(op, WindowKernel::MaxIndex);
+            for index in 0..input.len() {
+                if index + 1 < period {
+                    continue;
+                }
+                let start = index + 1 - period;
+                let mut best = if want_max {
+                    f64::NEG_INFINITY
+                } else {
+                    f64::INFINITY
+                };
+                let mut best_offset = 0.0;
+                for position in start..=index {
+                    let value = input[position];
+                    if value.is_nan() {
+                        continue;
+                    }
+                    if (want_max && value > best) || (!want_max && value < best) {
+                        best = value;
+                        best_offset = (position - start) as f64;
+                    }
+                }
+                let found = if want_max {
+                    best > f64::NEG_INFINITY
+                } else {
+                    best < f64::INFINITY
+                };
+                if found {
+                    output[index] = best_offset;
+                }
+            }
+        }
+        WindowKernel::HhvBars | WindowKernel::LlvBars => {
+            let want_high = matches!(op, WindowKernel::HhvBars);
+            for index in 0..input.len() {
+                let start = (index + 1).saturating_sub(period);
+                let mut best = if want_high {
+                    f64::NEG_INFINITY
+                } else {
+                    f64::INFINITY
+                };
+                let mut best_position: Option<usize> = None;
+                for position in start..=index {
+                    let value = input[position];
+                    if value.is_nan() {
+                        continue;
+                    }
+                    if (want_high && value > best) || (!want_high && value < best) {
+                        best = value;
+                        best_position = Some(position);
+                    }
+                }
+                if let Some(position) = best_position {
+                    output[index] = (index - position) as f64;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Single-argument maths behind `SQRT` / `SINH` / `COSH` / `TANH`.
+///
+/// `SQRT` reproduces `fn_sqrt`'s negative guard rather than calling `sqrt`
+/// unconditionally: the tree path maps `v < 0.0` to NaN, and a bare `sqrt` would
+/// match that anyway, but the guard is stated so the two stay tied together.
+enum UnaryMathKernel {
+    Sqrt,
+    Sinh,
+    Cosh,
+    Tanh,
+}
+
+fn dispatch_unary_math_call(
+    call: KernelCall<'_>,
+    buffers: &mut [Vec<f64>],
+    op: UnaryMathKernel,
+) -> Result<(), KernelDispatchError> {
+    if call.inputs.len() != 1 {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_ARITY,
+        ));
+    }
+    let input = call.inputs[0].0;
+    let out = call.output.0;
+    let length = buffers[out].len();
+    for index in 0..length {
+        let value = buffers[input][index];
+        buffers[out][index] = match op {
+            UnaryMathKernel::Sqrt => {
+                if value < 0.0 {
+                    f64::NAN
+                } else {
+                    value.sqrt()
+                }
+            }
+            UnaryMathKernel::Sinh => value.sinh(),
+            UnaryMathKernel::Cosh => value.cosh(),
+            UnaryMathKernel::Tanh => value.tanh(),
+        };
+    }
+    Ok(())
 }
 
 /// `INDEX(array, index)`: per-bar historical element access, i.e. `array[index]`.

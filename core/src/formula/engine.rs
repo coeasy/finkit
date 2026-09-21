@@ -296,9 +296,10 @@ pub enum FormulaExecutionMode {
     /// Tree-walking interpreter. The reference path and the current default.
     ///
     /// This is not caution for its own sake. Flipping the default was measured,
-    /// not assumed: doing so fails 18 test groups today, including basic
-    /// arithmetic and transcendental functions. See the note in
-    /// `docs/refactor-plan-2026-09-21.md` (§3.2) for the measured list.
+    /// not assumed: doing so failed 18 test groups, and closing the arithmetic,
+    /// transcendental and window-kernel gaps brought that to 12. See the note
+    /// in `docs/refactor-plan-2026-09-21.md` (§3.2) for the measured list and
+    /// what each remaining group needs.
     #[default]
     Tree,
     /// Compiled compute plan driven by `UnifiedExecutor`.
