@@ -27,7 +27,7 @@ Finkit 希望提供四个稳定承诺：
 1. **同一语义**：一个 canonical Rust 实现服务多个入口与语言，减少算法漂移。
 2. **同一执行模型**：公式、因子、批量、局部和流式能力逐步收敛到共享 Runtime，而不是各自维护隐藏执行器。
 3. **同一正确性边界**：对齐、warm-up、NaN、point-in-time、no-lookahead 和增量安全规则明确且可测试。
-4. **同一验证体系**：编译、Clippy、SSOT、参考值、跨语言、性能和发布门禁形成连续证据链。
+4. **同一验证体系**：编译、Clippy、SSOT、参考值、跨语言、性能和发布门禁形成连续证据链；数值门禁同时断言**路径间一致**与**绝对性质**（有限值个数、恒等式、重复实现互校），避免“两边一致地错”被误判为通过。
 
 ## 目标用户
 
@@ -36,7 +36,7 @@ Finkit 希望提供四个稳定承诺：
 | 量化研究员 | 快速验证公式、特征和因子，不想维护底层算法 | 指标、Formula、Feature、Factor、Research primitives |
 | 量化开发工程师 | 研究结果如何稳定进入服务 | Rust core、compiled plan、Runtime、FFI/SDK |
 | 数据/特征平台团队 | 大量 rolling/label/statistics 不重复实现 | canonical kernels、feature pipeline、批量执行 |
-| 行情/分析产品团队 | 实时更新、选股、分析 API 的计算底座 | Streaming、Formula、FactorPlan、低开销运行时 |
+| 行情/分析产品团队 | 实时更新、批量扫描、分析 API 的计算底座 | Streaming、Formula、FactorPlan、低开销运行时 |
 | SDK/基础设施团队 | 多语言接口语义一致、升级可控 | 一个核心、多语言 delivery contracts |
 
 ## 六个产品价值支柱
@@ -72,7 +72,7 @@ SIMD、zero-copy、borrowed input、`_into` output、persistent plans、streamin
 | 层级 | 能力 | 产品作用 |
 | --- | --- | --- |
 | Financial Compute Core | 指标、统计、回归、排序、数学内核 | 提供 canonical numerical semantics |
-| Formula Engine | Parser、Compiler、Bytecode/JIT、缓存、range/last | 把终端式表达式变为可复用计划 |
+| Formula Engine | Parser、Compiler、tree / bytecode / plan 三条执行路径、缓存、range/last | 把终端式表达式变为可复用计划；三条路径的数值一致性由门禁强制 |
 | Factor Engine | Named factors、DAG、dependency validation、FactorPlan | 把因子依赖显式化和可重复执行化 |
 | Unified Runtime | full/borrowed/range/into、typed artifacts、DirtyRange | 统一执行、状态与局部重算边界 |
 | Streaming Engine | incremental state、one-bar update、batch parity | 支撑实时分析与低延迟更新 |
@@ -118,11 +118,25 @@ Finkit 不管理账户、订单、撮合、券商连接或交易状态机。它�
 - bars 按 oldest → newest 排列；
 - OHLCV 和关联字段必须保持对齐；
 - rolling 结果保留长度并显式表达 warm-up；
+- **滚动结果可以继续作为输入参与组合计算**：预热段不得污染下游。`MA(MA(CLOSE,5),9)`、
+  `DEA:=EMA(DIF,9)`、`ZSCORE(MA(CLOSE,5),9)` 这类写法必须产生有效值，而不是整段 NaN；
 - 多输出组合使用联合有效性规则；
+- **同一公式的多条执行路径（tree / bytecode / plan，以及启用时的 JIT / SIMD）必须数值一致**；
+- **同一统计量的多份实现必须互校一致**（例如 `AVGDEV` ≡ `AVEDEV`、`SLOPE` ≡ `LINEARREG_SLOPE`）；
 - borrowed 数据在同步执行期间不得被非法修改；
 - 预测研究必须 point-in-time / no-lookahead；
 - 增量执行必须证明依赖链安全，否则 full fallback；
 - artifact 身份必须稳定、typed、可复现。
+
+### 为什么“两条路径一致”不等于“正确”
+
+路径间一致性是必要条件，不是充分条件：如果两条路径**以完全相同的方式算错**（例如都返回全 NaN），
+一致性门禁会判为通过。因此 Finkit 的数值门禁同时断言**绝对性质**——每个用例的精确有限值个数、
+非退化性、已知恒等式与重复实现互校——而不只断言路径间相等。
+
+这套方法直接来自真实缺陷的复盘：滚动指标曾因“预热段 + 增量累加器把 NaN 当吸收态”而无法组合，
+而当时 5 条路径的差分门禁**全绿**。详细记录见
+[重构基线](refactor-plan-2026-09-21.md) 与 [Formula Runtime 契约](formula-runtime-contract.md) §3.1–§3.2。
 
 ## 性能模型
 
@@ -161,6 +175,7 @@ Finkit 不做 OMS、Broker API、Exchange Gateway、Matching Engine 或 turnkey 
 - [宣传文稿](promotion-zh.md)
 - [品牌与媒体素材](media-kit-zh.md)
 - [Runtime 与 Factor](runtime-and-factors.md)
+- [Formula Runtime 契约](formula-runtime-contract.md)
 - [Factor Research 架构](factor-research-architecture.md)
 - [多语言绑定](language-bindings.md)
 - [完整使用指南](usage.md)

@@ -1183,3 +1183,57 @@ fn formula_differential_incremental_accumulators_survive_warmup() {
         );
     }
 }
+
+/// The product documentation makes specific, checkable promises about warm-up
+/// composition:
+///
+/// > A rolling indicator's warm-up `NaN` prefix must not poison composition:
+/// > `MA(MA(CLOSE,5),9)` and `DEA:=EMA(DIF,9)` return valid values rather than
+/// > all-`NaN`.
+///
+/// (README.md "Performance and correctness", README.zh-CN.md "正确性与性能原则",
+/// docs/product-overview.md "Explicit semantics",
+/// docs/formula-runtime-contract.md §3.1.)
+///
+/// Documentation that promises behavior nothing enforces is exactly how the
+/// original defect survived: the docs described warm-up `NaN` correctly while
+/// composition silently returned all-`NaN`. This gate keeps the two in sync, so
+/// a regression fails here instead of quietly making the docs wrong.
+#[test]
+fn documented_warmup_composition_examples_hold() {
+    const LEN: usize = 200;
+    let mut engine = FormulaEngine::new();
+
+    // Each entry is a formula quoted in the docs plus the number of finite
+    // values it must produce. `MA(CLOSE,5)` over 200 bars leaves 196 finite.
+    let cases: &[(&str, usize)] = &[
+        // Quoted verbatim in the docs.
+        ("MA(MA(CLOSE,5),9)", 188),
+        // `EMA(CLOSE,12)`/`EMA(CLOSE,26)` leave 189/175 finite, so `DIF` has 175
+        // and `EMA(DIF,9)` has 167.
+        (
+            "DIF:=EMA(CLOSE,12)-EMA(CLOSE,26); DEA:=EMA(DIF,9); DEA",
+            167,
+        ),
+        // Same guarantee, applied to the statistics/regression family that the
+        // round-12 fix unblocked.
+        ("ZSCORE(MA(CLOSE,5),9)", 188),
+        ("LINEARREG(MA(CLOSE,5),9)", 188),
+        ("AVGDEV(MA(CLOSE,5),9)", 188),
+        // Three levels deep, to show it is not a one-level special case.
+        // Each rolling layer costs `period - 1` bars: 196 -> 188 -> 185.
+        ("MA(MA(MA(CLOSE,5),9),4)", 185),
+    ];
+
+    for (source, expected_finite) in cases {
+        let mut ctx = make_ctx(LEN);
+        let values = run_ast(&mut engine, source, &mut ctx);
+        let finite = values.iter().filter(|value| value.is_finite()).count();
+        assert_eq!(
+            finite, *expected_finite,
+            "{source}: got {finite} finite values, expected {expected_finite}. \
+             The docs promise warm-up composition yields valid values; a \
+             0 here means the documentation is now wrong."
+        );
+    }
+}

@@ -49,6 +49,8 @@ The formula layer supports terminal-style expressions and reusable compiled plan
 
 The runtime includes optimized execution paths such as cached compilation, bytecode/JIT-oriented execution, range/latest evaluation, append-oriented updates, reusable buffers, and zero-copy/borrowed inputs where supported.
 
+A formula has several execution paths — a reference tree interpreter, a bytecode VM, and compiled plans (`FormulaHotPlan` + the unified executor), plus JIT/SIMD variants when those features are enabled. The compiled plan is the production carrier and never silently falls back. **All paths must produce the same numbers for the same input**, and that agreement is enforced by differential gates rather than asserted in prose.
+
 ### 3. Factor engine
 
 Factors are named reusable computations with explicit dependencies. `FactorPlan` compiles and validates the dependency graph before numerical execution, allowing repeated workloads to reuse dependency discovery and stable execution order.
@@ -81,7 +83,7 @@ For calculations that naturally evolve one bar at a time, Finkit provides statef
 
 ### 6. Feature and research layer
 
-The project includes feature engineering, labels, cross-validation helpers, stability/regime tools, PCA, selection/importance primitives, returns/risk/performance evaluation components, and the developing Factor Research layer.
+The project includes feature engineering, labels, cross-validation helpers, stability/regime tools, PCA, feature-selection and feature-importance primitives, returns/risk/performance evaluation components, and the developing Factor Research layer.
 
 Finkit is a compute library, not a trading system: it deliberately ships no backtest engine and no stock-selection engine. The evaluation layer above measures **return series and factor studies** you supply — downstream strategy/backtest products are consumers of that layer, not part of it.
 
@@ -195,6 +197,12 @@ New research or runtime modules should reuse existing math, graph, cache, calend
 
 Warm-up, NaN behavior, input alignment, lookback, statefulness, determinism, effects, and data ownership are contracts, not accidental behavior.
 
+A rolling indicator's leading NaN warm-up run is a contract, not an error — and it must not poison downstream composition. `MA(MA(CLOSE,5),9)` and `DEA:=EMA(DIF,9)` produce valid values rather than all-NaN. For fully-finite input the behavior stays bit-for-bit unchanged, so the guarantee does not disturb existing golden fixtures or benchmarks. See the [formula runtime contract](formula-runtime-contract.md) §3.1–§3.2.
+
+### Agreement is necessary, not sufficient
+
+Two paths agreeing does not mean the answer is correct: if both are wrong in the same way — both all-NaN, for instance — an equivalence gate passes. Finkit's numerical gates therefore also assert **absolute properties** (exact finite-value counts, non-degeneracy, known identities) and **cross-check duplicate implementations** of the same statistic (`AVGDEV` ≡ `AVEDEV`, `SLOPE` ≡ `LINEARREG_SLOPE`, `FORCAST` ≡ `LINEARREG`). The practice comes from a real post-mortem: rolling indicators could not be composed through variables while five paths' differential gates were fully green.
+
 ### Correct incremental execution
 
 A local execution path must prove that every node in the dependency chain is compatible with range recomputation. Unknown/dynamic/cross-sectional semantics fall back to full execution.
@@ -230,6 +238,7 @@ Release confidence is built from layered gates:
 
 - unit and integration tests;
 - batch/streaming equivalence checks;
+- cross-path agreement gates (tree/bytecode/plan, plus JIT/SIMD where enabled) paired with absolute-property assertions, so two paths that are wrong in the same way cannot pass;
 - selected external/reference parity tests;
 - formula semantic contracts;
 - no-lookahead and point-in-time tests for research paths;
@@ -270,6 +279,7 @@ Longer term, Finkit should become a dependable computational substrate for quant
 
 - [Getting started](getting-started.md)
 - [Runtime and factors](runtime-and-factors.md)
+- [Formula runtime contract](formula-runtime-contract.md)
 - [Factor research architecture](factor-research-architecture.md)
 - [Formula runtime](formula-runtime.md)
 - [Language bindings](language-bindings.md)

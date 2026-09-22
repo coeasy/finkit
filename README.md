@@ -138,6 +138,8 @@ Finkit optimizes the whole execution path: SIMD kernels, borrowed/zero-copy inpu
 
 Those optimizations remain constrained by numerical correctness. Time series are oldest-to-newest, aligned arrays stay aligned, rolling outputs preserve warm-up `NaN`, predictive research follows point-in-time/no-lookahead rules, and unsafe incremental plans must fall back to full execution.
 
+A rolling indicator's warm-up `NaN` prefix must not poison composition: `MA(MA(CLOSE,5),9)` and `DEA:=EMA(DIF,9)` return valid values rather than all-`NaN`. A formula's execution paths — reference tree interpreter, bytecode VM, and compiled plans (plus JIT/SIMD when enabled) — must all return the same numbers, and that agreement is enforced by gates rather than asserted in prose. Because two paths can also be wrong in exactly the same way, those gates additionally assert absolute properties (exact finite-value counts, identities) and cross-check duplicate implementations of one statistic. See the [formula runtime contract](docs/formula-runtime-contract.md) §3.1–§3.2.
+
 Strict performance contracts run in dedicated release-mode regression gates. The HT_SINE whole-function budget remains `<1000 ns/bar`, but is measured in an optimized single-threaded gate instead of a noisy concurrent debug test. DirtyRange also carries a row-efficiency contract: a local historical revision must remain local and must match a full recomputation exactly.
 
 ## Competitive performance is evidence-based

@@ -126,6 +126,8 @@ Finkit 的性能优化覆盖完整执行路径：SIMD kernels、borrowed/zero-co
 
 但所有优化都受正确性合同约束：时间序列按最旧到最新排列，OHLCV 必须对齐，rolling 输出保留 warm-up `NaN`，预测研究必须满足 point-in-time / no-lookahead，无法证明安全的增量路径必须 full fallback。
 
+滚动指标的 warm-up `NaN` 前导段**不得污染下游组合**：`MA(MA(CLOSE,5),9)`、`DEA:=EMA(DIF,9)` 必须返回有效值，而不是整段 NaN。同一公式的多条执行路径（参考 tree 解释器、bytecode VM、编译计划，以及启用时的 JIT/SIMD）必须给出相同的数值，且这一致性由门禁强制，而不是写在文档里。由于两条路径也可能**以完全相同的方式算错**，门禁同时断言**绝对性质**（精确有限值个数、恒等式）并对同一统计量的多份实现做互校。详见 [Formula Runtime 契约](docs/formula-runtime-contract.md) §3.1–§3.2。
+
 严格性能回归由专用 release-mode 门禁承担。`HT_SINE` 的整函数预算仍保持 `<1000 ns/bar`，但在 optimized + single-thread 的独立 performance regression 中测量，而不是依赖高并发 debug unit-test 的不稳定墙钟。DirtyRange 同样有行级效率合同：局部历史数据修改必须保持局部重算，并与 full recompute 结果完全一致。
 
 ## 超越竞品：用证据而不是口号

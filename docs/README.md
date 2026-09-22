@@ -48,6 +48,15 @@ Rust / Python / CLI / native bindings / WASM
 
 The project is a calculation/research engine, not an OMS, brokerage connector, exchange gateway, matching engine, or turnkey live-trading platform.
 
+## Correctness model
+
+Two properties are contracts rather than aspirations:
+
+1. **Warm-up composability** — a rolling indicator's leading NaN warm-up run must not poison downstream composition. `MA(MA(CLOSE,5),9)` and `DEA:=EMA(DIF,9)` produce valid values. For fully-finite input the behavior stays bit-for-bit unchanged.
+2. **Multi-path agreement** — tree, bytecode, and compiled-plan execution (plus JIT/SIMD when enabled) must return the same numbers for the same input.
+
+Path agreement alone is not evidence of correctness: two paths that are wrong in the same way still agree. Numerical gates therefore pair agreement with **absolute-property assertions** (exact finite-value counts, identities, non-degeneracy) and **duplicate-implementation cross-checks**. Details in [formula-runtime-contract.md](formula-runtime-contract.md) §3.1–§3.2.
+
 ## Published v0.1.15 contract
 
 The GitHub `v0.1.15` Release is the authoritative distribution contract for the current published version.
@@ -114,7 +123,7 @@ Binding-specific source guides also live with their implementations, including `
 | [formula/grammar.md](formula/grammar.md) | Core formula grammar |
 | [formula/pine-grammar.md](formula/pine-grammar.md) | Supported Pine grammar subset |
 | [formula-runtime.md](formula-runtime.md) | Persistent compiled plans and incremental execution |
-| [formula-runtime-contract.md](formula-runtime-contract.md) | Ownership, `eval_range`, `eval_last`, append, warm-up and concurrency semantics |
+| [formula-runtime-contract.md](formula-runtime-contract.md) | Ownership, `eval_range`, `eval_last`, append, warm-up composability, multi-path agreement and concurrency semantics |
 | [formula-templates.md](formula-templates.md) | Reusable formula patterns |
 | [formula-performance.md](formula-performance.md) | Formula optimization and benchmark notes |
 | [migration/pine-to-finkit.md](migration/pine-to-finkit.md) | Pine migration guidance and semantic boundaries |
@@ -211,4 +220,4 @@ cargo fmt --all -- --check
 cargo test --workspace --doc --locked
 ```
 
-_Last product/documentation review: 2026-09-12. Published distribution baseline: v0.1.15._
+_Last product/documentation review: 2026-09-22. Published distribution baseline: v0.1.15._
