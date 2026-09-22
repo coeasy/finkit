@@ -92,7 +92,8 @@ pub use ops::*;
 pub use opt_level::OptLevel;
 pub use optimizer::{DependencyAnalyzer, FormulaOptimizer};
 pub use params::{
-    apply_params, get_param_value, parse_params, validate_params, ParamDef, ParamValues,
+    apply_params, expand_implicit_price_args, get_param_value, parse_params, validate_params,
+    ParamDef, ParamValues,
 };
 pub use parser::parse_formula;
 pub use pine::{

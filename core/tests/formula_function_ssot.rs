@@ -464,10 +464,16 @@ fn the_three_surfaces_have_the_expected_sizes() {
     // visible as a single, deliberate edit rather than a silent drift.
     //
     // The formula surface is larger than the literal `map.insert` count across
-    // `functions_legacy.rs` and `functions.rs` (388) because `get_builtin_functions`
+    // `functions_legacy.rs` and `functions.rs` (368) because `get_builtin_functions`
     // then injects the SSOT aliases of every spec whose canonical name resolved
-    // (+31 -> 419). Measured, not counted by hand: see the doc-vs-runtime gate in
+    // (+31 -> 399). Measured, not counted by hand: see the doc-vs-runtime gate in
     // `generated_formula_catalogue_matches_the_runtime_surface`.
+    //
+    // 419 -> 399: the twenty out-of-scope registrations (FoxTrader trade signals
+    // and backtest metrics, the 文华财经 signal-filter directives, and the THS
+    // condition-selection directives) were removed. finkit does not do
+    // backtesting or stock selection; see the product-boundary section of
+    // `.workbuddy-ai/memory/MEMORY.md`.
     let registry = registered_names();
     let formulas = formula_names();
     let kernels = probed_plan_kernels(&registry);
@@ -476,7 +482,7 @@ fn the_three_surfaces_have_the_expected_sizes() {
     let actual = (registry.len(), formulas.len(), kernels.len());
     assert_eq!(
         actual,
-        (254, 419, 107),
+        (254, 399, 107),
         "surface sizes changed: (registry, formula, plan kernels)"
     );
 }

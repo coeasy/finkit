@@ -161,7 +161,16 @@ pub fn bbands(
             constraint: "at least 2".to_string(),
         });
     }
-    if let Some(idx) = input.iter().position(|v| !v.is_finite()) {
+    // Only a non-finite value *after* the series has started is bad input. A
+    // leading run is the warm-up prefix of an upstream rolling indicator (see
+    // `math::leading_warmup`), and `bbands_sma_into` seeds its rolling moments
+    // from `input[0]`, so skip it instead of rejecting the call.
+    let start = crate::math::leading_warmup(input);
+    let interior = input[start..]
+        .iter()
+        .position(|v| !v.is_finite())
+        .map(|offset| offset + start);
+    if let Some(idx) = interior {
         #[cfg(feature = "metrics")]
         crate::metrics::input_rejected("bbands", "non_finite");
         return Err(TaError::InvalidParameter {
@@ -172,6 +181,33 @@ pub fn bbands(
     validate_input(input.len(), period)?;
 
     let len = input.len();
+    if start > 0 {
+        let tail_len = len - start;
+        let mut upper = vec![f64::NAN; tail_len];
+        let mut middle = vec![f64::NAN; tail_len];
+        let mut lower = vec![f64::NAN; tail_len];
+        if start + period <= len {
+            bbands_into(
+                &input[start..],
+                period,
+                nb_dev_up,
+                nb_dev_dn,
+                &mut middle,
+                &mut upper,
+                &mut lower,
+            )?;
+        }
+        let pad = |values: Vec<f64>| {
+            let mut out = vec![f64::NAN; len];
+            out[start..].copy_from_slice(&values);
+            Array1::from_vec(out)
+        };
+        return Ok(BbandsResult {
+            upper: pad(upper),
+            middle: pad(middle),
+            lower: pad(lower),
+        });
+    }
     let mut upper = vec![f64::NAN; len];
     let mut middle = vec![f64::NAN; len];
     let mut lower = vec![f64::NAN; len];
@@ -2297,7 +2333,14 @@ pub fn bbands_into(
             constraint: "must have the same length as input".to_string(),
         });
     }
-    if let Some(idx) = input.iter().position(|v| !v.is_finite()) {
+    // See `bbands`: a leading non-finite run is an upstream warm-up prefix, not
+    // bad input. Recurse on the valid tail and leave the (larger) warm-up as NaN.
+    let start = crate::math::leading_warmup(input);
+    let interior = input[start..]
+        .iter()
+        .position(|v| !v.is_finite())
+        .map(|offset| offset + start);
+    if let Some(idx) = interior {
         #[cfg(feature = "metrics")]
         crate::metrics::input_rejected("bbands_into", "non_finite");
         return Err(TaError::InvalidParameter {
@@ -2306,6 +2349,26 @@ pub fn bbands_into(
         });
     }
     validate_input(len, period)?;
+
+    if start > 0 {
+        middle.fill(f64::NAN);
+        upper.fill(f64::NAN);
+        lower.fill(f64::NAN);
+        if start + period <= len {
+            let (input_tail, middle_tail) = (&input[start..], &mut middle[start..]);
+            let (upper_tail, lower_tail) = (&mut upper[start..], &mut lower[start..]);
+            bbands_into(
+                input_tail,
+                period,
+                nb_dev_up,
+                nb_dev_dn,
+                middle_tail,
+                upper_tail,
+                lower_tail,
+            )?;
+        }
+        return Ok(());
+    }
 
     bbands_sma_into(input, period, nb_dev_up, nb_dev_dn, middle, upper, lower);
 

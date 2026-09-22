@@ -1,5 +1,5 @@
 use finkit::formula::engine::FormulaEngine;
-use finkit::formula::types::{AlertCommand, FormulaContext, SelectionResult};
+use finkit::formula::types::{AlertCommand, FormulaContext};
 use ndarray::Array1;
 
 fn make_test_context(len: usize) -> FormulaContext {
@@ -100,55 +100,6 @@ mod ths_alias_tests {
                 continue;
             }
             assert!((close1_result[i] - ref_result[i]).abs() < 1e-10);
-        }
-    }
-}
-
-#[cfg(test)]
-mod ths_selection_tests {
-    use super::*;
-
-    #[test]
-    fn test_smartselect_mode0() {
-        let mut engine = make_engine();
-        let mut ctx = make_test_context(20);
-        let result = engine
-            .eval("SMARTSELECT(CLOSE > MA(CLOSE, 5), 0)", &mut ctx)
-            .unwrap();
-
-        let signal_count = result.iter().filter(|&v| *v > 0.0).count();
-        assert!(signal_count > 0);
-    }
-
-    #[test]
-    fn test_smartselect_mode1() {
-        let mut engine = make_engine();
-        let mut ctx = make_test_context(20);
-        let result = engine
-            .eval("SMARTSELECT(CLOSE > OPEN, 1)", &mut ctx)
-            .unwrap();
-
-        let mut last_signal = false;
-        for i in 0..result.len() {
-            if result[i] > 0.0 {
-                assert!(!last_signal);
-                last_signal = true;
-            }
-        }
-    }
-
-    #[test]
-    fn test_selectcond() {
-        let mut engine = make_engine();
-        let mut ctx = make_test_context(20);
-        let result = engine.eval("SELECTCOND(CLOSE > OPEN)", &mut ctx).unwrap();
-
-        for i in 0..ctx.data_len {
-            if ctx.close[i] > ctx.open[i] {
-                assert!(result[i] > 0.0);
-            } else {
-                assert!(result[i] == 0.0);
-            }
         }
     }
 }
@@ -294,17 +245,6 @@ mod ths_compat_integration_tests {
     }
 
     #[test]
-    fn test_ths_combined_formula() {
-        let mut engine = make_engine();
-        let mut ctx = make_test_context(30);
-
-        let formula = "COND1 := CLOSE > MA(CLOSE, 5); COND2 := VOL > MA(VOL, 5); SIGNAL := SMARTSELECT(COND1 AND COND2, 0)";
-        let result = engine.eval(formula, &mut ctx).unwrap();
-
-        assert!(result.len() == ctx.data_len);
-    }
-
-    #[test]
     fn test_ths_price_change_formula() {
         let mut engine = make_engine();
         let mut ctx = make_test_context(30);
@@ -359,29 +299,6 @@ mod alert_command_tests {
 }
 
 #[cfg(test)]
-mod selection_result_tests {
-    use super::*;
-
-    #[test]
-    fn test_selection_result_creation() {
-        let signals = Array1::from_vec(vec![0.0, 1.0, 0.0, 1.0, 1.0]);
-        let result = SelectionResult::new(signals, 0);
-
-        assert_eq!(result.mode, 0);
-        assert_eq!(result.selected_bars.len(), 3);
-        assert_eq!(result.selected_bars, vec![1, 3, 4]);
-    }
-
-    #[test]
-    fn test_selection_result_empty() {
-        let signals = Array1::from_vec(vec![0.0, 0.0, 0.0, 0.0, 0.0]);
-        let result = SelectionResult::new(signals, 1);
-
-        assert!(result.selected_bars.is_empty());
-    }
-}
-
-#[cfg(test)]
 mod compatibility_score_tests {
     use super::*;
 
@@ -393,8 +310,6 @@ mod compatibility_score_tests {
             "HIGH1",
             "LOW1",
             "VOL1",
-            "SMARTSELECT",
-            "SELECTCOND",
             "ALERT",
             "ALERTONCE",
             "AVGPRICE_N",
@@ -422,7 +337,7 @@ mod compatibility_score_tests {
 
         for func in test_funcs {
             let mut ctx = make_test_context(30);
-            let formula = if func.contains("SELECT") || func.contains("ALERT") {
+            let formula = if func.contains("ALERT") {
                 format!("{}(CLOSE > OPEN, 0)", func)
             } else if func.ends_with("_N")
                 || func == "TOTALVOL"
@@ -469,7 +384,7 @@ mod compatibility_score_tests {
     #[test]
     fn test_compatibility_score() {
         let supported = count_supported_functions();
-        let total = 27;
+        let total = 25;
         let score = supported as f64 / total as f64 * 100.0;
 
         println!(

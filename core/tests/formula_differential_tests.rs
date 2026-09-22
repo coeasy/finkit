@@ -195,6 +195,32 @@ fn formula_differential_ma_sum_all_paths() {
     check_all_paths("MA_SUM", MA_SUM, 80);
 }
 
+/// Context-implicit price arguments must be expanded before lowering.
+///
+/// `PLUS_DI(CLOSE, 14)` and `AROON_UP(14)` name only their period: the tree
+/// path fills `HIGH`/`LOW`/`CLOSE` in from the evaluation context via
+/// `resolve_hlc_args` / `resolve_hl_args`. The compiled plan has no such
+/// fallback — its input layout only carries series the source text names — so
+/// without `expand_implicit_price_args` these calls reach the dispatcher one
+/// operand short and are rejected with `ERR_ARITY`. That is why the failure
+/// this test pins is an *execution* error on the plan side rather than a
+/// numeric mismatch: nothing diverges, the call simply refuses to run.
+///
+/// The explicit spellings are checked too. They are the same computation, so
+/// agreeing with the short form is the property that proves the expansion is
+/// value-preserving rather than merely executable.
+#[test]
+fn formula_differential_implicit_price_arguments() {
+    check_all_paths("PLUS_DI_SHORT", "PLUS_DI(CLOSE, 14)", 80);
+    check_all_paths("MINUS_DI_SHORT", "MINUS_DI(CLOSE, 14)", 80);
+    check_all_paths("AROON_UP_SHORT", "AROON_UP(14)", 80);
+    check_all_paths("AROON_DN_SHORT", "AROON_DN(14)", 80);
+    check_all_paths("PLUS_DI_EXPLICIT", "PLUS_DI(HIGH, LOW, CLOSE, 14)", 80);
+    check_all_paths("MINUS_DI_EXPLICIT", "MINUS_DI(HIGH, LOW, CLOSE, 14)", 80);
+    check_all_paths("AROON_UP_EXPLICIT", "AROON_UP(HIGH, LOW, 14)", 80);
+    check_all_paths("AROON_DN_EXPLICIT", "AROON_DN(HIGH, LOW, 14)", 80);
+}
+
 /// Newly added plan kernels must agree with the tree path, not merely execute.
 ///
 /// `DIV` is the one worth a second look: the plan kernel guards `rhs == 0.0`
@@ -771,4 +797,99 @@ fn formula_differential_trailing_draw_directive_all_paths() {
             .any(|node| node.kernel == KernelId::from_static("DRAW_ICON")),
         "a drawing directive must be retained as a root, not dropped by dead-code elimination"
     );
+}
+
+/// Number of bars used by the rolling-composition cases below. The expected
+/// finite counts are derived from this length, so it is a named constant.
+const COMPOSITION_LEN: usize = 200;
+
+/// Rolling indicators must survive composition through variables.
+///
+/// Every rolling kernel seeds an incremental accumulator from its first window,
+/// and `NaN` is absorbing for such an accumulator (`NaN - NaN` is still `NaN`).
+/// Because every rolling indicator in this crate marks its warm-up with a
+/// *leading* `NaN` run, `MA(MA(CLOSE, 5), 9)` used to return an all-`NaN`
+/// series -- and so did `DEA := EMA(DIF, 9)`, i.e. the canonical MACD.
+///
+/// The gates in this file could not see it: they only assert that the paths
+/// *agree*, and `values_match` treats `NaN`/`NaN` as a match, so two paths that
+/// were wrong in exactly the same way looked like success. These cases therefore
+/// pin the finite-value count as well as the agreement -- the count is what
+/// makes the regression detectable at all.
+#[test]
+fn formula_differential_rolling_composition() {
+    // (name, source, expected finite values on the 200-bar synthetic series)
+    let cases: &[(&str, &str, usize)] = &[
+        ("MA_OF_MA", "X:=MA(CLOSE,5); Y:=MA(X,9); Y", 188),
+        ("EMA_OF_MA", "X:=MA(CLOSE,5); Y:=EMA(X,9); Y", 188),
+        ("EMA_OF_EMA", "X:=EMA(CLOSE,5); Y:=EMA(X,9); Y", 188),
+        ("WMA_OF_MA", "X:=MA(CLOSE,5); Y:=WMA(X,9); Y", 188),
+        ("SUM_OF_MA", "X:=MA(CLOSE,5); Y:=SUM(X,9); Y", 188),
+        ("STD_OF_MA", "X:=MA(CLOSE,5); Y:=STD(X,9); Y", 188),
+        ("VAR_OF_MA", "X:=MA(CLOSE,5); Y:=VAR(X,9); Y", 188),
+        ("HHV_OF_MA", "X:=MA(CLOSE,5); Y:=HHV(X,9); Y", 188),
+        ("LLV_OF_MA", "X:=MA(CLOSE,5); Y:=LLV(X,9); Y", 188),
+        ("TRIMA_OF_MA", "X:=MA(CLOSE,5); Y:=TRIMA(X,9); Y", 188),
+        ("TRIX_OF_MA", "X:=MA(CLOSE,5); Y:=TRIX(X,9); Y", 171),
+        ("RSI_OF_MA", "X:=MA(CLOSE,5); Y:=RSI(X,9); Y", 191),
+        ("MA_OF_REF", "X:=REF(CLOSE,10); Y:=MA(X,9); Y", 182),
+        (
+            "MACD_COMPOSED",
+            "DIF:=EMA(CLOSE,12)-EMA(CLOSE,26); DEA:=EMA(DIF,9); (DIF-DEA)*2",
+            167,
+        ),
+        ("BOLL_OF_MA", "BOLL(MA(CLOSE,5),20,2)", 177),
+        ("ATR_OF_MA", "ATR(MA(HIGH,5),MA(LOW,5),MA(CLOSE,5),9)", 187),
+    ];
+
+    for (name, source, expected_finite) in cases {
+        check_all_paths(name, source, COMPOSITION_LEN);
+
+        let mut engine = FormulaEngine::new();
+        let mut ctx = make_ctx(COMPOSITION_LEN);
+        let series = run_ast(&mut engine, source, &mut ctx);
+        let finite = series.iter().filter(|value| value.is_finite()).count();
+        assert_eq!(
+            finite, *expected_finite,
+            "formula {name}: expected {expected_finite} finite values out of {COMPOSITION_LEN}, \
+             got {finite} -- the inner indicator's leading NaN warm-up run was not skipped"
+        );
+    }
+}
+
+/// Composite indicators applied to a rolling input, pinned on the tree path.
+///
+/// `DEMA`, `TEMA`, `MACD`, `APO` and `STOCH` reject a non-finite input outright
+/// and seed their internal recursions from `input[0]`, so feeding them the output
+/// of another rolling indicator used to produce an all-`NaN` series as well.
+///
+/// These run through `run_ast` only: the compiled plan has no kernel for
+/// `DEMA`/`TEMA`/`MACD(<expr>, ...)` yet, so `check_all_paths` cannot drive them
+/// (it would fail to compile the plan rather than compare values). Move each case
+/// up into `formula_differential_rolling_composition` as its kernel lands.
+#[test]
+fn formula_rolling_composition_of_composites() {
+    let cases: &[(&str, &str, usize)] = &[
+        ("DEMA_OF_MA", "X:=MA(CLOSE,5); Y:=DEMA(X,9); Y", 180),
+        ("TEMA_OF_MA", "X:=MA(CLOSE,5); Y:=TEMA(X,9); Y", 172),
+        ("MACD_OF_MA", "MACD(MA(CLOSE,5),12,26,9)", 163),
+        ("APO_OF_MA", "APO(MA(CLOSE,5),12,26)", 171),
+        (
+            "STOCH_OF_MA",
+            "STOCH(MA(HIGH,5),MA(LOW,5),MA(CLOSE,5),9,3,3)",
+            188,
+        ),
+    ];
+
+    for (name, source, expected_finite) in cases {
+        let mut engine = FormulaEngine::new();
+        let mut ctx = make_ctx(COMPOSITION_LEN);
+        let series = run_ast(&mut engine, source, &mut ctx);
+        let finite = series.iter().filter(|value| value.is_finite()).count();
+        assert_eq!(
+            finite, *expected_finite,
+            "formula {name}: expected {expected_finite} finite values out of {COMPOSITION_LEN}, \
+             got {finite} -- the inner indicator's leading NaN warm-up run was not skipped"
+        );
+    }
 }

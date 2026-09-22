@@ -213,30 +213,6 @@ impl AlertCommand {
     }
 }
 
-/// 选股信号结果（THS SMARTSELECT/SELECTCOND）
-#[derive(Debug, Clone)]
-pub struct SelectionResult {
-    pub signals: Array1<f64>,
-    pub mode: u8,
-    pub selected_bars: Vec<usize>,
-}
-
-impl SelectionResult {
-    pub fn new(signals: Array1<f64>, mode: u8) -> Self {
-        let selected_bars: Vec<usize> = signals
-            .iter()
-            .enumerate()
-            .filter(|(_, &v)| v > 0.0 && !v.is_nan())
-            .map(|(i, _)| i)
-            .collect();
-        Self {
-            signals,
-            mode,
-            selected_bars,
-        }
-    }
-}
-
 pub use crate::error::FormulaError;
 
 /// 多输出结果（支持函数返回多个命名序列，如 MACD 返回 DIF/DEA/MACD）

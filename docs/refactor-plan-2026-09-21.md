@@ -629,18 +629,220 @@ kernel 会通过宽松比较却是错的算术**。实测（同一输入、perio
 6. **工作区事故**：`git rm -f` 清掉了 `docs/` 下大量工作区文件，已全部从 git 恢复；
    唯一损失是本文件（untracked）与 `docs/archive/README.md`，均已重建。
    **教训：对带 staged 改动的文件（`git mv` 目标）用 `git rm` 极其危险。**
-7. **【第八轮新增 · 优先级最高】是否删除域外的「回测 / 选股」公式函数？**
+7. ✅ **【第八轮新增】域外的「回测 / 选股」公式函数已按方案 A 删除**（用户授权「你全权处理」）。
    翻转默认的缺口实测为 **87 个缺失 kernel / 179 个红测试 / 11 个红 target**（不是此前
-   误记的 1 个或 26 个，原因见 §3.3 第八轮）。其中约 **22 个**是 `FOX_*`（回测信号、
-   胜率、盈亏比、最大回撤）、`ENTERLONG` / `AUTOFILTER` / `CHECKSIG` / `MULTSIG`、
-   `SELECTCOND` / `SMARTSELECT` / `SORT` / `TOPN` / `RANK` —— **正是 §2 定调「不涉及
-   回测、不涉及选股」的那一类**。补它们的 kernel 等于把划出去的域重新实现一遍。
-   - **方案 A（建议）**：按 §2 删除这些函数及其测试（连带 `fox_compat_tests` 等 target），
-     再补剩余的机械缺口。缺口一次性减少约四分之一。
-   - **方案 B**：保留它们（视为「方言兼容层」而非产品能力），照常补 kernel —— 缺口 87 个全补。
-   - 若选 A，删除范围需要你确认到**函数清单粒度**，我不会自行扩大。
-8. **`PLUS_DI` / `MINUS_DI` 的 `ERR_ARITY`（`code 2`）是 kernel 真 bug**，与错误策略无关，
-   建议直接修（不影响其它函数）。
+   误记的 1 个或 26 个，原因见 §3.3 第八轮）。
+   - **实际删除清单（20 个注册，18 个实现）**，按**实现语义**而非名字判定：
+     - 回测指标（8）：`FOX_BACKTEST`、`FOX_BUY`、`FOX_SELL`、`FOX_TRADE_SIGNAL`、
+       `FOX_TRADE_COUNT`、`FOX_WIN_RATE`、`FOX_PROFIT_RATIO`、`FOX_MAX_DRAWDOWN`
+     - 文华信号指令（9）：`AUTOFILTER`、`CHECKSIG`、`MULTSIG`、`ENTERLONG`、`EXITLONG`、
+       `ENTERSHORT`、`EXITSHORT`、`BUY`、`SELL`
+     - 同花顺条件选股（3）：`SMARTSELECT`、`SELECTCOND`、`TOPN`
+   - **`SORT` / `RANK` 已从原清单剔除 —— 它们不是选股。** 二者都是**单序列滚动窗口**
+     统计（`SORT(X,N,DIR)` = 当前值在窗口内的排序位次；`RANK(X,N)` = 窗口内百分位），
+     与横截面选股无关。**教训：删除清单必须按实现推导，不能按名字**；原清单正是靠名字
+     把 `SORT`/`RANK` 误判成选股函数。
+   - 连带清理：`templates.rs` 的 15 条 FoxTrader 策略模板、`optimizer.rs` 的
+     `SMARTSELECT` 非纯标记、`types.rs` 中**零生产消费者**的 `SelectionResult`
+     （选股信号结果类型），以及 6 个测试 target 里的 21 个用例。
+   - **未删（刻意保留）**：`ALERT` / `ALERTONCE` 与 `AlertCommand`（预警语义，不在
+     「回测 / 选股」两条边界内）、`FOX_ZIG` / `FOX_PEAK` / `FOX_TROUGH`（峰谷指标）。
+   - **公式语言面 419 → 399**；registry（254）与 plan kernel（107）不变 —— 这 20 个
+     函数**从未在 `registry.rs` 或 FFI 注册**，所以删除不是 FFI 破坏性变更。
+8. ✅ **`PLUS_DI` / `MINUS_DI` 的 `ERR_ARITY` 已修**，且**同类问题一并修掉**：
+   `AROON_UP` / `AROON_DN`（`resolve_hl_args` 的 1 参形式）与
+   `DX` / `ADXR` / `AROONOSC` 同属 `resolve_hl*` 短实参族。见 §9。
 9. **`MA` / `EMA` / `MACD` 在「周期 > 序列长度」或「只有 1 根」时 tree=NaN / plan=抛错** ——
    这是**既有**分歧（非本轮引入），已由 `out_of_range_period_is_a_recorded_divergence` 钉住。
    要么让 plan 跟随 tree 返回 NaN，要么明确 plan 的严格语义并同步改 tree。**属行为变更，需你定。**
+
+---
+
+## 9. 第九轮：核心链路验证（2026-09-21）
+
+用户要求：**「继续验证核心功能和核心链路还有哪些潜在问题？全部修复，保证核心功能无错误。」**
+
+### 9.1 修掉的真 bug：`resolve_hl*` 短实参在 plan 路径上 `ERR_ARITY`
+
+**现象**：`PLUS_DI(CLOSE, 14)` 树路径算得出值，plan 路径 `ERR_ARITY`（`code 2`）。
+**根因**：树路径的 `resolve_hlc_args` / `resolve_hl_args` 会把缺失的价格序列从
+**求值上下文**补齐：
+
+| 解析器 | 函数 | 显式形式 | 短形式 | 周期取自 |
+|---|---|---|---|---|
+| `resolve_hlc_args` | `DX` `PLUS_DI` `MINUS_DI` `ADXR` | ≥4 参 | 2–3 参（补 `HIGH`/`LOW`/`CLOSE`） | **参数 1** |
+| `resolve_hl_args` | `AROONOSC` `AROON_UP` `AROON_DN` | ≥3 参 | 1–2 参（补 `HIGH`/`LOW`） | **参数 0** |
+
+plan 路径**没有上下文可补** —— 它的 input layout 只能承载源码里**写出来**的序列名。
+**修复**：在 `FormulaComputePlan::compile_with_registry` 里新增
+`expand_implicit_price_args`（`formula/params.rs`），把短形式改写成显式拼写。
+`HIGH`/`LOW`/`CLOSE` 经 `FormulaContext::get_data` 解析到的**正是**上下文里那三条序列，
+所以这是**保值的**（不是新语义）。
+
+**三个关键判断**：
+1. **改在 lowerer 里，不是 `FormulaEngine::build_plan` 里。** 差分门禁
+   （`formula_differential_tests.rs` / `formula_plan_differential.rs`）**绕过引擎**，
+   直接 `parse_formula` + `FormulaHotPlan::compile` —— 放在 `build_plan` 里的话
+   门禁**根本测不到**。（这是本轮发现的门禁盲区，值得记住。）
+2. **镜像解析器的实参位置，包括它的怪癖**：`resolve_hlc_args` 的 3 参形式读**参数 1**
+   并把最后一个参数丢掉。expand 照抄这个行为 —— 本轮目标是让两条路径**一致**，
+   不是重新设计一个调用方可能已经依赖的契约。
+3. **Pine mapper 已经展开过的调用不会被二次展开**：展开后实参数已不在短形式区间。
+   该 pass 只会**增加**操作数。
+
+**验收**：`formula_differential_tests::formula_differential_implicit_price_arguments`
+（短形式 + 显式形式，四条路径全比），33 passed / 0 failed。
+
+### 9.2 审计结论（无改动）
+
+- **5 处 `unreachable!()` 全部不可由输入触达**：`error.rs:451` 在 `#[cfg(test)]` 内；
+  `stateful.rs:1331` 被 `direct_expression` 的前置校验保证；`cycle.rs:1231` 是
+  const-generic `MODE`（只实例化 1/3/5）的死分支；`rank.rs:48` 在已排除该 policy 的
+  match 臂内；`operation.rs:2254` 的 `talib_ma_type` 在 `> 8.0` / `fract() != 0.0`
+  已返回错误后必然落在 0..=8。
+- **索引访问有纪律**：抽查 `cycle.rs`、`classic_patterns.rs`、`classic_tools.rs`、
+  `momentum.rs` 的 68 处 `x[0]`/`x[1]`，全部有 `validate_input` 或等长前置校验。
+  `point_and_figure` 先查 `high.len() != low.len()` 再 `validate_input(high.len(), 1)`。
+- **`unified_dispatch.rs` 的 `unsafe from_raw_parts` 是可靠的**：`len` 取自
+  `buffers[output_slot].len()`，而 `BufferLayout::take_buffers` 对**每个** slot 都
+  `take_overwrite(len)`，所以所有 buffer 等长；`validate_inputs` 又强制所有输入等长。
+- **资金流 7 个 kernel 与树路径逐项同构**（`fn_netinflow` 的 level 映射、越界回退、
+  长度不符 → NaN 全部一致）。
+- **全部生成物门禁通过**：`check_versions` / `gen_ssot_docs --check` /
+  `check_docs_links`（83 文件）/ `check_orphan_modules`（38 模块）/ `sync_bindings --check --all`。
+
+### 9.3 文档说谎：宣称了划出去的域
+
+按「**删代码不删宣称 = 文档在撒谎**」逐条核对，发现 4 处：
+
+| 文件 | 原文 | 处理 |
+|---|---|---|
+| `api-reference-zh.md` | 目录 + 章节标题「跨市场**选股**公式」 | →「跨市场**信号**公式」，并补一句「只做逐 bar 计算，不含横截面排序 / 标的池 / 回测」 |
+| `screening-formulas.md` | 标题「Cross-market **screening** formulas」、正文「**screening** layer for common **selection** logic」 | →「Cross-market **signal** formulas」+ 显式 Scope 声明 |
+| `competitive-positioning-zh.md` | 对比矩阵行 `portfolio/backtest product \| lightweight / 非核心` | → `❌ 不做（只做底层计算）` |
+| `api-reference-zh.md:1853` | 「适合批量扫描、**回测**和实时循环」 | 保留（说的是「可被回测系统使用」，不是「提供回测」） |
+
+**未动**：`factor-research-architecture.md` 全文仍在描述已删的 `core/src/backtest.rs`
+（约 10 处），但抬头已有 ⚠️ 失效声明，属**诚实的历史设计文档**。是否归档到
+`docs/archive/` 由你定 —— 它有 8 处文档入链，归档需连带改链。
+
+### 9.4 已知但未改（需要你拍板，均属行为变更）
+
+1. **`ema_into` 与 `ema` 的 NaN 策略不一致**：`ema_into` → `ema_simd_into` →
+   `ema_scalar` 用 `data[..period]` 的简单均值作种子，**种子含 NaN 会污染整条序列**；
+   而 `ema()`（`Array1` 版）与 `ema_fast_into` 都显式 `reject_if_non_finite` 报错。
+   两条路径**一致地**产出全 NaN，所以差分门禁看不见 —— 但它与
+   **TA-Lib 行为相符**（TA-Lib 的 SMA 种子同样被 NaN 污染并传播），
+   所以**不一定是 bug**，只是 `_into` 与 `Array1` 两个入口的契约不一致。
+2. **`factor-research-architecture.md` 是否归档**（见 9.3）。
+3. **`screening.rs` 模块名**：`core/src/indicators/screening.rs` 的 9 个函数都是
+   **单/双序列逐 bar 信号计算**，且**已在 `registry.rs` 注册**（属公开 API + FFI 面），
+   所以只改了文档措辞、**没有删模块**。若你认为模块名「screening」本身就是产品定位
+   问题，需要一次破坏性变更 —— 请确认。
+4. §8 第 9 条（越界周期 tree=NaN / plan=抛错）仍未决。
+
+---
+
+## 10. 第十轮：滚动指标不可组合（2026-09-21）
+
+### 10.1 症状
+
+**任何滚动指标都无法通过变量组合。** 用干净数据（200 根、无缺失）验证：
+
+| 公式 | 修复前 |
+|---|---|
+| `X:=MA(CLOSE,5); Y:=MA(X,9); Y` | 整条 NaN |
+| `DIF:=EMA(CLOSE,12)-EMA(CLOSE,26); DEA:=EMA(DIF,9); (DIF-DEA)*2` | 整条 NaN |
+| `X:=MA(CLOSE,5); Y:=SUM(X,9); Y` / `STD` / `VAR` / `WMA` / `TRIMA` / `TRIX` | 整条 NaN |
+| `BOLL(MA(CLOSE,5),20,2)` / `ATR(MA(HIGH,5),MA(LOW,5),MA(CLOSE,5),9)` | 整条 NaN |
+
+内置的 `MACD(CLOSE,12,26,9)` 一直正常 —— 因为它是**手写的、没有组合**。
+一旦用户按定义手写 MACD（`DEA:=EMA(DIF,9)`），就全 NaN。
+
+### 10.2 根因
+
+两个事实叠加：
+
+1. **每个滚动指标的输出都以「前导 NaN 预热段」开头**（`MA(CLOSE,5)` 前 4 个是 NaN）。
+   这是结构，不是数据。
+2. **滚动核用增量累加器**（`sum += input[i] - input[i-period]`），而 `NaN` 是**吸收态**
+   （`NaN - NaN = NaN`）。核从 `input[..period]` 取种子 → 种子含 NaN → **整条序列永久 NaN**。
+
+于是「把 A 的输出喂给 B」必然失效。
+
+### 10.3 为什么所有门禁都没发现
+
+- **差分门禁只断言「两条路径一致」**，而 `values_match` 把 `NaN == NaN` 算作一致。
+  树路径和 plan 路径**错得一模一样**，所以门禁全绿。
+- 唯一能发现它的是**断言有限值个数**的探针。
+
+### 10.4 修法（用户拍板：math 层 NaN-only 分支）
+
+在 `math` 层引入 `leading_warmup(input)`（第一个有限值的下标），让滚动核**从该处起算**：
+
+- 前导非有限段 = 上游指标的预热前缀，**跳过**，不是坏数据；
+- **`start == 0` 时逐位等同原实现** → goldens / benchmark 一个数字都不动；
+- R-1 仍拒**内部**非有限（既有拒绝测试全部使用内部 NaN，因此放宽「允许前导段」不会弄红它们）。
+
+**为什么不改公式层**：公式层有 78 处 `Err(_) => Ok(nan_vec(..))` 调用点，逐个包裹等于把
+同一个规则抄 78 遍；math 层一处生效。
+
+**实现模式（无分配）**：`let (tail_in, tail_out) = (&input[start..], &mut output[start..]);`
+然后**递归调用自己**。递归那一层 `tail[0]` 必然有限 → `leading_warmup == 0` → 不会二次递归。
+比 `vec!` 临时缓冲干净，也避开 `no_std` 没有 `alloc` 的问题。
+
+### 10.5 改动清单（13 个文件）
+
+| 文件 | 改动 |
+|---|---|
+| `math/mod.rs` | 新增 `pub(crate) fn leading_warmup`（唯一定义） |
+| `math/moving_avg.rs` | `sma_inner` / `sma_into` / `ema_inner` 前导偏移；`wma` 改用 `reject_if_non_finite`；`wma_kernel_into` 种子与滑动偏移；`trima_into` 尾部递归 |
+| `math/fast_moving_avg.rs` | `reject_if_non_finite` 放宽（只拒内部）；`ema_into` / `wma_into` 前导偏移 |
+| `math/rolling_stats.rs` | `variance_into` / `stddev` / `stddev_into` / `bbands_upper_into` 尾部递归 |
+| `math/kernels/compat.rs` | `rolling_sample_variance_into` 从第一个有限值起喂 Welford |
+| `indicators/overlap.rs` | `bbands` / `bbands_into` 放宽为只拒内部 + 尾部递归 |
+| `indicators/volatility.rs` | `atr_into` / `natr_into` 按三条序列**最宽**的前导段整体偏移 |
+| `indicators/momentum.rs` | `rsi` 的 metrics 门控拒绝改为跳过前导段（原与 `rsi_into` 不对称）；`trix_into` 尾部递归 |
+| `formula/functions_legacy.rs` | `fn_sum` 累加器从第一个有限值起（SUM 没有 math 层对应物）；`fn_dema` / `fn_tema` / `fn_macd` 走 `warmup_offset` + `shift_back` |
+| `formula/functions.rs` | 新增 `warmup_offset` / `shift_back`；`canonical_bband_component` / `canonical_atr` 接上 |
+
+### 10.6 踩到的坑（已写进 `TRAPS.md` §D）
+
+**同一个核有两份实现，且其中一份是「覆盖」而非「并列」。** `math/mod.rs` 里
+
+```rust
+pub mod moving_avg {
+    pub use super::fast_moving_avg::{ema_into, kama, kama_into, wma_into}; // 遮蔽！
+    pub use super::moving_avg_legacy::*;
+}
+```
+
+显式 `use` **遮蔽** glob 导入的同名项 → `moving_avg::ema` 走 legacy，而
+`moving_avg::ema_into` 走 `fast_moving_avg`，**两个不同的 `reject_if_non_finite`**。
+
+只修 legacy 那份的直接后果：**树路径（走 `ema`）修好了、plan 路径（走 `ema_into`）仍全 NaN
+→ 制造出新的树/plan 分叉**（比原来「两边一致地错」更糟，因为差分门禁会红）。
+`BOLL` / `ATR` 也踩了同一个坑（树路径在 `formula` 层、plan 路径在 `unified_dispatch`），
+最终两边都收敛到 math 层才一致。
+
+### 10.7 验证
+
+| 项 | 结果 |
+|---|---|
+| lib 测试 | 2969 passed / 0 failed / 1 ignored |
+| 组合探针（40 个用例 × 树/plan） | 两路径可执行处**全部一致且有有限值**；`plan=UNSUPPORTED` 的用例已在 §10.8 记录 |
+| 既有拒绝测试 | `edge_case_invalid_input.rs` / `property_tests.rs` 全绿（内部 NaN 仍报错） |
+| goldens / benchmark | 未动（`start == 0` 短路保证） |
+
+新增回归门禁 `core/tests/formula_differential_tests.rs`：
+
+- `formula_differential_rolling_composition` —— 16 个组合用例，**同时**跑两路径并**钉住有限值个数**
+  （这才是能发现本缺陷的断言）；
+- `formula_rolling_composition_of_composites` —— `DEMA`/`TEMA`/`MACD`/`APO`/`STOCH` 的树路径用例，
+  带注释说明「kernel 落地后上移到上面那个测试」。
+
+### 10.8 未闭环（不属本缺陷）
+
+`DEMA` / `TEMA` / `MACD(<表达式>, ...)` / `APO` / `STOCH` / `COUNT` / `DMA` 在 **plan 路径没有 kernel**
+（`plan=UNSUPPORTED`），属 §7 第 1 条的「剩余 ~65 个机械缺口」；树路径已正确。
+`#[default]` 仍是 `Tree`，所以这不是线上缺陷。

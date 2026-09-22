@@ -210,6 +210,218 @@ pub fn apply_params(ast: &AstNode, values: &ParamValues) -> AstNode {
     }
 }
 
+// ============================================================================
+// Implicit price-argument expansion
+// ============================================================================
+
+/// Which price series a short `resolve_hl*` call reads from the context, and
+/// which written argument carries the period.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ImplicitPriceForm {
+    /// `resolve_hlc_args` short form: `HIGH`, `LOW`, `CLOSE` come from the
+    /// context; the period is written argument 1.
+    HighLowClose,
+    /// `resolve_hl_args` short form: `HIGH`, `LOW` come from the context; the
+    /// period is written argument 0.
+    HighLow,
+}
+
+impl ImplicitPriceForm {
+    /// Index of the written argument that carries the period.
+    const fn period_arg(self) -> usize {
+        match self {
+            Self::HighLowClose => 1,
+            Self::HighLow => 0,
+        }
+    }
+
+    /// Whether the explicit spelling needs a `CLOSE` operand between `LOW` and
+    /// the period.
+    const fn needs_close(self) -> bool {
+        matches!(self, Self::HighLowClose)
+    }
+}
+
+/// Classify a function into its context-fallback short form, if the written
+/// argument count selects one.
+///
+/// Two resolver families in `functions_legacy` accept a short argument list and
+/// pull the missing price series out of the evaluation context:
+///
+/// * `resolve_hlc_args` — `DX`, `PLUS_DI`, `MINUS_DI`, `ADXR`. Four or more
+///   arguments are explicit; two or three fall back to the context's
+///   `HIGH`/`LOW`/`CLOSE` and read the period from **argument 1**. The
+///   three-argument form therefore ignores its last argument — a quirk of the
+///   resolver, mirrored here deliberately (see [`expand_implicit_price_args`]).
+/// * `resolve_hl_args` — `AROONOSC`, `AROON_UP`, `AROON_DN`. Three or more
+///   arguments are explicit; one or two fall back to the context's
+///   `HIGH`/`LOW` and read the period from **argument 0**.
+///
+/// `ADX` is *not* in either family: `fn_adx` handles its four- and five-argument
+/// forms itself rather than through a resolver.
+fn implicit_price_form(name: &str, arity: usize) -> Option<ImplicitPriceForm> {
+    if matches!(name, "DX" | "PLUS_DI" | "MINUS_DI" | "ADXR") && (2..4).contains(&arity) {
+        return Some(ImplicitPriceForm::HighLowClose);
+    }
+    if matches!(name, "AROONOSC" | "AROON_UP" | "AROON_DN") && (1..3).contains(&arity) {
+        return Some(ImplicitPriceForm::HighLow);
+    }
+    None
+}
+
+/// Rewrite context-fallback short forms into their fully explicit spellings.
+///
+/// The compiled-plan path has no evaluation context to fall back on: its input
+/// layout can only carry series the source text names, so `PLUS_DI(CLOSE, 14)`
+/// reaches the dispatcher with two operands and is rejected with `ERR_ARITY`
+/// while the tree path evaluates it happily against `ctx.high`/`ctx.low`/
+/// `ctx.close`. Spelling those series out as `HIGH`/`LOW`/`CLOSE` references is
+/// **value-preserving** — `FormulaContext::get_data` resolves exactly those
+/// names to exactly those series — and it lets a kernel serve the call.
+///
+/// This pass only ever *adds* operands, so a call the Pine mapper already
+/// expanded (see `pine::ast_mapper`) is left untouched: its argument count is
+/// no longer in the short-form range.
+///
+/// Argument positions mirror the resolvers verbatim, including the fact that
+/// the three-argument `resolve_hlc_args` form drops its final argument. The
+/// point of this pass is to make the two execution paths agree, not to
+/// redesign a contract that callers may already depend on.
+pub fn expand_implicit_price_args(ast: &AstNode) -> AstNode {
+    match ast {
+        AstNode::FunctionCall { name, args } => {
+            let expanded: Vec<AstNode> = args.iter().map(expand_implicit_price_args).collect();
+            let canonical = name.trim().to_ascii_uppercase();
+            let Some(form) = implicit_price_form(&canonical, expanded.len()) else {
+                return AstNode::FunctionCall {
+                    name: name.clone(),
+                    args: expanded,
+                };
+            };
+            let period = expanded[form.period_arg()].clone();
+            let mut rewritten = Vec::with_capacity(4);
+            rewritten.push(AstNode::Variable("HIGH".to_string()));
+            rewritten.push(AstNode::Variable("LOW".to_string()));
+            if form.needs_close() {
+                rewritten.push(AstNode::Variable("CLOSE".to_string()));
+            }
+            rewritten.push(period);
+            AstNode::FunctionCall {
+                name: name.clone(),
+                args: rewritten,
+            }
+        }
+        AstNode::Statements(stmts) => {
+            AstNode::Statements(stmts.iter().map(expand_implicit_price_args).collect())
+        }
+        AstNode::Assignment { name, expr } => AstNode::Assignment {
+            name: name.clone(),
+            expr: Box::new(expand_implicit_price_args(expr)),
+        },
+        AstNode::Output {
+            name,
+            expr,
+            modifier,
+        } => AstNode::Output {
+            name: name.clone(),
+            expr: Box::new(expand_implicit_price_args(expr)),
+            modifier: modifier.clone(),
+        },
+        AstNode::CompoundAssignment { name, op, expr } => AstNode::CompoundAssignment {
+            name: name.clone(),
+            op: op.clone(),
+            expr: Box::new(expand_implicit_price_args(expr)),
+        },
+        AstNode::BinaryOp { op, left, right } => AstNode::BinaryOp {
+            op: op.clone(),
+            left: Box::new(expand_implicit_price_args(left)),
+            right: Box::new(expand_implicit_price_args(right)),
+        },
+        AstNode::UnaryOp { op, expr } => AstNode::UnaryOp {
+            op: op.clone(),
+            expr: Box::new(expand_implicit_price_args(expr)),
+        },
+        AstNode::IndexAccess { array, index } => AstNode::IndexAccess {
+            array: Box::new(expand_implicit_price_args(array)),
+            index: Box::new(expand_implicit_price_args(index)),
+        },
+        AstNode::DrawText {
+            cond,
+            price,
+            text,
+            color,
+        } => AstNode::DrawText {
+            cond: Box::new(expand_implicit_price_args(cond)),
+            price: Box::new(expand_implicit_price_args(price)),
+            text: text.clone(),
+            color: color.clone(),
+        },
+        AstNode::DrawIcon {
+            cond,
+            price,
+            icon,
+            color,
+        } => AstNode::DrawIcon {
+            cond: Box::new(expand_implicit_price_args(cond)),
+            price: Box::new(expand_implicit_price_args(price)),
+            icon: Box::new(expand_implicit_price_args(icon)),
+            color: color.clone(),
+        },
+        AstNode::StickLine {
+            cond,
+            price1,
+            price2,
+            width,
+            empty,
+            color,
+        } => AstNode::StickLine {
+            cond: Box::new(expand_implicit_price_args(cond)),
+            price1: Box::new(expand_implicit_price_args(price1)),
+            price2: Box::new(expand_implicit_price_args(price2)),
+            width: Box::new(expand_implicit_price_args(width)),
+            empty: *empty,
+            color: color.clone(),
+        },
+        AstNode::DrawGeneric {
+            command,
+            args,
+            color,
+        } => AstNode::DrawGeneric {
+            command: command.clone(),
+            args: args.iter().map(expand_implicit_price_args).collect(),
+            color: color.clone(),
+        },
+        AstNode::IfThenElse {
+            cond,
+            then_branch,
+            else_branch,
+        } => AstNode::IfThenElse {
+            cond: Box::new(expand_implicit_price_args(cond)),
+            then_branch: Box::new(expand_implicit_price_args(then_branch)),
+            else_branch: Box::new(expand_implicit_price_args(else_branch)),
+        },
+        AstNode::ForLoop {
+            var,
+            start,
+            end,
+            body,
+        } => AstNode::ForLoop {
+            var: var.clone(),
+            start: Box::new(expand_implicit_price_args(start)),
+            end: Box::new(expand_implicit_price_args(end)),
+            body: body.iter().map(expand_implicit_price_args).collect(),
+        },
+        AstNode::WhileLoop { cond, body } => AstNode::WhileLoop {
+            cond: Box::new(expand_implicit_price_args(cond)),
+            body: body.iter().map(expand_implicit_price_args).collect(),
+        },
+        AstNode::Number(_)
+        | AstNode::StringLit(_)
+        | AstNode::Variable(_)
+        | AstNode::ParamDecl { .. } => ast.clone(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

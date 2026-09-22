@@ -571,86 +571,6 @@ fn test_ths_trend_following() {
 // ============================================================================
 
 #[test]
-fn test_wenhua_basic_strategy() {
-    let mut engine = FormulaEngine::new();
-    let mut ctx = make_ctx(100);
-    let source = r#"
-        MA5 := MA(CLOSE, 5);
-        MA10 := MA(CLOSE, 10);
-        COND1 := CROSS(MA5, MA10);
-        BUY_SIG := ENTERLONG(COND1);
-        RESULT: BUY_SIG
-    "#;
-    let result = engine.eval(source, &mut ctx).unwrap();
-    assert_eq!(result.len(), 100);
-}
-
-#[test]
-fn test_wenhua_autofilter() {
-    let mut engine = FormulaEngine::new();
-    let mut ctx = make_ctx(100);
-    let source = r#"
-        COND := CROSS(MA(CLOSE, 5), MA(CLOSE, 20));
-        FILTERED := AUTOFILTER(COND, 10);
-        RESULT: FILTERED
-    "#;
-    let result = engine.eval(source, &mut ctx).unwrap();
-    assert_eq!(result.len(), 100);
-}
-
-#[test]
-fn test_wenhua_multsig() {
-    let mut engine = FormulaEngine::new();
-    let mut ctx = make_ctx(100);
-    let source = r#"
-        BUY_SIG := CROSS(EMA(CLOSE, 5), EMA(CLOSE, 20));
-        SELL_SIG := CROSS(EMA(CLOSE, 20), EMA(CLOSE, 5));
-        MS := MULTSIG(BUY_SIG, SELL_SIG, 1, 5);
-        RESULT: MS
-    "#;
-    let result = engine.eval(source, &mut ctx).unwrap();
-    assert_eq!(result.len(), 100);
-}
-
-#[test]
-fn test_wenhua_dual_ma_strategy() {
-    let mut engine = FormulaEngine::new();
-    let mut ctx = make_ctx(100);
-    let source = r#"
-        FAST := EMA(CLOSE, 5);
-        SLOW := EMA(CLOSE, 20);
-        LONG := CROSS(FAST, SLOW);
-        SHORT := CROSS(SLOW, FAST);
-        BL := ENTERLONG(LONG);
-        BS := ENTERSHORT(SHORT);
-        XL := EXITLONG(SHORT);
-        XS := EXITSHORT(LONG);
-        RESULT: BL + BS + XL + XS
-    "#;
-    let result = engine.eval(source, &mut ctx).unwrap();
-    assert_eq!(result.len(), 100);
-}
-
-#[test]
-fn test_wenhua_boll_breakout() {
-    let mut engine = FormulaEngine::new();
-    let mut ctx = make_ctx(100);
-    let source = r#"
-        MID := MA(CLOSE, 20);
-        BAND := 2 * STD(CLOSE, 20);
-        UPPER := MID + BAND;
-        LOWER := MID - BAND;
-        BUY1 := CROSS(CLOSE, UPPER);
-        SELL1 := CROSS(LOWER, CLOSE);
-        BF := AUTOFILTER(BUY1, 5);
-        SF := AUTOFILTER(SELL1, 5);
-        RESULT: BF + SF
-    "#;
-    let result = engine.eval(source, &mut ctx).unwrap();
-    assert_eq!(result.len(), 100);
-}
-
-#[test]
 fn test_wenhua_atr_trailing_stop() {
     let mut engine = FormulaEngine::new();
     let mut ctx = make_ctx(100);
@@ -1069,20 +989,6 @@ fn test_multi_output_boll() {
 // ============================================================================
 // 信号过滤函数兼容测试（文华风格）
 // ============================================================================
-
-#[test]
-fn test_checksig_compat() {
-    let mut engine = FormulaEngine::new();
-    let mut ctx = make_ctx(100);
-    let source = r#"
-        BUY_COND := CROSS(MA(CLOSE, 5), MA(CLOSE, 20));
-        SELL_COND := CROSS(MA(CLOSE, 20), MA(CLOSE, 5));
-        CHECKED := CHECKSIG(BUY_COND, SELL_COND, 1);
-        RESULT: CHECKED
-    "#;
-    let result = engine.eval(source, &mut ctx).unwrap();
-    assert_eq!(result.len(), 100);
-}
 
 // ============================================================================
 // 市场数据引用函数兼容测试

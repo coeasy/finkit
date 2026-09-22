@@ -52,13 +52,15 @@ Pine `request.security` 全语义、跨截面批量调度或 stateful 跨周期�
 10. [经典形态指标](#经典形态指标)
 11. [流式指标](#流式指标)
 12. [公式引擎](#公式引擎)
-13. [跨市场选股公式](#跨市场选股公式)
+13. [跨市场信号公式](#跨市场信号公式)
 
 ---
 
-## 跨市场选股公式
+## 跨市场信号公式
 
-`finkit::indicators` 提供不绑定交易所规则的选股基础函数，可用于 A 股、港股、美股、ETF、期货和 7×24 加密货币 K 线。输入序列按从旧到新排列，多序列必须等长；滚动计算的预热区为 `NaN`。
+`finkit::indicators` 提供不绑定交易所规则的信号基础函数，可用于 A 股、港股、美股、ETF、期货和 7×24 加密货币 K 线。输入序列按从旧到新排列，多序列必须等长；滚动计算的预热区为 `NaN`。
+
+这些函数只做**单序列/双序列的逐 bar 计算**，输出对齐的数值序列；它们不含横截面排序，也不含任何标的池、筛选或回测语义 —— finkit 不提供选股与回测能力。
 
 | 函数 | 含义 |
 | --- | --- |
@@ -72,7 +74,7 @@ Pine `request.security` 全语义、跨截面批量调度或 stateful 跨周期�
 | `gap_signal(open, close, threshold)` | 跳空方向：`1/-1/0` |
 | `trend_breakout_signal(...)` | 均线、价格突破和放量确认的组合信号 |
 
-公式引擎对应名称为 `GOLDEN_CROSS`、`DEAD_CROSS`、`BREAKOUT`、`BREAKDOWN`、`VOLUME_SURGE`、`MA_ALIGN`、`RELATIVE_STRENGTH`、`GAP_SIGNAL` 和 `TREND_BREAKOUT`，并提供兼容别名。完整签名及选股示例见[跨市场选股公式](screening-formulas.md)。
+公式引擎对应名称为 `GOLDEN_CROSS`、`DEAD_CROSS`、`BREAKOUT`、`BREAKDOWN`、`VOLUME_SURGE`、`MA_ALIGN`、`RELATIVE_STRENGTH`、`GAP_SIGNAL` 和 `TREND_BREAKOUT`，并提供兼容别名。完整签名及示例见[跨市场信号公式](screening-formulas.md)。
 
 ## 重叠研究指标
 

@@ -749,17 +749,6 @@ fn test_formula_advanced_find_functions() {
     // Bar 3 (value=7) is lowest in its neighborhood
     assert!((result[3] - 1.0).abs() < 1e-10);
 
-    // TOPN: marks top N values in entire series
-    let result = engine.eval("TOPN(CLOSE, 3)", &mut ctx).unwrap();
-    assert_eq!(result.len(), 10);
-    // Top 3 values are 19 (bar4), 17 (bar8), 14 (bar1)
-    assert!((result[4] - 1.0).abs() < 1e-10);
-    assert!((result[8] - 1.0).abs() < 1e-10);
-    assert!((result[1] - 1.0).abs() < 1e-10);
-    // Others should be 0
-    assert!((result[0]).abs() < 1e-10);
-    assert!((result[3]).abs() < 1e-10);
-
     // DRAWNULL: returns NaN series (used for drawing null lines)
     let result = engine.eval("DRAWNULL()", &mut ctx).unwrap();
     assert_eq!(result.len(), 10);
@@ -775,57 +764,6 @@ fn test_formula_advanced_find_functions() {
     assert!((result[1] - 15.0).abs() < 1e-10);
     // 19.0 -> ceil(19/5)*5 = 20.0
     assert!((result[4] - 20.0).abs() < 1e-10);
-}
-
-#[test]
-fn test_formula_signal_functions() {
-    let mut engine = FormulaEngine::new();
-    let open = Array1::from_vec(vec![10.0; 10]);
-    let high = Array1::from_vec(vec![12.0; 10]);
-    let low = Array1::from_vec(vec![8.0; 10]);
-    // Buy signals at bars 1,2,4; Sell signals at bars 3,6,7
-    let close = Array1::from_vec(vec![10.0, 12.0, 13.0, 8.0, 14.0, 11.0, 7.0, 6.0, 9.0, 10.0]);
-    let volume = Array1::from_vec(vec![1000.0; 10]);
-    let mut ctx = FormulaContext::new(open, high, low, close, volume, None);
-
-    // AUTOFILTER returns 1.0 series
-    let result = engine.eval("AUTOFILTER()", &mut ctx).unwrap();
-    assert_eq!(result.len(), 10);
-    assert!((result[0] - 1.0).abs() < 1e-10);
-    assert!((result[5] - 1.0).abs() < 1e-10);
-
-    // CHECKSIG: buy when CLOSE > 11, sell when CLOSE < 9, confirm mode=1
-    let result = engine
-        .eval("CHECKSIG(CLOSE > 11, CLOSE < 9, 1)", &mut ctx)
-        .unwrap();
-    assert_eq!(result.len(), 10);
-    // First buy at bar 1 (12>11)
-    assert!((result[1] - 1.0).abs() < 1e-10);
-    // Bar 2 (13>11) is suppressed (same direction)
-    assert!((result[2]).abs() < 1e-10);
-    // First sell at bar 3 (8<9)
-    assert!((result[3] - (-1.0)).abs() < 1e-10);
-    // Buy again at bar 4 (14>11)
-    assert!((result[4] - 1.0).abs() < 1e-10);
-    // Sell at bar 6 (7<9)
-    assert!((result[6] - (-1.0)).abs() < 1e-10);
-
-    // MULTSIG: allows up to 2 same-direction signals within 5 bars
-    let result = engine
-        .eval("MULTSIG(CLOSE > 11, CLOSE < 9, 5, 2)", &mut ctx)
-        .unwrap();
-    assert_eq!(result.len(), 10);
-    // First buy at bar 1
-    assert!((result[1] - 1.0).abs() < 1e-10);
-    // Second buy at bar 2 (allowed, count=2 within N=5 bars)
-    assert!((result[2] - 1.0).abs() < 1e-10);
-
-    // ENTERLONG/EXITLONG pass-through
-    let result = engine.eval("ENTERLONG(CLOSE > 11)", &mut ctx).unwrap();
-    assert_eq!(result.len(), 10);
-
-    let result = engine.eval("EXITLONG(CLOSE < 9)", &mut ctx).unwrap();
-    assert_eq!(result.len(), 10);
 }
 
 #[test]

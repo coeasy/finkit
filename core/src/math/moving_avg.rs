@@ -1,4 +1,5 @@
 use crate::error::{Result, TaError};
+use crate::math::leading_warmup;
 use crate::utils::{init_output, smoothing_factor, validate_input};
 use ndarray::Array1;
 
@@ -32,10 +33,25 @@ pub enum EmaSeed {
 /// Common guard for non-finite (NaN / ±Inf) input rejection. Increments the
 /// `indicator_input_rejected_total` counter (O-2) when the `metrics` feature
 /// is enabled, and emits a `tracing::warn!` event for observability.
+///
+/// Only a non-finite value that appears *after* the series has started is
+/// rejected. A leading run of non-finite values is the warm-up prefix of an
+/// upstream rolling indicator and is handled by offsetting the kernel (see
+/// [`leading_warmup`]); a non-finite value in the middle of the data is still a
+/// hard error, which is what R-1 requires.
 #[inline]
 #[allow(unused_variables)]
 fn reject_if_non_finite(name: &'static str, input: &[f64]) -> Result<()> {
-    if let Some(idx) = input.iter().position(|v| !v.is_finite()) {
+    let started = leading_warmup(input);
+    if started == input.len() {
+        // The whole series is warm-up; the kernel will emit an all-NaN result.
+        return Ok(());
+    }
+    let invalid = input[started..]
+        .iter()
+        .position(|v| !v.is_finite())
+        .map(|offset| offset + started);
+    if let Some(idx) = invalid {
         #[cfg(feature = "metrics")]
         crate::metrics::input_rejected(name, "non_finite");
         #[cfg(feature = "tracing")]
@@ -97,11 +113,18 @@ fn sma_inner(input: &[f64], period: usize) -> Result<Array1<f64>> {
     let mut output = init_output(len);
     let inv_period = 1.0 / period as f64;
 
-    // SIMD-accelerated initial sum: 4-6x faster than iterator sum
-    let mut sum = simd_horizontal_sum(&input[..period]);
-    output[period - 1] = sum * inv_period;
+    // Start after any leading warm-up run. With no warm-up (`start == 0`) this is
+    // the original loop, unchanged and bit-identical.
+    let start = leading_warmup(input);
+    if start + period > len {
+        return Ok(output);
+    }
 
-    for i in period..len {
+    // SIMD-accelerated initial sum: 4-6x faster than iterator sum
+    let mut sum = simd_horizontal_sum(&input[start..start + period]);
+    output[start + period - 1] = sum * inv_period;
+
+    for i in start + period..len {
         sum += input[i] - input[i - period];
         output[i] = sum * inv_period;
     }
@@ -138,17 +161,22 @@ pub fn sma_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> 
         });
     }
 
-    // SIMD NaN-fill warm-up region
-    crate::utils::simd_fill_nan(&mut output[..period - 1]);
-
     let len = input.len();
     let inv_period = 1.0 / period as f64;
 
-    // SIMD-accelerated initial sum
-    let mut sum = simd_horizontal_sum(&input[..period]);
-    output[period - 1] = sum * inv_period;
+    // Start after any leading warm-up run so an upstream indicator's NaN prefix
+    // cannot poison the accumulator. The output warm-up grows by the same amount.
+    let start = leading_warmup(input);
+    crate::utils::simd_fill_nan(&mut output[..(start + period - 1).min(len)]);
+    if start + period > len {
+        return Ok(());
+    }
 
-    for i in period..len {
+    // SIMD-accelerated initial sum
+    let mut sum = simd_horizontal_sum(&input[start..start + period]);
+    output[start + period - 1] = sum * inv_period;
+
+    for i in start + period..len {
         sum += input[i] - input[i - period];
         output[i] = sum * inv_period;
     }
@@ -422,6 +450,22 @@ unsafe fn ema_inner_avx512(input: &[f64], period: usize, output: &mut [f64]) -> 
 #[allow(clippy::uninit_vec)]
 fn ema_inner(input: &[f64], period: usize, seed: EmaSeed) -> Result<Array1<f64>> {
     let len = input.len();
+
+    // A leading warm-up run comes from an upstream rolling indicator. The SIMD
+    // kernels below index from zero and would seed from NaN, so compute on the
+    // valid tail and shift the result back; the output's own warm-up grows by
+    // the same amount. NaN-free input has `start == 0` and skips this entirely.
+    let start = leading_warmup(input);
+    if start > 0 {
+        let mut shifted = Array1::from_elem(len, f64::NAN);
+        if len - start >= period {
+            let computed = ema_inner(&input[start..], period, seed)?;
+            // `computed` covers `[start..len]`; write it into the tail and leave
+            // the leading warm-up as NaN.
+            shifted.as_slice_mut().unwrap()[start..].copy_from_slice(computed.as_slice().unwrap());
+        }
+        return Ok(shifted);
+    }
     // Every branch below writes every output element. Avoid eagerly filling a
     // million-element result with NaN and then overwriting almost all of it;
     // this is material on the public Python binding, which returns an owned
@@ -720,12 +764,7 @@ pub fn wma(input: &[f64], period: usize) -> Result<Array1<f64>> {
         });
     }
     validate_input(input.len(), period)?;
-    if let Some(pos) = input.iter().position(|v| !v.is_finite()) {
-        return Err(TaError::InvalidParameter {
-            name: "input".to_string(),
-            constraint: format!("non-finite value at index {}", pos),
-        });
-    }
+    reject_if_non_finite("wma", input)?;
     #[cfg(feature = "metrics")]
     {
         crate::metrics::indicator_called("wma");
@@ -754,15 +793,22 @@ fn wma_inner(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// used by the retired SIMD compatibility path.
 #[inline]
 fn wma_kernel_into(input: &[f64], period: usize, output: &mut [f64]) {
-    crate::utils::simd_fill_nan(&mut output[..period - 1]);
-
     let len = input.len();
+    // Start after any leading warm-up run (see `math::leading_warmup`): the seed
+    // below indexes from zero, so a `NaN` there would poison `period_sub` /
+    // `period_sum` for the whole series. `start == 0` is the original loop.
+    let start = leading_warmup(input);
+    crate::utils::simd_fill_nan(&mut output[..(start + period - 1).min(len)]);
+    if start + period > len {
+        return;
+    }
+
     let inv_weight_sum = 1.0 / (period * (period + 1) / 2) as f64;
     let p = period as f64;
     let lookback = period - 1;
     let mut period_sub = 0.0;
     let mut period_sum = 0.0;
-    for (weight, &value) in input.iter().take(lookback).enumerate() {
+    for (weight, &value) in input[start..].iter().take(lookback).enumerate() {
         period_sub += value;
         period_sum += value * (weight + 1) as f64;
     }
@@ -772,8 +818,8 @@ fn wma_kernel_into(input: &[f64], period: usize, output: &mut [f64]) {
     // point drift on long/high-magnitude series.
     let mut bars_since_reseed = 8 * period;
     let mut trailing_value = 0.0;
-    let mut trailing_index = 0usize;
-    for i in lookback..len {
+    let mut trailing_index = start;
+    for i in start + lookback..len {
         let value = input[i];
         period_sub += value;
         period_sub -= trailing_value;
@@ -1230,6 +1276,19 @@ pub fn trima_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()
     if period == 1 {
         output.copy_from_slice(input);
         return Ok(());
+    }
+
+    // See `math::leading_warmup`: recurse on the valid tail so a leading warm-up
+    // run from an upstream indicator is skipped rather than poisoning this
+    // recurrence's seed (it indexes `input` from zero).
+    let start = leading_warmup(input);
+    if start > 0 {
+        crate::utils::simd_fill_nan(&mut output[..(start + period - 1).min(len)]);
+        if start + period > len {
+            return Ok(());
+        }
+        let (tail_in, tail_out) = (&input[start..], &mut output[start..]);
+        return trima_into(tail_in, period, tail_out);
     }
 
     crate::utils::simd_fill_nan(&mut output[..period - 1]);

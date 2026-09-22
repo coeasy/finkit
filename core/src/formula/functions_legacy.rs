@@ -762,13 +762,18 @@ fn fn_sum(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, For
     let data_len = ctx.data_len;
     let mut result = nan_vec(data_len);
 
+    // `SUM` has no math-layer counterpart, so it carries the same warm-up rule
+    // locally: seed the running total at the first finite value instead of
+    // letting a leading `NaN` run (an upstream indicator's warm-up prefix)
+    // absorb the accumulator for the whole series.
+    let start = crate::math::leading_warmup(input.as_slice().unwrap_or_default());
     let mut running_sum = 0.0;
-    for i in 0..data_len {
+    for i in start..data_len {
         running_sum += input[i];
-        if i >= n {
+        if i >= start + n {
             running_sum -= input[i - n];
             result[i] = running_sum;
-        } else if i == n - 1 {
+        } else if i == start + n - 1 {
             result[i] = running_sum;
         }
     }
@@ -1184,8 +1189,11 @@ fn fn_dema(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, Fo
 
     let data_len = ctx.data_len;
     let values = input.as_slice().unwrap();
-    match lib_ma::dema(values, n) {
-        Ok(result) => Ok(result),
+    // See `functions::warmup_offset`: a leading non-finite run is an upstream
+    // indicator's warm-up prefix, and `dema` seeds its EMA chain from `input[0]`.
+    let start = super::functions::warmup_offset(values);
+    match lib_ma::dema(&values[start..], n) {
+        Ok(result) => Ok(super::functions::shift_back(result, start, data_len)),
         Err(_) => Ok(nan_vec(data_len)),
     }
 }
@@ -1197,8 +1205,10 @@ fn fn_tema(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, Fo
 
     let data_len = ctx.data_len;
     let values = input.as_slice().unwrap();
-    match lib_ma::tema(values, n) {
-        Ok(result) => Ok(result),
+    // See `functions::warmup_offset`.
+    let start = super::functions::warmup_offset(values);
+    match lib_ma::tema(&values[start..], n) {
+        Ok(result) => Ok(super::functions::shift_back(result, start, data_len)),
         Err(_) => Ok(nan_vec(data_len)),
     }
 }
@@ -1539,8 +1549,12 @@ fn fn_macd(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, Fo
         return Ok(nan_vec(data_len));
     }
 
-    match lib_momentum::macd(values, fast_n, slow_n, signal_n) {
-        Ok(result) => Ok(result.macd),
+    // See `functions::warmup_offset`: `macd` rejects any non-finite input and
+    // seeds its EMAs from `input[0]`, so a leading warm-up run from an upstream
+    // indicator has to be skipped rather than rejected.
+    let start = super::functions::warmup_offset(values);
+    match lib_momentum::macd(&values[start..], fast_n, slow_n, signal_n) {
+        Ok(result) => Ok(super::functions::shift_back(result.macd, start, data_len)),
         Err(_) => Ok(nan_vec(data_len)),
     }
 }
@@ -5113,28 +5127,6 @@ fn fn_findlow(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>,
     Ok(result)
 }
 
-fn fn_topn(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
-    ensure_args_len("TOPN", args, 2)?;
-    let input = &args[0];
-    let n = extract_n(args, 1, "TOPN")?;
-    let data_len = ctx.data_len;
-    let mut result = Array1::zeros(data_len);
-
-    let mut indexed: Vec<(usize, f64)> = input
-        .iter()
-        .enumerate()
-        .filter(|(_, v)| !v.is_nan())
-        .map(|(i, &v)| (i, v))
-        .collect();
-    indexed.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-
-    for &(idx, _) in indexed.iter().take(n) {
-        result[idx] = 1.0;
-    }
-
-    Ok(result)
-}
-
 fn fn_drawnull(ctx: &FormulaContext, _args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     Ok(nan_vec(ctx.data_len))
 }
@@ -5161,135 +5153,6 @@ fn fn_ceiling(_ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
     }
 
     Ok(result)
-}
-
-// === Signal filtering functions (文华财经 compat) ===
-
-/// AUTOFILTER: returns a constant 1.0 series (marks formula as auto-filter mode).
-/// Actual filtering logic happens at the evaluation layer.
-fn fn_autofilter(ctx: &FormulaContext, _args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
-    Ok(Array1::ones(ctx.data_len))
-}
-
-/// CHECKSIG(BuyCond, SellCond, N): Signal confirmation.
-/// N=1: signal confirmed on same bar. N=0: signal confirmed on next bar.
-/// Returns filtered buy signal (1.0 = buy, -1.0 = sell, 0 = no signal).
-/// Consecutive same-direction signals are suppressed.
-fn fn_checksig(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
-    ensure_args_len("CHECKSIG", args, 3)?;
-    let buy_cond = &args[0];
-    let sell_cond = &args[1];
-    let confirm_mode = args[2][0] as i32;
-    let data_len = ctx.data_len;
-    let mut result = Array1::zeros(data_len);
-
-    let mut last_signal = 0i32; // 0=none, 1=buy, -1=sell
-
-    for i in 0..data_len {
-        let buy = buy_cond[i] != 0.0 && !buy_cond[i].is_nan();
-        let sell = sell_cond[i] != 0.0 && !sell_cond[i].is_nan();
-
-        if buy && last_signal != 1 {
-            if confirm_mode == 1 {
-                result[i] = 1.0;
-            } else if i + 1 < data_len {
-                result[i + 1] = 1.0;
-            }
-            last_signal = 1;
-        } else if sell && last_signal != -1 {
-            if confirm_mode == 1 {
-                result[i] = -1.0;
-            } else if i + 1 < data_len {
-                result[i + 1] = -1.0;
-            }
-            last_signal = -1;
-        }
-    }
-
-    Ok(result)
-}
-
-/// MULTSIG(BuyCond, SellCond, N, M): Multi-signal mode.
-/// Allows up to M signals within N bars of the same direction.
-fn fn_multsig(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
-    ensure_args_len("MULTSIG", args, 4)?;
-    let buy_cond = &args[0];
-    let sell_cond = &args[1];
-    let n = args[2][0] as usize;
-    let m = args[3][0] as usize;
-    let data_len = ctx.data_len;
-    let mut result = Array1::zeros(data_len);
-
-    let mut last_signal = 0i32;
-    let mut same_dir_count = 0usize;
-    let mut last_signal_bar = 0usize;
-
-    for i in 0..data_len {
-        let buy = buy_cond[i] != 0.0 && !buy_cond[i].is_nan();
-        let sell = sell_cond[i] != 0.0 && !sell_cond[i].is_nan();
-
-        if buy {
-            if last_signal != 1 {
-                result[i] = 1.0;
-                last_signal = 1;
-                same_dir_count = 1;
-                last_signal_bar = i;
-            } else if same_dir_count < m && (n == 0 || i - last_signal_bar <= n) {
-                result[i] = 1.0;
-                same_dir_count += 1;
-                last_signal_bar = i;
-            }
-        } else if sell {
-            if last_signal != -1 {
-                result[i] = -1.0;
-                last_signal = -1;
-                same_dir_count = 1;
-                last_signal_bar = i;
-            } else if same_dir_count < m && (n == 0 || i - last_signal_bar <= n) {
-                result[i] = -1.0;
-                same_dir_count += 1;
-                last_signal_bar = i;
-            }
-        }
-    }
-
-    Ok(result)
-}
-
-/// ENTERLONG: Alias for buy signal marker (returns input as-is or 1.0 series)
-fn fn_enterlong(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
-    if args.is_empty() {
-        Ok(Array1::ones(ctx.data_len))
-    } else {
-        Ok(args[0].clone())
-    }
-}
-
-/// EXITLONG: Alias for sell signal marker
-fn fn_exitlong(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
-    if args.is_empty() {
-        Ok(Array1::ones(ctx.data_len))
-    } else {
-        Ok(args[0].clone())
-    }
-}
-
-/// ENTERSHORT: Alias for short entry signal marker
-fn fn_entershort(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
-    if args.is_empty() {
-        Ok(Array1::ones(ctx.data_len))
-    } else {
-        Ok(args[0].clone())
-    }
-}
-
-/// EXITSHORT: Alias for short exit signal marker
-fn fn_exitshort(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
-    if args.is_empty() {
-        Ok(Array1::ones(ctx.data_len))
-    } else {
-        Ok(args[0].clone())
-    }
 }
 
 // === Cumulative / Sequence operations ===
@@ -5890,20 +5753,8 @@ pub fn get_builtin_functions() -> HashMap<String, FormulaFn> {
     // Advanced find functions
     map.insert("FINDHIGH".to_string(), fn_findhigh as FormulaFn);
     map.insert("FINDLOW".to_string(), fn_findlow as FormulaFn);
-    map.insert("TOPN".to_string(), fn_topn as FormulaFn);
     map.insert("DRAWNULL".to_string(), fn_drawnull as FormulaFn);
     map.insert("CEILING".to_string(), fn_ceiling as FormulaFn);
-
-    // Signal filtering functions (文华财经 compat)
-    map.insert("AUTOFILTER".to_string(), fn_autofilter as FormulaFn);
-    map.insert("CHECKSIG".to_string(), fn_checksig as FormulaFn);
-    map.insert("MULTSIG".to_string(), fn_multsig as FormulaFn);
-    map.insert("ENTERLONG".to_string(), fn_enterlong as FormulaFn);
-    map.insert("EXITLONG".to_string(), fn_exitlong as FormulaFn);
-    map.insert("ENTERSHORT".to_string(), fn_entershort as FormulaFn);
-    map.insert("EXITSHORT".to_string(), fn_exitshort as FormulaFn);
-    map.insert("BUY".to_string(), fn_enterlong as FormulaFn);
-    map.insert("SELL".to_string(), fn_exitlong as FormulaFn);
 
     // Cumulative / sequence operations
     map.insert("CUMSUM".to_string(), fn_cumsum as FormulaFn);
@@ -5923,10 +5774,6 @@ pub fn get_builtin_functions() -> HashMap<String, FormulaFn> {
     // Multi-period functions
     map.insert("PERIODTYPE".to_string(), fn_periodtype as FormulaFn);
     map.insert("REFDATE".to_string(), fn_refdate as FormulaFn);
-
-    // THS (同花顺) Smart Selection Functions
-    map.insert("SMARTSELECT".to_string(), fn_smartselect as FormulaFn);
-    map.insert("SELECTCOND".to_string(), fn_selectcond as FormulaFn);
 
     // THS Alert Functions
     map.insert("ALERT".to_string(), fn_alert as FormulaFn);
@@ -5961,26 +5808,6 @@ pub fn get_builtin_functions() -> HashMap<String, FormulaFn> {
     map.insert("FOX_PEAK".to_string(), fn_fox_peak as FormulaFn);
     map.insert("FOX_TROUGHBARS".to_string(), fn_fox_troughbars as FormulaFn);
     map.insert("FOX_PEAKBARS".to_string(), fn_fox_peakbars as FormulaFn);
-    map.insert("FOX_BUY".to_string(), fn_fox_buy as FormulaFn);
-    map.insert("FOX_SELL".to_string(), fn_fox_sell as FormulaFn);
-    map.insert(
-        "FOX_TRADE_SIGNAL".to_string(),
-        fn_fox_trade_signal as FormulaFn,
-    );
-    map.insert("FOX_BACKTEST".to_string(), fn_fox_backtest as FormulaFn);
-    map.insert(
-        "FOX_PROFIT_RATIO".to_string(),
-        fn_fox_profit_ratio as FormulaFn,
-    );
-    map.insert("FOX_WIN_RATE".to_string(), fn_fox_win_rate as FormulaFn);
-    map.insert(
-        "FOX_MAX_DRAWDOWN".to_string(),
-        fn_fox_max_drawdown as FormulaFn,
-    );
-    map.insert(
-        "FOX_TRADE_COUNT".to_string(),
-        fn_fox_trade_count as FormulaFn,
-    );
 
     // TA-Lib C compatibility — additional momentum indicators
     map.insert("STOCHF".to_string(), fn_stochf);
@@ -6260,72 +6087,6 @@ fn fn_vol1(ctx: &FormulaContext, _args: &[Array1<f64>]) -> Result<Array1<f64>, F
     Ok(out)
 }
 
-fn fn_smartselect(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
-    ensure_args_len("SMARTSELECT", args, 2)?;
-    let cond = &args[0];
-    let mode = args[1][0] as u8;
-    let data_len = ctx.data_len;
-    let mut result = Array1::zeros(data_len);
-
-    match mode {
-        0 => {
-            for i in 0..data_len {
-                if cond[i] > 0.0 && !cond[i].is_nan() {
-                    result[i] = 1.0;
-                }
-            }
-        }
-        1 => {
-            let mut last_signal = false;
-            for i in 0..data_len {
-                if cond[i] > 0.0 && !cond[i].is_nan() && !last_signal {
-                    result[i] = 1.0;
-                    last_signal = true;
-                } else if cond[i] <= 0.0 || cond[i].is_nan() {
-                    last_signal = false;
-                }
-            }
-        }
-        2 => {
-            let mut count = 0usize;
-            for i in 0..data_len {
-                if cond[i] > 0.0 && !cond[i].is_nan() {
-                    count += 1;
-                    if count == 1 {
-                        result[i] = 1.0;
-                    }
-                } else {
-                    count = 0;
-                }
-            }
-        }
-        _ => {
-            for i in 0..data_len {
-                if cond[i] > 0.0 && !cond[i].is_nan() {
-                    result[i] = 1.0;
-                }
-            }
-        }
-    }
-
-    Ok(result)
-}
-
-fn fn_selectcond(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
-    ensure_args_len("SELECTCOND", args, 1)?;
-    let cond = &args[0];
-    let data_len = ctx.data_len;
-    let mut result = Array1::zeros(data_len);
-
-    for i in 0..data_len {
-        if cond[i] > 0.0 && !cond[i].is_nan() {
-            result[i] = 1.0;
-        }
-    }
-
-    Ok(result)
-}
-
 fn fn_alert(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("ALERT", args, 2)?;
     let cond = &args[0];
@@ -6548,268 +6309,6 @@ fn fn_fox_peakbars(
                 }
             }
         }
-    }
-
-    Ok(result)
-}
-
-fn fn_fox_buy(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
-    ensure_args_len("FOX_BUY", args, 2)?;
-    let cond = &args[0];
-    let price = &args[1];
-    let data_len = ctx.data_len;
-    let mut result = Array1::zeros(data_len);
-
-    for i in 0..data_len {
-        if cond[i] != 0.0 && !cond[i].is_nan() {
-            result[i] = price[i];
-        }
-    }
-
-    Ok(result)
-}
-
-fn fn_fox_sell(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
-    ensure_args_len("FOX_SELL", args, 2)?;
-    let cond = &args[0];
-    let price = &args[1];
-    let data_len = ctx.data_len;
-    let mut result = Array1::zeros(data_len);
-
-    for i in 0..data_len {
-        if cond[i] != 0.0 && !cond[i].is_nan() {
-            result[i] = -price[i];
-        }
-    }
-
-    Ok(result)
-}
-
-fn fn_fox_trade_signal(
-    ctx: &FormulaContext,
-    args: &[Array1<f64>],
-) -> Result<Array1<f64>, FormulaError> {
-    ensure_args_len("FOX_TRADE_SIGNAL", args, 2)?;
-    let buy_cond = &args[0];
-    let sell_cond = &args[1];
-    let data_len = ctx.data_len;
-    let mut result = Array1::zeros(data_len);
-
-    let mut last_signal = 0i32;
-
-    for i in 0..data_len {
-        let buy = buy_cond[i] != 0.0 && !buy_cond[i].is_nan();
-        let sell = sell_cond[i] != 0.0 && !sell_cond[i].is_nan();
-
-        if buy && last_signal != 1 {
-            result[i] = 1.0;
-            last_signal = 1;
-        } else if sell && last_signal != -1 {
-            result[i] = -1.0;
-            last_signal = -1;
-        }
-    }
-
-    Ok(result)
-}
-
-fn fn_fox_backtest(
-    ctx: &FormulaContext,
-    args: &[Array1<f64>],
-) -> Result<Array1<f64>, FormulaError> {
-    ensure_args_len("FOX_BACKTEST", args, 3)?;
-    let buy_cond = &args[0];
-    let sell_cond = &args[1];
-    let price = &args[2];
-    let data_len = ctx.data_len;
-    let mut result = Array1::zeros(data_len);
-
-    let mut holding = false;
-    let mut entry_price = 0.0f64;
-    let mut cum_pnl = 0.0f64;
-
-    for i in 0..data_len {
-        let buy = buy_cond[i] != 0.0 && !buy_cond[i].is_nan();
-        let sell = sell_cond[i] != 0.0 && !sell_cond[i].is_nan();
-
-        if buy && !holding {
-            holding = true;
-            entry_price = price[i];
-        } else if sell && holding {
-            if !entry_price.is_nan() && !price[i].is_nan() && entry_price != 0.0 {
-                cum_pnl += (price[i] - entry_price) / entry_price;
-            }
-            holding = false;
-            entry_price = 0.0;
-        }
-
-        result[i] = cum_pnl;
-    }
-
-    Ok(result)
-}
-
-fn fn_fox_profit_ratio(
-    ctx: &FormulaContext,
-    args: &[Array1<f64>],
-) -> Result<Array1<f64>, FormulaError> {
-    ensure_args_len("FOX_PROFIT_RATIO", args, 3)?;
-    let buy_cond = &args[0];
-    let sell_cond = &args[1];
-    let price = &args[2];
-    let data_len = ctx.data_len;
-
-    let mut holding = false;
-    let mut entry_price = 0.0f64;
-    let mut total_profit = 0.0f64;
-    let mut total_loss = 0.0f64;
-
-    for i in 0..data_len {
-        let buy = buy_cond[i] != 0.0 && !buy_cond[i].is_nan();
-        let sell = sell_cond[i] != 0.0 && !sell_cond[i].is_nan();
-
-        if buy && !holding {
-            holding = true;
-            entry_price = price[i];
-        } else if sell && holding {
-            if !entry_price.is_nan() && !price[i].is_nan() && entry_price != 0.0 {
-                let pnl = (price[i] - entry_price) / entry_price;
-                if pnl > 0.0 {
-                    total_profit += pnl;
-                } else {
-                    total_loss += pnl.abs();
-                }
-            }
-            holding = false;
-            entry_price = 0.0;
-        }
-    }
-
-    let ratio = if total_loss > 0.0 {
-        total_profit / total_loss
-    } else if total_profit > 0.0 {
-        f64::INFINITY
-    } else {
-        0.0
-    };
-
-    Ok(Array1::from_elem(data_len, ratio))
-}
-
-fn fn_fox_win_rate(
-    ctx: &FormulaContext,
-    args: &[Array1<f64>],
-) -> Result<Array1<f64>, FormulaError> {
-    ensure_args_len("FOX_WIN_RATE", args, 3)?;
-    let buy_cond = &args[0];
-    let sell_cond = &args[1];
-    let price = &args[2];
-    let data_len = ctx.data_len;
-
-    let mut holding = false;
-    let mut entry_price = 0.0f64;
-    let mut wins = 0usize;
-    let mut total = 0usize;
-
-    for i in 0..data_len {
-        let buy = buy_cond[i] != 0.0 && !buy_cond[i].is_nan();
-        let sell = sell_cond[i] != 0.0 && !sell_cond[i].is_nan();
-
-        if buy && !holding {
-            holding = true;
-            entry_price = price[i];
-        } else if sell && holding {
-            if !entry_price.is_nan() && !price[i].is_nan() && entry_price != 0.0 {
-                let pnl = (price[i] - entry_price) / entry_price;
-                total += 1;
-                if pnl > 0.0 {
-                    wins += 1;
-                }
-            }
-            holding = false;
-            entry_price = 0.0;
-        }
-    }
-
-    let rate = if total > 0 {
-        wins as f64 / total as f64
-    } else {
-        0.0
-    };
-
-    Ok(Array1::from_elem(data_len, rate))
-}
-
-fn fn_fox_max_drawdown(
-    ctx: &FormulaContext,
-    args: &[Array1<f64>],
-) -> Result<Array1<f64>, FormulaError> {
-    ensure_args_len("FOX_MAX_DRAWDOWN", args, 3)?;
-    let buy_cond = &args[0];
-    let sell_cond = &args[1];
-    let price = &args[2];
-    let data_len = ctx.data_len;
-    let mut result = Array1::zeros(data_len);
-
-    let mut holding = false;
-    let mut entry_price = 0.0f64;
-    let mut cum_pnl = 0.0f64;
-    let mut peak_equity = 0.0f64;
-    let mut max_dd = 0.0f64;
-
-    for i in 0..data_len {
-        let buy = buy_cond[i] != 0.0 && !buy_cond[i].is_nan();
-        let sell = sell_cond[i] != 0.0 && !sell_cond[i].is_nan();
-
-        if buy && !holding {
-            holding = true;
-            entry_price = price[i];
-        } else if sell && holding {
-            if !entry_price.is_nan() && !price[i].is_nan() && entry_price != 0.0 {
-                cum_pnl += (price[i] - entry_price) / entry_price;
-            }
-            holding = false;
-            entry_price = 0.0;
-        }
-
-        if cum_pnl > peak_equity {
-            peak_equity = cum_pnl;
-        }
-        let dd = peak_equity - cum_pnl;
-        if dd > max_dd {
-            max_dd = dd;
-        }
-        result[i] = max_dd;
-    }
-
-    Ok(result)
-}
-
-fn fn_fox_trade_count(
-    ctx: &FormulaContext,
-    args: &[Array1<f64>],
-) -> Result<Array1<f64>, FormulaError> {
-    ensure_args_len("FOX_TRADE_COUNT", args, 2)?;
-    let buy_cond = &args[0];
-    let sell_cond = &args[1];
-    let data_len = ctx.data_len;
-    let mut result = Array1::zeros(data_len);
-
-    let mut holding = false;
-    let mut count = 0usize;
-
-    for i in 0..data_len {
-        let buy = buy_cond[i] != 0.0 && !buy_cond[i].is_nan();
-        let sell = sell_cond[i] != 0.0 && !sell_cond[i].is_nan();
-
-        if buy && !holding {
-            holding = true;
-        } else if sell && holding {
-            count += 1;
-            holding = false;
-        }
-
-        result[i] = count as f64;
     }
 
     Ok(result)

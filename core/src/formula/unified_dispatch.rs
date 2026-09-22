@@ -1115,13 +1115,19 @@ fn sum_formula_into(input: &[f64], period: usize, output: &mut [f64]) -> crate::
         });
     }
     output.fill(f64::NAN);
+    // See `math::leading_warmup`: a leading non-finite run is the warm-up prefix
+    // of an upstream rolling indicator, not data. The running total below is an
+    // incremental accumulator, so feeding it that run would make it `NaN` for
+    // the whole series -- and `SUM` has no math-layer counterpart, so the rule
+    // has to be applied here and in `functions_legacy::fn_sum`.
+    let start = crate::math::leading_warmup(input);
     let mut running = 0.0;
-    for (index, &current) in input.iter().enumerate() {
+    for (index, &current) in input.iter().enumerate().skip(start) {
         running += current;
-        if index >= period {
+        if index >= start + period {
             running -= input[index - period];
             output[index] = running;
-        } else if index == period - 1 {
+        } else if index == start + period - 1 {
             output[index] = running;
         }
     }

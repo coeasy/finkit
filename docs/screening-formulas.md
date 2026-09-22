@@ -1,9 +1,15 @@
-# Cross-market screening formulas
+# Cross-market signal formulas
 
-Finkit `0.1.5` adds a small, allocation-conscious screening layer for common
-selection logic. The primitives use aligned price/volume/benchmark series and
-do not embed exchange-specific rules, so the same formulas can be used with
-A-shares, Hong Kong stocks, US equities, ETFs, futures, and 24/7 crypto bars.
+Finkit `0.1.5` adds a small, allocation-conscious signal layer for common
+per-bar event detection. The primitives use aligned price/volume/benchmark
+series and do not embed exchange-specific rules, so the same formulas can be
+used with A-shares, Hong Kong stocks, US equities, ETFs, futures, and 24/7
+crypto bars.
+
+> **Scope.** These are single-series / two-series computations that return an
+> aligned numeric series. They carry no cross-sectional ranking, no universe
+> or instrument-pool semantics, and no backtest semantics: finkit does not do
+> stock selection or backtesting.
 
 The functions return an aligned numeric series. Signal values are `1` for a
 bullish event, `-1` for a bearish event, and `0` for no event unless noted.

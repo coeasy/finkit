@@ -135,6 +135,20 @@ pub fn variance_into(input: &[f64], period: usize, output: &mut [f64]) -> Result
             constraint: "must have the same length as input".to_string(),
         });
     }
+    // `TaVarianceState` anchors its shift on `input[0]`, so a leading warm-up
+    // run from an upstream indicator would poison every window. Recurse on the
+    // valid tail: the recursive call sees a finite `tail[0]`, so it takes the
+    // branch below and cannot recurse again.
+    let start = crate::math::leading_warmup(input);
+    if start > 0 {
+        let warm_up_end = (start + period - 1).min(output.len());
+        output[..warm_up_end].fill(f64::NAN);
+        if start + period > input.len() {
+            return Ok(());
+        }
+        let (tail_in, tail_out) = (&input[start..], &mut output[start..]);
+        return variance_into(tail_in, period, tail_out);
+    }
     let lookback = period - 1;
     output[..lookback].fill(f64::NAN);
     let mut state = TaVarianceState::new(input, period);
@@ -159,6 +173,16 @@ pub fn variance(input: &[f64], period: usize) -> Result<Vec<f64>> {
 pub fn stddev(input: &[f64], period: usize, nb_dev: f64) -> Result<Vec<f64>> {
     validate_period(input.len(), period, 2)?;
     let mut output = vec![f64::NAN; input.len()];
+    // See `variance_into`: skip an upstream warm-up run instead of poisoning the
+    // rolling moment state with it.
+    let start = crate::math::leading_warmup(input);
+    if start > 0 {
+        if start + period <= input.len() {
+            let tail = stddev(&input[start..], period, nb_dev)?;
+            output[start..].copy_from_slice(&tail);
+        }
+        return Ok(output);
+    }
     let lookback = period - 1;
     let mut state = TaVarianceState::new(input, period);
     for index in lookback..input.len() {
@@ -180,6 +204,18 @@ pub fn stddev_into(input: &[f64], period: usize, nb_dev: f64, output: &mut [f64]
             name: "output".to_string(),
             constraint: "must have the same length as input".to_string(),
         });
+    }
+    // See `variance_into`: skip an upstream warm-up run rather than poisoning
+    // the rolling moment state with it.
+    let start = crate::math::leading_warmup(input);
+    if start > 0 {
+        let warm_up_end = (start + period - 1).min(output.len());
+        output[..warm_up_end].fill(f64::NAN);
+        if start + period > input.len() {
+            return Ok(());
+        }
+        let (tail_in, tail_out) = (&input[start..], &mut output[start..]);
+        return stddev_into(tail_in, period, nb_dev, tail_out);
     }
     let lookback = period - 1;
     output[..lookback].fill(f64::NAN);
@@ -480,6 +516,17 @@ pub fn bbands_upper_into(
             name: "output".to_string(),
             constraint: "must have the same length as input".to_string(),
         });
+    }
+
+    // See `math::leading_warmup`: `TaVarianceState` anchors its shift on
+    // `input[0]`, so a leading warm-up run would poison every window.
+    let start = crate::math::leading_warmup(input);
+    if start > 0 {
+        output.fill(f64::NAN);
+        if start + period <= input.len() {
+            bbands_upper_into(&input[start..], period, nb_dev, &mut output[start..])?;
+        }
+        return Ok(());
     }
 
     let lookback = period - 1;

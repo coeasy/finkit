@@ -24,6 +24,23 @@
 //! - [`typed_moving_avg`] — native f32 SMA/EMA caller-owned kernels (requires `std` feature)
 //! - [`volume_kernels`] — caller-owned OBV/VWAP output kernels (requires `std` feature)
 
+/// Length of the leading non-finite (warm-up) run of a series, i.e. the index
+/// of the first finite value. Returns `input.len()` when every value is
+/// non-finite.
+///
+/// Every rolling indicator in this crate marks its warm-up region with a leading
+/// run of `NaN`. That run is structural, not data, so composing two indicators
+/// (`EMA(EMA(x, 5), 9)`) must start the second kernel *after* it rather than
+/// treating it as bad input — otherwise the accumulator is seeded from `NaN`
+/// and the whole output is `NaN` (`NaN - NaN` is still `NaN`).
+#[inline]
+pub(crate) fn leading_warmup(input: &[f64]) -> usize {
+    input
+        .iter()
+        .position(|value| value.is_finite())
+        .unwrap_or(input.len())
+}
+
 #[cfg(feature = "std")]
 pub mod cci;
 #[cfg(feature = "std")]

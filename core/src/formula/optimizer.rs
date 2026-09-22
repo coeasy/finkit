@@ -1267,10 +1267,7 @@ impl FormulaOptimizer {
                 AstNode::FunctionCall { name, args } => {
                     let upper = name.to_ascii_uppercase();
                     !upper.starts_with("DRAW")
-                        && !matches!(
-                            upper.as_str(),
-                            "ALERT" | "ALERTONCE" | "SELECT" | "SMARTSELECT"
-                        )
+                        && !matches!(upper.as_str(), "ALERT" | "ALERTONCE")
                         && args.iter().all(is_pure)
                 }
                 AstNode::IndexAccess { array, index } => is_pure(array) && is_pure(index),

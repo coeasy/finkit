@@ -528,6 +528,13 @@ impl FormulaEngine {
         // binds numeric literals into its parameter arena, so the substituted
         // values are precisely what make two parameterisations different plans.
         let ast = apply_params(&ast, params);
+        // The plan path has no evaluation context to fall back on, so the
+        // context-implicit price arguments of `resolve_hl*` short forms are
+        // expanded during lowering rather than here — see
+        // `FormulaComputePlan::compile_with_registry`. Doing it in the lowerer
+        // keeps the compiled-plan differential gate (which calls
+        // `FormulaHotPlan::compile` directly, without an engine) on the same
+        // code path as production.
         FormulaHotPlan::compile(&ast).map_err(|error| {
             FormulaError::InvalidOperation(format!("formula plan compilation failed: {error}"))
         })

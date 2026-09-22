@@ -3,7 +3,7 @@
 > **SSOT** — auto-generated from the legacy formula table and routed formula functions.
 > Do not edit manually. Regenerate: `python scripts/gen_ssot_docs.py --generate`
 
-Built-in formula functions: **419**
+Built-in formula functions: **399**
 
 These functions are available in the formula DSL for expressions like `SMA(CLOSE, 20)`.
 
@@ -29,7 +29,6 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `ATAN` |
 | `ATR` |
 | `ATR_ENHANCED` |
-| `AUTOFILTER` |
 | `AVEDEV` |
 | `AVG` |
 | `AVGDEV` |
@@ -65,7 +64,6 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `BREAKOUT_SCREEN` |
 | `BREAKOUT_UP` |
 | `BULLISH_CROSS` |
-| `BUY` |
 | `CAPITAL` |
 | `CCI` |
 | `CDL2CROWS` |
@@ -131,7 +129,6 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `CDLXSIDEGAP3METHODS` |
 | `CEIL` |
 | `CEILING` |
-| `CHECKSIG` |
 | `CHOP` |
 | `CHOPPINESS` |
 | `CLOSE1` |
@@ -191,12 +188,8 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `EM_TROUGHBARS` |
 | `EM_ZIG` |
 | `EM_ZLCCV` |
-| `ENTERLONG` |
-| `ENTERSHORT` |
 | `EVERY` |
 | `EXIST` |
-| `EXITLONG` |
-| `EXITSHORT` |
 | `EXP` |
 | `FILTER` |
 | `FINANCE` |
@@ -208,18 +201,10 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `FIXNAN` |
 | `FLOOR` |
 | `FORCAST` |
-| `FOX_BACKTEST` |
-| `FOX_BUY` |
-| `FOX_MAX_DRAWDOWN` |
 | `FOX_PEAK` |
 | `FOX_PEAKBARS` |
-| `FOX_PROFIT_RATIO` |
-| `FOX_SELL` |
-| `FOX_TRADE_COUNT` |
-| `FOX_TRADE_SIGNAL` |
 | `FOX_TROUGH` |
 | `FOX_TROUGHBARS` |
-| `FOX_WIN_RATE` |
 | `FOX_ZIG` |
 | `FRACPART` |
 | `FROMOPEN` |
@@ -319,7 +304,6 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `MONTH` |
 | `MTM` |
 | `MULT` |
-| `MULTSIG` |
 | `NATR` |
 | `NETINFLOW` |
 | `NOT` |
@@ -362,8 +346,6 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `RS_RATIO` |
 | `SAR` |
 | `SAREXT` |
-| `SELECTCOND` |
-| `SELL` |
 | `SHIFT` |
 | `SIGN` |
 | `SIN` |
@@ -372,7 +354,6 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `SLOPE` |
 | `SMA` |
 | `SMALLORDER` |
-| `SMARTSELECT` |
 | `SORT` |
 | `SQRT` |
 | `STD` |
@@ -394,7 +375,6 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `TENKAN` |
 | `THREE_LINE_BREAK` |
 | `TIME` |
-| `TOPN` |
 | `TOTALBARSCOUNT` |
 | `TOTALVOL` |
 | `TR` |

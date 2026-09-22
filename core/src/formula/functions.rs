@@ -12,6 +12,38 @@ fn nan_vec(len: usize) -> Array1<f64> {
     Array1::from_elem(len, f64::NAN)
 }
 
+/// Length of the leading warm-up run of a series, i.e. the index of the first
+/// finite value.
+///
+/// The *composite* indicators (`MACD`, `BOLL`, `ATR`, `DEMA`, `TEMA`) reject a
+/// non-finite input outright and seed their internal recursions from `input[0]`,
+/// but a leading run is not bad data -- it is the warm-up prefix every rolling
+/// indicator in this crate emits. Composing one on top of another
+/// (`BOLL(MA(CLOSE, 5), 20, 2)`) therefore used to yield an all-`NaN` series.
+/// See [`crate::math::leading_warmup`].
+#[inline]
+pub(super) fn warmup_offset(input: &[f64]) -> usize {
+    crate::math::leading_warmup(input)
+}
+
+/// Copy a kernel result computed on `input[start..]` back onto the full grid.
+///
+/// `start == 0` returns the series untouched, so NaN-free input keeps the
+/// original code path and arithmetic exactly.
+#[inline]
+pub(super) fn shift_back(tail: Array1<f64>, start: usize, data_len: usize) -> Array1<f64> {
+    if start == 0 {
+        return tail;
+    }
+    let mut out = nan_vec(data_len);
+    let written = tail.len().min(data_len.saturating_sub(start));
+    if written > 0 {
+        out.as_slice_mut().expect("owned Array1 is contiguous")[start..start + written]
+            .copy_from_slice(&tail.as_slice().expect("Array1 is contiguous")[..written]);
+    }
+    out
+}
+
 #[inline]
 fn ensure_args_len(name: &str, args: &[Array1<f64>], expected: usize) -> Result<(), FormulaError> {
     if args.len() < expected {
@@ -136,14 +168,17 @@ fn optional_f64(args: &[Array1<f64>], idx: usize, default: f64) -> f64 {
 fn canonical_atr(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("ATR", args, 4)?;
     let period = extract_n(args, 3, "ATR")?;
-    match crate::indicators::volatility::atr(
-        args[0].as_slice().unwrap(),
-        args[1].as_slice().unwrap(),
-        args[2].as_slice().unwrap(),
-        period,
-    ) {
-        Ok(result) => Ok(result),
-        Err(_) => Ok(nan_vec(ctx.data_len)),
+    let data_len = ctx.data_len;
+    let high = args[0].as_slice().unwrap();
+    // `MA(HIGH, 5)`, `MA(LOW, 5)` and `MA(CLOSE, 5)` carry the same upstream
+    // warm-up, so a single offset applies to all three inputs.
+    let start = warmup_offset(high);
+    let high_tail = &high[start.min(high.len())..];
+    let low_tail = args[1].as_slice().unwrap().get(start..).unwrap_or(&[]);
+    let close_tail = args[2].as_slice().unwrap().get(start..).unwrap_or(&[]);
+    match crate::indicators::volatility::atr(high_tail, low_tail, close_tail, period) {
+        Ok(result) => Ok(shift_back(result, start, data_len)),
+        Err(_) => Ok(nan_vec(data_len)),
     }
 }
 
@@ -229,23 +264,27 @@ fn canonical_bband_component(
     ensure_args_len(name, args, 2)?;
     let period = extract_n(args, 1, name)?;
     let nbdev = optional_f64(args, 2, 2.0);
-    let result =
-        match crate::indicators::overlap::bbands(args[0].as_slice().unwrap(), period, nbdev, nbdev)
-        {
-            Ok(result) => result,
-            Err(_) => return Ok(nan_vec(ctx.data_len)),
-        };
+    let data_len = ctx.data_len;
+    let values = args[0].as_slice().unwrap();
+    let start = warmup_offset(values);
+    let result = match crate::indicators::overlap::bbands(&values[start..], period, nbdev, nbdev) {
+        Ok(result) => result,
+        Err(_) => return Ok(nan_vec(data_len)),
+    };
+    let upper = shift_back(result.upper, start, data_len);
+    let middle = shift_back(result.middle, start, data_len);
+    let lower = shift_back(result.lower, start, data_len);
 
     match component {
-        BbandComponent::Upper => Ok(result.upper),
-        BbandComponent::Middle => Ok(result.middle),
-        BbandComponent::Lower => Ok(result.lower),
+        BbandComponent::Upper => Ok(upper),
+        BbandComponent::Middle => Ok(middle),
+        BbandComponent::Lower => Ok(lower),
         BbandComponent::Width => {
-            let mut width = nan_vec(ctx.data_len);
-            for i in 0..ctx.data_len {
-                let middle = result.middle[i];
-                if middle.is_finite() && middle.abs() > 1e-15 {
-                    width[i] = (result.upper[i] - result.lower[i]) / middle * 100.0;
+            let mut width = nan_vec(data_len);
+            for i in 0..data_len {
+                let mid = middle[i];
+                if mid.is_finite() && mid.abs() > 1e-15 {
+                    width[i] = (upper[i] - lower[i]) / mid * 100.0;
                 }
             }
             Ok(width)

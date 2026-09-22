@@ -132,10 +132,14 @@ pub fn rolling_sample_variance_into(
     if window > input.len() {
         return Ok(());
     }
+    // Feed the Welford state only from the first finite value: a leading warm-up
+    // run from an upstream rolling indicator would otherwise poison every window
+    // (`variance` is a running moment, so `NaN` is absorbing).
+    let start = crate::math::leading_warmup(input);
     let mut state = RollingWelfordState::new(window);
-    for (index, value) in input.iter().copied().enumerate() {
+    for (index, value) in input.iter().copied().enumerate().skip(start) {
         let current = state.update(value);
-        if index + 1 >= window {
+        if index + 1 >= start + window {
             output[index] = current.variance * current.count as f64 / (current.count - 1) as f64;
         }
     }

@@ -33,7 +33,19 @@ fn reject_if_non_finite(input: &[f64]) -> Result<()> {
             input.iter().position(|value| !value.is_finite())
         }
     };
-    if let Some(index) = first_invalid {
+    if let Some(first) = first_invalid {
+        // A non-finite value at index 0 begins a leading warm-up run emitted by
+        // an upstream rolling indicator; only a non-finite value *after* the
+        // series has started is bad input. See `math::leading_warmup`.
+        let index = if first == 0 {
+            let started = super::leading_warmup(input);
+            match input[started..].iter().position(|value| !value.is_finite()) {
+                Some(offset) => started + offset,
+                None => return Ok(()),
+            }
+        } else {
+            first
+        };
         return Err(TaError::InvalidParameter {
             name: "input".to_string(),
             constraint: format!("non-finite value at index {index}"),
@@ -88,10 +100,18 @@ pub fn ema_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> 
         });
     }
 
-    crate::utils::simd_fill_nan(&mut output[..period - 1]);
-    let initial_sma =
-        super::moving_avg_legacy::simd_horizontal_sum(&input[..period]) / period as f64;
-    output[period - 1] = initial_sma;
+    // Start after any leading warm-up run (see `math::leading_warmup`): the SMA
+    // seed reads the first `period` values, so a `NaN` there would poison the
+    // recurrence for the whole series. `start == 0` is the original arithmetic.
+    let start = super::leading_warmup(input);
+    let warm_up_end = (start + period - 1).min(output.len());
+    crate::utils::simd_fill_nan(&mut output[..warm_up_end]);
+    if start + period > input.len() {
+        return Ok(());
+    }
+    let initial_sma = super::moving_avg_legacy::simd_horizontal_sum(&input[start..start + period])
+        / period as f64;
+    output[start + period - 1] = initial_sma;
 
     let len = input.len();
     let k = smoothing_factor(period);
@@ -99,7 +119,7 @@ pub fn ema_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> 
     unsafe {
         let input_ptr = input.as_ptr();
         let output_ptr = output.as_mut_ptr();
-        for index in period..len {
+        for index in start + period..len {
             let value = *input_ptr.add(index);
             previous = (value - previous).mul_add(k, previous);
             *output_ptr.add(index) = previous;
@@ -120,6 +140,20 @@ pub fn wma_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> 
             name: "output".to_string(),
             constraint: "must have the same length as input".to_string(),
         });
+    }
+
+    // Start after any leading warm-up run (see `math::leading_warmup`). Recurse
+    // on the valid tail rather than copying it: the recursive call sees a
+    // finite `tail[0]`, so it takes the branch below and cannot recurse again.
+    let start = super::leading_warmup(input);
+    if start > 0 {
+        let warm_up_end = (start + period - 1).min(output.len());
+        crate::utils::simd_fill_nan(&mut output[..warm_up_end]);
+        if start + period > input.len() {
+            return Ok(());
+        }
+        let (tail_in, tail_out) = (&input[start..], &mut output[start..]);
+        return wma_into(tail_in, period, tail_out);
     }
 
     #[cfg(all(feature = "std", target_arch = "x86_64"))]

@@ -6,6 +6,7 @@
 //! or context mutation is safe to remove.
 
 use super::ast::{AstNode, BinaryOperator, OutputModifier, UnaryOperator};
+use super::params::expand_implicit_price_args;
 use crate::compute::{
     ComputeCapabilities, ComputeEffect, ComputeNode, ComputeNodeId, ComputePlan, ComputePlanError,
     LookbackRequirement,
@@ -63,8 +64,17 @@ impl FormulaComputePlan {
         ast: &AstNode,
         registry: &FunctionRegistry,
     ) -> Result<Self, ComputePlanError> {
+        // Context-implicit price arguments cannot survive lowering. The plan's
+        // input layout only carries series the source text *names*, so
+        // `PLUS_DI(CLOSE, 14)` — which the tree path evaluates against
+        // `ctx.high`/`ctx.low`/`ctx.close` — would reach the dispatcher one
+        // operand short and be rejected with `ERR_ARITY`. Expanding the short
+        // form into its explicit `HIGH`/`LOW`/`CLOSE` spelling here keeps the
+        // plan self-contained and is value-preserving. See
+        // [`crate::formula::params::expand_implicit_price_args`].
+        let ast = expand_implicit_price_args(ast);
         let mut lowerer = FormulaLowerer::new(registry);
-        let root = lowerer.lower(ast);
+        let root = lowerer.lower(&ast);
         let plan = ComputePlan::compile(lowerer.nodes)?;
         if let Some(error) = lowerer.pending_error {
             return Err(error);

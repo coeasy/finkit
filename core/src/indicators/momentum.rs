@@ -157,13 +157,25 @@ pub fn rsi(input: &[f64], period: usize) -> Result<Array1<f64>> {
             constraint: "greater than 0".to_string(),
         });
     }
+    // Only a non-finite value *after* the series has started is bad input; a
+    // leading run is the warm-up prefix of an upstream rolling indicator, which
+    // `rsi_simd_into` already skips. Rejecting it here made `RSI(MA(CLOSE, 5), 9)`
+    // all-NaN on this path while the compiled plan path -- which calls `rsi_into`
+    // and has no such check -- returned values.
     #[cfg(feature = "metrics")]
-    if let Some(idx) = input.iter().position(|v| !v.is_finite()) {
-        crate::metrics::input_rejected("rsi", "non_finite");
-        return Err(TaError::InvalidParameter {
-            name: "input".to_string(),
-            constraint: format!("non-finite value at index {idx}"),
-        });
+    {
+        let started = crate::math::leading_warmup(input);
+        if let Some(idx) = input[started..]
+            .iter()
+            .position(|v| !v.is_finite())
+            .map(|offset| offset + started)
+        {
+            crate::metrics::input_rejected("rsi", "non_finite");
+            return Err(TaError::InvalidParameter {
+                name: "input".to_string(),
+                constraint: format!("non-finite value at index {idx}"),
+            });
+        }
     }
     validate_input(input.len(), period + 1)?;
 
@@ -3044,6 +3056,19 @@ pub fn trix_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()>
 
     let len = input.len();
     crate::utils::simd_fill_nan(output);
+
+    // See `math::leading_warmup`: recurse on the valid tail so a leading warm-up
+    // run from an upstream indicator is skipped instead of poisoning the
+    // three-stage EMA seed (which reads `input[..period]`).
+    let start = crate::math::leading_warmup(input);
+    if start > 0 {
+        if start + period <= len {
+            let (tail_in, tail_out) = (&input[start..], &mut output[start..]);
+            trix_into(tail_in, period, tail_out)?;
+        }
+        return Ok(());
+    }
+
     let s1 = period - 1;
     let s2 = 2 * s1;
     let first_trix = s2 + period;

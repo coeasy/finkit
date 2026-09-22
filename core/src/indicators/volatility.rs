@@ -64,6 +64,26 @@ pub fn atr_into(
     validate_input(high.len(), period + 1)?;
     validate_output(high.len(), output.len())?;
 
+    // See `math::leading_warmup`: `MA(HIGH, 5)`, `MA(LOW, 5)` and `MA(CLOSE, 5)`
+    // share one upstream warm-up, so strip it from all three (the widest run
+    // wins) instead of letting the Wilder seed absorb `NaN`.
+    let start = crate::math::leading_warmup(high)
+        .max(crate::math::leading_warmup(low))
+        .max(crate::math::leading_warmup(close));
+    if start > 0 {
+        output.fill(f64::NAN);
+        if start + period + 1 <= high.len() {
+            atr_into(
+                &high[start..],
+                low.get(start..).unwrap_or(&[]),
+                close.get(start..).unwrap_or(&[]),
+                period,
+                &mut output[start..],
+            )?;
+        }
+        return Ok(());
+    }
+
     output[..period].fill(f64::NAN);
 
     let mut tr_sum = 0.0;
@@ -108,6 +128,26 @@ pub fn natr_into(
     validate_ohlc(high, low, close)?;
     validate_input(high.len(), period + 1)?;
     validate_output(high.len(), output.len())?;
+
+    // See `math::leading_warmup`: `MA(HIGH, 5)`, `MA(LOW, 5)` and `MA(CLOSE, 5)`
+    // share one upstream warm-up, so strip it from all three (the widest run
+    // wins) instead of letting the Wilder seed absorb `NaN`.
+    let start = crate::math::leading_warmup(high)
+        .max(crate::math::leading_warmup(low))
+        .max(crate::math::leading_warmup(close));
+    if start > 0 {
+        output.fill(f64::NAN);
+        if start + period + 1 <= high.len() {
+            natr_into(
+                &high[start..],
+                low.get(start..).unwrap_or(&[]),
+                close.get(start..).unwrap_or(&[]),
+                period,
+                &mut output[start..],
+            )?;
+        }
+        return Ok(());
+    }
 
     output[..period].fill(f64::NAN);
 

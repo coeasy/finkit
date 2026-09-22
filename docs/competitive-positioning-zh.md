@@ -83,7 +83,7 @@ Finkit 的目标是在保留同类低开销 Streaming 能力的同时，额外�
 | proven DirtyRange local recompute | ✅，仅安全依赖链 | 非 Finkit 同类合同 | 未按 Finkit DirtyRange 合同建模 | ❌ | 单状态推进，不是历史修订模型 |
 | caller-owned `_into` hot path | ✅，选定 kernel | C API 输出 buffer | 后端依实现而异 | Python array/DataFrame 语义 | stateful scalar output |
 | Factor Research / validation | ✅，持续扩展 | ❌ | ✅ 强研究/组合生态 | 指标与策略辅助 | ❌ |
-| portfolio/backtest product | lightweight / 非核心 | ❌ | ✅ 强项 | 可集成第三方 | ❌ |
+| portfolio/backtest product | ❌ 不做（只做底层计算） | ❌ | ✅ 强项 | 可集成第三方 | ❌ |
 | multi-language product delivery | ✅ 多绑定路径 | ✅ 多原生/Wrapper | Python-first | Python-first | Rust-first |
 | same-core semantic contract across bindings | 目标为强合同 | 各原生/Wrapper 状态不同 | Python 产品内统一 | Python 产品内统一 | Rust only |
 

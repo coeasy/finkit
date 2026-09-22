@@ -269,16 +269,6 @@ fn test_findhigh_findlow() {
 }
 
 #[test]
-fn test_topn() {
-    let mut engine = FormulaEngine::new();
-    let mut ctx = make_ctx(100);
-    let result = engine.eval("TOPN(CLOSE, 10)", &mut ctx).unwrap();
-    assert_eq!(result.len(), 100);
-    let count = result.iter().filter(|&&v| v > 0.0).count();
-    assert!(count <= 10);
-}
-
-#[test]
 fn test_drawnull() {
     let mut engine = FormulaEngine::new();
     let mut ctx = make_ctx(50);
@@ -295,53 +285,6 @@ fn test_ceiling_function() {
     let mut ctx = make_ctx(50);
     let result = engine.eval("CEILING(CLOSE, 0.1)", &mut ctx).unwrap();
     assert_eq!(result.len(), 50);
-}
-
-#[test]
-fn test_autofilter() {
-    let mut engine = FormulaEngine::new();
-    let mut ctx = make_ctx(100);
-    let result = engine.eval("AUTOFILTER()", &mut ctx).unwrap();
-    assert_eq!(result.len(), 100);
-    for i in 0..100 {
-        assert!((result[i] - 1.0).abs() < 1e-10);
-    }
-}
-
-#[test]
-fn test_checksig() {
-    let mut engine = FormulaEngine::new();
-    let mut ctx = make_ctx(100);
-    let source = r#"
-        BUY_COND := CROSS(MA(CLOSE, 5), MA(CLOSE, 20));
-        SELL_COND := CROSS(MA(CLOSE, 20), MA(CLOSE, 5));
-        RESULT: CHECKSIG(BUY_COND, SELL_COND, 1)
-    "#;
-    let result = engine.eval(source, &mut ctx).unwrap();
-    assert_eq!(result.len(), 100);
-}
-
-#[test]
-fn test_multsig() {
-    let mut engine = FormulaEngine::new();
-    let mut ctx = make_ctx(100);
-    let source = r#"
-        BUY_COND := CROSS(MA(CLOSE, 5), MA(CLOSE, 20));
-        SELL_COND := CROSS(MA(CLOSE, 20), MA(CLOSE, 5));
-        RESULT: MULTSIG(BUY_COND, SELL_COND, 5, 3)
-    "#;
-    let result = engine.eval(source, &mut ctx).unwrap();
-    assert_eq!(result.len(), 100);
-}
-
-#[test]
-fn test_enterlong_exitlong() {
-    let mut engine = FormulaEngine::new();
-    let mut ctx = make_ctx(100);
-    let bl = engine.eval("ENTERLONG()", &mut ctx).unwrap();
-    let xl = engine.eval("EXITLONG()", &mut ctx).unwrap();
-    assert_eq!(bl.len(), 100);
-    assert_eq!(xl.len(), 100);
 }
 
 #[test]
@@ -660,9 +603,7 @@ fn test_compatibility_summary() {
         ("ZIGZAG(CLOSE, 5)", true),
         ("FINDHIGH(HIGH, 20, 1, 0)", true),
         ("FINDLOW(LOW, 20, 1, 0)", true),
-        ("TOPN(CLOSE, 10)", true),
         ("DRAWNULL", true),
-        ("AUTOFILTER()", true),
         ("CUMSUM(CLOSE)", true),
         ("CUMMAX(HIGH)", true),
         ("CUMMIN(LOW)", true),

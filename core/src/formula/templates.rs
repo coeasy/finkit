@@ -104,33 +104,73 @@ impl FormulaTemplates {
 
     /// Validate that all function references in a template are registered.
     /// Returns a list of unresolved function names.
+    ///
+    /// Kept as the two-argument entry point; templates that declare parameters
+    /// should use [`Self::unresolved_function_calls`] so their own parameter
+    /// names are not mistaken for calls.
     pub fn validate_template(
         source: &str,
         registered_functions: &std::collections::HashSet<String>,
     ) -> Vec<String> {
-        let mut unresolved = Vec::new();
-        let known_data = [
+        Self::unresolved_function_calls(source, registered_functions, &[])
+    }
+
+    /// Token-anchored, parameter-aware version of [`Self::validate_template`].
+    ///
+    /// Only an *entire* identifier immediately followed by `(` counts as a call.
+    /// The previous implementation tested `source.contains(&format!("{token}("))`,
+    /// which is not token-anchored: the token `M` was reported for any template
+    /// containing `SUM(` or `MAX(`, because the substring `M(` occurs inside those
+    /// names. Identifiers that the template declares as its own parameters are
+    /// skipped as well.
+    pub fn unresolved_function_calls(
+        source: &str,
+        registered_functions: &std::collections::HashSet<String>,
+        parameters: &[String],
+    ) -> Vec<String> {
+        const KNOWN_DATA: [&str; 13] = [
             "OPEN", "HIGH", "LOW", "CLOSE", "VOLUME", "AMOUNT", "O", "H", "L", "C", "V", "A", "VOL",
         ];
-        let keywords = [
+        const KEYWORDS: [&str; 15] = [
             "IF", "THEN", "ELSE", "AND", "OR", "XOR", "NOT", "FOR", "WHILE", "DO", "END", "TO",
             "TRUE", "FALSE", "PARAMS",
         ];
 
-        for token in source.split(|c: char| !c.is_alphanumeric() && c != '_') {
-            if token.is_empty() || token.chars().next().is_none_or(|c| c.is_ascii_digit()) {
+        let mut unresolved: Vec<String> = Vec::new();
+        let chars: Vec<char> = source.chars().collect();
+        let mut index = 0;
+        while index < chars.len() {
+            if !chars[index].is_alphanumeric() && chars[index] != '_' {
+                index += 1;
                 continue;
             }
-            let upper = token.to_uppercase();
-            if known_data.contains(&upper.as_str()) || keywords.contains(&upper.as_str()) {
+            let start = index;
+            while index < chars.len() && (chars[index].is_alphanumeric() || chars[index] == '_') {
+                index += 1;
+            }
+            let token: String = chars[start..index].iter().collect();
+            if token.chars().next().is_some_and(|c| c.is_ascii_digit()) {
                 continue;
             }
-            if source.contains(&format!("{}(", token))
-                && !registered_functions.contains(&upper)
-                && !unresolved.contains(&upper)
+            let mut lookahead = index;
+            while lookahead < chars.len() && chars[lookahead].is_whitespace() {
+                lookahead += 1;
+            }
+            if lookahead >= chars.len() || chars[lookahead] != '(' {
+                continue;
+            }
+            let upper = token.to_ascii_uppercase();
+            if KNOWN_DATA.contains(&upper.as_str())
+                || KEYWORDS.contains(&upper.as_str())
+                || registered_functions.contains(&upper)
+                || parameters
+                    .iter()
+                    .any(|name| name.eq_ignore_ascii_case(&token))
+                || unresolved.contains(&upper)
             {
-                unresolved.push(upper);
+                continue;
             }
+            unresolved.push(upper);
         }
         unresolved
     }
@@ -236,7 +276,7 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
             name: "赫尔均线趋势".to_string(),
             description: "赫尔移动平均线趋势判断".to_string(),
             category: TemplateCategory::MovingAverage,
-            source: "HMA:=2*EMA(CLOSE,SHORT/2)-EMA(CLOSE,SHORT); CLOSE>HMA".to_string(),
+            source: "HMA:=2*EMA(CLOSE,N/2)-EMA(CLOSE,N); CLOSE>HMA".to_string(),
             parameters: vec![("N".to_string(), 5.0, 60.0, 21.0)],
         },
     );
@@ -521,7 +561,7 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
             name: "SAR抛物线趋势".to_string(),
             description: "抛物线转向指标判断趋势方向".to_string(),
             category: TemplateCategory::Trend,
-            source: "SAR=SAR(N,STEP,MAXSTEP); CLOSE>SAR".to_string(),
+            source: "SAR_VAL:=SAR(HIGH,LOW,STEP,MAXSTEP); CLOSE>SAR_VAL".to_string(),
             parameters: vec![
                 ("N".to_string(), 1.0, 10.0, 4.0),
                 ("STEP".to_string(), 0.01, 0.05, 0.02),
@@ -1205,7 +1245,7 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
             name: "多空强度".to_string(),
             description: "多空列强度对比".to_string(),
             category: TemplateCategory::EMClassic,
-            source: "DKCOL/MA(VOLUME,5)".to_string(),
+            source: "DKCOL()/MA(VOLUME,5)".to_string(),
             parameters: vec![],
         },
     );
@@ -1293,7 +1333,7 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
             name: "智能综合".to_string(),
             description: "多信号综合".to_string(),
             category: TemplateCategory::EMClassic,
-            source: "DKCOL;EM_CROSS(MA(C,5),MA(C,20));EM_ZLCCV()".to_string(),
+            source: "DKCOL();EM_CROSS(MA(C,5),MA(C,20));EM_ZLCCV()".to_string(),
             parameters: vec![],
         },
     );
@@ -1304,7 +1344,7 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
             name: "量价分析".to_string(),
             description: "量价配合分析".to_string(),
             category: TemplateCategory::EMClassic,
-            source: "EM_COSTEX(CLOSE,VOLUME);DKCOL".to_string(),
+            source: "EM_COSTEX(CLOSE,VOLUME);DKCOL()".to_string(),
             parameters: vec![],
         },
     );
@@ -1440,7 +1480,7 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
         name: "VR容量比率".to_string(),
         description: "容量比率指标，量价关系分析".to_string(),
         category: TemplateCategory::Volume,
-        source: "TH:=SUM(IF(CLOSE>REF(CLOSE,1),VOLUME,0),N); TL:=SUM(IF(CLOSE<REF(CLOSE,1),VOLUME,0),N); TQ:=SUM(IF(CLOSE=REF(CLOSE,1),VOLUME,0),N); VR:=(TH+TQ/2)/(TL+TQ/2)*100; VR<70".to_string(),
+        source: "TH:=SUM(IF(CLOSE>REF(CLOSE,1),VOLUME,0),N); TL:=SUM(IF(CLOSE<REF(CLOSE,1),VOLUME,0),N); TQ:=SUM(IF(CLOSE==REF(CLOSE,1),VOLUME,0),N); VR:=(TH+TQ/2)/(TL+TQ/2)*100; VR<70".to_string(),
         parameters: vec![("N".to_string(), 10.0, 30.0, 26.0)],
     });
 
@@ -1618,7 +1658,12 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
         name: "PVI正量指标".to_string(),
         description: "正量指标，放量日价格变化".to_string(),
         category: TemplateCategory::Volume,
-        source: "PVI:=IF(VOLUME>REF(VOLUME,1),REF(PVI,1)+(CLOSE-REF(CLOSE,1))/REF(CLOSE,1)*REF(PVI,1),REF(PVI,1)); MA_PVI:=MA(PVI,M); CROSS(PVI,MA_PVI)".to_string(),
+        // PVI is recursive (`PVI[t] = PVI[t-1] * (1 + r[t])` on volume-up bars),
+        // and the formula language has no recursive-series construct — the
+        // original `REF(PVI, 1)` inside the definition of `PVI` can never
+        // resolve. Rewritten with the exact identity
+        // `PVI[t] = 1000 * exp(sum of ln(1 + r) over volume-up bars)`.
+        source: "PVI_LN:=IF(VOLUME>REF(VOLUME,1),LN(1+(CLOSE-REF(CLOSE,1))/REF(CLOSE,1)),0); PVI:=1000*EXP(CUMSUM(PVI_LN)); MA_PVI:=MA(PVI,M); CROSS(PVI,MA_PVI)".to_string(),
         parameters: vec![("M".to_string(), 10.0, 30.0, 20.0)],
     });
 
@@ -1674,7 +1719,7 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
         name: "分形突破".to_string(),
         description: "比尔威廉姆斯分形突破".to_string(),
         category: TemplateCategory::Pattern,
-        source: "UP_FRACTAL:=HIGH>REF(HIGH,1) AND HIGH>REF(HIGH,2) AND HIGH>REF(HIGH,-1) AND HIGH>REF(HIGH,-2); DOWN_FRACTAL:=LOW<REF(LOW,1) AND LOW<REF(LOW,2) AND LOW<REF(LOW,-1) AND LOW<REF(LOW,-2); CLOSE>REF(HHV(HIGH,5),1)".to_string(),
+        source: "UP_FRACTAL:=HIGH>REF(HIGH,1) AND HIGH>REF(HIGH,2) AND REF(HIGH,2)>REF(HIGH,3) AND REF(HIGH,2)>REF(HIGH,4); DOWN_FRACTAL:=REF(LOW,2)<REF(LOW,1) AND REF(LOW,2)<LOW AND REF(LOW,2)<REF(LOW,3) AND REF(LOW,2)<REF(LOW,4); CLOSE>REF(HHV(HIGH,5),1)".to_string(),
         parameters: vec![],
     });
 
@@ -1686,13 +1731,17 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
         parameters: vec![],
     });
 
-    map.insert("heikinashi_trend".to_string(), FormulaTemplate {
-        name: "平均K线趋势".to_string(),
-        description: "Heikin-Ashi平均K线趋势".to_string(),
-        category: TemplateCategory::Trend,
-        source: "HA_CLOSE:=(OPEN+HIGH+LOW+CLOSE)/4; HA_OPEN:=REF((HA_OPEN+HA_CLOSE)/2,1); HA_OPEN<HA_CLOSE".to_string(),
-        parameters: vec![],
-    });
+    map.insert(
+        "heikinashi_trend".to_string(),
+        FormulaTemplate {
+            name: "平均K线趋势".to_string(),
+            description: "Heikin-Ashi平均K线趋势".to_string(),
+            category: TemplateCategory::Trend,
+            source: "HA_CLOSE:=(OPEN+HIGH+LOW+CLOSE)/4; HA_OPEN:=EMA(HA_CLOSE,3); HA_OPEN<HA_CLOSE"
+                .to_string(),
+            parameters: vec![],
+        },
+    );
 
     map.insert("ichimoku_cloud".to_string(), FormulaTemplate {
         name: "云图穿越".to_string(),
@@ -2151,7 +2200,7 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
         name: "二次测试".to_string(),
         description: "威科夫二次测试形态".to_string(),
         category: TemplateCategory::Pattern,
-        source: "FIRST_LOW:=REF(LOW,5)=LLV(LOW,10); SECOND_LOW:=LOW<REF(LOW,1)*1.01; VOL_DECREASE:=VOLUME<REF(VOLUME,5); FIRST_LOW AND SECOND_LOW AND VOL_DECREASE".to_string(),
+        source: "FIRST_LOW:=REF(LOW,5)==LLV(LOW,10); SECOND_LOW:=LOW<REF(LOW,1)*1.01; VOL_DECREASE:=VOLUME<REF(VOLUME,5); FIRST_LOW AND SECOND_LOW AND VOL_DECREASE".to_string(),
         parameters: vec![],
     });
 
@@ -2199,7 +2248,7 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
         name: "AR形态".to_string(),
         description: "威科夫自动反弹".to_string(),
         category: TemplateCategory::Pattern,
-        source: "AFTER_SC:=REF(LOW,1)=LLV(LOW,10); PRICE_UP:=CLOSE>REF(CLOSE,1)*1.02; VOL_MODERATE:=VOLUME>MA(VOLUME,10)*0.8 AND VOLUME<MA(VOLUME,10)*1.5; AFTER_SC AND PRICE_UP AND VOL_MODERATE".to_string(),
+        source: "AFTER_SC:=REF(LOW,1)==LLV(LOW,10); PRICE_UP:=CLOSE>REF(CLOSE,1)*1.02; VOL_MODERATE:=VOLUME>MA(VOLUME,10)*0.8 AND VOLUME<MA(VOLUME,10)*1.5; AFTER_SC AND PRICE_UP AND VOL_MODERATE".to_string(),
         parameters: vec![],
     });
 
@@ -2207,7 +2256,7 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
         name: "ST形态".to_string(),
         description: "威科夫二次测试".to_string(),
         category: TemplateCategory::Pattern,
-        source: "AR_HIGH:=REF(HIGH,3)=HHV(HIGH,10); RETEST_LOW:=LOW<=REF(LOW,3)*1.01; VOL_LOWER:=VOLUME<REF(VOLUME,3); AR_HIGH AND RETEST_LOW AND VOL_LOWER".to_string(),
+        source: "AR_HIGH:=REF(HIGH,3)==HHV(HIGH,10); RETEST_LOW:=LOW<=REF(LOW,3)*1.01; VOL_LOWER:=VOLUME<REF(VOLUME,3); AR_HIGH AND RETEST_LOW AND VOL_LOWER".to_string(),
         parameters: vec![],
     });
 
@@ -2527,7 +2576,7 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
         name: "对冲信号".to_string(),
         description: "对冲交易信号".to_string(),
         category: TemplateCategory::Strategy,
-        source: "BETA:=CORR(CLOSE,INDEX,N); MARKET_DOWN:=INDEX<MA(INDEX,20); STOCK_UP:=CLOSE>MA(CLOSE,20); DIVERGENCE:=BETA>0.5 AND MARKET_DOWN AND STOCK_UP; DIVERGENCE".to_string(),
+        source: "BETA:=CORREL(CLOSE,INDEX,N); MARKET_DOWN:=INDEX<MA(INDEX,20); STOCK_UP:=CLOSE>MA(CLOSE,20); DIVERGENCE:=BETA>0.5 AND MARKET_DOWN AND STOCK_UP; DIVERGENCE".to_string(),
         parameters: vec![("N".to_string(), 10.0, 30.0, 20.0)],
     });
 
@@ -2535,7 +2584,7 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
         name: "套利信号".to_string(),
         description: "统计套利信号".to_string(),
         category: TemplateCategory::Strategy,
-        source: "SPREAD:=CLOSE-REF(CLOSE,1)*CORR(CLOSE,REF(CLOSE,1),N); MEAN_SPREAD:=MA(SPREAD,N); STD_SPREAD:=STD(SPREAD,N); Z_SCORE:=(SPREAD-MEAN_SPREAD)/STD_SPREAD; ABS(Z_SCORE)>2".to_string(),
+        source: "SPREAD:=CLOSE-REF(CLOSE,1)*CORREL(CLOSE,REF(CLOSE,1),N); MEAN_SPREAD:=MA(SPREAD,N); STD_SPREAD:=STD(SPREAD,N); Z_SCORE:=(SPREAD-MEAN_SPREAD)/STD_SPREAD; ABS(Z_SCORE)>2".to_string(),
         parameters: vec![("N".to_string(), 10.0, 30.0, 20.0)],
     });
 
@@ -2556,25 +2605,6 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
     });
 
     map.insert(
-        "value_factor".to_string(),
-        FormulaTemplate {
-            name: "价值因子".to_string(),
-            description: "价值因子选股".to_string(),
-            category: TemplateCategory::Strategy,
-            source: "PE:=CLOSE/EPS; PB:=CLOSE/BVPS; PE<15 AND PB<1.5".to_string(),
-            parameters: vec![],
-        },
-    );
-
-    map.insert("quality_factor".to_string(), FormulaTemplate {
-        name: "质量因子".to_string(),
-        description: "质量因子选股".to_string(),
-        category: TemplateCategory::Strategy,
-        source: "ROE:=NET_INCOME/EQUITY; DEBT_RATIO:=TOTAL_DEBT/TOTAL_ASSETS; ROE>0.15 AND DEBT_RATIO<0.5".to_string(),
-        parameters: vec![],
-    });
-
-    map.insert(
         "low_vol_factor".to_string(),
         FormulaTemplate {
             name: "低波动因子".to_string(),
@@ -2586,222 +2616,6 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
             parameters: vec![("N".to_string(), 10.0, 60.0, 30.0)],
         },
     );
-
-    map.insert(
-        "size_factor".to_string(),
-        FormulaTemplate {
-            name: "规模因子".to_string(),
-            description: "小市值因子选股".to_string(),
-            category: TemplateCategory::Strategy,
-            source: "MARKET_CAP:=CLOSE*TOTAL_SHARES; MARKET_CAP<5000000000".to_string(),
-            parameters: vec![],
-        },
-    );
-
-    map.insert(
-        "dividend_yield".to_string(),
-        FormulaTemplate {
-            name: "股息率因子".to_string(),
-            description: "高股息率选股".to_string(),
-            category: TemplateCategory::Strategy,
-            source: "DIV_YIELD:=DIVIDEND/CLOSE*100; DIV_YIELD>3".to_string(),
-            parameters: vec![],
-        },
-    );
-
-    map.insert(
-        "earnings_yield".to_string(),
-        FormulaTemplate {
-            name: "盈利收益率".to_string(),
-            description: "盈利收益率因子".to_string(),
-            category: TemplateCategory::Strategy,
-            source: "EARNINGS_YIELD:=EPS/CLOSE*100; EARNINGS_YIELD>8".to_string(),
-            parameters: vec![],
-        },
-    );
-
-    map.insert(
-        "book_yield".to_string(),
-        FormulaTemplate {
-            name: "账面收益率".to_string(),
-            description: "账面收益率因子".to_string(),
-            category: TemplateCategory::Strategy,
-            source: "BOOK_YIELD:=BVPS/CLOSE*100; BOOK_YIELD>100".to_string(),
-            parameters: vec![],
-        },
-    );
-
-    map.insert(
-        "cash_flow_yield".to_string(),
-        FormulaTemplate {
-            name: "现金流收益率".to_string(),
-            description: "现金流收益率因子".to_string(),
-            category: TemplateCategory::Strategy,
-            source: "CF_YIELD:=CASH_FLOW/CLOSE*100; CF_YIELD>10".to_string(),
-            parameters: vec![],
-        },
-    );
-
-    map.insert(
-        "ev_ebitda".to_string(),
-        FormulaTemplate {
-            name: "EV/EBITDA".to_string(),
-            description: "企业价值倍数因子".to_string(),
-            category: TemplateCategory::Strategy,
-            source: "EV:=MARKET_CAP+TOTAL_DEBT-CASH; EV_EBITDA:=EV/EBITDA; EV_EBITDA<10"
-                .to_string(),
-            parameters: vec![],
-        },
-    );
-
-    map.insert(
-        "price_sales".to_string(),
-        FormulaTemplate {
-            name: "市销率".to_string(),
-            description: "市销率因子".to_string(),
-            category: TemplateCategory::Strategy,
-            source: "PS:=CLOSE*TOTAL_SHARES/REVENUE; PS<2".to_string(),
-            parameters: vec![],
-        },
-    );
-
-    map.insert(
-        "gross_margin".to_string(),
-        FormulaTemplate {
-            name: "毛利率因子".to_string(),
-            description: "高毛利率选股".to_string(),
-            category: TemplateCategory::Strategy,
-            source: "GROSS_MARGIN:=(REVENUE-COST)/REVENUE*100; GROSS_MARGIN>30".to_string(),
-            parameters: vec![],
-        },
-    );
-
-    map.insert(
-        "net_margin".to_string(),
-        FormulaTemplate {
-            name: "净利率因子".to_string(),
-            description: "高净利率选股".to_string(),
-            category: TemplateCategory::Strategy,
-            source: "NET_MARGIN:=NET_INCOME/REVENUE*100; NET_MARGIN>10".to_string(),
-            parameters: vec![],
-        },
-    );
-
-    map.insert(
-        "asset_turnover".to_string(),
-        FormulaTemplate {
-            name: "资产周转率".to_string(),
-            description: "资产周转率因子".to_string(),
-            category: TemplateCategory::Strategy,
-            source: "ASSET_TURNOVER:=REVENUE/TOTAL_ASSETS; ASSET_TURNOVER>0.8".to_string(),
-            parameters: vec![],
-        },
-    );
-
-    map.insert(
-        "inventory_turnover".to_string(),
-        FormulaTemplate {
-            name: "存货周转率".to_string(),
-            description: "存货周转率因子".to_string(),
-            category: TemplateCategory::Strategy,
-            source: "INV_TURNOVER:=COST/INVENTORY; INV_TURNOVER>5".to_string(),
-            parameters: vec![],
-        },
-    );
-
-    map.insert(
-        "current_ratio".to_string(),
-        FormulaTemplate {
-            name: "流动比率".to_string(),
-            description: "流动比率因子".to_string(),
-            category: TemplateCategory::Strategy,
-            source: "CURRENT_RATIO:=CURRENT_ASSETS/CURRENT_LIABILITIES; CURRENT_RATIO>1.5"
-                .to_string(),
-            parameters: vec![],
-        },
-    );
-
-    map.insert(
-        "quick_ratio".to_string(),
-        FormulaTemplate {
-            name: "速动比率".to_string(),
-            description: "速动比率因子".to_string(),
-            category: TemplateCategory::Strategy,
-            source: "QUICK_RATIO:=(CURRENT_ASSETS-INVENTORY)/CURRENT_LIABILITIES; QUICK_RATIO>1"
-                .to_string(),
-            parameters: vec![],
-        },
-    );
-
-    map.insert(
-        "interest_coverage".to_string(),
-        FormulaTemplate {
-            name: "利息保障倍数".to_string(),
-            description: "利息保障倍数因子".to_string(),
-            category: TemplateCategory::Strategy,
-            source: "INTEREST_COVERAGE:=EBIT/INTEREST_EXPENSE; INTEREST_COVERAGE>5".to_string(),
-            parameters: vec![],
-        },
-    );
-
-    map.insert("altman_z".to_string(), FormulaTemplate {
-        name: "Altman Z值".to_string(),
-        description: "Altman Z值破产预警".to_string(),
-        category: TemplateCategory::Strategy,
-        source: "Z:=1.2*WORKING_CAPITAL/TOTAL_ASSETS+1.4*RETAINED_EARNINGS/TOTAL_ASSETS+3.3*EBIT/TOTAL_ASSETS+0.6*MARKET_CAP/TOTAL_LIABILITIES+1.0*REVENUE/TOTAL_ASSETS; Z>3".to_string(),
-        parameters: vec![],
-    });
-
-    map.insert("piotroski_f".to_string(), FormulaTemplate {
-        name: "Piotroski F值".to_string(),
-        description: "Piotroski F-Score评分".to_string(),
-        category: TemplateCategory::Strategy,
-        source: "F1:=IF(NET_INCOME>0,1,0); F2:=IF(OPERATING_CASH_FLOW>0,1,0); F3:=IF(ROA>REF(ROA,1),1,0); F4:=IF(OPERATING_CASH_FLOW>NET_INCOME,1,0); F_SCORE:=F1+F2+F3+F4; F_SCORE>=3".to_string(),
-        parameters: vec![],
-    });
-
-    map.insert(
-        "graham_number".to_string(),
-        FormulaTemplate {
-            name: "格雷厄姆数值".to_string(),
-            description: "格雷厄姆数值选股".to_string(),
-            category: TemplateCategory::Strategy,
-            source: "GRAHAM:=SQRT(22.5*EPS*BVPS); CLOSE<GRAHAM".to_string(),
-            parameters: vec![],
-        },
-    );
-
-    map.insert("magic_formula".to_string(), FormulaTemplate {
-        name: "神奇公式".to_string(),
-        description: "Joel Greenblatt神奇公式".to_string(),
-        category: TemplateCategory::Strategy,
-        source: "ROC:=EBIT/(WORKING_CAPITAL+NET_FIXED_ASSETS); EARNINGS_YIELD:=EBIT/ENTERPRISE_VALUE; ROC_RANK:=RANK(ROC); EY_RANK:=RANK(EARNINGS_YIELD); COMBINED_RANK:=ROC_RANK+EY_RANK; COMBINED_RANK<30".to_string(),
-        parameters: vec![],
-    });
-
-    map.insert("nifty_fifty".to_string(), FormulaTemplate {
-        name: "漂亮50策略".to_string(),
-        description: "漂亮50成长股策略".to_string(),
-        category: TemplateCategory::Strategy,
-        source: "GROWTH:=EPS/REF(EPS,4)-1; ROE:=NET_INCOME/EQUITY; PE:=CLOSE/EPS; GROWTH>0.2 AND ROE>0.15 AND PE<30".to_string(),
-        parameters: vec![],
-    });
-
-    map.insert("dogs_of_dow".to_string(), FormulaTemplate {
-        name: "狗股策略".to_string(),
-        description: "道指狗股策略".to_string(),
-        category: TemplateCategory::Strategy,
-        source: "DIV_YIELD:=DIVIDEND/CLOSE*100; HIGH_DIV:=DIV_YIELD>4; LARGE_CAP:=MARKET_CAP>10000000000; HIGH_DIV AND LARGE_CAP".to_string(),
-        parameters: vec![],
-    });
-
-    map.insert("can_slim".to_string(), FormulaTemplate {
-        name: "CAN SLIM策略".to_string(),
-        description: "William O'Neil CAN SLIM策略".to_string(),
-        category: TemplateCategory::Strategy,
-        source: "C_QTR:=EPS>REF(EPS,3)*1.25; A_ANNUAL:=EPS>REF(EPS,4)*1.25; N_NEW:=HIGH>HHV(HIGH,52); S_SUPPLY:=VOLUME/CAPITAL<0.1; L_LEADER:=CLOSE/MA(CLOSE,50)>1.3; I_INSTITUTION:=VOLUME>MA(VOLUME,20)*1.5; M_MARKET:=INDEX>MA(INDEX,50); C_QTR AND A_ANNUAL AND N_NEW".to_string(),
-        parameters: vec![],
-    });
 
     map.insert("dual_momentum".to_string(), FormulaTemplate {
         name: "双动量策略".to_string(),
@@ -2855,7 +2669,7 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
         name: "相关性交易".to_string(),
         description: "基于相关性的交易".to_string(),
         category: TemplateCategory::Strategy,
-        source: "CORR_VAL:=CORR(CLOSE,INDEX,N); DIVERGENCE:=CLOSE>MA(CLOSE,20) AND INDEX<MA(INDEX,20); CORR_VAL>0.7 AND DIVERGENCE".to_string(),
+        source: "CORR_VAL:=CORREL(CLOSE,INDEX,N); DIVERGENCE:=CLOSE>MA(CLOSE,20) AND INDEX<MA(INDEX,20); CORR_VAL>0.7 AND DIVERGENCE".to_string(),
         parameters: vec![("N".to_string(), 10.0, 30.0, 20.0)],
     });
 
@@ -2866,7 +2680,7 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
             description: "Beta中性策略".to_string(),
             category: TemplateCategory::Strategy,
             source:
-                "BETA:=COV(CLOSE,INDEX,N)/VAR(INDEX,N); BETA_HEDGE:=1-BETA; ABS(BETA_HEDGE)<0.2"
+                "BETA:=CORREL(CLOSE,INDEX,N)*STD(CLOSE,N)*STD(INDEX,N)/VAR(INDEX,N); BETA_HEDGE:=1-BETA; ABS(BETA_HEDGE)<0.2"
                     .to_string(),
             parameters: vec![("N".to_string(), 10.0, 30.0, 20.0)],
         },
@@ -2877,14 +2691,6 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
         description: "Alpha生成策略".to_string(),
         category: TemplateCategory::Strategy,
         source: "STOCK_RET:=(CLOSE-REF(CLOSE,1))/REF(CLOSE,1); MARKET_RET:=(INDEX-REF(INDEX,1))/REF(INDEX,1); ALPHA:=STOCK_RET-BETA*MARKET_RET; ALPHA>0.02".to_string(),
-        parameters: vec![],
-    });
-
-    map.insert("multi_factor".to_string(), FormulaTemplate {
-        name: "多因子模型".to_string(),
-        description: "多因子综合选股".to_string(),
-        category: TemplateCategory::Strategy,
-        source: "MOM_FACTOR:=(CLOSE-REF(CLOSE,20))/REF(CLOSE,20); VALUE_FACTOR:=EPS/CLOSE; QUALITY_FACTOR:=ROE; MOM_SCORE:=RANK(MOM_FACTOR); VALUE_SCORE:=RANK(VALUE_FACTOR); QUALITY_SCORE:=RANK(QUALITY_FACTOR); COMPOSITE:=MOM_SCORE+VALUE_SCORE+QUALITY_SCORE; COMPOSITE>2".to_string(),
         parameters: vec![],
     });
 
@@ -2912,14 +2718,6 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
         parameters: vec![("N".to_string(), 10.0, 30.0, 20.0)],
     });
 
-    map.insert("black_litterman".to_string(), FormulaTemplate {
-        name: "Black-Litterman".to_string(),
-        description: "Black-Litterman模型".to_string(),
-        category: TemplateCategory::Strategy,
-        source: "MARKET_WEIGHT:=MARKET_CAP/SUM(MARKET_CAP); VIEW_RETURN:=0.1; TAU:=0.05; POSTERIOR_WEIGHT:=MARKET_WEIGHT+TAU*VIEW_RETURN; POSTERIOR_WEIGHT>MARKET_WEIGHT*1.2".to_string(),
-        parameters: vec![],
-    });
-
     map.insert("factor_momentum".to_string(), FormulaTemplate {
         name: "因子动量".to_string(),
         description: "因子动量策略".to_string(),
@@ -2928,54 +2726,11 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
         parameters: vec![],
     });
 
-    map.insert("factor_value".to_string(), FormulaTemplate {
-        name: "因子价值".to_string(),
-        description: "价值因子策略".to_string(),
-        category: TemplateCategory::Strategy,
-        source: "PE_RANK:=RANK(PE); PB_RANK:=RANK(PB); PS_RANK:=RANK(PS); VALUE_SCORE:=PE_RANK+PB_RANK+PS_RANK; VALUE_SCORE<30".to_string(),
-        parameters: vec![],
-    });
-
-    map.insert("factor_quality".to_string(), FormulaTemplate {
-        name: "因子质量".to_string(),
-        description: "质量因子策略".to_string(),
-        category: TemplateCategory::Strategy,
-        source: "ROE_RANK:=RANK(ROE); ROA_RANK:=RANK(ROA); GROSS_MARGIN_RANK:=RANK(GROSS_MARGIN); QUALITY_SCORE:=ROE_RANK+ROA_RANK+GROSS_MARGIN_RANK; QUALITY_SCORE>70".to_string(),
-        parameters: vec![],
-    });
-
     map.insert("factor_low_vol".to_string(), FormulaTemplate {
         name: "因子低波".to_string(),
         description: "低波动因子策略".to_string(),
         category: TemplateCategory::Strategy,
-        source: "VOL_20:=STD((CLOSE-REF(CLOSE,1))/REF(CLOSE,1),20); VOL_60:=STD((CLOSE-REF(CLOSE,1))/REF(CLOSE,1),60); VOL_RANK:=RANK(VOL_20+VOL_60); VOL_RANK<30".to_string(),
-        parameters: vec![],
-    });
-
-    map.insert(
-        "factor_size".to_string(),
-        FormulaTemplate {
-            name: "因子规模".to_string(),
-            description: "规模因子策略".to_string(),
-            category: TemplateCategory::Strategy,
-            source: "CAP_RANK:=RANK(MARKET_CAP); SIZE_FACTOR:=CAP_RANK; SIZE_FACTOR<30".to_string(),
-            parameters: vec![],
-        },
-    );
-
-    map.insert("factor_yield".to_string(), FormulaTemplate {
-        name: "因子收益".to_string(),
-        description: "收益率因子策略".to_string(),
-        category: TemplateCategory::Strategy,
-        source: "DIV_YIELD_RANK:=RANK(DIVIDEND/CLOSE); EARNINGS_YIELD_RANK:=RANK(EPS/CLOSE); YIELD_SCORE:=DIV_YIELD_RANK+EARNINGS_YIELD_RANK; YIELD_SCORE>70".to_string(),
-        parameters: vec![],
-    });
-
-    map.insert("factor_growth".to_string(), FormulaTemplate {
-        name: "因子成长".to_string(),
-        description: "成长因子策略".to_string(),
-        category: TemplateCategory::Strategy,
-        source: "EPS_GROWTH:=(EPS-REF(EPS,4))/REF(EPS,4); REV_GROWTH:=(REVENUE-REF(REVENUE,4))/REF(REVENUE,4); GROWTH_SCORE:=RANK(EPS_GROWTH)+RANK(REV_GROWTH); GROWTH_SCORE>70".to_string(),
+        source: "VOL_20:=STD((CLOSE-REF(CLOSE,1))/REF(CLOSE,1),20); VOL_60:=STD((CLOSE-REF(CLOSE,1))/REF(CLOSE,1),60); VOL_RANK:=RANK(VOL_20+VOL_60,60); VOL_RANK<30".to_string(),
         parameters: vec![],
     });
 
@@ -2999,7 +2754,7 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
         name: "动量因子增强".to_string(),
         description: "增强版动量因子".to_string(),
         category: TemplateCategory::Strategy,
-        source: "MOM_3M:=(CLOSE-REF(CLOSE,60))/REF(CLOSE,60); MOM_6M:=(CLOSE-REF(CLOSE,120))/REF(CLOSE,120); MOM_12M:=(CLOSE-REF(CLOSE,240))/REF(CLOSE,240); MOM_COMPOSITE:=MOM_3M*0.5+MOM_6M*0.3+MOM_12M*0.2; MOM_RANK:=RANK(MOM_COMPOSITE); MOM_RANK>70".to_string(),
+        source: "MOM_3M:=(CLOSE-REF(CLOSE,60))/REF(CLOSE,60); MOM_6M:=(CLOSE-REF(CLOSE,120))/REF(CLOSE,120); MOM_12M:=(CLOSE-REF(CLOSE,240))/REF(CLOSE,240); MOM_COMPOSITE:=MOM_3M*0.5+MOM_6M*0.3+MOM_12M*0.2; MOM_RANK:=RANK(MOM_COMPOSITE,240); MOM_RANK>70".to_string(),
         parameters: vec![],
     });
 
@@ -3007,7 +2762,7 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
         name: "反转因子".to_string(),
         description: "短期反转因子".to_string(),
         category: TemplateCategory::Strategy,
-        source: "SHORT_RET:=(CLOSE-REF(CLOSE,5))/REF(CLOSE,5); REVERSAL_RANK:=RANK(-SHORT_RET); REVERSAL_RANK>70".to_string(),
+        source: "SHORT_RET:=(CLOSE-REF(CLOSE,5))/REF(CLOSE,5); REVERSAL_RANK:=RANK(-SHORT_RET,60); REVERSAL_RANK>70".to_string(),
         parameters: vec![],
     });
 
@@ -3015,7 +2770,7 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
         name: "技术因子".to_string(),
         description: "技术分析因子".to_string(),
         category: TemplateCategory::Strategy,
-        source: "RSI:=SMA(MAX(CLOSE-REF(CLOSE,1),0),14,1)/SMA(ABS(CLOSE-REF(CLOSE,1)),14,1)*100; MACD_HIST:=MACD(12,26,9); TECH_SCORE:=RANK(RSI)+RANK(MACD_HIST); TECH_SCORE>100".to_string(),
+        source: "RSI:=SMA(MAX(CLOSE-REF(CLOSE,1),0),14,1)/SMA(ABS(CLOSE-REF(CLOSE,1)),14,1)*100; MACD_HIST:=MACD(12,26,9); TECH_SCORE:=RANK(RSI,14)+RANK(MACD_HIST,26); TECH_SCORE>100".to_string(),
         parameters: vec![],
     });
 
@@ -3023,15 +2778,7 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
         name: "成交量因子".to_string(),
         description: "成交量分析因子".to_string(),
         category: TemplateCategory::Strategy,
-        source: "VOL_RATIO:=VOLUME/MA(VOLUME,20); VOL_TREND:=MA(VOLUME,5)/MA(VOLUME,20); VOL_SCORE:=RANK(VOL_RATIO)+RANK(VOL_TREND); VOL_SCORE>100".to_string(),
-        parameters: vec![],
-    });
-
-    map.insert("volatility_factor".to_string(), FormulaTemplate {
-        name: "波动率因子".to_string(),
-        description: "波动率分析因子".to_string(),
-        category: TemplateCategory::Strategy,
-        source: "HIST_VOL:=STD((CLOSE-REF(CLOSE,1))/REF(CLOSE,1),20)*SQRT(252); IMPLIED_VOL:=VOLATILITY_SURFACE; VOL_RANK:=RANK(HIST_VOL); VOL_RANK<30".to_string(),
+        source: "VOL_RATIO:=VOLUME/MA(VOLUME,20); VOL_TREND:=MA(VOLUME,5)/MA(VOLUME,20); VOL_SCORE:=RANK(VOL_RATIO,20)+RANK(VOL_TREND,20); VOL_SCORE>100".to_string(),
         parameters: vec![],
     });
 
@@ -3055,7 +2802,7 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
         name: "回撤因子".to_string(),
         description: "最大回撤因子".to_string(),
         category: TemplateCategory::Strategy,
-        source: "PEAK:=HHV(CLOSE,N); DRAWDOWN:=(PEAK-CLOSE)/PEAK; MAX_DD:=HHV(DRAWDOWN,N); DD_RANK:=RANK(-MAX_DD); DD_RANK>70".to_string(),
+        source: "PEAK:=HHV(CLOSE,N); DRAWDOWN:=(PEAK-CLOSE)/PEAK; MAX_DD:=HHV(DRAWDOWN,N); DD_RANK:=RANK(-MAX_DD,N); DD_RANK>70".to_string(),
         parameters: vec![("N".to_string(), 20.0, 60.0, 30.0)],
     });
 
@@ -3065,7 +2812,7 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
             name: "一目均衡策略".to_string(),
             description: "一目均衡表交叉".to_string(),
             category: TemplateCategory::Strategy,
-            source: "CROSS(TENKAN,KIJUN)".to_string(),
+            source: "TENKAN:=(HHV(HIGH,9)+LLV(LOW,9))/2; KIJUN:=(HHV(HIGH,26)+LLV(LOW,26))/2; CROSS(TENKAN,KIJUN)".to_string(),
             parameters: vec![],
         },
     );
@@ -3076,7 +2823,7 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
             name: "超级趋势策略".to_string(),
             description: "超级趋势跟踪".to_string(),
             category: TemplateCategory::Strategy,
-            source: "CLOSE>SUPERTREND(10,3)".to_string(),
+            source: "CLOSE>SUPERTREND(HIGH,LOW,CLOSE,10,3)".to_string(),
             parameters: vec![],
         },
     );
@@ -3087,7 +2834,7 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
             name: "VWAP回归".to_string(),
             description: "VWAP均值回归".to_string(),
             category: TemplateCategory::Strategy,
-            source: "CLOSE<VWAP".to_string(),
+            source: "CLOSE<VWAP(CLOSE,VOLUME)".to_string(),
             parameters: vec![],
         },
     );
@@ -3098,7 +2845,7 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
             name: "肯特纳通道".to_string(),
             description: "肯特纳突破".to_string(),
             category: TemplateCategory::Strategy,
-            source: "CLOSE>KELTNER_UB".to_string(),
+            source: "TYP:=(HIGH+LOW+CLOSE)/3; ATR:=MA(MAX(MAX(HIGH-LOW,ABS(HIGH-REF(CLOSE,1))),ABS(LOW-REF(CLOSE,1))),10); CLOSE>MA(TYP,10)+ATR*2".to_string(),
             parameters: vec![],
         },
     );
@@ -3158,13 +2905,24 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
         },
     );
 
+    // The eight templates below used to call `ELDER_RAY_BULL`, `CHAIKIN_VOL`,
+    // `FORCE_INDEX`, `MASS_INDEX`, `SQUEEZE_MOMENTUM`, `STC`, `COPPOCK` and
+    // `VI_PLUS`/`VI_MINUS`. None of those is implemented anywhere in finkit — not
+    // in `functions.rs`, not in `registry.rs`, not in `indicators/` — so every one
+    // of them failed at evaluation time. Rather than ship a template that points at
+    // a function that does not exist, each is spelled out inline from primitives
+    // that *are* registered. The formulas are the textbook definitions.
+    //
+    // `test_every_builtin_template_resolves_its_functions` keeps this honest.
+
     map.insert(
         "strat_elder_ray".to_string(),
         FormulaTemplate {
             name: "老鹰射线".to_string(),
             description: "老鹰射线多头".to_string(),
             category: TemplateCategory::Strategy,
-            source: "ELDER_RAY_BULL(CLOSE,13)>0".to_string(),
+            // Elder Ray Bull Power = HIGH - EMA(CLOSE, n)
+            source: "HIGH-EMA(CLOSE,13)>0".to_string(),
             parameters: vec![],
         },
     );
@@ -3175,7 +2933,9 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
             name: "佳庆波动".to_string(),
             description: "佳庆波动扩张".to_string(),
             category: TemplateCategory::Strategy,
-            source: "CHAIKIN_VOL(HIGH,LOW,CLOSE,10,20)>0".to_string(),
+            // Chaikin Volatility, expansion form: the short EMA of the high-low
+            // range above its long EMA.
+            source: "EMA(HIGH-LOW,10)-EMA(HIGH-LOW,20)>0".to_string(),
             parameters: vec![],
         },
     );
@@ -3186,7 +2946,8 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
             name: "力度指数".to_string(),
             description: "力度指数多头".to_string(),
             category: TemplateCategory::Strategy,
-            source: "FORCE_INDEX(CLOSE,VOLUME,13)>0".to_string(),
+            // Elder Force Index = EMA((CLOSE - REF(CLOSE, 1)) * VOLUME, n)
+            source: "EMA((CLOSE-REF(CLOSE,1))*VOLUME,13)>0".to_string(),
             parameters: vec![],
         },
     );
@@ -3197,7 +2958,9 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
             name: "质量指数".to_string(),
             description: "质量指数反转".to_string(),
             category: TemplateCategory::Strategy,
-            source: "MASS_INDEX(HIGH,LOW,25)>27".to_string(),
+            // Mass Index = SUM(EMA(H-L, 9) / EMA(EMA(H-L, 9), 9), 25); 27 is the
+            // classic reversal threshold.
+            source: "SUM(EMA(HIGH-LOW,9)/EMA(EMA(HIGH-LOW,9),9),25)>27".to_string(),
             parameters: vec![],
         },
     );
@@ -3208,7 +2971,13 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
             name: "挤压动量".to_string(),
             description: "TTM挤压".to_string(),
             category: TemplateCategory::Strategy,
-            source: "SQUEEZE_MOMENTUM(CLOSE,20,2,1.5)>0".to_string(),
+            // TTM Squeeze momentum. The published indicator plots a linear
+            // regression of the detrended close, and finkit has no LINREG; the
+            // sign of that regression value is the sign of the detrend term, which
+            // is what this compares. The squeeze on/off condition needs Bollinger
+            // and Keltner bands and is not part of the momentum reading.
+            source: "AVG:=SMA(CLOSE,20); MID:=(HHV(HIGH,20)+LLV(LOW,20))/2; CLOSE-(AVG+MID)/2>0"
+                .to_string(),
             parameters: vec![],
         },
     );
@@ -3219,7 +2988,9 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
             name: "Schaff趋势周期".to_string(),
             description: "STC超买".to_string(),
             category: TemplateCategory::Strategy,
-            source: "STC(CLOSE,23,50,25)>80".to_string(),
+            // Schaff Trend Cycle: two stochastic passes over MACD, each smoothed
+            // by an EMA(3).
+            source: "MACD_LINE:=EMA(CLOSE,23)-EMA(CLOSE,50); K1:=100*(MACD_LINE-LLV(MACD_LINE,25))/(HHV(MACD_LINE,25)-LLV(MACD_LINE,25)); D1:=EMA(K1,3); K2:=100*(D1-LLV(D1,25))/(HHV(D1,25)-LLV(D1,25)); STC_LINE:=EMA(K2,3); STC_LINE>80".to_string(),
             parameters: vec![],
         },
     );
@@ -3230,7 +3001,8 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
             name: "估波指标".to_string(),
             description: "估波指标底部".to_string(),
             category: TemplateCategory::Strategy,
-            source: "COPPOCK(CLOSE,14,11,10)>0".to_string(),
+            // Coppock Curve = WMA(ROC(CLOSE, 14) + ROC(CLOSE, 11), 10)
+            source: "WMA(ROC(CLOSE,14)+ROC(CLOSE,11),10)>0".to_string(),
             parameters: vec![],
         },
     );
@@ -3241,7 +3013,7 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
             name: "终极振荡".to_string(),
             description: "终极振荡超买".to_string(),
             category: TemplateCategory::Strategy,
-            source: "ULT_OSC(HIGH,LOW,CLOSE,7,14,28)>70".to_string(),
+            source: "ULTOSC(HIGH,LOW,CLOSE,7,14,28)>70".to_string(),
             parameters: vec![],
         },
     );
@@ -3252,7 +3024,9 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
             name: "涡旋指标".to_string(),
             description: "涡旋交叉".to_string(),
             category: TemplateCategory::Strategy,
-            source: "CROSS(VI_PLUS(HIGH,LOW,CLOSE,14),VI_MINUS(HIGH,LOW,CLOSE,14))".to_string(),
+            // Vortex: VI+ = SUM(|HIGH - REF(LOW,1)|, n) / SUM(TR, n),
+            //         VI- = SUM(|LOW  - REF(HIGH,1)|, n) / SUM(TR, n).
+            source: "TR1:=MAX(MAX(HIGH-LOW,ABS(HIGH-REF(CLOSE,1))),ABS(LOW-REF(CLOSE,1))); VIP:=SUM(ABS(HIGH-REF(LOW,1)),14)/SUM(TR1,14); VIM:=SUM(ABS(LOW-REF(HIGH,1)),14)/SUM(TR1,14); CROSS(VIP,VIM)".to_string(),
             parameters: vec![],
         },
     );
@@ -3290,155 +3064,43 @@ fn init_builtin_templates() -> HashMap<String, FormulaTemplate> {
         },
     );
 
-    // ========== 飞狐交易师（FoxTrader）策略模板 ==========
-    map.insert("fox_ma_cross".to_string(), FormulaTemplate {
-        name: "均线交叉策略".to_string(),
-        description: "飞狐交易师均线交叉策略，短期均线上穿长期均线买入".to_string(),
-        category: TemplateCategory::FoxTrader,
-        source: "MA5:=MA(CLOSE,5); MA10:=MA(CLOSE,10); MA20:=MA(CLOSE,20); BUY_COND:=CROSS(MA5,MA10); SELL_COND:=CROSS(MA10,MA5); FOX_TRADE_SIGNAL(BUY_COND,SELL_COND)".to_string(),
-        parameters: vec![],
-    });
-
-    map.insert("fox_macd_golden".to_string(), FormulaTemplate {
-        name: "MACD金叉策略".to_string(),
-        description: "飞狐交易师MACD金叉策略，DIF上穿DEA买入".to_string(),
-        category: TemplateCategory::FoxTrader,
-        source: "DIF:=EMA(CLOSE,12)-EMA(CLOSE,26); DEA1:=EMA(DIF,9); MACD1:=(DIF-DEA1)*2; BUY_COND:=CROSS(DIF,DEA1); SELL_COND:=CROSS(DEA1,DIF); FOX_BACKTEST(BUY_COND,SELL_COND,CLOSE)".to_string(),
-        parameters: vec![],
-    });
-
-    map.insert("fox_rsi_overtrade".to_string(), FormulaTemplate {
-        name: "RSI超买超卖策略".to_string(),
-        description: "飞狐交易师RSI超买超卖策略，RSI低位买入高位卖出".to_string(),
-        category: TemplateCategory::FoxTrader,
-        source: "RSI14:=RSI(CLOSE,14); BUY_COND:=CROSS(30,RSI14); SELL_COND:=CROSS(RSI14,70); FOX_BACKTEST(BUY_COND,SELL_COND,CLOSE)".to_string(),
-        parameters: vec![],
-    });
-
-    map.insert("fox_boll_break".to_string(), FormulaTemplate {
-        name: "布林带突破策略".to_string(),
-        description: "飞狐交易师布林带突破策略，突破下轨买入突破上轨卖出".to_string(),
-        category: TemplateCategory::FoxTrader,
-        source: "MID:=MA(CLOSE,20); UPPER:=MID+2*STD(CLOSE,20); LOWER:=MID-2*STD(CLOSE,20); BUY_COND:=CROSS(LOWER,CLOSE); SELL_COND:=CROSS(CLOSE,UPPER); FOX_BACKTEST(BUY_COND,SELL_COND,CLOSE)".to_string(),
-        parameters: vec![],
-    });
-
-    map.insert("fox_turtle".to_string(), FormulaTemplate {
-        name: "海龟交易策略".to_string(),
-        description: "飞狐交易师海龟交易策略，突破N日新高买入跌破N日新低卖出".to_string(),
-        category: TemplateCategory::FoxTrader,
-        source: "HH:=HHV(HIGH,N); LL:=LLV(LOW,N); BUY_COND:=CROSS(CLOSE,REF(HH,1)); SELL_COND:=CROSS(REF(LL,1),CLOSE); FOX_BACKTEST(BUY_COND,SELL_COND,CLOSE)".to_string(),
-        parameters: vec![("N".to_string(), 10.0, 60.0, 20.0)],
-    });
-
+    // ========== 飞狐交易师（FoxTrader）指标模板 ==========
+    //
+    // Only the *indicator* half of the dialect is offered. The trade-signal and
+    // backtest helpers (`FOX_BUY`/`FOX_SELL`/`FOX_TRADE_SIGNAL`/`FOX_BACKTEST`
+    // and the statistics that go with them) were removed together with the
+    // functions themselves: finkit does not do backtesting, and shipping a
+    // strategy template that cannot be evaluated would be worse than shipping
+    // none. `TemplateCategory::FoxTrader` stays because these three remain.
     map.insert(
-        "fox_kdj_strategy".to_string(),
+        "fox_zig".to_string(),
         FormulaTemplate {
-            name: "KDJ策略".to_string(),
-            description: "KDJ金叉死叉".to_string(),
+            name: "飞狐之字转向".to_string(),
+            description: "FoxTrader ZIG 之字转向线，标记价格转折点".to_string(),
             category: TemplateCategory::FoxTrader,
-            source: "FOX_BUY(CROSS(K,D),CLOSE);FOX_SELL(CROSS(D,K),CLOSE)".to_string(),
+            source: "FOX_ZIG(CLOSE, 5)".to_string(),
             parameters: vec![],
         },
     );
 
     map.insert(
-        "fox_boll_mean".to_string(),
+        "fox_peak".to_string(),
         FormulaTemplate {
-            name: "布林回归".to_string(),
-            description: "布林带均值回归".to_string(),
+            name: "飞狐峰标记".to_string(),
+            description: "FoxTrader PEAK 峰识别，M 为邻域半径".to_string(),
             category: TemplateCategory::FoxTrader,
-            source: "FOX_BUY(CLOSE<BOLL_LB,CLOSE);FOX_SELL(CLOSE>BOLL_UB,CLOSE)".to_string(),
+            source: "FOX_PEAK(CLOSE, 5, 1)".to_string(),
             parameters: vec![],
         },
     );
 
     map.insert(
-        "fox_momentum".to_string(),
+        "fox_trough".to_string(),
         FormulaTemplate {
-            name: "动量策略".to_string(),
-            description: "动量突破".to_string(),
+            name: "飞狐谷标记".to_string(),
+            description: "FoxTrader TROUGH 谷识别，M 为邻域半径".to_string(),
             category: TemplateCategory::FoxTrader,
-            source: "FOX_BUY(ROC(CLOSE,10)>0,CLOSE);FOX_SELL(ROC(CLOSE,10)<0,CLOSE)".to_string(),
-            parameters: vec![],
-        },
-    );
-
-    map.insert(
-        "fox_volume_break".to_string(),
-        FormulaTemplate {
-            name: "放量突破".to_string(),
-            description: "放量突破".to_string(),
-            category: TemplateCategory::FoxTrader,
-            source: "FOX_BUY(VOLUME>MA(VOLUME,20)*2 AND CLOSE>MA(CLOSE,20),CLOSE)".to_string(),
-            parameters: vec![],
-        },
-    );
-
-    map.insert(
-        "fox_double_bottom".to_string(),
-        FormulaTemplate {
-            name: "双底策略".to_string(),
-            description: "双底形态".to_string(),
-            category: TemplateCategory::FoxTrader,
-            source: "FOX_BUY(LOW=LLV(LOW,20) AND REF(LOW,1)=LLV(LOW,20),CLOSE)".to_string(),
-            parameters: vec![],
-        },
-    );
-
-    map.insert(
-        "fox_trend_follow".to_string(),
-        FormulaTemplate {
-            name: "趋势跟踪".to_string(),
-            description: "均线趋势跟踪".to_string(),
-            category: TemplateCategory::FoxTrader,
-            source: "FOX_BUY(CLOSE>MA(CLOSE,60),CLOSE);FOX_SELL(CLOSE<MA(CLOSE,60),CLOSE)"
-                .to_string(),
-            parameters: vec![],
-        },
-    );
-
-    map.insert(
-        "fox_mean_revert".to_string(),
-        FormulaTemplate {
-            name: "均值回归".to_string(),
-            description: "均值回归买入".to_string(),
-            category: TemplateCategory::FoxTrader,
-            source: "FOX_BUY(CLOSE<MA(CLOSE,20)-2*STD(CLOSE,20),CLOSE)".to_string(),
-            parameters: vec![],
-        },
-    );
-
-    map.insert(
-        "fox_breakout".to_string(),
-        FormulaTemplate {
-            name: "突破策略".to_string(),
-            description: "N日突破".to_string(),
-            category: TemplateCategory::FoxTrader,
-            source: "FOX_BUY(CLOSE=HHV(CLOSE,20),CLOSE);FOX_SELL(CLOSE=LLV(CLOSE,20),CLOSE)"
-                .to_string(),
-            parameters: vec![],
-        },
-    );
-
-    map.insert(
-        "fox_scalping".to_string(),
-        FormulaTemplate {
-            name: "日内短线".to_string(),
-            description: "短线交易".to_string(),
-            category: TemplateCategory::FoxTrader,
-            source: "FOX_BUY(CROSS(MA(C,5),MA(C,10)) AND VOLUME>REF(VOLUME,1),CLOSE)".to_string(),
-            parameters: vec![],
-        },
-    );
-
-    map.insert(
-        "fox_swing".to_string(),
-        FormulaTemplate {
-            name: "波段交易".to_string(),
-            description: "波段交易".to_string(),
-            category: TemplateCategory::FoxTrader,
-            source: "FOX_BUY(FOX_ZIG(1,5)>REF(FOX_ZIG(1,5),1),CLOSE)".to_string(),
+            source: "FOX_TROUGH(CLOSE, 5, 1)".to_string(),
             parameters: vec![],
         },
     );
@@ -3604,5 +3266,186 @@ mod tests {
             let templates = lib.get_by_category(&cat);
             assert!(!templates.is_empty(), "Category {:?} has no templates", cat);
         }
+    }
+
+    /// Every built-in template must reference only functions that still exist.
+    ///
+    /// [`FormulaTemplates::validate_template`] was written for this and then
+    /// never called, so a template could name a function that had been renamed or
+    /// deleted and nothing would notice — which is exactly what happened when the
+    /// out-of-scope backtest/selection registrations were removed: fifteen
+    /// FoxTrader templates kept pointing at `FOX_BUY`/`FOX_BACKTEST` and only the
+    /// `cargo test` build caught it, by failing to *compile* a different test.
+    ///
+    /// Wiring the validator into a gate turns template rot into a named failure
+    /// instead of a silent one.
+    #[test]
+    fn test_every_builtin_template_resolves_its_functions() {
+        use crate::formula::get_builtin_functions;
+        use std::collections::HashSet;
+
+        let lib = FormulaTemplates::new();
+        let registered: HashSet<String> = get_builtin_functions().keys().cloned().collect();
+
+        let mut failures = Vec::new();
+        for template in lib.list_all() {
+            let parameters: Vec<String> = template
+                .parameters
+                .iter()
+                .map(|(name, ..)| name.clone())
+                .collect();
+            let unresolved = FormulaTemplates::unresolved_function_calls(
+                &template.source,
+                &registered,
+                &parameters,
+            );
+            if !unresolved.is_empty() {
+                failures.push(format!("{} -> {unresolved:?}", template.name));
+            }
+        }
+        assert!(
+            failures.is_empty(),
+            "templates reference unregistered functions:\n{}",
+            failures.join("\n")
+        );
+    }
+
+    /// `unresolved_function_calls` must only treat a *whole* identifier followed
+    /// by `(` as a call.
+    ///
+    /// The previous `source.contains("{token}(")` test reported the token `M`
+    /// whenever the source contained `SUM(` or `MAX(`, which made the gate above
+    /// unusable: it produced a long list of false positives and would have hidden
+    /// the real rot among them.
+    #[test]
+    fn test_unresolved_function_calls_is_token_anchored() {
+        use std::collections::HashSet;
+
+        let registered: HashSet<String> = ["MA".to_string(), "SUM".to_string(), "MAX".to_string()]
+            .into_iter()
+            .collect();
+
+        // `M` is a declared parameter here, and `M(` only ever occurs inside
+        // `SUM(` / `MAX(` — neither may be reported.
+        let source = "M:=3; X:=MA(SUM(CLOSE,M),MAX(CLOSE,1))";
+        let unresolved =
+            FormulaTemplates::unresolved_function_calls(source, &registered, &["M".to_string()]);
+        assert!(
+            unresolved.is_empty(),
+            "unexpected unresolved: {unresolved:?}"
+        );
+
+        // A genuine unknown call is still reported, exactly once.
+        let unresolved = FormulaTemplates::unresolved_function_calls(
+            "NOPE(CLOSE) + NOPE(OPEN)",
+            &registered,
+            &[],
+        );
+        assert_eq!(unresolved, vec!["NOPE".to_string()]);
+    }
+
+    /// Every built-in template must at least parse.
+    ///
+    /// Resolving names is not enough: a template whose source has a syntax error
+    /// is just as unusable, and nothing checked that either.
+    #[test]
+    fn test_every_builtin_template_parses() {
+        let lib = FormulaTemplates::new();
+        let mut failures = Vec::new();
+        for template in lib.list_all() {
+            if let Err(error) = crate::formula::parse_formula(&template.source) {
+                failures.push(format!("{} -> {error}", template.name));
+            }
+        }
+        assert!(
+            failures.is_empty(),
+            "templates failed to parse:\n{}",
+            failures.join("\n")
+        );
+    }
+
+    /// The templates repaired in the template-rot sweep must produce numbers, not
+    /// merely parse.
+    ///
+    /// Without this, "the template resolves its function names" could be satisfied
+    /// by a formula that evaluates to all-NaN. Series length is 600 so that the
+    /// longest lookback in the set (the 240-bar momentum rank) has room to warm up.
+    /// The `em_*` templates are excluded because they read `ctx.em_data`, which a
+    /// synthetic context does not provide.
+    #[test]
+    fn test_repaired_templates_evaluate_to_finite_values() {
+        use crate::formula::{FormulaContext, FormulaEngine, ParamValues};
+        use ndarray::Array1;
+
+        let len = 600;
+        let open = Array1::from_vec((0..len).map(|i| 100.0 + i as f64 * 0.5).collect());
+        let high = Array1::from_vec((0..len).map(|i| 105.0 + i as f64 * 0.7).collect());
+        let low = Array1::from_vec((0..len).map(|i| 95.0 + i as f64 * 0.3).collect());
+        let close = Array1::from_vec((0..len).map(|i| 102.0 + i as f64 * 0.6).collect());
+        let volume = Array1::from_vec((0..len).map(|i| 10_000.0 + i as f64 * 100.0).collect());
+
+        let keys = [
+            // rewritten to stop calling unimplemented indicators
+            "strat_elder_ray",
+            "strat_chaikin_vol",
+            "strat_force_index",
+            "strat_mass_index",
+            "strat_squeeze",
+            "strat_stc",
+            "strat_coppock",
+            "strat_vortex",
+            // arity / parameter defects
+            "sar_trend",
+            "fractal_break",
+            "factor_low_vol",
+            "momentum_factor_new",
+            "reversal_factor",
+            "technical_factor",
+            "volume_factor",
+            "drawdown_factor",
+            "strat_supertrend",
+            // undefined-variable defects
+            "hma_trend",
+            "strat_keltner",
+            "strat_ichimoku",
+            "strat_vwap_revert",
+            "heikinashi_trend",
+            "pvi_positive",
+        ];
+
+        let lib = FormulaTemplates::new();
+        let mut failures = Vec::new();
+        for key in keys {
+            let Some(template) = lib.get(key) else {
+                failures.push(format!("{key}: template missing"));
+                continue;
+            };
+            let mut params = ParamValues::new();
+            for (name, _, _, default) in &template.parameters {
+                params.insert(name.clone(), *default);
+            }
+            let mut engine = FormulaEngine::new();
+            let mut ctx = FormulaContext::new(
+                open.clone(),
+                high.clone(),
+                low.clone(),
+                close.clone(),
+                volume.clone(),
+                None,
+            );
+            match engine.eval_with_params(&template.source, &mut ctx, &params) {
+                Ok(result) => {
+                    if !result.iter().any(|value| value.is_finite()) {
+                        failures.push(format!("{key}: no finite values"));
+                    }
+                }
+                Err(error) => failures.push(format!("{key}: {error}")),
+            }
+        }
+        assert!(
+            failures.is_empty(),
+            "repaired templates do not evaluate:\n{}",
+            failures.join("\n")
+        );
     }
 }
