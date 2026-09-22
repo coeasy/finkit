@@ -893,3 +893,66 @@ fn formula_rolling_composition_of_composites() {
         );
     }
 }
+
+/// The `try_execute_simple_formula*` fast paths must not answer for a name they
+/// do not specialise, and must not answer all-`NaN` for a *leading* NaN run.
+///
+/// Regression for a divergence that the rolling-composition fix exposed. Those
+/// helpers guard with `input.iter().any(|value| !value.is_finite())` and used to
+/// do so **before** matching the function name, so any formula whose root was
+/// `NAME(<variable>, <literal>)` was answered with an all-`NaN` series whenever
+/// the input carried a warm-up run -- including names such as `SUM`, `HHV` and
+/// `WMA` that the fast path never supported. That was invisible while the
+/// general executor produced all-`NaN` for the same input too; once the math
+/// layer learned to compute through a warm-up run it became a live
+/// fast-path-vs-plan divergence.
+///
+/// The `+0` case matters: the optimizer folds the identity away, so the root is
+/// the call again and the structural match still fires.
+#[test]
+fn formula_differential_simple_formula_fast_path_defers() {
+    const LEN: usize = 200;
+
+    // A rolling output: 4 leading NaNs, 196 finite values.
+    let mut engine = FormulaEngine::new();
+    let mut seed_ctx = make_ctx(LEN);
+    let warm = run_ast(&mut engine, "MA(CLOSE,5)", &mut seed_ctx);
+    assert_eq!(warm.iter().filter(|value| value.is_finite()).count(), 196);
+
+    let cases: &[(&str, usize)] = &[
+        ("MA(X,9)", 188),
+        ("EMA(X,9)", 188),
+        ("RSI(X,9)", 191),
+        ("BOLLMID(X,9)", 188),
+        ("SUM(X,9)", 188),
+        ("HHV(X,9)", 188),
+        ("LLV(X,9)", 188),
+        ("STD(X,9)", 188),
+        ("WMA(X,9)", 188),
+        ("SUM(X,9)+0", 188),
+        // Controls: these never matched the fast path's structure.
+        ("MA(REF(X,3),9)", 185),
+        ("SUM(MA(CLOSE,5),9)", 188),
+        ("MA(MA(CLOSE,5),9)", 188),
+        ("X2:=MA(X,9); X2", 188),
+        ("Y:=SUM(X,9); Y", 188),
+    ];
+
+    for (source, expected_finite) in cases {
+        let mut ctx_fast = make_ctx(LEN);
+        ctx_fast.set_variable("X".to_string(), warm.clone());
+        let fast = run_ast(&mut engine, source, &mut ctx_fast);
+
+        let mut ctx_plan = make_ctx(LEN);
+        ctx_plan.set_variable("X".to_string(), warm.clone());
+        let plan = run_plan(source, &ctx_plan);
+        assert_arrays_match(source, "plan", &fast, &plan);
+
+        let finite = fast.iter().filter(|value| value.is_finite()).count();
+        assert_eq!(
+            finite, *expected_finite,
+            "{source}: got {finite} finite values, expected {expected_finite} \
+             (0 means a simple-formula fast path answered all-NaN instead of deferring)"
+        );
+    }
+}

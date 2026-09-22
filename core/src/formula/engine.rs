@@ -908,12 +908,26 @@ impl FormulaEngine {
             return false;
         }
 
-        if input.iter().any(|value| !value.is_finite()) {
-            output.fill(f64::NAN);
-            return true;
+        // The name check must precede the non-finite guard, and both must fall
+        // through rather than answer from here:
+        //
+        // * an unsupported name (`SUM`, `HHV`, ...) was previously answered with
+        //   all-NaN purely because its input was non-finite, silently shadowing
+        //   the general executor;
+        // * a supported name whose input is not fully finite must reach the
+        //   general executor, which owns the "invalid market data becomes
+        //   all-NaN" contract *and* the math layer's warm-up rule -- a
+        //   **leading** NaN run is an upstream indicator's warm-up prefix and is
+        //   computed through, while **interior** non-finite values are rejected
+        //   there and become all-NaN anyway.
+        let upper = name.to_ascii_uppercase();
+        if !matches!(upper.as_str(), "MA" | "BOLLMID" | "EMA" | "RSI")
+            || input.iter().any(|value| !value.is_finite())
+        {
+            return false;
         }
 
-        match name.to_ascii_uppercase().as_str() {
+        match upper.as_str() {
             "MA" | "BOLLMID" => crate::math::simd_kernels::sma_simd_into(
                 input,
                 period,
@@ -963,15 +977,20 @@ impl FormulaEngine {
             return None;
         }
 
-        // The formula functions intentionally turn invalid market data into
-        // an all-NaN result. Preserve that behaviour while bypassing the
-        // allocation-heavy function-call path for valid input.
-        if input.iter().any(|value| !value.is_finite()) {
-            return Some(Array1::from_elem(ctx.data_len, f64::NAN));
+        // See `try_execute_simple_formula_into`: the name check must precede the
+        // non-finite guard, and neither an unsupported name nor a non-finite
+        // input may be answered from here. The general executor owns both the
+        // "invalid market data becomes all-NaN" contract and the math layer's
+        // warm-up rule, under which a leading NaN run is computed through.
+        let upper = name.to_ascii_uppercase();
+        if !matches!(upper.as_str(), "MA" | "BOLLMID" | "EMA" | "RSI")
+            || input.iter().any(|value| !value.is_finite())
+        {
+            return None;
         }
 
         let mut output = Array1::from_elem(input.len(), f64::NAN);
-        match name.to_ascii_uppercase().as_str() {
+        match upper.as_str() {
             "MA" | "BOLLMID" => {
                 crate::math::simd_kernels::sma_simd_into(
                     input,
@@ -1522,11 +1541,17 @@ impl FormulaEngine {
         if period == 0 || (period as f64 - period_value).abs() > f64::EPSILON {
             return None;
         }
-        if input.iter().any(|value| !value.is_finite()) {
-            return Some(Array1::from_elem(input.len(), f64::NAN));
+        // Same rule as the two `try_execute_simple_formula*` helpers above: the
+        // name check comes first and a non-finite input falls through, so the
+        // general executor applies the math layer's warm-up rule.
+        let upper = name.to_ascii_uppercase();
+        if !matches!(upper.as_str(), "MA" | "BOLLMID" | "EMA" | "RSI")
+            || input.iter().any(|value| !value.is_finite())
+        {
+            return None;
         }
         let mut output = Array1::from_elem(input.len(), f64::NAN);
-        match name.to_ascii_uppercase().as_str() {
+        match upper.as_str() {
             "MA" | "BOLLMID" => crate::math::simd_kernels::sma_simd_into(
                 input,
                 period,

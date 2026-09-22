@@ -846,3 +846,84 @@ pub mod moving_avg {
 `DEMA` / `TEMA` / `MACD(<表达式>, ...)` / `APO` / `STOCH` / `COUNT` / `DMA` 在 **plan 路径没有 kernel**
 （`plan=UNSUPPORTED`），属 §7 第 1 条的「剩余 ~65 个机械缺口」；树路径已正确。
 `#[default]` 仍是 `Tree`，所以这不是线上缺陷。
+
+---
+
+## 11. 第十一轮：simple-formula 快速路径吃掉预热段（2026-09-21）
+
+### 11.1 发现方式
+
+第十轮的教训是「**等价门禁看不见两边一致地错**」，所以本轮换了方法：写**绝对性质探针**
+（断言有限值个数，而不是断言两路径一致）。探针枚举「根节点形如 `NAME(<变量>, <字面量>)`」
+的公式，把带预热段的序列**通过 `set_variable` 绑定成变量**再求值。
+
+一次就命中 **10 个用例**（`MA`/`EMA`/`RSI`/`BOLLMID`/`SUM`/`HHV`/`LLV`/`STD`/`WMA`/`SUM(X,9)+0`）：
+引擎返回**全 NaN**，而 plan 路径返回 188~191 个有限值。
+
+### 11.2 根因
+
+`FormulaEngine` 有三条「简单公式」快速路径：
+
+| 函数 | 入口 |
+|---|---|
+| `try_execute_simple_formula` | `execute` |
+| `try_execute_simple_formula_into` | `eval_into` |
+| `try_execute_simple_formula_slices` | `eval_zero_copy_inputs` |
+
+三条都是同一段结构：匹配 `FunctionCall` → 取 `args[0]` 为变量、`args[1]` 为字面量 →
+**然后先做非有限值检查，最后才 match 函数名**。
+
+```rust
+if input.iter().any(|value| !value.is_finite()) {
+    return Some(Array1::from_elem(ctx.data_len, f64::NAN));   // ← 在 match 之前
+}
+match name.to_ascii_uppercase().as_str() {
+    "MA" | "BOLLMID" => ..., "EMA" => ..., "RSI" => ..., _ => return None,
+}
+```
+
+两个后果：
+
+1. **未支持的函数名也被这里回答**。`SUM`/`HHV`/`LLV`/`STD`/`WMA` 根本不在 match 里，
+   但只要**结构**匹配且输入含非有限值，就会返回全 NaN —— 永远不会落到通用执行器。
+2. **`SUM(X,9)+0` 也中招**：优化器把 `+0` 恒等式折叠掉，根节点又变回那个调用。
+
+第十轮之前这不表现为缺陷，因为通用执行器对同样的输入也返回全 NaN（**两边一致地错**）。
+math 层学会「跳过前导预热段」之后，通用路径算出有限值，而快速路径仍返回全 NaN
+→ **变成真实的快速路径 vs plan 分叉**。
+
+### 11.3 修法
+
+规则收敛为一条：**快速路径只处理完全有限的输入，其余一律落回通用执行器**；
+且**函数名检查必须在非有限值检查之前**。
+
+```rust
+let upper = name.to_ascii_uppercase();
+if !matches!(upper.as_str(), "MA" | "BOLLMID" | "EMA" | "RSI")
+    || input.iter().any(|value| !value.is_finite())
+{
+    return None;   // 或 _into 变体里 return false
+}
+```
+
+为什么「非有限就落回」是安全的：
+
+- **前导** NaN 段 → 通用执行器按 math 层规则**算过去**（这正是要修的）；
+- **内部** 非有限值 → 通用执行器走 `fn_ma` 等包装函数，`Err(_) => Ok(nan_vec(..))`
+  → 仍然全 NaN。**可观测结果不变**，只是不再由快速路径给出。
+
+三条路径都改了，避免只改一条造成新的分叉（第十轮的教训）。
+
+### 11.4 验证
+
+| 项 | 结果 |
+|---|---|
+| 探针（16 用例 × 快速路径/plan） | 修前 **10 处分叉**，修后 **0 处**，全部 `AGREE` |
+| 新增门禁 `formula_differential_simple_formula_fast_path_defers` | 15 用例，同时断言两路径一致**与**精确有限值个数 |
+| `formula_differential_tests` | 36 passed / 0 failed |
+
+### 11.5 方法论（已固化为 skill）
+
+绝对性质探针 → 定位 → 修共享层 → 升格为正式门禁 → 删探针。
+已存为 skill `equivalence-gate-blind-spot`（差分门禁盲区审计）。
+
