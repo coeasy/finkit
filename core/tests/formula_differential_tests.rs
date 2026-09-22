@@ -956,3 +956,230 @@ fn formula_differential_simple_formula_fast_path_defers() {
         );
     }
 }
+
+/// The other two "simple formula" fast paths are reached through different
+/// public entry points than `eval`: `try_execute_simple_formula_into` through
+/// `eval_into`, and `try_execute_simple_formula_slices` through
+/// `eval_zero_copy_inputs`. They carried the same defect and were fixed
+/// alongside it, so they need their own coverage -- a fix applied to one entry
+/// point is exactly how the previous round created a fresh divergence.
+///
+/// `eval_zero_copy_inputs` cannot be handed a bound variable, so it is driven
+/// with OHLCV that itself begins with a NaN run, as an incomplete or resampled
+/// feed would be.
+#[test]
+fn formula_differential_fast_path_entry_points_defer() {
+    const LEN: usize = 200;
+    const WARM: usize = 4;
+
+    let mut engine = FormulaEngine::new();
+
+    // A rolling output: 4 leading NaNs, 196 finite values.
+    let mut seed_ctx = make_ctx(LEN);
+    let warm = run_ast(&mut engine, "MA(CLOSE,5)", &mut seed_ctx);
+    assert_eq!(warm.iter().filter(|value| value.is_finite()).count(), 196);
+
+    // ---- eval_into ---------------------------------------------------------
+    for (source, expected_finite) in [
+        ("MA(X,9)", 188),
+        ("SUM(X,9)", 188),
+        ("HHV(X,9)", 188),
+        ("WMA(X,9)", 188),
+    ] {
+        let formula = engine.compile(source).expect("compile failed");
+
+        let mut ctx_into = make_ctx(LEN);
+        ctx_into.set_variable("X".to_string(), warm.clone());
+        let mut output = Array1::zeros(LEN);
+        engine
+            .eval_into(&formula, &mut ctx_into, &mut output)
+            .expect("eval_into failed");
+
+        let mut ctx_ref = make_ctx(LEN);
+        ctx_ref.set_variable("X".to_string(), warm.clone());
+        let reference = run_ast(&mut engine, source, &mut ctx_ref);
+        assert_arrays_match(source, "eval", &output, &reference);
+
+        let finite = output.iter().filter(|value| value.is_finite()).count();
+        assert_eq!(
+            finite, expected_finite,
+            "eval_into {source}: got {finite} finite values, expected {expected_finite}"
+        );
+    }
+
+    // ---- eval_zero_copy_inputs --------------------------------------------
+    let mut open = vec![f64::NAN; LEN];
+    let mut high = vec![f64::NAN; LEN];
+    let mut low = vec![f64::NAN; LEN];
+    let mut close = vec![f64::NAN; LEN];
+    let mut volume = vec![f64::NAN; LEN];
+    for index in WARM..LEN {
+        let x = index as f64;
+        open[index] = 100.0 + x * 0.5;
+        high[index] = 105.0 + x * 0.7;
+        low[index] = 95.0 + x * 0.3;
+        close[index] = 102.0 + x * 0.6;
+        volume[index] = 10000.0 + x * 100.0;
+    }
+
+    for (source, expected_finite) in [
+        ("MA(CLOSE,9)", 188),
+        ("SUM(CLOSE,9)", 188),
+        ("HHV(CLOSE,9)", 188),
+        ("EMA(CLOSE,9)", 188),
+        ("RSI(CLOSE,9)", 191),
+    ] {
+        let formula = engine.compile(source).expect("compile failed");
+        let fast = engine
+            .eval_zero_copy_inputs(&formula, &open, &high, &low, &close, &volume, None)
+            .expect("eval_zero_copy_inputs failed");
+
+        let mut ctx_ref = FormulaContext::new(
+            Array1::from_vec(open.clone()),
+            Array1::from_vec(high.clone()),
+            Array1::from_vec(low.clone()),
+            Array1::from_vec(close.clone()),
+            Array1::from_vec(volume.clone()),
+            None,
+        );
+        let reference = run_ast(&mut engine, source, &mut ctx_ref);
+        assert_arrays_match(source, "eval", &fast, &reference);
+
+        let finite = fast.iter().filter(|value| value.is_finite()).count();
+        assert_eq!(
+            finite, expected_finite,
+            "eval_zero_copy_inputs {source}: got {finite} finite values, \
+             expected {expected_finite}"
+        );
+    }
+}
+
+/// Round 12: the same absorbing-`NaN` class as the rolling kernels, but living
+/// in the **library layer** rather than the formula layer.
+///
+/// `AVGDEV`, `ZSCORE`, `TSF` and the whole `LINEARREG*` family keep an
+/// incremental accumulator (`sum += newest - oldest`). Seeded from a window that
+/// still contains an upstream indicator's leading `NaN` warm-up run, the
+/// accumulator is poisoned for the entire series, so composing any of them onto
+/// a rolling output produced all-`NaN`.
+///
+/// Two things make this class easy to miss, and both are guarded here:
+///
+/// * the differential gates cannot see it — before the fix the tree path and
+///   the plan path were *identically* all-`NaN`, and `values_match` treats
+///   `NaN`/`NaN` as agreement;
+/// * the same logical indicator has more than one implementation
+///   (`AVGDEV` delegates to the library, `AVEDEV` is hand-written; `fn_zscore`
+///   uses `rolling_mean`, not `zscore`), so fixing one says nothing about the
+///   other.
+///
+/// Every count below is an absolute property, not a comparison: a regression
+/// that re-introduces the poison reports `0` and fails loudly.
+#[test]
+fn formula_differential_incremental_accumulators_survive_warmup() {
+    const LEN: usize = 200;
+
+    let mut engine = FormulaEngine::new();
+    let mut seed_ctx = make_ctx(LEN);
+    let warm = run_ast(&mut engine, "MA(CLOSE,5)", &mut seed_ctx);
+    assert_eq!(warm.iter().filter(|value| value.is_finite()).count(), 196);
+
+    // ---- tree path: the whole accumulator family ---------------------------
+    //
+    // `period = 9` over a 196-finite tail gives 196 - 9 + 1 = 188 values.
+    for (source, expected_finite) in [
+        ("AVGDEV(X,9)", 188),
+        ("AVEDEV(X,9)", 188),
+        ("ZSCORE(X,9)", 188),
+        ("TSF(X,9)", 188),
+        ("LINEARREG(X,9)", 188),
+        ("LINEAR_REG(X,9)", 188),
+        ("LINEARREG_SLOPE(X,9)", 188),
+        ("LINEARREG_INTERCEPT(X,9)", 188),
+        ("LINEARREG_ANGLE(X,9)", 188),
+        ("SLOPE(X,9)", 188),
+        ("FORCAST(X,9)", 188),
+        // Wider windows already worked; kept as a control.
+        ("SKEW(X,9)", 192),
+        ("KURT(X,9)", 192),
+    ] {
+        let mut ctx = make_ctx(LEN);
+        ctx.set_variable("X".to_string(), warm.clone());
+        let values = run_ast(&mut engine, source, &mut ctx);
+        let finite = values.iter().filter(|value| value.is_finite()).count();
+        assert_eq!(
+            finite, expected_finite,
+            "{source}: got {finite} finite values, expected {expected_finite} \
+             (0 means the library-layer accumulator was seeded from the NaN prefix)"
+        );
+    }
+
+    // ---- plan path ---------------------------------------------------------
+    //
+    // `ZSCORE` is the one member of the family with a plan kernel, and that
+    // kernel is a *separate* implementation (`statistics::zscore_into`) rather
+    // than the `rolling_mean` route the tree path takes. Its slide guard had to
+    // be offset by the warm-up start as well: a bare `index >= period` evicted
+    // `input[warm_start - period]` on the seed bar, which is still inside the
+    // NaN prefix.
+    {
+        let mut ctx_plan = make_ctx(LEN);
+        ctx_plan.set_variable("X".to_string(), warm.clone());
+        let plan = run_plan("ZSCORE(X,9)", &ctx_plan);
+
+        let mut ctx_tree = make_ctx(LEN);
+        ctx_tree.set_variable("X".to_string(), warm.clone());
+        let tree = run_ast(&mut engine, "ZSCORE(X,9)", &mut ctx_tree);
+        assert_arrays_match("ZSCORE(X,9)", "plan", &tree, &plan);
+
+        let finite = plan.iter().filter(|value| value.is_finite()).count();
+        assert_eq!(
+            finite, 188,
+            "ZSCORE(X,9) plan: got {finite} finite values, expected 188"
+        );
+    }
+
+    // ---- duplicate implementations must agree ------------------------------
+    //
+    // These pairs are two independent implementations of the same statistic
+    // reaching different code paths. Comparing them is an absolute property that
+    // holds even when both paths are wrong in the same way, which is precisely
+    // how the `AVGDEV`/`AVEDEV` split stayed hidden.
+    for (left, right) in [
+        ("AVGDEV(X,9)", "AVEDEV(X,9)"),
+        ("SLOPE(X,9)", "LINEARREG_SLOPE(X,9)"),
+        ("FORCAST(X,9)", "LINEARREG(X,9)"),
+    ] {
+        let mut ctx_left = make_ctx(LEN);
+        ctx_left.set_variable("X".to_string(), warm.clone());
+        let lhs = run_ast(&mut engine, left, &mut ctx_left);
+
+        let mut ctx_right = make_ctx(LEN);
+        ctx_right.set_variable("X".to_string(), warm.clone());
+        let rhs = run_ast(&mut engine, right, &mut ctx_right);
+
+        assert_arrays_match(left, right, &lhs, &rhs);
+    }
+
+    // ---- inert for NaN-free input ------------------------------------------
+    //
+    // The fix must not touch the ordinary path: with no leading non-finite run
+    // the warm-up start is 0 and every index is byte-for-byte what it was. The
+    // observable contract is the warm-up shape -- the first `period - 1` rows
+    // stay `NaN` and the first finite value lands exactly on row `period - 1`.
+    for source in ["AVGDEV(CLOSE,9)", "ZSCORE(CLOSE,9)", "LINEARREG(CLOSE,9)"] {
+        let mut ctx = make_ctx(LEN);
+        let values = run_ast(&mut engine, source, &mut ctx);
+        for (index, value) in values.iter().enumerate().take(8) {
+            assert!(
+                value.is_nan(),
+                "{source}: row {index} should be NaN warm-up on NaN-free input, got {value}"
+            );
+        }
+        assert!(
+            values[8].is_finite(),
+            "{source}: row 8 should be the first finite value on NaN-free input, got {}",
+            values[8]
+        );
+    }
+}

@@ -35,9 +35,22 @@ pub fn avgdev(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
 
     let len = input.len();
     let mut output = init_output(len);
+
+    // A leading NaN run is an upstream rolling indicator's warm-up prefix, not
+    // bad data: start the window after it, exactly as the `math::` kernels do.
+    // `start == 0` (NaN-free input) leaves every index below unchanged. Without
+    // this the incremental `sum` is seeded from a NaN-bearing window and
+    // `NaN - NaN` keeps it NaN for the whole series, so `AVGDEV` of any rolling
+    // output was all-NaN even though `AVEDEV` (a separate implementation)
+    // handled it.
+    let start = crate::math::leading_warmup(input);
+    if start + timeperiod > len {
+        return Ok(output);
+    }
+
     if timeperiod == 1 {
         // No deviation: window of size 1 always has mean == x.
-        for i in 0..len {
+        for i in start..len {
             output[i] = 0.0;
         }
         return Ok(output);
@@ -50,16 +63,16 @@ pub fn avgdev(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
     // O(1) rolling mean update, O(period) abs-deviation per step. For typical
     // periods (<= 200) this is fast enough; a strict O(1) streaming version
     // is implemented in `streaming::StreamingAvgdev`.
-    let mut buf: Vec<f64> = input[..timeperiod].to_vec();
+    let mut buf: Vec<f64> = input[start..start + timeperiod].to_vec();
     let mut sum: f64 = buf.iter().sum();
 
     // Helper closure
     let dev_sum = |buf: &[f64], mean: f64| -> f64 { buf.iter().map(|&x| (x - mean).abs()).sum() };
 
     let mean = sum * inv_n;
-    output[timeperiod - 1] = dev_sum(&buf, mean) * inv_n;
+    output[start + timeperiod - 1] = dev_sum(&buf, mean) * inv_n;
 
-    for i in timeperiod..len {
+    for i in start + timeperiod..len {
         let oldest = input[i - timeperiod];
         let newest = input[i];
         sum += newest - oldest;
@@ -106,6 +119,16 @@ pub fn zscore(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
 
     let len = input.len();
     let mut output = init_output(len);
+
+    // A leading NaN run is an upstream rolling indicator's warm-up prefix, not
+    // bad data: start the rolling window after it. `warm_start == 0` leaves
+    // every index below unchanged. Without this the incremental accumulators
+    // below are seeded from a NaN-bearing window and `NaN - NaN` keeps them NaN
+    // for the whole series.
+    let warm_start = crate::math::leading_warmup(input);
+    if warm_start + timeperiod > len {
+        return Ok(output);
+    }
     let n = timeperiod as f64;
     let inv_n = 1.0 / n;
     let inv_n_minus_1 = 1.0 / (n - 1.0);
@@ -113,7 +136,7 @@ pub fn zscore(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
     // Initialize accumulators with first window
     let mut sum: f64 = 0.0;
     let mut sum_sq: f64 = 0.0;
-    for j in 0..timeperiod {
+    for j in warm_start..warm_start + timeperiod {
         sum += input[j];
         sum_sq += input[j] * input[j];
     }
@@ -123,11 +146,11 @@ pub fn zscore(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
     let var = ((sum_sq - sum * mean) * inv_n_minus_1).max(0.0);
     let std_dev = var.sqrt();
     if std_dev > 1e-15 {
-        output[timeperiod - 1] = (input[timeperiod - 1] - mean) / std_dev;
+        output[warm_start + timeperiod - 1] = (input[warm_start + timeperiod - 1] - mean) / std_dev;
     }
 
     // Subsequent windows — incremental O(1) update per step
-    for i in timeperiod..len {
+    for i in warm_start + timeperiod..len {
         let old = input[i - timeperiod];
         let new = input[i];
         sum += new - old;
@@ -166,18 +189,32 @@ pub fn zscore_into(input: &[f64], timeperiod: usize, output: &mut [f64]) -> Resu
     validate_input(input.len(), timeperiod)?;
 
     output.fill(f64::NAN);
+
+    // A leading NaN run is an upstream rolling indicator's warm-up prefix, not
+    // bad data: start the rolling window after it. `warm_start == 0` leaves
+    // every index below unchanged. Without this the incremental accumulators
+    // below are seeded from a NaN-bearing window and `NaN - NaN` keeps them NaN
+    // for the whole series.
+    let warm_start = crate::math::leading_warmup(input);
+    if warm_start + timeperiod > input.len() {
+        return Ok(());
+    }
     let n = timeperiod as f64;
     let inv_n = 1.0 / n;
     let inv_n_minus_1 = 1.0 / (n - 1.0);
     let mut sum = 0.0;
     let mut sum_sq = 0.0;
-    for &value in &input[..timeperiod] {
+    for &value in &input[warm_start..warm_start + timeperiod] {
         sum += value;
         sum_sq += value * value;
     }
 
-    for index in timeperiod - 1..input.len() {
-        if index >= timeperiod {
+    for index in warm_start + timeperiod - 1..input.len() {
+        // The window only starts sliding once it has moved past the seed. Using
+        // a bare `index >= timeperiod` here would evict `input[warm_start -
+        // timeperiod]` on the seed bar, which is still inside the NaN prefix,
+        // and poison every subsequent update.
+        if index >= warm_start + timeperiod {
             let old = input[index - timeperiod];
             let new = input[index];
             sum += new - old;
@@ -557,6 +594,16 @@ pub fn tsf(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
 
     let len = input.len();
     let mut output = init_output(len);
+
+    // A leading NaN run is an upstream rolling indicator's warm-up prefix, not
+    // bad data: start the rolling window after it. `warm_start == 0` leaves
+    // every index below unchanged. Without this the incremental accumulators
+    // below are seeded from a NaN-bearing window and `NaN - NaN` keeps them NaN
+    // for the whole series.
+    let warm_start = crate::math::leading_warmup(input);
+    if warm_start + timeperiod > len {
+        return Ok(output);
+    }
     let p = timeperiod as f64;
 
     // Precompute constants for x = [0, 1, ..., timeperiod-1]
@@ -572,7 +619,10 @@ pub fn tsf(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
     // Initialize accumulators with first window
     let mut sum_y: f64 = 0.0;
     let mut sum_xy: f64 = 0.0;
-    for (j, &val) in input[..timeperiod].iter().enumerate() {
+    for (j, &val) in input[warm_start..warm_start + timeperiod]
+        .iter()
+        .enumerate()
+    {
         sum_y += val;
         sum_xy += j as f64 * val;
     }
@@ -580,10 +630,10 @@ pub fn tsf(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
     // First window
     let slope = (p * sum_xy - sum_x * sum_y) / denom;
     let intercept = (sum_y - slope * sum_x) / p;
-    output[timeperiod - 1] = slope * p + intercept;
+    output[warm_start + timeperiod - 1] = slope * p + intercept;
 
     // Subsequent windows — incremental O(1) update per step
-    for i in timeperiod..len {
+    for i in warm_start + timeperiod..len {
         let old_val = input[i - timeperiod];
         let new_val = input[i];
         sum_xy += last_x * new_val - (sum_y - old_val);

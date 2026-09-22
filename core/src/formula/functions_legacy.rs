@@ -13,7 +13,7 @@ use crate::indicators::momentum as lib_momentum;
 use crate::indicators::momentum_ext::imi as lib_imi;
 use crate::indicators::momentum_ext::{chop as lib_chop, fisher as lib_fisher, tsi as lib_tsi};
 use crate::indicators::overlap::sarext as lib_sarext;
-use crate::indicators::statistics::avgdev as lib_avgdev;
+use crate::indicators::statistics::{avgdev as lib_avgdev, zscore as lib_zscore};
 use crate::indicators::volume_ext::cmf as lib_cmf;
 use crate::math::kernels::{rolling_beta_into, rolling_correlation_into};
 use crate::math::linear as lib_linear;
@@ -2426,23 +2426,16 @@ fn fn_zscore(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, 
     let data_len = ctx.data_len;
     let values = input.as_slice().unwrap();
 
-    let mean_vals = match lib_stat::rolling_mean(values, n) {
-        Ok(r) => r,
-        Err(_) => return Ok(nan_vec(data_len)),
-    };
-    let std_vals = match lib_stat::rolling_std_dev(values, n) {
-        Ok(r) => r,
-        Err(_) => return Ok(nan_vec(data_len)),
-    };
-
-    let mut result = nan_vec(data_len);
-    for i in 0..data_len {
-        if !mean_vals[i].is_nan() && !std_vals[i].is_nan() && std_vals[i].abs() > 1e-15 {
-            result[i] = (input[i] - mean_vals[i]) / std_vals[i];
-        }
+    // Delegate to the canonical implementation rather than hand-rolling
+    // `rolling_mean` + `rolling_std_dev`. The plan path's kernel calls
+    // `statistics::zscore_into`, which is bit-identical to `statistics::zscore`,
+    // but `rolling_std_dev` uses Welford's removable variance and disagreed with
+    // it by ~2.5e-10 absolute -- a live tree-vs-plan divergence on ordinary
+    // NaN-free input that the all-NaN warm-up bug had been masking.
+    match lib_zscore(values, n) {
+        Ok(result) => Ok(result),
+        Err(_) => Ok(nan_vec(data_len)),
     }
-
-    Ok(result)
 }
 
 fn fn_stoch(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {

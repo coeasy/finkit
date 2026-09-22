@@ -78,10 +78,15 @@ pub fn sma_into(input: &[f64], window: usize, output: &mut [f64]) -> Result<(), 
     if window > input.len() {
         return Ok(());
     }
+    // Feed the state only from the first finite value: a leading warm-up run
+    // from an upstream rolling indicator would otherwise poison every window
+    // (`MovingAverageState` is a running recurrence, so `NaN` is absorbing).
+    // `start == 0` leaves the loop bit-identical to the unfixed version.
+    let start = crate::math::leading_warmup(input);
     let mut state = MovingAverageState::new(MovingAverageKind::Sma, window);
-    for (index, value) in input.iter().copied().enumerate() {
+    for (index, value) in input.iter().copied().enumerate().skip(start) {
         let current = state.update(value);
-        if index + 1 >= window {
+        if index + 1 >= start + window {
             output[index] = current;
         }
     }
@@ -108,10 +113,13 @@ pub fn wma_into(input: &[f64], window: usize, output: &mut [f64]) -> Result<(), 
     if window > input.len() {
         return Ok(());
     }
+    // Same leading warm-up rule as `sma_into`: skip the upstream NaN prefix so
+    // the weighted recurrence starts from a real value.
+    let start = crate::math::leading_warmup(input);
     let mut state = MovingAverageState::new(MovingAverageKind::Wma, window);
-    for (index, value) in input.iter().copied().enumerate() {
+    for (index, value) in input.iter().copied().enumerate().skip(start) {
         let current = state.update(value);
-        if index + 1 >= window {
+        if index + 1 >= start + window {
             output[index] = current;
         }
     }

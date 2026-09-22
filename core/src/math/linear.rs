@@ -126,6 +126,16 @@ pub fn linreg_slope(input: &[f64], period: usize) -> Result<Array1<f64>> {
 
     let len = input.len();
     let mut output = init_output(len);
+
+    // A leading NaN run is an upstream rolling indicator's warm-up prefix, not
+    // bad data: start the rolling window after it. `warm_start == 0` leaves
+    // every index below unchanged. Without this the incremental accumulators
+    // below are seeded from a NaN-bearing window and `NaN - NaN` keeps them NaN
+    // for the whole series.
+    let warm_start = crate::math::leading_warmup(input);
+    if warm_start + period > len {
+        return Ok(output);
+    }
     let p = period as f64;
     // For x = 0..period-1: sum_x = p*(p-1)/2, sum_x2 = p*(p-1)*(2p-1)/6
     let sum_x = p * (p - 1.0) / 2.0;
@@ -136,13 +146,13 @@ pub fn linreg_slope(input: &[f64], period: usize) -> Result<Array1<f64>> {
     let mut sum_xy = 0.0;
     let reseed_interval = 32 * period;
     let mut since_reseed = 0usize;
-    for (j, &val) in input[..period].iter().enumerate() {
+    for (j, &val) in input[warm_start..warm_start + period].iter().enumerate() {
         sum_y += val;
         sum_xy += j as f64 * val;
     }
-    output[period - 1] = (p * sum_xy - sum_x * sum_y) / denom;
+    output[warm_start + period - 1] = (p * sum_xy - sum_x * sum_y) / denom;
 
-    for i in period..len {
+    for i in warm_start + period..len {
         let old_val = input[i - period];
         let new_val = input[i];
         sum_xy += (period - 1) as f64 * new_val - (sum_y - old_val);
@@ -193,6 +203,16 @@ pub fn linreg_intercept(input: &[f64], period: usize) -> Result<Array1<f64>> {
 
     let len = input.len();
     let mut output = init_output(len);
+
+    // A leading NaN run is an upstream rolling indicator's warm-up prefix, not
+    // bad data: start the rolling window after it. `warm_start == 0` leaves
+    // every index below unchanged. Without this the incremental accumulators
+    // below are seeded from a NaN-bearing window and `NaN - NaN` keeps them NaN
+    // for the whole series.
+    let warm_start = crate::math::leading_warmup(input);
+    if warm_start + period > len {
+        return Ok(output);
+    }
     let p = period as f64;
     let sum_x = p * (p - 1.0) / 2.0;
     let sum_x2 = p * (p - 1.0) * (2.0 * p - 1.0) / 6.0;
@@ -200,14 +220,14 @@ pub fn linreg_intercept(input: &[f64], period: usize) -> Result<Array1<f64>> {
 
     let mut sum_y = 0.0;
     let mut sum_xy = 0.0;
-    for (j, &val) in input[..period].iter().enumerate() {
+    for (j, &val) in input[warm_start..warm_start + period].iter().enumerate() {
         sum_y += val;
         sum_xy += j as f64 * val;
     }
     let slope = (p * sum_xy - sum_x * sum_y) / denom;
-    output[period - 1] = (sum_y - slope * sum_x) / p;
+    output[warm_start + period - 1] = (sum_y - slope * sum_x) / p;
 
-    for i in period..len {
+    for i in warm_start + period..len {
         let old_val = input[i - period];
         let new_val = input[i];
         sum_xy += (period - 1) as f64 * new_val - (sum_y - old_val);
@@ -248,6 +268,16 @@ pub fn linreg(input: &[f64], period: usize) -> Result<Array1<f64>> {
 
     let len = input.len();
     let mut output = init_output(len);
+
+    // A leading NaN run is an upstream rolling indicator's warm-up prefix, not
+    // bad data: start the rolling window after it. `warm_start == 0` leaves
+    // every index below unchanged. Without this the incremental accumulators
+    // below are seeded from a NaN-bearing window and `NaN - NaN` keeps them NaN
+    // for the whole series.
+    let warm_start = crate::math::leading_warmup(input);
+    if warm_start + period > len {
+        return Ok(output);
+    }
     let p = period as f64;
     let sum_x = p * (p - 1.0) / 2.0;
     let sum_x2 = p * (p - 1.0) * (2.0 * p - 1.0) / 6.0;
@@ -256,15 +286,15 @@ pub fn linreg(input: &[f64], period: usize) -> Result<Array1<f64>> {
 
     let mut sum_y = 0.0;
     let mut sum_xy = 0.0;
-    for (j, &val) in input[..period].iter().enumerate() {
+    for (j, &val) in input[warm_start..warm_start + period].iter().enumerate() {
         sum_y += val;
         sum_xy += j as f64 * val;
     }
     let slope = (p * sum_xy - sum_x * sum_y) / denom;
     let intercept = (sum_y - slope * sum_x) / p;
-    output[period - 1] = slope * last_x + intercept;
+    output[warm_start + period - 1] = slope * last_x + intercept;
 
-    for i in period..len {
+    for i in warm_start + period..len {
         let old_val = input[i - period];
         let new_val = input[i];
         sum_xy += last_x * new_val - (sum_y - old_val);
@@ -306,6 +336,16 @@ pub fn linreg_angle(input: &[f64], period: usize) -> Result<Array1<f64>> {
 
     let len = input.len();
     let mut output = init_output(len);
+
+    // A leading NaN run is an upstream rolling indicator's warm-up prefix, not
+    // bad data: start the rolling window after it. `warm_start == 0` leaves
+    // every index below unchanged. Without this the incremental accumulators
+    // below are seeded from a NaN-bearing window and `NaN - NaN` keeps them NaN
+    // for the whole series.
+    let warm_start = crate::math::leading_warmup(input);
+    if warm_start + period > len {
+        return Ok(output);
+    }
     let p = period as f64;
     let sum_x = p * (p - 1.0) * 0.5;
     let sum_x_sq = p * (p - 1.0) * (2.0 * p - 1.0) / 6.0;
@@ -315,21 +355,21 @@ pub fn linreg_angle(input: &[f64], period: usize) -> Result<Array1<f64>> {
     let mut sum_xy = 0.0;
     let mut sum_abs = 0.0;
     for i in (0..period).rev() {
-        let value = input[period - 1 - i];
+        let value = input[warm_start + period - 1 - i];
         sum_y += value;
         sum_xy += i as f64 * value;
         sum_abs += value.abs();
     }
 
-    let mut trailing_idx = 1usize;
-    let mut trailing_value = input[0];
+    let mut trailing_idx = warm_start + 1;
+    let mut trailing_value = input[warm_start];
     let mut bars_since_reseed = 8 * period;
     let angle = |sxy: f64, sy: f64| {
         ((p * sxy - sum_x * sy) / divisor).atan() * (180.0 / std::f64::consts::PI)
     };
-    output[period - 1] = angle(sum_xy, sum_y);
+    output[warm_start + period - 1] = angle(sum_xy, sum_y);
 
-    for today in period..len {
+    for today in warm_start + period..len {
         let weighted_trailing = p * trailing_value;
         sum_xy += sum_y - weighted_trailing;
         sum_y += input[today] - trailing_value;

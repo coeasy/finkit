@@ -927,3 +927,135 @@ if !matches!(upper.as_str(), "MA" | "BOLLMID" | "EMA" | "RSI")
 绝对性质探针 → 定位 → 修共享层 → 升格为正式门禁 → 删探针。
 已存为 skill `equivalence-gate-blind-spot`（差分门禁盲区审计）。
 
+
+---
+
+## 12. 第十二轮：库层增量累加器的预热段污染（同型缺陷的第三处）
+
+第十轮（滚动核）、第十一轮（formula 快速路径）、第十二轮（库层累加器）是**同一个缺陷类的三次显形**。
+共同机制：`NaN` 对增量递推是**吸收元**（`NaN - NaN = NaN`），而滚动指标的输出天然带一段
+**前导 NaN 预热段**。只要递推的种子窗口覆盖到那段，整个序列就永久 NaN。
+
+### 12.1 发现方法
+
+沿用第十一轮的**绝对性质探针**：把 `MA(CLOSE,5)`（196/200 有限）绑定为变量 `X`，
+对 36 个滚动/统计/回归函数断言**有限值个数**（而不是两路径是否一致）。
+
+结果：**6 处全 NaN** —— `AVGDEV`、`LINEARREG`、`LINEAR_REG`、`LINEARREG_SLOPE`、
+`LINEARREG_INTERCEPT`、`TSF`。
+
+注意 `AVEDEV(X,9)` 是好的、`AVGDEV(X,9)` 是坏的 —— 同一指标的两份实现，一份自愈一份不自愈。
+这个不对称是定位整个缺陷类的钥匙。
+
+### 12.2 根因：库层累加器
+
+这些函数都维护 `sum += newest - oldest` 形式的增量累加器，种子取自 `input[..period]`：
+
+| 站点 | 函数 |
+|---|---|
+| `math/linear.rs` | `linreg` / `linreg_slope` / `linreg_intercept` / `linreg_angle` |
+| `indicators/statistics.rs` | `avgdev` / `zscore` / `zscore_into` / `tsf` |
+| `math/kernels/compat.rs` | `sma_into` / `wma_into`（`MovingAverageState`） |
+
+`fn_zscore` 走的是 `lib_stat::rolling_mean`（**不是** `statistics::zscore`），
+而 `rolling_mean` → `compat::rolling_mean_into` → `compat::sma_into` → `MovingAverageState`。
+所以只修 `statistics.rs` 修不好 `ZSCORE`。
+
+### 12.3 修法：种子与循环全部按 `warm_start` 偏移
+
+```rust
+let warm_start = crate::math::leading_warmup(input);   // 全 NaN 输入返回 input.len()
+if warm_start + period > len { return Ok(output); }    // 有限尾巴不够长 → 保持全 NaN
+// 种子：input[warm_start..warm_start + period]
+// 首值：output[warm_start + period - 1]
+// 循环：for i in warm_start + period..len
+```
+
+`warm_start == 0`（无 NaN 输入）时 `skip(0)` 与 `+0` 偏移都是空操作 → **逐位不变**，
+golden / benchmark 不受影响。`compat.rs` 用第十轮 `rolling_sample_variance_into`
+的既有形状（`.skip(start)` + `index + 1 >= start + window`）。
+
+### 12.4 自己踩的坑：guard 忘了偏移（只在 plan 路径暴露）
+
+`zscore_into` 把「滑窗」折进了主循环：
+
+```rust
+for index in warm_start + timeperiod - 1..input.len() {
+    if index >= timeperiod {          // ← 忘了偏移！
+        let old = input[index - timeperiod];
+        sum += new - old;             // old 落在 NaN 前缀里 → 永久 NaN
+    }
+```
+
+在**种子那根 bar** 上窗口还没开始滑动，但 `index >= timeperiod` 已经成立 →
+驱逐了 `input[warm_start - timeperiod]`。必须写成 `index >= warm_start + timeperiod`。
+
+**为什么只有 plan 路径暴露**：tree 路径的 `fn_zscore` 根本不调 `zscore_into`，
+plan kernel 才调。所以症状是 `tree=188 plan=0` —— 一个**方向相反的**分叉。
+这也说明：**改完共享层必须两条路径都跑**。
+
+### 12.5 连带发现：一个被全 NaN 掩盖的既有分叉
+
+修完预热段后 `ZSCORE` 变成 `tree=188 plan=188`，但两路径**数值不等**：
+
+| 输入 | tree vs plan `max_abs` | `max_rel` | 位置 |
+|---|---|---|---|
+| NaN-free `ZSCORE(CLOSE,9)` | **2.243e-10** | 1.536e-10 | 199 |
+| 预热段 `ZSCORE(X,9)` | 2.248e-10 | 1.539e-10 | 199 |
+
+**NaN-free 输入上就已经超出门禁的 1e-10 绝对容差** —— 这是**既有缺陷**，不是本轮引入的。
+它一直被两件事掩盖：(1) 全 NaN 时 `values_match` 判 NaN/NaN 相等；
+(2) 语料里从没用精确容差覆盖过 `ZSCORE` 的 plan kernel。
+
+根因是**两份不同算法**：
+
+| 实现 | σ 的算法 | 实测差异 |
+|---|---|---|
+| `fn_zscore`（tree，手写） | `rolling_std_dev` → **Welford 可移除方差** | 基线 |
+| `zscore_into`（plan kernel） | 朴素 `sum` / `sum_sq` 递推 | **2.524e-10** |
+| `statistics::zscore` | 与 `zscore_into` **逐位一致**（`max_abs = 0`） | — |
+
+**修法**：按项目既有政策（两份实现冲突时收敛到有参考覆盖的那份，删掉手写那份），
+让 `fn_zscore` 直接委托 canonical 实现 —— 与 `fn_avgdev`/`fn_std` 同形：
+
+```rust
+match lib_zscore(values, n) {          // indicators::statistics::zscore
+    Ok(result) => Ok(result),
+    Err(_) => Ok(nan_vec(data_len)),
+}
+```
+
+方向说明：**plan 路径一个字节都没动**（它本来就用 canonical），改的是 tree 路径这份
+手写重复实现。NaN 语义不变（`zscore_into` 同样有 `std_dev > 1e-15` 门槛）。
+
+### 12.6 验证
+
+| 项 | 结果 |
+|---|---|
+| 探针（36 用例） | 修前 **6 处全 NaN** → 修后 **0 处** |
+| `ZSCORE` 两路径 | 修前 `tree=0 plan=0` → 修后 `tree=188 plan=188` 且逐位一致 |
+| 新增门禁 `formula_differential_incremental_accumulators_survive_warmup` | 13 用例精确有限值 + `ZSCORE` plan 一致性 + **重复实现互校**（`AVGDEV`≡`AVEDEV`、`SLOPE`≡`LINEARREG_SLOPE`、`FORCAST`≡`LINEARREG`）+ NaN-free 输入的预热形状不变 |
+| `formula_differential_tests` | 38 passed / 0 failed |
+| `formula_compat` | 73 passed / 0 failed |
+| **全量 `--no-fail-fast`** | **50 targets / 4013 passed / 0 failed / 16 ignored，EXIT=0** |
+| 文档门禁 + rustfmt | 全绿（versions 0.1.15 / SSOT / links 83 / orphan 38） |
+
+**全函数面分叉复扫**（NaN-free 输入，`tree` vs `plan` 逐点 `max_abs`，阈值 1e-10）：
+扫了 31 个代表函数（`BOLL*`/`STD`/`VAR`/`HISTVOL`/`ZSCORE`/`AVGDEV`/`TSF`/`LINEARREG*`/
+`MA`/`EMA`/`WMA`/`RSI`/`CCI`/`CORREL`/`SUM`/`HHV`/`LLV`/`MEDIAN`/`RMA`/`TRIMA`/`TRIX`/`SKEW`/`KURT`），
+**超出 1e-10 的 = 0 处**；最大的两个是 `BOLL` 4.2e-12、`WMA` 5.7e-14（都在容差内）。
+`ZSCORE(CLOSE,20)` 修后 **`max_abs = 0`（逐位一致）**。
+→ 说明「重复实现数值分叉」这一类在公式面上**只有 `ZSCORE` 一处**，已闭环。
+
+门禁里那条**重复实现互校**是本轮新增的断言类型：它在两条路径**一致地错**时依然有效，
+正好补上差分门禁的盲区。
+
+### 12.7 教训
+
+1. **「两路径一致」不是正确性**。全 NaN == 全 NaN 在 `values_match` 里算相等。
+2. **修一个缺陷会激活另一个被掩盖的缺陷** —— 本轮一次修出两处（`zscore_into` 的 guard、
+   `fn_zscore` 的算法分叉），都是修完预热段才看得见。
+3. **同一逻辑指标可能有三份实现**（`fn_zscore` 手写 / `statistics::zscore` / plan kernel 的
+   `zscore_into`）。修之前先 grep 清楚到底有几条路。
+4. **改完共享层必须两条路径都跑**：`zscore_into` 的 guard 错误只在 plan 路径可见。
+5. **guard 的每一个下标都要按 `warm_start` 偏移**，不只是种子和循环边界。
