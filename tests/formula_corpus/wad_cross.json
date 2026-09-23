@@ -1,0 +1,18 @@
+{
+  "id": "wad_cross",
+  "platform": "CROSS",
+  "source_formula": "WD:=WAD(HIGH,LOW,CLOSE);MF:=MARKETFI(HIGH,LOW,VOLUME);",
+  "description": "威廉姆斯累积分配（WAD）与市场促进指数（MARKETFI） - TA-Lib 0.8 新增",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv"
+  },
+  "expected_output_columns": [
+    "WD",
+    "MF"
+  ],
+  "tolerance": 1e-08,
+  "tags": [
+    "volume",
+    "talib08"
+  ]
+}

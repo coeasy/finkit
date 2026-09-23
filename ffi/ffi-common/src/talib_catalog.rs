@@ -20,6 +20,7 @@ pub const TALIB_CORE_VERSION: &str = "0.8.1";
 /// TA-Lib 0.8.0 profile-only names exposed by the versioned dispatcher.
 pub const TALIB_PROFILE_CATALOG_NAMES: &[&str] = &[
     "AC",
+    "ACCBANDS",
     "ACOS",
     "ADR",
     "ADX",
@@ -117,6 +118,7 @@ pub const TALIB_PROFILE_CATALOG_NAMES: &[&str] = &[
     "KDJ",
     "LN",
     "LOG10",
+    "MAMA",
     "MARKETFI",
     "MASSI",
     "MEDPRICE",

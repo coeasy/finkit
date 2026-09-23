@@ -1,0 +1,19 @@
+{
+  "id": "massi_cross",
+  "platform": "CROSS",
+  "source_formula": "MI:=MASSI(HIGH,LOW,9,25);ADRV:=ADR(HIGH,LOW,14);CV:=CVI(HIGH,LOW,10,10);",
+  "description": "梅斯线（MASSI）/平均日幅（ADR）/蔡金波动率（CVI） - TA-Lib 0.7-0.8 新增",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv"
+  },
+  "expected_output_columns": [
+    "MI",
+    "ADRV",
+    "CV"
+  ],
+  "tolerance": 1e-08,
+  "tags": [
+    "volatility",
+    "talib08"
+  ]
+}

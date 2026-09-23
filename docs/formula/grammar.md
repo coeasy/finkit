@@ -401,6 +401,42 @@ Finkit 通过 `FormulaContext::with_period_data()` 提供跨周期数据，语�
 平均成本:=COST(50);
 ```
 
+### 方言覆盖度契约
+
+四个方言终端（`FormulaTerminal`）的覆盖情况由机器可查的契约描述：
+
+* 契约文件：`tests/contracts/formula_dialect_coverage_v1.json`
+* 生成器：`scripts/gen_dialect_coverage.py`（`--generate` / `--check` / `--summary`）
+* 门禁：`core/tests/formula_dialect_coverage.rs`
+
+每个 `(终端, 函数)` 行记录**两个互相独立的事实**：
+
+| 字段 | 含义 |
+|------|------|
+| `status` | 该名字是否**开箱可用** |
+| `registered` | 引擎的函数表里是否存在该名字（机器推导，非人工断言） |
+| `provenance` | `verified`（可在仓库内某个具名文件中找到）或 `attributed`（仅能追溯到厂商函数表） |
+
+`status` 的五种取值分两组：
+
+* **开箱可用** — `exact` / `near`（经由 AlphaTA 公共子集路由）/ `approximate`（路由，但标注了未来数据语义，目前仅 `BACKSET`）；
+* **不可用** — `host_required`（需要宿主注入行情/会话数据，否则返回 NaN）/ `unsupported`（未实现）。
+
+`coverage_pct` 只统计开箱可用的行，因此 `host_required` **不计入**——即使引擎为它注册了一个恒返回 NaN 的桩（这类名字列在 `host_dependent_registered` 中）。`verified_coverage_pct` 是同一比例在 `verified` 行上的取值；两者差距大说明**参考清单**来源薄弱，而非覆盖率更好。
+
+`大智慧（DZH）` 已作为第 6 个 `FormulaTerminal` 声明（`dzh` / `dazhihui` / `大智慧`），语义档 `dzh-v1`，复用同花顺的公共子集；单等号赋值 `=` 仍未支持（见上表）。
+
+实测覆盖（2026-09-23）：
+
+| 终端 | 参考清单 | 其中可验证 | 开箱可用 |
+|------|---------|-----------|---------|
+| 通达信 `tongdaxin` | 231 | 231 | 97.0% |
+| 同花顺 `tonghuashun` | 223 | 223 | 96.4% |
+| 大智慧 `dazhihui` | 226 | 219 | 91.6% |
+| TradingView Pine `tradingview_pine` | 224 | 219 | 97.8% |
+
+`EXPMEMA` / `IFNULL`（通达信）在仓库内无任何出处，因此**不计入**参考清单，而是列在契约的 `unverified_candidates` 中。
+
 ---
 
 ## 关键字列表

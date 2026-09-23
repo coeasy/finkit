@@ -1,0 +1,18 @@
+{
+  "id": "elder_ray_cross",
+  "platform": "CROSS",
+  "source_formula": "BULL:=ERI(HIGH,LOW,CLOSE,13);BEAR:=ERI_BEAR(HIGH,LOW,CLOSE,13);",
+  "description": "艾达透视指标（Elder Ray）多头/空头力道 - TA-Lib 0.8 新增",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv"
+  },
+  "expected_output_columns": [
+    "BULL",
+    "BEAR"
+  ],
+  "tolerance": 1e-08,
+  "tags": [
+    "momentum",
+    "talib08"
+  ]
+}

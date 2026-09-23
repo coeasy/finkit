@@ -35,6 +35,17 @@ pub enum FormulaTerminal {
     /// TradingView Pine Script subset.
     #[cfg_attr(feature = "serde", serde(rename = "pine"))]
     TradingView,
+    /// 大智慧 common formula subset.
+    ///
+    /// Added as the sixth terminal so 大智慧 formulas are a *declared* adapter
+    /// instead of being silently parsed as 同花顺 source. It deliberately has no
+    /// dedicated dialect: 大智慧 shares the 同花顺 common subset for the shared
+    /// core (MA/EMA/HHV/LLV/CROSS/...), and its特有 families are routed through
+    /// the same canonical runtime. Promoting it to a full dialect is a separate
+    /// change that would also have to update the exhaustive dialect matches in
+    /// `engine.rs`.
+    #[cfg_attr(feature = "serde", serde(rename = "dzh"))]
+    DaZhiHui,
 }
 
 /// All declared formula terminals in stable discovery order.
@@ -44,6 +55,7 @@ pub const FORMULA_TERMINALS: &[FormulaTerminal] = &[
     FormulaTerminal::TongHuaShun,
     FormulaTerminal::EastMoney,
     FormulaTerminal::TradingView,
+    FormulaTerminal::DaZhiHui,
 ];
 
 /// Declared compatibility strength for a terminal adapter.
@@ -161,6 +173,7 @@ impl FormulaTerminal {
             "ths" | "tonghuashun" | "同花顺" => Some(Self::TongHuaShun),
             "eastmoney" | "em" | "dfcf" | "东方财富" => Some(Self::EastMoney),
             "pine" | "tradingview" | "tv" => Some(Self::TradingView),
+            "dzh" | "dazhihui" | "大智慧" => Some(Self::DaZhiHui),
             _ => None,
         }
     }
@@ -178,6 +191,8 @@ impl FormulaTerminal {
             Self::TongDaXin => FormulaDialect::TongDaXin,
             Self::TongHuaShun => FormulaDialect::TongHuaShun,
             Self::EastMoney => FormulaDialect::EastMoney,
+            // 大智慧 shares the 同花顺 common subset; see the variant docs.
+            Self::DaZhiHui => FormulaDialect::TongHuaShun,
         }
     }
 
@@ -189,9 +204,11 @@ impl FormulaTerminal {
     pub const fn compatibility_level(self) -> CompatibilityLevel {
         match self {
             Self::Finkit => CompatibilityLevel::Native,
-            Self::TongDaXin | Self::TongHuaShun | Self::EastMoney | Self::TradingView => {
-                CompatibilityLevel::CommonSubset
-            }
+            Self::TongDaXin
+            | Self::TongHuaShun
+            | Self::EastMoney
+            | Self::TradingView
+            | Self::DaZhiHui => CompatibilityLevel::CommonSubset,
         }
     }
 
@@ -203,6 +220,7 @@ impl FormulaTerminal {
             Self::TongHuaShun => "ths",
             Self::EastMoney => "eastmoney",
             Self::TradingView => "pine",
+            Self::DaZhiHui => "dzh",
         }
     }
 
@@ -247,6 +265,14 @@ impl FormulaTerminal {
                 boolean_numeric_policy: "bool-context".to_string(),
                 sma_policy: "ta.sma".to_string(),
                 lookahead_policy: "request-security-controlled".to_string(),
+                requires_session_metadata: true,
+            },
+            Self::DaZhiHui => SemanticProfile {
+                id: "dzh-v1".to_string(),
+                null_policy: "nan-propagating".to_string(),
+                boolean_numeric_policy: "true-is-1".to_string(),
+                sma_policy: "recursive-sma".to_string(),
+                lookahead_policy: "explicit-only".to_string(),
                 requires_session_metadata: true,
             },
         }
@@ -637,6 +663,38 @@ mod tests {
             FormulaTerminal::from_str("TradingView"),
             Some(FormulaTerminal::TradingView)
         );
+        assert_eq!(
+            FormulaTerminal::from_str("大智慧"),
+            Some(FormulaTerminal::DaZhiHui)
+        );
+        assert_eq!(
+            FormulaTerminal::from_str("dzh"),
+            Some(FormulaTerminal::DaZhiHui)
+        );
+    }
+
+    #[test]
+    fn dazhihui_routes_through_the_shared_common_subset() {
+        // 大智慧 is the sixth terminal. It has no dedicated dialect yet: it
+        // intentionally reuses the 同花顺 common subset so the shared core
+        // (MA/EMA/HHV/LLV/CROSS/...) routes without touching the exhaustive
+        // dialect matches in `engine.rs`.
+        assert_eq!(
+            FormulaTerminal::DaZhiHui.canonical_dialect(),
+            FormulaDialect::TongHuaShun
+        );
+        assert_eq!(FormulaTerminal::DaZhiHui.as_str(), "dzh");
+        assert_eq!(
+            FormulaTerminal::DaZhiHui.compatibility_level(),
+            CompatibilityLevel::CommonSubset
+        );
+        let report =
+            inspect_formula_compatibility("MA5:=MA(CLOSE,5); MA5", FormulaTerminal::DaZhiHui)
+                .unwrap();
+        assert!(report
+            .functions
+            .iter()
+            .any(|item| item.name == "MA" && item.status == CompatibilityStatus::Near));
     }
 
     #[test]
@@ -653,6 +711,7 @@ mod tests {
                 FormulaTerminal::TongHuaShun,
                 FormulaTerminal::EastMoney,
                 FormulaTerminal::TradingView,
+                FormulaTerminal::DaZhiHui,
             ]
         );
     }
@@ -670,6 +729,7 @@ mod tests {
             FormulaTerminal::TongHuaShun,
             FormulaTerminal::EastMoney,
             FormulaTerminal::TradingView,
+            FormulaTerminal::DaZhiHui,
         ] {
             assert_eq!(
                 terminal.compatibility_level(),

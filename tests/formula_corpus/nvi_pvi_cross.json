@@ -1,0 +1,19 @@
+{
+  "id": "nvi_pvi_cross",
+  "platform": "CROSS",
+  "source_formula": "NV:=NVI(CLOSE,VOLUME);PV2:=PVI(CLOSE,VOLUME);EF:=EFI(CLOSE,VOLUME,13);",
+  "description": "负/正量指数（NVI/PVI）与强力指数（EFI） - TA-Lib 0.8 新增",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv"
+  },
+  "expected_output_columns": [
+    "NV",
+    "PV2",
+    "EF"
+  ],
+  "tolerance": 1e-08,
+  "tags": [
+    "volume",
+    "talib08"
+  ]
+}

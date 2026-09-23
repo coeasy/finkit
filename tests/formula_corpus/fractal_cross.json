@@ -1,0 +1,18 @@
+{
+  "id": "fractal_cross",
+  "platform": "CROSS",
+  "source_formula": "FH:=FRACTAL(HIGH,LOW,2,2);FL:=FRACTAL_LOW(HIGH,LOW,2,2);",
+  "description": "分形高低点（FRACTAL）摆动标记 - TA-Lib 0.8 新增",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv"
+  },
+  "expected_output_columns": [
+    "FH",
+    "FL"
+  ],
+  "tolerance": 1e-08,
+  "tags": [
+    "pattern",
+    "talib08"
+  ]
+}

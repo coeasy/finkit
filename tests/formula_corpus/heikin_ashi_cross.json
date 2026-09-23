@@ -1,0 +1,20 @@
+{
+  "id": "heikin_ashi_cross",
+  "platform": "CROSS",
+  "source_formula": "HAO:=HA_OPEN(OPEN,HIGH,LOW,CLOSE);HAH:=HA_HIGH(OPEN,HIGH,LOW,CLOSE);HAL:=HA_LOW(OPEN,HIGH,LOW,CLOSE);HAC:=HA(OPEN,HIGH,LOW,CLOSE);",
+  "description": "平均K线（Heikin-Ashi）四价 - TA-Lib 0.8 新增",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv"
+  },
+  "expected_output_columns": [
+    "HAO",
+    "HAH",
+    "HAL",
+    "HAC"
+  ],
+  "tolerance": 1e-08,
+  "tags": [
+    "trend",
+    "talib08"
+  ]
+}

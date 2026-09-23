@@ -613,6 +613,10 @@ pub fn get_builtin_functions() -> HashMap<String, FormulaFn> {
         canonical_trend_breakout as FormulaFn,
     );
 
+    // TA-Lib 0.7/0.8 additions: the kernels and their golden vectors already
+    // existed, only the formula surface was missing.
+    super::functions_talib_081::register(&mut map);
+
     // Registry aliases must follow the replaced canonical function pointers too.
     // This preserves the alias identity invariant after the canonical overrides.
     for spec in crate::registry::builtin_function_registry().iter() {

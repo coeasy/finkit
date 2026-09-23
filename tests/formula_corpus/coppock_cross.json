@@ -1,0 +1,17 @@
+{
+  "id": "coppock_cross",
+  "platform": "CROSS",
+  "source_formula": "CPK:=COPPOCK(CLOSE,10,14,11);",
+  "description": "估波指标（Coppock Curve） - TA-Lib 0.7 新增",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv"
+  },
+  "expected_output_columns": [
+    "CPK"
+  ],
+  "tolerance": 1e-08,
+  "tags": [
+    "momentum",
+    "talib08"
+  ]
+}

@@ -44,6 +44,82 @@ const DOMESTIC_UNSUPPORTED: &[(&str, &str)] = &[
     // The list is intentionally left in place rather than deleted: it is the
     // backlog mechanism, and the next host-context or lowering gap belongs here
     // with a stated reason.
+    //
+    // 2026-09-23 — M0-1 registered 31 TA-Lib 0.7/0.8 functions in the *formula*
+    // surface (`functions_talib_081.rs`). They are callable through the tree,
+    // bytecode and JIT paths, but no `CALL:<NAME>` kernel exists for any of
+    // them, so the compiled plan path answers `unsupported kernel` (code 1).
+    // The sixteen cases below are the corpus coverage for that work.
+    //
+    // This is a **kernel** backlog, not an error-policy one: the entries fail
+    // with code 1 before any kernel runs, so `absorb_kernel_failure` cannot
+    // reach them. Registering a function in the formula surface without also
+    // adding its plan kernel *widens* this list, which is why the count is
+    // pinned here rather than left implicit.
+    (
+        "accbands_cross",
+        "no `CALL:ACCBANDS` kernel (code 1); callable on the tree/bytecode/JIT paths only",
+    ),
+    (
+        "ao_ac_cross",
+        "no `CALL:AO` kernel (code 1); callable on the tree/bytecode/JIT paths only",
+    ),
+    (
+        "coppock_cross",
+        "no `CALL:COPPOCK` kernel (code 1); callable on the tree/bytecode/JIT paths only",
+    ),
+    (
+        "elder_ray_cross",
+        "no `CALL:ERI` kernel (code 1); callable on the tree/bytecode/JIT paths only",
+    ),
+    (
+        "er_vhf_cross",
+        "no `CALL:ER` kernel (code 1); callable on the tree/bytecode/JIT paths only",
+    ),
+    (
+        "fractal_cross",
+        "no `CALL:FRACTAL` kernel (code 1); callable on the tree/bytecode/JIT paths only",
+    ),
+    (
+        "heikin_ashi_cross",
+        "no `CALL:HA_OPEN` kernel (code 1); callable on the tree/bytecode/JIT paths only",
+    ),
+    (
+        "keltner_cross",
+        "no `CALL:KC_MID` kernel (code 1); callable on the tree/bytecode/JIT paths only",
+    ),
+    (
+        "massi_cross",
+        "no `CALL:MASSI` kernel (code 1); callable on the tree/bytecode/JIT paths only",
+    ),
+    (
+        "nvi_pvi_cross",
+        "no `CALL:NVI` kernel (code 1); callable on the tree/bytecode/JIT paths only",
+    ),
+    (
+        "pr_qstick_cross",
+        "no `CALL:PERCENTRANK` kernel (code 1); callable on the tree/bytecode/JIT paths only",
+    ),
+    (
+        "rvol_cross",
+        "no `CALL:RVOL` kernel (code 1); callable on the tree/bytecode/JIT paths only",
+    ),
+    (
+        "smi_cross",
+        "no `CALL:SMI` kernel (code 1); callable on the tree/bytecode/JIT paths only",
+    ),
+    (
+        "vortex_cross",
+        "no `CALL:VORTEX` kernel (code 1); callable on the tree/bytecode/JIT paths only",
+    ),
+    (
+        "wad_cross",
+        "no `CALL:WAD` kernel (code 1); callable on the tree/bytecode/JIT paths only",
+    ),
+    (
+        "zlema_cross",
+        "no `CALL:ZLEMA` kernel (code 1); callable on the tree/bytecode/JIT paths only",
+    ),
 ];
 
 /// Pine corpus cases the compiled plan path cannot execute yet.

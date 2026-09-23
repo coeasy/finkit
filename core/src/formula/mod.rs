@@ -36,6 +36,7 @@ pub mod executor;
 // is documented on `functions::get_builtin_functions`.
 pub mod functions;
 mod functions_legacy;
+pub mod functions_talib_081;
 pub mod hot_plan;
 pub mod jit;
 pub mod memory_pool;

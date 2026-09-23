@@ -1,0 +1,19 @@
+{
+  "id": "keltner_cross",
+  "platform": "CROSS",
+  "source_formula": "KCM:=KC_MID(HIGH,LOW,CLOSE,20,10,2);KCU:=KC(HIGH,LOW,CLOSE,20,10,2);KCL:=KC_LOWER(HIGH,LOW,CLOSE,20,10,2);",
+  "description": "肯特纳通道（Keltner Channel）上中下轨 - TA-Lib 0.8 新增",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv"
+  },
+  "expected_output_columns": [
+    "KCM",
+    "KCU",
+    "KCL"
+  ],
+  "tolerance": 1e-08,
+  "tags": [
+    "volatility",
+    "talib08"
+  ]
+}

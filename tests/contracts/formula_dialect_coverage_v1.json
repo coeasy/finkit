@@ -1,0 +1,6482 @@
+{
+  "schema_version": 1,
+  "generated_by": "scripts/gen_dialect_coverage.py",
+  "collected": "2026-09-23",
+  "statuses": [
+    "exact",
+    "near",
+    "approximate",
+    "host_required",
+    "unsupported"
+  ],
+  "runtime_formula_surface": 447,
+  "provenance_sources": {
+    "repo:functions_legacy": "core/src/formula/functions_legacy.rs",
+    "repo:functions_talib_081": "core/src/formula/functions_talib_081.rs",
+    "repo:compat": "core/src/formula/compat.rs",
+    "repo:analysis": "core/src/formula/analysis.rs",
+    "repo:pine_builtin_table": "core/src/formula/pine/builtin_table.rs",
+    "repo:registry": "core/src/registry.rs",
+    "repo:talib_catalog": "ffi/ffi-common/src/talib_catalog.rs",
+    "repo:talib_coverage_matrix": "tests/contracts/talib_coverage_matrix_v1.json"
+  },
+  "vendor_sources": {
+    "vendor:tdx": "通达信 documented function list (quote / parameter families)",
+    "vendor:ths": "同花顺 documented function list",
+    "vendor:dzh": "大智慧 documented function list (block / money-flow / depth families)",
+    "vendor:pine_reference": "TradingView Pine v6 reference (ta.* / math.*)"
+  },
+  "notes": "Each row carries independent facts. `status` says whether the name is useful out of the box: `exact`/`near` route through the canonical AlphaTA runtime (a documented common-subset mapping, not a claim of terminal-identical numerics), `approximate` routes but flags future-data semantics, `host_required` only means something once the host injects market/session data, and `unsupported` is not implemented. `registered` says whether the engine's function table contains the name at all. `provenance` says whether the reference name was *verified* in a named in-repo file or merely *attributed* to a vendor function list; `coverage_pct` is computed over verified rows only, so it excludes `host_required` even when a NaN-returning stub is registered (see `host_dependent_registered`). Names with no support in this repository are listed in `unverified_candidates` instead of being counted.",
+  "terminals": {
+    "tongdaxin": {
+      "id": "tdx",
+      "label": "通达信",
+      "reference": "repo:talib_coverage_matrix (numeric_reference 201) + repo:grammar §通达信特有 + core/src/formula/functions_legacy.rs §TIME / BAR FUNCTIONS (TDX)",
+      "collected": "2026-09-23",
+      "reference_size": 231,
+      "verified_size": 231,
+      "attributed_size": 0,
+      "functions": {
+        "AC": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ACCBANDS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ACOS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "AD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ADD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ADOSC": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ADR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ADX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ADXR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "AO": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "APO": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "AROON": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "AROONOSC": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ASIN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ATAN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ATR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "AVGDEV": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "AVGPRICE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "BACKSET": {
+          "status": "approximate",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "BARSCOUNT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "BARSLAST": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "BARSLASTCOUNT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "BARSSINCE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "BBANDS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "BETA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "BETWEEN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "BOP": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CAPITAL": {
+          "status": "host_required",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "CCI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDL2CROWS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDL3BLACKCROWS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDL3INSIDE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDL3LINESTRIKE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDL3OUTSIDE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDL3STARSINSOUTH": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDL3WHITESOLDIERS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLABANDONEDBABY": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLADVANCEBLOCK": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLBELTHOLD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLBREAKAWAY": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLCLOSINGMARUBOZU": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLCONCEALBABYSWALL": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLCOUNTERATTACK": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLDARKCLOUDCOVER": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLDOJI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLDOJISTAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLDRAGONFLYDOJI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLENGULFING": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLEVENINGDOJISTAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLEVENINGSTAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLGAPSIDESIDEWHITE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLGRAVESTONEDOJI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHAMMER": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHANGINGMAN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHARAMI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHARAMICROSS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHIGHWAVE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHIKKAKE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHIKKAKEMOD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHOMINGPIGEON": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLIDENTICAL3CROWS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLINNECK": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLINVERTEDHAMMER": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLKICKING": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLKICKINGBYLENGTH": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLLADDERBOTTOM": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLLONGLEGGEDDOJI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLLONGLINE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLMARUBOZU": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLMATCHINGLOW": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLMATHOLD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLMORNINGDOJISTAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLMORNINGSTAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLONNECK": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLPIERCING": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLRICKSHAWMAN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLRISEFALL3METHODS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLSEPARATINGLINES": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLSHOOTINGSTAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLSHORTLINE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLSPINNINGTOP": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLSTALLEDPATTERN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLSTICKSANDWICH": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLTAKURI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLTASUKIGAP": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLTHRUSTING": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLTRISTAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLUNIQUE3RIVER": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLUPSIDEGAP2CROWS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLXSIDEGAP3METHODS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CEIL": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CMF": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CMO": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CMOU": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "COPPOCK": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CORREL": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "COS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "COSH": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "COST": {
+          "status": "host_required",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "COUNT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "CUMSUM": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CURRBARSCOUNT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "CVI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "DEMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "DIV": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "DKCOL": {
+          "status": "host_required",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "DONCHIAN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "DPO": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "DX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "DYNAINFO": {
+          "status": "host_required",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "EFI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "EMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ER": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ERI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "EXP": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "FILTER": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "FINANCE": {
+          "status": "host_required",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "FLOOR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "FOSC": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "FRACTAL": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HHVBARS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "HMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HT_DCPERIOD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HT_DCPHASE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HT_PHASOR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HT_SINE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HT_TRENDLINE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HT_TRENDMODE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "IFF": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:registry",
+          "provenance": "verified",
+          "via": null
+        },
+        "IMI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "INTPART": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "KAMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "KC": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "KDJ": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "LAST": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "LINEARREG": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "LINEARREG_ANGLE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "LINEARREG_INTERCEPT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "LINEARREG_SLOPE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "LLVBARS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "LN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "LOG10": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MACD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MACDEXT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MACDFIX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MAMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MARKETFI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MASSI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MAVP": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MAX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MAXINDEX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MDI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "MEDPRICE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MFI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MIDPOINT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MIDPRICE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MIN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MININDEX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MINMAX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MINMAXINDEX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MINUS_DI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MINUS_DM": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MOM": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MTM": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "MULT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "NATR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "NVI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "OBV": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "PDI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "PERCENTILE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "PERCENTRANK": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "PERIODTYPE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "PLUS_DI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "PLUS_DM": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "PPO": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "PVI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "PVO": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "PVT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "QSTICK": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "RANGE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "REFDATE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "REFX": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "repo:compat",
+          "provenance": "verified",
+          "via": null
+        },
+        "RMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ROC": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ROCP": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ROCR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ROCR100": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "RSI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "RVI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "RVOL": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SAREXT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SIGN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "SIN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SINH": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SMI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SQRT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "STDDEV": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "STOCH": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "STOCHF": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "STOCHRSI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SUB": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SUM": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SUMBARS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "SUPERTREND": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "T3": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TAN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TANH": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TEMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TRANGE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TRIMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TRIX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TSF": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TSI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TYPPRICE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ULTOSC": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "VALUEWHEN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "VAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "VHF": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "VORTEX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "VWAP": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "VWMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "WAD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "WCLPRICE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "WILLR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "WINNER": {
+          "status": "host_required",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "WMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ZLEMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        }
+      },
+      "coverage": {
+        "exact": 0,
+        "near": 223,
+        "approximate": 1,
+        "host_required": 6,
+        "unsupported": 1
+      },
+      "coverage_pct": 97.0,
+      "verified_coverage_pct": 97.0,
+      "registered": 230,
+      "host_dependent_registered": [
+        "CAPITAL",
+        "COST",
+        "DKCOL",
+        "DYNAINFO",
+        "FINANCE",
+        "WINNER"
+      ]
+    },
+    "tonghuashun": {
+      "id": "ths",
+      "label": "同花顺",
+      "reference": "repo:talib_coverage_matrix (numeric_reference 201) + repo:grammar §同花顺历史引用别名 + core/src/formula/functions_legacy.rs THS aliases",
+      "collected": "2026-09-23",
+      "reference_size": 223,
+      "verified_size": 223,
+      "attributed_size": 0,
+      "functions": {
+        "AC": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ACCBANDS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ACOS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "AD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ADD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ADOSC": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ADR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ADX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ADXR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "AO": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "APO": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "AROON": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "AROONOSC": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ASIN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ATAN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ATR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "AVGDEV": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "AVGPRICE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "BARSLAST": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "BBANDS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "BETA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "BOP": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CAPITAL": {
+          "status": "host_required",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "CCI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDL2CROWS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDL3BLACKCROWS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDL3INSIDE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDL3LINESTRIKE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDL3OUTSIDE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDL3STARSINSOUTH": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDL3WHITESOLDIERS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLABANDONEDBABY": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLADVANCEBLOCK": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLBELTHOLD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLBREAKAWAY": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLCLOSINGMARUBOZU": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLCONCEALBABYSWALL": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLCOUNTERATTACK": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLDARKCLOUDCOVER": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLDOJI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLDOJISTAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLDRAGONFLYDOJI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLENGULFING": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLEVENINGDOJISTAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLEVENINGSTAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLGAPSIDESIDEWHITE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLGRAVESTONEDOJI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHAMMER": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHANGINGMAN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHARAMI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHARAMICROSS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHIGHWAVE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHIKKAKE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHIKKAKEMOD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHOMINGPIGEON": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLIDENTICAL3CROWS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLINNECK": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLINVERTEDHAMMER": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLKICKING": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLKICKINGBYLENGTH": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLLADDERBOTTOM": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLLONGLEGGEDDOJI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLLONGLINE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLMARUBOZU": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLMATCHINGLOW": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLMATHOLD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLMORNINGDOJISTAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLMORNINGSTAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLONNECK": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLPIERCING": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLRICKSHAWMAN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLRISEFALL3METHODS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLSEPARATINGLINES": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLSHOOTINGSTAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLSHORTLINE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLSPINNINGTOP": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLSTALLEDPATTERN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLSTICKSANDWICH": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLTAKURI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLTASUKIGAP": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLTHRUSTING": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLTRISTAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLUNIQUE3RIVER": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLUPSIDEGAP2CROWS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLXSIDEGAP3METHODS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CEIL": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CLOSE1": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "CMF": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CMO": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CMOU": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "COPPOCK": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CORREL": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "COS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "COSH": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "COST": {
+          "status": "host_required",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "COUNT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "CUMSUM": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CVI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "DEMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "DIV": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "DKCOL": {
+          "status": "host_required",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "DONCHIAN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "DPO": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "DX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "DYNAINFO": {
+          "status": "host_required",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "EFI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "EMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ER": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ERI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "EXP": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "FILTER": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "FINANCE": {
+          "status": "host_required",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "FLOOR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "FOSC": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "FRACTAL": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HHVBARS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "HIGH1": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "HMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HT_DCPERIOD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HT_DCPHASE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HT_PHASOR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HT_SINE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HT_TRENDLINE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HT_TRENDMODE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "IMI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "KAMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "KC": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "KDJ": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "LINEARREG": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "LINEARREG_ANGLE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "LINEARREG_INTERCEPT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "LINEARREG_SLOPE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "LLVBARS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "LN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "LOG10": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "LOW1": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "LWINNER": {
+          "status": "host_required",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "MA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MACD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MACDEXT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MACDFIX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MAMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MARKETFI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MASSI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MAVP": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MAX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MAXINDEX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MEDPRICE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MFI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MIDPOINT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MIDPRICE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MIN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MININDEX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MINMAX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MINMAXINDEX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MINUS_DI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MINUS_DM": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MOM": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MULT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "NATR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "NVI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "OBV": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "OPEN1": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "PERCENTILE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "PERCENTRANK": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "PERIODTYPE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "PLUS_DI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "PLUS_DM": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "PPO": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "PVI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "PVO": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "PVT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "QSTICK": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "REFDATE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "RMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ROC": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ROCP": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ROCR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ROCR100": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "RSI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "RVI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "RVOL": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SAREXT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SECURITY": {
+          "status": "host_required",
+          "registered": false,
+          "source": "repo:compat",
+          "provenance": "verified",
+          "via": null
+        },
+        "SIN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SINH": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SMI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SQRT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "STDDEV": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "STOCH": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "STOCHF": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "STOCHRSI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SUB": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SUM": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SUMBARS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "SUPERTREND": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "T3": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TAN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TANH": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TEMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TRANGE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TRIMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TRIX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TSF": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TSI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TYPPRICE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ULTOSC": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "VALUEWHEN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "VAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "VHF": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "VOL1": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "VORTEX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "VWAP": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "VWMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "WAD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "WCLPRICE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "WILLR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "WINNER": {
+          "status": "host_required",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "WMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ZLEMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        }
+      },
+      "coverage": {
+        "exact": 0,
+        "near": 215,
+        "approximate": 0,
+        "host_required": 8,
+        "unsupported": 0
+      },
+      "coverage_pct": 96.4,
+      "verified_coverage_pct": 96.4,
+      "registered": 222,
+      "host_dependent_registered": [
+        "CAPITAL",
+        "COST",
+        "DKCOL",
+        "DYNAINFO",
+        "FINANCE",
+        "LWINNER",
+        "WINNER"
+      ]
+    },
+    "dazhihui": {
+      "id": "dzh",
+      "label": "大智慧",
+      "reference": "repo:talib_coverage_matrix (numeric_reference 201) + repo:grammar §大智慧特有语法 + core/src/formula/functions_legacy.rs §DZH BLOCK / MONEY FLOW FUNCTIONS",
+      "collected": "2026-09-23",
+      "reference_size": 226,
+      "verified_size": 219,
+      "attributed_size": 7,
+      "functions": {
+        "AC": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ACCBANDS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ACOS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "AD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ADD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ADOSC": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ADR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ADX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ADXR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "AO": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "APO": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "AROON": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "AROONOSC": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ASIN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ATAN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ATR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "AVGDEV": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "AVGPRICE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "BARSLAST": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "BBANDS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "BETA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "BIGORDER": {
+          "status": "host_required",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "BLOCKAVG": {
+          "status": "host_required",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "BLOCKDATA": {
+          "status": "host_required",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "BLOCKINDEX": {
+          "status": "host_required",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "BOP": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CCI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDL2CROWS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDL3BLACKCROWS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDL3INSIDE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDL3LINESTRIKE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDL3OUTSIDE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDL3STARSINSOUTH": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDL3WHITESOLDIERS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLABANDONEDBABY": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLADVANCEBLOCK": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLBELTHOLD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLBREAKAWAY": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLCLOSINGMARUBOZU": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLCONCEALBABYSWALL": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLCOUNTERATTACK": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLDARKCLOUDCOVER": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLDOJI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLDOJISTAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLDRAGONFLYDOJI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLENGULFING": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLEVENINGDOJISTAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLEVENINGSTAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLGAPSIDESIDEWHITE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLGRAVESTONEDOJI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHAMMER": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHANGINGMAN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHARAMI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHARAMICROSS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHIGHWAVE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHIKKAKE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHIKKAKEMOD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHOMINGPIGEON": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLIDENTICAL3CROWS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLINNECK": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLINVERTEDHAMMER": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLKICKING": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLKICKINGBYLENGTH": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLLADDERBOTTOM": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLLONGLEGGEDDOJI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLLONGLINE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLMARUBOZU": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLMATCHINGLOW": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLMATHOLD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLMORNINGDOJISTAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLMORNINGSTAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLONNECK": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLPIERCING": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLRICKSHAWMAN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLRISEFALL3METHODS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLSEPARATINGLINES": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLSHOOTINGSTAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLSHORTLINE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLSPINNINGTOP": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLSTALLEDPATTERN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLSTICKSANDWICH": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLTAKURI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLTASUKIGAP": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLTHRUSTING": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLTRISTAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLUNIQUE3RIVER": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLUPSIDEGAP2CROWS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLXSIDEGAP3METHODS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CEIL": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CMF": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CMO": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CMOU": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "COPPOCK": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CORREL": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "COS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "COSH": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "COUNT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "CUMSUM": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CVI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "DDX": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:dzh",
+          "provenance": "attributed",
+          "via": null
+        },
+        "DDY": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:dzh",
+          "provenance": "attributed",
+          "via": null
+        },
+        "DDZ": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:dzh",
+          "provenance": "attributed",
+          "via": null
+        },
+        "DEMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "DIV": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "DKCOL": {
+          "status": "host_required",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "DONCHIAN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "DPO": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "DX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "DYNAINFO": {
+          "status": "host_required",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "EFI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "EMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ER": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ERI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "EXP": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "FILTER": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "FLOOR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "FOSC": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "FRACTAL": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HHVALL": {
+          "status": "host_required",
+          "registered": false,
+          "source": "vendor:dzh",
+          "provenance": "attributed",
+          "via": null
+        },
+        "HMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HT_DCPERIOD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HT_DCPHASE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HT_PHASOR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HT_SINE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HT_TRENDLINE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HT_TRENDMODE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "IMI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "KAMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "KC": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "KDJ": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "LINEARREG": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "LINEARREG_ANGLE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "LINEARREG_INTERCEPT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "LINEARREG_SLOPE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "LLVALL": {
+          "status": "host_required",
+          "registered": false,
+          "source": "vendor:dzh",
+          "provenance": "attributed",
+          "via": null
+        },
+        "LN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "LOG10": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MACD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MACDEXT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MACDFIX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MAININFLOW": {
+          "status": "host_required",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "MAININFLOWPCT": {
+          "status": "host_required",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "MAMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MARKETFI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MASSI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MAVP": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MAX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MAXINDEX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MEDPRICE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MFI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MIDPOINT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MIDPRICE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MIN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MININDEX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MINMAX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MINMAXINDEX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MINUS_DI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MINUS_DM": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MOM": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MONEYFLOW": {
+          "status": "host_required",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "MULT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "NATR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "NETINFLOW": {
+          "status": "host_required",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "NVI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "OBV": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "OPENINTEREST": {
+          "status": "host_required",
+          "registered": false,
+          "source": "vendor:dzh",
+          "provenance": "attributed",
+          "via": null
+        },
+        "PERCENTILE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "PERCENTRANK": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "PERIODTYPE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "PLUS_DI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "PLUS_DM": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "PPO": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "PVI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "PVO": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "PVT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "QSTICK": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "REFDATE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "RMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ROC": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ROCP": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ROCR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ROCR100": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "RSI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "RVI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "RVOL": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SAREXT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SIN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SINH": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SMALLORDER": {
+          "status": "host_required",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "SMI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SQRT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "STDDEV": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "STOCH": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "STOCHF": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "STOCHRSI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SUB": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SUM": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SUPERBIGORDER": {
+          "status": "host_required",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "SUPERTREND": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SV": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:dzh",
+          "provenance": "attributed",
+          "via": null
+        },
+        "T3": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TAN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TANH": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TEMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TRANGE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TRIMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TRIX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TSF": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TSI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TYPPRICE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ULTOSC": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "VALUEWHEN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "VAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "VHF": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "VORTEX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "VWAP": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "VWMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "WAD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "WCLPRICE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "WILLR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "WMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ZLEMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        }
+      },
+      "coverage": {
+        "exact": 0,
+        "near": 207,
+        "approximate": 0,
+        "host_required": 15,
+        "unsupported": 4
+      },
+      "coverage_pct": 91.6,
+      "verified_coverage_pct": 94.5,
+      "registered": 219,
+      "host_dependent_registered": [
+        "BIGORDER",
+        "BLOCKAVG",
+        "BLOCKDATA",
+        "BLOCKINDEX",
+        "DKCOL",
+        "DYNAINFO",
+        "MAININFLOW",
+        "MAININFLOWPCT",
+        "MONEYFLOW",
+        "NETINFLOW",
+        "SMALLORDER",
+        "SUPERBIGORDER"
+      ]
+    },
+    "tradingview_pine": {
+      "id": "pine",
+      "label": "TradingView Pine",
+      "reference": "TradingView Pine v6 reference ta.*/math.* mapped through core/src/formula/pine/builtin_table.rs + repo:talib_coverage_matrix (numeric_reference 201)",
+      "collected": "2026-09-23",
+      "reference_size": 224,
+      "verified_size": 219,
+      "attributed_size": 5,
+      "functions": {
+        "ABS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "AC": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ACCBANDS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ACOS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "AD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ADD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ADOSC": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ADR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ADX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ADXR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "AO": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "APO": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "AROON": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "AROONOSC": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ASIN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ATAN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ATR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "AVG": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "AVGDEV": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "AVGPRICE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "BARSSINCE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "BBANDS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "BETA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "BOLLWIDTH": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "BOP": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CCI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDL2CROWS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDL3BLACKCROWS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDL3INSIDE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDL3LINESTRIKE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDL3OUTSIDE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDL3STARSINSOUTH": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDL3WHITESOLDIERS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLABANDONEDBABY": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLADVANCEBLOCK": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLBELTHOLD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLBREAKAWAY": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLCLOSINGMARUBOZU": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLCONCEALBABYSWALL": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLCOUNTERATTACK": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLDARKCLOUDCOVER": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLDOJI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLDOJISTAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLDRAGONFLYDOJI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLENGULFING": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLEVENINGDOJISTAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLEVENINGSTAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLGAPSIDESIDEWHITE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLGRAVESTONEDOJI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHAMMER": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHANGINGMAN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHARAMI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHARAMICROSS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHIGHWAVE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHIKKAKE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHIKKAKEMOD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLHOMINGPIGEON": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLIDENTICAL3CROWS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLINNECK": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLINVERTEDHAMMER": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLKICKING": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLKICKINGBYLENGTH": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLLADDERBOTTOM": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLLONGLEGGEDDOJI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLLONGLINE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLMARUBOZU": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLMATCHINGLOW": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLMATHOLD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLMORNINGDOJISTAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLMORNINGSTAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLONNECK": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLPIERCING": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLRICKSHAWMAN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLRISEFALL3METHODS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLSEPARATINGLINES": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLSHOOTINGSTAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLSHORTLINE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLSPINNINGTOP": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLSTALLEDPATTERN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLSTICKSANDWICH": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLTAKURI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLTASUKIGAP": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLTHRUSTING": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLTRISTAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLUNIQUE3RIVER": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLUPSIDEGAP2CROWS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CDLXSIDEGAP3METHODS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CEIL": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CEILING": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "CMF": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CMO": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CMOU": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "COG": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.cog"
+        },
+        "COPPOCK": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CORREL": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "COS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "COSH": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CROSSDOWN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:registry",
+          "provenance": "verified",
+          "via": null
+        },
+        "CROSSOVER": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:registry",
+          "provenance": "verified",
+          "via": null
+        },
+        "CUMSUM": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "CVI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "DEMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "DIV": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "DONCHIAN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "DONCHIAN_MID": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:registry",
+          "provenance": "verified",
+          "via": null
+        },
+        "DPO": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "DX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "EFI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "EMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ER": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ERI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "EXP": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "FLOOR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "FOSC": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "FRACTAL": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HHV": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "HHVBARS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "HMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HT_DCPERIOD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HT_DCPHASE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HT_PHASOR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HT_SINE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HT_TRENDLINE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "HT_TRENDMODE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "IMI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "KAMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "KC": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "KDJ": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "LINEARREG": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "LINEARREG_ANGLE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "LINEARREG_INTERCEPT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "LINEARREG_SLOPE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "LLV": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "LLVBARS": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "LN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "LOG10": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MACD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MACDEXT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MACDFIX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MAMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MARKETFI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MASSI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MAVP": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MAX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MAXINDEX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MEDIAN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "MEDPRICE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MFI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MIDPOINT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MIDPRICE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MIN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MININDEX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MINMAX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MINMAXINDEX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MINUS_DI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MINUS_DM": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MODE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "MOM": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "MULT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "NATR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "NVI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "OBV": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "PERCENTILE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "PERCENTRANK": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "PIVOTHIGH": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.pivothigh"
+        },
+        "PIVOTLOW": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.pivotlow"
+        },
+        "PLUS_DI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "PLUS_DM": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "POW": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "PPO": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "PVI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "PVO": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "PVT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "QSTICK": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "RISING": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.rising"
+        },
+        "RMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ROC": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ROCP": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ROCR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ROCR100": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ROUND": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "RSI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "RVI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "RVOL": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SAREXT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SIGN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "SIN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SINH": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SMI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SQRT": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "STDDEV": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "STOCH": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "STOCHF": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "STOCHRSI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SUB": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SUM": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SUPERTREND": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "SWMA": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.swma"
+        },
+        "T3": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TAN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TANH": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TEMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TRANGE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TRIMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TRIX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TSF": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TSI": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "TYPPRICE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ULTOSC": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "VALUEWHEN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "VAR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "VHF": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "VORTEX": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "VWAP": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "VWMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "WAD": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "WCLPRICE": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "WILLR": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "WMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ZLEMA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        }
+      },
+      "coverage": {
+        "exact": 0,
+        "near": 219,
+        "approximate": 0,
+        "host_required": 0,
+        "unsupported": 5
+      },
+      "coverage_pct": 97.8,
+      "verified_coverage_pct": 100.0,
+      "registered": 219,
+      "host_dependent_registered": []
+    }
+  },
+  "unverified_candidates": {
+    "tongdaxin": [
+      "EXPMEMA",
+      "IFNULL"
+    ]
+  }
+}

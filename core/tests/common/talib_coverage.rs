@@ -26,6 +26,13 @@ pub struct TalibCoverageSurfaces {
     pub profile_catalog: TalibCoverageSurface,
     pub dispatcher_smoke: TalibCoverageSurface,
     pub numeric_reference: TalibNumericReference,
+    /// Names that must be callable from the formula DSL itself.
+    ///
+    /// `numeric_reference` proves the *library* matches TA-Lib; this surface
+    /// proves a user can write `ZLEMA(CLOSE, 20)` in a formula. The two can
+    /// drift independently -- the 31 TA-Lib 0.7/0.8 additions were numeric-green
+    /// and formula-red for months -- so it is a separate, gated surface.
+    pub formula_surface: TalibNumericReference,
 }
 
 #[derive(Debug, Deserialize)]
@@ -129,6 +136,14 @@ pub fn assert_catalog_matches_matrix(matrix: &TalibCoverageMatrix) {
         matrix.surfaces.numeric_reference.indicators.len(),
         matrix.surfaces.numeric_reference.expected_count
     );
+    assert_eq!(
+        matrix.surfaces.formula_surface.status, "callable_in_formula_engine",
+        "formula status must describe formula-DSL reachability only"
+    );
+    assert_eq!(
+        matrix.surfaces.formula_surface.indicators.len(),
+        matrix.surfaces.formula_surface.expected_count
+    );
     let catalog = TALIB_PROFILE_CATALOG_NAMES
         .iter()
         .copied()
@@ -142,6 +157,28 @@ pub fn assert_catalog_matches_matrix(matrix: &TalibCoverageMatrix) {
     assert!(
         catalog.windows(2).all(|pair| pair[0] < pair[1]),
         "TA-Lib catalog must remain sorted"
+    );
+}
+
+/// Assert every `formula_surface` entry is reachable from the formula DSL.
+///
+/// This is the gate that made the 31 TA-Lib 0.7/0.8 additions visible: their
+/// kernels and golden vectors existed, but `get_builtin_functions()` did not
+/// know their names, so a user got "unknown function" for a fully covered
+/// indicator.
+pub fn assert_formula_surface_is_callable(matrix: &TalibCoverageMatrix) {
+    let functions = finkit::formula::functions::get_builtin_functions();
+    let missing = matrix
+        .surfaces
+        .formula_surface
+        .indicators
+        .iter()
+        .filter(|name| !functions.contains_key(name.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
+    assert!(
+        missing.is_empty(),
+        "formula surface entries are not registered in the formula function table: {missing:?}"
     );
 }
 

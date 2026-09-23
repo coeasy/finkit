@@ -405,6 +405,83 @@ fn rate_of_change_into(
     }
 }
 
+/// Absorb a caller-owned kernel's failure into an all-NaN output.
+///
+/// A period that does not fit the data is an **edge case the reference path
+/// answers with values, not an error**. Two families on the tree path behave
+/// that way, and both are mirrored here:
+///
+/// - the legacy wrappers — `fn_ma`, `fn_ema`, `fn_wma`, `fn_hma`, `fn_rma`,
+///   `fn_median`, `fn_rolling_range`, `fn_rsi`, `fn_mom`, `fn_trima`, `fn_trix`,
+///   `fn_hhv`, `fn_llv`, `fn_sum`, `fn_var`, `fn_macd`, `fn_dea` — end with
+///   `match lib_x(..) { Ok(result) => Ok(result), Err(_) => Ok(nan_vec(data_len)) }`;
+/// - the `canonical_*` overrides that win for the multi-input indicators —
+///   `canonical_atr`, `canonical_natr`, `canonical_bband_component` (behind
+///   `BOLL`/`BOLLUP`/`BOLLDN`/`BOLLMID`/`BBANDS`), `canonical_adosc`,
+///   `canonical_mfi`, `canonical_ad`, `canonical_obv`, `canonical_trange` —
+///   answer `Ok(nan_vec(..))` the same way.
+///
+/// `MA(CLOSE, 100)` over ten bars therefore yields **ten NaN values**, never an
+/// error, and a one-bar input behaves the same.
+///
+/// The compiled-plan path used to propagate the underlying `TaError` as
+/// `ERR_PARAMETER` and fail the whole evaluation. That is a cross-path
+/// divergence, not a stricter contract — switching
+/// `FormulaEngine::set_execution_mode` turned a NaN result into a hard error —
+/// so this reproduces the reference series instead. Same policy as
+/// [`rate_of_change_into`] and [`sum_formula_into`].
+///
+/// Only the *kernel's own* failure is absorbed, and only where a **period
+/// parameter** exists. Arity, aliasing and buffer-length checks stay errors: the
+/// tree path cannot reach them (its arity check runs first and it owns its
+/// buffers), so absorbing those would hide caller bugs rather than mirror a
+/// documented behaviour. Period-*less* kernels (`TRANGE`, `TR`, `OBV`) are
+/// deliberately left propagating for the same reason — their only failure mode
+/// is a length mismatch the dispatcher already validates explicitly before the
+/// call, so absorbing them would be a no-op that weakens the rule.
+///
+/// A **zero period is not absorbed**: both paths reject it at their own guard
+/// (`extract_n` on the tree path, `period_from_slot` here) *before* any kernel
+/// runs, so `absorb_kernel_failure` can never see it.
+///
+/// `CALL:REF` is deliberately **not** routed through here: `fn_ref` is the one
+/// function in this family that does not swallow its error, so the dispatcher
+/// must keep failing with it.
+fn absorb_kernel_failure<E>(
+    result: Result<(), E>,
+    output: &mut [f64],
+) -> Result<(), KernelDispatchError> {
+    match result {
+        Ok(()) => Ok(()),
+        Err(_) => {
+            output.fill(f64::NAN);
+            Ok(())
+        }
+    }
+}
+
+/// The same policy for kernels that *return* a freshly built series instead of
+/// writing through an output slice (`bbands`, `aroon`, `willr`, `zscore`,
+/// `vwma`, `cmf`, `chop`, `fisher`, `tsi`, `kdj`, `supertrend`, `donchian`).
+///
+/// Two helpers exist because the two kernel shapes need different plumbing for
+/// one rule. Returning `None` after filling the output with NaN lets the caller
+/// write `let Some(x) = ... else { return Ok(()) };`, which keeps the
+/// "degenerate period is data, not an error" decision in one place.
+///
+/// It is deliberately *not* a general-purpose error swallow: callers must have
+/// already validated arity, aliasing and buffer lengths, so the only failure
+/// left is the kernel's own `InsufficientData`. See [`absorb_kernel_failure`].
+fn absorb_kernel_series<T>(result: crate::error::Result<T>, output: &mut [f64]) -> Option<T> {
+    match result {
+        Ok(value) => Some(value),
+        Err(_) => {
+            output.fill(f64::NAN);
+            None
+        }
+    }
+}
+
 /// Element-wise arithmetic behind the `ADD` / `SUB` / `MULT` / `DIV` functions.
 ///
 /// These deliberately do **not** reuse `BINARY:<op>`. `DIV` guards with
@@ -975,16 +1052,19 @@ fn dispatch_periodic_call(
     // Rolling extrema return their own error type, so they return early rather
     // than joining the `TaError`-typed chain below.
     if call.kernel == KernelId::from_static("CALL:HHV") {
-        return crate::math::kernels::rolling_max_into(input, period, output)
-            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER));
+        return absorb_kernel_failure(
+            crate::math::kernels::rolling_max_into(input, period, output),
+            output,
+        );
     }
     if call.kernel == KernelId::from_static("CALL:LLV") {
-        return crate::math::kernels::rolling_min_into(input, period, output)
-            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER));
+        return absorb_kernel_failure(
+            crate::math::kernels::rolling_min_into(input, period, output),
+            output,
+        );
     }
     if call.kernel == KernelId::from_static("CALL:SUM") {
-        return sum_formula_into(input, period, output)
-            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER));
+        return absorb_kernel_failure(sum_formula_into(input, period, output), output);
     }
     // `VAR` is the *population* variance on every other path -- the formula
     // surface resolves it to `indicators::statistics::var`, which is
@@ -994,8 +1074,10 @@ fn dispatch_periodic_call(
     // `functions_legacy.rs` uses the *sample* variance, but it is shadowed by
     // the router and is not what any path executes.)
     if call.kernel == KernelId::from_static("CALL:VAR") {
-        return crate::math::rolling_stats::variance_into(input, period, output)
-            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER));
+        return absorb_kernel_failure(
+            crate::math::rolling_stats::variance_into(input, period, output),
+            output,
+        );
     }
     if call.kernel == KernelId::from_static("CALL:REF") {
         return ref_formula_into(input, period, output)
@@ -1065,7 +1147,10 @@ fn dispatch_periodic_call(
         crate::indicators::roc_into(input, period, output)
     };
 
-    result.map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))
+    // A degenerate period (longer than the series, or zero) must produce the
+    // reference path's all-NaN series rather than failing the evaluation -- see
+    // `absorb_kernel_failure`.
+    absorb_kernel_failure(result, output)
 }
 
 /// Execute terminal SMA(X, N[, M]) without materialising argument arrays.
@@ -1243,8 +1328,10 @@ fn dispatch_cci_source_call(
     let result = {
         let source = &buffers[source_slot];
         let mut cci = vec![f64::NAN; len];
-        crate::indicators::momentum::cci_source_into(source, period, &mut cci)
-            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+        if crate::indicators::momentum::cci_source_into(source, period, &mut cci).is_err() {
+            // Degenerate period: the tree path yields an all-NaN series.
+            cci.fill(f64::NAN);
+        }
         cci
     };
 
@@ -1365,7 +1452,7 @@ fn dispatch_hlc_periodic_call(
     } else {
         crate::indicators::momentum::cci_into(high, low, close, period, output)
     };
-    result.map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))
+    absorb_kernel_failure(result, output)
 }
 
 /// Execute `IF(COND, A, B)` and Pine's `cond ? A : B`, which both lower to
@@ -1697,8 +1784,14 @@ fn dispatch_bbands_call(
             std::slice::from_raw_parts_mut(output_ptr, len),
         )
     };
-    crate::math::rolling_stats::bbands_upper_into(input, period, nb_dev, output)
-        .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))
+    // `canonical_boll` (the tree path's `BBANDS` entry) returns an all-NaN
+    // series on a bad period, so absorb the kernel's failure rather than failing
+    // the evaluation (`absorb_kernel_failure`). The period guard above runs
+    // first, so a zero period is still an error.
+    absorb_kernel_failure(
+        crate::math::rolling_stats::bbands_upper_into(input, period, nb_dev, output),
+        output,
+    )
 }
 
 /// Execute the single-band `BBANDS` projections into the plan-owned output.
@@ -1740,10 +1833,15 @@ fn dispatch_boll_band_call(
     }
 
     // Scoped so the immutable borrow ends before the output is borrowed mutably.
-    let result = {
+    let computed = {
         let input = &buffers[input_slot];
         crate::indicators::overlap::bbands(input, period, nb_dev, nb_dev)
-            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?
+    };
+    // A period longer than the series is a data condition: the tree path's
+    // `canonical_bband_component` answers an all-NaN series, so absorb the
+    // kernel's own failure rather than failing the evaluation.
+    let Some(result) = absorb_kernel_series(computed, &mut buffers[output_slot]) else {
+        return Ok(());
     };
     let source = if call.kernel == KernelId::from_static("CALL:BOLLMID") {
         result.middle
@@ -1804,8 +1902,10 @@ fn dispatch_macd_line_call(
             std::slice::from_raw_parts_mut(output_ptr, len),
         )
     };
-    crate::indicators::macd_line_into(input, fast, slow, signal, output)
-        .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))
+    absorb_kernel_failure(
+        crate::indicators::macd_line_into(input, fast, slow, signal, output),
+        output,
+    )
 }
 
 /// Execute `DEA` — the MACD signal line — into the plan-owned output.
@@ -1850,9 +1950,16 @@ fn dispatch_dea_call(
     let result = {
         let input = &buffers[input_slot];
         crate::indicators::momentum::macd(input, fast, slow, signal)
-            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?
     };
-    let source = result.signal;
+    // `fn_dea` swallows a bad period into an all-NaN series, so this path must
+    // too (`absorb_kernel_failure` explains why).
+    let source = match result {
+        Ok(result) => result.signal,
+        Err(_) => {
+            buffers[output_slot].fill(f64::NAN);
+            return Ok(());
+        }
+    };
     let output = buffers
         .get_mut(output_slot)
         .ok_or_else(|| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
@@ -1977,7 +2084,11 @@ fn dispatch_volume_call(
         let period = period_from_slot(buffers, call.inputs[4].0)?;
         crate::math::mfi::mfi_into(high, low, close, volume, period, output)
     };
-    result.map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))
+    // `canonical_adosc` / `canonical_mfi` (and `canonical_ad`, which shares this
+    // tail) answer an all-NaN series on a bad period, so mirror them
+    // (`absorb_kernel_failure`). ADOSC's fast/slow and MFI's period go through
+    // `period_from_slot` above, so a zero period is still an error.
+    absorb_kernel_failure(result, output)
 }
 
 /// Execute `AROON_UP` / `AROON_DN` into the plan-owned output.
@@ -2171,8 +2282,10 @@ fn dispatch_willr_call(
         let low = &buffers[low_slot];
         let close = &buffers[close_slot];
         let mut willr = vec![f64::NAN; len];
-        crate::indicators::momentum::willr_into(high, low, close, period, &mut willr)
-            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+        if crate::indicators::momentum::willr_into(high, low, close, period, &mut willr).is_err() {
+            // Degenerate period: the tree path yields an all-NaN series.
+            willr.fill(f64::NAN);
+        }
         willr
     };
 
@@ -2303,12 +2416,16 @@ fn dispatch_stochf_call(
     }
 
     // Scoped so the immutable borrows end before the output is borrowed mutably.
-    let result = {
+    let computed = {
         let high = &buffers[high_slot];
         let low = &buffers[low_slot];
         let close = &buffers[close_slot];
         crate::indicators::momentum::stochf(high, low, close, fast_k, fast_d)
-            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?
+    };
+    // A degenerate period is a data condition; the tree path's `fn_stochf`
+    // yields an all-NaN series, so absorb the kernel's own failure.
+    let Some(result) = absorb_kernel_series(computed, &mut buffers[output_slot]) else {
+        return Ok(());
     };
     let source = result.k;
     let output = buffers
@@ -2420,8 +2537,10 @@ fn dispatch_modern_call(
                 std::slice::from_raw_parts_mut(output_ptr, len),
             )
         };
-        return crate::indicators::statistics::zscore_into(input, period, output)
-            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER));
+        return absorb_kernel_failure(
+            crate::indicators::statistics::zscore_into(input, period, output),
+            output,
+        );
     }
 
     if is("CALL:VWMA") {
@@ -2436,8 +2555,10 @@ fn dispatch_modern_call(
                 std::slice::from_raw_parts_mut(output_ptr, len),
             )
         };
-        return crate::math::moving_avg::vwma_into(input, volume, period, output)
-            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER));
+        return absorb_kernel_failure(
+            crate::math::moving_avg::vwma_into(input, volume, period, output),
+            output,
+        );
     }
 
     if is("CALL:CORREL") {
@@ -2456,8 +2577,10 @@ fn dispatch_modern_call(
                 std::slice::from_raw_parts_mut(output_ptr, len),
             )
         };
-        return crate::math::kernels::rolling_correlation_into(left, right, period, output)
-            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER));
+        return absorb_kernel_failure(
+            crate::math::kernels::rolling_correlation_into(left, right, period, output),
+            output,
+        );
     }
 
     if is("CALL:VWAP") {
@@ -2524,8 +2647,12 @@ fn dispatch_modern_call(
                 std::slice::from_raw_parts_mut(buffers[output_slot].as_mut_ptr(), len),
             )
         };
-        let result = crate::indicators::volume_ext::cmf(high, low, close, volume, period)
-            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+        let Some(result) = absorb_kernel_series(
+            crate::indicators::volume_ext::cmf(high, low, close, volume, period),
+            &mut *output,
+        ) else {
+            return Ok(());
+        };
         return copy_result(output, result.as_slice().unwrap());
     }
 
@@ -2539,8 +2666,12 @@ fn dispatch_modern_call(
                 std::slice::from_raw_parts_mut(buffers[output_slot].as_mut_ptr(), len),
             )
         };
-        let result = crate::indicators::momentum_ext::chop(high, low, close, period)
-            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+        let Some(result) = absorb_kernel_series(
+            crate::indicators::momentum_ext::chop(high, low, close, period),
+            &mut *output,
+        ) else {
+            return Ok(());
+        };
         return copy_result(output, result.as_slice().unwrap());
     }
 
@@ -2553,8 +2684,12 @@ fn dispatch_modern_call(
                 std::slice::from_raw_parts_mut(buffers[output_slot].as_mut_ptr(), len),
             )
         };
-        let result = crate::indicators::momentum_ext::fisher(high, low, period)
-            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+        let Some(result) = absorb_kernel_series(
+            crate::indicators::momentum_ext::fisher(high, low, period),
+            &mut *output,
+        ) else {
+            return Ok(());
+        };
         let selected = if is("CALL:FISHER") {
             result.fisher.as_slice().unwrap()
         } else {
@@ -2577,8 +2712,12 @@ fn dispatch_modern_call(
                 std::slice::from_raw_parts_mut(buffers[output_slot].as_mut_ptr(), len),
             )
         };
-        let result = crate::indicators::momentum_ext::tsi(input, long_period, short_period)
-            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+        let Some(result) = absorb_kernel_series(
+            crate::indicators::momentum_ext::tsi(input, long_period, short_period),
+            &mut *output,
+        ) else {
+            return Ok(());
+        };
         return copy_result(output, result.as_slice().unwrap());
     }
 
@@ -2609,8 +2748,12 @@ fn dispatch_modern_call(
                 std::slice::from_raw_parts_mut(buffers[output_slot].as_mut_ptr(), len),
             )
         };
-        let result = crate::indicators::china::kdj(high, low, close, n, m1, m2)
-            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+        let Some(result) = absorb_kernel_series(
+            crate::indicators::china::kdj(high, low, close, n, m1, m2),
+            &mut *output,
+        ) else {
+            return Ok(());
+        };
         let selected = if is("CALL:KDJ_D") {
             result.d.as_slice().unwrap()
         } else if is("CALL:KDJ_J") {
@@ -2630,10 +2773,18 @@ fn dispatch_modern_call(
                 std::slice::from_raw_parts_mut(buffers[output_slot].as_mut_ptr(), len),
             )
         };
-        let upper = crate::math::statistics::rolling_max(high, period)
-            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
-        let lower = crate::math::statistics::rolling_min(low, period)
-            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+        let Some(upper) = absorb_kernel_series(
+            crate::math::statistics::rolling_max(high, period),
+            &mut *output,
+        ) else {
+            return Ok(());
+        };
+        let Some(lower) = absorb_kernel_series(
+            crate::math::statistics::rolling_min(low, period),
+            &mut *output,
+        ) else {
+            return Ok(());
+        };
         for index in 0..len {
             output[index] = if upper[index].is_finite() && lower[index].is_finite() {
                 (upper[index] + lower[index]) * 0.5
@@ -2660,9 +2811,12 @@ fn dispatch_modern_call(
                 std::slice::from_raw_parts_mut(buffers[output_slot].as_mut_ptr(), len),
             )
         };
-        let result =
-            crate::indicators::supertrend::supertrend(high, low, close, period, multiplier)
-                .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+        let Some(result) = absorb_kernel_series(
+            crate::indicators::supertrend::supertrend(high, low, close, period, multiplier),
+            &mut *output,
+        ) else {
+            return Ok(());
+        };
         return copy_result(output, result.trend_line.as_slice().unwrap());
     }
 
@@ -2674,8 +2828,12 @@ fn dispatch_modern_call(
             std::slice::from_raw_parts_mut(buffers[output_slot].as_mut_ptr(), len),
         )
     };
-    let result = crate::indicators::donchian::donchian(high, low, period)
-        .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+    let Some(result) = absorb_kernel_series(
+        crate::indicators::donchian::donchian(high, low, period),
+        &mut *output,
+    ) else {
+        return Ok(());
+    };
     let selected = if is("CALL:DONCHIAN_UPPER") {
         result.upper.as_slice().unwrap()
     } else if is("CALL:DONCHIAN_LOWER") {

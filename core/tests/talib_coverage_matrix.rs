@@ -3,7 +3,8 @@
 mod common;
 
 use common::talib_coverage::{
-    assert_catalog_matches_matrix, dispatcher_names, golden_indicator_names, load_matrix,
+    assert_catalog_matches_matrix, assert_formula_surface_is_callable, dispatcher_names,
+    golden_indicator_names, load_matrix,
 };
 use finkit_ffi_common::{
     is_profile_catalog_name, talib_profile_supported, TALIB_PROFILE_CATALOG_NAMES,
@@ -14,6 +15,11 @@ use std::collections::BTreeSet;
 fn talib_coverage_surfaces_are_explicit_and_consistent() {
     let matrix = load_matrix();
     assert_catalog_matches_matrix(&matrix);
+
+    // A golden vector alone is not enough: the same name must be callable from
+    // the formula DSL. See `assert_formula_surface_is_callable`. Checked before
+    // `numeric_reference.indicators` is consumed below.
+    assert_formula_surface_is_callable(&matrix);
 
     let numeric = matrix
         .surfaces

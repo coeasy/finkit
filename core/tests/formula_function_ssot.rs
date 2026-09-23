@@ -177,6 +177,7 @@ const PLAN_KERNELS: &[&str] = &[
 /// and already implemented, so it needs a dispatcher kernel and nothing else.
 /// The list is the measurable target for expanding plan coverage.
 const DECLARED_BUT_NO_KERNEL: &[&str] = &[
+    "ACCBANDS",
     "ACOS",
     "ASIN",
     "ATAN",
@@ -291,6 +292,7 @@ const DECLARED_BUT_NO_KERNEL: &[&str] = &[
     "LOG10",
     "MACDEXT",
     "MACDFIX",
+    "MAMA",
     "MAVP",
     "MA_ALIGN",
     "MA_ALIGNMENT",
@@ -479,10 +481,15 @@ fn the_three_surfaces_have_the_expected_sizes() {
     let kernels = probed_plan_kernels(&registry);
 
     // Compared as one tuple so a single run reports all three live values.
+    // 399 -> 447: the TA-Lib 0.7/0.8 formula bridge
+    // (`core/src/formula/functions_talib_081.rs`) registered 48 names whose
+    // kernels and golden vectors already existed but which no formula could
+    // name. The registry SSOT and the plan-kernel surfaces are unchanged: this
+    // was pure formula-surface wiring, not new compute.
     let actual = (registry.len(), formulas.len(), kernels.len());
     assert_eq!(
         actual,
-        (254, 399, 107),
+        (254, 447, 107),
         "surface sizes changed: (registry, formula, plan kernels)"
     );
 }

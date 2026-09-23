@@ -1,0 +1,17 @@
+{
+  "id": "zlema_cross",
+  "platform": "CROSS",
+  "source_formula": "ZLEMA20:=ZLEMA(CLOSE,20);",
+  "description": "零滞后EMA（ZLEMA）20日 - TA-Lib 0.7 新增",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv"
+  },
+  "expected_output_columns": [
+    "ZLEMA20"
+  ],
+  "tolerance": 1e-08,
+  "tags": [
+    "moving_average",
+    "talib08"
+  ]
+}

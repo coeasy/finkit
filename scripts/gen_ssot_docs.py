@@ -35,6 +35,7 @@ FORMULA_MOD = ROOT / "core" / "src" / "formula" / "mod.rs"
 FORMULA_FUNCTION_SOURCES = (
     ROOT / "core" / "src" / "formula" / "functions.rs",
     ROOT / "core" / "src" / "formula" / "functions_legacy.rs",
+    ROOT / "core" / "src" / "formula" / "functions_talib_081.rs",
 )
 FEATURES_MOD = ROOT / "core" / "src" / "features" / "mod.rs"
 PINE_BUILTIN = ROOT / "core" / "src" / "formula" / "pine" / "builtin_table.rs"

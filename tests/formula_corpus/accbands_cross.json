@@ -1,0 +1,19 @@
+{
+  "id": "accbands_cross",
+  "platform": "CROSS",
+  "source_formula": "ABU:=ACCBANDS(HIGH,LOW,CLOSE,20);ABM:=ACCBANDS_MID(HIGH,LOW,CLOSE,20);ABL:=ACCBANDS_LOWER(HIGH,LOW,CLOSE,20);",
+  "description": "加速带（Acceleration Bands）上中下轨 - TA-Lib 0.8 新增",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv"
+  },
+  "expected_output_columns": [
+    "ABU",
+    "ABM",
+    "ABL"
+  ],
+  "tolerance": 1e-08,
+  "tags": [
+    "volatility",
+    "talib08"
+  ]
+}

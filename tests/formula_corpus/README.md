@@ -97,6 +97,32 @@ tests/formula_corpus/
 | `dialect_ohlc_aliases.json` | `H/L/C` vs `HIGH/LOW/CLOSE` |
 | `cross_period_refdate.json` | `PERIODTYPE` / `REFDATE` |
 
+### TA-Lib 0.7/0.8 新增函数 — 16 条
+
+M0-1 把 31 个 TA-Lib 0.7/0.8 函数接入**公式层**（`core/src/formula/functions_talib_081.rs`），
+下列 16 条语料是它们的执行覆盖。这些函数目前只在 tree / bytecode / JIT 路径可用，
+**plan 路径尚无对应 kernel**（`CALL:<NAME>` 报 `code 1`），因此每条都已登记在
+`core/tests/formula_plan_differential.rs` 的 `DOMESTIC_UNSUPPORTED` 中，并注明缺失的 kernel。
+
+| 文件 | 覆盖函数 |
+|------|---------|
+| `accbands_cross.json` | `ACCBANDS`（多输出） |
+| `ao_ac_cross.json` | `AO` |
+| `coppock_cross.json` | `COPPOCK` |
+| `elder_ray_cross.json` | `ERI` |
+| `er_vhf_cross.json` | `ER` / `VHF` |
+| `fractal_cross.json` | `FRACTAL`（多输出） |
+| `heikin_ashi_cross.json` | `HA_OPEN`/`HA_HIGH`/`HA_LOW`/`HA_CLOSE` |
+| `keltner_cross.json` | `KC`（多输出） |
+| `massi_cross.json` | `MASSI` |
+| `nvi_pvi_cross.json` | `NVI` / `PVI` |
+| `pr_qstick_cross.json` | `PERCENTRANK` |
+| `rvol_cross.json` | `RVOL` |
+| `smi_cross.json` | `SMI` |
+| `vortex_cross.json` | `VORTEX` |
+| `wad_cross.json` | `WAD` |
+| `zlema_cross.json` | `ZLEMA` |
+
 ## 输入数据
 
 语料默认使用 `tests/fixtures/` 下的共享测试数据集。详见 [tests/fixtures/README.md](../fixtures/README.md)。

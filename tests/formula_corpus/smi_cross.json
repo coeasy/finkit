@@ -1,0 +1,18 @@
+{
+  "id": "smi_cross",
+  "platform": "CROSS",
+  "source_formula": "SMIV:=SMI(HIGH,LOW,CLOSE,13,2,25,9);SMIS:=SMI_SIGNAL(HIGH,LOW,CLOSE,13,2,25,9);",
+  "description": "随机动量指数（SMI）与信号线 - TA-Lib 0.8 新增",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv"
+  },
+  "expected_output_columns": [
+    "SMIV",
+    "SMIS"
+  ],
+  "tolerance": 1e-08,
+  "tags": [
+    "oscillator",
+    "talib08"
+  ]
+}

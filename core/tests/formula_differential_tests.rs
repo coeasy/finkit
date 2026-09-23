@@ -487,44 +487,113 @@ fn formula_differential_rolling_range_kernel() {
     );
 }
 
-/// Known, **recorded** divergence: a period longer than the series.
+/// A period longer than the series must yield an all-NaN series of the **same
+/// length** on every path — never an error.
 ///
-/// The tree path's `canonical_*` wrappers swallow a kernel error and return an
-/// all-NaN series, so `MA(CLOSE, 100)` over 80 bars evaluates to NaN. The
-/// compiled-plan path propagates the underlying `InsufficientData` as
-/// `ERR_PARAMETER` and fails the execution instead.
+/// This used to be a recorded divergence: the tree path's `fn_ma` swallows the
+/// kernel's `InsufficientData` into `nan_vec(data_len)`, while the plan path
+/// propagated it as `ERR_PARAMETER` and failed the evaluation. That made
+/// switching `FormulaExecutionMode` turn a NaN result into a hard error — a
+/// user-visible regression waiting to happen on the way to promoting `plan`.
 ///
-/// This is pre-existing — it predates the kernel-coverage work and no corpus
-/// case asks for a period longer than its data, which is why the differential
-/// gate never saw it. It is pinned rather than fixed so that (a) the divergence
-/// cannot drift unnoticed, and (b) promoting the plan path to the default fails
-/// *here*, forcing the dispatcher's error policy to be decided deliberately
-/// instead of silently turning a NaN result into a hard failure.
+/// The dispatcher now absorbs the kernel's *own* failure into an all-NaN output
+/// (`unified_dispatch::absorb_kernel_failure` / `absorb_kernel_series`),
+/// mirroring the reference. `REF` is deliberately excluded: `fn_ref` is the one
+/// function in that family that does not swallow its error.
+///
+/// `AROON(HIGH, LOW, N)` is deliberately **not** in this list. It fails the
+/// plan path with `ERR_UNSUPPORTED_KERNEL`, not `ERR_PARAMETER`: the plan lowers
+/// it to `CALL:AROON`, which the dispatcher never handles (only `CALL:AROON_UP`
+/// and `CALL:AROON_DN` are dispatched), so it is a *missing kernel* rather than
+/// an error-policy divergence. It is tracked by
+/// `formula_function_ssot::declared_functions_without_a_kernel_are_recorded`
+/// and is out of scope here.
 #[test]
-fn out_of_range_period_is_a_recorded_divergence() {
+fn out_of_range_period_is_all_nan_on_every_path() {
+    // `EMA` / `MACD` / `STD` are not padding: the round-13 default-flip
+    // measurement reported `code 3` for all three, so they pin the family, not
+    // just `MA`.
+    for source in [
+        "MA(CLOSE, 100)",
+        "EMA(CLOSE, 100)",
+        "WMA(CLOSE, 100)",
+        "STD(CLOSE, 100)",
+        "SUM(CLOSE, 100)",
+        "HHV(CLOSE, 100)",
+        "MACD(CLOSE, 12, 100, 9)",
+        // Multi-input indicators take the `canonical_*` overrides rather than
+        // the legacy `fn_*` wrappers, so they are a *different* code path with
+        // the same error policy -- and the default-flip measurement never named
+        // them, because no corpus case ever asks one for an out-of-range period.
+        // The gate has to reach that branch itself.
+        "ATR(HIGH, LOW, CLOSE, 100)",
+        "NATR(HIGH, LOW, CLOSE, 100)",
+        "CCI(CLOSE, 100)",
+        "CCI(HIGH, LOW, CLOSE, 100)",
+        "BOLLUP(CLOSE, 100, 2)",
+        "BOLLMID(CLOSE, 100, 2)",
+        "BOLLDN(CLOSE, 100, 2)",
+        "BBANDS(CLOSE, 100, 2)",
+        "MFI(HIGH, LOW, CLOSE, VOLUME, 100)",
+        "ADOSC(HIGH, LOW, CLOSE, VOLUME, 100, 200)",
+        // The remaining kernel families that return a whole series instead of
+        // writing through an output slice -- each needed `absorb_kernel_series`.
+        "WILLR(HIGH, LOW, CLOSE, 100)",
+        "STOCHF(HIGH, LOW, CLOSE, 100, 3)",
+        "ZSCORE(CLOSE, 100)",
+        "VWMA(CLOSE, VOLUME, 100)",
+        "CORREL(CLOSE, OPEN, 100)",
+        "CMF(HIGH, LOW, CLOSE, VOLUME, 100)",
+        "CHOP(HIGH, LOW, CLOSE, 100)",
+        "FISHER(HIGH, LOW, 100)",
+        "TSI(CLOSE, 100, 50)",
+        "KDJ(HIGH, LOW, CLOSE, 100, 3, 3)",
+        "SUPERTREND(HIGH, LOW, CLOSE, 100, 3)",
+        "DONCHIAN_UPPER(HIGH, LOW, 100)",
+    ] {
+        const LEN: usize = 80;
+        let mut engine = FormulaEngine::new();
+        let mut ctx = make_ctx(LEN);
+        let reference = engine
+            .eval(source, &mut ctx)
+            .unwrap_or_else(|error| panic!("tree path rejected `{source}`: {error}"));
+        assert_eq!(reference.len(), LEN, "{source}: length must survive");
+        assert!(
+            reference.iter().all(|value| value.is_nan()),
+            "{source}: an out-of-range period must yield an all-NaN series"
+        );
+        assert_every_path_matches(source, source, || make_ctx(LEN), &reference);
+    }
+
+    // A one-bar series is the same class: `EMA(CLOSE, 5)` over a single bar has
+    // no window to seed from, and `fn_ema` answers NaN rather than failing.
+    let mut engine = FormulaEngine::new();
+    let mut ctx = make_ctx(1);
+    let reference = engine
+        .eval("EMA(CLOSE, 5)", &mut ctx)
+        .expect("the tree path must tolerate a one-bar series");
+    assert_eq!(reference.len(), 1);
+    assert!(reference[0].is_nan());
+    assert_every_path_matches("EMA_ONE_BAR", "EMA(CLOSE, 5)", || make_ctx(1), &reference);
+
+    // The other half of the policy: a period of zero is *not* a data condition.
+    // Both paths reject it at their own guard (`extract_n` on the tree path,
+    // `period_from_slot` on the plan path) before any kernel runs, so
+    // `absorb_kernel_failure` must not have swallowed it into a NaN series.
     use finkit::formula::FormulaExecutionMode;
-
-    let mut tree = FormulaEngine::new();
-    let mut tree_ctx = make_ctx(80);
-    let reference = tree
-        .eval("MA(CLOSE, 100)", &mut tree_ctx)
-        .expect("the tree path must tolerate an out-of-range period");
-    assert!(
-        reference.iter().all(|value| value.is_nan()),
-        "the tree path must swallow the insufficient-data error and yield NaN, \
-         got {:?}",
-        &reference.as_slice().unwrap()[..5.min(reference.len())]
-    );
-
-    let mut plan = FormulaEngine::new().with_execution_mode(FormulaExecutionMode::Plan);
-    let mut plan_ctx = make_ctx(80);
-    let outcome = plan.eval("MA(CLOSE, 100)", &mut plan_ctx);
-    assert!(
-        outcome.is_err(),
-        "the plan path now agrees with the tree path on an out-of-range period, \
-         so this divergence is closed: delete this test and update \
-         docs/refactor-plan-2026-09-21.md"
-    );
+    for source in ["MA(CLOSE, 0)", "EMA(CLOSE, 0)"] {
+        let mut tree = FormulaEngine::new();
+        assert!(
+            tree.eval(source, &mut make_ctx(80)).is_err(),
+            "the tree path must reject `{source}`"
+        );
+        let mut plan = FormulaEngine::new().with_execution_mode(FormulaExecutionMode::Plan);
+        assert!(
+            plan.eval(source, &mut make_ctx(80)).is_err(),
+            "the plan path must reject `{source}` too: the period guard runs before \
+             the kernel, so absorbing the kernel's failure must not reach it"
+        );
+    }
 }
 
 /// `MOD` must follow the *function*, not the `%` operator.

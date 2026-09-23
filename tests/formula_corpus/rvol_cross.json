@@ -1,0 +1,19 @@
+{
+  "id": "rvol_cross",
+  "platform": "CROSS",
+  "source_formula": "RV:=RVOL(VOLUME,20);PVS:=PVO(VOLUME,12,26,1);PT:=PVT(CLOSE,VOLUME);",
+  "description": "相对成交量（RVOL）/量能振荡（PVO）/价量趋势（PVT） - TA-Lib 0.8 新增",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv"
+  },
+  "expected_output_columns": [
+    "RV",
+    "PVS",
+    "PT"
+  ],
+  "tolerance": 1e-08,
+  "tags": [
+    "volume",
+    "talib08"
+  ]
+}

@@ -454,12 +454,12 @@ plan 路径原来从**第一个输入槽**推断执行长度，于是 `10 + 20` 
 「按定调不该存在的函数」—— 在删除它们之前补 kernel，等于把 §2 已经划出去的域重新
 实现一遍。所以正确的顺序是**先删域外，再补剩余**，而不是先补完再删。
 
-**另有 8 处非 kernel 的分歧（同一批测出来，均未修）**：
+**另有 8 处非 kernel 的分歧（同一批测出来；两类均已于第十四轮闭环）**：
 
-| kernel | 错误码 | 现象 |
-|---|---|---|
-| `MA` / `EMA` / `MACD` | `code 3` (`ERR_PARAMETER`) | 周期大于序列长度或只有 1 根时，树路径的 `canonical_*` 吞掉 `InsufficientData` 返回全 `NaN`，plan 路径抛错。即第七轮已钉住的那条分歧，现在测出它还牵连 `EMA` / `MACD` 与单根输入 |
-| `PLUS_DI` / `MINUS_DI` | `code 2` (`ERR_ARITY`) | kernel 要求的实参个数与公式实际传入的不一致 —— 是**真 kernel bug**，不是错误策略分歧 |
+| kernel | 错误码 | 现象 | 状态 |
+|---|---|---|---|
+| `MA` / `EMA` / `MACD` | `code 3` (`ERR_PARAMETER`) | 周期大于序列长度或只有 1 根时，树路径的 `canonical_*` 吞掉 `InsufficientData` 返回全 `NaN`，plan 路径抛错。即第七轮已钉住的那条分歧，现在测出它还牵连 `EMA` / `MACD` 与单根输入 | ✅ 第十四轮：plan 改为复现参考序列（`absorb_kernel_failure`） |
+| `PLUS_DI` / `MINUS_DI` | `code 2` (`ERR_ARITY`) | kernel 要求的实参个数与公式实际传入的不一致 —— 是**真 kernel bug**，不是错误策略分歧 | ✅ 第九轮：`expand_implicit_price_args` |
 
 **本轮对「字符串字面量」的判断更正**：第七轮记的是「需要先拍板」，实际读代码后发现
 **没有可选项** —— 树路径的语义就是「字面量追加进 `FormulaContext::string_table`，
@@ -694,9 +694,10 @@ kernel 会通过宽松比较却是错的算术**。实测（同一输入、perio
 8. ✅ **`PLUS_DI` / `MINUS_DI` 的 `ERR_ARITY` 已修**，且**同类问题一并修掉**：
    `AROON_UP` / `AROON_DN`（`resolve_hl_args` 的 1 参形式）与
    `DX` / `ADXR` / `AROONOSC` 同属 `resolve_hl*` 短实参族。见 §9。
-9. **`MA` / `EMA` / `MACD` 在「周期 > 序列长度」或「只有 1 根」时 tree=NaN / plan=抛错** ——
-   这是**既有**分歧（非本轮引入），已由 `out_of_range_period_is_a_recorded_divergence` 钉住。
-   要么让 plan 跟随 tree 返回 NaN，要么明确 plan 的严格语义并同步改 tree。**属行为变更，需你定。**
+9. ✅ **`MA` / `EMA` / `MACD` 在「周期 > 序列长度」或「只有 1 根」时 tree=NaN / plan=抛错** ——
+   已**定案并修掉**（第十四轮）：plan 路径改为复现参考路径的全 NaN 序列。判定依据是
+   树路径同族 **23 个** `fn_*` 包装全部把 kernel 错误吞成 `nan_vec(data_len)`，只有 `fn_ref`
+   例外；所以「NaN」才是被文档化的契约，plan 的抛错是**跨路径分歧**而非更严格的语义。
 
 ---
 
@@ -781,7 +782,7 @@ plan 路径**没有上下文可补** —— 它的 input layout 只能承载源�
    **单/双序列逐 bar 信号计算**，且**已在 `registry.rs` 注册**（属公开 API + FFI 面），
    所以只改了文档措辞、**没有删模块**。若你认为模块名「screening」本身就是产品定位
    问题，需要一次破坏性变更 —— 请确认。
-4. §8 第 9 条（越界周期 tree=NaN / plan=抛错）仍未决。
+4. ✅ §8 第 9 条（越界周期 tree=NaN / plan=抛错）**已定案并修复**（第十四轮）。
 
 ---
 

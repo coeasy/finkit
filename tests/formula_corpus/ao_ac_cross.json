@@ -1,0 +1,21 @@
+{
+  "id": "ao_ac_cross",
+  "platform": "CROSS",
+  "source_formula": "AOV:=AO(HIGH,LOW,5,34);ACV:=AC(HIGH,LOW,5,34,5);MAM:=MAMA(CLOSE,0.5,0.05);FAM:=MAMA_FAMA(CLOSE,0.5,0.05);",
+  "description": "动量震荡（AO）/累积摆动（AC）/MESA自适应均线（MAMA/FAMA） - TA-Lib 0.7-0.8 新增",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv"
+  },
+  "expected_output_columns": [
+    "AOV",
+    "ACV",
+    "MAM",
+    "FAM"
+  ],
+  "tolerance": 1e-08,
+  "tags": [
+    "momentum",
+    "moving_average",
+    "talib08"
+  ]
+}

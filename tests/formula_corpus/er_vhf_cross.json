@@ -1,0 +1,19 @@
+{
+  "id": "er_vhf_cross",
+  "platform": "CROSS",
+  "source_formula": "EFR:=ER(CLOSE,10);VF:=VHF(CLOSE,28);FO:=FOSC(CLOSE,5);",
+  "description": "效率系数（ER）/垂直水平过滤（VHF）/预测振荡（FOSC） - TA-Lib 0.8 新增",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv"
+  },
+  "expected_output_columns": [
+    "EFR",
+    "VF",
+    "FO"
+  ],
+  "tolerance": 1e-08,
+  "tags": [
+    "trend",
+    "talib08"
+  ]
+}

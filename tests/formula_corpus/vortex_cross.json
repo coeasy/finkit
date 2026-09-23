@@ -1,0 +1,18 @@
+{
+  "id": "vortex_cross",
+  "platform": "CROSS",
+  "source_formula": "VIP:=VORTEX(HIGH,LOW,CLOSE,14);VIM:=VORTEX_MINUS(HIGH,LOW,CLOSE,14);",
+  "description": "涡旋指标（Vortex）VI+/VI- - TA-Lib 0.8 新增",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv"
+  },
+  "expected_output_columns": [
+    "VIP",
+    "VIM"
+  ],
+  "tolerance": 1e-08,
+  "tags": [
+    "trend",
+    "talib08"
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "id": "pr_qstick_cross",
+  "platform": "CROSS",
+  "source_formula": "PRK:=PERCENTRANK(CLOSE,100);QS:=QSTICK(OPEN,CLOSE,10);CM:=CMOU(CLOSE,14);RVIV:=RVI(CLOSE,14,10);",
+  "description": "百分排名（PERCENTRANK）/Q棒（QSTICK）/CMOU/相对活力（RVI） - TA-Lib 0.7-0.8 新增",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv"
+  },
+  "expected_output_columns": [
+    "PRK",
+    "QS",
+    "CM",
+    "RVIV"
+  ],
+  "tolerance": 1e-08,
+  "tags": [
+    "statistics",
+    "oscillator",
+    "talib08"
+  ]
+}

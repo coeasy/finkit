@@ -3,7 +3,7 @@
 > **SSOT** — auto-generated from the legacy formula table and routed formula functions.
 > Do not edit manually. Regenerate: `python scripts/gen_ssot_docs.py --generate`
 
-Built-in formula functions: **399**
+Built-in formula functions: **447**
 
 These functions are available in the formula DSL for expressions like `SMA(CLOSE, 20)`.
 
@@ -12,18 +12,26 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | Function |
 |----------|
 | `ABS` |
+| `AC` |
+| `ACCBANDS` |
+| `ACCBANDS_LOWER` |
+| `ACCBANDS_MID` |
 | `ACOS` |
 | `AD` |
 | `ADD` |
 | `ADOSC` |
+| `ADR` |
 | `ADX` |
 | `ADXR` |
 | `ALERT` |
 | `ALERTONCE` |
 | `ALMA` |
+| `AO` |
 | `APO` |
+| `AROON` |
 | `AROONOSC` |
 | `AROON_DN` |
+| `AROON_DOWN` |
 | `AROON_UP` |
 | `ASIN` |
 | `ATAN` |
@@ -134,8 +142,10 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `CLOSE1` |
 | `CMF` |
 | `CMO` |
+| `CMOU` |
 | `CONSECUTIVE_LIMIT` |
 | `CONST` |
+| `COPPOCK` |
 | `CORREL` |
 | `COS` |
 | `COSH` |
@@ -156,6 +166,7 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `CUMMIN` |
 | `CUMSUM` |
 | `CURRBARSCOUNT` |
+| `CVI` |
 | `DARVAS_BOX` |
 | `DATE` |
 | `DAY` |
@@ -178,6 +189,7 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `DRAWNULL` |
 | `DX` |
 | `DYNAINFO` |
+| `EFI` |
 | `EMA` |
 | `EM_COSTEX` |
 | `EM_CROSS` |
@@ -188,6 +200,10 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `EM_TROUGHBARS` |
 | `EM_ZIG` |
 | `EM_ZLCCV` |
+| `ER` |
+| `ERI` |
+| `ERI_BEAR` |
+| `ERI_BULL` |
 | `EVERY` |
 | `EXIST` |
 | `EXP` |
@@ -201,16 +217,25 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `FIXNAN` |
 | `FLOOR` |
 | `FORCAST` |
+| `FOSC` |
 | `FOX_PEAK` |
 | `FOX_PEAKBARS` |
 | `FOX_TROUGH` |
 | `FOX_TROUGHBARS` |
 | `FOX_ZIG` |
 | `FRACPART` |
+| `FRACTAL` |
+| `FRACTAL_HIGH` |
+| `FRACTAL_LOW` |
 | `FROMOPEN` |
 | `GAP` |
 | `GAP_SIGNAL` |
 | `GOLDEN_CROSS` |
+| `HA` |
+| `HA_CLOSE` |
+| `HA_HIGH` |
+| `HA_LOW` |
+| `HA_OPEN` |
 | `HEIKIN_ASHI` |
 | `HHV` |
 | `HHVBARS` |
@@ -242,6 +267,9 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `ISNA` |
 | `KAGI` |
 | `KAMA` |
+| `KC` |
+| `KC_LOWER` |
+| `KC_MID` |
 | `KD` |
 | `KDJ` |
 | `KDJ_D` |
@@ -273,6 +301,10 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `MAININFLOW` |
 | `MAININFLOWPCT` |
 | `MAIN_NET_INFLOW` |
+| `MAMA` |
+| `MAMA_FAMA` |
+| `MARKETFI` |
+| `MASSI` |
 | `MATH_AVG` |
 | `MAVP` |
 | `MAX` |
@@ -307,6 +339,7 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `NATR` |
 | `NETINFLOW` |
 | `NOT` |
+| `NVI` |
 | `OBV` |
 | `OBV_ENHANCED` |
 | `OPEN1` |
@@ -314,6 +347,7 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `PEAK` |
 | `PEAKBARS` |
 | `PERCENTILE` |
+| `PERCENTRANK` |
 | `PERCENT_RANK` |
 | `PERIODTYPE` |
 | `PLUS_DI` |
@@ -326,6 +360,10 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `PRICE_BREAKOUT` |
 | `PSAR` |
 | `PSY` |
+| `PVI` |
+| `PVO` |
+| `PVT` |
+| `QSTICK` |
 | `RANGE` |
 | `RANK` |
 | `REF` |
@@ -344,6 +382,8 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `RSI` |
 | `RS_EXCESS_RETURN` |
 | `RS_RATIO` |
+| `RVI` |
+| `RVOL` |
 | `SAR` |
 | `SAREXT` |
 | `SHIFT` |
@@ -354,6 +394,8 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `SLOPE` |
 | `SMA` |
 | `SMALLORDER` |
+| `SMI` |
+| `SMI_SIGNAL` |
 | `SORT` |
 | `SQRT` |
 | `STD` |
@@ -393,12 +435,17 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `ULTOSC` |
 | `VALUEWHEN` |
 | `VAR` |
+| `VHF` |
 | `VOL1` |
 | `VOLSURGE` |
 | `VOLUME_EXPANSION` |
 | `VOLUME_SURGE` |
+| `VORTEX` |
+| `VORTEX_MINUS` |
+| `VORTEX_PLUS` |
 | `VWAP` |
 | `VWMA` |
+| `WAD` |
 | `WCLPRICE` |
 | `WEEKDAY` |
 | `WILLIAMS_ALLIGATOR` |
@@ -408,6 +455,7 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `WR` |
 | `YEAR` |
 | `ZIGZAG` |
+| `ZLEMA` |
 | `ZSCORE` |
 | `Z_SCORE` |
 
