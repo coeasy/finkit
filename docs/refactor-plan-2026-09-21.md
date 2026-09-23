@@ -471,6 +471,48 @@ plan 路径原来从**第一个输入槽**推断执行长度，于是 `10 + 20` 
 真正需要拍板的是另一件事：**是否把 §2 划定的域外函数（回测/选股，约 22 个）连同
 它们的测试一并删除**。删掉它们会同时消掉 87 个缺口里的约四分之一。
 
+##### 第十三轮：`--no-fail-fast` 复测（2026-09-23）
+
+第八轮作废了「18 → … → 1」这条曲线，但**作废只落到了本文件**——`engine.rs` 里
+`FormulaExecutionMode::Tree` 的文档注释、以及项目记忆，**仍然写着「剩 1 组」**。
+所以按第八轮的方法重测了一遍，确认现状，并把错的数字从代码注释里清掉。
+
+方法（照 §3.3 的教训，全程可逆）：
+
+1. `cp core/src/formula/engine.rs .git/engine.rs.bak`（**不用 `git checkout --`**，它会连带
+   丢掉该文件全部未提交改动）；
+2. 用脚本翻转 `#[default]`，每个锚点先 `assert` 命中数 == 1；
+3. `cargo test -p finkit --offline -j 2 --no-fail-fast > .git/flip.log`；
+4. 三个口径分别统计，并把 `kernel 0x…` 用 FNV-1a 64 反查成函数名；
+5. `cp` 回滚 + `diff -q` 验证**逐字节相同**。
+
+| 口径 | 第八轮（2026-09-21） | 本轮（2026-09-23） |
+|---|---|---|
+| 红 test target | 11 | **12**（多一个 `--lib`） |
+| 红测试 | 179 | **143** |
+| 缺失 kernel（`code 1`） | 87 | **76** |
+| 其它派发错误 | `code 3` ×6、`code 2` ×2 | `code 3` ×8（`MA`/`EMA`/`MACD`）；`code 2` 已清零 |
+
+数字下降与第九~十二轮一致：第九轮删掉域外公式 20 注册/18 实现，第十二轮修了库层累加器。
+`code 2`（`ERR_ARITY`，`PLUS_DI`/`MINUS_DI`）**已清零**，说明那条真 kernel bug 修掉了。
+
+**红 target 名单（12）**：`--lib`、`dzh_compat_tests`、`em_compat_tests`、`fox_compat_tests`、
+`tdx_compat_tests`、`ths_compat_tests`、`formula_compat`、`formula_regression`、
+`formula_differential_tests`、`formula_engine_integration`、`formula_execution_mode`、
+`formula_cache_tests`。
+
+**本轮新增确认的两条非 kernel 分歧**：
+
+| 现象 | 位置 | 性质 |
+|---|---|---|
+| `cache_hit` / `cache_len` 在两种模式下语义不同 | `formula_cache_tests`（2 条） | **API 语义分歧，不是覆盖缺口**。`cache_hit` 按模式分别查 `self.cache` 与 `self.plan_cache`，两者键与 LRU 淘汰顺序都不同 → 切默认会改变**可观测的缓存 API 行为** |
+| `test_repaired_templates_evaluate_to_finite_values` | 模板表 | 模板含 `RANK`（域外，见第八轮表），plan 无 kernel |
+
+**结论**：默认仍**不能**切 `plan`。而且拦路石不止「缺 76 个 kernel」——
+`STRING_LITERAL` 是**结构性**的（executor 只收 `&[&[f64]]`，拿不到 `ctx`，无法追加
+`string_table`；见第七轮的判断），`cache_hit` 是**API 契约**层面的。
+这两条都不是补 kernel 能解决的。
+
 ##### 沙箱如何在 plan 路径落地（2026-09-21）
 
 三条限制在 plan 路径上没有一一对应的机制，所以**映射方式必须显式**，不能假装一致：

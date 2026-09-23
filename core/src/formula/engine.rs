@@ -323,16 +323,27 @@ pub enum FormulaExecutionMode {
     /// Tree-walking interpreter. The reference path and the current default.
     ///
     /// This is not caution for its own sake. Flipping the default was measured,
-    /// not assumed: doing so failed 18 test groups, and closing the kernel,
-    /// sandbox, compound-assignment, statistics, cache, length-inference and
-    /// `ctx.variables` gaps brought that down round by round. See the note in
-    /// `docs/refactor-plan-2026-09-21.md` (§3.2) for the measured per-round list.
+    /// not assumed — and the measurement itself was wrong before it was right.
+    /// The first curve (`18 → 12 → 8 → 7 → 6 → 3 → 1`) came from runs
+    /// **without `--no-fail-fast`**, so it recorded the failure count of the
+    /// *first red target*, not the full gap. Re-measured 2026-09-23 with
+    /// `--no-fail-fast`: **12 red targets / 143 failing tests / 76 missing
+    /// kernels**. See `docs/refactor-plan-2026-09-21.md` §3.2 (rounds 8 and 13)
+    /// for both the breakdown and the methodology note.
     ///
     /// Both paths now publish the same observable results — assignments into
     /// `ctx.variables`, declared channels into `ctx.output_names`, chart styling
     /// into `ctx.output_modifiers` — so a caller cannot tell from the context
-    /// which one ran. What remains is coverage: under [`Self::Plan`] a formula
-    /// with no kernel fails at compile time rather than at runtime.
+    /// which one ran. What remains is coverage, not semantics: under
+    /// [`Self::Plan`] a formula whose operation has no kernel fails at dispatch
+    /// rather than at runtime.
+    ///
+    /// That loud failure is deliberate — a silent fallback would make "the fast
+    /// path" mean "usually the fast path" — but it also means a formula
+    /// containing a **string literal** cannot run under [`Self::Plan`] at all:
+    /// the tree path's semantics are "append the literal to
+    /// `FormulaContext::string_table`, evaluate to its index", and the plan
+    /// executor receives only `&[&[f64]]` with no context to append to.
     #[default]
     Tree,
     /// Compiled compute plan driven by `UnifiedExecutor`.
