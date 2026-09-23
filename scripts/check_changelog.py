@@ -12,7 +12,7 @@ Exit 0 if the most recent version block has at least one of:
 Exit 1 if the changelog is malformed or the latest version is empty.
 
 Usage:
-    python scripts/check_changelog.py docs/CHANGELOG.md
+    python scripts/check_changelog.py CHANGELOG.md
 """
 
 import re

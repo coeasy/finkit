@@ -57,3 +57,5 @@ jobs:
         run: python scripts/gen_ssot_docs.py --check
       - name: Check local documentation links
         run: python scripts/check_docs_links.py
+      - name: Check changelog structure
+        run: python scripts/check_changelog.py CHANGELOG.md
