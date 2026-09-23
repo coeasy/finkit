@@ -28,14 +28,82 @@ CMAKE_PROJECT = ROOT / "ffi" / "c-binding" / "CMakeLists.txt"
 XML_PROJECT_VERSIONS = ((DOTNET_PROJECT, "Version"), (JAVA_POM, "version"))
 DOC_VERSION_FILES = (
     ROOT / "README.md",
+    ROOT / "docs" / "README.md",
     ROOT / "docs" / "api-reference.md",
     ROOT / "docs" / "generated" / "version-matrix.md",
     ROOT / "docs" / "installation.md",
     ROOT / "docs" / "python.md",
+    ROOT / "docs" / "getting-started.md",
+    ROOT / "docs" / "cli.md",
+    ROOT / "docs" / "language-bindings.md",
+    ROOT / "docs" / "development.md",
     ROOT / "ffi" / "python-binding" / "README.md",
     ROOT / "examples" / "README.md",
     ROOT / "docs" / "indicator_registry.json",
     ROOT / "docs" / "ffi_registry.json",
+)
+
+# A release version is `MAJOR.MINOR.PATCH`.
+#
+# This used to be the literal `0\.1\.\d+`, which meant the check only ever
+# looked for drift *within the 0.1 series*. Two consequences, both silent:
+# `docs/getting-started.md` sat at `v0.1.5` while every other document said
+# `v0.1.15` and nothing noticed, and once the workspace moved to 0.2.0 the
+# pattern could no longer describe the version it was meant to protect.
+# A gate that can only catch drift in a series you have already left is not a
+# gate.
+SEMVER_RE = re.compile(r"(?<![\d.])(\d+\.\d+\.\d+)(?![\d.])")
+
+# The most recent version that has actually been **published** (a tag with
+# Release assets a user can download).
+#
+# This is deliberately a second constant, not a copy of the workspace version.
+# The workspace moves to the next version the moment development starts, while
+# users can still only download the previous one until the release job runs.
+# Conflating the two is how a version bump silently rewrites "here is what you
+# can download" into a false statement: bumping to 0.2.0 would otherwise make
+# `docs/installation.md` claim a `v0.2.0` GitHub Release with
+# `finkit-0.2.0-<platform>.whl` assets that do not exist.
+#
+# Both versions are legal in release-facing documents. When a publish actually
+# happens, move this forward in the same commit as the release notes.
+PUBLISHED_VERSION = "0.1.15"
+
+# Versions that legitimately appear in release-facing documents but are neither
+# this workspace's version nor a published one (a dependency's version, say).
+# Keep this explicit: a blanket ignore is how a version check quietly stops
+# checking. `collect_errors` asserts the list stays in sync with what the
+# documents actually contain, so a stale entry is reported rather than left to
+# rot.
+FOREIGN_VERSIONS = frozenset(
+    {
+        "0.7.1",  # TA-Lib, named in README.md's head-to-head guardrail paragraph
+        "0.8.0",  # TA-Lib Python, in the docs index link to the coverage audit
+    }
+)
+
+# Documents that describe **published** artifacts rather than the workspace.
+#
+# `--fix` must not rewrite these. A version in prose is a claim about the world
+# -- "this is the tag you can check out", "this is the wheel you can install" --
+# and only an author knows whether a given occurrence means "the code's version"
+# or "the release you can download". Rewriting them mechanically is what turned
+# a correct `v0.1.15` into a nonexistent `v0.2.0` Release. The gate reports
+# stale values here and leaves the edit to a human.
+PROSE_RELEASE_DOCS = frozenset(
+    {
+        "README.md",
+        "docs/api-reference.md",
+        "docs/installation.md",
+        "docs/python.md",
+        "docs/getting-started.md",
+        "docs/cli.md",
+        "docs/language-bindings.md",
+        "docs/development.md",
+        "docs/README.md",
+        "examples/README.md",
+        "ffi/python-binding/README.md",
+    }
 )
 
 
@@ -178,6 +246,10 @@ def collect_errors(canonical: str) -> list[str]:
     cmake_version = read_cmake_project_version()
     if cmake_version != canonical:
         errors.append(f"{CMAKE_PROJECT.relative_to(ROOT)}: {cmake_version} != {canonical}")
+    # Two versions are legal in release-facing prose: the workspace version
+    # (what the code says it is) and the published version (what a user can
+    # actually download). Anything else is drift. See `PUBLISHED_VERSION`.
+    accepted = {canonical, PUBLISHED_VERSION} | FOREIGN_VERSIONS
     for path in DOC_VERSION_FILES:
         if not path.exists():
             errors.append(f"missing release-facing document: {path.relative_to(ROOT)}")
@@ -188,13 +260,29 @@ def collect_errors(canonical: str) -> list[str]:
             if version != canonical:
                 errors.append(f"{path.relative_to(ROOT)}: {version} != {canonical}")
         else:
-            release_versions = set(re.findall(r"(?<!\d)0\.1\.\d+(?!\d)", text))
-            stale_versions = sorted(version for version in release_versions if version != canonical)
+            found = set(SEMVER_RE.findall(text))
+            stale_versions = sorted(found - accepted)
             if stale_versions:
                 errors.append(
                     f"{path.relative_to(ROOT)}: contains stale release version(s) "
-                    f"{', '.join(stale_versions)}; expected {canonical}"
+                    f"{', '.join(stale_versions)}; expected {canonical} (workspace) "
+                    f"or {PUBLISHED_VERSION} (published)"
                 )
+
+    # The foreign-version allowlist must stay exactly in sync with the
+    # documents. An unused entry is dead weight that would hide the next real
+    # exemption; an unlisted foreign version is already reported as stale above.
+    seen = set()
+    for path in DOC_VERSION_FILES:
+        if not path.exists() or path.name in ("indicator_registry.json", "ffi_registry.json"):
+            continue
+        seen |= set(SEMVER_RE.findall(path.read_text(encoding="utf-8")))
+    unused_foreign = sorted(FOREIGN_VERSIONS - seen)
+    if unused_foreign:
+        errors.append(
+            "FOREIGN_VERSIONS lists version(s) no release-facing document contains: "
+            f"{', '.join(unused_foreign)}; remove them so the allowlist stays auditable"
+        )
 
     return errors
 
@@ -297,11 +385,22 @@ def fix_versions(canonical: str) -> None:
     )
     CARGO_LOCK.write_text(lock, encoding="utf-8")
 
+    # Metadata and generated catalogs only. Hand-written release prose is
+    # deliberately excluded: see `PROSE_RELEASE_DOCS` for why a mechanical
+    # rewrite there is worse than a red gate.
     for path in DOC_VERSION_FILES:
-        if not path.exists() or path.name == "indicator_registry.json":
+        if not path.exists() or path.name in ("indicator_registry.json", "ffi_registry.json"):
+            continue
+        relative = str(path.relative_to(ROOT)).replace("\\", "/")
+        if relative in PROSE_RELEASE_DOCS:
             continue
         text = path.read_text(encoding="utf-8")
-        text = re.sub(r"(?<!\d)0\.1\.\d+(?!\d)", canonical, text)
+        text = SEMVER_RE.sub(
+            lambda match: (
+                match.group(1) if match.group(1) in FOREIGN_VERSIONS else canonical
+            ),
+            text,
+        )
         path.write_text(text, encoding="utf-8")
 
     registry = json.loads(

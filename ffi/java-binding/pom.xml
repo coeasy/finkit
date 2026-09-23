@@ -6,7 +6,7 @@
 
     <groupId>com.finkit</groupId>
     <artifactId>finkit</artifactId>
-    <version>0.1.15</version>
+    <version>0.2.0</version>
     <packaging>jar</packaging>
 
     <name>Finkit Java Bindings</name>

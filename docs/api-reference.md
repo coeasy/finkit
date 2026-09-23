@@ -448,8 +448,13 @@ Valid category slugs: `overlap`, `momentum`, `volume`, `volatility`, `price_tran
 
 ### Installation
 
+Finkit is distributed as Python ABI3 wheels attached to the published GitHub
+`v0.1.15` Release. Download the wheel for your platform and install it locally,
+or build the current v0.2.0 workspace from source with `maturin` (see
+[installation.md](installation.md)):
+
 ```bash
-pip install finkit
+python -m pip install ./finkit-0.1.15-<matching-platform>.whl
 ```
 
 ### Functions
@@ -541,8 +546,12 @@ double_tops = ta.detect_double_top(high)
 
 ### Installation
 
+The Node binding is built from source under `ffi/node-binding` with NAPI-RS.
+There is no npm registry release yet; see [installation.md](installation.md)
+for the build and `npm pack` path.
+
 ```bash
-npm install finkit
+cd ffi/node-binding && npm ci && npm run build && npm test
 ```
 
 ### TypeScript Definitions
@@ -647,12 +656,13 @@ const doubleTops = detect_double_top(high);
 
 ### Maven Dependency
 
-```xml
-<dependency>
-    <groupId>com.finkit</groupId>
-    <artifactId>finkit</artifactId>
-    <version>0.1.15</version>
-</dependency>
+The Java/JNI binding is packaged from source under `ffi/java-binding`. Maven
+Central publication is not enabled yet; build the native library and package
+the JAR locally (see [installation.md](installation.md)).
+
+```bash
+cargo build -p finkit-java --release --locked
+mvn -B -f ffi/java-binding/pom.xml -DskipTests package
 ```
 
 ### Classes
@@ -728,8 +738,14 @@ public class Example {
 
 ### Installation
 
+The Go binding is a nested source module under `ffi/go-binding/go`. There is no
+public `go get` release yet; build the native library and test the module from
+a checkout (see [installation.md](installation.md)).
+
 ```bash
-go get github.com/coeasy/finkit
+cargo build -p finkit-go --release --locked
+cd ffi/go-binding/go
+go test ./...
 ```
 
 ### Functions
@@ -799,8 +815,13 @@ func main() {
 
 ### NuGet Package
 
+The .NET binding is built from source under `ffi/dotnet-binding`. There is no
+NuGet feed release yet; see [installation.md](installation.md) for the build
+and `dotnet pack` path.
+
 ```bash
-dotnet add package finkit
+cargo build -p finkit-dotnet --release --locked
+dotnet pack ffi/dotnet-binding/src/Finkit/Finkit.csproj -c Release -o dist/dotnet
 ```
 
 ### Classes
@@ -875,8 +896,13 @@ class Program
 
 ### Installation
 
+The WASM module is built from the `finkit-wasm` crate for the
+`wasm32-unknown-unknown` target. There is no npm registry release yet; see
+[installation.md](installation.md) for the build path.
+
 ```bash
-npm install finkit-wasm
+rustup target add wasm32-unknown-unknown
+cargo build -p finkit-wasm --target wasm32-unknown-unknown --release --locked
 ```
 
 ### Functions

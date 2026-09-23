@@ -16,6 +16,7 @@ Choose the path that matches your goal:
 | 评估竞品与性能优势 | [竞品对比与超越路线](competitive-positioning-zh.md) |
 | Install and calculate something | [Getting started](getting-started.md) |
 | Verify install/release assets | [Installation](installation.md) |
+| Prepare or audit a release | [Release checklist](release-checklist.md) |
 | Learn the end-to-end APIs | [Complete usage guide](usage.md) |
 | Use Python | [Python guide](python.md) |
 | Use the CLI | [CLI guide](cli.md) |
@@ -220,4 +221,4 @@ cargo fmt --all -- --check
 cargo test --workspace --doc --locked
 ```
 
-_Last product/documentation review: 2026-09-22. Published distribution baseline: v0.1.15._
+_Last product/documentation review: 2026-09-23. Workspace target: v0.2.0. Published distribution baseline: v0.1.15._

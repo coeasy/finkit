@@ -67,11 +67,11 @@ load-bearing:
 CI asserts the core registry is untouched by the binding job
 (`git diff --exit-code -- docs/indicator_registry.json`).
 
-## v0.1.5 distribution contract
+## v0.1.15 distribution contract
 
-The `v0.1.5` tag and release workflow are the authoritative version contract:
+The `v0.1.15` tag and release workflow are the authoritative version contract:
 
-| Target | v0.1.5 release path | Installation path |
+| Target | v0.1.15 release path | Installation path |
 | --- | --- | --- |
 | Python | ABI3 wheels | GitHub Release wheel |
 | Rust | `.crate` asset | Release asset or git tag/source |
@@ -118,7 +118,7 @@ The current Node package manifest declares additional optional packages such as 
 
 ## Python
 
-Python remains the most complete binary-distribution path in v0.1.5. Four `cp38-abi3` wheels are built for Linux x86_64, Windows x86_64, macOS x86_64, and macOS arm64.
+Python remains the most complete binary-distribution path in v0.1.15. Four `cp38-abi3` wheels are built for Linux x86_64, Windows x86_64, macOS x86_64, and macOS arm64.
 
 Use [installation.md](installation.md) and [python.md](python.md) for exact wheel selection, NumPy input requirements, `CompiledFormula`, and troubleshooting.
 
@@ -128,7 +128,7 @@ Use the release tag when a crates.io package is not independently verified:
 
 ```toml
 [dependencies]
-finkit = { git = "https://github.com/coeasy/finkit", tag = "v0.1.5" }
+finkit = { git = "https://github.com/coeasy/finkit", tag = "v0.1.15" }
 ```
 
 Or use a local checkout:

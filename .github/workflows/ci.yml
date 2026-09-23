@@ -184,6 +184,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Verify packaged core crate compiles from packaged contents
         run: cargo package -p finkit --locked
+      # `cargo package` proves the crate compiles from its packaged contents,
+      # but it does not validate publish-specific metadata (a readme path that
+      # does not resolve inside the package, a keyword or category crates.io
+      # rejects, a version already published). Those only surface on the tag,
+      # which is the worst possible time to discover them.
+      - name: Verify publish metadata without uploading
+        run: cargo publish -p finkit --locked --dry-run
       - name: Build release CLI against the release core
         run: cargo build -p finkit-cli --release --locked
 

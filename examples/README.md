@@ -19,21 +19,25 @@ examples/
 
 ### Python
 
-```bash
-# 安装 Finkit
-pip install finkit
+Use a wheel downloaded from the published GitHub Release, or build the Python
+binding from source as described in `docs/installation.md`:
 
-# 运行示例
+```bash
+python -m pip install ./finkit-0.1.15-<matching-platform>.whl
 python examples/python_example.py
 ```
 
 ### Node.js
 
-```bash
-# 安装 Finkit
-npm install finkit
+The Node binding is currently built and packed from `ffi/node-binding`; no
+public npm install path is advertised yet:
 
-# 运行示例
+```bash
+cd ffi/node-binding
+npm ci
+npm run build
+npm test
+cd ../..
 node examples/nodejs_example.js
 ```
 
@@ -49,11 +53,14 @@ java -cp dist/java/windows-x64/finkit-0.1.15.jar;examples/java_example FinkitExa
 
 ### Go
 
-```bash
-# 安装 Finkit
-go get github.com/coeasy/finkit/go/ta
+The Go binding is a nested source module. Build the native library first, then
+run the example from the checkout:
 
-# 运行示例
+```bash
+cargo build -p finkit-go --release --locked
+cd ffi/go-binding/go
+go test ./...
+cd ../../..
 go run examples/go_example/main.go
 ```
 

@@ -1,5 +1,69 @@
 # Changelog
 
+## [0.2.0] - 2026-09-23
+
+Trial release. This cycle closes the gap between "the engine can compute it"
+and "a user can find out that it can": the formula surface is now described by
+a machine-checkable contract, and the factor libraries are defined once and
+reused.
+
+### Added
+
+- The 31 TA-Lib 0.7/0.8 indicator functions that were numeric-green but
+  unreachable from the formula engine: `AC`, `ACCBANDS`, `ADR`, `AO`, `AROON`,
+  `CMOU`, `COPPOCK`, `CVI`, `EFI`, `ER`, `ERI`, `FOSC`, `FRACTAL`, `HA`, `KC`,
+  `MAMA`, `MARKETFI`, `MASSI`, `NVI`, `PERCENTRANK`, `PVI`, `PVO`, `PVT`,
+  `QSTICK`, `RVI`, `RVOL`, `SMI`, `VHF`, `VORTEX`, `WAD`, `ZLEMA`, together with
+  their multi-output registrations.
+- `tests/contracts/formula_dialect_coverage_v1.json`, a per-function coverage
+  contract for 通达信 / 同花顺 / 大智慧 / TradingView Pine. Each row carries
+  three independent facts: `status` (usable out of the box?), `registered` (a
+  machine-derived fact about the live function table) and `provenance`
+  (substantiated by a named in-repo file, or merely attributed to a vendor
+  list). Each terminal also records which rows a checked-in corpus actually
+  calls, recomputed by the gate from the corpus files.
+- 大智慧 as the sixth `FormulaTerminal` (`dzh` / `dazhihui` / `大智慧`),
+  routing the 同花顺 common subset.
+- Alpha158 (158 factors) and WorldQuant101 (17 computable, the rest annotated
+  with the reason they are not) as declarative factor graphs, plus a one-line
+  `finkit.factor_library("alpha158")` entry point in Rust and Python.
+- Pine user-defined function blocks, tuple destructuring, and plot visual
+  metadata.
+
+### Changed
+
+- `FormulaExecutionMode` is now a real execution switch. The default is still
+  the tree interpreter; the compiled plan path is selected explicitly and is
+  covered by a differential gate against the interpreter.
+- The Pine canonical-name mapping is derived from the engine (the builtin
+  table plus the `ast_mapper` special cases plus the `TA_<NAME>` fallback) and
+  recorded in the coverage contract, instead of being mirrored by hand in the
+  generator.
+- The release version gate now covers `docs/getting-started.md`,
+  `docs/cli.md`, `docs/language-bindings.md` and `docs/development.md`, and it
+  matches any `MAJOR.MINOR.PATCH` series rather than only `0.1.x`. Those four
+  documents had drifted to `v0.1.5` while the workspace was at `0.1.15`, and
+  the old pattern could not have caught it.
+
+### Fixed
+
+- Pine `na(x)` was silently mis-parsed. `na` is a grammar keyword, so it could
+  not reach the call rule, and `na(close)` parsed *without error* as an `na`
+  literal followed by a discarded `(close)` expression statement — so
+  `is_missing = na(close)` evaluated to `NaN` instead of `ISNA(CLOSE)`. The
+  grammar now has an explicit `na_call` rule.
+- The Pine coverage figure was a false green. The generator's hand-written
+  canonical-name mirror disagreed with the engine on 7 names, left 48 spellings
+  unmapped, and credited 43 unusable names as out-of-the-box, reporting 97.8%
+  coverage. Deriving the mapping from the engine drops it to the real 81.7%
+  (263 rows, 47 `unsupported`).
+- Formula and plan kernel correctness for `IF`, `STOCHF`, `SAR`, `BOLLUP` /
+  `BOLLMID` / `BOLLDN`, `DEA`, `WILLR`, `PLUS_DI` / `MINUS_DI` / `ADX`, `TRIX`,
+  `STDDEV`, `CROSS` / `FIXNAN` / `VAR`, and the money-flow / `TR` host kernels.
+- External variables bound through `HostContext` are now visible on the
+  bytecode and JIT paths, which previously resolved only their own private
+  tables.
+
 ## [0.1.15] - 2026-09-11
 
 ### Added

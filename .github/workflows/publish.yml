@@ -1,0 +1,117 @@
+name: Publish
+
+# Tag-triggered release pipeline for the Rust crate.
+#
+# Scope: this workflow publishes **crates.io only**. PyPI is deliberately not
+# wired up yet. The distribution name `finkit` is held on PyPI by an empty
+# placeholder package, and `docs/language-bindings.md` forbids advertising a
+# registry path before it has actually been published to *and* a clean consumer
+# install has passed. Pre-claiming `pip install finkit` here would make that
+# document untrue, so the `pypi` job below stays commented out until the
+# distribution name is decided (see
+# docs/competitive-analysis/finkit-落地开发计划-2026-09-23.md, decision 1).
+#
+# The Python wheels for a release are produced by `python-wheels.yml`, which
+# also triggers on `v*` tags and attaches the wheels to the GitHub Release.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  verify-tag:
+    name: Tag matches the workspace version
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      # Read the version through the repository's own reader rather than
+      # re-parsing Cargo.toml here: a second parser is a second thing that can
+      # disagree with `check_versions.py`.
+      - name: Assert the tag equals the workspace version
+        run: |
+          python - <<'PY'
+          import os, sys
+          sys.path.insert(0, "scripts")
+          from check_versions import read_workspace_version
+
+          version = read_workspace_version()
+          tag = os.environ["GITHUB_REF_NAME"]
+          if tag != f"v{version}":
+              sys.exit(f"tag {tag!r} does not match workspace version {version!r}")
+          print(f"OK: tag {tag} matches workspace version {version}")
+          PY
+      - name: Check release versions and changelog structure
+        run: |
+          python scripts/check_versions.py
+          python scripts/check_changelog.py CHANGELOG.md
+
+  crates-io:
+    name: Publish to crates.io
+    needs: verify-tag
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    env:
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Fail early when the registry token is missing
+        # Without this the job dies inside `cargo publish` with a message that
+        # does not say which secret is absent.
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          if [ -z "${CARGO_REGISTRY_TOKEN}" ]; then
+            echo "::error::CARGO_REGISTRY_TOKEN secret is not configured"
+            exit 1
+          fi
+      - name: Build the exact docs.rs configuration
+        # docs.rs builds with `all-features = true` and `--cfg docsrs` (see
+        # `[package.metadata.docs.rs]` in core/Cargo.toml). Building only the
+        # default features here would let a feature-gated doc break ship.
+        env:
+          RUSTDOCFLAGS: "--cfg docsrs"
+        run: cargo doc -p finkit --no-deps --all-features --locked
+      - name: Dry run
+        # Packages, verifies the packaged crate compiles, and validates the
+        # publish-specific metadata that `cargo package` does not check.
+        run: cargo publish -p finkit --locked --dry-run
+      - name: Publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish -p finkit --locked
+
+  # pypi:
+  #   name: Publish to PyPI
+  #   needs: verify-tag
+  #   runs-on: ubuntu-22.04
+  #   timeout-minutes: 60
+  #   permissions:
+  #     id-token: write        # Trusted Publishing; no long-lived token
+  #   steps:
+  #     - uses: actions/checkout@v7
+  #     - uses: actions/setup-python@v6
+  #       with:
+  #         python-version: "3.12"
+  #     - uses: dtolnay/rust-toolchain@stable
+  #     - uses: Swatinem/rust-cache@v2
+  #     - run: pip install maturin
+  #     # `--skip-existing` keeps a re-run of the same tag idempotent.
+  #     - run: maturin publish --manifest-path ffi/python-binding/Cargo.toml --skip-existing
