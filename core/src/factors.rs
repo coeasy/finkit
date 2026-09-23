@@ -6,12 +6,17 @@
 //! cross-sectional post-processing. Raw inputs can be owned (`FactorContext`)
 //! or borrowed (`BorrowedFactorContext`) without changing custom factor
 //! callbacks.
+//!
+//! [`builtin`] adds the shipped factor libraries — see
+//! [`builtin::factor_library`].
+
+pub mod builtin;
 
 use crate::data_contract::CrossSectionView;
 use crate::runtime::MarketFrame;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 /// Result type used by the factor engine.
 pub type FactorResult<T> = std::result::Result<T, FactorError>;
@@ -23,6 +28,8 @@ pub enum FactorError {
     DuplicateFactor(String),
     /// The requested factor is not registered.
     UnknownFactor(String),
+    /// The requested built-in factor library does not exist.
+    UnknownLibrary(String),
     /// A required raw input series is missing.
     MissingInput(String),
     /// Input or output series lengths are inconsistent.
@@ -47,6 +54,7 @@ impl fmt::Display for FactorError {
         match self {
             Self::DuplicateFactor(name) => write!(f, "factor already registered: {name}"),
             Self::UnknownFactor(name) => write!(f, "unknown factor: {name}"),
+            Self::UnknownLibrary(name) => write!(f, "unknown factor library: {name}"),
             Self::MissingInput(name) => write!(f, "missing factor input: {name}"),
             Self::LengthMismatch {
                 name,
@@ -866,8 +874,76 @@ pub fn neutralize(values: &[f64], exposure: &[f64]) -> FactorResult<Vec<f64>> {
         .map_err(|error| FactorError::Compute(error.to_string()))
 }
 
-/// Build the stable v0.1.2 built-in price-factor registry.
+/// The shipped factor registry: the demo factors plus every built-in library.
+///
+/// # Composition
+///
+/// Three sources, kept as three so the total is auditable rather than asserted:
+///
+/// | source | names |
+/// |---|---|
+/// | [`demo_factor_registry`] — `momentum_5/20/60`, `volatility_20`, `reversal_5`, `cross_*` | 9 |
+/// | [`crate::factors::builtin::alpha158`] — Qlib's Alpha158 | 158 |
+/// | [`crate::factors::builtin::worldquant101`] — the computable alphas | 17 |
+/// | **total** | **184** |
+///
+/// The competitive-analysis plan set this criterion at "9 -> >= 240", from the
+/// arithmetic `158 + ~85 + 9`. Both of its middle terms are larger than the
+/// sources support: `WorldQuant`'s paper numbers 101 alphas but defines only 71
+/// (30 numbers are reserved), and 54 of those 71 are blocked on a
+/// cross-sectional *data axis* rather than a missing operator. `184` is the
+/// measured sum, not a target that was rounded to; see
+/// [`crate::factors::builtin::worldquant101`] for the per-alpha classification.
+///
+/// # Why it is cached
+///
+/// Building this compiles one [`FactorGraphPlan`] per expression — 184 of them.
+/// The registry is immutable once built, so recompiling per call would make
+/// `FactorEngine::new` cost more than the evaluation it exists to set up, and
+/// `FactorEngine::new(builtin_factor_registry())` is the documented entry point.
+/// `FactorRegistry` is `Clone` and every definition holds `Arc`s, so a caller
+/// gets a fresh registry that shares the already-compiled plans.
+///
+/// # Panics
+///
+/// If a shipped library fails to compile or two libraries claim the same name.
+/// Both are defects in the crate rather than in the caller, and both are caught
+/// by tests before release; returning a `Result` here would push that defect onto
+/// every caller of a function whose only failure mode is "finkit is broken".
 pub fn builtin_factor_registry() -> FactorRegistry {
+    static REGISTRY: OnceLock<FactorRegistry> = OnceLock::new();
+    REGISTRY
+        .get_or_init(|| {
+            let mut registry = demo_factor_registry();
+            for name in crate::factors::builtin::LIBRARY_NAMES {
+                let library = crate::factors::builtin::factor_library(name)
+                    .unwrap_or_else(|error| {
+                        panic!("built-in factor library `{name}` failed to compile: {error}")
+                    });
+                for definition in library.registry().iter() {
+                    registry.register(definition.clone()).unwrap_or_else(|error| {
+                        panic!("built-in factor library `{name}` collides with an existing name: {error}")
+                    });
+                }
+            }
+            registry
+        })
+        .clone()
+}
+
+/// The hand-written demo factors, without the expression libraries.
+///
+/// This is what [`builtin_factor_registry`] returned before the Alpha158 and
+/// `WorldQuant101` libraries existed. It is kept separate — and public — so the
+/// library totals can be reconciled against it instead of being folded into one
+/// unexplained number.
+///
+/// # Panics
+///
+/// If two demo factors share a name. The names are literals in this function, so
+/// a duplicate would be a crate defect rather than a caller error.
+#[must_use]
+pub fn demo_factor_registry() -> FactorRegistry {
     let mut registry = FactorRegistry::new();
     for period in [5_usize, 20, 60] {
         let name = format!("momentum_{period}");
@@ -1204,6 +1280,148 @@ mod tests {
         let registry = builtin_factor_registry();
         let dependencies = dependency_set(&registry, "reversal_5").unwrap();
         assert!(dependencies.contains("momentum_5"));
+    }
+
+    /// The shipped registry must be the sum of its parts, and the sum must be
+    /// the number the docs state.
+    ///
+    /// Written as a reconciliation rather than a bare `assert_eq!(len, 184)`
+    /// because the interesting failure is not "the total moved" but "a library
+    /// silently stopped contributing": a single pinned total would stay green if
+    /// Alpha158 lost 100 factors while some other library gained 100.
+    #[test]
+    fn the_shipped_registry_is_the_sum_of_its_parts() {
+        let registry = builtin_factor_registry();
+        let demo = demo_factor_registry();
+
+        let mut expected = demo.names().count();
+        for name in crate::factors::builtin::LIBRARY_NAMES {
+            let library = crate::factors::builtin::factor_library(name).unwrap();
+            assert!(
+                !library.is_empty(),
+                "advertised library `{name}` contributes nothing to the shipped registry"
+            );
+            expected += library.len();
+        }
+
+        assert_eq!(
+            registry.names().count(),
+            expected,
+            "the shipped registry does not match demo({}) + {} libraries",
+            demo.names().count(),
+            crate::factors::builtin::LIBRARY_NAMES.len()
+        );
+
+        // The three components, spelled out. Update these deliberately: they are
+        // quoted in `builtin_factor_registry`'s doc comment.
+        assert_eq!(demo.names().count(), 9, "demo factors");
+        assert_eq!(
+            crate::factors::builtin::factor_library("alpha158")
+                .unwrap()
+                .len(),
+            158,
+            "Qlib Alpha158"
+        );
+        assert_eq!(
+            crate::factors::builtin::factor_library("worldquant101")
+                .unwrap()
+                .len(),
+            17,
+            "computable WorldQuant alphas"
+        );
+        assert_eq!(registry.names().count(), 184, "shipped total");
+    }
+
+    /// Building the registry twice must not recompile the plans.
+    ///
+    /// The second call is served from a `OnceLock`, so this asserts the cache
+    /// exists rather than that it is fast: `Arc::ptr_eq` on a factor definition's
+    /// compute handle proves the two registries share the same compiled plan.
+    #[test]
+    fn the_shipped_registry_shares_one_set_of_compiled_plans() {
+        let first = builtin_factor_registry();
+        let second = builtin_factor_registry();
+        assert_eq!(first.names().count(), second.names().count());
+        for name in first.names() {
+            let left = first.get(name).unwrap();
+            let right = second.get(name).unwrap();
+            assert!(
+                Arc::ptr_eq(&left.compute, &right.compute),
+                "factor `{name}` was rebuilt instead of sharing its compiled plan"
+            );
+        }
+    }
+
+    /// The registry is what makes the libraries reachable, not just present.
+    ///
+    /// A library that compiled but could not be evaluated through
+    /// `FactorEngine` would satisfy the count and nothing else.
+    #[test]
+    #[allow(clippy::cast_precision_loss)] // 64 bars: every index is exact in f64.
+    fn library_factors_evaluate_through_the_shipped_registry() {
+        let engine = FactorEngine::new(builtin_factor_registry());
+        let len = 64;
+        let close: Vec<f64> = (0..len)
+            .map(|i| 100.0 + (i as f64 * 0.7).sin() * 5.0)
+            .collect();
+        // Volume must actually vary: `Alpha6` is `-1*CORREL(OPEN, VOLUME, 10)`,
+        // and a constant volume has no variance, so the correlation kernel
+        // returns `NaN` by design. A flat fixture would report that correct
+        // answer as a broken factor.
+        let volume: Vec<f64> = (0..len)
+            .map(|i| 10_000.0 + (i as f64 * 0.31).cos() * 800.0)
+            .collect();
+        let context = FactorContext::new()
+            .with_series("close", close.clone())
+            .unwrap()
+            .with_series("open", close.clone())
+            .unwrap()
+            .with_series("high", close.iter().map(|v| v + 1.0).collect())
+            .unwrap()
+            .with_series("low", close.iter().map(|v| v - 1.0).collect())
+            .unwrap()
+            .with_series("volume", volume)
+            .unwrap()
+            .with_series("vwap", close.clone())
+            .unwrap();
+
+        // One representative from each source, so a library that registered
+        // under a name nothing can resolve is caught.
+        for name in ["momentum_5", "MA20", "Alpha6"] {
+            let values = engine.evaluate(name, &context).unwrap_or_else(|error| {
+                panic!("`{name}` is registered but not evaluable: {error}")
+            });
+            assert_eq!(values.len(), len, "`{name}` returned the wrong length");
+            assert!(
+                values.iter().any(|value| value.is_finite()),
+                "`{name}` returned no finite value at all"
+            );
+        }
+
+        // ...and then all 175 of them. The count gate would stay green if the
+        // libraries registered names nothing could compute, and the failure mode
+        // here is per-factor rather than per-library: the definitions declared
+        // canonical upper-case dependencies (`CLOSE`) while the engine validates
+        // each dependency with an exact-match lookup against the caller's
+        // context, and the platform's own demo factors declare `["close"]`. The
+        // libraries compiled, registered and counted — and could not be
+        // evaluated.
+        let mut evaluated = 0;
+        for library_name in crate::factors::builtin::LIBRARY_NAMES {
+            let library = crate::factors::builtin::factor_library(library_name).unwrap();
+            for factor_name in library.names() {
+                let values = engine.evaluate(factor_name, &context).unwrap_or_else(|error| {
+                    panic!("`{library_name}/{factor_name}` is registered but not evaluable: {error}")
+                });
+                assert_eq!(
+                    values.len(),
+                    len,
+                    "`{library_name}/{factor_name}` returned the wrong length"
+                );
+                evaluated += 1;
+            }
+        }
+        assert_eq!(evaluated, 175, "158 Alpha158 + 17 WorldQuant101");
     }
 
     #[test]

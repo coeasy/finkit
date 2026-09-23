@@ -1119,7 +1119,12 @@ fn fn_log10(_ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, 
 
 fn fn_sign(_ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("SIGN", args, 1)?;
-    Ok(args[0].mapv(|v| v.signum()))
+    // Superseded in `get_builtin_functions` by `canonical_sign`, but kept
+    // semantically identical: this table is parsed statically by the docs and
+    // dialect-contract generators, and an unreachable-but-wrong body here is
+    // exactly the kind of thing a later reader copies. Three-way, not
+    // `signum` — see `math::three_way_sign`.
+    Ok(args[0].mapv(crate::math::three_way_sign))
 }
 
 fn fn_floor(_ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {

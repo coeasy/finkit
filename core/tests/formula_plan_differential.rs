@@ -49,7 +49,7 @@ const DOMESTIC_UNSUPPORTED: &[(&str, &str)] = &[
     // surface (`functions_talib_081.rs`). They are callable through the tree,
     // bytecode and JIT paths, but no `CALL:<NAME>` kernel exists for any of
     // them, so the compiled plan path answers `unsupported kernel` (code 1).
-    // The sixteen cases below are the corpus coverage for that work.
+    // The seventeen cases below are the corpus coverage for that work.
     //
     // This is a **kernel** backlog, not an error-policy one: the entries fail
     // with code 1 before any kernel runs, so `absorb_kernel_failure` cannot
@@ -63,6 +63,10 @@ const DOMESTIC_UNSUPPORTED: &[(&str, &str)] = &[
     (
         "ao_ac_cross",
         "no `CALL:AO` kernel (code 1); callable on the tree/bytecode/JIT paths only",
+    ),
+    (
+        "aroon_cross",
+        "no `CALL:AROON` kernel (code 1); callable on the tree/bytecode/JIT paths only",
     ),
     (
         "coppock_cross",

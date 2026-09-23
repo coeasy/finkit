@@ -41,6 +41,84 @@ pub(crate) fn leading_warmup(input: &[f64]) -> usize {
         .unwrap_or(input.len())
 }
 
+/// Safety factor applied to the floating-point noise floor in
+/// [`degenerate_variance`].
+///
+/// The floor is an order-of-magnitude estimate, not a bound, so the test needs
+/// headroom above it. 64 is ~75x the observed residue for a constant 60-bar
+/// window at a price scale of 100, and still eight orders of magnitude below
+/// the relative variance of any window carrying real signal.
+pub(crate) const DEGENERATE_VARIANCE_SAFETY: f64 = 64.0;
+
+/// Is a rolling variance indistinguishable from zero?
+///
+/// Several kernels compute a window's variance in the cheap, incrementally
+/// updatable form `sum_sq - sum * sum / n`. That form subtracts two large,
+/// nearly equal quantities, so for a window that is *exactly* constant it does
+/// not return `0.0` — it returns a residue of order `n * eps * mean(x^2)`.
+///
+/// That residue is why an absolute threshold cannot work. Measured on the
+/// Alpha158 reference market (a constant 20-bar window at a price of ~105.79),
+/// the residue is `2.9e-11`; at 60 bars it is `7.0e-10`. Both are twelve orders
+/// of magnitude above the `1e-15` that `rolling_correlation_into` used to test
+/// against, so its degeneracy guard never fired at realistic price levels and
+/// `CORREL` returned a correlation computed from a window with no variance at
+/// all. The bug is invisible at `O(1)` inputs, which is presumably why it
+/// survived: at unit scale the residue really is below `1e-15`.
+///
+/// The test is therefore expressed against the noise floor itself, which scales
+/// with both the magnitude of the data and the window length, so it holds at
+/// any price scale and any window size:
+///
+/// ```text
+/// variance <= 64 * n * eps * mean(x^2)   =>  degenerate
+/// ```
+///
+/// `variance` and `sum_sq` must come from the same window, and `size` is the
+/// window length. A window carrying real signal has a relative variance many
+/// orders of magnitude above this floor, so the predicate is not a "small
+/// variance" filter — it only fires when the variance is numerically absent.
+#[inline]
+pub(crate) fn degenerate_variance(variance: f64, sum_sq: f64, size: f64) -> bool {
+    // A non-finite variance means the window was not fully finite; report it as
+    // degenerate so the caller leaves the output as `NaN`.
+    if !variance.is_finite() {
+        return true;
+    }
+    let mean_square = (sum_sq / size).abs();
+    variance.abs() <= DEGENERATE_VARIANCE_SAFETY * size * f64::EPSILON * mean_square
+}
+
+/// `SIGN(X)` for a single value: `-1.0`, `0.0` or `1.0`.
+///
+/// Deliberately not [`f64::signum`], which maps both `0.0` and `-0.0` to `1.0`
+/// and `-1.0` respectively. The three-way form is what the dialect contracts
+/// describe and what the `WorldQuant` alphas need: `Alpha7` computes
+/// `... * sign(close - ref(close, 7))` to re-attach the direction of a 7-bar
+/// move, and on a flat 7-bar stretch that difference is exactly `0.0`. Under
+/// `signum` the factor would acquire a direction that the data does not have —
+/// and because the wrong branch is `+1`, not `NaN`, nothing downstream notices.
+///
+/// `NaN` and both signed zeros are passed through unchanged, so a missing value
+/// stays missing rather than becoming a direction.
+///
+/// This lives here rather than in `formula::functions` because the formula
+/// table is not the only implementation of `SIGN`: the stateful streaming path
+/// (`formula::stateful::apply_stateful_unary_function`) evaluates the same
+/// operator one value at a time. Both call this function, so the two cannot
+/// drift apart again — they did once, and a differential test could not see it
+/// because the probe data contained no exact zero.
+#[inline]
+pub(crate) fn three_way_sign(value: f64) -> f64 {
+    if value > 0.0 {
+        1.0
+    } else if value < 0.0 {
+        -1.0
+    } else {
+        value
+    }
+}
+
 #[cfg(feature = "std")]
 pub mod cci;
 #[cfg(feature = "std")]

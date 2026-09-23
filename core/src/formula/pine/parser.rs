@@ -962,6 +962,23 @@ fn parse_function_call(pair: Pair<Rule>) -> Result<PineAstNode, PineError> {
     let inner = pair.into_inner().next().expect("call type");
     match inner.as_rule() {
         Rule::qualified_call => parse_qualified_call(inner),
+        // `na` is a keyword, so it has its own call rule rather than reaching
+        // `simple_call` through `identifier`. Without this arm the grammar
+        // silently degraded `na(close)` into a `na` literal plus a stray
+        // parenthesized expression.
+        Rule::na_call => {
+            let args = inner
+                .into_inner()
+                .next()
+                .map(parse_arg_list)
+                .transpose()?
+                .unwrap_or_default();
+            Ok(PineAstNode::FunctionCall {
+                namespace: None,
+                name: "na".to_string(),
+                args,
+            })
+        }
         Rule::simple_call => {
             let mut si = inner.into_inner();
             let name = si.next().expect("name").as_str().to_string();

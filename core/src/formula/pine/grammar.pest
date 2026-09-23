@@ -159,8 +159,12 @@ namespace_access = { namespace ~ "." ~ identifier }
 bool_literal = { "true" | "false" }
 
 // 函数调用（含命名空间: ta.sma, math.abs, request.security）
-function_call = { qualified_call | simple_call }
+function_call = { qualified_call | na_call | simple_call }
 qualified_call = { namespace ~ "." ~ identifier ~ "(" ~ arg_list? ~ ")" }
+// `na` 是关键字，所以它永远进不了 `simple_call` 的 `identifier`。Pine v5 的
+// `na(x)` 必须单列一条规则：否则 `na(close)` 不会报错，而是被静默拆成
+// `na` 字面量 + 一个游离的 `(close)` 表达式语句，赋值结果变成 NaN。
+na_call = { "na" ~ !(ASCII_ALPHANUMERIC | "_") ~ "(" ~ arg_list? ~ ")" }
 simple_call = { identifier ~ "(" ~ arg_list? ~ ")" }
 namespace = { "ta" | "math" | "request" | "color" | "str" | "array" | "line" | "label" | "box" | "syminfo" | "plot" }
 arg_list = { expression ~ ("," ~ arg_item)* }

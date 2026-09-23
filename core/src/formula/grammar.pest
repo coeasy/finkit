@@ -118,8 +118,11 @@ builtin_keyword = @{
     "COLOR" | "COLORHEX") ~ !(ASCII_ALPHANUMERIC | "_")
 }
 
-// 数字 - 不包含负号，负号通过unary规则处理
-number = @{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
+// 数字 - 不包含负号，负号通过unary规则处理。
+// 支持科学计数法（`1e-12`、`2.5E6`）：量化公式里 `+1e-12` 这类防零除项很常见，
+// 而 Qlib 的 Alpha158 表达式全部使用该写法。指数部分要求至少一位数字，因此
+// `2e` 仍解析为数字 `2` 后跟变量 `e`，不会吞掉标识符。
+number = @{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? ~ (^"e" ~ ("+" | "-")? ~ ASCII_DIGIT+)? }
 
 // 字符串: 双引号或单引号
 string = { "\"" ~ (!("\"") ~ ANY)* ~ "\"" | "'" ~ (!("'") ~ ANY)* ~ "'" }

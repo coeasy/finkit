@@ -108,8 +108,15 @@ const PLAN_KERNELS: &[&str] = &[
     "KDJ",
     "KDJ_D",
     "KDJ_J",
+    // The slope kernel behind Qlib's `Slope`, needed by Alpha158's `BETA{d}`.
+    // `LINEARREG_SLOPE` already had an SSOT entry from the TA-Lib track, so
+    // only the plan kernel was missing.
+    "LINEARREG_SLOPE",
     "LLV",
     "LLVBARS",
+    // `LN` is the SSOT spelling of `LOG` on the formula surface (`fn_log` is
+    // registered under both names); Qlib's Alpha158 needs it for `CORR`/`CORD`.
+    "LN",
     "MA",
     "MACD",
     "MAININFLOW",
@@ -132,8 +139,14 @@ const PLAN_KERNELS: &[&str] = &[
     "OBV",
     "PERIODTYPE",
     "PLUS_DI",
+    // Reference-parity rolling operators for Alpha158. Each delegates to a
+    // `math::` kernel that the formula-language implementation also calls, so
+    // the two paths share one arithmetic rather than two that agree by luck.
+    "QUANTILE",
+    "RANK_PCT",
     "REF",
     "REFDATE",
+    "RESI",
     "REVERSE",
     "RMA",
     "ROC",
@@ -142,13 +155,21 @@ const PLAN_KERNELS: &[&str] = &[
     "ROCR100",
     "ROLLING_RANGE",
     "RSI",
+    "RSQUARE",
     "SAR",
+    // `sign(x)` as `-1`/`0`/`1`, needed by the WorldQuant alphas to re-attach
+    // the direction of a differenced series.
+    "SIGN",
     "SINH",
     "SMA",
     "SMALLORDER",
     "SQRT",
     "STD",
     "STDDEV",
+    // pandas'/Qlib's `ddof = 1` standard deviation, i.e. what `Std` means in
+    // Alpha158. `STD`/`STDDEV` stay TA-Lib's population convention; the two
+    // differ by the exact factor `sqrt((n - 1) / n)`, so both names are needed.
+    "STDDEV_SAMPLE",
     "SUB",
     "STOCHF",
     "SUM",
@@ -287,8 +308,6 @@ const DECLARED_BUT_NO_KERNEL: &[&str] = &[
     "LINEARREG",
     "LINEARREG_ANGLE",
     "LINEARREG_INTERCEPT",
-    "LINEARREG_SLOPE",
-    "LN",
     "LOG10",
     "MACDEXT",
     "MACDFIX",
@@ -486,10 +505,40 @@ fn the_three_surfaces_have_the_expected_sizes() {
     // kernels and golden vectors already existed but which no formula could
     // name. The registry SSOT and the plan-kernel surfaces are unchanged: this
     // was pure formula-surface wiring, not new compute.
+    //
+    // 447 -> 451 and 107 -> 113: the Alpha158 factor library needed four
+    // operators no domestic/TALib spelling covers (`QUANTILE`, `RSQUARE`,
+    // `RESI`, `RANK_PCT`), plus plan kernels for those and for the already
+    // registered `LINEARREG_SLOPE` and `LN`. The registry grew by the four new
+    // names (254 -> 258); the plan-kernel surface grew by six because
+    // `LINEARREG_SLOPE` and `LN` were already in the registry but not
+    // executable from a compiled plan.
+    //
+    // 258 -> 259, 451 -> 452 and 113 -> 114: `STDDEV_SAMPLE`. Alpha158's `Std`
+    // is pandas' `ddof = 1` standard deviation, while finkit's `STD`/`STDDEV`
+    // are TA-Lib's population convention; the ratio is exactly
+    // `sqrt((n - 1) / n)`, measured at 0.894427191 for `n = 5`. A ~10% scale
+    // error is not something a tolerance can absorb, so the sample convention
+    // needed its own name on all three surfaces.
+    //
+    // 259 -> 260 and 114 -> 115, with the formula surface unchanged: `SIGN`.
+    // This one is not a new name, and the asymmetry is the point. `SIGN` was
+    // already callable from a formula — `functions_legacy.rs` registers it — but
+    // it was absent from the registry SSOT and had no plan kernel, so a compiled
+    // factor graph could not execute it. Registering it and giving it a kernel
+    // grew the other two surfaces by one each and left the formula surface at
+    // 452, where `map.insert("SIGN", ...)` overwrites the legacy entry rather
+    // than adding a key.
+    //
+    // The overwrite is a semantic correction, not a rename: the legacy body was
+    // `f64::signum()`, which returns `1.0` for `0.0`, while the dialect
+    // contracts and Qlib both describe `0` for `0`. That distinction is load
+    // bearing — `Alpha7` multiplies `sign(close - ref(close, 7))` into a factor,
+    // and a flat 7-bar stretch must contribute `0`, not a fabricated direction.
     let actual = (registry.len(), formulas.len(), kernels.len());
     assert_eq!(
         actual,
-        (254, 447, 107),
+        (260, 452, 115),
         "surface sizes changed: (registry, formula, plan kernels)"
     );
 }

@@ -3,7 +3,7 @@
 > **SSOT** — auto-generated from the legacy formula table and routed formula functions.
 > Do not edit manually. Regenerate: `python scripts/gen_ssot_docs.py --generate`
 
-Built-in formula functions: **447**
+Built-in formula functions: **452**
 
 These functions are available in the formula DSL for expressions like `SMA(CLOSE, 20)`.
 
@@ -364,13 +364,16 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `PVO` |
 | `PVT` |
 | `QSTICK` |
+| `QUANTILE` |
 | `RANGE` |
 | `RANK` |
+| `RANK_PCT` |
 | `REF` |
 | `REFDATE` |
 | `RELATIVE_STRENGTH` |
 | `RELSTRENGTH` |
 | `RENKO` |
+| `RESI` |
 | `REVERSE` |
 | `RMA` |
 | `ROC` |
@@ -380,6 +383,7 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `ROLLING_RANGE` |
 | `ROUND` |
 | `RSI` |
+| `RSQUARE` |
 | `RS_EXCESS_RETURN` |
 | `RS_RATIO` |
 | `RVI` |
@@ -400,6 +404,7 @@ These functions are available in the formula DSL for expressions like `SMA(CLOSE
 | `SQRT` |
 | `STD` |
 | `STDDEV` |
+| `STDDEV_SAMPLE` |
 | `STOCH` |
 | `STOCHF` |
 | `STOCHRSI` |

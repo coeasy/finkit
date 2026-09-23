@@ -246,6 +246,141 @@ fn canonical_var(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f6
     }
 }
 
+// Reference-parity rolling operators.
+//
+// These five exist because Qlib's Alpha158 factor set needs them and no
+// domestic or TA-Lib spelling computes the same quantity. Each one is a thin
+// wrapper over a `math::` kernel that the compiled-plan dispatcher calls too
+// (`unified_dispatch::dispatch_reference_rolling_call`), so the interpreted and
+// planned paths are the *same arithmetic*, not two implementations that happen
+// to agree on the test vectors.
+//
+// Their window convention is finkit's, not Qlib's: a bar is `NaN` unless its
+// window is full. Qlib builds every rolling window with `min_periods=1`, so its
+// first `N - 1` bars carry a partial-window value. The Alpha158 parity gate
+// compares on the common support and pins the warm-up shape separately, rather
+// than quietly adopting one convention and calling it agreement.
+//
+// `STDDEV_SAMPLE` is here for the same reason as the other four, but it is the
+// one that is *not* a missing operator so much as a missing convention:
+// finkit's `STD`/`STDDEV` are TA-Lib's population standard deviation (`m2 / n`)
+// while pandas — and therefore Qlib — divide by `n - 1`. The two differ by the
+// exact factor `sqrt((n - 1) / n)`, a systematic ~10% scale error at `n = 5`,
+// so Alpha158's `Std` cannot be spelled `STD`. See
+// [`crate::math::rolling_stats::stddev_sample_into`].
+//
+// Written as `//` rather than `///`: it documents the group, not the next item.
+// As a doc comment it would have been glued onto `canonical_quantile` below and
+// left the other four undocumented.
+
+/// `QUANTILE(X, N, Q)`: the `Q`-quantile of the last `N` bars, linear
+/// interpolation.
+///
+/// Linear interpolation is numpy's and pandas' default and therefore Qlib's
+/// `Quantile`; see [`crate::math::quantile::rolling_quantile_into`].
+#[inline]
+fn canonical_quantile(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
+    ensure_args_len("QUANTILE", args, 3)?;
+    let period = extract_n(args, 1, "QUANTILE")?;
+    let qscore = args[2][0];
+    match crate::math::quantile::rolling_quantile(
+        args[0].as_slice().unwrap(),
+        period,
+        qscore,
+        crate::math::quantile::QuantileInterpolation::Linear,
+    ) {
+        Ok(values) => Ok(Array1::from_vec(values)),
+        Err(_) => Ok(nan_vec(ctx.data_len)),
+    }
+}
+
+/// `RSQUARE(X, N)`: coefficient of determination of a linear fit against the bar
+/// index, over the last `N` bars.
+#[inline]
+fn canonical_rsquare(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
+    ensure_args_len("RSQUARE", args, 2)?;
+    let period = extract_n(args, 1, "RSQUARE")?;
+    match crate::math::regression::rolling_rsquare(args[0].as_slice().unwrap(), period) {
+        Ok(values) => Ok(Array1::from_vec(values)),
+        Err(_) => Ok(nan_vec(ctx.data_len)),
+    }
+}
+
+/// `RESI(X, N)`: residual of the current bar from the linear fit over the last
+/// `N` bars.
+#[inline]
+fn canonical_resi(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+    ensure_args_len("RESI", args, 2)?;
+    let period = extract_n(args, 1, "RESI")?;
+    match crate::math::regression::rolling_resi(args[0].as_slice().unwrap(), period) {
+        Ok(values) => Ok(Array1::from_vec(values)),
+        Err(_) => Ok(nan_vec(ctx.data_len)),
+    }
+}
+
+/// `RANK_PCT(X, N)`: percentile rank of the current bar within its own `N`-bar
+/// window, on a `(0, 1]` scale with average tie handling.
+///
+/// Deliberately distinct from `RANK(X, N)`, which is the domestic 0..100
+/// convention with a `(n - 1)` denominator; this one is pandas'
+/// `rolling(N).rank(pct=True)` and therefore Qlib's `Rank`.
+#[inline]
+fn canonical_rank_pct(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
+    ensure_args_len("RANK_PCT", args, 2)?;
+    let period = extract_n(args, 1, "RANK_PCT")?;
+    match crate::math::rank::rolling_rank_pct(args[0].as_slice().unwrap(), period) {
+        Ok(values) => Ok(Array1::from_vec(values)),
+        Err(_) => Ok(nan_vec(ctx.data_len)),
+    }
+}
+
+/// `STDDEV_SAMPLE(X, N)`: rolling standard deviation with pandas' `ddof = 1`
+/// denominator, i.e. what `series.rolling(N).std()` computes.
+///
+/// The population counterpart is `STDDEV`/`STD` (TA-Lib's convention). Both are
+/// kept because they answer different questions and the difference is a
+/// systematic scale factor, not a rounding artefact.
+#[inline]
+fn canonical_stddev_sample(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
+    ensure_args_len("STDDEV_SAMPLE", args, 2)?;
+    let period = extract_n(args, 1, "STDDEV_SAMPLE")?;
+    match crate::math::rolling_stats::stddev_sample(args[0].as_slice().unwrap(), period) {
+        Ok(values) => Ok(Array1::from_vec(values)),
+        Err(_) => Ok(nan_vec(ctx.data_len)),
+    }
+}
+
+/// `SIGN(X)`: `-1`, `0` or `1` per element.
+///
+/// The semantics live in [`crate::math::three_way_sign`] because the stateful
+/// streaming path evaluates the same operator per value; both call it so the
+/// two cannot disagree. See that function for why `f64::signum` is wrong here.
+#[inline]
+fn canonical_sign(
+    _ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
+    ensure_args_len("SIGN", args, 1)?;
+    let values = args[0].as_slice().unwrap();
+    Ok(Array1::from_iter(
+        values
+            .iter()
+            .map(|value| crate::math::three_way_sign(*value)),
+    ))
+}
+
 #[derive(Clone, Copy)]
 enum BbandComponent {
     Upper,
@@ -578,6 +713,19 @@ pub fn get_builtin_functions() -> HashMap<String, FormulaFn> {
     map.insert("STD".to_string(), canonical_std as FormulaFn);
     map.insert("STDDEV".to_string(), canonical_std as FormulaFn);
     map.insert("VAR".to_string(), canonical_var as FormulaFn);
+
+    // Reference-parity rolling operators for the Alpha158 factor library. Each
+    // also has a plan kernel, so a compiled factor graph executes them rather
+    // than falling back; see `unified_dispatch::dispatch_reference_rolling_call`.
+    map.insert("QUANTILE".to_string(), canonical_quantile as FormulaFn);
+    map.insert("RSQUARE".to_string(), canonical_rsquare as FormulaFn);
+    map.insert("RESI".to_string(), canonical_resi as FormulaFn);
+    map.insert("RANK_PCT".to_string(), canonical_rank_pct as FormulaFn);
+    map.insert(
+        "STDDEV_SAMPLE".to_string(),
+        canonical_stddev_sample as FormulaFn,
+    );
+    map.insert("SIGN".to_string(), canonical_sign as FormulaFn);
 
     map.insert("BOLL".to_string(), canonical_boll as FormulaFn);
     map.insert("BOLLUP".to_string(), canonical_boll as FormulaFn);

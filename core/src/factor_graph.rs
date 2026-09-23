@@ -81,7 +81,7 @@ use crate::formula::compute_ir::canonical_name;
 use crate::formula::hot_plan::FormulaOutputBinding;
 use crate::formula::{
     unified_formula_executor, AstNode, BinaryOperator, FormulaContext, FormulaHotPlan,
-    FormulaHotPlanError, FormulaInputBinding,
+    FormulaHotPlanError, FormulaInputBinding, UnaryOperator,
 };
 use crate::unified_executor::ExecuteError;
 
@@ -244,6 +244,25 @@ pub enum FactorGraphError {
         /// How many parameters it was given.
         params: usize,
     },
+    /// [`FactorGraph::from_expression`] met a construct that has no factor-graph
+    /// equivalent.
+    ///
+    /// The supported subset is deliberately narrow: numbers, variable
+    /// references, binary operators, and function calls whose arguments are
+    /// either sub-expressions or numeric literals. Statements, assignments,
+    /// loops, drawing directives and index access are formula-language features
+    /// with side effects or control flow, and a factor graph is a pure dataflow
+    /// DAG — admitting them here would mean the graph could no longer be
+    /// reordered or deduplicated.
+    UnsupportedExpression {
+        /// The offending construct, in the canonical rendering.
+        construct: String,
+    },
+    /// The expression could not be parsed.
+    Parse {
+        /// Parser message.
+        message: String,
+    },
     /// The graph is not acyclic, so no valid evaluation order exists.
     Cycle {
         /// Every node left with an unsatisfied dependency, in declaration order.
@@ -297,6 +316,12 @@ impl fmt::Display for FactorGraphError {
                 f,
                 "factor node `{node}` takes {expected} parameter(s) but was given {params}"
             ),
+            Self::UnsupportedExpression { construct } => write!(
+                f,
+                "`{construct}` has no factor-graph equivalent: a factor graph is a pure dataflow DAG, \
+                 so statements, control flow and drawing directives are out of scope"
+            ),
+            Self::Parse { message } => write!(f, "factor expression did not parse: {message}"),
             Self::Cycle { nodes } => write!(
                 f,
                 "factor graph has a dependency cycle among: {}",
@@ -321,6 +346,165 @@ impl From<FormulaHotPlanError> for FactorGraphError {
     }
 }
 
+/// Canonical, whitespace-free rendering of an expression, used as a node id.
+///
+/// Rendering rather than an opaque counter is what makes the generated graph
+/// legible: a node is named by the text a human would have written for it, so
+/// the deduplication below collapses `Ref($close,1)` written four times into one
+/// node *and* leaves the result addressable as `Ref($close,1)`.
+fn render_expression(node: &AstNode) -> String {
+    match node {
+        AstNode::Number(value) => format!("{value}"),
+        AstNode::Variable(name) => canonical_name(name),
+        AstNode::BinaryOp { op, left, right } => format!(
+            "({}{}{})",
+            render_expression(left),
+            binary_operator_text(op),
+            render_expression(right)
+        ),
+        AstNode::UnaryOp { op, expr } => {
+            let symbol = match op {
+                UnaryOperator::Neg => "-",
+                UnaryOperator::Not => "!",
+            };
+            format!("({symbol}{})", render_expression(expr))
+        }
+        AstNode::FunctionCall { name, args } => {
+            let rendered: Vec<String> = args.iter().map(render_expression).collect();
+            format!("{}({})", canonical_name(name), rendered.join(","))
+        }
+        // Only reachable on the error path: the emitter rejects these before any
+        // rendering is used as an id, and the debug form is what the resulting
+        // `UnsupportedExpression` message reports.
+        other => format!("{other:?}"),
+    }
+}
+
+/// Source spelling of a binary operator, for [`render_expression`].
+fn binary_operator_text(op: &BinaryOperator) -> &'static str {
+    match op {
+        BinaryOperator::Add => "+",
+        BinaryOperator::Sub => "-",
+        BinaryOperator::Mul => "*",
+        BinaryOperator::Div => "/",
+        BinaryOperator::Mod => "%",
+        BinaryOperator::Pow => "^",
+        BinaryOperator::StringConcat => "&",
+        BinaryOperator::Gt => ">",
+        BinaryOperator::Lt => "<",
+        BinaryOperator::Gte => ">=",
+        BinaryOperator::Lte => "<=",
+        BinaryOperator::Eq => "==",
+        BinaryOperator::Neq => "!=",
+        BinaryOperator::And => "AND",
+        BinaryOperator::Or => "OR",
+        BinaryOperator::Xor => "XOR",
+    }
+}
+
+/// Lowers a parsed expression into [`FactorGraph`] nodes.
+///
+/// Kept as a separate struct rather than a set of free functions because the
+/// dedup table has to be threaded through the whole walk.
+struct ExpressionEmitter<'a> {
+    graph: &'a mut FactorGraph,
+    /// Renderings already turned into a node, so a repeated sub-expression is
+    /// emitted once and reused by id.
+    emitted: BTreeSet<String>,
+}
+
+impl ExpressionEmitter<'_> {
+    /// Emit `node`, returning the id of the graph node that computes it.
+    fn emit(&mut self, node: &AstNode) -> Result<String, FactorGraphError> {
+        match node {
+            AstNode::Variable(name) => {
+                // A bare variable is external data, never a node: the graph has
+                // nothing to compute for it, and `build` needs it declared so a
+                // typo in a node id is not silently read as a data series.
+                let id = canonical_name(name);
+                self.graph.declare_input(id.clone());
+                Ok(id)
+            }
+            AstNode::Number(value) => {
+                // Only reachable as a whole expression (`"5"`), because a
+                // numeric call argument is consumed as a parameter by the
+                // `FunctionCall` arm below.
+                let id = render_expression(node);
+                if self.emitted.insert(id.clone()) {
+                    self.graph
+                        .add_node(FactorNode::constant(id.clone(), *value))?;
+                }
+                Ok(id)
+            }
+            AstNode::BinaryOp { op, left, right } => {
+                let id = render_expression(node);
+                if self.emitted.contains(&id) {
+                    return Ok(id);
+                }
+                let left_id = self.emit(left)?;
+                let right_id = self.emit(right)?;
+                self.emitted.insert(id.clone());
+                self.graph.add_node(
+                    FactorNode::binary(id.clone(), op.clone())
+                        .input(left_id)
+                        .input(right_id),
+                )?;
+                Ok(id)
+            }
+            AstNode::UnaryOp { op, expr } => match op {
+                // `-x` has no unary node, so it is stated as `0 - x`. The
+                // constant is shared across every negation in the graph.
+                UnaryOperator::Neg => {
+                    let id = render_expression(node);
+                    if self.emitted.contains(&id) {
+                        return Ok(id);
+                    }
+                    let inner = self.emit(expr)?;
+                    let zero_id = "0".to_string();
+                    if self.emitted.insert(zero_id.clone()) {
+                        self.graph
+                            .add_node(FactorNode::constant(zero_id.clone(), 0.0))?;
+                    }
+                    self.emitted.insert(id.clone());
+                    self.graph.add_node(
+                        FactorNode::binary(id.clone(), BinaryOperator::Sub)
+                            .input(zero_id)
+                            .input(inner),
+                    )?;
+                    Ok(id)
+                }
+                UnaryOperator::Not => Err(FactorGraphError::UnsupportedExpression {
+                    construct: render_expression(node),
+                }),
+            },
+            AstNode::FunctionCall { name, args } => {
+                let id = render_expression(node);
+                if self.emitted.contains(&id) {
+                    return Ok(id);
+                }
+                let mut factor_node = FactorNode::new(id.clone(), canonical_name(name));
+                for arg in args {
+                    match arg {
+                        // A numeric literal is this node's parameter, matching
+                        // the `SMA(CLOSE, 20)` argument convention.
+                        AstNode::Number(value) => factor_node = factor_node.param(*value),
+                        other => {
+                            let argument_id = self.emit(other)?;
+                            factor_node = factor_node.input(argument_id);
+                        }
+                    }
+                }
+                self.emitted.insert(id.clone());
+                self.graph.add_node(factor_node)?;
+                Ok(id)
+            }
+            other => Err(FactorGraphError::UnsupportedExpression {
+                construct: render_expression(other),
+            }),
+        }
+    }
+}
+
 /// A declarative factor graph.
 ///
 /// External data series must be declared before they can be referenced
@@ -331,6 +515,11 @@ impl From<FormulaHotPlanError> for FactorGraphError {
 pub struct FactorGraph {
     nodes: Vec<FactorNode>,
     inputs: BTreeSet<String>,
+    /// Id of the node computing the whole expression, set by
+    /// [`Self::from_expression`]. Hand-built graphs leave this `None` and pass
+    /// the primary to [`Self::build`] explicitly, because a graph may publish
+    /// several outputs and nothing in the structure says which one is wanted.
+    expression_primary: Option<String>,
 }
 
 impl FactorGraph {
@@ -356,6 +545,53 @@ impl FactorGraph {
             self.inputs.insert(canonical_name(&name.into()));
         }
         self
+    }
+
+    /// Build a graph from a formula expression.
+    ///
+    /// Every **distinct** sub-expression becomes one node, and the node's id is
+    /// that sub-expression's canonical rendering. Two consequences follow, and
+    /// both are the point:
+    ///
+    /// * shared sub-expressions are computed once. Alpha158's `CORD{d}` contains
+    ///   `Ref($volume,1)` once and `$volume` twice; a hand-written graph would
+    ///   have to remember to share them, whereas this cannot forget.
+    /// * every intermediate series stays addressable by the text a human would
+    ///   have written for it, so [`FactorGraphPlan::execute_node`] can return
+    ///   `Ref($close,1)` without the caller inventing an id.
+    ///
+    /// Only the pure-dataflow subset of the language is accepted — see
+    /// [`FactorGraphError::UnsupportedExpression`]. A `Variable` leaf becomes a
+    /// declared external input; a `Number` argument to a call becomes that
+    /// node's numeric parameter rather than a constant node, matching the
+    /// `SMA(CLOSE, 20)` argument convention every formula function uses.
+    ///
+    /// # Errors
+    ///
+    /// [`FactorGraphError::Parse`] if `expression` does not parse, and
+    /// [`FactorGraphError::UnsupportedExpression`] for a construct with no
+    /// dataflow equivalent.
+    pub fn from_expression(expression: &str) -> Result<Self, FactorGraphError> {
+        let ast = crate::formula::parse_formula(expression)
+            .map_err(|error| FactorGraphError::Parse { message: error })?;
+        let mut graph = Self::new();
+        let primary = render_expression(&ast);
+        let mut emitter = ExpressionEmitter {
+            graph: &mut graph,
+            emitted: BTreeSet::new(),
+        };
+        emitter.emit(&ast)?;
+        graph.expression_primary = Some(primary);
+        Ok(graph)
+    }
+
+    /// Id of the node computing the whole expression, when this graph came from
+    /// [`Self::from_expression`].
+    ///
+    /// Hand-built graphs return `None`; they name their primary explicitly.
+    #[must_use]
+    pub fn expression_primary(&self) -> Option<&str> {
+        self.expression_primary.as_deref()
     }
 
     /// Add a node.

@@ -45,6 +45,11 @@ harness = false
 name = "features_bench"
 harness = false
 
+# M0-3: proves the factor library parses and compiles once, not per evaluation.
+[[bench]]
+name = "factor_library_bench"
+harness = false
+
 [[bench]]
 name = "trend_bench"
 harness = false

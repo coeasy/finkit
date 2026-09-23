@@ -248,96 +248,202 @@ DZH_SPECIFIC = {
     "OPENINTEREST": "vendor:dzh",
 }
 
-# Official TradingView Pine v6 `ta.*` / `math.*` names, mapped to the canonical
-# formula name through core/src/formula/pine/builtin_table.rs.
-PINE_SPECIFIC = {
-    "ta.alma": "SMA",
-    "ta.atr": "ATR",
-    "ta.bb": "BBANDS",
-    "ta.bbw": "BOLLWIDTH",
-    "ta.percentile_linear_interpolation": "PERCENTILE",
-    "ta.percentile_nearest_rank": "PERCENTRANK",
-    "ta.percentrank": "PERCENTRANK",
-    "ta.change": "MOM",
-    "ta.cmo": "CMO",
-    "ta.cog": "COG",
-    "ta.correlation": "CORREL",
-    "ta.cci": "CCI",
-    "ta.dev": "AVGDEV",
-    "ta.dmi": "ADX",
-    "ta.donchian": "DONCHIAN_MID",
-    "ta.ema": "EMA",
-    "ta.highest": "HHV",
-    "ta.highestbars": "HHVBARS",
-    "ta.hma": "HMA",
-    "ta.kc": "KC",
-    "ta.kcw": "BOLLWIDTH",
-    "ta.linreg": "LINEARREG",
-    "ta.lowest": "LLV",
-    "ta.lowestbars": "LLVBARS",
-    "ta.macd": "MACD",
-    "ta.max": "MAX",
-    "ta.median": "MEDIAN",
-    "ta.mfi": "MFI",
-    "ta.min": "MIN",
-    "ta.mode": "MODE",
-    "ta.mom": "MOM",
-    "ta.pivothigh": "PIVOTHIGH",
-    "ta.pivotlow": "PIVOTLOW",
-    "ta.range": "TRANGE",
-    "ta.rising": "RISING",
-    "ta.rma": "RMA",
-    "ta.roc": "ROC",
-    "ta.rsi": "RSI",
-    "ta.sar": "SAR",
-    "ta.sma": "SMA",
-    "ta.stdev": "STDDEV",
-    "ta.stoch": "STOCH",
-    "ta.supertrend": "SUPERTREND",
-    "ta.swma": "SWMA",
+# Official TradingView Pine v6 `ta.*` / `math.*` names we survey.
+#
+# This is the *reference spelling list* only. What each spelling resolves to is
+# deliberately NOT written here: it is read from the engine by
+# `pine_engine_mapping()`, because a hand-maintained mirror of the engine's
+# mapping drifts. An earlier version of this file carried such a mirror (86
+# entries); it disagreed with the engine on 7 canonical names and credited 43
+# spellings the engine cannot resolve at all as `near` (out-of-the-box).
+#
+# Spellings the engine cannot map stay in the contract as `unsupported` rows
+# keyed by the spelling itself, so the gap stays visible instead of being
+# dropped. Under-claiming is safe here; over-claiming is the defect being
+# repaired.
+PINE_SPELLINGS = (
+    "math.abs",
+    "math.acos",
+    "math.asin",
+    "math.atan",
+    "math.avg",
+    "math.ceil",
+    "math.cos",
+    "math.exp",
+    "math.floor",
+    "math.log",
+    "math.log10",
+    "math.max",
+    "math.min",
+    "math.pow",
+    "math.round",
+    "math.sign",
+    "math.sin",
+    "math.sqrt",
+    "math.sum",
+    "math.tan",
+    "ta.ac",
+    "ta.accdist",
+    "ta.ad",
+    "ta.alma",
+    "ta.ao",
+    "ta.atr",
+    "ta.barssince",
+    "ta.bb",
+    "ta.bbw",
+    "ta.cci",
+    "ta.change",
+    "ta.cmo",
+    "ta.cog",
+    "ta.correlation",
+    "ta.crossover",
+    "ta.crossunder",
+    "ta.cum",
+    "ta.dev",
+    "ta.dmi",
+    "ta.donchian",
+    "ta.ema",
+    "ta.highest",
+    "ta.highestbars",
+    "ta.hma",
+    "ta.kc",
+    "ta.kcw",
+    "ta.linreg",
+    "ta.lowest",
+    "ta.lowestbars",
+    "ta.macd",
+    "ta.max",
+    "ta.median",
+    "ta.mfi",
+    "ta.min",
+    "ta.mode",
+    "ta.mom",
+    "ta.nvi",
+    "ta.obv",
+    "ta.percentile_linear_interpolation",
+    "ta.percentile_nearest_rank",
+    "ta.percentrank",
+    "ta.pivothigh",
+    "ta.pivotlow",
+    "ta.pvi",
+    "ta.pvt",
+    "ta.range",
+    "ta.rising",
+    "ta.rma",
+    "ta.roc",
+    "ta.rsi",
+    "ta.sar",
+    "ta.sma",
+    "ta.stdev",
+    "ta.stoch",
+    "ta.supertrend",
+    "ta.swma",
+    "ta.tr",
+    "ta.tsi",
+    "ta.valuewhen",
+    "ta.variance",
+    "ta.vol",
+    "ta.vwap",
+    "ta.vwma",
+    "ta.wad",
+    "ta.wma",
+    "ta.wpr",
+)
+
+# `core/src/formula/pine/ast_mapper.rs` resolves a handful of `ta.*` names
+# before consulting the builtin table, because they need argument normalisation
+# (Pine's compact signatures vs. AlphaTA's OHLCV-expanded ones). That is Rust
+# code rather than a data table, so the list is written out here -- and *proved*
+# by the behavioural gate `pine_engine_mapping_matches_the_engine`, which lowers
+# each spelling through `map_pine_to_alphata` and compares the emitted name.
+PINE_AST_OVERRIDES = {
     "ta.tr": "TRANGE",
-    "ta.tsi": "TSI",
-    "ta.valuewhen": "VALUEWHEN",
-    "ta.variance": "VAR",
-    "ta.vwap": "VWAP",
-    "ta.vwma": "VWMA",
-    "ta.wma": "WMA",
+    "ta.atr": "ATR",
+    "ta.natr": "NATR",
+    "ta.cci": "CCI",
     "ta.wpr": "WILLR",
-    "ta.crossover": "CROSSOVER",
-    "ta.crossunder": "CROSSDOWN",
-    "ta.barssince": "BARSSINCE",
-    "ta.cum": "SUM",
+    "ta.williamspercentr": "WILLR",
+    "ta.vwap": "VWAP",
     "ta.obv": "OBV",
-    "ta.pvt": "PVT",
-    "ta.wad": "WAD",
-    "ta.ad": "AD",
-    "ta.accdist": "AD",
-    "ta.nvi": "NVI",
-    "ta.pvi": "PVI",
-    "ta.vol": "STDDEV",
-    "ta.ao": "AO",
-    "ta.ac": "AC",
-    "math.abs": "ABS",
-    "math.acos": "ACOS",
-    "math.asin": "ASIN",
-    "math.atan": "ATAN",
-    "math.avg": "AVG",
-    "math.ceil": "CEILING",
-    "math.cos": "COS",
-    "math.exp": "EXP",
-    "math.floor": "FLOOR",
-    "math.log": "LN",
-    "math.log10": "LOG10",
-    "math.max": "MAX",
-    "math.min": "MIN",
-    "math.pow": "POW",
-    "math.round": "ROUND",
-    "math.sign": "SIGN",
-    "math.sin": "SIN",
-    "math.sqrt": "SQRT",
-    "math.sum": "SUM",
-    "math.tan": "TAN",
+    "ta.sar": "SAR",
+    "ta.stoch": "STOCHF",
+    "ta.change": "MOM",
+    "ta.sma": "MA",
+    "ta.vwma": "VWMA",
 }
+
+
+def read_pine_builtin_table() -> dict[str, str]:
+    """Parse `PineBuiltinTable`'s default mappings out of the Rust source.
+
+    The table is a plain data table (`namespace` / `pine_name` /
+    `alpha_ta_name`), so reading it is safe. This is the authoritative source
+    for every Pine spelling the engine resolves through the generic path; the
+    `ast_mapper` special cases layered on top live in [`PINE_AST_OVERRIDES`].
+    """
+    text = _file_text(PINE_SOURCE[1])
+    if text is None:
+        raise SystemExit("cannot read {}".format(PINE_SOURCE[1].relative_to(ROOT)))
+    body = text.split("fn default_mappings()", 1)
+    if len(body) != 2:
+        raise SystemExit("builtin_table.rs no longer defines `default_mappings()`")
+    namespace_re = re.compile(r'namespace:\s*(None|Some\("([a-z]+)")')
+    pine_name_re = re.compile(r'pine_name:\s*"([^"]+)"')
+    alpha_re = re.compile(r'alpha_ta_name:\s*"([^"]+)"')
+
+    mapping: dict[str, str] = {}
+    for chunk in body[1].split("BuiltinMapping {")[1:]:
+        namespace = namespace_re.search(chunk)
+        pine_name = pine_name_re.search(chunk)
+        alpha = alpha_re.search(chunk)
+        if not (namespace and pine_name and alpha):
+            continue
+        if namespace.group(1) == "None":
+            key = pine_name.group(1)
+        else:
+            key = "{}.{}".format(namespace.group(2), pine_name.group(1))
+        mapping[key] = alpha.group(1)
+    if len(mapping) < 30:
+        raise SystemExit(
+            "parsed only {} Pine mappings; the parser has drifted from "
+            "builtin_table.rs".format(len(mapping))
+        )
+    return mapping
+
+
+def pine_fallback_name(spelling: str) -> str:
+    """The name `ast_mapper.rs` emits for a spelling the table does not resolve.
+
+    `ast_mapper.rs` falls through to `format!("{}_{}", ns.to_uppercase(),
+    name.to_uppercase())` (or the bare uppercase name when there is no
+    namespace). Most of these are dead names the runtime never registers -- but
+    not all: `math.avg` -> `MATH_AVG` really does exist. Recording the fallback
+    rather than assuming it is dead is what keeps `math.avg` from being
+    mislabelled.
+    """
+    if "." in spelling:
+        namespace, name = spelling.split(".", 1)
+        return "{}_{}".format(namespace.upper(), name.upper())
+    return spelling.upper()
+
+
+def pine_engine_mapping() -> dict[str, str]:
+    """Spelling -> the canonical name `map_pine_to_alphata` actually emits.
+
+    Complete by construction: a spelling the builtin table does not resolve
+    still resolves to *something*, because `ast_mapper.rs` falls through to
+    [`pine_fallback_name`]. That keeps one rule for every row -- the row key is
+    the name the engine emits -- so `registered` and `status` stay consistent
+    with the row key instead of needing a special case.
+
+    `ast_mapper.rs` checks its `ta.*` special cases *before* consulting the
+    table, so the overrides win.
+    """
+    mapping = read_pine_builtin_table()
+    mapping.update(PINE_AST_OVERRIDES)
+    for spelling in PINE_SPELLINGS:
+        mapping.setdefault(spelling, pine_fallback_name(spelling))
+    return mapping
 
 TERMINALS = (
     (
@@ -368,9 +474,10 @@ TERMINALS = (
         "tradingview_pine",
         "pine",
         "TradingView Pine",
-        "TradingView Pine v6 reference ta.*/math.* mapped through "
-        "core/src/formula/pine/builtin_table.rs + repo:talib_coverage_matrix (numeric_reference 201)",
-        PINE_SPECIFIC,
+        "TradingView Pine v6 reference ta.*/math.*, resolved through the engine's own "
+        "mapping (core/src/formula/pine/builtin_table.rs + the ast_mapper ta.* special "
+        "cases) + repo:talib_coverage_matrix (numeric_reference 201)",
+        PINE_SPELLINGS,
     ),
 )
 
@@ -486,24 +593,101 @@ def classify(name: str, runtime: set[str]) -> str:
     return "approximate" if name in APPROXIMATE else "near"
 
 
+# --------------------------------------------------------------------------
+# Corpus evidence
+# --------------------------------------------------------------------------
+
+FORMULA_CORPUS = ROOT / "tests" / "formula_corpus"
+PINE_CORPUS = ROOT / "tests" / "pine_corpus"
+
+# Corpus `platform` tag -> contract terminal key. Mirrors `terminal_for_platform`
+# in core/tests/formula_dialect_coverage.rs. An unmapped tag is an error rather
+# than a silent drop, so a new platform cannot quietly lose its evidence.
+PLATFORM_TERMINALS = {
+    "tdx": "tongdaxin",
+    "cross": "tongdaxin",
+    "ths": "tonghuashun",
+    "dzh": "dazhihui",
+    "pine": "tradingview_pine",
+    "tradingview": "tradingview_pine",
+}
+
+# `NAME(` at an identifier boundary. Same shape as `called_functions` in the
+# gate, so the generator and the gate cannot disagree about what "calls" means.
+CALL_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+
+
+def _called_names(source: str) -> set[str]:
+    return {match.group(1).upper() for match in CALL_RE.finditer(source)}
+
+
+def read_corpus_evidence() -> tuple[dict[str, set[str]], dict[str, int]]:
+    """Which reference rows each checked-in corpus actually exercises.
+
+    Derived from the corpus files themselves -- that is the whole point. The
+    contract must not be able to claim test coverage it does not have, and the
+    gate in ``core/tests/formula_dialect_coverage.rs`` recomputes this from the
+    same files rather than trusting the numbers written here.
+
+    Domestic corpus names *are* canonical formula names, so a call maps to a row
+    by identity. A Pine ``ta.*`` call reaches a row only through the engine's
+    mapping, so it is resolved with [`pine_engine_mapping`] -- the same mapping
+    the behavioural gate proves against `map_pine_to_alphata`.
+    """
+    exercised: dict[str, set[str]] = {key: set() for key, *_ in TERMINALS}
+    cases: dict[str, int] = {key: 0 for key, *_ in TERMINALS}
+
+    for path in sorted(FORMULA_CORPUS.glob("*.json")):
+        case = json.loads(path.read_text(encoding="utf-8"))
+        tag = str(case.get("platform", "")).lower()
+        key = PLATFORM_TERMINALS.get(tag)
+        if key is None:
+            raise SystemExit(
+                f"{path.relative_to(ROOT)}: platform {tag!r} maps to no contract terminal"
+            )
+        cases[key] += 1
+        exercised[key] |= _called_names(str(case.get("source_formula", "")))
+
+    mapping = pine_engine_mapping()
+    for path in sorted(PINE_CORPUS.glob("*.pine")):
+        source = path.read_text(encoding="utf-8")
+        cases["tradingview_pine"] += 1
+        for match in re.finditer(r"\b((?:ta|math)\.[a-z_][a-z0-9_]*)\s*\(", source):
+            canonical = mapping.get(match.group(1))
+            if canonical is not None:
+                exercised["tradingview_pine"].add(canonical)
+
+    return exercised, cases
+
+
 def build() -> dict:
     runtime = read_formula_surface()
     if not runtime:
         raise SystemExit("formula surface is empty; regenerate docs first")
     classic = read_classic_ta_core()
+    corpus_exercised, corpus_cases = read_corpus_evidence()
 
     terminals = {}
     unverified: dict[str, list[str]] = {}
+    pine_mapping: dict[str, str] = {}
     for key, short, label, reference, specific in TERMINALS:
         if key == "tradingview_pine":
             # Pine reference names are Pine spellings; the contract records the
-            # canonical name the mapping resolves to, so all four terminals share
-            # one namespace and can be compared directly.
-            reference_names = {canonical for canonical in specific.values()}
+            # canonical name the *engine* emits for them, so all four terminals
+            # share one namespace and can be compared directly.
+            #
+            # `pine_engine_mapping()` is total, so there is no "unresolvable"
+            # case to special-case here: a spelling the table does not know
+            # still lands on the `TA_<NAME>` / `MATH_<NAME>` fallback, which is
+            # usually -- but not always -- an unregistered name. Dropping those
+            # rows instead would report ~100% coverage, the exact failure mode
+            # this contract exists to prevent.
+            pine_mapping = pine_engine_mapping()
+            reference_names = set(pine_mapping.values())
             reference_names.update(classic)
-            attribution_of = {}
+            attribution_of: dict[str, str] = {}
             spellings_of: dict[str, list[str]] = {}
-            for pine_name, canonical in specific.items():
+            for pine_name, canonical in pine_mapping.items():
                 attribution_of.setdefault(canonical, "vendor:pine_reference")
                 spellings_of.setdefault(canonical, []).append(pine_name)
         else:
@@ -589,6 +773,14 @@ def build() -> dict:
                 for name, entry in functions.items()
                 if entry["status"] == "host_required" and entry["registered"]
             ),
+            # Corpus-derived, not hand-written: which of this terminal's rows a
+            # checked-in corpus case actually calls. Intersected with `functions`
+            # because a corpus may legitimately use a name this terminal's
+            # reference list does not carry (the contract makes no claim there).
+            "corpus_cases": corpus_cases[key],
+            "corpus_exercised": sorted(
+                name for name in corpus_exercised[key] if name in functions
+            ),
         }
 
     return {
@@ -602,6 +794,32 @@ def build() -> dict:
             CLASSIC_SOURCE: str(CLASSIC_PATH.relative_to(ROOT)).replace("\\", "/"),
         },
         "vendor_sources": dict(VENDOR_SOURCES),
+        # Spelling -> canonical name, as the engine resolves it. Recorded so the
+        # gate can *prove* it: `pine_engine_mapping_matches_the_engine` lowers
+        # every spelling through `map_pine_to_alphata` and compares the emitted
+        # function name. Without that proof this table is just another mirror.
+        "pine_engine_mapping": dict(sorted(pine_mapping.items())),
+        # Which corpora supply the per-terminal `corpus_exercised` evidence, and
+        # how many cases each contributed. Kept explicit so the two evidence
+        # paths (domestic formula corpus vs Pine script corpus) are never
+        # silently merged into one number.
+        "corpus_sources": {
+            "tests/formula_corpus": {
+                "kind": "domestic_formula_cases",
+                "cases": sum(
+                    corpus_cases[key]
+                    for key in ("tongdaxin", "tonghuashun", "dazhihui")
+                ),
+                "terminals": ["tongdaxin", "tonghuashun", "dazhihui"],
+                "row_level_evidence": "corpus_exercised",
+            },
+            "tests/pine_corpus": {
+                "kind": "pine_scripts",
+                "cases": corpus_cases["tradingview_pine"],
+                "terminals": ["tradingview_pine"],
+                "row_level_evidence": "corpus_exercised",
+            },
+        },
         "notes": (
             "Each row carries independent facts. `status` says whether the name "
             "is useful out of the box: `exact`/`near` route through the "
@@ -617,7 +835,11 @@ def build() -> dict:
             "a NaN-returning stub is registered (see "
             "`host_dependent_registered`). Names with no support in this "
             "repository are listed in `unverified_candidates` instead of being "
-            "counted."
+            "counted. `corpus_exercised` is a separate, narrower fact again: the "
+            "subset of rows a checked-in corpus case actually calls, derived "
+            "from the corpus files (see `corpus_sources`) and recomputed by the "
+            "gate. A row can be `registered` without being `corpus_exercised`; "
+            "registration is the weaker claim."
         ),
         "terminals": terminals,
         "unverified_candidates": unverified,

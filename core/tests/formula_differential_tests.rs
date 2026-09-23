@@ -13,9 +13,11 @@
 
 use finkit::execution_plan::KernelId;
 use finkit::formula::{
-    parse_formula, unified_formula_executor, FormulaContext, FormulaEngine, FormulaHotPlan,
+    parse_formula, unified_formula_executor, FormulaContext, FormulaDialect, FormulaEngine,
+    FormulaHotPlan, FormulaStatefulStream,
 };
 use ndarray::Array1;
+use std::collections::BTreeMap;
 
 const TOLERANCE: f64 = 1e-10;
 
@@ -1498,5 +1500,118 @@ fn formula_differential_warmup_composition_all_paths() {
         ("CUMSUM(X)", 200),
     ] {
         check_all_paths_with_warm_variable(source, source, &warm, expected_finite);
+    }
+}
+
+/// Execute a formula through the streaming stateful path.
+///
+/// This path is **not** covered by [`check_all_paths`]: it compiles to
+/// `FormulaExpressionState` and evaluates one value at a time, so it has its
+/// own implementations of the scalar operators. `SIGN` was implemented here as
+/// `value.signum()` while the formula table implemented the three-way form, and
+/// nothing noticed — the four-way harness only ever compares paths against each
+/// other, and every context it builds is strictly monotonic, so `CLOSE -
+/// REF(CLOSE, 1)` is never zero and the two bodies agree everywhere the harness
+/// looks.
+fn run_stateful(source: &str, ctx: &FormulaContext) -> Array1<f64> {
+    let mut stream = FormulaStatefulStream::from_source(source, FormulaDialect::AlphaTA)
+        .expect("stateful compile failed");
+    let names: Vec<String> = stream.required_inputs().map(ToString::to_string).collect();
+    let mut inputs: BTreeMap<String, Vec<f64>> = BTreeMap::new();
+    for name in &names {
+        let values = ctx
+            .get_data(name)
+            .unwrap_or_else(|| panic!("stateful stream requires {name}, absent from the context"));
+        inputs.insert(name.clone(), values.to_vec());
+    }
+    let mut output = Vec::new();
+    stream
+        .push_batch_into(&inputs, &mut output)
+        .expect("stateful push failed");
+    Array1::from_vec(output)
+}
+
+/// `SIGN` must be three-way on every path, including where the sign is zero.
+///
+/// Asserted as an **absolute** property, not only as path agreement. If all four
+/// implementations used `signum`, "ast == bytecode == plan == stateful" would
+/// still hold and the gate would be green while every flat window silently
+/// acquired a direction. The alphas that depend on this — `Alpha7` and
+/// `Alpha12` — multiply the sign into a factor, so a fabricated `+1` changes
+/// their value rather than producing a visible `NaN`.
+///
+/// The `f64` comparisons below are **exact on purpose** and `float_cmp` is
+/// silenced for that reason. The values under test are `0.0`, `1.0` and `-1.0`,
+/// produced by an integer-valued difference of exactly representable prices; a
+/// tolerance would defeat the point, because the bug being guarded against is a
+/// `0.0` that comes back as `1.0`.
+#[test]
+#[allow(clippy::float_cmp)]
+#[allow(clippy::cast_precision_loss)] // 40 bars: every index is exact in f64.
+fn sign_is_three_way_on_every_path() {
+    const SOURCE: &str = "SIGN(CLOSE-REF(CLOSE,1))";
+    let len = 40;
+    // Ramp up to index 19, ramp down to index 25, then hold. The holds are the
+    // whole point: they are the only places the two candidate semantics differ.
+    let close = Array1::from_vec(
+        (0..len)
+            .map(|i| match i {
+                0..=19 => 100.0 + i as f64,
+                20..=25 => 119.0 - (i - 19) as f64,
+                _ => 113.0,
+            })
+            .collect(),
+    );
+    let volume = Array1::from_vec(vec![1000.0; len]);
+    let ctx = FormulaContext::new(
+        close.clone(),
+        close.clone(),
+        close.clone(),
+        close.clone(),
+        volume,
+        None,
+    );
+
+    let mut engine = FormulaEngine::new();
+    let mut ctx_ast = FormulaContext::new(
+        close.clone(),
+        close.clone(),
+        close.clone(),
+        close.clone(),
+        Array1::from_vec(vec![1000.0; len]),
+        None,
+    );
+    let ast_result = run_ast(&mut engine, SOURCE, &mut ctx_ast);
+    let bytecode_result = run_bytecode(&mut engine, SOURCE, &ctx);
+    let plan_result = run_plan(SOURCE, &ctx);
+    let stateful_result = run_stateful(SOURCE, &ctx);
+
+    assert_arrays_match(SOURCE, "bytecode", &ast_result, &bytecode_result);
+    assert_arrays_match(SOURCE, "plan", &ast_result, &plan_result);
+    assert_arrays_match(SOURCE, "stateful", &ast_result, &stateful_result);
+
+    // Both directions must occur, or a constant-`0` body would pass the next
+    // assertion and the test would prove nothing.
+    assert!(
+        ast_result.iter().any(|value| *value == 1.0),
+        "the rising leg must produce +1"
+    );
+    assert!(
+        ast_result.iter().any(|value| *value == -1.0),
+        "the falling leg must produce -1"
+    );
+
+    // The flat leg is exactly zero on both sides, so the difference is exactly
+    // `0.0` and the sign must be exactly `0.0` — not `1.0`.
+    for index in 26..len {
+        assert_eq!(
+            ast_result[index], 0.0,
+            "index {index} sits on a flat stretch, so sign(close - ref(close, 1)) must be 0; \
+             a +1 here means `f64::signum` semantics survived"
+        );
+        assert_eq!(
+            stateful_result[index], 0.0,
+            "the streaming path disagrees at flat index {index}"
+        );
     }
 }

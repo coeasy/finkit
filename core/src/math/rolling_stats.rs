@@ -226,6 +226,79 @@ pub fn stddev_into(input: &[f64], period: usize, nb_dev: f64, output: &mut [f64]
     Ok(())
 }
 
+/// Standard deviation with the **sample** (`ddof = 1`) denominator, written into
+/// a caller-owned output slice.
+///
+/// This exists because two conventions are both in wide use and they are not
+/// interchangeable:
+///
+/// * [`stddev_into`] is TA-Lib's, which divides the second moment by `n` (the
+///   population convention). It is what finkit's `STD`, `STDDEV` and `VAR`
+///   resolve to, and changing those would break TA-Lib parity.
+/// * pandas — and therefore Qlib, whose `qlib/data/ops.py::Std` is
+///   `series.rolling(N, min_periods=1).std()` — divides by `n - 1`.
+///
+/// The two differ by the exact factor `sqrt((n - 1) / n)`, which is `0.894` at
+/// `n = 5` and `0.992` at `n = 60`. That is a systematic ~10% scale error at the
+/// short windows, not a rounding difference, so the Alpha158 factor set cannot
+/// reach Qlib parity through [`stddev_into`].
+///
+/// Rather than re-deriving the moment scan, this delegates to the same
+/// [`TaVarianceState`] and applies the `n / (n - 1)` correction to its variance
+/// output, so the tree path, the plan path and `STD` all share one arithmetic
+/// and cannot drift apart by more than a rounding step.
+///
+/// `period` must be at least 2: the correction divides by `n - 1`.
+///
+/// # Errors
+///
+/// [`TaError::InvalidParameter`] if `period < 2`, if `period` exceeds
+/// `input.len()`, or if `output.len() != input.len()`.
+pub fn stddev_sample_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> {
+    validate_period(input.len(), period, 2)?;
+    if output.len() != input.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
+    // See `variance_into`: skip an upstream warm-up run rather than poisoning the
+    // rolling moment state with it.
+    let start = crate::math::leading_warmup(input);
+    if start > 0 {
+        let warm_up_end = (start + period - 1).min(output.len());
+        output[..warm_up_end].fill(f64::NAN);
+        if start + period > input.len() {
+            return Ok(());
+        }
+        let (tail_in, tail_out) = (&input[start..], &mut output[start..]);
+        return stddev_sample_into(tail_in, period, tail_out);
+    }
+    let lookback = period - 1;
+    output[..lookback].fill(f64::NAN);
+    #[allow(clippy::cast_precision_loss)] // `period` is a bar count, far below 2^53
+    let size = period as f64;
+    let correction = size / (size - 1.0);
+    let mut state = TaVarianceState::new(input, period);
+    for (index, slot) in output.iter_mut().enumerate().skip(lookback) {
+        *slot = (state.next(index) * correction).sqrt();
+    }
+    Ok(())
+}
+
+/// Sample standard deviation as a fresh vector.
+///
+/// # Errors
+///
+/// Propagates [`stddev_sample_into`]: [`TaError::InvalidParameter`] if
+/// `period < 2`, if `period` exceeds `input.len()`, or if the output length
+/// cannot match the input.
+pub fn stddev_sample(input: &[f64], period: usize) -> Result<Vec<f64>> {
+    let mut output = vec![f64::NAN; input.len()];
+    stddev_sample_into(input, period, &mut output)?;
+    Ok(output)
+}
+
 /// Standard deviation written directly into a caller-owned output slice using
 /// the canonical rolling-moment order used by the TA-Lib fast path.
 pub fn stddev_rolling_into(

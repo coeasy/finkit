@@ -1282,7 +1282,9 @@ fn apply_stateful_binary(op: &BinaryOperator, left: f64, right: f64) -> f64 {
 fn apply_stateful_unary_function(function: FormulaUnaryFunction, value: f64) -> f64 {
     match function {
         FormulaUnaryFunction::Abs => value.abs(),
-        FormulaUnaryFunction::Sign => value.signum(),
+        // Shared with `functions::canonical_sign`; see `math::three_way_sign`
+        // for why this is not `value.signum()`.
+        FormulaUnaryFunction::Sign => crate::math::three_way_sign(value),
         FormulaUnaryFunction::Sqrt => {
             if value < 0.0 {
                 f64::NAN

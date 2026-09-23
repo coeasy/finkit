@@ -97,17 +97,22 @@ tests/formula_corpus/
 | `dialect_ohlc_aliases.json` | `H/L/C` vs `HIGH/LOW/CLOSE` |
 | `cross_period_refdate.json` | `PERIODTYPE` / `REFDATE` |
 
-### TA-Lib 0.7/0.8 新增函数 — 16 条
+### TA-Lib 0.7/0.8 新增函数 — 17 条
 
 M0-1 把 31 个 TA-Lib 0.7/0.8 函数接入**公式层**（`core/src/formula/functions_talib_081.rs`），
-下列 16 条语料是它们的执行覆盖。这些函数目前只在 tree / bytecode / JIT 路径可用，
+下列 17 条语料是它们的执行覆盖。这些函数目前只在 tree / bytecode / JIT 路径可用，
 **plan 路径尚无对应 kernel**（`CALL:<NAME>` 报 `code 1`），因此每条都已登记在
 `core/tests/formula_plan_differential.rs` 的 `DOMESTIC_UNSUPPORTED` 中，并注明缺失的 kernel。
+
+本表与语料**双向**受 `core/tests/formula_corpus.rs::talib_081_corpus_coverage_is_complete_and_documented`
+门禁约束：表中列出的文件必须真的在 `source_formula` 里调用这 31 个函数，且这 31 个函数
+每一个都必须至少被一条语料调用。新增语料但漏改本表会直接红。
 
 | 文件 | 覆盖函数 |
 |------|---------|
 | `accbands_cross.json` | `ACCBANDS`（多输出） |
 | `ao_ac_cross.json` | `AO` |
+| `aroon_cross.json` | `AROON` / `AROON_DOWN` |
 | `coppock_cross.json` | `COPPOCK` |
 | `elder_ray_cross.json` | `ERI` |
 | `er_vhf_cross.json` | `ER` / `VHF` |

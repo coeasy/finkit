@@ -94,6 +94,15 @@ impl KernelDispatcher for FormulaKernelDispatcher<'_> {
         if call.kernel == KernelId::from_static("CALL:TANH") {
             return dispatch_unary_math_call(call, buffers, UnaryMathKernel::Tanh);
         }
+        // `LN` and `LOG` are the same function on the formula surface (`fn_log`
+        // is registered under both names), so both dispatch here. The plan
+        // kernel is named after the SSOT entry, `LN`.
+        if call.kernel == KernelId::from_static("CALL:LN") {
+            return dispatch_unary_math_call(call, buffers, UnaryMathKernel::Ln);
+        }
+        if call.kernel == KernelId::from_static("CALL:SIGN") {
+            return dispatch_unary_math_call(call, buffers, UnaryMathKernel::Sign);
+        }
 
         if call.kernel == KernelId::from_static("CALL:CROSS") {
             return dispatch_elementwise_call(call, buffers, ElementwiseKernel::Cross);
@@ -150,6 +159,41 @@ impl KernelDispatcher for FormulaKernelDispatcher<'_> {
         }
         if call.kernel == KernelId::from_static("CALL:LLVBARS") {
             return dispatch_window_call(call, buffers, WindowKernel::LlvBars);
+        }
+
+        if call.kernel == KernelId::from_static("CALL:LINEARREG_SLOPE") {
+            return dispatch_linear_reg_slope_call(call, buffers);
+        }
+        if call.kernel == KernelId::from_static("CALL:QUANTILE") {
+            return dispatch_reference_rolling_call(
+                call,
+                buffers,
+                ReferenceRollingKernel::Quantile,
+            );
+        }
+        if call.kernel == KernelId::from_static("CALL:RSQUARE") {
+            return dispatch_reference_rolling_call(
+                call,
+                buffers,
+                ReferenceRollingKernel::RSquared,
+            );
+        }
+        if call.kernel == KernelId::from_static("CALL:RESI") {
+            return dispatch_reference_rolling_call(
+                call,
+                buffers,
+                ReferenceRollingKernel::Residual,
+            );
+        }
+        if call.kernel == KernelId::from_static("CALL:RANK_PCT") {
+            return dispatch_reference_rolling_call(call, buffers, ReferenceRollingKernel::RankPct);
+        }
+        if call.kernel == KernelId::from_static("CALL:STDDEV_SAMPLE") {
+            return dispatch_reference_rolling_call(
+                call,
+                buffers,
+                ReferenceRollingKernel::StdSample,
+            );
         }
 
         if call.kernel == KernelId::from_static("CALL:MA")
@@ -910,16 +954,26 @@ fn dispatch_window_call(
     Ok(())
 }
 
-/// Single-argument maths behind `SQRT` / `SINH` / `COSH` / `TANH`.
+/// Single-argument maths behind `SQRT` / `SINH` / `COSH` / `TANH` / `LN`.
 ///
 /// `SQRT` reproduces `fn_sqrt`'s negative guard rather than calling `sqrt`
 /// unconditionally: the tree path maps `v < 0.0` to NaN, and a bare `sqrt` would
 /// match that anyway, but the guard is stated so the two stay tied together.
+///
+/// `Ln` likewise reproduces `fn_log`'s non-positive guard instead of relying on
+/// `f64::ln`'s own `-inf`/`NaN` behaviour, so the two paths agree on `0.0` and on
+/// negatives rather than merely on positives.
 enum UnaryMathKernel {
     Sqrt,
     Sinh,
     Cosh,
     Tanh,
+    Ln,
+    /// `sign(x)` — `-1`, `0` or `1`. Needed by the `WorldQuant` alphas, which
+    /// use it to re-attach the direction of a differenced series.
+    ///
+    /// Not `f64::signum`: see `math::three_way_sign`.
+    Sign,
 }
 
 fn dispatch_unary_math_call(
@@ -946,6 +1000,20 @@ fn dispatch_unary_math_call(
             UnaryMathKernel::Sinh => value.sinh(),
             UnaryMathKernel::Cosh => value.cosh(),
             UnaryMathKernel::Tanh => value.tanh(),
+            UnaryMathKernel::Ln => {
+                if value <= 0.0 {
+                    f64::NAN
+                } else {
+                    value.ln()
+                }
+            }
+            // `f64::signum` is not the mathematical sign: it maps `0.0` and
+            // `-0.0` to `1.0` and `-1.0` respectively, and propagates `NaN`.
+            // The three-way form is what the alphas mean, and it keeps
+            // `sign(0) == 0` so a flat window does not acquire a direction.
+            // Shared with the formula table and the stateful stream so the
+            // three implementations cannot drift; see `math::three_way_sign`.
+            UnaryMathKernel::Sign => crate::math::three_way_sign(value),
         };
     }
     Ok(())
@@ -1151,6 +1219,172 @@ fn dispatch_periodic_call(
     // reference path's all-NaN series rather than failing the evaluation -- see
     // `absorb_kernel_failure`.
     absorb_kernel_failure(result, output)
+}
+
+/// Rolling operators whose numeric contract is pinned to an **external
+/// reference implementation** rather than to a domestic/TALib spelling.
+///
+/// They exist because Qlib's Alpha158 factor set needs them and nothing else in
+/// the formula surface covers the same quantity:
+///
+/// | kernel      | reference                    | shared math kernel                                    |
+/// | ----------- | ---------------------------- | ----------------------------------------------------- |
+/// | `QUANTILE`  | Qlib `Quantile`              | [`crate::math::quantile::rolling_quantile_into`]       |
+/// | `RSQUARE`   | Qlib `Rsquare`               | [`crate::math::regression::rolling_rsquare_into`]      |
+/// | `RESI`      | Qlib `Resi`                  | [`crate::math::regression::rolling_resi_into`]         |
+/// | `RANK_PCT`  | Qlib `Rank`                  | [`crate::math::rank::rolling_rank_pct_into`]           |
+/// | `STDDEV_SAMPLE` | pandas `rolling(N).std()` | [`crate::math::rolling_stats::stddev_sample_into`]     |
+///
+/// Each arm calls the *same* `math::` function the formula-language
+/// implementation calls, so the tree and plan paths agree by construction. That
+/// is the whole point of routing them through one kernel instead of writing the
+/// rolling loop twice.
+///
+/// `STDDEV_SAMPLE` is the odd one out: the operator is not missing, the
+/// *convention* is. finkit's `STD`/`STDDEV` are TA-Lib's population standard
+/// deviation (`m2 / n`); pandas and Qlib divide by `n - 1`. The gap is the exact
+/// factor `sqrt((n - 1) / n)` — a ~10% scale error at `n = 5` — so a separate
+/// name is the only honest way to have both, and Alpha158's `Std` needs the
+/// sample one.
+enum ReferenceRollingKernel {
+    Quantile,
+    RSquared,
+    Residual,
+    RankPct,
+    StdSample,
+}
+
+/// Execute a [`ReferenceRollingKernel`] into the plan-owned output buffer.
+///
+/// `KernelCall` is taken by value, matching every other `dispatch_*_call` in
+/// this file: the struct is a small bundle of borrows, and taking it by
+/// reference would make the ~25 dispatcher arms inconsistent for no gain.
+#[allow(clippy::needless_pass_by_value)]
+fn dispatch_reference_rolling_call(
+    call: KernelCall<'_>,
+    buffers: &mut [Vec<f64>],
+    op: ReferenceRollingKernel,
+) -> Result<(), KernelDispatchError> {
+    // `QUANTILE` is the only three-operand member: `(series, period, qscore)`.
+    let is_quantile = matches!(op, ReferenceRollingKernel::Quantile);
+    let expected = if is_quantile { 3 } else { 2 };
+    if call.inputs.len() != expected {
+        return Err(KernelDispatchError::new(FormulaKernelDispatcher::ERR_ARITY));
+    }
+    let input_slot = call.inputs[0].0;
+    let period_slot = call.inputs[1].0;
+    let output_slot = call.output.0;
+    if input_slot == output_slot
+        || period_slot == output_slot
+        || call.inputs.iter().skip(2).any(|slot| slot.0 == output_slot)
+    {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+    let period = period_from_slot(buffers, period_slot)?;
+    // Read every scalar operand before taking raw pointers below, so the
+    // borrows used to decode the qscore cannot overlap the aliasing.
+    let qscore = if is_quantile {
+        scalar_from_slot(buffers, call.inputs[2].0)?
+    } else {
+        0.5
+    };
+    let input_len = buffers[input_slot].len();
+    let output_len = buffers[output_slot].len();
+    if input_len != output_len {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+
+    let input_ptr = buffers[input_slot].as_ptr();
+    let output_ptr = buffers[output_slot].as_mut_ptr();
+    // The executor guarantees live dependencies do not alias the output slot,
+    // and the slot inequality was checked above, so the two slices address
+    // different allocations and cannot overlap.
+    let (input, output) = unsafe {
+        (
+            std::slice::from_raw_parts(input_ptr, input_len),
+            std::slice::from_raw_parts_mut(output_ptr, output_len),
+        )
+    };
+
+    let result = match op {
+        ReferenceRollingKernel::Quantile => crate::math::quantile::rolling_quantile_into(
+            input,
+            period,
+            qscore,
+            crate::math::quantile::QuantileInterpolation::Linear,
+            output,
+        ),
+        ReferenceRollingKernel::RSquared => {
+            crate::math::regression::rolling_rsquare_into(input, period, output)
+        }
+        ReferenceRollingKernel::Residual => {
+            crate::math::regression::rolling_resi_into(input, period, output)
+        }
+        ReferenceRollingKernel::RankPct => {
+            crate::math::rank::rolling_rank_pct_into(input, period, output)
+        }
+        ReferenceRollingKernel::StdSample => {
+            crate::math::rolling_stats::stddev_sample_into(input, period, output)
+        }
+    };
+
+    // A rejected argument is a hard error, matching `dispatch_periodic_call`'s
+    // contract for the period slot; a *valid* period longer than the series is
+    // not an error at all -- the kernels leave the output all-NaN, which is what
+    // the reference path produces too.
+    result.map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))
+}
+
+/// Execute `LINEARREG_SLOPE(series, period)` into the plan-owned output.
+///
+/// Delegates to [`crate::math::linear::linreg_slope`], which is already the
+/// single implementation behind `fn_linear_reg_slope`, so the tree path and this
+/// kernel cannot drift. The function returns a freshly allocated series rather
+/// than writing through a slice, so the result is copied in — the same shape as
+/// the `HMA` arm of [`dispatch_periodic_call`].
+///
+/// On a rejected period the reference path emits an all-NaN series instead of
+/// failing (`fn_linear_reg_slope` maps every error to `nan_vec`), and this
+/// kernel mirrors that rather than surfacing a hard error.
+fn dispatch_linear_reg_slope_call(
+    call: KernelCall<'_>,
+    buffers: &mut [Vec<f64>],
+) -> Result<(), KernelDispatchError> {
+    if call.inputs.len() != 2 {
+        return Err(KernelDispatchError::new(FormulaKernelDispatcher::ERR_ARITY));
+    }
+    let input_slot = call.inputs[0].0;
+    let period_slot = call.inputs[1].0;
+    let output_slot = call.output.0;
+    if input_slot == output_slot || period_slot == output_slot {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+    let period = period_from_slot(buffers, period_slot)?;
+    let output_len = buffers[output_slot].len();
+    if buffers[input_slot].len() != output_len {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_PARAMETER,
+        ));
+    }
+
+    let Ok(series) = crate::math::linear::linreg_slope(&buffers[input_slot], period) else {
+        buffers[output_slot].fill(f64::NAN);
+        return Ok(());
+    };
+    let source = series.as_slice().expect("Array1 is contiguous");
+    let output = &mut buffers[output_slot];
+    let written = source.len().min(output.len());
+    output[..written].copy_from_slice(&source[..written]);
+    if written < output.len() {
+        output[written..].fill(f64::NAN);
+    }
+    Ok(())
 }
 
 /// Execute terminal SMA(X, N[, M]) without materialising argument arrays.

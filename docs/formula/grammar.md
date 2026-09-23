@@ -409,13 +409,26 @@ Finkit 通过 `FormulaContext::with_period_data()` 提供跨周期数据，语�
 * 生成器：`scripts/gen_dialect_coverage.py`（`--generate` / `--check` / `--summary`）
 * 门禁：`core/tests/formula_dialect_coverage.rs`
 
-每个 `(终端, 函数)` 行记录**两个互相独立的事实**：
+每个 `(终端, 函数)` 行记录**三个互相独立的事实**：
 
 | 字段 | 含义 |
 |------|------|
 | `status` | 该名字是否**开箱可用** |
 | `registered` | 引擎的函数表里是否存在该名字（机器推导，非人工断言） |
 | `provenance` | `verified`（可在仓库内某个具名文件中找到）或 `attributed`（仅能追溯到厂商函数表） |
+
+终端级另有**语料证据**字段：
+
+| 字段 | 含义 |
+|------|------|
+| `corpus_cases` | 归到该终端的语料条数（`tests/formula_corpus/*.json` 的条数，Pine 为 `tests/pine_corpus/*.pine` 的脚本数） |
+| `corpus_exercised` | 该终端的行里，**确实被某条语料调用过**的那些名字。由生成器从语料文件解析，门禁会重新计算一遍再比对 |
+
+`corpus_exercised` 与 `registered` 是两个强度不同的断言：`registered` 只说明引擎认得这个名字，`corpus_exercised` 才说明有可运行的用例真的跑过它。本仓库出现过"注册齐全但一个都求值不了"的情况（库因子依赖名大小写不匹配），所以两者分开门禁。字段**缺失**表示该终端暂不出逐行证据，此时 `corpus_sources` 必须给出 `deferred_reason`——缺失与空数组在契约里是两件事，不允许含糊。
+
+顶层 `corpus_sources` 说明证据来自哪个语料目录、各贡献多少条、是否产出逐行证据。两个语料目录现在都产出逐行证据：国内语料里的函数名**本身就是**规范名，按同名匹配；Pine 语料里的 `ta.*` 拼写要先过引擎映射才能落到某一行，所以改用顶层 `pine_engine_mapping` 解析。
+
+顶层 `pine_engine_mapping` 记录**每个 Pine 拼写经 `map_pine_to_alphata` 后真正产出的规范名**（95 条，覆盖 `ta.*` / `math.*` / `request.*` 与裸名 `na` / `nz` / `fixnan`）。它由生成器读引擎推导：解析 `builtin_table.rs` 的 `default_mappings()`，叠加 `ast_mapper.rs` 中写死的 `ta.*` 特例，最后对查不到的拼写套用 `TA_<NAME>` / `MATH_<NAME>` 兜底——**是全覆盖的**，因此不存在"解析不到所以不计数"的漏洞。门禁 `pine_engine_mapping_matches_the_engine` 把每条拼写真的过一次 `map_pine_to_alphata`，断言产出的 `FunctionCall.name` 与记录一致；只有 `request.security` 例外（它需要宿主做时间框架对齐，`ast_mapper.rs` 拒绝解析），门禁对它是断言**必须报错**而不是断言名字。
 
 `status` 的五种取值分两组：
 
@@ -428,12 +441,26 @@ Finkit 通过 `FormulaContext::with_period_data()` 提供跨周期数据，语�
 
 实测覆盖（2026-09-23）：
 
-| 终端 | 参考清单 | 其中可验证 | 开箱可用 |
-|------|---------|-----------|---------|
-| 通达信 `tongdaxin` | 231 | 231 | 97.0% |
-| 同花顺 `tonghuashun` | 223 | 223 | 96.4% |
-| 大智慧 `dazhihui` | 226 | 219 | 91.6% |
-| TradingView Pine `tradingview_pine` | 224 | 219 | 97.8% |
+| 终端 | 参考清单 | 其中可验证 | 开箱可用 | 语料证据 |
+|------|---------|-----------|---------|---------|
+| 通达信 `tongdaxin` | 231 | 231 | 97.0% | 42 |
+| 同花顺 `tonghuashun` | 223 | 223 | 96.4% | 3 |
+| 大智慧 `dazhihui` | 226 | 219 | 91.6% | 2 |
+| TradingView Pine `tradingview_pine` | 263 | 216 | 81.7% | 23 |
+
+**Pine 的 81.7% 是修好之后才降下来的**：此前 Pine 的规范名取自生成器内一份手写映射（86 条），它与引擎实际的三个映射来源
+（`builtin_table.rs` 的 `default_mappings()`、`ast_mapper.rs` 中写死的 `ta.*` 特例、查不到时的 `TA_<NAME>` / `MATH_<NAME>` 兜底）
+并不一致，于是报出 **97.8%** 的假绿。修法是让生成器**只读引擎**（见上文 `pine_engine_mapping`），
+引擎映射不到的 47 个拼写照实记为 `unsupported`，覆盖率因此从 97.8% 掉到 81.7%——
+**掉下来的 16 个百分点是原本就不存在的覆盖**。同一映射下 `verified_coverage_pct` 为 99.5%，说明这 47 条全部是厂商清单里
+本仓库没有出处的名字，而不是实现缺失。
+
+同一轮修复还查出一个**静默错解**：`na` 是 Pine 关键字，因此进不了 `simple_call` 的 `identifier`，而
+`na_literal = { "na" ~ !ASCII_ALPHA }` 会匹配 `na(` 中的 `na`。结果 `is_missing = na(close)` **不报错**，
+被拆成 `na` 字面量 + 一个游离的 `(close)` 表达式语句，赋值静默变成 NaN；只有写成 `na(close, 14, 20)` 这种
+括号内不是合法表达式的形式才会报错。修法是给语法加一条 `na_call` 规则（`na` 保持关键字身份）。
+`core/tests/formula_terminal_golden.rs` 里那条 "na(x) must lower to an ISNA predicate" 断言此前是被下一行的
+`nz(close)`（它自己会产生 `ISNA`）满足的，现在由 `pine_na_call_lowers_to_a_predicate` 单独隔离验证。
 
 `EXPMEMA` / `IFNULL`（通达信）在仓库内无任何出处，因此**不计入**参考清单，而是列在契约的 `unverified_candidates` 中。
 

@@ -1,0 +1,18 @@
+{
+  "id": "aroon_cross",
+  "platform": "CROSS",
+  "source_formula": "AU:=AROON(HIGH,LOW,14);AD:=AROON_DOWN(HIGH,LOW,14);",
+  "description": "阿隆指标（Aroon）上/下轨 - TA-Lib 0.8 新增",
+  "input": {
+    "data_file": "tests/fixtures/ashare_sh_index_250d.csv"
+  },
+  "expected_output_columns": [
+    "AU",
+    "AD"
+  ],
+  "tolerance": 1e-08,
+  "tags": [
+    "trend",
+    "talib08"
+  ]
+}

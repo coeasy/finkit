@@ -39,6 +39,7 @@ use pyo3::marker::Ungil;
 use pyo3::prelude::*;
 
 mod compat_api;
+mod factor_library;
 mod features;
 #[cfg(feature = "formula")]
 mod formula_plan;
@@ -6585,6 +6586,9 @@ fn finkit(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // Factor research and generic quantitative evaluation
     research_api::register_research_api(m)?;
+
+    // Shipped factor libraries (M0-3): `finkit.factor_library("alpha158")`.
+    factor_library::register_factor_library(m)?;
 
     // Streaming Indicators
     streaming::register_streaming_classes(m)?;

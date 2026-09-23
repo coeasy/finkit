@@ -9,7 +9,7 @@
     "host_required",
     "unsupported"
   ],
-  "runtime_formula_surface": 447,
+  "runtime_formula_surface": 452,
   "provenance_sources": {
     "repo:functions_legacy": "core/src/formula/functions_legacy.rs",
     "repo:functions_talib_081": "core/src/formula/functions_talib_081.rs",
@@ -26,7 +26,124 @@
     "vendor:dzh": "大智慧 documented function list (block / money-flow / depth families)",
     "vendor:pine_reference": "TradingView Pine v6 reference (ta.* / math.*)"
   },
-  "notes": "Each row carries independent facts. `status` says whether the name is useful out of the box: `exact`/`near` route through the canonical AlphaTA runtime (a documented common-subset mapping, not a claim of terminal-identical numerics), `approximate` routes but flags future-data semantics, `host_required` only means something once the host injects market/session data, and `unsupported` is not implemented. `registered` says whether the engine's function table contains the name at all. `provenance` says whether the reference name was *verified* in a named in-repo file or merely *attributed* to a vendor function list; `coverage_pct` is computed over verified rows only, so it excludes `host_required` even when a NaN-returning stub is registered (see `host_dependent_registered`). Names with no support in this repository are listed in `unverified_candidates` instead of being counted.",
+  "pine_engine_mapping": {
+    "fixnan": "FIXNAN",
+    "math.abs": "ABS",
+    "math.acos": "MATH_ACOS",
+    "math.asin": "MATH_ASIN",
+    "math.atan": "MATH_ATAN",
+    "math.avg": "MATH_AVG",
+    "math.ceil": "MATH_CEIL",
+    "math.cos": "MATH_COS",
+    "math.exp": "MATH_EXP",
+    "math.floor": "MATH_FLOOR",
+    "math.log": "LOG",
+    "math.log10": "MATH_LOG10",
+    "math.max": "MAX",
+    "math.min": "MIN",
+    "math.pow": "POW",
+    "math.round": "MATH_ROUND",
+    "math.sign": "MATH_SIGN",
+    "math.sin": "MATH_SIN",
+    "math.sqrt": "SQRT",
+    "math.sum": "MATH_SUM",
+    "math.tan": "MATH_TAN",
+    "na": "ISNA",
+    "nz": "IF",
+    "request.security": "SECURITY",
+    "ta.ac": "TA_AC",
+    "ta.accdist": "TA_ACCDIST",
+    "ta.ad": "TA_AD",
+    "ta.alma": "TA_ALMA",
+    "ta.ao": "TA_AO",
+    "ta.aroon": "AROON",
+    "ta.atr": "ATR",
+    "ta.barssince": "BARSSINCE",
+    "ta.bb": "BOLL",
+    "ta.bbw": "TA_BBW",
+    "ta.cci": "CCI",
+    "ta.change": "MOM",
+    "ta.cmo": "TA_CMO",
+    "ta.cog": "TA_COG",
+    "ta.correlation": "CORREL",
+    "ta.crossover": "CROSS",
+    "ta.crossunder": "TA_CROSSUNDER",
+    "ta.cum": "CUMSUM",
+    "ta.dev": "TA_DEV",
+    "ta.dmi": "ADX",
+    "ta.donchian": "TA_DONCHIAN",
+    "ta.ema": "EMA",
+    "ta.highest": "HHV",
+    "ta.highestbars": "TA_HIGHESTBARS",
+    "ta.hma": "HMA",
+    "ta.kc": "TA_KC",
+    "ta.kcw": "TA_KCW",
+    "ta.linreg": "TA_LINREG",
+    "ta.lowest": "LLV",
+    "ta.lowestbars": "TA_LOWESTBARS",
+    "ta.macd": "MACD",
+    "ta.max": "TA_MAX",
+    "ta.median": "MEDIAN",
+    "ta.mfi": "TA_MFI",
+    "ta.min": "TA_MIN",
+    "ta.mode": "TA_MODE",
+    "ta.mom": "MOM",
+    "ta.natr": "NATR",
+    "ta.nvi": "TA_NVI",
+    "ta.obv": "OBV",
+    "ta.percentile_linear_interpolation": "TA_PERCENTILE_LINEAR_INTERPOLATION",
+    "ta.percentile_nearest_rank": "TA_PERCENTILE_NEAREST_RANK",
+    "ta.percentrank": "TA_PERCENTRANK",
+    "ta.pivothigh": "TA_PIVOTHIGH",
+    "ta.pivotlow": "TA_PIVOTLOW",
+    "ta.pvi": "TA_PVI",
+    "ta.pvt": "TA_PVT",
+    "ta.range": "ROLLING_RANGE",
+    "ta.rising": "TA_RISING",
+    "ta.rma": "RMA",
+    "ta.roc": "ROC",
+    "ta.rsi": "RSI",
+    "ta.sar": "SAR",
+    "ta.sma": "MA",
+    "ta.stdev": "STDDEV",
+    "ta.stoch": "STOCHF",
+    "ta.sum": "SUM",
+    "ta.supertrend": "SUPERTREND",
+    "ta.swma": "TA_SWMA",
+    "ta.tr": "TRANGE",
+    "ta.trix": "TRIX",
+    "ta.tsi": "TA_TSI",
+    "ta.valuewhen": "TA_VALUEWHEN",
+    "ta.variance": "VAR",
+    "ta.vol": "TA_VOL",
+    "ta.vwap": "VWAP",
+    "ta.vwma": "VWMA",
+    "ta.wad": "TA_WAD",
+    "ta.williamspercentr": "WILLR",
+    "ta.wma": "WMA",
+    "ta.wpr": "WILLR"
+  },
+  "corpus_sources": {
+    "tests/formula_corpus": {
+      "kind": "domestic_formula_cases",
+      "cases": 35,
+      "terminals": [
+        "tongdaxin",
+        "tonghuashun",
+        "dazhihui"
+      ],
+      "row_level_evidence": "corpus_exercised"
+    },
+    "tests/pine_corpus": {
+      "kind": "pine_scripts",
+      "cases": 26,
+      "terminals": [
+        "tradingview_pine"
+      ],
+      "row_level_evidence": "corpus_exercised"
+    }
+  },
+  "notes": "Each row carries independent facts. `status` says whether the name is useful out of the box: `exact`/`near` route through the canonical AlphaTA runtime (a documented common-subset mapping, not a claim of terminal-identical numerics), `approximate` routes but flags future-data semantics, `host_required` only means something once the host injects market/session data, and `unsupported` is not implemented. `registered` says whether the engine's function table contains the name at all. `provenance` says whether the reference name was *verified* in a named in-repo file or merely *attributed* to a vendor function list; `coverage_pct` is computed over verified rows only, so it excludes `host_required` even when a NaN-returning stub is registered (see `host_dependent_registered`). Names with no support in this repository are listed in `unverified_candidates` instead of being counted. `corpus_exercised` is a separate, narrower fact again: the subset of rows a checked-in corpus case actually calls, derived from the corpus files (see `corpus_sources`) and recomputed by the gate. A row can be `registered` without being `corpus_exercised`; registration is the weaker claim.",
   "terminals": {
     "tongdaxin": {
       "id": "tdx",
@@ -1672,6 +1789,51 @@
         "DYNAINFO",
         "FINANCE",
         "WINNER"
+      ],
+      "corpus_cases": 30,
+      "corpus_exercised": [
+        "AC",
+        "ACCBANDS",
+        "ADR",
+        "ADX",
+        "AO",
+        "AROON",
+        "CMOU",
+        "COPPOCK",
+        "CVI",
+        "EFI",
+        "EMA",
+        "ER",
+        "ERI",
+        "FOSC",
+        "FRACTAL",
+        "HA",
+        "KC",
+        "MA",
+        "MAMA",
+        "MARKETFI",
+        "MASSI",
+        "MAX",
+        "MINUS_DI",
+        "NVI",
+        "OBV",
+        "PERCENTRANK",
+        "PERIODTYPE",
+        "PLUS_DI",
+        "PVI",
+        "PVO",
+        "PVT",
+        "QSTICK",
+        "REFDATE",
+        "RVI",
+        "RVOL",
+        "SMA",
+        "SMI",
+        "SUM",
+        "VHF",
+        "VORTEX",
+        "WAD",
+        "ZLEMA"
       ]
     },
     "tonghuashun": {
@@ -3262,6 +3424,12 @@
         "DYNAINFO",
         "FINANCE",
         "LWINNER",
+        "WINNER"
+      ],
+      "corpus_cases": 3,
+      "corpus_exercised": [
+        "COST",
+        "MA",
         "WINNER"
       ]
     },
@@ -4880,16 +5048,21 @@
         "NETINFLOW",
         "SMALLORDER",
         "SUPERBIGORDER"
+      ],
+      "corpus_cases": 2,
+      "corpus_exercised": [
+        "EMA",
+        "MA"
       ]
     },
     "tradingview_pine": {
       "id": "pine",
       "label": "TradingView Pine",
-      "reference": "TradingView Pine v6 reference ta.*/math.* mapped through core/src/formula/pine/builtin_table.rs + repo:talib_coverage_matrix (numeric_reference 201)",
+      "reference": "TradingView Pine v6 reference ta.*/math.*, resolved through the engine's own mapping (core/src/formula/pine/builtin_table.rs + the ast_mapper ta.* special cases) + repo:talib_coverage_matrix (numeric_reference 201)",
       "collected": "2026-09-23",
-      "reference_size": 224,
-      "verified_size": 219,
-      "attributed_size": 5,
+      "reference_size": 263,
+      "verified_size": 216,
+      "attributed_size": 47,
       "functions": {
         "ABS": {
           "status": "near",
@@ -5010,13 +5183,6 @@
           "provenance": "verified",
           "via": null
         },
-        "AVG": {
-          "status": "near",
-          "registered": true,
-          "source": "repo:functions_legacy",
-          "provenance": "verified",
-          "via": null
-        },
         "AVGDEV": {
           "status": "near",
           "registered": true,
@@ -5052,7 +5218,7 @@
           "provenance": "verified",
           "via": null
         },
-        "BOLLWIDTH": {
+        "BOLL": {
           "status": "near",
           "registered": true,
           "source": "repo:functions_legacy",
@@ -5507,13 +5673,6 @@
           "provenance": "verified",
           "via": null
         },
-        "CEILING": {
-          "status": "near",
-          "registered": true,
-          "source": "repo:functions_legacy",
-          "provenance": "verified",
-          "via": null
-        },
         "CMF": {
           "status": "near",
           "registered": true,
@@ -5534,13 +5693,6 @@
           "source": "repo:talib_coverage_matrix",
           "provenance": "verified",
           "via": null
-        },
-        "COG": {
-          "status": "unsupported",
-          "registered": false,
-          "source": "vendor:pine_reference",
-          "provenance": "attributed",
-          "via": "ta.cog"
         },
         "COPPOCK": {
           "status": "near",
@@ -5570,17 +5722,10 @@
           "provenance": "verified",
           "via": null
         },
-        "CROSSDOWN": {
+        "CROSS": {
           "status": "near",
           "registered": true,
-          "source": "repo:registry",
-          "provenance": "verified",
-          "via": null
-        },
-        "CROSSOVER": {
-          "status": "near",
-          "registered": true,
-          "source": "repo:registry",
+          "source": "repo:functions_legacy",
           "provenance": "verified",
           "via": null
         },
@@ -5616,13 +5761,6 @@
           "status": "near",
           "registered": true,
           "source": "repo:talib_coverage_matrix",
-          "provenance": "verified",
-          "via": null
-        },
-        "DONCHIAN_MID": {
-          "status": "near",
-          "registered": true,
-          "source": "repo:registry",
           "provenance": "verified",
           "via": null
         },
@@ -5675,6 +5813,13 @@
           "provenance": "verified",
           "via": null
         },
+        "FIXNAN": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
         "FLOOR": {
           "status": "near",
           "registered": true,
@@ -5704,13 +5849,6 @@
           "via": null
         },
         "HHV": {
-          "status": "near",
-          "registered": true,
-          "source": "repo:functions_legacy",
-          "provenance": "verified",
-          "via": null
-        },
-        "HHVBARS": {
           "status": "near",
           "registered": true,
           "source": "repo:functions_legacy",
@@ -5766,10 +5904,24 @@
           "provenance": "verified",
           "via": null
         },
+        "IF": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
         "IMI": {
           "status": "near",
           "registered": true,
           "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "ISNA": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
           "provenance": "verified",
           "via": null
         },
@@ -5829,17 +5981,17 @@
           "provenance": "verified",
           "via": null
         },
-        "LLVBARS": {
-          "status": "near",
-          "registered": true,
-          "source": "repo:functions_legacy",
-          "provenance": "verified",
-          "via": null
-        },
         "LN": {
           "status": "near",
           "registered": true,
           "source": "repo:talib_coverage_matrix",
+          "provenance": "verified",
+          "via": null
+        },
+        "LOG": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
           "provenance": "verified",
           "via": null
         },
@@ -5898,6 +6050,104 @@
           "source": "repo:talib_coverage_matrix",
           "provenance": "verified",
           "via": null
+        },
+        "MATH_ACOS": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "math.acos"
+        },
+        "MATH_ASIN": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "math.asin"
+        },
+        "MATH_ATAN": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "math.atan"
+        },
+        "MATH_AVG": {
+          "status": "near",
+          "registered": true,
+          "source": "repo:functions_legacy",
+          "provenance": "verified",
+          "via": null
+        },
+        "MATH_CEIL": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "math.ceil"
+        },
+        "MATH_COS": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "math.cos"
+        },
+        "MATH_EXP": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "math.exp"
+        },
+        "MATH_FLOOR": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "math.floor"
+        },
+        "MATH_LOG10": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "math.log10"
+        },
+        "MATH_ROUND": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "math.round"
+        },
+        "MATH_SIGN": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "math.sign"
+        },
+        "MATH_SIN": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "math.sin"
+        },
+        "MATH_SUM": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "math.sum"
+        },
+        "MATH_TAN": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "math.tan"
         },
         "MAVP": {
           "status": "near",
@@ -5997,13 +6247,6 @@
           "provenance": "verified",
           "via": null
         },
-        "MODE": {
-          "status": "near",
-          "registered": true,
-          "source": "repo:functions_legacy",
-          "provenance": "verified",
-          "via": null
-        },
         "MOM": {
           "status": "near",
           "registered": true,
@@ -6052,20 +6295,6 @@
           "source": "repo:talib_coverage_matrix",
           "provenance": "verified",
           "via": null
-        },
-        "PIVOTHIGH": {
-          "status": "unsupported",
-          "registered": false,
-          "source": "vendor:pine_reference",
-          "provenance": "attributed",
-          "via": "ta.pivothigh"
-        },
-        "PIVOTLOW": {
-          "status": "unsupported",
-          "registered": false,
-          "source": "vendor:pine_reference",
-          "provenance": "attributed",
-          "via": "ta.pivotlow"
         },
         "PLUS_DI": {
           "status": "near",
@@ -6123,13 +6352,6 @@
           "provenance": "verified",
           "via": null
         },
-        "RISING": {
-          "status": "unsupported",
-          "registered": false,
-          "source": "vendor:pine_reference",
-          "provenance": "attributed",
-          "via": "ta.rising"
-        },
         "RMA": {
           "status": "near",
           "registered": true,
@@ -6165,7 +6387,7 @@
           "provenance": "verified",
           "via": null
         },
-        "ROUND": {
+        "ROLLING_RANGE": {
           "status": "near",
           "registered": true,
           "source": "repo:functions_legacy",
@@ -6207,10 +6429,10 @@
           "provenance": "verified",
           "via": null
         },
-        "SIGN": {
-          "status": "near",
-          "registered": true,
-          "source": "repo:functions_legacy",
+        "SECURITY": {
+          "status": "host_required",
+          "registered": false,
+          "source": "repo:compat",
           "provenance": "verified",
           "via": null
         },
@@ -6298,13 +6520,6 @@
           "provenance": "verified",
           "via": null
         },
-        "SWMA": {
-          "status": "unsupported",
-          "registered": false,
-          "source": "vendor:pine_reference",
-          "provenance": "attributed",
-          "via": "ta.swma"
-        },
         "T3": {
           "status": "near",
           "registered": true,
@@ -6325,6 +6540,244 @@
           "source": "repo:talib_coverage_matrix",
           "provenance": "verified",
           "via": null
+        },
+        "TA_AC": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.ac"
+        },
+        "TA_ACCDIST": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.accdist"
+        },
+        "TA_AD": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.ad"
+        },
+        "TA_ALMA": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.alma"
+        },
+        "TA_AO": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.ao"
+        },
+        "TA_BBW": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.bbw"
+        },
+        "TA_CMO": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.cmo"
+        },
+        "TA_COG": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.cog"
+        },
+        "TA_CROSSUNDER": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.crossunder"
+        },
+        "TA_DEV": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.dev"
+        },
+        "TA_DONCHIAN": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.donchian"
+        },
+        "TA_HIGHESTBARS": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.highestbars"
+        },
+        "TA_KC": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.kc"
+        },
+        "TA_KCW": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.kcw"
+        },
+        "TA_LINREG": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.linreg"
+        },
+        "TA_LOWESTBARS": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.lowestbars"
+        },
+        "TA_MAX": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.max"
+        },
+        "TA_MFI": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.mfi"
+        },
+        "TA_MIN": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.min"
+        },
+        "TA_MODE": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.mode"
+        },
+        "TA_NVI": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.nvi"
+        },
+        "TA_PERCENTILE_LINEAR_INTERPOLATION": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.percentile_linear_interpolation"
+        },
+        "TA_PERCENTILE_NEAREST_RANK": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.percentile_nearest_rank"
+        },
+        "TA_PERCENTRANK": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.percentrank"
+        },
+        "TA_PIVOTHIGH": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.pivothigh"
+        },
+        "TA_PIVOTLOW": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.pivotlow"
+        },
+        "TA_PVI": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.pvi"
+        },
+        "TA_PVT": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.pvt"
+        },
+        "TA_RISING": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.rising"
+        },
+        "TA_SWMA": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.swma"
+        },
+        "TA_TSI": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.tsi"
+        },
+        "TA_VALUEWHEN": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.valuewhen"
+        },
+        "TA_VOL": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.vol"
+        },
+        "TA_WAD": {
+          "status": "unsupported",
+          "registered": false,
+          "source": "vendor:pine_reference",
+          "provenance": "attributed",
+          "via": "ta.wad"
         },
         "TEMA": {
           "status": "near",
@@ -6379,13 +6832,6 @@
           "status": "near",
           "registered": true,
           "source": "repo:talib_coverage_matrix",
-          "provenance": "verified",
-          "via": null
-        },
-        "VALUEWHEN": {
-          "status": "near",
-          "registered": true,
-          "source": "repo:functions_legacy",
           "provenance": "verified",
           "via": null
         },
@@ -6462,15 +6908,41 @@
       },
       "coverage": {
         "exact": 0,
-        "near": 219,
+        "near": 215,
         "approximate": 0,
-        "host_required": 0,
-        "unsupported": 5
+        "host_required": 1,
+        "unsupported": 47
       },
-      "coverage_pct": 97.8,
-      "verified_coverage_pct": 100.0,
-      "registered": 219,
-      "host_dependent_registered": []
+      "coverage_pct": 81.7,
+      "verified_coverage_pct": 99.5,
+      "registered": 215,
+      "host_dependent_registered": [],
+      "corpus_cases": 26,
+      "corpus_exercised": [
+        "ADX",
+        "AROON",
+        "ATR",
+        "BOLL",
+        "CCI",
+        "EMA",
+        "HHV",
+        "LLV",
+        "MA",
+        "MACD",
+        "MATH_AVG",
+        "MAX",
+        "MIN",
+        "MOM",
+        "ROC",
+        "RSI",
+        "SAR",
+        "STOCHF",
+        "SUPERTREND",
+        "TRIX",
+        "VWAP",
+        "VWMA",
+        "WILLR"
+      ]
     }
   },
   "unverified_candidates": {

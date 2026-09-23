@@ -203,6 +203,10 @@ const SMA_PARAMS: &[ParamSpec] = &[
     ParamSpec::new("period", "usize", None, Some("> 0")),
     ParamSpec::new("m", "f64", Some("1"), Some("> 0")),
 ];
+const QUANTILE_PARAMS: &[ParamSpec] = &[
+    ParamSpec::new("period", "usize", None, Some("> 0")),
+    ParamSpec::new("qscore", "f64", Some("0.5"), Some("0 <= q <= 1")),
+];
 const MACD_PARAMS: &[ParamSpec] = &[
     ParamSpec::new("fast_period", "usize", Some("12"), Some("> 0")),
     ParamSpec::new("slow_period", "usize", Some("26"), Some("> fast_period")),
@@ -1830,6 +1834,21 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             streaming: true,
             deterministic: true,
         },
+        // `sign(x)` is `-1`, `0` or `1`, deliberately *not* `f64::signum`
+        // (which maps both zeros to `1`/`-1`). The WorldQuant alphas use it to
+        // re-attach the direction of a differenced series, so `sign(0) == 0`
+        // matters: a flat window must not acquire a direction.
+        FunctionSpec {
+            name: "SIGN",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Series,
+            params: &[],
+            outputs: 1,
+            lookback: LookbackSpec::None,
+            streaming: true,
+            deterministic: true,
+        },
         FunctionSpec {
             name: "SUM",
             aliases: &[],
@@ -2128,11 +2147,91 @@ pub fn builtin_function_registry() -> FunctionRegistry {
         deterministic: true,
     });
 
+    // Reference-parity primitives introduced for the Alpha158 factor library.
+    //
+    // Each one exists because Qlib's Alpha158 needs an operator that no
+    // domestic/TALib spelling covers, and each delegates to an existing
+    // `math::` kernel rather than re-deriving it:
+    //
+    // * `QUANTILE`  -> `math::quantile::quantile` (linear interpolation, which is
+    //   pandas' default and therefore Qlib's `Quantile`);
+    // * `RSQUARE`   -> `math::regression::simple_ols`'s `r_squared`;
+    // * `RESI`      -> the same fit's last residual;
+    // * `RANK_PCT`  -> `math::rank::ranks` with `TiePolicy::Average`, divided by
+    //   the window length, i.e. pandas' `rolling.rank(pct=True)`;
+    // * `STDDEV_SAMPLE` -> `math::rolling_stats::stddev_sample_into`, the same
+    //   moment scan as `STDDEV` with pandas' `ddof = 1` denominator. It is a
+    //   separate *name* rather than a change to `STDDEV` because TA-Lib's
+    //   `STDDEV` is the population convention and the two differ by the exact
+    //   factor `sqrt((n - 1) / n)` — a systematic ~10% scale error at `n = 5`,
+    //   which is precisely why Alpha158 needs both spellings.
+    //
+    // `LINEARREG_SLOPE` is deliberately *not* here: it already had an SSOT entry
+    // from the TA-Lib track, so only its plan kernel was missing.
+    let alpha158_parity_specs = [
+        FunctionSpec {
+            name: "QUANTILE",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Series,
+            params: QUANTILE_PARAMS,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "RSQUARE",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Series,
+            params: PERIOD_REQUIRED,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "RESI",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Series,
+            params: PERIOD_REQUIRED,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "RANK_PCT",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Series,
+            params: PERIOD_REQUIRED,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "STDDEV_SAMPLE",
+            aliases: &[],
+            category: FunctionCategory::Statistics,
+            input: InputKind::Series,
+            params: PERIOD_REQUIRED,
+            outputs: 1,
+            lookback: LookbackSpec::PeriodMinusOne,
+            streaming: true,
+            deterministic: true,
+        },
+    ];
+
     for spec in specs
         .into_iter()
         .chain(additional_specs)
         .chain(math_transform_specs)
         .chain(candlestick_specs)
+        .chain(alpha158_parity_specs)
     {
         registry
             .register(spec)

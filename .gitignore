@@ -17,6 +17,10 @@ __pycache__/
 /.nuget/
 /.test_venv/
 /.wasm-pack-cache/
+# Scratch space for verification work: reference-source checkouts, a built
+# extension module used to smoke-test the Python binding, generated corpora.
+# Nothing here is a deliverable; it must never be committed.
+/.research_tmp/
 # IDE / editor
 .vscode/
 .idea/

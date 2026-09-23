@@ -1,5 +1,7 @@
 //! Canonical ranking primitives with explicit tie handling.
 
+use crate::error::{Result, TaError};
+
 /// Tie handling for equal values.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TiePolicy {
@@ -85,6 +87,72 @@ pub fn percentile_rank(values: &[f64]) -> Vec<f64> {
             }
         })
         .collect()
+}
+
+/// Rolling percentile rank written directly into caller-owned output.
+///
+/// The value at each bar is the rank of that bar's value **within its own
+/// window**, scaled to `(0, 1]`: `ranks(window, Average)[last] / window`. Ties
+/// take the average rank, and the denominator is the number of observations
+/// rather than `n - 1` — that is pandas' `rolling(N).rank(pct=True)`, which is
+/// what Qlib's `Rank` operator calls, and it is deliberately *not*
+/// [`percentile_rank`], whose `(n - 1)` denominator and `0.5` single-value
+/// convention serve a different contract.
+///
+/// A bar is `NaN` unless its window is full and every value in it is finite;
+/// see [`crate::math::quantile::rolling_quantile_into`] for why finkit's window
+/// convention differs from Qlib's `min_periods=1`.
+///
+/// # Errors
+///
+/// Returns [`TaError::EmptyInput`] for empty `data`, [`TaError::InvalidParameter`]
+/// for `window == 0` or an `output` that does not match `data` in length.
+pub fn rolling_rank_pct_into(data: &[f64], window: usize, output: &mut [f64]) -> Result<()> {
+    if data.is_empty() {
+        return Err(TaError::EmptyInput);
+    }
+    if window == 0 {
+        return Err(TaError::InvalidParameter {
+            name: "window".to_string(),
+            constraint: "greater than 0".to_string(),
+        });
+    }
+    if output.len() != data.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as data".to_string(),
+        });
+    }
+
+    output.fill(f64::NAN);
+    if window > data.len() {
+        return Ok(());
+    }
+    #[allow(clippy::cast_precision_loss)] // `window` is a bar count, far below 2^53
+    let scale = window as f64;
+    let mut scratch: Vec<f64> = Vec::with_capacity(window);
+    for index in window - 1..data.len() {
+        let slice = &data[index + 1 - window..=index];
+        if slice.iter().any(|value| !value.is_finite()) {
+            continue;
+        }
+        scratch.clear();
+        scratch.extend_from_slice(slice);
+        // The last element of `ranks` is this bar's rank within the window.
+        output[index] = ranks(&scratch, TiePolicy::Average)[window - 1] / scale;
+    }
+    Ok(())
+}
+
+/// Rolling percentile rank as an owned series.
+///
+/// # Errors
+///
+/// Propagates [`rolling_rank_pct_into`]'s errors.
+pub fn rolling_rank_pct(data: &[f64], window: usize) -> Result<Vec<f64>> {
+    let mut output = vec![f64::NAN; data.len()];
+    rolling_rank_pct_into(data, window, &mut output)?;
+    Ok(output)
 }
 
 #[cfg(test)]

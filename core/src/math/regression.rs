@@ -202,6 +202,159 @@ pub fn simple_ols(y: &[f64], x: &[f64]) -> Result<RegressionResult> {
     ols(y, &[x])
 }
 
+/// Index design used by the rolling regression operators, `idx = 0..window`.
+///
+/// Only the *spread* of the index matters to a slope, an `R²` or a residual, so
+/// this matches Qlib's `x = 1..window` accumulators (`qlib/data/_libs/rolling.pyx`)
+/// to within floating-point noise while avoiding the extra `+1`.
+#[allow(clippy::cast_precision_loss)] // `window` is a bar count, far below 2^53
+fn index_design(window: usize) -> Vec<f64> {
+    (0..window).map(|step| step as f64).collect()
+}
+
+/// Is the window's variance numerically absent?
+///
+/// Uses the same noise-floor predicate [`crate::math::degenerate_variance`]
+/// applies to `CORREL`, so `RSQUARE` and `CORREL` cannot disagree about which
+/// windows are degenerate. An exactly-constant window is the extreme case; a
+/// merely *nearly* constant one is also caught, which is the honest answer,
+/// since an `R²` computed from such a window is cancellation noise rather than
+/// a fit quality.
+#[allow(clippy::cast_precision_loss)] // `window.len()` is a bar count, far below 2^53
+fn variance_is_absent(window: &[f64]) -> bool {
+    let size = window.len() as f64;
+    let sum: f64 = window.iter().sum();
+    let sum_sq: f64 = window.iter().map(|value| value * value).sum();
+    crate::math::degenerate_variance(sum_sq - sum * sum / size, sum_sq, size)
+}
+
+/// Rolling `R²` of a linear fit against the bar index, written into caller-owned
+/// output.
+///
+/// This is Qlib's `Rsquare` (`qlib/data/ops.py::Rsquare`, backed by
+/// `qlib/data/_libs/rolling.pyx::Rsquare`), which squares the correlation
+/// between the window and its indices — for a one-regressor OLS with intercept
+/// that is exactly `RegressionResult::r_squared`, so the shared
+/// [`simple_ols`] kernel is reused rather than re-derived.
+///
+/// One deliberate departure from Qlib: Qlib additionally NaNs out any window
+/// whose rolling std is within `atol=2e-05` of zero. That is a Qlib data-cleaning
+/// policy, not a property of the statistic, so finkit does not adopt it — the
+/// only windows finkit reports as `NaN` are ones where `R²` is genuinely
+/// undefined, i.e. where the response has no variance, detected by
+/// [`variance_is_absent`]. On data whose windows are either numerically constant
+/// or comfortably non-degenerate, the two policies agree exactly; they can only
+/// differ in a narrow band of near-constant windows, where Qlib's absolute
+/// `2e-05` is scale-dependent and finkit's floor is not.
+///
+/// A bar is also `NaN` unless its window is full and every value in it is
+/// finite; see [`crate::math::quantile::rolling_quantile_into`] for why finkit's
+/// window convention differs from Qlib's `min_periods=1`.
+///
+/// # Errors
+///
+/// Returns [`TaError::EmptyInput`] for empty `data`, [`TaError::InvalidParameter`]
+/// for `window == 0` or an `output` that does not match `data` in length.
+pub fn rolling_rsquare_into(data: &[f64], window: usize, output: &mut [f64]) -> Result<()> {
+    rolling_regression_into(data, window, output, RegressionOutput::RSquared)
+}
+
+/// Rolling residual of the **newest** bar in each window from its own linear
+/// fit, written into caller-owned output.
+///
+/// This is Qlib's `Resi` (`qlib/data/ops.py::Resi`, backed by
+/// `qlib/data/_libs/rolling.pyx::Resi`): the kernel returns
+/// `val - (slope * window + interp)`, i.e. the deviation of the current bar from
+/// the fitted line. [`RegressionResult::residuals`] carries exactly that, so no
+/// second formulation of the fit is needed.
+///
+/// Unlike [`rolling_rsquare_into`] this needs no zero-variance guard: a constant
+/// window has slope `0`, so the residual is `0.0` — which is also what Qlib's
+/// kernel returns, since its numerator vanishes while its denominator does not.
+///
+/// # Errors
+///
+/// Same as [`rolling_rsquare_into`].
+pub fn rolling_resi_into(data: &[f64], window: usize, output: &mut [f64]) -> Result<()> {
+    rolling_regression_into(data, window, output, RegressionOutput::Residual)
+}
+
+/// Which part of the per-window fit [`rolling_regression_into`] publishes.
+#[derive(Clone, Copy)]
+enum RegressionOutput {
+    RSquared,
+    Residual,
+}
+
+/// Shared driver for the rolling regression operators.
+fn rolling_regression_into(
+    data: &[f64],
+    window: usize,
+    output: &mut [f64],
+    want: RegressionOutput,
+) -> Result<()> {
+    if data.is_empty() {
+        return Err(TaError::EmptyInput);
+    }
+    if window == 0 {
+        return Err(TaError::InvalidParameter {
+            name: "window".to_string(),
+            constraint: "greater than 0".to_string(),
+        });
+    }
+    if output.len() != data.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as data".to_string(),
+        });
+    }
+
+    output.fill(f64::NAN);
+    if window > data.len() {
+        return Ok(());
+    }
+    let design = index_design(window);
+    for index in window - 1..data.len() {
+        let slice = &data[index + 1 - window..=index];
+        if slice.iter().any(|value| !value.is_finite()) {
+            continue;
+        }
+        if matches!(want, RegressionOutput::RSquared) && variance_is_absent(slice) {
+            continue;
+        }
+        let Ok(fit) = simple_ols(slice, &design) else {
+            continue;
+        };
+        output[index] = match want {
+            RegressionOutput::RSquared => fit.r_squared,
+            RegressionOutput::Residual => fit.residuals[window - 1],
+        };
+    }
+    Ok(())
+}
+
+/// Rolling `R²` as an owned series.
+///
+/// # Errors
+///
+/// Propagates [`rolling_rsquare_into`]'s errors.
+pub fn rolling_rsquare(data: &[f64], window: usize) -> Result<Vec<f64>> {
+    let mut output = vec![f64::NAN; data.len()];
+    rolling_rsquare_into(data, window, &mut output)?;
+    Ok(output)
+}
+
+/// Rolling newest-bar residual as an owned series.
+///
+/// # Errors
+///
+/// Propagates [`rolling_resi_into`]'s errors.
+pub fn rolling_resi(data: &[f64], window: usize) -> Result<Vec<f64>> {
+    let mut output = vec![f64::NAN; data.len()];
+    rolling_resi_into(data, window, &mut output)?;
+    Ok(output)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

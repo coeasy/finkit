@@ -297,7 +297,16 @@ pub fn rolling_correlation_into(
             let size = window as f64;
             let var_left = sum_left_sq - sum_left * sum_left / size;
             let var_right = sum_right_sq - sum_right * sum_right / size;
-            if var_left.abs() >= 1e-15 && var_right.abs() >= 1e-15 {
+            // A window with no variance has no correlation, so it must stay
+            // `NaN`. The test has to be relative to the floating-point noise
+            // floor of `sum_sq - sum^2/n`, not an absolute constant: for a
+            // constant window at a price of ~100 that residue is ~3e-11, which
+            // an absolute `1e-15` threshold does not catch, so the guard used to
+            // let a correlation through from a window with zero variance. See
+            // `crate::math::degenerate_variance`.
+            if !crate::math::degenerate_variance(var_left, sum_left_sq, size)
+                && !crate::math::degenerate_variance(var_right, sum_right_sq, size)
+            {
                 let covariance = sum_product - sum_left * sum_right / size;
                 output[index] = covariance / (var_left * var_right).sqrt();
             }

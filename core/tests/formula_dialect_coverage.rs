@@ -18,9 +18,25 @@
 //!    `repo:functions_legacy` tags before this gate existed.
 //! 4. **The corpus must live inside the claimed coverage.** Every function a
 //!    checked-in corpus formula calls must not be `unsupported`.
+//! 5. **`corpus_exercised` is derived, not asserted.** Which rows a checked-in
+//!    corpus actually calls is recomputed here from the corpus files. A row can
+//!    be `registered` without being exercised, and the contract has to say so
+//!    rather than let registration stand in for a runnable test.
+//! 6. **The Pine mapping is proved against the mapper, not mirrored.** The
+//!    canonical name a Pine `ta.*` spelling reaches is decided by three
+//!    different pieces of `ast_mapper.rs` (hard-coded `ta.*` special cases, a
+//!    builtin table, and a `TA_<NAME>` / `MATH_<NAME>` fallback). The generator
+//!    used to keep a fourth, hand-written copy of that mapping, which drifted
+//!    silently -- the corpus was green because it happened to only use
+//!    spellings all four copies agreed on. `pine_engine_mapping` in the contract
+//!    now records what the engine emits, and
+//!    [`pine_engine_mapping_matches_the_engine`] lowers every spelling through
+//!    `map_pine_to_alphata` to prove it.
 
 mod common;
 
+use finkit::formula::pine::{map_pine_to_alphata, parse_pine};
+use finkit::formula::AstNode;
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -28,7 +44,14 @@ use std::path::{Path, PathBuf};
 
 const CONTRACT: &str = "tests/contracts/formula_dialect_coverage_v1.json";
 const CORPUS_DIR: &str = "tests/formula_corpus";
+const PINE_CORPUS_DIR: &str = "tests/pine_corpus";
 const CLASSIC_SOURCE: &str = "repo:talib_coverage_matrix";
+
+/// Floor for `corpus_exercised` across the terminals that supply it (measured
+/// 70 on 2026-09-23: `tongdaxin` 42, `tonghuashun` 3, `dazhihui` 2,
+/// `tradingview_pine` 23). A floor rather than an equality: adding corpus
+/// coverage must stay easy, while silently losing it must not.
+const MIN_CORPUS_EXERCISED: usize = 65;
 
 #[derive(Debug, Deserialize)]
 struct Contract {
@@ -45,6 +68,26 @@ struct Contract {
     vendor_sources: BTreeMap<String, String>,
     terminals: BTreeMap<String, Terminal>,
     unverified_candidates: BTreeMap<String, Vec<String>>,
+    /// Which corpora supply `corpus_exercised`, and what each contributed.
+    corpus_sources: BTreeMap<String, CorpusSource>,
+    /// Pine spelling -> the canonical name `map_pine_to_alphata` emits.
+    ///
+    /// Total: a spelling the builtin table does not resolve still lands on the
+    /// `TA_<NAME>` / `MATH_<NAME>` fallback. Recorded in the contract so the
+    /// gate can prove the mapping behaviourally instead of trusting the
+    /// generator's reading of three separate code paths.
+    pine_engine_mapping: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CorpusSource {
+    kind: String,
+    cases: usize,
+    terminals: Vec<String>,
+    /// `Some("corpus_exercised")` when this corpus produces row-level evidence;
+    /// `None` when it is deliberately withheld (with `deferred_reason` set).
+    row_level_evidence: Option<String>,
+    deferred_reason: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -62,6 +105,16 @@ struct Terminal {
     verified_coverage_pct: f64,
     registered: usize,
     host_dependent_registered: Vec<String>,
+    /// Corpus cases attributed to this terminal.
+    corpus_cases: usize,
+    /// Rows a checked-in corpus case actually calls, derived by the generator
+    /// and recomputed by [`corpus_evidence_is_derived_from_the_corpora`].
+    ///
+    /// `None` means row-level evidence is deliberately withheld for this
+    /// terminal; `corpus_sources` must then carry a `deferred_reason`. The two
+    /// cases are kept distinct on purpose: an absent field is a documented
+    /// deferral, an empty list would be an ambiguous "measured nothing".
+    corpus_exercised: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -461,6 +514,245 @@ fn contract_statuses_agree_with_the_runtime_formula_table() {
     );
 }
 
+/// Every `*.pine` script in the Pine corpus, sorted for a stable order.
+fn pine_corpus_paths() -> Vec<PathBuf> {
+    let root = workspace_root().join(PINE_CORPUS_DIR);
+    let mut paths: Vec<PathBuf> = fs::read_dir(&root)
+        .unwrap_or_else(|error| panic!("read {}: {error}", root.display()))
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|path| path.extension().is_some_and(|ext| ext == "pine"))
+        .collect();
+    paths.sort();
+    paths
+}
+
+/// Number of `*.pine` scripts in the Pine corpus.
+///
+/// Gating the count catches the corpus being deleted or silently emptied.
+fn pine_corpus_script_count() -> usize {
+    pine_corpus_paths().len()
+}
+
+/// `ta.<name>` / `math.<name>` spellings a Pine source calls.
+///
+/// The generator resolves these through the same mapping, so the two agree by
+/// construction rather than by convention.
+fn namespaced_calls(source: &str) -> BTreeSet<String> {
+    /// Walk back over `[A-Za-z0-9_]`, returning the start index.
+    fn ident_start(source: &str, from: usize) -> usize {
+        let bytes = source.as_bytes();
+        let mut start = from;
+        while start > 0 {
+            let previous = bytes[start - 1];
+            if previous.is_ascii_alphanumeric() || previous == b'_' {
+                start -= 1;
+            } else {
+                break;
+            }
+        }
+        start
+    }
+
+    let bytes = source.as_bytes();
+    let mut names = BTreeSet::new();
+    for (index, byte) in bytes.iter().enumerate() {
+        if *byte != b'(' {
+            continue;
+        }
+        let name_start = ident_start(source, index);
+        // The namespace must be preceded by a dot, and that dot by a bare
+        // `ta` / `math` at an identifier boundary.
+        if name_start == 0 || bytes[name_start - 1] != b'.' {
+            continue;
+        }
+        let namespace_start = ident_start(source, name_start - 1);
+        let namespace = &source[namespace_start..name_start - 1];
+        if !matches!(namespace, "ta" | "math") {
+            continue;
+        }
+        let name = &source[name_start..index];
+        if !name.is_empty()
+            && name
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+        {
+            names.insert(source[namespace_start..index].to_string());
+        }
+    }
+    names
+}
+
+/// Which Pine rows the corpus reaches, resolved through the engine mapping.
+///
+/// A Pine `ta.*` call reaches a contract row only via `pine_engine_mapping`, so
+/// the evidence has to be resolved rather than matched by identity. The mapping
+/// itself is proved by [`pine_engine_mapping_matches_the_engine`].
+fn pine_exercised(contract: &Contract) -> BTreeSet<String> {
+    let mut names = BTreeSet::new();
+    for path in pine_corpus_paths() {
+        let source = fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
+        for spelling in namespaced_calls(&source) {
+            if let Some(canonical) = contract.pine_engine_mapping.get(&spelling) {
+                names.insert(canonical.clone());
+            }
+        }
+    }
+    names
+}
+
+/// A row claiming `exact` must also be covered by a runnable case.
+///
+/// No row makes that claim today, so this passes vacuously. It is written out
+/// anyway because the alternative -- adding `exact` rows later with no test
+/// behind them -- is exactly the "promise without a gate" shape this project
+/// keeps finding in its own contracts.
+fn assert_exact_rows_are_exercised(contract: &Contract) {
+    for (key, terminal) in &contract.terminals {
+        let Some(names) = terminal.corpus_exercised.as_ref() else {
+            continue;
+        };
+        let exercised: BTreeSet<&str> = names.iter().map(String::as_str).collect();
+        let uncovered: Vec<&str> = terminal
+            .functions
+            .iter()
+            .filter(|(name, entry)| entry.status == "exact" && !exercised.contains(name.as_str()))
+            .map(|(name, _)| name.as_str())
+            .collect();
+        assert!(
+            uncovered.is_empty(),
+            "{key}: `exact` rows with no corpus coverage: {uncovered:?}"
+        );
+    }
+}
+
+/// Split `corpus_sources` into the terminals that supply row-level evidence and
+/// the ones that withhold it.
+///
+/// A withheld `corpus_exercised` is only acceptable when a corpus source says so
+/// and gives a reason. Otherwise "no evidence" and "not measured" would be
+/// indistinguishable -- the ambiguity this field exists to avoid.
+fn corpus_source_roles(contract: &Contract) -> (BTreeSet<&str>, BTreeSet<&str>) {
+    let mut deferred: BTreeSet<&str> = BTreeSet::new();
+    let mut supplied: BTreeSet<&str> = BTreeSet::new();
+    for (dir, source) in &contract.corpus_sources {
+        assert!(
+            !source.kind.is_empty() && source.cases > 0,
+            "{dir}: a corpus source must declare its kind and a non-zero case count"
+        );
+        match source.row_level_evidence.as_deref() {
+            Some("corpus_exercised") => {
+                supplied.extend(source.terminals.iter().map(String::as_str));
+            }
+            Some(other) => panic!("{dir}: unknown row_level_evidence {other:?}"),
+            None => {
+                assert!(
+                    source
+                        .deferred_reason
+                        .as_deref()
+                        .is_some_and(|reason| !reason.is_empty()),
+                    "{dir}: withholding row-level evidence requires a deferred_reason"
+                );
+                deferred.extend(source.terminals.iter().map(String::as_str));
+            }
+        }
+    }
+    (supplied, deferred)
+}
+
+/// Which reference rows the checked-in corpora actually call, recomputed here.
+///
+/// [`contract_statuses_agree_with_the_runtime_formula_table`] proves a row is
+/// *registered*. This proves a row is *exercised*, which is the weaker claim's
+/// stronger sibling: this repository has already shipped a `SIGN` whose three
+/// implementations disagreed and a factor library that registered 175 factors
+/// none of which could be evaluated, and in both cases registration was green.
+///
+/// The evidence is recomputed from the corpus files rather than read from the
+/// contract, so the contract cannot claim test coverage it does not have.
+#[test]
+fn corpus_evidence_is_derived_from_the_corpora() {
+    let contract = load_contract();
+    let (supplied, deferred) = corpus_source_roles(&contract);
+
+    // Recompute the domestic evidence from `tests/formula_corpus`.
+    let mut recomputed: BTreeMap<&str, BTreeSet<String>> = BTreeMap::new();
+    let mut cases: BTreeMap<&str, usize> = BTreeMap::new();
+    for case in corpus_cases() {
+        let key = terminal_for_platform(&case.platform);
+        *cases.entry(key).or_default() += 1;
+        recomputed
+            .entry(key)
+            .or_default()
+            .extend(called_functions(&case.source_formula));
+    }
+    // A Pine `ta.*` call reaches a row only through the engine's mapping, so its
+    // evidence is resolved rather than matched by identity.
+    cases.insert("tradingview_pine", pine_corpus_script_count());
+    recomputed.insert("tradingview_pine", pine_exercised(&contract));
+
+    let mut total = 0usize;
+    for (key, terminal) in &contract.terminals {
+        assert_eq!(
+            terminal.corpus_cases,
+            cases.get(key.as_str()).copied().unwrap_or(0),
+            "{key}: corpus_cases does not match the corpus directory"
+        );
+        let recorded = terminal.corpus_exercised.as_ref();
+        let expected = recomputed.get(key.as_str());
+
+        match recorded {
+            Some(names) => {
+                assert!(
+                    supplied.contains(key.as_str()),
+                    "{key}: records corpus_exercised but no corpus source supplies it"
+                );
+                let recorded: BTreeSet<&str> = names.iter().map(String::as_str).collect();
+                let actual: BTreeSet<&str> = expected
+                    .into_iter()
+                    .flatten()
+                    .map(String::as_str)
+                    .filter(|name| terminal.functions.contains_key(*name))
+                    .collect();
+                assert_eq!(
+                    recorded,
+                    actual,
+                    "{key}: corpus_exercised is not what the corpus calls \
+                     (missing: {:?}, spurious: {:?})",
+                    actual.difference(&recorded).collect::<Vec<_>>(),
+                    recorded.difference(&actual).collect::<Vec<_>>()
+                );
+                // A row the corpus runs cannot be one the contract calls
+                // unsupported; `corpus_formulas_stay_inside_the_claimed_coverage`
+                // checks the same thing from the corpus side.
+                for name in &recorded {
+                    assert_ne!(
+                        terminal.functions[*name].status, "unsupported",
+                        "{key}/{name}: exercised by the corpus but marked unsupported"
+                    );
+                }
+                total += recorded.len();
+            }
+            None => {
+                assert!(
+                    deferred.contains(key.as_str()),
+                    "{key}: omits corpus_exercised without a deferred_reason"
+                );
+            }
+        }
+    }
+
+    // The strongest claim in the vocabulary is `exact`. No row makes it today,
+    // so this is a forward guard: the moment a row claims terminal-identical
+    // numerics it must also be covered by a runnable case.
+    assert_exact_rows_are_exercised(&contract);
+
+    assert!(
+        total >= MIN_CORPUS_EXERCISED,
+        "only {total} corpus-exercised rows; expected at least {MIN_CORPUS_EXERCISED}"
+    );
+}
+
 #[test]
 fn corpus_formulas_stay_inside_the_claimed_coverage() {
     let contract = load_contract();
@@ -498,5 +790,131 @@ fn corpus_formulas_stay_inside_the_claimed_coverage() {
         checked >= 20,
         "corpus/contract overlap is only {checked} function references; \
          the corpus and the contract have drifted apart"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Pine mapping
+// ---------------------------------------------------------------------------
+
+/// Arguments used to probe a Pine spelling.
+///
+/// Built-in `ta.*` / `math.*` calls are mapped by *name*, not by arity: the
+/// `ast_mapper.rs` special cases read only the argument positions they need and
+/// the generic table path passes the rest straight through. One generous
+/// argument list therefore probes every spelling without a per-function
+/// signature table -- which is the point, since a hand-maintained signature
+/// table is exactly what drifted in the first place.
+const PINE_PROBE_ARGS: &str = "close, 14, 20, 9";
+
+/// The one spelling whose mapping the *host* decides, not the builtin table.
+///
+/// `request.security` needs an explicit timeframe alignment, so `ast_mapper.rs`
+/// refuses to resolve it from the table. The contract still records the name the
+/// table would give -- and marks the row `host_required` -- but the gate has to
+/// assert the refusal rather than a name.
+const HOST_RESOLVED_SPELLING: &str = "request.security";
+
+/// First `FunctionCall` in document order.
+///
+/// The probe script assigns one `<spelling>(<args>)` expression to one variable,
+/// so the first call reached is the probe's own. The `indicator("Probe")`
+/// declaration maps to a string literal rather than a call, so it contributes
+/// nothing.
+fn first_call_name(node: &AstNode) -> Option<&str> {
+    match node {
+        AstNode::FunctionCall { name, .. } => Some(name),
+        AstNode::Statements(items) => items.iter().find_map(first_call_name),
+        AstNode::Assignment { expr, .. }
+        | AstNode::CompoundAssignment { expr, .. }
+        | AstNode::Output { expr, .. }
+        | AstNode::UnaryOp { expr, .. } => first_call_name(expr),
+        AstNode::BinaryOp { left, right, .. } => {
+            first_call_name(left).or_else(|| first_call_name(right))
+        }
+        AstNode::IndexAccess { array, .. } => first_call_name(array),
+        _ => None,
+    }
+}
+
+/// The contract's Pine mapping must be what `map_pine_to_alphata` actually does.
+///
+/// This is the gate that turns the mapping from a fourth, hand-written mirror
+/// into a proved fact. Before it existed, the generator carried its own list of
+/// canonical names; 48 of the 86 spellings it listed were never registered, and
+/// the mismatch was invisible because the Pine corpus happened to call only the
+/// spellings every copy agreed on. Recording the engine's behaviour and then
+/// re-deriving it from the engine is what makes the coverage number honest.
+#[test]
+fn pine_engine_mapping_matches_the_engine() {
+    let contract = load_contract();
+    assert!(
+        contract.pine_engine_mapping.len() >= 90,
+        "the Pine mapping has shrunk to {} entries; the generator is no longer \
+         reading the engine",
+        contract.pine_engine_mapping.len()
+    );
+
+    let mut checked = 0usize;
+    let mut host_resolved = Vec::new();
+    for (spelling, expected) in &contract.pine_engine_mapping {
+        let source =
+            format!("//@version=5\nindicator(\"Probe\")\nprobe = {spelling}({PINE_PROBE_ARGS})\n");
+        let pine = parse_pine(&source)
+            .unwrap_or_else(|error| panic!("{spelling}: probe failed to parse: {error}"));
+
+        if spelling == HOST_RESOLVED_SPELLING {
+            let error = map_pine_to_alphata(&pine)
+                .expect_err("request.security must not resolve without a host resolver");
+            assert!(
+                error.message.contains("host"),
+                "{spelling}: expected a host-alignment error, got {}",
+                error.message
+            );
+            host_resolved.push(spelling.as_str());
+            continue;
+        }
+
+        let ast = map_pine_to_alphata(&pine)
+            .unwrap_or_else(|error| panic!("{spelling}: failed to map: {error}"));
+        let actual = first_call_name(&ast)
+            .unwrap_or_else(|| panic!("{spelling}: probe produced no function call"));
+        assert_eq!(
+            actual, expected,
+            "{spelling}: the contract records `{expected}` but the engine emits `{actual}`"
+        );
+        checked += 1;
+    }
+
+    assert_eq!(
+        host_resolved,
+        vec![HOST_RESOLVED_SPELLING],
+        "the set of spellings that cannot be probed by name has changed"
+    );
+    assert!(
+        checked >= 90,
+        "only {checked} Pine spellings were proved against the engine"
+    );
+
+    // The terminal rows must be keyed by the same mapping, so a row cannot cite
+    // a spelling that resolves elsewhere.
+    let pine = &contract.terminals["tradingview_pine"];
+    let mut cited = 0usize;
+    for (name, entry) in &pine.functions {
+        let Some(spelling) = entry.via.as_deref() else {
+            continue;
+        };
+        let Some(resolved) = contract.pine_engine_mapping.get(spelling) else {
+            panic!("{name}: cites unknown Pine spelling `{spelling}`");
+        };
+        assert_eq!(
+            resolved, name,
+            "{name}: cites `{spelling}`, which the engine maps to `{resolved}`"
+        );
+        cited += 1;
+    }
+    assert!(
+        cited >= 40,
+        "only {cited} Pine rows cite the spelling that substantiated them"
     );
 }

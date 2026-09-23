@@ -30,11 +30,12 @@ struct GoldenFile {
 
 #[derive(Debug, Deserialize)]
 struct GoldenMetadata {
-    #[allow(dead_code)]
     indicator: String,
+    talib_version: String,
+    /// Parsed so the golden file's parameter block is part of the deserialized
+    /// contract; the values themselves are already pinned by `CASES`.
     #[allow(dead_code)]
     parameters: HashMap<String, serde_json::Value>,
-    #[allow(dead_code)]
     outputs: Vec<String>,
 }
 
@@ -383,6 +384,32 @@ fn load_golden(indicator: &str, output: &str) -> Vec<Option<f64>> {
     let raw = fs::read_to_string(&path)
         .unwrap_or_else(|_| panic!("missing golden file {}", path.display()));
     let golden: GoldenFile = serde_json::from_str(&raw).expect("parse golden");
+    // A golden vector that does not identify itself is not evidence. These
+    // assertions are what make the file self-describing: without them, a
+    // renamed or regenerated file would still be compared against, silently
+    // pinning this surface to whatever numbers happened to be in it.
+    assert_eq!(
+        golden.metadata.indicator,
+        indicator.to_ascii_uppercase(),
+        "golden {} does not identify itself as {indicator}",
+        path.display()
+    );
+    assert_eq!(
+        golden.metadata.talib_version,
+        "0.8.0",
+        "golden {} reference version drifted",
+        path.display()
+    );
+    assert!(
+        golden
+            .metadata
+            .outputs
+            .iter()
+            .any(|name| name.as_str() == output),
+        "golden {} does not declare output `{output}` (has {:?})",
+        path.display(),
+        golden.metadata.outputs
+    );
     let dataset = golden
         .results
         .get(DATASET)

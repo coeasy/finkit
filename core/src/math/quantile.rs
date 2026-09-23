@@ -1,5 +1,7 @@
 //! Canonical quantile and binning primitives.
 
+use crate::error::{Result, TaError};
+
 /// Quantile interpolation method.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum QuantileInterpolation {
@@ -46,6 +48,88 @@ pub fn quantile(values: &[f64], q: f64, interpolation: QuantileInterpolation) ->
     let mut sorted: Vec<f64> = values.iter().copied().filter(|v| v.is_finite()).collect();
     sorted.sort_by(f64::total_cmp);
     quantile_sorted(&sorted, q, interpolation)
+}
+
+/// Rolling quantile written directly into caller-owned output.
+///
+/// A bar is `NaN` unless its window is **full** and every value in it is finite.
+/// That is finkit's windowing convention, and it is deliberately not Qlib's:
+/// Qlib builds every rolling window with `min_periods=1`, so its first
+/// `window - 1` bars carry a partial-window value. The Alpha158 parity gate
+/// compares on the common support and pins the warm-up shape separately.
+///
+/// `interpolation` is threaded through rather than fixed, because the caller's
+/// contract decides it: Qlib's `Quantile` — like numpy's and pandas' defaults —
+/// is `Linear`.
+///
+/// # Errors
+///
+/// Returns [`TaError::EmptyInput`] for empty `data`, [`TaError::InvalidParameter`]
+/// for `window == 0`, an out-of-range `qscore`, or an `output` that does not
+/// match `data` in length.
+pub fn rolling_quantile_into(
+    data: &[f64],
+    window: usize,
+    qscore: f64,
+    interpolation: QuantileInterpolation,
+    output: &mut [f64],
+) -> Result<()> {
+    if data.is_empty() {
+        return Err(TaError::EmptyInput);
+    }
+    if window == 0 {
+        return Err(TaError::InvalidParameter {
+            name: "window".to_string(),
+            constraint: "greater than 0".to_string(),
+        });
+    }
+    if !qscore.is_finite() || !(0.0..=1.0).contains(&qscore) {
+        return Err(TaError::InvalidParameter {
+            name: "qscore".to_string(),
+            constraint: "within [0, 1]".to_string(),
+        });
+    }
+    if output.len() != data.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as data".to_string(),
+        });
+    }
+
+    output.fill(f64::NAN);
+    if window > data.len() {
+        return Ok(());
+    }
+    // One scratch buffer reused across bars: sorting per bar is unavoidable for
+    // an order statistic, but reallocating per bar is not.
+    let mut scratch: Vec<f64> = Vec::with_capacity(window);
+    for index in window - 1..data.len() {
+        let slice = &data[index + 1 - window..=index];
+        if slice.iter().any(|value| !value.is_finite()) {
+            continue;
+        }
+        scratch.clear();
+        scratch.extend_from_slice(slice);
+        scratch.sort_by(f64::total_cmp);
+        output[index] = quantile_sorted(&scratch, qscore, interpolation);
+    }
+    Ok(())
+}
+
+/// Rolling quantile as an owned series.
+///
+/// # Errors
+///
+/// Propagates [`rolling_quantile_into`]'s errors.
+pub fn rolling_quantile(
+    data: &[f64],
+    window: usize,
+    qscore: f64,
+    interpolation: QuantileInterpolation,
+) -> Result<Vec<f64>> {
+    let mut output = vec![f64::NAN; data.len()];
+    rolling_quantile_into(data, window, qscore, interpolation, &mut output)?;
+    Ok(output)
 }
 
 /// Build bin edges using one canonical implementation.

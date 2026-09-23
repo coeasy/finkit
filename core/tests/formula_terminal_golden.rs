@@ -70,6 +70,35 @@ fn pine_golden_fixture_parses_as_documented_subset() {
     assert!(!debug.contains("FunctionCall { name: \"SMA\""));
 }
 
+/// Pine v5 `na(x)` must lower to a predicate, not to a NaN literal.
+///
+/// `na` is a grammar keyword, so it can never reach `simple_call` through
+/// `identifier`. Before the `na_call` rule existed, `na(close)` parsed *without
+/// any error* into a `na` literal plus a discarded `(close)` expression
+/// statement, so `is_missing = na(close)` silently evaluated to NaN.
+///
+/// The fixture assertion below used to pass for the wrong reason: its
+/// `is_missing = na(close)` line was masked by the `nz(close)` on the next line,
+/// which emits an `ISNA` of its own. This test isolates the `na` call so the
+/// `ISNA` it asserts cannot come from anywhere else.
+#[test]
+fn pine_na_call_lowers_to_a_predicate() {
+    let ast = parse_formula_for_terminal(
+        "//@version=5\nindicator(\"N\")\nis_missing = na(close)\n",
+        FormulaTerminal::TradingView,
+    )
+    .unwrap();
+    let debug = format!("{ast:?}");
+    assert!(
+        debug.contains("FunctionCall { name: \"ISNA\", args: [Variable(\"CLOSE\")] }"),
+        "na(close) must lower to ISNA(CLOSE), got {debug}"
+    );
+    assert!(
+        !debug.contains("Number(NaN)"),
+        "na(close) must not degrade to a NaN literal: {debug}"
+    );
+}
+
 #[test]
 fn pine_golden_fixture_preserves_semantic_distinctions() {
     let ast = parse_formula_for_terminal(PINE, FormulaTerminal::TradingView).unwrap();
