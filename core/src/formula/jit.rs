@@ -20,6 +20,12 @@
 //! * **It is compared, not trusted.** `core/tests/formula_differential_tests.rs`
 //!   asserts this path agrees with the tree path; that gate is what keeps a
 //!   frozen path from silently rotting.
+//! * **Variable resolution mirrors the tree path.** `LoadVar` consults the
+//!   executor's local map first (a script-local assignment shadows an external
+//!   binding), then falls back to `ctx.variables` — the same order `executor.rs`
+//!   uses. Dropping that fallback makes an externally bound variable work on the
+//!   tree and plan paths but fail here with "Unknown variable". The fallback is
+//!   a correctness fix under the clause above, not a new capability.
 //!
 //! Do not add callers from core. Adding a binding export is a deliberate,
 //! recorded decision, not a cleanup.
@@ -934,8 +940,21 @@ impl JitCompiler {
         } else if bytes.eq_ignore_ascii_case(b"DRAWNULL") {
             Ok(Array1::from_elem(ctx.data_len, f64::NAN))
         } else {
+            // Script-local assignments shadow externally bound variables, so the
+            // executor's own map is consulted first. Falling back to
+            // `ctx.variables` keeps this path consistent with the tree executor:
+            // without it a formula referencing a variable bound through
+            // `FormulaContext::set_variable` ran on the tree and plan paths but
+            // failed here with "Unknown variable".
+            //
+            // This is a correctness fix under the freeze contract stated at the
+            // top of this module -- it removes a disagreement with the tree path
+            // and adds no new capability. The seeded map is still empty and is
+            // still populated only by `StoreVar`; nothing else about execution
+            // changes.
             variables
                 .get(name)
+                .or_else(|| ctx.get_variable(name))
                 .cloned()
                 .ok_or_else(|| FormulaError::RuntimeError(format!("Unknown variable: {}", name)))
         }

@@ -893,9 +893,19 @@ impl BytecodeVM {
             }
             Some(BuiltinVar::DrawNull) => Ok(Array1::from_elem(ctx.data_len, f64::NAN)),
             _ => {
-                self.variables.get(name).cloned().ok_or_else(|| {
-                    FormulaError::RuntimeError(format!("Unknown variable: {}", name))
-                })
+                // Script-local assignments shadow externally bound variables, so
+                // the VM's own map is consulted first. Falling back to
+                // `ctx.variables` keeps this path consistent with the tree
+                // executor: without it a formula referencing a variable bound
+                // through `FormulaContext::set_variable` ran on the tree and plan
+                // paths but failed here with "Unknown variable".
+                self.variables
+                    .get(name)
+                    .or_else(|| ctx.get_variable(name))
+                    .cloned()
+                    .ok_or_else(|| {
+                        FormulaError::RuntimeError(format!("Unknown variable: {}", name))
+                    })
             }
         }
     }

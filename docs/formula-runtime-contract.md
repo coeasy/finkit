@@ -82,6 +82,18 @@ LINEARREG(MA(CLOSE,5),9)
 - 同一统计量若存在多份实现，必须有**互校断言**（例如 `AVGDEV` ≡ `AVEDEV`、`SLOPE` ≡ `LINEARREG_SLOPE`、`FORCAST` ≡ `LINEARREG`）；
 - 路径间容差为绝对 `1e-10`；超出即为门禁失败，不允许静默放宽。
 
+### 3.3 外部变量绑定对所有路径可见
+
+调用方可以通过 `FormulaContext::set_variable` 把一个序列绑定为具名变量，公式里直接引用它——例如先把 `MA(CLOSE,5)` 的结果绑定成 `X`，再把 `X` 喂给下游。
+
+**契约**：这样的变量在**每一条**执行路径上都必须可解析：
+
+- 解析顺序与 tree 路径一致——**脚本内赋值遮蔽外部绑定**，所以先查执行器自己的局部表，再回退到 `ctx.variables`；
+- 只有 tree / plan 能解析、而 bytecode / JIT 报 `Unknown variable` 属于**违约**，不是"路径能力差异"；
+- 门禁 `formula_differential_warmup_composition_all_paths` 覆盖裸变量 `X`、`X + CLOSE`、`X * 2 - CLOSE`，以及 21 个把 `X` 当输入的滚动/统计函数，逐条断言**绝对有限值个数**并要求所有路径一致。
+
+这条对**冻结的** JIT 同样适用：`jit.rs` 模块头把"使该路径与 tree 路径不一致的缺陷"明确列为可修范围，因此补上该回退属于正确性修复，不是新增能力。
+
 ## 4. Range、Last 和 Append 的一致性
 
 必须满足以下等价关系：
@@ -121,6 +133,7 @@ LINEARREG(MA(CLOSE,5),9)
 - 连续与非连续 NumPy 输入行为稳定；
 - owned、borrowed direct kernel、Bytecode 和 optimized 路径在支持范围内一致；
 - 把滚动输出绑定为变量再套一层（如 `MA(MA(CLOSE,5),9)`）时，所有路径都产生有效值，而不只是"路径间相等"；
+- 通过 `set_variable` 绑定的外部变量在 tree / bytecode / plan / JIT / SIMD 上都必须可解析，包括裸变量引用；
 - 数值门禁同时断言精确有限值个数（绝对性质）与路径间相等；同统计量的多份实现有互校断言；
 - 复杂公式的中间分配可解释；
 - 静态分析应能识别依赖、lookback、未来数据和未知函数；

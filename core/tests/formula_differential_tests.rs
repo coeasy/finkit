@@ -150,6 +150,61 @@ fn check_all_paths(formula_name: &str, source: &str, data_len: usize) {
     }
 }
 
+/// Like [`check_all_paths`], but with an upstream rolling output bound as the
+/// variable `X` — the composition scenario the warm-up contract is about.
+///
+/// [`check_all_paths`] builds a clean context and **never binds a variable**, so
+/// it structurally cannot see this class: before the round-10..12 fixes every
+/// path returned all-`NaN` for a warm-up input and the gate stayed green. This
+/// variant also asserts an **absolute** finite-value count, because agreement
+/// between five paths that are all all-`NaN` is not evidence of anything.
+fn check_all_paths_with_warm_variable(
+    formula_name: &str,
+    source: &str,
+    warm: &Array1<f64>,
+    expected_finite: usize,
+) {
+    const LEN: usize = 200;
+    let mut engine = FormulaEngine::new();
+
+    let mut ctx_ast = make_ctx(LEN);
+    ctx_ast.set_variable("X".to_string(), warm.clone());
+    let reference = run_ast(&mut engine, source, &mut ctx_ast);
+
+    let finite = reference.iter().filter(|value| value.is_finite()).count();
+    assert_eq!(
+        finite, expected_finite,
+        "{formula_name}: ast produced {finite} finite values, expected \
+         {expected_finite} (0 means the warm-up prefix poisoned the accumulator)"
+    );
+
+    let mut ctx_bc = make_ctx(LEN);
+    ctx_bc.set_variable("X".to_string(), warm.clone());
+    let bytecode_result = run_bytecode(&mut engine, source, &ctx_bc);
+    assert_arrays_match(formula_name, "bytecode", &reference, &bytecode_result);
+
+    let mut ctx_plan = make_ctx(LEN);
+    ctx_plan.set_variable("X".to_string(), warm.clone());
+    let plan_result = run_plan(source, &ctx_plan);
+    assert_arrays_match(formula_name, "plan", &reference, &plan_result);
+
+    #[cfg(feature = "formula-jit")]
+    {
+        let mut ctx_jit = make_ctx(LEN);
+        ctx_jit.set_variable("X".to_string(), warm.clone());
+        let jit_result = run_jit(&mut engine, source, &mut ctx_jit);
+        assert_arrays_match(formula_name, "jit", &reference, &jit_result);
+    }
+
+    #[cfg(feature = "formula-simd")]
+    {
+        let mut ctx_simd = make_ctx(LEN);
+        ctx_simd.set_variable("X".to_string(), warm.clone());
+        let simd_result = run_simd(&mut engine, source, &mut ctx_simd);
+        assert_arrays_match(formula_name, "simd", &reference, &simd_result);
+    }
+}
+
 const MACD: &str = r#"
     DIF := EMA(CLOSE, 12) - EMA(CLOSE, 26);
     DEA := EMA(DIF, 9);
@@ -1235,5 +1290,58 @@ fn documented_warmup_composition_examples_hold() {
              The docs promise warm-up composition yields valid values; a \
              0 here means the documentation is now wrong."
         );
+    }
+}
+
+/// The warm-up composition contract, checked on **every** execution path.
+///
+/// The round-11 and round-12 gates compare tree against plan (and the entry
+/// points against the reference). The bytecode VM, JIT, and SIMD paths had no
+/// warm-up coverage at all — and a path that agrees with a broken reference is
+/// exactly how three successive bugs stayed invisible. Each case here asserts
+/// the absolute finite-value count on the reference path *and* requires every
+/// other path to match it.
+///
+/// Counts come from `MA(CLOSE,5)` over 200 bars, i.e. 196 finite values fed in
+/// as `X`; a rolling window of `p` costs `p - 1` bars.
+#[test]
+fn formula_differential_warmup_composition_all_paths() {
+    const LEN: usize = 200;
+
+    let mut engine = FormulaEngine::new();
+    let mut seed_ctx = make_ctx(LEN);
+    let warm = run_ast(&mut engine, "MA(CLOSE,5)", &mut seed_ctx);
+    assert_eq!(warm.iter().filter(|value| value.is_finite()).count(), 196);
+
+    for (source, expected_finite) in [
+        // No function call at all: this isolates `load_variable`. Before the
+        // bytecode/JIT fallback to `ctx.variables` these three failed outright
+        // with "Unknown variable: X" while the tree path returned a series.
+        ("X", 196),
+        ("X + CLOSE", 196),
+        ("X * 2 - CLOSE", 196),
+        ("MA(X,9)", 188),
+        ("EMA(X,9)", 188),
+        ("WMA(X,9)", 188),
+        ("RMA(X,9)", 188),
+        ("TRIMA(X,9)", 188),
+        ("SUM(X,9)", 188),
+        ("STD(X,9)", 188),
+        ("HHV(X,9)", 188),
+        ("LLV(X,9)", 188),
+        ("ROLLING_RANGE(X,9)", 188),
+        ("ZSCORE(X,9)", 188),
+        ("CORREL(X,CLOSE,9)", 188),
+        ("RSI(X,9)", 191),
+        ("MEDIAN(X,9)", 192),
+        ("REF(X,3)", 193),
+        ("TRIX(X,9)", 171),
+        ("BOLL(X,20,2)", 177),
+        ("CCI(X,14)", 183),
+        ("HMA(X,9)", 186),
+        ("REVERSE(X)", 196),
+        ("CUMSUM(X)", 200),
+    ] {
+        check_all_paths_with_warm_variable(source, source, &warm, expected_finite);
     }
 }
