@@ -28,6 +28,22 @@ fn make_ctx(len: usize) -> FormulaContext {
     FormulaContext::new(open, high, low, close, volume, None)
 }
 
+/// Like [`make_ctx`], but with an `AMOUNT` series present.
+///
+/// `AMOUNT` is the only built-in data series that is optional, and the only one
+/// whose lookup does **not** fall back to `ctx.variables` (`get_data`
+/// short-circuits on `BuiltinVar::Amount`). Every other gate here builds a
+/// context without it, so the whole `AMOUNT` path was never exercised.
+fn make_ctx_with_amount(len: usize) -> FormulaContext {
+    let open = Array1::from_vec((0..len).map(|i| 100.0 + i as f64 * 0.5).collect());
+    let high = Array1::from_vec((0..len).map(|i| 105.0 + i as f64 * 0.7).collect());
+    let low = Array1::from_vec((0..len).map(|i| 95.0 + i as f64 * 0.3).collect());
+    let close = Array1::from_vec((0..len).map(|i| 102.0 + i as f64 * 0.6).collect());
+    let volume = Array1::from_vec((0..len).map(|i| 10000.0 + i as f64 * 100.0).collect());
+    let amount = Array1::from_vec((0..len).map(|i| 1_000_000.0 + i as f64 * 1000.0).collect());
+    FormulaContext::new(open, high, low, close, volume, Some(amount))
+}
+
 fn values_match(a: f64, b: f64) -> bool {
     if a.is_nan() && b.is_nan() {
         return true;
@@ -150,6 +166,39 @@ fn check_all_paths(formula_name: &str, source: &str, data_len: usize) {
     }
 }
 
+/// Assert that bytecode, plan, JIT and SIMD all reproduce `reference`.
+///
+/// `make` builds a fresh context per path, because the bytecode/JIT/SIMD entry
+/// points take `&mut` and the plan path needs its own `&`-borrowed one.
+fn assert_every_path_matches(
+    formula_name: &str,
+    source: &str,
+    make: impl Fn() -> FormulaContext,
+    reference: &Array1<f64>,
+) {
+    let mut engine = FormulaEngine::new();
+
+    let bytecode_result = run_bytecode(&mut engine, source, &make());
+    assert_arrays_match(formula_name, "bytecode", reference, &bytecode_result);
+
+    let plan_result = run_plan(source, &make());
+    assert_arrays_match(formula_name, "plan", reference, &plan_result);
+
+    #[cfg(feature = "formula-jit")]
+    {
+        let mut ctx_jit = make();
+        let jit_result = run_jit(&mut engine, source, &mut ctx_jit);
+        assert_arrays_match(formula_name, "jit", reference, &jit_result);
+    }
+
+    #[cfg(feature = "formula-simd")]
+    {
+        let mut ctx_simd = make();
+        let simd_result = run_simd(&mut engine, source, &mut ctx_simd);
+        assert_arrays_match(formula_name, "simd", reference, &simd_result);
+    }
+}
+
 /// Like [`check_all_paths`], but with an upstream rolling output bound as the
 /// variable `X` — the composition scenario the warm-up contract is about.
 ///
@@ -178,31 +227,16 @@ fn check_all_paths_with_warm_variable(
          {expected_finite} (0 means the warm-up prefix poisoned the accumulator)"
     );
 
-    let mut ctx_bc = make_ctx(LEN);
-    ctx_bc.set_variable("X".to_string(), warm.clone());
-    let bytecode_result = run_bytecode(&mut engine, source, &ctx_bc);
-    assert_arrays_match(formula_name, "bytecode", &reference, &bytecode_result);
-
-    let mut ctx_plan = make_ctx(LEN);
-    ctx_plan.set_variable("X".to_string(), warm.clone());
-    let plan_result = run_plan(source, &ctx_plan);
-    assert_arrays_match(formula_name, "plan", &reference, &plan_result);
-
-    #[cfg(feature = "formula-jit")]
-    {
-        let mut ctx_jit = make_ctx(LEN);
-        ctx_jit.set_variable("X".to_string(), warm.clone());
-        let jit_result = run_jit(&mut engine, source, &mut ctx_jit);
-        assert_arrays_match(formula_name, "jit", &reference, &jit_result);
-    }
-
-    #[cfg(feature = "formula-simd")]
-    {
-        let mut ctx_simd = make_ctx(LEN);
-        ctx_simd.set_variable("X".to_string(), warm.clone());
-        let simd_result = run_simd(&mut engine, source, &mut ctx_simd);
-        assert_arrays_match(formula_name, "simd", &reference, &simd_result);
-    }
+    assert_every_path_matches(
+        formula_name,
+        source,
+        || {
+            let mut ctx = make_ctx(LEN);
+            ctx.set_variable("X".to_string(), warm.clone());
+            ctx
+        },
+        &reference,
+    );
 }
 
 const MACD: &str = r#"
@@ -1290,6 +1324,58 @@ fn documented_warmup_composition_examples_hold() {
              The docs promise warm-up composition yields valid values; a \
              0 here means the documentation is now wrong."
         );
+    }
+}
+
+/// Every built-in data alias must resolve to the *same series* as its canonical
+/// spelling, on every path — and to the *right* series, not to CLOSE.
+///
+/// Alias resolution lives in three independent lists:
+/// `normalize_variable` (bytecode/JIT compile time), `is_builtin_data` (which
+/// decides `LoadData` vs `LoadVar`), and `classify_builtin_var` (runtime, used by
+/// the tree path and by `get_data`). Three lists for one concept is exactly the
+/// shape that drifts, and the drift is asymmetric by construction: the tree path
+/// only knows `classify_builtin_var`, so an alias missing there resolves on
+/// bytecode/JIT and fails on the reference path.
+///
+/// The "not CLOSE" half is not redundant. A slot that fails to resolve is not
+/// always an error: `run_plan` binds unresolved slots to CLOSE, so a missing
+/// alias degrades into a silently wrong series rather than a loud failure.
+#[test]
+fn builtin_data_aliases_resolve_to_the_same_series_on_every_path() {
+    const LEN: usize = 200;
+    let mut engine = FormulaEngine::new();
+
+    let mut close_ctx = make_ctx_with_amount(LEN);
+    let close_reference = run_ast(&mut engine, "MA(CLOSE,5)", &mut close_ctx);
+
+    for (alias, canonical) in [
+        ("C", "CLOSE"),
+        ("H", "HIGH"),
+        ("L", "LOW"),
+        ("O", "OPEN"),
+        ("V", "VOLUME"),
+        ("VOL", "VOLUME"),
+        ("A", "AMOUNT"),
+        ("AMOUNT", "AMOUNT"),
+    ] {
+        let source = format!("MA({alias},5)");
+        let canonical_source = format!("MA({canonical},5)");
+
+        let mut alias_ctx = make_ctx_with_amount(LEN);
+        let got = run_ast(&mut engine, &source, &mut alias_ctx);
+        let mut canonical_ctx = make_ctx_with_amount(LEN);
+        let want = run_ast(&mut engine, &canonical_source, &mut canonical_ctx);
+        assert_arrays_match(&source, &canonical_source, &want, &got);
+
+        if canonical != "CLOSE" {
+            assert!(
+                (0..LEN).any(|i| !values_match(close_reference[i], got[i])),
+                "{source} resolved to the CLOSE series instead of {canonical}"
+            );
+        }
+
+        assert_every_path_matches(&source, &source, || make_ctx_with_amount(LEN), &got);
     }
 }
 
