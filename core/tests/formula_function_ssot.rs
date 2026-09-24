@@ -237,31 +237,18 @@ const PLAN_KERNELS: &[&str] = &[
     "VORTEX_MINUS",
     "WAD",
     "ZLEMA",
-];
-
-/// Functions registered in the SSOT **and** callable from a formula, but with
-/// no numeric kernel, so the compiled-plan path cannot execute them.
-///
-/// This is the plan-path coverage backlog: each name is already declared pure
-/// and already implemented, so it needs a dispatcher kernel and nothing else.
-/// The list is the measurable target for expanding plan coverage.
-const DECLARED_BUT_NO_KERNEL: &[&str] = &[
+    // TA-Lib 0.8.1 formula functions routed through the cached canonical
+    // formula bridge until their specialized in-place kernels land.
     "ACOS",
+    "ADXR",
+    "APO",
+    "AROONOSC",
     "ASIN",
     "ATAN",
-    "AVG",
+    "AVGPRICE",
     "AVGDEV",
-    "BARSLAST",
-    "BEARISH_CROSS",
     "BETA",
-    "BOLL",
-    "BOLLINGER",
-    "BREAKDOWN",
-    "BREAKOUT",
-    "BREAKOUT_DOWN",
-    "BREAKOUT_SCREEN",
-    "BREAKOUT_UP",
-    "BULLISH_CROSS",
+    "BOP",
     "CDL2CROWS",
     "CDL3BLACKCROWS",
     "CDL3INSIDE",
@@ -269,6 +256,19 @@ const DECLARED_BUT_NO_KERNEL: &[&str] = &[
     "CDL3OUTSIDE",
     "CDL3STARSINSOUTH",
     "CDL3WHITESOLDIERS",
+    "CDLDOJI",
+    "CDLDOJISTAR",
+    "CDLDRAGONFLYDOJI",
+    "CDLENGULFING",
+    "CDLEVENINGDOJISTAR",
+    "CDLGRAVESTONEDOJI",
+    "CDLHAMMER",
+    "CDLHANGINGMAN",
+    "CDLHARAMI",
+    "CDLMARUBOZU",
+    "CDLPIERCING",
+    "CDLSHOOTINGSTAR",
+    "CDLSPINNINGTOP",
     "CDLABANDONEDBABY",
     "CDLADVANCEBLOCK",
     "CDLBELTHOLD",
@@ -277,17 +277,8 @@ const DECLARED_BUT_NO_KERNEL: &[&str] = &[
     "CDLCONCEALBABYSWALL",
     "CDLCOUNTERATTACK",
     "CDLDARKCLOUDCOVER",
-    "CDLDOJI",
-    "CDLDOJISTAR",
-    "CDLDRAGONFLYDOJI",
-    "CDLENGULFING",
-    "CDLEVENINGDOJISTAR",
     "CDLEVENINGSTAR",
     "CDLGAPSIDESIDEWHITE",
-    "CDLGRAVESTONEDOJI",
-    "CDLHAMMER",
-    "CDLHANGINGMAN",
-    "CDLHARAMI",
     "CDLHARAMICROSS",
     "CDLHIGHWAVE",
     "CDLHIKKAKE",
@@ -301,19 +292,15 @@ const DECLARED_BUT_NO_KERNEL: &[&str] = &[
     "CDLLADDERBOTTOM",
     "CDLLONGLEGGEDDOJI",
     "CDLLONGLINE",
-    "CDLMARUBOZU",
     "CDLMATCHINGLOW",
     "CDLMATHOLD",
     "CDLMORNINGDOJISTAR",
     "CDLMORNINGSTAR",
     "CDLONNECK",
-    "CDLPIERCING",
     "CDLRICKSHAWMAN",
     "CDLRISEFALL3METHODS",
     "CDLSEPARATINGLINES",
-    "CDLSHOOTINGSTAR",
     "CDLSHORTLINE",
-    "CDLSPINNINGTOP",
     "CDLSTALLEDPATTERN",
     "CDLSTICKSANDWICH",
     "CDLTAKURI",
@@ -323,35 +310,21 @@ const DECLARED_BUT_NO_KERNEL: &[&str] = &[
     "CDLUNIQUE3RIVER",
     "CDLUPSIDEGAP2CROWS",
     "CDLXSIDEGAP3METHODS",
-    "CEIL",
-    "CHOPPINESS",
     "CMO",
+    "CEIL",
     "COS",
-    "COUNT",
-    "CROSSDOWN",
-    "CROSSOVER",
-    "CROSSUP",
-    "DEAD_CROSS",
     "DEMA",
-    "DONCHIAN_MID",
+    "DPO",
+    "DX",
     "EXP",
-    "FISHER_TRANSFORM",
     "FLOOR",
-    "GAP",
-    "GAP_SIGNAL",
-    "GOLDEN_CROSS",
     "HT_DCPERIOD",
     "HT_DCPHASE",
     "HT_PHASOR",
     "HT_SINE",
     "HT_TRENDLINE",
     "HT_TRENDMODE",
-    "IFF",
     "IMI",
-    "KD",
-    "KDJ_K",
-    "KIJUN",
-    "KIJUN_SEN",
     "LINEARREG",
     "LINEARREG_ANGLE",
     "LINEARREG_INTERCEPT",
@@ -359,32 +332,76 @@ const DECLARED_BUT_NO_KERNEL: &[&str] = &[
     "MACDEXT",
     "MACDFIX",
     "MAVP",
-    "MA_ALIGN",
-    "MA_ALIGNMENT",
+    "MEDPRICE",
+    "MIDPOINT",
+    "MIDPRICE",
     "MINMAX",
     "MINMAXINDEX",
     "MINUS_DM",
-    "MOMENTUM",
     "PLUS_DM",
+    "PERCENTILE",
     "PPO",
+    "SAREXT",
+    "SIN",
+    "STOCH",
+    "STOCHRSI",
+    "TAN",
+    "T3",
+    "TEMA",
+    "TSF",
+    "TYPPRICE",
+    "ULTOSC",
+    "WCLPRICE",
+];
+
+/// Functions registered in the SSOT **and** callable from a formula, but with
+/// no numeric kernel, so the compiled-plan path cannot execute them.
+///
+/// This is the plan-path coverage backlog: each name is already declared pure
+/// and already implemented, so it needs a dispatcher kernel and nothing else.
+/// The list is the measurable target for expanding plan coverage.
+const DECLARED_BUT_NO_KERNEL: &[&str] = &[
+    "AVG",
+    "BARSLAST",
+    "BEARISH_CROSS",
+    "BOLL",
+    "BOLLINGER",
+    "BREAKDOWN",
+    "BREAKOUT",
+    "BREAKOUT_DOWN",
+    "BREAKOUT_SCREEN",
+    "BREAKOUT_UP",
+    "BULLISH_CROSS",
+    "CHOPPINESS",
+    "COUNT",
+    "CROSSDOWN",
+    "CROSSOVER",
+    "CROSSUP",
+    "DEAD_CROSS",
+    "DONCHIAN_MID",
+    "FISHER_TRANSFORM",
+    "GAP",
+    "GAP_SIGNAL",
+    "GOLDEN_CROSS",
+    "IFF",
+    "KD",
+    "KDJ_K",
+    "KIJUN",
+    "KIJUN_SEN",
+    "MA_ALIGN",
+    "MA_ALIGNMENT",
+    "MOMENTUM",
     "PRICE_BREAKDOWN",
     "PRICE_BREAKOUT",
     "RELATIVE_STRENGTH",
     "RELSTRENGTH",
     "RS_EXCESS_RETURN",
-    "SAREXT",
     "SHIFT",
-    "SIN",
     "SUPERTREND_LINE",
-    "T3",
-    "TAN",
-    "TEMA",
     "TENKAN",
     "TREND_ALIGN",
     "TREND_BREAKOUT",
     "TREND_SCREEN",
-    "TSF",
-    "ULTOSC",
     "VOLSURGE",
     "VOLUME_EXPANSION",
     "VOLUME_SURGE",
@@ -417,14 +434,15 @@ fn formula_names() -> BTreeSet<String> {
 /// [`UNSUPPORTED_KERNEL_CODE`] means "no kernel".
 fn probed_plan_kernels(candidates: &BTreeSet<String>) -> BTreeSet<String> {
     let mut handled = BTreeSet::new();
-    // Zero-filled buffers: a period slot reads `0.0`, which trips the existing
-    // `period must be > 0` guard in `period_at` so period-reading kernels bail
-    // out (Err -> absorbed to NaN) instead of being fed the degenerate period
-    // `1.0` that the routing probe cannot distinguish from a series slot. The
-    // probe only checks that the dispatcher *routes* the kernel, not that it
-    // computes correctly on dummy data — numeric correctness is the
-    // differential gate's job, on real corpus periods.
-    let buffers = vec![vec![0.0_f64; 32]; PROBE_SLOTS];
+    // Use distinct positive probe values: period slots must be valid for legacy
+    // TA-Lib wrappers that validate periods inside their indicator kernel, while
+    // distinct values keep the probe from accidentally exercising a zero-range
+    // or zero-denominator corner. The probe only checks routing, not numeric
+    // correctness; that remains the differential gate's job on real fixtures.
+    // Hilbert-cycle functions need more than their 32-bar warm-up.
+    let buffers: Vec<Vec<f64>> = (0..PROBE_SLOTS)
+        .map(|slot| vec![2.0 + slot as f64; 128])
+        .collect();
     let inputs: Vec<BufferSlot> = (0..PROBE_SLOTS - 1).map(BufferSlot).collect();
     let output = BufferSlot(PROBE_SLOTS - 1);
 
@@ -589,18 +607,16 @@ fn the_three_surfaces_have_the_expected_sizes() {
     // bearing — `Alpha7` multiplies `sign(close - ref(close, 7))` into a factor,
     // and a flat 7-bar stretch must contribute `0`, not a fabricated direction.
     //
-    // 260 -> 302, 115 -> 159, formula surface unchanged at 452: the TA-Lib
-    // 0.7/0.8 compiled-plan bridge. Forty-four `CALL:<NAME>` plan kernels that
-    // previously failed with `ERR_UNSUPPORTED_KERNEL` now delegate to their
-    // exact `canonical_*` implementations, so the compiled-plan path is no
-    // longer a second-class execution mode for these indicators. Forty-two new
-    // `FunctionSpec` entries land in `builtin_function_registry()` (the two
-    // already present — `ACCBANDS`, `MAMA` — were promoted out of
-    // `DECLARED_BUT_NO_KERNEL`); the formula surface already named all forty-four.
+    // 260 -> 317, 115 -> 272, formula surface unchanged at 452: the TA-Lib
+    // 0.7/0.8 compiled-plan bridge. The original forty-four additions use
+    // explicit canonical delegates; the remaining formula-compatible names use
+    // the cached bridge until their allocation-free kernels are optimized.
+    // The fifteen previously formula-only TA-Lib names are now also registered,
+    // so every executable plan kernel remains inside the registry SSOT.
     let actual = (registry.len(), formulas.len(), kernels.len());
     assert_eq!(
         actual,
-        (302, 452, 159),
+        (317, 452, 272),
         "surface sizes changed: (registry, formula, plan kernels)"
     );
 }

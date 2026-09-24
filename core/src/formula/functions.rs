@@ -1,5 +1,6 @@
 use ndarray::Array1;
 use std::collections::HashMap;
+use std::sync::OnceLock;
 
 use crate::formula::types::{FormulaContext, FormulaError};
 use crate::indicators::screening as lib_screening;
@@ -777,6 +778,21 @@ pub fn get_builtin_functions() -> HashMap<String, FormulaFn> {
     }
 
     map
+}
+
+/// Look up a formula kernel without rebuilding the complete function table.
+///
+/// The compiled-plan bridge uses this for TA-Lib functions whose canonical
+/// formula implementation already exists but whose specialized in-place plan
+/// kernel has not been written yet. The table is initialized once, so the
+/// fallback preserves the plan path's steady-state cost instead of allocating
+/// a `HashMap` on every bar.
+pub(crate) fn lookup_builtin_function(name: &str) -> Option<FormulaFn> {
+    static FUNCTIONS: OnceLock<HashMap<String, FormulaFn>> = OnceLock::new();
+    FUNCTIONS
+        .get_or_init(get_builtin_functions)
+        .get(name)
+        .copied()
 }
 
 #[cfg(test)]

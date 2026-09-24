@@ -100,6 +100,36 @@ impl KernelDispatcher for FormulaKernelDispatcher<'_> {
         if call.kernel == KernelId::from_static("CALL:LN") {
             return dispatch_unary_math_call(call, buffers, UnaryMathKernel::Ln);
         }
+        if call.kernel == KernelId::from_static("CALL:ACOS") {
+            return dispatch_unary_math_call(call, buffers, UnaryMathKernel::Acos);
+        }
+        if call.kernel == KernelId::from_static("CALL:ASIN") {
+            return dispatch_unary_math_call(call, buffers, UnaryMathKernel::Asin);
+        }
+        if call.kernel == KernelId::from_static("CALL:ATAN") {
+            return dispatch_unary_math_call(call, buffers, UnaryMathKernel::Atan);
+        }
+        if call.kernel == KernelId::from_static("CALL:CEIL") {
+            return dispatch_unary_math_call(call, buffers, UnaryMathKernel::Ceil);
+        }
+        if call.kernel == KernelId::from_static("CALL:COS") {
+            return dispatch_unary_math_call(call, buffers, UnaryMathKernel::Cos);
+        }
+        if call.kernel == KernelId::from_static("CALL:EXP") {
+            return dispatch_unary_math_call(call, buffers, UnaryMathKernel::Exp);
+        }
+        if call.kernel == KernelId::from_static("CALL:FLOOR") {
+            return dispatch_unary_math_call(call, buffers, UnaryMathKernel::Floor);
+        }
+        if call.kernel == KernelId::from_static("CALL:LOG10") {
+            return dispatch_unary_math_call(call, buffers, UnaryMathKernel::Log10);
+        }
+        if call.kernel == KernelId::from_static("CALL:SIN") {
+            return dispatch_unary_math_call(call, buffers, UnaryMathKernel::Sin);
+        }
+        if call.kernel == KernelId::from_static("CALL:TAN") {
+            return dispatch_unary_math_call(call, buffers, UnaryMathKernel::Tan);
+        }
         if call.kernel == KernelId::from_static("CALL:SIGN") {
             return dispatch_unary_math_call(call, buffers, UnaryMathKernel::Sign);
         }
@@ -408,6 +438,13 @@ impl KernelDispatcher for FormulaKernelDispatcher<'_> {
             || call.kernel == KernelId::from_static("CALL:VORTEX_MINUS")
             || call.kernel == KernelId::from_static("CALL:WAD")
             || call.kernel == KernelId::from_static("CALL:ZLEMA")
+        {
+            return dispatch_modern_call(call, buffers);
+        }
+
+        if TALIB_FORMULA_GAP_KERNELS
+            .iter()
+            .any(|name| call.kernel == KernelId::from_static(name))
         {
             return dispatch_modern_call(call, buffers);
         }
@@ -1022,6 +1059,16 @@ enum UnaryMathKernel {
     Cosh,
     Tanh,
     Ln,
+    Acos,
+    Asin,
+    Atan,
+    Ceil,
+    Cos,
+    Exp,
+    Floor,
+    Log10,
+    Sin,
+    Tan,
     /// `sign(x)` — `-1`, `0` or `1`. Needed by the `WorldQuant` alphas, which
     /// use it to re-attach the direction of a differenced series.
     ///
@@ -1060,6 +1107,22 @@ fn dispatch_unary_math_call(
                     value.ln()
                 }
             }
+            UnaryMathKernel::Acos => value.acos(),
+            UnaryMathKernel::Asin => value.asin(),
+            UnaryMathKernel::Atan => value.atan(),
+            UnaryMathKernel::Ceil => value.ceil(),
+            UnaryMathKernel::Cos => value.cos(),
+            UnaryMathKernel::Exp => value.exp(),
+            UnaryMathKernel::Floor => value.floor(),
+            UnaryMathKernel::Log10 => {
+                if value <= 0.0 {
+                    f64::NAN
+                } else {
+                    value.log10()
+                }
+            }
+            UnaryMathKernel::Sin => value.sin(),
+            UnaryMathKernel::Tan => value.tan(),
             // `f64::signum` is not the mathematical sign: it maps `0.0` and
             // `-0.0` to `1.0` and `-1.0` respectively, and propagates `NaN`.
             // The three-way form is what the alphas mean, and it keeps
@@ -2762,6 +2825,185 @@ fn dispatch_draw_call(
     Ok(())
 }
 
+/// TA-Lib functions that already have a formula implementation but do not yet
+/// have a hand-written in-place plan kernel. They are routed through the cached
+/// formula function table below. This is an intentional compatibility bridge:
+/// it closes plan reachability first, while the specialized kernels can later
+/// remove the allocation/copy path one family at a time without changing the
+/// numeric contract.
+const TALIB_FORMULA_GAP_KERNELS: &[&str] = &[
+    "CALL:ADXR",
+    "CALL:APO",
+    "CALL:AROONOSC",
+    "CALL:AVGPRICE",
+    "CALL:AVGDEV",
+    "CALL:BETA",
+    "CALL:BOP",
+    "CALL:CDL2CROWS",
+    "CALL:CDL3BLACKCROWS",
+    "CALL:CDL3INSIDE",
+    "CALL:CDL3LINESTRIKE",
+    "CALL:CDL3OUTSIDE",
+    "CALL:CDL3STARSINSOUTH",
+    "CALL:CDL3WHITESOLDIERS",
+    "CALL:CDLDOJI",
+    "CALL:CDLDOJISTAR",
+    "CALL:CDLDRAGONFLYDOJI",
+    "CALL:CDLENGULFING",
+    "CALL:CDLEVENINGDOJISTAR",
+    "CALL:CDLGRAVESTONEDOJI",
+    "CALL:CDLHAMMER",
+    "CALL:CDLHANGINGMAN",
+    "CALL:CDLHARAMI",
+    "CALL:CDLMARUBOZU",
+    "CALL:CDLPIERCING",
+    "CALL:CDLSHOOTINGSTAR",
+    "CALL:CDLSPINNINGTOP",
+    "CALL:CDLABANDONEDBABY",
+    "CALL:CDLADVANCEBLOCK",
+    "CALL:CDLBELTHOLD",
+    "CALL:CDLBREAKAWAY",
+    "CALL:CDLCLOSINGMARUBOZU",
+    "CALL:CDLCONCEALBABYSWALL",
+    "CALL:CDLCOUNTERATTACK",
+    "CALL:CDLDARKCLOUDCOVER",
+    "CALL:CDLEVENINGSTAR",
+    "CALL:CDLGAPSIDESIDEWHITE",
+    "CALL:CDLHARAMICROSS",
+    "CALL:CDLHIGHWAVE",
+    "CALL:CDLHIKKAKE",
+    "CALL:CDLHIKKAKEMOD",
+    "CALL:CDLHOMINGPIGEON",
+    "CALL:CDLIDENTICAL3CROWS",
+    "CALL:CDLINNECK",
+    "CALL:CDLINVERTEDHAMMER",
+    "CALL:CDLKICKING",
+    "CALL:CDLKICKINGBYLENGTH",
+    "CALL:CDLLADDERBOTTOM",
+    "CALL:CDLLONGLEGGEDDOJI",
+    "CALL:CDLLONGLINE",
+    "CALL:CDLMATCHINGLOW",
+    "CALL:CDLMATHOLD",
+    "CALL:CDLMORNINGDOJISTAR",
+    "CALL:CDLMORNINGSTAR",
+    "CALL:CDLONNECK",
+    "CALL:CDLRICKSHAWMAN",
+    "CALL:CDLRISEFALL3METHODS",
+    "CALL:CDLSEPARATINGLINES",
+    "CALL:CDLSHORTLINE",
+    "CALL:CDLSTALLEDPATTERN",
+    "CALL:CDLSTICKSANDWICH",
+    "CALL:CDLTAKURI",
+    "CALL:CDLTASUKIGAP",
+    "CALL:CDLTHRUSTING",
+    "CALL:CDLTRISTAR",
+    "CALL:CDLUNIQUE3RIVER",
+    "CALL:CDLUPSIDEGAP2CROWS",
+    "CALL:CDLXSIDEGAP3METHODS",
+    "CALL:CMO",
+    "CALL:DEMA",
+    "CALL:DPO",
+    "CALL:DX",
+    "CALL:HT_DCPERIOD",
+    "CALL:HT_DCPHASE",
+    "CALL:HT_PHASOR",
+    "CALL:HT_SINE",
+    "CALL:HT_TRENDLINE",
+    "CALL:HT_TRENDMODE",
+    "CALL:IMI",
+    "CALL:LINEARREG",
+    "CALL:LINEARREG_ANGLE",
+    "CALL:LINEARREG_INTERCEPT",
+    "CALL:MACDEXT",
+    "CALL:MACDFIX",
+    "CALL:MAVP",
+    "CALL:MEDPRICE",
+    "CALL:MIDPOINT",
+    "CALL:MIDPRICE",
+    "CALL:MINMAX",
+    "CALL:MINMAXINDEX",
+    "CALL:MINUS_DM",
+    "CALL:PLUS_DM",
+    "CALL:PERCENTILE",
+    "CALL:PPO",
+    "CALL:SAREXT",
+    "CALL:STOCH",
+    "CALL:STOCHRSI",
+    "CALL:T3",
+    "CALL:TEMA",
+    "CALL:TSF",
+    "CALL:TYPPRICE",
+    "CALL:ULTOSC",
+    "CALL:WCLPRICE",
+];
+
+/// Execute one TA-Lib formula function through the plan-owned buffers.
+///
+/// This fallback deliberately allocates only at the boundary: canonical legacy
+/// functions accept `Array1<f64>` arguments and the hot-plan ABI owns `Vec<f64>`
+/// buffers. The function table itself is cached, so subsequent calls avoid its
+/// construction cost. Families with a proven in-place kernel should stay on
+/// their specialized dispatch branch above.
+fn dispatch_formula_bridge_call(
+    call: KernelCall<'_>,
+    buffers: &mut [Vec<f64>],
+    name: &str,
+) -> Result<(), KernelDispatchError> {
+    let output_slot = call.output.0;
+    let len = match buffers.get(output_slot) {
+        Some(output) if !output.is_empty() => output.len(),
+        _ => {
+            return Err(KernelDispatchError::new(
+                FormulaKernelDispatcher::ERR_PARAMETER,
+            ))
+        }
+    };
+    for input in call.inputs {
+        if input.0 == output_slot
+            || buffers
+                .get(input.0)
+                .is_none_or(|values| values.len() != len)
+        {
+            return Err(KernelDispatchError::new(
+                FormulaKernelDispatcher::ERR_PARAMETER,
+            ));
+        }
+    }
+
+    let args: Vec<Array1<f64>> = call
+        .inputs
+        .iter()
+        .map(|slot| Array1::from(buffers[slot.0].clone()))
+        .collect();
+    let context_series = |index: usize| {
+        args.get(index)
+            .cloned()
+            .unwrap_or_else(|| Array1::zeros(len))
+    };
+    let ctx = crate::formula::types::FormulaContext::new(
+        context_series(0),
+        context_series(1),
+        context_series(2),
+        context_series(3),
+        context_series(4),
+        None,
+    );
+    let Some(kernel) = crate::formula::functions::lookup_builtin_function(name) else {
+        return Err(KernelDispatchError::new(
+            FormulaKernelDispatcher::ERR_UNSUPPORTED_KERNEL,
+        ));
+    };
+    match kernel(&ctx, &args) {
+        Ok(series) if series.len() == len => {
+            buffers[output_slot].copy_from_slice(series.as_slice().unwrap());
+        }
+        Ok(_) | Err(_) => {
+            buffers[output_slot].fill(f64::NAN);
+        }
+    }
+    Ok(())
+}
+
 /// Execute the formula catalogue's popular non-TA-Lib indicators through the
 /// same hot-plan ABI as the TA-Lib-compatible kernels.  The two most common
 /// rolling transforms (ZSCORE and VWMA) write directly into the plan buffer;
@@ -2996,6 +3238,16 @@ fn dispatch_modern_call(
                 }
             }
             return Ok(());
+        }
+    }
+
+    // Compatibility bridge for the remaining TA-Lib catalogue. The lookup is
+    // cached, and the canonical formula function is the same implementation
+    // used by the tree/bytecode/JIT frontends. Errors are absorbed to an
+    // all-NaN output exactly like the explicit TA-Lib bridge above.
+    for &kernel_name in TALIB_FORMULA_GAP_KERNELS {
+        if call.kernel == KernelId::from_static(kernel_name) {
+            return dispatch_formula_bridge_call(call, buffers, &kernel_name[5..]);
         }
     }
 

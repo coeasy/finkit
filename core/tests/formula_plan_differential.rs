@@ -389,6 +389,40 @@ fn domestic_corpus_plan_matches_ast_reference() {
 }
 
 #[test]
+fn talib_formula_bridge_matches_ast_for_representative_gap_families() {
+    // These names intentionally span scalar math, OHLC composites, candlestick
+    // patterns, rolling overlap, directional movement, cycle analysis, and a
+    // multi-period oscillator. They all use the cached formula bridge rather
+    // than a hand-written in-place kernel, so this gate protects the temporary
+    // compatibility path while specialized kernels are added incrementally.
+    let formulas = [
+        "ACOS(CLOSE)",
+        "ADXR(HIGH, LOW, CLOSE, 5)",
+        "AVGPRICE(OPEN, HIGH, LOW, CLOSE)",
+        "BOP(OPEN, HIGH, LOW, CLOSE)",
+        "CDLDOJI(OPEN, HIGH, LOW, CLOSE)",
+        "DEMA(CLOSE, 5)",
+        "DX(HIGH, LOW, CLOSE, 5)",
+        "HT_DCPERIOD(CLOSE)",
+        "STOCH(HIGH, LOW, CLOSE, 5, 3, 3)",
+        "TYPPRICE(HIGH, LOW, CLOSE)",
+    ];
+
+    for source in formulas {
+        let ast = parse_formula_with_dialect(source, FormulaDialect::TongDaXin)
+            .unwrap_or_else(|error| panic!("{source}: parse: {error}"));
+        let mut reference_ctx = synthetic_ohlcv(128);
+        let reference = FormulaEngine::new()
+            .eval_ast(&ast, &mut reference_ctx)
+            .unwrap_or_else(|error| panic!("{source}: eval: {error}"));
+        let plan_ctx = synthetic_ohlcv(128);
+        let candidate =
+            plan_values(&ast, &plan_ctx).unwrap_or_else(|error| panic!("{source}: plan: {error}"));
+        compare(&reference, &candidate, 1e-9).unwrap_or_else(|error| panic!("{source}: {error}"));
+    }
+}
+
+#[test]
 fn pine_corpus_plan_matches_ast_reference() {
     let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/pine_corpus");
     let manifest: Value =

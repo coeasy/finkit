@@ -2520,6 +2520,40 @@ pub fn builtin_function_registry() -> FunctionRegistry {
         },
     ];
 
+    // TA-Lib-compatible formula functions that were historically callable only
+    // through the formula map. Their metadata is now explicit so the generic
+    // plan bridge remains inside the registry SSOT rather than creating a
+    // formula-only execution path.
+    let talib_formula_specs = [
+        "ADXR",
+        "APO",
+        "AROONOSC",
+        "AVGPRICE",
+        "BOP",
+        "DPO",
+        "DX",
+        "MEDPRICE",
+        "MIDPOINT",
+        "MIDPRICE",
+        "PERCENTILE",
+        "STOCH",
+        "STOCHRSI",
+        "TYPPRICE",
+        "WCLPRICE",
+    ]
+    .into_iter()
+    .map(|name| FunctionSpec {
+        name,
+        aliases: &[],
+        category: FunctionCategory::Formula,
+        input: InputKind::Dynamic,
+        params: &[],
+        outputs: 1,
+        lookback: LookbackSpec::Dynamic,
+        streaming: false,
+        deterministic: true,
+    });
+
     let math_transform_specs = [
         "ACOS", "ASIN", "ATAN", "CEIL", "COS", "COSH", "EXP", "FLOOR", "LN", "LOG10", "SIN",
         "SINH", "SQRT", "TAN", "TANH",
@@ -2695,6 +2729,7 @@ pub fn builtin_function_registry() -> FunctionRegistry {
     for spec in specs
         .into_iter()
         .chain(additional_specs)
+        .chain(talib_formula_specs)
         .chain(math_transform_specs)
         .chain(candlestick_specs)
         .chain(alpha158_parity_specs)
