@@ -114,6 +114,14 @@ reused.
   names (they are `*_seed`). No numeric behaviour changed — these are
   documentation↔reality corrections.
 
+- Streaming `OBV` diverged from the batch `obv` / `simd_obv` contract on flat
+  bars. It accumulated `diff.signum() * volume`, and `f64::signum(0.0)` is
+  `+1.0`, so a bar with an unchanged close wrongly added `volume` instead of
+  leaving OBV unchanged (the comment even claimed the opposite). The streaming
+  step is now an explicit three-way `> prev` / `< prev` / flat, matching the AVX2
+  and scalar batch kernels. A regression gate pins the two implementations
+  together on shared bars including a flat one.
+
 ## [0.1.15] - 2026-09-11
 
 ### Added

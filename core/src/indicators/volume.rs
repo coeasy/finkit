@@ -272,8 +272,9 @@ pub fn obv(close: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
     let len = close.len();
     let mut out = Vec::with_capacity(len);
     unsafe { out.set_len(len) };
-    // SIMD-accelerated OBV: AVX2 kernel vectorises the diff/signum/mul chain.
-    // Scalar fallback path is identical to the legacy implementation.
+    // SIMD-accelerated OBV: the AVX2 kernel vectorises the diff / sign-mask /
+    // multiply chain (flat diff contributes nothing, matching TA-Lib). The
+    // scalar fallback (`obv_core_scalar`) is identical to the legacy contract.
     crate::math::simd_ops::simd_obv(close, volume, &mut out);
 
     Ok(Array1::from(out))
