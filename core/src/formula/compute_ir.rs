@@ -542,7 +542,7 @@ impl<'a> FormulaLowerer<'a> {
                     BinaryOperator::Sub => Some(left - right),
                     BinaryOperator::Mul => Some(left * right),
                     BinaryOperator::Div => Some(left / right),
-                    BinaryOperator::Mod => Some(left % right),
+                    BinaryOperator::Mod => Some(crate::math::floor_remainder(left, right)),
                     BinaryOperator::Pow => Some(left.powf(right)),
                     _ => None,
                 }

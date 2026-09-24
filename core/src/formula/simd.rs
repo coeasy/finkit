@@ -9,6 +9,8 @@ use std::sync::OnceLock;
 
 use ndarray::Array1;
 
+use crate::formula::truth;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SimdLevel {
     Scalar,
@@ -52,11 +54,7 @@ fn simd_level() -> SimdLevel {
 pub mod scalar {
     #[inline]
     pub fn element_mod(a: f64, b: f64) -> f64 {
-        if b.abs() < 1e-15 {
-            f64::NAN
-        } else {
-            a - (a / b).floor() * b
-        }
+        crate::math::floor_remainder(a, b)
     }
 
     #[inline]
@@ -241,15 +239,24 @@ unsafe fn eq_avx2(a: &[f64], b: &[f64], result: &mut [f64]) {
     let len = a.len().min(b.len()).min(result.len());
     let chunks = len / 4;
     let ones = _mm256_set1_pd(1.0);
+    let sign_mask = _mm256_castsi256_pd(_mm256_set1_epi64x(i64::MIN));
+    let eps = _mm256_set1_pd(crate::math::EQUALITY_TOLERANCE);
     for i in 0..chunks {
         let off = i * 4;
         let va = _mm256_loadu_pd(a.as_ptr().add(off));
         let vb = _mm256_loadu_pd(b.as_ptr().add(off));
-        let cmp = _mm256_cmp_pd(va, vb, _CMP_EQ_OQ);
+        // `|a - b| < eps`, ordered: a NaN operand compares false, matching
+        // `math::nearly_equal`.
+        let abs_diff = _mm256_andnot_pd(sign_mask, _mm256_sub_pd(va, vb));
+        let cmp = _mm256_cmp_pd(abs_diff, eps, _CMP_LT_OS);
         _mm256_storeu_pd(result.as_mut_ptr().add(off), _mm256_and_pd(cmp, ones));
     }
     for i in (chunks * 4)..len {
-        result[i] = if a[i] == b[i] { 1.0 } else { 0.0 };
+        result[i] = if crate::math::nearly_equal(a[i], b[i]) {
+            1.0
+        } else {
+            0.0
+        };
     }
 }
 
@@ -260,15 +267,24 @@ unsafe fn neq_avx2(a: &[f64], b: &[f64], result: &mut [f64]) {
     let len = a.len().min(b.len()).min(result.len());
     let chunks = len / 4;
     let ones = _mm256_set1_pd(1.0);
+    let sign_mask = _mm256_castsi256_pd(_mm256_set1_epi64x(i64::MIN));
+    let eps = _mm256_set1_pd(crate::math::EQUALITY_TOLERANCE);
     for i in 0..chunks {
         let off = i * 4;
         let va = _mm256_loadu_pd(a.as_ptr().add(off));
         let vb = _mm256_loadu_pd(b.as_ptr().add(off));
-        let cmp = _mm256_cmp_pd(va, vb, _CMP_NEQ_UQ);
+        // `|a - b| >= eps`, ordered: a NaN operand compares false, matching
+        // `math::nearly_not_equal` (which is *not* the negation of `Eq`).
+        let abs_diff = _mm256_andnot_pd(sign_mask, _mm256_sub_pd(va, vb));
+        let cmp = _mm256_cmp_pd(abs_diff, eps, _CMP_GE_OS);
         _mm256_storeu_pd(result.as_mut_ptr().add(off), _mm256_and_pd(cmp, ones));
     }
     for i in (chunks * 4)..len {
-        result[i] = if a[i] != b[i] { 1.0 } else { 0.0 };
+        result[i] = if crate::math::nearly_not_equal(a[i], b[i]) {
+            1.0
+        } else {
+            0.0
+        };
     }
 }
 
@@ -633,18 +649,26 @@ unsafe fn eq_avx512(a: &[f64], b: &[f64], result: &mut [f64]) {
     let chunks = len / 8;
     let ones = _mm512_set1_pd(1.0);
     let zeros = _mm512_setzero_pd();
+    let sign_mask = _mm512_castsi512_pd(_mm512_set1_epi64(i64::MIN));
+    let eps = _mm512_set1_pd(crate::math::EQUALITY_TOLERANCE);
     for i in 0..chunks {
         let off = i * 8;
         let va = _mm512_loadu_pd(a.as_ptr().add(off));
         let vb = _mm512_loadu_pd(b.as_ptr().add(off));
-        let mask = _mm512_cmp_pd_mask(va, vb, _CMP_EQ_OQ);
+        // `|a - b| < eps`, ordered: a NaN operand compares false.
+        let abs_diff = _mm512_andnot_pd(sign_mask, _mm512_sub_pd(va, vb));
+        let mask = _mm512_cmp_pd_mask(abs_diff, eps, _CMP_LT_OS);
         _mm512_storeu_pd(
             result.as_mut_ptr().add(off),
             _mm512_mask_blend_pd(mask, zeros, ones),
         );
     }
     for i in (chunks * 8)..len {
-        result[i] = if a[i] == b[i] { 1.0 } else { 0.0 };
+        result[i] = if crate::math::nearly_equal(a[i], b[i]) {
+            1.0
+        } else {
+            0.0
+        };
     }
 }
 
@@ -656,18 +680,26 @@ unsafe fn neq_avx512(a: &[f64], b: &[f64], result: &mut [f64]) {
     let chunks = len / 8;
     let ones = _mm512_set1_pd(1.0);
     let zeros = _mm512_setzero_pd();
+    let sign_mask = _mm512_castsi512_pd(_mm512_set1_epi64(i64::MIN));
+    let eps = _mm512_set1_pd(crate::math::EQUALITY_TOLERANCE);
     for i in 0..chunks {
         let off = i * 8;
         let va = _mm512_loadu_pd(a.as_ptr().add(off));
         let vb = _mm512_loadu_pd(b.as_ptr().add(off));
-        let mask = _mm512_cmp_pd_mask(va, vb, _CMP_NEQ_UQ);
+        // `|a - b| >= eps`, ordered: a NaN operand compares false.
+        let abs_diff = _mm512_andnot_pd(sign_mask, _mm512_sub_pd(va, vb));
+        let mask = _mm512_cmp_pd_mask(abs_diff, eps, _CMP_GE_OS);
         _mm512_storeu_pd(
             result.as_mut_ptr().add(off),
             _mm512_mask_blend_pd(mask, zeros, ones),
         );
     }
     for i in (chunks * 8)..len {
-        result[i] = if a[i] != b[i] { 1.0 } else { 0.0 };
+        result[i] = if crate::math::nearly_not_equal(a[i], b[i]) {
+            1.0
+        } else {
+            0.0
+        };
     }
 }
 
@@ -995,15 +1027,22 @@ unsafe fn eq_neon(a: &[f64], b: &[f64], result: &mut [f64]) {
     let chunks = len / 2;
     let ones = vdupq_n_f64(1.0);
     let zeros = vdupq_n_f64(0.0);
+    let eps = vdupq_n_f64(crate::math::EQUALITY_TOLERANCE);
     for i in 0..chunks {
         let off = i * 2;
         let va = vld1q_f64(a.as_ptr().add(off));
         let vb = vld1q_f64(b.as_ptr().add(off));
-        let cmp = vceqq_f64(va, vb);
+        // `|a - b| < eps`, ordered: a NaN operand compares false.
+        let abs_diff = vabsq_f64(vsubq_f64(va, vb));
+        let cmp = vcltq_f64(abs_diff, eps);
         vst1q_f64(result.as_mut_ptr().add(off), vbslq_f64(cmp, ones, zeros));
     }
     for i in (chunks * 2)..len {
-        result[i] = if a[i] == b[i] { 1.0 } else { 0.0 };
+        result[i] = if crate::math::nearly_equal(a[i], b[i]) {
+            1.0
+        } else {
+            0.0
+        };
     }
 }
 
@@ -1014,17 +1053,24 @@ unsafe fn neq_neon(a: &[f64], b: &[f64], result: &mut [f64]) {
     let chunks = len / 2;
     let ones = vdupq_n_f64(1.0);
     let zeros = vdupq_n_f64(0.0);
+    let eps = vdupq_n_f64(crate::math::EQUALITY_TOLERANCE);
     for i in 0..chunks {
         let off = i * 2;
         let va = vld1q_f64(a.as_ptr().add(off));
         let vb = vld1q_f64(b.as_ptr().add(off));
-        let eq = vceqq_f64(va, vb);
-        let neq = vmvnq_u8(vreinterpretq_u8_u64(eq));
-        let neq64 = vreinterpretq_u64_u8(neq);
-        vst1q_f64(result.as_mut_ptr().add(off), vbslq_f64(neq64, ones, zeros));
+        // `|a - b| >= eps`, ordered: a NaN operand compares false. Deliberately
+        // not the bitwise negation of the equality mask, which would make a
+        // missing value compare *unequal* instead of neither.
+        let abs_diff = vabsq_f64(vsubq_f64(va, vb));
+        let cmp = vcgeq_f64(abs_diff, eps);
+        vst1q_f64(result.as_mut_ptr().add(off), vbslq_f64(cmp, ones, zeros));
     }
     for i in (chunks * 2)..len {
-        result[i] = if a[i] != b[i] { 1.0 } else { 0.0 };
+        result[i] = if crate::math::nearly_not_equal(a[i], b[i]) {
+            1.0
+        } else {
+            0.0
+        };
     }
 }
 
@@ -1631,7 +1677,7 @@ impl SimdOps {
         }
         #[cfg(not(target_arch = "aarch64"))]
         {
-            cmp_fallback(a, b, result, |a, b| a == b)
+            cmp_fallback(a, b, result, crate::math::nearly_equal)
         }
     }
 
@@ -1650,7 +1696,7 @@ impl SimdOps {
         }
         #[cfg(not(target_arch = "aarch64"))]
         {
-            cmp_fallback(a, b, result, |a, b| a != b)
+            cmp_fallback(a, b, result, crate::math::nearly_not_equal)
         }
     }
 
@@ -2103,116 +2149,40 @@ impl SimdOps {
 
     pub fn logical_and(a: &[f64], b: &[f64], result: &mut [f64]) {
         let len = a.len().min(b.len()).min(result.len());
-        let chunks = len / 4;
-        for i in 0..chunks {
-            let off = i * 4;
-            result[off] = if a[off] != 0.0 && b[off] != 0.0 {
-                1.0
-            } else {
-                0.0
-            };
-            result[off + 1] = if a[off + 1] != 0.0 && b[off + 1] != 0.0 {
-                1.0
-            } else {
-                0.0
-            };
-            result[off + 2] = if a[off + 2] != 0.0 && b[off + 2] != 0.0 {
-                1.0
-            } else {
-                0.0
-            };
-            result[off + 3] = if a[off + 3] != 0.0 && b[off + 3] != 0.0 {
-                1.0
-            } else {
-                0.0
-            };
-        }
-        for i in (chunks * 4)..len {
-            result[i] = if a[i] != 0.0 && b[i] != 0.0 { 1.0 } else { 0.0 };
+        for i in 0..len {
+            result[i] =
+                truth::logical_bool(truth::is_logical_true(a[i]) && truth::is_logical_true(b[i]));
         }
     }
 
     pub fn logical_or(a: &[f64], b: &[f64], result: &mut [f64]) {
         let len = a.len().min(b.len()).min(result.len());
-        let chunks = len / 4;
-        for i in 0..chunks {
-            let off = i * 4;
-            result[off] = if a[off] != 0.0 || b[off] != 0.0 {
-                1.0
-            } else {
-                0.0
-            };
-            result[off + 1] = if a[off + 1] != 0.0 || b[off + 1] != 0.0 {
-                1.0
-            } else {
-                0.0
-            };
-            result[off + 2] = if a[off + 2] != 0.0 || b[off + 2] != 0.0 {
-                1.0
-            } else {
-                0.0
-            };
-            result[off + 3] = if a[off + 3] != 0.0 || b[off + 3] != 0.0 {
-                1.0
-            } else {
-                0.0
-            };
-        }
-        for i in (chunks * 4)..len {
-            result[i] = if a[i] != 0.0 || b[i] != 0.0 { 1.0 } else { 0.0 };
+        for i in 0..len {
+            result[i] =
+                truth::logical_bool(truth::is_logical_true(a[i]) || truth::is_logical_true(b[i]));
         }
     }
 
     pub fn logical_not(data: &[f64], result: &mut [f64]) {
         let len = data.len().min(result.len());
-        let chunks = len / 4;
-        for i in 0..chunks {
-            let off = i * 4;
-            result[off] = if data[off] != 0.0 { 0.0 } else { 1.0 };
-            result[off + 1] = if data[off + 1] != 0.0 { 0.0 } else { 1.0 };
-            result[off + 2] = if data[off + 2] != 0.0 { 0.0 } else { 1.0 };
-            result[off + 3] = if data[off + 3] != 0.0 { 0.0 } else { 1.0 };
-        }
-        for i in (chunks * 4)..len {
-            result[i] = if data[i] != 0.0 { 0.0 } else { 1.0 };
+        for i in 0..len {
+            result[i] = truth::logical_bool(!truth::is_logical_true(data[i]));
         }
     }
 
     pub fn logical_xor(a: &[f64], b: &[f64], result: &mut [f64]) {
         let len = a.len().min(b.len()).min(result.len());
-        let chunks = len / 4;
-        for i in 0..chunks {
-            let off = i * 4;
-            result[off] = if (a[off] != 0.0) != (b[off] != 0.0) {
-                1.0
-            } else {
-                0.0
-            };
-            result[off + 1] = if (a[off + 1] != 0.0) != (b[off + 1] != 0.0) {
-                1.0
-            } else {
-                0.0
-            };
-            result[off + 2] = if (a[off + 2] != 0.0) != (b[off + 2] != 0.0) {
-                1.0
-            } else {
-                0.0
-            };
-            result[off + 3] = if (a[off + 3] != 0.0) != (b[off + 3] != 0.0) {
-                1.0
-            } else {
-                0.0
-            };
-        }
-        for i in (chunks * 4)..len {
-            result[i] = if (a[i] != 0.0) != (b[i] != 0.0) {
-                1.0
-            } else {
-                0.0
-            };
+        for i in 0..len {
+            result[i] =
+                truth::logical_bool(truth::is_logical_true(a[i]) != truth::is_logical_true(b[i]));
         }
     }
 
+    /// Element-wise `condition ? then_val : else_val`.
+    ///
+    /// The truthiness rule is [`truth::is_true`] (`!= 0.0`), shared with every
+    /// other branch-selection site. The SIMD kernels below compare against zero
+    /// with `_CMP_NEQ_UQ` for the same reason; keep the two in step.
     pub fn select(condition: &[f64], then_val: &[f64], else_val: &[f64], result: &mut [f64]) {
         let len = condition
             .len()
@@ -2237,7 +2207,7 @@ impl SimdOps {
         #[cfg(not(target_arch = "aarch64"))]
         {
             for i in 0..len {
-                result[i] = if condition[i] != 0.0 {
+                result[i] = if truth::is_true(condition[i]) {
                     then_val[i]
                 } else {
                     else_val[i]

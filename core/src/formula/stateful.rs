@@ -670,13 +670,9 @@ impl FormulaExpressionState {
             Self::Unary { op, expression } => {
                 let value = expression.next(row, variables);
                 match op {
-                    UnaryOperator::Not => {
-                        if value > 0.0 {
-                            0.0
-                        } else {
-                            1.0
-                        }
-                    }
+                    UnaryOperator::Not => crate::formula::truth::logical_bool(
+                        !crate::formula::truth::is_logical_true(value),
+                    ),
                     UnaryOperator::Neg => -value,
                 }
             }
@@ -1424,20 +1420,18 @@ fn apply_stateful_binary(op: &BinaryOperator, left: f64, right: f64) -> f64 {
                 left / right
             }
         }
-        BinaryOperator::Mod => {
-            if right.abs() < 1e-15 {
-                f64::NAN
-            } else {
-                left - (left / right).floor() * right
-            }
-        }
+        BinaryOperator::Mod => crate::math::floor_remainder(left, right),
         BinaryOperator::Pow => left.powf(right),
         BinaryOperator::Gt => (left > right) as u8 as f64,
         BinaryOperator::Lt => (left < right) as u8 as f64,
         BinaryOperator::Gte => (left >= right) as u8 as f64,
         BinaryOperator::Lte => (left <= right) as u8 as f64,
-        BinaryOperator::Eq => ((left - right).abs() < 1e-10) as u8 as f64,
-        BinaryOperator::Neq => ((left - right).abs() >= 1e-10) as u8 as f64,
+        BinaryOperator::Eq => {
+            crate::formula::truth::logical_bool(crate::math::nearly_equal(left, right))
+        }
+        BinaryOperator::Neq => {
+            crate::formula::truth::logical_bool(crate::math::nearly_not_equal(left, right))
+        }
         BinaryOperator::And => ((left > 0.0) && (right > 0.0)) as u8 as f64,
         BinaryOperator::Or => ((left > 0.0) || (right > 0.0)) as u8 as f64,
         BinaryOperator::Xor => ((left > 0.0) != (right > 0.0)) as u8 as f64,
@@ -1485,11 +1479,7 @@ fn apply_stateful_unary_function(function: FormulaUnaryFunction, value: f64) -> 
         FormulaUnaryFunction::Acos => value.acos(),
         FormulaUnaryFunction::Atan => value.atan(),
         FormulaUnaryFunction::Not => {
-            if value > 0.0 {
-                0.0
-            } else {
-                1.0
-            }
+            crate::formula::truth::logical_bool(!crate::formula::truth::is_logical_true(value))
         }
     }
 }

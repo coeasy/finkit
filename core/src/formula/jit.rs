@@ -38,6 +38,7 @@ use crate::formula::bytecode::{Bytecode, ExecResult, OpCode};
 use crate::formula::drawing::DrawResult;
 use crate::formula::functions::get_builtin_functions;
 use crate::formula::simd::SimdOps;
+use crate::formula::truth;
 use crate::formula::types::*;
 
 type FormulaFn = fn(&FormulaContext, &[Array1<f64>]) -> Result<Array1<f64>, FormulaError>;
@@ -285,11 +286,7 @@ impl JitCompiler {
                         .ok_or_else(|| FormulaError::RuntimeError("Stack underflow".to_string()))?;
                     let mut result = Array1::zeros(left.len());
                     for i in 0..left.len() {
-                        if right[i].abs() < 1e-15 {
-                            result[i] = f64::NAN;
-                        } else {
-                            result[i] = left[i] % right[i];
-                        }
+                        result[i] = crate::math::floor_remainder(left[i], right[i]);
                     }
                     stack.push(result);
                 }
@@ -461,7 +458,11 @@ impl JitCompiler {
                     let result = left
                         .iter()
                         .zip(right.iter())
-                        .map(|(&l, &r)| if l > 0.0 && r > 0.0 { 1.0 } else { 0.0 })
+                        .map(|(&l, &r)| {
+                            truth::logical_bool(
+                                truth::is_logical_true(l) && truth::is_logical_true(r),
+                            )
+                        })
                         .collect();
                     stack.push(result);
                 }
@@ -475,7 +476,11 @@ impl JitCompiler {
                     let result = left
                         .iter()
                         .zip(right.iter())
-                        .map(|(&l, &r)| if l > 0.0 || r > 0.0 { 1.0 } else { 0.0 })
+                        .map(|(&l, &r)| {
+                            truth::logical_bool(
+                                truth::is_logical_true(l) || truth::is_logical_true(r),
+                            )
+                        })
                         .collect();
                     stack.push(result);
                 }
@@ -489,7 +494,11 @@ impl JitCompiler {
                     let result = left
                         .iter()
                         .zip(right.iter())
-                        .map(|(&l, &r)| if (l > 0.0) != (r > 0.0) { 1.0 } else { 0.0 })
+                        .map(|(&l, &r)| {
+                            truth::logical_bool(
+                                truth::is_logical_true(l) != truth::is_logical_true(r),
+                            )
+                        })
                         .collect();
                     stack.push(result);
                 }
@@ -497,7 +506,7 @@ impl JitCompiler {
                     let val = stack
                         .pop()
                         .ok_or_else(|| FormulaError::RuntimeError("Stack underflow".to_string()))?;
-                    let result = val.mapv(|v| if v > 0.0 { 0.0 } else { 1.0 });
+                    let result = val.mapv(|v| truth::logical_bool(!truth::is_logical_true(v)));
                     stack.push(result);
                 }
                 OpCode::StringConcat => {
@@ -855,7 +864,9 @@ impl JitCompiler {
                 if b.abs() < 1e-15 {
                     Some(f64::NAN)
                 } else {
-                    Some(a % b)
+                    // Floor-based, matching every runtime kernel: folding must
+                    // not change the value of the formula.
+                    Some(crate::math::floor_remainder(a, b))
                 }
             }
             OpCode::Pow => Some(a.powf(b)),
@@ -863,8 +874,8 @@ impl JitCompiler {
             OpCode::Lt => Some(if a < b { 1.0 } else { 0.0 }),
             OpCode::Gte => Some(if a >= b { 1.0 } else { 0.0 }),
             OpCode::Lte => Some(if a <= b { 1.0 } else { 0.0 }),
-            OpCode::Eq => Some(if (a - b).abs() < 1e-10 { 1.0 } else { 0.0 }),
-            OpCode::Neq => Some(if (a - b).abs() >= 1e-10 { 1.0 } else { 0.0 }),
+            OpCode::Eq => Some(truth::logical_bool(crate::math::nearly_equal(a, b))),
+            OpCode::Neq => Some(truth::logical_bool(crate::math::nearly_not_equal(a, b))),
             _ => None,
         }
     }

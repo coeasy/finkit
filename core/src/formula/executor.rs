@@ -7,6 +7,7 @@ use crate::formula::ast::*;
 use crate::formula::functions::get_builtin_functions;
 use crate::formula::memory_pool::BufferPool;
 use crate::formula::simd::SimdOps;
+use crate::formula::truth;
 use crate::formula::types::*;
 
 type FormulaFn = fn(&FormulaContext, &[Array1<f64>]) -> Result<Array1<f64>, FormulaError>;
@@ -549,9 +550,9 @@ impl FormulaExecutor {
         _data_len: usize,
     ) -> Result<FormulaValue, FormulaError> {
         match (&val, op) {
-            (FormulaValue::Scalar(v), UnaryOperator::Not) => {
-                Ok(FormulaValue::Scalar(if *v <= 0.0 { 1.0 } else { 0.0 }))
-            }
+            (FormulaValue::Scalar(v), UnaryOperator::Not) => Ok(FormulaValue::Scalar(
+                truth::logical_bool(!truth::is_logical_true(*v)),
+            )),
             (FormulaValue::Scalar(v), UnaryOperator::Neg) => Ok(FormulaValue::Scalar(-*v)),
             (FormulaValue::Array(a), UnaryOperator::Not) => {
                 let result = self.apply_unary_op(op, a)?;
@@ -577,13 +578,7 @@ fn apply_scalar_op(op: &BinaryOperator, l: f64, r: f64) -> Result<f64, FormulaEr
                 Ok(l / r)
             }
         }
-        BinaryOperator::Mod => {
-            if r.abs() < 1e-15 {
-                Ok(f64::NAN)
-            } else {
-                Ok(l - (l / r).floor() * r)
-            }
-        }
+        BinaryOperator::Mod => Ok(crate::math::floor_remainder(l, r)),
         BinaryOperator::Pow => Ok(l.powf(r)),
         BinaryOperator::Gt => Ok(if l > r { 1.0 } else { 0.0 }),
         BinaryOperator::Lt => Ok(if l < r { 1.0 } else { 0.0 }),
@@ -634,11 +629,7 @@ fn apply_scalar_array_op(
         }
         BinaryOperator::Mod => {
             for i in 0..len {
-                result[i] = if arr[i].abs() < 1e-15 {
-                    f64::NAN
-                } else {
-                    scalar - (scalar / arr[i]).floor() * arr[i]
-                };
+                result[i] = crate::math::floor_remainder(scalar, arr[i]);
             }
         }
         BinaryOperator::Pow => {
@@ -686,29 +677,23 @@ fn apply_scalar_array_op(
         }
         BinaryOperator::And => {
             for i in 0..len {
-                result[i] = if scalar > 0.0 && arr[i] > 0.0 {
-                    1.0
-                } else {
-                    0.0
-                };
+                result[i] = truth::logical_bool(
+                    truth::is_logical_true(scalar) && truth::is_logical_true(arr[i]),
+                );
             }
         }
         BinaryOperator::Or => {
             for i in 0..len {
-                result[i] = if scalar > 0.0 || arr[i] > 0.0 {
-                    1.0
-                } else {
-                    0.0
-                };
+                result[i] = truth::logical_bool(
+                    truth::is_logical_true(scalar) || truth::is_logical_true(arr[i]),
+                );
             }
         }
         BinaryOperator::Xor => {
             for i in 0..len {
-                result[i] = if (scalar > 0.0) != (arr[i] > 0.0) {
-                    1.0
-                } else {
-                    0.0
-                };
+                result[i] = truth::logical_bool(
+                    truth::is_logical_true(scalar) != truth::is_logical_true(arr[i]),
+                );
             }
         }
         BinaryOperator::StringConcat => {
@@ -755,14 +740,8 @@ fn apply_array_scalar_op(
             }
         }
         BinaryOperator::Mod => {
-            if scalar.abs() < 1e-15 {
-                for i in 0..len {
-                    result[i] = f64::NAN;
-                }
-            } else {
-                for i in 0..len {
-                    result[i] = arr[i] - (arr[i] / scalar).floor() * scalar;
-                }
+            for i in 0..len {
+                result[i] = crate::math::floor_remainder(arr[i], scalar);
             }
         }
         BinaryOperator::Pow => {
@@ -792,47 +771,33 @@ fn apply_array_scalar_op(
         }
         BinaryOperator::Eq => {
             for i in 0..len {
-                result[i] = if (arr[i] - scalar).abs() < 1e-10 {
-                    1.0
-                } else {
-                    0.0
-                };
+                result[i] = truth::logical_bool(crate::math::nearly_equal(arr[i], scalar));
             }
         }
         BinaryOperator::Neq => {
             for i in 0..len {
-                result[i] = if (arr[i] - scalar).abs() >= 1e-10 {
-                    1.0
-                } else {
-                    0.0
-                };
+                result[i] = truth::logical_bool(crate::math::nearly_not_equal(arr[i], scalar));
             }
         }
         BinaryOperator::And => {
             for i in 0..len {
-                result[i] = if arr[i] > 0.0 && scalar > 0.0 {
-                    1.0
-                } else {
-                    0.0
-                };
+                result[i] = truth::logical_bool(
+                    truth::is_logical_true(arr[i]) && truth::is_logical_true(scalar),
+                );
             }
         }
         BinaryOperator::Or => {
             for i in 0..len {
-                result[i] = if arr[i] > 0.0 || scalar > 0.0 {
-                    1.0
-                } else {
-                    0.0
-                };
+                result[i] = truth::logical_bool(
+                    truth::is_logical_true(arr[i]) || truth::is_logical_true(scalar),
+                );
             }
         }
         BinaryOperator::Xor => {
             for i in 0..len {
-                result[i] = if (arr[i] > 0.0) != (scalar > 0.0) {
-                    1.0
-                } else {
-                    0.0
-                };
+                result[i] = truth::logical_bool(
+                    truth::is_logical_true(arr[i]) != truth::is_logical_true(scalar),
+                );
             }
         }
         BinaryOperator::StringConcat => {

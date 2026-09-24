@@ -96,3 +96,40 @@ fn execution_optimizer_preserves_buy_and_sell_assignments() {
 fn execution_optimizer_preserves_named_outputs() {
     assert_execution_equivalent("MA5:=MA(CLOSE,5);UPPER:MA5+2;LOWER:MA5-2;UPPER;");
 }
+
+/// Constant folding must not change the value of the `%` operator.
+///
+/// `%` is the floor-based remainder (`-7 % 3` is `2`), but the optimizer's
+/// folder used Rust's truncating `%`, so a *literal* dividend folded to `-1`
+/// while the same arithmetic reached through a variable produced `2`. The
+/// difference only appears when the folder can see both operands, which is
+/// exactly why the runtime differentials stayed green.
+#[test]
+fn execution_optimizer_preserves_floor_modulo() {
+    assert_execution_equivalent("REMAINDER:=(0-7)%3;REMAINDER;");
+    assert_execution_equivalent("REMAINDER:=(0-1)%3;REMAINDER;");
+    assert_execution_equivalent("REMAINDER:=(0-7)MOD3;REMAINDER;");
+    assert_execution_equivalent("REMAINDER:=(0-CLOSE)%3;REMAINDER;");
+}
+
+/// Constant folding must not change the logical operators' truthiness.
+///
+/// They treat a value as true only when it is strictly positive, so a negative
+/// operand is false — unlike `IF`'s branch selection, which is `!= 0.0`.
+#[test]
+fn execution_optimizer_preserves_logical_truthiness() {
+    assert_execution_equivalent("FLAG:=(0-1)AND(0-1);FLAG;");
+    assert_execution_equivalent("FLAG:=(0-1)OR0;FLAG;");
+    assert_execution_equivalent("FLAG:=(0-1)XOR1;FLAG;");
+    assert_execution_equivalent("FLAG:=!(0-1);FLAG;");
+    assert_execution_equivalent("FLAG:=CLOSE AND (0-CLOSE);FLAG;");
+    assert_execution_equivalent("FLAG:=!(0-CLOSE);FLAG;");
+}
+
+/// Constant folding must not change the `==` / `!=` tolerance.
+#[test]
+fn execution_optimizer_preserves_equality_tolerance() {
+    assert_execution_equivalent("FLAG:=CLOSE==(CLOSE+0.000000000001);FLAG;");
+    assert_execution_equivalent("FLAG:=CLOSE!=(CLOSE+0.000000000001);FLAG;");
+    assert_execution_equivalent("FLAG:=CLOSE==(CLOSE+1);FLAG;");
+}

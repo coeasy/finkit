@@ -7,6 +7,7 @@
 
 use crate::error::TaError;
 use crate::execution_plan::KernelId;
+use crate::formula::truth;
 use crate::formula::types::HostContext;
 use crate::state_arena::StateArena;
 use crate::unified_executor::{KernelCall, KernelDispatchError, KernelDispatcher, UnifiedExecutor};
@@ -461,7 +462,9 @@ impl KernelDispatcher for FormulaKernelDispatcher<'_> {
             return unary(call, buffers, |value| -value);
         }
         if call.kernel == KernelId::from_static("UNARY:Not") {
-            return unary(call, buffers, |value| if value <= 0.0 { 1.0 } else { 0.0 });
+            return unary(call, buffers, |value| {
+                bool_value(!truth::is_logical_true(value))
+            });
         }
         if call.kernel == KernelId::from_static("CALL:ABS") {
             return unary(call, buffers, f64::abs);
@@ -3740,13 +3743,7 @@ fn apply_binary(op: BinaryKernel, lhs: f64, rhs: f64) -> f64 {
                 lhs / rhs
             }
         }
-        BinaryKernel::Mod => {
-            if rhs.abs() < 1e-15 {
-                f64::NAN
-            } else {
-                lhs - (lhs / rhs).floor() * rhs
-            }
-        }
+        BinaryKernel::Mod => crate::math::floor_remainder(lhs, rhs),
         BinaryKernel::Pow => lhs.powf(rhs),
         // `f64::max`/`f64::min` return the non-NaN operand when exactly one side
         // is NaN, matching the reference `MAX`/`MIN` implementations.
@@ -3756,11 +3753,11 @@ fn apply_binary(op: BinaryKernel, lhs: f64, rhs: f64) -> f64 {
         BinaryKernel::Lt => bool_value(lhs < rhs),
         BinaryKernel::Gte => bool_value(lhs >= rhs),
         BinaryKernel::Lte => bool_value(lhs <= rhs),
-        BinaryKernel::Eq => bool_value((lhs - rhs).abs() < 1e-10),
-        BinaryKernel::Neq => bool_value((lhs - rhs).abs() >= 1e-10),
-        BinaryKernel::And => bool_value(lhs > 0.0 && rhs > 0.0),
-        BinaryKernel::Or => bool_value(lhs > 0.0 || rhs > 0.0),
-        BinaryKernel::Xor => bool_value((lhs > 0.0) != (rhs > 0.0)),
+        BinaryKernel::Eq => bool_value(crate::math::nearly_equal(lhs, rhs)),
+        BinaryKernel::Neq => bool_value(crate::math::nearly_not_equal(lhs, rhs)),
+        BinaryKernel::And => bool_value(truth::is_logical_true(lhs) && truth::is_logical_true(rhs)),
+        BinaryKernel::Or => bool_value(truth::is_logical_true(lhs) || truth::is_logical_true(rhs)),
+        BinaryKernel::Xor => bool_value(truth::is_logical_true(lhs) != truth::is_logical_true(rhs)),
     }
 }
 

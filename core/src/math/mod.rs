@@ -119,6 +119,70 @@ pub(crate) fn three_way_sign(value: f64) -> f64 {
     }
 }
 
+/// `A % B` for the formula `%` operator: the **floor-based** remainder.
+///
+/// Rust's `%` truncates toward zero, so `-7.0 % 3.0` is `-1.0`. The dialect
+/// contract is the floor form — `-7 % 3` is `2.0` — because the remainder is
+/// defined as `a - floor(a / b) * b`. The two disagree in sign whenever the
+/// operands have opposite signs, and a truncating implementation returns a
+/// plausible number rather than a visible gap, so nothing downstream notices.
+///
+/// A divisor near zero has no usable remainder, so the result is `NaN`; that
+/// also keeps the operation total for the streaming path, which has no
+/// per-row error channel.
+///
+/// Every implementation of the operator must call this — the tree scalar and
+/// array kernels, the bytecode VM, the JIT runtime and its bytecode folder, the
+/// plan's `BINARY:Mod` kernel, the SIMD fallbacks, and the AST constant folder.
+/// Four of those had drifted to Rust's truncating `%`, and the constant folder
+/// was the worst of them: folding a literal *changed the value*, so `-7 % 3`
+/// answered `-1` while the equivalent `CLOSE % 3` answered the floor form on the
+/// very same bar. The differential harness could not see it because its data is
+/// strictly positive and it never probed `%` with a negative operand.
+///
+/// `MOD(A, B)` the *function* is deliberately the truncating remainder and must
+/// NOT call this; see `unified_dispatch`'s `MOD`-vs-`%` note.
+#[inline]
+pub(crate) fn floor_remainder(dividend: f64, divisor: f64) -> f64 {
+    if divisor.abs() < 1e-15 {
+        f64::NAN
+    } else {
+        dividend - (dividend / divisor).floor() * divisor
+    }
+}
+
+/// The tolerance behind the formula `==` and `!=` operators: `1e-10`.
+///
+/// The comparison is deliberately not exact. Operands are the result of chained
+/// floating-point arithmetic, so an exact comparison makes two expressions that
+/// are mathematically equal — but reached by different routes — compare
+/// unequal. `1e-10` is the established value; it is stated once here so the
+/// kernels cannot drift.
+pub(crate) const EQUALITY_TOLERANCE: f64 = 1e-10;
+
+/// `A == B` for the formula `==` operator: `|A - B| < `[`EQUALITY_TOLERANCE`].
+///
+/// # `NaN`
+///
+/// A `NaN` operand is neither nearly equal nor nearly unequal: `|NaN - x|` is
+/// `NaN`, and both `<` and `>=` are false against it. So `Eq` and `Neq` both
+/// answer `0.0` when either side is missing. That is the contract every path
+/// already implements, and it is preserved here rather than "fixed" — making
+/// `Neq` the negation of `Eq` would change every path's answer for a missing
+/// value, which is a semantic decision, not a consistency cleanup.
+#[inline]
+pub(crate) fn nearly_equal(lhs: f64, rhs: f64) -> bool {
+    (lhs - rhs).abs() < EQUALITY_TOLERANCE
+}
+
+/// `A != B` for the formula `!=` operator: `|A - B| >= `[`EQUALITY_TOLERANCE`].
+///
+/// Not `!`[`nearly_equal`] — see the `NaN` note there.
+#[inline]
+pub(crate) fn nearly_not_equal(lhs: f64, rhs: f64) -> bool {
+    (lhs - rhs).abs() >= EQUALITY_TOLERANCE
+}
+
 #[cfg(feature = "std")]
 pub mod cci;
 #[cfg(feature = "std")]

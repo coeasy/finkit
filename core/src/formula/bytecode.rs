@@ -7,6 +7,7 @@ use crate::formula::ast::*;
 use crate::formula::drawing::DrawResult;
 use crate::formula::functions::get_builtin_functions;
 use crate::formula::simd::SimdOps;
+use crate::formula::truth;
 use crate::formula::types::{
     classify_builtin_var, BuiltinVar, FormulaContext, FormulaError, FormulaValue,
 };
@@ -574,11 +575,7 @@ impl BytecodeVM {
             }),
             OpCode::Mod => self.exec_binary_op(ctx, |a, b, r| {
                 for i in 0..a.len() {
-                    r[i] = if b[i].abs() < 1e-15 {
-                        f64::NAN
-                    } else {
-                        a[i] - (a[i] / b[i]).floor() * b[i]
-                    };
+                    r[i] = crate::math::floor_remainder(a[i], b[i]);
                 }
             }),
             OpCode::Pow => self.exec_binary_op(ctx, |a, b, r| {
@@ -608,39 +605,33 @@ impl BytecodeVM {
             }),
             OpCode::Eq => self.exec_binary_op(ctx, |a, b, r| {
                 for i in 0..a.len() {
-                    r[i] = if (a[i] - b[i]).abs() < 1e-10 {
-                        1.0
-                    } else {
-                        0.0
-                    };
+                    r[i] = truth::logical_bool(crate::math::nearly_equal(a[i], b[i]));
                 }
             }),
             OpCode::Neq => self.exec_binary_op(ctx, |a, b, r| {
                 for i in 0..a.len() {
-                    r[i] = if (a[i] - b[i]).abs() >= 1e-10 {
-                        1.0
-                    } else {
-                        0.0
-                    };
+                    r[i] = truth::logical_bool(crate::math::nearly_not_equal(a[i], b[i]));
                 }
             }),
             OpCode::And => self.exec_binary_op(ctx, |a, b, r| {
                 for i in 0..a.len() {
-                    r[i] = if a[i] > 0.0 && b[i] > 0.0 { 1.0 } else { 0.0 };
+                    r[i] = truth::logical_bool(
+                        truth::is_logical_true(a[i]) && truth::is_logical_true(b[i]),
+                    );
                 }
             }),
             OpCode::Or => self.exec_binary_op(ctx, |a, b, r| {
                 for i in 0..a.len() {
-                    r[i] = if a[i] > 0.0 || b[i] > 0.0 { 1.0 } else { 0.0 };
+                    r[i] = truth::logical_bool(
+                        truth::is_logical_true(a[i]) || truth::is_logical_true(b[i]),
+                    );
                 }
             }),
             OpCode::Xor => self.exec_binary_op(ctx, |a, b, r| {
                 for i in 0..a.len() {
-                    r[i] = if (a[i] > 0.0) != (b[i] > 0.0) {
-                        1.0
-                    } else {
-                        0.0
-                    };
+                    r[i] = truth::logical_bool(
+                        truth::is_logical_true(a[i]) != truth::is_logical_true(b[i]),
+                    );
                 }
             }),
             OpCode::StringConcat => {
@@ -654,8 +645,9 @@ impl BytecodeVM {
                 let val = self.pop_val()?;
                 match val {
                     FormulaValue::Scalar(v) => {
-                        self.stack
-                            .push(FormulaValue::Scalar(if v <= 0.0 { 1.0 } else { 0.0 }));
+                        self.stack.push(FormulaValue::Scalar(truth::logical_bool(
+                            !truth::is_logical_true(v),
+                        )));
                     }
                     FormulaValue::Array(a) => {
                         let mut result = Array1::zeros(a.len());

@@ -328,6 +328,15 @@ fn formula_differential_arithmetic_and_unary_math_kernels() {
     // Tiny but non-zero: `fn_div` yields a huge finite number, whereas
     // `BinaryKernel::Div`'s epsilon guard would yield NaN.
     check_all_paths("DIV_TINY", "DIV(CLOSE, 0.00000000000000000001)", 80);
+    // `%` is the *floor-based* remainder — `-7 % 3` is `2`, not `-1` — while
+    // `MOD(A, B)` the function truncates. The two must stay pinned apart, and
+    // the operator needs a negative dividend to tell them apart at all: the
+    // harness data is strictly positive, so `CLOSE % 3` alone is satisfied by
+    // either definition, which is how the JIT's runtime `OpCode::Mod` kept
+    // Rust's truncating `%` without any path disagreeing.
+    check_all_paths("MOD_OPERATOR", "CLOSE % 3", 80);
+    check_all_paths("MOD_OPERATOR_NEGATIVE", "(0 - CLOSE) % 3", 80);
+    check_all_paths("MOD_FUNCTION_TRUNCATING", "MOD(0 - CLOSE, 3)", 80);
     check_all_paths("SQRT", "SQRT(CLOSE)", 80);
     check_all_paths("SINH", "SINH(CLOSE / 100)", 80);
     check_all_paths("COSH", "COSH(CLOSE / 100)", 80);
@@ -1919,5 +1928,208 @@ fn streaming_stateful_survives_leading_nan() {
         };
         let stateful_result = run_stateful(source, &make_ctx_leading_nan(90, 6));
         assert_arrays_match(source, "stateful", &ast_result, &stateful_result);
+    }
+}
+
+/// `%` is the floor-based remainder on every path, including after constant
+/// folding.
+///
+/// The operator contract is pinned at the plan's `BINARY:Mod` kernel and in
+/// `unified_dispatch`'s `MOD`-vs-`%` note: `-7 % 3` is `2`, not `-1`, because
+/// the remainder floors toward negative infinity. Every *runtime* implements
+/// that — tree `apply_scalar_op`, bytecode `OpCode::Mod`, plan `BinaryKernel::Mod`
+/// and the streaming `apply_stateful_binary` — but both constant folders used
+/// Rust's truncating `%` (`FormulaOptimizer::eval_binary_const`, reached by the
+/// tree and bytecode compile steps, and the JIT bytecode folder `fold_binary`).
+///
+/// That is a silent optimizer bug rather than a rounding difference: folding a
+/// literal changed the value, so `-7 % 3` answered `-1` while the equivalent
+/// `CLOSE % 3` answered the floor form on the very same bar. Asserted against
+/// the absolute contract, not only as path agreement — if every path had folded,
+/// the differential would stay green while the documented semantics broke.
+#[test]
+fn percent_operator_is_floor_mod_after_constant_folding() {
+    // Absolute reference: floor-mod is the documented operator semantics.
+    let reference = -7.0_f64 - (-7.0_f64 / 3.0).floor() * 3.0;
+    assert!(
+        (reference - 2.0).abs() < TOLERANCE,
+        "floor-mod reference drifted: {reference}"
+    );
+
+    let mut engine = FormulaEngine::new();
+
+    // Literal-only spellings are constant-folded by the tree and bytecode
+    // compile steps, so the folded value has to be the floor form.
+    let folded_cases: &[&str] = &[
+        "-7 % 3",        // `%` binds looser than unary minus: (-7) % 3
+        "(0 - 7) % 3",   // explicit negative left operand
+        "(0 - 7) MOD 3", // `MOD` is also an operator token
+        "(0 - 1) % 3",
+    ];
+    for source in folded_cases {
+        let ast_result = {
+            let mut ctx = make_ctx(8);
+            run_ast(&mut engine, source, &mut ctx)
+        };
+        let bytecode_result = {
+            let ctx = make_ctx(8);
+            run_bytecode(&mut engine, source, &ctx)
+        };
+        for (label, values) in [("ast", &ast_result), ("bytecode", &bytecode_result)] {
+            for (index, value) in values.iter().enumerate() {
+                assert!(
+                    (value - reference).abs() < TOLERANCE,
+                    "{source}: {label}[{index}] = {value}, expected floor-mod {reference}"
+                );
+            }
+        }
+    }
+
+    // A spelling the optimizer cannot fold: `0 - CLOSE` is not a literal, so
+    // this reaches the runtime kernel. It supplies an independent per-element
+    // oracle for the floor form rather than a single folded constant, and it is
+    // checked to actually discriminate floor-mod from truncating `%`.
+    let runtime_result = {
+        let mut ctx = make_ctx(8);
+        run_ast(&mut engine, "(0 - CLOSE) % 3", &mut ctx)
+    };
+    let mut discriminating = false;
+    for (index, value) in runtime_result.iter().enumerate() {
+        let close = 102.0 + index as f64 * 0.6;
+        let expected = -close - (-close / 3.0).floor() * 3.0;
+        assert!(
+            (value - expected).abs() < TOLERANCE,
+            "(0 - CLOSE) % 3: ast[{index}] = {value}, expected floor-mod {expected}"
+        );
+        if (value - (-close % 3.0)).abs() >= TOLERANCE {
+            discriminating = true;
+        }
+    }
+    assert!(
+        discriminating,
+        "(0 - CLOSE) % 3 must separate floor-mod from truncating %"
+    );
+
+    // `MOD(A, B)` the *function* is deliberately the truncating remainder — the
+    // documented difference from the `%` operator. Keep the two pinned apart so
+    // a later "unify the moduluses" cleanup cannot quietly merge them.
+    let mut ctx = make_ctx(8);
+    let function_result = run_ast(&mut engine, "MOD(0 - 7, 3)", &mut ctx);
+    for value in &function_result {
+        assert!(
+            (value - (-1.0)).abs() < TOLERANCE,
+            "MOD(A,B) the function must stay truncating: got {value}"
+        );
+    }
+}
+
+/// Logical operators use one truthiness convention on every path: a value is
+/// true only when it is **strictly positive**.
+///
+/// That is what `BINARY:And/Or/Xor` in the plan, the JIT's `OpCode::And/Or/Xor`,
+/// every scalar kernel and the streaming path do. `SimdOps::logical_and/or/xor/not`
+/// used C-style truthiness (`!= 0.0`) instead, and those four are exactly what
+/// the *array* legs call: the tree executor's array-array `And`/`Or`/`Xor` and
+/// the bytecode VM's array `Not`. A negative operand is the only thing that
+/// separates the two conventions, so the family agreed everywhere the tests
+/// looked:
+///
+/// - `CLOSE AND 0` (array vs scalar) answered `0.0`
+/// - `CLOSE AND (0 - CLOSE)` (array vs array) answered `1.0`
+///
+/// The same expression shape, two answers, chosen by whether an operand happened
+/// to be a scalar. Pinned absolutely as well as across paths, because a
+/// "consistently wrong" convention would keep a differential green.
+#[test]
+fn logical_operators_use_one_truthiness_convention() {
+    // Four-way comparison on data-dependent operands, so every path has work.
+    check_all_paths("LOGICAL_AND_NEGATIVE", "CLOSE AND (0 - CLOSE)", 80);
+    check_all_paths("LOGICAL_AND_SCALAR", "CLOSE AND 0", 80);
+    check_all_paths("LOGICAL_OR_NEGATIVE", "(0 - CLOSE) OR (0 - CLOSE)", 80);
+    check_all_paths("LOGICAL_XOR_NEGATIVE", "(0 - CLOSE) XOR CLOSE", 80);
+    check_all_paths("LOGICAL_NOT_NEGATIVE", "!(0 - CLOSE)", 80);
+
+    // Absolute values: false is anything that is not strictly positive.
+    let cases: &[(&str, f64)] = &[
+        ("(0 - 1) AND (0 - 1)", 0.0),
+        ("(0 - 1) AND 1", 0.0),
+        ("1 AND (0 - 1)", 0.0),
+        ("1 AND 1", 1.0),
+        ("(0 - 1) OR 0", 0.0),
+        ("0 OR (0 - 1)", 0.0),
+        ("1 OR (0 - 1)", 1.0),
+        ("(0 - 1) XOR 1", 1.0),
+        ("(0 - 1) XOR 0", 0.0),
+        ("1 XOR 1", 0.0),
+        ("!(0 - 1)", 1.0),
+        ("!(1)", 0.0),
+        ("!(0)", 1.0),
+    ];
+    let mut engine = FormulaEngine::new();
+    for (source, expected) in cases {
+        let result = {
+            let mut ctx = make_ctx(8);
+            run_ast(&mut engine, source, &mut ctx)
+        };
+        for (index, value) in result.iter().enumerate() {
+            assert!(
+                (value - expected).abs() < TOLERANCE,
+                "{source}: ast[{index}] = {value}, expected {expected}"
+            );
+        }
+    }
+}
+
+/// `==` / `!=` compare with a **tolerance** on every path, not exactly.
+///
+/// Every kernel uses `|lhs - rhs| < 1e-10` — the scalar legs, the bytecode VM,
+/// the JIT, the plan's `BinaryKernel::Eq/Neq`, the streaming path and the
+/// optimizer's constant folder. The array-array leg alone called
+/// `SimdOps::simd_eq_arrays` / `simd_neq_arrays`, which compare exactly
+/// (`_CMP_EQ_OQ` in the AVX2 kernel). So the same comparison answered two ways
+/// depending on whether one operand happened to be a scalar:
+///
+/// - `CLOSE == (CLOSE + 1e-12)` (array vs array) answered `0.0`
+/// - `CLOSE == (CLOSE[0] + 1e-12)` (array vs scalar) answered `1.0`
+///
+/// `1e-12` is below the tolerance but far above the f64 spacing at these
+/// magnitudes, so the two sides genuinely are distinct values and the case
+/// really does separate the two rules.
+#[test]
+fn equality_operators_use_one_tolerance_on_every_path() {
+    check_all_paths("EQ_TOLERANCE", "CLOSE == (CLOSE + 0.000000000001)", 80);
+    check_all_paths("NEQ_TOLERANCE", "CLOSE != (CLOSE + 0.000000000001)", 80);
+    check_all_paths("EQ_IDENTICAL", "CLOSE == CLOSE", 80);
+    check_all_paths("NEQ_IDENTICAL", "CLOSE != CLOSE", 80);
+    // Below the JIT's 16-element SIMD threshold, which is where the JIT used to
+    // switch to a *different* comparison and made the answer depend on length.
+    check_all_paths("EQ_TOLERANCE_SHORT", "CLOSE == (CLOSE + 0.000000000001)", 8);
+    check_all_paths(
+        "NEQ_TOLERANCE_SHORT",
+        "CLOSE != (CLOSE + 0.000000000001)",
+        8,
+    );
+
+    // Absolute: a difference inside the tolerance still counts as equal.
+    let cases: &[(&str, f64)] = &[
+        ("CLOSE == (CLOSE + 0.000000000001)", 1.0),
+        ("CLOSE != (CLOSE + 0.000000000001)", 0.0),
+        ("CLOSE == CLOSE", 1.0),
+        ("CLOSE != CLOSE", 0.0),
+        ("CLOSE == (CLOSE + 1)", 0.0),
+        ("CLOSE != (CLOSE + 1)", 1.0),
+    ];
+    let mut engine = FormulaEngine::new();
+    for (source, expected) in cases {
+        let result = {
+            let mut ctx = make_ctx(8);
+            run_ast(&mut engine, source, &mut ctx)
+        };
+        for (index, value) in result.iter().enumerate() {
+            assert!(
+                (value - expected).abs() < TOLERANCE,
+                "{source}: ast[{index}] = {value}, expected {expected}"
+            );
+        }
     }
 }

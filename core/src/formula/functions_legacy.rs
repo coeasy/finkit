@@ -3076,7 +3076,8 @@ fn fn_ifthen(_ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>,
 
 fn fn_not(_ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("NOT", args, 1)?;
-    Ok(args[0].mapv(|v| if v > 0.0 { 0.0 } else { 1.0 }))
+    Ok(args[0]
+        .mapv(|v| crate::formula::truth::logical_bool(!crate::formula::truth::is_logical_true(v))))
 }
 
 fn fn_histvol(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {

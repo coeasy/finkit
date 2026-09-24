@@ -154,6 +154,44 @@ reused.
   second gate `streaming_stateful_survives_leading_nan` locks this on a context
   whose columns open with a `NaN` run.
 
+- The `%` operator had four implementations that disagreed with the other eight.
+  The dialect contract is the **floor-based** remainder (`-7 % 3` is `2`), which
+  the tree scalar and array kernels, the bytecode VM, the plan's `BINARY:Mod`
+  kernel and the streaming path all implement; but `FormulaOptimizer`'s
+  constant folder, the JIT's bytecode folder, the JIT's *runtime* `OpCode::Mod`
+  and `compute_ir`'s `const_eval` used Rust's truncating `%` (`-7 % 3` is `-1`).
+  A folder that changes the value of a formula is the worst form of this: with
+  literals the optimizer folded `-7 % 3` to `-1`, while the equivalent
+  `CLOSE % 3` on the same bar produced the floor form. All eleven sites now
+  call `math::floor_remainder`. `MOD(A, B)` the *function* stays truncating by
+  design; a new gate pins the two apart, and `%` gained a negative-dividend case
+  in the four-way harness (the harness data is strictly positive, so
+  `CLOSE % 3` alone is satisfied by either definition).
+
+- The logical operators had two truthiness conventions. `truth.rs` records that
+  `And` / `Or` / `Xor` / `Not` treat a value as true only when it is **strictly
+  positive** (deliberately unlike `IF`'s branch selection, which is
+  `!= 0.0`), and eight implementations follow it — the scalar kernels, the
+  bytecode VM, the JIT, the plan's `BINARY:And/Or/Xor` and `UNARY:Not` kernels,
+  the streaming path, the optimizer's folder and `fn_not`. `SimdOps::logical_and`
+  / `logical_or` / `logical_xor` / `logical_not` compared against zero
+  (`!= 0.0`), and those are what the *array* legs call, so the same expression
+  shape answered two ways depending on whether an operand happened to be a
+  scalar: `CLOSE AND 0` was `0.0` while `CLOSE AND (0 - CLOSE)` was `1.0`. All
+  sites now call `truth::is_logical_true` / `truth::logical_bool`, and
+  `SimdOps::select` now calls `truth::is_true` instead of restating it.
+
+- `==` / `!=` compared with a tolerance everywhere except the array-array leg.
+  Every kernel uses `|lhs - rhs| < 1e-10`, but `SimdOps::simd_eq_arrays` /
+  `simd_neq_arrays` compared exactly (`_CMP_EQ_OQ` in the AVX2 kernel), so
+  `CLOSE == (CLOSE + 1e-12)` answered `0.0` while the scalar leg answered
+  `1.0`. The JIT had the same split *within one path*, choosing the exact SIMD
+  kernel from 16 elements up and the tolerant scalar loop below — the
+  length-dependent anomaly that `truth.rs` exists to prevent. The AVX2, AVX-512
+  and NEON kernels now compute `|a - b| < eps` and `|a - b| >= eps` (ordered, so
+  a `NaN` operand makes both comparisons false, exactly as before), and every
+  site calls `math::nearly_equal` / `nearly_not_equal`.
+
 ## [0.1.15] - 2026-09-11
 
 ### Added

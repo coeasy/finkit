@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::formula::ast::*;
 use crate::formula::opt_level::OptLevel;
+use crate::formula::truth;
 use crate::formula::types::classify_builtin_var;
 
 pub struct FormulaOptimizer;
@@ -800,7 +801,9 @@ impl FormulaOptimizer {
                 if right.abs() < 1e-15 {
                     None
                 } else {
-                    Some(left % right)
+                    // Floor-based, matching every runtime kernel: folding must
+                    // not change the value of the formula.
+                    Some(crate::math::floor_remainder(left, right))
                 }
             }
             BinaryOperator::Pow => Some(left.powf(right)),
@@ -808,23 +811,19 @@ impl FormulaOptimizer {
             BinaryOperator::Lt => Some(if left < right { 1.0 } else { 0.0 }),
             BinaryOperator::Gte => Some(if left >= right { 1.0 } else { 0.0 }),
             BinaryOperator::Lte => Some(if left <= right { 1.0 } else { 0.0 }),
-            BinaryOperator::Eq => Some(if (left - right).abs() < 1e-10 {
-                1.0
-            } else {
-                0.0
-            }),
-            BinaryOperator::Neq => Some(if (left - right).abs() >= 1e-10 {
-                1.0
-            } else {
-                0.0
-            }),
-            BinaryOperator::And => Some(if left > 0.0 && right > 0.0 { 1.0 } else { 0.0 }),
-            BinaryOperator::Or => Some(if left > 0.0 || right > 0.0 { 1.0 } else { 0.0 }),
-            BinaryOperator::Xor => Some(if (left > 0.0) != (right > 0.0) {
-                1.0
-            } else {
-                0.0
-            }),
+            BinaryOperator::Eq => Some(truth::logical_bool(crate::math::nearly_equal(left, right))),
+            BinaryOperator::Neq => Some(truth::logical_bool(crate::math::nearly_not_equal(
+                left, right,
+            ))),
+            BinaryOperator::And => Some(truth::logical_bool(
+                truth::is_logical_true(left) && truth::is_logical_true(right),
+            )),
+            BinaryOperator::Or => Some(truth::logical_bool(
+                truth::is_logical_true(left) || truth::is_logical_true(right),
+            )),
+            BinaryOperator::Xor => Some(truth::logical_bool(
+                truth::is_logical_true(left) != truth::is_logical_true(right),
+            )),
             BinaryOperator::StringConcat => None,
         }
     }
