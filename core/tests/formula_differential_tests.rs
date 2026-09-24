@@ -14,7 +14,7 @@
 use finkit::execution_plan::KernelId;
 use finkit::formula::{
     parse_formula, unified_formula_executor, FormulaContext, FormulaDialect, FormulaEngine,
-    FormulaHotPlan, FormulaStatefulStream,
+    FormulaExecutionMode, FormulaHotPlan, FormulaStatefulStream,
 };
 use ndarray::Array1;
 use std::collections::BTreeMap;
@@ -1461,6 +1461,48 @@ fn builtin_data_aliases_resolve_to_the_same_series_on_every_path() {
 ///
 /// Counts come from `MA(CLOSE,5)` over 200 bars, i.e. 196 finite values fed in
 /// as `X`; a rolling window of `p` costs `p - 1` bars.
+#[test]
+fn externally_bound_variables_are_case_insensitive_on_all_paths() {
+    const SOURCE: &str = "foo + CLOSE";
+    const LEN: usize = 40;
+    let external = Array1::from_vec((0..LEN).map(|index| 10.0 + index as f64).collect());
+    let mut engine = FormulaEngine::new();
+
+    let mut tree_ctx = make_ctx(LEN);
+    tree_ctx.set_variable("foo".to_string(), external.clone());
+    let reference = run_ast(&mut engine, SOURCE, &mut tree_ctx);
+
+    let mut bytecode_ctx = make_ctx(LEN);
+    bytecode_ctx.set_variable("foo".to_string(), external.clone());
+    let bytecode = run_bytecode(&mut engine, SOURCE, &bytecode_ctx);
+    assert_arrays_match(SOURCE, "bytecode", &reference, &bytecode);
+
+    let mut plan_ctx = make_ctx(LEN);
+    plan_ctx.set_variable("foo".to_string(), external);
+    engine.set_execution_mode(FormulaExecutionMode::Plan);
+    let plan = engine
+        .eval(SOURCE, &mut plan_ctx)
+        .unwrap_or_else(|error| panic!("plan failed for mixed-case variable: {error}"));
+    assert_arrays_match(SOURCE, "plan", &reference, &plan);
+}
+
+#[test]
+fn implicit_builtin_variables_are_consistent_on_tree_and_plan() {
+    for source in ["BARSCOUNT", "BARPOS", "CAPITAL", "DRAWNULL"] {
+        let mut tree_ctx = make_ctx(12).with_capital(123.0);
+        let mut tree_engine = FormulaEngine::new();
+        let reference = run_ast(&mut tree_engine, source, &mut tree_ctx);
+
+        let mut plan_ctx = make_ctx(12).with_capital(123.0);
+        let mut plan_engine = FormulaEngine::new();
+        plan_engine.set_execution_mode(FormulaExecutionMode::Plan);
+        let candidate = plan_engine
+            .eval(source, &mut plan_ctx)
+            .unwrap_or_else(|error| panic!("{source}: plan failed: {error}"));
+        assert_arrays_match(source, "plan", &reference, &candidate);
+    }
+}
+
 #[test]
 fn formula_differential_warmup_composition_all_paths() {
     const LEN: usize = 200;

@@ -2525,6 +2525,10 @@ pub fn builtin_function_registry() -> FunctionRegistry {
     // plan bridge remains inside the registry SSOT rather than creating a
     // formula-only execution path.
     let talib_formula_specs = [
+        "BARSCOUNT",
+        "BARPOS",
+        "CAPITAL",
+        "DRAWNULL",
         "ADXR",
         "APO",
         "AROONOSC",

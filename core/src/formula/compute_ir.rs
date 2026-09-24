@@ -453,6 +453,15 @@ impl<'a> FormulaLowerer<'a> {
 
     fn lower_variable(&mut self, name: &str) -> ComputeNodeId {
         let key = canonical_name(name);
+        // These names are implicit context values, not external input series.
+        // Lowering them as VARIABLE nodes made the plan binder ask callers for
+        // data that only the FormulaContext can synthesize.
+        if matches!(
+            key.as_str(),
+            "BARSCOUNT" | "BARPOS" | "CAPITAL" | "DRAWNULL"
+        ) {
+            return self.add_pure(format!("CALL:{key}"), Vec::new());
+        }
         let mut dependencies = Vec::with_capacity(2);
         if let Some(write) = self.last_write.get(&key).copied() {
             dependencies.push(write);
@@ -465,14 +474,12 @@ impl<'a> FormulaLowerer<'a> {
         self.add_pure(format!("VARIABLE:{key}"), dependencies)
     }
 
-    fn function_metadata(&self, name: &str) -> (String, ComputeCapabilities) {
+    fn function_metadata(&mut self, name: &str) -> (String, ComputeCapabilities) {
         self.registry.get(name).map_or_else(
             || {
                 (
                     canonical_name(name),
                     ComputeCapabilities {
-                        // Unknown/custom formula functions are deliberately conservative.
-                        // Once registered in the SSOT they regain precise capabilities.
                         deterministic: false,
                         streaming: false,
                         stateful: true,

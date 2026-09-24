@@ -148,11 +148,14 @@ impl JitCompiler {
         self.execute_optimized(optimized, ctx)
     }
 
+    #[allow(clippy::cast_possible_truncation)] // drawing parameters use the established i32 ABI.
+    #[allow(clippy::cast_precision_loss)] // literal indices are exact for realistic table sizes.
     pub fn execute_optimized(
         &self,
         optimized: &OptimizedBytecode,
         ctx: &mut FormulaContext,
     ) -> Result<ExecResult, FormulaError> {
+        ctx.validate_alignment()?;
         let data_len = ctx.data_len;
         let mut stack: Vec<Array1<f64>> = Vec::with_capacity(optimized.buffer_size);
         let mut variables: AHashMap<String, Array1<f64>> = AHashMap::new();
@@ -160,6 +163,7 @@ impl JitCompiler {
         let mut draw_commands = DrawResult::new();
         let instructions = &optimized.bytecode.instructions;
         let mut pc: usize = 0;
+        let mut backward_jumps = 0usize;
 
         while pc < instructions.len() {
             let op = &instructions[pc];
@@ -524,6 +528,14 @@ impl JitCompiler {
                     stack.push(result);
                 }
                 OpCode::Jump(target) => {
+                    if *target <= pc {
+                        backward_jumps = backward_jumps.saturating_add(1);
+                        if backward_jumps > crate::formula::executor::MAX_LOOP_ITERATIONS {
+                            return Err(FormulaError::RuntimeError(
+                                "loop iteration limit exceeded in JIT VM".to_string(),
+                            ));
+                        }
+                    }
                     pc = *target;
                     continue;
                 }
@@ -533,6 +545,14 @@ impl JitCompiler {
                     })?;
                     let all_false = cond.iter().all(|&v| v <= 0.0);
                     if all_false {
+                        if *target <= pc {
+                            backward_jumps = backward_jumps.saturating_add(1);
+                            if backward_jumps > crate::formula::executor::MAX_LOOP_ITERATIONS {
+                                return Err(FormulaError::RuntimeError(
+                                    "loop iteration limit exceeded in JIT VM".to_string(),
+                                ));
+                            }
+                        }
                         pc = *target;
                         continue;
                     }
@@ -666,13 +686,44 @@ impl JitCompiler {
                     let width = width_val[0] as i32;
                     draw_commands.add_stick(cond, price1, price2, width, *empty, color.clone());
                 }
-                OpCode::DrawGeneric { arg_count, .. } => {
+                OpCode::DrawGeneric {
+                    command,
+                    arg_count,
+                    color,
+                } => {
+                    let mut values = Vec::with_capacity(*arg_count);
                     for _ in 0..*arg_count {
-                        stack.pop();
+                        values.push(stack.pop().ok_or_else(|| {
+                            FormulaError::RuntimeError("Stack underflow on DrawGeneric".to_string())
+                        })?);
+                    }
+                    values.reverse();
+                    match (command.as_str(), values.len()) {
+                        ("DRAWLINE", n) if n >= 5 => draw_commands.add_line(
+                            values.remove(0),
+                            values.remove(0),
+                            values.remove(0),
+                            values.remove(0),
+                            values[0][0] as i32,
+                            color.clone(),
+                        ),
+                        ("DRAWKLINE", n) if n >= 4 => draw_commands.add_kline(
+                            values.remove(0),
+                            values.remove(0),
+                            values.remove(0),
+                            values.remove(0),
+                        ),
+                        _ => {
+                            return Err(FormulaError::RuntimeError(format!(
+                                "generic drawing command `{command}` is not supported by JIT VM"
+                            )))
+                        }
                     }
                 }
-                OpCode::PushString(_) => {
-                    stack.push(Array1::zeros(data_len));
+                OpCode::PushString(value) => {
+                    let index = ctx.string_table.len();
+                    ctx.string_table.push(value.clone());
+                    stack.push(Array1::from_elem(data_len, index as f64));
                 }
                 OpCode::Select => {
                     let else_val = stack
@@ -705,6 +756,7 @@ impl JitCompiler {
             outputs,
             final_value,
             draw_commands,
+            string_table: ctx.string_table.clone(),
         })
     }
 

@@ -156,6 +156,8 @@ pub enum ComputePlanError {
     /// The dependency graph contains a cycle. The list contains nodes that
     /// remain cyclic after deterministic topological sorting.
     DependencyCycle(Vec<ComputeNodeId>),
+    /// A formula call has no registered implementation.
+    UnknownFunction(String),
     /// A `for` loop cannot be lowered into the acyclic compute plan.
     ///
     /// Loop bodies are lowered by unrolling, which needs bounds that are known
@@ -185,6 +187,7 @@ impl fmt::Display for ComputePlanError {
                 let ids: Vec<String> = nodes.iter().map(|id| id.0.to_string()).collect();
                 write!(f, "compute dependency cycle: {}", ids.join(" -> "))
             }
+            Self::UnknownFunction(name) => write!(f, "unknown formula function: {name}"),
             Self::UnsupportedLoop { variable, reason } => {
                 write!(f, "unsupported `for` loop over `{variable}`: {reason}")
             }

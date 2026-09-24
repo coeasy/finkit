@@ -628,6 +628,7 @@ impl FormulaEngine {
         params: &ParamValues,
         ctx: &mut FormulaContext,
     ) -> Result<FormulaPlanOutput, FormulaError> {
+        ctx.validate_alignment()?;
         let plan = self.compile_plan(source, dialect, params)?;
 
         // The plan path must honour the same execution sandbox as the tree path.
@@ -697,6 +698,7 @@ impl FormulaEngine {
                     low: ctx.low.as_slice(),
                     close: ctx.close.as_slice(),
                 }),
+                capital: ctx.capital,
             };
             let mut executor = unified_formula_executor_with_host(&plan, host);
             executor
@@ -1641,6 +1643,7 @@ impl FormulaEngine {
         ast: &AstNode,
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
+        ctx.validate_alignment()?;
         self.executor.execute(ast, ctx)
     }
 

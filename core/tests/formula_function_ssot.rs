@@ -68,6 +68,8 @@ const PLAN_KERNELS: &[&str] = &[
     "AROON_UP",
     "ATR",
     "BARSSINCE",
+    "BARSCOUNT",
+    "BARPOS",
     "BBANDS",
     "BIGORDER",
     "BOLLDN",
@@ -83,10 +85,12 @@ const PLAN_KERNELS: &[&str] = &[
     "CUMSUM",
     // Host-context kernels: they read data the numeric input slots cannot carry
     // (see `HostContext`), so they are only executable when the caller supplies it.
+    "CAPITAL",
     "COST",
     "DEA",
     "DIV",
     "DONCHIAN",
+    "DRAWNULL",
     "DONCHIAN_LOWER",
     "DONCHIAN_MIDDLE",
     "DONCHIAN_UPPER",
@@ -523,7 +527,11 @@ fn every_plan_kernel_is_registered_in_the_ssot() {
 fn every_plan_kernel_has_a_formula_implementation() {
     let kernels = probed_plan_kernels(&all_candidate_names());
     let formulas = formula_names();
-    let missing: Vec<&String> = kernels.difference(&formulas).collect();
+    let implicit_context = ["BARPOS"];
+    let missing: Vec<&String> = kernels
+        .difference(&formulas)
+        .filter(|name| !implicit_context.contains(&name.as_str()))
+        .collect();
     assert!(
         missing.is_empty(),
         "these kernels execute but no formula can name them: {missing:?}"
@@ -607,16 +615,17 @@ fn the_three_surfaces_have_the_expected_sizes() {
     // bearing — `Alpha7` multiplies `sign(close - ref(close, 7))` into a factor,
     // and a flat 7-bar stretch must contribute `0`, not a fabricated direction.
     //
-    // 260 -> 317, 115 -> 272, formula surface unchanged at 452: the TA-Lib
-    // 0.7/0.8 compiled-plan bridge. The original forty-four additions use
-    // explicit canonical delegates; the remaining formula-compatible names use
-    // the cached bridge until their allocation-free kernels are optimized.
-    // The fifteen previously formula-only TA-Lib names are now also registered,
-    // so every executable plan kernel remains inside the registry SSOT.
+    // 260 -> 321, 115 -> 276, formula surface unchanged at 452: the TA-Lib
+    // 0.7/0.8 compiled-plan bridge plus implicit context variables. The original
+    // forty-four additions use explicit canonical delegates; the remaining
+    // formula-compatible names use the cached bridge until their allocation-free
+    // kernels are optimized. The formerly unregistered TA-Lib names and the
+    // four implicit variables are now also registered, so every executable plan
+    // kernel remains inside the registry SSOT.
     let actual = (registry.len(), formulas.len(), kernels.len());
     assert_eq!(
         actual,
-        (317, 452, 272),
+        (321, 452, 276),
         "surface sizes changed: (registry, formula, plan kernels)"
     );
 }

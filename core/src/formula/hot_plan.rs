@@ -7,6 +7,7 @@
 
 use super::ast::{AstNode, OutputModifier};
 use super::compute_ir::FormulaComputePlan;
+use super::functions::get_builtin_functions;
 use crate::buffer_arena::BufferSlot;
 use crate::compute::{
     ComputeCapabilities, ComputeEffect, ComputeNode, ComputeNodeId, ComputePlan, ComputePlanError,
@@ -133,6 +134,21 @@ impl FormulaHotPlan {
     /// Shared tail of both compile entry points: literal binding, CSE, plumbing
     /// resolution, then numeric hot lowering.
     fn finish(semantic: FormulaComputePlan) -> Result<Self, FormulaHotPlanError> {
+        let builtins = get_builtin_functions();
+        for &node_id in semantic.plan().execution_order() {
+            let Some(node) = semantic.plan().node(node_id) else {
+                continue;
+            };
+            let Some(name) = node.operation.strip_prefix("CALL:") else {
+                continue;
+            };
+            let context_kernel = matches!(name, "BARSCOUNT" | "BARPOS" | "CAPITAL" | "DRAWNULL");
+            if !context_kernel && !builtins.contains_key(name) {
+                return Err(FormulaHotPlanError::Semantic(
+                    ComputePlanError::UnknownFunction(name.to_string()),
+                ));
+            }
+        }
         let (parameters, ranges) = bind_numeric_literals(&semantic)?;
         let optimized = cse_plan(&semantic, &parameters, &ranges)?;
         let lowered = lower_formula_plumbing(&optimized, semantic.root())?;

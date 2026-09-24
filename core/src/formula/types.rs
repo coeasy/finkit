@@ -306,6 +306,8 @@ pub struct HostContext<'a> {
     pub money_flow: Option<&'a MoneyFlowData>,
     /// Implicit OHLC for `TR()`.
     pub ohlc: Option<HostOhlc<'a>>,
+    /// Scalar capital value used by the implicit `CAPITAL` formula variable.
+    pub capital: Option<f64>,
 }
 
 impl<'a> HostContext<'a> {
@@ -316,6 +318,7 @@ impl<'a> HostContext<'a> {
             period_type: 0,
             money_flow: None,
             ohlc: None,
+            capital: None,
         }
     }
 }
@@ -637,6 +640,33 @@ impl Clone for FormulaContext {
 }
 
 impl FormulaContext {
+    /// Validate the core OHLCV alignment before any formula path executes.
+    ///
+    /// Keeping this check at the context boundary prevents malformed input from
+    /// becoming an indexing panic in one execution path and a structured error
+    /// in another. Optional series are validated by the feature that consumes
+    /// them because some host payloads are intentionally sparse.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FormulaError::InvalidParameter`] when the core OHLCV series do
+    /// not have identical lengths.
+    pub fn validate_alignment(&self) -> Result<(), FormulaError> {
+        let expected = self.open.len();
+        let fields = [
+            ("HIGH", self.high.len()),
+            ("LOW", self.low.len()),
+            ("CLOSE", self.close.len()),
+            ("VOLUME", self.volume.len()),
+        ];
+        if let Some((name, actual)) = fields.into_iter().find(|(_, length)| *length != expected) {
+            return Err(FormulaError::InvalidParameter(format!(
+                "OHLCV series length mismatch: OPEN={expected}, {name}={actual}"
+            )));
+        }
+        Ok(())
+    }
+
     /// 创建新的公式上下文
     pub fn new(
         open: Array1<f64>,
@@ -896,7 +926,14 @@ impl FormulaContext {
                 if name.eq_ignore_ascii_case("A") {
                     self.amount.as_ref().and_then(|value| value.as_slice())
                 } else {
-                    self.variables.get(name).and_then(|value| value.as_slice())
+                    self.variables
+                        .get(name)
+                        .or_else(|| {
+                            self.variables.iter().find_map(|(key, value)| {
+                                key.eq_ignore_ascii_case(name).then_some(value)
+                            })
+                        })
+                        .and_then(|value| value.as_slice())
                 }
             }
         }
@@ -914,7 +951,11 @@ impl FormulaContext {
 
     /// 获取变量（返回引用，避免克隆）
     pub fn get_variable(&self, name: &str) -> Option<&Array1<f64>> {
-        self.variables.get(name)
+        self.variables.get(name).or_else(|| {
+            self.variables
+                .iter()
+                .find_map(|(key, value)| key.eq_ignore_ascii_case(name).then_some(value))
+        })
     }
 
     /// 获取变量（使用 Arc<str> 键）

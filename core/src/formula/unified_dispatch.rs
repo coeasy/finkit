@@ -69,6 +69,14 @@ impl KernelDispatcher for FormulaKernelDispatcher<'_> {
             return dispatch_index_call(call, buffers);
         }
 
+        if call.kernel == KernelId::from_static("CALL:BARSCOUNT")
+            || call.kernel == KernelId::from_static("CALL:BARPOS")
+            || call.kernel == KernelId::from_static("CALL:CAPITAL")
+            || call.kernel == KernelId::from_static("CALL:DRAWNULL")
+        {
+            return dispatch_context_variable_call(call, buffers, &self.host);
+        }
+
         if call.kernel == KernelId::from_static("CALL:ADD") {
             return dispatch_arith_call(call, buffers, ArithKernel::Add);
         }
@@ -1131,6 +1139,33 @@ fn dispatch_unary_math_call(
             // three implementations cannot drift; see `math::three_way_sign`.
             UnaryMathKernel::Sign => crate::math::three_way_sign(value),
         };
+    }
+    Ok(())
+}
+
+#[allow(clippy::cast_precision_loss)] // a bar index is exact for practical series lengths.
+fn dispatch_context_variable_call(
+    call: KernelCall<'_>,
+    buffers: &mut [Vec<f64>],
+    host: &HostContext<'_>,
+) -> Result<(), KernelDispatchError> {
+    if !call.inputs.is_empty() {
+        return Err(KernelDispatchError::new(FormulaKernelDispatcher::ERR_ARITY));
+    }
+    let output = buffers
+        .get_mut(call.output.0)
+        .ok_or_else(|| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+    let len = output.len();
+    if call.kernel == KernelId::from_static("CALL:BARSCOUNT") {
+        output.fill(len as f64);
+    } else if call.kernel == KernelId::from_static("CALL:BARPOS") {
+        for (index, value) in output.iter_mut().enumerate() {
+            *value = (index + 1) as f64;
+        }
+    } else if call.kernel == KernelId::from_static("CALL:CAPITAL") {
+        output.fill(host.capital.unwrap_or(f64::NAN));
+    } else {
+        output.fill(f64::NAN);
     }
     Ok(())
 }

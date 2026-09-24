@@ -418,6 +418,8 @@ pub struct ExecResult {
     pub outputs: AHashMap<String, Array1<f64>>,
     pub final_value: Array1<f64>,
     pub draw_commands: DrawResult,
+    /// String literals interned while this execution ran.
+    pub string_table: Vec<String>,
 }
 
 type BuiltinFn = fn(&FormulaContext, &[Array1<f64>]) -> Result<Array1<f64>, FormulaError>;
@@ -448,19 +450,30 @@ impl BytecodeVM {
         bytecode: &Bytecode,
         ctx: &FormulaContext,
     ) -> Result<ExecResult, FormulaError> {
+        ctx.validate_alignment()?;
         // Reuse VM allocations between calls while keeping each execution
         // semantically isolated.
         self.stack.clear();
         self.variables.clear();
+        let mut execution_ctx = ctx.clone();
         let mut outputs = AHashMap::new();
         let mut final_value = Array1::zeros(ctx.data_len);
         let mut draw_commands = DrawResult::new();
         let mut pc: usize = 0;
+        let mut backward_jumps = 0usize;
 
         while pc < bytecode.instructions.len() {
             let op = &bytecode.instructions[pc];
             match op {
                 OpCode::Jump(target) => {
+                    if *target <= pc {
+                        backward_jumps = backward_jumps.saturating_add(1);
+                        if backward_jumps > crate::formula::executor::MAX_LOOP_ITERATIONS {
+                            return Err(FormulaError::RuntimeError(
+                                "loop iteration limit exceeded in bytecode VM".to_string(),
+                            ));
+                        }
+                    }
                     pc = *target;
                     continue;
                 }
@@ -471,6 +484,14 @@ impl BytecodeVM {
                         FormulaValue::Array(a) => a.iter().all(|&v| v <= 0.0),
                     };
                     if all_false {
+                        if *target <= pc {
+                            backward_jumps = backward_jumps.saturating_add(1);
+                            if backward_jumps > crate::formula::executor::MAX_LOOP_ITERATIONS {
+                                return Err(FormulaError::RuntimeError(
+                                    "loop iteration limit exceeded in bytecode VM".to_string(),
+                                ));
+                            }
+                        }
                         pc = *target;
                         continue;
                     }
@@ -479,7 +500,7 @@ impl BytecodeVM {
                     continue;
                 }
                 _ => {
-                    self.execute_op(op, ctx, &mut outputs, &mut draw_commands)?;
+                    self.execute_op(op, &mut execution_ctx, &mut outputs, &mut draw_commands)?;
                     pc += 1;
                 }
             }
@@ -493,13 +514,16 @@ impl BytecodeVM {
             outputs,
             final_value,
             draw_commands,
+            string_table: execution_ctx.string_table,
         })
     }
 
+    #[allow(clippy::cast_possible_truncation)] // drawing parameters use the established i32 ABI.
+    #[allow(clippy::cast_precision_loss)] // literal indices are exact for realistic table sizes.
     fn execute_op(
         &mut self,
         op: &OpCode,
-        ctx: &FormulaContext,
+        ctx: &mut FormulaContext,
         outputs: &mut AHashMap<String, Array1<f64>>,
         draw_commands: &mut DrawResult,
     ) -> Result<(), FormulaError> {
@@ -803,17 +827,42 @@ impl BytecodeVM {
                 Ok(())
             }
             OpCode::DrawGeneric {
-                command: _,
+                command,
                 arg_count,
-                color: _,
+                color,
             } => {
+                let mut values = Vec::with_capacity(*arg_count);
                 for _ in 0..*arg_count {
-                    self.pop_val()?;
+                    values.push(self.pop_val()?.to_array(ctx.data_len));
+                }
+                values.reverse();
+                match (command.as_str(), values.len()) {
+                    ("DRAWLINE", n) if n >= 5 => draw_commands.add_line(
+                        values.remove(0),
+                        values.remove(0),
+                        values.remove(0),
+                        values.remove(0),
+                        values[0][0] as i32,
+                        color.clone(),
+                    ),
+                    ("DRAWKLINE", n) if n >= 4 => draw_commands.add_kline(
+                        values.remove(0),
+                        values.remove(0),
+                        values.remove(0),
+                        values.remove(0),
+                    ),
+                    _ => {
+                        return Err(FormulaError::RuntimeError(format!(
+                            "generic drawing command `{command}` is not supported by bytecode VM"
+                        )))
+                    }
                 }
                 Ok(())
             }
-            OpCode::PushString(_) => {
-                self.stack.push(FormulaValue::Scalar(0.0));
+            OpCode::PushString(value) => {
+                let index = ctx.string_table.len();
+                ctx.string_table.push(value.clone());
+                self.stack.push(FormulaValue::Scalar(index as f64));
                 Ok(())
             }
         }

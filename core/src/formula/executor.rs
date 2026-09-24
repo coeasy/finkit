@@ -64,6 +64,7 @@ impl FormulaExecutor {
         ast: &AstNode,
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
+        ctx.validate_alignment()?;
         ctx.reset_sandbox();
         let val = self.execute_val(ast, ctx)?;
         Ok(val.to_array(ctx.data_len))
@@ -497,8 +498,7 @@ impl FormulaExecutor {
             Some(BuiltinVar::Capital) => Ok(FormulaValue::Scalar(ctx.capital.unwrap_or(f64::NAN))),
             Some(BuiltinVar::DrawNull) => Ok(FormulaValue::Scalar(f64::NAN)),
             None => ctx
-                .variables
-                .get(name)
+                .get_variable(name)
                 .map(|v| FormulaValue::Array(FormulaContext::copy_array(v)))
                 .ok_or_else(|| FormulaError::RuntimeError(format!("Unknown variable: {}", name))),
         }
@@ -1755,8 +1755,7 @@ impl FormulaExecutor {
                 Ok(buf)
             }
             None => ctx
-                .variables
-                .get(name)
+                .get_variable(name)
                 .map(FormulaContext::copy_array)
                 .ok_or_else(|| FormulaError::RuntimeError(format!("Unknown variable: {}", name))),
         }
