@@ -139,6 +139,21 @@ reused.
   (direct and composed) against the batch (AST) path on oscillating data,
   closing the blind spot.
 
+- The streaming formula path poisoned its rolling accumulators on a leading
+  `NaN` run. A composed source such as `MA(MA(CLOSE,5),9)` (or raw input that
+  opens with a warm-up `NaN` prefix) handed the outer indicator a leading `NaN`
+  run; the batch math layer skips it via `math::leading_warmup`, but the
+  streaming accumulators absorbed the `NaN` and returned an all-`NaN` series.
+  Both the direct state kernels and the composed expression kernels now hold
+  the indicator until the first finite input arrives, so its window starts on
+  the first finite value exactly like the batch path. `RSI` is deliberately
+  exempt: its batch kernel computes `change.max(0.0)` (and
+  `NaN.max(0.0) == 0.0`), so it treats a leading `NaN` delta as a zero change
+  and keeps its warm-up at `period`; feeding the `NaN` through reproduces
+  `rsi_scalar` exactly, whereas skipping would shift the warm-up by the run. A
+  second gate `streaming_stateful_survives_leading_nan` locks this on a context
+  whose columns open with a `NaN` run.
+
 ## [0.1.15] - 2026-09-11
 
 ### Added

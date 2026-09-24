@@ -273,34 +273,42 @@ enum FormulaState {
     Sma {
         input: FormulaStateInput,
         indicator: StreamingSma,
+        started: bool,
     },
     SmaSmoothed {
         input: FormulaStateInput,
         indicator: StreamingSmaSmoothed,
+        started: bool,
     },
     Wma {
         input: FormulaStateInput,
         indicator: StreamingWma,
+        started: bool,
     },
     Ema {
         input: FormulaStateInput,
         indicator: StreamingEma,
+        started: bool,
     },
     Rsi {
         input: FormulaStateInput,
         indicator: StreamingRsi,
+        started: bool,
     },
     Max {
         input: FormulaStateInput,
         indicator: StreamingMax,
+        started: bool,
     },
     Min {
         input: FormulaStateInput,
         indicator: StreamingMin,
+        started: bool,
     },
     Sum {
         input: FormulaStateInput,
         indicator: StreamingSum,
+        started: bool,
     },
     Reference {
         input: FormulaStateInput,
@@ -316,6 +324,7 @@ enum FormulaState {
         input: FormulaStateInput,
         indicator: FormulaRollingVariance,
         square_root: bool,
+        started: bool,
     },
     Atr {
         high: FormulaStateInput,
@@ -326,7 +335,31 @@ enum FormulaState {
     Macd {
         input: FormulaStateInput,
         indicator: StreamingMacd,
+        started: bool,
     },
+}
+
+/// Feed one value to a rolling accumulator, skipping a leading non-finite run.
+///
+/// A composed expression such as `MA(MA(CLOSE,5),9)` — or raw input that opens
+/// with a warm-up `NaN` run — hands the indicator a leading `NaN` prefix. The
+/// batch math layer skips that prefix via `math::leading_warmup`; the streaming
+/// accumulators must do the same or a single `NaN` poisons them for the whole
+/// series. Until the first finite value arrives the indicator is not advanced,
+/// so its window starts on the first finite value exactly like the batch path.
+fn feed_after_warmup<T>(
+    started: &mut bool,
+    input: f64,
+    next: impl FnOnce(f64) -> Option<T>,
+) -> Option<T> {
+    if *started {
+        next(input)
+    } else if input.is_finite() {
+        *started = true;
+        next(input)
+    } else {
+        None
+    }
 }
 
 impl FormulaState {
@@ -334,14 +367,49 @@ impl FormulaState {
         let value = match self {
             Self::Expression { expression } => Some(expression.next(row, variables)),
             Self::Program(program) => Some(program.next(row)),
-            Self::Sma { input, indicator } => indicator.next(row[input.slot()]),
-            Self::SmaSmoothed { input, indicator } => indicator.next(row[input.slot()]),
-            Self::Wma { input, indicator } => indicator.next(row[input.slot()]),
-            Self::Ema { input, indicator } => indicator.next(row[input.slot()]),
-            Self::Rsi { input, indicator } => indicator.next(row[input.slot()]),
-            Self::Max { input, indicator } => indicator.next(row[input.slot()]),
-            Self::Min { input, indicator } => indicator.next(row[input.slot()]),
-            Self::Sum { input, indicator } => indicator.next(row[input.slot()]),
+            Self::Sma {
+                input,
+                indicator,
+                started,
+            } => feed_after_warmup(started, row[input.slot()], |value| indicator.next(value)),
+            Self::SmaSmoothed {
+                input,
+                indicator,
+                started,
+            } => feed_after_warmup(started, row[input.slot()], |value| indicator.next(value)),
+            Self::Wma {
+                input,
+                indicator,
+                started,
+            } => feed_after_warmup(started, row[input.slot()], |value| indicator.next(value)),
+            Self::Ema {
+                input,
+                indicator,
+                started,
+            } => feed_after_warmup(started, row[input.slot()], |value| indicator.next(value)),
+            // RSI is the one stateful function whose batch kernel treats a
+            // leading non-finite delta as 0 (`change.max(0.0)` with
+            // `NaN.max(0.0) == 0.0`) instead of skipping it, so it must NOT be
+            // gated: feeding the `NaN` straight in reproduces `rsi_scalar`
+            // exactly, whereas skipping would shift its warm-up by the run.
+            Self::Rsi {
+                input, indicator, ..
+            } => indicator.next(row[input.slot()]),
+            Self::Max {
+                input,
+                indicator,
+                started,
+            } => feed_after_warmup(started, row[input.slot()], |value| indicator.next(value)),
+            Self::Min {
+                input,
+                indicator,
+                started,
+            } => feed_after_warmup(started, row[input.slot()], |value| indicator.next(value)),
+            Self::Sum {
+                input,
+                indicator,
+                started,
+            } => feed_after_warmup(started, row[input.slot()], |value| indicator.next(value)),
             Self::Reference { input, state } => state.next(row[input.slot()]),
             Self::Cross {
                 left,
@@ -372,22 +440,21 @@ impl FormulaState {
                 input,
                 indicator,
                 square_root,
-            } => indicator.next(row[input.slot()]).map(|value| {
-                if *square_root {
-                    value.sqrt()
-                } else {
-                    value
-                }
-            }),
+                started,
+            } => feed_after_warmup(started, row[input.slot()], |value| indicator.next(value))
+                .map(|value| if *square_root { value.sqrt() } else { value }),
             Self::Atr {
                 high,
                 low,
                 close,
                 indicator,
             } => indicator.next(row[high.slot()], row[low.slot()], row[close.slot()]),
-            Self::Macd { input, indicator } => {
-                indicator.next(row[input.slot()]).map(|value| value.macd)
-            }
+            Self::Macd {
+                input,
+                indicator,
+                started,
+            } => feed_after_warmup(started, row[input.slot()], |value| indicator.next(value))
+                .map(|value| value.macd),
         };
         value.unwrap_or(f64::NAN)
     }
@@ -497,6 +564,16 @@ enum FormulaExpressionState {
     Stateful {
         function: FormulaExpressionFunction,
         expression: Box<FormulaExpressionState>,
+        /// Whether the first finite input has already seeded `function`.
+        ///
+        /// A composed expression such as `MA(MA(CLOSE,5),9)` feeds the outer
+        /// indicator a leading `NaN` run (the inner indicator's warm-up
+        /// prefix). The batch math layer skips that run via
+        /// `math::leading_warmup`; the streaming accumulators must do the same
+        /// or they are poisoned for the whole series. Until the first finite
+        /// input arrives the indicator is not advanced, so its window starts
+        /// on the first finite value exactly like the batch path.
+        started: bool,
     },
     Reference {
         state: FormulaReferenceState,
@@ -570,6 +647,17 @@ impl FormulaExpressionFunction {
         };
         value.unwrap_or(f64::NAN)
     }
+
+    /// Whether the batch counterpart skips a leading non-finite run before
+    /// seeding, mirroring `math::leading_warmup`.
+    ///
+    /// Every stateful function does except `RSI`: `rsi_scalar` computes
+    /// `change.max(0.0)`, and `NaN.max(0.0) == 0.0`, so it treats a leading
+    /// `NaN` delta as a zero change and keeps its warm-up at `period` instead of
+    /// shifting the window past the run.
+    fn skips_leading_warmup(&self) -> bool {
+        !matches!(self, Self::Rsi(_))
+    }
 }
 
 impl FormulaExpressionState {
@@ -624,7 +712,21 @@ impl FormulaExpressionState {
             Self::Stateful {
                 function,
                 expression,
-            } => function.next(expression.next(row, variables)),
+                started,
+            } => {
+                let input = expression.next(row, variables);
+                if !function.skips_leading_warmup() || *started {
+                    function.next(input)
+                } else if input.is_finite() {
+                    *started = true;
+                    function.next(input)
+                } else {
+                    // Leading non-finite run: hold the indicator so its window
+                    // starts on the first finite value, matching
+                    // `math::leading_warmup` on the batch path.
+                    f64::NAN
+                }
+            }
             Self::Reference {
                 state, expression, ..
             } => state
@@ -1163,6 +1265,7 @@ fn compile_expression_stateful_function(
             FormulaExpressionState::Stateful {
                 function,
                 expression: Box::new(expression),
+                started: false,
             },
             inputs,
         )))
@@ -1422,6 +1525,7 @@ fn compile_state(expression: &AstNode) -> FactorResult<(FormulaState, Vec<Formul
                 FormulaState::Sma {
                     input: value,
                     indicator: StreamingSma::new(period),
+                    started: false,
                 },
                 vec![value],
             )
@@ -1440,6 +1544,7 @@ fn compile_state(expression: &AstNode) -> FactorResult<(FormulaState, Vec<Formul
                 FormulaState::SmaSmoothed {
                     input: value,
                     indicator: StreamingSmaSmoothed::new(period, weight),
+                    started: false,
                 },
                 vec![value],
             )
@@ -1451,6 +1556,7 @@ fn compile_state(expression: &AstNode) -> FactorResult<(FormulaState, Vec<Formul
                 FormulaState::Wma {
                     input: value,
                     indicator: StreamingWma::new(period),
+                    started: false,
                 },
                 vec![value],
             )
@@ -1462,6 +1568,7 @@ fn compile_state(expression: &AstNode) -> FactorResult<(FormulaState, Vec<Formul
                 FormulaState::Ema {
                     input: value,
                     indicator: StreamingEma::new(period),
+                    started: false,
                 },
                 vec![value],
             )
@@ -1473,6 +1580,7 @@ fn compile_state(expression: &AstNode) -> FactorResult<(FormulaState, Vec<Formul
                 FormulaState::Rsi {
                     input: value,
                     indicator: StreamingRsi::new(period),
+                    started: false,
                 },
                 vec![value],
             )
@@ -1484,6 +1592,7 @@ fn compile_state(expression: &AstNode) -> FactorResult<(FormulaState, Vec<Formul
                 FormulaState::Max {
                     input: value,
                     indicator: StreamingMax::new(period),
+                    started: false,
                 },
                 vec![value],
             )
@@ -1495,6 +1604,7 @@ fn compile_state(expression: &AstNode) -> FactorResult<(FormulaState, Vec<Formul
                 FormulaState::Min {
                     input: value,
                     indicator: StreamingMin::new(period),
+                    started: false,
                 },
                 vec![value],
             )
@@ -1506,6 +1616,7 @@ fn compile_state(expression: &AstNode) -> FactorResult<(FormulaState, Vec<Formul
                 FormulaState::Sum {
                     input: value,
                     indicator: StreamingSum::new(period),
+                    started: false,
                 },
                 vec![value],
             )
@@ -1551,6 +1662,7 @@ fn compile_state(expression: &AstNode) -> FactorResult<(FormulaState, Vec<Formul
                     input: value,
                     indicator: FormulaRollingVariance::new(period),
                     square_root: true,
+                    started: false,
                 },
                 vec![value],
             )
@@ -1568,6 +1680,7 @@ fn compile_state(expression: &AstNode) -> FactorResult<(FormulaState, Vec<Formul
                     input: value,
                     indicator: FormulaRollingVariance::new(period),
                     square_root: false,
+                    started: false,
                 },
                 vec![value],
             )
@@ -1596,6 +1709,7 @@ fn compile_state(expression: &AstNode) -> FactorResult<(FormulaState, Vec<Formul
                 FormulaState::Macd {
                     input: value,
                     indicator: StreamingMacd::new(fast, slow, signal),
+                    started: false,
                 },
                 vec![value],
             )

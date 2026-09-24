@@ -1836,6 +1836,15 @@ fn streaming_stateful_matches_batch() {
         "REF(CLOSE,5) + REF(CLOSE,10)",
         "HHV(HIGH,20) - LLV(LOW,20)",
         "SUM(VOLUME,10) / 10",
+        // Nested warm-up composition: the inner indicator emits a leading NaN
+        // run, which the batch path skips via `math::leading_warmup`. The
+        // streaming indicators accumulate blindly, so this is where a
+        // "consistent-wrong" NaN absorption would hide.
+        "MA(MA(CLOSE,5),9)",
+        "EMA(MA(CLOSE,5),9)",
+        "SUM(MA(CLOSE,5),10)",
+        "MA(REF(CLOSE,10),9)",
+        "HHV(MA(CLOSE,5),10)",
     ];
     let mut engine = FormulaEngine::new();
     for source in cases {
@@ -1844,6 +1853,71 @@ fn streaming_stateful_matches_batch() {
             run_ast(&mut engine, source, &mut ast_ctx)
         };
         let stateful_result = run_stateful(source, &make_ctx_oscillating(140));
+        assert_arrays_match(source, "stateful", &ast_result, &stateful_result);
+    }
+}
+
+/// Context whose OHLCV columns begin with a leading `NaN` run, exactly like the
+/// output of an upstream streaming indicator.
+fn make_ctx_leading_nan(len: usize, warmup: usize) -> FormulaContext {
+    let mut close: Vec<f64> = (0..len)
+        .map(|i| 100.0 + (i as f64 * 0.4).sin() * 20.0)
+        .collect();
+    let mut high: Vec<f64> = (0..len)
+        .map(|i| 100.0 + (i as f64 * 0.4).sin() * 20.0 + 2.5)
+        .collect();
+    let mut low: Vec<f64> = (0..len)
+        .map(|i| 100.0 + (i as f64 * 0.4).sin() * 20.0 - 2.5)
+        .collect();
+    let mut open = close.clone();
+    let mut volume: Vec<f64> = (0..len).map(|i| 500.0 + (i % 5) as f64 * 100.0).collect();
+    for series in [&mut close, &mut high, &mut low, &mut open, &mut volume] {
+        for value in series.iter_mut().take(warmup) {
+            *value = f64::NAN;
+        }
+    }
+    FormulaContext::new(
+        Array1::from_vec(open),
+        Array1::from_vec(high),
+        Array1::from_vec(low),
+        Array1::from_vec(close),
+        Array1::from_vec(volume),
+        None,
+    )
+}
+
+/// A leading non-finite run is an upstream indicator's warm-up prefix, not bad
+/// data. The batch math layer skips it (`math::leading_warmup`); the streaming
+/// path must skip it too, on both the direct state kernels and the composed
+/// expression kernels, or the two paths disagree on the very same source.
+#[test]
+fn streaming_stateful_survives_leading_nan() {
+    let cases: &[&str] = &[
+        "MA(CLOSE,10)",
+        "EMA(CLOSE,12)",
+        "WMA(CLOSE,11)",
+        "RSI(CLOSE,14)",
+        "SUM(CLOSE,10)",
+        "HHV(HIGH,20)",
+        "LLV(LOW,20)",
+        "STD(CLOSE,20)",
+        "VAR(CLOSE,20)",
+        "ATR(HIGH,LOW,CLOSE,14)",
+        "MACD(CLOSE,12,26,9)",
+        "MA(MA(CLOSE,5),9)",
+        "SUM(MA(CLOSE,5),10)",
+        // RSI is the exception: its batch kernel keeps the warm-up at `period`
+        // and treats a leading NaN delta as 0, so it must be fed the NaN rather
+        // than gated. This composed case exercises that path.
+        "RSI(MA(CLOSE,5),14)",
+    ];
+    let mut engine = FormulaEngine::new();
+    for source in cases {
+        let ast_result = {
+            let mut ast_ctx = make_ctx_leading_nan(90, 6);
+            run_ast(&mut engine, source, &mut ast_ctx)
+        };
+        let stateful_result = run_stateful(source, &make_ctx_leading_nan(90, 6));
         assert_arrays_match(source, "stateful", &ast_result, &stateful_result);
     }
 }
