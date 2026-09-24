@@ -122,6 +122,23 @@ reused.
   and scalar batch kernels. A regression gate pins the two implementations
   together on shared bars including a flat one.
 
+- The formula streaming path (`FormulaStatefulStream`) was a differential
+  blind spot: `check_all_paths` never instantiates it, so two of its stateful
+  indicators silently disagreed with the batch formula table.
+  1. `SMA(X, N[, M])` was implemented as a simple moving average (warm-up `NaN`
+     prefix), while the batch `fn_sma` is recursive smoothing seeded at the
+     first value (`value = (M*cur + (N - M)*prev) / N`). The streaming path now
+     has its own `StreamingSmaSmoothed` and routes `SMA` (distinct from `MA`) to
+     it in both `compile_state` and `compile_expression_stateful_function`, with
+     the optional third weight argument honoured.
+  2. `MACD(...)` streaming returned the histogram (`macd - signal`) while the
+     batch `MACD` formula returns the DIF line (`fast_ema - slow_ema`); the two
+     are different series. The streaming `MACD` now returns `value.macd`.
+  A new gate `streaming_stateful_matches_batch` compares MA / SMA / EMA / WMA /
+  RSI / HHV / LLV / SUM / REF / STD / VAR / CROSS / CROSSBELOW / ATR / MACD
+  (direct and composed) against the batch (AST) path on oscillating data,
+  closing the blind spot.
+
 ## [0.1.15] - 2026-09-11
 
 ### Added

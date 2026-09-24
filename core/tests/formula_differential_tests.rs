@@ -1772,3 +1772,78 @@ fn sign_is_three_way_on_every_path() {
         );
     }
 }
+
+/// Non-monotonic context so the streaming stateful indicators are exercised on
+/// rising, falling and flat stretches (the warm-up and plateau behaviour of a
+/// simple ramp hides real divergences).
+fn make_ctx_oscillating(len: usize) -> FormulaContext {
+    let close: Vec<f64> = (0..len)
+        .map(|i| 100.0 + (i as f64 * 0.35).sin() * 25.0)
+        .collect();
+    let high: Vec<f64> = (0..len)
+        .map(|i| 100.0 + (i as f64 * 0.35).sin() * 25.0 + 3.0)
+        .collect();
+    let low: Vec<f64> = (0..len)
+        .map(|i| 100.0 + (i as f64 * 0.35).sin() * 25.0 - 3.0)
+        .collect();
+    let open: Vec<f64> = (0..len)
+        .map(|i| 100.0 + ((i as f64 - 1.0) * 0.35).sin() * 25.0)
+        .collect();
+    let volume: Vec<f64> = (0..len).map(|i| 1000.0 + (i % 7) as f64 * 250.0).collect();
+    FormulaContext::new(
+        Array1::from_vec(open),
+        Array1::from_vec(high),
+        Array1::from_vec(low),
+        Array1::from_vec(close),
+        Array1::from_vec(volume),
+        None,
+    )
+}
+
+/// Every supported stateful indicator in the streaming path must reproduce the
+/// batch (AST) path value-for-value, including the warm-up prefix.
+///
+/// This is the gate the module doc in `stateful.rs` admits is missing: the
+/// four-way `check_all_paths` harness never instantiates `FormulaStatefulStream`,
+/// so its own (scalar) operator implementations and its `Streaming<X>` delegates
+/// were never compared against the batch formula table. A divergence here is a
+/// broken link between the streaming and batch contracts for the same formula.
+#[test]
+fn streaming_stateful_matches_batch() {
+    let cases: &[&str] = &[
+        "MA(CLOSE,10)",
+        "SMA(CLOSE,10)",
+        "EMA(CLOSE,12)",
+        "WMA(CLOSE,11)",
+        "RSI(CLOSE,14)",
+        "HHV(HIGH,20)",
+        "LLV(LOW,20)",
+        "SUM(VOLUME,10)",
+        "REF(CLOSE,5)",
+        "STD(CLOSE,20)",
+        "VAR(CLOSE,20)",
+        "CROSS(CLOSE,OPEN)",
+        "CROSSBELOW(CLOSE,OPEN)",
+        "ATR(HIGH,LOW,CLOSE,14)",
+        "MACD(CLOSE,12,26,9)",
+        // Composed formulas exercise `compile_expression_stateful_function` (the
+        // nested-stateful sub-path), which is NOT reached by a bare top-level
+        // call. `SMA` is fixed there independently of `compile_state`, so it must
+        // be checked through a composition or the fix is untested.
+        "1 + SMA(CLOSE,10)",
+        "MA(CLOSE,10) + EMA(CLOSE,12)",
+        "SMA(CLOSE,10) - SMA(CLOSE,5)",
+        "REF(CLOSE,5) + REF(CLOSE,10)",
+        "HHV(HIGH,20) - LLV(LOW,20)",
+        "SUM(VOLUME,10) / 10",
+    ];
+    let mut engine = FormulaEngine::new();
+    for source in cases {
+        let ast_result = {
+            let mut ast_ctx = make_ctx_oscillating(140);
+            run_ast(&mut engine, source, &mut ast_ctx)
+        };
+        let stateful_result = run_stateful(source, &make_ctx_oscillating(140));
+        assert_arrays_match(source, "stateful", &ast_result, &stateful_result);
+    }
+}

@@ -274,6 +274,10 @@ enum FormulaState {
         input: FormulaStateInput,
         indicator: StreamingSma,
     },
+    SmaSmoothed {
+        input: FormulaStateInput,
+        indicator: StreamingSmaSmoothed,
+    },
     Wma {
         input: FormulaStateInput,
         indicator: StreamingWma,
@@ -331,6 +335,7 @@ impl FormulaState {
             Self::Expression { expression } => Some(expression.next(row, variables)),
             Self::Program(program) => Some(program.next(row)),
             Self::Sma { input, indicator } => indicator.next(row[input.slot()]),
+            Self::SmaSmoothed { input, indicator } => indicator.next(row[input.slot()]),
             Self::Wma { input, indicator } => indicator.next(row[input.slot()]),
             Self::Ema { input, indicator } => indicator.next(row[input.slot()]),
             Self::Rsi { input, indicator } => indicator.next(row[input.slot()]),
@@ -380,9 +385,9 @@ impl FormulaState {
                 close,
                 indicator,
             } => indicator.next(row[high.slot()], row[low.slot()], row[close.slot()]),
-            Self::Macd { input, indicator } => indicator
-                .next(row[input.slot()])
-                .map(|value| value.histogram),
+            Self::Macd { input, indicator } => {
+                indicator.next(row[input.slot()]).map(|value| value.macd)
+            }
         };
         value.unwrap_or(f64::NAN)
     }
@@ -532,6 +537,7 @@ enum FormulaUnaryFunction {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 enum FormulaExpressionFunction {
     Sma(StreamingSma),
+    SmaSmoothed(StreamingSmaSmoothed),
     Wma(StreamingWma),
     Ema(StreamingEma),
     Rsi(StreamingRsi),
@@ -548,6 +554,7 @@ impl FormulaExpressionFunction {
     fn next(&mut self, input: f64) -> f64 {
         let value = match self {
             Self::Sma(indicator) => indicator.next(input),
+            Self::SmaSmoothed(indicator) => indicator.next(input),
             Self::Wma(indicator) => indicator.next(input),
             Self::Ema(indicator) => indicator.next(input),
             Self::Rsi(indicator) => indicator.next(input),
@@ -778,6 +785,53 @@ impl FormulaRollingVariance {
         }
         let mean = self.sum / self.period as f64;
         Some(((self.sum_sq - self.sum * mean) / self.period as f64).max(0.0))
+    }
+}
+
+/// Recursive smoothing backing the formula `SMA(X, N[, M])` semi-directive.
+///
+/// This mirrors `functions_legacy::fn_sma` bit-for-bit: the first finite sample
+/// seeds the running value, every later sample uses
+/// `value = (M*cur + (N - M)*prev) / N`, and no warm-up `NaN` prefix is emitted.
+///
+/// `MA` (simple moving average) is a *different* operation and keeps
+/// `StreamingSma`. Collapsing `MA` and `SMA` onto the same simple-MA indicator
+/// was the divergence this structure fixes: the streaming path produced a `NaN`
+/// warm-up prefix while the batch path returned a seeded value from index 0,
+/// so `SMA(CLOSE, 10)` was silently a different series on the two paths.
+#[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+struct StreamingSmaSmoothed {
+    period: usize,
+    weight: f64,
+    inv_period: f64,
+    value: Option<f64>,
+}
+
+impl StreamingSmaSmoothed {
+    fn new(period: usize, weight: f64) -> Self {
+        Self {
+            period,
+            weight,
+            inv_period: 1.0 / period as f64,
+            value: None,
+        }
+    }
+
+    fn next(&mut self, input: f64) -> Option<f64> {
+        if !input.is_finite() {
+            // Match `fn_sma`: a NaN sample yields `NaN` and does not advance
+            // the running value.
+            return None;
+        }
+        let next = match self.value {
+            Some(prev) => {
+                (self.weight * input + (self.period as f64 - self.weight) * prev) * self.inv_period
+            }
+            None => input,
+        };
+        self.value = Some(next);
+        Some(next)
     }
 }
 
@@ -1115,9 +1169,18 @@ fn compile_expression_stateful_function(
     };
 
     match name {
-        "MA" | "SMA" => Ok(unary(FormulaExpressionFunction::Sma(StreamingSma::new(
+        "MA" => Ok(unary(FormulaExpressionFunction::Sma(StreamingSma::new(
             period(1)?,
         )))?),
+        "SMA" => {
+            let weight = match args.get(2) {
+                Some(AstNode::Number(value)) if value.is_finite() => *value,
+                _ => 1.0,
+            };
+            Ok(unary(FormulaExpressionFunction::SmaSmoothed(
+                StreamingSmaSmoothed::new(period(1)?, weight),
+            ))?)
+        }
         "WMA" => Ok(unary(FormulaExpressionFunction::Wma(StreamingWma::new(
             period(1)?,
         )))?),
@@ -1352,13 +1415,31 @@ fn compile_state(expression: &AstNode) -> FactorResult<(FormulaState, Vec<Formul
         }
     };
     let (state, inputs) = match normalized.as_str() {
-        "MA" | "SMA" => {
+        "MA" => {
             let value = input(0)?;
             let period = period(1, 14)?;
             (
                 FormulaState::Sma {
                     input: value,
                     indicator: StreamingSma::new(period),
+                },
+                vec![value],
+            )
+        }
+        "SMA" => {
+            let value = input(0)?;
+            let period = period(1, 14)?;
+            // `SMA(X, N[, M])` is recursive smoothing (weight `M`, default 1),
+            // distinct from `MA` (simple moving average). The optional third
+            // argument is the smoothing weight.
+            let weight = match args.get(2) {
+                Some(AstNode::Number(value)) if value.is_finite() => *value,
+                _ => 1.0,
+            };
+            (
+                FormulaState::SmaSmoothed {
+                    input: value,
+                    indicator: StreamingSmaSmoothed::new(period, weight),
                 },
                 vec![value],
             )
