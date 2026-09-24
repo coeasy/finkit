@@ -3,28 +3,30 @@
 
 //! AVX-512 SIMD kernels for batch indicator primitives.
 //!
-//! These functions are 8-wide f64 SIMD kernels (twice the throughput of
+//! These functions are 8-wide f64 SIMD kernels (twice the width of
 //! AVX2's 4-wide path) targeting recent x86_64 CPUs that expose the
 //! `avx512f` feature (Skylake-X, Ice Lake, Zen 4, etc.).
 //!
-//! Each `pub fn simd512_*` function provides a runtime-dispatched fast path:
-//! AVX-512 → AVX2 → scalar. Functions operate on `&[f64]` slices and write
-//! results into a caller-provided `&mut [f64]` buffer.
+//! Each `pub fn simd512_*` function is runtime-dispatched: it uses AVX-512 when
+//! `has_avx512f()` is true and otherwise falls back to its scalar path. Only
+//! [`simd512_sma`] additionally delegates to the AVX2 dispatcher
+//! ([`crate::math::simd_ops::simd_sma`]). Functions operate on `&[f64]` slices
+//! and write results into a caller-provided `&mut [f64]` buffer.
 //!
 //! ## Coverage
 //!
 //! AVX-512 kernels are provided for the seven most impactful indicators that
 //! the AVX2 path already accelerates:
 //!
-//! | Indicator  | Function              | AVX-512 primitive   |
-//! |------------|-----------------------|---------------------|
-//! | SMA        | `simd512_sma`         | 8-wide add + hsum   |
-//! | EMA        | `simd512_ema`         | 8-wide FMA + hsum   |
-//! | RSI        | `simd512_rsi`         | 8-wide add + hsum   |
-//! | MACD       | `simd512_macd`        | 8-wide FMA + hsum   |
-//! | BBANDS     | `simd512_bbands`      | 8-wide FMA + sqrt   |
-//! | ATR        | `simd512_atr`         | 8-wide max + hsum   |
-//! | ADX        | `simd512_adx`         | 8-wide add + hsum   |
+//! | Indicator  | Function                | AVX-512 primitive   |
+//! |------------|-------------------------|---------------------|
+//! | SMA        | `simd512_sma`           | 8-wide add + hsum   |
+//! | EMA        | `simd512_ema`           | 8-wide FMA + hsum   |
+//! | RSI        | `simd512_rsi`           | 8-wide add + hsum   |
+//! | MACD       | `simd512_macd_seed`     | 8-wide FMA + hsum   |
+//! | BBANDS     | `simd512_bbands_seed`   | 8-wide FMA + sqrt   |
+//! | ATR        | `simd512_atr_seed`      | 8-wide max + hsum   |
+//! | ADX        | `simd512_adx_seed`      | 8-wide add + hsum   |
 //!
 //! ## no_std support
 //!

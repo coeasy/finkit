@@ -1538,11 +1538,126 @@ fn formula_differential_warmup_composition_all_paths() {
         ("BOLL(X,20,2)", 177),
         ("CCI(X,14)", 183),
         ("HMA(X,9)", 186),
+        // The MACD family. Each of these seeds a rolling sum / EMA chain from
+        // `input[0]`, so a leading warm-up run used to poison the whole series.
+        // `MACD` was the only member guarded (`fn_macd`); `MACDEXT`, `MACDFIX`
+        // and `DEA` were not, and `DEA`'s *plan kernel* was not either -- the
+        // plan path returned all-NaN where the tree path returned values, which
+        // is exactly the class this list exists to catch.
+        //
+        // Expected counts: `X` has 4 leading NaN, so the recurrence sees 196
+        // bars. Every MACD-family output shares one lookback -- `macd_inner`
+        // re-NaNs `macd_line[macd_start..signal_start]` so the line, signal and
+        // histogram all start at bar 33 -- leaving 196-33 = 163 finite.
+        ("MACD(X,12,26,9)", 163),
+        ("MACDEXT(X,12,0,26,0,9,0)", 163),
+        ("MACDFIX(X,9)", 163),
+        ("DEA(X,12,26,9)", 163),
         ("REVERSE(X)", 196),
         ("CUMSUM(X)", 200),
     ] {
         check_all_paths_with_warm_variable(source, source, &warm, expected_finite);
     }
+}
+
+/// The exact CLOSE series [`make_ctx`] installs, as a plain slice.
+///
+/// Rebuilt here rather than read back off the context, because the reference
+/// implementations in `finkit::indicators` take `&[f64]`.
+// Every index is far below 2^53, so the `usize -> f64` cast is exact.
+#[allow(clippy::cast_precision_loss)]
+fn reference_close(len: usize) -> Vec<f64> {
+    (0..len).map(|i| 102.0 + i as f64 * 0.6).collect()
+}
+
+/// `MACDFIX` must use TA-Lib's fixed smoothing constants, not MACD's `2/(n+1)`.
+///
+/// The formula path used to delegate to `macd(.., 12, 26, signal)`, while the
+/// indicator API used `macdfix_with_signal`, which pins k = 0.15 / 0.075. Both
+/// were "plausible", so every differential path agreed with every other path --
+/// they all agreed on the *wrong* constants. The only thing that can see this
+/// is an absolute comparison against the reference implementation.
+#[test]
+fn formula_macdfix_uses_talib_fixed_constants() {
+    const LEN: usize = 120;
+    let mut engine = FormulaEngine::new();
+    let mut ctx = make_ctx(LEN);
+
+    let formula = run_ast(&mut engine, "MACDFIX(CLOSE,9)", &mut ctx);
+    let close = reference_close(LEN);
+    let reference = finkit::indicators::momentum::macdfix_with_signal(&close, 9)
+        .expect("reference macdfix")
+        .macd;
+
+    assert_arrays_match("MACDFIX", "indicator-reference", &reference, &formula);
+}
+
+/// `MACDEXT`'s `matype` slots must accept `0`, which is the TA-Lib code for
+/// `SMA` and the documented default of every one of them.
+///
+/// They were routed through the period extractor, which rejects `0` outright,
+/// so `MACDEXT(close, 12, 0, 26, 0, 9, 0)` — the canonical TA-Lib spelling —
+/// failed with "period must be > 0" and the `0 => Sma` arm behind it was
+/// unreachable. Only the `EMA` spelling ever worked.
+#[test]
+fn formula_macdext_accepts_sma_selector_zero() {
+    use finkit::indicators::overlap::MaType;
+
+    const LEN: usize = 120;
+    let mut engine = FormulaEngine::new();
+    let mut ctx = make_ctx(LEN);
+
+    let formula = run_ast(&mut engine, "MACDEXT(CLOSE,12,0,26,0,9,0)", &mut ctx);
+    let close = reference_close(LEN);
+    let reference = finkit::indicators::momentum::macdext(
+        &close,
+        12,
+        MaType::Sma,
+        26,
+        MaType::Sma,
+        9,
+        MaType::Sma,
+    )
+    .expect("reference macdext")
+    .macd;
+
+    assert_arrays_match("MACDEXT", "indicator-reference", &reference, &formula);
+}
+
+/// `DIFF`/`DEA` are the TDX spellings of the MACD line and signal line. They
+/// have no plan kernel (`DIFF`) or a hand-written one (`DEA`), so the warm-up
+/// contract has to hold on the tree path and, for `DEA`, on the plan path too.
+///
+/// `DIFF` is deliberately checked only against the tree path: it is one of the
+/// declared-but-kernel-less names, so the plan path is expected to *fail*
+/// loudly rather than silently substitute another series.
+#[test]
+fn tdx_macd_family_survives_warmup_composition() {
+    const LEN: usize = 200;
+    let mut engine = FormulaEngine::new();
+    let mut seed_ctx = make_ctx(LEN);
+    let warm = run_ast(&mut engine, "MA(CLOSE,5)", &mut seed_ctx);
+
+    for (source, expected_finite) in [
+        // `macd(&X[4..], 12, 26, 9)`: one shared lookback, so the line starts at
+        // bar 33 of the 196-bar slice, exactly like the signal leg.
+        ("DIFF(X,12,26)", 163),
+        ("DEA(X,12,26,9)", 163),
+    ] {
+        let mut ctx = make_ctx(LEN);
+        ctx.set_variable("X".to_string(), warm.clone());
+        let values = run_ast(&mut engine, source, &mut ctx);
+        let finite = values.iter().filter(|value| value.is_finite()).count();
+        assert_eq!(
+            finite, expected_finite,
+            "{source}: got {finite} finite values, expected {expected_finite} \
+             (0 means the warm-up prefix poisoned the seed)"
+        );
+    }
+
+    // `DEA` also has a plan kernel, so it must agree with the tree path -- this
+    // is the half that was broken independently of `fn_dea`.
+    check_all_paths_with_warm_variable("DEA", "DEA(X,12,26,9)", &warm, 163);
 }
 
 /// Execute a formula through the streaming stateful path.

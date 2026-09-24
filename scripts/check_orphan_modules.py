@@ -24,6 +24,19 @@ The second half is what stops the allowlist from rotting: an entry that stops
 being needed fails the check, so the list can only shrink by a deliberate edit.
 That is the same contract used by the differential allowlist in
 ``core/tests/formula_plan_differential.rs``.
+
+Known limitation
+----------------
+The census is **one level deep**: it reads ``pub mod`` declarations out of
+``core/src/lib.rs`` only. A public module nested inside another module is
+invisible to it, and that blind spot is not hypothetical -- ``pine::runtime``
+(``PineRuntime`` plus its plot/security/barstate support types) lived in
+``core/src/formula/pine/`` with no caller anywhere in the workspace for the
+whole life of the repository, and this check reported ``formula  ok``.
+
+Reaching nested modules would mean 274 more candidates and a reference rule
+that also has to decide what a parent's ``pub use`` means, so it is deliberately
+out of scope here. When you add or remove a submodule, grep for its name by hand.
 """
 
 from __future__ import annotations

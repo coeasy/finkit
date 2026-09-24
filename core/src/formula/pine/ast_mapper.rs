@@ -222,7 +222,7 @@ impl<'a> PineAstMapper<'a> {
                         ],
                     });
                 }
-                Ok(AstNode::Variable(map_builtin_var(id)))
+                Ok(map_price_identifier(id))
             }
             PineAstNode::BinaryOp { op, left, right } => Ok(AstNode::BinaryOp {
                 op: map_binary_op(*op),
@@ -251,9 +251,7 @@ impl<'a> PineAstMapper<'a> {
                 array: Box::new(self.map_node(array)?),
                 index: Box::new(self.map_node(index)?),
             }),
-            PineAstNode::BarstateAccess { field } => {
-                Ok(AstNode::Variable(format!("barstate_{}", field)))
-            }
+            PineAstNode::BarstateAccess { field } => map_barstate_access(field),
         }
     }
 
@@ -1102,6 +1100,54 @@ fn assignment(name: &str, expr: AstNode) -> AstNode {
     }
 }
 
+/// Map a bare Pine price identifier to an expression the engine can evaluate.
+///
+/// [`map_builtin_var`] is the *name normalizer* — it is also used for the
+/// targets of assignments and `for` variables, so it must stay a pure rename.
+/// Reading an identifier is a different job: the normalized name has to resolve.
+///
+/// `hl2`, `hlc3`, `ohlc4` and `time` did not. They were renamed to `HL2`,
+/// `HLC3`, `OHLC4` and `DATE` and then handed to the engine, where
+/// `classify_builtin_var` has no arm for them and `get_variable` only consults
+/// `ctx.variables` — so any script using them died with "Unknown variable".
+/// The corpus runner hid this by pre-binding the three price sources into the
+/// context, which is exactly why no gate caught it.
+///
+/// The derived sources are expanded into arithmetic on OPEN/HIGH/LOW/CLOSE
+/// (identical to `streaming::PriceSource`), and `time` becomes a call to the
+/// zero-argument `DATE()` builtin rather than a variable reference. `DATE()`
+/// yields NaN when the context carries no datetime instead of inventing one.
+///
+/// Returns a plain node, not a `Result`: an unrecognized identifier must pass
+/// through as a variable reference, because that is how user-defined names
+/// reach the engine.
+fn map_price_identifier(id: &str) -> AstNode {
+    let add = |left: AstNode, right: AstNode| AstNode::BinaryOp {
+        op: BinaryOperator::Add,
+        left: Box::new(left),
+        right: Box::new(right),
+    };
+    let div = |num: AstNode, denom: f64| AstNode::BinaryOp {
+        op: BinaryOperator::Div,
+        left: Box::new(num),
+        right: Box::new(AstNode::Number(denom)),
+    };
+    match id {
+        "hl2" => div(add(v("HIGH"), v("LOW")), 2.0),
+        "hlc3" => div(add(add(v("HIGH"), v("LOW")), v("CLOSE")), 3.0),
+        "ohlc4" => div(
+            add(add(add(v("OPEN"), v("HIGH")), v("LOW")), v("CLOSE")),
+            4.0,
+        ),
+        "time" => AstNode::FunctionCall {
+            name: "DATE".to_string(),
+            args: Vec::new(),
+        },
+        other => AstNode::Variable(map_builtin_var(other)),
+    }
+}
+
+/// Normalize a Pine builtin identifier to its formula-engine spelling.
 fn map_builtin_var(id: &str) -> String {
     match id {
         "open" => "OPEN".to_string(),
@@ -1114,6 +1160,40 @@ fn map_builtin_var(id: &str) -> String {
         "hlc3" => "HLC3".to_string(),
         "ohlc4" => "OHLC4".to_string(),
         other => other.to_uppercase(),
+    }
+}
+
+/// Map a Pine `barstate.<field>` read onto primitives the engine really has.
+///
+/// This used to emit `AstNode::Variable("barstate_<field>")`, which mapped
+/// cleanly and then failed at evaluation: no execution path classifies that
+/// name (`classify_builtin_var` has no `barstate_*` arm and `get_variable` only
+/// consults `ctx.variables`), so every script reading `barstate` died with
+/// `Unknown variable: barstate_islast`.
+///
+/// Expressing the fields in terms of `BARPOS` (the 1-based bar index series)
+/// and `BARSCOUNT` (the bar count) keeps the translation inside the frontend
+/// and therefore cannot diverge between the numeric backends. A historical
+/// batch is, by definition, closed history: `ishistory`/`isconfirmed` are
+/// always 1 and `isnew`/`isrealtime` are always 0.
+fn map_barstate_access(field: &str) -> Result<AstNode, PineMapperError> {
+    let bar_pos = || AstNode::Variable("BARPOS".to_string());
+    let eq = |left: AstNode, right: AstNode| AstNode::BinaryOp {
+        op: BinaryOperator::Eq,
+        left: Box::new(left),
+        right: Box::new(right),
+    };
+    match field {
+        // `BARPOS` is 1-based, so the first bar is position 1.
+        "isfirst" => Ok(eq(bar_pos(), AstNode::Number(1.0))),
+        // `BARSCOUNT` is the series length, so the last bar is the one whose
+        // position equals it.
+        "islast" => Ok(eq(bar_pos(), AstNode::Variable("BARSCOUNT".to_string()))),
+        "ishistory" | "isconfirmed" => Ok(AstNode::Number(1.0)),
+        "isnew" | "isrealtime" => Ok(AstNode::Number(0.0)),
+        other => Err(PineMapperError {
+            message: format!("unsupported barstate field `{other}`"),
+        }),
     }
 }
 

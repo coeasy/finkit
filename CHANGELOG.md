@@ -44,6 +44,12 @@ reused.
   matches any `MAJOR.MINOR.PATCH` series rather than only `0.1.x`. Those four
   documents had drifted to `v0.1.5` while the workspace was at `0.1.15`, and
   the old pattern could not have caught it.
+- Removed the unreferenced `formula::pine::runtime` module (`PineRuntime`,
+  `PineRuntimeError`, `SeriesValue` and its plot/security/barstate support
+  types). It was introduced in the initial commit and never had a caller
+  anywhere in the workspace, including the language bindings and the test
+  suite. It was a second, parallel Pine evaluator for semantics the mapper plus
+  the AlphaTA engine already own, so it could only ever drift from them.
 
 ### Fixed
 
@@ -63,6 +69,50 @@ reused.
 - External variables bound through `HostContext` are now visible on the
   bytecode and JIT paths, which previously resolved only their own private
   tables.
+- `MACDFIX` used MACD's `2/(period+1)` EMA constants instead of TA-Lib's fixed
+  `0.15` / `0.075`, so `MACDFIX(CLOSE, 9)` on the formula path disagreed with
+  `indicators::macdfix` on the very same input. Every differential path agreed
+  with every other path — on the wrong constants — so only an absolute
+  comparison against the reference implementation could see it. The formula
+  function now delegates to the parity implementation.
+- The MACD family (`MACDFIX`, `MACDEXT`, `DIFF`, `DEA`) treated a leading
+  warm-up run as bad data instead of skipping it, so a composed input such as
+  `MACDFIX(MA(CLOSE, 5), 9)` collapsed to an all-NaN series. The plan path's
+  `MACD` and `DEA` kernels carried the same gap independently of the tree path,
+  which the corpus never exercised.
+- `MACDEXT`'s three `matype` arguments were read with the period extractor,
+  which rejects `0` outright. The canonical TA-Lib spelling
+  `MACDEXT(close, 12, 0, 26, 0, 9, 0)` therefore failed with
+  "period must be > 0", and the `0 => SMA` match arm behind it was unreachable:
+  only the `EMA` selector ever worked.
+- Pine `barstate.*` mapped to a variable name that no execution path resolved
+  (`barstate_islast` and friends), so any script reading `barstate` parsed,
+  mapped, and then failed with "Unknown variable". The fields are now
+  translated in the mapper into `BARPOS` / `BARSCOUNT` comparisons, which keeps
+  the decision inside the frontend and out of the five numeric backends.
+- Pine's `hl2`, `hlc3`, `ohlc4` and `time` had the same defect: they were
+  renamed to `HL2` / `HLC3` / `OHLC4` / `DATE` and handed to the engine as
+  variable references, and none of those names resolves. The derived price
+  sources are now expanded into OPEN/HIGH/LOW/CLOSE arithmetic (identical to
+  `streaming::PriceSource`) and `time` is emitted as a call to the
+  zero-argument `DATE()` builtin. The Pine corpus runner had been pre-binding
+  `HL2` / `HLC3` / `OHLC4` into the context, which is exactly why a green
+  corpus gate never noticed; that workaround is removed.
+- SIMD documentation no longer claims acceleration that does not exist. The
+  Hilbert section in `indicators::cycle` said the pipeline was AVX2-accelerated
+  by the `simd_ht_*` kernels and that `ht_sine`'s terminal stage batched through
+  `simd_sin_cos`; in fact the production Hilbert chain is a scalar TA-Lib-faithful
+  state machine and `simd_sin_cos` is only reached from a unit test. Likewise
+  `simd_ht_dcphase` documented an AVX2 path and radian output that its body does
+  not provide (it is a scalar, degree-returning approximation), and
+  `simd_aroon` / `simd_kama` / `simd_ema_next` / `simd_mama_hilbert` /
+  `simd_sar_step` / `simd_atr` documented AVX2 batching that their scalar bodies
+  do not perform. The module docs for `math::simd_ops` and `math::simd_ops_avx512`
+  now state the real dispatch policy (AVX-512 falls back to scalar for every
+  kernel except `simd512_sma`) and the `avx512` coverage table no longer lists
+  non-existent `simd512_macd` / `simd512_bbands` / `simd512_atr` / `simd512_adx`
+  names (they are `*_seed`). No numeric behaviour changed — these are
+  documentation↔reality corrections.
 
 ## [0.1.15] - 2026-09-11
 

@@ -892,33 +892,6 @@ pub fn kurtosis(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
 }
 
 // ============================================================
-// Internal helper functions
-// ============================================================
-
-#[allow(dead_code)]
-fn calculate_returns(prices: &[f64]) -> Result<Vec<f64>> {
-    if prices.len() < 2 {
-        return Err(TaError::InsufficientData {
-            length: prices.len(),
-            required: 2,
-        });
-    }
-
-    let mut returns = Vec::with_capacity(prices.len());
-    returns.push(0.0);
-
-    for i in 1..prices.len() {
-        if prices[i - 1].abs() > 1e-15 {
-            returns.push((prices[i] - prices[i - 1]) / prices[i - 1]);
-        } else {
-            returns.push(0.0);
-        }
-    }
-
-    Ok(returns)
-}
-
-// ============================================================
 // Unit tests
 // ============================================================
 

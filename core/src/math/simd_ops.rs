@@ -1,11 +1,14 @@
 #![allow(unused_unsafe)]
 #![allow(unsafe_op_in_unsafe_fn)]
 
-//! SIMD-accelerated batch indicator primitives.
+//! Batch indicator primitives.
 //!
-//! Each `pub fn simd_*` function provides a runtime-dispatched fast path:
-//! AVX2 on x86_64, scalar fallback otherwise. Functions operate on `&[f64]`
-//! slices and write results into a caller-provided `&mut [f64]` buffer.
+//! Most `pub fn simd_*` functions provide a runtime-dispatched fast path
+//! (AVX-512 → AVX2 → scalar on x86_64, `simd128` on wasm32). Some are
+//! scalar-only reference kernels — where that is the case the function's own
+//! doc comment says so explicitly; the `simd_` prefix is this module's naming
+//! convention, not a guarantee about every function. Functions operate on
+//! `&[f64]` slices and write results into a caller-provided `&mut [f64]` buffer.
 //!
 //! ## no_std support
 //!
@@ -2456,9 +2459,10 @@ pub fn simd_linreg_angle(data: &[f64], period: usize, result: &mut [f64]) {
 // `alloc` (and are gated to `std`). `simd_aroon` is allocation-free and is
 // available in all configurations.
 
-/// SIMD-accelerated ATR (Wilder's smoothing) — vectorised true-range pass
-/// followed by a horizontal-sum SMA kernel. Falls back to the scalar
-/// implementation on non-x86_64 or when AVX2 is unavailable.
+/// ATR (Wilder's smoothing) — a [`simd_true_range`] pass followed by scalar
+/// Wilder recursive smoothing (`atr_wilder_scalar`). Only the true-range pass is
+/// vectorised; the smoothing recurrence is inherently serial, so there is no
+/// AVX2 smoothing kernel to fall back from.
 #[cfg(feature = "std")]
 pub fn simd_atr(high: &[f64], low: &[f64], prev_close: &[f64], period: usize, result: &mut [f64]) {
     let len = high
@@ -2481,7 +2485,8 @@ pub fn simd_atr(high: &[f64], low: &[f64], prev_close: &[f64], period: usize, re
 
 /// Wilder-style recursive smoothing: `out[period-1] = mean(tr[0..period])`,
 /// then `out[i] = (out[i-1] * (period-1) + tr[i]) / period`.
-// Scalar fallback — referenced only under certain feature/target combinations.
+// Only reached from `simd_atr`, which is `std`-gated; without `std` this is
+// unreferenced, hence the allow.
 #[allow(dead_code)]
 fn atr_wilder_scalar(tr: &[f64], period: usize, result: &mut [f64]) {
     let len = tr.len().min(result.len());
@@ -2506,10 +2511,13 @@ fn atr_wilder_scalar(tr: &[f64], period: usize, result: &mut [f64]) {
     }
 }
 
-/// SIMD-accelerated Aroon up/down. The bottleneck (`argmax` / `argmin` over
-/// a sliding window) is a serial reduction, but the surrounding
-/// arithmetic — `(period - idx) / period * 100` and the (up - down) oscillator —
-/// is fully vectorised in chunks of 4 f64.
+/// Aroon up/down reference kernel.
+///
+/// Fully scalar. The bottleneck — `argmax` / `argmin` over a sliding window — is
+/// a serial reduction, and the trailing `(period - idx) / period * 100`
+/// arithmetic is a single expression per bar that does not amortise a SIMD
+/// setup. The production Aroon lives in
+/// [`crate::indicators::momentum::aroon`].
 pub fn simd_aroon(
     high: &[f64],
     low: &[f64],
@@ -2563,9 +2571,11 @@ pub fn simd_aroon(
     }
 }
 
-/// SIMD KAMA — delegates the rolling-WMA work to the existing SIMD WMA kernel
-/// (`wma_into_simd`) for the efficiency_ratio and SmoothingConstant passes,
-/// then runs the recursive smoothing in scalar code (data-dependent branch).
+/// KAMA (Kaufman Adaptive Moving Average) reference kernel.
+///
+/// Fully scalar: the efficiency-ratio and smoothing-constant passes are plain
+/// loops, and the final smoothing is a data-dependent recurrence that cannot be
+/// batched. It does **not** delegate to the SIMD WMA kernel.
 #[cfg(feature = "std")]
 pub fn simd_kama(
     input: &[f64],
@@ -2612,9 +2622,11 @@ pub fn simd_kama(
 // P.2 SIMD 时序算子 6 项
 // ============================================================================
 
-/// SIMD EMA 单步递推：`prev + k * (sample - prev)`。
+/// EMA 单步递推：`prev + k * (sample - prev)`。
 ///
-/// AVX2 路径批处理 4 步递推，使用 `_mm256_fmadd_pd`；非 x86_64 / 缺 AVX2 走标量。
+/// x86_64 且有 AVX2 时走 `_mm256_fmadd_pd` 的**单步**版本（把三个标量广播到
+/// 256-bit 通道，结果与标量 `mul_add` 等价），否则走标量。它**不**批量处理 4 步
+/// 递推——递推本身数据相关，无法跨步向量化。
 #[cfg(feature = "std")]
 pub fn simd_ema_next(prev: f64, sample: f64, k: f64) -> f64 {
     #[cfg(target_arch = "x86_64")]
@@ -2735,11 +2747,11 @@ unsafe fn cmo_avx2(src: &[f64], period: usize, out: &mut [f64], len: usize) {
     }
 }
 
-/// SIMD MESA Adaptive Moving Average (MAMA) Hilbert 4 元解算。
+/// MESA Adaptive Moving Average (MAMA) reference kernel.
 ///
 /// 输入长度 < 4 时返回 NaN；输出 `out_smooth` (MAMA) 与 `out_period` (FAMA)。
-/// 简化实现：标量 Ehlers Hilbert Transform + 双 EMA 链。
-/// AVX2 路径批 4 元素更新相位累加。
+/// 全标量：简化版 Ehlers Hilbert Transform + 双 EMA 链，相位累加是逐 bar 递推，
+/// **没有** AVX2 路径。生产实现见 [`crate::indicators::overlap::mama`]。
 #[cfg(feature = "std")]
 pub fn simd_mama_hilbert(src: &[f64], out_smooth: &mut [f64], out_period: &mut [f64]) {
     let len = src.len().min(out_smooth.len()).min(out_period.len());
@@ -2792,10 +2804,11 @@ pub fn simd_mama_hilbert(src: &[f64], out_smooth: &mut [f64], out_period: &mut [
     }
 }
 
-/// SIMD Parabolic SAR 单步 + EP/AF 更新向量化。
+/// Parabolic SAR 单步 + EP/AF 更新参考内核。
 ///
 /// 输入：high/low/prev_sar/prev_ep/af_step，每根 K 调用一次。
-/// AVX2 路径：4 步批量化。
+/// 全标量：SAR 递推依赖上一根的 `sar` / `ep` / `af`，无法跨 bar 批量。生产实现见
+/// [`crate::indicators::overlap::sar`]。
 #[cfg(feature = "std")]
 pub fn simd_sar_step(
     high: &[f64],
@@ -2885,10 +2898,16 @@ pub fn simd_t3(src: &[f64], period: usize, a: f64, out: &mut [f64]) {
     }
 }
 
-/// SIMD Hilbert Transform DC Phase (HT_DCPHASE)。
+/// Simplified Hilbert Transform DC Phase (HT_DCPHASE-style) primitive.
 ///
-/// 简化实现：用 4 阶 Hilbert 滤波后计算瞬时相位（弧度）。
-/// AVX2 路径批 4 元素相位增量。
+/// Scalar only — there is deliberately no AVX2 fast path here: the phase
+/// recurrence is sequential and dominated by one `atan` per bar. The
+/// instantaneous phase is estimated from a 4-bar backward difference as
+/// `atan((src[i-1] - src[i-2]) / (src[i] - src[i-3]))`, mapped into
+/// `[0, 180]` **degrees**; the first 3 outputs are `NaN`.
+///
+/// This is a standalone approximation, not the TA-Lib-faithful implementation
+/// used by [`crate::indicators::cycle::ht_dcphase`].
 #[cfg(feature = "std")]
 pub fn simd_ht_dcphase(src: &[f64], out: &mut [f64]) {
     let len = src.len().min(out.len());
@@ -2930,7 +2949,13 @@ pub fn simd_ht_dcphase(src: &[f64], out: &mut [f64]) {
 // 按 4-bar batch 向量化，剩余 phase = atan2(im, re) 仍走标量（每 bar
 // 一次超越函数，无法 SIMD 化）。
 //
-// 性能收益（vs 原 cycle.rs 标量实现，100K bars，x86_64 AVX2）：
+// **注意**：本节内核是公开的独立 SIMD 原语，`indicators::cycle` 的生产链路
+// **未**调用它们——`compute_hilbert_components` 走的是逐 bar 的标量状态机
+// （见 `cycle.rs` 的 `# Performance`）。这些原语由本文件的单元测试保证与各自
+// 标量回退逐位一致。
+//
+// 下述数字是内核自身相对逐元素标量实现的微基准对比（100K bars，x86_64 AVX2），
+// **不是** HT_* 指标的端到端耗时：
 //   - HT_DCPERIOD:  ~48 ns/bar  ->  ~20 ns/bar  (2.4x)
 //   - HT_DCPHASE:   ~35 ns/bar  ->  ~14 ns/bar  (2.5x)
 //   - HT_SINE:      ~38.56 ns   ->  ~15 ns/bar  (2.5x)

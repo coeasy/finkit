@@ -2287,9 +2287,22 @@ fn dispatch_macd_line_call(
             std::slice::from_raw_parts_mut(output_ptr, len),
         )
     };
+    // Mirror the tree path's `fn_macd`: `macd_line_into` rejects *any*
+    // non-finite value, but a leading warm-up run is an upstream indicator's
+    // prefix rather than bad data. Skipping it keeps the two paths in step --
+    // without this the plan path returned an all-NaN series where the tree path
+    // returned real values for the same source.
+    let start = crate::math::leading_warmup(input);
+    output[..start].fill(f64::NAN);
     absorb_kernel_failure(
-        crate::indicators::macd_line_into(input, fast, slow, signal, output),
-        output,
+        crate::indicators::macd_line_into(
+            &input[start..],
+            fast,
+            slow,
+            signal,
+            &mut output[start..],
+        ),
+        &mut output[start..],
     )
 }
 
@@ -2331,9 +2344,14 @@ fn dispatch_dea_call(
         ));
     }
 
+    // Mirror the tree path's `fn_dea`: `macd` seeds its EMAs from `input[0]`, so
+    // the leading warm-up run is skipped before the recurrence rather than fed
+    // to the seed. Without this the plan path produced an all-NaN signal where
+    // the tree path produced real values.
+    let start = crate::math::leading_warmup(&buffers[input_slot]);
     // Scoped so the immutable borrow ends before the output is borrowed mutably.
     let result = {
-        let input = &buffers[input_slot];
+        let input = &buffers[input_slot][start..];
         crate::indicators::momentum::macd(input, fast, slow, signal)
     };
     // `fn_dea` swallows a bad period into an all-NaN series, so this path must
@@ -2348,12 +2366,15 @@ fn dispatch_dea_call(
     let output = buffers
         .get_mut(output_slot)
         .ok_or_else(|| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
-    if output.len() != source.len() {
+    if output.len() != len {
         return Err(KernelDispatchError::new(
             FormulaKernelDispatcher::ERR_PARAMETER,
         ));
     }
-    output.copy_from_slice(source.as_slice().unwrap());
+    // Reuse the tree path's own helper so the warm-up prefix is restored by one
+    // rule rather than two hand-written ones that can drift apart.
+    let shifted = crate::formula::functions::shift_back(source, start, len);
+    output.copy_from_slice(shifted.as_slice().unwrap());
     Ok(())
 }
 

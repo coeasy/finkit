@@ -66,6 +66,25 @@ fn extract_n(args: &[Array1<f64>], idx: usize, name: &str) -> Result<usize, Form
     Ok(n)
 }
 
+/// Read a TA-Lib `MAType` selector argument out of `args`.
+///
+/// This deliberately accepts `0`, which is the code for `SMA` and therefore the
+/// *documented default* of every `matype` slot. Routing these through
+/// [`extract_n`] made `0` a hard "period must be > 0" error, which left the
+/// `0 => Sma` match arm unreachable and made the canonical TA-Lib call
+/// `MACDEXT(close, 12, 0, 26, 0, 9, 0)` fail outright on the formula path.
+// Every `MAType` code is a tiny non-negative integer, so the saturating
+// `f64 as usize` cast is exact; a NaN slot (omitted argument) lands on 0 = SMA.
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn extract_ma_code(args: &[Array1<f64>], idx: usize, name: &str) -> Result<usize, FormulaError> {
+    if idx >= args.len() {
+        return Err(FormulaError::RuntimeError(format!(
+            "{name}: missing argument at index {idx}"
+        )));
+    }
+    Ok(args[idx][0] as usize)
+}
+
 fn extract_f64_arg(args: &[Array1<f64>], idx: usize, name: &str) -> Result<f64, FormulaError> {
     if idx >= args.len() {
         return Err(FormulaError::RuntimeError(format!(
@@ -1384,11 +1403,11 @@ fn fn_macdext(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>,
     ensure_args_len("MACDEXT", args, 7)?;
     let input = &args[0];
     let fast_period = extract_n(args, 1, "MACDEXT")?;
-    let fast_ma = extract_n(args, 2, "MACDEXT")?;
+    let fast_ma = extract_ma_code(args, 2, "MACDEXT")?;
     let slow_period = extract_n(args, 3, "MACDEXT")?;
-    let slow_ma = extract_n(args, 4, "MACDEXT")?;
+    let slow_ma = extract_ma_code(args, 4, "MACDEXT")?;
     let signal_period = extract_n(args, 5, "MACDEXT")?;
-    let signal_ma = extract_n(args, 6, "MACDEXT")?;
+    let signal_ma = extract_ma_code(args, 6, "MACDEXT")?;
 
     let data_len = ctx.data_len;
     let values = input.as_slice().unwrap();
@@ -1410,8 +1429,12 @@ fn fn_macdext(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>,
         _ => crate::indicators::overlap::MaType::Ema,
     };
 
+    // See `functions::warmup_offset`: the SMA-seeded MACDEXT accumulates its
+    // rolling sums from `input[0]` (and the EMA variants seed from it too), so a
+    // leading warm-up run has to be skipped rather than folded into the seed.
+    let start = super::functions::warmup_offset(values);
     match lib_momentum::macdext(
-        values,
+        &values[start..],
         fast_period,
         fast_kind,
         slow_period,
@@ -1419,24 +1442,33 @@ fn fn_macdext(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>,
         signal_period,
         signal_kind,
     ) {
-        Ok(r) => Ok(r.macd),
+        Ok(r) => Ok(super::functions::shift_back(r.macd, start, data_len)),
         Err(_) => Ok(nan_vec(data_len)),
     }
 }
 
-#[allow(dead_code)]
 fn fn_macdfix(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     // MACDFIX(close, signal_period)
     ensure_args_len("MACDFIX", args, 2)?;
     let input = &args[0];
+    let signal_period = extract_n(args, 1, "MACDFIX")?;
+
     let data_len = ctx.data_len;
     let values = input.as_slice().unwrap();
 
-    // Batch macdfix uses fixed 12/26 periods. We delegate to standard macd so
-    // that a custom signal_period is honoured.
-    let signal_period = extract_n(args, 1, "MACDFIX")?;
-    match lib_momentum::macd(values, 12, 26, signal_period) {
-        Ok(r) => Ok(r.macd),
+    // MACDFIX is *not* MACD with 12/26 periods. TA-Lib pins the EMA smoothing
+    // constants at 0.15 / 0.075 rather than recomputing `2/(period+1)`, and the
+    // gap accumulates over the series. Delegating to `macd` therefore made the
+    // formula path disagree with `indicators::macdfix` (the TA-Lib-parity
+    // implementation) on the very same input. `macdfix_with_signal` carries the
+    // fixed constants and still honours a caller-supplied signal period.
+    //
+    // See `functions::warmup_offset`: the recurrence seeds its EMAs from
+    // `input[0]`, and `macd` rejected a non-finite value outright, so a leading
+    // warm-up run from an upstream indicator turned the whole series NaN.
+    let start = super::functions::warmup_offset(values);
+    match lib_momentum::macdfix_with_signal(&values[start..], signal_period) {
+        Ok(result) => Ok(super::functions::shift_back(result.macd, start, data_len)),
         Err(_) => Ok(nan_vec(data_len)),
     }
 }
@@ -1577,8 +1609,13 @@ fn fn_diff(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, Fo
         return Ok(nan_vec(data_len));
     }
 
-    match lib_momentum::macd(values, fast_n, slow_n, 9) {
-        Ok(result) => Ok(result.macd),
+    // See `functions::warmup_offset`: `macd` seeds its EMAs from `input[0]` and
+    // rejects any non-finite value, so a leading warm-up run has to be skipped
+    // rather than handed to the seed. Without this, `DIFF(MA(CLOSE, 5), 12, 26)`
+    // was an all-NaN series.
+    let start = super::functions::warmup_offset(values);
+    match lib_momentum::macd(&values[start..], fast_n, slow_n, 9) {
+        Ok(result) => Ok(super::functions::shift_back(result.macd, start, data_len)),
         Err(_) => Ok(nan_vec(data_len)),
     }
 }
@@ -1605,8 +1642,11 @@ fn fn_dea(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, For
         return Ok(nan_vec(data_len));
     }
 
-    match lib_momentum::macd(values, fast_n, slow_n, signal_n) {
-        Ok(result) => Ok(result.signal),
+    // See `functions::warmup_offset`: the same seed-from-`input[0]` contract as
+    // `fn_diff`, so the leading warm-up run is skipped for the signal leg too.
+    let start = super::functions::warmup_offset(values);
+    match lib_momentum::macd(&values[start..], fast_n, slow_n, signal_n) {
+        Ok(result) => Ok(super::functions::shift_back(result.signal, start, data_len)),
         Err(_) => Ok(nan_vec(data_len)),
     }
 }

@@ -31,21 +31,23 @@
 //!
 //! # Performance
 //!
-//! Hilbert pipeline is SIMD-accelerated via AVX2 kernels in
-//! [`crate::math::simd_ops::simd_ht_smooth`], [`simd_ht_detrender`](crate::math::simd_ops::simd_ht_detrender)
-//! and [`simd_ht_components`](crate::math::simd_ops::simd_ht_components).
+//! The Hilbert chain in [`compute_hilbert_components`] is deliberately scalar.
+//! Every bar's `detrender` / `Q1` / `jI` / `jQ` value is fed back from the two
+//! previous same-parity bars, so the recurrence cannot be batched, and the
+//! output must reproduce the TA-Lib bar-by-bar state machine exactly.
 //!
-//! The HT_SINE terminal sin/cos stage (`sin(p)` and `(sin p + cos p)·√2/2` for
-//! the lead sine) is batched through [`crate::math::simd_ops::simd_sin_cos`],
-//! an AVX2 polynomial-approximation kernel. Because `phase = atan(im/re)` is
-//! always bounded to (-π/2, π/2), the polynomial is exact to ~1e-11. The
-//! terminal stage drops from a per-element scalar `f64::sin_cos` (~38 ns/bar
-//! equivalent) to the batched SIMD path (~15 ns/bar, ~2.5x) on x86_64 AVX2.
-//! (The overall `ht_sine` cost is dominated by the Hilbert IIR chain and is
-//! accordingly higher.)
+//! [`crate::math::simd_ops`] does publish batchable primitives for these stages —
+//! [`simd_ht_smooth`](crate::math::simd_ops::simd_ht_smooth),
+//! [`simd_ht_detrender`](crate::math::simd_ops::simd_ht_detrender),
+//! [`simd_ht_components`](crate::math::simd_ops::simd_ht_components) and, for the
+//! HT_SINE terminal sin/cos stage,
+//! [`simd_sin_cos`](crate::math::simd_ops::simd_sin_cos) — but this module does
+//! **not** call them. `ht_sine` runs the same unified state machine as the other
+//! `ht_*` terminals, which keeps those SIMD primitives numerically independent of
+//! the production chain; they carry their own unit tests in
+//! [`crate::math::simd_ops`].
 
 use crate::error::Result;
-use crate::math::simd_ops;
 use crate::utils::{init_output, validate_input};
 use ndarray::Array1;
 use std::sync::OnceLock;
@@ -308,33 +310,6 @@ pub fn ht_trendline(input: &[f64]) -> Result<Array1<f64>> {
 // ============================================================================
 // Internal Hilbert Transform Implementation
 // ============================================================================
-
-/// Compute the detrender (zero-lag differentiator) from smoothed data.
-///
-/// The detrender removes low-frequency components and amplifies the cycle components.
-///
-/// Detrender = (0.0962*Smooth + 0.5769*Smooth[2] - 0.5769*Smooth[4] - 0.0962*Smooth[6])
-///             * (0.075*Smooth[1] + 0.54*Smooth[3] + 0.075*Smooth[5])
-///
-/// Delegates to the AVX2 kernel [`simd_ops::simd_ht_detrender`] (scalar fallback).
-/// Indices 0..10 are left as 0.0 because the consumer only reads from i >= 10.
-#[allow(dead_code)]
-fn compute_detrender(smooth: &[f64], len: usize) -> Vec<f64> {
-    let mut detrender = vec![0.0; len];
-    simd_ops::simd_ht_detrender(smooth, &mut detrender[..len]);
-    detrender
-}
-
-/// Compute the quadrature component from detrender values.
-///
-/// Quadrature = 0.0962*Detrender + 0.5769*Detrender[2] - 0.5769*Detrender[4] - 0.0962*Detrender[6]
-#[allow(dead_code)]
-#[inline(always)]
-fn compute_quadrature(detrender: &[f64], i: usize) -> f64 {
-    // FMA form: a*b + c (replaces 4 multiplies + 3 adds with 1 mul + 3 fma)
-    0.0962f64.mul_add(detrender[i], 0.5769 * detrender[i - 2])
-        - 0.5769f64.mul_add(detrender[i - 4], 0.0962 * detrender[i - 6])
-}
 
 /// Compute all Hilbert Transform components needed by the cycle indicators.
 ///
@@ -1896,6 +1871,9 @@ pub fn ehlers_sidewinder(input: &[f64], period: usize) -> Result<Array1<f64>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // Only the SIMD-primitive parity test below reaches into `simd_ops`; the
+    // production Hilbert chain deliberately does not (see `# Performance`).
+    use crate::math::simd_ops;
 
     /// Generate a sine wave for testing
     fn sine_wave(n: usize, frequency: f64, amplitude: f64, offset: f64) -> Vec<f64> {

@@ -1,7 +1,9 @@
 //! SIMD-optimized operations for feature engineering hot paths.
 //!
-//! Uses the `SimdOps` dispatch layer from `formula::simd` for real AVX2/SSE2/NEON
-//! acceleration instead of manual 4-wide scalar unrolling.
+//! Uses the `SimdOps` dispatch layer from `formula::simd` for real
+//! AVX2/AVX-512/NEON acceleration. Where the work reduces to a prefix-sum /
+//! rolling-window recurrence, the hot loop is additionally unrolled 4-wide over
+//! the SIMD-accelerated cumulative sums.
 
 use crate::formula::simd::SimdOps;
 use crate::math::simd_ops;
