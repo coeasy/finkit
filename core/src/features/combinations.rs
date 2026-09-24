@@ -36,20 +36,12 @@ pub fn rolling_correlation(a: &[f64], b: &[f64], window: usize) -> Array1<f64> {
         let start = i + 1 - window;
         let sa = &a[start..=i];
         let sb = &b[start..=i];
-        let n = window as f64;
-        let mean_a = sa.iter().sum::<f64>() / n;
-        let mean_b = sb.iter().sum::<f64>() / n;
 
-        let mut cov = 0.0;
-        let mut var_a = 0.0;
-        let mut var_b = 0.0;
-        for j in 0..window {
-            let da = sa[j] - mean_a;
-            let db = sb[j] - mean_b;
-            cov += da * db;
-            var_a += da * da;
-            var_b += db * db;
-        }
+        // Centred moments from the shared `math` helper rather than a local
+        // copy of the two-pass loop: this is the same arithmetic, and having one
+        // implementation is what stops the offset-sensitive one-pass form from
+        // reappearing in one spelling but not another.
+        let (cov, var_a, var_b) = crate::math::centred_moments(sa, sb);
 
         let denom = (var_a * var_b).sqrt();
         if denom > 1e-15 {

@@ -183,6 +183,57 @@ pub(crate) fn nearly_not_equal(lhs: f64, rhs: f64) -> bool {
     (lhs - rhs).abs() >= EQUALITY_TOLERANCE
 }
 
+/// Centred second moments of two equal-length series: the sum of squared
+/// deviations of each series and the sum of their cross-products.
+///
+/// Returns `(sum_dx_dy, sum_dx_dx, sum_dy_dy)` with `dx = x - mean(x)`.
+///
+/// # Why two passes
+///
+/// The textbook one-pass form `sum(x*y) - sum(x)*sum(y)/n` subtracts two large,
+/// nearly equal totals. When the mean is large compared with the spread — a
+/// price series at `1e9`, a feature that is a large constant plus a small
+/// signal — the subtraction loses every significant digit. Measured: a series
+/// and its exact affine image `2x + 3` are perfectly correlated, yet the
+/// one-pass form reported `r = 0.667` at a `1e9` baseline (and `1.0` at a small
+/// baseline, which is why the ordinary-data tests never caught it).
+///
+/// Subtracting the mean *first* and accumulating the deviations keeps every
+/// addend at the scale of the spread, so the relative error stays at the level
+/// of the individual subtraction rather than of the baseline. Every caller that
+/// needs a variance, covariance, correlation or z-score must come through here,
+/// so the crate has one moment formula instead of one per spelling.
+///
+/// # Panics
+///
+/// Panics in debug builds if the two series differ in length; callers validate
+/// that up front because they also decide the error to report.
+#[inline]
+pub(crate) fn centred_moments(x: &[f64], y: &[f64]) -> (f64, f64, f64) {
+    debug_assert_eq!(
+        x.len(),
+        y.len(),
+        "centred_moments requires equal-length series"
+    );
+    if x.is_empty() {
+        return (0.0, 0.0, 0.0);
+    }
+    let inv_n = 1.0 / x.len() as f64;
+    let mean_x = x.iter().sum::<f64>() * inv_n;
+    let mean_y = y.iter().sum::<f64>() * inv_n;
+    let mut cross = 0.0;
+    let mut sum_dx_dx = 0.0;
+    let mut sum_dy_dy = 0.0;
+    for (xi, yi) in x.iter().zip(y.iter()) {
+        let dx = xi - mean_x;
+        let dy = yi - mean_y;
+        cross += dx * dy;
+        sum_dx_dx += dx * dx;
+        sum_dy_dy += dy * dy;
+    }
+    (cross, sum_dx_dx, sum_dy_dy)
+}
+
 #[cfg(feature = "std")]
 pub mod cci;
 #[cfg(feature = "std")]

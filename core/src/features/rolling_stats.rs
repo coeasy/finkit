@@ -144,7 +144,15 @@ pub fn rolling_entropy(data: &[f64], window: usize, num_bins: usize) -> Array1<f
     out
 }
 
-/// Rolling z-score: (x - rolling_mean) / rolling_std.
+/// Rolling z-score: `(x - rolling_mean) / rolling_std` with the population
+/// deviation.
+///
+/// The variance comes from the shared centred moments, so the result depends
+/// only on the spread of the window and not on its offset — the same guarantee
+/// the sibling `rolling_skewness` / `rolling_kurtosis` get from their two-pass
+/// loops. The incremental `sum_sq - sum^2/n` accumulators this used to carry
+/// lose every significant digit when the mean dwarfs the spread, which made the
+/// z-score drift with the baseline.
 pub fn rolling_zscore(data: &[f64], window: usize) -> Array1<f64> {
     let len = data.len();
     let mut out = Array1::from_elem(len, f64::NAN);
@@ -152,35 +160,17 @@ pub fn rolling_zscore(data: &[f64], window: usize) -> Array1<f64> {
         return out;
     }
 
-    let mut sum = 0.0;
-    let mut sum_sq = 0.0;
-
-    for &val in &data[..window] {
-        sum += val;
-        sum_sq += val * val;
-    }
-
     let w = window as f64;
-    let mean = sum / w;
-    let var = sum_sq / w - mean * mean;
-    let std = var.max(0.0).sqrt();
-    if std > 1e-15 {
-        out[window - 1] = (data[window - 1] - mean) / std;
-    } else {
-        out[window - 1] = 0.0;
-    }
-
-    for i in window..len {
-        sum += data[i] - data[i - window];
-        sum_sq += data[i] * data[i] - data[i - window] * data[i - window];
-        let mean = sum / w;
-        let var = sum_sq / w - mean * mean;
-        let std = var.max(0.0).sqrt();
-        if std > 1e-15 {
-            out[i] = (data[i] - mean) / std;
+    for i in (window - 1)..len {
+        let slice = &data[i + 1 - window..=i];
+        let mean = slice.iter().sum::<f64>() / w;
+        let (_, sum_dx_dx, _) = crate::math::centred_moments(slice, slice);
+        let std = (sum_dx_dx / w).max(0.0).sqrt();
+        out[i] = if std > 1e-15 {
+            (data[i] - mean) / std
         } else {
-            out[i] = 0.0;
-        }
+            0.0
+        };
     }
     out
 }
@@ -1920,31 +1910,22 @@ pub fn rolling_ic(
 }
 
 /// Pearson correlation for a window slice.
+///
+/// Uses the shared centred moments rather than the one-pass
+/// `n*sum_xy - sum_x*sum_y` form, which loses every significant digit when the
+/// factor or the return has a large mean relative to its spread — the same
+/// defect that made the Python-exposed `correlation` report `0.667` for a
+/// perfectly correlated pair at a `1e9` baseline. See
+/// [`crate::math::centred_moments`].
 fn pearson_ic(x: &[f64], y: &[f64]) -> f64 {
-    let n = x.len() as f64;
-    let mut sum_x = 0.0;
-    let mut sum_y = 0.0;
-    let mut sum_xy = 0.0;
-    let mut sum_x2 = 0.0;
-    let mut sum_y2 = 0.0;
-
-    for (&xi, &yi) in x.iter().zip(y.iter()) {
-        sum_x += xi;
-        sum_y += yi;
-        sum_xy += xi * yi;
-        sum_x2 += xi * xi;
-        sum_y2 += yi * yi;
-    }
-
-    let denom_x = n * sum_x2 - sum_x * sum_x;
-    let denom_y = n * sum_y2 - sum_y * sum_y;
-    let denom = (denom_x * denom_y).sqrt();
+    let (cross, sum_dx_dx, sum_dy_dy) = crate::math::centred_moments(x, y);
+    let denom = (sum_dx_dx * sum_dy_dy).sqrt();
 
     if denom < 1e-15 {
         return 0.0;
     }
 
-    (n * sum_xy - sum_x * sum_y) / denom
+    cross / denom
 }
 
 #[cfg(test)]

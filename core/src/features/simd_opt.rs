@@ -1,30 +1,25 @@
-//! SIMD-optimized operations for feature engineering hot paths.
+//! Batch and rolling helpers for feature engineering hot paths.
 //!
-//! Uses the `SimdOps` dispatch layer from `formula::simd` for real
-//! AVX2/AVX-512/NEON acceleration. Where the work reduces to a prefix-sum /
-//! rolling-window recurrence, the hot loop is additionally unrolled 4-wide over
-//! the SIMD-accelerated cumulative sums.
+//! The arithmetic is delegated to the crate's canonical `math::` kernels rather
+//! than re-derived here. These entry points used to carry their own one-pass
+//! moment loops (`sum_sq - sum^2/n`) and their own sliding-window recurrences,
+//! which agreed with the canonical kernels on ordinary test data and diverged
+//! badly on a large baseline — a series and its exact affine image `2x + 3` are
+//! perfectly correlated, yet this module reported `r = 0.667` at a `1e9`
+//! baseline, and its rolling standard deviation reported `0.0` where the true
+//! value is `1.0`. Two spellings of the same statistic must not answer
+//! differently, so the spellings now share one implementation.
 
 use crate::formula::simd::SimdOps;
-use crate::math::simd_ops;
+use crate::math::kernels::{rolling_sample_stddev_into, sma_into};
 use ndarray::Array1;
 
-/// Vectorized sum and sum-of-squares over a slice using AVX2-accelerated mul + horizontal reduce.
-#[inline]
-fn sum_and_sum_sq_simd(data: &[f64]) -> (f64, f64) {
-    let n = data.len();
-    if n == 0 {
-        return (0.0, 0.0);
-    }
-    // Use SimdOps::mul for element-wise squaring, then scalar reduce
-    let mut sq = vec![0.0; n];
-    SimdOps::mul(data, data, &mut sq);
-    let sum: f64 = data.iter().sum();
-    let sum_sq: f64 = sq.iter().sum();
-    (sum, sum_sq)
-}
-
-/// SIMD-optimized rolling mean using prefix sums (O(n) vs naive O(n·window)).
+/// Rolling mean, delegated to the canonical O(1) moving-average state.
+///
+/// Equivalent to [`crate::math::statistics::rolling_mean`] and to
+/// [`crate::math::kernels::sma_into`], including their leading warm-up rule: a
+/// leading non-finite run is treated as an upstream indicator's warm-up prefix
+/// and skipped, not as data.
 #[inline]
 pub fn rolling_mean_simd(data: &[f64], window: usize) -> Vec<f64> {
     let n = data.len();
@@ -37,31 +32,18 @@ pub fn rolling_mean_simd(data: &[f64], window: usize) -> Vec<f64> {
         return out;
     }
 
-    let mut cum = vec![0.0; n];
-    simd_ops::simd_prefix_sum(data, &mut cum);
-    let inv_w = 1.0 / window as f64;
-
-    out[window - 1] = cum[window - 1] * inv_w;
-
-    let mut i = window;
-    while i + 4 <= n {
-        out[i] = (cum[i] - cum[i - window]) * inv_w;
-        out[i + 1] = (cum[i + 1] - cum[i + 1 - window]) * inv_w;
-        out[i + 2] = (cum[i + 2] - cum[i + 2 - window]) * inv_w;
-        out[i + 3] = (cum[i + 3] - cum[i + 3 - window]) * inv_w;
-        i += 4;
-    }
-    while i < n {
-        out[i] = (cum[i] - cum[i - window]) * inv_w;
-        i += 1;
-    }
-
+    sma_into(data, window, &mut out).expect("lengths were validated above");
     out
 }
 
-/// SIMD-optimized rolling standard deviation using a sliding sum / sum-of-squares window.
+/// Rolling sample standard deviation (Bessel correction), delegated to the
+/// canonical compat kernel.
 ///
-/// Matches `statistics::rolling_std_dev` (sample std, Bessel correction).
+/// Equivalent to [`crate::math::statistics::rolling_std_dev`] and to
+/// [`crate::math::kernels::rolling_sample_stddev_into`]. The sliding
+/// sum/sum-of-squares window this used to run cancelled catastrophically at a
+/// large baseline — measured `0.0` for every window of `1e12 + i` with
+/// `window = 3`, where the true sample deviation is exactly `1.0`.
 #[inline]
 pub fn rolling_std_simd(data: &[f64], window: usize) -> Vec<f64> {
     let n = data.len();
@@ -74,29 +56,18 @@ pub fn rolling_std_simd(data: &[f64], window: usize) -> Vec<f64> {
         return out;
     }
 
-    let inv_w = 1.0 / window as f64;
-    let inv_w_minus_1 = 1.0 / (window as f64 - 1.0);
-
-    let (mut sum, mut sum_sq) = sum_and_sum_sq_simd(&data[..window]);
-    let mean = sum * inv_w;
-    out[window - 1] = ((sum_sq - sum * mean) * inv_w_minus_1).max(0.0).sqrt();
-
-    for i in window..n {
-        let old = data[i - window];
-        let new = data[i];
-        sum += new - old;
-        sum_sq += new * new - old * old;
-        let m = sum * inv_w;
-        let var = (sum_sq - sum * m) * inv_w_minus_1;
-        out[i] = var.max(0.0).sqrt();
-    }
-
+    rolling_sample_stddev_into(data, window, &mut out).expect("lengths were validated above");
     out
 }
 
-/// SIMD-optimized batch z-score normalization.
+/// Batch z-score normalisation, `(x - mean) / stddev` with the population
+/// deviation.
 ///
-/// Computes (x - mean) / std for each element using SimdOps vectorized sub and mul.
+/// The deviation comes from the centred moments, so the result depends only on
+/// the spread of the data and not on its offset: an arithmetic ramp scores the
+/// same whether it starts at `0` or at `1e9`. The previous one-pass form did
+/// not — at a `1e9` baseline it reported `-1.607` where the offset-invariant
+/// answer is `-1.705`.
 #[inline]
 pub fn batch_zscore_simd(data: &[f64]) -> Array1<f64> {
     let n = data.len();
@@ -104,10 +75,8 @@ pub fn batch_zscore_simd(data: &[f64]) -> Array1<f64> {
         return Array1::zeros(0);
     }
 
-    let (sum, sum_sq) = sum_and_sum_sq_simd(data);
-    let n_f = n as f64;
-    let mean = sum / n_f;
-    let var = sum_sq / n_f - mean * mean;
+    let (_, sum_dx_dx, _) = crate::math::centred_moments(data, data);
+    let var = sum_dx_dx / n as f64;
     let std = var.max(0.0).sqrt();
 
     if std < 1e-15 {
@@ -115,6 +84,7 @@ pub fn batch_zscore_simd(data: &[f64]) -> Array1<f64> {
     }
 
     let inv_std = 1.0 / std;
+    let mean = data.iter().sum::<f64>() / n as f64;
 
     // Use SimdOps for (data - mean) * inv_std
     let mean_vec = vec![mean; n];
@@ -127,9 +97,12 @@ pub fn batch_zscore_simd(data: &[f64]) -> Array1<f64> {
     Array1::from_vec(out)
 }
 
-/// SIMD-optimized batch min-max normalization to [0, 1].
+/// Batch min-max normalization to `[0, 1]`.
 ///
-/// Uses SimdOps::min_elementwise / max_elementwise for the reduction.
+/// The min/max reduction is scalar and the scaling step uses `SimdOps::sub` /
+/// `SimdOps::mul`. `SimdOps::min_elementwise` / `max_elementwise` are
+/// element-wise kernels and cannot perform a reduction, so they are not used
+/// here. A constant series (zero range) maps to `0.5`.
 #[inline]
 pub fn batch_minmax_simd(data: &[f64]) -> Array1<f64> {
     let n = data.len();
@@ -137,7 +110,10 @@ pub fn batch_minmax_simd(data: &[f64]) -> Array1<f64> {
         return Array1::zeros(0);
     }
 
-    // Tree reduction for min and max using SimdOps
+    // Scalar reduction for min and max. `SimdOps::min_elementwise` /
+    // `max_elementwise` are *element-wise* kernels (two arrays in, element-wise
+    // result out) and cannot perform a reduction, so they are not usable here —
+    // the previous doc comment claimed they were.
     let mut min_val = data[0];
     let mut max_val = data[0];
     for &v in &data[1..] {
@@ -165,36 +141,25 @@ pub fn batch_minmax_simd(data: &[f64]) -> Array1<f64> {
     Array1::from_vec(out)
 }
 
-/// SIMD-optimized correlation computation between two arrays.
+/// Pearson correlation coefficient between two arrays.
 ///
-/// Uses SimdOps::mul for element-wise products, then scalar reduce.
+/// Delegates to [`crate::math::centred_moments`], so the coefficient is
+/// invariant under the offset of the data: `b = 2a + 3` scores exactly `1.0`
+/// whether `a` runs over `0..n` or over `1e9..1e9+n`. The previous one-pass
+/// form reported `0.667` at the large baseline — a silent 33% error in a
+/// function that is exposed to Python as `correlation`.
+///
+/// Returns `0.0` when either series has no spread (or fewer than three points),
+/// matching this entry point's historical degenerate contract.
 #[inline]
 pub fn correlation_simd(a: &[f64], b: &[f64]) -> f64 {
     assert_eq!(a.len(), b.len());
-    let n = a.len();
-    let n_f = n as f64;
-    if n_f < 3.0 {
+    if a.len() < 3 {
         return 0.0;
     }
 
-    // Use SimdOps::mul for element-wise products
-    let mut ab = vec![0.0; n];
-    let mut a2 = vec![0.0; n];
-    let mut b2 = vec![0.0; n];
-    SimdOps::mul(a, b, &mut ab);
-    SimdOps::mul(a, a, &mut a2);
-    SimdOps::mul(b, b, &mut b2);
-
-    let sum_a: f64 = a.iter().sum();
-    let sum_b: f64 = b.iter().sum();
-    let sum_ab: f64 = ab.iter().sum();
-    let sum_a2: f64 = a2.iter().sum();
-    let sum_b2: f64 = b2.iter().sum();
-
-    let cov = sum_ab / n_f - (sum_a / n_f) * (sum_b / n_f);
-    let var_a = sum_a2 / n_f - (sum_a / n_f).powi(2);
-    let var_b = sum_b2 / n_f - (sum_b / n_f).powi(2);
-    let denom = (var_a * var_b).sqrt();
+    let (cov, sum_da_da, sum_db_db) = crate::math::centred_moments(a, b);
+    let denom = (sum_da_da * sum_db_db).sqrt();
 
     if denom > 1e-15 {
         cov / denom

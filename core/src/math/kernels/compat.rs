@@ -148,7 +148,14 @@ pub fn rolling_sample_variance_into(
     for (index, value) in input.iter().copied().enumerate().skip(start) {
         let current = state.update(value);
         if index + 1 >= start + window {
-            output[index] = current.variance * current.count as f64 / (current.count - 1) as f64;
+            // Sample variance is a sum of squared deviations, so a negative
+            // value is floating-point residue rather than data. Clamping at the
+            // source keeps `rolling_sample_stddev_into` exactly the square root
+            // of this number and removes the last route by which a `sqrt` could
+            // be handed a negative argument. For any window with real signal the
+            // residue is positive and this is a no-op.
+            let sample = current.variance * current.count as f64 / (current.count - 1) as f64;
+            output[index] = sample.max(0.0);
         }
     }
     Ok(())

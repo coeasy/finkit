@@ -192,6 +192,41 @@ reused.
   a `NaN` operand makes both comparisons false, exactly as before), and every
   site calls `math::nearly_equal` / `nearly_not_equal`.
 
+- The second-moment family used the one-pass form `sum(x^2) - sum(x)^2 / n`,
+  which subtracts two large nearly equal totals and loses every significant
+  digit when a series' mean dwarfs its spread. A series and its exact affine
+  image `2x + 3` are perfectly correlated, yet `correlation` — exposed to Python
+  as `correlation` — returned `0.667` at a `1e9` baseline, `covariance` returned
+  `520.1` where the exact answer is `693.3`, `batch_zscore` returned `-1.607`
+  where the offset-invariant answer is `-1.705`, and `rolling_std_simd` returned
+  `0.0` for every window of `1e12 + i` with `window = 3` where the true sample
+  deviation is exactly `1.0`. Every spelling now goes through the new
+  `math::centred_moments`, which subtracts the mean first so each addend stays
+  at the scale of the spread. `math::statistics::{correlation, covariance}`,
+  `features::{correlation_simd, batch_zscore_simd, rolling_mean_simd,
+  rolling_std_simd}`, `features::combinations::rolling_correlation`,
+  `features::rolling_stats::{rolling_zscore, pearson_ic}` are routed through it.
+  The rolling spellings delegate to the canonical `math::kernels` entries
+  instead of carrying their own sliding-window recurrences.
+
+- `statistics::rolling_std_dev` took the square root of an *unclamped* variance,
+  so a window whose true variance is zero but whose removable-Welford residue
+  came out slightly negative produced `NaN` — while the canonical kernel
+  `rolling_sample_stddev_into` and `features::rolling_std_simd` clamped and
+  returned `0.0`. Two spellings of "rolling sample standard deviation" must not
+  answer differently on the same window: `rolling_std_dev` now delegates to
+  `rolling_sample_stddev_into`, and `rolling_sample_variance_into` clamps its
+  output at the source so the variance is never negative and the deviation is
+  exactly its square root.
+
+- `features::simd_opt` carried doc claims its bodies did not implement:
+  `rolling_std_simd` claimed to "match `statistics::rolling_std_dev`" (it did
+  not — see above), `batch_minmax_simd` claimed to use
+  `SimdOps::min_elementwise` / `max_elementwise` "for the reduction" (those are
+  *element-wise* kernels and cannot reduce; the body runs a scalar loop), and
+  `sum_and_sum_sq_simd` claimed an "AVX2-accelerated mul + horizontal reduce"
+  (the reduce is scalar `iter().sum()`). The claims now match the bodies.
+
 ## [0.1.15] - 2026-09-11
 
 ### Added

@@ -1,5 +1,7 @@
 use crate::error::{Result, TaError};
-use crate::math::kernels::{rolling_mean_into, rolling_sample_variance_into, KernelCompatError};
+use crate::math::kernels::{
+    rolling_mean_into, rolling_sample_stddev_into, rolling_sample_variance_into, KernelCompatError,
+};
 use crate::math::rank::fractional_ranks;
 use ndarray::Array1;
 
@@ -130,17 +132,14 @@ pub fn covariance(x: &[f64], y: &[f64]) -> Result<f64> {
 
     let n = x.len() as f64;
 
-    // Single-pass: cov = (sum_xy - sum_x*sum_y/n) / (n-1)
-    let mut sum_x: f64 = 0.0;
-    let mut sum_y: f64 = 0.0;
-    let mut sum_xy: f64 = 0.0;
-    for (xi, yi) in x.iter().zip(y.iter()) {
-        sum_x += xi;
-        sum_y += yi;
-        sum_xy += xi * yi;
-    }
-
-    Ok((sum_xy - sum_x * sum_y / n) / (n - 1.0))
+    // Sample covariance from the *centred* moments. The one-pass form
+    // `sum_xy - sum_x*sum_y/n` subtracts two large nearly-equal totals and loses
+    // every significant digit when the mean dwarfs the spread; see
+    // [`crate::math::centred_moments`]. Measured on `x = 1e9 + i`,
+    // `y = 2x + 3`: the one-pass form returned `520.1` where the exact answer is
+    // `693.3`.
+    let (cross, _, _) = crate::math::centred_moments(x, y);
+    Ok(cross / (n - 1.0))
 }
 
 /// Calculate Pearson correlation coefficient
@@ -176,32 +175,19 @@ pub fn correlation(x: &[f64], y: &[f64]) -> Result<f64> {
         });
     }
 
-    let n = x.len() as f64;
+    // Centred moments rather than the one-pass `sum_sq - sum^2/n` form: the
+    // latter reports `r = 0.667` for a series and its exact affine image
+    // `2x + 3` at a `1e9` baseline. See [`crate::math::centred_moments`]. The
+    // returned variances are sums of *squared deviations*, so they are
+    // non-negative and `(var_x * var_y).sqrt()` cannot produce a `NaN`.
+    let (cov, var_x, var_y) = crate::math::centred_moments(x, y);
 
-    // Single-pass: accumulate all sums simultaneously
-    let mut sum_x: f64 = 0.0;
-    let mut sum_y: f64 = 0.0;
-    let mut sum_xy: f64 = 0.0;
-    let mut sum_x2: f64 = 0.0;
-    let mut sum_y2: f64 = 0.0;
-    for (xi, yi) in x.iter().zip(y.iter()) {
-        sum_x += xi;
-        sum_y += yi;
-        sum_xy += xi * yi;
-        sum_x2 += xi * xi;
-        sum_y2 += yi * yi;
-    }
-
-    let var_x = sum_x2 - sum_x * sum_x / n;
-    let var_y = sum_y2 - sum_y * sum_y / n;
-
-    if var_x.abs() < 1e-15 || var_y.abs() < 1e-15 {
+    if var_x < 1e-15 || var_y < 1e-15 {
         return Err(TaError::ComputationError {
             message: "Standard deviation is zero for one or both series".to_string(),
         });
     }
 
-    let cov = sum_xy - sum_x * sum_y / n;
     Ok(cov / (var_x * var_y).sqrt())
 }
 
@@ -292,7 +278,26 @@ pub fn rolling_variance(data: &[f64], window: usize) -> Result<Array1<f64>> {
 /// assert_eq!(result.len(), 10);
 /// ```
 pub fn rolling_std_dev(data: &[f64], window: usize) -> Result<Array1<f64>> {
-    rolling_variance(data, window).map(|v| v.map(|x| if x.is_nan() { f64::NAN } else { x.sqrt() }))
+    if data.is_empty() {
+        return Err(TaError::EmptyInput);
+    }
+    if window < 2 {
+        return Err(TaError::InvalidParameter {
+            name: "window".to_string(),
+            constraint: "at least 2".to_string(),
+        });
+    }
+
+    // Delegate to the canonical kernel rather than `rolling_variance(..).map(sqrt)`.
+    // The map form applied `sqrt` to an *unclamped* variance, so a window whose
+    // true variance is zero but whose removable-Welford residue came out
+    // slightly negative produced `NaN` instead of `0.0` — while the canonical
+    // kernel (`features::rolling_std_simd`, `StreamingStddev`) clamped and
+    // returned `0.0`. Two spellings of "rolling sample standard deviation" must
+    // not answer differently on the same window.
+    let mut output = vec![f64::NAN; data.len()];
+    rolling_sample_stddev_into(data, window, &mut output).map_err(map_kernel_error)?;
+    Ok(Array1::from_vec(output))
 }
 
 /// Calculate skewness of a data series
