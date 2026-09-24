@@ -61,7 +61,10 @@ fn to_py_error(error: ::finkit::factors::FactorError) -> PyErr {
 
 impl PyFactorLibrary {
     /// Look up a factor, mapping a miss to `KeyError`.
-    fn factor(&self, name: &str) -> PyResult<&std::sync::Arc<::finkit::factors::builtin::CompiledFactor>> {
+    fn factor(
+        &self,
+        name: &str,
+    ) -> PyResult<&std::sync::Arc<::finkit::factors::builtin::CompiledFactor>> {
         self.library
             .get(name)
             .ok_or_else(|| PyKeyError::new_err(name.to_string()))

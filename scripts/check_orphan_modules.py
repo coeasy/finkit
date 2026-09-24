@@ -95,8 +95,10 @@ KNOWN = {
     #
     # `multi_period_resonance` is *reachable public API*, not dead internals:
     # a downstream user can call it today despite there being no in-repo
-    # caller. It stays listed until the product boundary decision covers it.
-    "multi_period_resonance": "orphan",
+    # production caller. It is exercised externally by
+    # `core/tests/multi_period_resonance_smoke.rs` (which references it through
+    # the public `finkit::` path), so it is `test-only`, not `orphan`.
+    "multi_period_resonance": "test-only",
 }
 
 
