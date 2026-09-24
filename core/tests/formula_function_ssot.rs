@@ -189,6 +189,54 @@ const PLAN_KERNELS: &[&str] = &[
     "WINNER",
     "WMA",
     "ZSCORE",
+    // TA-Lib 0.7/0.8 formula bridge (M0-1 surface). Each of these now has a
+    // compiled-plan kernel that delegates to its exact `canonical_*`
+    // implementation, so the plan path emits byte-identical output to the
+    // tree/bytecode/JIT paths (zero divergence by construction).
+    "AC",
+    "ACCBANDS",
+    "ACCBANDS_MID",
+    "ACCBANDS_LOWER",
+    "ADR",
+    "AO",
+    "AROON",
+    "AROON_DOWN",
+    "CMOU",
+    "COPPOCK",
+    "CVI",
+    "EFI",
+    "ER",
+    "ERI",
+    "ERI_BEAR",
+    "FOSC",
+    "FRACTAL",
+    "FRACTAL_LOW",
+    "HA",
+    "HA_OPEN",
+    "HA_HIGH",
+    "HA_LOW",
+    "KC",
+    "KC_MID",
+    "KC_LOWER",
+    "MAMA",
+    "MAMA_FAMA",
+    "MARKETFI",
+    "MASSI",
+    "NVI",
+    "PERCENTRANK",
+    "PVI",
+    "PVO",
+    "PVT",
+    "QSTICK",
+    "RVI",
+    "RVOL",
+    "SMI",
+    "SMI_SIGNAL",
+    "VHF",
+    "VORTEX",
+    "VORTEX_MINUS",
+    "WAD",
+    "ZLEMA",
 ];
 
 /// Functions registered in the SSOT **and** callable from a formula, but with
@@ -198,7 +246,6 @@ const PLAN_KERNELS: &[&str] = &[
 /// and already implemented, so it needs a dispatcher kernel and nothing else.
 /// The list is the measurable target for expanding plan coverage.
 const DECLARED_BUT_NO_KERNEL: &[&str] = &[
-    "ACCBANDS",
     "ACOS",
     "ASIN",
     "ATAN",
@@ -311,7 +358,6 @@ const DECLARED_BUT_NO_KERNEL: &[&str] = &[
     "LOG10",
     "MACDEXT",
     "MACDFIX",
-    "MAMA",
     "MAVP",
     "MA_ALIGN",
     "MA_ALIGNMENT",
@@ -371,7 +417,14 @@ fn formula_names() -> BTreeSet<String> {
 /// [`UNSUPPORTED_KERNEL_CODE`] means "no kernel".
 fn probed_plan_kernels(candidates: &BTreeSet<String>) -> BTreeSet<String> {
     let mut handled = BTreeSet::new();
-    let buffers = vec![vec![1.0_f64; 32]; PROBE_SLOTS];
+    // Zero-filled buffers: a period slot reads `0.0`, which trips the existing
+    // `period must be > 0` guard in `period_at` so period-reading kernels bail
+    // out (Err -> absorbed to NaN) instead of being fed the degenerate period
+    // `1.0` that the routing probe cannot distinguish from a series slot. The
+    // probe only checks that the dispatcher *routes* the kernel, not that it
+    // computes correctly on dummy data — numeric correctness is the
+    // differential gate's job, on real corpus periods.
+    let buffers = vec![vec![0.0_f64; 32]; PROBE_SLOTS];
     let inputs: Vec<BufferSlot> = (0..PROBE_SLOTS - 1).map(BufferSlot).collect();
     let output = BufferSlot(PROBE_SLOTS - 1);
 
@@ -535,10 +588,19 @@ fn the_three_surfaces_have_the_expected_sizes() {
     // contracts and Qlib both describe `0` for `0`. That distinction is load
     // bearing — `Alpha7` multiplies `sign(close - ref(close, 7))` into a factor,
     // and a flat 7-bar stretch must contribute `0`, not a fabricated direction.
+    //
+    // 260 -> 302, 115 -> 159, formula surface unchanged at 452: the TA-Lib
+    // 0.7/0.8 compiled-plan bridge. Forty-four `CALL:<NAME>` plan kernels that
+    // previously failed with `ERR_UNSUPPORTED_KERNEL` now delegate to their
+    // exact `canonical_*` implementations, so the compiled-plan path is no
+    // longer a second-class execution mode for these indicators. Forty-two new
+    // `FunctionSpec` entries land in `builtin_function_registry()` (the two
+    // already present — `ACCBANDS`, `MAMA` — were promoted out of
+    // `DECLARED_BUT_NO_KERNEL`); the formula surface already named all forty-four.
     let actual = (registry.len(), formulas.len(), kernels.len());
     assert_eq!(
         actual,
-        (260, 452, 115),
+        (302, 452, 159),
         "surface sizes changed: (registry, formula, plan kernels)"
     );
 }

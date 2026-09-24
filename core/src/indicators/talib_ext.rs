@@ -409,7 +409,11 @@ pub fn massi(high: &[f64], low: &[f64], fast: usize, slow: usize) -> Result<Arra
     let mut out = init_output(len);
     let first = 2 * (fast - 1) + slow - 1;
     for i in first..len {
-        out[i] = ratio_slice[i - slow + 1..=i].iter().sum();
+        // `saturating_sub` guards the degenerate `fast == 1` case, where
+        // `first == slow - 1` would make `i - slow` underflow at the loop
+        // start. Valid MASSI periods (`fast >= 2`) leave the bound unchanged.
+        let lo = i.saturating_sub(slow).saturating_add(1);
+        out[i] = ratio_slice[lo..=i].iter().sum();
     }
     Ok(out)
 }

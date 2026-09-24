@@ -359,6 +359,59 @@ impl KernelDispatcher for FormulaKernelDispatcher<'_> {
             return dispatch_modern_call(call, buffers);
         }
 
+        // TA-Lib 0.7/0.8 formula bridge (M0-1 surface). These names are
+        // callable on the tree/bytecode/JIT paths but had no `CALL:<NAME>`
+        // plan kernel; `dispatch_modern_call` delegates each to the exact
+        // `canonical_*` implementation, so the compiled plan path emits
+        // byte-identical output (zero divergence by construction).
+        if call.kernel == KernelId::from_static("CALL:AC")
+            || call.kernel == KernelId::from_static("CALL:ACCBANDS")
+            || call.kernel == KernelId::from_static("CALL:ACCBANDS_MID")
+            || call.kernel == KernelId::from_static("CALL:ACCBANDS_LOWER")
+            || call.kernel == KernelId::from_static("CALL:ADR")
+            || call.kernel == KernelId::from_static("CALL:AO")
+            || call.kernel == KernelId::from_static("CALL:AROON")
+            || call.kernel == KernelId::from_static("CALL:AROON_DOWN")
+            || call.kernel == KernelId::from_static("CALL:CMOU")
+            || call.kernel == KernelId::from_static("CALL:COPPOCK")
+            || call.kernel == KernelId::from_static("CALL:CVI")
+            || call.kernel == KernelId::from_static("CALL:EFI")
+            || call.kernel == KernelId::from_static("CALL:ER")
+            || call.kernel == KernelId::from_static("CALL:ERI")
+            || call.kernel == KernelId::from_static("CALL:ERI_BEAR")
+            || call.kernel == KernelId::from_static("CALL:FOSC")
+            || call.kernel == KernelId::from_static("CALL:FRACTAL")
+            || call.kernel == KernelId::from_static("CALL:FRACTAL_LOW")
+            || call.kernel == KernelId::from_static("CALL:HA")
+            || call.kernel == KernelId::from_static("CALL:HA_OPEN")
+            || call.kernel == KernelId::from_static("CALL:HA_HIGH")
+            || call.kernel == KernelId::from_static("CALL:HA_LOW")
+            || call.kernel == KernelId::from_static("CALL:KC")
+            || call.kernel == KernelId::from_static("CALL:KC_MID")
+            || call.kernel == KernelId::from_static("CALL:KC_LOWER")
+            || call.kernel == KernelId::from_static("CALL:MAMA")
+            || call.kernel == KernelId::from_static("CALL:MAMA_FAMA")
+            || call.kernel == KernelId::from_static("CALL:MARKETFI")
+            || call.kernel == KernelId::from_static("CALL:MASSI")
+            || call.kernel == KernelId::from_static("CALL:NVI")
+            || call.kernel == KernelId::from_static("CALL:PERCENTRANK")
+            || call.kernel == KernelId::from_static("CALL:PVI")
+            || call.kernel == KernelId::from_static("CALL:PVO")
+            || call.kernel == KernelId::from_static("CALL:PVT")
+            || call.kernel == KernelId::from_static("CALL:QSTICK")
+            || call.kernel == KernelId::from_static("CALL:RVI")
+            || call.kernel == KernelId::from_static("CALL:RVOL")
+            || call.kernel == KernelId::from_static("CALL:SMI")
+            || call.kernel == KernelId::from_static("CALL:SMI_SIGNAL")
+            || call.kernel == KernelId::from_static("CALL:VHF")
+            || call.kernel == KernelId::from_static("CALL:VORTEX")
+            || call.kernel == KernelId::from_static("CALL:VORTEX_MINUS")
+            || call.kernel == KernelId::from_static("CALL:WAD")
+            || call.kernel == KernelId::from_static("CALL:ZLEMA")
+        {
+            return dispatch_modern_call(call, buffers);
+        }
+
         if call.kernel == KernelId::from_static("UNARY:Neg") {
             return unary(call, buffers, |value| -value);
         }
@@ -2719,6 +2772,233 @@ fn dispatch_modern_call(
     buffers: &mut [Vec<f64>],
 ) -> Result<(), KernelDispatchError> {
     let is = |name| call.kernel == KernelId::from_static(name);
+
+    // TA-Lib 0.7/0.8 formula bridge (M0-1 surface). Each `CALL:NAME` is
+    // delegated to the exact `canonical_*` implementation the tree/bytecode/JIT
+    // paths use. The compiled plan path therefore produces byte-identical
+    // output — zero divergence by construction; `formula_plan_differential`
+    // remains the independent safety net.
+    const TALIB_081_KERNELS: &[(
+        &str,
+        fn(
+            &crate::formula::types::FormulaContext,
+            &[Array1<f64>],
+        ) -> std::result::Result<Array1<f64>, crate::error::FormulaError>,
+    )] = &[
+        ("CALL:AC", crate::formula::functions_talib_081::canonical_ac),
+        (
+            "CALL:ACCBANDS",
+            crate::formula::functions_talib_081::canonical_accbands,
+        ),
+        (
+            "CALL:ACCBANDS_MID",
+            crate::formula::functions_talib_081::canonical_accbands_mid,
+        ),
+        (
+            "CALL:ACCBANDS_LOWER",
+            crate::formula::functions_talib_081::canonical_accbands_lower,
+        ),
+        (
+            "CALL:ADR",
+            crate::formula::functions_talib_081::canonical_adr,
+        ),
+        ("CALL:AO", crate::formula::functions_talib_081::canonical_ao),
+        (
+            "CALL:AROON",
+            crate::formula::functions_talib_081::canonical_aroon,
+        ),
+        (
+            "CALL:AROON_DOWN",
+            crate::formula::functions_talib_081::canonical_aroon_down,
+        ),
+        (
+            "CALL:CMOU",
+            crate::formula::functions_talib_081::canonical_cmou,
+        ),
+        (
+            "CALL:COPPOCK",
+            crate::formula::functions_talib_081::canonical_coppock,
+        ),
+        (
+            "CALL:CVI",
+            crate::formula::functions_talib_081::canonical_cvi,
+        ),
+        (
+            "CALL:EFI",
+            crate::formula::functions_talib_081::canonical_efi,
+        ),
+        ("CALL:ER", crate::formula::functions_talib_081::canonical_er),
+        (
+            "CALL:ERI",
+            crate::formula::functions_talib_081::canonical_eri,
+        ),
+        (
+            "CALL:ERI_BEAR",
+            crate::formula::functions_talib_081::canonical_eri_bear,
+        ),
+        (
+            "CALL:FOSC",
+            crate::formula::functions_talib_081::canonical_fosc,
+        ),
+        (
+            "CALL:FRACTAL",
+            crate::formula::functions_talib_081::canonical_fractal,
+        ),
+        (
+            "CALL:FRACTAL_LOW",
+            crate::formula::functions_talib_081::canonical_fractal_low,
+        ),
+        ("CALL:HA", crate::formula::functions_talib_081::canonical_ha),
+        (
+            "CALL:HA_OPEN",
+            crate::formula::functions_talib_081::canonical_ha_open,
+        ),
+        (
+            "CALL:HA_HIGH",
+            crate::formula::functions_talib_081::canonical_ha_high,
+        ),
+        (
+            "CALL:HA_LOW",
+            crate::formula::functions_talib_081::canonical_ha_low,
+        ),
+        ("CALL:KC", crate::formula::functions_talib_081::canonical_kc),
+        (
+            "CALL:KC_MID",
+            crate::formula::functions_talib_081::canonical_kc_mid,
+        ),
+        (
+            "CALL:KC_LOWER",
+            crate::formula::functions_talib_081::canonical_kc_lower,
+        ),
+        (
+            "CALL:MAMA",
+            crate::formula::functions_talib_081::canonical_mama,
+        ),
+        (
+            "CALL:MAMA_FAMA",
+            crate::formula::functions_talib_081::canonical_mama_fama,
+        ),
+        (
+            "CALL:MARKETFI",
+            crate::formula::functions_talib_081::canonical_marketfi,
+        ),
+        (
+            "CALL:MASSI",
+            crate::formula::functions_talib_081::canonical_massi,
+        ),
+        (
+            "CALL:NVI",
+            crate::formula::functions_talib_081::canonical_nvi,
+        ),
+        (
+            "CALL:PERCENTRANK",
+            crate::formula::functions_talib_081::canonical_percentrank,
+        ),
+        (
+            "CALL:PVI",
+            crate::formula::functions_talib_081::canonical_pvi,
+        ),
+        (
+            "CALL:PVO",
+            crate::formula::functions_talib_081::canonical_pvo,
+        ),
+        (
+            "CALL:PVT",
+            crate::formula::functions_talib_081::canonical_pvt,
+        ),
+        (
+            "CALL:QSTICK",
+            crate::formula::functions_talib_081::canonical_qstick,
+        ),
+        (
+            "CALL:RVI",
+            crate::formula::functions_talib_081::canonical_rvi,
+        ),
+        (
+            "CALL:RVOL",
+            crate::formula::functions_talib_081::canonical_rvol,
+        ),
+        (
+            "CALL:SMI",
+            crate::formula::functions_talib_081::canonical_smi,
+        ),
+        (
+            "CALL:SMI_SIGNAL",
+            crate::formula::functions_talib_081::canonical_smi_signal,
+        ),
+        (
+            "CALL:VHF",
+            crate::formula::functions_talib_081::canonical_vhf,
+        ),
+        (
+            "CALL:VORTEX",
+            crate::formula::functions_talib_081::canonical_vortex,
+        ),
+        (
+            "CALL:VORTEX_MINUS",
+            crate::formula::functions_talib_081::canonical_vortex_minus,
+        ),
+        (
+            "CALL:WAD",
+            crate::formula::functions_talib_081::canonical_wad,
+        ),
+        (
+            "CALL:ZLEMA",
+            crate::formula::functions_talib_081::canonical_zlema,
+        ),
+    ];
+    for &(name, kernel) in TALIB_081_KERNELS {
+        if is(name) {
+            let output_slot = call.output.0;
+            let len = match buffers.get(output_slot) {
+                Some(buf) if !buf.is_empty() => buf.len(),
+                _ => {
+                    return Err(KernelDispatchError::new(
+                        FormulaKernelDispatcher::ERR_PARAMETER,
+                    ))
+                }
+            };
+            for input in call.inputs {
+                if input.0 == output_slot
+                    || buffers
+                        .get(input.0)
+                        .is_none_or(|values| values.len() != len)
+                {
+                    return Err(KernelDispatchError::new(
+                        FormulaKernelDispatcher::ERR_PARAMETER,
+                    ));
+                }
+            }
+            let args: Vec<Array1<f64>> = call
+                .inputs
+                .iter()
+                .map(|slot| Array1::from(buffers[slot.0].clone()))
+                .collect();
+            let ctx = crate::formula::types::FormulaContext::new(
+                Array1::zeros(len),
+                Array1::zeros(len),
+                Array1::zeros(len),
+                Array1::zeros(len),
+                Array1::zeros(len),
+                None,
+            );
+            match kernel(&ctx, &args) {
+                Ok(series) => {
+                    let out = &mut buffers[output_slot];
+                    if series.len() == out.len() {
+                        out.copy_from_slice(series.as_slice().unwrap());
+                    } else {
+                        out.fill(f64::NAN);
+                    }
+                }
+                Err(_) => {
+                    buffers[output_slot].fill(f64::NAN);
+                }
+            }
+            return Ok(());
+        }
+    }
+
     let arity_ok = if is("CALL:VWAP") {
         call.inputs.len() == 2 || call.inputs.len() == 4
     } else if is("CALL:VWMA") {
