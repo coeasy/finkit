@@ -449,8 +449,16 @@ verification tree (`packaging/usage/<lang>/`) is likewise absent.
 ### Native C/C++ archive
 
 `dist/native/windows-x64/finkit-<version>-native-windows-x64.zip` is the C/C++
-SDK bundle. It has **no in-tree builder** — it is assembled by hand from the
-release build's linker output plus the committed headers and licence:
+SDK bundle. Build it with:
+
+```bash
+cargo build -p finkit-ffi --release --locked
+python scripts/build_native_archive.py            # write the archive + report digests
+python scripts/build_native_archive.py --verify   # fail if a rebuild would differ
+```
+
+It packs the release build's linker output plus the committed headers and
+licence:
 
 | Member | Source |
 | --- | --- |
@@ -463,11 +471,20 @@ release build's linker output plus the committed headers and licence:
 | `include/finkit_research.hpp` | `ffi/c-binding/include/finkit_research.hpp` |
 | `share/finkit/LICENSE` | `LICENSE` |
 
-Because the linker output is not reproducible byte-for-byte, a rebuilt archive
-always has a different digest even when nothing changed — so refresh the
-`size_bytes`/`sha256` records in `dist/manifest.json` and
-`dist/python/windows-x64/manifest.json` whenever you repack it. Neither manifest
-is checked in (`/dist/` is gitignored), so they are a local release record only.
+Every member is stored with a fixed 1980-01-01 timestamp, so two runs over
+identical inputs produce a byte-identical archive. The *linker* output is not
+reproducible, though, so a rebuilt archive legitimately has a different digest
+even when no source changed — refresh the `size_bytes`/`sha256` records in
+`dist/manifest.json` and `dist/python/windows-x64/manifest.json` when you
+repack. Neither manifest is checked in (`/dist/` is gitignored), so they are a
+local release record only.
+
+The target directory is chosen deterministically: `--target-dir` if given,
+otherwise cargo's default `target/release`, otherwise `.cargo-target/release`.
+Both trees can coexist and their `finkit_ffi.dll` will differ (linker output is
+not reproducible), so when the tree that was *not* chosen also holds a differing
+library the script says so on stderr instead of letting you assume you got the
+build you meant.
 
 To confirm the bundle is coherent, check that the DLL actually exports the ABI
 the headers promise: `python scripts/gen_c_header.py --check

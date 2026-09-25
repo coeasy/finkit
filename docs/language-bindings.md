@@ -241,6 +241,10 @@ metadata now lives in `docs/ffi_registry.json` and the emitter refuses to run
 rather than write an empty binding. `make verify-ffi` is what keeps the frozen
 artifact honest.
 
+The shipped SDK bundle is assembled by `scripts/build_native_archive.py`
+(`make build-native-archive`); see [installation.md](installation.md) section
+14a for its member list and the reproducibility caveat.
+
 ## Go/CGO
 
 The canonical nested Go module is:

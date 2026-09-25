@@ -46,6 +46,7 @@ LANGS := $(sort $(LANGS))
 .PHONY: docker-build docker-run docker-bench
 .PHONY: preflight lint
 .PHONY: gen-c-header verify-ffi gen-c-binding verify-bindings verify-bindings-tier verify-all-bindings
+.PHONY: build-native-archive verify-native-archive
 
 # ---- default ----------------------------------------------------------------
 all: preflight
@@ -120,6 +121,18 @@ verify-ffi:
 gen-c-binding:
 	@echo "no in-tree generator for ffi/c-binding/src/generated.rs;"
 	@echo "the FFI SSOT is docs/ffi_registry.json -- run 'make verify-ffi' to check it."
+
+# ---- packaging: the native C/C++ SDK archive --------------------------------
+# The archive is the C/C++ half of the release. It used to be hand-zipped, which
+# let its member list and timestamps drift; the script now packs a fixed member
+# set with fixed timestamps, so identical inputs give a byte-identical archive.
+# The linker output itself is not reproducible, so `--verify` compares content
+# rather than digests.
+build-native-archive:
+	python3 $(ROOT)/scripts/build_native_archive.py
+
+verify-native-archive:
+	python3 $(ROOT)/scripts/build_native_archive.py --verify
 
 verify-bindings: verify-all-bindings
 

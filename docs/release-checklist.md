@@ -32,10 +32,12 @@ claim registry installation commands before a clean consumer test exists.
       and the binding test suite from outside the source tree. `--expect-prefix`
       is required: without it the check can silently validate a stale install.
 - [ ] Repack the native C/C++ archive from the freshly built
-      `finkit_ffi.dll`/`.lib` plus `ffi/c-binding/include/*` and `LICENSE`, and
-      refresh the `size_bytes`/`sha256` records in `dist/manifest.json` and
-      `dist/python/windows-x64/manifest.json`. The archive has no in-tree
-      builder, so this step is manual by design.
+      `finkit_ffi.dll`/`.lib` plus `ffi/c-binding/include/*` and `LICENSE`:
+      `cargo build -p finkit-ffi --release --locked` then
+      `python scripts/build_native_archive.py`. Refresh the
+      `size_bytes`/`sha256` records in `dist/manifest.json` and
+      `dist/python/windows-x64/manifest.json` — the linker output is not
+      reproducible, so the digest changes on every rebuild.
 - [ ] Verify the tag will be exactly `v0.2.0`; `publish.yml` rejects a mismatch.
 - [ ] Confirm the GitHub Actions secret `CARGO_REGISTRY_TOKEN` is available to
       the repository and has permission to publish `finkit`.

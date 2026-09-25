@@ -29,6 +29,15 @@ reused.
   `finkit.factor_library("alpha158")` entry point in Rust and Python.
 - Pine user-defined function blocks, tuple destructuring, and plot visual
   metadata.
+- `scripts/build_native_archive.py`, a builder for the native C/C++ SDK archive
+  (`dist/native/<platform>/finkit-<version>-native-<platform>.zip`). The archive
+  used to be hand-zipped, so its member list and timestamps drifted from release
+  to release. It now packs a fixed member set with a fixed 1980-01-01 timestamp
+  (so identical inputs give a byte-identical archive), warns when the target
+  directory it did *not* choose holds a differing `finkit_ffi.dll` (two build
+  trees can coexist and linker output is not reproducible), and offers
+  `--verify` to confirm the archive on disk still matches the current build.
+  Wired into `make build-native-archive` / `make verify-native-archive`.
 
 ### Changed
 
