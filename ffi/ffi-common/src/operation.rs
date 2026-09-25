@@ -1233,9 +1233,24 @@ mod tests {
         }
     }
 
+    /// Both halves of the parameter contract must be published, and each must
+    /// describe the profile it belongs to.
+    ///
+    /// `profile_output_contracts["talib_0_8_0"].params` is the executable
+    /// contract for the versioned TA-Lib dispatcher, so it must equal the
+    /// declared [`TALIB_PROFILE_PARAMETER_SPECS`] table.
+    ///
+    /// The flat `params` field describes the **default** (`core_registry`)
+    /// profile instead, and the two legitimately differ: core `STOCH` is a
+    /// positional formula bridge (`fastk` defaults to 14, and there are no
+    /// `matype` arguments), while TA-Lib `STOCH` takes five named periods with
+    /// `fastk_period = 5`. Publishing the TA-Lib names in the flat field would
+    /// hand `core_registry` callers parameters the core kernel silently
+    /// ignores — the anti-pattern the parameter table exists to prevent.
     #[test]
-    fn profile_only_entries_publish_executable_parameter_contracts() {
-        let catalog = operation_catalog(&builtin_operation_registry());
+    fn profile_parameter_contracts_are_published_per_profile() {
+        let registry = builtin_operation_registry();
+        let catalog = operation_catalog(&registry);
         let find = |name: &str| {
             catalog
                 .operations
@@ -1243,10 +1258,75 @@ mod tests {
                 .find(|operation| operation.name == name)
                 .unwrap_or_else(|| panic!("missing operation {name}"))
         };
+        let as_tuples = |params: &[OperationParameter]| {
+            params
+                .iter()
+                .map(|param| {
+                    (
+                        param.name.clone(),
+                        param.value_type.clone(),
+                        param.default.clone(),
+                        param.constraint.clone(),
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
 
+        // 1. Every declared TA-Lib spec reaches the catalog's TA-Lib profile.
+        //    A profile-only entry has no core profile to describe, so it must
+        //    also publish that same contract flat.
+        for spec in TALIB_PROFILE_PARAMETER_SPECS {
+            let expected = spec
+                .params
+                .iter()
+                .map(|param| {
+                    (
+                        param.name.to_string(),
+                        param.value_type.to_string(),
+                        param.default.map(str::to_string),
+                        param.constraint.map(str::to_string),
+                    )
+                })
+                .collect::<Vec<_>>();
+            let entry = find(spec.name);
+            let profile = entry
+                .profile_output_contracts
+                .get(TALIB_SEMANTIC_PROFILE)
+                .unwrap_or_else(|| panic!("{} must publish a TA-Lib profile", spec.name));
+            assert_eq!(
+                as_tuples(&profile.params),
+                expected,
+                "TA-Lib profile parameters for {}",
+                spec.name
+            );
+            if registry.get(spec.name).is_none() {
+                assert_eq!(
+                    as_tuples(&entry.params),
+                    expected,
+                    "profile-only {} must publish its executable parameters flat",
+                    spec.name
+                );
+            }
+        }
+
+        // 2. A registry-backed TA-Lib name keeps its core contract flat and its
+        //    TA-Lib contract nested; the two must not be conflated.
         let stoch = find("STOCH");
+        assert!(
+            registry.get("STOCH").is_some(),
+            "STOCH is expected to be registry-backed; if it becomes profile-only, \
+             the flat-params expectation below must move into the loop above"
+        );
+        assert!(
+            stoch.params.is_empty(),
+            "core_registry STOCH is a positional formula bridge and publishes no named params"
+        );
+        let stoch_profile = stoch
+            .profile_output_contracts
+            .get(TALIB_SEMANTIC_PROFILE)
+            .expect("STOCH must publish a TA-Lib profile");
         assert_eq!(
-            stoch
+            stoch_profile
                 .params
                 .iter()
                 .map(|param| param.name.as_str())
@@ -1259,12 +1339,19 @@ mod tests {
                 "slowd_matype",
             ]
         );
-        assert_eq!(stoch.params[0].default.as_deref(), Some("5"));
+        assert_eq!(stoch_profile.params[0].default.as_deref(), Some("5"));
 
         let apo = find("APO");
-        assert_eq!(apo.params.len(), 3);
-        assert_eq!(apo.params[2].name, "matype");
-        assert_eq!(apo.params[2].constraint.as_deref(), Some("integer in 0..8"));
+        let apo_profile = apo
+            .profile_output_contracts
+            .get(TALIB_SEMANTIC_PROFILE)
+            .expect("APO must publish a TA-Lib profile");
+        assert_eq!(apo_profile.params.len(), 3);
+        assert_eq!(apo_profile.params[2].name, "matype");
+        assert_eq!(
+            apo_profile.params[2].constraint.as_deref(),
+            Some("integer in 0..8")
+        );
 
         let candle = find("CDLDOJI");
         assert!(candle.params.is_empty());

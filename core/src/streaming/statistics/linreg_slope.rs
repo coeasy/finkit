@@ -97,7 +97,7 @@ impl StreamingIndicator for StreamingLinRegSlope {
 impl_indicator_meta!(
     StreamingLinRegSlope,
     "LinRegSlope",
-    "statistic",
+    "statistics",
     "Linear Regression Slope"
 );
 

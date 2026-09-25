@@ -63,6 +63,7 @@ pub const VALID_CATEGORIES: &[&str] = &[
     "fibonacci",
     "pattern",
     "astock",
+    "smc",
 ];
 
 const PERIOD: ParamInfo = ParamInfo {

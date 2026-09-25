@@ -22,6 +22,11 @@ macro_rules! impl_indicator_meta {
             }
             #[inline]
             fn category() -> &'static str {
+                debug_assert!(
+                    $crate::streaming::registry::VALID_CATEGORIES.contains(&$category),
+                    "invalid streaming indicator category slug: {}",
+                    $category
+                );
                 $category
             }
             #[inline]

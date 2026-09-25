@@ -108,7 +108,7 @@ impl StreamingCorrel {
 impl_indicator_meta!(
     StreamingCorrel,
     "CORREL",
-    "statistic",
+    "statistics",
     "Rolling Pearson Correlation"
 );
 
@@ -138,7 +138,7 @@ mod tests {
     #[test]
     fn test_streaming_correl_meta() {
         assert_eq!(StreamingCorrel::name(), "CORREL");
-        assert_eq!(StreamingCorrel::category(), "statistic");
+        assert_eq!(StreamingCorrel::category(), "statistics");
     }
 
     #[test]

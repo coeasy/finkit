@@ -42,7 +42,7 @@ impl IndicatorMeta for StreamingStdDev {
         "STDDEV"
     }
     fn category() -> &'static str {
-        "statistic"
+        "statistics"
     }
     fn description() -> &'static str {
         "Rolling Standard Deviation (Welford)"
@@ -68,7 +68,7 @@ mod tests {
     #[test]
     fn test_streaming_stddev_meta() {
         assert_eq!(StreamingStdDev::name(), "STDDEV");
-        assert_eq!(StreamingStdDev::category(), "statistic");
+        assert_eq!(StreamingStdDev::category(), "statistics");
     }
 
     #[test]

@@ -98,7 +98,7 @@ impl StreamingIndicator for StreamingLinRegIntercept {
 impl_indicator_meta!(
     StreamingLinRegIntercept,
     "LinRegIntercept",
-    "statistic",
+    "statistics",
     "Linear Regression Intercept"
 );
 

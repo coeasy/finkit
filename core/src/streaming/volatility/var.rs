@@ -83,7 +83,7 @@ impl StreamingIndicator for StreamingVar {
 impl_indicator_meta!(
     StreamingVar,
     "VAR",
-    "statistic",
+    "statistics",
     "Rolling Variance (Welford)"
 );
 
@@ -104,7 +104,7 @@ mod tests {
     #[test]
     fn test_streaming_var_meta() {
         assert_eq!(StreamingVar::name(), "VAR");
-        assert_eq!(StreamingVar::category(), "statistic");
+        assert_eq!(StreamingVar::category(), "statistics");
     }
 
     #[test]

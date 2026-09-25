@@ -103,7 +103,15 @@ mod tests {
         let payload: Value = serde_json::from_str(&factor_catalog_json().unwrap()).unwrap();
         assert_eq!(payload["schema_version"], FACTOR_CATALOG_SCHEMA_VERSION);
         let factors = payload["factors"].as_array().unwrap();
-        assert_eq!(factors.len(), 9);
+        // Derive the expectation from the same registry the catalog projects, so
+        // this stays a *contract* check (the FFI catalog must publish exactly the
+        // built-in registry) instead of a hard-coded count that silently rots
+        // every time a library is added.
+        assert_eq!(
+            factors.len(),
+            finkit::factors::builtin_factor_registry().len(),
+            "the FFI factor catalog must publish exactly the built-in factor registry"
+        );
         let momentum = factors
             .iter()
             .find(|factor| factor["name"] == "momentum_5")

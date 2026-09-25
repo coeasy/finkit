@@ -754,14 +754,30 @@ mod tests {
                 .find(|operation| operation["name"] == name)
                 .unwrap_or_else(|| panic!("missing operation {name}"))
         };
+        // The executable TA-Lib parameter contract lives in the per-profile
+        // contract, not in the flat `params` field: the flat field describes the
+        // default (`core_registry`) profile, and for `STOCH` the two genuinely
+        // differ (core is a positional bridge with no named `matype`
+        // parameters). Publishing the TA-Lib names flat would hand
+        // `core_registry` callers parameters the core kernel silently ignores.
+        let talib_params = |name: &str| {
+            let operation = find(name);
+            let profile = operation["profile_output_contracts"]["talib_0_8_0"].clone();
+            assert!(
+                !profile.is_null(),
+                "{name} must publish a TA-Lib profile output contract"
+            );
+            profile["params"].as_array().unwrap().clone()
+        };
         let stoch = find("STOCH");
         assert!(stoch["semantic_profiles"]
             .as_array()
             .unwrap()
             .iter()
             .any(|profile| profile == "talib_0_8_0"));
-        assert_eq!(stoch["params"].as_array().unwrap().len(), 5);
-        assert_eq!(stoch["params"][2]["name"], "slowk_matype");
+        let stoch_params = talib_params("STOCH");
+        assert_eq!(stoch_params.len(), 5);
+        assert_eq!(stoch_params[2]["name"], "slowk_matype");
         let bbands = find("BBANDS");
         assert_eq!(bbands["params"][3]["name"], "matype");
         unsafe { finkit_free_string(ptr) };

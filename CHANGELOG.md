@@ -227,6 +227,46 @@ reused.
   `sum_and_sum_sq_simd` claimed an "AVX2-accelerated mul + horizontal reduce"
   (the reduce is scalar `iter().sum()`). The claims now match the bodies.
 
+- The streaming registry and each indicator's own `IndicatorMeta` are two
+  independent sources for the same metadata, and nothing tied them together, so
+  they had drifted. Eight types answered `IndicatorMeta::category()` with the
+  slug `"statistic"`, which is not a member of `VALID_CATEGORIES` — the declared
+  vocabulary — so a consumer grouping by that value would invent a category the
+  contract does not define; five of them (`BETA`, `CORREL`, `STDDEV`, `TSF`,
+  `VAR`) additionally contradicted their own registry entry, which says
+  `"statistics"`. `StreamingSuperTrend` reported `"volatility"` while the
+  registry entry it is published under says `"overlap"`. The slugs are aligned,
+  `"smc"` (the category of the two smart-money-concepts detectors) is added to
+  `VALID_CATEGORIES`, `impl_indicator_meta!` now `debug_assert!`s that its slug
+  is declared, and a new gate
+  `scripts/check_streaming_registry_contract.py` (wired into the Docs Check
+  workflow) fails on any undeclared slug or any category that disagrees with the
+  registry entry.
+
+- Three contract tests had gone red in crates the release gate never ran.
+  `cargo test -p finkit` was the only test command used to certify the workspace
+  locally, and it does not build `finkit-ffi-common` or `finkit-ffi`, even
+  though `.github/workflows/ci.yml` does. Two regressions had accumulated behind
+  that blind spot:
+  1. `factor_catalog::tests::catalog_is_stable_and_describes_dependencies`
+     asserted a hard-coded factor count of `9`. The built-in library grew to the
+     demo factors plus Alpha158 plus WorldQuant101, so the FFI catalog
+     legitimately publishes 184 and the assertion could only ever rot. It now
+     derives the expectation from `builtin_factor_registry()`, which is the same
+     registry the catalog projects.
+  2. `profile_only_entries_publish_executable_parameter_contracts` (ffi-common)
+     and `operation_catalog_json_exposes_talib_parameter_contract` (c-binding)
+     both asserted that the *flat* `params` field of `STOCH` carries the TA-Lib
+     five-parameter contract. That was true while `STOCH` was a profile-only
+     name; it is now a registry-backed formula bridge, and the flat field
+     describes the default `core_registry` profile instead — publishing the
+     TA-Lib names there would hand `core_registry` callers parameters the core
+     kernel silently ignores (`STOCH` is positional, defaults to `fastk = 14`,
+     and has no `matype` arguments). Both tests now assert the executable TA-Lib
+     contract where it actually lives, in
+     `profile_output_contracts["talib_0_8_0"].params`, and a new loop in the
+     ffi-common test pins every declared TA-Lib parameter spec to that contract.
+
 ## [0.1.15] - 2026-09-11
 
 ### Added

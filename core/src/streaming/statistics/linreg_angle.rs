@@ -100,7 +100,7 @@ impl StreamingIndicator for StreamingLinRegAngle {
 impl_indicator_meta!(
     StreamingLinRegAngle,
     "LinRegAngle",
-    "statistic",
+    "statistics",
     "Linear Regression Angle (degrees)"
 );
 

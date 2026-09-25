@@ -130,7 +130,7 @@ impl IndicatorMeta for StreamingBeta {
         "BETA"
     }
     fn category() -> &'static str {
-        "statistic"
+        "statistics"
     }
     fn description() -> &'static str {
         "Rolling Beta Coefficient"
@@ -161,7 +161,7 @@ mod tests {
     #[test]
     fn test_streaming_beta_meta() {
         assert_eq!(StreamingBeta::name(), "BETA");
-        assert_eq!(StreamingBeta::category(), "statistic");
+        assert_eq!(StreamingBeta::category(), "statistics");
     }
 
     #[test]

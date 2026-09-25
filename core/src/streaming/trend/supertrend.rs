@@ -123,7 +123,10 @@ impl IndicatorMeta for StreamingSuperTrend {
         "SuperTrend"
     }
     fn category() -> &'static str {
-        "volatility"
+        // Matches the published registry entry: `SuperTrend` is a price-chart
+        // overlay, and the registry classifies every band overlay (`BBANDS`,
+        // `ENE`, ...) as `overlap`.
+        "overlap"
     }
     fn description() -> &'static str {
         "Super Trend Indicator"

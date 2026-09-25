@@ -98,7 +98,7 @@ impl StreamingIndicator for StreamingTsf {
     impl_standard_methods!();
 }
 
-impl_indicator_meta!(StreamingTsf, "TSF", "statistic", "Time Series Forecast");
+impl_indicator_meta!(StreamingTsf, "TSF", "statistics", "Time Series Forecast");
 
 #[cfg(test)]
 mod tests {
@@ -118,7 +118,7 @@ mod tests {
     #[test]
     fn test_streaming_tsf_meta() {
         assert_eq!(StreamingTsf::name(), "TSF");
-        assert_eq!(StreamingTsf::category(), "statistic");
+        assert_eq!(StreamingTsf::category(), "statistics");
     }
 
     #[test]
