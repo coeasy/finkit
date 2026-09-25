@@ -120,6 +120,20 @@ reused.
   and `normalize_migration_parsers.py`. They rewrite Rust sources, so running
   one against today's tree would have applied a stale transformation; their
   effect is preserved by the commits that landed it.
+- `make verify-native-archive` was red in any checkout that redirects cargo
+  with `CARGO_TARGET_DIR`. The archive is packed from the tree cargo actually
+  wrote, but `--verify` looked in `target/release` first and compared against a
+  `finkit_ffi.dll` built in a different tree — and linker output differs
+  between trees, so the comparison could never succeed and the message gave no
+  clue why. The script now locates the release directory the way cargo does
+  (`--target-dir`, then `$CARGO_TARGET_DIR/release`, then `target/release`),
+  and when a member does differ it names the tree the archive *was* packed
+  from and the flag to pass.
+- `docs/refactor-plan-2026-09-21.md`, the declared sole execution baseline,
+  pointed at `docs/improvement-plan-2026-09-20.md` and
+  `docs/architecture-gap-assessment-2026-09-20.md` at their pre-archive
+  locations, in the same sentence that says historical plans have been
+  archived. Both paths now carry the `docs/archive/` prefix.
 - Pine `na(x)` was silently mis-parsed. `na` is a grammar keyword, so it could
   not reach the call rule, and `na(close)` parsed *without error* as an `na`
   literal followed by a discarded `(close)` expression statement — so

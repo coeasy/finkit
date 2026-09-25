@@ -24,6 +24,13 @@ digest even when no source changed -- refresh the ``size_bytes``/``sha256``
 records in ``dist/manifest.json`` and
 ``dist/python/windows-x64/manifest.json`` when you repack.
 
+The release directory is located the way cargo locates it: ``--target-dir`` if
+given, otherwise ``$CARGO_TARGET_DIR/release``, otherwise ``target/release``,
+otherwise ``.cargo-target/release``. Honouring ``CARGO_TARGET_DIR`` matters in
+checkouts that redirect cargo: without it, packing and ``--verify`` would read
+different trees, and since linker output differs between them the comparison
+could never succeed.
+
 Usage:
     python scripts/build_native_archive.py                 # build + report digests
     python scripts/build_native_archive.py --verify        # fail if a rebuild would differ
@@ -34,6 +41,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import os
 import re
 import sys
 import zipfile
@@ -77,17 +85,49 @@ def workspace_version() -> str:
     return match.group(1)
 
 
+def candidate_dirs() -> list[tuple[Path, str]]:
+    """Release directories to look in, most authoritative first.
+
+    ``CARGO_TARGET_DIR`` comes first because that is where cargo actually put
+    the build. Honouring it is what keeps packing and ``--verify`` pointed at
+    the same tree: in a checkout where the environment redirects cargo to
+    ``.cargo-target``, preferring ``target/release`` unconditionally would pack
+    one tree and verify against the other, and the comparison could never
+    succeed -- linker output differs between the two, so
+    ``make verify-native-archive`` would be permanently red.
+    """
+    out: list[tuple[Path, str]] = []
+    seen: set[Path] = set()
+
+    def add(path: Path, origin: str) -> None:
+        resolved = path.resolve() if path.exists() else path
+        if resolved in seen:
+            return
+        seen.add(resolved)
+        out.append((path, origin))
+
+    env = os.environ.get("CARGO_TARGET_DIR", "").strip()
+    if env:
+        base = Path(env)
+        if not base.is_absolute():
+            base = ROOT / base
+        add(base / "release", f"CARGO_TARGET_DIR={env}")
+    add(ROOT / "target" / "release", "cargo's default target/release")
+    add(ROOT / ".cargo-target" / "release", "the repo's .cargo-target/release")
+    return out
+
+
 def resolve_target_dir(explicit: Path | None) -> tuple[Path, str | None]:
     """Return ``(release_dir, warning)``.
 
     The choice is deterministic: an explicit ``--target-dir`` wins, otherwise
-    cargo's default ``target/release``, otherwise the ``.cargo-target/release``
-    tree this repo falls back to when ``target/`` is unavailable. Two trees can
-    coexist and their ``finkit_ffi.dll`` will differ, because linker output is
-    not reproducible -- so when the one *not* chosen also holds a differing
-    library, say so rather than letting the caller assume they got the build
-    they meant. This is a warning, not a failure: refusing outright would leave
-    `make verify-native-archive` permanently red in any two-tree checkout.
+    the first candidate from :func:`candidate_dirs` that holds a built
+    ``finkit_ffi.dll``. Two trees can coexist and their ``finkit_ffi.dll`` will
+    differ, because linker output is not reproducible -- so when the one *not*
+    chosen also holds a differing library, say so rather than letting the
+    caller assume they got the build they meant. This is a warning, not a
+    failure: refusing outright would leave ``make verify-native-archive``
+    permanently red in any two-tree checkout.
     """
     if explicit is not None:
         if not explicit.is_dir():
@@ -96,24 +136,24 @@ def resolve_target_dir(explicit: Path | None) -> tuple[Path, str | None]:
             raise SystemExit(f"--target-dir has no finkit_ffi.dll: {explicit}")
         return explicit, None
 
-    default = ROOT / "target" / "release"
-    alternate = ROOT / ".cargo-target" / "release"
-    if (default / "finkit_ffi.dll").exists():
-        chosen = default
-    elif (alternate / "finkit_ffi.dll").exists():
-        chosen = alternate
-    else:
+    candidates = candidate_dirs()
+    chosen: Path | None = None
+    for path, _origin in candidates:
+        if (path / "finkit_ffi.dll").exists():
+            chosen = path
+            break
+    if chosen is None:
         raise SystemExit(
             "no release build found; expected finkit_ffi.dll in "
-            + " or ".join(str(c) for c in (default, alternate))
+            + " or ".join(str(path) for path, _ in candidates)
             + "\nBuild one first: cargo build -p finkit-ffi --release --locked"
         )
 
     warning = None
-    for other in (default, alternate):
+    mine = hashlib.sha256((chosen / "finkit_ffi.dll").read_bytes()).hexdigest()
+    for other, _origin in candidates:
         if other == chosen or not (other / "finkit_ffi.dll").exists():
             continue
-        mine = hashlib.sha256((chosen / "finkit_ffi.dll").read_bytes()).hexdigest()
         theirs = hashlib.sha256((other / "finkit_ffi.dll").read_bytes()).hexdigest()
         if mine != theirs:
             warning = (
@@ -155,8 +195,8 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         default=None,
         help=(
-            "release output directory (default: cargo's target/release, falling "
-            "back to .cargo-target/release)"
+            "release output directory (default: $CARGO_TARGET_DIR/release, then "
+            "cargo's target/release, then .cargo-target/release)"
         ),
     )
     parser.add_argument(
@@ -230,10 +270,32 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
-        for member, src in sources:
-            if payloads[member] != src.read_bytes():
-                print(f"FAIL: {member} in the archive differs from {src}", file=sys.stderr)
-                return 1
+        mismatched = [
+            (member, src)
+            for member, src in sources
+            if payloads[member] != src.read_bytes()
+        ]
+        if mismatched:
+            for member, src in mismatched:
+                print(
+                    f"FAIL: {member} in the archive differs from {src}", file=sys.stderr
+                )
+            # "differs" on its own is not actionable when two release trees
+            # coexist: the caller cannot tell whether the archive is stale or
+            # merely packed from the other tree. Name the tree it matches.
+            packed_from = payloads.get("bin/finkit_ffi.dll")
+            for other, origin in candidate_dirs():
+                if other == target_dir:
+                    continue
+                dll = other / "finkit_ffi.dll"
+                if dll.exists() and packed_from == dll.read_bytes():
+                    print(
+                        f"  the archive was packed from {other} ({origin}); "
+                        f"re-run with --target-dir {other}",
+                        file=sys.stderr,
+                    )
+                    break
+            return 1
         stamps = set(current.values())
         if stamps != {FIXED_DATE}:
             print(f"FAIL: non-canonical timestamps in the archive: {sorted(stamps)}", file=sys.stderr)

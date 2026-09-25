@@ -1,7 +1,7 @@
 # Finkit 重构总纲（2026-09-21）
 
-> **本文档是唯一执行基线。** `docs/improvement-plan-2026-09-20.md` 降级为上一轮记录，
-> `docs/architecture-gap-assessment-2026-09-20.md` 保留为证据，其余历史计划已归档到 `docs/archive/`。
+> **本文档是唯一执行基线。** `docs/archive/improvement-plan-2026-09-20.md` 降级为上一轮记录，
+> `docs/archive/architecture-gap-assessment-2026-09-20.md` 保留为证据，其余历史计划已归档到 `docs/archive/`。
 
 > **重建说明（2026-09-21）**：本文档一度是 untracked 文件，在一次 `git rm -f` 引发的工作区事故中被删除，
 > 无法从 git 恢复。以下内容按本轮所有已验证结论**重建**，所有数字均为本机实测，不是估计值。
