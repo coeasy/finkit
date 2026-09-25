@@ -48,8 +48,12 @@ claim registry installation commands before a clean consumer test exists.
       `cargo build -p finkit-ffi --release --locked` then
       `python scripts/build_native_archive.py`. Refresh the
       `size_bytes`/`sha256` records in `dist/manifest.json` and
-      `dist/python/windows-x64/manifest.json` — the linker output is not
-      reproducible, so the digest changes on every rebuild.
+      `dist/python/windows-x64/manifest.json` with
+      `python scripts/refresh_release_manifests.py` (`make
+      refresh-release-manifests`) — the linker output is not reproducible, so
+      the digest changes on every rebuild and a stale record is
+      indistinguishable from a fresh one by inspection. `--check` (or `make
+      check-release-manifests`) is the verify-only form.
 - [ ] Verify the tag will be exactly `v0.2.0`; `publish.yml` rejects a mismatch.
 - [ ] Confirm the GitHub Actions secret `CARGO_REGISTRY_TOKEN` is available to
       the repository and has permission to publish `finkit`.

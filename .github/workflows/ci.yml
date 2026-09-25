@@ -103,6 +103,16 @@ jobs:
         run: python scripts/check_orphan_scripts.py
       - name: Check every workflow can actually be triggered
         run: python scripts/check_workflow_liveness.py
+      # The inverse break: a caller that names a script which is not in the
+      # tree. A workflow step, Makefile recipe or document that invokes a
+      # script which is not there has a
+      # name, a place in the release checklist and often a paragraph
+      # explaining what it enforces -- and no implementation. One workflow used
+      # to write a hidden script at run time, execute it and delete it, so its
+      # own command line pointed at a file that never existed in the tree.
+      # `make check-script-refs`.
+      - name: Check every `scripts/` reference resolves
+        run: python scripts/check_script_references.py
 
   fmt:
     name: Format

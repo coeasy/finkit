@@ -151,6 +151,25 @@ check-orphans:
 	python3 $(ROOT)/scripts/check_orphan_scripts.py
 	python3 $(ROOT)/scripts/check_workflow_liveness.py
 
+# ---- repository hygiene: the inverse direction of `check-orphans` ----------
+# `check_orphan_scripts.py` catches a script with no consumer. This catches the
+# opposite break: a workflow, Makefile target or document that *calls* a script
+# which is not in the tree. That reads as an automated gate while being a link
+# to nothing, and no compiler or test ever visits it.
+check-script-refs:
+	python3 $(ROOT)/scripts/check_script_references.py
+
+# ---- release records: keep the shipped digests in step with the artefacts ---
+# `dist/**/manifest.json` records a `size_bytes`/`sha256` pair per shipped
+# artefact. The linker output is not reproducible, so every rebuild changes
+# those numbers and a stale record is indistinguishable from a fresh one by
+# inspection. Refresh after any rebuild; `--check` is the verify-only form.
+refresh-release-manifests:
+	python3 $(ROOT)/scripts/refresh_release_manifests.py
+
+check-release-manifests:
+	python3 $(ROOT)/scripts/refresh_release_manifests.py --check
+
 verify-bindings: verify-all-bindings
 
 # ---- codegen: registry-driven drift check for the active FFI binding tier --
@@ -188,6 +207,11 @@ help:
 	@echo "  make verify-bindings  Fail if the C wrappers drifted from the registry"
 	@echo "  make verify-bindings-tier  Drift-check the active tier (Python, Node)"
 	@echo "  make verify-all-bindings  Same, plus report the deferred languages"
+	@echo "  make check-rustdoc    Fail if rustdoc emits any diagnostic (ADR 0011)"
+	@echo "  make check-orphans    Fail on orphan scripts or unreachable workflows"
+	@echo "  make check-script-refs  Fail if a caller references a script that is missing"
+	@echo "  make refresh-release-manifests  Recompute dist/**/manifest.json digests"
+	@echo "  make check-release-manifests    Fail if those digests are stale"
 	@echo ""
 	@echo "Underlying scripts (read these for full control):"
 	@echo "  build-usage.{sh,ps1}                  Root entry point"

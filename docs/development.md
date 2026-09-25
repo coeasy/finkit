@@ -76,12 +76,13 @@ python scripts/check_docs_links.py
 bash scripts/check_rustdoc.sh
 python scripts/check_orphan_scripts.py
 python scripts/check_workflow_liveness.py
+python scripts/check_script_references.py
 ```
 
 Do not remove `--locked` from CI-equivalent commands. `Cargo.lock` is part of the reproducibility contract.
 
-The last three are the repository-hygiene gates, also available as
-`make check-rustdoc` and `make check-orphans`:
+The last four are the repository-hygiene gates, also available as
+`make check-rustdoc`, `make check-orphans` and `make check-script-refs`:
 
 - `scripts/check_rustdoc.sh` is the enforcement point for ADR 0011 (see the
   policy note at the top of `core/src/lib.rs`). `cargo doc` on its own is *not*
@@ -91,12 +92,25 @@ The last three are the repository-hygiene gates, also available as
 - `scripts/check_orphan_scripts.py` fails when a file under `scripts/` has no
   consumer anywhere in the tree. A dead script reads as documentation of a
   workflow that no longer exists, and a second, unused implementation of a gate
-  silently lowers the bar for the one that runs.
+  silently lowers the bar for the one that runs. References are resolved to a
+  fixed point and at identifier boundaries, so a cluster of scripts that only
+  mention each other, or an accidental substring hit, cannot excuse a dead one.
 - `scripts/check_workflow_liveness.py` fails when a workflow can never be
   triggered (every trigger branch-filtered, no filtered branch exists, and no
   `workflow_dispatch`/`schedule`/`release`/`workflow_call`). It also reports
   dormant branch filters on workflows that are still reachable, so a stale
   `on:` block is visible without failing the build.
+- `scripts/check_script_references.py` fails when a caller names a `scripts/`
+  path that is not in the tree — the inverse of the orphan check. A workflow
+  step, Makefile recipe or document that invokes a script which does not exist
+  has a name and a place in the release checklist, and no implementation.
+  Paths that are legitimately absent (planned, or written at run time by the
+  caller itself) must be recorded in `RECORDED_MISSING` with a reason.
+
+All three hygiene checks enumerate tracked files with `git ls-files -z`. The
+`-z` is required: without it git octal-escapes paths containing non-ASCII
+bytes, so `docs/competitive-analysis/finkit-<cjk>.md` silently drops out of the
+scan — nine tracked files were invisible that way.
 
 ## 4. Version contract
 

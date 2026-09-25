@@ -51,6 +51,24 @@ reused.
 - An enforcement point for ADR 0011: `scripts/check_rustdoc.sh` now runs from
   `make check-rustdoc` and from the CI `doc` job, so a local run and CI cannot
   disagree about what "the public surface is documented" means.
+- `scripts/check_script_references.py`, the inverse of the orphan check: it
+  fails when a workflow step, Makefile recipe or document invokes a `scripts/`
+  path that is not in the tree. A reference like that has a name, a place in
+  the release checklist, and often a paragraph explaining what it enforces —
+  and no implementation, so nothing compiles it and nothing tests it. Paths
+  that are legitimately absent (planned work, or a helper the caller writes
+  itself before running it) must be recorded in `RECORDED_MISSING` with a
+  reason, and the list is checked in both directions. Wired into the CI
+  `binding-ssot` job and `make check-script-refs`.
+- `scripts/refresh_release_manifests.py`, which recomputes the `size_bytes` /
+  `sha256` records in `dist/manifest.json` and
+  `dist/python/windows-x64/manifest.json` from the artefacts on disk and then
+  re-reads what it wrote to confirm the match. Those numbers were refreshed by
+  hand, which is the same failure mode the native archive already had: linker
+  output is not reproducible, so every rebuild changes the digests and a stale
+  record is indistinguishable from a correct one by inspection. `--check` is
+  the verify-only form. Wired into `make refresh-release-manifests` /
+  `make check-release-manifests`.
 
 ### Changed
 
@@ -75,6 +93,33 @@ reused.
 
 ### Fixed
 
+- The repository-hygiene gates were blind to any tracked file whose path
+  contains a non-ASCII byte. `git ls-files` octal-escapes such paths
+  (`"docs/...finkit-\350\220\275..."`), so `Path.is_file()` failed and nine
+  tracked files — every one of them a document that mentions `scripts/` paths —
+  silently dropped out of the scan. Both checks now enumerate with
+  `git ls-files -z`.
+- `scripts/check_orphan_scripts.py` could be fooled in two ways, both of which
+  made a dead script look alive. A cluster of scripts that only mention each
+  other satisfied the one-hop "is it mentioned anywhere" test for every member,
+  and a bare stem matched as a substring, so a script named `_probe_a.py`
+  counted as referenced by
+  `fn the_probe_actually_exercises_the_degenerate_guard()`. References are now
+  peeled to a fixed point and stem hits must fall on identifier boundaries.
+- Four one-shot migration-bot workflows were still in the tree after their work
+  landed: `apply-architecture-v3-round2.yml` and `apply-extrema-round6.yml`
+  pushed to `perf/outperform-talib-v3-20260904`, and `apply-perf-plan.yml` and
+  `apply-talib-performance-plan.yml` pushed to `fix/*` branches that no longer
+  exist. They carried `contents: write`, and the first embedded a 27 KB base64
+  payload that rewrote seven source files and force-pushed, so its own command
+  line named a script that was never in the tree. Removed.
+- Six completed TA-Lib migration codemods that nothing invoked:
+  `apply_core_hotpath_fixes.py`, `apply_formula_output_fixes.py`,
+  `apply_formula_runtime_performance_fixes.py`,
+  `apply_talib_existing_contract_fixes.py`, `apply_talib_semantic_fixes.py`
+  and `normalize_migration_parsers.py`. They rewrite Rust sources, so running
+  one against today's tree would have applied a stale transformation; their
+  effect is preserved by the commits that landed it.
 - Pine `na(x)` was silently mis-parsed. `na` is a grammar keyword, so it could
   not reach the call rule, and `na(close)` parsed *without error* as an `na`
   literal followed by a discarded `(close)` expression statement — so

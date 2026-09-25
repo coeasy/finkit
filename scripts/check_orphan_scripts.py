@@ -35,11 +35,18 @@ script nobody calls" a build-time failure instead of a code-review discovery.
 
 How a script counts as referenced
 ---------------------------------
-A file is considered consumed if its basename **or** its stem appears in any
-other tracked file, or if a wildcard pattern in the corpus matches it (the
-Makefile discovers `build-usage-*.sh` with `$(wildcard ...)`, so a literal
-mention is not the only legitimate form of reference). Mentions inside the file
-itself do not count.
+A file is considered consumed if its basename appears in any other tracked
+file, or if its bare stem appears there at an identifier boundary, or if a
+wildcard pattern in the corpus matches it (the Makefile discovers
+`build-usage-*.sh` with `$(wildcard ...)`, so a literal mention is not the only
+legitimate form of reference). Mentions inside the file itself do not count.
+
+That single-hop test is then peeled to a fixed point. A mention from another
+script only counts while *that* script is itself reachable, because a cluster
+of migration scripts that only mention each other satisfies the one-hop test
+for every member while the group as a whole has no consumer. Six completed
+TA-Lib migration codemods hid behind exactly that: four had no referencer at
+all, and two were named only by a fifth script that nothing called.
 
 Manual tools
 ------------
@@ -93,13 +100,23 @@ BRACE = re.compile(r"([\w./-]*)\{([^{}]*)\}")
 
 
 def tracked_files() -> list[str]:
+    """Every tracked path that still exists in the working tree.
+
+    `-z` is load-bearing, not cosmetic: without it git octal-escapes any path
+    containing a non-ASCII byte, so `docs/competitive-analysis/finkit-<cjk>.md`
+    arrives as `"docs/...finkit-\\350\\220\\275..."` and `Path.is_file()` then
+    fails. Nine tracked files were invisible to this check that way, and every
+    one of them was a document that mentions `scripts/` paths -- so the check
+    could neither see a reference they made nor find them as consumers.
+
+    A path whose working-tree file has been deleted but whose removal is not
+    staged is also still listed; it is gone as far as this check is concerned,
+    and leaving it in would make the gate red for no reason.
+    """
     out = subprocess.run(
-        ["git", "ls-files"], capture_output=True, text=True, check=True, cwd=ROOT
+        ["git", "ls-files", "-z"], capture_output=True, text=True, check=True, cwd=ROOT
     ).stdout
-    # `git ls-files` still lists a path whose working-tree file has been deleted
-    # but whose removal is not staged yet; those are gone as far as this check is
-    # concerned, and leaving them in would make the gate red for no reason.
-    return [line for line in out.splitlines() if line and (ROOT / line).is_file()]
+    return [line for line in out.split("\0") if line and (ROOT / line).is_file()]
 
 
 def checkable_scripts(files: list[str]) -> list[str]:
@@ -117,10 +134,10 @@ def checkable_scripts(files: list[str]) -> list[str]:
 
 
 def expand_braces(text: str) -> str:
-    """Rewrite `scripts/foo.{sh,ps1}` as `scripts/foo.sh scripts/foo.ps1`.
+    """Rewrite `dir/foo.{sh,ps1}` as `dir/foo.sh dir/foo.ps1`.
 
     The Makefile and its help text use the brace form. The prefix has to be
-    repeated for each alternative: expanding to `scripts/foo.sh ps1` would leave
+    repeated for each alternative: expanding to `dir/foo.sh ps1` would leave
     the second file looking unreferenced, which is a false positive.
     """
     return BRACE.sub(
@@ -164,40 +181,88 @@ def wildcard_tokens(text: str) -> list[str]:
     return out
 
 
-def is_referenced(rel: str, corpus: dict[str, str], unique_stems: set[str]) -> bool:
-    """True if any tracked file other than `rel` refers to it.
+def stem_pattern(stem: str) -> re.Pattern[str]:
+    """A bare stem only counts as a reference at an identifier boundary.
 
-    The full basename always counts. The bare stem only counts when no other
-    checkable file shares it: `bench-vs-talib` is the stem of a shell script, a
-    PowerShell script *and* a Dockerfile, so a stem hit would make the orphaned
-    Dockerfile look referenced by its live siblings.
+    Plain substring matching is too generous: a script named `_probe_a.py` was
+    "referenced" by `fn the_probe_actually_exercises_the_degenerate_guard()`,
+    because `e_probe_a` contains `_probe_a`. A false reference silently excuses
+    a genuinely dead script, which is the failure this whole check exists to
+    prevent, so the stem must not be flanked by identifier characters.
+    """
+    return re.compile(r"(?<![A-Za-z0-9_])" + re.escape(stem) + r"(?![A-Za-z0-9_])")
+
+
+def referencers(
+    rel: str,
+    corpus: dict[str, str],
+    wildcards: dict[str, list[str]],
+    unique_stems: set[str],
+) -> set[str]:
+    """Every tracked file that refers to `rel`.
+
+    The full basename always counts, because it carries its extension and so is
+    distinctive on its own. The bare stem only counts when no other checkable
+    file shares it: `bench-vs-talib` is the stem of a shell script, a PowerShell
+    script *and* a Dockerfile, so a stem hit would make the orphaned Dockerfile
+    look referenced by its live siblings.
     """
     name = Path(rel).name
     stem = Path(rel).stem
-    stem_counts = stem in unique_stems
+    pattern = stem_pattern(stem) if stem in unique_stems else None
+    out: set[str] = set()
     for other, text in corpus.items():
         if other == rel:
             continue
         if name in text:
-            return True
-        if stem_counts and stem in text:
-            return True
+            out.add(other)
+            continue
+        if pattern is not None and pattern.search(text):
+            out.add(other)
+            continue
         # A wildcard pattern may be the only reference (e.g. `build-usage-*.sh`).
-        for token in wildcard_tokens(text):
-            if fnmatch.fnmatch(name, Path(token).name) or fnmatch.fnmatch(rel, token.lstrip("/")):
-                return True
-    return False
+        for token in wildcards.get(other, ()):
+            if fnmatch.fnmatch(name, Path(token).name) or fnmatch.fnmatch(
+                rel, token.lstrip("/")
+            ):
+                out.add(other)
+                break
+    return out
+
+
+def reachable(scripts: list[str], refs: dict[str, set[str]]) -> set[str]:
+    """Scripts transitively reachable from a consumer that is not a script.
+
+    Peeling to a fixed point is what makes the one-hop test meaningful for
+    tooling: a group of scripts that only mention one another looks fully
+    referenced to a single-hop check, yet nothing outside the group calls it.
+    """
+    script_set = set(scripts)
+    alive = {s for s in scripts if any(r not in script_set for r in refs[s])}
+    changed = True
+    while changed:
+        changed = False
+        for s in scripts:
+            if s in alive:
+                continue
+            if any(r in alive for r in refs[s]):
+                alive.add(s)
+                changed = True
+    return alive
 
 
 def main() -> int:
     files = tracked_files()
     scripts = checkable_scripts(files)
     corpus = read_corpus(files)
+    wildcards = {rel: wildcard_tokens(text) for rel, text in corpus.items()}
 
     stem_tally = Counter(Path(s).stem for s in scripts)
     unique_stems = {stem for stem, count in stem_tally.items() if count == 1}
 
-    unreferenced = [s for s in scripts if not is_referenced(s, corpus, unique_stems)]
+    refs = {s: referencers(s, corpus, wildcards, unique_stems) for s in scripts}
+    alive = reachable(scripts, refs)
+    unreferenced = [s for s in scripts if s not in alive]
 
     orphans = [s for s in unreferenced if s not in MANUAL_TOOLS]
     stale_allowlist = [s for s in MANUAL_TOOLS if s not in unreferenced]
