@@ -66,8 +66,20 @@ def _translate_native_errors(name, function):
     return wrapped
 
 
+def _is_numeric_scalar(item):
+    """True for real numbers; false for bool, str, bytes and containers."""
+    return isinstance(item, (int, float, np.number)) and not isinstance(item, bool)
+
+
 def _as_numpy_result(name, function):
-    """Expose legacy native numeric results as NumPy arrays consistently."""
+    """Expose legacy native numeric results as NumPy arrays consistently.
+
+    Only *numeric* series are converted. The predicate used to be "this list
+    contains no containers", which also matches a list of strings -- so
+    `available_factor_libraries()` returned
+    `array(['alpha158', 'worldquant101'])` instead of the documented list of
+    names, and `x == [...]` on it raised "truth value of an array is ambiguous".
+    """
 
     def convert(value):
         if isinstance(value, dict):
@@ -75,9 +87,7 @@ def _as_numpy_result(name, function):
         if isinstance(value, tuple):
             return tuple(convert(item) for item in value)
         if isinstance(value, list):
-            if not value or all(
-                not isinstance(item, (dict, list, tuple)) for item in value
-            ):
+            if not value or all(_is_numeric_scalar(item) for item in value):
                 return np.asarray(value)
             return [convert(item) for item in value]
         return value
@@ -696,7 +706,9 @@ if hasattr(_native, "_fast_bbands"):
 
     def bollinger_bands(close, timeperiod=20, nbdevup=2.0, nbdevdn=2.0, matype=0):
         if matype != 0:
-            raise ValueError("bollinger_bands currently supports matype=0 only")
+            raise InvalidParameterError(
+                "bollinger_bands currently supports matype=0 only"
+            )
         close = _as_contiguous_float64(close)
         return _native._fast_bbands(close, timeperiod, nbdevup, nbdevdn)
 
@@ -707,7 +719,9 @@ elif "bollinger_bands" in globals():
 
     def bollinger_bands(close, timeperiod=20, nbdevup=2.0, nbdevdn=2.0, matype=0):
         if matype != 0:
-            raise ValueError("bollinger_bands currently supports matype=0 only")
+            raise InvalidParameterError(
+                "bollinger_bands currently supports matype=0 only"
+            )
         return _bollinger_bands_impl(
             close, timeperiod=timeperiod, nbdevup=nbdevup, nbdevdn=nbdevdn
         )
@@ -734,6 +748,21 @@ if hasattr(_native, "_fast_sar_public"):
     _sar_fallback = sar
     sar = _native._fast_sar_public
 
+# `sar` deliberately exposes only the projected series, so the acceleration
+# factor the engine computes alongside it was unreachable from Python. Expose it
+# explicitly instead of making every caller unpack a tuple.
+if hasattr(_native, "sar"):
+    _sar_full = _native.sar
+
+    @wraps(_sar_full)
+    def sar_with_af(high, low, acceleration=0.02, maximum=0.2):
+        """Finkit's parabolic SAR together with its acceleration-factor series."""
+        high = _as_contiguous_float64(high)
+        low = _as_contiguous_float64(low)
+        return _sar_full(high, low, acceleration=acceleration, maximum=maximum)
+
+    sar_with_af = _translate_native_errors("sar_with_af", sar_with_af)
+
 if hasattr(_native, "_fast_macd"):
 
     def macd(close, fastperiod=12, slowperiod=26, signalperiod=9):
@@ -757,9 +786,9 @@ if hasattr(_native, "_fast_stoch"):
         slowd_matype=0,
     ):
         if slowk_matype != 0:
-            raise ValueError("stoch currently supports slowk_matype=0 only")
+            raise InvalidParameterError("stoch currently supports slowk_matype=0 only")
         if slowd_matype != 0:
-            raise ValueError("stoch currently supports slowd_matype=0 only")
+            raise InvalidParameterError("stoch currently supports slowd_matype=0 only")
         high = _as_contiguous_float64(high)
         low = _as_contiguous_float64(low)
         close = _as_contiguous_float64(close)
@@ -783,9 +812,9 @@ elif "stoch" in globals():
         slowd_matype=0,
     ):
         if slowk_matype != 0:
-            raise ValueError("stoch currently supports slowk_matype=0 only")
+            raise InvalidParameterError("stoch currently supports slowk_matype=0 only")
         if slowd_matype != 0:
-            raise ValueError("stoch currently supports slowd_matype=0 only")
+            raise InvalidParameterError("stoch currently supports slowd_matype=0 only")
         return _stoch_impl(
             high,
             low,
@@ -846,3 +875,5 @@ if "stddev" in globals() and "stddev" not in __all__:
     __all__.append("stddev")
 if "correl" in globals() and "correl" not in __all__:
     __all__.append("correl")
+if "sar_with_af" in globals() and "sar_with_af" not in __all__:
+    __all__.append("sar_with_af")

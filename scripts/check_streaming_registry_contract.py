@@ -120,20 +120,33 @@ def parse_valid_categories(text: str) -> list[str]:
     return re.findall(r'"([^"]*)"', block.group(1))
 
 
-def parse_registry_entries(text: str) -> dict[str, dict]:
+def parse_registry_entries(text: str) -> tuple[dict[str, dict], list[str], int]:
+    """Parse `INDICATORS` into `{name: {...}}`, plus duplicates and the raw count.
+
+    The result is keyed by name, so two `IndicatorInfo` rows sharing a name would
+    silently collapse into one -- and the gate would report a *smaller* registry
+    than the file actually contains, with no complaint. A duplicate is a real
+    defect (it makes `by_id` ambiguous and doubles the entry in the JSON export),
+    so it is reported rather than swallowed.
+    """
     body = text[text.index("static INDICATORS") :]
     entries: dict[str, dict] = {}
+    duplicates: list[str] = []
+    raw = 0
     for chunk in body.split("IndicatorInfo {")[1:]:
         chunk = chunk.split("IndicatorInfo {")[0]
         name = re.search(r'name:\s*"([^"]*)"', chunk)
         category = re.search(r'category:\s*"([^"]*)"', chunk)
         streaming = re.search(r"streaming:\s*(true|false)", chunk)
         if name and category:
+            raw += 1
+            if name.group(1) in entries:
+                duplicates.append(name.group(1))
             entries[name.group(1)] = {
                 "category": category.group(1),
                 "streaming": streaming is not None and streaming.group(1) == "true",
             }
-    return entries
+    return entries, duplicates, raw
 
 
 def parse_metas() -> list[dict]:
@@ -188,7 +201,7 @@ def count_declared_impls() -> int:
 def main() -> int:
     text = read_registry()
     valid = parse_valid_categories(text)
-    entries = parse_registry_entries(text)
+    entries, duplicates, raw_entries = parse_registry_entries(text)
     metas = parse_metas()
     declared = count_declared_impls()
 
@@ -228,9 +241,19 @@ def main() -> int:
 
     print("[streaming-registry] IndicatorMeta vs registry contract")
     print(f"  declared categories : {len(valid)}")
-    print(f"  registry entries    : {len(entries)}")
+    print(f"  registry entries    : {len(entries)} (raw rows {raw_entries})")
     print(f"  IndicatorMeta impls : {len(metas)} (declared {declared})")
     print(f"  streaming claims    : {sum(1 for i in entries.values() if i['streaming'])}")
+
+    if duplicates:
+        print(
+            "\n[streaming-registry] DUPLICATE registry entries:\n"
+            "  (the parse is keyed by name, so a duplicate collapses silently and the\n"
+            "   reported entry count is smaller than the file; `by_id` becomes\n"
+            "   ambiguous and the JSON export carries the row twice)"
+        )
+        for name in sorted(set(duplicates)):
+            print(f"  - {name!r} appears {duplicates.count(name) + 1} times")
 
     if unreadable:
         print(
@@ -273,7 +296,7 @@ def main() -> int:
         for alias in stale_aliases:
             print(f"  - {alias!r}")
 
-    if undeclared or disagreements or unbacked or stale_aliases:
+    if undeclared or disagreements or unbacked or stale_aliases or duplicates:
         print("\n[streaming-registry] FAIL")
         return 1
 

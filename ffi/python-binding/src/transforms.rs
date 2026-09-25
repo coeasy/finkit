@@ -5,7 +5,7 @@ use finkit::transforms::{
     Diff, DiffN, LogReturn, MinMaxScaler, PctChange, PercentileRank, Pipeline, Rank, RollingMean,
     RollingStd, RollingSum, StandardScaler, Transform, ZScore,
 };
-use numpy::PyReadonlyArray1;
+use numpy::{PyArray1, PyReadonlyArray1};
 use pyo3::prelude::*;
 
 #[pyclass(name = "Pipeline")]
@@ -103,7 +103,10 @@ impl PyPipeline {
 }
 
 #[pyfunction]
-pub fn transform_log_return(py: Python<'_>, data: PyReadonlyArray1<'_, f64>) -> PyResult<Vec<f64>> {
+pub fn vec_transform_log_return_impl(
+    py: Python<'_>,
+    data: PyReadonlyArray1<'_, f64>,
+) -> PyResult<Vec<f64>> {
     let slice = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
@@ -111,7 +114,19 @@ pub fn transform_log_return(py: Python<'_>, data: PyReadonlyArray1<'_, f64>) -> 
 }
 
 #[pyfunction]
-pub fn transform_zscore(py: Python<'_>, data: PyReadonlyArray1<'_, f64>) -> PyResult<Vec<f64>> {
+fn transform_log_return(
+    py: Python<'_>,
+    data: PyReadonlyArray1<'_, f64>,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_transform_log_return_impl(py, data)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
+#[pyfunction]
+pub fn vec_transform_zscore_impl(
+    py: Python<'_>,
+    data: PyReadonlyArray1<'_, f64>,
+) -> PyResult<Vec<f64>> {
     let slice = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
@@ -119,7 +134,19 @@ pub fn transform_zscore(py: Python<'_>, data: PyReadonlyArray1<'_, f64>) -> PyRe
 }
 
 #[pyfunction]
-pub fn transform_rank(py: Python<'_>, data: PyReadonlyArray1<'_, f64>) -> PyResult<Vec<f64>> {
+fn transform_zscore(
+    py: Python<'_>,
+    data: PyReadonlyArray1<'_, f64>,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_transform_zscore_impl(py, data)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
+#[pyfunction]
+pub fn vec_transform_rank_impl(
+    py: Python<'_>,
+    data: PyReadonlyArray1<'_, f64>,
+) -> PyResult<Vec<f64>> {
     let slice = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
@@ -127,7 +154,16 @@ pub fn transform_rank(py: Python<'_>, data: PyReadonlyArray1<'_, f64>) -> PyResu
 }
 
 #[pyfunction]
-pub fn transform_diff(py: Python<'_>, data: PyReadonlyArray1<'_, f64>) -> PyResult<Vec<f64>> {
+fn transform_rank(py: Python<'_>, data: PyReadonlyArray1<'_, f64>) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_transform_rank_impl(py, data)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
+#[pyfunction]
+pub fn vec_transform_diff_impl(
+    py: Python<'_>,
+    data: PyReadonlyArray1<'_, f64>,
+) -> PyResult<Vec<f64>> {
     let slice = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
@@ -135,8 +171,14 @@ pub fn transform_diff(py: Python<'_>, data: PyReadonlyArray1<'_, f64>) -> PyResu
 }
 
 #[pyfunction]
+fn transform_diff(py: Python<'_>, data: PyReadonlyArray1<'_, f64>) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_transform_diff_impl(py, data)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
+#[pyfunction]
 #[pyo3(signature = (data, window=5))]
-pub fn transform_rolling_mean(
+pub fn vec_transform_rolling_mean_impl(
     py: Python<'_>,
     data: PyReadonlyArray1<'_, f64>,
     window: usize,
@@ -145,6 +187,17 @@ pub fn transform_rolling_mean(
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
     Ok(py.detach(|| RollingMean { window }.transform(slice)))
+}
+
+#[pyfunction]
+#[pyo3(signature = (data, window=5))]
+fn transform_rolling_mean(
+    py: Python<'_>,
+    data: PyReadonlyArray1<'_, f64>,
+    window: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_transform_rolling_mean_impl(py, data, window)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
 }
 
 pub fn register_transform_classes(m: &Bound<'_, PyModule>) -> PyResult<()> {

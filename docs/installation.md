@@ -446,6 +446,35 @@ with an explicit message naming the missing file instead of a mid-build tool
 error. `scripts/build-usage-packages.sh` is in the same state: its per-language
 verification tree (`packaging/usage/<lang>/`) is likewise absent.
 
+### Native C/C++ archive
+
+`dist/native/windows-x64/finkit-<version>-native-windows-x64.zip` is the C/C++
+SDK bundle. It has **no in-tree builder** — it is assembled by hand from the
+release build's linker output plus the committed headers and licence:
+
+| Member | Source |
+| --- | --- |
+| `bin/finkit_ffi.dll` | `target/release/finkit_ffi.dll` |
+| `lib/finkit_ffi.dll.lib` | `target/release/finkit_ffi.dll.lib` |
+| `lib/finkit_ffi.lib` | `target/release/finkit_ffi.lib` |
+| `include/finkit.h` | `ffi/c-binding/include/finkit.h` |
+| `include/finkit.hpp` | `ffi/c-binding/include/finkit.hpp` |
+| `include/finkit_research.h` | `ffi/c-binding/include/finkit_research.h` |
+| `include/finkit_research.hpp` | `ffi/c-binding/include/finkit_research.hpp` |
+| `share/finkit/LICENSE` | `LICENSE` |
+
+Because the linker output is not reproducible byte-for-byte, a rebuilt archive
+always has a different digest even when nothing changed — so refresh the
+`size_bytes`/`sha256` records in `dist/manifest.json` and
+`dist/python/windows-x64/manifest.json` whenever you repack it. Neither manifest
+is checked in (`/dist/` is gitignored), so they are a local release record only.
+
+To confirm the bundle is coherent, check that the DLL actually exports the ABI
+the headers promise: `python scripts/gen_c_header.py --check
+ffi/c-binding/include/finkit.h` proves it at source level (99 exports across
+`generated.rs`, `lib.rs` and `research.rs`), and `dumpbin /exports
+bin/finkit_ffi.dll` (or any PE export reader) proves it at binary level.
+
 ## 15. Troubleshooting
 
 ### Python wheel is rejected as unsupported

@@ -1752,7 +1752,41 @@ heikin_ashi(open, high, low, close)
 
 ## 流式指标
 
-流式指标支持 O(1) 每根 K 线增量更新，适合实时数据流处理。
+流式指标支持 O(1) 每根 K 线增量更新，适合实时数据流处理。Python 侧共导出 **88** 个
+`Streaming*` 类，全部实现同一套方法；其中 **26** 个额外提供状态持久化。完整清单见
+[流式指标目录](generated/streaming-indicators.md)。
+
+### 通用接口
+
+所有流式类共享下列方法，构造参数因指标而异：
+
+```python
+streaming = ta.StreamingSMA(period=20)
+
+streaming.update(value)          # 单根更新；未预热完成时返回 NaN
+streaming.update_batch(values)   # 批量更新，返回等长结果列表
+streaming.is_ready()             # 是否已累积足够样本
+streaming.count()                # 已接收的样本数
+streaming.reset()                # 清空内部状态
+```
+
+多输入指标（如 `StreamingATR`）把额外序列作为 `update` 的位置参数传入。
+
+### 状态持久化
+
+`save_state()` 是**实例方法**，返回可序列化的 `bytes`；`restore_state()` 是**静态方法**，
+接收该 `bytes` 并返回一个**新实例**——它不会就地修改调用者：
+
+```python
+state = streaming.save_state()
+resumed = ta.StreamingSMA.restore_state(state)   # 用类调用，不是实例
+```
+
+> 写成 `streaming.restore_state(state)` 不会报错，但返回值会被丢弃，调用者状态不变。
+> 需要持久化时请始终通过类调用。
+
+`StreamingMACD` 等带内部信号的指标**不提供**持久化；是否支持请以
+[流式指标目录](generated/streaming-indicators.md) 为准。
 
 ### StreamingRSI
 
@@ -1765,10 +1799,10 @@ for price in prices:
     print(f"RSI: {rsi_value}")
 
 # 保存状态
-state = streaming_rsi.save()
+state = streaming_rsi.save_state()
 
-# 恢复状态
-new_rsi = ta.StreamingRSI.from_state(state)
+# 恢复状态（静态方法，返回新实例）
+new_rsi = ta.StreamingRSI.restore_state(state)
 ```
 
 ---
@@ -1776,11 +1810,17 @@ new_rsi = ta.StreamingRSI.from_state(state)
 ### StreamingMACD
 
 ```python
-streaming_macd = ta.StreamingMACD(fast=12, slow=26, signal=9)
+streaming_macd = ta.StreamingMACD(fast_period=12, slow_period=26, signal_period=9)
 
 for price in prices:
-    macd, signal, hist = streaming_macd.update(price)
+    result = streaming_macd.update(price)   # 返回 MACDResult
+    print(result.macd, result.signal, result.histogram)
 ```
+
+`update()` 返回 `MACDResult`，通过 `.macd` / `.signal` / `.histogram` 字段访问；它
+**不可解包**（`macd, signal, hist = ...` 会抛 `TypeError`）。`update_batch()` 返回
+`MACDResult` 列表。需要自定义均线类型时使用
+`ta.StreamingMACDEXT(fast_period=12, slow_period=26, signal_period=9, fast_ma="ema", slow_ma="ema", signal_ma="ema")`。
 
 ---
 

@@ -212,7 +212,7 @@ def main() -> int:
     bothmiss = [r for r in rows if not r["streaming"] and not r["batch"] and not r["formula"]]
 
     # 按注册表声明口径：只有 registry.streaming=true 的才需要流式实现。
-    # 用「全部 236 项」当分母会把 CDL_* 形态（声明不需要流式）算成缺口，严重高估工作量。
+    # 用「全部 235 项」当分母会把 CDL_* 形态（声明不需要流式）算成缺口，严重高估工作量。
     want_stream = [r for r in rows if r["registry_streaming"] is True]
     ws_hit = sum(1 for r in want_stream if r["streaming"])
     print(

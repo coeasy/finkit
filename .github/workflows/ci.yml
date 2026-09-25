@@ -70,6 +70,31 @@ jobs:
       # never hide behind a passing job. See scripts/sync_bindings.py.
       - name: Verify binding bodies against the registry
         run: python scripts/sync_bindings.py --check --all
+      # The NumPy-direct rewrite used to be checked only from
+      # `apply-talib-performance-plan.yml`, whose `on:` covers a branch that is
+      # no longer active -- so the check never ran and two binding modules
+      # (`features.rs`, `transforms.rs`) silently kept their list-returning
+      # wrappers. Check every binding source here, on the branches that matter.
+      - name: Verify the Python bindings are NumPy-direct stable
+        run: python scripts/optimize_python_bindings.py --check ffi/python-binding/src/*.rs
+      # The `.pyi` stub ships inside the wheel and had rotted into declaring a
+      # nonexistent `StreamingIndicator` base class and a nonexistent
+      # `cdlhomingsoldier`. Static checks need no build; the strong
+      # stub-vs-extension check runs in python-wheels.yml after a wheel exists.
+      - name: Check the Python type stub contract
+        run: python scripts/check_python_stub.py
+      # The C header and the Rust `#[no_mangle] extern "C"` surface are two
+      # halves of one ABI. `gen_binding.py` used to regenerate the Rust side
+      # from `docs/indicator_registry.json`'s `ffi` block, but that metadata
+      # moved to `docs/ffi_registry.json` and the generator now refuses to run,
+      # so nothing kept the pair honest. This checks both directions across all
+      # of `ffi/c-binding/src/*.rs` and `ffi/c-binding/include/*.h` -- including
+      # the fixed-template entry points in `lib.rs` (`ta_version`,
+      # `ta_last_error`, `ta_factor_execute_json`, ...) and the research surface
+      # in `research.rs`, which the old generated-file-only check never saw.
+      # `#[cfg(test)]`-gated exports are correctly ignored.
+      - name: Check the C FFI header against the Rust exports
+        run: python scripts/gen_c_header.py --check ffi/c-binding/include/finkit.h
 
   fmt:
     name: Format

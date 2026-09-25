@@ -5,7 +5,7 @@ use finkit::indicators;
 use finkit_factor_analysis::{
     AssetId, FactorStudy, GroupId, PanelIndex, QuantizeConfig, ResearchFrame,
 };
-use numpy::PyReadonlyArray1;
+use numpy::{PyArray1, PyReadonlyArray1};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
@@ -53,7 +53,7 @@ fn feature_set(
 
 /// Rolling skewness over a window.
 #[pyfunction]
-fn rolling_skewness(
+fn vec_rolling_skewness_impl(
     py: Python<'_>,
     data: PyReadonlyArray1<'_, f64>,
     window: usize,
@@ -64,9 +64,19 @@ fn rolling_skewness(
     Ok(py.detach(|| features::rolling_skewness(data, window).to_vec()))
 }
 
+#[pyfunction]
+fn rolling_skewness(
+    py: Python<'_>,
+    data: PyReadonlyArray1<'_, f64>,
+    window: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_rolling_skewness_impl(py, data, window)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// Rolling kurtosis over a window.
 #[pyfunction]
-fn rolling_kurtosis(
+fn vec_rolling_kurtosis_impl(
     py: Python<'_>,
     data: PyReadonlyArray1<'_, f64>,
     window: usize,
@@ -77,9 +87,19 @@ fn rolling_kurtosis(
     Ok(py.detach(|| features::rolling_kurtosis(data, window).to_vec()))
 }
 
+#[pyfunction]
+fn rolling_kurtosis(
+    py: Python<'_>,
+    data: PyReadonlyArray1<'_, f64>,
+    window: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_rolling_kurtosis_impl(py, data, window)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// Rolling entropy (information entropy using histogram binning).
 #[pyfunction]
-fn rolling_entropy(
+fn vec_rolling_entropy_impl(
     py: Python<'_>,
     data: PyReadonlyArray1<'_, f64>,
     window: usize,
@@ -91,9 +111,20 @@ fn rolling_entropy(
     Ok(py.detach(|| features::rolling_entropy(data, window, bins).to_vec()))
 }
 
+#[pyfunction]
+fn rolling_entropy(
+    py: Python<'_>,
+    data: PyReadonlyArray1<'_, f64>,
+    window: usize,
+    bins: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_rolling_entropy_impl(py, data, window, bins)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// Rolling z-score.
 #[pyfunction]
-fn rolling_zscore(
+fn vec_rolling_zscore_impl(
     py: Python<'_>,
     data: PyReadonlyArray1<'_, f64>,
     window: usize,
@@ -104,9 +135,19 @@ fn rolling_zscore(
     Ok(py.detach(|| features::rolling_zscore(data, window).to_vec()))
 }
 
+#[pyfunction]
+fn rolling_zscore(
+    py: Python<'_>,
+    data: PyReadonlyArray1<'_, f64>,
+    window: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_rolling_zscore_impl(py, data, window)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// Rolling percentile rank within window.
 #[pyfunction]
-fn rolling_percentile(
+fn vec_rolling_percentile_impl(
     py: Python<'_>,
     data: PyReadonlyArray1<'_, f64>,
     window: usize,
@@ -117,13 +158,23 @@ fn rolling_percentile(
     Ok(py.detach(|| features::rolling_percentile(data, window).to_vec()))
 }
 
+#[pyfunction]
+fn rolling_percentile(
+    py: Python<'_>,
+    data: PyReadonlyArray1<'_, f64>,
+    window: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_rolling_percentile_impl(py, data, window)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 // ============================================================================
 // Normalization
 // ============================================================================
 
 /// Rolling z-score normalization.
 #[pyfunction]
-fn rolling_zscore_normalize(
+fn vec_rolling_zscore_normalize_impl(
     py: Python<'_>,
     data: PyReadonlyArray1<'_, f64>,
     window: usize,
@@ -134,9 +185,19 @@ fn rolling_zscore_normalize(
     Ok(py.detach(|| features::rolling_zscore_normalize(data, window).to_vec()))
 }
 
+#[pyfunction]
+fn rolling_zscore_normalize(
+    py: Python<'_>,
+    data: PyReadonlyArray1<'_, f64>,
+    window: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_rolling_zscore_normalize_impl(py, data, window)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// Rolling min-max normalization to [0, 1].
 #[pyfunction]
-fn rolling_minmax(
+fn vec_rolling_minmax_impl(
     py: Python<'_>,
     data: PyReadonlyArray1<'_, f64>,
     window: usize,
@@ -147,9 +208,19 @@ fn rolling_minmax(
     Ok(py.detach(|| features::rolling_minmax(data, window).to_vec()))
 }
 
+#[pyfunction]
+fn rolling_minmax(
+    py: Python<'_>,
+    data: PyReadonlyArray1<'_, f64>,
+    window: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_rolling_minmax_impl(py, data, window)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// Robust scaler using median and IQR.
 #[pyfunction]
-fn robust_scaler(
+fn vec_robust_scaler_impl(
     py: Python<'_>,
     data: PyReadonlyArray1<'_, f64>,
     window: usize,
@@ -160,9 +231,19 @@ fn robust_scaler(
     Ok(py.detach(|| features::robust_scaler(data, window).to_vec()))
 }
 
+#[pyfunction]
+fn robust_scaler(
+    py: Python<'_>,
+    data: PyReadonlyArray1<'_, f64>,
+    window: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_robust_scaler_impl(py, data, window)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// Rank normalization within a rolling window.
 #[pyfunction]
-fn rank_normalize(
+fn vec_rank_normalize_impl(
     py: Python<'_>,
     data: PyReadonlyArray1<'_, f64>,
     window: usize,
@@ -173,44 +254,86 @@ fn rank_normalize(
     Ok(py.detach(|| features::rank_normalize(data, window).to_vec()))
 }
 
+#[pyfunction]
+fn rank_normalize(
+    py: Python<'_>,
+    data: PyReadonlyArray1<'_, f64>,
+    window: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_rank_normalize_impl(py, data, window)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 // ============================================================================
 // Time Series
 // ============================================================================
 
 /// Lag (shift forward) by n positions.
 #[pyfunction]
-fn lag(py: Python<'_>, data: PyReadonlyArray1<'_, f64>, n: usize) -> PyResult<Vec<f64>> {
+fn vec_lag_impl(py: Python<'_>, data: PyReadonlyArray1<'_, f64>, n: usize) -> PyResult<Vec<f64>> {
     let data = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
     Ok(py.detach(|| features::lag(data, n).to_vec()))
 }
 
+#[pyfunction]
+fn lag(py: Python<'_>, data: PyReadonlyArray1<'_, f64>, n: usize) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_lag_impl(py, data, n)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// Lead (shift backward) by n positions.
 #[pyfunction]
-fn lead(py: Python<'_>, data: PyReadonlyArray1<'_, f64>, n: usize) -> PyResult<Vec<f64>> {
+fn vec_lead_impl(py: Python<'_>, data: PyReadonlyArray1<'_, f64>, n: usize) -> PyResult<Vec<f64>> {
     let data = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
     Ok(py.detach(|| features::lead(data, n).to_vec()))
 }
 
+#[pyfunction]
+fn lead(py: Python<'_>, data: PyReadonlyArray1<'_, f64>, n: usize) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_lead_impl(py, data, n)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// N-th order difference.
 #[pyfunction]
-fn diff(py: Python<'_>, data: PyReadonlyArray1<'_, f64>, n: usize) -> PyResult<Vec<f64>> {
+fn vec_diff_impl(py: Python<'_>, data: PyReadonlyArray1<'_, f64>, n: usize) -> PyResult<Vec<f64>> {
     let data = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
     Ok(py.detach(|| features::diff(data, n).to_vec()))
 }
 
+#[pyfunction]
+fn diff(py: Python<'_>, data: PyReadonlyArray1<'_, f64>, n: usize) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_diff_impl(py, data, n)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// Percentage change over n periods.
 #[pyfunction]
-fn pct_change(py: Python<'_>, data: PyReadonlyArray1<'_, f64>, n: usize) -> PyResult<Vec<f64>> {
+fn vec_pct_change_impl(
+    py: Python<'_>,
+    data: PyReadonlyArray1<'_, f64>,
+    n: usize,
+) -> PyResult<Vec<f64>> {
     let data = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
     Ok(py.detach(|| features::pct_change(data, n).to_vec()))
+}
+
+#[pyfunction]
+fn pct_change(
+    py: Python<'_>,
+    data: PyReadonlyArray1<'_, f64>,
+    n: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_pct_change_impl(py, data, n)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
 }
 
 // ============================================================================
@@ -219,7 +342,7 @@ fn pct_change(py: Python<'_>, data: PyReadonlyArray1<'_, f64>, n: usize) -> PyRe
 
 /// Forward log return over n periods.
 #[pyfunction]
-fn forward_return(
+fn vec_forward_return_impl(
     py: Python<'_>,
     close: PyReadonlyArray1<'_, f64>,
     n: usize,
@@ -230,9 +353,19 @@ fn forward_return(
     Ok(py.detach(|| features::forward_return(close, n).to_vec()))
 }
 
+#[pyfunction]
+fn forward_return(
+    py: Python<'_>,
+    close: PyReadonlyArray1<'_, f64>,
+    n: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_forward_return_impl(py, close, n)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// Binary label: 1 if forward return > threshold, else 0.
 #[pyfunction]
-fn binary_label(
+fn vec_binary_label_impl(
     py: Python<'_>,
     close: PyReadonlyArray1<'_, f64>,
     n: usize,
@@ -244,9 +377,20 @@ fn binary_label(
     Ok(py.detach(|| features::binary_label(close, n, threshold).to_vec()))
 }
 
+#[pyfunction]
+fn binary_label(
+    py: Python<'_>,
+    close: PyReadonlyArray1<'_, f64>,
+    n: usize,
+    threshold: f64,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_binary_label_impl(py, close, n, threshold)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// Fixed horizon label: +1, 0, -1 based on return vs threshold.
 #[pyfunction]
-fn fixed_horizon_label(
+fn vec_fixed_horizon_label_impl(
     py: Python<'_>,
     close: PyReadonlyArray1<'_, f64>,
     horizon: usize,
@@ -256,6 +400,17 @@ fn fixed_horizon_label(
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
     Ok(py.detach(|| features::fixed_horizon_label(close, horizon, threshold).to_vec()))
+}
+
+#[pyfunction]
+fn fixed_horizon_label(
+    py: Python<'_>,
+    close: PyReadonlyArray1<'_, f64>,
+    horizon: usize,
+    threshold: f64,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_fixed_horizon_label_impl(py, close, horizon, threshold)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
 }
 
 /// Triple barrier label (López de Prado method).
@@ -294,7 +449,7 @@ fn triple_barrier(
 
 /// Element-wise ratio: a[i] / b[i].
 #[pyfunction]
-fn feature_ratio(
+fn vec_feature_ratio_impl(
     py: Python<'_>,
     a: PyReadonlyArray1<'_, f64>,
     b: PyReadonlyArray1<'_, f64>,
@@ -308,9 +463,19 @@ fn feature_ratio(
     Ok(py.detach(|| features::feature_ratio(a, b).to_vec()))
 }
 
+#[pyfunction]
+fn feature_ratio(
+    py: Python<'_>,
+    a: PyReadonlyArray1<'_, f64>,
+    b: PyReadonlyArray1<'_, f64>,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_feature_ratio_impl(py, a, b)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// Element-wise spread: a[i] - b[i].
 #[pyfunction]
-fn feature_spread(
+fn vec_feature_spread_impl(
     py: Python<'_>,
     a: PyReadonlyArray1<'_, f64>,
     b: PyReadonlyArray1<'_, f64>,
@@ -324,9 +489,19 @@ fn feature_spread(
     Ok(py.detach(|| features::feature_spread(a, b).to_vec()))
 }
 
+#[pyfunction]
+fn feature_spread(
+    py: Python<'_>,
+    a: PyReadonlyArray1<'_, f64>,
+    b: PyReadonlyArray1<'_, f64>,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_feature_spread_impl(py, a, b)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// Rolling Pearson correlation between two series.
 #[pyfunction]
-fn rolling_correlation(
+fn vec_rolling_correlation_impl(
     py: Python<'_>,
     a: PyReadonlyArray1<'_, f64>,
     b: PyReadonlyArray1<'_, f64>,
@@ -341,26 +516,49 @@ fn rolling_correlation(
     Ok(py.detach(|| features::rolling_correlation(a, b, window).to_vec()))
 }
 
+#[pyfunction]
+fn rolling_correlation(
+    py: Python<'_>,
+    a: PyReadonlyArray1<'_, f64>,
+    b: PyReadonlyArray1<'_, f64>,
+    window: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_rolling_correlation_impl(py, a, b, window)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 // ============================================================================
 // SIMD Batch Operations
 // ============================================================================
 
 /// Batch z-score normalization (SIMD-optimized).
 #[pyfunction]
-fn batch_zscore(py: Python<'_>, data: PyReadonlyArray1<'_, f64>) -> PyResult<Vec<f64>> {
+fn vec_batch_zscore_impl(py: Python<'_>, data: PyReadonlyArray1<'_, f64>) -> PyResult<Vec<f64>> {
     let data = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
     Ok(py.detach(|| features::batch_zscore_simd(data).to_vec()))
 }
 
+#[pyfunction]
+fn batch_zscore(py: Python<'_>, data: PyReadonlyArray1<'_, f64>) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_batch_zscore_impl(py, data)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// Batch min-max normalization (SIMD-optimized).
 #[pyfunction]
-fn batch_minmax(py: Python<'_>, data: PyReadonlyArray1<'_, f64>) -> PyResult<Vec<f64>> {
+fn vec_batch_minmax_impl(py: Python<'_>, data: PyReadonlyArray1<'_, f64>) -> PyResult<Vec<f64>> {
     let data = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
     Ok(py.detach(|| features::batch_minmax_simd(data).to_vec()))
+}
+
+#[pyfunction]
+fn batch_minmax(py: Python<'_>, data: PyReadonlyArray1<'_, f64>) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_batch_minmax_impl(py, data)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
 }
 
 /// Pearson correlation between two arrays (SIMD-optimized).
@@ -386,7 +584,11 @@ fn correlation(
 /// Hull Moving Average (HMA).
 #[pyfunction]
 #[pyo3(signature = (close, period=14))]
-fn hma(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, period: usize) -> PyResult<Vec<f64>> {
+fn vec_hma_impl(
+    py: Python<'_>,
+    close: PyReadonlyArray1<'_, f64>,
+    period: usize,
+) -> PyResult<Vec<f64>> {
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
@@ -397,10 +599,21 @@ fn hma(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, period: usize) -> PyRes
     })
 }
 
+#[pyfunction]
+#[pyo3(signature = (close, period=14))]
+fn hma(
+    py: Python<'_>,
+    close: PyReadonlyArray1<'_, f64>,
+    period: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_hma_impl(py, close, period)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// Arnaud Legoux Moving Average (ALMA).
 #[pyfunction]
 #[pyo3(signature = (close, period=9, offset_factor=0.85, sigma=6.0))]
-fn alma(
+fn vec_alma_impl(
     py: Python<'_>,
     close: PyReadonlyArray1<'_, f64>,
     period: usize,
@@ -417,10 +630,23 @@ fn alma(
     })
 }
 
+#[pyfunction]
+#[pyo3(signature = (close, period=9, offset_factor=0.85, sigma=6.0))]
+fn alma(
+    py: Python<'_>,
+    close: PyReadonlyArray1<'_, f64>,
+    period: usize,
+    offset_factor: f64,
+    sigma: f64,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_alma_impl(py, close, period, offset_factor, sigma)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// Variable Index Dynamic Average (VIDYA).
 #[pyfunction]
 #[pyo3(signature = (close, short_period=9, long_period=14))]
-fn vidya(
+fn vec_vidya_impl(
     py: Python<'_>,
     close: PyReadonlyArray1<'_, f64>,
     short_period: usize,
@@ -434,6 +660,18 @@ fn vidya(
             .map(|arr| arr.into_raw_vec_and_offset().0)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
     })
+}
+
+#[pyfunction]
+#[pyo3(signature = (close, short_period=9, long_period=14))]
+fn vidya(
+    py: Python<'_>,
+    close: PyReadonlyArray1<'_, f64>,
+    short_period: usize,
+    long_period: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_vidya_impl(py, close, short_period, long_period)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
 }
 
 /// MESA Adaptive Moving Average (MAMA).
@@ -461,7 +699,11 @@ fn mama<'py>(
 /// Fractal Adaptive Moving Average (FRAMA).
 #[pyfunction]
 #[pyo3(signature = (close, period=16))]
-fn frama(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, period: usize) -> PyResult<Vec<f64>> {
+fn vec_frama_impl(
+    py: Python<'_>,
+    close: PyReadonlyArray1<'_, f64>,
+    period: usize,
+) -> PyResult<Vec<f64>> {
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
@@ -472,6 +714,17 @@ fn frama(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, period: usize) -> PyR
     })
 }
 
+#[pyfunction]
+#[pyo3(signature = (close, period=16))]
+fn frama(
+    py: Python<'_>,
+    close: PyReadonlyArray1<'_, f64>,
+    period: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_frama_impl(py, close, period)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 // ============================================================================
 // Extended Momentum Indicators
 // ============================================================================
@@ -479,7 +732,7 @@ fn frama(py: Python<'_>, close: PyReadonlyArray1<'_, f64>, period: usize) -> PyR
 /// Connors RSI composite oscillator.
 #[pyfunction]
 #[pyo3(signature = (close, rsi_period=3, streak_period=2, rank_period=100))]
-fn connors_rsi(
+fn vec_connors_rsi_impl(
     py: Python<'_>,
     close: PyReadonlyArray1<'_, f64>,
     rsi_period: usize,
@@ -494,6 +747,19 @@ fn connors_rsi(
             .map(|arr| arr.into_raw_vec_and_offset().0)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
     })
+}
+
+#[pyfunction]
+#[pyo3(signature = (close, rsi_period=3, streak_period=2, rank_period=100))]
+fn connors_rsi(
+    py: Python<'_>,
+    close: PyReadonlyArray1<'_, f64>,
+    rsi_period: usize,
+    streak_period: usize,
+    rank_period: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_connors_rsi_impl(py, close, rsi_period, streak_period, rank_period)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
 }
 
 /// Stochastic RSI.
@@ -560,7 +826,7 @@ fn rvi<'py>(
 /// Garman-Klass volatility estimator.
 #[pyfunction]
 #[pyo3(signature = (open, high, low, close, period=14))]
-fn garman_klass_volatility(
+fn vec_garman_klass_volatility_impl(
     py: Python<'_>,
     open: PyReadonlyArray1<'_, f64>,
     high: PyReadonlyArray1<'_, f64>,
@@ -587,10 +853,24 @@ fn garman_klass_volatility(
     })
 }
 
+#[pyfunction]
+#[pyo3(signature = (open, high, low, close, period=14))]
+fn garman_klass_volatility(
+    py: Python<'_>,
+    open: PyReadonlyArray1<'_, f64>,
+    high: PyReadonlyArray1<'_, f64>,
+    low: PyReadonlyArray1<'_, f64>,
+    close: PyReadonlyArray1<'_, f64>,
+    period: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_garman_klass_volatility_impl(py, open, high, low, close, period)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// Parkinson volatility estimator.
 #[pyfunction]
 #[pyo3(signature = (high, low, period=14))]
-fn parkinson_volatility(
+fn vec_parkinson_volatility_impl(
     py: Python<'_>,
     high: PyReadonlyArray1<'_, f64>,
     low: PyReadonlyArray1<'_, f64>,
@@ -609,10 +889,22 @@ fn parkinson_volatility(
     })
 }
 
+#[pyfunction]
+#[pyo3(signature = (high, low, period=14))]
+fn parkinson_volatility(
+    py: Python<'_>,
+    high: PyReadonlyArray1<'_, f64>,
+    low: PyReadonlyArray1<'_, f64>,
+    period: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_parkinson_volatility_impl(py, high, low, period)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// Rogers-Satchell volatility estimator.
 #[pyfunction]
 #[pyo3(signature = (open, high, low, close, period=14))]
-fn rogers_satchell_volatility(
+fn vec_rogers_satchell_volatility_impl(
     py: Python<'_>,
     open: PyReadonlyArray1<'_, f64>,
     high: PyReadonlyArray1<'_, f64>,
@@ -639,10 +931,24 @@ fn rogers_satchell_volatility(
     })
 }
 
+#[pyfunction]
+#[pyo3(signature = (open, high, low, close, period=14))]
+fn rogers_satchell_volatility(
+    py: Python<'_>,
+    open: PyReadonlyArray1<'_, f64>,
+    high: PyReadonlyArray1<'_, f64>,
+    low: PyReadonlyArray1<'_, f64>,
+    close: PyReadonlyArray1<'_, f64>,
+    period: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_rogers_satchell_volatility_impl(py, open, high, low, close, period)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// Yang-Zhang volatility estimator.
 #[pyfunction]
 #[pyo3(signature = (open, high, low, close, period=14))]
-fn yang_zhang_volatility(
+fn vec_yang_zhang_volatility_impl(
     py: Python<'_>,
     open: PyReadonlyArray1<'_, f64>,
     high: PyReadonlyArray1<'_, f64>,
@@ -669,10 +975,24 @@ fn yang_zhang_volatility(
     })
 }
 
+#[pyfunction]
+#[pyo3(signature = (open, high, low, close, period=14))]
+fn yang_zhang_volatility(
+    py: Python<'_>,
+    open: PyReadonlyArray1<'_, f64>,
+    high: PyReadonlyArray1<'_, f64>,
+    low: PyReadonlyArray1<'_, f64>,
+    close: PyReadonlyArray1<'_, f64>,
+    period: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_yang_zhang_volatility_impl(py, open, high, low, close, period)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// Realized volatility from log returns.
 #[pyfunction]
 #[pyo3(signature = (close, period=14))]
-fn realized_volatility(
+fn vec_realized_volatility_impl(
     py: Python<'_>,
     close: PyReadonlyArray1<'_, f64>,
     period: usize,
@@ -687,10 +1007,21 @@ fn realized_volatility(
     })
 }
 
+#[pyfunction]
+#[pyo3(signature = (close, period=14))]
+fn realized_volatility(
+    py: Python<'_>,
+    close: PyReadonlyArray1<'_, f64>,
+    period: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_realized_volatility_impl(py, close, period)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// Semivariance (downside volatility).
 #[pyfunction]
 #[pyo3(signature = (close, period=14))]
-fn semivariance(
+fn vec_semivariance_impl(
     py: Python<'_>,
     close: PyReadonlyArray1<'_, f64>,
     period: usize,
@@ -703,6 +1034,17 @@ fn semivariance(
             .map(|arr| arr.into_raw_vec_and_offset().0)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
     })
+}
+
+#[pyfunction]
+#[pyo3(signature = (close, period=14))]
+fn semivariance(
+    py: Python<'_>,
+    close: PyReadonlyArray1<'_, f64>,
+    period: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_semivariance_impl(py, close, period)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
 }
 
 // ============================================================================
@@ -758,21 +1100,51 @@ fn hurst_exponent(
 /// Autocorrelation function (ACF).
 #[pyfunction]
 #[pyo3(signature = (data, max_lag=10))]
-fn acf(py: Python<'_>, data: PyReadonlyArray1<'_, f64>, max_lag: usize) -> PyResult<Vec<f64>> {
+fn vec_acf_impl(
+    py: Python<'_>,
+    data: PyReadonlyArray1<'_, f64>,
+    max_lag: usize,
+) -> PyResult<Vec<f64>> {
     let data = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
     Ok(py.detach(|| features::acf(data, max_lag)))
 }
 
+#[pyfunction]
+#[pyo3(signature = (data, max_lag=10))]
+fn acf(
+    py: Python<'_>,
+    data: PyReadonlyArray1<'_, f64>,
+    max_lag: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_acf_impl(py, data, max_lag)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// Partial autocorrelation function (PACF).
 #[pyfunction]
 #[pyo3(signature = (data, max_lag=10))]
-fn pacf(py: Python<'_>, data: PyReadonlyArray1<'_, f64>, max_lag: usize) -> PyResult<Vec<f64>> {
+fn vec_pacf_impl(
+    py: Python<'_>,
+    data: PyReadonlyArray1<'_, f64>,
+    max_lag: usize,
+) -> PyResult<Vec<f64>> {
     let data = data
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
     Ok(py.detach(|| features::pacf(data, max_lag)))
+}
+
+#[pyfunction]
+#[pyo3(signature = (data, max_lag=10))]
+fn pacf(
+    py: Python<'_>,
+    data: PyReadonlyArray1<'_, f64>,
+    max_lag: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_pacf_impl(py, data, max_lag)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
 }
 
 /// Augmented Dickey-Fuller unit-root test.
@@ -834,7 +1206,7 @@ fn cointegration_test<'py>(
 
 /// Element-wise cross product: a[i] * b[i].
 #[pyfunction]
-fn feature_cross(
+fn vec_feature_cross_impl(
     py: Python<'_>,
     a: PyReadonlyArray1<'_, f64>,
     b: PyReadonlyArray1<'_, f64>,
@@ -846,6 +1218,16 @@ fn feature_cross(
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
     Ok(py.detach(|| features::feature_cross(a, b).to_vec()))
+}
+
+#[pyfunction]
+fn feature_cross(
+    py: Python<'_>,
+    a: PyReadonlyArray1<'_, f64>,
+    b: PyReadonlyArray1<'_, f64>,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_feature_cross_impl(py, a, b)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
 }
 
 /// Generate all pairwise cross-product features.
@@ -887,7 +1269,7 @@ fn auto_cross(
 /// Tick imbalance: rolling mean of price direction signs.
 #[pyfunction]
 #[pyo3(signature = (close, window=20))]
-fn tick_imbalance(
+fn vec_tick_imbalance_impl(
     py: Python<'_>,
     close: PyReadonlyArray1<'_, f64>,
     window: usize,
@@ -898,10 +1280,21 @@ fn tick_imbalance(
     Ok(py.detach(|| features::tick_imbalance(close, window).to_vec()))
 }
 
+#[pyfunction]
+#[pyo3(signature = (close, window=20))]
+fn tick_imbalance(
+    py: Python<'_>,
+    close: PyReadonlyArray1<'_, f64>,
+    window: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_tick_imbalance_impl(py, close, window)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// Volume imbalance: rolling ratio of signed volume to total volume.
 #[pyfunction]
 #[pyo3(signature = (close, volume, window=20))]
-fn volume_imbalance(
+fn vec_volume_imbalance_impl(
     py: Python<'_>,
     close: PyReadonlyArray1<'_, f64>,
     volume: PyReadonlyArray1<'_, f64>,
@@ -916,10 +1309,22 @@ fn volume_imbalance(
     Ok(py.detach(|| features::volume_imbalance(close, volume, window).to_vec()))
 }
 
+#[pyfunction]
+#[pyo3(signature = (close, volume, window=20))]
+fn volume_imbalance(
+    py: Python<'_>,
+    close: PyReadonlyArray1<'_, f64>,
+    volume: PyReadonlyArray1<'_, f64>,
+    window: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_volume_imbalance_impl(py, close, volume, window)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// Kyle's lambda: rolling price impact coefficient.
 #[pyfunction]
 #[pyo3(signature = (close, volume, window=20))]
-fn kyle_lambda(
+fn vec_kyle_lambda_impl(
     py: Python<'_>,
     close: PyReadonlyArray1<'_, f64>,
     volume: PyReadonlyArray1<'_, f64>,
@@ -934,10 +1339,22 @@ fn kyle_lambda(
     Ok(py.detach(|| features::kyle_lambda(close, volume, window).to_vec()))
 }
 
+#[pyfunction]
+#[pyo3(signature = (close, volume, window=20))]
+fn kyle_lambda(
+    py: Python<'_>,
+    close: PyReadonlyArray1<'_, f64>,
+    volume: PyReadonlyArray1<'_, f64>,
+    window: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_kyle_lambda_impl(py, close, volume, window)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// Roll (1984) implied spread estimator.
 #[pyfunction]
 #[pyo3(signature = (close, window=20))]
-fn roll_spread(
+fn vec_roll_spread_impl(
     py: Python<'_>,
     close: PyReadonlyArray1<'_, f64>,
     window: usize,
@@ -948,6 +1365,17 @@ fn roll_spread(
     Ok(py.detach(|| features::roll_spread(close, window).to_vec()))
 }
 
+#[pyfunction]
+#[pyo3(signature = (close, window=20))]
+fn roll_spread(
+    py: Python<'_>,
+    close: PyReadonlyArray1<'_, f64>,
+    window: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_roll_spread_impl(py, close, window)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 // ============================================================================
 // Regime Detection
 // ============================================================================
@@ -955,7 +1383,7 @@ fn roll_spread(
 /// Threshold-based volatility regime classifier.
 #[pyfunction]
 #[pyo3(signature = (data, window=20, low_pct=25.0, high_pct=75.0))]
-fn threshold_regime(
+fn vec_threshold_regime_impl(
     py: Python<'_>,
     data: PyReadonlyArray1<'_, f64>,
     window: usize,
@@ -966,6 +1394,19 @@ fn threshold_regime(
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
     Ok(py.detach(|| features::threshold_regime(data, window, low_pct, high_pct).to_vec()))
+}
+
+#[pyfunction]
+#[pyo3(signature = (data, window=20, low_pct=25.0, high_pct=75.0))]
+fn threshold_regime(
+    py: Python<'_>,
+    data: PyReadonlyArray1<'_, f64>,
+    window: usize,
+    low_pct: f64,
+    high_pct: f64,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_threshold_regime_impl(py, data, window, low_pct, high_pct)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
 }
 
 /// Gaussian HMM regime detection.

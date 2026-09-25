@@ -1,7 +1,12 @@
 """Type stubs for finkit Python bindings.
 
-This file provides type hints for the native Rust extension module.
-Auto-generated from Rust FFI signatures.
+Hand-maintained type hints for the native Rust extension module.
+
+This stub is intentionally partial: it covers the documented surface rather than
+all 400+ exported names. `__all__` is declared without a literal value on
+purpose -- the runtime computes it from the native module, so a frozen list here
+would silently rot. `scripts/check_python_stub.py` asserts that every class and
+function declared below actually exists in the built extension.
 """
 
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
@@ -90,6 +95,12 @@ def bollinger_bands(close: ArrayLike, *, timeperiod: int = 20, nbdevup: float = 
 
 def sar(high: ArrayLike, low: ArrayLike, *, acceleration: float = 0.02, maximum: float = 0.2) -> Array1D:
     """Parabolic SAR."""
+    ...
+
+def sar_with_af(
+    high: ArrayLike, low: ArrayLike, *, acceleration: float = 0.02, maximum: float = 0.2
+) -> Tuple[Array1D, Array1D]:
+    """Parabolic SAR together with its acceleration-factor series."""
     ...
 
 def midpoint(close: ArrayLike, *, timeperiod: int = 14) -> Array1D:
@@ -364,7 +375,7 @@ def cdlhikkakemod(open: ArrayLike, high: ArrayLike, low: ArrayLike, close: Array
     """Hikkake Modified Pattern."""
     ...
 
-def cdlhomingsoldier(open: ArrayLike, high: ArrayLike, low: ArrayLike, close: ArrayLike) -> Array1D:
+def cdlhomingpigeon(open: ArrayLike, high: ArrayLike, low: ArrayLike, close: ArrayLike) -> Array1D:
     """Homing Pigeon."""
     ...
 
@@ -710,6 +721,30 @@ class CompiledFormula:
         """Evaluate the compiled formula and return NumPy arrays."""
         ...
 
+    def eval_owned(
+        self,
+        open: ArrayLike,
+        high: ArrayLike,
+        low: ArrayLike,
+        close: ArrayLike,
+        volume: ArrayLike,
+        amount: Optional[ArrayLike] = ...,
+    ) -> Dict[str, Array1D]:
+        """Evaluate while retaining the copied stream context (append_bar mode)."""
+        ...
+
+    def eval_zero_copy(
+        self,
+        open: ArrayLike,
+        high: ArrayLike,
+        low: ArrayLike,
+        close: ArrayLike,
+        volume: ArrayLike,
+        amount: Optional[ArrayLike] = ...,
+    ) -> Dict[str, Array1D]:
+        """Evaluate without copying contiguous NumPy OHLCV inputs."""
+        ...
+
 def formula_eval(
     source: str,
     open: ArrayLike,
@@ -1037,31 +1072,69 @@ class KlineData:
 # Streaming Indicators
 # ============================================================================
 
-class StreamingIndicator:
-    """Base class for streaming indicators."""
-    
-    def next(self, value: float) -> Optional[float]:
-        ...
-    
-    def reset(self) -> None:
-        ...
-
-class StreamingSMA(StreamingIndicator):
-    """Streaming Simple Moving Average."""
-    
-    def __init__(self, period: int) -> None:
-        ...
-
-class StreamingEMA(StreamingIndicator):
-    """Streaming Exponential Moving Average."""
-    
-    def __init__(self, period: int) -> None:
-        ...
-
 class MACDResult:
+    """Result of a :class:`StreamingMACD` / :class:`StreamingMACDEXT` update.
+
+    Not iterable: read the ``macd`` / ``signal`` / ``histogram`` fields.
+    """
+
     macd: float
     signal: float
     histogram: float
+
+class StreamingSMA:
+    """Streaming Simple Moving Average."""
+
+    def __init__(self, period: int) -> None: ...
+    def update(self, value: float) -> float: ...
+    def update_batch(self, values: Sequence[float]) -> List[float]: ...
+    def is_ready(self) -> bool: ...
+    def count(self) -> int: ...
+    def reset(self) -> None: ...
+    def save_state(self) -> bytes: ...
+    @staticmethod
+    def restore_state(state: bytes) -> "StreamingSMA": ...
+
+class StreamingEMA:
+    """Streaming Exponential Moving Average."""
+
+    def __init__(self, period: int) -> None: ...
+    def update(self, value: float) -> float: ...
+    def update_batch(self, values: Sequence[float]) -> List[float]: ...
+    def is_ready(self) -> bool: ...
+    def count(self) -> int: ...
+    def reset(self) -> None: ...
+    def save_state(self) -> bytes: ...
+    @staticmethod
+    def restore_state(state: bytes) -> "StreamingEMA": ...
+
+class StreamingRSI:
+    """Streaming Relative Strength Index."""
+
+    def __init__(self, period: int) -> None: ...
+    def update(self, value: float) -> float: ...
+    def update_batch(self, values: Sequence[float]) -> List[float]: ...
+    def is_ready(self) -> bool: ...
+    def count(self) -> int: ...
+    def reset(self) -> None: ...
+    def save_state(self) -> bytes: ...
+    @staticmethod
+    def restore_state(state: bytes) -> "StreamingRSI": ...
+
+class StreamingMACD:
+    """Streaming MACD. Returns :class:`MACDResult`; no state persistence."""
+
+    def __init__(
+        self,
+        fast_period: int = 12,
+        slow_period: int = 26,
+        signal_period: int = 9,
+    ) -> None: ...
+    def update(self, value: float) -> MACDResult: ...
+    def update_batch(self, values: Sequence[float]) -> List[MACDResult]: ...
+    def is_ready(self) -> bool: ...
+    def count(self) -> int: ...
+    def reset(self) -> None: ...
 
 class StreamingMACDEXT:
     """Streaming MACD with configurable scalar MA types."""
@@ -1074,29 +1147,24 @@ class StreamingMACDEXT:
         fast_ma: str = "ema",
         slow_ma: str = "ema",
         signal_ma: str = "ema",
-    ) -> None:
-        ...
+    ) -> None: ...
+    def update(self, value: float) -> MACDResult: ...
+    def update_batch(self, values: Sequence[float]) -> List[MACDResult]: ...
+    def is_ready(self) -> bool: ...
+    def count(self) -> int: ...
+    def reset(self) -> None: ...
 
-    def update(self, value: float) -> MACDResult:
-        ...
+class StreamingATR:
+    """Streaming Average True Range. Three positional inputs per update."""
 
-    def update_batch(self, values: Sequence[float]) -> List[MACDResult]:
-        ...
-
-    def reset(self) -> None:
-        ...
-
-    def is_ready(self) -> bool:
-        ...
-
-    def count(self) -> int:
-        ...
-
-class StreamingRSI(StreamingIndicator):
-    """Streaming Relative Strength Index."""
-    
-    def __init__(self, period: int) -> None:
-        ...
+    def __init__(self, period: int) -> None: ...
+    def update(self, high: float, low: float, close: float) -> float: ...
+    def update_batch(
+        self, high: Sequence[float], low: Sequence[float], close: Sequence[float]
+    ) -> List[float]: ...
+    def is_ready(self) -> bool: ...
+    def count(self) -> int: ...
+    def reset(self) -> None: ...
 
 # ============================================================================
 # Exceptions
@@ -1130,59 +1198,7 @@ def register_accessor() -> None:
 # Module Exports
 # ============================================================================
 
-__all__ = [
-    # Overlap Studies
-    "sma", "ema", "wma", "dema", "tema", "kama", "mama", "t3",
-    "bollinger_bands", "sar", "midpoint", "midprice",
-    # Momentum Indicators
-    "rsi", "macd", "stoch", "adx", "aroon", "cci", "mom", "roc", "willr",
-    "apo", "bop", "cmo", "dx", "mfi", "minus_di", "minus_dm", "plus_di",
-    "plus_dm", "trix",
-    # Cycle Indicators
-    "ht_dcperiod", "ht_dcphase", "ht_phasor", "ht_sine", "ht_trendmode",
-    "ht_trendline",
-    # Volume Indicators
-    "obv", "ad", "adosc",
-    # Volatility Indicators
-    "atr", "natr", "trange",
-    # Pattern Recognition
-    "cdl2crows", "cdl3blackcrows", "cdl3inside", "cdl3linestrike",
-    "cdl3outside", "cdl3starsinsouth", "cdl3whitesoldiers",
-    "cdlabandonedbaby", "cdladvanceblock", "cdlbelthold", "cdlbreakaway",
-    "cdlclosingmarubozu", "cdlconcealbabyswall", "cdlcounterattack",
-    "cdldarkcloudcover", "cdldoji", "cdldojistar", "cdldragonflydoji",
-    "cdlengulfing", "cdleveningdojistar", "cdleveningstar",
-    "cdlgapsidesidewhite", "cdlgravestonedoji", "cdlhammer", "cdlhangingman",
-    "cdlharami", "cdlharamicross", "cdlhighwave", "cdlhikkake",
-    "cdlhikkakemod", "cdlhomingsoldier", "cdlidentical3crows", "cdlinneck",
-    "cdlinvertedhammer", "cdlkicking", "cdlkickingbylength", "cdlladderbottom",
-    "cdllongleggeddoji", "cdllongline", "cdlmarubozu", "cdlmatchinglow",
-    "cdlmathold", "cdlmorningdojistar", "cdlmorningstar", "cdlonneck",
-    "cdlpiercing", "cdlrickshawman", "cdlrisefall3methods", "cdlseparatinglines",
-    "cdlshootingstar", "cdlshortline", "cdlspinningtop", "cdlstalledpattern",
-    "cdlsticksandwich", "cdltakuri", "cdltasukigap", "cdlthrusting",
-    "cdltristar", "cdlunique3river", "cdlupsidegap2crows", "cdlxsidegap3methods",
-    # Statistic Functions
-    "beta", "correl", "linearreg", "linearreg_angle", "linearreg_intercept",
-    "linearreg_slope", "stddev", "tsf", "var",
-    # Price Transform
-    "avgprice", "medprice", "typprice", "wclprice",
-    # Math Transform
-    "add", "div", "max", "maxindex", "min", "minindex", "minmax", "minmaxindex",
-    "mult", "sub", "sum",
-    # Math Operators
-    "acos", "asin", "atan", "ceil", "cos", "cosh", "exp", "floor", "ln",
-    "log10", "sin", "sinh", "sqrt", "tan", "tanh",
-    # Formula Engine
-    "CompiledFormula", "formula_eval", "formula_eval_dialect",
-    "operation_catalog_json", "factor_catalog_json", "operation_execute_json", "composite_execute_json", "factor_execute_json", "factor_cross_sectional_execute_json", "formula_eval_contract_json", "formula_eval_temporal_contract_json", "formula_eval_panel_contract_json", "formula_eval_cross_sectional_contract_json", "formula_compatibility_report_json", "formula_stream_execute_json",
-    # Visualization
-    "KlineChart", "KlineData",
-    # Streaming Indicators
-    "StreamingIndicator", "StreamingSMA", "StreamingEMA", "StreamingMACDEXT", "StreamingRSI",
-    # Exceptions
-    "FinkitError", "InsufficientDataError", "InvalidParameterError",
-    "IndicatorNotFoundError",
-    # Accessor
-    "register_accessor",
-]
+# The runtime computes __all__ from the native module. Declaring a frozen
+# list here would rot silently (it previously listed 170 names while the
+# runtime exported 449, and included two that did not exist at all).
+__all__: List[str]

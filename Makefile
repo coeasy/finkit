@@ -106,16 +106,22 @@ gen-c-header:
 verify-ffi:
 	python3 $(ROOT)/scripts/gen_c_header.py --check $(ROOT)/ffi/c-binding/include/finkit.h
 
-# ---- codegen: regenerate the C Rust wrappers from the indicator registry ---
-# `gen-c-binding` rewrites ffi/c-binding/src/{lib.rs -> include! generated.rs}
-# from docs/indicator_registry.json. `verify-bindings` fails CI if the
-# committed generated.rs has drifted from the registry. Python/Node emitters
-# can be generated on demand with scripts/gen_binding.py.
+# ---- codegen: C Rust wrappers ---------------------------------------------
+# `ffi/c-binding/src/{lib.rs -> include! generated.rs}` was emitted by
+# scripts/gen_binding.py from an `ffi` block in docs/indicator_registry.json.
+# That metadata moved to docs/ffi_registry.json, and the emitter now refuses to
+# run rather than write an empty binding, so there is no in-tree generator for
+# the C wrappers any more. `verify-ffi` (gen_c_header.py) is what keeps the
+# artifact honest: it fails when the symbols exported by `ffi/c-binding/src/*.rs`
+# (the registry-generated set in `generated.rs`, the fixed-template entry points
+# in `lib.rs`, and the research surface in `research.rs`) stop matching the
+# declarations in `ffi/c-binding/include/*.h`. `#[cfg(test)]`-gated exports are
+# ignored, since they are intentionally absent from a release build.
 gen-c-binding:
-	python3 $(ROOT)/scripts/gen_binding.py --lang c --rewrite-cbinding
+	@echo "no in-tree generator for ffi/c-binding/src/generated.rs;"
+	@echo "the FFI SSOT is docs/ffi_registry.json -- run 'make verify-ffi' to check it."
 
-verify-bindings:
-	python3 $(ROOT)/scripts/gen_binding.py --lang c --check
+verify-bindings: verify-all-bindings
 
 # ---- codegen: registry-driven drift check for the active FFI binding tier --
 # `verify-bindings-tier` drift-checks the **active tier** (Python, Node) against

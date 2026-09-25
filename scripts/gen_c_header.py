@@ -212,6 +212,92 @@ def signatures_of(text: str) -> dict[str, str]:
     return sigs
 
 
+C_BINDING_SRC = ROOT / "ffi/c-binding/src"
+C_BINDING_INCLUDE = ROOT / "ffi/c-binding/include"
+
+# `#[no_mangle] pub [unsafe] extern "C" fn <name>`, together with any attribute
+# run immediately above it (so a `#[cfg(test)]` guard can be detected).
+NO_MANGLE_RE = re.compile(
+    r"(?P<attrs>(?:#\[[^\]]*\]\s*)*)"
+    r'#\[no_mangle\]\s*pub\s+(?:unsafe\s+)?extern\s+"C"\s+fn\s+(?P<name>\w+)'
+)
+CFG_TEST_RE = re.compile(r"#\[cfg\(\s*test\s*\)\]")
+
+# A declaration in a C/C++ public header: `<MACRO> <return type> <name>(`.
+# Covers the generated indicator set (`TA_API ta_result_t ta_*`), the fixed
+# template API (`TA_API ta_version`, `TA_API void finkit_free_string`, ...) and
+# the research surface (`FINKIT_RESEARCH_API char *finkit_factor_study_json`).
+DECL_RE = re.compile(
+    r"^\s*(?:TA_API|FINKIT_RESEARCH_API)\s+[A-Za-z_][\w\s\*]*?"
+    r"\b(?P<name>(?:ta|finkit)_\w+)\s*\(",
+    re.MULTILINE,
+)
+
+
+def rust_c_exports() -> dict[str, str]:
+    """Every `#[no_mangle] extern "C"` symbol that ships in a release build.
+
+    Test-only exports (`#[cfg(test)]`) are excluded: they are intentionally
+    absent from the shipped DLL.
+    """
+    out: dict[str, str] = {}
+    for f in sorted(C_BINDING_SRC.glob("*.rs")):
+        text = f.read_text(encoding="utf-8", errors="replace")
+        for m in NO_MANGLE_RE.finditer(text):
+            if CFG_TEST_RE.search(m.group("attrs") or ""):
+                continue
+            out[m.group("name")] = f.name
+    return out
+
+
+def header_c_decls() -> dict[str, str]:
+    """Every C FFI function declared across `ffi/c-binding/include/*.h`."""
+    out: dict[str, str] = {}
+    for f in sorted(C_BINDING_INCLUDE.glob("*.h")):
+        text = f.read_text(encoding="utf-8", errors="replace")
+        for m in DECL_RE.finditer(text):
+            out[m.group("name")] = f.name
+    return out
+
+
+def check_c_binding() -> bool:
+    """The Rust C-binding must export exactly the functions the headers declare.
+
+    `ffi/c-binding/src/generated.rs` used to be emitted by `gen_binding.py`,
+    which now refuses to run: its input was `docs/indicator_registry.json`'s
+    `ffi` block, and that metadata moved to `docs/ffi_registry.json`. Nothing
+    checked the artifact afterwards, so a function could disappear from the Rust
+    side while the committed header kept promising it. Compare the two directly
+    instead of trusting that the frozen file is still whole.
+
+    The comparison spans *all* of `ffi/c-binding/src/*.rs`, not just
+    `generated.rs`: the fixed-template entry points (`ta_version`,
+    `ta_last_error`, `ta_factor_execute_json`, ...) live in `lib.rs` and the
+    research surface in `research.rs`, and both are declared in the headers.
+    """
+    if not C_BINDING_SRC.is_dir():
+        print(f"[check] FAILED: missing {C_BINDING_SRC}")
+        return False
+
+    exported = rust_c_exports()
+    heads = header_c_decls()
+    if not exported or not heads:
+        print(f"[check] FAILED: empty export set (rust={len(exported)}, headers={len(heads)})")
+        return False
+
+    missing = sorted(set(heads) - set(exported))  # declared but not exported
+    extra = sorted(set(exported) - set(heads))  # exported but undeclared
+    if not missing and not extra:
+        print(f"[check] OK: {len(exported)} C-binding exports match the headers")
+        return True
+    if missing:
+        print(f"[check] C-binding MISSING exports (declared, not exported): {missing}")
+    if extra:
+        print(f"[check] C-binding EXTRA exports (exported, not declared): {extra}")
+    print(f"[check] FAILED: headers({len(heads)}) vs c-binding({len(exported)})")
+    return False
+
+
 def check(header_path: Path) -> bool:
     generated = generate()
     current = header_path.read_text(encoding="utf-8")
@@ -219,7 +305,7 @@ def check(header_path: Path) -> bool:
     b = signatures_of(current)
     if a == b:
         print(f"[check] OK: {len(a)} indicator signatures match (ok)")
-        return True
+        return check_c_binding()
     missing = set(a) - set(b)
     extra = set(b) - set(a)
     differing = {k for k in set(a) & set(b) if a[k] != b[k]}

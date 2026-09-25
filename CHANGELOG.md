@@ -358,6 +358,84 @@ reused.
   use the same NumPy-direct wrapper shape, so the native surface is uniform and
   `optimize_python_bindings.py --check` covers `lib.rs` as well as
   `generated.rs`.
+- The NumPy-direct binding check never actually ran on a live branch: the only
+  workflow that invoked it was `apply-talib-performance-plan.yml`, whose `on:`
+  covers `fix/talib-performance-plan-20260904`. Because the check was dead, two
+  binding modules kept their list-returning wrappers — `features.rs` (40
+  numeric pyfunctions) and `transforms.rs` (5) — so `finkit.features.acf(...)`
+  and friends returned Python lists while every top-level numeric function
+  returned a NumPy array. Both modules are now NumPy-direct, and the check runs
+  in `ci.yml` over **every** binding source, not two hand-listed files.
+- The shipped type stub `ffi/python-binding/finkit/__init__.pyi` described an
+  API that does not exist. It declared a `StreamingIndicator` base class with a
+  `next()` method (the real classes have no base class and the method is
+  `update`), declared `cdlhomingsoldier` (the real name is `cdlhomingpigeon`),
+  omitted `StreamingMACD` entirely, and froze an `__all__` of 170 names while
+  the runtime exported 449. `__all__` is now declared as an annotation so it
+  cannot drift again, the streaming section documents the six documented
+  classes with their real signatures (`restore_state` is a static method), and
+  `scripts/check_python_stub.py` fails the build if the stub declares a name
+  the extension does not have.
+- Nine streaming classes were registered under their internal Rust struct name,
+  so Python users had to reach `finkit.PyStreamingAnchoredVwap`,
+  `finkit.PyStreamingPlusDi`, `finkit.PyStreamingStochRsi` and six others while
+  the other seventy followed the `Streaming*` convention. They now register as
+  `StreamingAnchoredVwap`, `StreamingPlusDi`, `StreamingStochRsi`, … .
+- The streaming section of `docs/api-reference-zh.md` documented an API that
+  cannot run: `StreamingMACD(fast=…, slow=…)` (the parameters are
+  `fast_period`/`slow_period`/`signal_period`), `save()` and
+  `from_state()` (the real methods are `save_state()` and the static
+  `restore_state(bytes)`), and `macd, signal, hist = update(price)` where
+  `update` returns a non-iterable `MACDResult`. `docs/api-reference.md` had no
+  Python streaming section at all; both documents now describe the common
+  interface and point at the generated catalog.
+- Five tests in `ffi/python-binding/tests/` failed against a real wheel, and the
+  live `python-wheels.yml` workflow runs them — so the Python release gate was
+  red. The compatibility layer that would have fixed them exists only in
+  `scripts/apply_perf_plan.py`, whose workflow triggers on
+  `fix/perf-contract-talib-parity-20260904`. The layer is now applied for real:
+  * `available_factor_libraries()` returned `array(['alpha158',
+    'worldquant101'])`. The blanket `_as_numpy_result` adapter used "this list
+    contains no containers" as its numeric predicate, which also matches a list
+    of *strings*, so `== [...]` raised "truth value of an array is ambiguous".
+    It now converts only lists of real numbers (`bool` excluded).
+  * `bollinger_bands(matype=1)` and `stoch(slowk_matype=1)` raised a bare
+    `ValueError`, so `except finkit.InvalidParameterError` did not catch them.
+  * `sar` discarded the acceleration-factor series the engine computes with it,
+    leaving no way to reach it from Python; `sar_with_af` now exposes it.
+  * `CompiledFormula` had no explicit name for the owned/context-retaining
+    evaluation mode; `eval_owned` is now an alias for `eval`.
+- `InsufficientDataError` and `InvalidParameterError` inherited only from
+  `FinkitError`, and `IndicatorNotFoundError` from `FinkitError` alone, so a
+  caller writing `except ValueError` or `except KeyError` missed them. They now
+  also inherit from the matching built-in, which is what the documented
+  semantic names were always meant to specialise.
+- The C-binding export gate was checking roughly one third of the ABI. It
+  compared the committed headers against `ffi/c-binding/src/generated.rs` only,
+  so the 18 fixed-template entry points in `lib.rs` (`ta_version`,
+  `ta_last_error`, `ta_factor_execute_json`, `finkit_free_string`, ...) and the
+  3 research functions in `research.rs` were never verified — 21 of the 99
+  shipped exports could have disappeared from the Rust side while the header
+  kept promising them. `scripts/gen_c_header.py --check` now scans every
+  `ffi/c-binding/src/*.rs` and every `ffi/c-binding/include/*.h` and compares in
+  both directions, correctly ignoring `#[cfg(test)]`-gated exports such as
+  `ta_ffi_panic_test` (deliberately absent from a release build). Cross-checked
+  against the shipped DLL's PE export table: 95 `ta_*` plus 4 `finkit_*`
+  exports, matching the headers one-for-one.
+- That gate had never run in CI either — it was reachable only through
+  `make verify-ffi`, which no workflow invokes. It is now a step in `ci.yml`'s
+  `binding-ssot` job, alongside the Python binding contracts.
+- `scripts/check_python_stub.py` ran its dynamic half whenever *any* `finkit`
+  was importable, so on a machine with an older wheel in `site-packages` it
+  failed against a build the developer never touched — and, worse, it could
+  report success after validating the wrong build. The dynamic check is now
+  opt-in (`--require-extension`, or `--expect-prefix` to name the build), and
+  `python-wheels.yml` pins the freshly installed wheel with
+  `--expect-prefix "$pythonLocation"`.
+- Documentation counts that had drifted by one: `docs/indicator_registry.json`
+  holds 235 indicators, not 236, so 157 of them have no FFI binding rather than
+  158. Corrected in `docs/language-bindings.md` and in the matching comments in
+  `scripts/check_coverage.py` and `scripts/sync_bindings.py`.
 
 ## [0.1.15] - 2026-09-11
 

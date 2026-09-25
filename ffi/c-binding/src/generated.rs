@@ -1,7 +1,14 @@
 // ─────────────────────────────────────────────────────────────────────
 // GENERATED FILE — do not edit by hand.
-// Source of truth: docs/indicator_registry.json (ffi block).
-// Regenerate with: python3 scripts/gen_binding.py --lang c --rewrite-cbinding
+// Source of truth: docs/ffi_registry.json (the FFI SSOT).
+//
+// This file was emitted by `scripts/gen_binding.py` from an `ffi` block that
+// used to live in docs/indicator_registry.json. That block moved to
+// docs/ffi_registry.json and the emitter now refuses to run, so no in-tree
+// generator reproduces this file today. It is kept consistent with the
+// registry, and `scripts/gen_c_header.py --check` fails if the exported
+// `ta_*` symbols stop matching the committed header (which is generated from
+// the registry).
 // ─────────────────────────────────────────────────────────────────────
 
 #[no_mangle]

@@ -133,6 +133,18 @@ jobs:
           cd "$RUNNER_TEMP"
           python -m pytest "$GITHUB_WORKSPACE/ffi/python-binding/tests" -q
 
+      # The wheel is installed and we are outside the source tree, so
+      # `import finkit` resolves to the artifact under test. This is the only
+      # check that can prove a stub declaration actually exists in the build.
+      # `--expect-prefix` pins the interpreter's own site-packages, so a stale
+      # or shadowing install can never make the check pass vacuously.
+      - name: Check the Python stub against the installed wheel
+        shell: bash
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          python scripts/check_python_stub.py \
+            --require-extension --expect-prefix "${{ env.pythonLocation }}"
+
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v7
         with:

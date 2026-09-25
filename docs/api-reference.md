@@ -588,6 +588,69 @@ doji_signals = ta.cdl_doji(open, high, low, close)
 double_tops = ta.detect_double_top(high)
 ```
 
+### Streaming Indicators
+
+Streaming indicators update in O(1) per bar instead of recomputing the whole
+series. The Python binding exports **88** `Streaming*` classes; all of them share
+the same method set, and **26** additionally support state persistence. The
+complete list is in the generated
+[streaming indicator catalog](generated/streaming-indicators.md).
+
+Common interface (constructor parameters differ per indicator):
+
+```python
+streaming = ta.StreamingSMA(period=20)
+
+streaming.update(value)          # single bar; NaN until the warmup completes
+streaming.update_batch(values)   # batch update, returns an equal-length list
+streaming.is_ready()             # enough samples accumulated?
+streaming.count()                # samples received so far
+streaming.reset()                # clear internal state
+```
+
+Multi-input indicators (for example `StreamingATR`) take the extra series as
+positional arguments to `update`.
+
+State persistence: `save_state()` is an **instance method** returning serialisable
+`bytes`, while `restore_state()` is a **static method** that takes those bytes and
+returns a **new instance** — it does not mutate the caller:
+
+```python
+state = streaming.save_state()
+resumed = ta.StreamingSMA.restore_state(state)   # call on the class, not the instance
+```
+
+> Writing `streaming.restore_state(state)` does not raise, but the returned object
+> is discarded and the caller is left unchanged. Always call it on the class.
+
+Indicators with internal signal state (such as `StreamingMACD`) do not provide
+persistence; check the
+[streaming indicator catalog](generated/streaming-indicators.md) for the current
+set.
+
+```python
+# Relative Strength Index
+streaming_rsi = ta.StreamingRSI(period=14)
+for price in prices:
+    rsi_value = streaming_rsi.update(price)
+
+# MACD — update() returns a MACDResult, not a tuple
+streaming_macd = ta.StreamingMACD(fast_period=12, slow_period=26, signal_period=9)
+result = streaming_macd.update(price)
+print(result.macd, result.signal, result.histogram)
+
+# Average True Range — three positional inputs
+streaming_atr = ta.StreamingATR(period=14)
+for h, l, c in zip(high, low, close):
+    atr_value = streaming_atr.update(h, l, c)
+```
+
+`MACDResult` exposes `.macd` / `.signal` / `.histogram`; it is **not iterable**, so
+`macd, signal, hist = ...` raises `TypeError`. `update_batch()` returns a list of
+`MACDResult`. Use
+`ta.StreamingMACDEXT(fast_period=12, slow_period=26, signal_period=9, fast_ma="ema", slow_ma="ema", signal_ma="ema")`
+when you need configurable moving-average types.
+
 ## Node.js API
 
 ### Installation

@@ -7,13 +7,35 @@ claim registry installation commands before a clean consumer test exists.
 ## Before creating the tag
 
 - [ ] Confirm the intended release commit contains the v0.2.0 workspace version.
-- [ ] Run `python scripts/check_versions.py`.
-- [ ] Run `python scripts/check_changelog.py CHANGELOG.md`.
-- [ ] Run `python scripts/gen_ssot_docs.py --check` and
+- [ ] Run the version/docs contracts:
+      `python scripts/check_versions.py`,
+      `python scripts/check_changelog.py CHANGELOG.md`,
+      `python scripts/gen_ssot_docs.py --check`,
       `python scripts/check_docs_links.py`.
-- [ ] Run `cargo fmt --all -- --check`.
+- [ ] Run the binding SSOT contracts (CI job `binding-ssot`):
+      `python scripts/sync_bindings.py --check --all`,
+      `python scripts/optimize_python_bindings.py --check ffi/python-binding/src/*.rs`,
+      `python scripts/check_python_stub.py`,
+      `python scripts/check_streaming_registry_contract.py`,
+      `python scripts/gen_c_header.py --check ffi/c-binding/include/finkit.h`.
+- [ ] Run the remaining registry/research gates:
+      `python scripts/check_orphan_modules.py`,
+      `python scripts/check_warning_contracts.py`,
+      `python scripts/check_research_ssot.py`,
+      `python scripts/gen_dialect_coverage.py --check`,
+      `python scripts/gen_talib_numeric_contract.py --check`.
+- [ ] Run `cargo fmt --all -- --check` and `cargo check --workspace --locked`.
 - [ ] Run the Rust test and package gates required by CI:
       `cargo test -p finkit --locked` and `cargo package -p finkit --locked`.
+- [ ] Build the Python wheel, install it into a throwaway venv, then run
+      `python scripts/check_python_stub.py --require-extension --expect-prefix <venv>`
+      and the binding test suite from outside the source tree. `--expect-prefix`
+      is required: without it the check can silently validate a stale install.
+- [ ] Repack the native C/C++ archive from the freshly built
+      `finkit_ffi.dll`/`.lib` plus `ffi/c-binding/include/*` and `LICENSE`, and
+      refresh the `size_bytes`/`sha256` records in `dist/manifest.json` and
+      `dist/python/windows-x64/manifest.json`. The archive has no in-tree
+      builder, so this step is manual by design.
 - [ ] Verify the tag will be exactly `v0.2.0`; `publish.yml` rejects a mismatch.
 - [ ] Confirm the GitHub Actions secret `CARGO_REGISTRY_TOKEN` is available to
       the repository and has permission to publish `finkit`.

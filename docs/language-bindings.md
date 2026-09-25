@@ -46,11 +46,11 @@ stored bodies. It is wired into CI (`.github/workflows/ci.yml`, job
 
 ### Registry round-trip invariants
 
-`docs/indicator_registry.json` (236 indicators, rich per-indicator metadata) is
+`docs/indicator_registry.json` (235 indicators, rich per-indicator metadata) is
 a **superset** of `docs/ffi_registry.json` (78 indicators carrying binding
-bodies) — 158 indicators have no binding at all. `sync_bindings.py` must
-therefore never rebuild the core registry *from* the FFI one. Two invariants are
-load-bearing:
+bodies) — the remaining 157 indicators have no binding at all. `sync_bindings.py`
+must therefore never rebuild the core registry *from* the FFI one. Two invariants
+are load-bearing:
 
 1. **`--discover` is superset-preserving.** It keeps every entry already in the
    core registry, in its existing order, and only appends names that carry core
@@ -58,7 +58,7 @@ load-bearing:
    (for example `DARVAS_BOX`, `RENKO` — dispatched through a `match` and
    deliberately without a core entry) must not spring into existence. Without
    this, running `--discover` on a clean checkout — where the transient Python
-   overlay is absent and the FFI SSOT is the fallback — deleted all 158
+   overlay is absent and the FFI SSOT is the fallback — deleted all 157
    binding-less indicators.
 2. **Both registries are written with `\n` line endings.** The default
    translation to `os.linesep` made every Windows run rewrite both files as CRLF
@@ -213,6 +213,34 @@ find_package(finkit CONFIG REQUIRED)
 
 For ownership and lifetime rules, read [ffi/memory-contract.md](ffi/memory-contract.md) and [ffi/error-codes.md](ffi/error-codes.md).
 
+### ABI surface and its gate
+
+`ffi/c-binding/include/*.h` and the Rust `#[no_mangle] extern "C"` functions are
+two halves of one ABI. The Rust side is spread over three files that all export
+symbols, and all three are part of the contract:
+
+| Source | Symbols | What they are |
+| --- | --- | --- |
+| `ffi/c-binding/src/generated.rs` | 78 | one `ta_*` per indicator in `docs/ffi_registry.json` |
+| `ffi/c-binding/src/lib.rs` | 18 | fixed-template entry points (`ta_version`, `ta_last_error`, `ta_factor_execute_json`, `finkit_free_string`, ...) |
+| `ffi/c-binding/src/research.rs` | 3 | research surface (`finkit_factor_study_json`, `finkit_quant_evaluation_json`, `finkit_factor_study_free_string`) |
+
+That is **99 shipped exports**, matched one-for-one by 99 declarations across
+`ffi/c-binding/include/finkit.h` (96) and `finkit_research.h` (3).
+
+`python scripts/gen_c_header.py --check ffi/c-binding/include/finkit.h` asserts
+that match in both directions and is wired into CI (`.github/workflows/ci.yml`,
+job `binding-ssot`). It scans *all* of `ffi/c-binding/src/*.rs`: an earlier
+version only looked at `generated.rs`, which left 21 real exports unverified.
+`#[cfg(test)]`-gated exports (for example `ta_ffi_panic_test`) are correctly
+ignored, because they are absent from a release build.
+
+`generated.rs` no longer has an in-tree generator — `scripts/gen_binding.py` used
+to emit it from an `ffi` block in `docs/indicator_registry.json`, but that
+metadata now lives in `docs/ffi_registry.json` and the emitter refuses to run
+rather than write an empty binding. `make verify-ffi` is what keeps the frozen
+artifact honest.
+
 ## Go/CGO
 
 The canonical nested Go module is:
@@ -336,5 +364,29 @@ python scripts/check_versions.py
 python scripts/gen_ssot_docs.py --check
 python scripts/check_docs_links.py
 ```
+
+Binding SSOT contracts (all wired into `ci.yml`, job `binding-ssot`):
+
+```bash
+python scripts/sync_bindings.py --check --all
+python scripts/optimize_python_bindings.py --check ffi/python-binding/src/*.rs
+python scripts/check_python_stub.py                     # static half
+python scripts/check_streaming_registry_contract.py
+python scripts/gen_c_header.py --check ffi/c-binding/include/finkit.h
+```
+
+The strong half of the stub check needs a built wheel, so it runs from
+`python-wheels.yml` after the wheel is installed:
+
+```bash
+python scripts/check_python_stub.py \
+  --require-extension --expect-prefix "$pythonLocation"
+```
+
+`--require-extension` makes "finkit not importable" a failure instead of a skip,
+and `--expect-prefix` pins the build under test so a stale or shadowing install
+cannot make the check pass vacuously. The check is opt-in for exactly that
+reason: importing whatever `finkit` happens to be on `sys.path` would fail
+against a stale site-packages copy, or silently validate the wrong build.
 
 Multi-language packaging is defined by `.github/workflows/multilang-release.yml` and `.github/workflows/multilang-cross-platform.yml`. See [development.md](development.md) and [troubleshooting.md](troubleshooting.md) for diagnosis details.

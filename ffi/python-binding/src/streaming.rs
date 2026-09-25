@@ -247,8 +247,8 @@ py_streaming_f64_f64_default!(
     "Streaming Hilbert Transform Dominant Cycle Phase"
 );
 py_streaming_f64_f64_default!(
-    PyStreamingHtTrendline,
     StreamingHtTrendline,
+    finkit::streaming::indicators::StreamingHtTrendline,
     "Streaming Hilbert Transform Instantaneous Trendline"
 );
 py_streaming_f64_f64_default!(
@@ -257,8 +257,8 @@ py_streaming_f64_f64_default!(
     "Streaming Hilbert Transform Trend Mode"
 );
 py_streaming_f64_f64_default!(
-    PyStreamingHtSine,
     StreamingHtSine,
+    finkit::streaming::indicators::StreamingHtSine,
     "Streaming Hilbert Transform Sine Wave"
 );
 
@@ -611,8 +611,8 @@ macro_rules! py_streaming_f64_f64_4period {
 }
 
 py_streaming_f64_f64_4period!(
-    PyStreamingStochRsi,
     StreamingStochRsi,
+    finkit::streaming::indicators::StreamingStochRsi,
     "Streaming Stochastic RSI"
 );
 
@@ -894,8 +894,16 @@ py_streaming_hlc_f64!(
 );
 py_streaming_hlc_f64!(StreamingADXR, StreamingAdxr, "Streaming ADXR");
 py_streaming_hlc_f64!(StreamingDX, StreamingDx, "Streaming DX");
-py_streaming_hlc_f64!(PyStreamingMinusDi, StreamingMinusDi, "Streaming Minus DI");
-py_streaming_hlc_f64!(PyStreamingPlusDi, StreamingPlusDi, "Streaming Plus DI");
+py_streaming_hlc_f64!(
+    StreamingMinusDi,
+    finkit::streaming::indicators::StreamingMinusDi,
+    "Streaming Minus DI"
+);
+py_streaming_hlc_f64!(
+    StreamingPlusDi,
+    finkit::streaming::indicators::StreamingPlusDi,
+    "Streaming Plus DI"
+);
 py_streaming_hlc_f64!(StreamingCHOP, StreamingChop, "Streaming Choppiness Index");
 
 macro_rules! py_streaming_hl_f64 {
@@ -1382,8 +1390,8 @@ py_streaming_ohlcv_f64!(StreamingBR, StreamingBr, "Streaming BR");
 py_streaming_ohlcv_f64!(StreamingCR, StreamingCr, "Streaming CR");
 py_streaming_ohlcv_f64!(StreamingVR, StreamingVr, "Streaming VR");
 py_streaming_ohlcv_f64!(
-    PyStreamingForceIndex,
     StreamingForceIndex,
+    finkit::streaming::indicators::StreamingForceIndex,
     "Streaming Force Index"
 );
 py_streaming_ohlcv_f64!(StreamingEOM, StreamingEom, "Streaming Ease of Movement");
@@ -1465,8 +1473,8 @@ py_streaming_ohlcv_f64_default!(
 );
 py_streaming_ohlcv_f64_default!(StreamingPVT, StreamingPvt, "Streaming Price Volume Trend");
 py_streaming_ohlcv_f64_default!(
-    PyStreamingAnchoredVwap,
     StreamingAnchoredVwap,
+    finkit::streaming::indicators::StreamingAnchoredVwap,
     "Streaming Anchored VWAP"
 );
 py_streaming_ohlcv_f64_default!(
@@ -1613,8 +1621,8 @@ macro_rules! py_streaming_ohlcv_f64_period_ema {
 }
 
 py_streaming_ohlcv_f64_period_ema!(
-    PyStreamingMassIndex,
     StreamingMassIndex,
+    finkit::streaming::indicators::StreamingMassIndex,
     "Streaming Mass Index"
 );
 
@@ -1679,8 +1687,8 @@ macro_rules! py_streaming_ohlcv_f64_period_dev {
 }
 
 py_streaming_ohlcv_f64_period_dev!(
-    PyStreamingVwapBands,
     StreamingVwapBands,
+    finkit::streaming::indicators::StreamingVwapBands,
     "Streaming VWAP Bands"
 );
 
@@ -2107,9 +2115,9 @@ pub fn register_streaming_classes(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<StreamingPSY>()?;
     m.add_class::<StreamingHtDcperiod>()?;
     m.add_class::<StreamingHtDcphase>()?;
-    m.add_class::<PyStreamingHtTrendline>()?;
+    m.add_class::<StreamingHtTrendline>()?;
     m.add_class::<StreamingHtTrendmode>()?;
-    m.add_class::<PyStreamingHtSine>()?;
+    m.add_class::<StreamingHtSine>()?;
     m.add_class::<StreamingAPO>()?;
     m.add_class::<StreamingPPO>()?;
     m.add_class::<StreamingTSI>()?;
@@ -2119,7 +2127,7 @@ pub fn register_streaming_classes(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<StreamingVIDYA>()?;
     m.add_class::<StreamingBETA>()?;
     m.add_class::<StreamingCORREL>()?;
-    m.add_class::<PyStreamingStochRsi>()?;
+    m.add_class::<StreamingStochRsi>()?;
     m.add_class::<MACDResult>()?;
     m.add_class::<StreamingMACD>()?;
     m.add_class::<StreamingMACDEXT>()?;
@@ -2129,8 +2137,8 @@ pub fn register_streaming_classes(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<StreamingCCI>()?;
     m.add_class::<StreamingADXR>()?;
     m.add_class::<StreamingDX>()?;
-    m.add_class::<PyStreamingMinusDi>()?;
-    m.add_class::<PyStreamingPlusDi>()?;
+    m.add_class::<StreamingMinusDi>()?;
+    m.add_class::<StreamingPlusDi>()?;
     m.add_class::<StreamingCHOP>()?;
     m.add_class::<StreamingAROONOSC>()?;
     m.add_class::<StreamingULTOSC>()?;
@@ -2146,21 +2154,21 @@ pub fn register_streaming_classes(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<StreamingBR>()?;
     m.add_class::<StreamingCR>()?;
     m.add_class::<StreamingVR>()?;
-    m.add_class::<PyStreamingForceIndex>()?;
+    m.add_class::<StreamingForceIndex>()?;
     m.add_class::<StreamingEOM>()?;
     m.add_class::<StreamingVWMA>()?;
     m.add_class::<StreamingAD>()?;
     m.add_class::<StreamingPVI>()?;
     m.add_class::<StreamingNVI>()?;
     m.add_class::<StreamingPVT>()?;
-    m.add_class::<PyStreamingAnchoredVwap>()?;
+    m.add_class::<StreamingAnchoredVwap>()?;
     m.add_class::<StreamingAVGPRICE>()?;
     m.add_class::<StreamingMEDPRICE>()?;
     m.add_class::<StreamingTYPPRICE>()?;
     m.add_class::<StreamingAO>()?;
     m.add_class::<StreamingADOSC>()?;
-    m.add_class::<PyStreamingMassIndex>()?;
-    m.add_class::<PyStreamingVwapBands>()?;
+    m.add_class::<StreamingMassIndex>()?;
+    m.add_class::<StreamingVwapBands>()?;
     m.add_class::<StreamingCMF>()?;
     m.add_class::<StreamingTRANGE>()?;
     m.add_class::<StreamingDONCHIAN>()?;

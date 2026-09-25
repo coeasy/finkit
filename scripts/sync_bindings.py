@@ -231,8 +231,8 @@ def _carries_core_metadata(item: dict) -> bool:
 
 
 def save_registry(reg: dict) -> None:
-    # The core registry is a *superset* of the FFI one: 236 indicators against
-    # the FFI SSOT's 78, because 158 of them have no binding at all.  It must
+    # The core registry is a *superset* of the FFI one: 235 indicators against
+    # the FFI SSOT's 78, because 157 of them have no binding at all.  It must
     # therefore be rebuilt as a superset-preserving overlay rather than
     # reconstructed from `reg`:
     #   1. keep every entry already checked in, in its existing order;

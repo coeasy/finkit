@@ -661,6 +661,27 @@ impl PyCompiledFormula {
         result_dict(py, self.stream_context.as_ref().unwrap(), result)
     }
 
+    /// Explicit alias for the owned/context-retaining evaluation mode.
+    ///
+    /// `eval` already retains the copied stream context so `append_bar` can keep
+    /// extending it; this name makes that choice explicit at the call site, so
+    /// batch users converge on `eval_zero_copy` and streaming users on
+    /// `eval_owned` instead of inferring the mode from `eval`.
+    #[pyo3(signature = (open, high, low, close, volume, amount=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn eval_owned<'py>(
+        &mut self,
+        py: Python<'py>,
+        open: PyReadonlyArray1<'py, f64>,
+        high: PyReadonlyArray1<'py, f64>,
+        low: PyReadonlyArray1<'py, f64>,
+        close: PyReadonlyArray1<'py, f64>,
+        volume: PyReadonlyArray1<'py, f64>,
+        amount: Option<PyReadonlyArray1<'py, f64>>,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        self.eval(py, open, high, low, close, volume, amount)
+    }
+
     /// Evaluate without copying the contiguous NumPy OHLCV inputs.
     ///
     /// Common pure indicator formulas reuse the exact same canonical kernels

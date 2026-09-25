@@ -49,7 +49,13 @@ DELEGATING_FACADES = {
     ("core/src/features/rolling_stats.rs", "linear_regression_slope"): "simple_slope",
     ("core/src/features/importance.rs", "mutual_info_discrete"): "mutual_information_discrete",
     ("core/src/features/importance.rs", "mutual_info_continuous"): "mutual_information_continuous",
-    ("ffi/python-binding/src/features.rs", "forward_return"): "features::forward_return",
+    # `optimize_python_bindings.py` rewrites a numeric pyfunction into a
+    # `vec_<name>_impl` body plus a NumPy-direct wrapper that keeps the public
+    # name. The delegation is therefore two hops -- the wrapper calls the impl,
+    # and the impl calls the canonical owner -- so both hops are registered and
+    # the whole chain stays mechanically verified.
+    ("ffi/python-binding/src/features.rs", "forward_return"): "vec_forward_return_impl",
+    ("ffi/python-binding/src/features.rs", "vec_forward_return_impl"): "features::forward_return",
     ("wasm/src/lib.rs", "sortino_ratio"): "indicators::sortino_ratio",
     ("wasm/src/lib.rs", "max_drawdown"): "indicators::max_drawdown",
 }
