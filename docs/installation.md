@@ -415,7 +415,7 @@ the GitHub Release). Build one locally with `maturin`:
 
 ```bash
 maturin build --manifest-path ffi/python-binding/Cargo.toml \
-  --release --out dist/python --features abi3 --strip
+  --release --out dist/python/windows-x64 --features abi3 --strip
 ```
 
 Verify it by installing it *outside the source tree* and importing it there — a
@@ -423,9 +423,19 @@ successful compile does not prove the wheel loads:
 
 ```bash
 python -m venv /tmp/wheeltest
-/tmp/wheeltest/bin/pip install dist/python/finkit-*-abi3-*.whl
-/tmp/wheeltest/bin/python -c "import finkit; print(finkit.__version__)"
+/tmp/wheeltest/bin/pip install dist/python/windows-x64/finkit-*-abi3-*.whl
+/tmp/wheeltest/bin/python -c "import finkit, importlib.metadata as m; print(m.version('finkit'))"
 ```
+
+(`finkit` deliberately exposes no `__version__` attribute — read the installed
+distribution version through `importlib.metadata` as above.)
+
+> On Windows the `venv` path must be a native path (`D:/tmp/wheeltest`), not an
+> MSYS `/tmp/...` path: `python.exe` does not resolve MSYS mounts and
+> `python -m venv /tmp/x` fails silently — no error, no directory. If the target
+> interpreter has no network access, create the venv with
+> `--system-site-packages` and install the wheel with `--no-deps` so NumPy is
+> taken from the host.
 
 The OS-level installer targets (`scripts/build-installer.sh`,
 `scripts/build-installer-msi.cmd`) are **not buildable from a clean checkout**:
