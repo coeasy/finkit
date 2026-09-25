@@ -10,7 +10,7 @@
 //! - [`swing_high_low`] 用 N 根前 + N 根后的局部极值定义,但后 N 根是用 `..=i+N` 内的
 //!   已存在数据,**不参考**未发生的 K 线。
 //! - [`trend_reversal_confirm`] 的"反转中"信号在 `confirm_bars` 根后才输出,但**触发**
-//!   条件(close[i] 是 new_high_lookback 日新高)是已经发生的事实。
+//!   条件(close\[i\] 是 new_high_lookback 日新高)是已经发生的事实。
 
 use crate::error::{Result, TaError};
 use crate::patterns::common::{detect_peaks, detect_troughs};
@@ -183,8 +183,8 @@ pub fn swing_high_low(
 /// 在 `confirm_bars` 根后输出,避免未来函数。
 ///
 /// # 算法
-/// - "顶反转"信号 (`out[i] = -100`):close[j] 是 j 的 `new_high_lookback` 日新高
-///   **且** close[j+1..=j+confirm_bars] 范围内存在 close[k] < close[j] * (1 - drop_pct)
+/// - "顶反转"信号 (`out[i] = -100`):close\[j\] 是 j 的 `new_high_lookback` 日新高
+///   **且** close\[j+1..=j+confirm_bars\] 范围内存在 close\[k\] < close\[j\] * (1 - drop_pct)
 ///   → 在 j+confirm_bars 时刻输出。
 /// - "底反转"信号 (`out[i] = +100`):对称。
 ///

@@ -1,8 +1,8 @@
 //! Numeric Architecture v3 executor shared by batch, formula, factor and streaming frontends.
 //!
-//! Frontends compile semantic work once into [`HotExecutionPlan`]. This executor
+//! Frontends compile semantic work once into [`HotExecutionPlan`](crate::execution_plan::HotExecutionPlan). This executor
 //! then runs only numeric kernel/input/buffer/state/parameter addresses. Kernel
-//! implementations are supplied through [`KernelDispatcher`], keeping runtime
+//! implementations are supplied through [`KernelDispatcher`](crate::unified_executor::KernelDispatcher), keeping runtime
 //! dispatch independent from formula strings or registry hash maps.
 
 use crate::buffer_arena::{BufferArena, BufferArenaConfig, BufferArenaStats, BufferSlot};

@@ -2,23 +2,23 @@
 //!
 //! # Module organization
 //!
-//! - [`common`] — shared utilities (ATR pre-compute, candle/shadow helpers,
+//! - [`common`](crate::patterns::common) — shared utilities (ATR pre-compute, candle/shadow helpers,
 //!   trend/volume context). All pattern detectors should build on top of
 //!   these.
-//! - [`candlestick`] — 60+ TA-Lib compatible single/multi-bar K-line
+//! - [`candlestick`](crate::patterns::candlestick) — 60+ TA-Lib compatible single/multi-bar K-line
 //!   patterns (Doji, Hammer, Engulfing, Morning/Evening Star, etc.).
-//! - [`chart`] — 15+ chart-level patterns (H&S, Double Top/Bottom,
+//! - [`chart`](crate::patterns::chart) — 15+ chart-level patterns (H&S, Double Top/Bottom,
 //!   Triangles, Wedges, Flags, Pennants, Rectangles).
 //!
 //! # A-share extensions
 //!
-//! - [`astock_kline`] — 30 A-share specific K-line patterns (仙人指路,
+//! - [`astock_kline`](crate::patterns::astock_kline) — 30 A-share specific K-line patterns (仙人指路,
 //!   老鸭头, 多方炮, 空方炮, 三阳开泰, 红杏出墙, 蚂蚁上树, 梅开二度,
 //!   拨云见日, 海底捞月, 一阳/阴穿三线, etc.).
-//! - [`astock_ma`] — 15 moving-average combination patterns (金叉, 死叉,
+//! - [`astock_ma`](crate::patterns::astock_ma) — 15 moving-average combination patterns (金叉, 死叉,
 //!   银山谷, 金山谷, 死亡谷, 金蜘蛛, 死蜘蛛, 多/空头排列, 粘合, etc.).
-//! - [`harmonic`] — 5 harmonic patterns (AB=CD, Gartley, Bat, Butterfly, Crab).
-//! - [`classic_ext`] — 10 international classics (VCP, Cup & Handle,
+//! - [`harmonic`](crate::patterns::harmonic) — 5 harmonic patterns (AB=CD, Gartley, Bat, Butterfly, Crab).
+//! - [`classic_ext`](crate::patterns::classic_ext) — 10 international classics (VCP, Cup & Handle,
 //!   Rounding Top/Bottom, Island Reversal, Broadening Triangle, Diamond,
 //!   Harami-with-volume, Morning/Evening Star with trend filter).
 //!

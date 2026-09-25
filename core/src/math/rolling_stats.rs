@@ -244,7 +244,7 @@ pub fn stddev_into(input: &[f64], period: usize, nb_dev: f64, output: &mut [f64]
 /// reach Qlib parity through [`stddev_into`].
 ///
 /// Rather than re-deriving the moment scan, this delegates to the same
-/// [`TaVarianceState`] and applies the `n / (n - 1)` correction to its variance
+/// `TaVarianceState` and applies the `n / (n - 1)` correction to its variance
 /// output, so the tree path, the plan path and `STD` all share one arithmetic
 /// and cannot drift apart by more than a rounding step.
 ///

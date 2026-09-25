@@ -12,8 +12,8 @@
 //! interface for a *program*: its nodes have stable identity, so a caller can
 //! name an intermediate series, read it back by id after execution, and diff two
 //! graphs structurally. Crucially, this does **not** introduce a second execution
-//! engine. [`FactorGraph::build`] lowers the graph to an [`AstNode::Statements`]
-//! block and hands it to [`FormulaHotPlan::compile`], so a graph and the
+//! engine. [`FactorGraph::build`](crate::factor_graph::FactorGraph::build) lowers the graph to an [`AstNode::Statements`](crate::formula::ast::AstNode::Statements)
+//! block and hands it to [`FormulaHotPlan::compile`](crate::formula::hot_plan::FormulaHotPlan::compile), so a graph and the
 //! equivalent formula string share one lowering contract, one optimizer, one CSE
 //! pass, one dead-code elimination pass and one kernel dispatcher. A graph
 //! therefore cannot drift from a formula — and the differential test at the
@@ -25,12 +25,12 @@
 //! `CALL:<name>` and an arithmetic operator through `BINARY:<op>`. Those are
 //! genuinely different kernels: `CALL:SUB` is not dispatched, so a graph that
 //! modelled `fast - slow` as a call to the registry's `SUB` function would
-//! compile and then fail at execution. [`FactorOperation`] therefore keeps the
+//! compile and then fail at execution. [`FactorOperation`](crate::factor_graph::FactorOperation) therefore keeps the
 //! distinction explicit rather than inferring it from a function name:
 //!
-//! * [`FactorOperation::Call`] — a registry function, with numeric parameters;
-//! * [`FactorOperation::Binary`] — one of the `BINARY:*` operators, two operands;
-//! * [`FactorOperation::Constant`] — a scalar, which is what lets a factor scale
+//! * [`FactorOperation::Call`](crate::factor_graph::FactorOperation::Call) — a registry function, with numeric parameters;
+//! * [`FactorOperation::Binary`](crate::factor_graph::FactorOperation::Binary) — one of the `BINARY:*` operators, two operands;
+//! * [`FactorOperation::Constant`](crate::factor_graph::FactorOperation::Constant) — a scalar, which is what lets a factor scale
 //!   or offset a series.
 //!
 //! # Emission shape is load-bearing
@@ -43,7 +43,7 @@
 //!   `lower_variable`). A reference to a node that has not been emitted yet does
 //!   not fail — it silently becomes an **external input** of the same name. A
 //!   cycle is therefore detected *here*, by Kahn's algorithm, and reported as
-//!   [`FactorGraphError::Cycle`]; delegating that to the compute plan would not
+//!   [`FactorGraphError::Cycle`](crate::factor_graph::FactorGraphError::Cycle); delegating that to the compute plan would not
 //!   work, because the plan never observes a cycle, only a set of variables that
 //!   quietly resolve to external inputs.
 //! * Every node is defined by an **`Assignment`**, not only published as an
@@ -58,7 +58,7 @@
 //! One naming rule follows from the same layer: node ids are canonicalized the
 //! way the formula layer canonicalizes variables — trimmed and upper-cased — so
 //! `fast`, `FAST` and `" fast "` denote one node. They collide at declaration
-//! ([`FactorGraphError::DuplicateNode`]) instead of the later one silently
+//! ([`FactorGraphError::DuplicateNode`](crate::factor_graph::FactorGraphError::DuplicateNode)) instead of the later one silently
 //! shadowing the earlier in the plan.
 //!
 //! # Provenance

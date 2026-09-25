@@ -47,6 +47,7 @@ LANGS := $(sort $(LANGS))
 .PHONY: preflight lint
 .PHONY: gen-c-header verify-ffi gen-c-binding verify-bindings verify-bindings-tier verify-all-bindings
 .PHONY: build-native-archive verify-native-archive
+.PHONY: check-rustdoc check-orphans
 
 # ---- default ----------------------------------------------------------------
 all: preflight
@@ -133,6 +134,22 @@ build-native-archive:
 
 verify-native-archive:
 	python3 $(ROOT)/scripts/build_native_archive.py --verify
+
+# ---- documentation gate: rustdoc must be warning-free (ADR 0011) -----------
+# `cargo doc` *is* the generated interface reference, so a broken intra-doc link
+# is a broken link in the interface documentation. The script is the single
+# implementation of this gate; the `doc` job in .github/workflows/ci.yml runs
+# the same file, so a local run and CI cannot disagree.
+check-rustdoc:
+	bash $(ROOT)/scripts/check_rustdoc.sh
+
+# ---- repository hygiene: no orphan scripts, no unreachable workflows -------
+# A `scripts/` file with no consumer reads as documentation of a workflow that
+# does not exist; a workflow whose `on:` block can never match reads as a live
+# gate that never runs. Both are checked, and both must stay clean.
+check-orphans:
+	python3 $(ROOT)/scripts/check_orphan_scripts.py
+	python3 $(ROOT)/scripts/check_workflow_liveness.py
 
 verify-bindings: verify-all-bindings
 

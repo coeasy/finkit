@@ -18,6 +18,18 @@ claim registry installation commands before a clean consumer test exists.
       `python scripts/check_python_stub.py`,
       `python scripts/check_streaming_registry_contract.py`,
       `python scripts/gen_c_header.py --check ffi/c-binding/include/finkit.h`.
+- [ ] Run the repository hygiene gates, which fail on orphan automation
+      (`make check-orphans`):
+      `python scripts/check_orphan_scripts.py`,
+      `python scripts/check_workflow_liveness.py`.
+      A `scripts/` file with no consumer, or a workflow whose `on:` block can
+      never match an existing branch, reads as a live gate while doing nothing.
+- [ ] Run the rustdoc policy gate (`make check-rustdoc`), which is the
+      enforcement point for ADR 0011:
+      `bash scripts/check_rustdoc.sh`.
+      `cargo doc` on its own is not a gate — rustdoc lints are warn-by-default,
+      so broken intra-doc links still "build". Note that `RUSTFLAGS` does not
+      affect them; rustdoc reads `RUSTDOCFLAGS`.
 - [ ] Run the remaining registry/research gates:
       `python scripts/check_orphan_modules.py`,
       `python scripts/check_warning_contracts.py`,

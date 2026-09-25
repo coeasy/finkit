@@ -6,7 +6,7 @@
 //!
 //! # Complements `features::multi_period`
 //!
-//! - [`features::multi_period`](crate::features::multi_period) generates
+//! - `features::multi_period` generates
 //!   the same indicator across multiple period parameters (feature
 //!   engineering).
 //! - **This module** fuses signals from different timeframes (signal

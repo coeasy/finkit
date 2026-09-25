@@ -2,7 +2,7 @@
 //!
 //! Implementation of Ehlers' MAMA/FAMA: the MAMA line adapts its smoothing
 //! constant to the dominant cycle period estimated by the Hilbert transform.
-//! Uses a fixed-size Hilbert state from [`super::ht_dcperiod::HilbertState`].
+//! Uses a fixed-size Hilbert state from `HilbertState`.
 //!
 //! Reference: John F. Ehlers, "Rocket Science for Traders" (2001), Chapter 9.
 

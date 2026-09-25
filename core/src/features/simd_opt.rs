@@ -143,7 +143,7 @@ pub fn batch_minmax_simd(data: &[f64]) -> Array1<f64> {
 
 /// Pearson correlation coefficient between two arrays.
 ///
-/// Delegates to [`crate::math::centred_moments`], so the coefficient is
+/// Delegates to `crate::math::centred_moments`, so the coefficient is
 /// invariant under the offset of the data: `b = 2a + 3` scores exactly `1.0`
 /// whether `a` runs over `0..n` or over `1e9..1e9+n`. The previous one-pass
 /// form reported `0.667` at the large baseline — a silent 33% error in a

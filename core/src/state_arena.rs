@@ -2,7 +2,7 @@
 //!
 //! Unlike [`crate::buffer_arena::BufferArena`], which owns recyclable temporary
 //! arrays, `StateArena` stores long-lived rolling/streaming state. Compute plans
-//! address states through compact [`StateSlot`] ids so hot execution does not
+//! address states through compact [`StateSlot`](crate::state_arena::StateSlot) ids so hot execution does not
 //! require string-keyed lookups.
 
 use crate::compute::{ComputeNode, ComputeNodeId, ComputePlan};

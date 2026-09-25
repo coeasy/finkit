@@ -2,8 +2,8 @@
 //! and future backend dispatch layers.
 //!
 //! The module deliberately separates *semantic planning* from execution. A
-//! [`ComputePlan`] records dependency order and observable effects so future
-//! optimizers do not need to infer safety from syntax alone. [`FactorPlan`]
+//! [`ComputePlan`](crate::compute::ComputePlan) records dependency order and observable effects so future
+//! optimizers do not need to infer safety from syntax alone. [`FactorPlan`](crate::compute::FactorPlan)
 //! performs the same up-front dependency validation for the existing factor
 //! engine while preserving its public execution contract.
 

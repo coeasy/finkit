@@ -31,7 +31,7 @@
 //!
 //! # Performance
 //!
-//! The Hilbert chain in [`compute_hilbert_components`] is deliberately scalar.
+//! The Hilbert chain in `compute_hilbert_components` is deliberately scalar.
 //! Every bar's `detrender` / `Q1` / `jI` / `jQ` value is fed back from the two
 //! previous same-parity bars, so the recurrence cannot be batched, and the
 //! output must reproduce the TA-Lib bar-by-bar state machine exactly.

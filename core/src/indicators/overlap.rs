@@ -2134,7 +2134,7 @@ pub fn alma(input: &[f64], period: usize, offset_factor: f64, sigma: f64) -> Res
 /// Adaptive EMA whose smoothing constant scales with the absolute Chande Momentum
 /// Oscillator (CMO) ratio.
 ///
-/// VIDYA[t] = alpha * |CMO_ratio| * price[t] + (1 - alpha * |CMO_ratio|) * VIDYA[t-1]
+/// VIDYA\[t\] = alpha * |CMO_ratio| * price\[t\] + (1 - alpha * |CMO_ratio|) * VIDYA\[t-1\]
 /// where alpha = 2 / (long_period + 1).
 ///
 /// # Arguments
@@ -2785,7 +2785,7 @@ mod tests {
 /// * `power` - Damping power (typically 2, range 1-5)
 ///
 /// # Returns
-/// JMA values. First value is set to input[0], subsequent values converge.
+/// JMA values. First value is set to input\[0\], subsequent values converge.
 pub fn jma(input: &[f64], period: usize, phase: f64, power: f64) -> Result<Array1<f64>> {
     if period < 1 {
         return Err(TaError::InvalidParameter {

@@ -6,7 +6,7 @@
 //! * Positive values (close to +1) -- "buy" pressure
 //! * Negative values (close to -1) -- "sell" pressure
 //!
-//! Uses a fixed-size Hilbert state from [`super::ht_dcperiod::HilbertState`].
+//! Uses a fixed-size Hilbert state from `HilbertState`.
 
 use crate::impl_standard_methods;
 use crate::streaming::cycle::ht_dcperiod::HilbertState;

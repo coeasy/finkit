@@ -24,9 +24,9 @@
 //!
 //! ## 窗口统计函数（stateful, 单输入）
 //!
-//! - [`StreamingMax`]: 滚动窗口最大值
-//! - [`StreamingMin`]: 滚动窗口最小值
-//! - [`StreamingSum`]: 滚动窗口求和
+//! - [`StreamingMax`] — 滚动窗口最大值
+//! - [`StreamingMin`] — 滚动窗口最小值
+//! - [`StreamingSum`] — 滚动窗口求和
 //!
 //! 所有窗口函数在累积满 `period` 个数据点之前返回 `None`。
 

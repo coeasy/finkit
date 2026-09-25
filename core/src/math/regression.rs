@@ -242,7 +242,7 @@ fn variance_is_absent(window: &[f64]) -> bool {
 /// policy, not a property of the statistic, so finkit does not adopt it — the
 /// only windows finkit reports as `NaN` are ones where `R²` is genuinely
 /// undefined, i.e. where the response has no variance, detected by
-/// [`variance_is_absent`]. On data whose windows are either numerically constant
+/// `variance_is_absent`. On data whose windows are either numerically constant
 /// or comfortably non-degenerate, the two policies agree exactly; they can only
 /// differ in a narrow band of near-constant windows, where Qlib's absolute
 /// `2e-05` is scale-dependent and finkit's floor is not.

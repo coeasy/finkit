@@ -922,7 +922,7 @@ impl FormulaExecutor {
         self.execute_with_pool(ast, ctx, &mut pool)
     }
 
-    /// 使用 VarNameCache 的零拷贝执行路径，避免重复创建 Arc<str>
+    /// 使用 VarNameCache 的零拷贝执行路径，避免重复创建 `Arc<str>`
     pub fn execute_zero_copy_cached(
         &self,
         ast: &AstNode,

@@ -7,8 +7,8 @@
 //! or borrowed (`BorrowedFactorContext`) without changing custom factor
 //! callbacks.
 //!
-//! [`builtin`] adds the shipped factor libraries — see
-//! [`builtin::factor_library`].
+//! [`builtin`](crate::factors::builtin) adds the shipped factor libraries — see
+//! [`builtin::factor_library`](crate::factors::builtin::factor_library).
 
 pub mod builtin;
 
@@ -897,7 +897,7 @@ pub fn neutralize(values: &[f64], exposure: &[f64]) -> FactorResult<Vec<f64>> {
 ///
 /// # Why it is cached
 ///
-/// Building this compiles one [`FactorGraphPlan`] per expression — 184 of them.
+/// Building this compiles one [`FactorGraphPlan`](crate::factor_graph::FactorGraphPlan) per expression — 184 of them.
 /// The registry is immutable once built, so recompiling per call would make
 /// `FactorEngine::new` cost more than the evaluation it exists to set up, and
 /// `FactorEngine::new(builtin_factor_registry())` is the documented entry point.

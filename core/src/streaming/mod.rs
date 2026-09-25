@@ -2,7 +2,7 @@
 //!
 //! This module provides O(1) per-bar indicator updates via the
 //! [`StreamingIndicator`] trait, an [`Ohlcv`] abstraction for bar data,
-//! and [`IndicatorMeta`] for machine-readable indicator metadata.
+//! and [`IndicatorMeta`](crate::streaming::IndicatorMeta) for machine-readable indicator metadata.
 //!
 //! # Architecture
 //!

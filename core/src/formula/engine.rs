@@ -2195,7 +2195,7 @@ impl FormulaEngine {
         self.executor.execute_zero_copy(&formula.ast, ctx)
     }
 
-    /// 使用 VarNameCache 的零拷贝执行路径，避免重复创建 Arc<str>
+    /// 使用 VarNameCache 的零拷贝执行路径，避免重复创建 `Arc<str>`
     pub fn eval_zero_copy_cached(
         &mut self,
         source: &str,

@@ -5,8 +5,8 @@
 //! retained only within configured count/byte limits.
 //!
 //! Architecture v3 also needs *in-plan* reuse, not only reuse across calls.
-//! [`PlanBufferLayout`] performs dependency lifetime analysis once at compile
-//! time and maps logical compute-node values onto compact numeric [`BufferSlot`]
+//! [`PlanBufferLayout`](crate::buffer_arena::PlanBufferLayout) performs dependency lifetime analysis once at compile
+//! time and maps logical compute-node values onto compact numeric [`BufferSlot`](crate::buffer_arena::BufferSlot)
 //! ids. Hot executors can therefore address scratch storage only by slot and do
 //! not need string-keyed buffer maps or per-evaluation lifetime bookkeeping.
 

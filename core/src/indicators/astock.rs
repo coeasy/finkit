@@ -209,7 +209,7 @@ fn compute_winner_ratio(close: &[f64], volume: &[f64], start: usize, end: usize,
 ///
 /// # Formula
 /// For each bar `i`:
-/// - amount = close[i] * volume[i]
+/// - amount = close\[i\] * volume\[i\]
 /// - if amount > large_threshold: inflow += amount, count as "buy"
 /// - else: outflow += amount, count as "sell"
 /// - net = inflow - outflow
@@ -270,7 +270,7 @@ pub fn main_net_inflow(close: &[f64], volume: &[f64], large_threshold: f64) -> R
 /// For each bar `i` and period `p`:
 /// - typical = (high + low + close) / 3
 /// - if i < p: NaN
-/// - else: sum(typical[j] * volume[j] for j in [i-p+1, i])
+/// - else: sum(typical\[j\] * volume\[j\] for j in \[i-p+1, i\])
 ///
 /// # Arguments
 /// * `high` - High prices
@@ -438,7 +438,7 @@ pub fn consecutive_limit(limit_signal: &[f64]) -> Result<Array1<f64>> {
 /// Turnover Rate (换手率) — volume / free-float shares
 ///
 /// # Formula
-/// turnover[i] = volume[i] / free_float_shares[i]
+/// turnover\[i\] = volume\[i\] / free_float_shares\[i\]
 ///
 /// # Arguments
 /// * `volume` - Trading volume per bar

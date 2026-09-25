@@ -1500,7 +1500,7 @@ fn simd_bp_tr_scalar(
 
 /// Computes the Ultimate Oscillator raw series (buying pressure `bp` and true
 /// range `tr`) using a SIMD fast path on x86_64 AVX2, scalar fallback otherwise.
-/// See [`simd_bp_tr_avx2`] for the per-element formulas.
+/// See `simd_bp_tr_avx2` for the per-element formulas.
 pub fn simd_bp_tr(high: &[f64], low: &[f64], close: &[f64], bp: &mut [f64], tr: &mut [f64]) {
     let len = high
         .len()
@@ -2961,7 +2961,7 @@ pub fn simd_ht_dcphase(src: &[f64], out: &mut [f64]) {
 //   - HT_SINE:      ~38.56 ns   ->  ~15 ns/bar  (2.5x)
 
 /// 4-period weighted moving average (Hilbert smooth):
-///     smooth[i] = (4*price[i] + 3*price[i-1] + 2*price[i-2] + price[i-3]) / 10
+///     smooth\[i\] = (4*price\[i\] + 3*price\[i-1\] + 2*price\[i-2\] + price\[i-3\]) / 10
 ///
 /// AVX2 路径：每批处理 4 bars，权重 [4, 3, 2, 1] 直接用 `_mm256_fmadd_pd`
 /// 累加，最后乘 0.1。
@@ -3028,9 +3028,9 @@ unsafe fn ht_smooth_avx2(input: &[f64], out: &mut [f64], len: usize) {
 }
 
 /// 7-tap Hilbert detrender：
-///     a = 0.0962*s[i] + 0.5769*s[i-2] - 0.5769*s[i-4] - 0.0962*s[i-6]
+///     a = 0.0962*s\[i\] + 0.5769*s\[i-2\] - 0.5769*s\[i-4\] - 0.0962*s\[i-6\]
 ///     b = 0.075 *s[i-1] + 0.54 *s[i-3] + 0.075 *s[i-5]
-///     detrender[i] = a * b
+///     detrender\[i\] = a * b
 ///
 /// AVX2 路径：每批 4 bars 同时计算 a 和 b，最后用 `_mm256_mul_pd` 相乘。
 #[cfg(feature = "std")]
@@ -3112,13 +3112,13 @@ unsafe fn ht_detrender_avx2(smooth: &[f64], out: &mut [f64], len: usize) {
 }
 
 /// Hilbert 滤波链后端：
-///     in_phase[i]   = detrender[i-6]
-///     quadrature[i] = 0.0962*d[i] + 0.5769*d[i-2] - 0.5769*d[i-4] - 0.0962*d[i-6]
-///     j1[i]         = 0.0962*ip[i] + 0.5769*ip[i-2] - 0.5769*ip[i-4] - 0.0962*ip[i-6]
-///     i2[i]         = ip[i] - j1[i]
-///     j2[i]         = q[i] + ip[i]
-///     re[i]         = i2[i]*ip[i] + j2[i]*q[i]
-///     im[i]         = i2[i]*q[i]  - j2[i]*ip[i]
+///     in_phase\[i\]   = detrender\[i-6\]
+///     quadrature\[i\] = 0.0962*d\[i\] + 0.5769*d\[i-2\] - 0.5769*d\[i-4\] - 0.0962*d\[i-6\]
+///     j1\[i\]         = 0.0962*ip\[i\] + 0.5769*ip\[i-2\] - 0.5769*ip\[i-4\] - 0.0962*ip\[i-6\]
+///     i2\[i\]         = ip\[i\] - j1\[i\]
+///     j2\[i\]         = q\[i\] + ip\[i\]
+///     re\[i\]         = i2\[i\]*ip\[i\] + j2\[i\]*q\[i\]
+///     im\[i\]         = i2\[i\]*q\[i\]  - j2\[i\]*ip\[i\]
 ///
 /// 输出 phase 数组（弧度），最后一次 atan2 在 AVX2 之外逐 bar 处理
 /// （每 bar 1 个超越函数，无法 SIMD 化）。
@@ -3348,8 +3348,8 @@ unsafe fn max_diff_sum_avx2(a: &[f64], b: &[f64], period: usize) -> f64 {
 /// SIMD 双滚动求和初始化 (AR 用)。
 ///
 /// 同时计算：
-///   - sum_ho = sum(high[i] - open[i] for i in 0..period)
-///   - sum_ol = sum(open[i] - low[i]  for i in 0..period)
+///   - sum_ho = sum(high\[i\] - open\[i\] for i in 0..period)
+///   - sum_ol = sum(open\[i\] - low\[i\]  for i in 0..period)
 ///
 /// AVX2 路径：单遍 4-bar batch 同时算两条 sum。
 #[cfg(feature = "std")]
@@ -3402,8 +3402,8 @@ unsafe fn dual_diff_init_avx2(
 /// SIMD 双 max 滚动求和初始化 (BR 用)。
 ///
 /// 同时计算：
-///   - sum_up   = sum(max(0, high[i]   - close[i]) for i in 0..period)
-///   - sum_down = sum(max(0, close[i+1] - low[i])  for i in 0..period)
+///   - sum_up   = sum(max(0, high\[i\]   - close\[i\]) for i in 0..period)
+///   - sum_down = sum(max(0, close\[i+1\] - low\[i\])  for i in 0..period)
 ///
 /// 注：BR 的索引从 1 开始（j=1..=period），所以这里 `close[i]` 实际
 /// 是 close[i+1] 在原 BR 公式中。调用方负责传入正确的窗口。
@@ -3478,7 +3478,7 @@ unsafe fn dual_max_init_avx2(
 // P.3: SIMD kernels for simple indicators (MOM, BOP, AVGPRICE)
 // ============================================================================
 
-/// SIMD-accelerated Momentum (MOM): output[i] = input[i] - input[i - period]
+/// SIMD-accelerated Momentum (MOM): output\[i\] = input\[i\] - input\[i - period\]
 #[cfg(feature = "std")]
 pub fn simd_mom(input: &[f64], period: usize, result: &mut [f64]) {
     #[cfg(all(feature = "std", target_arch = "x86_64"))]

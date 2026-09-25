@@ -13,7 +13,7 @@
 //! default here is intentionally explicit and reproducible: strict three-bar
 //! fractals, alternating fractals, and a configurable minimum distance between
 //! stroke endpoints.  Applications that need a different school can change
-//! [`ChanConfig`] without changing the result model.
+//! [`ChanConfig`](crate::chan::ChanConfig) without changing the result model.
 
 use crate::error::{IndicatorError, Result};
 

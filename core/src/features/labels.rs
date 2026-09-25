@@ -10,7 +10,7 @@ use super::BarrierLabel;
 use crate::returns::{forward_return as core_forward_return, ReturnKind};
 use ndarray::Array1;
 
-/// Compute n-period forward log return: ln(close[i+n] / close[i]).
+/// Compute n-period forward log return: ln(close\[i+n\] / close\[i\]).
 ///
 /// Last n values will be NaN (no future data available).
 pub fn forward_return(close: &[f64], n: usize) -> Array1<f64> {
@@ -29,7 +29,7 @@ pub fn forward_return(close: &[f64], n: usize) -> Array1<f64> {
     )
 }
 
-/// Compute n-period forward arithmetic return: (close[i+n] - close[i]) / close[i].
+/// Compute n-period forward arithmetic return: (close\[i+n\] - close\[i\]) / close\[i\].
 pub fn forward_return_arithmetic(close: &[f64], n: usize) -> Array1<f64> {
     if n == 0 {
         return Array1::from_iter(close.iter().map(|&value| {

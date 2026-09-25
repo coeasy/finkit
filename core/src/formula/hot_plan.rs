@@ -194,7 +194,7 @@ impl FormulaHotPlan {
     /// case, so publishing the canonical form here would make the two modes
     /// disagree for a source such as `golden: CROSS(a, b)`. Callers that need to
     /// match a name case-insensitively — as
-    /// [`crate::factor_graph::GraphPlan::node_index`] does — must canonicalize
+    /// [`crate::factor_graph::FactorGraphPlan::node_index`] does — must canonicalize
     /// both sides.
     pub fn outputs(&self) -> &[FormulaOutputBinding] {
         &self.outputs

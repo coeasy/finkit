@@ -3,7 +3,7 @@
 //! [`crate::compute::ComputePlan`] is the logical/semantic DAG. It intentionally
 //! keeps human-readable operation labels for diagnostics, optimization and
 //! tooling. This module is the execution boundary: operation labels are parsed
-//! exactly once while compiling a [`HotExecutionPlan`], then discarded from the
+//! exactly once while compiling a [`HotExecutionPlan`](crate::execution_plan::HotExecutionPlan), then discarded from the
 //! hot nodes. Runtime executors address kernels, inputs, parameters, temporary
 //! buffers and persistent state only through compact numeric ids.
 

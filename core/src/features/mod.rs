@@ -5,10 +5,10 @@
 //!
 //! # Architecture
 //!
-//! - [`FeatureMatrix`] — 2D matrix of features (rows=time points, columns=features)
-//! - [`Feature`] — metadata describing a single feature column
-//! - [`FeatureEngine`] — trait for feature generators
-//! - [`FeatureSet`] — composable collection of feature generators
+//! - [`FeatureMatrix`](crate::features::FeatureMatrix) — 2D matrix of features (rows=time points, columns=features)
+//! - [`Feature`](crate::features::Feature) — metadata describing a single feature column
+//! - [`FeatureEngine`](crate::features::FeatureEngine) — trait for feature generators
+//! - [`FeatureSet`](crate::features::FeatureSet) — composable collection of feature generators
 //!
 //! # Example
 //!

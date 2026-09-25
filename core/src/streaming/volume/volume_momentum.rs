@@ -89,7 +89,7 @@ impl IndicatorMeta for StreamingVolumeMomentum {
     }
 }
 
-/// Streaming Volume Rate of Change = (Volume - Volume[n]) / Volume[n] * 100.
+/// Streaming Volume Rate of Change = (Volume - Volume\[n\]) / Volume\[n\] * 100.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamingVolumeRoc {
     period: usize,

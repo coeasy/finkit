@@ -55,7 +55,7 @@ pub fn classify_builtin_var(name: &str) -> Option<BuiltinVar> {
     }
 }
 
-/// 变量名缓存，用于避免热路径中重复创建 Arc<str>
+/// 变量名缓存，用于避免热路径中重复创建 `Arc<str>`
 #[derive(Debug, Default)]
 pub struct VarNameCache {
     cache: HashMap<String, VarName>,
@@ -66,7 +66,7 @@ impl VarNameCache {
         Self::default()
     }
 
-    /// 获取或创建 Arc<str>，避免重复分配
+    /// 获取或创建 `Arc<str>`，避免重复分配
     pub fn get_or_create(&mut self, name: &str) -> VarName {
         if let Some(arc) = self.cache.get(name) {
             arc.clone()
@@ -584,7 +584,7 @@ pub struct FormulaContext {
     pub em_data: Option<EmData>,
     /// 字符串映射表（用于函数参数传递，索引 -> 字符串）
     pub string_table: Vec<String>,
-    /// 变量存储（使用 Arc<str> 避免字符串克隆）
+    /// 变量存储（使用 `Arc<str>` 避免字符串克隆）
     pub variables: HashMap<VarName, Array1<f64>>,
     /// Ordered visual output channels emitted by the Formula AST.
     ///
@@ -944,7 +944,7 @@ impl FormulaContext {
         self.variables.insert(Arc::from(name), value);
     }
 
-    /// 设置变量（使用 Arc<str> 键，避免字符串克隆）
+    /// 设置变量（使用 `Arc<str>` 键，避免字符串克隆）
     pub fn set_variable_arc(&mut self, name: VarName, value: Array1<f64>) {
         self.variables.insert(name, value);
     }
@@ -958,7 +958,7 @@ impl FormulaContext {
         })
     }
 
-    /// 获取变量（使用 Arc<str> 键）
+    /// 获取变量（使用 `Arc<str>` 键）
     pub fn get_variable_arc(&self, name: &VarName) -> Option<&Array1<f64>> {
         self.variables.get(name)
     }

@@ -73,9 +73,30 @@ cargo test --workspace --doc --locked
 python scripts/check_versions.py
 python scripts/gen_ssot_docs.py --check
 python scripts/check_docs_links.py
+bash scripts/check_rustdoc.sh
+python scripts/check_orphan_scripts.py
+python scripts/check_workflow_liveness.py
 ```
 
 Do not remove `--locked` from CI-equivalent commands. `Cargo.lock` is part of the reproducibility contract.
+
+The last three are the repository-hygiene gates, also available as
+`make check-rustdoc` and `make check-orphans`:
+
+- `scripts/check_rustdoc.sh` is the enforcement point for ADR 0011 (see the
+  policy note at the top of `core/src/lib.rs`). `cargo doc` on its own is *not*
+  a gate: rustdoc lints are warn-by-default, so a crate whose API reference is
+  full of broken intra-doc links still exits 0. `RUSTFLAGS` does not change
+  that — rustdoc reads `RUSTDOCFLAGS`.
+- `scripts/check_orphan_scripts.py` fails when a file under `scripts/` has no
+  consumer anywhere in the tree. A dead script reads as documentation of a
+  workflow that no longer exists, and a second, unused implementation of a gate
+  silently lowers the bar for the one that runs.
+- `scripts/check_workflow_liveness.py` fails when a workflow can never be
+  triggered (every trigger branch-filtered, no filtered branch exists, and no
+  `workflow_dispatch`/`schedule`/`release`/`workflow_call`). It also reports
+  dormant branch filters on workflows that are still reachable, so a stale
+  `on:` block is visible without failing the build.
 
 ## 4. Version contract
 

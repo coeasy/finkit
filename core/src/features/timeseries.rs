@@ -22,7 +22,7 @@ pub fn lead(data: &[f64], n: usize) -> Array1<f64> {
     out
 }
 
-/// N-th order difference: data[i] - data[i-n].
+/// N-th order difference: data\[i\] - data\[i-n\].
 pub fn diff(data: &[f64], n: usize) -> Array1<f64> {
     let len = data.len();
     let mut out = Array1::from_elem(len, f64::NAN);
@@ -32,7 +32,7 @@ pub fn diff(data: &[f64], n: usize) -> Array1<f64> {
     out
 }
 
-/// Percentage change: (data[i] - data[i-n]) / data[i-n].
+/// Percentage change: (data\[i\] - data\[i-n\]) / data\[i-n\].
 pub fn pct_change(data: &[f64], n: usize) -> Array1<f64> {
     let len = data.len();
     let mut out = Array1::from_elem(len, f64::NAN);

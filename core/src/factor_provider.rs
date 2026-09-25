@@ -7,12 +7,12 @@
 //! failure modes that actually matter as distinct, actionable errors instead of
 //! one opaque failure:
 //!
-//! * [`FactorFactoryError::InvalidParameter`] — present, but unparseable or
+//! * [`FactorFactoryError::InvalidParameter`](crate::factor_provider::FactorFactoryError::InvalidParameter) — present, but unparseable or
 //!   outside the factor's contract;
-//! * [`FactorFactoryError::UnknownParameter`] — not accepted by the provider;
-//! * [`FactorFactoryError::DuplicateParameter`] — supplied more than once.
+//! * [`FactorFactoryError::UnknownParameter`](crate::factor_provider::FactorFactoryError::UnknownParameter) — not accepted by the provider;
+//! * [`FactorFactoryError::DuplicateParameter`](crate::factor_provider::FactorFactoryError::DuplicateParameter) — supplied more than once.
 //!
-//! [`FactorFactoryRequest::canonical_params`] produces a stable,
+//! [`FactorFactoryRequest::canonical_params`](crate::factor_provider::FactorFactoryRequest::canonical_params) produces a stable,
 //! order-independent parameter identity. That is exactly what a result-cache key
 //! needs, so it is deliberately a pure function of the parameter *set*:
 //! `a=1,b=2` and `b=2,a=1` canonicalise identically.

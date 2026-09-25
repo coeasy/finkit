@@ -1195,7 +1195,7 @@ pub fn volume_momentum(volume: &[f64], period: usize) -> Result<Array1<f64>> {
     Ok(output)
 }
 
-/// Volume Rate of Change = (Volume - Volume[n]) / Volume[n] * 100
+/// Volume Rate of Change = (Volume - Volume\[n\]) / Volume\[n\] * 100
 ///
 /// # Arguments
 /// * `volume` - Volume data

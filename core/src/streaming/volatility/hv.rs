@@ -3,7 +3,7 @@ use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 
 /// Streaming Historical Volatility (Close-to-Close).
 ///
-/// HV = StdDev(ln(C[i]/C[i-1]), period) × sqrt(annualization)
+/// HV = StdDev(ln(C\[i\]/C\[i-1\]), period) × sqrt(annualization)
 /// Input: single `f64` close price per bar.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamingHv {

@@ -7,7 +7,7 @@
 //! 命名遵循中文拼音风格（`v_shape_reversal` / `yang_engulfing` 等），与
 //! `super::astock_kline` 保持一致。
 //!
-//! All functions return `Result<PatternResult>` (Array1<i32>, TA-Lib 风格: 100/-100/0).
+//! All functions return `Result<PatternResult>` (`Array1<i32>`, TA-Lib 风格: 100/-100/0).
 
 use crate::error::{Result, TaError};
 use crate::patterns::common::*;

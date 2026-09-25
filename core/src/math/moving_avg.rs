@@ -711,7 +711,7 @@ pub fn ema_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> 
 }
 
 /// Compute EMA into a caller-owned buffer using the public-boundary AVX2/FMA
-/// kernel when available. This is intentionally separate from [`ema_into`]:
+/// kernel when available. This is intentionally separate from `ema_into`:
 /// formula execution and the Rust API keep the scalar/FMA recurrence for
 /// stable internal rounding, while the Python-owned-array path benefits from
 /// four-sample block prefixing.
@@ -894,7 +894,7 @@ pub fn wma_simd(input: &[f64], period: usize) -> Result<Array1<f64>> {
 }
 
 /// Compatibility alias for the historical SIMD WMA API. Uses the same
-/// caller-owned canonical kernel as [`wma_into`].
+/// caller-owned canonical kernel as `wma_into`.
 pub fn wma_into_simd(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> {
     wma_into(input, period, output)
 }

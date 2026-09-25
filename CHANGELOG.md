@@ -38,6 +38,19 @@ reused.
   trees can coexist and linker output is not reproducible), and offers
   `--verify` to confirm the archive on disk still matches the current build.
   Wired into `make build-native-archive` / `make verify-native-archive`.
+- `scripts/check_orphan_scripts.py`, a gate that fails when a file under
+  `scripts/` has no consumer anywhere in the tree. A dead script reads as
+  documentation of a workflow that no longer exists, and a second, unused
+  implementation of a gate silently lowers the bar for the one that runs.
+- `scripts/check_workflow_liveness.py`, a gate that fails when a GitHub Actions
+  workflow can never be triggered — every trigger is branch-filtered, no
+  filtered branch exists, and there is no `workflow_dispatch`/`schedule`/
+  `release`/`workflow_call`. It also reports *dormant* branch filters (filters
+  matching no existing branch) on workflows that are still reachable, so a
+  stale `on:` block is visible without failing the build.
+- An enforcement point for ADR 0011: `scripts/check_rustdoc.sh` now runs from
+  `make check-rustdoc` and from the CI `doc` job, so a local run and CI cannot
+  disagree about what "the public surface is documented" means.
 
 ### Changed
 
@@ -445,6 +458,36 @@ reused.
   holds 235 indicators, not 236, so 157 of them have no FFI binding rather than
   158. Corrected in `docs/language-bindings.md` and in the matching comments in
   `scripts/check_coverage.py` and `scripts/sync_bindings.py`.
+- The generated API reference had 137 rustdoc diagnostics, all of them silent.
+  `cargo doc` exits 0 because rustdoc lints are warn-by-default, and the CI
+  `doc` job set `RUSTFLAGS` — but rustdoc reads `RUSTDOCFLAGS`, so nothing was
+  denied. The bulk were broken intra-doc links: 62 were bare array indexing in
+  prose (`a[i] / b[i]`) that rustdoc read as links to an item named `i`, and
+  the module indexes in `math`/`patterns`/`features` used bare sibling names,
+  which do not resolve because rustdoc resolves a module's own `//!` links
+  against the parent scope. Fixed by escaping the indexing, adding crate-rooted
+  paths, and unlinking the targets that are private (`HilbertState`,
+  `TaVarianceState`, `ema_into`) or cross-crate (`FfiError`). Two of the
+  references were simply stale: `crate::factor_graph::GraphPlan` no longer
+  exists (`node_index` lives on `FactorGraphPlan`), and `math::simd_ops`
+  documented an AVX2 kernel name that is not in the tree. Eight
+  `invalid_html_tags` (`Arc<str>`, `Array1<i32>`) are now code spans. The build
+  is clean under `RUSTDOCFLAGS="-D warnings"`.
+- `.github/workflows/release-v014-orchestrator.yml` could never run and would
+  have failed if it had: its only trigger was a push to `release/v0.1.4`, a
+  branch that no longer exists, and its body asserted `VERSION = 0.1.4`, a
+  hard-coded commit SHA and a hard-coded workflow run id while the workspace is
+  at 0.2.0. Removed rather than left as a release gate that silently never fires.
+- Fifteen dead files under `scripts/`, found by the new orphan gate and each
+  removed only after establishing that it was superseded, broken, or falsely
+  documented: `check-versions.sh`/`.ps1` (the live gate is
+  `scripts/check_versions.py`, which the release checklist already names),
+  `with-path.sh`, `audit_talib_numeric_contract.mjs`,
+  `verify_python_binding.py`, `benchmark_full_coverage.py`,
+  `full_accuracy_diagnose.py`, `bench_alpha_vs_talib_python.py`,
+  `bench_gate.sh`, `bench_regression_check.sh`, `gen_compat_matrix.py`,
+  `gen_competitor_comparison.py`, `gen_performance_report.py`, and
+  `generated_samples/{node,python}_indicators.rs`.
 
 ## [0.1.15] - 2026-09-11
 

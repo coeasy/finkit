@@ -3,7 +3,7 @@
 use super::{Feature, FeatureMatrix};
 use ndarray::Array1;
 
-/// Compute element-wise ratio: a[i] / b[i].
+/// Compute element-wise ratio: a\[i\] / b\[i\].
 pub fn feature_ratio(a: &[f64], b: &[f64]) -> Array1<f64> {
     assert_eq!(a.len(), b.len());
     let mut out = Array1::zeros(a.len());
@@ -17,7 +17,7 @@ pub fn feature_ratio(a: &[f64], b: &[f64]) -> Array1<f64> {
     out
 }
 
-/// Compute element-wise spread: a[i] - b[i].
+/// Compute element-wise spread: a\[i\] - b\[i\].
 pub fn feature_spread(a: &[f64], b: &[f64]) -> Array1<f64> {
     assert_eq!(a.len(), b.len());
     Array1::from_iter(a.iter().zip(b.iter()).map(|(&x, &y)| x - y))
