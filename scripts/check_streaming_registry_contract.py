@@ -51,7 +51,26 @@ META_MACRO = re.compile(
     r'impl_indicator_meta!\(\s*(\w+)\s*,\s*"([^"]*)"\s*,\s*"([^"]*)"\s*,\s*"([^"]*)"'
 )
 META_IMPL = re.compile(r"impl IndicatorMeta for (\w+) \{(.*?)\n\}", re.S)
-FN_CATEGORY = r'fn category\(\) -> &\'static str \{\s*"([^"]*)"'
+FN_NAME_HEAD = r"fn name\(\) -> &'static str \{"
+FN_CATEGORY_HEAD = r"fn category\(\) -> &'static str \{"
+
+BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.S)
+
+
+def first_literal_after(blob: str, head: str) -> str | None:
+    """Return the first string literal in the body of the accessor `head`.
+
+    Comments are stripped first: a `//` note inside the body must not make the
+    accessor invisible to this gate (that is exactly how a real drift hides --
+    an extractor that only accepts `{ "literal"` silently skips the type).
+    """
+    match = re.search(head, blob)
+    if not match:
+        return None
+    tail = BLOCK_COMMENT.sub("", blob[match.end() :])
+    tail = "\n".join(line.split("//", 1)[0] for line in tail.splitlines())
+    literal = re.search(r'"([^"]*)"', tail)
+    return literal.group(1) if literal else None
 
 
 def read_registry() -> str:
@@ -93,18 +112,35 @@ def parse_metas() -> list[dict]:
                 }
             )
         for m in META_IMPL.finditer(text):
-            name = re.search(r'fn name\(\) -> &\'static str \{\s*"([^"]*)"', m.group(2))
-            category = re.search(FN_CATEGORY, m.group(2))
+            name = first_literal_after(m.group(2), FN_NAME_HEAD)
+            category = first_literal_after(m.group(2), FN_CATEGORY_HEAD)
             if name and category:
                 metas.append(
                     {
                         "type": m.group(1),
-                        "name": name.group(1),
-                        "category": category.group(1),
+                        "name": name,
+                        "category": category,
                         "file": str(pathlib.Path(path).relative_to(ROOT)),
                     }
                 )
     return metas
+
+
+def count_declared_impls() -> int:
+    """Number of `impl IndicatorMeta` blocks and macro calls in the crate.
+
+    Used as a self-check: the extractor must see every one of them, otherwise a
+    type silently escapes validation -- which is how the drift this gate exists
+    for would hide.
+    """
+    total = 0
+    for path in glob.glob(str(ROOT / "core/src/streaming/**/*.rs"), recursive=True):
+        if pathlib.Path(path).name == "macros.rs":
+            continue
+        text = pathlib.Path(path).read_text(encoding="utf-8")
+        total += len(META_IMPL.findall(text))
+        total += len(re.findall(r"impl_indicator_meta!\(", text))
+    return total
 
 
 def main() -> int:
@@ -112,16 +148,28 @@ def main() -> int:
     valid = parse_valid_categories(text)
     entries = parse_registry_entries(text)
     metas = parse_metas()
+    declared = count_declared_impls()
 
     undeclared = [m for m in metas if m["category"] not in valid]
     disagreements = [
         m for m in metas if m["name"] in entries and entries[m["name"]] != m["category"]
     ]
+    unreadable = declared - len(metas)
 
     print("[streaming-registry] IndicatorMeta vs registry contract")
     print(f"  declared categories : {len(valid)}")
     print(f"  registry entries    : {len(entries)}")
-    print(f"  IndicatorMeta impls : {len(metas)}")
+    print(f"  IndicatorMeta impls : {len(metas)} (declared {declared})")
+
+    if unreadable:
+        print(
+            f"\n[streaming-registry] {unreadable} `impl IndicatorMeta` block(s) could not be "
+            "read by the extractor, so they are NOT validated.\n"
+            "  Fix the extractor rather than the count: an unreadable block is an "
+            "unvalidated type."
+        )
+        print("\n[streaming-registry] FAIL")
+        return 1
 
     if undeclared:
         print("\n[streaming-registry] UNDECLARED category slugs:")

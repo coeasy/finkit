@@ -235,6 +235,15 @@ pub use builder::{Builder, IndicatorBuilder};
 #[cfg(feature = "serde")]
 pub use checkpoint::{CheckpointError, CheckpointState};
 pub use price_source::PriceSource;
-pub use registry::{all_indicators, IndicatorInfo, ParamInfo, RegistryDocument};
+// The discovery surface is re-exported as one coherent family so the paths in
+// `docs/api-reference.md` (`finkit::streaming::{all_indicators, by_id,
+// by_category, registry_document, VALID_CATEGORIES}`) actually resolve. Keep
+// these together: exporting `all_indicators` alone left its natural companions
+// (`by_id`, `by_category`) reachable only through `streaming::registry::`, which
+// no binding or doc ever used.
+pub use registry::{
+    all_indicators, by_category, by_id, registry_document, IndicatorInfo, ParamInfo,
+    RegistryDocument, VALID_CATEGORIES,
+};
 pub use traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
 pub use types::OhlcvBar;

@@ -368,18 +368,73 @@ See [../wasm/README.md](../wasm/README.md).
 
 ## 14. Verify versions and generated contracts
 
+The documentation gates (also run by `.github/workflows/docs-check.yml`):
+
 ```bash
 python scripts/check_versions.py
 python scripts/gen_ssot_docs.py --check
+python scripts/gen_dialect_coverage.py --check
 python scripts/check_docs_links.py
-cargo fmt --all -- --check
-cargo check --workspace --locked
-cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-cargo test -p finkit --locked
-cargo test --workspace --doc --locked
+python scripts/check_streaming_registry_contract.py
+python scripts/check_changelog.py CHANGELOG.md
 ```
 
+The code gates (`.github/workflows/ci.yml`):
+
+```bash
+python scripts/check_warning_contracts.py
+python scripts/check_orphan_modules.py
+python scripts/check_research_ssot.py
+python scripts/sync_bindings.py --check --all
+cargo fmt --all -- --check
+cargo check --workspace --all-targets --locked
+cargo clippy --workspace --all-targets --locked
+```
+
+**Test every crate the gate tests, not just `finkit`.** `cargo test -p finkit`
+does not build `finkit-ffi-common` or `finkit-ffi`, so a regression in either
+passes silently; CI runs them as separate jobs:
+
+```bash
+cargo test -p finkit -p finkit-factor-analysis -p finkit-cli \
+  -p finkit-visualization -p finkit-ffi-common -p finkit-ffi \
+  --locked --no-fail-fast -j 2
+cargo test -p finkit --doc --locked
+```
+
+Use `--no-fail-fast`: without it a failing target aborts the run, and you will
+count the failures of the *first* red target and mistake them for the total.
+
 The full next-release target/package matrix is defined in `.github/workflows/multilang-release.yml`.
+
+## 14a. Build an installable package
+
+The artifact the release process actually ships is the Python ABI3 wheel
+(`.github/workflows/python-wheels.yml` builds four of them and attaches them to
+the GitHub Release). Build one locally with `maturin`:
+
+```bash
+maturin build --manifest-path ffi/python-binding/Cargo.toml \
+  --release --out dist/python --features abi3 --strip
+```
+
+Verify it by installing it *outside the source tree* and importing it there — a
+successful compile does not prove the wheel loads:
+
+```bash
+python -m venv /tmp/wheeltest
+/tmp/wheeltest/bin/pip install dist/python/finkit-*-abi3-*.whl
+/tmp/wheeltest/bin/python -c "import finkit; print(finkit.__version__)"
+```
+
+The OS-level installer targets (`scripts/build-installer.sh`,
+`scripts/build-installer-msi.cmd`) are **not buildable from a clean checkout**:
+they stage a payload and then hand it to WiX, but the `packaging/wix/`
+product definition they reference has never been committed to this repository,
+and the WiX toolset is not installed by any workflow. Those scripts now fail
+with an explicit message naming the missing file instead of a mid-build tool
+error. `scripts/build-usage-packages.sh` is in the same state: its per-language
+verification tree (`packaging/usage/<lang>/`) is likewise absent.
 
 ## 15. Troubleshooting
 

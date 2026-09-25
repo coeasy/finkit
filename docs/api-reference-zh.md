@@ -40,19 +40,20 @@ Pine `request.security` 全语义、跨截面批量调度或 stateful 跨周期�
 
 ## 目录
 
-1. [重叠研究指标](#重叠研究指标)
-2. [动量指标](#动量指标)
-3. [成交量指标](#成交量指标)
-4. [波动率指标](#波动率指标)
-5. [周期指标](#周期指标)
-6. [价格变换](#价格变换)
-7. [统计指标](#统计指标)
-8. [K线形态识别](#k线形态识别)
-9. [图表形态识别](#图表形态识别)
-10. [经典形态指标](#经典形态指标)
-11. [流式指标](#流式指标)
-12. [公式引擎](#公式引擎)
-13. [跨市场信号公式](#跨市场信号公式)
+1. [跨市场信号公式](#跨市场信号公式)
+2. [重叠研究指标](#重叠研究指标)
+3. [动量指标](#动量指标)
+4. [成交量指标](#成交量指标)
+5. [波动率指标](#波动率指标)
+6. [周期指标](#周期指标)
+7. [价格变换](#价格变换)
+8. [统计指标](#统计指标)
+9. [K线形态识别](#k线形态识别)
+10. [图表形态识别](#图表形态识别)
+11. [经典形态指标](#经典形态指标)
+12. [流式指标](#流式指标)
+13. [指标注册表 API](#指标注册表-api)
+14. [公式引擎](#公式引擎)
 
 ---
 
@@ -1816,25 +1817,107 @@ for h, l, c in zip(high, low, close):
 
 ---
 
+## 指标注册表 API
+
+`finkit::streaming` 的注册表模块提供全部已支持指标的**静态元数据**，用于能力发现、文档生成与 JSON 导出。它与上文逐指标的 Python 用法互补：Python 侧面向「怎么算」，注册表面向「有哪些、属于哪一类、预热多少根」。
+
+```rust
+use finkit::streaming::{
+    all_indicators, by_category, by_id, registry_document, VALID_CATEGORIES,
+    IndicatorInfo, ParamInfo, RegistryDocument,
+};
+
+/// 返回全部已注册指标的元数据
+pub fn all_indicators() -> &'static [IndicatorInfo];
+
+/// 按规范名查找单个指标，例如 "SMA"
+pub fn by_id(name: &str) -> Option<&'static IndicatorInfo>;
+
+/// 返回某一类别下的全部指标，按注册顺序
+pub fn by_category(category: &str) -> Vec<&'static IndicatorInfo>;
+
+/// 构建用于 JSON 序列化的完整注册表文档
+pub fn registry_document() -> RegistryDocument;
+```
+
+### 数据类型
+
+```rust
+pub struct IndicatorInfo {
+    pub name: &'static str,
+    pub category: &'static str,       // 取值属于 VALID_CATEGORIES
+    pub description: &'static str,
+    pub params: &'static [ParamInfo],
+    pub convergence: usize,           // 默认参数下的预热根数
+    pub streaming: bool,              // 是否属于对外承诺的增量（流式）面
+}
+
+pub struct ParamInfo {
+    pub name: &'static str,
+    pub param_type: &'static str,     // "usize"、"f64" 或 "str"
+    pub default: &'static str,
+    pub description: &'static str,
+}
+
+pub struct RegistryDocument {
+    pub version: &'static str,
+    pub generated_at: Option<&'static str>,
+    pub indicators: &'static [IndicatorInfo],
+}
+```
+
+`convergence` 描述的是 `params` 中声明的**默认**配置所需的预热根数；若用更长的周期实例化，预热会更久。某个具体实例的精确预热值请读该实例上的 `IndicatorMeta::warm_up_period()`。
+
+`streaming` 是对**已发布增量面**的策展性声明，而不是对 crate 内每个 `Streaming*` 类型的普查。`breadth`、`pattern`、`fibonacci` 三类刻意标为 `false`：它们需要全市场或全形态的输入，而非单条 K 线序列。该规则由 `streaming::registry` 的 `test_registry_coverage` 钉住。
+
+### 类别词表
+
+`VALID_CATEGORIES` 是类别词表的唯一真源，共 15 个 slug：`overlap`、`momentum`、`volume`、`volatility`、`price_transform`、`cycle`、`statistics`、`math_transform`、`math_operators`、`pattern`、`smc`、`breadth`、`sentiment`、`fibonacci`、`astock`。
+
+指标自身返回的类别（无论来自注册表还是流式类型的 `IndicatorMeta::category()`）都会由 `scripts/check_streaming_registry_contract.py` 逐一核对。按类别筛选时请使用 `VALID_CATEGORIES`，不要硬编码 slug。
+
+### JSON 导出
+
+规范 JSON 快照位于 `docs/indicator_registry.json`，由 core 测试对照 `registry_document()` 校验，因此它不会与代码静默漂移：
+
+```rust
+use finkit::streaming::registry_document;
+use serde_json;
+
+let json = serde_json::to_string_pretty(&registry_document()).unwrap();
+// 写入 docs/indicator_registry.json，或通过 HTTP 提供
+```
+
+---
+
 ## 公式引擎
 
 公式引擎支持表达式计算，类似通达信/同花顺公式。
 
 ### 基础使用
 
+Python 侧的入口是模块级函数 `formula_eval`，它返回 `{输出名: ndarray}` 的字典。
+给语句加上 `名字:` 前缀即可命名输出：
+
 ```python
-engine = ta.FormulaEngine()
+out = ta.formula_eval(
+    "UPPER: MA(CLOSE, 20) + 2 * STDDEV(CLOSE, 20);",
+    open, high, low, close, volume,   # amount 可选，省略即 None
+)
+upper = out["UPPER"]
 
-# 计算布林带上轨
-result = engine.evaluate("""
-    MA(CLOSE, 20) + 2 * STDDEV(CLOSE, 20)
-""", close=close)
-
-# 计算自定义指标
-result = engine.evaluate("""
-    (CLOSE - MA(CLOSE, 20)) / STDDEV(CLOSE, 20)
-""", close=close)
+# 多输出：每条带名字的语句都会出现在返回字典里
+out = ta.formula_eval(
+    "UPPER: MA(CLOSE, 20) + 2 * STDDEV(CLOSE, 20);"
+    "ZSCORE: (CLOSE - MA(CLOSE, 20)) / STDDEV(CLOSE, 20);",
+    open, high, low, close, volume,
+)
+zscore = out["ZSCORE"]
 ```
+
+返回字典中除命名输出外还包含引擎生成的 `_CSE0`、`_CSE1`…（每条语句的表达式值）
+与 `__result__`（最后一条语句的结果）；匿名公式因此可以读 `out["__result__"]`。
+未预热的前若干根为 `NaN`。
 
 ### 高频执行建议
 
@@ -1852,7 +1935,7 @@ for _ in 0..iterations {
 ```
 
 `output` 长度必须等于 `ctx.data_len`。第一次执行完成预热后，公式执行器会复用内部缓冲区，
-适合批量扫描、回测和实时循环。
+适合批量扫描和实时循环。（finkit 本身不提供回测/选股能力，见上文产品边界。）
 
 ### 支持的表达式
 

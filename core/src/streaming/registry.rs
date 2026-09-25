@@ -24,7 +24,25 @@ pub struct IndicatorInfo {
     pub category: &'static str,
     pub description: &'static str,
     pub params: &'static [ParamInfo],
+    /// Bars the indicator needs before it emits a valid value, at the default
+    /// parameter values declared in [`IndicatorInfo::params`].
+    ///
+    /// This is a property of the *default* configuration, not of the period
+    /// argument: an indicator instantiated with a longer period warms up for
+    /// longer. Consumers that need the exact figure for a concrete instance
+    /// should read `IndicatorMeta::warm_up_period()` on that instance.
     pub convergence: usize,
+    /// Whether this indicator is part of the advertised incremental (streaming)
+    /// surface.
+    ///
+    /// `true` means the indicator can be updated one bar at a time through the
+    /// published streaming API. It is a curated claim about the shipped
+    /// surface, not a census of every `Streaming*` type in the crate: some
+    /// incremental implementations exist without being published here, and the
+    /// breadth / pattern / fibonacci categories are deliberately `false`
+    /// because they need market-wide or pattern-wide input rather than a
+    /// single series of bars. `streaming::registry`'s
+    /// `test_registry_coverage` pins that rule.
     pub streaming: bool,
 }
 
@@ -48,6 +66,13 @@ pub struct RegistryDocument {
 }
 
 /// Valid indicator category slugs.
+///
+/// This is the single source of truth for the vocabulary: every
+/// [`IndicatorInfo::category`] in this file must be one of these, and so must
+/// every `IndicatorMeta::category()` returned by a streaming type. Both halves
+/// are enforced — the first by this module's `test_valid_categories`, the
+/// second by `scripts/check_streaming_registry_contract.py` (plus a
+/// `debug_assert!` inside `impl_indicator_meta!`).
 pub const VALID_CATEGORIES: &[&str] = &[
     "overlap",
     "momentum",
@@ -2877,6 +2902,53 @@ mod tests {
             unique.len(),
             "duplicate indicator names detected"
         );
+    }
+
+    /// `by_id` / `by_category` are an index-cache implementation of the same
+    /// lookup `all_indicators()` provides by linear scan, and they are part of
+    /// the advertised discovery surface (see `docs/api-reference.md`). They had
+    /// no caller and no test, so nothing proved the two agreed. Assert they
+    /// return *the same entries* — pointer-identical, i.e. the shared cached
+    /// slice rather than a clone — and that unknown keys fail closed.
+    #[test]
+    fn test_lookup_helpers_agree_with_all_indicators() {
+        let all = all_indicators();
+
+        for expected in all {
+            let found = by_id(expected.name)
+                .unwrap_or_else(|| panic!("by_id({}) must resolve", expected.name));
+            assert!(
+                std::ptr::eq(found, expected),
+                "by_id({}) returned a different entry than all_indicators()",
+                expected.name
+            );
+
+            assert!(
+                by_category(expected.category)
+                    .iter()
+                    .any(|i| std::ptr::eq(*i, expected)),
+                "by_category({}) must contain {}",
+                expected.category,
+                expected.name
+            );
+        }
+
+        // The per-category buckets must partition the registry exactly: summing
+        // them over the declared vocabulary must recover every entry once, so a
+        // category typo cannot silently drop an indicator from discovery.
+        let total: usize = VALID_CATEGORIES
+            .iter()
+            .map(|category| by_category(category).len())
+            .sum();
+        assert_eq!(
+            total,
+            all.len(),
+            "per-category buckets must partition the registry"
+        );
+
+        // Fail closed on unknown keys rather than returning a stale default.
+        assert!(by_id("NOT_A_REAL_INDICATOR").is_none());
+        assert!(by_category("not-a-real-category").is_empty());
     }
 
     #[test]

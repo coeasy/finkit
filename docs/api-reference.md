@@ -393,12 +393,18 @@ enabling discovery, documentation generation, and JSON export.
 
 ```rust
 use finkit::streaming::{
-    all_indicators, registry_document,
+    all_indicators, by_category, by_id, registry_document, VALID_CATEGORIES,
     IndicatorInfo, ParamInfo, RegistryDocument,
 };
 
 /// Returns metadata for every registered indicator
-pub fn all_indicators() -> Vec<IndicatorInfo>;
+pub fn all_indicators() -> &'static [IndicatorInfo];
+
+/// Looks up one indicator by its canonical name, e.g. "SMA"
+pub fn by_id(name: &str) -> Option<&'static IndicatorInfo>;
+
+/// Returns every indicator in one category, in registry order
+pub fn by_category(category: &str) -> Vec<&'static IndicatorInfo>;
 
 /// Builds the full registry document for JSON serialization
 pub fn registry_document() -> RegistryDocument;
@@ -409,15 +415,16 @@ pub fn registry_document() -> RegistryDocument;
 ```rust
 pub struct IndicatorInfo {
     pub name: &'static str,
-    pub category: &'static str,       // "overlap", "momentum", "volume", etc.
+    pub category: &'static str,       // a member of VALID_CATEGORIES
     pub description: &'static str,
     pub params: &'static [ParamInfo],
-    pub convergence: usize,           // warm-up bars before valid output
+    pub convergence: usize,           // warm-up bars at the default parameters
+    pub streaming: bool,              // part of the advertised streaming surface
 }
 
 pub struct ParamInfo {
     pub name: &'static str,
-    pub param_type: &'static str,     // "usize", "f64", "str"
+    pub param_type: &'static str,     // "usize", "f64", or "str"
     pub default: &'static str,
     pub description: &'static str,
 }
@@ -425,9 +432,47 @@ pub struct ParamInfo {
 pub struct RegistryDocument {
     pub version: &'static str,
     pub generated_at: Option<&'static str>,
-    pub indicators: Vec<IndicatorInfo>,
+    pub indicators: &'static [IndicatorInfo],
 }
 ```
+
+`convergence` describes the **default** configuration declared in `params`;
+an indicator instantiated with a longer period warms up for longer. For the
+exact figure of a concrete instance, read `IndicatorMeta::warm_up_period()` on
+that instance.
+
+`streaming` is a curated claim about the published incremental surface, not a
+census of every `Streaming*` type in the crate. The `breadth`, `pattern` and
+`fibonacci` categories are deliberately `false`: they need market-wide or
+pattern-wide input rather than a single series of bars. That rule is pinned by
+`streaming::registry`'s `test_registry_coverage`.
+
+#### Category Slugs
+
+`VALID_CATEGORIES` is the single source of truth for the vocabulary — 15 slugs:
+
+| Category | Contents |
+| --- | --- |
+| `overlap` | Moving averages and price overlays (`SMA`, `EMA`, `BBANDS`, `SAR`, `SuperTrend`, ...) |
+| `momentum` | Oscillators and momentum (`RSI`, `MACD`, `KDJ`, `CCI`, ...) |
+| `volume` | Volume-driven indicators (`OBV`, `MFI`, `VWAP`, `CMF`, ...) |
+| `volatility` | Range and deviation measures (`ATR`, `NATR`, `Donchian`, `Keltner`, `STDDEV`, `VAR`, ...) |
+| `price_transform` | Price derivations (`AVGPRICE`, `MEDPRICE`, `TYPPRICE`, `WCLPRICE`) |
+| `cycle` | Hilbert-transform and Ehlers cycle tools |
+| `statistics` | Rolling statistics (`BETA`, `CORREL`, `TSF`, `AVGDEV`, `ZSCORE`, ...) |
+| `math_transform` | Element-wise transforms (`SIN`, `LOG10`, `SQRT`, ...) |
+| `math_operators` | Element-wise operators (`ADD`, `SUB`, `MULT`, `DIV`, `MIN`, `MAX`, `SUM`) |
+| `pattern` | Candlestick pattern detectors (`CDL_*`) |
+| `smc` | Smart-money-concepts detectors (`FVG`, `OB`) |
+| `breadth` | Market-breadth aggregates (`TRIN`, `AR`/`BR`/`CR`, advance/decline) |
+| `sentiment` | Sentiment gauges (fear & greed, put/call ratio) |
+| `fibonacci` | Fibonacci retracement levels |
+| `astock` | A-share market-structure indicators |
+
+Every category returned by an indicator — whether from the registry or from
+`IndicatorMeta::category()` on a streaming type — is checked against this list
+by `scripts/check_streaming_registry_contract.py`.
+
 
 #### JSON Export
 
@@ -442,7 +487,8 @@ let json = serde_json::to_string_pretty(&registry_document()).unwrap();
 // Write to docs/indicator_registry.json or serve via HTTP
 ```
 
-Valid category slugs: `overlap`, `momentum`, `volume`, `volatility`, `price_transform`.
+To filter by category, use `VALID_CATEGORIES` rather than hard-coding slugs —
+it is the declared vocabulary (see [Category Slugs](#category-slugs) above).
 
 ## Python API
 

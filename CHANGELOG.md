@@ -264,8 +264,60 @@ reused.
      kernel silently ignores (`STOCH` is positional, defaults to `fastk = 14`,
      and has no `matype` arguments). Both tests now assert the executable TA-Lib
      contract where it actually lives, in
-     `profile_output_contracts["talib_0_8_0"].params`, and a new loop in the
-     ffi-common test pins every declared TA-Lib parameter spec to that contract.
+      `profile_output_contracts["talib_0_8_0"].params`, and a new loop in the
+      ffi-common test pins every declared TA-Lib parameter spec to that contract.
+
+- The streaming discovery API was documented at a path that does not resolve.
+  `docs/api-reference.md` told users to
+  `use finkit::streaming::{all_indicators, by_id, by_category, registry_document, VALID_CATEGORIES}`,
+  but `streaming/mod.rs` re-exported only `all_indicators`, leaving its natural
+  companions reachable only through `streaming::registry::`. The whole family is
+  now re-exported together, so every path the interface reference advertises
+  resolves.
+- `by_id` and `by_category` had no caller and no test anywhere in the workspace.
+  They are an index-cache implementation of the same lookup `all_indicators()`
+  provides by linear scan, so nothing proved the two agreed. A new test asserts
+  they return pointer-identical entries from the shared cached slice, that the
+  per-category buckets partition the registry exactly (a category typo can no
+  longer silently drop an indicator from discovery), and that unknown keys fail
+  closed.
+- The interface reference had drifted from the code it documents.
+  `all_indicators()` was written as returning `Vec<IndicatorInfo>` (it returns
+  `&'static [IndicatorInfo]`), `RegistryDocument::indicators` likewise,
+  `by_id` / `by_category` / `VALID_CATEGORIES` were missing from the listing
+  entirely, `IndicatorInfo` was missing its `streaming` field, and the "valid
+  category slugs" line listed 5 of the 15 slugs. All corrected, with a full
+  category table and prose for the `convergence` / `streaming` semantics.
+- The Chinese API reference documented no registry-discovery surface at all —
+  the whole `Indicator Registry API` section existed only in English. It now has
+  a matching section, and its table of contents lists the sections in document
+  order (`跨市场信号公式` had been listed last while sitting second).
+- The Windows MSI script staged the wrong native library names. It copied
+  `AlphaTA_ffi.dll` / `.dll.lib` / `.lib`, but the crate is `finkit-ffi` with no
+  explicit `[lib]` name, so the artifacts are `finkit_ffi.*`; `copy` does not
+  fail a batch script, so the run would have produced an MSI whose `bin\` was
+  empty. It also never created the `bin\` directory it copied into, used a
+  component-group name that disagreed with `build-installer.sh`, and wrote a
+  third spelling of the output filename. All corrected, and the script now
+  preflights its inputs.
+- No OS-level installer target has ever been buildable from this repository.
+  `scripts/build-installer.sh` and `scripts/build-installer-msi.cmd` both hand a
+  staged payload to WiX, but the `packaging/wix/Product.wxs` they read has never
+  existed in any commit (checked across all branches), and no workflow installs
+  the WiX toolset. `scripts/build-usage-packages.sh` is in the same position:
+  its `packaging/usage/<lang>/` verification tree is likewise absent, as is the
+  `packaging/build-installer.sh` its own RPM changelog refers to. Both installer
+  scripts now fail up front with a message naming the missing file, instead of
+  dying inside `candle`/`heat` with a tool error. The working release artifact is
+  the Python ABI3 wheel, which is what `python-wheels.yml` actually ships.
+- `docs/installation.md` §14 told readers to certify a change with
+  `cargo test -p finkit --locked` — the same command that left the three
+  contract tests in `finkit-ffi-common` / `finkit-ffi` unrun (see above) — and
+  listed three of the ten gate scripts. It now gives the full CI-aligned
+  per-crate test command, warns about `--no-fail-fast`, and separates the
+  docs-check gates from the ci.yml gates. `scripts/check_coverage.py` was
+  dropped from that list: it is a coverage *report*, not a CI gate, and is not
+  wired into any workflow.
 
 ## [0.1.15] - 2026-09-11
 

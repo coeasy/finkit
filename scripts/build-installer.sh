@@ -118,6 +118,15 @@ build_msi() {
   command -v light  >/dev/null || { echo "WiX Toolset not in PATH (light.exe)"  >&2; return 1; }
 
   local wix="${ROOT}/packaging/wix"
+  # The WiX product definition is not part of this repository (it has never been
+  # committed), so a clean checkout cannot build the MSI. Fail with that fact
+  # instead of letting candle report a missing source file mid-build.
+  if [[ ! -f "${wix}/Product.wxs" ]]; then
+    echo "[build-installer] missing ${wix}/Product.wxs" >&2
+    echo "[build-installer] this repository ships no WiX product definition;" >&2
+    echo "[build-installer] the msi target cannot be built from a clean checkout." >&2
+    return 1
+  fi
   mkdir -p "${wix}/obj"
   local wobj="${wix}/obj"
 
