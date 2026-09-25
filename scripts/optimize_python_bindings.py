@@ -13,8 +13,16 @@ Vec(s) directly into ``numpy::PyArray1`` without creating Python float objects.
 
 Supported return shapes:
 
-* ``PyResult<Vec<f64>>`` / ``PyResult<Vec<i32>>`` / ``PyResult<Vec<i64>>``
-* tuples containing 2-6 numeric Vec outputs, including mixed i32/f64 tuples
+* ``PyResult<Vec<f64>>`` / ``PyResult<Vec<f32>>``
+* tuples containing 2-6 **floating-point** Vec outputs
+
+Floating-point series are the only targets.  Integer results (candlestick
+patterns returning ``Vec<i32>``) deliberately keep the existing
+``Vec<T>`` -> Python list boundary: they are not hot numeric-series paths, the
+Node binding exposes the same shapes as plain arrays, and
+``sync_bindings.transform_python_numpy_body`` applies the identical rule.
+Including integers here made ``--check`` demand a rewrite that the committed
+bindings never contained (see CHANGELOG, 2026-09-25).
 
 The transformation is idempotent and is intentionally limited to top-level
 ``#[pyfunction]`` items.  ``#[pymethods]`` getters and non-numeric container
@@ -27,7 +35,11 @@ import argparse
 import re
 from pathlib import Path
 
-_NUMERIC = {"f64", "f32", "i64", "i32", "u64", "u32", "i16", "u16", "i8", "u8"}
+# Only floating-point series get a NumPy-direct wrapper.  Integer outputs
+# (candlestick patterns) intentionally keep the ``Vec<T>`` -> Python list
+# boundary -- see the module docstring and
+# ``sync_bindings.transform_python_numpy_body``.
+_NUMPY_DIRECT_FLOAT = {"f64", "f32"}
 
 
 def _match_pair(text: str, start: int, opening: str, closing: str) -> int:
@@ -94,7 +106,7 @@ def _numeric_vec_components(return_type: str) -> list[str] | None:
     inner = compact[len("PyResult<") : -1]
     if inner.startswith("Vec<") and inner.endswith(">"):
         ty = inner[4:-1]
-        return [ty] if ty in _NUMERIC else None
+        return [ty] if ty in _NUMPY_DIRECT_FLOAT else None
     if inner.startswith("(") and inner.endswith(")"):
         fields = _split_top_level(inner[1:-1])
         out: list[str] = []
@@ -103,7 +115,7 @@ def _numeric_vec_components(return_type: str) -> list[str] | None:
             if not m:
                 return None
             ty = m.group(1).split("::")[-1]
-            if ty not in _NUMERIC:
+            if ty not in _NUMPY_DIRECT_FLOAT:
                 return None
             out.append(ty)
         return out if out else None
@@ -283,7 +295,13 @@ def optimize_source(source: str) -> tuple[str, int]:
 
 
 def optimize_file(path: Path, *, check: bool = False) -> int:
-    original = path.read_text(encoding="utf-8")
+    raw = path.read_bytes()
+    original = raw.decode("utf-8")
+    # Preserve the file's own newline convention.  ``Path.write_text`` would
+    # otherwise translate every '\n' to ``os.linesep``, silently rewriting the
+    # whole file to CRLF on Windows (the repo keeps these files POSIX-clean so
+    # the wheel workflow's ``git diff --check`` stays happy).
+    newline = "\r\n" if b"\r\n" in raw else "\n"
     optimized, count = optimize_source(original)
     if check:
         if optimized != original:
@@ -291,7 +309,8 @@ def optimize_file(path: Path, *, check: bool = False) -> int:
         print(f"{path}: NumPy-direct binding check OK")
         return 0
     if optimized != original:
-        path.write_text(optimized, encoding="utf-8")
+        with path.open("w", encoding="utf-8", newline=newline) as handle:
+            handle.write(optimized)
     print(f"{path}: optimized {count} numeric pyfunctions")
     return count
 

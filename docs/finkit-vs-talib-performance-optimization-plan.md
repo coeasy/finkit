@@ -329,6 +329,16 @@ fn sma<'py>(
 
 多输出直接创建 tuple of PyArray；整数 pattern 直接 `PyArray1<i32>`。
 
+> **2026-09-25 更正**：整数 pattern 这一条**未被执行，且已被后续决定推翻**。
+> `scripts/sync_bindings.py::transform_python_numpy_body`（2026-09-10 加入，晚于本文档与
+> optimizer）明确规定「Integer candlestick results intentionally remain unchanged」——
+> 整数 K 线形态保留 `Vec<i32>` -> Python list 边界（不是热路径；Node 绑定同样是普通数组）。
+> `scripts/optimize_python_bindings.py` 原先仍把 `i32` 当优化目标，于是
+> `sync_bindings.py --generate` 不再是幂等操作（会凭空多出 13 个 wrapper），
+> `optimize_python_bindings.py --check` 永久为红；现已限制为**仅浮点**。
+> 浮点路径（P0-1 的主体）已全部落地：`generated.rs` 39 个数值函数 + `lib.rs` 13 个手写
+> 数值函数均直接返回 ndarray，native 直接调用不再经过 Python list。
+
 ### 验收
 
 - `type(finkit.sma(...)) is np.ndarray`

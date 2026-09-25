@@ -231,7 +231,7 @@ include!("generated.rs");
 /// * `timeperiod` - Lookback period (default: 14)
 #[pyfunction]
 #[pyo3(signature = (high, low, close, timeperiod=14))]
-fn dx(
+fn vec_dx_impl(
     py: Python<'_>,
     high: PyReadonlyArray1<'_, f64>,
     low: PyReadonlyArray1<'_, f64>,
@@ -254,6 +254,19 @@ fn dx(
     })
 }
 
+#[pyfunction]
+#[pyo3(signature = (high, low, close, timeperiod=14))]
+fn dx(
+    py: Python<'_>,
+    high: PyReadonlyArray1<'_, f64>,
+    low: PyReadonlyArray1<'_, f64>,
+    close: PyReadonlyArray1<'_, f64>,
+    timeperiod: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_dx_impl(py, high, low, close, timeperiod)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// Minus Directional Indicator (MINUS_DI)
 ///
 /// # Arguments
@@ -263,7 +276,7 @@ fn dx(
 /// * `timeperiod` - Lookback period (default: 14)
 #[pyfunction]
 #[pyo3(signature = (high, low, close, timeperiod=14))]
-fn minus_di(
+fn vec_minus_di_impl(
     py: Python<'_>,
     high: PyReadonlyArray1<'_, f64>,
     low: PyReadonlyArray1<'_, f64>,
@@ -286,6 +299,19 @@ fn minus_di(
     })
 }
 
+#[pyfunction]
+#[pyo3(signature = (high, low, close, timeperiod=14))]
+fn minus_di(
+    py: Python<'_>,
+    high: PyReadonlyArray1<'_, f64>,
+    low: PyReadonlyArray1<'_, f64>,
+    close: PyReadonlyArray1<'_, f64>,
+    timeperiod: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_minus_di_impl(py, high, low, close, timeperiod)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// Minus Directional Movement (MINUS_DM)
 ///
 /// # Arguments
@@ -293,7 +319,7 @@ fn minus_di(
 /// * `low` - Low prices
 #[pyfunction]
 #[pyo3(signature = (high, low))]
-fn minus_dm(
+fn vec_minus_dm_impl(
     py: Python<'_>,
     high: PyReadonlyArray1<'_, f64>,
     low: PyReadonlyArray1<'_, f64>,
@@ -311,6 +337,17 @@ fn minus_dm(
     })
 }
 
+#[pyfunction]
+#[pyo3(signature = (high, low))]
+fn minus_dm(
+    py: Python<'_>,
+    high: PyReadonlyArray1<'_, f64>,
+    low: PyReadonlyArray1<'_, f64>,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_minus_dm_impl(py, high, low)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// Plus Directional Indicator (PLUS_DI)
 ///
 /// # Arguments
@@ -320,7 +357,7 @@ fn minus_dm(
 /// * `timeperiod` - Lookback period (default: 14)
 #[pyfunction]
 #[pyo3(signature = (high, low, close, timeperiod=14))]
-fn plus_di(
+fn vec_plus_di_impl(
     py: Python<'_>,
     high: PyReadonlyArray1<'_, f64>,
     low: PyReadonlyArray1<'_, f64>,
@@ -343,6 +380,19 @@ fn plus_di(
     })
 }
 
+#[pyfunction]
+#[pyo3(signature = (high, low, close, timeperiod=14))]
+fn plus_di(
+    py: Python<'_>,
+    high: PyReadonlyArray1<'_, f64>,
+    low: PyReadonlyArray1<'_, f64>,
+    close: PyReadonlyArray1<'_, f64>,
+    timeperiod: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_plus_di_impl(py, high, low, close, timeperiod)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// Plus Directional Movement (PLUS_DM)
 ///
 /// # Arguments
@@ -350,7 +400,7 @@ fn plus_di(
 /// * `low` - Low prices
 #[pyfunction]
 #[pyo3(signature = (high, low))]
-fn plus_dm(
+fn vec_plus_dm_impl(
     py: Python<'_>,
     high: PyReadonlyArray1<'_, f64>,
     low: PyReadonlyArray1<'_, f64>,
@@ -366,6 +416,17 @@ fn plus_dm(
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
     })
+}
+
+#[pyfunction]
+#[pyo3(signature = (high, low))]
+fn plus_dm(
+    py: Python<'_>,
+    high: PyReadonlyArray1<'_, f64>,
+    low: PyReadonlyArray1<'_, f64>,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_plus_dm_impl(py, high, low)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
 }
 
 // ============================================================================
@@ -398,7 +459,7 @@ fn plus_dm(
 /// * `nbdev` - Variance multiplier (default: 1.0)
 #[pyfunction]
 #[pyo3(signature = (close, timeperiod=5, nbdev=1.0))]
-fn var(
+fn vec_var_impl(
     py: Python<'_>,
     close: PyReadonlyArray1<'_, f64>,
     timeperiod: usize,
@@ -412,6 +473,18 @@ fn var(
             .map(|arr| arr.into_raw_vec())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
     })
+}
+
+#[pyfunction]
+#[pyo3(signature = (close, timeperiod=5, nbdev=1.0))]
+fn var(
+    py: Python<'_>,
+    close: PyReadonlyArray1<'_, f64>,
+    timeperiod: usize,
+    nbdev: f64,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_var_impl(py, close, timeperiod, nbdev)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
 }
 
 // ============================================================================
@@ -1275,7 +1348,7 @@ fn detect_rectangle(
 #[pyfunction]
 #[pyo3(signature = (high, low, close, tenkan_period=9, kijun_period=26, senkou_b_period=52))]
 #[allow(clippy::type_complexity)]
-fn ichimoku(
+fn vec_ichimoku_impl(
     py: Python<'_>,
     high: PyReadonlyArray1<'_, f64>,
     low: PyReadonlyArray1<'_, f64>,
@@ -1315,6 +1388,42 @@ fn ichimoku(
         })
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
     })
+}
+
+#[pyfunction]
+#[pyo3(signature = (high, low, close, tenkan_period=9, kijun_period=26, senkou_b_period=52))]
+#[allow(clippy::type_complexity)]
+fn ichimoku(
+    py: Python<'_>,
+    high: PyReadonlyArray1<'_, f64>,
+    low: PyReadonlyArray1<'_, f64>,
+    close: PyReadonlyArray1<'_, f64>,
+    tenkan_period: usize,
+    kijun_period: usize,
+    senkou_b_period: usize,
+) -> PyResult<(
+    Py<PyArray1<f64>>,
+    Py<PyArray1<f64>>,
+    Py<PyArray1<f64>>,
+    Py<PyArray1<f64>>,
+    Py<PyArray1<f64>>,
+)> {
+    let (out_0, out_1, out_2, out_3, out_4) = vec_ichimoku_impl(
+        py,
+        high,
+        low,
+        close,
+        tenkan_period,
+        kijun_period,
+        senkou_b_period,
+    )?;
+    Ok((
+        PyArray1::from_vec(py, out_0).unbind(),
+        PyArray1::from_vec(py, out_1).unbind(),
+        PyArray1::from_vec(py, out_2).unbind(),
+        PyArray1::from_vec(py, out_3).unbind(),
+        PyArray1::from_vec(py, out_4).unbind(),
+    ))
 }
 
 /// SuperTrend Indicator
@@ -1385,7 +1494,7 @@ fn supertrend(
 /// Array of VWAP values
 #[pyfunction]
 #[pyo3(signature = (high, low, close, volume))]
-fn vwap(
+fn vec_vwap_impl(
     py: Python<'_>,
     high: PyReadonlyArray1<'_, f64>,
     low: PyReadonlyArray1<'_, f64>,
@@ -1411,6 +1520,19 @@ fn vwap(
     })
 }
 
+#[pyfunction]
+#[pyo3(signature = (high, low, close, volume))]
+fn vwap(
+    py: Python<'_>,
+    high: PyReadonlyArray1<'_, f64>,
+    low: PyReadonlyArray1<'_, f64>,
+    close: PyReadonlyArray1<'_, f64>,
+    volume: PyReadonlyArray1<'_, f64>,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_vwap_impl(py, high, low, close, volume)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// Anchored Volume Weighted Average Price (Anchored VWAP)
 ///
 /// Similar to VWAP, but allows traders to specify a starting point (anchor) from which
@@ -1427,7 +1549,7 @@ fn vwap(
 /// Array of Anchored VWAP values (NaN for indices before start_index)
 #[pyfunction]
 #[pyo3(signature = (high, low, close, volume, start_index))]
-fn anchored_vwap(
+fn vec_anchored_vwap_impl(
     py: Python<'_>,
     high: PyReadonlyArray1<'_, f64>,
     low: PyReadonlyArray1<'_, f64>,
@@ -1454,6 +1576,20 @@ fn anchored_vwap(
     })
 }
 
+#[pyfunction]
+#[pyo3(signature = (high, low, close, volume, start_index))]
+fn anchored_vwap(
+    py: Python<'_>,
+    high: PyReadonlyArray1<'_, f64>,
+    low: PyReadonlyArray1<'_, f64>,
+    close: PyReadonlyArray1<'_, f64>,
+    volume: PyReadonlyArray1<'_, f64>,
+    start_index: usize,
+) -> PyResult<Py<PyArray1<f64>>> {
+    let result = vec_anchored_vwap_impl(py, high, low, close, volume, start_index)?;
+    Ok(PyArray1::from_vec(py, result).unbind())
+}
+
 /// VWAP Bands
 ///
 /// VWAP with upper and lower bands based on rolling standard deviation.
@@ -1471,7 +1607,7 @@ fn anchored_vwap(
 /// Tuple of (vwap, upper_band, lower_band) arrays
 #[pyfunction]
 #[pyo3(signature = (high, low, close, volume, timeperiod=20, nb_dev=2.0))]
-fn vwap_bands(
+fn vec_vwap_bands_impl(
     py: Python<'_>,
     high: PyReadonlyArray1<'_, f64>,
     low: PyReadonlyArray1<'_, f64>,
@@ -1505,6 +1641,26 @@ fn vwap_bands(
     })
 }
 
+#[pyfunction]
+#[pyo3(signature = (high, low, close, volume, timeperiod=20, nb_dev=2.0))]
+fn vwap_bands(
+    py: Python<'_>,
+    high: PyReadonlyArray1<'_, f64>,
+    low: PyReadonlyArray1<'_, f64>,
+    close: PyReadonlyArray1<'_, f64>,
+    volume: PyReadonlyArray1<'_, f64>,
+    timeperiod: usize,
+    nb_dev: f64,
+) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>, Py<PyArray1<f64>>)> {
+    let (out_0, out_1, out_2) =
+        vec_vwap_bands_impl(py, high, low, close, volume, timeperiod, nb_dev)?;
+    Ok((
+        PyArray1::from_vec(py, out_0).unbind(),
+        PyArray1::from_vec(py, out_1).unbind(),
+        PyArray1::from_vec(py, out_2).unbind(),
+    ))
+}
+
 /// Elder-Ray Indicator
 ///
 /// Developed by Alexander Elder, this indicator evaluates the balance of power
@@ -1526,7 +1682,7 @@ fn vwap_bands(
 /// Tuple of (force_index, bull_power, bear_power) arrays
 #[pyfunction]
 #[pyo3(signature = (high, low, close, volume, period=13))]
-fn elder_ray(
+fn vec_elder_ray_impl(
     py: Python<'_>,
     high: PyReadonlyArray1<'_, f64>,
     low: PyReadonlyArray1<'_, f64>,
@@ -1559,6 +1715,24 @@ fn elder_ray(
     })
 }
 
+#[pyfunction]
+#[pyo3(signature = (high, low, close, volume, period=13))]
+fn elder_ray(
+    py: Python<'_>,
+    high: PyReadonlyArray1<'_, f64>,
+    low: PyReadonlyArray1<'_, f64>,
+    close: PyReadonlyArray1<'_, f64>,
+    volume: PyReadonlyArray1<'_, f64>,
+    period: usize,
+) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>, Py<PyArray1<f64>>)> {
+    let (out_0, out_1, out_2) = vec_elder_ray_impl(py, high, low, close, volume, period)?;
+    Ok((
+        PyArray1::from_vec(py, out_0).unbind(),
+        PyArray1::from_vec(py, out_1).unbind(),
+        PyArray1::from_vec(py, out_2).unbind(),
+    ))
+}
+
 /// Donchian Channel
 ///
 /// A trend-following indicator that displays the highest and lowest prices
@@ -1580,7 +1754,7 @@ fn elder_ray(
 #[pyfunction]
 #[pyo3(signature = (high, low, period=20))]
 #[allow(clippy::type_complexity)]
-fn donchian(
+fn vec_donchian_impl(
     py: Python<'_>,
     high: PyReadonlyArray1<'_, f64>,
     low: PyReadonlyArray1<'_, f64>,
@@ -1606,6 +1780,29 @@ fn donchian(
     })
 }
 
+#[pyfunction]
+#[pyo3(signature = (high, low, period=20))]
+#[allow(clippy::type_complexity)]
+fn donchian(
+    py: Python<'_>,
+    high: PyReadonlyArray1<'_, f64>,
+    low: PyReadonlyArray1<'_, f64>,
+    period: usize,
+) -> PyResult<(
+    Py<PyArray1<f64>>,
+    Py<PyArray1<f64>>,
+    Py<PyArray1<f64>>,
+    Py<PyArray1<f64>>,
+)> {
+    let (out_0, out_1, out_2, out_3) = vec_donchian_impl(py, high, low, period)?;
+    Ok((
+        PyArray1::from_vec(py, out_0).unbind(),
+        PyArray1::from_vec(py, out_1).unbind(),
+        PyArray1::from_vec(py, out_2).unbind(),
+        PyArray1::from_vec(py, out_3).unbind(),
+    ))
+}
+
 /// Pivot Points
 ///
 /// A technical analysis indicator used to determine the overall trend direction
@@ -1629,7 +1826,7 @@ fn donchian(
 #[pyfunction]
 #[pyo3(signature = (high, low, close, method="standard"))]
 #[allow(clippy::type_complexity)]
-fn pivot_points(
+fn vec_pivot_points_impl(
     py: Python<'_>,
     high: PyReadonlyArray1<'_, f64>,
     low: PyReadonlyArray1<'_, f64>,
@@ -1681,6 +1878,37 @@ fn pivot_points(
             })
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
     })
+}
+
+#[pyfunction]
+#[pyo3(signature = (high, low, close, method="standard"))]
+#[allow(clippy::type_complexity)]
+fn pivot_points(
+    py: Python<'_>,
+    high: PyReadonlyArray1<'_, f64>,
+    low: PyReadonlyArray1<'_, f64>,
+    close: PyReadonlyArray1<'_, f64>,
+    method: &str,
+) -> PyResult<(
+    Py<PyArray1<f64>>,
+    Py<PyArray1<f64>>,
+    Py<PyArray1<f64>>,
+    Py<PyArray1<f64>>,
+    Py<PyArray1<f64>>,
+    Py<PyArray1<f64>>,
+    Py<PyArray1<f64>>,
+)> {
+    let (out_0, out_1, out_2, out_3, out_4, out_5, out_6) =
+        vec_pivot_points_impl(py, high, low, close, method)?;
+    Ok((
+        PyArray1::from_vec(py, out_0).unbind(),
+        PyArray1::from_vec(py, out_1).unbind(),
+        PyArray1::from_vec(py, out_2).unbind(),
+        PyArray1::from_vec(py, out_3).unbind(),
+        PyArray1::from_vec(py, out_4).unbind(),
+        PyArray1::from_vec(py, out_5).unbind(),
+        PyArray1::from_vec(py, out_6).unbind(),
+    ))
 }
 
 /// Volume Profile

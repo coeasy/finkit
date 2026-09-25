@@ -318,6 +318,46 @@ reused.
   docs-check gates from the ci.yml gates. `scripts/check_coverage.py` was
   dropped from that list: it is a coverage *report*, not a CI gate, and is not
   wired into any workflow.
+- `MONEY_FLOW` was advertised as streaming-capable in
+  `streaming::registry` with no implementation behind it. Added
+  `StreamingMoneyFlow` (`streaming::volume::money_flow`), which mirrors
+  `indicators::astock::money_flow` bar-for-bar, including its NaN behaviour, and
+  is re-exported from `finkit::streaming`.
+- The streaming-registry contract gate silently skipped every `IndicatorMeta`
+  impl written as `impl crate::streaming::IndicatorMeta for T` (three types:
+  `StreamingDema`, `StreamingObv`, `StreamingWclPrice`), so a qualified-path
+  impl could drift without ever being checked. The extractor now accepts
+  qualified paths.
+- The same gate's self-check was tautological: `count_declared_impls()` reused
+  the extractor's own regexes, so a form the extractor could not read was also
+  uncountable and the two counts agreed on the wrong number. The self-check now
+  uses an independent, deliberately looser census.
+- `streaming::registry` listed Elder Ray twice — `ELDERRAY` with a 14-period
+  default and `Elder Ray` with the correct 13 — and `test_unique_names` compared
+  raw strings, so both passed. Consolidated onto the canonical `ELDERRAY` entry
+  with the 13-period default (`StreamingElderRay::new(13)`).
+- `docs/generated/streaming-indicators.md` was stale after the registry
+  corrections; regenerated via `gen_ssot_docs.py --generate`.
+- `scripts/optimize_python_bindings.py` rewrote **integer** results to NumPy
+  arrays, contradicting `sync_bindings.transform_python_numpy_body`, whose
+  documented rule is that integer candlestick results keep the `Vec<T>` ->
+  Python list boundary. The mismatch made `sync_bindings.py --generate` a
+  non-idempotent operation (it would have introduced 13 wrappers the committed
+  bindings never contained) and left `optimize_python_bindings.py --check`
+  permanently red. The optimizer now targets floating-point series only, which
+  restores `--generate` as a fixed point and turns the check green.
+- The same rewriter wrote with `Path.write_text`, which translates every newline
+  to `os.linesep`; run on Windows it silently rewrote a whole binding to CRLF.
+  It now preserves the file's existing newline convention.
+- The 13 hand-written `Vec<f64>` pyfunctions in `ffi/python-binding/src/lib.rs`
+  (`dx`, `minus_di`, `minus_dm`, `plus_di`, `plus_dm`, `var`, `ichimoku`,
+  `vwap`, `anchored_vwap`, `vwap_bands`, `elder_ray`, `donchian`,
+  `pivot_points`) still returned Python lists, while the 39 generated numeric
+  functions in the same module returned NumPy arrays and
+  `finkit/__init__.pyi` declares `dx`/`var`/`plus_di`/… as `Array1D`. They now
+  use the same NumPy-direct wrapper shape, so the native surface is uniform and
+  `optimize_python_bindings.py --check` covers `lib.rs` as well as
+  `generated.rs`.
 
 ## [0.1.15] - 2026-09-11
 

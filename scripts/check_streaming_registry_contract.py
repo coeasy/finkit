@@ -50,11 +50,47 @@ REGISTRY = ROOT / "core" / "src" / "streaming" / "registry.rs"
 META_MACRO = re.compile(
     r'impl_indicator_meta!\(\s*(\w+)\s*,\s*"([^"]*)"\s*,\s*"([^"]*)"\s*,\s*"([^"]*)"'
 )
-META_IMPL = re.compile(r"impl IndicatorMeta for (\w+) \{(.*?)\n\}", re.S)
+# The `impl` header may spell the trait with a path (`impl crate::streaming::
+# IndicatorMeta for T`), which is what three types did -- and an extractor that
+# only accepted the bare spelling silently skipped them, so they were never
+# validated. Accept any path prefix.
+META_IMPL = re.compile(
+    r"impl\s+[A-Za-z0-9_:]*IndicatorMeta\s+for\s+(\w+)\s*\{(.*?)\n\}", re.S
+)
+# Deliberately *broader* than the two extractor regexes above, and used only by
+# `count_declared_impls`. A self-check built from the extractor's own patterns is
+# a tautology: the form the extractor cannot read is also the form the self-check
+# cannot count, so both agree on the wrong total.
+CENSUS_IMPL = re.compile(r"impl\s+[A-Za-z0-9_:]*IndicatorMeta\s+for\s+([A-Za-z0-9_]+)")
+CENSUS_MACRO = re.compile(r"impl_indicator_meta!\(")
 FN_NAME_HEAD = r"fn name\(\) -> &'static str \{"
 FN_CATEGORY_HEAD = r"fn category\(\) -> &'static str \{"
 
 BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.S)
+
+# Registry entries whose published `name` is a *display* name that cannot be
+# reduced to the canonical `IndicatorMeta::name()` by case/punctuation folding
+# alone ("Bollinger Bands" -> "BBANDS", "Stochastic" -> "STOCH"). Everything
+# else is resolved by `norm()` below.
+#
+# Every pair here must be declared, not inferred: the point of the check is to
+# make an unbacked claim loud, and a fuzzy matcher would instead invent a
+# mapping and hide the next one. Keep this list minimal and delete an entry the
+# moment the registry adopts the canonical name -- a stale alias fails the gate.
+STREAMING_NAME_ALIASES = {
+    "Bollinger Bands": "BBANDS",
+    "Chaikin Volatility": "ChaikinVol",
+    "Donchian Channel": "Donchian",
+    "Ichimoku Cloud": "Ichimoku",
+    "Keltner Channel": "Keltner",
+    "Stochastic": "STOCH",
+    "Williams %R": "WILLR",
+}
+
+
+def norm(name: str) -> str:
+    """Fold case and punctuation: 'Williams %R' -> 'williamsr'."""
+    return re.sub(r"[^a-z0-9]", "", name.lower())
 
 
 def first_literal_after(blob: str, head: str) -> str | None:
@@ -84,15 +120,19 @@ def parse_valid_categories(text: str) -> list[str]:
     return re.findall(r'"([^"]*)"', block.group(1))
 
 
-def parse_registry_entries(text: str) -> dict[str, str]:
+def parse_registry_entries(text: str) -> dict[str, dict]:
     body = text[text.index("static INDICATORS") :]
-    entries: dict[str, str] = {}
+    entries: dict[str, dict] = {}
     for chunk in body.split("IndicatorInfo {")[1:]:
         chunk = chunk.split("IndicatorInfo {")[0]
         name = re.search(r'name:\s*"([^"]*)"', chunk)
         category = re.search(r'category:\s*"([^"]*)"', chunk)
+        streaming = re.search(r"streaming:\s*(true|false)", chunk)
         if name and category:
-            entries[name.group(1)] = category.group(1)
+            entries[name.group(1)] = {
+                "category": category.group(1),
+                "streaming": streaming is not None and streaming.group(1) == "true",
+            }
     return entries
 
 
@@ -127,19 +167,21 @@ def parse_metas() -> list[dict]:
 
 
 def count_declared_impls() -> int:
-    """Number of `impl IndicatorMeta` blocks and macro calls in the crate.
+    """Number of `IndicatorMeta` implementations in the crate, counted broadly.
 
-    Used as a self-check: the extractor must see every one of them, otherwise a
-    type silently escapes validation -- which is how the drift this gate exists
-    for would hide.
+    Used as a self-check: the extractor must see every implementation, otherwise
+    a type silently escapes validation -- which is how the drift this gate exists
+    for would hide. The census is deliberately written with *different, looser*
+    patterns than the extractor, so a form the extractor cannot read still shows
+    up in this count and trips the check.
     """
     total = 0
     for path in glob.glob(str(ROOT / "core/src/streaming/**/*.rs"), recursive=True):
         if pathlib.Path(path).name == "macros.rs":
             continue
         text = pathlib.Path(path).read_text(encoding="utf-8")
-        total += len(META_IMPL.findall(text))
-        total += len(re.findall(r"impl_indicator_meta!\(", text))
+        total += len(CENSUS_IMPL.findall(text))
+        total += len(CENSUS_MACRO.findall(text))
     return total
 
 
@@ -152,14 +194,43 @@ def main() -> int:
 
     undeclared = [m for m in metas if m["category"] not in valid]
     disagreements = [
-        m for m in metas if m["name"] in entries and entries[m["name"]] != m["category"]
+        m
+        for m in metas
+        if m["name"] in entries and entries[m["name"]]["category"] != m["category"]
     ]
     unreadable = declared - len(metas)
+
+    # Every `streaming: true` entry is a published claim that an incremental
+    # implementation exists. Nothing checked that: `test_registry_coverage` only
+    # asserts a count floor and that three categories are false, so an entry
+    # could advertise streaming with nothing behind it (MONEY_FLOW did).
+    meta_names = {m["name"] for m in metas}
+    norm_metas = {norm(m["name"]): m["name"] for m in metas}
+
+    def resolve(registry_name: str) -> str | None:
+        """Canonical meta name for a registry entry, or None if unbacked."""
+        alias = STREAMING_NAME_ALIASES.get(registry_name)
+        if alias is not None:
+            return alias if alias in meta_names else None
+        return norm_metas.get(norm(registry_name))
+
+    unbacked = [
+        (name, STREAMING_NAME_ALIASES.get(name, norm(name)))
+        for name, info in sorted(entries.items())
+        if info["streaming"] and resolve(name) is None
+    ]
+    # An alias that is no longer needed is dead config and must not be kept:
+    # otherwise the table silently accumulates and hides a real gap.
+    stale_aliases = sorted(
+        alias for alias in STREAMING_NAME_ALIASES if resolve(alias) is not None
+        and norm(alias) in norm_metas
+    )
 
     print("[streaming-registry] IndicatorMeta vs registry contract")
     print(f"  declared categories : {len(valid)}")
     print(f"  registry entries    : {len(entries)}")
     print(f"  IndicatorMeta impls : {len(metas)} (declared {declared})")
+    print(f"  streaming claims    : {sum(1 for i in entries.values() if i['streaming'])}")
 
     if unreadable:
         print(
@@ -181,10 +252,28 @@ def main() -> int:
         for m in sorted(disagreements, key=lambda x: x["name"]):
             print(
                 f"  - {m['name']} ({m['type']}): meta={m['category']!r} "
-                f"registry={entries[m['name']]!r}  [{m['file']}]"
+                f"registry={entries[m['name']]['category']!r}  [{m['file']}]"
             )
 
-    if undeclared or disagreements:
+    if unbacked:
+        print(
+            "\n[streaming-registry] ADVERTISED AS streaming BUT NO IMPLEMENTATION:\n"
+            "  (the registry says `streaming: true`; no IndicatorMeta publishes this\n"
+            "   name, and it is not in STREAMING_NAME_ALIASES)"
+        )
+        for name, canonical in unbacked:
+            print(f"  - {name!r} (looked for {canonical!r})")
+
+    if stale_aliases:
+        print(
+            "\n[streaming-registry] STALE STREAMING_NAME_ALIASES entries:\n"
+            "  (the registry name already matches an IndicatorMeta name, so the\n"
+            "   alias is dead -- delete it)"
+        )
+        for alias in stale_aliases:
+            print(f"  - {alias!r}")
+
+    if undeclared or disagreements or unbacked or stale_aliases:
         print("\n[streaming-registry] FAIL")
         return 1
 

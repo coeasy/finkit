@@ -4,7 +4,7 @@
 > Do not edit manually. Regenerate: `python scripts/gen_ssot_docs.py --generate`
 
 Streaming source modules: **5** | Direct public structs: **24**
-Registered indicator entries marked streaming in `docs/indicator_registry.json`: **145**
+Registered indicator entries marked streaming in `docs/indicator_registry.json`: **144**
 
 Streaming indicators provide O(1) per-bar updates via the `StreamingIndicator` trait.
 The source scan lists directly detected public structs; the registered count is the user-facing indicator count.

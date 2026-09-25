@@ -158,6 +158,7 @@ pub mod indicators {
     pub use super::volume::force_index::StreamingForceIndex;
     pub use super::volume::kvo::{KvoOutput, StreamingKvo};
     pub use super::volume::mfi::StreamingMfi;
+    pub use super::volume::money_flow::StreamingMoneyFlow;
     pub use super::volume::nvi::StreamingNvi;
     pub use super::volume::obv::StreamingObv;
     pub use super::volume::pvi::StreamingPvi;

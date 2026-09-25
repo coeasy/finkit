@@ -5,6 +5,7 @@ pub mod eom;
 pub mod force_index;
 pub mod kvo;
 pub mod mfi;
+pub mod money_flow;
 pub mod nvi;
 pub mod obv;
 pub mod pvi;

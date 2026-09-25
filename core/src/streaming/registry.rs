@@ -773,9 +773,14 @@ static INDICATORS: &[IndicatorInfo] = &[
     IndicatorInfo {
         name: "ELDERRAY",
         category: "momentum",
-        description: "Elder Ray Index (Bull/Bear Power)",
-        params: &[PERIOD],
-        convergence: 14,
+        description: "Elder Ray Index (bull power / bear power)",
+        params: &[ParamInfo {
+            name: "period",
+            param_type: "usize",
+            default: "13",
+            description: "EMA period for bull/bear power baseline",
+        }],
+        convergence: 13,
         streaming: true,
     },
     IndicatorInfo {
@@ -905,19 +910,6 @@ static INDICATORS: &[IndicatorInfo] = &[
         description: "Triple Smooth EMA Rate of Change",
         params: &[PERIOD],
         convergence: 42,
-        streaming: true,
-    },
-    IndicatorInfo {
-        name: "Elder Ray",
-        category: "momentum",
-        description: "Elder Ray Index (bull power / bear power)",
-        params: &[ParamInfo {
-            name: "period",
-            param_type: "usize",
-            default: "13",
-            description: "EMA period for bull/bear power baseline",
-        }],
-        convergence: 13,
         streaming: true,
     },
     IndicatorInfo {

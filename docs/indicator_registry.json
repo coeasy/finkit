@@ -835,16 +835,16 @@
     {
       "name": "ELDERRAY",
       "category": "momentum",
-      "description": "Elder Ray Index (Bull/Bear Power)",
+      "description": "Elder Ray Index (bull power / bear power)",
       "params": [
         {
           "name": "period",
           "param_type": "usize",
-          "default": "14",
-          "description": "Lookback period"
+          "default": "13",
+          "description": "EMA period for bull/bear power baseline"
         }
       ],
-      "convergence": 14,
+      "convergence": 13,
       "streaming": true
     },
     {
@@ -1002,21 +1002,6 @@
         }
       ],
       "convergence": 42,
-      "streaming": true
-    },
-    {
-      "name": "Elder Ray",
-      "category": "momentum",
-      "description": "Elder Ray Index (bull power / bear power)",
-      "params": [
-        {
-          "name": "period",
-          "param_type": "usize",
-          "default": "13",
-          "description": "EMA period for bull/bear power baseline"
-        }
-      ],
-      "convergence": 13,
       "streaming": true
     },
     {
