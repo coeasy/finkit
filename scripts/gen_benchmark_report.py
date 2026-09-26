@@ -82,7 +82,11 @@ def run_cmd(cmd: list[str], default: str = "unknown") -> str:
         out = subprocess.run(
             cmd,
             capture_output=True,
-            text=True,
+            # Never inherit the ANSI codepage: a non-ASCII byte from `git` or
+            # `rustc` on Windows raises UnicodeDecodeError here, and this
+            # helper exists precisely so a failing probe degrades to `default`.
+            encoding="utf-8",
+            errors="replace",
             check=False,
             timeout=15,
         )

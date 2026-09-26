@@ -54,12 +54,18 @@ macro_rules! shim_indicator {
             input: $arg_ty,
             period: jint,
         ) -> $out_ty {
-            panic::catch_unwind(panic::AssertUnwindSafe(|| {
-                let data = from_double_array(&mut env, input);
-                // Delegate to the matching pure-Rust core function.
-                let result = dispatch_ta($dispatch, &data, period as usize);
-                to_double_array(&mut env, result)
-            }))
+            panic::catch_unwind(panic::AssertUnwindSafe(
+                || -> Result<jdoubleArray, String> {
+                    let data = from_double_array(&mut env, input);
+                    // Delegate to the matching pure-Rust core function. Unknown
+                    // names and calculation failures remain errors; they must not
+                    // be collapsed into a successful empty array.
+                    let result = dispatch_ta($dispatch, &data, period as usize)?;
+                    Ok(to_double_array(&mut env, result))
+                },
+            ))
+            .ok()
+            .and_then(Result::ok)
             .unwrap_or(std::ptr::null_mut())
         }
     };
@@ -72,28 +78,34 @@ macro_rules! shim_indicator {
 /// function names (`sma`, `rsi`, …) and they live in different modules, so a
 /// small explicit dispatch is the cleanest way to bridge them without pulling
 /// raw-pointer `extern "C"` signatures into the JNI shim.
-fn dispatch_ta(name: &str, data: &[f64], period: usize) -> Vec<f64> {
-    let res: Option<Result<ndarray::Array1<f64>, _>> = match name {
-        "ta_sma" => Some(finkit::math::moving_avg::sma(data, period)),
-        "ta_ema" => Some(finkit::math::moving_avg::ema(data, period)),
-        "ta_wma" => Some(finkit::math::moving_avg::wma(data, period)),
-        "ta_dema" => Some(finkit::math::moving_avg::dema(data, period)),
-        "ta_tema" => Some(finkit::math::moving_avg::tema(data, period)),
-        "ta_rsi" => Some(finkit::indicators::momentum::rsi(data, period)),
-        "ta_mom" => Some(finkit::indicators::momentum::mom(data, period)),
-        "ta_roc" => Some(finkit::indicators::momentum::roc(data, period)),
-        "ta_cmo" => Some(finkit::indicators::momentum::cmo(data, period)),
-        "ta_trix" => Some(finkit::indicators::momentum::trix(data, period)),
-        "ta_midpoint" => Some(finkit::indicators::overlap::midpoint(data, period)),
-        "ta_zscore" => Some(finkit::indicators::statistics::zscore(data, period)),
-        "ta_tsf" => Some(finkit::indicators::statistics::tsf(data, period)),
-        "ta_linear_reg" => Some(finkit::indicators::statistics::linearreg(data, period)),
-        "ta_percent_rank" => Some(finkit::indicators::statistics::percent_rank(data, period)),
-        _ => None,
-    };
-    res.and_then(|r| r.ok())
-        .map(|a| a.to_vec())
-        .unwrap_or_default()
+fn dispatch_ta(name: &str, data: &[f64], period: usize) -> Result<Vec<f64>, String> {
+    let res = match name {
+        "ta_sma" => finkit::math::moving_avg::sma(data, period).map_err(|e| e.to_string()),
+        "ta_ema" => finkit::math::moving_avg::ema(data, period).map_err(|e| e.to_string()),
+        "ta_wma" => finkit::math::moving_avg::wma(data, period).map_err(|e| e.to_string()),
+        "ta_dema" => finkit::math::moving_avg::dema(data, period).map_err(|e| e.to_string()),
+        "ta_tema" => finkit::math::moving_avg::tema(data, period).map_err(|e| e.to_string()),
+        "ta_rsi" => finkit::indicators::momentum::rsi(data, period).map_err(|e| e.to_string()),
+        "ta_mom" => finkit::indicators::momentum::mom(data, period).map_err(|e| e.to_string()),
+        "ta_roc" => finkit::indicators::momentum::roc(data, period).map_err(|e| e.to_string()),
+        "ta_cmo" => finkit::indicators::momentum::cmo(data, period).map_err(|e| e.to_string()),
+        "ta_trix" => finkit::indicators::momentum::trix(data, period).map_err(|e| e.to_string()),
+        "ta_midpoint" => {
+            finkit::indicators::overlap::midpoint(data, period).map_err(|e| e.to_string())
+        }
+        "ta_zscore" => {
+            finkit::indicators::statistics::zscore(data, period).map_err(|e| e.to_string())
+        }
+        "ta_tsf" => finkit::indicators::statistics::tsf(data, period).map_err(|e| e.to_string()),
+        "ta_linear_reg" => {
+            finkit::indicators::statistics::linearreg(data, period).map_err(|e| e.to_string())
+        }
+        "ta_percent_rank" => {
+            finkit::indicators::statistics::percent_rank(data, period).map_err(|e| e.to_string())
+        }
+        _ => return Err(format!("unsupported Android indicator: {name}")),
+    }?;
+    Ok(res.to_vec())
 }
 
 include!("generated.rs");
@@ -142,7 +154,7 @@ mod tests {
         // `math::moving_avg::sma` returns an aligned array: the first
         // `period-1` slots are NaN warm-up, then the rolling values.
         let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
-        let out = dispatch_ta("ta_sma", &data, 3);
+        let out = dispatch_ta("ta_sma", &data, 3).expect("ta_sma should be supported");
         assert_eq!(out.len(), data.len());
         assert!(out[0].is_nan() && out[1].is_nan());
         assert_eq!(&out[2..], &[2.0, 3.0, 4.0]);
@@ -151,16 +163,17 @@ mod tests {
     #[test]
     fn test_dispatch_ta_rsi_shape() {
         let data = vec![44.0, 44.34, 44.09, 43.61, 44.33, 44.83, 45.10, 45.42];
-        let out = dispatch_ta("ta_rsi", &data, 5);
+        let out = dispatch_ta("ta_rsi", &data, 5).expect("ta_rsi should be supported");
         // RSI returns one value per input once the warmup period is met.
         assert_eq!(out.len(), data.len());
     }
 
     #[test]
-    fn test_dispatch_ta_unknown_returns_empty() {
+    fn test_dispatch_ta_unknown_returns_error() {
         let data = vec![1.0, 2.0, 3.0];
-        let out = dispatch_ta("ta_does_not_exist", &data, 2);
-        assert!(out.is_empty());
+        let error = dispatch_ta("ta_does_not_exist", &data, 2)
+            .expect_err("unknown indicators must not look like empty success");
+        assert!(error.contains("unsupported Android indicator"));
     }
 }
 

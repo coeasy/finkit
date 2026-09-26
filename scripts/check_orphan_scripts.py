@@ -114,7 +114,16 @@ def tracked_files() -> list[str]:
     and leaving it in would make the gate red for no reason.
     """
     out = subprocess.run(
-        ["git", "ls-files", "-z"], capture_output=True, text=True, check=True, cwd=ROOT
+        # `encoding` is mandatory on Windows: without it subprocess decodes
+        # with the ANSI codepage (GBK on a zh-CN box) and any non-ASCII path
+        # raises UnicodeDecodeError in the reader thread, which surfaces here
+        # as `stdout is None` instead of a file list.
+        ["git", "ls-files", "-z"],
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        check=True,
+        cwd=ROOT,
     ).stdout
     return [line for line in out.split("\0") if line and (ROOT / line).is_file()]
 

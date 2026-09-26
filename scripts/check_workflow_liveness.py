@@ -132,7 +132,8 @@ def existing_branches() -> tuple[set[str], str | None]:
         out = subprocess.run(
             ['git', '-c', 'credential.helper=', '-c', 'credential.helper=manager',
              'ls-remote', '--heads', 'origin'],
-            cwd=ROOT, capture_output=True, text=True, timeout=60, check=True,
+            cwd=ROOT, capture_output=True, encoding='utf-8', errors='replace',
+            timeout=60, check=True,
         ).stdout
         names = {ln.split('refs/heads/', 1)[1] for ln in out.splitlines() if 'refs/heads/' in ln}
         if names:
@@ -143,7 +144,8 @@ def existing_branches() -> tuple[set[str], str | None]:
     try:
         out = subprocess.run(
             ['git', 'for-each-ref', '--format=%(refname:short)', 'refs/heads', 'refs/remotes/origin'],
-            cwd=ROOT, capture_output=True, text=True, timeout=60, check=True,
+            cwd=ROOT, capture_output=True, encoding='utf-8', errors='replace',
+            timeout=60, check=True,
         ).stdout
         names = set()
         for ln in out.splitlines():

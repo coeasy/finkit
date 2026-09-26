@@ -1453,71 +1453,37 @@ fn run_sweep(
 }
 
 fn run_chart(input: &PathBuf, chart_format: &str, title: Option<&str>, output: Option<String>) {
+    use finkit_visualization::chart::KlineChart;
     use finkit_visualization::config::ChartConfig;
     use finkit_visualization::data::KlineData;
-    use finkit_visualization::renderer::{ChartRenderer, Renderer};
+
     let ohlcv = read_ohlcv_input(Some(input)).expect("Failed to read OHLCV input");
     let mut cfg = ChartConfig::default();
     if let Some(t) = title {
         cfg.title = t.to_string();
     }
-    let renderer = ChartRenderer::new(cfg);
     let dates: Vec<String> = (0..ohlcv.close.len()).map(|i| format!("bar_{i}")).collect();
     let kline = KlineData::new(
         dates,
-        ohlcv.open.clone(),
-        ohlcv.high.clone(),
-        ohlcv.low.clone(),
-        ohlcv.close.clone(),
-        ohlcv.volume.clone(),
+        ohlcv.open,
+        ohlcv.high,
+        ohlcv.low,
+        ohlcv.close,
+        ohlcv.volume,
     );
+
+    // Keep every CLI output on the same scene/rendering path as Python, Node
+    // and WASM. The previous SVG/HTML branch built a second close-price-only
+    // renderer, which silently dropped candles, overlays, interaction metadata
+    // and escaping rules from finkit-visualization.
+    let mut chart = KlineChart::new(cfg);
+    chart
+        .build_draw_list(&kline, &[])
+        .expect("render failed: invalid chart data");
     let payload = match chart_format {
-        "json" => renderer.render(&kline, &[]).expect("render failed"),
-        "svg" | "html" => {
-            // Generate a minimal SVG with the closing line as a quick visual preview.
-            let mut svg = String::new();
-            let w = 800usize;
-            let h = 400usize;
-            let closes = &kline.closes;
-            let min_v = closes.iter().cloned().fold(f64::INFINITY, f64::min);
-            let max_v = closes.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-            let range = (max_v - min_v).max(1e-12);
-            svg.push_str(&format!(
-                "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{w}\" height=\"{h}\" viewBox=\"0 0 {w} {h}\">\n"
-            ));
-            svg.push_str(&format!(
-                "<rect width=\"100%\" height=\"100%\" fill=\"#ffffff\"/>\n"
-            ));
-            if let Some(t) = title {
-                svg.push_str(&format!(
-                    "<text x=\"10\" y=\"20\" font-size=\"14\" fill=\"#000\">{t}</text>\n"
-                ));
-            }
-            let mut points = String::new();
-            for (i, v) in closes.iter().enumerate() {
-                if v.is_nan() {
-                    continue;
-                }
-                let x = (i as f64 / (closes.len().max(1) - 1).max(1) as f64) * w as f64;
-                let y = h as f64 - ((v - min_v) / range) * h as f64;
-                if i > 0 {
-                    points.push(' ');
-                }
-                points.push_str(&format!("{:.2},{:.2}", x, y));
-            }
-            svg.push_str(&format!(
-                "<polyline points=\"{points}\" fill=\"none\" stroke=\"#1f77b4\" stroke-width=\"1.5\"/>\n"
-            ));
-            svg.push_str("</svg>\n");
-            if chart_format == "html" {
-                format!(
-                    "<!doctype html><html><head><meta charset=\"utf-8\"><title>{}</title></head><body>{}</body></html>\n",
-                    title.unwrap_or("Finkit Chart"), svg
-                )
-            } else {
-                svg
-            }
-        }
+        "json" => chart.to_json_string().expect("render failed"),
+        "svg" => chart.to_svg_string().expect("render failed"),
+        "html" => chart.to_html_string().expect("render failed"),
         other => {
             eprintln!("Unknown chart format: {other}. Available: svg, html, json");
             std::process::exit(1);
