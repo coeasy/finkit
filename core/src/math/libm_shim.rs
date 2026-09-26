@@ -14,6 +14,11 @@
 //! previously duplicated inside `simd_ops.rs`, plus the `FloatExt` trait used
 //! by the isolated numeric helpers.
 
+// This shim is compiled in both `std` and `no_std` builds, and each build uses
+// only one half of it: the `libm` imports exist for `no_std`, several `f64_*`
+// wrappers exist for callers that a given feature set does not compile in. The
+// unused half therefore depends on the configuration, not on anything a reader
+// can see from one build alone.
 #![allow(dead_code)]
 
 #[cfg(not(feature = "std"))]

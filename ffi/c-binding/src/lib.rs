@@ -61,6 +61,8 @@ fn set_last_error_code(code: i32) {
     LAST_ERROR_CODE.with(|c| *c.borrow_mut() = code);
 }
 
+// Clears the thread-local error state. Only the `cfg(test)` block at the bottom
+// of this file calls it, so a non-test build sees it as unused.
 #[allow(dead_code)]
 fn reset_last_error() {
     LAST_ERROR.with(|e| *e.borrow_mut() = String::new());
@@ -139,13 +141,6 @@ fn invalid_input() -> i32 {
     set_last_error("Invalid input parameters");
     set_last_error_code(TA_ERR_INVALID_INPUT);
     TA_ERR_INVALID_INPUT
-}
-
-#[allow(dead_code)]
-fn null_pointer() -> i32 {
-    set_last_error("null pointer");
-    set_last_error_code(FFI_NULL_POINTER);
-    FFI_NULL_POINTER
 }
 
 fn calc_error(err: &TaError) -> i32 {

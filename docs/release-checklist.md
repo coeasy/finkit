@@ -24,6 +24,11 @@ claim registry installation commands before a clean consumer test exists.
       `python scripts/check_workflow_liveness.py`.
       A `scripts/` file with no consumer, or a workflow whose `on:` block can
       never match an existing branch, reads as a live gate while doing nothing.
+- [ ] Run the dead-code reason gate (`make check-dead-code`):
+      `python scripts/check_dead_code_allows.py`.
+      `#[allow(dead_code)]` turns off the only compiler check that can see
+      orphan logic, so any suppression without a stated reason is
+      indistinguishable from a function that was never wired up.
 - [ ] Run the rustdoc policy gate (`make check-rustdoc`), which is the
       enforcement point for ADR 0011:
       `bash scripts/check_rustdoc.sh`.

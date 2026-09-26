@@ -248,6 +248,9 @@ pub mod linear;
 pub mod mfi;
 #[cfg(feature = "std")]
 #[path = "moving_avg.rs"]
+// The canonical `moving_avg` module below re-exports this whole file and then
+// overrides `ema_into`/`kama` with the `fast_moving_avg` versions, so those two
+// items here are unreachable from the public path by design -- not forgotten.
 #[allow(dead_code)]
 mod moving_avg_legacy;
 /// Canonical moving-average API.

@@ -69,6 +69,14 @@ reused.
   record is indistinguishable from a correct one by inspection. `--check` is
   the verify-only form. Wired into `make refresh-release-manifests` /
   `make check-release-manifests`.
+- `scripts/check_dead_code_allows.py`, which fails on any
+  `#[allow(dead_code)]`, `#![allow(dead_code)]` or `expect(dead_code)` that
+  does not carry a `// why` comment on the line, inside the attribute block
+  above it, or on the line directly above that block. That attribute disables
+  the only compiler check that can see orphan logic, so an item behind it is
+  invisible to every build and every test, and a bare suppression is
+  indistinguishable from a function that was never wired up. Wired into the CI
+  `binding-ssot` job and `make check-dead-code`.
 
 ### Changed
 
@@ -93,6 +101,23 @@ reused.
 
 ### Fixed
 
+- Five private functions were unreachable from every build and every test, and
+  nothing reported it: each carried a bare `#[allow(dead_code)]`, which is
+  precisely the attribute that hides an item from the compiler's dead-code
+  check. Removing the suppressions and letting `cargo check` adjudicate found
+  them, and they are gone — `push_sliding_max`, `push_sliding_min`,
+  `aroonosc_scan_inner` and `aroonosc_deque_inner` in
+  `core/src/indicators/momentum.rs` (two deque helpers with no call sites, and
+  two alternative AROONOSC kernels superseded by the inlined deque loop in
+  `aroonosc` itself, 178 lines), and `null_pointer` in
+  `ffi/c-binding/src/lib.rs`, a second implementation of the
+  `FfiError::NullPointer` arm already inside `map_ta_error`.
+- Six `#[allow(dead_code)]` suppressions were stale: the item they guarded is
+  genuinely used, so the attribute only served to make a future regression
+  invisible. Removed from `bop_scalar`, `avgprice_scalar`,
+  `avx2_fma_available`, `ta_t3`, `approx_eq` and the `Case::fixture_path`
+  field (also deleted: `approx_eq` in the `top_bottom` test module, which the
+  test build proved unused).
 - The repository-hygiene gates were blind to any tracked file whose path
   contains a non-ASCII byte. `git ls-files` octal-escapes such paths
   (`"docs/...finkit-\350\220\275..."`), so `Path.is_file()` failed and nine

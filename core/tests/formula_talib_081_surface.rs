@@ -41,6 +41,9 @@ struct GoldenMetadata {
 
 #[derive(Debug, Deserialize)]
 struct DatasetResult {
+    // Not read by the assertions, but part of the fixture schema: declaring it
+    // pins the shape of the JSON, so a fixture that drops or renames the field
+    // fails to deserialize instead of silently losing its provenance.
     #[allow(dead_code)]
     fixture_path: String,
     outputs: HashMap<String, Vec<Option<f64>>>,

@@ -4,6 +4,10 @@
 //! and fixed numeric references.  A catalog entry is not silently treated as
 //! numeric parity until it has a checked-in golden reference.
 
+// Shared by several integration-test binaries, each of which `mod common;`s it
+// and uses a different subset of the helpers. Which fields and functions are
+// live therefore depends on which binary is compiling, so a per-binary view
+// would report the other binaries' helpers as unused.
 #![allow(dead_code)]
 
 use finkit_ffi_common::{TALIB_PROFILE_CATALOG_NAMES, TALIB_SEMANTIC_PROFILE};

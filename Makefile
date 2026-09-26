@@ -47,7 +47,7 @@ LANGS := $(sort $(LANGS))
 .PHONY: preflight lint
 .PHONY: gen-c-header verify-ffi gen-c-binding verify-bindings verify-bindings-tier verify-all-bindings
 .PHONY: build-native-archive verify-native-archive
-.PHONY: check-rustdoc check-orphans
+.PHONY: check-rustdoc check-orphans check-script-refs check-dead-code
 
 # ---- default ----------------------------------------------------------------
 all: preflight
@@ -159,6 +159,15 @@ check-orphans:
 check-script-refs:
 	python3 $(ROOT)/scripts/check_script_references.py
 
+# ---- repository hygiene: no unexplained dead_code suppressions -------------
+# `#[allow(dead_code)]` turns off the only compiler check that can see orphan
+# logic. Most suppressions here are legitimate -- a `#[cfg]`-gated fallback the
+# current build does not select, or a legacy spelling kept for one release --
+# but a bare one is indistinguishable from a function that was never wired up.
+# Five of them turned out to be exactly that. Require a `// why` next to each.
+check-dead-code:
+	python3 $(ROOT)/scripts/check_dead_code_allows.py
+
 # ---- release records: keep the shipped digests in step with the artefacts ---
 # `dist/**/manifest.json` records a `size_bytes`/`sha256` pair per shipped
 # artefact. The linker output is not reproducible, so every rebuild changes
@@ -210,6 +219,7 @@ help:
 	@echo "  make check-rustdoc    Fail if rustdoc emits any diagnostic (ADR 0011)"
 	@echo "  make check-orphans    Fail on orphan scripts or unreachable workflows"
 	@echo "  make check-script-refs  Fail if a caller references a script that is missing"
+	@echo "  make check-dead-code    Fail on an unexplained `#[allow(dead_code)]`"
 	@echo "  make refresh-release-manifests  Recompute dist/**/manifest.json digests"
 	@echo "  make check-release-manifests    Fail if those digests are stale"
 	@echo ""

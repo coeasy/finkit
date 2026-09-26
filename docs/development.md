@@ -77,12 +77,14 @@ bash scripts/check_rustdoc.sh
 python scripts/check_orphan_scripts.py
 python scripts/check_workflow_liveness.py
 python scripts/check_script_references.py
+python scripts/check_dead_code_allows.py
 ```
 
 Do not remove `--locked` from CI-equivalent commands. `Cargo.lock` is part of the reproducibility contract.
 
-The last four are the repository-hygiene gates, also available as
-`make check-rustdoc`, `make check-orphans` and `make check-script-refs`:
+The last five are the repository-hygiene gates, also available as
+`make check-rustdoc`, `make check-orphans`, `make check-script-refs` and
+`make check-dead-code`:
 
 - `scripts/check_rustdoc.sh` is the enforcement point for ADR 0011 (see the
   policy note at the top of `core/src/lib.rs`). `cargo doc` on its own is *not*
@@ -106,6 +108,16 @@ The last four are the repository-hygiene gates, also available as
   has a name and a place in the release checklist, and no implementation.
   Paths that are legitimately absent (planned, or written at run time by the
   caller itself) must be recorded in `RECORDED_MISSING` with a reason.
+- `scripts/check_dead_code_allows.py` fails on any `#[allow(dead_code)]` (or
+  `#![allow(dead_code)]`, or the `expect` form) that does not carry a `// why`
+  comment on the line, inside the attribute block above it, or on the line
+  directly above that block. That attribute disables the only compiler check
+  that can see orphan logic, so an item behind it is invisible to every build
+  and every test. Most suppressions here are legitimate — a `#[cfg]`-gated
+  fallback the current build does not select, or a legacy spelling kept for one
+  release — but the reason has to be written down, because a bare suppression
+  and a function that was never wired up look identical. Five of them turned
+  out to be the latter and were deleted.
 
 All three hygiene checks enumerate tracked files with `git ls-files -z`. The
 `-z` is required: without it git octal-escapes paths containing non-ASCII

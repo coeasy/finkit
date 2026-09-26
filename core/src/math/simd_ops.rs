@@ -3793,6 +3793,9 @@ unsafe fn mom_avx2(input: &[f64], period: usize, result: &mut [f64]) {
     }
 }
 
+// The scalar fallback behind `simd_mom`/`simd_mom10`. Those call it only under
+// `cfg(not(all(feature = "std", target_arch = "x86_64")))`, so an x86_64 build
+// never reaches it -- which is what makes it look unused here.
 #[allow(dead_code)]
 fn mom_scalar(input: &[f64], period: usize, result: &mut [f64]) {
     let len = input.len().min(result.len());
@@ -3896,7 +3899,6 @@ unsafe fn bop_avx2(open: &[f64], high: &[f64], low: &[f64], close: &[f64], resul
     }
 }
 
-#[allow(dead_code)]
 fn bop_scalar(open: &[f64], high: &[f64], low: &[f64], close: &[f64], result: &mut [f64]) {
     let len = open
         .len()
@@ -3973,7 +3975,6 @@ unsafe fn avgprice_avx2(
     }
 }
 
-#[allow(dead_code)]
 fn avgprice_scalar(open: &[f64], high: &[f64], low: &[f64], close: &[f64], result: &mut [f64]) {
     let len = open
         .len()

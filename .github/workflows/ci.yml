@@ -103,6 +103,13 @@ jobs:
         run: python scripts/check_orphan_scripts.py
       - name: Check every workflow can actually be triggered
         run: python scripts/check_workflow_liveness.py
+      # `#[allow(dead_code)]` disables the one compiler check that can see
+      # orphan logic, so an item behind it is invisible to every build and test.
+      # A suppression with no stated reason is indistinguishable from a
+      # function that was never wired up, which is exactly what five of them
+      # turned out to be. Require a `// why` next to each one.
+      - name: Check every dead_code suppression states a reason
+        run: python scripts/check_dead_code_allows.py
       # The inverse break: a caller that names a script which is not in the
       # tree. A workflow step, Makefile recipe or document that invokes a
       # script which is not there has a

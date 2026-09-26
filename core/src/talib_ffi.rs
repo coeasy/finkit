@@ -14,6 +14,11 @@
 //! - Math Operators (12)
 //! - Pattern Recognition (61)
 
+// This module is a transcription of the TA-Lib C API surface: the type aliases,
+// `TA_*` constants and `extern` declarations mirror `ta_libc.h` one-for-one,
+// including entries this crate does not bind yet. Their spelling is fixed by the
+// upstream header, and most are unreferenced until a binding lands, so dead-code
+// detection here would flag "not wired up yet" rather than "no longer needed".
 #![allow(non_camel_case_types, non_upper_case_globals, dead_code)]
 
 pub type TA_RetCode = i32;

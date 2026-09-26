@@ -73,7 +73,6 @@ fn ta_trix(data: &[f64], period: i32) -> Vec<f64> {
     call_single_in(TA_TRIX, data, period)
 }
 
-#[allow(dead_code)]
 fn ta_t3(data: &[f64], period: i32) -> Vec<f64> {
     let len = data.len();
     let mut out = vec![0.0f64; len];

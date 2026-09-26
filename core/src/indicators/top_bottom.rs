@@ -277,11 +277,6 @@ pub fn trend_reversal_confirm(
 mod tests {
     use super::*;
 
-    #[allow(dead_code)]
-    fn approx_eq(a: f64, b: f64) -> bool {
-        (a - b).abs() < 1e-9
-    }
-
     #[test]
     fn test_local_extremum_basic() {
         // 1 2 5 2 1 2 4 1 — peak at idx=2 (5), peak at idx=6 (4)
