@@ -909,13 +909,15 @@ pub extern "system" fn Java_com_finkit_Indicators_htPhasor(
     input: JDoubleArray,
     result: JObject,
 ) {
-    let input_vec = get_double_array(&mut env, input);
-    if let Ok((in_phase, quadrature)) = indicators::ht_phasor(&input_vec) {
-        let in_phase_arr = to_double_array(&mut env, in_phase.into_raw_vec_and_offset().0);
-        let quadrature_arr = to_double_array(&mut env, quadrature.into_raw_vec_and_offset().0);
-        set_double_field(&mut env, &result, "inPhase", in_phase_arr);
-        set_double_field(&mut env, &result, "quadrature", quadrature_arr);
-    }
+    ffi_catch_void(|| {
+        let input_vec = get_double_array(&mut env, input);
+        if let Ok((in_phase, quadrature)) = indicators::ht_phasor(&input_vec) {
+            let in_phase_arr = to_double_array(&mut env, in_phase.into_raw_vec_and_offset().0);
+            let quadrature_arr = to_double_array(&mut env, quadrature.into_raw_vec_and_offset().0);
+            set_double_field(&mut env, &result, "inPhase", in_phase_arr);
+            set_double_field(&mut env, &result, "quadrature", quadrature_arr);
+        }
+    })
 }
 
 #[no_mangle]
@@ -925,13 +927,15 @@ pub extern "system" fn Java_com_finkit_Indicators_htSine(
     input: JDoubleArray,
     result: JObject,
 ) {
-    let input_vec = get_double_array(&mut env, input);
-    if let Ok((sine, lead_sine)) = indicators::ht_sine(&input_vec) {
-        let sine_arr = to_double_array(&mut env, sine.into_raw_vec_and_offset().0);
-        let lead_sine_arr = to_double_array(&mut env, lead_sine.into_raw_vec_and_offset().0);
-        set_double_field(&mut env, &result, "sine", sine_arr);
-        set_double_field(&mut env, &result, "leadSine", lead_sine_arr);
-    }
+    ffi_catch_void(|| {
+        let input_vec = get_double_array(&mut env, input);
+        if let Ok((sine, lead_sine)) = indicators::ht_sine(&input_vec) {
+            let sine_arr = to_double_array(&mut env, sine.into_raw_vec_and_offset().0);
+            let lead_sine_arr = to_double_array(&mut env, lead_sine.into_raw_vec_and_offset().0);
+            set_double_field(&mut env, &result, "sine", sine_arr);
+            set_double_field(&mut env, &result, "leadSine", lead_sine_arr);
+        }
+    })
 }
 
 #[no_mangle]
@@ -1033,14 +1037,16 @@ macro_rules! impl_cdl_pattern {
             close: JDoubleArray,
             $arg_name: $arg_type,
         ) -> jintArray {
-            let open_vec = get_double_array(&mut env, open);
-            let high_vec = get_double_array(&mut env, high);
-            let low_vec = get_double_array(&mut env, low);
-            let close_vec = get_double_array(&mut env, close);
-            match candlestick::$rust_fn(&open_vec, &high_vec, &low_vec, &close_vec, $arg_name) {
-                Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
-                Err(_) => std::ptr::null_mut(),
-            }
+            ffi_catch_ptr(|| {
+                let open_vec = get_double_array(&mut env, open);
+                let high_vec = get_double_array(&mut env, high);
+                let low_vec = get_double_array(&mut env, low);
+                let close_vec = get_double_array(&mut env, close);
+                match candlestick::$rust_fn(&open_vec, &high_vec, &low_vec, &close_vec, $arg_name) {
+                    Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
+                    Err(_) => std::ptr::null_mut(),
+                }
+            })
         }
     };
 }
@@ -1056,14 +1062,16 @@ macro_rules! impl_cdl_pattern_5arg {
             low: JDoubleArray,
             close: JDoubleArray,
         ) -> jintArray {
-            let open_vec = get_double_array(&mut env, open);
-            let high_vec = get_double_array(&mut env, high);
-            let low_vec = get_double_array(&mut env, low);
-            let close_vec = get_double_array(&mut env, close);
-            match candlestick::$rust_fn(&open_vec, &high_vec, &low_vec, &close_vec, $default) {
-                Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
-                Err(_) => std::ptr::null_mut(),
-            }
+            ffi_catch_ptr(|| {
+                let open_vec = get_double_array(&mut env, open);
+                let high_vec = get_double_array(&mut env, high);
+                let low_vec = get_double_array(&mut env, low);
+                let close_vec = get_double_array(&mut env, close);
+                match candlestick::$rust_fn(&open_vec, &high_vec, &low_vec, &close_vec, $default) {
+                    Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
+                    Err(_) => std::ptr::null_mut(),
+                }
+            })
         }
     };
 }
@@ -1079,14 +1087,16 @@ macro_rules! impl_cdl_pattern_4arg {
             low: JDoubleArray,
             close: JDoubleArray,
         ) -> jintArray {
-            let open_vec = get_double_array(&mut env, open);
-            let high_vec = get_double_array(&mut env, high);
-            let low_vec = get_double_array(&mut env, low);
-            let close_vec = get_double_array(&mut env, close);
-            match candlestick::$rust_fn(&open_vec, &high_vec, &low_vec, &close_vec) {
-                Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
-                Err(_) => std::ptr::null_mut(),
-            }
+            ffi_catch_ptr(|| {
+                let open_vec = get_double_array(&mut env, open);
+                let high_vec = get_double_array(&mut env, high);
+                let low_vec = get_double_array(&mut env, low);
+                let close_vec = get_double_array(&mut env, close);
+                match candlestick::$rust_fn(&open_vec, &high_vec, &low_vec, &close_vec) {
+                    Ok(result) => to_int_array(&mut env, result.into_raw_vec_and_offset().0),
+                    Err(_) => std::ptr::null_mut(),
+                }
+            })
         }
     };
 }
@@ -1506,29 +1516,33 @@ pub extern "system" fn Java_com_finkit_Indicators_ichimoku(
     displacement: jint,
     result: JObject,
 ) {
-    let high_vec = get_double_array(&mut env, high);
-    let low_vec = get_double_array(&mut env, low);
-    let close_vec = get_double_array(&mut env, close);
-    if let Ok(res) = indicators::ichimoku(
-        &high_vec,
-        &low_vec,
-        &close_vec,
-        tenkanPeriod as usize,
-        kijunPeriod as usize,
-        senkouBPeriod as usize,
-        displacement as usize,
-    ) {
-        let tenkan_arr = to_double_array(&mut env, res.tenkan_sen.into_raw_vec_and_offset().0);
-        let kijun_arr = to_double_array(&mut env, res.kijun_sen.into_raw_vec_and_offset().0);
-        let span_a_arr = to_double_array(&mut env, res.senkou_span_a.into_raw_vec_and_offset().0);
-        let span_b_arr = to_double_array(&mut env, res.senkou_span_b.into_raw_vec_and_offset().0);
-        let chikou_arr = to_double_array(&mut env, res.chikou_span.into_raw_vec_and_offset().0);
-        set_double_field(&mut env, &result, "tenkanSen", tenkan_arr);
-        set_double_field(&mut env, &result, "kijunSen", kijun_arr);
-        set_double_field(&mut env, &result, "senkouSpanA", span_a_arr);
-        set_double_field(&mut env, &result, "senkouSpanB", span_b_arr);
-        set_double_field(&mut env, &result, "chikouSpan", chikou_arr);
-    }
+    ffi_catch_void(|| {
+        let high_vec = get_double_array(&mut env, high);
+        let low_vec = get_double_array(&mut env, low);
+        let close_vec = get_double_array(&mut env, close);
+        if let Ok(res) = indicators::ichimoku(
+            &high_vec,
+            &low_vec,
+            &close_vec,
+            tenkanPeriod as usize,
+            kijunPeriod as usize,
+            senkouBPeriod as usize,
+            displacement as usize,
+        ) {
+            let tenkan_arr = to_double_array(&mut env, res.tenkan_sen.into_raw_vec_and_offset().0);
+            let kijun_arr = to_double_array(&mut env, res.kijun_sen.into_raw_vec_and_offset().0);
+            let span_a_arr =
+                to_double_array(&mut env, res.senkou_span_a.into_raw_vec_and_offset().0);
+            let span_b_arr =
+                to_double_array(&mut env, res.senkou_span_b.into_raw_vec_and_offset().0);
+            let chikou_arr = to_double_array(&mut env, res.chikou_span.into_raw_vec_and_offset().0);
+            set_double_field(&mut env, &result, "tenkanSen", tenkan_arr);
+            set_double_field(&mut env, &result, "kijunSen", kijun_arr);
+            set_double_field(&mut env, &result, "senkouSpanA", span_a_arr);
+            set_double_field(&mut env, &result, "senkouSpanB", span_b_arr);
+            set_double_field(&mut env, &result, "chikouSpan", chikou_arr);
+        }
+    })
 }
 
 #[no_mangle]
@@ -1542,37 +1556,39 @@ pub extern "system" fn Java_com_finkit_Indicators_supertrend(
     multiplier: jdouble,
     result: JObject,
 ) {
-    let high_vec = get_double_array(&mut env, high);
-    let low_vec = get_double_array(&mut env, low);
-    let close_vec = get_double_array(&mut env, close);
-    if let Ok(res) = indicators::supertrend(
-        &high_vec,
-        &low_vec,
-        &close_vec,
-        atrPeriod as usize,
-        multiplier,
-    ) {
-        let direction_arr = {
-            let len = res.direction.len();
-            let java_arr = env.new_int_array(len as jsize).unwrap();
-            let data: Vec<i32> = res.direction.iter().copied().collect();
-            env.set_int_array_region(&java_arr, 0, &data).unwrap();
-            java_arr.into_raw()
-        };
-        let trend_arr = to_double_array(&mut env, res.trend_line.into_raw_vec_and_offset().0);
-        let upper_arr = to_double_array(&mut env, res.upper_band.into_raw_vec_and_offset().0);
-        let lower_arr = to_double_array(&mut env, res.lower_band.into_raw_vec_and_offset().0);
-        env.set_field(
-            &result,
-            "direction",
-            "[I",
-            JValue::Int(direction_arr as i32),
-        )
-        .unwrap();
-        set_double_field(&mut env, &result, "trendLine", trend_arr);
-        set_double_field(&mut env, &result, "upperBand", upper_arr);
-        set_double_field(&mut env, &result, "lowerBand", lower_arr);
-    }
+    ffi_catch_void(|| {
+        let high_vec = get_double_array(&mut env, high);
+        let low_vec = get_double_array(&mut env, low);
+        let close_vec = get_double_array(&mut env, close);
+        if let Ok(res) = indicators::supertrend(
+            &high_vec,
+            &low_vec,
+            &close_vec,
+            atrPeriod as usize,
+            multiplier,
+        ) {
+            let direction_arr = {
+                let len = res.direction.len();
+                let java_arr = env.new_int_array(len as jsize).unwrap();
+                let data: Vec<i32> = res.direction.iter().copied().collect();
+                env.set_int_array_region(&java_arr, 0, &data).unwrap();
+                java_arr.into_raw()
+            };
+            let trend_arr = to_double_array(&mut env, res.trend_line.into_raw_vec_and_offset().0);
+            let upper_arr = to_double_array(&mut env, res.upper_band.into_raw_vec_and_offset().0);
+            let lower_arr = to_double_array(&mut env, res.lower_band.into_raw_vec_and_offset().0);
+            env.set_field(
+                &result,
+                "direction",
+                "[I",
+                JValue::Int(direction_arr as i32),
+            )
+            .unwrap();
+            set_double_field(&mut env, &result, "trendLine", trend_arr);
+            set_double_field(&mut env, &result, "upperBand", upper_arr);
+            set_double_field(&mut env, &result, "lowerBand", lower_arr);
+        }
+    })
 }
 
 #[no_mangle]
@@ -1636,25 +1652,27 @@ pub extern "system" fn Java_com_finkit_Indicators_vwapBands(
     nbDev: jdouble,
     result: JObject,
 ) {
-    let high_vec = get_double_array(&mut env, high);
-    let low_vec = get_double_array(&mut env, low);
-    let close_vec = get_double_array(&mut env, close);
-    let volume_vec = get_double_array(&mut env, volume);
-    if let Ok(res) = indicators::vwap_bands(
-        &high_vec,
-        &low_vec,
-        &close_vec,
-        &volume_vec,
-        timeperiod as usize,
-        nbDev,
-    ) {
-        let vwap_arr = to_double_array(&mut env, res.vwap.into_raw_vec_and_offset().0);
-        let upper_arr = to_double_array(&mut env, res.upper.into_raw_vec_and_offset().0);
-        let lower_arr = to_double_array(&mut env, res.lower.into_raw_vec_and_offset().0);
-        set_double_field(&mut env, &result, "vwap", vwap_arr);
-        set_double_field(&mut env, &result, "upper", upper_arr);
-        set_double_field(&mut env, &result, "lower", lower_arr);
-    }
+    ffi_catch_void(|| {
+        let high_vec = get_double_array(&mut env, high);
+        let low_vec = get_double_array(&mut env, low);
+        let close_vec = get_double_array(&mut env, close);
+        let volume_vec = get_double_array(&mut env, volume);
+        if let Ok(res) = indicators::vwap_bands(
+            &high_vec,
+            &low_vec,
+            &close_vec,
+            &volume_vec,
+            timeperiod as usize,
+            nbDev,
+        ) {
+            let vwap_arr = to_double_array(&mut env, res.vwap.into_raw_vec_and_offset().0);
+            let upper_arr = to_double_array(&mut env, res.upper.into_raw_vec_and_offset().0);
+            let lower_arr = to_double_array(&mut env, res.lower.into_raw_vec_and_offset().0);
+            set_double_field(&mut env, &result, "vwap", vwap_arr);
+            set_double_field(&mut env, &result, "upper", upper_arr);
+            set_double_field(&mut env, &result, "lower", lower_arr);
+        }
+    })
 }
 
 #[no_mangle]
@@ -1668,24 +1686,26 @@ pub extern "system" fn Java_com_finkit_Indicators_elderRay(
     period: jint,
     result: JObject,
 ) {
-    let high_vec = get_double_array(&mut env, high);
-    let low_vec = get_double_array(&mut env, low);
-    let close_vec = get_double_array(&mut env, close);
-    let volume_vec = get_double_array(&mut env, volume);
-    if let Ok(res) = indicators::elder_ray(
-        &high_vec,
-        &low_vec,
-        &close_vec,
-        &volume_vec,
-        period as usize,
-    ) {
-        let force_arr = to_double_array(&mut env, res.force_index.into_raw_vec_and_offset().0);
-        let bull_arr = to_double_array(&mut env, res.bull_power.into_raw_vec_and_offset().0);
-        let bear_arr = to_double_array(&mut env, res.bear_power.into_raw_vec_and_offset().0);
-        set_double_field(&mut env, &result, "forceIndex", force_arr);
-        set_double_field(&mut env, &result, "bullPower", bull_arr);
-        set_double_field(&mut env, &result, "bearPower", bear_arr);
-    }
+    ffi_catch_void(|| {
+        let high_vec = get_double_array(&mut env, high);
+        let low_vec = get_double_array(&mut env, low);
+        let close_vec = get_double_array(&mut env, close);
+        let volume_vec = get_double_array(&mut env, volume);
+        if let Ok(res) = indicators::elder_ray(
+            &high_vec,
+            &low_vec,
+            &close_vec,
+            &volume_vec,
+            period as usize,
+        ) {
+            let force_arr = to_double_array(&mut env, res.force_index.into_raw_vec_and_offset().0);
+            let bull_arr = to_double_array(&mut env, res.bull_power.into_raw_vec_and_offset().0);
+            let bear_arr = to_double_array(&mut env, res.bear_power.into_raw_vec_and_offset().0);
+            set_double_field(&mut env, &result, "forceIndex", force_arr);
+            set_double_field(&mut env, &result, "bullPower", bull_arr);
+            set_double_field(&mut env, &result, "bearPower", bear_arr);
+        }
+    })
 }
 
 #[no_mangle]
@@ -1697,18 +1717,20 @@ pub extern "system" fn Java_com_finkit_Indicators_donchian(
     period: jint,
     result: JObject,
 ) {
-    let high_vec = get_double_array(&mut env, high);
-    let low_vec = get_double_array(&mut env, low);
-    if let Ok(res) = indicators::donchian(&high_vec, &low_vec, period as usize) {
-        let upper_arr = to_double_array(&mut env, res.upper.into_raw_vec_and_offset().0);
-        let lower_arr = to_double_array(&mut env, res.lower.into_raw_vec_and_offset().0);
-        let middle_arr = to_double_array(&mut env, res.middle.into_raw_vec_and_offset().0);
-        let width_arr = to_double_array(&mut env, res.width.into_raw_vec_and_offset().0);
-        set_double_field(&mut env, &result, "upper", upper_arr);
-        set_double_field(&mut env, &result, "lower", lower_arr);
-        set_double_field(&mut env, &result, "middle", middle_arr);
-        set_double_field(&mut env, &result, "width", width_arr);
-    }
+    ffi_catch_void(|| {
+        let high_vec = get_double_array(&mut env, high);
+        let low_vec = get_double_array(&mut env, low);
+        if let Ok(res) = indicators::donchian(&high_vec, &low_vec, period as usize) {
+            let upper_arr = to_double_array(&mut env, res.upper.into_raw_vec_and_offset().0);
+            let lower_arr = to_double_array(&mut env, res.lower.into_raw_vec_and_offset().0);
+            let middle_arr = to_double_array(&mut env, res.middle.into_raw_vec_and_offset().0);
+            let width_arr = to_double_array(&mut env, res.width.into_raw_vec_and_offset().0);
+            set_double_field(&mut env, &result, "upper", upper_arr);
+            set_double_field(&mut env, &result, "lower", lower_arr);
+            set_double_field(&mut env, &result, "middle", middle_arr);
+            set_double_field(&mut env, &result, "width", width_arr);
+        }
+    })
 }
 
 #[no_mangle]
@@ -1722,31 +1744,33 @@ pub extern "system" fn Java_com_finkit_Indicators_volumeProfile(
     numBins: jint,
     result: JObject,
 ) {
-    let high_vec = get_double_array(&mut env, high);
-    let low_vec = get_double_array(&mut env, low);
-    let close_vec = get_double_array(&mut env, close);
-    let volume_vec = get_double_array(&mut env, volume);
-    if let Ok(res) = indicators::volume_profile(
-        &high_vec,
-        &low_vec,
-        &close_vec,
-        &volume_vec,
-        numBins as usize,
-    ) {
-        let poc = res.poc;
-        let vah = res.vah;
-        let val = res.val;
-        let profile_arr = to_double_array(&mut env, res.profile);
-        let bin_prices_arr = to_double_array(&mut env, res.bin_prices);
-        env.set_field(&result, "poc", "D", JValue::Double(poc))
-            .unwrap();
-        env.set_field(&result, "vah", "D", JValue::Double(vah))
-            .unwrap();
-        env.set_field(&result, "val", "D", JValue::Double(val))
-            .unwrap();
-        set_double_field(&mut env, &result, "profile", profile_arr);
-        set_double_field(&mut env, &result, "binPrices", bin_prices_arr);
-    }
+    ffi_catch_void(|| {
+        let high_vec = get_double_array(&mut env, high);
+        let low_vec = get_double_array(&mut env, low);
+        let close_vec = get_double_array(&mut env, close);
+        let volume_vec = get_double_array(&mut env, volume);
+        if let Ok(res) = indicators::volume_profile(
+            &high_vec,
+            &low_vec,
+            &close_vec,
+            &volume_vec,
+            numBins as usize,
+        ) {
+            let poc = res.poc;
+            let vah = res.vah;
+            let val = res.val;
+            let profile_arr = to_double_array(&mut env, res.profile);
+            let bin_prices_arr = to_double_array(&mut env, res.bin_prices);
+            env.set_field(&result, "poc", "D", JValue::Double(poc))
+                .unwrap();
+            env.set_field(&result, "vah", "D", JValue::Double(vah))
+                .unwrap();
+            env.set_field(&result, "val", "D", JValue::Double(val))
+                .unwrap();
+            set_double_field(&mut env, &result, "profile", profile_arr);
+            set_double_field(&mut env, &result, "binPrices", bin_prices_arr);
+        }
+    })
 }
 
 #[no_mangle]
@@ -1759,45 +1783,47 @@ pub extern "system" fn Java_com_finkit_Indicators_fibonacciRetracement(
     endIndex: jint,
     result: JObject,
 ) {
-    let high_vec = get_double_array(&mut env, high);
-    let low_vec = get_double_array(&mut env, low);
-    if let Ok(res) = indicators::fibonacci_retracement(
-        &high_vec,
-        &low_vec,
-        startIndex as usize,
-        endIndex as usize,
-    ) {
-        let trend = res.trend;
-        let high_price = res.high_price;
-        let low_price = res.low_price;
-        let high_index = res.high_index as i32;
-        let low_index = res.low_index as i32;
-        let levels_len = res.levels.len();
-        let ratios_arr = {
-            let java_arr = env.new_double_array(levels_len as jsize).unwrap();
-            let data: Vec<f64> = res.levels.iter().map(|l| l.ratio).collect();
-            env.set_double_array_region(&java_arr, 0, &data).unwrap();
-            java_arr.into_raw()
-        };
-        let prices_arr = {
-            let java_arr = env.new_double_array(levels_len as jsize).unwrap();
-            let data: Vec<f64> = res.levels.iter().map(|l| l.price).collect();
-            env.set_double_array_region(&java_arr, 0, &data).unwrap();
-            java_arr.into_raw()
-        };
-        env.set_field(&result, "trend", "I", JValue::Int(trend))
-            .unwrap();
-        env.set_field(&result, "highPrice", "D", JValue::Double(high_price))
-            .unwrap();
-        env.set_field(&result, "lowPrice", "D", JValue::Double(low_price))
-            .unwrap();
-        env.set_field(&result, "highIndex", "I", JValue::Int(high_index))
-            .unwrap();
-        env.set_field(&result, "lowIndex", "I", JValue::Int(low_index))
-            .unwrap();
-        set_double_field(&mut env, &result, "ratios", ratios_arr);
-        set_double_field(&mut env, &result, "prices", prices_arr);
-    }
+    ffi_catch_void(|| {
+        let high_vec = get_double_array(&mut env, high);
+        let low_vec = get_double_array(&mut env, low);
+        if let Ok(res) = indicators::fibonacci_retracement(
+            &high_vec,
+            &low_vec,
+            startIndex as usize,
+            endIndex as usize,
+        ) {
+            let trend = res.trend;
+            let high_price = res.high_price;
+            let low_price = res.low_price;
+            let high_index = res.high_index as i32;
+            let low_index = res.low_index as i32;
+            let levels_len = res.levels.len();
+            let ratios_arr = {
+                let java_arr = env.new_double_array(levels_len as jsize).unwrap();
+                let data: Vec<f64> = res.levels.iter().map(|l| l.ratio).collect();
+                env.set_double_array_region(&java_arr, 0, &data).unwrap();
+                java_arr.into_raw()
+            };
+            let prices_arr = {
+                let java_arr = env.new_double_array(levels_len as jsize).unwrap();
+                let data: Vec<f64> = res.levels.iter().map(|l| l.price).collect();
+                env.set_double_array_region(&java_arr, 0, &data).unwrap();
+                java_arr.into_raw()
+            };
+            env.set_field(&result, "trend", "I", JValue::Int(trend))
+                .unwrap();
+            env.set_field(&result, "highPrice", "D", JValue::Double(high_price))
+                .unwrap();
+            env.set_field(&result, "lowPrice", "D", JValue::Double(low_price))
+                .unwrap();
+            env.set_field(&result, "highIndex", "I", JValue::Int(high_index))
+                .unwrap();
+            env.set_field(&result, "lowIndex", "I", JValue::Int(low_index))
+                .unwrap();
+            set_double_field(&mut env, &result, "ratios", ratios_arr);
+            set_double_field(&mut env, &result, "prices", prices_arr);
+        }
+    })
 }
 
 use std::collections::HashMap;
@@ -1873,7 +1899,9 @@ pub extern "system" fn Java_com_finkit_KlineChart_klineDataFree(
     _class: JClass,
     handle: jni::sys::jlong,
 ) {
-    KLINE_DATA_MAP.write().unwrap().remove(&handle);
+    ffi_catch_void(|| {
+        KLINE_DATA_MAP.write().unwrap().remove(&handle);
+    })
 }
 
 #[no_mangle]
@@ -1938,7 +1966,9 @@ pub extern "system" fn Java_com_finkit_KlineChart_klineChartFree(
     _class: JClass,
     handle: jni::sys::jlong,
 ) {
-    KLINE_CHART_MAP.write().unwrap().remove(&handle);
+    ffi_catch_void(|| {
+        KLINE_CHART_MAP.write().unwrap().remove(&handle);
+    })
 }
 
 #[no_mangle]
@@ -1948,16 +1978,18 @@ pub extern "system" fn Java_com_finkit_KlineChart_klineChartAddMa(
     handle: jni::sys::jlong,
     periods: jintArray,
 ) {
-    let mut map = KLINE_CHART_MAP.write().unwrap();
-    if let Some((chart, Some(ref d))) = map.get_mut(&handle) {
-        let periods_arr: JPrimitiveArray<i32> = unsafe { JPrimitiveArray::from_raw(periods) };
-        let len = _env.get_array_length(&periods_arr).unwrap() as usize;
-        let mut buf = vec![0i32; len];
-        _env.get_int_array_region(&periods_arr, 0, &mut buf)
-            .unwrap();
-        let p: Vec<usize> = buf.iter().map(|&x| x as usize).collect();
-        chart.add_ma(d, &p);
-    }
+    ffi_catch_void(|| {
+        let mut map = KLINE_CHART_MAP.write().unwrap();
+        if let Some((chart, Some(ref d))) = map.get_mut(&handle) {
+            let periods_arr: JPrimitiveArray<i32> = unsafe { JPrimitiveArray::from_raw(periods) };
+            let len = _env.get_array_length(&periods_arr).unwrap() as usize;
+            let mut buf = vec![0i32; len];
+            _env.get_int_array_region(&periods_arr, 0, &mut buf)
+                .unwrap();
+            let p: Vec<usize> = buf.iter().map(|&x| x as usize).collect();
+            chart.add_ma(d, &p);
+        }
+    })
 }
 
 #[no_mangle]
@@ -1969,10 +2001,12 @@ pub extern "system" fn Java_com_finkit_KlineChart_klineChartAddMacd(
     slow: jint,
     signal: jint,
 ) {
-    let mut map = KLINE_CHART_MAP.write().unwrap();
-    if let Some((chart, Some(ref d))) = map.get_mut(&handle) {
-        chart.add_macd(d, fast as usize, slow as usize, signal as usize, 1);
-    }
+    ffi_catch_void(|| {
+        let mut map = KLINE_CHART_MAP.write().unwrap();
+        if let Some((chart, Some(ref d))) = map.get_mut(&handle) {
+            chart.add_macd(d, fast as usize, slow as usize, signal as usize, 1);
+        }
+    })
 }
 
 #[no_mangle]
@@ -1982,10 +2016,12 @@ pub extern "system" fn Java_com_finkit_KlineChart_klineChartAddRsi(
     handle: jni::sys::jlong,
     period: jint,
 ) {
-    let mut map = KLINE_CHART_MAP.write().unwrap();
-    if let Some((chart, Some(ref d))) = map.get_mut(&handle) {
-        chart.add_rsi(d, period as usize, 1);
-    }
+    ffi_catch_void(|| {
+        let mut map = KLINE_CHART_MAP.write().unwrap();
+        if let Some((chart, Some(ref d))) = map.get_mut(&handle) {
+            chart.add_rsi(d, period as usize, 1);
+        }
+    })
 }
 
 #[no_mangle]
@@ -1996,10 +2032,12 @@ pub extern "system" fn Java_com_finkit_KlineChart_klineChartAddBoll(
     period: jint,
     nb_dev: jdouble,
 ) {
-    let mut map = KLINE_CHART_MAP.write().unwrap();
-    if let Some((chart, Some(ref d))) = map.get_mut(&handle) {
-        chart.add_boll(d, period as usize, nb_dev);
-    }
+    ffi_catch_void(|| {
+        let mut map = KLINE_CHART_MAP.write().unwrap();
+        if let Some((chart, Some(ref d))) = map.get_mut(&handle) {
+            chart.add_boll(d, period as usize, nb_dev);
+        }
+    })
 }
 
 #[no_mangle]
@@ -2009,11 +2047,13 @@ pub extern "system" fn Java_com_finkit_KlineChart_klineChartSaveAsSvg(
     handle: jni::sys::jlong,
     path: jni::objects::JString,
 ) {
-    let path_str: String = env.get_string(&path).unwrap().into();
-    let map = KLINE_CHART_MAP.read().unwrap();
-    if let Some((chart, _)) = map.get(&handle) {
-        let _ = chart.save_as_svg(&path_str);
-    }
+    ffi_catch_void(|| {
+        let path_str: String = env.get_string(&path).unwrap().into();
+        let map = KLINE_CHART_MAP.read().unwrap();
+        if let Some((chart, _)) = map.get(&handle) {
+            let _ = chart.save_as_svg(&path_str);
+        }
+    })
 }
 
 #[no_mangle]
@@ -2421,20 +2461,22 @@ pub extern "system" fn Java_com_finkit_FactorResearch_factorStudyJson(
     _class: jni::objects::JClass<'_>,
     request: jni::objects::JString<'_>,
 ) -> jni::sys::jstring {
-    let request: String = match env.get_string(&request) {
-        Ok(value) => value.into(),
-        Err(error) => {
-            let fallback =
-                finkit_ffi_common::factor_study_error_json("invalid_utf8", &error.to_string());
-            return env
-                .new_string(fallback)
-                .map(|value| value.into_raw())
-                .unwrap_or(std::ptr::null_mut());
-        }
-    };
-    env.new_string(finkit_ffi_common::factor_study_json(&request))
-        .map(|value| value.into_raw())
-        .unwrap_or(std::ptr::null_mut())
+    ffi_catch_ptr(|| {
+        let request: String = match env.get_string(&request) {
+            Ok(value) => value.into(),
+            Err(error) => {
+                let fallback =
+                    finkit_ffi_common::factor_study_error_json("invalid_utf8", &error.to_string());
+                return env
+                    .new_string(fallback)
+                    .map(|value| value.into_raw())
+                    .unwrap_or(std::ptr::null_mut());
+            }
+        };
+        env.new_string(finkit_ffi_common::factor_study_json(&request))
+            .map(|value| value.into_raw())
+            .unwrap_or(std::ptr::null_mut())
+    })
 }
 
 #[no_mangle]
@@ -2443,16 +2485,18 @@ pub extern "system" fn Java_com_finkit_QuantEvaluation_evaluateJson(
     _class: jni::objects::JClass<'_>,
     request: jni::objects::JString<'_>,
 ) -> jni::sys::jstring {
-    let response = match env.get_string(&request) {
-        Ok(value) => {
-            let request: String = value.into();
-            finkit_ffi_common::quant_evaluation_json(&request)
-        }
-        Err(error) => {
-            finkit_ffi_common::quant_evaluation_error_json("invalid_utf8", &error.to_string())
-        }
-    };
-    env.new_string(response)
-        .map(|value| value.into_raw())
-        .unwrap_or(std::ptr::null_mut())
+    ffi_catch_ptr(|| {
+        let response = match env.get_string(&request) {
+            Ok(value) => {
+                let request: String = value.into();
+                finkit_ffi_common::quant_evaluation_json(&request)
+            }
+            Err(error) => {
+                finkit_ffi_common::quant_evaluation_error_json("invalid_utf8", &error.to_string())
+            }
+        };
+        env.new_string(response)
+            .map(|value| value.into_raw())
+            .unwrap_or(std::ptr::null_mut())
+    })
 }

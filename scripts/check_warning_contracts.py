@@ -59,6 +59,32 @@ def main() -> int:
     if offenders:
         fail("generated bindings still call linear_reg: " + ", ".join(offenders))
 
+    # Java multi-output JNI functions return `()` and populate a result object.
+    # The generated wrapper used to guard only functions with an explicit `->`
+    # return type, leaving MAMA/BBANDS/SAR/MACD/STOCH/AROON able to unwind across
+    # the JNI boundary. Keep this contract next to the other binding warning
+    # contracts so a future regeneration cannot silently reintroduce the hole.
+    java_generated = (ROOT / "ffi/java-binding/src/generated.rs").read_text(
+        encoding="utf-8"
+    )
+    java_void_names = ("mama", "bbands", "sar", "macd", "stoch", "aroon")
+    missing_java_guards: list[str] = []
+    for name in java_void_names:
+        marker = f"pub extern \"system\" fn Java_com_finkit_Indicators_{name}"
+        start = java_generated.find(marker)
+        if start < 0:
+            missing_java_guards.append(name + ":missing")
+            continue
+        end = java_generated.find("#[no_mangle]", start + len(marker))
+        body = java_generated[start:] if end < 0 else java_generated[start:end]
+        if "ffi_catch_void" not in body:
+            missing_java_guards.append(name)
+    if missing_java_guards:
+        fail(
+            "generated Java void exports must use ffi_catch_void: "
+            + ", ".join(missing_java_guards)
+        )
+
     # GitHub-hosted runners now execute modern JavaScript actions with Node 24.
     # These exact legacy action majors/pins were observed in Finkit's real workflow
     # logs being forced from deprecated Node 20. Keep this list narrow: a generic

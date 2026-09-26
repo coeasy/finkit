@@ -101,6 +101,15 @@ reused.
 
 ### Fixed
 
+- Java JNI multi-output exports (`MAMA`, `BBANDS`, `SAR`, `MACD`, `STOCH`, and
+  `AROON`) could unwind a Rust panic across the JNI boundary because the binding
+  synchronizer only wrapped functions with an explicit `->` return type. They
+  return `()` and populate a result object, so the old parser skipped them.
+  `sync_bindings.py` now recognizes Java void bodies and wraps them with
+  `ffi_catch_void`; the generated six exports are guarded, and the structural
+  warning contract prevents the hole from returning. The same pass wrapped 21
+  unguarded manual Java exports (including chart and research bridges) with the
+  return-type-appropriate guard.
 - Five private functions were unreachable from every build and every test, and
   nothing reported it: each carried a bare `#[allow(dead_code)]`, which is
   precisely the attribute that hides an item from the compiler's dead-code

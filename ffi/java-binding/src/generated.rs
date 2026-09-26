@@ -109,13 +109,15 @@ pub extern "system" fn Java_com_finkit_Indicators_mama(
     slowlimit: jdouble,
     result: JObject,
 ) {
-    let input_vec = get_double_array(&mut env, input);
-    if let Ok(res) = indicators::mama(&input_vec, fastlimit, slowlimit) {
-        let mama_arr = to_double_array(&mut env, res.mama.into_raw_vec_and_offset().0);
-        let fama_arr = to_double_array(&mut env, res.fama.into_raw_vec_and_offset().0);
-        set_double_field(&mut env, &result, "mama", mama_arr);
-        set_double_field(&mut env, &result, "fama", fama_arr);
-    }
+    ffi_catch_void(|| {
+        let input_vec = get_double_array(&mut env, input);
+        if let Ok(res) = indicators::mama(&input_vec, fastlimit, slowlimit) {
+            let mama_arr = to_double_array(&mut env, res.mama.into_raw_vec_and_offset().0);
+            let fama_arr = to_double_array(&mut env, res.fama.into_raw_vec_and_offset().0);
+            set_double_field(&mut env, &result, "mama", mama_arr);
+            set_double_field(&mut env, &result, "fama", fama_arr);
+        }
+    })
 }
 
 #[no_mangle]
@@ -145,15 +147,17 @@ pub extern "system" fn Java_com_finkit_Indicators_bbands(
     nbdevdn: jdouble,
     result: JObject,
 ) {
-    let input_vec = get_double_array(&mut env, input);
-    if let Ok(res) = indicators::bbands(&input_vec, timeperiod as usize, nbdevup, nbdevdn) {
-        let upper_arr = to_double_array(&mut env, res.upper.into_raw_vec_and_offset().0);
-        let middle_arr = to_double_array(&mut env, res.middle.into_raw_vec_and_offset().0);
-        let lower_arr = to_double_array(&mut env, res.lower.into_raw_vec_and_offset().0);
-        set_double_field(&mut env, &result, "upper", upper_arr);
-        set_double_field(&mut env, &result, "middle", middle_arr);
-        set_double_field(&mut env, &result, "lower", lower_arr);
-    }
+    ffi_catch_void(|| {
+        let input_vec = get_double_array(&mut env, input);
+        if let Ok(res) = indicators::bbands(&input_vec, timeperiod as usize, nbdevup, nbdevdn) {
+            let upper_arr = to_double_array(&mut env, res.upper.into_raw_vec_and_offset().0);
+            let middle_arr = to_double_array(&mut env, res.middle.into_raw_vec_and_offset().0);
+            let lower_arr = to_double_array(&mut env, res.lower.into_raw_vec_and_offset().0);
+            set_double_field(&mut env, &result, "upper", upper_arr);
+            set_double_field(&mut env, &result, "middle", middle_arr);
+            set_double_field(&mut env, &result, "lower", lower_arr);
+        }
+    })
 }
 
 #[no_mangle]
@@ -201,15 +205,17 @@ pub extern "system" fn Java_com_finkit_Indicators_sar(
     maximum: jdouble,
     result: JObject,
 ) {
-    let high_vec = get_double_array(&mut env, high);
-    let low_vec = get_double_array(&mut env, low);
-    let _close_vec = get_double_array(&mut env, close);
-    if let Ok(res) = indicators::sar(&high_vec, &low_vec, acceleration, maximum) {
-        let sar_arr = to_double_array(&mut env, res.sar.into_raw_vec_and_offset().0);
-        let af_arr = to_double_array(&mut env, res.af.into_raw_vec_and_offset().0);
-        set_double_field(&mut env, &result, "sar", sar_arr);
-        set_double_field(&mut env, &result, "af", af_arr);
-    }
+    ffi_catch_void(|| {
+        let high_vec = get_double_array(&mut env, high);
+        let low_vec = get_double_array(&mut env, low);
+        let _close_vec = get_double_array(&mut env, close);
+        if let Ok(res) = indicators::sar(&high_vec, &low_vec, acceleration, maximum) {
+            let sar_arr = to_double_array(&mut env, res.sar.into_raw_vec_and_offset().0);
+            let af_arr = to_double_array(&mut env, res.af.into_raw_vec_and_offset().0);
+            set_double_field(&mut env, &result, "sar", sar_arr);
+            set_double_field(&mut env, &result, "af", af_arr);
+        }
+    })
 }
 
 #[no_mangle]
@@ -238,20 +244,22 @@ pub extern "system" fn Java_com_finkit_Indicators_macd(
     signalperiod: jint,
     result: JObject,
 ) {
-    let input_vec = get_double_array(&mut env, input);
-    if let Ok(res) = indicators::macd(
-        &input_vec,
-        fastperiod as usize,
-        slowperiod as usize,
-        signalperiod as usize,
-    ) {
-        let macd_arr = to_double_array(&mut env, res.macd.into_raw_vec_and_offset().0);
-        let signal_arr = to_double_array(&mut env, res.signal.into_raw_vec_and_offset().0);
-        let hist_arr = to_double_array(&mut env, res.hist.into_raw_vec_and_offset().0);
-        set_double_field(&mut env, &result, "macd", macd_arr);
-        set_double_field(&mut env, &result, "signal", signal_arr);
-        set_double_field(&mut env, &result, "hist", hist_arr);
-    }
+    ffi_catch_void(|| {
+        let input_vec = get_double_array(&mut env, input);
+        if let Ok(res) = indicators::macd(
+            &input_vec,
+            fastperiod as usize,
+            slowperiod as usize,
+            signalperiod as usize,
+        ) {
+            let macd_arr = to_double_array(&mut env, res.macd.into_raw_vec_and_offset().0);
+            let signal_arr = to_double_array(&mut env, res.signal.into_raw_vec_and_offset().0);
+            let hist_arr = to_double_array(&mut env, res.hist.into_raw_vec_and_offset().0);
+            set_double_field(&mut env, &result, "macd", macd_arr);
+            set_double_field(&mut env, &result, "signal", signal_arr);
+            set_double_field(&mut env, &result, "hist", hist_arr);
+        }
+    })
 }
 
 #[no_mangle]
@@ -266,22 +274,24 @@ pub extern "system" fn Java_com_finkit_Indicators_stoch(
     slowd: jint,
     result: JObject,
 ) {
-    let high_vec = get_double_array(&mut env, high);
-    let low_vec = get_double_array(&mut env, low);
-    let close_vec = get_double_array(&mut env, close);
-    if let Ok(res) = indicators::stoch(
-        &high_vec,
-        &low_vec,
-        &close_vec,
-        fastk as usize,
-        slowk as usize,
-        slowd as usize,
-    ) {
-        let k_arr = to_double_array(&mut env, res.k.into_raw_vec_and_offset().0);
-        let d_arr = to_double_array(&mut env, res.d.into_raw_vec_and_offset().0);
-        set_double_field(&mut env, &result, "k", k_arr);
-        set_double_field(&mut env, &result, "d", d_arr);
-    }
+    ffi_catch_void(|| {
+        let high_vec = get_double_array(&mut env, high);
+        let low_vec = get_double_array(&mut env, low);
+        let close_vec = get_double_array(&mut env, close);
+        if let Ok(res) = indicators::stoch(
+            &high_vec,
+            &low_vec,
+            &close_vec,
+            fastk as usize,
+            slowk as usize,
+            slowd as usize,
+        ) {
+            let k_arr = to_double_array(&mut env, res.k.into_raw_vec_and_offset().0);
+            let d_arr = to_double_array(&mut env, res.d.into_raw_vec_and_offset().0);
+            set_double_field(&mut env, &result, "k", k_arr);
+            set_double_field(&mut env, &result, "d", d_arr);
+        }
+    })
 }
 
 #[no_mangle]
@@ -313,14 +323,16 @@ pub extern "system" fn Java_com_finkit_Indicators_aroon(
     period: jint,
     result: JObject,
 ) {
-    let high_vec = get_double_array(&mut env, high);
-    let low_vec = get_double_array(&mut env, low);
-    if let Ok(res) = indicators::aroon(&high_vec, &low_vec, period as usize) {
-        let up_arr = to_double_array(&mut env, res.aroon_up.into_raw_vec_and_offset().0);
-        let down_arr = to_double_array(&mut env, res.aroon_down.into_raw_vec_and_offset().0);
-        set_double_field(&mut env, &result, "aroonUp", up_arr);
-        set_double_field(&mut env, &result, "aroonDown", down_arr);
-    }
+    ffi_catch_void(|| {
+        let high_vec = get_double_array(&mut env, high);
+        let low_vec = get_double_array(&mut env, low);
+        if let Ok(res) = indicators::aroon(&high_vec, &low_vec, period as usize) {
+            let up_arr = to_double_array(&mut env, res.aroon_up.into_raw_vec_and_offset().0);
+            let down_arr = to_double_array(&mut env, res.aroon_down.into_raw_vec_and_offset().0);
+            set_double_field(&mut env, &result, "aroonUp", up_arr);
+            set_double_field(&mut env, &result, "aroonDown", down_arr);
+        }
+    })
 }
 
 #[no_mangle]

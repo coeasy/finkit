@@ -118,6 +118,10 @@ The last five are the repository-hygiene gates, also available as
   release — but the reason has to be written down, because a bare suppression
   and a function that was never wired up look identical. Five of them turned
   out to be the latter and were deleted.
+- `scripts/check_warning_contracts.py` also protects the Java JNI panic boundary:
+  the six generated multi-output functions that return `()` must use
+  `ffi_catch_void`. The synchronizer recognizes that shape explicitly; otherwise
+  an arrow-only parser silently leaves those exports able to unwind into Java.
 
 All three hygiene checks enumerate tracked files with `git ls-files -z`. The
 `-z` is required: without it git octal-escapes paths containing non-ASCII

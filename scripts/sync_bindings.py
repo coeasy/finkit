@@ -540,8 +540,18 @@ def wrap_body(lang: str, body: str) -> str:
         return body
     ri = body.find("->")
     if ri == -1:
-        return body
-    ob = body.find("{", ri)
+        # Java multi-output JNI functions (MAMA, HT_PHASOR, etc.) return
+        # `()` and write arrays into a result object. They still cross the JNI
+        # boundary and must be panic-safe; the old arrow-only parser silently
+        # left them unwrapped. No other generated language currently stores a
+        # body without an explicit return type.
+        if lang != "java":
+            return body
+        ob = body.find("{")
+        ret = "()"
+    else:
+        ob = body.find("{", ri)
+        ret = body[ri + 2 : ob].strip() if ob != -1 else ""
     if ob == -1:
         return body
     try:
@@ -551,7 +561,6 @@ def wrap_body(lang: str, body: str) -> str:
     inner = body[ob + 1 : cb]
     if inner.strip().startswith("ffi_catch"):
         return body  # already wrapped
-    ret = body[ri + 2 : ob].strip()
     guard = guard_for(lang, ret)
     if guard is None:
         return body
