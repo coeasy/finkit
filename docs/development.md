@@ -22,7 +22,7 @@ This guide describes the development and validation workflow for the Finkit Rust
 | `scripts/` | version, SSOT generation, benchmark, release/helper scripts |
 | `.github/workflows/` | core CI, docs, wheels, multi-language packaging validation |
 
-`docs/README.md` is the canonical documentation index. Completed plans and temporary implementation snapshots should remain in Git history instead of returning as current user documentation.
+`docs/README.md` is the canonical documentation index. The current architecture baseline is [`architecture-and-feature-audit-2026-09-26.md`](architecture-and-feature-audit-2026-09-26.md), and the active optimization route is [`refactor-plan-2026-09-26.md`](refactor-plan-2026-09-26.md). Completed plans and temporary implementation snapshots should remain in Git history instead of returning as current user documentation.
 
 ## 2. Toolchains
 

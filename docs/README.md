@@ -24,6 +24,8 @@ Choose the path that matches your goal:
 | Build factor/runtime workloads | [Runtime and factors](runtime-and-factors.md) |
 | Understand research architecture | [Factor research architecture](factor-research-architecture.md) |
 | Diagnose failures | [Troubleshooting](troubleshooting.md) |
+| 审计当前功能和架构 | [功能与架构审计（2026-09-26）](architecture-and-feature-audit-2026-09-26.md) |
+| 查看当前重构路线 | [最优化重构方案（2026-09-26）](refactor-plan-2026-09-26.md) |
 
 ## Product model
 
